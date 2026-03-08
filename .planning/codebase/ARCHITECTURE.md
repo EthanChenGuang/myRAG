@@ -4,203 +4,204 @@
 
 ## Pattern Overview
 
-**Overall:** Next.js App Router monolith with client-heavy SPA pattern
+**Overall:** Monolithic Next.js App Router application with a single-page chat UI, server-side API routes, and Supabase as the persistence layer.
 
 **Key Characteristics:**
-- Single-page chat application rendered entirely client-side (`'use client'` on `page.tsx`)
-- Server-side limited to API routes (no RSC data fetching in pages)
-- Zustand for client state management with localStorage persistence
-- Supabase as the unified backend (auth, database, storage, realtime)
-- AI SDK 5 (`ai` package) for streaming LLM interactions via OpenRouter
-- Multi-tenant / single-tenant deployment mode toggled by environment variable
-- React Compiler enabled via Next.js 16 (`reactCompiler: true` in `next.config.js`)
+- Single-page application: the entire chat experience lives in `src/app/page.tsx` (4685 lines) as a client component
+- API routes handle all backend logic (chat streaming, document processing, MCP tool execution, integrations)
+- Zustand stores manage client-side state; no server-side state beyond Supabase
+- RAG pipeline uses OpenAI embeddings + pgvector (HNSW) for semantic search
+- Multi-model orchestration via OpenRouter as the primary AI gateway
+- Supports single-tenant (shared knowledge base) and multi-tenant (organization-scoped) deployment modes
 
 ## Layers
 
-**Presentation Layer (Client Components):**
-- Purpose: Renders the chat UI, sidebar, settings, and multi-modal content
-- Location: `src/components/ui/`, `src/components/providers/`
-- Contains: React components, context providers, hooks
-- Depends on: Zustand stores, `@ai-sdk/react` `useChat` hook, Supabase client
-- Used by: `src/app/page.tsx` (main page), `src/app/client-layout.tsx` (layout shell)
+**Presentation Layer:**
+- Purpose: Renders the chat UI, sidebars, settings, and all user-facing components
+- Location: `src/app/page.tsx`, `src/components/ui/`, `src/components/providers/`
+- Contains: React client components, Zustand store consumers, Framer Motion animations
+- Depends on: Zustand stores, provider contexts, API routes (via fetch/useChat)
+- Used by: End users via browser
 
-**Provider Layer (React Context):**
-- Purpose: Global state injection for auth, model selection, theme, fonts, language, artifacts, sources
-- Location: `src/components/providers/`
-- Contains: `AuthProvider`, `ModelProvider`, `ArtifactProvider`, `TextSizeProvider`, `FontProvider`, `LanguageProvider`, `SourcesProvider`, `MarkdownProvider`
-- Depends on: Supabase auth client, environment config
-- Used by: `src/app/client-layout.tsx` (nested provider tree)
+**Provider Layer:**
+- Purpose: Wraps the app with context providers for auth, model selection, theming, language, etc.
+- Location: `src/components/providers/`, `src/app/client-layout.tsx`
+- Contains: React context providers (AuthProvider, ModelProvider, TextSizeProvider, FontProvider, LanguageProvider, ArtifactProvider, SourcesProvider)
+- Depends on: `src/lib/supabase/client.ts` for auth, environment config
+- Used by: All client components via `useAuth()`, `useModel()`, etc.
 
-**State Management Layer (Zustand Stores):**
-- Purpose: Client-side state for chats, files, settings, organizations, reasoning, ghost mode, web search, MCP, documents
-- Location: `src/lib/chat-store.ts`, `src/lib/file-upload-store.ts`, `src/lib/user-settings-store.ts`, `src/lib/web-search-store.ts`, `src/lib/ghost-mode-store.ts`, `src/lib/document-mention-store.ts`, `src/lib/multi-file-upload-store.ts`, `src/lib/stores/organization-store.ts`, `src/lib/stores/reasoning-store.ts`
-- Contains: Zustand `create()` stores with Supabase CRUD operations
-- Depends on: Supabase client, localStorage
-- Used by: Components via `useShallow` selectors
+**State Layer:**
+- Purpose: Client-side state management via Zustand stores
+- Location: `src/lib/chat-store.ts`, `src/lib/web-search-store.ts`, `src/lib/file-upload-store.ts`, `src/lib/user-settings-store.ts`, `src/lib/ghost-mode-store.ts`, `src/lib/document-mention-store.ts`, `src/lib/multi-file-upload-store.ts`, `src/lib/stores/organization-store.ts`, `src/lib/stores/reasoning-store.ts`, `src/lib/admin-store.ts`
+- Contains: Zustand store definitions with actions, selectors, localStorage persistence
+- Depends on: Supabase client for data operations
+- Used by: Presentation layer components
 
-**API Layer (Next.js Route Handlers):**
-- Purpose: Server-side request handling, AI streaming, document processing, integrations
+**API Layer:**
+- Purpose: Server-side request handling, streaming AI responses, CRUD operations
 - Location: `src/app/api/`
-- Contains: `route.ts` files using `NextRequest`/`NextResponse`
-- Depends on: `src/lib/` modules, Supabase admin client, AI SDK, external APIs
-- Used by: Client via fetch/`useChat` transport
+- Contains: Next.js Route Handlers (`route.ts` files) for chat, documents, config, auth, MCP, WhatsApp, payments, scrapers, etc.
+- Depends on: RAG pipeline, Supabase admin client, AI providers, MCP client
+- Used by: Frontend via fetch, external webhooks (Stripe, WhatsApp, Nango)
 
 **RAG Pipeline Layer:**
-- Purpose: Document ingestion, chunking, embedding, retrieval, and context assembly
-- Location: `src/lib/document-processor.ts`, `src/lib/retrieval-strategies.ts`, `src/lib/enhanced-rag-retrieval.ts`, `src/lib/optimized-search.ts`, `src/lib/adaptive-retrieval.ts`, `src/lib/semantic-chunker.ts`, `src/lib/bm25-scorer.ts`, `src/lib/mmr-scorer.ts`, `src/lib/thinking-rag-enhancer.ts`, `src/lib/temporal-query-detector.ts`, `src/lib/temporal-metadata-extractor.ts`
-- Contains: Embedding generation (OpenAI), hybrid search (vector + BM25), MMR reranking, temporal/financial boost scoring, adaptive multi-pass retrieval
-- Depends on: Supabase pgvector, OpenAI embeddings API
-- Used by: `src/app/api/chat/route.ts`, `src/app/api/process-document/route.ts`
+- Purpose: Document ingestion, chunking, embedding, retrieval, and prompt assembly
+- Location: `src/lib/document-processor.ts`, `src/lib/enhanced-rag-retrieval.ts`, `src/lib/retrieval-strategies.ts`, `src/lib/optimized-search.ts`, `src/lib/semantic-chunker.ts`, `src/lib/thinking-rag-enhancer.ts`, `src/lib/adaptive-retrieval.ts`, `src/lib/bm25-scorer.ts`, `src/lib/mmr-scorer.ts`, `src/lib/reranker-local.ts`
+- Contains: Embedding generation (OpenAI), vector search (pgvector), temporal/financial query detection, BM25 scoring, MMR diversity, semantic chunking
+- Depends on: Supabase (pgvector), OpenAI API, environment config
+- Used by: Chat API route, document processing API
 
 **MCP (Model Context Protocol) Layer:**
-- Purpose: Dynamic tool discovery and execution via MCP servers
+- Purpose: Dynamic tool discovery and execution across external MCP servers
 - Location: `src/lib/mcp/`
-- Contains: `UniversalMcpClient` singleton, transport factory, discovery, smart router, query classifier, query patterns
-- Key files: `src/lib/mcp/universal-client.ts`, `src/lib/mcp/production-router.ts`, `src/lib/mcp/smart-router.ts`, `src/lib/mcp/discovery.ts`, `src/lib/mcp/transport-factory.ts`
-- Depends on: `@modelcontextprotocol/sdk`, external MCP servers
-- Used by: `src/app/api/chat/route.ts`, `src/app/api/chat/approve/route.ts`
+- Contains: Universal client (`universal-client.ts`), transport factory (`transport-factory.ts`), discovery (`discovery.ts`), query classification (`query-patterns/`), smart routing (`smart-router.ts`)
+- Depends on: MCP server configurations, transport protocols (SSE, stdio)
+- Used by: Chat API route for tool-augmented responses
+
+**Data Access Layer:**
+- Purpose: Supabase client management and database operations
+- Location: `src/lib/supabase.ts`, `src/lib/supabase/client.ts`, `src/lib/supabase/server.ts`, `src/lib/supabase/middleware.ts`
+- Contains: Singleton Supabase manager, browser client, server client, admin client, CRUD helpers for chats/documents/chunks
+- Depends on: Supabase JS SDK, environment config
+- Used by: All server-side code and client-side stores
 
 **Integration Layer:**
-- Purpose: External service connectors (WhatsApp, Nango, Stripe, scrapers)
+- Purpose: External service adapters for WhatsApp, Nango, Stripe, scrapers
 - Location: `src/lib/whatsapp/`, `src/lib/nango/`, `src/lib/stripe.ts`, `src/lib/polar.ts`, `src/lib/scrapers/`
-- Contains: Client factories, webhook handlers, sync managers
-- Depends on: External APIs, environment configuration
-- Used by: Respective API routes
-
-**Environment & Config Layer:**
-- Purpose: Centralized env loading, deployment mode, feature flags
-- Location: `src/lib/env.ts`, `src/lib/deployment-mode.ts`, `src/lib/config/connectors.ts`
-- Contains: `EnvironmentConfig` singleton, deployment mode helpers, feature flag computation
-- Depends on: `.env.local`, `process.env`
-- Used by: All server-side modules
+- Contains: WhatsApp client factory (Fly.io/Koyeb), Nango sync/document adapter, Stripe/Polar payment utils, Firecrawl scraper
+- Depends on: External APIs, Supabase
+- Used by: Corresponding API routes
 
 ## Data Flow
 
 **Chat Message Flow:**
 
-1. User types message in `ChatInput` component (`src/components/ui/chat-input.tsx`)
-2. `useChat` hook from `@ai-sdk/react` sends message via `DefaultChatTransport` to `POST /api/chat`
-3. `src/app/api/chat/route.ts` receives message, classifies query intent (`src/lib/query-classifier.ts`)
-4. If RAG-relevant: generates embedding via OpenAI, performs hybrid search (vector + BM25) in Supabase pgvector, applies MMR reranking
-5. Assembles system prompt with `{{context}}` placeholder filled by retrieved chunks (`src/lib/system-prompt-manager.ts`)
-6. Calls `streamText()` from AI SDK 5 with OpenRouter provider, streams response back
-7. Client renders streaming tokens in `ChatMessage` component (`src/components/ui/chat-message.tsx`)
-8. On completion, chat is persisted to Supabase via `useChatStore`
+1. User types message in `src/components/ui/chat-input.tsx`, submits form
+2. `src/app/page.tsx` handles submission via `useChat` hook from `@ai-sdk/react`
+3. Request hits `src/app/api/chat/route.ts` (POST) with model, messages, config
+4. Route classifies query (`src/lib/query-classifier.ts`), retrieves RAG context via `src/lib/enhanced-rag-retrieval.ts`
+5. System prompt assembled via `src/lib/system-prompt-manager.ts` with `{{context}}` placeholder filled with retrieved chunks
+6. `streamText()` from Vercel AI SDK streams response back through OpenRouter provider
+7. Client receives streaming tokens, renders via `src/components/ui/chat-message.tsx`
+8. Chat persisted to Supabase `chats` table via `src/lib/chat-store.ts`
 
 **Document Ingestion Flow:**
 
-1. User uploads file via `src/components/ui/document-dashboard.tsx` or `unified-upload-button.tsx`
-2. `POST /api/upload` receives file, stores in Supabase storage
-3. `POST /api/process-document/route.ts` parses document (LlamaIndex Cloud or local), creates semantic chunks (`src/lib/semantic-chunker.ts`)
-4. Generates embeddings via OpenAI (`src/lib/document-processor.ts`)
-5. Stores document metadata, chunks, and embeddings in Supabase tables
+1. User uploads file via `src/components/ui/document-dashboard.tsx` or `src/components/ui/unified-upload-button.tsx`
+2. File sent to `src/app/api/upload/route.ts` or `src/app/api/process-document/route.ts`
+3. `src/lib/document-processor.ts` extracts text, creates semantic chunks (`src/lib/semantic-chunker.ts`)
+4. Embeddings generated via OpenAI embeddings API (text-embedding-3-small default)
+5. Document metadata and chunk embeddings stored in Supabase (`documents` and `document_chunks` tables with pgvector)
 
 **MCP Tool Execution Flow:**
 
-1. Chat route classifies query for MCP tool relevance (`src/lib/query-classifier.ts`)
-2. `UniversalMcpClient` discovers available tools from configured MCP servers
-3. Tools registered with AI SDK `streamText()` as `ToolSet`
-4. If tool requires approval: returns pending state, awaits `POST /api/chat/approve`
-5. Tool executed via MCP transport, result injected into conversation
+1. Chat route classifies query for MCP tool intent (`src/lib/query-classifier.ts`, `src/lib/mcp/query-patterns/`)
+2. `UniversalMcpClient` discovers available tools from configured MCP servers (`src/lib/mcp/discovery.ts`)
+3. Tools injected as AI SDK tools into `streamText()` call
+4. If tool requires approval, approval request sent to client; user approves via `src/app/api/chat/approve/route.ts`
+5. Tool executed via appropriate transport (SSE/stdio), result returned to model for final response
 
 **State Management:**
-- Client state: Zustand stores with `useShallow` selectors (prevents unnecessary re-renders)
-- Server state: Supabase PostgreSQL with RLS policies
-- Chat persistence: Zustand store syncs to Supabase on create/update
-- Session: Supabase Auth (cookie-based via `@supabase/ssr`)
-- Preferences: localStorage via Zustand `persist` middleware or direct localStorage access
+- Client state: Zustand stores with `useShallow` selectors for performance
+- Persistence: Supabase for chats, documents, user data; localStorage for UI preferences (sidebar state, current chat ID, theme)
+- Auth state: Supabase Auth with session management in `AuthProvider`
 
 ## Key Abstractions
 
 **EnvironmentConfig Singleton:**
-- Purpose: Single source of truth for all environment variables
-- Location: `src/lib/env.ts`
-- Pattern: Singleton class, lazily initialized, validates on first access
+- Purpose: Centralizes all environment variable access with defaults and validation
+- Examples: `src/lib/env.ts`
+- Pattern: Singleton class with lazy initialization, accessed via `env` export
 
 **SupabaseManager Singleton:**
-- Purpose: Manages Supabase client instances (browser + admin)
-- Location: `src/lib/supabase.ts`
-- Pattern: Singleton with separate browser client (anon key) and admin client (service role key)
+- Purpose: Manages Supabase client instances (browser, admin) with singleton pattern
+- Examples: `src/lib/supabase.ts`
+- Pattern: Singleton with separate browser client and service-role admin client
 
 **UniversalMcpClient Singleton:**
-- Purpose: Dynamic MCP tool discovery and execution
-- Location: `src/lib/mcp/universal-client.ts`
-- Pattern: Singleton with transport factory, tool caching (60s TTL), schema cache
+- Purpose: Discovers and executes MCP tools across any configured server
+- Examples: `src/lib/mcp/universal-client.ts`
+- Pattern: Singleton with transport factory, tool/schema caching, TTL-based cache invalidation
 
 **SystemPromptManager:**
-- Purpose: Assembles system prompts with RAG context and i18n support
-- Location: `src/lib/system-prompt-manager.ts`
-- Pattern: Static class, template lookup by language with `{{context}}` placeholder injection
+- Purpose: Assembles system prompts from i18n templates with RAG context injection
+- Examples: `src/lib/system-prompt-manager.ts`
+- Pattern: Static utility class, uses `{{context}}` placeholder substitution
 
 **DeploymentMode:**
-- Purpose: Feature flag computation based on single-tenant vs multi-tenant mode
-- Location: `src/lib/deployment-mode.ts`
-- Pattern: Pure functions reading from env, guard functions (`requireMultiTenant()`)
+- Purpose: Controls single-tenant vs multi-tenant feature flags and data scoping
+- Examples: `src/lib/deployment-mode.ts`
+- Pattern: Functional module with `isSingleTenant()` / `isMultiTenant()` guards and `getFeatureFlags()`
 
-**Chat Store:**
-- Purpose: Central chat CRUD with Supabase sync, folder management, sidebar state
-- Location: `src/lib/chat-store.ts`
-- Pattern: Zustand store with async Supabase operations, event emission for cross-component updates
+**SmartLogger:**
+- Purpose: Centralized logging with deduplication, log levels, and environment awareness
+- Examples: `src/lib/logger.ts`
+- Pattern: Class with log caching to suppress duplicate messages, level-based filtering
 
 ## Entry Points
 
-**Main Chat Page:**
-- Location: `src/app/page.tsx` (4685 lines)
+**Main App Page:**
+- Location: `src/app/page.tsx`
 - Triggers: Browser navigation to `/`
-- Responsibilities: Full chat UI including message list, input, sidebar integration, image/video/3D generation handlers, streaming state management
+- Responsibilities: Renders entire chat experience (messages, input, sidebar, header), manages chat lifecycle, handles streaming
 
 **Root Layout:**
-- Location: `src/app/layout.tsx` -> `src/app/client-layout.tsx`
+- Location: `src/app/layout.tsx` → `src/app/client-layout.tsx`
 - Triggers: Every page load
-- Responsibilities: Provider nesting (Theme > Auth > Model > TextSize > Font > Language > Artifact > Sources > MobileTools), global styles, sidebar wrapper, toaster
+- Responsibilities: Provider tree setup (Theme, Auth, Model, TextSize, Font, Language, Artifact, Sources, MobileTools), font loading, global styles
 
-**Chat API:**
-- Location: `src/app/api/chat/route.ts` (4226 lines)
-- Triggers: `POST /api/chat` from `useChat` hook
-- Responsibilities: Query classification, RAG retrieval, MCP tool integration, AI streaming, document reference tracking
+**Chat API Route:**
+- Location: `src/app/api/chat/route.ts`
+- Triggers: POST from `useChat` hook on message submission
+- Responsibilities: RAG retrieval, system prompt assembly, AI streaming, MCP tool orchestration, multi-model support
 
-**Chat Approve API:**
-- Location: `src/app/api/chat/approve/route.ts` (4823 lines)
-- Triggers: `POST /api/chat/approve` when user approves MCP tool execution
-- Responsibilities: Tool approval workflow, execution, result streaming
+**Document API Routes:**
+- Location: `src/app/api/documents/route.ts`, `src/app/api/process-document/route.ts`, `src/app/api/upload/route.ts`
+- Triggers: Document dashboard CRUD operations
+- Responsibilities: Document listing, upload, processing, deletion
 
-**Document Processing API:**
-- Location: `src/app/api/process-document/route.ts` (800 lines)
-- Triggers: `POST /api/process-document` after file upload
-- Responsibilities: Document parsing, chunking, embedding generation, Supabase storage
+**Config API Routes:**
+- Location: `src/app/api/config/` (models, rag-prompt, system-prompts, embed, connectors, etc.)
+- Triggers: Config dashboard, settings modal
+- Responsibilities: Runtime configuration management, model list serving, logo/favicon upload
 
 **Embed Widget:**
-- Location: `src/app/embed/` (embeddable chat widget)
-- Triggers: External websites embedding the chat
-- Responsibilities: Standalone chat interface for third-party embedding
+- Location: `src/app/embed/`, `src/app/api/embed/`
+- Triggers: External websites embedding the chat widget
+- Responsibilities: Embeddable chat widget with iframe + JS loader
 
-**Config Dashboard:**
-- Location: `scripts/config-server.js` + `scripts/config-ui/`
-- Triggers: `npm run config` (separate Express server on port 3333)
-- Responsibilities: Visual env management, admin users, RAG prompt tuning
+**Auth Pages:**
+- Location: `src/app/auth/`, `src/app/api/auth/`
+- Triggers: Login/signup flows
+- Responsibilities: Supabase Auth (GitHub OAuth, email/password, magic links), session management
+
+**Webhook Endpoints:**
+- Location: `src/app/api/webhooks/stripe/route.ts`, `src/app/api/whatsapp/webhook/route.ts`, `src/app/api/nango/webhook/route.ts`
+- Triggers: External service callbacks
+- Responsibilities: Payment event processing, WhatsApp message relay, Nango sync notifications
 
 ## Error Handling
 
-**Strategy:** Mixed - no unified error handling pattern
+**Strategy:** Mixed approach - API routes use try/catch with JSON error responses; client-side uses toast notifications and error state in stores.
 
 **Patterns:**
-- API routes: try/catch with `NextResponse.json({ error: ... }, { status: N })`
-- Validation: Zod schemas via `src/lib/api-middleware.ts` `withValidation` wrapper
-- Client: try/catch in async store operations, error state in Zustand stores
-- Streaming: Error events from AI SDK `useChat` hook, `onError` callbacks
-- Supabase: Direct `.error` check on query results (no centralized error handler)
+- API routes return `NextResponse.json({ success: false, error: '...' }, { status: N })` on failure
+- `src/lib/api-middleware.ts` provides Zod-based request validation via `validateRequest()` / `withValidation()`
+- Supabase errors checked inline after each query: `if (error) { throw/return error }`
+- Client-side stores set `error` state properties for UI display
+- No global error boundary detected; errors handled per-component
 
 ## Cross-Cutting Concerns
 
-**Logging:** Custom `logger` utility (`src/lib/logger.ts`) with level-based output (startup, debug, error). Performance monitor component at `src/lib/performance-monitor.tsx`. Noisy console logs can be disabled via `NEXT_PUBLIC_DISABLE_DEBUG_LOGS`.
+**Logging:** `src/lib/logger.ts` - SmartLogger singleton with deduplication, log levels (ERROR/WARN/INFO/DEBUG), dev-only debug output. Also `src/lib/dev-logger.ts` for development-only logging. Performance monitoring via `src/lib/performance-monitor.tsx`.
 
-**Validation:** Zod schemas for API request validation via `src/lib/api-middleware.ts`. No client-side form validation library detected.
+**Validation:** Zod (`zod/v3`) for API request validation via `src/lib/api-middleware.ts`. No client-side form validation library detected.
 
-**Authentication:** Supabase Auth via `src/components/providers/auth-provider.tsx`. Supports GitHub OAuth, email/password, magic links. Toggleable via `NEXT_PUBLIC_AUTH_ENABLED`. Multi-tenant mode adds organization-scoped RLS.
+**Authentication:** Supabase Auth via `src/components/providers/auth-provider.tsx`. Supports GitHub OAuth, email/password, magic links. Auth can be disabled entirely via `NEXT_PUBLIC_AUTH_ENABLED` env var. Admin auth separate via `src/app/api/admin/` routes.
 
-**Internationalization:** 20 language files in `src/translations/` (en, es, fr, de, ja, ko, zh, ar, hi, pt, ru, etc.). System prompts are translatable. UI strings accessed via `LanguageProvider`.
+**Internationalization:** `src/translations/` with 20 language files. Used by `SystemPromptManager` for system prompt localization and `LanguageProvider` for UI translations.
 
-**Theming:** `next-themes` via `src/components/theme-provider.tsx`. Light/dark mode with CSS custom properties. Default dark.
+**Multi-tenancy:** `src/lib/deployment-mode.ts` controls single-tenant vs multi-tenant. Multi-tenant adds organization scoping, team invites, storage quotas. Data isolation via Supabase RLS policies.
 
 ---
 

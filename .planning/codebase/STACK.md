@@ -5,125 +5,152 @@
 ## Languages
 
 **Primary:**
-- TypeScript ^5 - All application code (`src/`), config files (`tailwind.config.ts`, `eslint.config.mjs`)
+- TypeScript ^5 - All application code (`src/`), config files (`tailwind.config.ts`)
 - JavaScript (ES2017 target) - Scripts (`scripts/`), Next.js config (`next.config.js`)
 
 **Secondary:**
-- Bash - Database setup (`scripts/setup-database.sh`)
-- SQL - Schema definitions (`supabase/single-tenant-setup.sql`, `supabase/multi-tenant-setup.sql`)
+- Bash - Database setup script (`scripts/setup-database.sh`)
+- SQL - Supabase schema files (`supabase/single-tenant-setup.sql`, `supabase/multi-tenant-setup.sql`)
 
 ## Runtime
 
 **Environment:**
-- Node.js 18+ (required minimum)
-- Next.js Node.js runtime (not Edge) for API routes (`export const runtime = 'nodejs'`)
+- Node.js 18+ (current dev environment: v23.10.0)
+- No `.nvmrc` or `.node-version` file present
 
 **Package Manager:**
 - npm
-- Lockfile: `package-lock.json` present
+- Lockfile: `package-lock.json` (present)
 
 ## Frameworks
 
 **Core:**
-- Next.js ^16.1.6 - App Router, React Compiler enabled (`reactCompiler: true` in `next.config.js`), Turbopack dev server
-- React ^19.2.1 - With React Compiler via `babel-plugin-react-compiler`
-- Tailwind CSS ^3.4.1 - Styling with CSS custom properties (`tailwind.config.ts`)
+- Next.js ^16.1.6 - Full-stack React framework (App Router)
+  - React Compiler enabled (`reactCompiler: true` in `next.config.js`)
+  - Turbopack enabled for dev
+  - Server Actions enabled
+  - TypeScript build errors ignored (`ignoreBuildErrors: true`)
+  - Runtime: Node.js (not Edge) for API routes
+- React ^19.2.1 - UI library
+- React DOM ^19.2.1
 
-**UI Component Libraries:**
-- Radix UI - Primitives: accordion, avatar, checkbox, dialog, dropdown-menu, label, popover, radio-group, scroll-area, select, slider, slot, switch, tabs, toast, tooltip
-- Framer Motion ^11.17.0 - Animations
-- Lucide React ^0.471.2 - Icons
-- Tabler Icons React ^3.29.0 - Additional icons
-
-**State Management:**
-- Zustand ^5.0.3 - Client state (use `useShallow` from `zustand/react/shallow`)
-
-**AI/LLM:**
-- Vercel AI SDK 5 (`ai` ^5.0.78) - Core streaming, tool calling, model messages
-- `@ai-sdk/openai` ^2.0.53 - OpenAI provider
-- `@ai-sdk/react` ^2.0.78 - React hooks for AI
+**AI / ML:**
+- Vercel AI SDK (`ai`) ^5.0.78 - Core AI streaming, tool calling, model abstraction
+- `@ai-sdk/openai` ^2.0.53 - OpenAI provider for AI SDK
+- `@ai-sdk/react` ^2.0.78 - React hooks for AI SDK
 - `@ai-sdk/rsc` ^1.0.78 - React Server Components integration
-- `@ai-sdk/fal` ^1.0.17 - Fal.ai provider
-- `@ai-sdk/replicate` ^1.0.13 - Replicate provider
-- `@openrouter/ai-sdk-provider` ^1.2.0 - OpenRouter provider
+- `@ai-sdk/fal` ^1.0.17 - Fal.ai provider for AI SDK
+- `@ai-sdk/replicate` ^1.0.13 - Replicate provider for AI SDK
+- `@openrouter/ai-sdk-provider` ^1.2.0 - OpenRouter provider for AI SDK
+- `openai` ^4.103.0 - Direct OpenAI client (embeddings, image generation)
+- `@modelcontextprotocol/sdk` ^1.15.0 - MCP tool integration
+- `llamaindex` ^0.8.30 - Document parsing via LlamaCloud
+- `tiktoken` ^1.0.22 - Token counting
+
+**Styling:**
+- Tailwind CSS ^3.4.1
+- `tailwindcss-animate` ^1.0.7 - Animation utilities
+- `tailwind-scrollbar` ^3.1.0 - Custom scrollbar styling
+- `@tailwindcss/typography` ^0.5.16 - Prose/typography plugin
+- `tailwind-merge` ^2.6.0 - Class merging utility
+- `class-variance-authority` ^0.7.1 - Variant-based component styling
+- `clsx` ^2.1.1 - Conditional class names
+
+**UI Components:**
+- Radix UI - Headless component primitives (accordion, avatar, checkbox, dialog, dropdown-menu, label, popover, radio-group, scroll-area, select, slider, slot, switch, tabs, toast, tooltip)
+- `lucide-react` ^0.471.2 - Icon library
+- `@tabler/icons-react` ^3.29.0 - Additional icon library
+- `framer-motion` ^11.17.0 - Animation library
+- `next-themes` ^0.4.6 - Dark mode support
+- `sonner` ^2.0.2 - Toast notifications
+- `react-hot-toast` ^2.5.2 - Additional toast library
 
 **Testing:**
-- Not detected (no test framework configured)
+- Not detected (no test framework in dependencies)
 
 **Build/Dev:**
-- ESLint ^9 with `eslint-config-next` ^16.0.3, `typescript-eslint` ^8 (`eslint.config.mjs`)
-- PostCSS ^8 (`postcss.config.mjs`)
-- TypeScript ^5 (`tsconfig.json` - strict mode, bundler module resolution)
+- `babel-plugin-react-compiler` ^19.1.0-rc.2 - React Compiler babel plugin
+- ESLint ^9 with `eslint-config-next` ^16.0.3
+- PostCSS ^8
+- `sharp` ^0.34.3 - Image optimization
+- `ts-node` ^10.9.2 - TypeScript execution for scripts
 
 ## Key Dependencies
 
 **Critical:**
-- `@supabase/supabase-js` ^2.48.1 - Database client, auth, storage, realtime
-- `@supabase/ssr` ^0.5.2 - Server-side rendering auth helpers
-- `openai` ^4.103.0 - OpenAI API client (embeddings, TTS/STT, image generation)
-- `ai` ^5.0.78 - Vercel AI SDK for streaming chat and tool calling
-- `zod` ^3.25.76 - Schema validation (imported as `zod/v3` in route handlers)
+- `@supabase/supabase-js` ^2.48.1 - Supabase client (database, auth, storage, realtime)
+- `@supabase/ssr` ^0.5.2 - Supabase SSR helpers (cookie-based auth)
+- `@supabase/auth-helpers-nextjs` ^0.10.0 - Legacy Supabase auth helpers
+- `ai` ^5.0.78 - Vercel AI SDK core (streaming, tool use, model routing)
+- `openai` ^4.103.0 - OpenAI API client (embeddings, image gen, chat)
+- `stripe` ^17.6.0 - Payment processing
+- `zod` ^3.25.76 - Schema validation (used with `zod/v3` subpath)
+- `zustand` ^5.0.3 - Client state management
 
 **Infrastructure:**
-- `stripe` ^17.6.0 - Payment processing (API version `2025-01-27.acacia`)
-- `@mendable/firecrawl-js` ^4.8.2 - Web scraping
-- `@nangohq/node` ^0.69.14, `@nangohq/frontend` ^0.69.14 - Document connector integrations
-- `@modelcontextprotocol/sdk` ^1.15.0 - MCP tool protocol
-- `llamaindex` ^0.8.30 - Document parsing via LlamaCloud API
-- `exa-js` ^1.8.26 - Exa web search API
-- `replicate` ^1.0.1 - Replicate AI model API
-- `@fal-ai/client` ^1.4.0 - Fal.ai generative AI
-
-**Document/PDF:**
-- `@react-pdf/renderer` ^4.3.0 - PDF rendering in React
-- `jspdf` ^4.2.0 + `jspdf-autotable` ^5.0.2 - PDF generation
-- `pdfmake` ^0.2.18 - PDF document generation
-
-**Markdown/Content:**
-- `react-markdown` ^9.1.0 - Markdown rendering
-- `remark-gfm` ^4.0.1 - GitHub Flavored Markdown
-- `remark-math` ^6.0.0 + `rehype-katex` ^7.0.1 - Math rendering
-- `marked` ^15.0.7 - Markdown parser
-- `shiki` ^3.1.0 - Syntax highlighting
-
-**Utilities:**
+- `express` ^5.1.0 - Config server (`scripts/config-server.js`)
+- `dotenv` ^16.6.1 - Environment variable loading for scripts
 - `nanoid` ^5.1.0 - ID generation
 - `uuid` ^11.1.0 - UUID generation
-- `date-fns` ^4.1.0 - Date utilities
-- `tiktoken` ^1.0.22 - Token counting for LLMs
-- `dotenv` ^16.6.1 - Environment variable loading (scripts only)
-- `class-variance-authority` ^0.7.1, `clsx` ^2.1.1, `tailwind-merge` ^2.6.0 - CSS class utilities
-- `sharp` ^0.34.3 (dev) - Image processing
+- `node-fetch` ^2.7.0 - HTTP client for Node.js
+- `form-data` ^4.0.1 - Multipart form data
+- `multer` ^1.4.5-lts.2 - File upload handling
+- `eventsource` ^3.0.6 - SSE client
 
-**UI Extras:**
-- `next-themes` ^0.4.6 - Dark/light mode
-- `sonner` ^2.0.2 - Toast notifications
-- `react-hot-toast` ^2.5.2 - Alternative toast notifications
+**Content Processing:**
+- `react-markdown` ^9.1.0 - Markdown rendering
+- `marked` ^15.0.7 - Markdown parser
+- `remark-gfm` ^4.0.1 - GitHub Flavored Markdown
+- `remark-math` ^6.0.0 + `rehype-katex` ^7.0.1 - Math/LaTeX rendering
+- `remark-breaks` ^4.0.0 - Line break handling
+- `react-syntax-highlighter` ^15.6.1 - Code highlighting
+- `shiki` ^3.1.0 - Syntax highlighting engine
+- `react-code-blocks` ^0.1.6 - Code block component
+
+**PDF / Document:**
+- `@react-pdf/renderer` ^4.3.0 - PDF generation (React-based)
+- `jspdf` ^4.2.0 + `jspdf-autotable` ^5.0.2 - PDF generation (imperative)
+- `pdfmake` ^0.2.18 - PDF document builder
+
+**External Service Clients:**
+- `exa-js` ^1.8.26 - Exa web search API
+- `replicate` ^1.0.1 - Replicate AI models
+- `@fal-ai/client` ^1.4.0 - Fal.ai client
+- `@fal-ai/serverless-client` ^0.15.0 - Fal.ai legacy client
+- `@mendable/firecrawl-js` ^4.8.2 - Firecrawl web scraping
+- `@nangohq/frontend` ^0.69.14 + `@nangohq/node` ^0.69.14 - Nango document connectors
+
+**Other:**
+- `@vercel/analytics` ^1.5.0 - Vercel analytics
+- `@tanstack/react-virtual` ^3.13.12 - Virtualized lists
 - `react-textarea-autosize` ^8.5.7 - Auto-resizing textarea
-- `@tanstack/react-virtual` ^3.13.12 - Virtual scrolling
 - `react-qr-code` ^2.0.18 - QR code generation (WhatsApp pairing)
-- `@vercel/analytics` ^1.5.0 - Usage analytics
+- `date-fns` ^4.1.0 - Date utilities
 
 ## Configuration
 
 **Environment:**
-- Configuration singleton: `src/lib/env.ts` (EnvironmentConfig class)
-- `.env.local` - Primary environment file (auto-created by `scripts/init-env.js`)
-- `.env.local.multi-tenant` - Multi-tenant variant
+- Environment managed via `.env.local` (auto-created by `scripts/init-env.js`)
+- Singleton pattern in `src/lib/env.ts` loads and validates all env vars
+- Multi-tenant mode supported via `NEXT_PUBLIC_CHATRAG_DEPLOYMENT_MODE` (`single-tenant` | `multi-tenant`)
 - Required server vars: `OPENAI_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
 - Required public vars: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- Models must be synced across 5 locations: `.env.local`, `scripts/init-env.js`, `src/lib/env.ts`, `scripts/config-server.js`, `scripts/config-ui/index.html`
+- Models must be synchronized across 5 locations (see CLAUDE.md section 7)
 
 **Build:**
-- `next.config.js` - React Compiler enabled, Turbopack, server actions, TS build errors ignored
-- `tsconfig.json` - Strict mode, path alias `@/*` maps to `./src/*`
-- `tailwind.config.ts` - CSS custom properties via `hsl(var(--*))`, plugins: typography, animate, scrollbar
-- `postcss.config.mjs` - PostCSS pipeline
-- `eslint.config.mjs` - ESLint 9 flat config
+- `next.config.js` - Next.js configuration (React Compiler, Turbopack, image remotePatterns)
+- `tsconfig.json` - TypeScript (ES2017 target, bundler module resolution, `@/*` path alias to `./src/*`)
+- `tailwind.config.ts` - Tailwind with shadcn/ui CSS variable theme, dark mode via `class`
+- `postcss.config.mjs` - PostCSS configuration
+- `eslint.config.mjs` - ESLint flat config
 
-**Deployment Modes:**
-- Single-tenant (default): `NEXT_PUBLIC_CHATRAG_DEPLOYMENT_MODE=single-tenant`
-- Multi-tenant: Organizations, team invites, storage quotas, usage analytics (feature-flagged)
+**Scripts:**
+- `npm run dev` - Development server (auto-creates `.env.local`)
+- `npm run build` - Production build
+- `npm run config` - Visual configuration dashboard at `http://localhost:3333`
+- `npm run db:setup` - Database schema setup (auto-selects single/multi-tenant)
+- `npm run reprocess-docs` - Reprocess document embeddings
+- `npm run test-rag` - RAG system diagnostics
 
 ## Platform Requirements
 
@@ -131,12 +158,12 @@
 - Node.js 18+
 - npm
 - Supabase project (PostgreSQL + pgvector)
-- API keys: OpenAI (required), OpenRouter (recommended), plus optional service keys
+- API keys: OpenAI (required), OpenRouter (recommended)
 
 **Production:**
-- Vercel (primary deployment target based on `@vercel/analytics`, server actions config)
-- Supabase hosted PostgreSQL with pgvector HNSW indexes
-- WhatsApp: Fly.io or Koyeb for Baileys deployment
+- Vercel (primary deployment target, uses `@vercel/analytics`)
+- Supabase hosted instance
+- Optional: Fly.io or Koyeb for WhatsApp Baileys service
 
 ---
 

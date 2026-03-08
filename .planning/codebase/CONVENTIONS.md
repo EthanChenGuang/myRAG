@@ -5,223 +5,218 @@
 ## Naming Patterns
 
 **Files:**
-- Components: kebab-case `.tsx` files (e.g., `src/components/ui/chat-message.tsx`, `src/components/ui/ghost-mode-indicator.tsx`)
-- Exception: PascalCase for some components (e.g., `src/components/ui/CopyButton.tsx`) -- not preferred, kebab-case is the dominant pattern
-- Library modules: kebab-case `.ts` files (e.g., `src/lib/chat-store.ts`, `src/lib/deployment-mode.ts`)
-- Stores: `*-store.ts` suffix (e.g., `src/lib/chat-store.ts`, `src/lib/ghost-mode-store.ts`, `src/lib/web-search-store.ts`)
-- Hooks: `use-*.ts` prefix with kebab-case (e.g., `src/hooks/use-mobile-detection.ts`, `src/lib/hooks/use-audio-settings.ts`)
-- Exception: camelCase hook in `src/hooks/useShareChat.ts` -- not preferred
-- Types: kebab-case `.ts` files in `src/types/` (e.g., `src/types/chat.ts`, `src/types/folder.ts`)
-- API routes: `route.ts` inside directory-based routing (e.g., `src/app/api/chat/route.ts`)
+- Components: PascalCase for React components (`ChatMessage.tsx`, `ModelSelector.tsx`) but kebab-case filenames dominate (`chat-message.tsx`, `model-selector.tsx`, `ghost-mode-store.ts`)
+- Stores: kebab-case with `-store` suffix (`chat-store.ts`, `web-search-store.ts`, `ghost-mode-store.ts`, `reasoning-store.ts`)
+- API routes: `route.ts` inside kebab-case directories following Next.js App Router conventions (`src/app/api/chat/route.ts`, `src/app/api/documents/route.ts`)
+- Utilities: kebab-case (`date-grouping.ts`, `sanitize-title.ts`, `deployment-mode.ts`)
+- Types: kebab-case (`src/types/chat.ts`, `src/types/folder.ts`, `src/types/events.ts`)
+- Providers: kebab-case with `-provider` suffix (`auth-provider.tsx`, `model-provider.tsx`, `language-provider.tsx`)
+- Hooks: camelCase with `use` prefix for files (`useShareChat.ts`) or kebab-case (`use-mobile-detection.ts`) -- inconsistent
 
 **Functions:**
-- Use camelCase for all functions: `fetchChats`, `createChat`, `getStoredChatId`
-- React components use PascalCase: `Header`, `ChatMessage`, `Button`
-- Boolean getters use `is`/`has` prefix: `isSingleTenant()`, `isMultiTenant()`, `hasUnsavedGhostMessages`
-- Store hooks use `use` prefix with PascalCase store name: `useChatStore`, `useReasoningStore`, `useGhostModeStore`
+- Use camelCase: `fetchChats`, `createChat`, `toggleWebSearch`, `getDeploymentMode`
+- Boolean getters use `is` prefix: `isSingleTenant()`, `isMultiTenant()`, `isAuthEnabled`
+- Event handlers use `handle` prefix: `handleGhostModeToggle`, `handleModelDropdownClosedChange`
+- Async operations use descriptive verbs: `fetchModelsFromAPI`, `createBatchEmbeddings`, `searchSimilarChunks`
 
 **Variables:**
-- camelCase for local variables and state: `currentChatId`, `isLoading`, `searchQuery`
-- UPPER_SNAKE_CASE for constants: `STORAGE_BUCKET`, `CURRENT_CHAT_KEY`, `BREAKPOINTS`
-- Environment variables: `NEXT_PUBLIC_*` for client-accessible, plain `UPPER_SNAKE` for server-only
+- camelCase for local variables and state: `currentChatId`, `isLoading`, `headerLogoText`
+- UPPER_SNAKE_CASE for constants: `STORAGE_BUCKET`, `MAX_FILE_SIZE`, `ALLOWED_TYPES`, `CURRENT_CHAT_KEY`
+- Environment variables: `NEXT_PUBLIC_` prefix for client-side, plain uppercase for server-side
 
-**Types:**
-- PascalCase for interfaces and types: `ChatStore`, `MobileDetectionResult`, `ContentPart`
-- Interface names describe the shape directly (no `I` prefix): `ChatMessageProps`, `HeaderProps`, `ButtonProps`
-- Type exports use `type` keyword for type-only imports: `import type { Chat } from '@/lib/supabase'`
+**Types/Interfaces:**
+- PascalCase: `ChatStore`, `ReasoningConfig`, `ExtendedMessage`, `ContentPart`
+- Use `interface` for object shapes, `type` for unions and aliases
+- Export types alongside implementations in same file (e.g., `src/types/chat.ts`)
 
 ## Code Style
 
 **Formatting:**
-- No Prettier config detected -- formatting is handled implicitly by ESLint and editor settings
-- Semicolons are used consistently
-- Single quotes for string literals (TypeScript/JSX)
-- 2-space indentation (observed in all source files)
-- Trailing commas in multi-line objects/arrays
+- No Prettier configured -- formatting is manual/editor-based
+- 2-space indentation (observed across all files)
+- Single quotes for imports in TypeScript files
+- Semicolons used inconsistently (some files omit trailing semicolons in Supabase client files)
 
 **Linting:**
 - ESLint 9 flat config at `eslint.config.mjs`
-- TypeScript-ESLint recommended rules enabled
-- `no-unused-vars`: warn (with `_` prefix ignore pattern for args and vars)
-- `@typescript-eslint/no-explicit-any`: warn (not error -- `any` is used liberally throughout)
-- React hooks rules enforced: `rules-of-hooks` (error), `exhaustive-deps` (warn)
-- Node globals allowed in API routes and scripts (`no-undef: off`)
-- Run: `npm run lint` or `npm run lint:fix`
+- TypeScript ESLint recommended rules
+- `react-hooks/rules-of-hooks`: error
+- `react-hooks/exhaustive-deps`: warn
+- `no-unused-vars`: warn (with `_` prefix ignore for args and vars)
+- `@typescript-eslint/no-explicit-any`: warn (not error -- `any` is used frequently)
+- Node-specific overrides for API routes and scripts: `no-undef` off, `@typescript-eslint/no-require-imports` off
 
 **TypeScript:**
 - Strict mode enabled in `tsconfig.json`
-- `typescript.ignoreBuildErrors: true` in `next.config.js` -- builds proceed despite TS errors
+- `ignoreBuildErrors: true` in `next.config.js` (TypeScript errors do not block builds)
 - React Compiler enabled (`reactCompiler: true` in `next.config.js`)
-- Target: ES2017, Module: ESNext, Module Resolution: bundler
+- Path alias: `@/*` maps to `./src/*`
 
 ## Import Organization
 
 **Order:**
-1. External packages (React, Next.js, third-party libraries)
-2. Internal absolute imports using `@/` alias
-3. Relative imports (rare, mostly within same directory)
-4. Type-only imports using `import type { ... }`
+1. External packages (`react`, `next`, `zustand`, `ai`, `@supabase/*`, `@radix-ui/*`)
+2. Internal library imports (`@/lib/*`)
+3. Component imports (`@/components/*`)
+4. Type imports (`@/types/*`)
+5. Relative imports (same directory)
 
 **Path Aliases:**
-- `@/*` maps to `./src/*` (configured in `tsconfig.json`)
-- Always use `@/` for cross-directory imports: `@/lib/utils`, `@/components/ui/button`, `@/types/chat`
-- Relative imports only within the same module/directory
+- `@/*` resolves to `./src/*` -- use this for all internal imports
+- Example: `import { cn } from '@/lib/utils'`
 
-**Examples from `src/app/page.tsx`:**
-```typescript
-import { useChat } from '@ai-sdk/react';           // External
-import { DefaultChatTransport, type UIMessage } from 'ai';  // External
-import { ChatInput } from '@/components/ui/chat-input';     // Internal component
-import { cn } from '@/lib/utils';                           // Internal utility
-import { useChatStore } from '@/lib/chat-store';            // Internal store
-import { useShallow } from 'zustand/react/shallow';         // External (Zustand)
-import type { Chat } from '@/lib/supabase';                 // Type-only import
-```
+**Patterns:**
+- Use `import type` for type-only imports: `import type { AuthUser } from '@/lib/supabase-auth'`
+- Named exports preferred over default exports (except for pages/layouts)
+- Barrel re-exports not commonly used
 
 ## Error Handling
 
 **API Routes:**
-- Wrap handler body in `try/catch` blocks
-- Return structured JSON errors with `success: false` and descriptive `error` message
-- Use appropriate HTTP status codes (400 for validation, 500 for server errors)
-- Log errors with `console.error()` before returning
-- Pattern from `src/app/api/documents/[id]/route.ts`:
+- Wrap entire handler in try/catch
+- Return structured JSON errors with `NextResponse.json()`:
 ```typescript
-try {
-  // ... operation
-  return new Response(JSON.stringify({ success: true }), { status: 200 });
-} catch (error) {
-  console.error('Error deleting document:', error);
-  return new Response(
-    JSON.stringify({ error: 'Failed to delete document' }),
-    { status: 500, headers: { 'Content-Type': 'application/json' } }
-  );
+return NextResponse.json(
+  { success: false, error: 'descriptive message', details: errorInfo },
+  { status: 400 }
+);
+```
+- Use Zod validation via `src/lib/api-middleware.ts` (`validateRequest` and `withValidation` helpers)
+- Log errors with `console.error()` or `logger.error()` before returning error response
+
+**Client-side:**
+- Use try/catch around async operations (fetch, Supabase calls)
+- Log errors with `console.error()` -- no user-facing toast pattern standardized
+- Silently swallow certain errors in cookie handling (Supabase SSR server components)
+
+**Patterns to follow:**
+```typescript
+// API route pattern
+export async function POST(request: NextRequest) {
+  try {
+    // ... business logic
+    return NextResponse.json({ success: true, data });
+  } catch (error) {
+    console.error('Context description:', error);
+    return NextResponse.json(
+      { success: false, error: 'User-facing message' },
+      { status: 500 }
+    );
+  }
 }
 ```
 
-**Validation:**
-- Use Zod schemas for request body validation via `src/lib/api-middleware.ts`
-- `withValidation(schema, handler)` HOF wraps route handlers with automatic validation
-- `validateRequest(req, schema)` for inline validation returning discriminated union
-- Zod imported from `'zod/v3'` (AI SDK 5 compatibility)
-
-**Client-side:**
-- Errors surfaced via store state (`error: string | null` pattern in Zustand stores)
-- `console.error()` for logging; no centralized error boundary observed
-
 ## Logging
 
-**Framework:** Two logging utilities coexist:
+**Framework:** Custom `SmartLogger` singleton at `src/lib/logger.ts` plus `devLog` utility at `src/lib/dev-logger.ts`
 
-1. **`src/lib/logger.ts`** - `SmartLogger` class with deduplication and log levels (`ERROR`, `WARN`, `INFO`, `DEBUG`)
-   - Deduplicates repeated log messages (30-second window, max 2 duplicates)
-   - Methods: `logger.debug()`, `logger.startup()`, `logger.error()`
-   - Server-side focused
+**SmartLogger (`src/lib/logger.ts`):**
+- Singleton with deduplication to prevent log spam
+- Domain-specific methods: `logger.startup()`, `logger.env()`, `logger.db()`, `logger.mcp()`, `logger.api()`, `logger.admin()`
+- General methods: `logger.error()`, `logger.warn()`, `logger.info()`, `logger.debug()`
+- `logger.error()` always prints; `logger.debug()` only in development
+- Backwards-compatible helper exports: `logStartup`, `logEnv`, `logDb`, `logMcp`, `logApi`, `logError`, `logWarn`, `logInfo`, `logDebug`
 
-2. **`src/lib/dev-logger.ts`** - `devLog` object for development logging
-   - `devLog.log()` - dev-only logging
-   - `devLog.verbose()` - requires `NEXT_PUBLIC_VERBOSE_LOGGING=true`
-   - `devLog.error()` - always logs
-   - `devLog.warn()` - dev-only
-   - `devLog.perf()` - performance timing (verbose mode)
-   - `devLog.lifecycle()` - component lifecycle (requires explicit flag)
+**devLog (`src/lib/dev-logger.ts`):**
+- Client-side development logging
+- `devLog.log()` for dev-only, `devLog.verbose()` for opt-in verbose, `devLog.error()` always
+- `devLog.perf()` for performance measurement
 
-**Patterns:**
-- Prefix log messages with `[ModuleName]` brackets: `[ReasoningStore]`, `[Document Reference Tool]`
-- Use `console.error` directly in catch blocks
-- Avoid log spam: use `devLog` or `logger` instead of raw `console.log` in production paths
-- Many raw `console.log` calls still exist in API routes (e.g., `src/app/api/chat/route.ts` lines 75-79)
+**When to use which:**
+- API routes / server logic: Use `logger` from `@/lib/logger`
+- Client components: Use `devLog` from `@/lib/dev-logger` or `console.log` (many files still use raw console)
+- Avoid excessive logging in production; use the SmartLogger deduplication
 
 ## Comments
 
 **When to Comment:**
-- JSDoc-style comments on utility functions and classes (`src/lib/deployment-mode.ts`, `src/lib/api-middleware.ts`)
-- Inline comments for non-obvious logic or "why" explanations
-- TODO/FIXME comments for known gaps (explored in CONCERNS.md)
-- Keep comments minimal per project guidelines
+- JSDoc-style comments on exported functions with `@param`, `@returns`, `@throws` tags (seen in `src/lib/deployment-mode.ts`, `src/lib/api-middleware.ts`)
+- Inline `// Debug:` comments (many left as stubs from removed logging -- see `src/components/providers/auth-provider.tsx`)
+- Section dividers with comments in large files (e.g., `// Desktop Layout`, `// Mobile + Tablet Layout`)
+- `// TODO`, `// FIXME` used sparingly
 
 **JSDoc/TSDoc:**
-- Used on exported utility functions with `@param` and `@returns` tags
-- Not used on React components (props interfaces serve as documentation)
-- Example from `src/lib/deployment-mode.ts`:
-```typescript
-/**
- * Check if the application is running in single-tenant mode
- * @returns true if in single-tenant mode
- */
-export function isSingleTenant(): boolean {
-```
+- Used on utility/library functions, especially in `src/lib/`
+- Not commonly used on React components or hooks
 
 ## Function Design
 
-**Size:**
-- No enforced limit; some files are very large (page.tsx: 4685 lines, chat-message.tsx: 5586 lines, chat/route.ts: 4226 lines)
-- Utility modules are kept small and focused (e.g., `src/lib/utils.ts`: 7 lines, `src/lib/deployment-mode.ts`: 105 lines)
+**Size:** No enforced limits. Many component files are very large (4000-5000+ lines for `page.tsx`, `chat-input.tsx`, `chat-message.tsx`, `chat route.ts`)
 
 **Parameters:**
-- Destructured object parameters for React components: `({ className, variant, size, ...props })`
-- Zustand stores use `(set, get)` creator pattern
-- API handlers receive `(request: NextRequest)` or `(request: NextRequest, { params })` for dynamic routes
-- In Next.js 16, `params` is a Promise and must be awaited: `const { id } = await params;`
+- Destructure props in function signatures for React components
+- Use typed interfaces for complex parameter objects
+- Optional parameters use `?` suffix
 
 **Return Values:**
-- API routes return `NextResponse.json()` or `new Response(JSON.stringify(...))`
-- Store actions return `Promise<void>` or `Promise<string | null>` for creation
-- Utility functions return typed values
+- API routes return `NextResponse.json()` with `{ success, data }` or `{ success, error }` shape
+- Store actions return `Promise<void>` or `Promise<string | null>` for create operations
+- Boolean utility functions return plain `boolean`
 
 ## Module Design
 
 **Exports:**
-- Named exports preferred over default exports for components and utilities
-- Default export used sparingly (e.g., `export default devLog` in `src/lib/dev-logger.ts`)
-- React components: `export function ComponentName() {}` or `const Component = React.forwardRef(...)` + named export
-- Stores export the hook directly: `export const useChatStore = create<ChatStore>(...)`
+- Named exports strongly preferred: `export function`, `export const`, `export interface`
+- Default exports only for Next.js pages/layouts and the Framer Motion features bundle
+- Singletons use class with `getInstance()` pattern: `EnvironmentConfig`, `SupabaseManager`, `SmartLogger`
 
 **Barrel Files:**
-- Not used in this codebase -- import directly from specific files
-- No `index.ts` barrel files in `src/lib/` or `src/components/ui/`
+- Not used -- import directly from source files
 
 ## State Management
 
-**Zustand Stores:**
-- Pattern: `create<StoreType>((set, get) => ({ ... }))`
-- Located in `src/lib/*-store.ts` and `src/lib/stores/*.ts`
-- Always use `useShallow` from `zustand/react/shallow` when selecting multiple properties:
+**Pattern:** Zustand stores with the following conventions:
+- Create store with `create<StoreType>()` from `zustand`
+- Define store interface before implementation
+- Export the hook: `export const useChatStore = create<ChatStore>(...)`
+- Access in components with `useShallow` selector from `zustand/react/shallow`:
 ```typescript
 const { currentChatId, chats } = useChatStore(
   useShallow((s) => ({ currentChatId: s.currentChatId, chats: s.chats }))
 );
 ```
-- Store interfaces defined above the `create` call
-- LocalStorage persistence done manually with `getItem`/`setItem` (not Zustand middleware)
 
-**React Context:**
-- Providers in `src/components/providers/` for cross-cutting concerns: auth, model, theme, language, text-size, font, sources, artifacts, markdown
-- Pattern: `createContext` + `useContext` + custom `useXxx` hook
-- Located at `src/components/providers/{name}-provider.tsx`
+**Store locations:**
+- Feature stores in `src/lib/`: `chat-store.ts`, `web-search-store.ts`, `file-upload-store.ts`, `ghost-mode-store.ts`, `user-settings-store.ts`, `admin-store.ts`, `document-mention-store.ts`
+- Grouped stores in `src/lib/stores/`: `reasoning-store.ts`, `organization-store.ts`
 
 ## Component Patterns
 
 **Client Components:**
-- Marked with `'use client'` directive at top of file (98 client component files)
-- No `'use server'` directives detected -- server actions not used
+- Mark with `'use client'` directive at top of file
+- Use React Context for cross-cutting concerns (`AuthProvider`, `ModelProvider`, `LanguageProvider`, `TextSizeProvider`, `FontProvider`, `SourcesProvider`, `ArtifactProvider`)
+- Providers nested in `src/app/client-layout.tsx`
 
-**Shadcn/ui Base Components:**
-- Located in `src/components/ui/` with CVA (class-variance-authority) for variants
-- Use `cn()` utility from `src/lib/utils.ts` for class merging (clsx + tailwind-merge)
-- `React.forwardRef` pattern for primitive UI components (`Button`, `Input`, etc.)
+**UI Components:**
+- shadcn/ui pattern at `src/components/ui/` using Radix primitives + `cva` for variants + `cn()` for class merging
+- `forwardRef` pattern for composable primitives (e.g., `Button`)
+- Tailwind CSS for all styling; no CSS modules
+- Dark mode via CSS variables and `dark:` Tailwind prefix
 
-**Styling:**
-- Tailwind CSS 3.4 with `tailwindcss-animate` plugin
-- `cn()` for conditional/merged classes
-- Inline style objects for dynamic values (e.g., theme-dependent colors in `src/components/ui/header.tsx`)
-- Framer Motion for animations (`motion` components, `AnimatePresence`)
+**Styling utility:**
+- `cn()` from `src/lib/utils.ts` (combines `clsx` + `tailwind-merge`)
+- Use for all conditional class names
 
-## Singleton Patterns
+## Validation
 
-- `EnvironmentConfig` in `src/lib/env.ts`: private constructor + `getInstance()`
-- `SupabaseManager` in `src/lib/supabase.ts`: same singleton pattern
-- Used for one-time initialization of config and database connections
+**Schema validation:** Zod (`zod/v3` -- note the `/v3` import path)
+- API request validation via `src/lib/api-middleware.ts`
+- Tool input schemas defined with `z.object()` in AI SDK tool definitions
+- Example:
+```typescript
+const schema = z.object({
+  documentId: z.string(),
+  relevance: z.number().min(0).max(100),
+});
+```
+
+## Internationalization
+
+**Pattern:** Custom translation system in `src/translations/`
+- Type-safe translation keys derived from English source (`src/translations/en.ts`)
+- `useLanguage()` hook provides `t()` function
+- 18 languages supported
+- Access: `const { t } = useLanguage(); t('newChat')`
 
 ---
 

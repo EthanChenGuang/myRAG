@@ -5,164 +5,181 @@
 ## Tech Debt
 
 **Monolithic Chat Route (God File):**
-- Issue: `src/app/api/chat/route.ts` is 4,226 lines and `src/app/api/chat/approve/route.ts` is 4,823 lines. Both files contain email intent analysis, calendar parameter transforms, MCP tool routing, RAG retrieval, streaming logic, and error handling all in single files.
+- Issue: `src/app/api/chat/route.ts` is 4,226 lines and `src/app/api/chat/approve/route.ts` is 4,823 lines. These files contain RAG retrieval, MCP tool orchestration, email intent analysis, image/video/3D generation handling, multi-tenant routing, and error handling all in single route handlers.
 - Files: `src/app/api/chat/route.ts`, `src/app/api/chat/approve/route.ts`
-- Impact: Extremely difficult to reason about, test, or modify safely. Any change risks unintended side effects across unrelated features. Code review is impractical at this scale.
-- Fix approach: Extract into focused modules: email intent (`lib/email-intent.ts`), calendar transforms (`lib/calendar-transforms.ts`), MCP tool execution pipeline, RAG context builder, and a thin route handler that orchestrates them.
+- Impact: Extremely difficult to modify, test, or debug. Any change risks breaking unrelated functionality. High cognitive load for developers.
+- Fix approach: Extract into focused modules — separate RAG retrieval, MCP orchestration, media generation, and error handling into dedicated service files under `src/lib/`.
 
-**Excessive `globalThis` State Management:**
-- Issue: The chat route stores tool approval state, persistent MCP clients, Gmail caches, image contexts, reasoning details, and fallback sources on `globalThis` via `(globalThis as any)`. At least 30+ references to `globalThis` state across the chat routes.
-- Files: `src/app/api/chat/route.ts` (lines 626-644, 1522-1542, 3125, 3293-3307, 3907-3920, 3967-3978, 3994-4003, 4214), `src/app/api/chat/approve/route.ts` (lines 10-25)
-- Impact: Memory leaks in long-running server processes. State bleeds between requests. No cleanup guarantees. Impossible to test in isolation. Race conditions between concurrent requests sharing the same global state.
-- Fix approach: Use request-scoped state management or a proper in-memory store with TTL (e.g., `lru-cache`). Move MCP client lifecycle into a managed singleton with reference counting.
+**Monolithic Main Page Component:**
+- Issue: `src/app/page.tsx` is 4,685 lines with 41 `useEffect` hooks and ~20 `setInterval`/`setTimeout` calls. Contains chat logic, media generation polling, scroll management, and state synchronization.
+- Files: `src/app/page.tsx`
+- Impact: Render performance risk, memory leak potential from interval/timeout proliferation, nearly impossible to unit test.
+- Fix approach: Extract into custom hooks (`useChat`, `useMediaGeneration`, `useScrollManagement`) and smaller sub-components.
 
-**Pervasive `any` Types (1,026 Occurrences):**
-- Issue: 1,026 uses of `: any` across 162 files. Worst offenders: `src/app/api/chat/route.ts` (81), `src/app/api/chat/approve/route.ts` (132), `src/components/ui/chat-message.tsx` (55), `src/components/ui/chat-input.tsx` (49).
-- Files: See counts above; concentrated in chat route, approve route, chat-message, and chat-input components.
-- Impact: TypeScript safety is effectively disabled in the most critical code paths. Refactoring is unsafe because the compiler cannot catch type mismatches. Runtime errors occur that would be caught at compile time.
-- Fix approach: Prioritize typing the globalThis state objects, MCP tool parameters, and API response shapes. Create proper interfaces for Gmail/calendar data structures that are currently `any`.
+**Oversized UI Components:**
+- Issue: Several components far exceed reasonable size limits.
+- Files: `src/components/ui/chat-message.tsx` (5,586 lines), `src/components/ui/chat-input.tsx` (4,875 lines), `src/components/ui/sidebar.tsx` (2,697 lines)
+- Impact: Slow hot-reload, difficult to reason about, high merge conflict risk.
+- Fix approach: Break into composable sub-components. `chat-message.tsx` should split into message types (text, tool, media). `chat-input.tsx` should extract media generation handlers.
 
-**518 Console Log Statements in Chat Route:**
-- Issue: `src/app/api/chat/route.ts` contains 518 `console.log/error/warn/debug` calls, including a module-level log on every import that partially prints the API key prefix (line 79: `OPENROUTER_API_KEY_START`).
-- Files: `src/app/api/chat/route.ts`
-- Impact: Log noise drowns useful diagnostics. Performance impact from string formatting on every request. The API key prefix log is a minor information leak.
-- Fix approach: Replace with the existing `devLog` utility from `src/lib/dev-logger.ts`. Remove the module-level environment dump. Gate verbose logs behind `NODE_ENV === 'development'`.
+**Global State via `globalThis`:**
+- Issue: MCP tool approval state, persistent MCP clients, and image context are stored on `globalThis` with `as any` casts. This is module-scoped mutable state in a serverless-like environment.
+- Files: `src/app/api/chat/route.ts` (lines 626-644, 1522-1534, 3125, 3293, 3907), `src/lib/mcp/production-router.ts` (lines 49, 954-956), `src/app/api/tool-execution-state/route.ts` (lines 120-122)
+- Impact: State leaks between requests in long-running processes. State lost on cold starts. Race conditions between concurrent requests.
+- Fix approach: Move to Redis or Supabase-backed state management for tool approval and MCP sessions.
 
-**Zero Test Coverage:**
-- Issue: No test files exist anywhere in the project. No test framework is configured (no jest.config, vitest.config, playwright.config). The only test-related npm script is `test-rag` which runs a diagnostic script, not automated tests.
-- Files: `package.json` (scripts section)
-- Impact: Every change is a regression risk. The 9,000+ lines of chat route logic have no automated verification. Refactoring the monolithic files is extremely risky without tests as a safety net.
-- Fix approach: Add vitest as the test runner. Start with unit tests for the pure functions that can be extracted from the chat routes (email intent analysis, calendar parameter transforms, query classification). Add integration tests for the RAG retrieval pipeline.
+**Window Global State for Request Tracking:**
+- Issue: Pending image/video/3D generation requests tracked on `window._pendingImageRequests`, `window._pendingVideoRequests`, `window._pendingThreeDRequests`, `window._videoProgressIntervals`.
+- Files: `src/app/page.tsx` (lines 47-55, 2676-2691), `src/components/ui/chat-input.tsx` (lines 1037-1039, 1527-1774)
+- Impact: Not cleaned up on component unmount, bypasses React state management, untestable.
+- Fix approach: Move to a Zustand store or React refs scoped to component lifecycle.
 
-**Missing Input Validation on Most API Routes:**
-- Issue: `withValidation` middleware exists in `src/lib/api-middleware.ts` but is only used in `src/app/api/chat/route.ts`. All other API routes (generate-image, generate-video, upload, web-search, documents, folders, organizations) accept unvalidated request bodies.
-- Files: `src/lib/api-middleware.ts`, all files under `src/app/api/`
-- Impact: Malformed requests can cause unexpected errors. No defense against oversized payloads or injection attacks through request parameters.
-- Fix approach: Add Zod schemas and `withValidation` wrapper to all POST/PUT/PATCH route handlers, starting with the generation endpoints and document processing.
+**Duplicate Artifact Sidebar Implementation:**
+- Issue: Two coexisting implementations — a legacy monolithic file and a refactored directory version.
+- Files: `src/components/ui/artifact-sidebar.tsx` (480 lines, legacy), `src/components/ui/artifact-sidebar/` (directory, refactored)
+- Impact: Unclear which is canonical. Both define `FileToDownload` interface. Maintenance burden of keeping two versions.
+- Fix approach: Remove `src/components/ui/artifact-sidebar.tsx` and ensure all imports point to `src/components/ui/artifact-sidebar/index.tsx`.
+
+**Excessive Console Logging (2,929 occurrences):**
+- Issue: 2,929 `console.log/warn/error/debug` calls across 171 files. Many are debug-level logs left in production code, including the chat route logging API key metadata on module load.
+- Files: `src/app/api/chat/route.ts` (518 occurrences), `src/app/api/chat/approve/route.ts` (475 occurrences), `src/components/ui/chat-input.tsx` (157 occurrences), `src/app/page.tsx` (179 occurrences)
+- Impact: Log noise in production, performance overhead from string interpolation, potential information leakage.
+- Fix approach: Use the existing `src/lib/logger.ts` and `src/lib/dev-logger.ts` consistently. Gate debug logs behind `NODE_ENV` check. Remove module-load logging from chat route.
+
+**Excessive `as any` / Type Safety Bypasses:**
+- Issue: 248 occurrences of `eslint-disable`, `@ts-ignore`, `@ts-nocheck`, or `as any` across 40 files. Core singletons (`SupabaseManager`, `EnvironmentConfig`) type their internal state as `any`.
+- Files: `src/lib/supabase.ts` (line 18: `private _supabase: any = null`), `src/lib/env.ts` (line 11: `private envVars: any = null`), `src/app/api/chat/route.ts` (42 occurrences), `src/app/api/chat/approve/route.ts` (67 occurrences)
+- Impact: TypeScript provides no safety guarantees in these areas. Runtime errors go undetected at compile time.
+- Fix approach: Define proper interfaces for Supabase clients, environment config objects, and MCP state. Replace `as any` with proper type assertions or generics.
+
+**In-Memory Rate Limiting:**
+- Issue: Rate limiting for embed widget uses in-memory `Map` with a `setInterval` cleanup. Comment acknowledges "in production, use Redis or similar."
+- Files: `src/lib/embed-rate-limit.ts`
+- Impact: Rate limits reset on every deployment/restart. Not shared across serverless instances. Memory grows unbounded between cleanup intervals.
+- Fix approach: Use Redis, Upstash, or Supabase for rate limit state.
 
 ## Known Bugs
 
-**Polar Webhook Signature Verification Disabled:**
-- Symptoms: The `verifyPolarWebhookSignature` function always returns `true`, even in production. The TODO comment says "Implement HMAC verification when Polar provides the documentation" but the function unconditionally trusts all webhooks.
-- Files: `src/lib/polar.ts` (lines 43-60)
-- Trigger: Any HTTP POST to the webhook endpoint will be accepted as valid, even from malicious sources.
-- Workaround: None in code. Rely on network-level restrictions if available.
-
-**Organization Invitation Email Not Sent:**
-- Symptoms: When inviting users to an organization, the invite record is created in the database but no email is sent. The invite URL is generated and returned in the API response but the user must be manually notified.
-- Files: `src/app/api/organizations/[id]/invites/route.ts` (line 250)
-- Trigger: Any call to the organization invite endpoint.
-- Workaround: Manually share the invite URL from the API response.
+**Empty Catch Blocks Swallowing Errors:**
+- Symptoms: Errors silently discarded in embed chat widget and client layout.
+- Files: `src/app/embed/chat.js/route.ts` (line 1022: `catch(_){}`), `src/app/client-layout.tsx` (lines 97, 357: `catch (e) {}`)
+- Trigger: Any error in the caught code path.
+- Workaround: None — errors are invisible.
 
 ## Security Considerations
 
-**Unauthenticated Generation Endpoints:**
-- Risk: `src/app/api/generate-image/route.ts` and `src/app/api/generate-video/route.ts` have no authentication checks. Any client can call these endpoints to consume expensive API credits (OpenAI, Fal.ai, Replicate).
-- Files: `src/app/api/generate-image/route.ts`, `src/app/api/generate-video/route.ts`
-- Current mitigation: None. The endpoints are fully open.
-- Recommendations: Add `auth.getUser()` checks matching the pattern used in WhatsApp, documents, and folder routes. Add rate limiting similar to `src/lib/embed-rate-limit.ts`.
+**API Key Partial Logging:**
+- Risk: Chat route logs first 7 characters of OPENROUTER_API_KEY on module load, which runs on every cold start.
+- Files: `src/app/api/chat/route.ts` (lines 75-80)
+- Current mitigation: Only partial key logged, but still leaks to log aggregators.
+- Recommendations: Remove API key logging entirely. Use boolean presence checks only.
 
-**No Rate Limiting on Primary Chat Endpoint:**
-- Risk: The main chat endpoint at `src/app/api/chat/route.ts` has no rate limiting. Rate limiting only exists for the embed chat endpoint (`src/lib/embed-rate-limit.ts`).
-- Files: `src/app/api/chat/route.ts`, `src/lib/embed-rate-limit.ts`
-- Current mitigation: None for the primary endpoint. The embed endpoint uses an in-memory rate limiter.
-- Recommendations: Apply rate limiting to the main chat route and all generation endpoints. The in-memory rate limiter in `src/lib/embed-rate-limit.ts` is a start but will not work across multiple server instances (comment on line 8 acknowledges this: "in production, use Redis or similar").
+**No Rate Limiting on Core Chat API:**
+- Risk: The main chat endpoint (`/api/chat`) has no rate limiting. Only the embed widget endpoint has rate limiting.
+- Files: `src/app/api/chat/route.ts` (no rate limit middleware), `src/lib/embed-rate-limit.ts` (embed-only)
+- Current mitigation: Supabase auth required in multi-tenant mode, but single-tenant mode is open.
+- Recommendations: Add rate limiting middleware to all API routes, especially chat and document processing.
 
-**API Key Prefix Logged at Module Load:**
-- Risk: Lines 76-80 of the chat route log the first 7 characters of `OPENROUTER_API_KEY` to stdout on every server start/module reload. This partial key exposure aids brute-force attacks.
-- Files: `src/app/api/chat/route.ts` (lines 74-80)
-- Current mitigation: None.
-- Recommendations: Remove the `OPENROUTER_API_KEY_START` log entirely. Log only "Present" or "Missing" status.
+**Webhook Signature Verification Disabled:**
+- Risk: Polar webhook signature verification always returns `true` — the HMAC check is stubbed out with a TODO.
+- Files: `src/lib/polar.ts` (lines 43-60)
+- Current mitigation: None. Any request to the webhook endpoint is trusted.
+- Recommendations: Implement HMAC verification or disable Polar webhooks until verification is ready.
 
-**Wildcard CORS on Embed Endpoints:**
-- Risk: `Access-Control-Allow-Origin: *` is set on embed chat and config endpoints. This is intentional for embeddable widgets but allows any origin to make requests.
-- Files: `src/app/api/embed/chat/route.ts`, `src/app/embed/chat.js/route.ts`, `src/app/api/config/openrouter-model-info/route.ts`
-- Current mitigation: The embed chat endpoint has rate limiting via `src/lib/embed-rate-limit.ts`.
-- Recommendations: Consider restricting CORS to configured allowed origins from an env var. The openrouter-model-info endpoint exposes model configuration to any origin unnecessarily.
+**`dangerouslySetInnerHTML` Usage:**
+- Risk: Multiple uses of `dangerouslySetInnerHTML` and `innerHTML` across components, particularly in the embed chat widget which renders user-provided content.
+- Files: `src/components/ui/chat-message.tsx` (lines 3790, 4178, 4903), `src/app/embed/chat.js/route.ts` (14 occurrences of `innerHTML`), `src/lib/chat-utils.ts` (lines 93, 150 using `window.marked.parse`)
+- Current mitigation: Some content goes through markdown rendering, but the embed widget has minimal sanitization.
+- Recommendations: Use DOMPurify or equivalent sanitization for all `innerHTML`/`dangerouslySetInnerHTML` usage, especially in the embed widget.
 
-**Multiple `dangerouslySetInnerHTML` Usages:**
-- Risk: At least 7 uses of `dangerouslySetInnerHTML` in component code, plus `innerHTML` assignments in the embed widget. The `src/lib/chat-utils.ts` file uses `(window as any).marked.parse()` to render markdown directly into DOM elements (lines 93, 150).
-- Files: `src/components/ui/code-block.tsx`, `src/components/ui/chat-input.tsx`, `src/components/ui/chat-message.tsx`, `src/app/page.tsx`, `src/app/client-layout.tsx`, `src/lib/chat-utils.ts`
-- Current mitigation: Some uses are for style injection which is lower risk. The markdown rendering in `chat-utils.ts` relies on the `marked` library's sanitization.
-- Recommendations: Audit each `dangerouslySetInnerHTML` usage. Ensure the `marked` library has XSS sanitization enabled. Replace direct DOM manipulation in `chat-utils.ts` with React-managed rendering.
+**Single-Tenant Mode Auth Bypass:**
+- Risk: In single-tenant mode, document upload and chat endpoints skip authentication entirely.
+- Files: `src/app/api/process-document/route.ts` (lines 530-536), `src/app/api/chat/route.ts`
+- Current mitigation: Designed for private deployments, but no network-level access control is enforced.
+- Recommendations: Document that single-tenant mode must be deployed behind a VPN or reverse proxy with auth. Consider adding optional API key auth.
+
+**Invitation Email Not Sent:**
+- Risk: Organization invite endpoint creates the invite record but never sends the email notification.
+- Files: `src/app/api/organizations/[id]/invites/route.ts` (line 250: `// TODO: Send invitation email`)
+- Current mitigation: Users must share invite links manually.
+- Recommendations: Implement email sending via SMTP or a transactional email service.
 
 ## Performance Bottlenecks
 
-**Giant Client Components:**
-- Problem: `src/app/page.tsx` (4,685 lines), `src/components/ui/chat-message.tsx` (5,586 lines), and `src/components/ui/chat-input.tsx` (4,875 lines) are massive client-side components. `page.tsx` has 41 `useEffect` hooks.
-- Files: `src/app/page.tsx`, `src/components/ui/chat-message.tsx`, `src/components/ui/chat-input.tsx`
-- Cause: All features are in monolithic components rather than split into focused sub-components. Every state change potentially triggers re-renders of the entire component tree.
-- Improvement path: Extract sub-components with their own state. Use `React.memo` for expensive renders. Move non-interactive parts to server components. Split `page.tsx` into `ChatContainer`, `MessageList`, `InputArea`, etc.
+**Page Component Re-render Cascade:**
+- Problem: `src/app/page.tsx` with 41 `useEffect` hooks and extensive state creates re-render cascades. Multiple `setInterval` calls (progress polling, scroll checking, message ID cleaning) run concurrently.
+- Files: `src/app/page.tsx`
+- Cause: Monolithic component with tightly coupled state. Intervals not always cleaned up properly.
+- Improvement path: Split into focused hooks with `useShallow` selectors. Replace polling intervals with event-driven updates where possible.
 
-**Uncontrolled setInterval Proliferation:**
-- Problem: 30+ `setInterval` calls across the codebase including polling loops for MCP health (every 5 min), model updates (every 5 sec), sidebar polling, WhatsApp status checks, document refresh, and firecrawl config polling.
-- Files: `src/components/providers/model-provider.tsx` (5s interval), `src/lib/mcp/production-router.ts`, `src/lib/mcp/universal-discovery.ts`, `src/components/ui/sidebar.tsx`, `src/lib/hooks/use-firecrawl-config.ts` (2s interval), `src/lib/embed-rate-limit.ts`, `src/lib/mcp-cache.ts`
-- Cause: Each feature independently sets up its own polling without coordination. Module-level `setInterval` calls in `src/lib/embed-rate-limit.ts`, `src/lib/mcp-cache.ts`, `src/lib/mcp/universal-discovery.ts`, and `src/lib/mcp/production-router.ts` run forever with no cleanup path.
-- Improvement path: Consolidate polling into a single heartbeat system. Use `requestIdleCallback` or visibility-aware polling. Module-level intervals should be lazily initialized and stoppable.
+**Chat Route Module-Load Side Effects:**
+- Problem: Chat route executes `console.log` statements and environment checks at module load time (lines 75-80), running on every cold start.
+- Files: `src/app/api/chat/route.ts` (lines 75-80)
+- Cause: Debug logging left at module scope.
+- Improvement path: Remove module-scope logging. Move to request-scoped debug logging behind a flag.
 
-**In-Memory Rate Limiter Does Not Scale:**
-- Problem: `src/lib/embed-rate-limit.ts` uses a `Map` for rate limiting. This only works for single-instance deployments.
-- Files: `src/lib/embed-rate-limit.ts`
-- Cause: No external store for rate limit state.
-- Improvement path: Use Redis or Supabase for rate limit state if deploying multiple instances.
+**In-Memory Caching Without Eviction:**
+- Problem: MCP cache, rate limit store, and tool execution state use in-memory stores without size limits.
+- Files: `src/lib/mcp-cache.ts`, `src/lib/embed-rate-limit.ts`, `src/lib/tool-execution-state.ts`
+- Cause: No TTL or max-size enforcement beyond periodic cleanup.
+- Improvement path: Add LRU eviction or move to external cache (Redis/Upstash).
 
 ## Fragile Areas
 
-**Chat Route MCP Tool Execution Pipeline:**
-- Files: `src/app/api/chat/route.ts` (lines 3000-4226), `src/app/api/chat/approve/route.ts`
-- Why fragile: Tool execution relies on `globalThis` state for approval workflows. The approval flow requires state to survive across separate HTTP requests. If the server restarts between tool proposal and approval, the state is lost. Gmail-specific parameter mapping, calendar transforms, and image context management are all inline.
-- Safe modification: Do not modify MCP tool execution without understanding the full approval lifecycle. Test with actual MCP servers (Zapier, Gmail). The `__REQUIRES_APPROVAL__` string protocol is a fragile text-based IPC mechanism.
-- Test coverage: Zero automated tests.
+**Chat Message Rendering:**
+- Files: `src/components/ui/chat-message.tsx` (5,586 lines)
+- Why fragile: Handles text, markdown, code, tool calls, tool results, MCP approvals, audio, video, 3D models, image generation, PDF export, and source citations all in one component. Complex conditional rendering with deeply nested JSX.
+- Safe modification: Test with all message types (text, tool call, media, approval). Check both light and dark themes.
+- Test coverage: No automated tests exist.
 
-**Sidebar Deduplication Logic:**
-- Files: `src/components/ui/sidebar.tsx` (lines 1273-1394)
-- Why fragile: Multiple layers of deduplication ("aggressive deduplication", "emergency deduplication", duplicate ID warnings) suggest an underlying data consistency issue that is being patched at the render level rather than fixed at the source.
-- Safe modification: Fix the root cause of duplicate chat IDs appearing in state before simplifying the deduplication layers.
-- Test coverage: None.
+**MCP Tool Orchestration Pipeline:**
+- Files: `src/app/api/chat/route.ts` (lines 2900-3400), `src/app/api/chat/approve/route.ts`, `src/lib/mcp/production-router.ts`, `src/lib/mcp/universal-client.ts`, `src/lib/tool-execution-state.ts`
+- Why fragile: Multi-step flow spanning global state, API routes, and client-side polling. Tool approval state stored on `globalThis`. MCP client lifecycle managed manually with explicit connect/disconnect.
+- Safe modification: Test full approval flow end-to-end. Verify tool state persistence across request boundaries.
+- Test coverage: No automated tests exist.
 
-**Five-File Model Synchronization:**
+**Model Configuration Synchronization:**
 - Files: `.env.local`, `scripts/init-env.js`, `src/lib/env.ts`, `scripts/config-server.js`, `scripts/config-ui/index.html`
-- Why fragile: Model definitions must be manually synchronized across five separate files (as documented in CLAUDE.md). Missing a file causes models to not appear or behave incorrectly. No validation ensures consistency.
-- Safe modification: Always update all five files when changing models. Consider generating model lists from a single source of truth.
-- Test coverage: None.
+- Why fragile: Model definitions must be synchronized across five separate files (per CLAUDE.md). Any mismatch causes models to disappear or malfunction.
+- Safe modification: Update all five files atomically. Test model selector UI after changes.
+- Test coverage: No automated validation that files are in sync.
 
 ## Scaling Limits
 
-**globalThis State:**
-- Current capacity: Works for single-server, low-concurrency usage.
-- Limit: Concurrent requests sharing `toolApprovalState` on `globalThis` will race. State accumulates without bounds (no TTL or size limits on the approval state map or Gmail cache).
-- Scaling path: Move to Redis or a proper state store. Add TTL-based expiry for approval states.
+**In-Memory State:**
+- Current capacity: Single Node.js process.
+- Limit: Cannot scale horizontally — `globalThis` state, in-memory caches, and rate limit stores are process-local.
+- Scaling path: Move shared state to Redis/Supabase. Use stateless API routes.
 
-**In-Memory Caches:**
-- Current capacity: MCP cache (`src/lib/mcp-cache.ts`), rate limiter (`src/lib/embed-rate-limit.ts`), and admin session cache (`src/app/api/admin/check/route.ts`) all use in-memory Maps.
-- Limit: Memory grows unbounded in long-running processes. Cannot share state across multiple server instances.
-- Scaling path: Use Redis for shared caches. Add maximum size limits and LRU eviction to in-memory caches.
+**Chat Route Complexity:**
+- Current capacity: Single endpoint handling all chat functionality.
+- Limit: 4,226-line route handler creates long cold start times and high memory usage per request.
+- Scaling path: Split into microservice-style route handlers or edge functions for specific tasks.
 
 ## Dependencies at Risk
 
-**Heavy Client Bundle:**
-- Risk: The client imports `framer-motion`, `react-markdown`, `remark-gfm`, `remark-math`, `rehype-katex`, `date-fns`, `lucide-react`, `pdfmake`, and multiple Supabase packages. The `chat-message.tsx` component alone imports 30+ modules.
-- Impact: Large initial bundle size. Slow page loads on mobile/low-bandwidth connections.
-- Migration plan: Lazy-load heavy dependencies (pdfmake, katex, model-viewer). Use dynamic imports for generation features. Tree-shake lucide-react icons.
+**`@supabase/auth-helpers-nextjs`:**
+- Risk: Legacy Supabase auth package. Supabase recommends `@supabase/ssr` for Next.js App Router.
+- Impact: May lose compatibility with future Supabase/Next.js versions. Some auth flows may not work correctly with SSR.
+- Migration plan: Migrate to `@supabase/ssr` package, update server-side client creation patterns.
 
 ## Missing Critical Features
 
-**No Automated Testing Infrastructure:**
-- Problem: No test framework, no test files, no CI test pipeline. The `package.json` has no `test` script (only `test-rag` for manual RAG diagnostics).
-- Blocks: Safe refactoring of the monolithic chat routes. Confident deployment. Regression detection.
+**Zero Test Coverage:**
+- Problem: No test files exist anywhere in the codebase (no `*.test.*` or `*.spec.*` files found).
+- Blocks: Cannot verify correctness of any code changes. No regression detection. Refactoring the large files is extremely risky.
 
-**No Request Authentication on Generation Endpoints:**
-- Problem: Image, video, and 3D generation endpoints have no auth checks. Upload endpoint also has no auth check.
-- Files: `src/app/api/generate-image/route.ts`, `src/app/api/generate-video/route.ts`, `src/app/api/generate-3d/route.ts`, `src/app/api/upload/route.ts`
-- Blocks: Safe public deployment without risk of API credit abuse.
+**No Input Sanitization Middleware:**
+- Problem: API routes validate with Zod schemas in some places (`src/lib/api-middleware.ts`) but many routes parse request bodies directly without validation.
+- Blocks: Cannot guarantee API input safety across all endpoints.
 
 ## Test Coverage Gaps
 
 **Entire Codebase:**
-- What's not tested: Everything. Zero test files exist.
-- Files: All 162+ source files under `src/`.
-- Risk: Any change to the 117,000+ lines of source code has no automated safety net. The most critical paths (chat streaming, RAG retrieval, MCP tool execution, document processing) are completely untested.
-- Priority: **Critical**. Start with: (1) Pure utility functions in `src/lib/`, (2) RAG retrieval pipeline, (3) API route request/response contracts, (4) Chat store Zustand actions.
+- What's not tested: Everything — 360 TypeScript/TSX source files with zero test files.
+- Files: All files under `src/`
+- Risk: Any refactoring or bug fix could introduce regressions that go unnoticed until production.
+- Priority: High — start with `src/app/api/chat/route.ts`, `src/lib/chat-store.ts`, `src/lib/document-processor.ts`, and `src/lib/supabase.ts` as they form the core data pipeline.
 
 ---
 

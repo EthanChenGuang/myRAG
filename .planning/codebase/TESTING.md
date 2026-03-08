@@ -5,118 +5,198 @@
 ## Test Framework
 
 **Runner:**
-- No test framework is configured in this project
-- No Jest, Vitest, Mocha, or any other test runner detected
-- No `jest.config.*`, `vitest.config.*`, or similar configuration files exist
-- No test-related dependencies in `package.json` (devDependencies)
-- No test-related npm scripts in `package.json`
+- No test framework configured
+- No test runner in `package.json` scripts
+- No Jest, Vitest, or Playwright config files detected
+- No test files exist in `src/` or project root
 
 **Assertion Library:**
-- None configured
+- Not applicable
 
 **Run Commands:**
 ```bash
 # No test commands available
-# The project has no automated test infrastructure
+# The following diagnostic scripts exist but are NOT automated tests:
+node scripts/rag/check-rag-flow.js       # Manual RAG pipeline verification
+node scripts/rag/test-rag-system.js       # Manual RAG system smoke test
+node scripts/rag/decode-rag-prompt.js     # RAG prompt inspection
+npm run test-rag                          # Alias for test-rag-system.js
 ```
 
 ## Test File Organization
 
 **Location:**
-- No test files exist anywhere in `src/`
-- No `__tests__/` directories
-- No `*.test.ts`, `*.test.tsx`, `*.spec.ts`, or `*.spec.tsx` files in the project source
+- No test files exist in the project
 
-## Current Quality Assurance
+**Naming:**
+- Not established
 
-**Linting (only automated check):**
-```bash
-npm run lint          # ESLint with flat config
-npm run lint:fix      # Auto-fix lint issues
+## Test Structure
+
+**No tests exist.** If adding tests, follow these recommendations based on codebase patterns:
+
+**Recommended framework:** Vitest (aligns with the Vite/Next.js ecosystem)
+
+**Recommended structure:**
 ```
-
-**TypeScript:**
-- `tsconfig.json` has `strict: true` enabled
-- However, `next.config.js` sets `typescript.ignoreBuildErrors: true`, meaning type errors do not block builds
-
-**Manual RAG Testing Scripts:**
-- `npm run test-rag` (`node scripts/test-rag-system.js`) - manual RAG pipeline validation
-- `node scripts/rag/decode-rag-prompt.js` - RAG prompt inspection
-- `node scripts/rag/check-rag-flow.js` - RAG flow diagnostics
-- These are operational scripts, not automated unit/integration tests
-
-## Recommended Test Setup
-
-If adding tests to this project, follow these conventions based on the existing codebase patterns:
-
-**Suggested Framework:** Vitest (aligns with the Vite/modern tooling ecosystem, faster than Jest for TypeScript)
-
-**Suggested File Organization:**
-- Co-locate test files next to source: `src/lib/deployment-mode.test.ts`
-- For components: `src/components/ui/button.test.tsx`
-- For API routes: `src/app/api/documents/route.test.ts`
-
-**Suggested Naming:**
-- `*.test.ts` / `*.test.tsx` (not `.spec`)
-- Mirror the source file name: `chat-store.ts` -> `chat-store.test.ts`
-
-**Priority Test Targets (based on codebase structure):**
-
-1. **Utility functions** (pure, easy to test):
-   - `src/lib/deployment-mode.ts` - `isSingleTenant()`, `isMultiTenant()`, `getFeatureFlags()`
-   - `src/lib/utils.ts` - `cn()` utility
-   - `src/lib/query-classifier.ts` - query classification logic
-   - `src/lib/bm25-scorer.ts` - BM25 scoring algorithm
-   - `src/lib/mmr-scorer.ts` - MMR scoring algorithm
-   - `src/lib/reranker-local.ts` - local reranking logic
-
-2. **API middleware** (critical path):
-   - `src/lib/api-middleware.ts` - `validateRequest()`, `withValidation()`
-
-3. **Type conversion functions** (data integrity):
-   - `src/types/chat.ts` - `toAPIMessage()`, `toDBMessages()`, `fromUIMessage()`
-
-4. **Zustand stores** (business logic):
-   - `src/lib/chat-store.ts` - chat CRUD operations
-   - `src/lib/ghost-mode-store.ts` - ghost mode state machine
-   - `src/lib/stores/reasoning-store.ts` - reasoning config management
-
-5. **RAG pipeline** (core feature):
-   - `src/lib/document-processor.ts` - document chunking and embedding
-   - `src/lib/enhanced-rag-retrieval.ts` - retrieval strategies
-   - `src/lib/semantic-chunker.ts` - semantic chunking
+src/
+├── lib/
+│   ├── __tests__/
+│   │   ├── deployment-mode.test.ts
+│   │   ├── api-middleware.test.ts
+│   │   ├── utils.test.ts
+│   │   └── logger.test.ts
+│   └── ...
+├── components/
+│   └── ui/
+│       └── __tests__/
+│           └── button.test.tsx
+└── app/
+    └── api/
+        └── __tests__/
+            └── documents.test.ts
+```
 
 ## Mocking
 
-**Framework:** Not applicable (no tests exist)
+**Framework:** Not established
 
-**What Would Need Mocking:**
-- Supabase client (`@supabase/supabase-js`) - database and auth operations
-- OpenAI/OpenRouter API calls - AI model interactions
-- `process.env` - environment variable configuration
-- `localStorage` / `window` - browser APIs in Zustand stores
-- `fetch` - for API route integration tests
+**Recommended mocking targets:**
+- Supabase client (`src/lib/supabase/client.ts`, `src/lib/supabase/server.ts`) -- mock with `vi.mock('@/lib/supabase/client')`
+- OpenAI/AI SDK calls (`src/lib/document-processor.ts`)
+- Environment variables (`src/lib/env.ts`) -- the singleton pattern makes this testable by mocking the module
+- `fetch` calls for API integration tests
+- `localStorage` for store tests (`src/lib/chat-store.ts`, `src/lib/ghost-mode-store.ts`)
+
+**What to Mock:**
+- External API calls (OpenAI, Supabase, OpenRouter, Fal.ai, Replicate)
+- Browser APIs (`localStorage`, `window`, `document`)
+- `next/navigation` (`useRouter`, `usePathname`)
+- `next/headers` (`cookies`)
+
+**What NOT to Mock:**
+- Pure utility functions (`cn()`, `isSingleTenant()`, `getDeploymentMode()`)
+- Zod schemas and validation logic
+- Type definitions and interfaces
+- Store logic (test with actual Zustand stores)
+
+## Fixtures and Factories
+
+**Test Data:**
+- Not established
+
+**Recommended fixtures based on data models:**
+```typescript
+// Example fixture for documents (based on src/lib/types.ts)
+const mockDocument: ParsedDocument = {
+  id: 'doc-123',
+  filename: 'test.pdf',
+  content: 'Test content',
+  chunks: [],
+  metadata: {},
+  created_at: '2026-01-01T00:00:00Z',
+};
+
+// Example fixture for chat messages (based on src/types/chat.ts)
+const mockMessage: ExtendedMessage = {
+  id: 'msg-123',
+  role: 'user',
+  content: 'Hello',
+  createdAt: new Date(),
+};
+```
 
 ## Coverage
 
-**Requirements:** None enforced -- no test coverage tooling configured
+**Requirements:** None enforced
+
+**View Coverage:**
+```bash
+# Not configured
+```
 
 ## Test Types
 
 **Unit Tests:**
-- Not present
+- Not present. Priority candidates for unit testing:
+  - `src/lib/deployment-mode.ts` -- pure functions, easy to test
+  - `src/lib/api-middleware.ts` -- Zod validation logic
+  - `src/lib/utils.ts` -- `cn()` utility
+  - `src/lib/query-classifier.ts` -- intent classification
+  - `src/lib/bm25-scorer.ts` -- scoring algorithm
+  - `src/lib/mmr-scorer.ts` -- scoring algorithm
+  - `src/lib/semantic-chunker.ts` -- chunking logic
+  - `src/lib/url-extractor.ts` -- URL parsing
+  - `src/lib/utils/date-grouping.ts` -- date utilities
+  - `src/lib/utils/sanitize-title.ts` -- string sanitization
 
 **Integration Tests:**
-- Not present
+- Not present. Priority candidates:
+  - API route handlers (`src/app/api/documents/route.ts`, `src/app/api/upload/route.ts`)
+  - RAG pipeline (`src/lib/enhanced-rag-retrieval.ts`, `src/lib/retrieval-strategies.ts`)
+  - Supabase operations (`src/lib/supabase.ts`)
 
 **E2E Tests:**
-- Not present
-- No Playwright, Cypress, or similar E2E framework configured
+- Not present. No Playwright or Cypress configured.
+- The `scripts/rag/test-rag-system.js` script serves as a manual E2E smoke test for the RAG pipeline only.
 
-**Manual Testing:**
-- RAG diagnostic scripts serve as manual integration checks
-- `npm run config` provides visual configuration validation
-- Development server (`npm run dev`) used for manual UI testing
+## Diagnostic Scripts (Not Tests)
+
+The project includes manual diagnostic/verification scripts that serve as informal smoke tests:
+
+**RAG diagnostics:**
+- `scripts/rag/check-rag-flow.js` -- Verifies RAG pipeline configuration and connectivity
+- `scripts/rag/test-rag-system.js` -- End-to-end RAG query test against live system
+- `scripts/rag/decode-rag-prompt.js` -- Inspects and validates RAG prompt templates
+- `scripts/rag/reprocess-documents.js` -- Re-processes existing documents for embedding updates
+
+**Environment verification:**
+- `scripts/init-env.js` -- Creates `.env.local` with defaults if missing
+
+These scripts require running infrastructure (Supabase, API keys) and cannot run in CI without significant setup.
+
+## Recommendations for Adding Tests
+
+**Step 1: Install Vitest**
+```bash
+npm install -D vitest @testing-library/react @testing-library/jest-dom jsdom
+```
+
+**Step 2: Create `vitest.config.ts`**
+```typescript
+import { defineConfig } from 'vitest/config';
+import path from 'path';
+
+export default defineConfig({
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: ['./src/test/setup.ts'],
+  },
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+    },
+  },
+});
+```
+
+**Step 3: Add scripts to `package.json`**
+```json
+{
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  }
+}
+```
+
+**Step 4: Start with pure utility functions** (zero mocking needed):
+- `src/lib/utils.ts`
+- `src/lib/deployment-mode.ts`
+- `src/lib/utils/date-grouping.ts`
+- `src/lib/utils/sanitize-title.ts`
 
 ---
 
