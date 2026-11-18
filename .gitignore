@@ -64,3 +64,7 @@ logs/
 after-process.md
 dash-snapshot.md
 .env.local.*
+
+# Local Claude Code session data
+.claude/data/
+.claude/settings.local.json
