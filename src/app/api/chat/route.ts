@@ -5,6 +5,7 @@ import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { getQueryEmbedding } from '@/lib/document-processor';
 import { searchSimilarChunks, getSupabaseAdmin } from '@/lib/supabase';
 import { env, getAppName } from '@/lib/env';
+import { formatErrorSSE } from '@/lib/error-stream';
 // Import enhanced RAG modules for dual-mode support
 import { comprehensiveRetrieval, aggregateChunks, requiresComprehensiveRetrieval } from '@/lib/retrieval-strategies';
 import { optimizedSearch } from '@/lib/optimized-search';
@@ -216,6 +217,29 @@ function parseOpenRouterError(error: any): { code?: number; message?: string; de
       details: error
     };
   }
+}
+
+// Map provider/API errors (credits, rate limits, auth) to clear user-facing
+// messages. Returns null when the error is not a recognizable provider error
+// (e.g. a genuine tool execution failure), so callers can fall back.
+function friendlyProviderErrorMessage(error: any): string | null {
+  const parsed = parseOpenRouterError(error);
+  const msg = (parsed.message || error?.message || '').toString();
+  const code = parsed.code;
+
+  if (code === 402 || /requires more credits|insufficient.*credit|fewer max_tokens|can only afford/i.test(msg)) {
+    return 'Not enough OpenRouter credits for this request. Add credits at https://openrouter.ai/settings/credits, shorten the response, or switch to a free model.';
+  }
+  if (code === 429 || /rate limit/i.test(msg)) {
+    return 'Rate limit exceeded. Please wait a moment and try again.';
+  }
+  if (code === 401 || /unauthorized|invalid api key|no auth credentials/i.test(msg)) {
+    return 'AI provider authentication failed. Please check the OpenRouter API key configuration.';
+  }
+  if (code === 403) {
+    return 'Access denied by the AI provider. Check that your API key has access to the selected model.';
+  }
+  return null;
 }
 
 // Helper function to prepare reasoning configuration based on model capabilities
@@ -554,20 +578,17 @@ const isSpanishText = (text: string): boolean => {
 
 // Helper function to create a proper AI message for errors
 function createErrorResponse(message: string) {
-  // Format the error as a proper token stream similar to what the client expects
-  return new Response(
-    `3:"${message}"
-  
-0:
-  
-`,
-    {
-      status: 200,
-      headers: {
-        'Content-Type': 'text/plain'
-      }
+  // Emit the AI SDK v5 UI-message-stream SSE format the chat client parses.
+  // (The legacy v4 wire format `3:"msg"` was unparseable here and surfaced as
+  // an empty `{}` error event in the browser.)
+  return new Response(formatErrorSSE(message), {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive'
     }
-  );
+  });
 }
 
 function buildNoKnowledgeBaseResponse(language: Language): string {
@@ -4440,7 +4461,15 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
               }
             }
 
-            // Standard error handling for non-approval errors
+            // Provider/API errors (credits, rate limits, auth) are NOT tool
+            // failures — surface a clear, accurate message instead.
+            const providerMessage = friendlyProviderErrorMessage(error);
+            if (providerMessage) {
+              console.error('API ROUTE: Provider/API error during stream:', error.message);
+              return providerMessage;
+            }
+
+            // Standard error handling for genuine tool execution failures
             if (process.env.NODE_ENV === 'development') {
               return `Tool execution failed: ${error.message}`;
             } else {

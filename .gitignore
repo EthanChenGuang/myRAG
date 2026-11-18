@@ -54,3 +54,13 @@ next-env.d.ts
 
 # logs
 *.log
+
+# Auto Claude data directory
+.auto-claude/
+
+# Local tooling artifacts
+.playwright-mcp/
+logs/
+after-process.md
+dash-snapshot.md
+.env.local.*

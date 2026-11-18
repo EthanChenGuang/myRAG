@@ -2239,6 +2239,16 @@ export default function Home() {
             }
             case 'error': {
               console.error('Stream error event:', event);
+              // Surface the error to the user instead of failing silently.
+              const errorText =
+                (typeof event.errorText === 'string' && event.errorText) ||
+                (typeof event.error === 'string' && event.error) ||
+                (typeof event.message === 'string' && event.message) ||
+                'Something went wrong while generating a response. Please try again.';
+              const display = fullStreamedContent
+                ? `${fullStreamedContent}\n\n⚠️ ${errorText}`
+                : `⚠️ ${errorText}`;
+              updateStreamingText(display);
               break;
             }
             case 'finish':
@@ -4079,11 +4089,11 @@ export default function Home() {
     };
   }, [isStreaming, resetStreamingState]);
 
-  // Fetch chats when the component mounts
+  // Fetch chats when the component mounts (only when authenticated)
   useEffect(() => {
-    // Debug: Home component mounted, fetching chats
+    if (isAuthEnabled && !user) return;
     fetchChats();
-  }, [fetchChats]); // Add fetchChats to dependency array
+  }, [fetchChats, isAuthEnabled, user]);
 
   // Navigate to new chat when current chat is deleted
   useEffect(() => {

@@ -497,6 +497,10 @@ export function DocumentDashboard({
         const orgId = isPersonalMode ? 'null' : (currentOrganization?.id || 'null');
         const response = await fetch(`/api/documents?organization_id=${orgId}`)
         if (!response.ok) {
+          if (response.status === 401) {
+            setStoredDocuments([])
+            return
+          }
           throw new Error('Failed to fetch documents')
         }
 
@@ -559,6 +563,10 @@ export function DocumentDashboard({
       const orgId = isPersonalMode ? 'null' : (currentOrganization?.id || 'null');
       const response = await fetch(`/api/documents?organization_id=${orgId}`);
       if (!response.ok) {
+        if (response.status === 401) {
+          setStoredDocuments([]);
+          return;
+        }
         throw new Error('Failed to fetch documents');
       }
       const data: DocumentsApiResponse = await response.json();

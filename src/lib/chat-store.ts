@@ -258,6 +258,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
       if (!response.ok) {
         const errorData = await response.json();
+        if (response.status === 401) {
+          set({ chats: [], filteredChats: [] });
+          return undefined;
+        }
         throw new Error(errorData.error || 'Failed to fetch chats');
       }
 
@@ -305,6 +309,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
       if (!response.ok) {
         const errorData = await response.json();
+        if (response.status === 401) {
+          set({ folders: [] });
+          return [];
+        }
         throw new Error(errorData.error || 'Failed to fetch folders');
       }
 
