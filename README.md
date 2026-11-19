@@ -745,7 +745,7 @@ The license covers the code, not the myRAG name or logo. If you publish or sell 
 - 📘 [Deployment Modes](README_DEPLOYMENT_MODES.md)
 - 🐛 [GitHub Issues](https://github.com/EthanChenGuang/myRAG/issues)
 - 💬 [Discord Community](https://discord.gg/8ZCwZjqcAY)
-- 📧 [Contact](mailto:hello@myrag.ai)
+- 📧 [Contact](mailto:hello@myrag.laoxiang.app)
 
 ## 🙏 Acknowledgments
 

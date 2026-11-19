@@ -18,4 +18,4 @@ of that license.
 - Anything that suggests your version is the official one or is endorsed by
   the myRAG project.
 
-If you're unsure, ask at hello@myrag.ai.
+If you're unsure, ask at hello@myrag.laoxiang.app.

@@ -1059,7 +1059,7 @@ export function Sidebar({ isOpen, onClose, onNewChat, onSelectChat, userEmail, o
 
   // Initialize sidebar button configuration
   const [sidebarButtonText, setSidebarButtonText] = useState<string>('myRAG');
-  const [sidebarButtonUrl, setSidebarButtonUrl] = useState<string>('https://www.myrag.ai/');
+  const [sidebarButtonUrl, setSidebarButtonUrl] = useState<string>('https://myrag.laoxiang.app/');
 
   useEffect(() => {
     // Load from localStorage first for quick initial render

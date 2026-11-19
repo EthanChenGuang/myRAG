@@ -268,8 +268,8 @@ When responding to queries, if relevant links are provided in the "RELEVANT LINK
 
 Examples of good link usage:
 - "You can purchase the Pro plan [here](https://example.com/pricing/pro)"
-- "For more details, check out the [documentation](https://docs.myrag.ai)"
-- "Visit our [pricing page](https://myrag.ai/pricing) to compare plans"
+- "For more details, check out the [documentation](https://docs.myrag.laoxiang.app)"
+- "Visit our [pricing page](https://myrag.laoxiang.app/pricing) to compare plans"
 `;
 }
 
