@@ -1,5 +1,5 @@
 <overview>
-ChatRAG uses 150+ environment variables grouped by feature area. All are defined in `scripts/init-env.js` (source of truth) and loaded via `src/lib/env.ts` (singleton). Variables prefixed with `NEXT_PUBLIC_` are available client-side.
+myRAG uses 150+ environment variables grouped by feature area. All are defined in `scripts/init-env.js` (source of truth) and loaded via `src/lib/env.ts` (singleton). Variables prefixed with `NEXT_PUBLIC_` are available client-side.
 </overview>
 
 <core_infrastructure>
@@ -208,11 +208,11 @@ ChatRAG uses 150+ environment variables grouped by feature area. All are defined
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `NEXT_PUBLIC_APP_NAME` | `ChatRAG` | App name |
+| `NEXT_PUBLIC_APP_NAME` | `myRAG` | App name |
 | `NEXT_PUBLIC_SITE_TITLE` | Falls back to app name | Browser title |
 | `NEXT_PUBLIC_FAVICON_URL` | `/favicon.svg` | Favicon |
 | `NEXT_PUBLIC_HEADER_LOGO_TYPE` | `text` | text/image |
-| `NEXT_PUBLIC_HEADER_LOGO_TEXT` | `ChatRAG` | Header text |
+| `NEXT_PUBLIC_HEADER_LOGO_TEXT` | `myRAG` | Header text |
 | `NEXT_PUBLIC_WELCOME_TEXT` | `What can I help with?` | Welcome message |
 | `NEXT_PUBLIC_SHOW_SUGGESTIONS` | `true` | Show suggestion buttons |
 | `NEXT_PUBLIC_CHAT_INPUT_TEXT_SIZE` | `18` | Input font size |
@@ -225,7 +225,7 @@ ChatRAG uses 150+ environment variables grouped by feature area. All are defined
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `NEXT_PUBLIC_CHATRAG_DEPLOYMENT_MODE` | `single-tenant` | single-tenant/multi-tenant |
+| `NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE` | `single-tenant` | single-tenant/multi-tenant |
 | `NEXT_PUBLIC_AUTH_ENABLED` | `true` | Enable auth |
 | `NEXT_PUBLIC_SITE_URL` | `http://localhost:3000` | Site URL |
 | `NEXT_PUBLIC_EMBED_ENABLED` | `false` | Enable embed widget |

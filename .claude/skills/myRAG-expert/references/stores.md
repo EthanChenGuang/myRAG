@@ -1,5 +1,5 @@
 <overview>
-ChatRAG uses Zustand for global state management. All stores use the `useShallow` selector pattern from `zustand/react/shallow` to prevent unnecessary re-renders. The React Compiler is enabled but Zustand selectors are still important for subscription optimization.
+myRAG uses Zustand for global state management. All stores use the `useShallow` selector pattern from `zustand/react/shallow` to prevent unnecessary re-renders. The React Compiler is enabled but Zustand selectors are still important for subscription optimization.
 </overview>
 
 <chat_store>

@@ -1,9 +1,9 @@
-# fly.toml app configuration file generated for baileys-chatrag on 2025-08-21T14:09:30Z
+# fly.toml app configuration file generated for baileys-myrag on 2025-08-21T14:09:30Z
 #
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
 
-app = 'baileys-chatrag'
+app = 'baileys-myrag'
 primary_region = 'cdg'
 
 [build]

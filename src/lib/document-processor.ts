@@ -408,7 +408,7 @@ async function processDocument(
 
   try {
     // Create a temporary file to store the buffer
-    const tempDir = path.join(os.tmpdir(), 'chatrag');
+    const tempDir = path.join(os.tmpdir(), 'myrag');
     await mkdir(tempDir, { recursive: true });
     const tempFilePath = path.join(tempDir, filename);
     await writeFile(tempFilePath, buffer);

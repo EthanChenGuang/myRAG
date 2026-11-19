@@ -1,6 +1,6 @@
 # MCP Server Query Patterns
 
-This directory contains query pattern definitions for each MCP (Model Context Protocol) server integration in ChatRAG.
+This directory contains query pattern definitions for each MCP (Model Context Protocol) server integration in myRAG.
 
 ## 📁 Structure
 

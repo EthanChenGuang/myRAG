@@ -21,7 +21,7 @@ const DEFAULT_RAG_PRE_CONTEXT = 'You are a helpful and friendly AI assistant. Yo
 const DEFAULT_RAG_POST_CONTEXT = 'Based on the context provided, offer comprehensive and helpful answers. If specific information is missing, suggest how the user might rephrase their question or what additional information would be helpful.';
 
 function getStandardTemplate() {
-  return `# ChatRAG Configuration
+  return `# myRAG Configuration
 # Generated automatically on first run
 # Visit http://localhost:3333 (npm run config) to configure visually
 
@@ -164,9 +164,9 @@ SUPABASE_SERVICE_ROLE_KEY=
 # single-tenant: Shared knowledge base with user-isolated chats (simpler setup)
 # multi-tenant: Organization-based isolation with team features (advanced)
 # See DEPLOYMENT_MODES.md for complete documentation
-NEXT_PUBLIC_CHATRAG_DEPLOYMENT_MODE=single-tenant
+NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE=single-tenant
 
-# Multi-tenant features (only used when NEXT_PUBLIC_CHATRAG_DEPLOYMENT_MODE=multi-tenant)
+# Multi-tenant features (only used when NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE=multi-tenant)
 ENABLE_ORGANIZATIONS=true
 ENABLE_TEAM_INVITES=true
 ENABLE_STORAGE_QUOTAS=true
@@ -177,9 +177,9 @@ ENABLE_USAGE_ANALYTICS=true
 # -----------------------------
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
 
-# Config UI proxy target for the main ChatRAG app.
+# Config UI proxy target for the main myRAG app.
 # Set this when the Config UI runs behind a reverse proxy or different host.
-CHATRAG_APP_URL=http://localhost:3000
+MYRAG_APP_URL=http://localhost:3000
 
 # GitHub OAuth (optional)
 NEXT_PUBLIC_GITHUB_CLIENT_ID=
@@ -192,7 +192,7 @@ RESEND_API_KEY=
 
 # Custom SMTP Settings (optional)
 NEXT_PUBLIC_CUSTOM_SMTP_ENABLED=false
-NEXT_PUBLIC_SMTP_FROM_NAME=ChatRAG Support
+NEXT_PUBLIC_SMTP_FROM_NAME=myRAG Support
 NEXT_PUBLIC_SMTP_FROM_EMAIL=support@example.com
 
 # -----------------------------
@@ -219,11 +219,11 @@ NEXT_PUBLIC_POLAR_CHECKOUT_ENTERPRISE=
 # -----------------------------
 # BRANDING
 # -----------------------------
-NEXT_PUBLIC_APP_NAME=ChatRAG
+NEXT_PUBLIC_APP_NAME=myRAG
 NEXT_PUBLIC_SITE_TITLE=
 NEXT_PUBLIC_FAVICON_URL=/favicon.svg
 NEXT_PUBLIC_HEADER_LOGO_TYPE=text
-NEXT_PUBLIC_HEADER_LOGO_TEXT=ChatRAG
+NEXT_PUBLIC_HEADER_LOGO_TEXT=myRAG
 NEXT_PUBLIC_HEADER_LOGO_URL=
 NEXT_PUBLIC_AI_RESPONSE_LOGO_URL=
 NEXT_PUBLIC_AI_RESPONSE_LOGO_BORDER=true

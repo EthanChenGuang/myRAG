@@ -1778,10 +1778,10 @@ When you use information from documents in the context to answer a query, you MU
 4. If you see "Document:" in the context, cite the corresponding document by name
 
 Example of CORRECT citation:
-"According to the documentation, ChatRAG supports multiple AI models through OpenRouter. **Source:** CLAUDE.md"
+"According to the documentation, myRAG supports multiple AI models through OpenRouter. **Source:** CLAUDE.md"
 
 Example of INCORRECT citation (DO NOT DO THIS):
-"According to the documentation, ChatRAG supports multiple models. useDocument({documentName: 'CLAUDE.md', relevance: 85})"
+"According to the documentation, myRAG supports multiple models. useDocument({documentName: 'CLAUDE.md', relevance: 85})"
 
 Remember: Citations should be human-readable text, not code or function calls.
 
@@ -2094,7 +2094,7 @@ IMPORTANT:
 
         // Get current organization ID from request data (passed from frontend)
         let currentOrganizationId: string | null = null;
-        const deploymentMode = env.NEXT_PUBLIC_CHATRAG_DEPLOYMENT_MODE;
+        const deploymentMode = env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE;
 
         if (deploymentMode === 'multi-tenant') {
           // Use organization ID from request data (set by frontend based on user's current workspace)
@@ -2731,8 +2731,8 @@ Context:
       if (context.toLowerCase().includes('stripe') || context.toLowerCase().includes('polar')) {
         console.log('[DEBUG] ✅ Context contains payment integration information');
       }
-      if (context.toLowerCase().includes('chatrag')) {
-        console.log('[DEBUG] ✅ Context contains ChatRAG product information');
+      if (context.toLowerCase().includes('myrag')) {
+        console.log('[DEBUG] ✅ Context contains myRAG product information');
       }
     }
     console.log('=== END RAG CONTEXT DEBUG ===');

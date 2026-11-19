@@ -11,7 +11,7 @@ notes if you want it.
 
 ## What's worth reporting
 
-ChatRAG is self-hosted, so every deployment is run by someone else. The reports
+myRAG is self-hosted, so every deployment is run by someone else. The reports
 that matter are the ones that let a stranger reach data or actions they
 shouldn't on a correctly configured install:
 
@@ -29,7 +29,7 @@ shouldn't on a correctly configured install:
 Running without the secrets the docs tell you to set: the Supabase service role
 key exposed to the browser, the config UI (`npm run config`) reachable from the
 internet, the Baileys service deployed without `API_KEY`. Those are deployment
-mistakes, not bugs in ChatRAG.
+mistakes, not bugs in myRAG.
 
 ## Supported versions
 

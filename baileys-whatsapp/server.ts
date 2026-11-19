@@ -11,7 +11,7 @@ const app = express()
 app.use(express.json())
 
 // Every route except /health requires `Authorization: Bearer <API_KEY>` when API_KEY is set.
-// ChatRAG sends it from FLYIO_API_KEY / KOYEB_API_KEY.
+// myRAG sends it from FLYIO_API_KEY / KOYEB_API_KEY.
 const API_KEY = process.env.API_KEY || ''
 app.use((req: Request, res: Response, next: NextFunction) => {
     if (!API_KEY || req.path === '/health') return next()

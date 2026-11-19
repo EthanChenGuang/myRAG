@@ -7,7 +7,7 @@
 
 ## Overview
 
-ChatRAG includes a full-featured real-time voice assistant. Users can have natural conversations with the AI using their microphone, with responses spoken back via text-to-speech and displayed with word-level synchronization.
+myRAG includes a full-featured real-time voice assistant. Users can have natural conversations with the AI using their microphone, with responses spoken back via text-to-speech and displayed with word-level synchronization.
 
 ### Technology Stack
 
@@ -28,7 +28,7 @@ ChatRAG includes a full-featured real-time voice assistant. Users can have natur
 ### Voice Pipeline
 - **Full Conversation Loop:** User speaks → Transcribed → RAG Query → LLM Response → TTS → Audio Playback
 - **Proactive Greeting:** Agent welcomes users when they join
-- **Query Rewriting:** Follow-up questions resolved using conversation context (e.g., "How much is it?" → "How much is ChatRAG's pricing?")
+- **Query Rewriting:** Follow-up questions resolved using conversation context (e.g., "How much is it?" → "How much is myRAG's pricing?")
 - **Sentence Streaming:** Parallel TTS generation with ordered playback queue
 - **Word-Level Text Sync:** Text overlay reveals word-by-word synchronized with audio using Resemble.ai timestamps
 - **Barge-In:** Local Silero VAD detects user speech instantly, with 1.5s cooldown after interruption
@@ -36,7 +36,7 @@ ChatRAG includes a full-featured real-time voice assistant. Users can have natur
 - **Image RAG:** Retrieve and display images from knowledge base via voice queries ("Show me the logo")
 
 ### Voice Mode UI
-- **OGL Orb Visualizer:** Iridescent, audio-reactive WebGL sphere with ChatRAG brand gradient
+- **OGL Orb Visualizer:** Iridescent, audio-reactive WebGL sphere with myRAG brand gradient
 - **Dynamic Animations:** Concentric wave ripples, edge glow, scale pulsing (15% max)
 - **"End" Button Waveform:** 4-bar animation reacts to user's microphone
 - **Bouncing Dots:** Three-dot animation indicates "thinking" state
@@ -106,8 +106,8 @@ RESEMBLE_VOICE_ID=your_voice_uuid
 RESEMBLE_STREAM_URL=https://f.cluster.resemble.ai/stream
 
 # RAG Connection
-CHATRAG_INTERNAL_API_URL=http://localhost:3000/api/internal/voice-rag
-CHATRAG_INTERNAL_API_KEY=your_internal_api_key
+MYRAG_INTERNAL_API_URL=http://localhost:3000/api/internal/voice-rag
+MYRAG_INTERNAL_API_KEY=your_internal_api_key
 
 # LLM Provider (choose one)
 VOICE_AGENT_LLM_PROVIDER=groq   # openai | groq | openrouter
@@ -135,7 +135,7 @@ cd voice-agent && npm run dev
 cd voice-agent && npm run config
 # Opens at http://localhost:3334
 
-# Click the voice mode button in the ChatRAG UI
+# Click the voice mode button in the myRAG UI
 ```
 
 ---
@@ -203,7 +203,7 @@ The voice overlay uses a unified stacking context to ensure proper layering:
 Users can retrieve images from the knowledge base using voice queries:
 
 ```
-User: "Show me the ChatRAG logo"
+User: "Show me the myRAG logo"
 → System retrieves image + generates spoken response
 → Image displays in overlay with text
 ```
@@ -238,7 +238,7 @@ The voice agent runs as a separate Node.js service. See the main [deployment doc
 
 - [ ] LiveKit Cloud project configured with TURN servers
 - [ ] AssemblyAI and Resemble.ai API keys set
-- [ ] `CHATRAG_INTERNAL_API_KEY` matches between main app and voice-agent
+- [ ] `MYRAG_INTERNAL_API_KEY` matches between main app and voice-agent
 - [ ] Voice agent deployed on same network or with public endpoint
 - [ ] Environment variables set for chosen LLM provider
 
@@ -289,7 +289,7 @@ In `voice-mode-overlay.tsx`:
 | LiveKit InvalidState | Buffer all TTS, send in 50ms chunks |
 | False VAD triggers | Tune activation threshold to 0.8 |
 | Orb not bouncing | Reduce smoothingTimeConstant to 0.1 |
-| Sidebar not refreshing | Implement global event bus (`chatrag:voice-session-ended`) |
+| Sidebar not refreshing | Implement global event bus (`myrag:voice-session-ended`) |
 | Text-Audio Drift | Word-level sync using Resemble.ai timestamps |
 | Text on top of input (mobile) | Use `z-index: -1` on overlay wrapper |
 | Text disappears during typing | Implement Active Scroll Sync |
@@ -303,8 +303,8 @@ npx tsx scripts/close-room.ts
 # Test RAG API directly
 curl -X POST "http://localhost:3000/api/internal/voice-rag" \
   -H "Content-Type: application/json" \
-  -H "x-api-key: YOUR_CHATRAG_INTERNAL_API_KEY" \
-  -d '{"query": "What is ChatRAG?", "userId": "test-user"}'
+  -H "x-api-key: YOUR_MYRAG_INTERNAL_API_KEY" \
+  -d '{"query": "What is myRAG?", "userId": "test-user"}'
 ```
 
 ---

@@ -5,9 +5,9 @@ import { hybridRerank, ChunkWithScore } from './reranker-local';
  * Adapter to use our local reranking logic with standard AI SDK 6 APIs.
  * AI SDK 6 uses a standardized V3 specification for reranking models.
  */
-export const chatRagLocalReranker: RerankingModel = {
+export const myRAGLocalReranker: RerankingModel = {
     specificationVersion: 'v3',
-    provider: 'chatrag-local',
+    provider: 'myrag-local',
     modelId: 'hybrid-bm25',
     async doRerank(options) {
         const { query, documents, topN } = options;
@@ -41,9 +41,9 @@ export const chatRagLocalReranker: RerankingModel = {
  * Specialized adapter that accepts full ChunkWithScore objects
  * Compatible with the same interface, just casting the input values
  */
-export const chatRagScorePreservingReranker: RerankingModel = {
+export const myRAGScorePreservingReranker: RerankingModel = {
     specificationVersion: 'v3',
-    provider: 'chatrag-local',
+    provider: 'myrag-local',
     modelId: 'hybrid-preserves-scores',
     async doRerank(options) {
         const { query, documents, topN } = options;

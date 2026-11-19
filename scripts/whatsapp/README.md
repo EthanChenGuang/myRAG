@@ -5,7 +5,7 @@ This folder contains utility scripts for WhatsApp integration management and deb
 ## Available Scripts
 
 ### `check-whatsapp-chats.js`
-Inspects WhatsApp chat conversations and their mappings to ChatRAG chats.
+Inspects WhatsApp chat conversations and their mappings to myRAG chats.
 
 **Usage:**
 ```bash

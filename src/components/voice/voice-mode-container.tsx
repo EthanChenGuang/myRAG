@@ -117,7 +117,7 @@ export default function VoiceModeContainer({
                 }
 
                 const identity = `user-${userId}-${Math.floor(Math.random() * 1000)}`;
-                const resp = await fetch(`/api/livekit/token?room=chatrag-voice&username=${identity}`);
+                const resp = await fetch(`/api/livekit/token?room=myrag-voice&username=${identity}`);
                 const data = await resp.json();
 
                 if (data.error) {

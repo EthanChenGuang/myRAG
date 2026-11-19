@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# ChatRAG Database Setup Script
+# myRAG Database Setup Script
 # Automatically selects and applies the correct database schema based on deployment mode
 
 set -e  # Exit on error
@@ -15,7 +15,7 @@ NC='\033[0m' # No Color
 # Print header
 echo -e "${BLUE}"
 echo "╔════════════════════════════════════════════════════════════╗"
-echo "║          ChatRAG Database Setup                            ║"
+echo "║          myRAG Database Setup                            ║"
 echo "╚════════════════════════════════════════════════════════════╝"
 echo -e "${NC}"
 
@@ -30,7 +30,7 @@ else
 fi
 
 # Get deployment mode (default to single-tenant)
-MODE=${CHATRAG_DEPLOYMENT_MODE:-single-tenant}
+MODE=${MYRAG_DEPLOYMENT_MODE:-single-tenant}
 
 echo -e "${BLUE}Deployment Mode:${NC} ${MODE}"
 echo ""

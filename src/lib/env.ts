@@ -47,12 +47,12 @@ class EnvironmentConfig {
       NEXT_PUBLIC_STRIPE_PRICE_ID_PRO: process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_PRO || '',
       NEXT_PUBLIC_STRIPE_PRICE_ID_ENTERPRISE: process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_ENTERPRISE || '',
       NEXT_PUBLIC_CUSTOM_SMTP_ENABLED: process.env.NEXT_PUBLIC_CUSTOM_SMTP_ENABLED || 'false',
-      NEXT_PUBLIC_SMTP_FROM_NAME: process.env.NEXT_PUBLIC_SMTP_FROM_NAME || 'ChatRAG Support',
+      NEXT_PUBLIC_SMTP_FROM_NAME: process.env.NEXT_PUBLIC_SMTP_FROM_NAME || 'myRAG Support',
       NEXT_PUBLIC_SMTP_FROM_EMAIL: process.env.NEXT_PUBLIC_SMTP_FROM_EMAIL || 'support@example.com',
-      NEXT_PUBLIC_APP_NAME: process.env.NEXT_PUBLIC_APP_NAME || 'ChatRAG',
+      NEXT_PUBLIC_APP_NAME: process.env.NEXT_PUBLIC_APP_NAME || 'myRAG',
       NEXT_PUBLIC_SITE_TITLE: process.env.NEXT_PUBLIC_SITE_TITLE || '',
       NEXT_PUBLIC_FAVICON_URL: process.env.NEXT_PUBLIC_FAVICON_URL || '/favicon.ico',
-      NEXT_PUBLIC_SIDEBAR_BUTTON_TEXT: process.env.NEXT_PUBLIC_SIDEBAR_BUTTON_TEXT || 'ChatRAG',
+      NEXT_PUBLIC_SIDEBAR_BUTTON_TEXT: process.env.NEXT_PUBLIC_SIDEBAR_BUTTON_TEXT || 'myRAG',
       NEXT_PUBLIC_SIDEBAR_BUTTON_URL: process.env.NEXT_PUBLIC_SIDEBAR_BUTTON_URL || 'https://www.chatrag.ai/',
 
       // Chat input border customization
@@ -75,7 +75,7 @@ class EnvironmentConfig {
 
       // Embed widget configuration
       NEXT_PUBLIC_EMBED_ENABLED: process.env.NEXT_PUBLIC_EMBED_ENABLED || 'false',
-      NEXT_PUBLIC_EMBED_TITLE: process.env.NEXT_PUBLIC_EMBED_TITLE || 'ChatRAG Assistant',
+      NEXT_PUBLIC_EMBED_TITLE: process.env.NEXT_PUBLIC_EMBED_TITLE || 'myRAG Assistant',
       NEXT_PUBLIC_EMBED_PRIMARY_COLOR: process.env.NEXT_PUBLIC_EMBED_PRIMARY_COLOR || '#FF6417',
       NEXT_PUBLIC_EMBED_POSITION: process.env.NEXT_PUBLIC_EMBED_POSITION || 'bottom-right',
       NEXT_PUBLIC_EMBED_AUTO_OPEN: process.env.NEXT_PUBLIC_EMBED_AUTO_OPEN || 'false',
@@ -94,9 +94,9 @@ class EnvironmentConfig {
 
       // Deployment mode configuration
       // Note: We use NEXT_PUBLIC_ prefix so it's accessible in both client and server
-      NEXT_PUBLIC_CHATRAG_DEPLOYMENT_MODE: process.env.NEXT_PUBLIC_CHATRAG_DEPLOYMENT_MODE || 'single-tenant',
+      NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE: process.env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE || 'single-tenant',
       // Legacy alias for backward compatibility (server-side only)
-      CHATRAG_DEPLOYMENT_MODE: process.env.NEXT_PUBLIC_CHATRAG_DEPLOYMENT_MODE || process.env.CHATRAG_DEPLOYMENT_MODE || 'single-tenant',
+      MYRAG_DEPLOYMENT_MODE: process.env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE || process.env.MYRAG_DEPLOYMENT_MODE || 'single-tenant',
 
       // Multi-tenant feature flags (optional in single-tenant mode)
       ENABLE_ORGANIZATIONS: process.env.ENABLE_ORGANIZATIONS === 'true',
@@ -116,7 +116,7 @@ class EnvironmentConfig {
       GMAIL_INTEGRATION_ID: process.env.GMAIL_INTEGRATION_ID || '',
       RESEND_API_KEY: process.env.RESEND_API_KEY || '',
       MCP_ZAPIER_ENDPOINT: process.env.MCP_ZAPIER_ENDPOINT || '',
-      CHATRAG_INTERNAL_API_KEY: process.env.CHATRAG_INTERNAL_API_KEY || '',
+      MYRAG_INTERNAL_API_KEY: process.env.MYRAG_INTERNAL_API_KEY || '',
       NEXT_PUBLIC_MCP_YOLO_MODE_ENABLED: process.env.NEXT_PUBLIC_MCP_YOLO_MODE_ENABLED || 'false',
 
       // WhatsApp Integration
@@ -323,7 +323,7 @@ export const env = envConfig.getEnv();
 
 // Helper function to get the application name
 export function getAppName(): string {
-  return process.env.NEXT_PUBLIC_APP_NAME || env.NEXT_PUBLIC_APP_NAME || 'ChatRAG';
+  return process.env.NEXT_PUBLIC_APP_NAME || env.NEXT_PUBLIC_APP_NAME || 'myRAG';
 }
 
 // Helper function to get the site title (falls back to app name if not set)

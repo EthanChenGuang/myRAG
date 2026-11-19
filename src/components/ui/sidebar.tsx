@@ -922,8 +922,8 @@ const ScrollingTitle = React.memo(({ title, className, isMenuOpen = false, uniqu
 ScrollingTitle.displayName = 'ScrollingTitle';
 
 // Local storage cache key
-const CHATS_CACHE_KEY = 'chatrag_sidebar_chats';
-const CACHE_EXPIRY_KEY = 'chatrag_sidebar_cache_expiry';
+const CHATS_CACHE_KEY = 'myrag_sidebar_chats';
+const CACHE_EXPIRY_KEY = 'myrag_sidebar_cache_expiry';
 const CACHE_EXPIRY_TIME = 5 * 60 * 1000; // 5 minutes
 const MAX_CHATS_TO_CACHE = 10; // Limit to storing only 10 most recent chats
 
@@ -1058,7 +1058,7 @@ export function Sidebar({ isOpen, onClose, onNewChat, onSelectChat, userEmail, o
   }, []);
 
   // Initialize sidebar button configuration
-  const [sidebarButtonText, setSidebarButtonText] = useState<string>('ChatRAG');
+  const [sidebarButtonText, setSidebarButtonText] = useState<string>('myRAG');
   const [sidebarButtonUrl, setSidebarButtonUrl] = useState<string>('https://www.chatrag.ai/');
 
   useEffect(() => {
@@ -1292,9 +1292,9 @@ export function Sidebar({ isOpen, onClose, onNewChat, onSelectChat, userEmail, o
       }
     };
 
-    window.addEventListener('chatrag:voice-session-ended', handleVoiceSessionEnd);
+    window.addEventListener('myrag:voice-session-ended', handleVoiceSessionEnd);
     return () => {
-      window.removeEventListener('chatrag:voice-session-ended', handleVoiceSessionEnd);
+      window.removeEventListener('myrag:voice-session-ended', handleVoiceSessionEnd);
     };
   }, [fetchChats, orgId, updateCache, setCurrentChat, toast]);
 

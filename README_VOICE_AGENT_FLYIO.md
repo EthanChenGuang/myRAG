@@ -1,4 +1,4 @@
-# Deploying the ChatRAG Voice Agent to Fly.io
+# Deploying the myRAG Voice Agent to Fly.io
 
 > **Quick Start Guide** for deploying the voice agent as an always-on worker process.
 
@@ -42,7 +42,7 @@ fly auth login
 
 ### 3. Update the app name
 
-Edit `fly.toml` and change `app = 'chatrag-voice-agent'` to something globally unique.
+Edit `fly.toml` and change `app = 'myrag-voice-agent'` to something globally unique.
 
 ### 4. Create the application
 
@@ -61,8 +61,8 @@ fly secrets set \
   RESEMBLE_API_KEY=your_resemble_key \
   RESEMBLE_VOICE_ID=your_voice_id \
   RESEMBLE_STREAM_URL=https://f.cluster.resemble.ai/stream \
-  CHATRAG_INTERNAL_API_URL=https://your-app.vercel.app/api/internal/voice-rag \
-  CHATRAG_INTERNAL_API_KEY=your_internal_api_key \
+  MYRAG_INTERNAL_API_URL=https://your-app.vercel.app/api/internal/voice-rag \
+  MYRAG_INTERNAL_API_KEY=your_internal_api_key \
   GROQ_API_KEY=your_groq_key \
   VOICE_AGENT_LLM_PROVIDER=groq \
   VOICE_AGENT_MODEL=llama-3.3-70b-versatile
@@ -86,7 +86,7 @@ fly logs
 Voice Agent starting...
 [Agent] Silero VAD loaded successfully
 [VoicePipeline] Using Groq API with model: llama-3.3-70b-versatile
-[LiveKit] Connected to room: chatrag-voice
+[LiveKit] Connected to room: myrag-voice
 ```
 
 ---
@@ -103,7 +103,7 @@ The Voice Agent runs as a **worker process** (not a web server). It connects out
                                                              │
                                                              ▼
                                                     ┌─────────────────┐
-                                                    │  ChatRAG API    │
+                                                    │  myRAG API    │
                                                     │  (Vercel/etc)   │
                                                     └─────────────────┘
 ```

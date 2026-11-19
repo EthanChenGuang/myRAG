@@ -1,7 +1,7 @@
-# fly.toml app configuration file for ChatRAG Voice Agent
+# fly.toml app configuration file for myRAG Voice Agent
 # See https://fly.io/docs/reference/configuration/
 
-app = 'chatrag-voice-agent'  # ⚠️ CHANGE THIS: Must be globally unique on Fly.io
+app = 'myrag-voice-agent'  # ⚠️ CHANGE THIS: Must be globally unique on Fly.io
 primary_region = 'iad'        # ⚠️ CHANGE THIS: Choose a region close to your users
 
 [build]

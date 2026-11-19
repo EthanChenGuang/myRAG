@@ -347,7 +347,7 @@ export function MCPToolsButton({
             </DialogPrimitive.Close>
             <h2 className="text-lg font-semibold text-neutral-900 dark:text-neutral-100 pr-10">{t('availableMcpTools')}</h2>
             <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-1">
-              ChatRAG can use tools provided by specialized servers using Model Context Protocol. 
+              myRAG can use tools provided by specialized servers using Model Context Protocol. 
               <a href="#" className="text-blue-600 dark:text-blue-400 hover:underline ml-1">{t('learnMore')}</a>
             </p>
           </div>

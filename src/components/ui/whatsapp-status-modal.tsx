@@ -246,7 +246,7 @@ export function WhatsAppStatusModal({
           <div className="text-center">
             <p className="text-sm text-gray-600 dark:text-gray-400">
               {displayStatus.isConnected
-                ? t('whatsAppWorkingMessage') || 'Everything is working correctly. Messages sent to your WhatsApp will be processed by ChatRAG automatically.'
+                ? t('whatsAppWorkingMessage') || 'Everything is working correctly. Messages sent to your WhatsApp will be processed by myRAG automatically.'
                 : t('whatsAppReconnectMessage') || 'Connection lost. Please disconnect and reconnect WhatsApp to resume messaging.'}
             </p>
           </div>

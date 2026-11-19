@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ChatRAG Configuration</title>
+    <title>myRAG Configuration</title>
 
     <!-- Config UI Favicon -->
     <link rel="icon"
@@ -23,9 +23,9 @@
             theme: {
                 extend: {
                     colors: {
-                        'chatrag-primary': '#FF6417',
-                        'chatrag-primary-light': '#FF8A4D',
-                        'chatrag-primary-dark': '#E05A15'
+                        'myrag-primary': '#FF6417',
+                        'myrag-primary-light': '#FF8A4D',
+                        'myrag-primary-dark': '#E05A15'
                     }
                 }
             }
@@ -1879,8 +1879,8 @@
     <!-- First-time Setup Modal -->
     <div id="firstTimeSetup" class="modal" style="display: none;">
         <div class="modal-box max-w-2xl">
-            <h3 class="font-bold text-lg mb-4">🚀 Welcome to ChatRAG!</h3>
-            <p class="mb-6">Let's set up your configuration to get started with ChatRAG.</p>
+            <h3 class="font-bold text-lg mb-4">🚀 Welcome to myRAG!</h3>
+            <p class="mb-6">Let's set up your configuration to get started with myRAG.</p>
 
             <div class="form-control">
                 <label class="label">
@@ -1997,7 +1997,7 @@
                                     d="M4 6h16M4 12h16M4 18h16"></path>
                             </svg>
                         </button>
-                        <h1 class="desktop-title">⚙️ ChatRAG Configuration</h1>
+                        <h1 class="desktop-title">⚙️ myRAG Configuration</h1>
                         <button class="desktop-theme-btn" data-action="toggle-theme" aria-label="Toggle theme">
                             <span data-theme-icon>☀️</span>
                         </button>
@@ -2018,7 +2018,7 @@
                     <div class="tab-content" id="features">
                         <div class="card bg-base-100 shadow-lg">
                             <div class="card-body p-4 lg:p-6">
-                                <h2 class="card-title text-xl lg:text-2xl text-chatrag-primary mb-6">✨ Feature
+                                <h2 class="card-title text-xl lg:text-2xl text-myrag-primary mb-6">✨ Feature
                                     Configuration</h2>
 
                                 <div class="responsive-grid">
@@ -2118,7 +2118,7 @@
 
                     <!-- Image RAG Uploads Tab -->
                     <div class="tab-content" id="images">
-                        <h2 class="text-xl lg:text-2xl font-bold text-chatrag-primary mb-2">🖼️ Image RAG Upload</h2>
+                        <h2 class="text-xl lg:text-2xl font-bold text-myrag-primary mb-2">🖼️ Image RAG Upload</h2>
                         <p class="text-base-content/70 mb-6">Upload images to add to your knowledge base. Images are
                             captioned using AI vision and made searchable via RAG.</p>
 
@@ -2540,7 +2540,7 @@
                     <div class="tab-content" id="ai">
                         <div class="card bg-base-100 shadow-lg">
                             <div class="card-body p-4 lg:p-6">
-                                <h2 class="card-title text-xl lg:text-2xl text-chatrag-primary mb-6">🤖 AI Model
+                                <h2 class="card-title text-xl lg:text-2xl text-myrag-primary mb-6">🤖 AI Model
                                     Configuration</h2>
 
                                 <!-- OpenAI -->
@@ -3001,7 +3001,7 @@
                     <div class="tab-content" id="media">
                         <div class="card bg-base-100 shadow-lg">
                             <div class="card-body p-4 lg:p-6">
-                                <h2 class="card-title text-xl lg:text-2xl text-chatrag-primary mb-6">🧑‍🎨 Media
+                                <h2 class="card-title text-xl lg:text-2xl text-myrag-primary mb-6">🧑‍🎨 Media
                                     Generation Configuration</h2>
                                 <p class="text-base-content/70 mb-6">Configure AI-powered generation for images, videos,
                                     and 3D models. Manage providers, models, and API keys all in one place.</p>
@@ -3469,7 +3469,7 @@
                     <div class="tab-content" id="audio">
                         <div class="card bg-base-100 shadow-lg">
                             <div class="card-body p-4 lg:p-6">
-                                <h2 class="card-title text-2xl text-chatrag-primary mb-6">🔊 Audio Configuration</h2>
+                                <h2 class="card-title text-2xl text-myrag-primary mb-6">🔊 Audio Configuration</h2>
 
                                 <!-- Refresh Notice -->
                                 <div class="alert alert-warning mb-6">
@@ -3649,7 +3649,7 @@
                     <div class="tab-content" id="database">
                         <div class="card bg-base-100 shadow-lg">
                             <div class="card-body">
-                                <h2 class="card-title text-2xl text-chatrag-primary mb-6">🗄️ Database Configuration
+                                <h2 class="card-title text-2xl text-myrag-primary mb-6">🗄️ Database Configuration
                                 </h2>
 
                                 <!-- Supabase -->
@@ -3709,7 +3709,7 @@
                     <div class="tab-content active" id="deployment">
                         <div class="card bg-base-100 shadow-lg">
                             <div class="card-body">
-                                <h2 class="card-title text-2xl text-chatrag-primary mb-6">🏢 Deployment Mode
+                                <h2 class="card-title text-2xl text-myrag-primary mb-6">🏢 Deployment Mode
                                     Configuration</h2>
 
                                 <!-- Important Notice -->
@@ -3733,12 +3733,12 @@
                                     <div class="card-body">
                                         <h3 class="text-lg font-semibold mb-4">Select Deployment Mode</h3>
                                         <p class="text-base-content/70 mb-6">Choose how data isolation and multi-tenancy
-                                            should work in your ChatRAG instance.</p>
+                                            should work in your myRAG instance.</p>
 
                                         <div class="form-control mb-4">
                                             <label
                                                 class="label cursor-pointer justify-start gap-4 p-4 border-2 border-base-300 rounded-lg hover:border-primary transition-colors">
-                                                <input type="radio" name="NEXT_PUBLIC_CHATRAG_DEPLOYMENT_MODE"
+                                                <input type="radio" name="NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE"
                                                     value="single-tenant" class="radio radio-primary">
                                                 <div class="flex-1">
                                                     <div class="flex items-center gap-2 mb-2">
@@ -3765,7 +3765,7 @@
                                         <div class="form-control">
                                             <label
                                                 class="label cursor-pointer justify-start gap-4 p-4 border-2 border-base-300 rounded-lg hover:border-primary transition-colors">
-                                                <input type="radio" name="NEXT_PUBLIC_CHATRAG_DEPLOYMENT_MODE"
+                                                <input type="radio" name="NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE"
                                                     value="multi-tenant" class="radio radio-primary">
                                                 <div class="flex-1">
                                                     <div class="flex items-center gap-2 mb-2">
@@ -4010,7 +4010,7 @@
                     <div class="tab-content" id="auth">
                         <div class="card bg-base-100 shadow-lg">
                             <div class="card-body">
-                                <h2 class="card-title text-2xl text-chatrag-primary mb-6">🔐 Authentication
+                                <h2 class="card-title text-2xl text-myrag-primary mb-6">🔐 Authentication
                                     Configuration</h2>
 
                                 <!-- Site URL -->
@@ -4031,14 +4031,14 @@
 
                                         <div class="form-control mt-4">
                                             <label class="label">
-                                                <span class="label-text">ChatRAG App URL</span>
+                                                <span class="label-text">myRAG App URL</span>
                                             </label>
-                                            <input type="url" id="CHATRAG_APP_URL"
+                                            <input type="url" id="MYRAG_APP_URL"
                                                 placeholder="https://your-domain.com"
                                                 class="input input-bordered w-full">
                                             <label class="label">
                                                 <span class="label-text-alt">Used by this Config UI to proxy API calls
-                                                    to the main ChatRAG app. Defaults to Site URL, then local
+                                                    to the main myRAG app. Defaults to Site URL, then local
                                                     development port 3000.</span>
                                             </label>
                                         </div>
@@ -4085,7 +4085,7 @@
                     <div class="tab-content" id="payment">
                         <div class="card bg-base-100 shadow-lg">
                             <div class="card-body">
-                                <h2 class="card-title text-2xl text-chatrag-primary mb-6">💳 Payment Configuration</h2>
+                                <h2 class="card-title text-2xl text-myrag-primary mb-6">💳 Payment Configuration</h2>
 
                                 <!-- Stripe -->
                                 <div class="card bg-base-200 shadow-md mb-6">
@@ -4242,7 +4242,7 @@
                     <div class="tab-content" id="email">
                         <div class="card bg-base-100 shadow-lg">
                             <div class="card-body">
-                                <h2 class="card-title text-2xl text-chatrag-primary mb-6">📧 Email Configuration</h2>
+                                <h2 class="card-title text-2xl text-myrag-primary mb-6">📧 Email Configuration</h2>
 
                                 <!-- Email Settings -->
                                 <div class="card bg-base-200 shadow-md mb-6">
@@ -4267,7 +4267,7 @@
                                                     <span class="label-text">From Name</span>
                                                 </label>
                                                 <input type="text" id="NEXT_PUBLIC_SMTP_FROM_NAME"
-                                                    placeholder="ChatRAG Support" class="input input-bordered w-full">
+                                                    placeholder="myRAG Support" class="input input-bordered w-full">
                                             </div>
 
                                             <div class="form-control">
@@ -4301,7 +4301,7 @@
                     <div class="tab-content" id="branding">
                         <div class="card bg-base-100 shadow-lg">
                             <div class="card-body">
-                                <h2 class="card-title text-2xl text-chatrag-primary mb-6">🎨 Branding & UI Configuration
+                                <h2 class="card-title text-2xl text-myrag-primary mb-6">🎨 Branding & UI Configuration
                                 </h2>
 
                                 <!-- General Configuration -->
@@ -4391,7 +4391,7 @@
                                             <label class="label">
                                                 <span class="label-text">Application Name</span>
                                             </label>
-                                            <input type="text" id="NEXT_PUBLIC_APP_NAME" placeholder="ChatRAG"
+                                            <input type="text" id="NEXT_PUBLIC_APP_NAME" placeholder="myRAG"
                                                 class="input input-bordered w-full">
                                             <div class="text-sm text-base-content/70 mt-2">
                                                 This name will be used throughout the application, including in the
@@ -4426,7 +4426,7 @@
                                                     <span class="label-text">Logo Text</span>
                                                 </label>
                                                 <input type="text" id="NEXT_PUBLIC_HEADER_LOGO_TEXT"
-                                                    placeholder="ChatRAG" class="input input-bordered w-full">
+                                                    placeholder="myRAG" class="input input-bordered w-full">
                                             </div>
 
                                             <div class="form-control hidden" id="headerLogoUrlGroup">
@@ -4464,7 +4464,7 @@
                                                     <span class="label-text">Button Text</span>
                                                 </label>
                                                 <input type="text" id="NEXT_PUBLIC_SIDEBAR_BUTTON_TEXT"
-                                                    placeholder="ChatRAG" class="input input-bordered w-full">
+                                                    placeholder="myRAG" class="input input-bordered w-full">
                                                 <div class="text-sm text-base-content/70 mt-2">
                                                     This text will appear on the button at the bottom of the sidebar.
                                                 </div>
@@ -4500,7 +4500,7 @@
                                                     <span class="label-text">Browser Title</span>
                                                 </label>
                                                 <input type="text" id="NEXT_PUBLIC_SITE_TITLE"
-                                                    placeholder="ChatRAG - AI Assistant"
+                                                    placeholder="myRAG - AI Assistant"
                                                     class="input input-bordered w-full">
                                                 <div class="text-sm text-base-content/70 mt-2">
                                                     This title appears in the browser tab. If left empty, it will use
@@ -5081,7 +5081,7 @@
                     <div class="tab-content" id="saved-chats">
                         <div class="card bg-base-100 shadow-lg">
                             <div class="card-body p-4 lg:p-6">
-                                <h2 class="card-title text-xl lg:text-2xl text-chatrag-primary mb-6">💾 Saved Chats
+                                <h2 class="card-title text-xl lg:text-2xl text-myrag-primary mb-6">💾 Saved Chats
                                     Configuration</h2>
                                 <p class="text-base-content/70 mb-6">Configure how chat titles are generated using AI
                                     for better organization and searchability.</p>
@@ -5186,7 +5186,7 @@
                     <div class="tab-content" id="suggestions">
                         <div class="card bg-base-100 shadow-lg">
                             <div class="card-body p-4 lg:p-6">
-                                <h2 class="card-title text-xl lg:text-2xl text-chatrag-primary mb-6">💡 Suggestion
+                                <h2 class="card-title text-xl lg:text-2xl text-myrag-primary mb-6">💡 Suggestion
                                     Customization</h2>
                                 <p class="text-base-content/70 mb-6">Customize the suggestion buttons that help users
                                     start conversations.</p>
@@ -5351,7 +5351,7 @@
                     <div class="tab-content" id="embed">
                         <div class="card bg-base-100 shadow-lg">
                             <div class="card-body">
-                                <h2 class="card-title text-2xl text-chatrag-primary mb-6">💬 Embed Widget Configuration
+                                <h2 class="card-title text-2xl text-myrag-primary mb-6">💬 Embed Widget Configuration
                                 </h2>
 
                                 <!-- Enable Embed Widget -->
@@ -5392,7 +5392,7 @@
                                                     <span class="label-text">Widget Title</span>
                                                 </label>
                                                 <input type="text" id="NEXT_PUBLIC_EMBED_TITLE"
-                                                    placeholder="ChatRAG Assistant" class="input input-bordered w-full">
+                                                    placeholder="myRAG Assistant" class="input input-bordered w-full">
                                                 <div class="text-sm text-base-content/70 mt-2">
                                                     The title displayed in the chat widget header.
                                                 </div>
@@ -5471,7 +5471,7 @@
                                                 </select>
                                                 <div class="text-sm text-base-content/70 mt-2">
                                                     The AI model to use for the embedded chat widget. This is separate
-                                                    from your main ChatRAG model, allowing you to optimize costs (e.g.,
+                                                    from your main myRAG model, allowing you to optimize costs (e.g.,
                                                     use GPT-5 for main app, GPT-5 Mini for widget).
                                                 </div>
                                             </div>
@@ -5726,7 +5726,7 @@
                                                         <img id="chatLogo" src="/favicon.svg" alt="Logo"
                                                             style="width: 24px; height: 24px; object-fit: contain; display: none;"
                                                             onerror="this.style.display='none'" />
-                                                        <span id="chatTitle">ChatRAG</span>
+                                                        <span id="chatTitle">myRAG</span>
                                                     </div>
                                                     <button onclick="toggleInlineChat()" style="
                                                         background: none;
@@ -5858,7 +5858,7 @@
                     <div class="tab-content" id="whatsapp">
                         <div class="card bg-base-100 shadow-lg">
                             <div class="card-body p-4 lg:p-6">
-                                <h2 class="card-title text-xl lg:text-2xl text-chatrag-primary mb-6">💬 WhatsApp
+                                <h2 class="card-title text-xl lg:text-2xl text-myrag-primary mb-6">💬 WhatsApp
                                     Configuration</h2>
 
                                 <!-- Basic Settings -->
@@ -5866,7 +5866,7 @@
                                     <div class="card-body">
                                         <h3 class="text-lg font-semibold mb-4">Basic Settings</h3>
                                         <p class="text-base-content/70 mb-4">Configure WhatsApp integration with your
-                                            ChatRAG instance.</p>
+                                            myRAG instance.</p>
 
                                         <div class="space-y-4">
                                             <!-- Enable WhatsApp -->
@@ -5878,7 +5878,7 @@
                                                         <span class="label-text text-base font-medium">Enable WhatsApp
                                                             Integration</span>
                                                         <p class="text-sm text-base-content/70 mt-1">Allow users to
-                                                            interact with ChatRAG through WhatsApp</p>
+                                                            interact with myRAG through WhatsApp</p>
                                                     </div>
                                                 </label>
                                             </div>
@@ -5941,7 +5941,7 @@
                                                     </label>
                                                     <input type="url" class="input input-bordered"
                                                         id="flyio-baileys-url" data-key="FLYIO_BAILEYS_URL"
-                                                        placeholder="https://baileys-chatrag.fly.dev">
+                                                        placeholder="https://baileys-myrag.fly.dev">
                                                     <label class="label">
                                                         <span class="label-text-alt text-base-content/70">Your Fly.io
                                                             WhatsApp instance URL</span>
@@ -5991,7 +5991,7 @@
                                                             <p class="text-sm mt-1">A webhook secret is used to verify
                                                                 that incoming webhook requests are legitimate. Your
                                                                 Baileys instance will sign each request with this secret
-                                                                using HMAC-SHA256, and ChatRAG will verify the signature
+                                                                using HMAC-SHA256, and myRAG will verify the signature
                                                                 to ensure security.</p>
                                                         </div>
                                                     </div>
@@ -6240,7 +6240,7 @@
                     <div class="tab-content" id="rag-modes">
                         <div class="card bg-base-100 shadow-lg">
                             <div class="card-body">
-                                <h2 class="card-title text-2xl text-chatrag-primary mb-2">🎯 RAG Behavior Modes</h2>
+                                <h2 class="card-title text-2xl text-myrag-primary mb-2">🎯 RAG Behavior Modes</h2>
                                 <p class="text-base-content/70 mb-6">Control how strictly the AI follows your knowledge
                                     base when answering questions.</p>
 
@@ -6351,7 +6351,7 @@
                     <div class="tab-content" id="rag-settings">
                         <div class="card bg-base-100 shadow-lg">
                             <div class="card-body">
-                                <h2 class="card-title text-2xl text-chatrag-primary mb-6">🔍 RAG Configuration</h2>
+                                <h2 class="card-title text-2xl text-myrag-primary mb-6">🔍 RAG Configuration</h2>
                                 <p class="text-base-content/70 mb-6">Configure how documents are parsed, chunked, and
                                     embedded for retrieval.</p>
 
@@ -7110,7 +7110,7 @@
                     <div class="tab-content" id="rag-prompt">
                         <div class="card bg-base-100 shadow-lg">
                             <div class="card-body">
-                                <h2 class="card-title text-2xl text-chatrag-primary mb-6">📝 System Prompt</h2>
+                                <h2 class="card-title text-2xl text-myrag-primary mb-6">📝 System Prompt</h2>
 
                                 <div class="card bg-base-200 shadow-md mb-6">
                                     <div class="card-body">
@@ -7482,12 +7482,12 @@
                                                                 </div>
                                                             </div>
                                                             <div class="template-option card bg-base-200 cursor-pointer hover:bg-base-300 transition-colors"
-                                                                data-template="chatragSales">
+                                                                data-template="myragSales">
                                                                 <div class="card-body py-3">
-                                                                    <div class="font-medium">ChatRAG Sales Assistant
+                                                                    <div class="font-medium">myRAG Sales Assistant
                                                                     </div>
                                                                     <div class="text-sm text-base-content/70">
-                                                                        Enthusiastic sales support for ChatRAG platform
+                                                                        Enthusiastic sales support for myRAG platform
                                                                     </div>
                                                                 </div>
                                                             </div>
@@ -7691,10 +7691,10 @@
                     <div class="tab-content" id="document-processing">
                         <div class="card bg-base-100 shadow-lg">
                             <div class="card-body p-4 lg:p-6">
-                                <h2 class="card-title text-xl lg:text-2xl text-chatrag-primary mb-6">📚 Document
+                                <h2 class="card-title text-xl lg:text-2xl text-myrag-primary mb-6">📚 Document
                                     Processing Hub</h2>
                                 <p class="text-base-content/70 mb-6">Upload, process, and manage documents for your
-                                    ChatRAG knowledge base. Configure RAG settings and monitor processing status in
+                                    myRAG knowledge base. Configure RAG settings and monitor processing status in
                                     real-time.</p>
 
                                 <!-- Document Dashboard Visibility -->
@@ -7706,7 +7706,7 @@
                                                 class="toggle toggle-primary">
                                         </div>
                                         <p class="text-base-content/70">When enabled, the document dashboard button will
-                                            be hidden from the ChatRAG header for all users including admins. Documents
+                                            be hidden from the myRAG header for all users including admins. Documents
                                             can still be managed through this config interface.</p>
                                     </div>
                                 </div>
@@ -7966,7 +7966,7 @@
                     <div class="tab-content" id="admin">
                         <div class="card bg-base-100 shadow-lg">
                             <div class="card-body p-4 lg:p-6">
-                                <h2 class="card-title text-xl lg:text-2xl text-chatrag-primary mb-6">👤 Admin
+                                <h2 class="card-title text-xl lg:text-2xl text-myrag-primary mb-6">👤 Admin
                                     Configuration</h2>
 
                                 <!-- Primary Admin Account -->
@@ -8134,7 +8134,7 @@
                     <div class="tab-content" id="connectors">
                         <div class="card bg-base-100 shadow-lg">
                             <div class="card-body p-4 lg:p-6">
-                                <h2 class="card-title text-xl lg:text-2xl text-chatrag-primary mb-6">Connectors
+                                <h2 class="card-title text-xl lg:text-2xl text-myrag-primary mb-6">Connectors
                                     Configuration</h2>
                                 <p class="text-base-content/70 mb-6">Manage which document connectors are available to
                                     users. Control provider visibility, monitor connections, and view sync statistics.
@@ -8365,7 +8365,7 @@
                     <div class="tab-content" id="web-scraper">
                         <div class="card bg-base-100 shadow-lg">
                             <div class="card-body p-4 lg:p-6">
-                                <h2 class="card-title text-xl lg:text-2xl text-chatrag-primary mb-6">Web Scraper</h2>
+                                <h2 class="card-title text-xl lg:text-2xl text-myrag-primary mb-6">Web Scraper</h2>
                                 <p class="text-base-content/70 mb-6">Configure the integrated Firecrawl web scraper for
                                     high-quality HTML/PDF extraction.</p>
 
@@ -8479,9 +8479,9 @@
                 <div class="tab-content" id="advanced">
                     <div class="card bg-base-100 shadow-lg">
                         <div class="card-body">
-                            <h2 class="card-title text-2xl text-chatrag-primary mb-6">🔧 MCP Configuration</h2>
+                            <h2 class="card-title text-2xl text-myrag-primary mb-6">🔧 MCP Configuration</h2>
                             <p class="text-base-content/70 mb-6">Manage MCP (Model Context Protocol) servers to
-                                extend ChatRAG with custom tools and integrations.</p>
+                                extend myRAG with custom tools and integrations.</p>
 
                             <!-- Save Notice -->
                             <div class="alert alert-info mb-6">
@@ -8507,7 +8507,7 @@
                                                     System</h3>
                                                 <p class="text-sm text-base-content/70 leading-relaxed">Enable the
                                                     entire Model Context Protocol system for tool execution. When
-                                                    disabled, ChatRAG will focus on RAG functionality only.</p>
+                                                    disabled, myRAG will focus on RAG functionality only.</p>
                                             </div>
                                         </div>
                                         <div class="flex-shrink-0 pt-1">
@@ -8602,7 +8602,7 @@
         <footer class="px-6 py-8 text-center text-base-content/60 border-t border-base-300">
             <p class="mb-2">Changes are automatically saved to your <code
                     class="bg-base-200 px-2 py-1 rounded">.env.local</code> file.</p>
-            <p><small>ChatRAG Configuration Tool v1.0.0</small></p>
+            <p><small>myRAG Configuration Tool v1.0.0</small></p>
         </footer>
     </div>
     <!-- End of main-content-wrapper -->
@@ -9099,7 +9099,7 @@
 
                 // Broadcast the change for real-time updates
                 try {
-                    const bc = new BroadcastChannel('chatrag-config');
+                    const bc = new BroadcastChannel('myrag-config');
                     bc.postMessage({ key, value });
                     bc.close();
                 } catch (e) {
@@ -9309,15 +9309,15 @@
                         }
 
                         // Special handling for deployment mode radio buttons
-                        if (e.target.type === 'radio' && e.target.name === 'NEXT_PUBLIC_CHATRAG_DEPLOYMENT_MODE') {
+                        if (e.target.type === 'radio' && e.target.name === 'NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE') {
                             const selectedMode = e.target.value;
                             console.log('[Config] Deployment mode selected:', selectedMode);
 
                             // Update deployment mode in config
-                            this.updateConfig('NEXT_PUBLIC_CHATRAG_DEPLOYMENT_MODE', selectedMode);
+                            this.updateConfig('NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE', selectedMode);
 
                             console.log('[Config] Updated deployment mode config:', {
-                                'NEXT_PUBLIC_CHATRAG_DEPLOYMENT_MODE': selectedMode
+                                'NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE': selectedMode
                             });
 
                             // Trigger auto-save
@@ -9918,7 +9918,7 @@
 
                     // Get current configuration values
                     var primaryColor = document.getElementById('NEXT_PUBLIC_EMBED_PRIMARY_COLOR')?.value || '#FF6417';
-                    var title = document.getElementById('NEXT_PUBLIC_EMBED_TITLE')?.value || 'ChatRAG Assistant';
+                    var title = document.getElementById('NEXT_PUBLIC_EMBED_TITLE')?.value || 'myRAG Assistant';
                     var position = document.getElementById('NEXT_PUBLIC_EMBED_POSITION')?.value || 'bottom-right';
                     var greeting = document.getElementById('NEXT_PUBLIC_EMBED_GREETING')?.value || 'Hello! Development help you today?';
                     var model = document.getElementById('NEXT_PUBLIC_EMBED_MODEL')?.value || 'openai/gpt-4o-mini';
@@ -9928,7 +9928,7 @@
                     if (primaryColor !== '#FF6417') {
                         scriptCode += '  data-primary-color="' + primaryColor + '"\n';
                     }
-                    if (title !== 'ChatRAG Assistant') {
+                    if (title !== 'myRAG Assistant') {
                         scriptCode += '  data-title="' + encodeURIComponent(title) + '"\n';
                     }
                     if (position !== 'bottom-right') {
@@ -9948,7 +9948,7 @@
                     }
 
                     // Generate React/Next.js code
-                    var reactCode = '<script\n  id="chatrag-embed"\n  dangerouslySetInnerHTML={{ __html: `\n';
+                    var reactCode = '<script\n  id="myrag-embed"\n  dangerouslySetInnerHTML={{ __html: `\n';
                     reactCode += '    (function(){\n';
                     reactCode += '      var s = document.createElement(\'script\');\n';
                     reactCode += '      s.src = \'' + siteUrl + '/embed/chat.js\';\n';
@@ -9956,7 +9956,7 @@
                     if (primaryColor !== '#FF6417') {
                         reactCode += '      s.setAttribute(\'data-primary-color\', \'' + primaryColor + '\');\n';
                     }
-                    if (title !== 'ChatRAG Assistant') {
+                    if (title !== 'myRAG Assistant') {
                         reactCode += '      s.setAttribute(\'data-title\', \'' + title.replace(/'/g, "\\'") + '\');\n';
                     }
                     if (position !== 'bottom-right') {
@@ -10004,10 +10004,10 @@
                             label: 'Pricing & Ownership',
                             icon: 'DollarSign',
                             items: [
-                                { text: 'How much does ChatRAG cost?' },
+                                { text: 'How much does myRAG cost?' },
                                 { text: 'How many chatbots can I create?' },
                                 { text: 'Do I own the code forever?' },
-                                { text: 'Can I use ChatRAG for client projects?' }
+                                { text: 'Can I use myRAG for client projects?' }
                             ]
                         },
                         {
@@ -10015,21 +10015,21 @@
                             label: 'Technical Foundation',
                             icon: 'Database',
                             items: [
-                                { text: 'What vector database does ChatRAG use?' },
-                                { text: 'How does ChatRAG parse documents?' },
-                                { text: 'What AI models does ChatRAG support?' },
+                                { text: 'What vector database does myRAG use?' },
+                                { text: 'How does myRAG parse documents?' },
+                                { text: 'What AI models does myRAG support?' },
                                 { text: 'How fast is the vector search?' }
                             ]
                         },
                         {
-                            id: 'chatrag-vs-others',
-                            label: 'ChatRAG vs Others',
+                            id: 'myrag-vs-others',
+                            label: 'myRAG vs Others',
                             icon: 'BarChart',
                             items: [
-                                { text: 'How does ChatRAG compare to Chatbase?' },
-                                { text: 'Why choose ChatRAG over building from scratch?' },
-                                { text: 'Who created ChatRAG?' },
-                                { text: 'What features does ChatRAG have that competitors don\'t?' }
+                                { text: 'How does myRAG compare to Chatbase?' },
+                                { text: 'Why choose myRAG over building from scratch?' },
+                                { text: 'Who created myRAG?' },
+                                { text: 'What features does myRAG have that competitors don\'t?' }
                             ]
                         },
                         {
@@ -10037,9 +10037,9 @@
                             label: 'Key Features',
                             icon: 'Rocket',
                             items: [
-                                { text: 'How can I install ChatRAG?' },
-                                { text: 'How can I deploy ChatRAG to Vercel?' },
-                                { text: 'Does ChatRAG support WhatsApp?' },
+                                { text: 'How can I install myRAG?' },
+                                { text: 'How can I deploy myRAG to Vercel?' },
+                                { text: 'Does myRAG support WhatsApp?' },
                                 { text: 'Can I monetize chatbots with Stripe?' }
                             ]
                         }
@@ -10192,7 +10192,7 @@
                 },
 
                 getIconEmoji: function (icon) {
-                    // Return SVG icons that match the Lucide React icons used in ChatRAG
+                    // Return SVG icons that match the Lucide React icons used in myRAG
                     const iconMap = {
                         'DollarSign': '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="22"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>',
                         'Database': '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path></svg>',
@@ -10512,10 +10512,10 @@
                             label: 'Pricing & Ownership',
                             icon: 'DollarSign',
                             items: [
-                                { text: 'How much does ChatRAG cost?' },
+                                { text: 'How much does myRAG cost?' },
                                 { text: 'How many chatbots can I create?' },
                                 { text: 'Do I own the code forever?' },
-                                { text: 'Can I use ChatRAG for client projects?' }
+                                { text: 'Can I use myRAG for client projects?' }
                             ]
                         },
                         {
@@ -10523,21 +10523,21 @@
                             label: 'Technical Foundation',
                             icon: 'Database',
                             items: [
-                                { text: 'What vector database does ChatRAG use?' },
-                                { text: 'How does ChatRAG parse documents?' },
-                                { text: 'What AI models does ChatRAG support?' },
+                                { text: 'What vector database does myRAG use?' },
+                                { text: 'How does myRAG parse documents?' },
+                                { text: 'What AI models does myRAG support?' },
                                 { text: 'How fast is the vector search?' }
                             ]
                         },
                         {
-                            id: 'chatrag-vs-others',
-                            label: 'ChatRAG vs Others',
+                            id: 'myrag-vs-others',
+                            label: 'myRAG vs Others',
                             icon: 'BarChart',
                             items: [
-                                { text: 'How does ChatRAG compare to Chatbase?' },
-                                { text: 'Why choose ChatRAG over building from scratch?' },
-                                { text: 'Who created ChatRAG?' },
-                                { text: 'What features does ChatRAG have that competitors don\'t?' }
+                                { text: 'How does myRAG compare to Chatbase?' },
+                                { text: 'Why choose myRAG over building from scratch?' },
+                                { text: 'Who created myRAG?' },
+                                { text: 'What features does myRAG have that competitors don\'t?' }
                             ]
                         },
                         {
@@ -10545,9 +10545,9 @@
                             label: 'Key Features',
                             icon: 'Rocket',
                             items: [
-                                { text: 'How can I install ChatRAG?' },
-                                { text: 'How can I deploy ChatRAG to Vercel?' },
-                                { text: 'Does ChatRAG support WhatsApp?' },
+                                { text: 'How can I install myRAG?' },
+                                { text: 'How can I deploy myRAG to Vercel?' },
+                                { text: 'Does myRAG support WhatsApp?' },
                                 { text: 'Can I monetize chatbots with Stripe?' }
                             ]
                         }
@@ -10982,7 +10982,7 @@
 
                         // Force broadcast
                         try {
-                            const bc = new BroadcastChannel('chatrag-config');
+                            const bc = new BroadcastChannel('myrag-config');
                             bc.postMessage({ key: 'NEXT_PUBLIC_WELCOME_TEXT', value: 'What can I help with?' });
                             bc.postMessage({ key: 'NEXT_PUBLIC_WELCOME_TEXT_MODE', value: 'custom' });
                             bc.close();
@@ -11429,7 +11429,7 @@
                 // Auto-scroll to bottom
                 chatMessages.scrollTop = chatMessages.scrollHeight;
 
-                // Send real message to ChatRAG API
+                // Send real message to myRAG API
                 sendRealChatMessage(userMessage, chatMessages);
             };
 
@@ -11489,9 +11489,9 @@
                 }
             }
 
-            function getConfiguredChatRagAppUrl() {
+            function getConfiguredMyRAGAppUrl() {
                 const configuredUrl =
-                    document.getElementById('CHATRAG_APP_URL')?.value ||
+                    document.getElementById('MYRAG_APP_URL')?.value ||
                     document.getElementById('NEXT_PUBLIC_SITE_URL')?.value;
 
                 if (configuredUrl && configuredUrl.trim()) {
@@ -11504,9 +11504,9 @@
 
                 return window.location.origin;
             }
-            window.getConfiguredChatRagAppUrl = getConfiguredChatRagAppUrl;
+            window.getConfiguredMyRAGAppUrl = getConfiguredMyRAGAppUrl;
 
-            // Send real chat message to ChatRAG API
+            // Send real chat message to myRAG API
             async function sendRealChatMessage(userMessage, chatMessages) {
                 // Remove any existing typing indicator (use original function)
                 hideTypingIndicator();
@@ -11552,7 +11552,7 @@
 
                 try {
                     // Prefer direct call to the configured Next app; fallback to proxy if it fails
-                    const directUrl = `${getConfiguredChatRagAppUrl()}/api/embed/chat`;
+                    const directUrl = `${getConfiguredMyRAGAppUrl()}/api/embed/chat`;
                     const payload = {
                         messages: [
                             { role: 'user', content: userMessage }
@@ -11807,7 +11807,7 @@
                 const inlineChatWidget = document.getElementById('inlineChatWidget');
 
                 // Get current values
-                const title = document.getElementById('NEXT_PUBLIC_EMBED_TITLE')?.value || 'ChatRAG Assistant';
+                const title = document.getElementById('NEXT_PUBLIC_EMBED_TITLE')?.value || 'myRAG Assistant';
                 const greeting = document.getElementById('NEXT_PUBLIC_EMBED_GREETING')?.value || 'Hello! Development help you today?';
                 const primaryColor = document.getElementById('NEXT_PUBLIC_EMBED_PRIMARY_COLOR')?.value || '#FF6417';
                 const position = document.getElementById('NEXT_PUBLIC_EMBED_POSITION')?.value || 'bottom-right';
@@ -12397,8 +12397,8 @@
                 console.log('🔄 loadWorkspaces: Starting...');
 
                 // Check if multi-tenant mode is enabled
-                const deploymentMode = window.currentConfig?.NEXT_PUBLIC_CHATRAG_DEPLOYMENT_MODE ||
-                    window.currentConfig?.CHATRAG_DEPLOYMENT_MODE ||
+                const deploymentMode = window.currentConfig?.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE ||
+                    window.currentConfig?.MYRAG_DEPLOYMENT_MODE ||
                     'single-tenant';
 
                 console.log('📋 loadWorkspaces: Deployment mode from config:', deploymentMode);
@@ -12429,8 +12429,8 @@
                         let errorMessage = await this.readResponseError(response);
 
                         if (response.status === 401) {
-                            const appUrl = window.getConfiguredChatRagAppUrl ? window.getConfiguredChatRagAppUrl() : window.location.origin;
-                            errorMessage += ` In multi-tenant mode, sign in to the main ChatRAG app at ${appUrl} in this browser, then refresh the Config UI.`;
+                            const appUrl = window.getConfiguredMyRAGAppUrl ? window.getConfiguredMyRAGAppUrl() : window.location.origin;
+                            errorMessage += ` In multi-tenant mode, sign in to the main myRAG app at ${appUrl} in this browser, then refresh the Config UI.`;
                         }
 
                         console.error('❌ loadWorkspaces: Error response:', errorMessage);
@@ -12661,8 +12661,8 @@
                         let errorMessage = await this.readResponseError(response);
 
                         if (response.status === 401 && this.workspaces.isMultiTenant) {
-                            const appUrl = window.getConfiguredChatRagAppUrl ? window.getConfiguredChatRagAppUrl() : window.location.origin;
-                            errorMessage += ` In multi-tenant mode, sign in to the main ChatRAG app at ${appUrl} in this browser, then retry the upload from the Config UI.`;
+                            const appUrl = window.getConfiguredMyRAGAppUrl ? window.getConfiguredMyRAGAppUrl() : window.location.origin;
+                            errorMessage += ` In multi-tenant mode, sign in to the main myRAG app at ${appUrl} in this browser, then retry the upload from the Config UI.`;
                         }
 
                         throw new Error(errorMessage);
@@ -13224,19 +13224,19 @@ When providing technical guidance:
 7. Structure responses clearly (overview, implementation, examples)`,
                 postContext: `Based on the technical context provided, deliver accurate solutions and implementations. If specific technical details are missing, recommend official documentation or suggest more targeted technical queries.`
             },
-            chatragSales: {
-                preContext: `You are ChatRAG Sales Assistant, representing the ChatRAG intelligent document management platform.
+            myragSales: {
+                preContext: `You are myRAG Sales Assistant, representing the myRAG intelligent document management platform.
 
 When engaging with prospects:
 1. ALWAYS reference the context for product details, pricing, and features
-2. Highlight ChatRAG's capabilities: RAG technology, document processing, vector search
+2. Highlight myRAG's capabilities: RAG technology, document processing, vector search
 3. Use specific examples and case studies from the context
 4. Address security and privacy concerns with facts from documentation
 5. Explain pricing tiers clearly using context information
 6. Guide prospects through deployment options
 7. Maintain enthusiastic yet professional tone
 8. Provide personalized recommendations based on needs`,
-                postContext: `Using the product context provided, demonstrate ChatRAG's value proposition. If specific details are missing from the context, offer to connect prospects with our sales team for personalized demonstrations.`
+                postContext: `Using the product context provided, demonstrate myRAG's value proposition. If specific details are missing from the context, offer to connect prospects with our sales team for personalized demonstrations.`
             },
             customerSupport: {
                 preContext: `You are a dedicated customer support specialist. Your mission is to resolve issues quickly and effectively with empathy.
@@ -13641,7 +13641,7 @@ When messaging:
 
                 const link = document.createElement('a');
                 link.href = url;
-                link.download = `chatrag-templates-${new Date().toISOString().split('T')[0]}.json`;
+                link.download = `myrag-templates-${new Date().toISOString().split('T')[0]}.json`;
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
@@ -14105,7 +14105,7 @@ When messaging:
                     professional: 'Professional Expert',
                     educational: 'Educational Tutor',
                     technical: 'Technical Specialist',
-                    chatragSales: 'ChatRAG Sales Assistant',
+                    myragSales: 'myRAG Sales Assistant',
                     customerSupport: 'Customer Support Specialist',
                     researchAssistant: 'Research Assistant',
                     codeAssistant: 'Code Assistant',
@@ -15268,13 +15268,13 @@ When messaging:
             console.log('Initializing Deployment Mode functionality');
             deploymentModeInitialized = true;
 
-            const radioButtons = document.querySelectorAll('input[name="NEXT_PUBLIC_CHATRAG_DEPLOYMENT_MODE"]');
+            const radioButtons = document.querySelectorAll('input[name="NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE"]');
             const singleTenantInstructions = document.getElementById('single-tenant-instructions');
             const multiTenantInstructions = document.getElementById('multi-tenant-instructions');
 
             // Function to update instructions visibility
             function updateInstructions() {
-                const selectedMode = document.querySelector('input[name="NEXT_PUBLIC_CHATRAG_DEPLOYMENT_MODE"]:checked')?.value;
+                const selectedMode = document.querySelector('input[name="NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE"]:checked')?.value;
 
                 if (selectedMode === 'single-tenant') {
                     singleTenantInstructions?.classList.remove('hidden');
@@ -15321,8 +15321,8 @@ When messaging:
                     const data = await response.json();
                     const config = data.config || {};
 
-                    const deploymentMode = config.NEXT_PUBLIC_CHATRAG_DEPLOYMENT_MODE || 'single-tenant';
-                    const radioToCheck = document.querySelector(`input[name="NEXT_PUBLIC_CHATRAG_DEPLOYMENT_MODE"][value="${deploymentMode}"]`);
+                    const deploymentMode = config.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE || 'single-tenant';
+                    const radioToCheck = document.querySelector(`input[name="NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE"][value="${deploymentMode}"]`);
 
                     if (radioToCheck) {
                         radioToCheck.checked = true;
@@ -15347,7 +15347,7 @@ When messaging:
                 } catch (error) {
                     console.error('Error loading deployment mode:', error);
                     // Default to single-tenant on error
-                    const defaultRadio = document.querySelector('input[name="NEXT_PUBLIC_CHATRAG_DEPLOYMENT_MODE"][value="single-tenant"]');
+                    const defaultRadio = document.querySelector('input[name="NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE"][value="single-tenant"]');
                     if (defaultRadio) {
                         defaultRadio.checked = true;
                         updateInstructions();
@@ -16304,7 +16304,7 @@ When messaging:
 
                     // Now reload environment variables in the main app
                     try {
-                        console.log('🔄 Reloading environment variables in main ChatRAG app...');
+                        console.log('🔄 Reloading environment variables in main myRAG app...');
                         const reloadResponse = await fetch('../api/config/reload', {
                             method: 'POST',
                             headers: {
@@ -16331,7 +16331,7 @@ Saved to .env.local:
 • Models refreshed automatically in main app
 
 ✅ New models are now available immediately!
-Go to your ChatRAG app and check the model dropdown - your new models should appear within 5 seconds.
+Go to your myRAG app and check the model dropdown - your new models should appear within 5 seconds.
                             `;
                             alert(successMessage);
                         } else {
@@ -16346,7 +16346,7 @@ Updated values:
 • Groq Models: ${result.config.groqModels.length} models configured
 • OpenRouter Models: ${result.config.openrouterModels.length} models configured
 
-⚠️ Auto-reload failed. Please restart your ChatRAG application manually.
+⚠️ Auto-reload failed. Please restart your myRAG application manually.
 Run 'npm run dev' again in your terminal to pick up the new model configuration.
                             `;
                             alert(successMessage);
@@ -16363,7 +16363,7 @@ Updated values:
 • Groq Models: ${result.config.groqModels.length} models configured
 • OpenRouter Models: ${result.config.openrouterModels.length} models configured
 
-⚠️ Auto-reload failed. Please restart your ChatRAG application manually.
+⚠️ Auto-reload failed. Please restart your myRAG application manually.
 Run 'npm run dev' again in your terminal to pick up the new model configuration.
                         `;
                         alert(successMessage);
@@ -16382,15 +16382,15 @@ Run 'npm run dev' again in your terminal to pick up the new model configuration.
                 });
 
                 // Show detailed error message with troubleshooting
-                const appUrl = window.getConfiguredChatRagAppUrl ? window.getConfiguredChatRagAppUrl() : window.location.origin;
+                const appUrl = window.getConfiguredMyRAGAppUrl ? window.getConfiguredMyRAGAppUrl() : window.location.origin;
                 const errorMessage = `
 ❌ Failed to save model configuration
 
 Error: ${error.message}
 
 Troubleshooting:
-1. Make sure the main ChatRAG app is running (npm run dev)
-2. Check that the configured ChatRAG App URL is reachable: ${appUrl}
+1. Make sure the main myRAG app is running (npm run dev)
+2. Check that the configured myRAG App URL is reachable: ${appUrl}
 3. Verify .env.local file permissions
 4. Try refreshing the page and saving again
 

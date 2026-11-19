@@ -98,7 +98,7 @@ ${postContext ? `POST-CONTEXT:\n${postContext}` : ''}`;
           'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
           'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
-          'X-Title': 'ChatRAG System Prompt Translation'
+          'X-Title': 'myRAG System Prompt Translation'
         },
         body: JSON.stringify({
           model: 'openai/gpt-4o-mini',

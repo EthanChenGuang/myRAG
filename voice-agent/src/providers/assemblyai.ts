@@ -24,7 +24,7 @@ export class AssemblyAISTT implements STTProvider {
         // Initialize params
         const params: any = {
             sampleRate: this.sampleRate,
-            wordBoost: ['ChatRAG', 'chatrag'], // Boost recognition of brand name
+            wordBoost: ['myRAG', 'myrag'], // Boost recognition of brand name
             endUtteranceSilenceThreshold: 300, // Optimized for low latency (was 1200ms)
             disablePartialTranscripts: false // optional
         };

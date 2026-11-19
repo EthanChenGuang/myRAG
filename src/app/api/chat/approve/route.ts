@@ -1509,7 +1509,7 @@ export async function POST(req: NextRequest) {
               
               const mcpClient = new Client(
                 {
-                  name: "chatrag-mcp-client",
+                  name: "myrag-mcp-client",
                   version: "1.0.0",
                 },
                 {
@@ -1552,7 +1552,7 @@ export async function POST(req: NextRequest) {
               
               const mcpClient = new Client(
                 {
-                  name: "chatrag-mcp-client",
+                  name: "myrag-mcp-client",
                   version: "1.0.0",
                 },
                 {

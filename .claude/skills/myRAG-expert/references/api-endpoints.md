@@ -1,5 +1,5 @@
 <overview>
-ChatRAG has 89 API routes organized across functional domains. All use Node.js runtime, integrate with Supabase, and follow consistent error handling patterns.
+myRAG has 89 API routes organized across functional domains. All use Node.js runtime, integrate with Supabase, and follow consistent error handling patterns.
 
 **Error Pattern:** `{ error: string, details?: string }` with status codes 400/401/403/404/409/500/504
 **Auth Patterns:** Supabase session (multi-tenant), public (single-tenant), admin cookie, bearer token

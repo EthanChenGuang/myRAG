@@ -2,7 +2,7 @@ import { supabase } from './supabase';
 import { enhanceQuery as enhanceQueryLocal, quickEnhanceQuery, shouldEnhanceQuery } from './query-enhancer-local';
 import { rerankChunks, ChunkWithScore, shouldRerank } from './reranker-local';
 import { rerank } from 'ai';
-import { chatRagScorePreservingReranker } from './reranker-adapter';
+import { myRAGScorePreservingReranker } from './reranker-adapter';
 import { getQueryEmbedding } from './document-processor';
 
 /**

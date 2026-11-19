@@ -1,5 +1,5 @@
 <objective>
-Create a comprehensive Claude Code SKILL.md file called "chatrag-expert" that gives Claude instant, deep expertise about the ChatRAG codebase. This skill eliminates the need to re-analyze the codebase in every new conversation.
+Create a comprehensive Claude Code SKILL.md file called "myrag-expert" that gives Claude instant, deep expertise about the myRAG codebase. This skill eliminates the need to re-analyze the codebase in every new conversation.
 
 The skill must contain pre-baked architectural knowledge - every key file, data flow, pattern, convention, and integration detail embedded directly so Claude can answer questions, diagnose issues, plan features, and debug problems immediately without reading files first.
 
@@ -7,9 +7,9 @@ Go beyond the basics. This should be the most thorough codebase knowledge map po
 </objective>
 
 <context>
-This is a Next.js 16 + React 19 app called ChatRAG - a production AI chat experience with RAG, multi-model orchestration, and multi-modal generation.
+This is a Next.js 16 + React 19 app called myRAG - a production AI chat experience with RAG, multi-model orchestration, and multi-modal generation.
 
-The skill file will be saved to `.claude/skills/chatrag-expert.md` in the local project directory. It will be used as a Claude Code skill that can be activated to give Claude instant expertise about this specific codebase.
+The skill file will be saved to `.claude/skills/myRAG-expert.md` in the local project directory. It will be used as a Claude Code skill that can be activated to give Claude instant expertise about this specific codebase.
 
 Read CLAUDE.md first for project conventions and high-level architecture.
 </context>
@@ -101,11 +101,11 @@ Structure the skill file as a proper Claude Code SKILL.md with:
 
 ```markdown
 ---
-name: chatrag-expert
-description: Instant deep expertise on the ChatRAG codebase - architecture, patterns, data flows, debugging
+name: myrag-expert
+description: Instant deep expertise on the myRAG codebase - architecture, patterns, data flows, debugging
 ---
 
-# ChatRAG Codebase Expert
+# myRAG Codebase Expert
 
 [All sections with pre-baked knowledge here]
 ```
@@ -121,7 +121,7 @@ Important conventions to follow:
 
 <output>
 Create the skill file at:
-- `./.claude/skills/chatrag-expert.md` - The complete SKILL.md with all pre-baked codebase knowledge
+- `./.claude/skills/myRAG-expert.md` - The complete SKILL.md with all pre-baked codebase knowledge
 
 This single file should be comprehensive enough that when activated, Claude can:
 - Answer any architectural question about the codebase
@@ -142,11 +142,11 @@ Before declaring complete, verify your work:
 6. The chat flow is fully traced from user input to streamed response
 7. Common debugging scenarios are covered
 8. The skill file is valid markdown that follows SKILL.md conventions
-9. The file is saved to `.claude/skills/chatrag-expert.md`
+9. The file is saved to `.claude/skills/myRAG-expert.md`
 </verification>
 
 <success_criteria>
-- Skill file exists at `.claude/skills/chatrag-expert.md`
+- Skill file exists at `.claude/skills/myRAG-expert.md`
 - File contains all 16 required sections with substantive content (not placeholders)
 - Actual TypeScript types and interfaces from the codebase are embedded
 - Actual file paths are accurate and complete

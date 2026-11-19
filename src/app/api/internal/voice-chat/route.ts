@@ -17,12 +17,12 @@ export async function POST(req: NextRequest) {
         // Security Check
         const apiKey = req.headers.get('x-api-key');
         
-        if (!env.CHATRAG_INTERNAL_API_KEY) {
-            console.error('[Voice Chat API] CHATRAG_INTERNAL_API_KEY not configured');
+        if (!env.MYRAG_INTERNAL_API_KEY) {
+            console.error('[Voice Chat API] MYRAG_INTERNAL_API_KEY not configured');
             return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
         }
         
-        if (apiKey !== env.CHATRAG_INTERNAL_API_KEY) {
+        if (apiKey !== env.MYRAG_INTERNAL_API_KEY) {
             console.warn('[Voice Chat API] Unauthorized access attempt');
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }

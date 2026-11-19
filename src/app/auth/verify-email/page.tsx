@@ -147,7 +147,7 @@ export default function VerifyEmail() {
               transition={{ delay: 0.7, duration: 0.5 }}
               className={`text-sm ${mutedTextColor}`}
             >
-              <p>Once verified, you&apos;ll be able to sign in and start using ChatRAG.</p>
+              <p>Once verified, you&apos;ll be able to sign in and start using myRAG.</p>
             </motion.div>
           </div>
           

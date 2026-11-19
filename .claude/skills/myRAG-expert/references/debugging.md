@@ -1,5 +1,5 @@
 <overview>
-Common debugging scenarios, diagnostic tools, and troubleshooting guides for ChatRAG.
+Common debugging scenarios, diagnostic tools, and troubleshooting guides for myRAG.
 </overview>
 
 <diagnostic_scripts>

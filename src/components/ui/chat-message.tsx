@@ -5273,7 +5273,7 @@ function useAvatarSettings() {
 
     // Also listen for BroadcastChannel messages for real-time updates
     try {
-      const bc = new BroadcastChannel('chatrag-config');
+      const bc = new BroadcastChannel('myrag-config');
       bc.onmessage = (event) => {
         if (event.data.key === 'AI_RESPONSE_LOGO_BORDER') {
           const newValue = event.data.value === 'true';

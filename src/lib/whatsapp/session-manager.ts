@@ -52,7 +52,7 @@ export class WhatsAppSessionManager {
 
       // Create session in WhatsApp provider
       const providerResponse = await this.whatsappClient.createSession(userId, {
-        source: 'chatrag',
+        source: 'myrag',
         timestamp: new Date().toISOString()
       });
 

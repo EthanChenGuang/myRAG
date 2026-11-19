@@ -197,7 +197,7 @@ export function generateProjectFiles(
     const packageJson = {
       name: projectName,
       version: '1.0.0',
-      description: 'Generated from ChatRAG artifact',
+      description: 'Generated from myRAG artifact',
       main: 'index.js',
       scripts: {
         start: 'node index.js',
@@ -220,7 +220,7 @@ export function generateProjectFiles(
   if (includeReadme) {
     const readmeContent = `# ${projectName}
 
-Generated from ChatRAG artifact.
+Generated from myRAG artifact.
 
 ## Language
 ${language.toUpperCase()}

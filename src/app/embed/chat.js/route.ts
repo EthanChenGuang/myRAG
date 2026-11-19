@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
   }
 
   // Get the origin for API calls
-  // Always use this server's origin so API requests go to the ChatRAG demo domain
+  // Always use this server's origin so API requests go to the myRAG demo domain
   const origin = request.nextUrl.origin;
 
   // Get configuration from environment
@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
   const logoUrl = faviconPath.startsWith('http') ? faviconPath : `${origin}${faviconPath}`;
 
   const config = {
-    title: env.NEXT_PUBLIC_EMBED_TITLE || 'ChatRAG Assistant',
+    title: env.NEXT_PUBLIC_EMBED_TITLE || 'myRAG Assistant',
     primaryColor: getEmbedColor(),
     position: env.NEXT_PUBLIC_EMBED_POSITION || 'bottom-right',
     autoOpen: env.NEXT_PUBLIC_EMBED_AUTO_OPEN === 'true',
@@ -62,21 +62,21 @@ export async function GET(request: NextRequest) {
       try {
         const suggestionsStr = env.NEXT_PUBLIC_EMBED_SUGGESTIONS;
         return suggestionsStr ? JSON.parse(suggestionsStr) : [
-          'Who is the creator of ChatRAG?',
-          'How much does ChatRAG cost and is it a one-time payment?',
+          'Who is the creator of myRAG?',
+          'How much does myRAG cost and is it a one-time payment?',
           'Do I really own the chatbots I create or is there vendor lock-in?',
           'Can I build unlimited chatbots for my clients without extra fees?',
-          'What vector database and AI models does ChatRAG use?',
-          'How does ChatRAG compare to Chatbase in pricing and features?'
+          'What vector database and AI models does myRAG use?',
+          'How does myRAG compare to Chatbase in pricing and features?'
         ];
       } catch (e) {
         return [
-          'Who is the creator of ChatRAG?',
-          'How much does ChatRAG cost and is it a one-time payment?',
+          'Who is the creator of myRAG?',
+          'How much does myRAG cost and is it a one-time payment?',
           'Do I really own the chatbots I create or is there vendor lock-in?',
           'Can I build unlimited chatbots for my clients without extra fees?',
-          'What vector database and AI models does ChatRAG use?',
-          'How does ChatRAG compare to Chatbase in pricing and features?'
+          'What vector database and AI models does myRAG use?',
+          'How does myRAG compare to Chatbase in pricing and features?'
         ];
       }
     })()
@@ -343,8 +343,8 @@ export async function GET(request: NextRequest) {
   }
   
   // Prevent multiple instances
-  if (window.ChatRAGWidget) {
-    console.warn('ChatRAG Widget already loaded');
+  if (window.myRAGWidget) {
+    console.warn('myRAG Widget already loaded');
     return;
   }
   
@@ -357,14 +357,14 @@ export async function GET(request: NextRequest) {
   // Create widget container
   function createWidget() {
     // Check if widget already exists
-    if (document.getElementById('chatrag-widget-container')) {
-      console.warn('ChatRAG Widget already exists');
+    if (document.getElementById('myrag-widget-container')) {
+      console.warn('myRAG Widget already exists');
       return;
     }
     
     const container = document.createElement('div');
-    container.id = 'chatrag-widget-container';
-    container.setAttribute('data-chatrag-widget', 'true');
+    container.id = 'myrag-widget-container';
+    container.setAttribute('data-myrag-widget', 'true');
     container.style.cssText = \`
       position: fixed;
       z-index: 999999;
@@ -374,7 +374,7 @@ export async function GET(request: NextRequest) {
     
     // Create chat button
     const button = document.createElement('button');
-    button.id = 'chatrag-widget-button';
+    button.id = 'myrag-widget-button';
     button.innerHTML = '💬';
     button.style.cssText = \`
       width: 60px;
@@ -406,7 +406,7 @@ export async function GET(request: NextRequest) {
     
     // Create chat window
     const chatWindow = document.createElement('div');
-    chatWindow.id = 'chatrag-widget-window';
+    chatWindow.id = 'myrag-widget-window';
     chatWindow.style.cssText = \`
       position: absolute;
       width: 350px;
@@ -439,12 +439,12 @@ export async function GET(request: NextRequest) {
         \${config.logoUrl ? \`<img src="\${config.logoUrl}" alt="Logo" style="width: 24px; height: 24px; object-fit: contain;" onerror="this.style.display='none'" />\` : ''}
         <span>\${config.title}</span>
       </div>
-      <button id="chatrag-close-btn" style="background: none; border: none; color: white; font-size: 20px; cursor: pointer; padding: 0; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;">×</button>
+      <button id="myrag-close-btn" style="background: none; border: none; color: white; font-size: 20px; cursor: pointer; padding: 0; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;">×</button>
     \`;
     
     // Create messages container
     const messagesContainer = document.createElement('div');
-    messagesContainer.id = 'chatrag-messages';
+    messagesContainer.id = 'myrag-messages';
     messagesContainer.style.cssText = \`
       flex: 1;
       overflow-y: auto;
@@ -457,7 +457,7 @@ export async function GET(request: NextRequest) {
 
     // Top group (greeting + suggestions) rendered as part of the scrollable chat content
     const topGroup = document.createElement('div');
-    topGroup.id = 'chatrag-top-group';
+    topGroup.id = 'myrag-top-group';
     topGroup.style.cssText = \`
       display: flex;
       flex-direction: column;
@@ -498,7 +498,7 @@ export async function GET(request: NextRequest) {
 
     // Create suggestions container inside the row
     const suggestionsContainer = document.createElement('div');
-    suggestionsContainer.id = 'chatrag-suggestions';
+    suggestionsContainer.id = 'myrag-suggestions';
     suggestionsContainer.style.cssText = \`
       width: fit-content;
       max-width: 80%;
@@ -513,7 +513,7 @@ export async function GET(request: NextRequest) {
     // Add suggestion pills
     config.suggestions.forEach((suggestion) => {
       const pill = document.createElement('button');
-      pill.className = 'chatrag-suggestion-pill';
+      pill.className = 'myrag-suggestion-pill';
       pill.textContent = suggestion;
       pill.style.cssText = \`
         padding: 8px 14px;
@@ -547,7 +547,7 @@ export async function GET(request: NextRequest) {
       
       // Click handler - auto-fill and send (keep suggestions visible)
       pill.addEventListener('click', () => {
-        const input = document.getElementById('chatrag-input');
+        const input = document.getElementById('myrag-input');
         if (input && !isLoading) {
           input.value = suggestion;
           // Auto-send the message
@@ -574,7 +574,7 @@ export async function GET(request: NextRequest) {
     \`;
     
     const input = document.createElement('textarea');
-    input.id = 'chatrag-input';
+    input.id = 'myrag-input';
     input.placeholder = 'Type your message...';
     input.style.cssText = \`
       flex: 1;
@@ -592,7 +592,7 @@ export async function GET(request: NextRequest) {
     \`;
     
     const sendButton = document.createElement('button');
-    sendButton.id = 'chatrag-send-btn';
+    sendButton.id = 'myrag-send-btn';
     sendButton.innerHTML = '→';
     sendButton.style.cssText = \`
       width: 40px;
@@ -610,7 +610,7 @@ export async function GET(request: NextRequest) {
     \`;
     
     // Event listeners
-    header.querySelector('#chatrag-close-btn').addEventListener('click', toggleChat);
+    header.querySelector('#myrag-close-btn').addEventListener('click', toggleChat);
     sendButton.addEventListener('click', sendMessage);
     input.addEventListener('keypress', (e) => {
       if (e.key === 'Enter' && !e.shiftKey) {
@@ -670,8 +670,8 @@ export async function GET(request: NextRequest) {
   }
   
   function toggleChat() {
-    const chatWindow = document.getElementById('chatrag-widget-window');
-    const button = document.getElementById('chatrag-widget-button');
+    const chatWindow = document.getElementById('myrag-widget-window');
+    const button = document.getElementById('myrag-widget-button');
     
     isOpen = !isOpen;
     
@@ -686,7 +686,7 @@ export async function GET(request: NextRequest) {
   }
   
   function addMessage(role, content) {
-    const messagesContainer = document.getElementById('chatrag-messages');
+    const messagesContainer = document.getElementById('myrag-messages');
     const messageDiv = document.createElement('div');
     
     const isUser = role === 'user';
@@ -728,16 +728,16 @@ export async function GET(request: NextRequest) {
   }
   
   function scrollToBottom() {
-    const messagesContainer = document.getElementById('chatrag-messages');
+    const messagesContainer = document.getElementById('myrag-messages');
     if (messagesContainer) {
       messagesContainer.scrollTop = messagesContainer.scrollHeight;
     }
   }
   
   function showTypingIndicator() {
-    const messagesContainer = document.getElementById('chatrag-messages');
+    const messagesContainer = document.getElementById('myrag-messages');
     const typingDiv = document.createElement('div');
-    typingDiv.id = 'chatrag-typing';
+    typingDiv.id = 'myrag-typing';
     typingDiv.style.cssText = \`
       margin-bottom: 12px;
       display: flex;
@@ -772,15 +772,15 @@ export async function GET(request: NextRequest) {
   }
   
   function hideTypingIndicator() {
-    const typing = document.getElementById('chatrag-typing');
+    const typing = document.getElementById('myrag-typing');
     if (typing) {
       typing.remove();
     }
   }
   
   async function sendMessage() {
-    const input = document.getElementById('chatrag-input');
-    const sendButton = document.getElementById('chatrag-send-btn');
+    const input = document.getElementById('myrag-input');
+    const sendButton = document.getElementById('myrag-send-btn');
     const message = input.value.trim();
     if (!message || isLoading) return;
     
@@ -794,9 +794,9 @@ export async function GET(request: NextRequest) {
     sendButton.style.opacity = '0.5';
 
     // Create assistant message bubble immediately with loading animation
-    const messagesContainer = document.getElementById('chatrag-messages');
+    const messagesContainer = document.getElementById('myrag-messages');
     const messageDiv = document.createElement('div');
-    messageDiv.id = 'chatrag-assistant-response';
+    messageDiv.id = 'myrag-assistant-response';
     messageDiv.style.cssText = \`margin-bottom: 12px;\`;
 
     // Add "Assistant" label
@@ -805,7 +805,7 @@ export async function GET(request: NextRequest) {
     label.textContent = 'Assistant';
 
     const bubble = document.createElement('div');
-    bubble.id = 'chatrag-response-bubble';
+    bubble.id = 'myrag-response-bubble';
     bubble.style.cssText = \`
       display: inline-block;
       max-width: 80%;
@@ -821,7 +821,7 @@ export async function GET(request: NextRequest) {
 
     // Add loading dots to bubble
     const loadingDots = document.createElement('div');
-    loadingDots.id = 'chatrag-loading-dots';
+    loadingDots.id = 'myrag-loading-dots';
     loadingDots.style.cssText = \`display: flex; align-items: center; gap: 6px;\`;
 
     // Create three bouncing dots with different colors
@@ -835,19 +835,19 @@ export async function GET(request: NextRequest) {
         height: 8px;
         border-radius: 50%;
         background-color: \${color};
-        animation: chatrag-bounce 0.6s infinite;
+        animation: myrag-bounce 0.6s infinite;
         animation-delay: \${delays[i]}s;
       \`;
       loadingDots.appendChild(dot);
     });
 
     // Add bounce keyframes animation
-    const styleId = 'chatrag-typing-styles';
+    const styleId = 'myrag-typing-styles';
     if (!document.getElementById(styleId)) {
       const style = document.createElement('style');
       style.id = styleId;
       style.textContent = \`
-        @keyframes chatrag-bounce {
+        @keyframes myrag-bounce {
           0%, 100% { transform: translateY(0); }
           50% { transform: translateY(-4px); }
         }
@@ -893,7 +893,7 @@ export async function GET(request: NextRequest) {
 
       const removeLoadingDots = () => {
         if (!dotsRemoved) {
-          const loadingDotsElement = document.getElementById('chatrag-loading-dots');
+          const loadingDotsElement = document.getElementById('myrag-loading-dots');
           if (loadingDotsElement) {
             loadingDotsElement.remove();
           }
@@ -1107,7 +1107,7 @@ export async function GET(request: NextRequest) {
   }
   
   // Expose widget API
-  window.ChatRAGWidget = {
+  window.myRAGWidget = {
     open: () => {
       if (!isOpen) toggleChat();
     },
@@ -1120,7 +1120,7 @@ export async function GET(request: NextRequest) {
   };
   
   // Log version for debugging
-  console.log('ChatRAG Widget loaded:', window.ChatRAGWidget.version);
+  console.log('myRAG Widget loaded:', window.myRAGWidget.version);
 })();
 `;
 

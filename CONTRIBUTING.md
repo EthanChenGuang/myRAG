@@ -1,11 +1,11 @@
 # Contributing
 
-Thanks for looking. ChatRAG is open in full: the Next.js app, the config UI,
+Thanks for looking. myRAG is open in full: the Next.js app, the config UI,
 the voice agent, and the WhatsApp service.
 
 ## Pull requests are open
 
-There's no contributor license agreement to sign. ChatRAG is MIT-licensed, and
+There's no contributor license agreement to sign. myRAG is MIT-licensed, and
 by opening a pull request you agree that your contribution is released under
 the same [MIT License](LICENSE) as the rest of the project. Make sure it's
 yours to give: code you wrote, or code under a license compatible with MIT,
@@ -23,7 +23,7 @@ the work in.
 - **Security** reports go to the address in [SECURITY.md](SECURITY.md), not a
   public issue.
 - **Forks** are welcome, including commercial ones. The MIT License covers
-  that. It doesn't cover the ChatRAG name or logo, so if you publish or sell
+  that. It doesn't cover the myRAG name or logo, so if you publish or sell
   your own version, give it its own name. See [TRADEMARKS.md](TRADEMARKS.md).
 
 ## Before you open a pull request

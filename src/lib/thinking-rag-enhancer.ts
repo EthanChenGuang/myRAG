@@ -239,7 +239,7 @@ export async function intelligentSearch(
 
 /**
  * Checks if enhanced RAG should be used for the given model and settings
- * In ChatRAG, enhanced RAG is ALWAYS used when reasoning is enabled (it's a RAG app!)
+ * In myRAG, enhanced RAG is ALWAYS used when reasoning is enabled (it's a RAG app!)
  */
 export function shouldUseEnhancedRAG(
   modelId: string,
@@ -287,7 +287,7 @@ export function shouldUseEnhancedRAG(
   }
 
   // If we get here, reasoning is enabled and model supports it
-  // In ChatRAG, we ALWAYS use enhanced RAG when reasoning is available
+  // In myRAG, we ALWAYS use enhanced RAG when reasoning is available
   return true;
 }
 

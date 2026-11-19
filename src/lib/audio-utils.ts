@@ -253,7 +253,7 @@ export function generateAudioFilename(text: string): string {
   // Add timestamp for uniqueness
   const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
 
-  return `ChatRAG-${textSnippet}-${timestamp}.mp3`;
+  return `myRAG-${textSnippet}-${timestamp}.mp3`;
 }
 
 /**

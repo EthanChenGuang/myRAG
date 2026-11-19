@@ -1,5 +1,5 @@
 <overview>
-ChatRAG has 74+ React components in `src/components/ui/` plus provider components in `src/components/providers/`. The app uses a deep provider stack wrapping the main chat interface. All components are functional React with hooks, using Radix UI primitives, Tailwind CSS, and Framer Motion animations.
+myRAG has 74+ React components in `src/components/ui/` plus provider components in `src/components/providers/`. The app uses a deep provider stack wrapping the main chat interface. All components are functional React with hooks, using Radix UI primitives, Tailwind CSS, and Framer Motion animations.
 </overview>
 
 <provider_stack>

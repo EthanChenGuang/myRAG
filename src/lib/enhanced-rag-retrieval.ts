@@ -139,7 +139,7 @@ async function executeVectorSearch(
   organizationId: string | null,
   userId: string | null
 ): Promise<any[]> {
-  const deploymentMode = env.NEXT_PUBLIC_CHATRAG_DEPLOYMENT_MODE;
+  const deploymentMode = env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE;
 
   if (deploymentMode === 'multi-tenant') {
     // Workspace-scoped search for both org and personal (no cross-fallback)

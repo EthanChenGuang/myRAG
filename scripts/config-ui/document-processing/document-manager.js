@@ -224,12 +224,12 @@ class DocumentManager {
     }
 
     getMainAppUrl() {
-        if (window.getConfiguredChatRagAppUrl) {
-            return window.getConfiguredChatRagAppUrl();
+        if (window.getConfiguredMyRAGAppUrl) {
+            return window.getConfiguredMyRAGAppUrl();
         }
 
         const configuredUrl =
-            document.getElementById('CHATRAG_APP_URL')?.value ||
+            document.getElementById('MYRAG_APP_URL')?.value ||
             document.getElementById('NEXT_PUBLIC_SITE_URL')?.value;
 
         if (configuredUrl && configuredUrl.trim()) {
@@ -272,7 +272,7 @@ class DocumentManager {
                 let errorMessage = await this.readResponseError(response);
 
                 if (response.status === 401) {
-                    errorMessage += `. In multi-tenant mode, sign in to the main ChatRAG app at ${this.getMainAppUrl()} in this browser, then refresh this dashboard.`;
+                    errorMessage += `. In multi-tenant mode, sign in to the main myRAG app at ${this.getMainAppUrl()} in this browser, then refresh this dashboard.`;
                 }
 
                 throw new Error(errorMessage);

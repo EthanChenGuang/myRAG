@@ -205,7 +205,7 @@ knows/                          # Project root
 ├── .planning/
 │   └── codebase/               # GSD codebase map documents
 ├── .claude/
-│   ├── skills/                 # Project skills (chatrag-expert, brainstorming)
+│   ├── skills/                 # Project skills (myrag-expert, brainstorming)
 │   └── commands/               # Custom Claude commands
 ├── .auto-claude/               # AI-generated ideation, specs, roadmap
 ├── next.config.js

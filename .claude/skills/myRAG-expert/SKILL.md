@@ -1,11 +1,11 @@
 ---
-name: chatrag-expert
-description: Instant deep expertise on the ChatRAG codebase. Use when discussing architecture, diagnosing issues, planning features, debugging, or answering any question about the codebase. Eliminates need to re-analyze files each session.
+name: myrag-expert
+description: Instant deep expertise on the myRAG codebase. Use when discussing architecture, diagnosing issues, planning features, debugging, or answering any question about the codebase. Eliminates need to re-analyze files each session.
 ---
 
 <essential_principles>
 
-## ChatRAG at a Glance
+## myRAG at a Glance
 
 Production AI chat app with RAG, multi-model orchestration, and multi-modal generation (text, images, video, 3D).
 
@@ -97,7 +97,7 @@ Production AI chat app with RAG, multi-model orchestration, and multi-modal gene
 </essential_principles>
 
 <intake>
-What would you like to know about ChatRAG?
+What would you like to know about myRAG?
 
 1. **Discuss architecture** - Ask questions about how things work
 2. **Diagnose an issue** - Debug a problem or trace an error

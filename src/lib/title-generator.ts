@@ -452,7 +452,7 @@ function extractEntities(text: string): ExtractedEntities {
   // Product/Service patterns
   const productPatterns = [
     /\b([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,2})\s+(?:API|SDK|Platform|Service|Tool|Framework|Library|Package|Module)\b/g,
-    /\b(?:ChatRAG|ChatGPT|Claude|Gemini|Copilot|CodeWhisperer)\b/gi
+    /\b(?:myRAG|ChatGPT|Claude|Gemini|Copilot|CodeWhisperer)\b/gi
   ];
 
   productPatterns.forEach(pattern => {
@@ -1802,7 +1802,7 @@ function ensureValidTitle(title: string, messages: DBMessage[]): string {
         } else if (lowerText.includes('what') && (lowerText.includes('database') || lowerText.includes('use'))) {
           // "What X does Y use?" → "Y X"
           const mainSubject = words.find(w =>
-            ['chatrag', 'system', 'platform', 'app', 'application'].includes(w.toLowerCase())
+            ['myrag', 'system', 'platform', 'app', 'application'].includes(w.toLowerCase())
           );
           const aspect = words.find(w =>
             !['use', 'uses', 'using', 'does'].includes(w.toLowerCase()) && w !== mainSubject
@@ -1975,7 +1975,7 @@ function capitalize(text: string): string {
   if (!text) return '';
 
   // Preserve known proper nouns and acronyms
-  const properNouns = ['ChatRAG', 'Chatbase', 'API', 'URL', 'SQL', 'NoSQL', 'GraphQL', 'REST'];
+  const properNouns = ['myRAG', 'Chatbase', 'API', 'URL', 'SQL', 'NoSQL', 'GraphQL', 'REST'];
   const found = properNouns.find(noun => text.toLowerCase() === noun.toLowerCase());
   if (found) return found;
 
@@ -1992,7 +1992,7 @@ function capitalize(text: string): string {
 function capitalizeWords(text: string): string {
   return text.split(' ').map(w => {
     // Preserve known proper nouns
-    const properNouns = ['ChatRAG', 'Chatbase', 'API', 'URL', 'SQL', 'NoSQL', 'GraphQL', 'REST'];
+    const properNouns = ['myRAG', 'Chatbase', 'API', 'URL', 'SQL', 'NoSQL', 'GraphQL', 'REST'];
     const found = properNouns.find(noun => w.toLowerCase() === noun.toLowerCase());
     if (found) return found;
 

@@ -20,7 +20,7 @@ const plans: Plan[] = [
     price: "9",
     description: "Perfect for trying out the RAG chatbot",
     features: [
-      "Basic chatRAG functionality",
+      "Basic myRAG functionality",
       "Limited to 10 messages per day",
       "Public documents only",
       "Community support"

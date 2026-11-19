@@ -18,7 +18,7 @@ export class VoicePipeline {
 
     // State
     private history: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
-    private systemPrompt = `You are a helpful, knowledgeable voice assistant for ChatRAG.
+    private systemPrompt = `You are a helpful, knowledgeable voice assistant for myRAG.
     
     CORE INSTRUCTIONS:
     - Images are AUTOMATICALLY displayed alongside your response when available. Do NOT announce or describe them (e.g., avoid "Here is the image" or "Here is the logo"). The user can already see them.
@@ -197,7 +197,7 @@ export class VoicePipeline {
      * Called when a user joins the voice session.
      */
     async speakGreeting(greeting?: string): Promise<void> {
-        const defaultGreeting = "Hi there! I'm here to help. What would you like to know about ChatRAG?";
+        const defaultGreeting = "Hi there! I'm here to help. What would you like to know about myRAG?";
         const message = greeting || defaultGreeting;
 
         console.log(`[VoicePipeline] 🎙️ Speaking greeting: "${message}"`);
@@ -291,7 +291,7 @@ export class VoicePipeline {
     /**
      * Format a user transcript for clean display.
      * - Capitalizes first letter
-     * - Corrects common speech-to-text misspellings (chatbrag -> ChatRAG)
+     * - Corrects common speech-to-text misspellings (chatbrag -> myRAG)
      * - Adds question marks for question words (Who, What, Where, How, etc.)
      */
     private formatTranscript(text: string): string {
@@ -301,12 +301,11 @@ export class VoicePipeline {
 
         // 1. Brand name corrections (case-insensitive replacements)
         const brandCorrections: Record<string, string> = {
-            'chatbrag': 'ChatRAG',
-            'chat rag': 'ChatRAG',
-            'chatrag': 'ChatRAG',
-            'chat r a g': 'ChatRAG',
-            'chatr ag': 'ChatRAG',
-            'chat-rag': 'ChatRAG',
+            'my rag': 'myRAG',
+            'myrag': 'myRAG',
+            'my r a g': 'myRAG',
+            'my-rag': 'myRAG',
+            'mai rag': 'myRAG',
         };
 
         for (const [wrong, correct] of Object.entries(brandCorrections)) {
@@ -365,9 +364,9 @@ Rules:
 4. Output ONLY the rewritten query, nothing else.
 
 Examples:
-- "What is its price?" -> "What is ChatRAG's price?" (resolved "its")
-- "Who created ChatRAG?" -> "Who created ChatRAG?" (no pronouns, return unchanged)
-- "Tell me more about it" -> "Tell me more about ChatRAG" (resolved "it")`
+- "What is its price?" -> "What is myRAG's price?" (resolved "its")
+- "Who created myRAG?" -> "Who created myRAG?" (no pronouns, return unchanged)
+- "Tell me more about it" -> "Tell me more about myRAG" (resolved "it")`
                     },
                     {
                         role: 'user',
@@ -749,7 +748,7 @@ Examples:
             // Update History only if not cancelled
             if (!this.cancelCurrentPlayback && fullResponse.length > 0) {
                 // Save the REWRITTEN query to history so the user bubble shows the clarified intent
-                // This fixes the issue where "How much is it?" is shown instead of "How much is ChatRAG?"
+                // This fixes the issue where "How much is it?" is shown instead of "How much is myRAG?"
                 // Strip quotes if present
                 const cleanRewrittenQuery = rewrittenQuery.replace(/^["']|["']$/g, '');
                 this.history.push({ role: 'user', content: cleanRewrittenQuery });

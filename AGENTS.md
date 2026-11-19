@@ -1,6 +1,6 @@
-# ChatRAG Agents Guide
+# myRAG Agents Guide
 
-This document is the working guide for anyone, human or AI assistant (Claude, Codex, Cursor, Gemini, etc.), changing the ChatRAG codebase.
+This document is the working guide for anyone, human or AI assistant (Claude, Codex, Cursor, Gemini, etc.), changing the myRAG codebase.
 
 ---
 
@@ -42,7 +42,7 @@ This document is the working guide for anyone, human or AI assistant (Claude, Co
 
 ## 5. Repository Orientation
 ```
-chatrag/
+myrag/
 ├── src/
 │   ├── app/api/         # Chat, documents, MCP approval, auth, WhatsApp endpoints
 │   ├── components/      # UI components and providers

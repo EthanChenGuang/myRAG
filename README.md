@@ -1,4 +1,4 @@
-# <img src="./public/chatrag-logo.png" alt="ChatRAG" width="30" style="vertical-align: middle;"> ChatRAG - Production-Ready AI Chatbot Platform
+# <img src="./public/myRAG-logo.png" alt="myRAG" width="30" style="vertical-align: middle;"> myRAG - Production-Ready AI Chatbot Platform
 
 <div align="center">
   <h3>Build Unlimited RAG-Powered AI Chatbots in Minutes</h3>
@@ -23,15 +23,15 @@
 ---
 
 <div align="center">
-  <img src="./public/screenshots/chatrag-main-ui.png" alt="ChatRAG Main UI" width="100%" style="border-radius: 10px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
-  <p><em>ChatRAG's beautiful, modern chat interface with dark mode support</em></p>
+  <img src="./public/screenshots/myRAG-main-ui.png" alt="myRAG Main UI" width="100%" style="border-radius: 10px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+  <p><em>myRAG's beautiful, modern chat interface with dark mode support</em></p>
 </div>
 
 ---
 
 ## ⚠️ IMPORTANT: Choose Your Deployment Mode First
 
-**Before setup, decide which architecture fits your use case.** ChatRAG supports two modes with the same codebase:
+**Before setup, decide which architecture fits your use case.** myRAG supports two modes with the same codebase:
 
 <table>
 <tr>
@@ -152,7 +152,7 @@ Are you building a SaaS product with multiple customers?
 - **🕷️ Web Scraping (Firecrawl)** - Scrape websites and automatically index content into RAG with intelligent document titling and instant tooltips
 - **📋 Configurable Source Citations** - Toggle source citation display in AI responses through the config UI
 
-## <img src="./public/chatrag-logo.png" alt="ChatRAG" width="30" style="vertical-align: middle; margin-right: 8px;">Why ChatRAG?
+## <img src="./public/myRAG-logo.png" alt="myRAG" width="30" style="vertical-align: middle; margin-right: 8px;">Why myRAG?
 
 <table>
 <tr>
@@ -267,8 +267,8 @@ Build unlimited chatbots for yourself or clients with full white-label support
 #### Step 1: Clone & Install
 
 ```bash
-git clone https://github.com/areia-ai/chatrag.git
-cd chatrag
+git clone https://github.com/EthanChenGuang/myRAG.git
+cd myrag
 npm install
 ```
 
@@ -284,7 +284,7 @@ npm run configure-deployment
 **Option B: Manual**
 ```bash
 # Create .env.local with:
-NEXT_PUBLIC_CHATRAG_DEPLOYMENT_MODE=single-tenant
+NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE=single-tenant
 
 # Database
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
@@ -329,8 +329,8 @@ npm run dev          # http://localhost:3000
 #### Step 1: Clone & Install
 
 ```bash
-git clone https://github.com/areia-ai/chatrag.git
-cd chatrag
+git clone https://github.com/EthanChenGuang/myRAG.git
+cd myrag
 npm install
 ```
 
@@ -347,7 +347,7 @@ npm run configure-deployment
 **Option B: Manual**
 ```bash
 # Create .env.local with:
-NEXT_PUBLIC_CHATRAG_DEPLOYMENT_MODE=multi-tenant
+NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE=multi-tenant
 
 # Multi-Tenant Features
 ENABLE_ORGANIZATIONS=true
@@ -538,7 +538,7 @@ WHATSAPP_PROVIDER=flyio
 
 ## 📊 Performance Benchmarks
 
-| Metric | Traditional RAG | ChatRAG (HNSW) | Improvement |
+| Metric | Traditional RAG | myRAG (HNSW) | Improvement |
 |:-------|:---------------:|:---------------:|:-----------:|
 | **Single Query** | 100-500ms | **<50ms** | 🚀 15-28x |
 | **10 Concurrent Users** | 800-2000ms | **<100ms** | 🚀 20x |
@@ -560,7 +560,7 @@ WHATSAPP_PROVIDER=flyio
 
 ### Project Structure
 ```
-chatrag/
+myrag/
 ├── src/
 │   ├── app/           # Next.js app router
 │   ├── components/    # React components
@@ -624,7 +624,7 @@ chatrag/
 
 ## 🤖 AI Coding Assistant Setup
 
-ChatRAG is optimized for AI-assisted development. Use:
+myRAG is optimized for AI-assisted development. Use:
 - [AGENTS.md](AGENTS.md) as the single source of truth for agent rules and architecture.
 - [CLAUDE.md](CLAUDE.md), which imports AGENTS.md for Claude Code.
 
@@ -646,7 +646,7 @@ CLAUDE.md imports AGENTS.md, so Claude Code picks up the rules automatically.
 # Cursor reads AGENTS.md automatically.
 # To pin it as a Project Rule instead:
 mkdir -p .cursor/rules
-cp AGENTS.md .cursor/rules/chatrag.md
+cp AGENTS.md .cursor/rules/myrag.md
 ```
 
 </td>
@@ -698,7 +698,7 @@ Best practices that prevent re-renders:
 <summary><b>Common Issues & Quick Fixes</b></summary>
 
 ### Deployment Mode Issues
-- **Wrong mode selected?** Check `NEXT_PUBLIC_CHATRAG_DEPLOYMENT_MODE` in `.env.local`
+- **Wrong mode selected?** Check `NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE` in `.env.local`
 - **Missing multi-tenant features?** Ensure `ENABLE_ORGANIZATIONS=true` and other flags are set
 - **Database schema mismatch?** Run `npm run db:setup` again with correct mode
 
@@ -735,9 +735,9 @@ Pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first, and [A
 
 ## 📄 License
 
-ChatRAG is released under the [MIT License](LICENSE). Use it, change it, ship it to clients, or build a product on it, commercial or not. Keep the copyright notice and license text in your copies.
+myRAG is released under the [MIT License](LICENSE). Use it, change it, ship it to clients, or build a product on it, commercial or not. Keep the copyright notice and license text in your copies.
 
-The license covers the code, not the ChatRAG name or logo. If you publish or sell your own version, give it its own name. See [TRADEMARKS.md](TRADEMARKS.md).
+The license covers the code, not the myRAG name or logo. If you publish or sell your own version, give it its own name. See [TRADEMARKS.md](TRADEMARKS.md).
 
 ## 🆘 Support
 
@@ -763,7 +763,7 @@ Built with amazing technologies:
 ---
 
 <div align="center">
-  <h3><img src="./public/chatrag-logo.png" alt="ChatRAG" width="25" style="vertical-align: middle;"> Ready to Build Your AI Chatbot?</h3>
+  <h3><img src="./public/myRAG-logo.png" alt="myRAG" width="25" style="vertical-align: middle;"> Ready to Build Your AI Chatbot?</h3>
   <p><strong>Get started in minutes with our visual configuration UI</strong></p>
 
   [📖 Read Docs](#-documentation) • [💬 Join Discord](https://discord.gg/8ZCwZjqcAY)

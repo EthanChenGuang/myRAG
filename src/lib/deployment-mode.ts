@@ -1,6 +1,6 @@
 /**
  * Deployment Mode Configuration
- * Manages single-tenant vs multi-tenant deployment modes for ChatRAG
+ * Manages single-tenant vs multi-tenant deployment modes for myRAG
  */
 
 import { env } from './env';
@@ -13,7 +13,7 @@ export type DeploymentMode = 'single-tenant' | 'multi-tenant';
  */
 export function getDeploymentMode(): DeploymentMode {
   // Use NEXT_PUBLIC_ version for client-side, fallback to server-side version
-  const mode = (env.NEXT_PUBLIC_CHATRAG_DEPLOYMENT_MODE || env.CHATRAG_DEPLOYMENT_MODE || 'single-tenant') as DeploymentMode;
+  const mode = (env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE || env.MYRAG_DEPLOYMENT_MODE || 'single-tenant') as DeploymentMode;
   return mode;
 }
 
@@ -40,7 +40,7 @@ export function isMultiTenant(): boolean {
  */
 export function requireMultiTenant(): void {
   if (!isMultiTenant()) {
-    throw new Error('This feature requires multi-tenant mode. Set CHATRAG_DEPLOYMENT_MODE=multi-tenant in your environment configuration.');
+    throw new Error('This feature requires multi-tenant mode. Set MYRAG_DEPLOYMENT_MODE=multi-tenant in your environment configuration.');
   }
 }
 
@@ -51,7 +51,7 @@ export function requireMultiTenant(): void {
  */
 export function requireSingleTenant(): void {
   if (!isSingleTenant()) {
-    throw new Error('This feature requires single-tenant mode. Set CHATRAG_DEPLOYMENT_MODE=single-tenant in your environment configuration.');
+    throw new Error('This feature requires single-tenant mode. Set MYRAG_DEPLOYMENT_MODE=single-tenant in your environment configuration.');
   }
 }
 
@@ -90,15 +90,15 @@ export function logDeploymentMode(logger: (message: string) => void = console.lo
   const mode = getDeploymentMode();
   const features = getFeatureFlags();
 
-  logger(`[ChatRAG] Deployment Mode: ${mode.toUpperCase()}`);
+  logger(`[myRAG] Deployment Mode: ${mode.toUpperCase()}`);
 
   if (features.isMultiTenant) {
-    logger('[ChatRAG] Multi-tenant features:');
+    logger('[myRAG] Multi-tenant features:');
     logger(`  - Organizations: ${features.enableOrganizations ? 'Enabled' : 'Disabled'}`);
     logger(`  - Team Invites: ${features.enableTeamInvites ? 'Enabled' : 'Disabled'}`);
     logger(`  - Storage Quotas: ${features.enableStorageQuotas ? 'Enabled' : 'Disabled'}`);
     logger(`  - Usage Analytics: ${features.enableUsageAnalytics ? 'Enabled' : 'Disabled'}`);
   } else {
-    logger('[ChatRAG] Single-tenant mode: Shared knowledge base, user-isolated chats');
+    logger('[myRAG] Single-tenant mode: Shared knowledge base, user-isolated chats');
   }
 }

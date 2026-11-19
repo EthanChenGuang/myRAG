@@ -261,8 +261,8 @@ export async function GET(request: NextRequest) {
       headers: {
         'Authorization': `Bearer ${env.OPENROUTER_API_KEY}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://chatrag.com', // OpenRouter requires referer
-        'X-Title': 'ChatRAG Model Configuration'
+        'HTTP-Referer': 'https://myrag.com', // OpenRouter requires referer
+        'X-Title': 'myRAG Model Configuration'
       },
     });
 

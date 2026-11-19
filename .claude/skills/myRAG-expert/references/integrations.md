@@ -1,5 +1,5 @@
 <overview>
-ChatRAG integrates with multiple external services: MCP tool servers, WhatsApp (via Baileys), Stripe/Polar payments, Nango document connectors, Firecrawl web scraping, and various AI generation providers.
+myRAG integrates with multiple external services: MCP tool servers, WhatsApp (via Baileys), Stripe/Polar payments, Nango document connectors, Firecrawl web scraping, and various AI generation providers.
 </overview>
 
 <mcp_system>

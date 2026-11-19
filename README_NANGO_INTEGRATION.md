@@ -1,6 +1,6 @@
 # Nango Integration Developer Guide
 
-This is a comprehensive guide for developers working with the Nango integration in ChatRAG. It covers architecture, setup, implementation details, and troubleshooting.
+This is a comprehensive guide for developers working with the Nango integration in myRAG. It covers architecture, setup, implementation details, and troubleshooting.
 
 ## Quick Navigation
 
@@ -44,7 +44,7 @@ This is a comprehensive guide for developers working with the Nango integration 
 ### Prerequisites
 - Node.js 20+
 - Nango account (sign up at [nango.dev](https://nango.dev), docs at [nango.dev/docs](https://nango.dev/docs))
-- ChatRAG development environment running
+- myRAG development environment running
 
 ### 1. Get Nango API Keys (5 minutes)
 ```bash
@@ -341,7 +341,7 @@ await nangoClient.disconnect('google-drive');
 ```
 USER → Browser OAuth → Nango Cloud → Provider OAuth → Provider API
                 ↓
-           ChatRAG Backend
+           myRAG Backend
               ↓
          Sync Pipeline
               ↓
@@ -446,11 +446,11 @@ Nango provides pre-configured Google Drive credentials. Just connect in the app.
 **Step 1: Create Google Cloud Project**
 ```
 1. Go to https://console.cloud.google.com
-2. Create new project named "ChatRAG"
+2. Create new project named "myRAG"
 3. Enable Google Drive API
 4. Go to OAuth consent screen:
    - External application type
-   - App name: ChatRAG
+   - App name: myRAG
    - Add yourself as test user
 5. Create OAuth 2.0 credentials:
    - Type: Web application
@@ -482,7 +482,7 @@ node scripts/diagnose-nango-oauth.js
 ```
 1. Go to https://www.notion.so/my-integrations
 2. Click "Create new integration"
-3. Name: ChatRAG Integration
+3. Name: myRAG Integration
 4. Associated workspace: Select your workspace
 5. Capabilities: Enable "Read content"
 ```
@@ -531,7 +531,7 @@ node scripts/diagnose-nango-oauth.js
 ```
 1. Go to https://www.dropbox.com/developers/apps
 2. Create App → Scoped access → Full Dropbox
-3. Name: ChatRAG Integration
+3. Name: myRAG Integration
 ```
 
 **Step 2: Configure Permissions**

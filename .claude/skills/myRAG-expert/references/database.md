@@ -1,5 +1,5 @@
 <overview>
-ChatRAG uses Supabase (PostgreSQL + pgvector) with HNSW vector indexes. Schema files are in `supabase/single-tenant-setup.sql` (1665 lines) and `supabase/multi-tenant-setup.sql` (2199 lines). All tables enforce Row Level Security (RLS).
+myRAG uses Supabase (PostgreSQL + pgvector) with HNSW vector indexes. Schema files are in `supabase/single-tenant-setup.sql` (1665 lines) and `supabase/multi-tenant-setup.sql` (2199 lines). All tables enforce Row Level Security (RLS).
 </overview>
 
 <extensions>

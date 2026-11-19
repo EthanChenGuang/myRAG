@@ -14,8 +14,8 @@ import type { Folder, FolderWithStats, CreateFolderInput, UpdateFolderInput } fr
 
 // Add event emitter for chat updates
 export const ChatEvents = {
-  CHAT_CREATED: 'chatrag:chat_created',
-  CHAT_UPDATED: 'chatrag:chat_updated'
+  CHAT_CREATED: 'myrag:chat_created',
+  CHAT_UPDATED: 'myrag:chat_updated'
 };
 
 interface ChatStore {
@@ -646,8 +646,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         if (typeof window !== 'undefined') {
           try {
             // Remove the sidebar-specific chat cache
-            localStorage.removeItem('chatrag_sidebar_chats');
-            localStorage.removeItem('chatrag_sidebar_cache_expiry');
+            localStorage.removeItem('myrag_sidebar_chats');
+            localStorage.removeItem('myrag_sidebar_cache_expiry');
             // Debug: Cleared sidebar cache after chat deletion
           } catch (cacheError) {
             console.error('chat-store: Error clearing sidebar cache:', cacheError);

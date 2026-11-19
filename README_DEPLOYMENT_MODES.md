@@ -1,10 +1,10 @@
-# ChatRAG Deployment Modes - Complete Guide
+# myRAG Deployment Modes - Complete Guide
 
 **Last Updated**: November 17, 2025
 **Status**: Production Ready
 **Version**: 2.1
 
-> Complete guide to ChatRAG's dual-mode architecture supporting both single-tenant and multi-tenant deployments from a unified codebase.
+> Complete guide to myRAG's dual-mode architecture supporting both single-tenant and multi-tenant deployments from a unified codebase.
 
 ---
 
@@ -42,7 +42,7 @@
 
 ## Overview
 
-ChatRAG is a **dual-mode RAG boilerplate** that supports two distinct deployment architectures from a single codebase:
+myRAG is a **dual-mode RAG boilerplate** that supports two distinct deployment architectures from a single codebase:
 
 ### Deployment Modes at a Glance
 
@@ -112,7 +112,7 @@ npm run dev
 
 **Environment Variables**:
 ```bash
-NEXT_PUBLIC_CHATRAG_DEPLOYMENT_MODE=single-tenant
+NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE=single-tenant
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
 SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
@@ -137,7 +137,7 @@ npm run dev
 
 **Environment Variables**:
 ```bash
-NEXT_PUBLIC_CHATRAG_DEPLOYMENT_MODE=multi-tenant
+NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE=multi-tenant
 ENABLE_ORGANIZATIONS=true
 ENABLE_TEAM_INVITES=true
 ENABLE_STORAGE_QUOTAS=true
@@ -381,7 +381,7 @@ Create `.env.local`:
 # ============================================
 
 # Deployment Mode
-NEXT_PUBLIC_CHATRAG_DEPLOYMENT_MODE=single-tenant
+NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE=single-tenant
 
 # Database (Required)
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
@@ -446,8 +446,8 @@ npm run dev
 
 Check console logs:
 ```
-[ChatRAG] Deployment Mode: SINGLE-TENANT
-[ChatRAG] Single-tenant mode: Shared knowledge base, user-isolated chats
+[myRAG] Deployment Mode: SINGLE-TENANT
+[myRAG] Single-tenant mode: Shared knowledge base, user-isolated chats
 ```
 
 ---
@@ -464,7 +464,7 @@ Create `.env.local`:
 # ============================================
 
 # Deployment Mode
-NEXT_PUBLIC_CHATRAG_DEPLOYMENT_MODE=multi-tenant
+NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE=multi-tenant
 
 # Multi-Tenant Feature Flags
 ENABLE_ORGANIZATIONS=true
@@ -548,8 +548,8 @@ npm run dev
 
 Check console logs:
 ```
-[ChatRAG] Deployment Mode: MULTI-TENANT
-[ChatRAG] Multi-tenant features:
+[myRAG] Deployment Mode: MULTI-TENANT
+[myRAG] Multi-tenant features:
   - Organizations: Enabled
   - Team Invites: Enabled
   - Storage Quotas: Enabled
@@ -619,7 +619,7 @@ CREATE INDEX idx_folders_organization_id ON folders(organization_id);
 **3. Update Environment Variables**
 ```bash
 # In .env.local
-NEXT_PUBLIC_CHATRAG_DEPLOYMENT_MODE=multi-tenant
+NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE=multi-tenant
 ENABLE_ORGANIZATIONS=true
 ENABLE_TEAM_INVITES=true
 ENABLE_STORAGE_QUOTAS=true
@@ -749,7 +749,7 @@ COPY (
 **4. Update Environment**
 ```bash
 # In .env.local
-NEXT_PUBLIC_CHATRAG_DEPLOYMENT_MODE=single-tenant
+NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE=single-tenant
 ```
 
 **5. Remove Organization References**
@@ -1177,7 +1177,7 @@ This section and `supabase/multi-tenant-setup.sql` are the current schema refere
 
 **Environment Variable**:
 ```bash
-NEXT_PUBLIC_CHATRAG_DEPLOYMENT_MODE=single-tenant  # or multi-tenant
+NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE=single-tenant  # or multi-tenant
 ```
 
 **Code Implementation**:
@@ -1185,7 +1185,7 @@ NEXT_PUBLIC_CHATRAG_DEPLOYMENT_MODE=single-tenant  # or multi-tenant
 // src/lib/deployment-mode.ts
 
 export function getDeploymentMode(): DeploymentMode {
-  return (env.NEXT_PUBLIC_CHATRAG_DEPLOYMENT_MODE || 'single-tenant') as DeploymentMode;
+  return (env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE || 'single-tenant') as DeploymentMode;
 }
 
 export function isMultiTenant(): boolean {
@@ -1396,7 +1396,7 @@ $$ LANGUAGE plpgsql;
 **Solution**:
 ```bash
 # 1. Check deployment mode
-echo $NEXT_PUBLIC_CHATRAG_DEPLOYMENT_MODE
+echo $NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE
 
 # 2. Verify database schema matches mode
 psql $DATABASE_URL -c "\d documents"
@@ -1527,7 +1527,7 @@ A: No! The codebase is deployment-mode aware and handles both automatically.
 ### Reporting Issues
 
 When reporting deployment mode issues, include:
-- Current deployment mode (`NEXT_PUBLIC_CHATRAG_DEPLOYMENT_MODE`)
+- Current deployment mode (`NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE`)
 - Database schema version
 - Error messages and stack traces
 - Steps to reproduce
@@ -1585,5 +1585,5 @@ When reporting deployment mode issues, include:
 
 **Last Updated**: November 17, 2025
 **Version**: 2.1
-**Repository**: https://github.com/areia-ai/chatrag.git
+**Repository**: https://github.com/EthanChenGuang/myRAG.git
 **License**: MIT

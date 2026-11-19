@@ -1,5 +1,5 @@
 <overview>
-ChatRAG is a production AI chat application with RAG (Retrieval-Augmented Generation), multi-model orchestration, and multi-modal generation capabilities. Built on Next.js 16 with React 19, it supports single-tenant and multi-tenant deployment modes.
+myRAG is a production AI chat application with RAG (Retrieval-Augmented Generation), multi-model orchestration, and multi-modal generation capabilities. Built on Next.js 16 with React 19, it supports single-tenant and multi-tenant deployment modes.
 </overview>
 
 <system_architecture>
@@ -68,7 +68,7 @@ ChatRAG is a production AI chat application with RAG (Retrieval-Augmented Genera
 ## Directory Structure
 
 ```
-my-chat-rag/
+my-my-rag/
 ├── src/
 │   ├── app/
 │   │   ├── page.tsx              # Main chat interface (client component)
@@ -215,6 +215,6 @@ my-chat-rag/
 - Usage analytics
 - Additional tables: organizations, organization_members, team_invites
 - RLS policies filter by org membership
-- Enabled via `NEXT_PUBLIC_CHATRAG_DEPLOYMENT_MODE=multi-tenant`
+- Enabled via `NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE=multi-tenant`
 
 </deployment_modes>

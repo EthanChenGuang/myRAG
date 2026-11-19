@@ -1,6 +1,6 @@
-# ChatRAG Supabase Setup
+# myRAG Supabase Setup
 
-This directory contains two comprehensive database setup files for ChatRAG deployments.
+This directory contains two comprehensive database setup files for myRAG deployments.
 
 ## Files
 
@@ -14,7 +14,7 @@ Features:
 - RAG vector search with HNSW indexes
 - Flat personal workspace model
 
-Set `NEXT_PUBLIC_CHATRAG_DEPLOYMENT_MODE=single-tenant` in `.env.local`
+Set `NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE=single-tenant` in `.env.local`
 
 ### multi-tenant-setup.sql
 **Use this for multi-tenant deployments** with organizations and team collaboration.
@@ -31,7 +31,7 @@ Features:
 - Storage quotas and subscription tier enforcement
 - RAG vector search with HNSW indexes
 
-Set `NEXT_PUBLIC_CHATRAG_DEPLOYMENT_MODE=multi-tenant` in `.env.local`
+Set `NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE=multi-tenant` in `.env.local`
 
 ## Common Features (Both Setups)
 
@@ -67,10 +67,10 @@ Both setup files include:
 1. **Choose your deployment mode:**
    ```bash
    # For single-tenant
-   export NEXT_PUBLIC_CHATRAG_DEPLOYMENT_MODE=single-tenant
+   export NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE=single-tenant
    
    # For multi-tenant
-   export NEXT_PUBLIC_CHATRAG_DEPLOYMENT_MODE=multi-tenant
+   export NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE=multi-tenant
    ```
 
 2. **Run the appropriate setup in Supabase SQL Editor:**

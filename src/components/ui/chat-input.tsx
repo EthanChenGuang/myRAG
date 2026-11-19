@@ -996,7 +996,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
     // Listen for config changes via BroadcastChannel
     let bc: BroadcastChannel | null = null;
     try {
-      bc = new BroadcastChannel('chatrag-config');
+      bc = new BroadcastChannel('myrag-config');
       bc.onmessage = (event) => {
         if (event.data && event.data.key === 'SHOW_SUGGESTIONS') {
           const newValue = event.data.value === 'true';

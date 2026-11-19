@@ -1,7 +1,7 @@
 {
-    "name": "chatrag-voice-agent",
+    "name": "myrag-voice-agent",
     "version": "0.1.0",
-    "description": "Standalone Voice Agent for ChatRAG",
+    "description": "Standalone Voice Agent for myRAG",
     "main": "src/agent.ts",
     "type": "module",
     "scripts": {
@@ -11,7 +11,7 @@
         "config": "node scripts/config-server.js"
     },
     "keywords": [],
-    "author": "ChatRAG Team",
+    "author": "myRAG Team",
     "license": "MIT",
     "dependencies": {
         "@livekit/agents": "^1.0.31",

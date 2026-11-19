@@ -17,7 +17,7 @@ function getDeploymentMode() {
     return 'single-tenant';
   }
   const envContent = fs.readFileSync(envPath, 'utf8');
-  const match = envContent.match(/NEXT_PUBLIC_CHATRAG_DEPLOYMENT_MODE=(\S+)/);
+  const match = envContent.match(/NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE=(\S+)/);
   return match ? match[1] : 'single-tenant';
 }
 
@@ -43,8 +43,8 @@ function normalizeBaseUrl(value) {
 
 function getMainAppBaseUrl() {
   return normalizeBaseUrl(
-    process.env.CHATRAG_APP_URL ||
-    getEnvVar('CHATRAG_APP_URL') ||
+    process.env.MYRAG_APP_URL ||
+    getEnvVar('MYRAG_APP_URL') ||
     process.env.NEXT_PUBLIC_SITE_URL ||
     getEnvVar('NEXT_PUBLIC_SITE_URL') ||
     'http://localhost:3000'
@@ -74,7 +74,7 @@ function createMainAppRequest(apiPath, method, headers = {}) {
 
 function mainAppConnectionError(error) {
   return {
-    error: `Unable to connect to main ChatRAG app at ${getMainAppBaseUrl()}. Check CHATRAG_APP_URL or NEXT_PUBLIC_SITE_URL, and make sure the app server is running.`,
+    error: `Unable to connect to main myRAG app at ${getMainAppBaseUrl()}. Check MYRAG_APP_URL or NEXT_PUBLIC_SITE_URL, and make sure the app server is running.`,
     details: error.message
   };
 }
@@ -233,7 +233,7 @@ app.post('/api/config', (req, res) => {
     // First check if the file exists
     if (!fs.existsSync(envPath)) {
       // If it doesn't exist, create a new one with default structure
-      const newContent = `# ChatRAG Configuration
+      const newContent = `# myRAG Configuration
 
 # -----------------------------
 # FEATURES
@@ -339,13 +339,13 @@ ${fullValues.SUPABASE_SERVICE_ROLE_KEY ? `SUPABASE_SERVICE_ROLE_KEY=${fullValues
 # -----------------------------
 # Choose: single-tenant (shared knowledge base) or multi-tenant (org-based isolation)
 # See DEPLOYMENT_MODES.md for details
-${fullValues.NEXT_PUBLIC_CHATRAG_DEPLOYMENT_MODE ? `NEXT_PUBLIC_CHATRAG_DEPLOYMENT_MODE=${fullValues.NEXT_PUBLIC_CHATRAG_DEPLOYMENT_MODE}` : 'NEXT_PUBLIC_CHATRAG_DEPLOYMENT_MODE=single-tenant'}
+${fullValues.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE ? `NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE=${fullValues.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE}` : 'NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE=single-tenant'}
 
 # -----------------------------
 # AUTHENTICATION
 # -----------------------------
 ${fullValues.NEXT_PUBLIC_SITE_URL ? `NEXT_PUBLIC_SITE_URL=${fullValues.NEXT_PUBLIC_SITE_URL}` : 'NEXT_PUBLIC_SITE_URL='}
-${fullValues.CHATRAG_APP_URL ? `CHATRAG_APP_URL=${fullValues.CHATRAG_APP_URL}` : 'CHATRAG_APP_URL='}
+${fullValues.MYRAG_APP_URL ? `MYRAG_APP_URL=${fullValues.MYRAG_APP_URL}` : 'MYRAG_APP_URL='}
 ${fullValues.NEXT_PUBLIC_GITHUB_CLIENT_ID ? `NEXT_PUBLIC_GITHUB_CLIENT_ID=${fullValues.NEXT_PUBLIC_GITHUB_CLIENT_ID}` : 'NEXT_PUBLIC_GITHUB_CLIENT_ID='}
 ${fullValues.GITHUB_CLIENT_SECRET ? `GITHUB_CLIENT_SECRET=${fullValues.GITHUB_CLIENT_SECRET}` : 'GITHUB_CLIENT_SECRET='}
 
@@ -381,19 +381,19 @@ ${fullValues.RESEND_API_KEY ? `RESEND_API_KEY=${fullValues.RESEND_API_KEY}` : 'R
 # BRANDING
 # -----------------------------
 # Application Name
-${fullValues.NEXT_PUBLIC_APP_NAME !== undefined ? `NEXT_PUBLIC_APP_NAME=${fullValues.NEXT_PUBLIC_APP_NAME}` : 'NEXT_PUBLIC_APP_NAME=ChatRAG'}
+${fullValues.NEXT_PUBLIC_APP_NAME !== undefined ? `NEXT_PUBLIC_APP_NAME=${fullValues.NEXT_PUBLIC_APP_NAME}` : 'NEXT_PUBLIC_APP_NAME=myRAG'}
 
 # Sidebar Button
-${fullValues.NEXT_PUBLIC_SIDEBAR_BUTTON_TEXT !== undefined ? `NEXT_PUBLIC_SIDEBAR_BUTTON_TEXT=${fullValues.NEXT_PUBLIC_SIDEBAR_BUTTON_TEXT}` : 'NEXT_PUBLIC_SIDEBAR_BUTTON_TEXT=ChatRAG'}
+${fullValues.NEXT_PUBLIC_SIDEBAR_BUTTON_TEXT !== undefined ? `NEXT_PUBLIC_SIDEBAR_BUTTON_TEXT=${fullValues.NEXT_PUBLIC_SIDEBAR_BUTTON_TEXT}` : 'NEXT_PUBLIC_SIDEBAR_BUTTON_TEXT=myRAG'}
 ${fullValues.NEXT_PUBLIC_SIDEBAR_BUTTON_URL !== undefined ? `NEXT_PUBLIC_SIDEBAR_BUTTON_URL=${fullValues.NEXT_PUBLIC_SIDEBAR_BUTTON_URL}` : 'NEXT_PUBLIC_SIDEBAR_BUTTON_URL=https://www.chatrag.ai/'}
 
 # Header Logo
 ${fullValues.NEXT_PUBLIC_HEADER_LOGO_TYPE !== undefined ? `NEXT_PUBLIC_HEADER_LOGO_TYPE=${fullValues.NEXT_PUBLIC_HEADER_LOGO_TYPE}` : 'NEXT_PUBLIC_HEADER_LOGO_TYPE=text'}
-${fullValues.NEXT_PUBLIC_HEADER_LOGO_TEXT !== undefined ? `NEXT_PUBLIC_HEADER_LOGO_TEXT=${fullValues.NEXT_PUBLIC_HEADER_LOGO_TEXT}` : 'NEXT_PUBLIC_HEADER_LOGO_TEXT=ChatRAG'}
+${fullValues.NEXT_PUBLIC_HEADER_LOGO_TEXT !== undefined ? `NEXT_PUBLIC_HEADER_LOGO_TEXT=${fullValues.NEXT_PUBLIC_HEADER_LOGO_TEXT}` : 'NEXT_PUBLIC_HEADER_LOGO_TEXT=myRAG'}
 ${fullValues.NEXT_PUBLIC_HEADER_LOGO_URL ? `NEXT_PUBLIC_HEADER_LOGO_URL=${fullValues.NEXT_PUBLIC_HEADER_LOGO_URL}` : 'NEXT_PUBLIC_HEADER_LOGO_URL='}
 
 # Welcome Text
-${fullValues.NEXT_PUBLIC_WELCOME_TEXT !== undefined ? `NEXT_PUBLIC_WELCOME_TEXT=${fullValues.NEXT_PUBLIC_WELCOME_TEXT}` : 'NEXT_PUBLIC_WELCOME_TEXT=Welcome to ChatRAG'}
+${fullValues.NEXT_PUBLIC_WELCOME_TEXT !== undefined ? `NEXT_PUBLIC_WELCOME_TEXT=${fullValues.NEXT_PUBLIC_WELCOME_TEXT}` : 'NEXT_PUBLIC_WELCOME_TEXT=Welcome to myRAG'}
 ${fullValues.NEXT_PUBLIC_WELCOME_TEXT_MODE !== undefined ? `NEXT_PUBLIC_WELCOME_TEXT_MODE=${fullValues.NEXT_PUBLIC_WELCOME_TEXT_MODE}` : 'NEXT_PUBLIC_WELCOME_TEXT_MODE=custom'}
 ${fullValues.NEXT_PUBLIC_WELCOME_TEXT_GRADIENT !== undefined ? `NEXT_PUBLIC_WELCOME_TEXT_GRADIENT=${fullValues.NEXT_PUBLIC_WELCOME_TEXT_GRADIENT}` : 'NEXT_PUBLIC_WELCOME_TEXT_GRADIENT=orange'}
 ${fullValues.NEXT_PUBLIC_WELCOME_TEXT_TRANSLATIONS !== undefined ? `NEXT_PUBLIC_WELCOME_TEXT_TRANSLATIONS=${fullValues.NEXT_PUBLIC_WELCOME_TEXT_TRANSLATIONS}` : 'NEXT_PUBLIC_WELCOME_TEXT_TRANSLATIONS={}'}
@@ -409,7 +409,7 @@ ${fullValues.NEXT_PUBLIC_AI_RESPONSE_LOGO_BORDER !== undefined ? `NEXT_PUBLIC_AI
 ${fullValues.NEXT_PUBLIC_AI_RESPONSE_LOGO_SIZE !== undefined ? `NEXT_PUBLIC_AI_RESPONSE_LOGO_SIZE=${fullValues.NEXT_PUBLIC_AI_RESPONSE_LOGO_SIZE}` : 'NEXT_PUBLIC_AI_RESPONSE_LOGO_SIZE=3'}
 
 # Favicon & Site Title
-${fullValues.NEXT_PUBLIC_SITE_TITLE !== undefined ? `NEXT_PUBLIC_SITE_TITLE=${fullValues.NEXT_PUBLIC_SITE_TITLE}` : 'NEXT_PUBLIC_SITE_TITLE=ChatRAG'}
+${fullValues.NEXT_PUBLIC_SITE_TITLE !== undefined ? `NEXT_PUBLIC_SITE_TITLE=${fullValues.NEXT_PUBLIC_SITE_TITLE}` : 'NEXT_PUBLIC_SITE_TITLE=myRAG'}
 ${fullValues.NEXT_PUBLIC_FAVICON_URL ? `NEXT_PUBLIC_FAVICON_URL=${fullValues.NEXT_PUBLIC_FAVICON_URL}` : 'NEXT_PUBLIC_FAVICON_URL='}
 
 # -----------------------------
@@ -430,7 +430,7 @@ ${fullValues.NEXT_PUBLIC_SUGGESTION_GROUPS !== undefined ? `NEXT_PUBLIC_SUGGESTI
 # EMBED WIDGET
 # -----------------------------
 ${fullValues.NEXT_PUBLIC_EMBED_ENABLED !== undefined ? `NEXT_PUBLIC_EMBED_ENABLED=${fullValues.NEXT_PUBLIC_EMBED_ENABLED}` : 'NEXT_PUBLIC_EMBED_ENABLED=false'}
-${fullValues.NEXT_PUBLIC_EMBED_TITLE !== undefined ? `NEXT_PUBLIC_EMBED_TITLE=${fullValues.NEXT_PUBLIC_EMBED_TITLE}` : 'NEXT_PUBLIC_EMBED_TITLE=ChatRAG Assistant'}
+${fullValues.NEXT_PUBLIC_EMBED_TITLE !== undefined ? `NEXT_PUBLIC_EMBED_TITLE=${fullValues.NEXT_PUBLIC_EMBED_TITLE}` : 'NEXT_PUBLIC_EMBED_TITLE=myRAG Assistant'}
 ${fullValues.NEXT_PUBLIC_EMBED_PRIMARY_COLOR !== undefined ? `NEXT_PUBLIC_EMBED_PRIMARY_COLOR=${fullValues.NEXT_PUBLIC_EMBED_PRIMARY_COLOR}` : 'NEXT_PUBLIC_EMBED_PRIMARY_COLOR=#FF6417'}
 ${fullValues.NEXT_PUBLIC_EMBED_POSITION !== undefined ? `NEXT_PUBLIC_EMBED_POSITION=${fullValues.NEXT_PUBLIC_EMBED_POSITION}` : 'NEXT_PUBLIC_EMBED_POSITION=bottom-right'}
 ${fullValues.NEXT_PUBLIC_EMBED_AUTO_OPEN !== undefined ? `NEXT_PUBLIC_EMBED_AUTO_OPEN=${fullValues.NEXT_PUBLIC_EMBED_AUTO_OPEN}` : 'NEXT_PUBLIC_EMBED_AUTO_OPEN=false'}
@@ -1081,7 +1081,7 @@ function getEnvValue(key) {
 }
 
 function getMinimalTemplate() {
-  return `# ChatRAG Minimal Configuration
+  return `# myRAG Minimal Configuration
 # Enable/disable key features
 NEXT_PUBLIC_AUTH_ENABLED=false
 NEXT_PUBLIC_WEB_SEARCH_ENABLED=false
@@ -1103,15 +1103,15 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 
 # Deployment Mode (single-tenant or multi-tenant)
-NEXT_PUBLIC_CHATRAG_DEPLOYMENT_MODE=single-tenant
+NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE=single-tenant
 
 # Site URL
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
-CHATRAG_APP_URL=http://localhost:3000
+MYRAG_APP_URL=http://localhost:3000
 
 # Embed Widget (disabled by default)
 NEXT_PUBLIC_EMBED_ENABLED=false
-NEXT_PUBLIC_EMBED_TITLE=ChatRAG Assistant
+NEXT_PUBLIC_EMBED_TITLE=myRAG Assistant
 NEXT_PUBLIC_EMBED_PRIMARY_COLOR=#FF6417
 NEXT_PUBLIC_EMBED_POSITION=bottom-right
 NEXT_PUBLIC_EMBED_SUGGESTIONS_ENABLED=true
@@ -1126,7 +1126,7 @@ NEXT_PUBLIC_AUDIO_AUTOPLAY=false
 }
 
 function getStandardTemplate() {
-  return `# ChatRAG Configuration
+  return `# myRAG Configuration
 # Generated by setup tool
 
 # -----------------------------
@@ -1212,7 +1212,7 @@ SUPABASE_SERVICE_ROLE_KEY=${getEnvValue('SUPABASE_SERVICE_ROLE_KEY')}
 # AUTHENTICATION
 # -----------------------------
 NEXT_PUBLIC_SITE_URL=${getEnvValue('NEXT_PUBLIC_SITE_URL') || 'http://localhost:3000'}
-CHATRAG_APP_URL=${getEnvValue('CHATRAG_APP_URL') || getEnvValue('NEXT_PUBLIC_SITE_URL') || 'http://localhost:3000'}
+MYRAG_APP_URL=${getEnvValue('MYRAG_APP_URL') || getEnvValue('NEXT_PUBLIC_SITE_URL') || 'http://localhost:3000'}
 
 # -----------------------------
 # EMAIL
@@ -1222,11 +1222,11 @@ RESEND_API_KEY=${getEnvValue('RESEND_API_KEY') || ''}
 # -----------------------------
 # BRANDING
 # -----------------------------
-NEXT_PUBLIC_APP_NAME=${getEnvValue('NEXT_PUBLIC_APP_NAME') || 'ChatRAG'}
-NEXT_PUBLIC_SIDEBAR_BUTTON_TEXT=${getEnvValue('NEXT_PUBLIC_SIDEBAR_BUTTON_TEXT') || 'ChatRAG'}
+NEXT_PUBLIC_APP_NAME=${getEnvValue('NEXT_PUBLIC_APP_NAME') || 'myRAG'}
+NEXT_PUBLIC_SIDEBAR_BUTTON_TEXT=${getEnvValue('NEXT_PUBLIC_SIDEBAR_BUTTON_TEXT') || 'myRAG'}
 NEXT_PUBLIC_SIDEBAR_BUTTON_URL=${getEnvValue('NEXT_PUBLIC_SIDEBAR_BUTTON_URL') || 'https://www.chatrag.ai/'}
 NEXT_PUBLIC_HEADER_LOGO_TYPE=${getEnvValue('NEXT_PUBLIC_HEADER_LOGO_TYPE') || 'text'}
-NEXT_PUBLIC_HEADER_LOGO_TEXT=${getEnvValue('NEXT_PUBLIC_HEADER_LOGO_TEXT') || 'ChatRAG'}
+NEXT_PUBLIC_HEADER_LOGO_TEXT=${getEnvValue('NEXT_PUBLIC_HEADER_LOGO_TEXT') || 'myRAG'}
 NEXT_PUBLIC_HEADER_LOGO_URL=${getEnvValue('NEXT_PUBLIC_HEADER_LOGO_URL') || ''}
 NEXT_PUBLIC_AI_RESPONSE_LOGO_URL=${getEnvValue('NEXT_PUBLIC_AI_RESPONSE_LOGO_URL') || ''}
 NEXT_PUBLIC_AI_RESPONSE_LOGO_BORDER=${getEnvValue('NEXT_PUBLIC_AI_RESPONSE_LOGO_BORDER') || 'true'}
@@ -1241,7 +1241,7 @@ NEXT_PUBLIC_SHOW_SUGGESTIONS=${getEnvValue('NEXT_PUBLIC_SHOW_SUGGESTIONS') || 't
 # EMBED WIDGET
 # -----------------------------
 NEXT_PUBLIC_EMBED_ENABLED=${getEnvValue('NEXT_PUBLIC_EMBED_ENABLED') || 'false'}
-NEXT_PUBLIC_EMBED_TITLE=${getEnvValue('NEXT_PUBLIC_EMBED_TITLE') || 'ChatRAG Assistant'}
+NEXT_PUBLIC_EMBED_TITLE=${getEnvValue('NEXT_PUBLIC_EMBED_TITLE') || 'myRAG Assistant'}
 NEXT_PUBLIC_EMBED_PRIMARY_COLOR=${getEnvValue('NEXT_PUBLIC_EMBED_PRIMARY_COLOR') || '#FF6417'}
 NEXT_PUBLIC_EMBED_POSITION=${getEnvValue('NEXT_PUBLIC_EMBED_POSITION') || 'bottom-right'}
 NEXT_PUBLIC_EMBED_AUTO_OPEN=${getEnvValue('NEXT_PUBLIC_EMBED_AUTO_OPEN') || 'false'}
@@ -1340,7 +1340,7 @@ MCP_CUSTOM_SERVERS=${getEnvValue('MCP_CUSTOM_SERVERS') || '[]'}
 }
 
 function getFullTemplate() {
-  return `# ChatRAG Configuration - FULL
+  return `# myRAG Configuration - FULL
 # Generated by setup tool
 
 # -----------------------------
@@ -1442,7 +1442,7 @@ SUPABASE_SERVICE_ROLE_KEY=${getEnvValue('SUPABASE_SERVICE_ROLE_KEY')}
 # AUTHENTICATION
 # -----------------------------
 NEXT_PUBLIC_SITE_URL=${getEnvValue('NEXT_PUBLIC_SITE_URL') || 'http://localhost:3000'}
-CHATRAG_APP_URL=${getEnvValue('CHATRAG_APP_URL') || getEnvValue('NEXT_PUBLIC_SITE_URL') || 'http://localhost:3000'}
+MYRAG_APP_URL=${getEnvValue('MYRAG_APP_URL') || getEnvValue('NEXT_PUBLIC_SITE_URL') || 'http://localhost:3000'}
 NEXT_PUBLIC_GITHUB_CLIENT_ID=${getEnvValue('NEXT_PUBLIC_GITHUB_CLIENT_ID') || ''}
 GITHUB_CLIENT_SECRET=${getEnvValue('GITHUB_CLIENT_SECRET') || ''}
 
@@ -1470,7 +1470,7 @@ NEXT_PUBLIC_POLAR_CHECKOUT_ENTERPRISE=${getEnvValue('NEXT_PUBLIC_POLAR_CHECKOUT_
 # EMAIL
 # -----------------------------
 NEXT_PUBLIC_CUSTOM_SMTP_ENABLED=${getEnvValue('NEXT_PUBLIC_CUSTOM_SMTP_ENABLED') || 'false'}
-NEXT_PUBLIC_SMTP_FROM_NAME=${getEnvValue('NEXT_PUBLIC_SMTP_FROM_NAME') || 'ChatRAG Support'}
+NEXT_PUBLIC_SMTP_FROM_NAME=${getEnvValue('NEXT_PUBLIC_SMTP_FROM_NAME') || 'myRAG Support'}
 NEXT_PUBLIC_SMTP_FROM_EMAIL=${getEnvValue('NEXT_PUBLIC_SMTP_FROM_EMAIL') || 'support@example.com'}
 RESEND_API_KEY=${getEnvValue('RESEND_API_KEY') || ''}
 
@@ -1478,19 +1478,19 @@ RESEND_API_KEY=${getEnvValue('RESEND_API_KEY') || ''}
 # BRANDING
 # -----------------------------
 # Application Name
-NEXT_PUBLIC_APP_NAME=${getEnvValue('NEXT_PUBLIC_APP_NAME') || 'ChatRAG'}
+NEXT_PUBLIC_APP_NAME=${getEnvValue('NEXT_PUBLIC_APP_NAME') || 'myRAG'}
 
 # Sidebar Button
-NEXT_PUBLIC_SIDEBAR_BUTTON_TEXT=${getEnvValue('NEXT_PUBLIC_SIDEBAR_BUTTON_TEXT') || 'ChatRAG'}
+NEXT_PUBLIC_SIDEBAR_BUTTON_TEXT=${getEnvValue('NEXT_PUBLIC_SIDEBAR_BUTTON_TEXT') || 'myRAG'}
 NEXT_PUBLIC_SIDEBAR_BUTTON_URL=${getEnvValue('NEXT_PUBLIC_SIDEBAR_BUTTON_URL') || 'https://www.chatrag.ai/'}
 
 # Header Logo
 NEXT_PUBLIC_HEADER_LOGO_TYPE=${getEnvValue('NEXT_PUBLIC_HEADER_LOGO_TYPE') || 'text'}
-NEXT_PUBLIC_HEADER_LOGO_TEXT=${getEnvValue('NEXT_PUBLIC_HEADER_LOGO_TEXT') || 'ChatRAG'}
+NEXT_PUBLIC_HEADER_LOGO_TEXT=${getEnvValue('NEXT_PUBLIC_HEADER_LOGO_TEXT') || 'myRAG'}
 NEXT_PUBLIC_HEADER_LOGO_URL=${getEnvValue('NEXT_PUBLIC_HEADER_LOGO_URL') || ''}
 
 # Welcome Text
-NEXT_PUBLIC_WELCOME_TEXT=${getEnvValue('NEXT_PUBLIC_WELCOME_TEXT') || 'Welcome to ChatRAG'}
+NEXT_PUBLIC_WELCOME_TEXT=${getEnvValue('NEXT_PUBLIC_WELCOME_TEXT') || 'Welcome to myRAG'}
 NEXT_PUBLIC_WELCOME_TEXT_MODE=${getEnvValue('NEXT_PUBLIC_WELCOME_TEXT_MODE') || 'custom'}
 NEXT_PUBLIC_WELCOME_TEXT_GRADIENT=${getEnvValue('NEXT_PUBLIC_WELCOME_TEXT_GRADIENT') || 'orange'}
 NEXT_PUBLIC_WELCOME_TEXT_TRANSLATIONS=${getEnvValue('NEXT_PUBLIC_WELCOME_TEXT_TRANSLATIONS') || '{}'}
@@ -1506,7 +1506,7 @@ NEXT_PUBLIC_AI_RESPONSE_LOGO_BORDER=${getEnvValue('NEXT_PUBLIC_AI_RESPONSE_LOGO_
 NEXT_PUBLIC_AI_RESPONSE_LOGO_SIZE=${getEnvValue('NEXT_PUBLIC_AI_RESPONSE_LOGO_SIZE') || '3'}
 
 # Favicon & Site Title
-NEXT_PUBLIC_SITE_TITLE=${getEnvValue('NEXT_PUBLIC_SITE_TITLE') || 'ChatRAG'}
+NEXT_PUBLIC_SITE_TITLE=${getEnvValue('NEXT_PUBLIC_SITE_TITLE') || 'myRAG'}
 NEXT_PUBLIC_FAVICON_URL=${getEnvValue('NEXT_PUBLIC_FAVICON_URL') || ''}
 
 # -----------------------------
@@ -1527,7 +1527,7 @@ NEXT_PUBLIC_SUGGESTION_GROUPS=${getEnvValue('NEXT_PUBLIC_SUGGESTION_GROUPS') || 
 # EMBED WIDGET
 # -----------------------------
 NEXT_PUBLIC_EMBED_ENABLED=${getEnvValue('NEXT_PUBLIC_EMBED_ENABLED') || 'false'}
-NEXT_PUBLIC_EMBED_TITLE=${getEnvValue('NEXT_PUBLIC_EMBED_TITLE') || 'ChatRAG Assistant'}
+NEXT_PUBLIC_EMBED_TITLE=${getEnvValue('NEXT_PUBLIC_EMBED_TITLE') || 'myRAG Assistant'}
 NEXT_PUBLIC_EMBED_PRIMARY_COLOR=${getEnvValue('NEXT_PUBLIC_EMBED_PRIMARY_COLOR') || '#FF6417'}
 NEXT_PUBLIC_EMBED_POSITION=${getEnvValue('NEXT_PUBLIC_EMBED_POSITION') || 'bottom-right'}
 NEXT_PUBLIC_EMBED_AUTO_OPEN=${getEnvValue('NEXT_PUBLIC_EMBED_AUTO_OPEN') || 'false'}
@@ -2397,7 +2397,7 @@ app.get('/api/config/get-logo', (req, res) => {
 
       const response = {
         logoType,
-        logoText: envVars['NEXT_PUBLIC_HEADER_LOGO_TEXT'] || 'ChatRAG',
+        logoText: envVars['NEXT_PUBLIC_HEADER_LOGO_TEXT'] || 'myRAG',
         logoUrl: envVars['NEXT_PUBLIC_HEADER_LOGO_URL'] || null
       };
 
@@ -2412,12 +2412,12 @@ app.get('/api/config/get-logo', (req, res) => {
   }
 });
 
-// Proxy endpoint for Live Preview to connect to the main ChatRAG embed API
+// Proxy endpoint for Live Preview to connect to the main myRAG embed API
 app.post('/api/embed/chat/proxy', async (req, res) => {
   try {
-    console.log('🔄 Config Proxy: Forwarding chat request to main ChatRAG app...');
+    console.log('🔄 Config Proxy: Forwarding chat request to main myRAG app...');
 
-    // Prepare the request to the main ChatRAG app
+    // Prepare the request to the main myRAG app
     const postData = JSON.stringify(req.body);
 
     const { client, options } = createMainAppRequest('/api/embed/chat', 'POST', {
@@ -2447,7 +2447,7 @@ app.post('/api/embed/chat/proxy', async (req, res) => {
 
     // Handle proxy request errors
     proxyReq.on('error', (error) => {
-      console.error('❌ Config Proxy: Error connecting to main ChatRAG app:', error);
+      console.error('❌ Config Proxy: Error connecting to main myRAG app:', error);
       if (!res.headersSent) {
         res.status(500).json(mainAppConnectionError(error));
       }
@@ -2474,7 +2474,7 @@ app.post('/api/embed/chat/proxy', async (req, res) => {
   }
 });
 
-// Proxy endpoint for fetching documents from the main ChatRAG app
+// Proxy endpoint for fetching documents from the main myRAG app
 app.get('/api/documents', async (req, res) => {
   try {
     // Build query string with organization_id if provided
@@ -2483,7 +2483,7 @@ app.get('/api/documents', async (req, res) => {
       queryString = `?organization_id=${encodeURIComponent(req.query.organization_id)}`;
     }
 
-    console.log('🔄 Config Proxy: Forwarding documents fetch request to main ChatRAG app...');
+    console.log('🔄 Config Proxy: Forwarding documents fetch request to main myRAG app...');
     console.log('📂 Organization ID:', req.query.organization_id || 'null (flat personal workspace)');
 
     // Forward cookies from the browser for authentication
@@ -2524,7 +2524,7 @@ app.get('/api/documents', async (req, res) => {
     });
 
     proxyReq.on('error', (error) => {
-      console.error('❌ Config Proxy: Error connecting to main ChatRAG app:', error);
+      console.error('❌ Config Proxy: Error connecting to main myRAG app:', error);
       res.status(500).json(mainAppConnectionError(error));
     });
 
@@ -2539,11 +2539,11 @@ app.get('/api/documents', async (req, res) => {
   }
 });
 
-// Proxy endpoint for deleting documents from the main ChatRAG app
+// Proxy endpoint for deleting documents from the main myRAG app
 app.delete('/api/documents/:id', async (req, res) => {
   try {
     const docId = req.params.id;
-    console.log(`🔄 Config Proxy: Forwarding document delete request for ${docId} to main ChatRAG app...`);
+    console.log(`🔄 Config Proxy: Forwarding document delete request for ${docId} to main myRAG app...`);
 
     // Forward cookies from the browser for authentication
     const cookieHeader = req.headers.cookie || '';
@@ -2587,7 +2587,7 @@ app.delete('/api/documents/:id', async (req, res) => {
     });
 
     proxyReq.on('error', (error) => {
-      console.error('❌ Config Proxy: Error connecting to main ChatRAG app:', error);
+      console.error('❌ Config Proxy: Error connecting to main myRAG app:', error);
       res.status(500).json(mainAppConnectionError(error));
     });
 
@@ -2602,10 +2602,10 @@ app.delete('/api/documents/:id', async (req, res) => {
   }
 });
 
-// Proxy endpoint for document processing to connect to the main ChatRAG app
+// Proxy endpoint for document processing to connect to the main myRAG app
 app.post('/api/process-document', documentUpload.single('file'), async (req, res) => {
   try {
-    console.log('🔄 Config Proxy: Forwarding document processing request to main ChatRAG app...');
+    console.log('🔄 Config Proxy: Forwarding document processing request to main myRAG app...');
     console.log('📁 File received:', req.file ? req.file.originalname : 'No file');
     console.log('📝 Body:', req.body);
     console.log('📂 Organization ID:', req.body.organization_id || 'null (flat personal workspace)');
@@ -2664,7 +2664,7 @@ app.post('/api/process-document', documentUpload.single('file'), async (req, res
     });
 
     proxyReq.on('error', (error) => {
-      console.error('❌ Config Proxy: Error connecting to main ChatRAG app:', error);
+      console.error('❌ Config Proxy: Error connecting to main myRAG app:', error);
       if (!res.headersSent) {
         res.status(500).json(mainAppConnectionError(error));
       }
@@ -2688,7 +2688,7 @@ app.post('/api/process-document', documentUpload.single('file'), async (req, res
 // Uses the authenticated main app route so users only see workspaces they can upload into.
 app.get('/api/organizations', async (req, res) => {
   try {
-    console.log('🔄 Config Proxy: Forwarding organizations request to main ChatRAG app...');
+    console.log('🔄 Config Proxy: Forwarding organizations request to main myRAG app...');
     console.log('📋 Deployment mode:', getDeploymentMode());
 
     if (!isMultiTenant()) {
@@ -2720,7 +2720,7 @@ app.get('/api/organizations', async (req, res) => {
     });
 
     proxyReq.on('error', (error) => {
-      console.error('❌ Config Proxy: Error connecting to main ChatRAG app:', error);
+      console.error('❌ Config Proxy: Error connecting to main myRAG app:', error);
       res.status(500).json(mainAppConnectionError(error));
     });
 
@@ -2738,7 +2738,7 @@ app.get('/api/organizations', async (req, res) => {
 // Proxy endpoint for AI model configuration (GET)
 app.get('/api/config/models', async (req, res) => {
   try {
-    console.log('🔄 Config Proxy: Forwarding model config GET request to main ChatRAG app...');
+    console.log('🔄 Config Proxy: Forwarding model config GET request to main myRAG app...');
 
     const { client, options } = createMainAppRequest('/api/config/models', 'GET', {
         'Content-Type': 'application/json'
@@ -2774,7 +2774,7 @@ app.get('/api/config/models', async (req, res) => {
     });
 
     proxyReq.on('error', (error) => {
-      console.error('❌ Config Proxy: Error connecting to main ChatRAG app:', error);
+      console.error('❌ Config Proxy: Error connecting to main myRAG app:', error);
       res.status(500).json(mainAppConnectionError(error));
     });
 
@@ -2792,9 +2792,9 @@ app.get('/api/config/models', async (req, res) => {
 // Proxy endpoint for AI model configuration (POST)
 app.post('/api/config/models', async (req, res) => {
   try {
-    console.log('🔄 Config Proxy: Forwarding model config POST request to main ChatRAG app...');
+    console.log('🔄 Config Proxy: Forwarding model config POST request to main myRAG app...');
 
-    // Prepare the request to the main ChatRAG app
+    // Prepare the request to the main myRAG app
     const postData = JSON.stringify(req.body);
 
     const { client, options } = createMainAppRequest('/api/config/models', 'POST', {
@@ -2834,7 +2834,7 @@ app.post('/api/config/models', async (req, res) => {
 
     // Handle proxy request errors
     proxyReq.on('error', (error) => {
-      console.error('❌ Config Proxy: Error connecting to main ChatRAG app:', error);
+      console.error('❌ Config Proxy: Error connecting to main myRAG app:', error);
       if (!res.headersSent) {
         res.status(500).json(mainAppConnectionError(error));
       }
@@ -2864,7 +2864,7 @@ app.post('/api/config/models', async (req, res) => {
 // Proxy endpoint for environment reload (POST)
 app.post('/api/config/reload', async (req, res) => {
   try {
-    console.log('🔄 Config Proxy: Forwarding environment reload request to main ChatRAG app...');
+    console.log('🔄 Config Proxy: Forwarding environment reload request to main myRAG app...');
 
     const { client, options } = createMainAppRequest('/api/config/reload', 'POST', {
         'Content-Type': 'application/json'
@@ -2905,7 +2905,7 @@ app.post('/api/config/reload', async (req, res) => {
     });
 
     proxyReq.on('error', (error) => {
-      console.error('❌ Config Proxy: Error connecting to main ChatRAG app:', error);
+      console.error('❌ Config Proxy: Error connecting to main myRAG app:', error);
       res.status(500).json(mainAppConnectionError(error));
     });
 
@@ -2923,7 +2923,7 @@ app.post('/api/config/reload', async (req, res) => {
 // Proxy endpoint for OpenRouter model info (GET)
 app.get('/api/config/openrouter-model-info', async (req, res) => {
   try {
-    console.log('🔄 Config Proxy: Forwarding OpenRouter model info request to main ChatRAG app...');
+    console.log('🔄 Config Proxy: Forwarding OpenRouter model info request to main myRAG app...');
 
     // Build the query string from request parameters
     const queryString = req.url.split('?')[1] || '';
@@ -2967,7 +2967,7 @@ app.get('/api/config/openrouter-model-info', async (req, res) => {
     });
 
     proxyReq.on('error', (error) => {
-      console.error('❌ Config Proxy: Error connecting to main ChatRAG app:', error);
+      console.error('❌ Config Proxy: Error connecting to main myRAG app:', error);
       res.status(500).json(mainAppConnectionError(error));
     });
 
@@ -2985,7 +2985,7 @@ app.get('/api/config/openrouter-model-info', async (req, res) => {
 // Proxy endpoint for OpenRouter API test (GET)
 app.get('/api/config/test-openrouter', async (req, res) => {
   try {
-    console.log('🔄 Config Proxy: Forwarding OpenRouter test request to main ChatRAG app...');
+    console.log('🔄 Config Proxy: Forwarding OpenRouter test request to main myRAG app...');
 
     const { client, options } = createMainAppRequest('/api/config/test-openrouter', 'GET', {
         'Content-Type': 'application/json'
@@ -3025,7 +3025,7 @@ app.get('/api/config/test-openrouter', async (req, res) => {
     });
 
     proxyReq.on('error', (error) => {
-      console.error('❌ Config Proxy: Error connecting to main ChatRAG app:', error);
+      console.error('❌ Config Proxy: Error connecting to main myRAG app:', error);
       res.status(500).json(mainAppConnectionError(error));
     });
 
@@ -3043,7 +3043,7 @@ app.get('/api/config/test-openrouter', async (req, res) => {
 // Proxy endpoint for Connectors Configuration (GET)
 app.get('/api/config/connectors', async (req, res) => {
   try {
-    console.log('🔄 Config Proxy: Forwarding connectors GET request to main ChatRAG app...');
+    console.log('🔄 Config Proxy: Forwarding connectors GET request to main myRAG app...');
 
     const { client, options } = createMainAppRequest('/api/config/connectors', 'GET', {
         'Content-Type': 'application/json'
@@ -3075,7 +3075,7 @@ app.get('/api/config/connectors', async (req, res) => {
     });
 
     proxyReq.on('error', (error) => {
-      console.error('❌ Config Proxy: Error connecting to main ChatRAG app:', error);
+      console.error('❌ Config Proxy: Error connecting to main myRAG app:', error);
       res.status(500).json(mainAppConnectionError(error));
     });
 
@@ -3093,7 +3093,7 @@ app.get('/api/config/connectors', async (req, res) => {
 // Proxy endpoint for Connectors Configuration (PUT)
 app.put('/api/config/connectors', async (req, res) => {
   try {
-    console.log('🔄 Config Proxy: Forwarding connectors PUT request to main ChatRAG app...');
+    console.log('🔄 Config Proxy: Forwarding connectors PUT request to main myRAG app...');
 
     const postData = JSON.stringify(req.body);
 
@@ -3128,7 +3128,7 @@ app.put('/api/config/connectors', async (req, res) => {
     });
 
     proxyReq.on('error', (error) => {
-      console.error('❌ Config Proxy: Error connecting to main ChatRAG app:', error);
+      console.error('❌ Config Proxy: Error connecting to main myRAG app:', error);
       res.status(500).json(mainAppConnectionError(error));
     });
 
@@ -3147,7 +3147,7 @@ app.put('/api/config/connectors', async (req, res) => {
 // Proxy endpoint for MCP servers (GET)
 app.get('/api/mcp/servers', async (req, res) => {
   try {
-    console.log('🔄 Config Proxy: Forwarding MCP servers GET request to main ChatRAG app...');
+    console.log('🔄 Config Proxy: Forwarding MCP servers GET request to main myRAG app...');
 
     const { client, options } = createMainAppRequest('/api/mcp/servers', 'GET', {
         'Content-Type': 'application/json'
@@ -3183,7 +3183,7 @@ app.get('/api/mcp/servers', async (req, res) => {
     });
 
     proxyReq.on('error', (error) => {
-      console.error('❌ Config Proxy: Error connecting to main ChatRAG app:', error);
+      console.error('❌ Config Proxy: Error connecting to main myRAG app:', error);
       res.status(500).json(mainAppConnectionError(error));
     });
 
@@ -3201,9 +3201,9 @@ app.get('/api/mcp/servers', async (req, res) => {
 // Proxy endpoint for MCP servers (POST)
 app.post('/api/mcp/servers', async (req, res) => {
   try {
-    console.log('🔄 Config Proxy: Forwarding MCP servers POST request to main ChatRAG app...');
+    console.log('🔄 Config Proxy: Forwarding MCP servers POST request to main myRAG app...');
 
-    // Prepare the request to the main ChatRAG app
+    // Prepare the request to the main myRAG app
     const postData = JSON.stringify(req.body);
 
     const { client, options } = createMainAppRequest('/api/mcp/servers', 'POST', {
@@ -3243,7 +3243,7 @@ app.post('/api/mcp/servers', async (req, res) => {
 
     // Handle proxy request errors
     proxyReq.on('error', (error) => {
-      console.error('❌ Config Proxy: Error connecting to main ChatRAG app:', error);
+      console.error('❌ Config Proxy: Error connecting to main myRAG app:', error);
       if (!res.headersSent) {
         res.status(500).json(mainAppConnectionError(error));
       }
@@ -3346,7 +3346,7 @@ app.post('/api/generate-welcome-messages', async (req, res) => {
           'Authorization': `Bearer ${config.OPENROUTER_API_KEY}`,
           'Content-Type': 'application/json',
           'HTTP-Referer': 'http://localhost:3333',
-          'X-Title': 'ChatRAG Config'
+          'X-Title': 'myRAG Config'
         },
         body: JSON.stringify({
           model: 'openai/gpt-4o-mini',
@@ -3462,7 +3462,7 @@ Do not include any explanation or additional text.`;
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${apiKey}`,
             'HTTP-Referer': 'http://localhost:3333',
-            'X-Title': 'ChatRAG Config Translation'
+            'X-Title': 'myRAG Config Translation'
           },
           body: JSON.stringify({
             model: translationModel,
@@ -3589,8 +3589,8 @@ checkAndCreateEnvFile();
 
 // Start the server and automatically open the browser
 server.listen(PORT, () => {
-  console.log(`\n🔧 ChatRAG Config Tool running at http://localhost:${PORT}`);
-  console.log(`\n✨ Open this URL in your browser to configure ChatRAG`);
+  console.log(`\n🔧 myRAG Config Tool running at http://localhost:${PORT}`);
+  console.log(`\n✨ Open this URL in your browser to configure myRAG`);
   console.log(`\n🔄 Live Preview proxy ready - will forward chat requests to ${getMainAppBaseUrl()}`);
   console.log(`\n📄 Document processing proxy ready - will forward document requests to ${getMainAppBaseUrl()}`);
   console.log(`\n🌐 Translation API ready - will use OpenAI/OpenRouter for translations`);

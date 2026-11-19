@@ -1,6 +1,6 @@
-# ChatRAG Scripts
+# myRAG Scripts
 
-This directory contains utility scripts for managing, testing, and debugging various aspects of the ChatRAG application.
+This directory contains utility scripts for managing, testing, and debugging various aspects of the myRAG application.
 
 ## Directory Structure
 

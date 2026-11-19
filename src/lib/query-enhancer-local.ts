@@ -21,7 +21,7 @@ const TYPO_CORRECTIONS: Record<string, string> = {
   'paymentes': 'payments',
   'intergration': 'integration',
   'intergrations': 'integrations',
-  'chatrag': 'ChatRAG',
+  'myrag': 'myRAG',
   'stripe': 'Stripe',
   'polar': 'Polar',
   'supabase': 'Supabase',
@@ -75,9 +75,9 @@ const SYNONYM_MAP: Record<string, string[]> = {
   'context': ['information', 'background', 'content', 'knowledge'],
 };
 
-// Domain-specific expansions for ChatRAG
+// Domain-specific expansions for myRAG
 const DOMAIN_EXPANSIONS: Record<string, string[]> = {
-  'chatrag': ['chat', 'rag', 'retrieval', 'augmented', 'generation'],
+  'myrag': ['chat', 'rag', 'retrieval', 'augmented', 'generation'],
   'payment': ['stripe', 'polar', 'subscription', 'billing'],
   'authentication': ['github', 'oauth', 'magic link', 'email'],
   'model': ['openai', 'anthropic', 'claude', 'gpt', 'llm'],

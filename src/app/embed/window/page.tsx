@@ -206,7 +206,7 @@ export default function EmbedWindow() {
               <li>
                 NEXT_PUBLIC_EMBED_ENABLED is set to <code>true</code>
               </li>
-              <li>Your ChatRAG server is running</li>
+              <li>Your myRAG server is running</li>
               <li>Browser console for details</li>
             </ul>
           </div>

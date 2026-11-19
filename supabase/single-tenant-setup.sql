@@ -1,4 +1,4 @@
--- ChatRAG Application Complete Database Setup
+-- myRAG Application Complete Database Setup
 -- This file consolidates all SQL setup required for the application
 --
 -- Vector Database Optimization:
@@ -1287,7 +1287,7 @@ CREATE TRIGGER update_whatsapp_conversations_timestamp
 
 -- Comments for documentation
 COMMENT ON TABLE whatsapp_sessions IS 'Stores WhatsApp session data for each user connection';
-COMMENT ON TABLE whatsapp_conversations IS 'Maps WhatsApp conversations to ChatRAG chats';
+COMMENT ON TABLE whatsapp_conversations IS 'Maps WhatsApp conversations to myRAG chats';
 COMMENT ON TABLE whatsapp_messages IS 'Tracks WhatsApp message delivery status';
 
 COMMENT ON COLUMN whatsapp_sessions.koyeb_session_data IS 'Session data from Koyeb Baileys instance';

@@ -64,8 +64,8 @@ const config = {
     assemblyApiKey: process.env.ASSEMBLYAI_API_KEY || '',
     resembleApiKey: process.env.RESEMBLE_API_KEY || '',
     resembleVoiceId: process.env.RESEMBLE_VOICE_ID || '',
-    ragApiUrl: process.env.CHATRAG_INTERNAL_API_URL || 'http://localhost:3000/api/internal/voice-rag',
-    ragApiKey: process.env.CHATRAG_INTERNAL_API_KEY || '',
+    ragApiUrl: process.env.MYRAG_INTERNAL_API_URL || 'http://localhost:3000/api/internal/voice-rag',
+    ragApiKey: process.env.MYRAG_INTERNAL_API_KEY || '',
     livekitUrl: process.env.LIVEKIT_URL || '',
     livekitApiKey: process.env.LIVEKIT_API_KEY || '',
     livekitApiSecret: process.env.LIVEKIT_API_SECRET || '',
@@ -156,7 +156,7 @@ async function runAgent() {
     })();
 
     // 1. Setup LiveKit Token
-    const roomName = 'chatrag-voice';
+    const roomName = 'myrag-voice';
     // Use a FIXED identity so only one agent can exist at a time
     // When a new agent connects with the same identity, the old one is kicked out
     const participantIdentity = 'voice-agent';

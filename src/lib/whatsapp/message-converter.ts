@@ -4,13 +4,13 @@ import { nanoid } from 'nanoid';
 import { logger } from '@/lib/logger';
 
 /**
- * Converts messages between WhatsApp and ChatRAG formats
+ * Converts messages between WhatsApp and myRAG formats
  */
 export class WhatsAppMessageConverter {
   /**
-   * Convert WhatsApp message to ChatRAG format
+   * Convert WhatsApp message to myRAG format
    */
-  static toChatRAGMessage(
+  static toMyRAGMessage(
     whatsappMsg: KoyebWebhookPayload,
     userId: string
   ): ExtendedMessage | null {
@@ -94,7 +94,7 @@ export class WhatsAppMessageConverter {
   }
 
   /**
-   * Convert ChatRAG message to WhatsApp payload
+   * Convert myRAG message to WhatsApp payload
    */
   static toWhatsAppPayload(
     message: string | ContentPart[],
@@ -128,12 +128,12 @@ export class WhatsAppMessageConverter {
 
         case 'generated_video':
           if (part.generated_videos && part.generated_videos.length > 0) {
-            textParts.push('[Generated video - please view in ChatRAG]');
+            textParts.push('[Generated video - please view in myRAG]');
           }
           break;
 
         case 'generated_3d_model':
-          textParts.push('[3D model generated - please view in ChatRAG]');
+          textParts.push('[3D model generated - please view in myRAG]');
           break;
 
         case 'document_reference':
@@ -143,7 +143,7 @@ export class WhatsAppMessageConverter {
           break;
 
         case 'tool_result':
-          textParts.push('[Tool execution result - see ChatRAG for details]');
+          textParts.push('[Tool execution result - see myRAG for details]');
           break;
 
         default:
@@ -293,7 +293,7 @@ export class WhatsAppMessageConverter {
   }
 
   /**
-   * Format ChatRAG response as plain text for WhatsApp - preserves all numbers correctly
+   * Format myRAG response as plain text for WhatsApp - preserves all numbers correctly
    * This removes ALL formatting to ensure numbers are preserved
    */
   static formatPlainTextForWhatsApp(response: string): string {

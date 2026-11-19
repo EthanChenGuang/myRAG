@@ -11,7 +11,7 @@ export const runtime = 'nodejs';
  * Internal API Endpoint for Voice Agent RAG
  * 
  * Allows the standalone Node.js Voice Agent to query the Vector DB securely.
- * Protected by CHATRAG_INTERNAL_API_KEY.
+ * Protected by MYRAG_INTERNAL_API_KEY.
  */
 export async function POST(req: NextRequest) {
     try {
@@ -19,13 +19,13 @@ export async function POST(req: NextRequest) {
         const apiKey = req.headers.get('x-api-key');
 
         // Validate configuration
-        if (!env.CHATRAG_INTERNAL_API_KEY) {
-            console.error('[Internal RAG] CHATRAG_INTERNAL_API_KEY not configured on server');
+        if (!env.MYRAG_INTERNAL_API_KEY) {
+            console.error('[Internal RAG] MYRAG_INTERNAL_API_KEY not configured on server');
             return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
         }
 
         // Validate key
-        if (apiKey !== env.CHATRAG_INTERNAL_API_KEY) {
+        if (apiKey !== env.MYRAG_INTERNAL_API_KEY) {
             console.warn('[Internal RAG] Unauthorized access attempt');
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
@@ -83,10 +83,10 @@ export async function POST(req: NextRequest) {
         }
 
         // 4b. KEYWORD FALLBACK:
-        // Text-based retrieval for named entities (e.g. "ChatRAG logo") that vector search might miss
+        // Text-based retrieval for named entities (e.g. "myRAG logo") that vector search might miss
         // due to semantic gaps (e.g. description is "speech bubble icon").
         // 4b. KEYWORD FALLBACK:
-        // Text-based retrieval for named entities (e.g. "ChatRAG logo") that vector search might miss
+        // Text-based retrieval for named entities (e.g. "myRAG logo") that vector search might miss
 
         let cleanQuery = '';
         let keywords: string[] = [];
@@ -94,7 +94,7 @@ export async function POST(req: NextRequest) {
 
         if (query.split(' ').length < 15) { // Increased word limit slightly
             // Clean query: remove possessives ('s) first, then punctuation
-            // This ensures "ChatRAG's logo" becomes "chatrag logo" not "chatrags logo"
+            // This ensures "myRAG's logo" becomes "myrag logo" not "myrags logo"
             cleanQuery = query.toLowerCase()
                 .replace(/['’]s/g, '') // Remove possessive 's (straight and smart quotes)
                 .replace(/[^\w\s]/g, ''); // Remove other special chars
@@ -151,7 +151,7 @@ export async function POST(req: NextRequest) {
 
                         // DISCRIMINATOR CHECK: 
                         // If user specifically asked for "logo", and we have results matching "logo", 
-                        // filter out the loose matches (e.g. "ChatRAG creator") to avoid ambiguity.
+                        // filter out the loose matches (e.g. "myRAG creator") to avoid ambiguity.
                         if (query.toLowerCase().includes('logo')) {
                             const logoSpecificMatches = imageData.filter((img: { id: string; metadata?: { name?: string; image_context?: string } }) =>
                                 (img.metadata?.name || '').toLowerCase().includes('logo') ||
@@ -197,7 +197,7 @@ export async function POST(req: NextRequest) {
                 }
 
                 // STEP 1: Try LOOSE PHRASE MATCH first for highest precision using original keywords
-                // Join keywords with % to match "chatrag logo", "chatrag-logo", "chatrag_logo"
+                // Join keywords with % to match "myrag logo", "myRAG-logo", "myrag_logo"
                 const keyPhrase = keywords.join('%');
                 console.log(`[Internal RAG] Looking for loose phrase: "${keyPhrase}"`);
 
@@ -273,7 +273,7 @@ export async function POST(req: NextRequest) {
                                 if (matchText.includes(kw)) {
                                     matchCount++;
                                     // "logo" or names are strong identifiers
-                                    if (['logo', 'chatrag', 'carlos', 'marcial'].includes(kw)) {
+                                    if (['logo', 'myrag', 'carlos', 'marcial'].includes(kw)) {
                                         hasStrongMatch = true;
                                     }
                                 }
@@ -403,7 +403,7 @@ export async function POST(req: NextRequest) {
                 imageChunks = logoImages;
             }
         } else {
-            // Priority 3: General Intent ("What is ChatRAG?") -> Default to Logo
+            // Priority 3: General Intent ("What is myRAG?") -> Default to Logo
             // If we have a Logo, hide the Person to avoid confusion
             const hasLogo = imageChunks.some(r => {
                 const meta = (r.metadata?.name || '') + ' ' + (r.metadata?.image_context || '');

@@ -501,7 +501,7 @@ export default function Home() {
     window.addEventListener('storage', handleStorageChange);
 
     // Listen for BroadcastChannel updates (same-tab updates)
-    const channel = new BroadcastChannel('chatrag-config');
+    const channel = new BroadcastChannel('myrag-config');
     channel.addEventListener('message', (event) => {
       // Check if the update is for welcome text
       if (event.data.key && (
@@ -923,7 +923,7 @@ export default function Home() {
       // which happens asynchronously after disconnection.
       setTimeout(() => {
         console.log('[Page] Dispatching global refresh event');
-        window.dispatchEvent(new CustomEvent('chatrag:voice-session-ended'));
+        window.dispatchEvent(new CustomEvent('myrag:voice-session-ended'));
       }, 4000); // 4s delay to be absolutely sure DB is consistent
     }
 

@@ -1,5 +1,5 @@
 -- ============================================
--- ChatRAG Multi-Tenant Complete Setup
+-- myRAG Multi-Tenant Complete Setup
 -- ============================================
 --
 -- Three-Tier Workspace Architecture:
@@ -349,7 +349,7 @@ CREATE TABLE IF NOT EXISTS organization_domains (
 
 CREATE INDEX IF NOT EXISTS idx_organization_domains_org_id ON organization_domains(organization_id);
 
-COMMENT ON TABLE organization_domains IS 'Domain-based organization routing (e.g., acme.chatrag.app → acme organization)';
+COMMENT ON TABLE organization_domains IS 'Domain-based organization routing (e.g., acme.myrag.app → acme organization)';
 
 ------------------------------------------
 -- SUBSCRIPTIONS TABLE
@@ -2170,7 +2170,7 @@ COMMIT;
 ------------------------------------------
 
 SELECT
-  '✅ ChatRAG Multi-Tenant Setup Complete!' as status,
+  '✅ myRAG Multi-Tenant Setup Complete!' as status,
   NOW() as completed_at;
 
 SELECT
@@ -2191,7 +2191,7 @@ SELECT
 
 SELECT
   'Next Steps:' as info,
-  '1. Set NEXT_PUBLIC_CHATRAG_DEPLOYMENT_MODE=multi-tenant in .env.local' as step1,
+  '1. Set NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE=multi-tenant in .env.local' as step1,
   '2. Restart development server: npm run dev' as step2,
   '3. Test flat personal workspace (no orgs)' as step3,
   '4. Create personal projects via UI' as step4,

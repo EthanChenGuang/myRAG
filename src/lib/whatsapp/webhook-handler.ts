@@ -116,16 +116,16 @@ export class WhatsAppWebhookHandler {
       WhatsAppMessageConverter.extractPhoneNumber(whatsappJid)
     );
 
-    // Convert message to ChatRAG format
-    const chatRAGMessage = WhatsAppMessageConverter.toChatRAGMessage(payload, session.userId);
-    if (!chatRAGMessage) {
-      logger.warn('WhatsAppWebhookHandler', 'Failed to convert message to ChatRAG format');
+    // Convert message to myRAG format
+    const myRAGMessage = WhatsAppMessageConverter.toMyRAGMessage(payload, session.userId);
+    if (!myRAGMessage) {
+      logger.warn('WhatsAppWebhookHandler', 'Failed to convert message to myRAG format');
       return;
     }
 
     // Check for special commands
-    if (typeof chatRAGMessage.content === 'string') {
-      const command = chatRAGMessage.content.toLowerCase().trim();
+    if (typeof myRAGMessage.content === 'string') {
+      const command = myRAGMessage.content.toLowerCase().trim();
       
       // Handle reset command
       if (command === 'reset' || command === 'new chat' || command === '/reset') {
@@ -158,8 +158,8 @@ export class WhatsAppWebhookHandler {
     // Store message tracking
     await this.trackMessage(conversation.id, messageId, 'incoming');
 
-    // Process through ChatRAG
-    await this.processMessageThroughChatRAG(conversation, chatRAGMessage, session.sessionId);
+    // Process through myRAG
+    await this.processMessageThroughMyRAG(conversation, myRAGMessage, session.sessionId);
   }
 
   /**
@@ -262,7 +262,7 @@ export class WhatsAppWebhookHandler {
       };
     }
 
-    // Create new chat in ChatRAG using admin client
+    // Create new chat in myRAG using admin client
     const chatId = crypto.randomUUID(); // Use UUID instead of nanoid
     
     // Create chat directly in database without any system messages
@@ -314,9 +314,9 @@ export class WhatsAppWebhookHandler {
   }
 
   /**
-   * Process message through ChatRAG pipeline
+   * Process message through myRAG pipeline
    */
-  private async processMessageThroughChatRAG(
+  private async processMessageThroughMyRAG(
     conversation: WhatsAppConversation,
     message: ExtendedMessage,
     sessionId: string
@@ -349,11 +349,11 @@ export class WhatsAppWebhookHandler {
       }
 
       // Use WhatsApp-specific model for faster responses
-      // This is separate from the user's ChatRAG model preference
+      // This is separate from the user's myRAG model preference
       const selectedModel = env.WHATSAPP_DEFAULT_MODEL || 'openai/gpt-4o-mini';
       logger.info('WhatsAppWebhookHandler', `[WHATSAPP] Using WhatsApp-specific model: ${selectedModel}`);
 
-      // Process through ChatRAG API
+      // Process through myRAG API
       // Use absolute URL for server-side fetch
       // In development, always use localhost to ensure we hit the local server with debug logs
       const isDevelopment = process.env.NODE_ENV === 'development';
@@ -397,7 +397,7 @@ export class WhatsAppWebhookHandler {
       });
 
       if (!response.ok) {
-        throw new Error('ChatRAG processing failed');
+        throw new Error('myRAG processing failed');
       }
 
       // Stream response and collect full text
@@ -517,7 +517,7 @@ export class WhatsAppWebhookHandler {
 
       // Check if response is empty and provide a fallback
       if (!fullResponse || fullResponse.trim().length === 0) {
-        logger.warn('WhatsAppWebhookHandler', 'Empty response from ChatRAG, using fallback message');
+        logger.warn('WhatsAppWebhookHandler', 'Empty response from myRAG, using fallback message');
         fullResponse = 'I received your message but couldn\'t generate a proper response. Please try again.';
       }
 
@@ -602,7 +602,7 @@ export class WhatsAppWebhookHandler {
         }
       }
     } catch (error: any) {
-      logger.error('WhatsAppWebhookHandler', 'ChatRAG processing failed:', error);
+      logger.error('WhatsAppWebhookHandler', 'myRAG processing failed:', error);
       
       // Try to send error message, but don't fail if it doesn't work
       try {

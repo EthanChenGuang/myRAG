@@ -119,7 +119,7 @@ export default function AuthPage() {
               {isLogin ? 'Welcome back' : 'Create an account'}
             </h2>
             <p className={`text-center ${subTextColor} text-sm`}>
-              {isLogin ? 'Sign in to continue to ChatRAG' : 'Sign up to get started with ChatRAG'}
+              {isLogin ? 'Sign in to continue to myRAG' : 'Sign up to get started with myRAG'}
             </p>
           </div>
           <div className="px-8 pb-8">

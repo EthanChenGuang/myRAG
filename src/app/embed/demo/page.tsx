@@ -6,7 +6,7 @@ import { env } from '@/lib/env';
 export default function EmbedDemo() {
   const [embedType, setEmbedType] = useState<'script' | 'iframe'>('script');
   const [config, setConfig] = useState({
-    title: env.NEXT_PUBLIC_EMBED_TITLE || 'ChatRAG Assistant',
+    title: env.NEXT_PUBLIC_EMBED_TITLE || 'myRAG Assistant',
     primaryColor: env.NEXT_PUBLIC_EMBED_PRIMARY_COLOR || '#FF6417',
     position: env.NEXT_PUBLIC_EMBED_POSITION || 'bottom-right',
     autoOpen: env.NEXT_PUBLIC_EMBED_AUTO_OPEN === 'true',
@@ -74,7 +74,7 @@ export function ChatWidget() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-6">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">ChatRAG Embed Demo</h1>
+              <h1 className="text-3xl font-bold text-gray-900">myRAG Embed Demo</h1>
               <p className="mt-1 text-sm text-gray-500">
                 Test and customize your chat widget before embedding it on your website
               </p>

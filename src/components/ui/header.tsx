@@ -62,7 +62,7 @@ export function Header({ onNewChat, onToggleSidebar, isSidebarOpen }: HeaderProp
   const mcpTriggerRef = useRef<HTMLButtonElement>(null);
   const { isAdmin } = useAdmin();
   const [headerLogoType, setHeaderLogoType] = useState<string>('text');
-  const [headerLogoText, setHeaderLogoText] = useState<string>('ChatRAG');
+  const [headerLogoText, setHeaderLogoText] = useState<string>('myRAG');
   const [headerLogoUrl, setHeaderLogoUrl] = useState<string | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState(256); // Default sidebar width
 

@@ -70,7 +70,7 @@ export function IconOpenAI({ className, ...props }: React.ComponentProps<'svg'>)
     
     // Also listen for the BroadcastChannel messages
     try {
-      const bc = new BroadcastChannel('chatrag-config');
+      const bc = new BroadcastChannel('myrag-config');
       bc.onmessage = (event) => {
         if (event.data.key === 'AI_LOGO_TYPE') {
           setLogoType(event.data.value);

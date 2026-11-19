@@ -292,7 +292,7 @@ async function validateUrlAccessibility(url: string, timeout: number = 5000): Pr
       method: 'HEAD',
       signal: controller.signal,
       headers: {
-        'User-Agent': 'ChatRAG-MCP-Validator/1.0'
+        'User-Agent': 'myRAG-MCP-Validator/1.0'
       }
     });
     

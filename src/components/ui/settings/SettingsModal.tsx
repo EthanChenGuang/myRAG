@@ -54,7 +54,7 @@ const getTabs = () => {
 
   // Add workspace tab after admin if in multi-tenant mode
   // Use NEXT_PUBLIC_ version for client-side access
-  const deploymentMode = env.NEXT_PUBLIC_CHATRAG_DEPLOYMENT_MODE || env.CHATRAG_DEPLOYMENT_MODE || 'single-tenant';
+  const deploymentMode = env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE || env.MYRAG_DEPLOYMENT_MODE || 'single-tenant';
   if (deploymentMode === 'multi-tenant') {
     baseTabs.push({ id: 'workspace', label: 'workspace', icon: Building2, Component: WorkspaceTab });
   }

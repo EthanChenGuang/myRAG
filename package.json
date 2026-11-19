@@ -1,5 +1,5 @@
 {
-  "name": "chat-rag",
+  "name": "my-rag",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -135,6 +135,6 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/areia-ai/chatrag.git"
+    "url": "https://github.com/EthanChenGuang/myRAG.git"
   }
 }

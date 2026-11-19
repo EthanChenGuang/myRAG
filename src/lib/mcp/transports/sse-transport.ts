@@ -39,7 +39,7 @@ export class SseTransport implements McpTransport {
       // Create MCP client
       this.client = new Client(
         {
-          name: 'chatrag-client',
+          name: 'myrag-client',
           version: '1.0.0',
         },
         {

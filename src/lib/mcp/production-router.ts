@@ -772,9 +772,9 @@ export class ProductionMcpRouter {
     return sortedScores;
   }
 
-  // Removed extractCryptocurrencies method - no longer needed for ChatRAG
+  // Removed extractCryptocurrencies method - no longer needed for myRAG
 
-  // Removed extractNftCollections method - no longer needed for ChatRAG
+  // Removed extractNftCollections method - no longer needed for myRAG
 
   /**
    * Extract explicit service mentions from query

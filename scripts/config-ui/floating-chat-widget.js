@@ -18,7 +18,7 @@ class FloatingChatWidget {
     constructor(options = {}) {
         // Default configuration
         this.config = {
-            title: 'ChatRAG Assistant',
+            title: 'myRAG Assistant',
             primaryColor: '#FF6417',
             position: 'bottom-right',
             autoOpen: false,
@@ -342,7 +342,7 @@ class FloatingChatWidget {
         
         // Create a wrapper div to hold our widget
         const wrapper = document.createElement('div');
-        wrapper.className = 'chatrag-widget-container';
+        wrapper.className = 'myrag-widget-container';
         wrapper.style.position = 'relative';
         wrapper.style.width = '100%';
         wrapper.style.height = '100%';

@@ -39,39 +39,39 @@ const defaultSuggestionGroups: SuggestionGroup[] = [
     label: "Pricing & Ownership",
     icon: "DollarSign",
     items: [
-      { text: "How much does ChatRAG cost?" },
+      { text: "How much does myRAG cost?" },
       { text: "How many chatbots can I create?" },
       { text: "Do I own the code forever?" },
-      { text: "Can I use ChatRAG for client projects?" }
+      { text: "Can I use myRAG for client projects?" }
     ]
   },
   {
     label: "Technical Foundation",
     icon: "Database",
     items: [
-      { text: "What vector database does ChatRAG use?" },
-      { text: "How does ChatRAG parse documents?" },
-      { text: "What AI models does ChatRAG support?" },
+      { text: "What vector database does myRAG use?" },
+      { text: "How does myRAG parse documents?" },
+      { text: "What AI models does myRAG support?" },
       { text: "How fast is the vector search?" }
     ]
   },
   {
-    label: "ChatRAG vs Others",
+    label: "myRAG vs Others",
     icon: "BarChart",
     items: [
-      { text: "How does ChatRAG compare to Chatbase?" },
-      { text: "Why choose ChatRAG over building from scratch?" },
-      { text: "Who created ChatRAG?" },
-      { text: "What features does ChatRAG have that competitors don't?" }
+      { text: "How does myRAG compare to Chatbase?" },
+      { text: "Why choose myRAG over building from scratch?" },
+      { text: "Who created myRAG?" },
+      { text: "What features does myRAG have that competitors don't?" }
     ]
   },
   {
     label: "Key Features",
     icon: "Rocket",
     items: [
-      { text: "How can I install ChatRAG?" },
-      { text: "How can I deploy ChatRAG to Vercel?" },
-      { text: "Does ChatRAG support WhatsApp?" },
+      { text: "How can I install myRAG?" },
+      { text: "How can I deploy myRAG to Vercel?" },
+      { text: "Does myRAG support WhatsApp?" },
       { text: "Can I monetize chatbots with Stripe?" }
     ]
   }

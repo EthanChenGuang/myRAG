@@ -1,6 +1,6 @@
 #!/usr/bin/env npx tsx
 /**
- * Quick script to delete/close the chatrag-voice room
+ * Quick script to delete/close the myrag-voice room
  * Run with: npx tsx scripts/close-room.ts
  */
 
@@ -29,8 +29,8 @@ async function main() {
     const rooms = await svc.listRooms();
     console.log(`Found ${rooms.length} room(s):`, rooms.map(r => r.name));
 
-    // Delete the chatrag-voice room
-    const roomName = 'chatrag-voice';
+    // Delete the myrag-voice room
+    const roomName = 'myrag-voice';
     try {
         console.log(`\nDeleting room: ${roomName}...`);
         await svc.deleteRoom(roomName);

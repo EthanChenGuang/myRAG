@@ -4,7 +4,7 @@
 
 The SaaS payments landscape has bifurcated into two tiers: **traditional processors with AI bolted on** (Stripe leading with its Agent Toolkit + Metronome acquisition) and **agent-native protocols** (x402, AP2) purpose-built for autonomous commerce. For cost-optimized SaaS subscriptions, **Polar.sh** offers the best value as a Merchant of Record (4% + $0.40 all-in vs Paddle's 5% + $0.50), while **Lago (self-hosted) + Stripe** gives the absolute lowest cost if you handle tax compliance yourself. For future-proofing with AI-agent capabilities, **Stripe's Agentic Commerce Suite** is the clear ecosystem winner.
 
-**Recommendation for ChatRAG:** You already run Stripe + Polar -- this is near-optimal. Polar for MoR simplicity at the lowest fees; Stripe for its unmatched agentic commerce roadmap. The main decision is whether to consolidate onto one or keep both.
+**Recommendation for myRAG:** You already run Stripe + Polar -- this is near-optimal. Polar for MoR simplicity at the lowest fees; Stripe for its unmatched agentic commerce roadmap. The main decision is whether to consolidate onto one or keep both.
 
 ---
 
@@ -117,7 +117,7 @@ The SaaS payments landscape has bifurcated into two tiers: **traditional process
 - Support quality drops at scale
 - Stacking features (Billing + Tax + Revenue Recognition) gets expensive
 
-**Best when:** You want the most powerful AI-agent payment infrastructure and plan to build agentic features into ChatRAG.
+**Best when:** You want the most powerful AI-agent payment infrastructure and plan to build agentic features into myRAG.
 
 **Complexity:** M (Medium) -- more features to configure, tax is separate
 
@@ -248,7 +248,7 @@ The SaaS payments landscape has bifurcated into two tiers: **traditional process
 - Future-proof for agentic commerce explosion ($1.7T market by 2030)
 - Open protocols (x402, AP2) avoid vendor lock-in
 - Coinbase wallets handle security (keys never exposed to LLM)
-- Could monetize ChatRAG's AI capabilities to other agents
+- Could monetize myRAG's AI capabilities to other agents
 
 **Cons:**
 - Bleeding edge -- protocols still maturing
@@ -258,7 +258,7 @@ The SaaS payments landscape has bifurcated into two tiers: **traditional process
 - Two separate payment systems to maintain
 - Not needed unless building agent-to-agent features
 
-**Best when:** You're building features where AI agents pay for services autonomously, or want to make ChatRAG's capabilities purchasable by other AI agents.
+**Best when:** You're building features where AI agents pay for services autonomously, or want to make myRAG's capabilities purchasable by other AI agents.
 
 **Complexity:** L (Large) -- emerging tech, crypto integration, dual payment systems
 
@@ -289,19 +289,19 @@ The SaaS payments landscape has bifurcated into two tiers: **traditional process
 
 ## Recommendation
 
-**For ChatRAG's current state: Keep Stripe + Polar (your existing setup is near-optimal).**
+**For myRAG's current state: Keep Stripe + Polar (your existing setup is near-optimal).**
 
 Here's why:
 
 1. **Polar** handles MoR/tax at the lowest available fee (4% + $0.40), saving you ~$2,400/month vs Paddle at $100K MRR
-2. **Stripe** gives you the best AI-agent infrastructure (Agent Toolkit, MCP Server, SPTs) as you build agentic features into ChatRAG
+2. **Stripe** gives you the best AI-agent infrastructure (Agent Toolkit, MCP Server, SPTs) as you build agentic features into myRAG
 3. **No migration cost** -- you already have both integrated
 
 **Optimization path:**
 - **Now:** Use Polar for subscription checkout (lower fees, tax handled)
-- **Now:** Add Stripe Agent Toolkit to expose ChatRAG billing to AI agents
+- **Now:** Add Stripe Agent Toolkit to expose myRAG billing to AI agents
 - **Soon:** Watch Stripe Managed Payments (MoR) -- when it exits preview, evaluate consolidating from Polar
-- **Future:** Monitor x402/AP2 protocols if you want ChatRAG's RAG capabilities purchasable by other AI agents
+- **Future:** Monitor x402/AP2 protocols if you want myRAG's RAG capabilities purchasable by other AI agents
 
 **If starting fresh and had to pick one:** Polar for simplicity + cost, or Stripe for ecosystem + AI features. The combo of both is ideal.
 

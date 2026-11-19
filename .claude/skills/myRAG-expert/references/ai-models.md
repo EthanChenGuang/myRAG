@@ -1,5 +1,5 @@
 <overview>
-ChatRAG supports multiple AI providers via OpenRouter and direct OpenAI integration. Model configuration must be synchronized across 5 files. The system supports reasoning models with different methods (effort, max_tokens, both).
+myRAG supports multiple AI providers via OpenRouter and direct OpenAI integration. Model configuration must be synchronized across 5 files. The system supports reasoning models with different methods (effort, max_tokens, both).
 </overview>
 
 <model_schema>
