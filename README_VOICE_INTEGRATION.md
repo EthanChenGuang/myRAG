@@ -228,7 +228,7 @@ User: "Show me the myRAG logo"
 
 ## Deployment
 
-The voice agent runs as a separate Node.js service. See the main [deployment documentation](https://chatrag.ai/docs/voice-integration) or the local [Fly.io Deployment Guide](./README_VOICE_AGENT_FLYIO.md) for detailed instructions.
+The voice agent runs as a separate Node.js service. See the main [deployment documentation](https://myrag.ai/docs/voice-integration) or the local [Fly.io Deployment Guide](./README_VOICE_AGENT_FLYIO.md) for detailed instructions.
 
 - **[Fly.io](https://fly.io/docs/)** deployment with volumes (Recommended)
 - **[Railway](https://docs.railway.com/)** deployment configuration
@@ -312,7 +312,7 @@ curl -X POST "http://localhost:3000/api/internal/voice-rag" \
 ## Related Documentation
 
 - [Image RAG Implementation Guide](./IMAGE_RAG_IMPLEMENTATION_GUIDE.md) - How images are processed and retrieved
-- [Voice Integration Docs (Web)](https://chatrag.ai/docs/voice-integration) - User-facing deployment guide
+- [Voice Integration Docs (Web)](https://myrag.ai/docs/voice-integration) - User-facing deployment guide
 
 ---
 

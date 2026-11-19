@@ -2,7 +2,7 @@
 
 ## Reporting
 
-Email **hello@chatrag.ai** with `security` in the subject. Say what you found,
+Email **hello@myrag.ai** with `security` in the subject. Say what you found,
 how to reproduce it, and what someone could do with it.
 
 Don't open a public issue for anything that could be used against a running

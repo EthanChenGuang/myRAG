@@ -1,6 +1,6 @@
 # Third-party notices
 
-ChatRAG is MIT-licensed. This repository also contains, or installs, software
+myRAG is MIT-licensed. This repository also contains, or installs, software
 from other projects under their own licenses.
 
 ## Included in this repository
@@ -8,7 +8,7 @@ from other projects under their own licenses.
 - **`baileys-whatsapp/`** is a copy of
   [Baileys](https://github.com/WhiskeySockets/Baileys), copyright Rajeh
   Taher/WhiskeySockets, under the MIT License. Its license is in
-  [`baileys-whatsapp/LICENSE`](baileys-whatsapp/LICENSE). ChatRAG adds
+  [`baileys-whatsapp/LICENSE`](baileys-whatsapp/LICENSE). myRAG adds
   `server.ts`, an HTTP wrapper around it.
 
 ## Installed by npm, not included here

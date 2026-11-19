@@ -657,7 +657,7 @@ class ConnectorsConfigManager {
       reportBtn.innerHTML = '📋 Report';
       reportBtn.addEventListener('click', () => {
         const issueText = encodeURIComponent(`Config UI Error: ${message}`);
-        const issueUrl = `https://github.com/areia-ai/chatrag/issues/new?title=${issueText}`;
+        const issueUrl = `https://github.com/EthanChenGuang/myRAG/issues/new?title=${issueText}`;
         window.open(issueUrl, '_blank');
       });
 

@@ -26,7 +26,7 @@ export function getOpenRouterClient(): OpenAI | null {
     defaultHeaders: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${env.OPENROUTER_API_KEY}`,
-      'HTTP-Referer': 'https://github.com/areia-ai/chatrag', // Our GitHub repo as referer
+      'HTTP-Referer': 'https://github.com/EthanChenGuang/myRAG', // Our GitHub repo as referer
       'X-Title': getAppName(), // Our app name
     },
     defaultQuery: {

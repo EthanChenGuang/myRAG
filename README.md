@@ -743,9 +743,9 @@ The license covers the code, not the myRAG name or logo. If you publish or sell 
 
 - 📖 [Developer Guide](AGENTS.md)
 - 📘 [Deployment Modes](README_DEPLOYMENT_MODES.md)
-- 🐛 [GitHub Issues](https://github.com/areia-ai/chatrag/issues)
+- 🐛 [GitHub Issues](https://github.com/EthanChenGuang/myRAG/issues)
 - 💬 [Discord Community](https://discord.gg/8ZCwZjqcAY)
-- 📧 [Contact](mailto:hello@chatrag.ai)
+- 📧 [Contact](mailto:hello@myrag.ai)
 
 ## 🙏 Acknowledgments
 
