@@ -101,6 +101,7 @@ myRAG 是一个基于 Next.js + Supabase 的 AI 聊天产品，核心是从用�
 - **延迟**：查询改写 + 检索 + 重排要有总延迟预算（研究阶段给出建议值）；语音路径预算更低，可以只启用部分步骤 — 语音对延迟敏感
 - **密钥**：不提交任何密钥，测试和文档用占位值 — `AGENTS.md` 规则
 - **Python 侧车**：Docling、HHEM、DeepEval、Ragas 放在 Python 侧车服务里，主应用通过 HTTP 调用 — 用户决定
+- **标准输出格式用 Pydantic**：所有结构化输出都用 Pydantic v2（`pydantic>=2.14.4`，写进侧车的依赖文件）定义——侧车接口的请求和响应、golden set 条目、评估结果、LLM 结构化输出（查询分解、文档类型识别、改写、评估打分）。TypeScript 端用项目已有的 Zod 校验同一份结构，Zod schema 由 Pydantic 导出的 JSON Schema 生成，并在 CI 里检查两边一致 — 用户决定；两套手写 schema 会漂移
 - **pgvector 维度**：换 Embedding 后若超过 2000 维，pgvector 的 `vector` HNSW 索引放不下，需要 `halfvec` 或降维
 
 ## Key Decisions
@@ -117,6 +118,7 @@ myRAG 是一个基于 Next.js + Supabase 的 AI 聊天产品，核心是从用�
 | 上传时逐个选文档类型（可自动识别、可改），类型决定处理策略并写入元数据 | 用户要求在一个界面里选；不同类型需要不同解析和切块 | — Pending |
 | golden set 由 Claude 按真实文档起草、用户审核，覆盖中英意三种语言 | 用户决定 | — Pending |
 | 先跑基线再定具体指标目标 | 没有基线时定的数字没有依据 | — Pending |
+| Pydantic v2 作为所有结构化输出的标准格式，TS 端 Zod schema 由其 JSON Schema 生成 | 用户要求；单一数据源避免两端 schema 漂移 | — Pending |
 | 评估先行：第一阶段只建评估和基线 | 之后每个改动都要能证明有效 | — Pending |
 
 ## Evolution
