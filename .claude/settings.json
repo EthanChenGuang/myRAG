@@ -94,6 +94,15 @@
     ]
   },
   "enabledPlugins": {
-    "taches-cc-resources@taches-cc-resources": true
+    "taches-cc-resources@taches-cc-resources": true,
+    "pstack@cursor-plugins": true
+  },
+  "extraKnownMarketplaces": {
+    "cursor-plugins": {
+      "source": {
+        "source": "github",
+        "repo": "cursor/plugins"
+      }
+    }
   }
 }
