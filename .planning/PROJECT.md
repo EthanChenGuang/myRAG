@@ -43,10 +43,11 @@ myRAG 是一个基于 Next.js + Supabase 的 AI 聊天产品，核心是从用�
 - [ ] 按内容 hash 去重；同一文档的新版本替换旧版本
 
 **② 查询层**
-- [ ] 文字聊天结合对话历史改写查询（LangChain `create_history_aware_retriever` 的做法）
-- [ ] 多查询改写（LangChain `MultiQueryRetriever`）和 HyDE
-- [ ] 复合问题拆成子问题（LlamaIndex `SubQuestionQueryEngine`），多路结果用倒数排名融合（LlamaIndex `QueryFusionRetriever`）
-- [ ] 每项能力有开关和延迟预算；优先用 LangChain.js / LlamaIndex.TS，TS 里没有的能力由研究阶段决定放侧车还是在 TS 里按同样算法实现
+- [ ] 文字聊天结合对话历史改写查询（LlamaIndex condense-question 的做法）
+- [ ] 多查询改写 + 倒数排名融合（LlamaIndex `QueryFusionRetriever` 的做法）和 HyDE（LlamaIndex `HyDEQueryTransform` 的做法）
+- [ ] 复合问题拆成子问题（LlamaIndex `SubQuestionQueryEngine` 的做法），只生成子问题，不让它合成答案
+- [ ] 每项能力有开关和延迟预算；由路由按查询类型决定启用哪些；HyDE 默认关闭，语音路径不用 HyDE、多查询和分解
+- [ ] 查询层只用 LlamaIndex 的方法，不用 LangChain；在 TypeScript 里按 LlamaIndex 的算法和提示词实现，结构化输出用 Pydantic 定义的 schema（TS 端 Zod）
 
 **③ 召回层**
 - [ ] 可切换的 Embedding provider：Qwen3-Embedding-8B（第三方托管推理 API）和 Voyage-4-large；保留现有 OpenAI 模型可选
@@ -64,8 +65,8 @@ myRAG 是一个基于 Next.js + Supabase 的 AI 聊天产品，核心是从用�
 **⑤ 生成层**
 - [ ] 当前模型是 Claude 时，直连 Anthropic API 并启用 Citations，逐句标注引用的 chunk（新增 `ANTHROPIC_API_KEY`）
 - [ ] 其他模型保留提示词引用，改为要求标注 chunk ID
-- [ ] 所有模型的 RAG 回答过 HHEM-2.3 幻觉检测（侧车里），分数写进日志和消息元数据，前端显示"可能不可靠"提示；这一期不拦截
-- [ ] 能用结构化输出的地方用结构化输出（如引用列表）
+- [ ] 所有模型的 RAG 回答做 HHEM 幻觉检测：HHEM-2.3 只有 Vectara 托管 API（侧车代理调用，需显式开启，因为回答和 chunk 会发给 Vectara）；它支持中文和英文，不支持意大利语，意大利语回答记为"未检测"；没有 Vectara key 时，英文回答用开源 HHEM-2.1-Open 在侧车本地跑。分数写进日志和消息元数据，前端用三态标记（已核实 / 可能不可靠 / 未检测）；这一期不拦截
+- [ ] 非 Claude 路径用结构化输出给出引用列表；Claude 路径不能同时用 Citations 和结构化输出（会返回 HTTP 400），结构化输出只用在查询分解、文档类型识别等辅助调用上
 
 **收尾**
 - [ ] 全量回归评估，定稿默认配置（包括默认检索后端、Embedding、reranker）
@@ -111,13 +112,15 @@ myRAG 是一个基于 Next.js + Supabase 的 AI 聊天产品，核心是从用�
 | 每层取排名前两名：功能互补的一起用，功能相同的做成可切换 provider | 用户要求；可切换便于用评估比较 | — Pending |
 | pgvector、Weaviate、Qdrant 三个检索后端并存，pgvector 长期保留并作为默认 | 用户要求保留 pgvector；默认是否改由评估决定 | — Pending |
 | Supabase 是文档、权限、租户的唯一数据源，向量同步到外部向量库 | 保住现有 RLS 和多租户模型 | — Pending |
-| Docling、HHEM、DeepEval、Ragas 放 Python 侧车服务 | 这些都是 Python 生态，主应用是 TS | — Pending |
+| Docling、HHEM 代理、DeepEval、Ragas 放 Python 侧车服务 | 这些都是 Python 生态，主应用是 TS | — Pending |
 | Qwen3-Embedding-8B 用第三方托管推理 | 不自己管 GPU | — Pending |
 | Claude Citations 只在当前模型是 Claude 时启用，其他模型用 chunk ID 提示词引用，全部过 HHEM | 项目经 OpenRouter 支持多厂商模型 | — Pending |
 | HHEM 这一期只记录和提示，不拦截 | 先观察分数分布再决定阈值 | — Pending |
 | 上传时逐个选文档类型（可自动识别、可改），类型决定处理策略并写入元数据 | 用户要求在一个界面里选；不同类型需要不同解析和切块 | — Pending |
 | golden set 由 Claude 按真实文档起草、用户审核，覆盖中英意三种语言 | 用户决定 | — Pending |
 | 先跑基线再定具体指标目标 | 没有基线时定的数字没有依据 | — Pending |
+| 查询层只用 LlamaIndex 的方法，不用 LangChain；按 LlamaIndex 的算法在 TS 里实现，不在查询时调用框架 | 用户偏好 LlamaIndex；LlamaIndex.TS 没有 QueryFusionRetriever 和 HyDE，SubQuestionQueryEngine 会自己合成答案，和 Citations 冲突 | — Pending |
+| HHEM-2.3 走 Vectara 托管 API（需显式开启），意大利语记"未检测"，无 key 时英文用 HHEM-2.1-Open | HHEM-2.3 没有开源权重且不支持意大利语 | — Pending |
 | Pydantic v2 作为所有结构化输出的标准格式，TS 端 Zod schema 由其 JSON Schema 生成 | 用户要求；单一数据源避免两端 schema 漂移 | — Pending |
 | 评估先行：第一阶段只建评估和基线 | 之后每个改动都要能证明有效 | — Pending |
 
