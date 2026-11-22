@@ -90,5 +90,8 @@
     "source_grounding_authority": "grep"
   },
   "mode": "yolo",
-  "granularity": "standard"
+  "granularity": "standard",
+  "planner": {
+    "stall_detection_enabled": false
+  }
 }
