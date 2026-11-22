@@ -47,7 +47,7 @@ myRAG 是一个基于 Next.js + Supabase 的 AI 聊天产品，核心是从用�
 - [ ] 多查询改写 + 倒数排名融合（LlamaIndex `QueryFusionRetriever` 的做法）和 HyDE（LlamaIndex `HyDEQueryTransform` 的做法）
 - [ ] 复合问题拆成子问题（LlamaIndex `SubQuestionQueryEngine` 的做法），只生成子问题，不让它合成答案
 - [ ] 每项能力有开关和延迟预算；由路由按查询类型决定启用哪些；HyDE 默认关闭，语音路径不用 HyDE、多查询和分解
-- [ ] 查询层只用 LlamaIndex 的方法，不用 LangChain；在 TypeScript 里按 LlamaIndex 的算法和提示词实现，结构化输出用 Pydantic 定义的 schema（TS 端 Zod）
+- [ ] 查询层有两套可切换实现，在 Config UI 里选择（`RAG_QUERY_FRAMEWORK=llamaindex|langchain`）：LlamaIndex 为首选和默认，在 TypeScript 里按 LlamaIndex 的算法和提示词实现；LangChain 为备选，用 `@langchain/classic`（history-aware retriever、MultiQueryRetriever、HyDE、RRF 融合、分解提示词），限制在一个适配器模块里，把我们自己的检索管道包装成 retriever，租户隔离和后端仍由 `src/lib/rag/` 负责。两套都在评估里对比。结构化输出用 Pydantic 定义的 schema（TS 端 Zod）
 
 **③ 召回层**
 - [ ] 可切换的 Embedding provider：Qwen3-Embedding-8B（第三方托管推理 API）和 Voyage-4-large；保留现有 OpenAI 模型可选
@@ -119,7 +119,7 @@ myRAG 是一个基于 Next.js + Supabase 的 AI 聊天产品，核心是从用�
 | 上传时逐个选文档类型（可自动识别、可改），类型决定处理策略并写入元数据 | 用户要求在一个界面里选；不同类型需要不同解析和切块 | — Pending |
 | golden set 由 Claude 按真实文档起草、用户审核，覆盖中英意三种语言 | 用户决定 | — Pending |
 | 先跑基线再定具体指标目标 | 没有基线时定的数字没有依据 | — Pending |
-| 查询层只用 LlamaIndex 的方法，不用 LangChain；按 LlamaIndex 的算法在 TS 里实现，不在查询时调用框架 | 用户偏好 LlamaIndex；LlamaIndex.TS 没有 QueryFusionRetriever 和 HyDE，SubQuestionQueryEngine 会自己合成答案，和 Citations 冲突 | — Pending |
+| 查询层 LlamaIndex 为首选（默认），LangChain 为备选，在 Config UI 里切换；LlamaIndex 按其算法在 TS 里实现，LangChain 用 `@langchain/classic` 适配器 | 用户偏好 LlamaIndex，同时要保留 LangChain 作为可选；LlamaIndex.TS 没有 QueryFusionRetriever 和 HyDE，SubQuestionQueryEngine 会自己合成答案，和 Citations 冲突；`@langchain/core` 需要 zod 4，必须和应用的 zod 3 隔离 | — Pending |
 | HHEM-2.3 走 Vectara 托管 API（需显式开启），意大利语记"未检测"，无 key 时英文用 HHEM-2.1-Open | HHEM-2.3 没有开源权重且不支持意大利语 | — Pending |
 | Pydantic v2 作为所有结构化输出的标准格式，TS 端 Zod schema 由其 JSON Schema 生成 | 用户要求；单一数据源避免两端 schema 漂移 | — Pending |
 | 评估先行：第一阶段只建评估和基线 | 之后每个改动都要能证明有效 | — Pending |
