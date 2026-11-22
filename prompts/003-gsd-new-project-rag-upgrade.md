@@ -68,12 +68,13 @@
 - 提供重新向量化脚本：可分批、可断点续跑、可回滚。扩展现有的 `scripts/rag/reprocess-documents.js`。
 - 研究阶段确认两者的向量维度、输入长度上限和计费。
 
-### ③B 向量库与混合检索：Weaviate + Qdrant
-- 两者做成可切换的检索后端。
+### ③B 向量库与混合检索：Weaviate + Qdrant，并长期保留 pgvector
+- 做成三个可切换的检索后端：pgvector（现有，长期保留，不下线）、Weaviate、Qdrant。用 env 选择。
+- pgvector 也要升级成混合检索：用 Postgres 全文检索或 BM25 + 向量，倒数排名融合。和另外两个后端一样支持元数据过滤。
 - Supabase 仍然是文档、权限和租户的唯一数据源。向量从 Supabase 同步过去，增、删、改、重新向量化都要同步。
 - 检索时必须按 `user_id` / `organization_id` 过滤，和现在 `match_documents_by_workspace` 的隔离规则完全一致。不能出现跨租户结果。
 - 用各自原生的混合检索：BM25 + 向量，先过滤再检索。还要支持元数据过滤：日期范围、来源、文档。
-- 切换期间保留现有 pgvector 路径作为回退，直到评估证明新后端不比它差，再下线。
+- 默认后端仍是 pgvector；是否改默认，由评估结果决定。三个后端都要在评估里跑分对比。
 
 ### ④ 排序层：Cohere Rerank 5 + Voyage rerank-3
 - 两者做成可切换的 reranker，接在混合检索之后。
@@ -128,11 +129,11 @@
 
 1. 评估基线：Python 侧车骨架 + golden set + DeepEval/Ragas，跑出当前系统的分数。
 2. 数据层：Docling、元数据、去重和版本管理。
-3. 召回层：Embedding provider + Weaviate/Qdrant 混合检索 + 同步 + 重新向量化。
+3. 召回层：Embedding provider + pgvector/Weaviate/Qdrant 三个混合检索后端 + 同步 + 重新向量化。
 4. 排序与上下文层：reranker、Top-k、上下文顺序、压缩。
 5. 查询层：历史改写、多查询、HyDE、子问题分解、结果融合。
 6. 生成层：Claude Citations、chunk ID 引用、HHEM、结构化输出。
-7. 收尾：全量回归评估、默认配置定稿、pgvector 路径下线决策、文档更新。
+7. 收尾：全量回归评估、默认配置定稿（包括默认检索后端）、文档更新。
 
 ## 不在本项目范围内
 
@@ -144,4 +145,5 @@
 - 各产品的当前版本、价格和可用性：Cohere Rerank 5、Voyage-4-large、Voyage rerank-3、Vectara HHEM-2.3、提供 Qwen3-Embedding-8B 的托管推理服务。
 - LangChain.js 和 LlamaIndex.TS 是否有上面列出的每一项能力。
 - Weaviate 和 Qdrant 的托管方式（云服务还是自托管），以及各自混合检索的融合方法。
+- pgvector 换成新 Embedding 后的维度限制：`vector` 类型的 HNSW 索引最多 2000 维，超过要用 `halfvec` 或降维。
 - Anthropic Citations 和项目里 Vercel AI SDK 6 的兼容方式。
