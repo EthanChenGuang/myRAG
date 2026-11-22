@@ -1,0 +1,139 @@
+# Roadmap: myRAG RAG 全链路升级
+
+## Overview
+
+This milestone upgrades myRAG's retrieval from "vector search plus heuristic boosts" to a measured six-layer pipeline, without breaking anything that is already live. It starts by building the evaluation harness and recording a baseline of today's system. Next, text chat, embedded chat and voice are routed through one tenant-safe pipeline that reproduces that baseline. On that seam it unifies ingestion and embedding profiles, then adds hybrid retrieval, reranking and calibrated refusal on pgvector. Verified citations with groundedness badges and the query layer (two switchable frameworks) follow in parallel. The milestone finishes with Weaviate and Qdrant as synced, tenant-safe backends, and a full regression that sets the shipped defaults.
+
+**Rules that apply to every phase:**
+- **Proven against the baseline:** a phase is complete only when the eval smoke tier, compared with the Phase 1 baseline by paired differences, shows no metric (overall, per language, per category) dropping beyond the noise band.
+- **Behind a switch:** every new component has an env switch mirrored in the five config locations (`check-config` passes), and switching it off restores the previous behavior.
+- **Authenticated from the start:** every new endpoint and sidecar route requires auth and fails closed.
+- **Verification without live services:** this environment has no live vendor API keys and no live Supabase project, and no running Docker daemon. Success criteria are verified with tests, fakes, recorded vendor responses, the committed zh/en/it fixture corpus, and a local or CI-hosted Postgres with pgvector seeded from that corpus (Weaviate and Qdrant run as CI service containers). Steps that need a real key or the real knowledge base are listed per phase under **Live verification**. They are that phase's end-of-phase human verification items.
+
+## Phases
+
+**Phase Numbering:**
+- Integer phases (1, 2, 3): Planned milestone work
+- Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
+
+Decimal phases appear between their surrounding integers in numeric order.
+
+- [ ] **Phase 1: Evaluation Harness & Baseline** - Python sidecar, Pydantic/Zod contract, golden set, eval runner, CI gates and a measured baseline of today's system
+- [ ] **Phase 2: Unified Retrieval Pipeline & Tenant Scope** - Text chat, embedded chat and voice run through one `src/lib/rag/` pipeline that only searches a server-verified tenant, reproducing the baseline
+- [ ] **Phase 3: Unified Ingestion & Embedding Profiles** - One `ingest()` for every upload path with document types, Docling fallback, dedup, versioning, switchable embeddings and rollbackable re-embedding
+- [ ] **Phase 4: Hybrid Retrieval, Reranking & Calibrated Refusal** - Filtered hybrid search on pgvector, switchable rerankers, edge-ordered context and refusal from calibrated rerank scores
+- [ ] **Phase 5: Verified Citations & Groundedness** - Claude Citations, validated chunk-ID citations for other models, one persisted citation record and a post-stream groundedness badge
+- [ ] **Phase 6: Query Layer (LlamaIndex & LangChain)** - History rewrite, multi-query fusion, HyDE and sub-questions with a router and budgets, in two switchable frameworks compared in eval
+- [ ] **Phase 7: External Backends & Release Defaults** - Weaviate and Qdrant synced from Supabase behind tenant canaries; a full regression sets the defaults; Config UI and docs complete
+
+## Phase Details
+
+### Phase 1: Evaluation Harness & Baseline
+**Goal**: The quality of today's RAG system is measured reproducibly, per language and per question category, and CI blocks any change that makes it worse
+**Depends on**: Nothing (first phase)
+**Requirements**: EVAL-01, EVAL-02, EVAL-03, EVAL-04, EVAL-05, EVAL-06, EVAL-07, EVAL-08, EVAL-09, EVAL-10, EVAL-11, EVAL-12, EVAL-13
+**Success Criteria** (what must be TRUE):
+  1. The `rag-sidecar/` service builds from its Dockerfile and answers health and readiness checks; sidecar tests show that requests with a missing or wrong shared secret are rejected and that every request is refused when the secret is unset.
+  2. `npm run test-rag` runs the eval smoke tier on the committed zh/en/it fixture corpus through the authenticated `POST /api/internal/rag/run` endpoint (off in production unless enabled) and reports Recall@k, MRR, correct-refusal and false-refusal rates per language and per category, with no customer data, no live vendor keys and no LLM judge.
+  3. A three-run baseline of the current system on the fixture corpus is committed with a config hash per run and the mean and spread of each metric, and a PR whose change drops a deterministic metric beyond that noise band fails the PR smoke workflow (shown with a deliberately degraded config).
+  4. CI fails when a Pydantic model changes without its regenerated Zod schema, when an RAG env var is missing from any of the five config locations, or when a characterization test breaks; those tests pass on today's code for strict-mode "information not available", webSearch + strict using Exa results, `source_images` streaming and persistence, and `{{context}}` substitution.
+  5. Pointed at a workspace, the drafting tool writes span-labelled golden items (document, section, quote, language, category, review status; never chunk IDs) to a gitignored location with a frozen dev/test split, and the nightly tier computes Faithfulness, Answer Relevance and Context Recall with a pinned judge from a different model family and telemetry disabled (verified with a stubbed judge and a fixture workspace).
+**Live verification**: Draft the 50–200 item golden set from a real knowledge-base workspace and have the user review every item; record the three-run baseline on that real set with the OpenAI embedding key and the judge key, then set per-metric improvement targets from it; run the first nightly judge tier with real keys.
+**Plans**: TBD
+
+### Phase 2: Unified Retrieval Pipeline & Tenant Scope
+**Goal**: Text chat, embedded chat and voice get their context from one pipeline that can only search a tenant verified on the server, and answers are unchanged from the baseline
+**Depends on**: Phase 1
+**Requirements**: PIPE-01, PIPE-02, PIPE-03, PIPE-04, PIPE-05, PIPE-06, PIPE-07, PIPE-08, PIPE-09, PIPE-10
+**Success Criteria** (what must be TRUE):
+  1. Text chat, embedded chat and voice all retrieve through `src/lib/rag/`; a CI check fails if any file outside it imports an embedding provider, retrieval backend or reranker; the unused retrieval modules are deleted and `tsc --noEmit` passes.
+  2. Tests show that three kinds of request retrieve nothing outside the caller's verified tenant: an `organizationId` in the request body for an organization the caller does not belong to, an embedded chat request naming a different workspace than its server-side embed configuration, and a voice request with a bare `userId` or an expired or forged token. Voice never falls back to a global search.
+  3. With `RAG_PIPELINE=legacy` and every new switch off, the eval smoke tier reproduces the Phase 1 baseline within its noise band, running on Node.js 22, which `engines`, the docs and CI enforce.
+  4. Fault-injection tests show that a failing or timed-out stage is logged and surfaced as `error` or `degraded`, never as "information not available"; that only a verified `empty` result triggers the strict-mode refusal; that each stage can be switched off or skipped on timeout; and that aborting a request cancels in-flight stages.
+  5. All three entry points share one context-assembly step (dedupe, grouping, source labels, links section, images), and a query-counting test shows its database query count stays fixed as the number of returned chunks grows.
+**Live verification**: Check tenant resolution against a real Supabase project with personal and organization memberships in both single-tenant and multi-tenant modes; run a voice session with the running `voice-agent/` using the signed token; repeat the legacy-parity check on the real golden set.
+**Plans**: TBD
+
+### Phase 3: Unified Ingestion & Embedding Profiles
+**Goal**: Every document enters the knowledge base through one path (typed, deduplicated, versioned and carrying the same metadata), and its chunks are embedded under a switchable embedding profile that can be rolled back
+**Depends on**: Phase 2
+**Requirements**: DATA-01, DATA-02, DATA-03, DATA-04, DATA-05, DATA-06, DATA-07, EMB-01, EMB-02, EMB-03, EMB-04
+**Success Criteria** (what must be TRUE):
+  1. User can pick a document type for each file at upload (financial/report, contract/legal, product/technical, scanned/image), starting from an auto-detected default they can change, and untyped files become `general`; each type applies its processing profile (parser options, chunk size and boundaries, OCR, metadata extraction), which is defined as data, as shown by ingesting a fixture file of every type.
+  2. A fixture ingested through chat/Config UI upload, Nango sync, a scraper and image upload produces chunks with the same metadata fields on every path: tenant, document ID, version, `is_current`, source, type, date, language, page or section, content hash, `parser_used` and the URL metadata.
+  3. Re-uploading the same content in the same tenant adds no chunks, while the same content in another tenant is ingested normally; uploading a new version flips `is_current` in one transaction, retrieval returns only current chunks, and a message citing the old version still resolves.
+  4. With LlamaParse unconfigured or failing (stubbed), fixture PDFs including a table and a scan are parsed by the sidecar's async Docling job with OCR configured for zh/en/it; every table chunk repeats its header row, and `parser_used` records which parser ran.
+  5. Tests with fake providers show the following. Switching the active embedding profile among OpenAI `text-embedding-3-small`, Voyage `voyage-4-large` and hosted Qwen3-Embedding-8B is a pointer flip that can be rolled back. The re-embed job (dry-run, batched, resumable after a kill, reads stored chunk text and makes zero parser calls) fills the new profile side by side. A query-model or dimension mismatch fails loudly at startup and per request.
+**Live verification**: Parse real documents with the LlamaCloud key, and run Docling OCR on real scanned Chinese and Italian files; call Voyage, DeepInfra and OpenRouter with real keys (check Qwen3 dimension parameter, instruction prefix, MRL truncation); run the re-embed job and the `halfvec` HNSW index build on the real Supabase project; compare each embedding profile with the baseline on the real golden set; sync a real Nango connection.
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 4: Hybrid Retrieval, Reranking & Calibrated Refusal
+**Goal**: On pgvector, questions in Chinese, English and Italian find the right chunks through filtered hybrid search and reranking, and the system refuses when the best reranked evidence is too weak
+**Depends on**: Phase 3
+**Requirements**: RET-01, RET-02, RET-03, RET-04, DATA-08, RNK-01, RNK-02, RNK-03, RNK-04, RNK-05, RNK-06
+**Success Criteria** (what must be TRUE):
+  1. Against a local Postgres with pgvector seeded with the fixture corpus, Chinese exact-term queries (model numbers, IDs, names) and their English and Italian counterparts retrieve the expected chunk. The search is hybrid lexical + vector over the shared tokenizer's `lexical_text`, fused with RRF. Filters by date range, source, document, document type and language apply before search, and the hybrid function runs for the server role and is refused for `anon`.
+  2. Cohere `rerank-v5.0-pro`/`rerank-v5.0-fast`, Voyage `rerank-3` (with `rerank-2.5` as fallback) and the local BM25 reranker are switchable and rerank an enlarged candidate pool; when a fake reranker times out or errors, the fused order is used and threshold refusal is off for that request.
+  3. The assembled context puts the most relevant chunks at its start and end, merges adjacent chunks from the same document and stays within the token budget; context compression changes the context only when its switch is on.
+  4. Calibration tooling derives a refusal threshold per reranker provider and language on the dev split and checks it on the holdout split, and sweep tooling picks the candidate pool size and final top-k; both record their numbers (shown on the fixture set with fake rerankers). With the threshold applied, fixture no-answer questions are refused and answerable ones are not.
+  5. The pgvector retrieval adapter accepts only a `TenantScope`, and its hybrid conformance tests (including the Chinese exact-term test) are written to run unchanged against any backend; the fixture eval records paired differences against baseline, and no language slice drops beyond the noise band on Recall@k or MRR.
+**Live verification**: Calibrate thresholds and sweep pool size and top-k with real Cohere and Voyage keys on the real golden set's dev split, then check them on the holdout split; compare Voyage `rerank-3` with `rerank-2.5` on the zh and it slices; apply the hybrid SQL migration to the real Supabase project and confirm Chinese lexical behavior there.
+**Plans**: TBD
+
+### Phase 5: Verified Citations & Groundedness
+**Goal**: Every RAG answer cites only chunks that were actually sent to the model, its citations survive later document changes, and users can see whether the answer was checked for groundedness
+**Depends on**: Phase 4
+**Requirements**: GEN-01, GEN-02, GEN-03, GEN-04, GEN-05, GEN-06, GEN-07
+**Success Criteria** (what must be TRUE):
+  1. Against recorded or fake Anthropic streams: when the selected model is Claude, the answer comes from the direct Anthropic API with Citations (one plain-text document per chunk) and no structured output on that call. The OpenRouter-to-Anthropic model ID map passes the five-location model check, and turns needing tools, MCP or webSearch keep working or fall back to the existing path.
+  2. For other models, the server parses chunk-ID citations from the stream even when a marker is split across tokens, drops unknown IDs and IDs not in the context sent, and returns the citation list through structured output. Both paths persist the same `citations[]` record with a text snapshot that still resolves after the cited document is re-chunked or replaced.
+  3. Tests with a fake Vectara endpoint and a stubbed local model show that after the answer finishes streaming, the sidecar groundedness check stores a score and status in message metadata and logs, and never delays or blocks the answer. HHEM-2.3 through Vectara runs only when the key is set and opt-in is on (Chinese, English); HHEM-2.1-Open runs locally for English when there is no key; Italian and other unsupported cases are recorded as "not checked".
+  4. User sees a three-state badge (verified / possibly unreliable / not checked), never a numeric score, on RAG answers in strict and balanced modes only.
+  5. The Phase 1 characterization tests still pass (strict-mode "information not available" in the user's language, webSearch + Exa, `source_images`, `{{context}}`), and the fixture eval shows no slice dropping beyond the noise band.
+**Live verification**: Start with a spike using a real `ANTHROPIC_API_KEY` to confirm Citations survive AI SDK v6 streaming with tools, MCP approvals and webSearch; call Vectara with a real key and opt-in, and confirm host, header, rate limits, `source_texts` limit and data retention before any multi-tenant use; download and run HHEM-2.1-Open in the sidecar; compare Faithfulness on the real golden set with the baseline.
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 6: Query Layer (LlamaIndex & LangChain)
+**Goal**: Follow-up, vague and compound questions retrieve as well as standalone ones under either query framework, within their latency budgets, and voice stays fast
+**Depends on**: Phase 4
+**Requirements**: QRY-01, QRY-02, QRY-03, QRY-04, QRY-05, QRY-06, QRY-07, QRY-08
+**Success Criteria** (what must be TRUE):
+  1. Under the default `RAG_QUERY_FRAMEWORK=llamaindex`, native TypeScript ports make no framework call at query time and do four things: rewrite follow-ups into standalone queries in the user's language with numbers, names and IDs verbatim (standalone questions pass through unchanged); fuse multi-query variants with RRF; run HyDE only when switched on; and decompose compound questions into at most four sub-questions with no synthesized answer. Outputs validate against the Pydantic-generated Zod schemas (fake LLM, fixture multi-turn and compound items).
+  2. The router reuses the existing query classifier to choose transforms per query. Each transform has its own switch, timeout and latency budget, and is skipped without failing the request when it overruns (injected delays). The original query is always retrieved. Voice runs only history rewrite, hybrid retrieval and an optional fast reranker within its latency budget, never HyDE, multi-query or decomposition.
+  3. With `RAG_QUERY_FRAMEWORK=langchain`, an adapter built on `@langchain/classic` (history-aware retriever, MultiQueryRetriever, HyDE port, RRF ensemble, decomposition prompt) returns the same output shapes for the same fixture inputs and wraps the `src/lib/rag/` pipeline as its retriever. A CI check fails if LangChain is imported outside that one adapter module, or if the adapter reaches a backend, embedding provider or reranker directly.
+  4. Admin can switch the query framework between LlamaIndex (default) and LangChain in the Config UI; the switch is mirrored in the five config locations, and the zod 4 required by `@langchain/core` is isolated so the app's zod 3 schemas, type-check and build are unaffected.
+  5. The eval runs both frameworks on the fixture golden set and records paired differences per language and category; under the default framework the multi-turn and compound slices hold or improve against Phase 4, and no slice drops beyond the noise band.
+**Live verification**: Run both frameworks with real LLM keys; measure p50/p95 latency of each transform and of the whole pre-retrieval stage for chat (starting budget about 2 s before first token) and voice (about 800 ms), and replace the starting budgets with the measured ones; compare LlamaIndex and LangChain on the real golden set.
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 7: External Backends & Release Defaults
+**Goal**: Admins can switch retrieval to Weaviate or Qdrant without any cross-tenant leakage, every new provider and switch is configurable in the Config UI, and the shipped defaults are backed by a full regression
+**Depends on**: Phase 5, Phase 6
+**Requirements**: RET-05, RET-06, RET-07, RET-08, RET-09, ADM-01, ADM-02, ADM-03, ADM-04
+**Success Criteria** (what must be TRUE):
+  1. Tests against Weaviate and Qdrant containers in CI show that inserts, updates, deletes (including cascade deletes), version replacements and re-embeds in Supabase reach both stores through the outbox and drain worker, and that the reconcile job detects and repairs injected drift. Weaviate uses one tenant per workspace; Qdrant uses a shared collection per embedding profile with an `is_tenant` index and a tenant filter injected on every query and prefetch.
+  2. The cross-tenant canary suite (personal vs organization, null organization, removed member, after delete, after version replace, after re-embed) passes on pgvector, Weaviate and Qdrant in CI and blocks release on failure; chunk IDs from an external backend that fail re-validation against Supabase under the caller's scope are dropped.
+  3. The Phase 4 hybrid conformance tests, including the Chinese exact-term test, pass unchanged on Weaviate and Qdrant; when an external backend is not ready for a tenant or fails, retrieval falls back to pgvector and reports `degraded`.
+  4. Admin can configure every new provider and switch in the Config UI with masked secrets, a Test-connection button and a warning when the active embedding profile and backend don't match.
+  5. The regression runner evaluates backend, embedding profile and reranker combinations on the locked test split and writes a defaults decision record with its numbers (shown on fixtures). `AGENTS.md`, the `.env` templates and setup docs describe the sidecar, providers, switches, sync and eval workflow. A vendor data-flow inventory lists what content goes to Vectara, Cohere, Voyage, DeepInfra, Weaviate, Qdrant, Anthropic, LlamaCloud and any other external service the pipeline calls.
+**Live verification**: Provision Weaviate and Qdrant (cloud or self-hosted), host the drain worker within the 60 s function limit, and run the canary suite against them; run Test-connection for each real provider; run the full regression on the real locked test split with all real keys (the ADM-02 defaults decision is final only from this live run, not from fixtures); check voice latency end to end.
+**Plans**: TBD
+**UI hint**: yes
+
+## Progress
+
+**Execution Order:**
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7. Phases 5 and 6 both depend only on Phase 4 and can run in parallel. Phase 7's backend and sync work needs only Phases 3 and 4; its regression and closeout need Phases 5 and 6.
+
+| Phase | Plans Complete | Status | Completed |
+|-------|----------------|--------|-----------|
+| 1. Evaluation Harness & Baseline | 0/TBD | Not started | - |
+| 2. Unified Retrieval Pipeline & Tenant Scope | 0/TBD | Not started | - |
+| 3. Unified Ingestion & Embedding Profiles | 0/TBD | Not started | - |
+| 4. Hybrid Retrieval, Reranking & Calibrated Refusal | 0/TBD | Not started | - |
+| 5. Verified Citations & Groundedness | 0/TBD | Not started | - |
+| 6. Query Layer (LlamaIndex & LangChain) | 0/TBD | Not started | - |
+| 7. External Backends & Release Defaults | 0/TBD | Not started | - |

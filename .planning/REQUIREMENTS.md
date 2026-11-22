@@ -82,7 +82,8 @@ All requirements are written so they can be checked. "Behind a switch" means an 
 - [ ] **QRY-03**: HyDE (LlamaIndex `HyDEQueryTransform` method) is available, off by default, never used in voice
 - [ ] **QRY-04**: Compound questions are decomposed into at most four sub-questions (LlamaIndex `SubQuestionQueryEngine` method), producing sub-questions only — never a synthesized answer
 - [ ] **QRY-05**: A router reuses the existing query classifier to decide per query which transforms run; each transform has its own switch, timeout and latency budget, and the original query is always retained in retrieval
-- [ ] **QRY-06**: All query-layer methods are implemented natively in TypeScript (no LangChain, no framework call at query time), with structured outputs defined by the Pydantic/Zod contract
+- [ ] **QRY-06**: The LlamaIndex implementation (default) is native TypeScript following LlamaIndex's algorithms and prompts, with no framework call at query time; both implementations use structured outputs defined by the Pydantic/Zod contract
+- [ ] **QRY-08**: An admin can switch the query layer between LlamaIndex (default) and LangChain (`@langchain/classic`, confined to one adapter that wraps `src/lib/rag/` as a retriever, with its zod 4 isolated from the app's zod 3) in the Config UI (`RAG_QUERY_FRAMEWORK=llamaindex|langchain`); both produce the same transform outputs and are compared in eval
 - [ ] **QRY-07**: Voice uses a reduced profile (history rewrite, hybrid retrieval, optional fast reranker) that stays within its latency budget
 
 ### Generation (GEN)
@@ -131,7 +132,6 @@ All requirements are written so they can be checked. "Behind a switch" means an 
 
 | Feature | Reason |
 |---------|--------|
-| LangChain (any layer) | User chose LlamaIndex methods for the query layer |
 | Third-ranked products (Reducto, DSPy, Gemini Embedding, Elasticsearch/OpenSearch, Qwen3-Reranker, Galileo Luna-2, Langfuse) | User chose the top two per layer |
 | Retiring pgvector | User wants it kept permanently |
 | Self-hosted GPU for Qwen3-Embedding-8B | User chose hosted inference |
@@ -149,12 +149,86 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
+| EVAL-01 | Phase 1 | Pending |
+| EVAL-02 | Phase 1 | Pending |
+| EVAL-03 | Phase 1 | Pending |
+| EVAL-04 | Phase 1 | Pending |
+| EVAL-05 | Phase 1 | Pending |
+| EVAL-06 | Phase 1 | Pending |
+| EVAL-07 | Phase 1 | Pending |
+| EVAL-08 | Phase 1 | Pending |
+| EVAL-09 | Phase 1 | Pending |
+| EVAL-10 | Phase 1 | Pending |
+| EVAL-11 | Phase 1 | Pending |
+| EVAL-12 | Phase 1 | Pending |
+| EVAL-13 | Phase 1 | Pending |
+| PIPE-01 | Phase 2 | Pending |
+| PIPE-02 | Phase 2 | Pending |
+| PIPE-03 | Phase 2 | Pending |
+| PIPE-04 | Phase 2 | Pending |
+| PIPE-05 | Phase 2 | Pending |
+| PIPE-06 | Phase 2 | Pending |
+| PIPE-07 | Phase 2 | Pending |
+| PIPE-08 | Phase 2 | Pending |
+| PIPE-09 | Phase 2 | Pending |
+| PIPE-10 | Phase 2 | Pending |
+| DATA-01 | Phase 3 | Pending |
+| DATA-02 | Phase 3 | Pending |
+| DATA-03 | Phase 3 | Pending |
+| DATA-04 | Phase 3 | Pending |
+| DATA-05 | Phase 3 | Pending |
+| DATA-06 | Phase 3 | Pending |
+| DATA-07 | Phase 3 | Pending |
+| DATA-08 | Phase 4 | Pending |
+| EMB-01 | Phase 3 | Pending |
+| EMB-02 | Phase 3 | Pending |
+| EMB-03 | Phase 3 | Pending |
+| EMB-04 | Phase 3 | Pending |
+| RET-01 | Phase 4 | Pending |
+| RET-02 | Phase 4 | Pending |
+| RET-03 | Phase 4 | Pending |
+| RET-04 | Phase 4 | Pending |
+| RET-05 | Phase 7 | Pending |
+| RET-06 | Phase 7 | Pending |
+| RET-07 | Phase 7 | Pending |
+| RET-08 | Phase 7 | Pending |
+| RET-09 | Phase 7 | Pending |
+| RNK-01 | Phase 4 | Pending |
+| RNK-02 | Phase 4 | Pending |
+| RNK-03 | Phase 4 | Pending |
+| RNK-04 | Phase 4 | Pending |
+| RNK-05 | Phase 4 | Pending |
+| RNK-06 | Phase 4 | Pending |
+| QRY-01 | Phase 6 | Pending |
+| QRY-02 | Phase 6 | Pending |
+| QRY-03 | Phase 6 | Pending |
+| QRY-04 | Phase 6 | Pending |
+| QRY-05 | Phase 6 | Pending |
+| QRY-06 | Phase 6 | Pending |
+| QRY-07 | Phase 6 | Pending |
+| QRY-08 | Phase 6 | Pending |
+| GEN-01 | Phase 5 | Pending |
+| GEN-02 | Phase 5 | Pending |
+| GEN-03 | Phase 5 | Pending |
+| GEN-04 | Phase 5 | Pending |
+| GEN-05 | Phase 5 | Pending |
+| GEN-06 | Phase 5 | Pending |
+| GEN-07 | Phase 5 | Pending |
+| ADM-01 | Phase 7 | Pending |
+| ADM-02 | Phase 7 | Pending |
+| ADM-03 | Phase 7 | Pending |
+| ADM-04 | Phase 7 | Pending |
 
 **Coverage:**
-- v1 requirements: 68 total
-- Mapped to phases: 0
-- Unmapped: 68 ⚠️
+- v1 requirements: 69 total
+- Mapped to phases: 69
+- Unmapped: 0 ✓
+
+**Mapping notes:**
+- RET-01, RET-02 and RET-03 are mapped to Phase 4, which builds the retrieval adapter contract, the pgvector hybrid search, the shared tokenizer and backend-agnostic conformance tests. Their "every backend" clauses for Weaviate and Qdrant are verified in Phase 7 (success criterion 3).
+- DATA-08 (metadata filters) is mapped to Phase 4 because filters are applied inside the hybrid search function built there; the metadata it filters on comes from Phase 3.
+- QRY-08 adds a switchable LangChain implementation of the query layer (`RAG_QUERY_FRAMEWORK=llamaindex|langchain`, default `llamaindex`). The former Out of Scope row "LangChain (any layer)" was removed and QRY-06 reworded accordingly.
 
 ---
 *Requirements defined: 2026-11-22*
-*Last updated: 2026-11-22 after initial definition*
+*Last updated: 2026-11-22 after roadmap creation (traceability mapped, QRY-08 added to coverage)*
