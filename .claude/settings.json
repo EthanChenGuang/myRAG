@@ -199,13 +199,27 @@
   },
   "enabledPlugins": {
     "taches-cc-resources@taches-cc-resources": true,
-    "pstack@cursor-plugins": true
+    "pstack@cursor-plugins": true,
+    "frontend-design@claude-plugins-official": true,
+    "impeccable@impeccable": true
   },
   "extraKnownMarketplaces": {
     "cursor-plugins": {
       "source": {
         "source": "github",
         "repo": "cursor/plugins"
+      }
+    },
+    "claude-plugins-official": {
+      "source": {
+        "source": "github",
+        "repo": "anthropics/claude-plugins-official"
+      }
+    },
+    "impeccable": {
+      "source": {
+        "source": "github",
+        "repo": "pbakaus/impeccable"
       }
     }
   }
