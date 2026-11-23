@@ -75,9 +75,7 @@ Deviations from CONTEXT.md (research adjustments adopted):
 - D-14 lists the `urls` extractor only for general and product_technical, but D-07 keeps the URL metadata unchanged and storeDocument extracts it for every document, so enrich writes URL metadata on every chunk (DATA-02 parity); the profile entry stays in the data.
 - D-46 with the delivered 02-23 shape: ingest traces reuse exportTrace and the trace sampling, but they are never review candidates and never carry content, because the review queue holds retrieval answers and ingest content is document text.
 
-Commit rule for every task: plain `git commit`; the message ends with exactly:
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01X342shLsAZx6PYph2vA7hc
+Commit rule for every task: plain `git commit`; the message ends with the attribution lines (Co-Authored-By and the session link) that the executor's own session supplies; never copy them from a plan.
 No model identifiers in code comments or commit messages; no document text in logs or traces.
 </objective>
 
