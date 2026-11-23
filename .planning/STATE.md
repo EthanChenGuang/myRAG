@@ -4,16 +4,16 @@ milestone: v5.0
 current_phase: 01
 current_phase_name: Evaluation Harness & Baseline
 status: executing
-stopped_at: Completed 01-02-PLAN.md
-last_updated: "2026-11-23T06:24:17.434Z"
+stopped_at: Completed 01-03-PLAN.md
+last_updated: "2026-11-23T06:26:41.110Z"
 last_activity: 2026-11-23
 last_activity_desc: Phase 01 execution started
-state_head: c28e637f4d4e93d158d132b049cbc58f6e6f5aeb
+state_head: 30d68839bc7fbd93fa46e8360a9b98778cb5df09
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 22
-  completed_plans: 2
+  completed_plans: 3
 ---
 
 # Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-11-22)
 ## Current Position
 
 Phase: 01 (Evaluation Harness & Baseline) — EXECUTING
-Plan: 3 of 22
+Plan: 4 of 22
 Status: Ready to execute
 Last activity: 2026-11-23 — Phase 01 execution started
 
@@ -58,6 +58,7 @@ Progress: [░░░░░░░░░░] 0%
 |------|----------|-------|-------|
 | Phase 01 P01 | 7min | 2 tasks | 16 files |
 | Phase 01 P02 | 15min | 2 tasks | 9 files |
+| Phase 01 P03 | 6min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -75,6 +76,7 @@ Recent decisions affecting current work:
 - [Phase 01]: 01-01: npm ci needs --ignore-scripts in sandbox (onnxruntime-node CUDA postinstall 404)
 - [Phase 01]: 01-02: chunk embeddings use raw chunk text (as process-document does); PGRST116 406 is not counted as a fake-edge error
 - [Phase 01]: 01-02: fake edge supports limit param on table reads (chat route uses it); all other params rejected and recorded
+- [Phase 01]: 01-03: Golden cross-field rules (answerability, spans, multi_turn conversation) are enforced only in Pydantic; generated Zod enforces structure, enums, id pattern, quote min length and rejects chunk_id keys
 
 ### Pending Todos
 
@@ -101,6 +103,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-23T06:24:17.400Z
-Stopped at: Completed 01-02-PLAN.md
+Last session: 2026-11-23T06:26:41.073Z
+Stopped at: Completed 01-03-PLAN.md
 Resume file: None
