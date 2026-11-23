@@ -13,6 +13,8 @@ import {
   resolveEmbedScope,
   runRetrieval,
   scopeKey,
+  type RetrievalResult,
+  type TraceCollector,
 } from '@/lib/rag';
 
 // Use Node.js runtime instead of Edge
@@ -84,6 +86,14 @@ function knowledgeBaseUnavailableResponse(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  let pendingTrace: { collector: TraceCollector; result: RetrievalResult } | null = null;
+  const finishPendingTrace = () => {
+    if (!pendingTrace) return;
+    const pending = pendingTrace;
+    pendingTrace = null;
+    finishTrace(pending.collector, pending.result);
+  };
+
   console.log('EMBED API: POST request received');
   console.log('EMBED API: Environment check:', {
     EMBED_ENABLED: env.NEXT_PUBLIC_EMBED_ENABLED,
@@ -178,7 +188,8 @@ export async function POST(request: NextRequest) {
         signal: request.signal,
         trace: collector,
       });
-      finishTrace(collector, result);
+      collector.setReviewContent({ query: queryText, context: result.context, model });
+      pendingTrace = { collector, result };
 
       console.log('[Document Search] Embed retrieval finished:', {
         status: result.status,
@@ -189,6 +200,7 @@ export async function POST(request: NextRequest) {
 
       if (result.status === 'error' || (result.status === 'degraded' && result.usedDocuments.length === 0)) {
         console.error('[Document Search] Embed knowledge base unavailable:', { status: result.status, reason: result.reason });
+        finishPendingTrace();
         return knowledgeBaseUnavailableResponse(request);
       }
 
@@ -276,6 +288,7 @@ Context:
     const modelProvider = openrouterProvider(safeModelId);
 
     if (!modelProvider) {
+      finishPendingTrace();
       console.error('EMBED API: Failed to get model provider from OpenRouter');
       return createErrorResponse("I'm having trouble connecting to the AI service. The model provider could not be initialized.");
     }
@@ -289,6 +302,12 @@ Context:
         temperature: 0.1, // Use same temperature as main chat
         maxOutputTokens: 2000,
         // Don't include tools for embed API to keep it simple
+        onFinish: (event) => {
+          pendingTrace?.collector.setReviewContent({ answer: event.text ?? '' });
+          finishPendingTrace();
+        },
+        onAbort: () => finishPendingTrace(),
+        onError: () => finishPendingTrace(),
       });
 
       console.log('EMBED API: streamText call successful, streaming to client');
@@ -312,6 +331,7 @@ Context:
       });
 
     } catch (streamError) {
+      finishPendingTrace();
       console.error('=== EMBED API: STREAM ERROR ===');
       console.error('EMBED API: streamText failed:', streamError);
       console.error('EMBED API: streamText error message:', (streamError as Error).message);
@@ -337,6 +357,7 @@ Context:
     }
 
   } catch (error) {
+    finishPendingTrace();
     console.error('=== EMBED API: MAIN CATCH BLOCK ===');
     console.error('EMBED API: Error occurred:', error);
     console.error('EMBED API: Error type:', error?.constructor?.name);

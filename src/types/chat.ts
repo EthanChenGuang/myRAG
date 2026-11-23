@@ -174,6 +174,7 @@ export interface DBMessage {
   name?: string;
   createdAt?: Date;
   attachments?: Attachment[];
+  metadata?: { ragTraceId: string };
 }
 
 interface AppMessageMetadata {
@@ -208,21 +209,31 @@ export function toMessages(messages: ExtendedMessage[]): UIMessage<AppMessageMet
   return messages.map(toMessage);
 }
 
+function ragTraceIdOf(metadata: Record<string, unknown> | undefined): string | undefined {
+  const value = metadata?.ragTraceId;
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
 export function toDBMessages(messages: ExtendedMessage[]): DBMessage[] {
-  return messages.map((msg) => ({
-    id: msg.id,
-    role: msg.role === 'system' ? 'data' : (msg.role as 'user' | 'assistant' | 'data'),
-    content: msg.content,
-    createdAt: msg.createdAt,
-    ...(msg.name && { name: msg.name }),
-    ...(msg.attachments && msg.attachments.length > 0
-      ? { attachments: msg.attachments }
-      : {}),
-  }));
+  return messages.map((msg) => {
+    const ragTraceId = ragTraceIdOf(msg.metadata);
+    return {
+      id: msg.id,
+      role: msg.role === 'system' ? 'data' : (msg.role as 'user' | 'assistant' | 'data'),
+      content: msg.content,
+      createdAt: msg.createdAt,
+      ...(msg.name && { name: msg.name }),
+      ...(msg.attachments && msg.attachments.length > 0
+        ? { attachments: msg.attachments }
+        : {}),
+      ...(ragTraceId ? { metadata: { ragTraceId } } : {}),
+    };
+  });
 }
 
 export function toExtendedMessage(message: DBMessage): ExtendedMessage {
   const role = message.role === 'data' ? 'system' : (message.role as 'user' | 'assistant' | 'system');
+  const ragTraceId = ragTraceIdOf(message.metadata);
 
   return {
     id: message.id,
@@ -233,6 +244,7 @@ export function toExtendedMessage(message: DBMessage): ExtendedMessage {
     ...(message.attachments && message.attachments.length > 0
       ? { attachments: message.attachments }
       : {}),
+    ...(ragTraceId ? { metadata: { ragTraceId } } : {}),
   };
 }
 
