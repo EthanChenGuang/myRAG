@@ -154,7 +154,8 @@ def test_same_family_traces_are_skipped_and_counted(monkeypatch, tmp_path, capsy
     factory = _Factory()
     with FakeLangfuse(rows) as fake:
         _keys(monkeypatch, fake)
-        rc = main([*WINDOW, "--config", str(_config(tmp_path, online=None))], judge_factory=factory)
+        same_family_online = {"sample_rate": 1.0, "seed": 1, "judge_model": "openai/gpt-4o", "judge_family": "openai"}
+        rc = main([*WINDOW, "--config", str(_config(tmp_path, online=same_family_online))], judge_factory=factory)
         posts = fake.score_requests()
     assert rc == 0
     summary = _summary(capsys)
@@ -256,6 +257,15 @@ def test_a_failing_judge_call_is_counted_and_not_posted(monkeypatch, tmp_path, c
     assert summary["scored"] == 0 and summary["skipped"]["judge_error"] == 2
 
 
+def test_without_an_online_judge_block_the_cli_skips_with_a_notice(monkeypatch, tmp_path, capsys):
+    with FakeLangfuse([_obs(1, "google/gemini-2.5-flash")]) as fake:
+        _keys(monkeypatch, fake)
+        rc = main([*WINDOW, "--config", str(_config(tmp_path, online=None))], judge_factory=_Factory())
+        assert fake.requests == []
+    assert rc == 0
+    assert "::notice::" in capsys.readouterr().out
+
+
 def test_judge_traces_orders_scores_by_trace_and_metric():
     from rag_sidecar.contracts.review import ReviewQueueItem
 
@@ -276,3 +286,24 @@ def test_judge_traces_orders_scores_by_trace_and_metric():
     scores, skipped = judge_traces([item(2), item(1)], load_judge_config(), _Factory())
     assert [(s["traceId"], s["name"]) for s in scores] == sorted((s["traceId"], s["name"]) for s in scores)
     assert len(scores) == 4 and skipped.get("same_family", 0) == 0
+
+
+def test_judge_traces_skips_openai_generators_when_no_online_judge_is_configured():
+    from rag_sidecar.contracts.review import ReviewQueueItem
+
+    from rag_eval.judge.config import load_judge_config
+
+    config = load_judge_config().model_copy(update={"online_judge": None})
+    item = ReviewQueueItem(
+        trace_id="a" * 32,
+        observation_id="b" * 16,
+        captured_at="2026-11-01T10:00:00.000Z",
+        tenant_key="tenant-a",
+        query_masked="How many leave days?",
+        answer_masked="Twenty days.",
+        context_masked="Employees receive twenty days of leave.",
+        model="openai/gpt-4o-mini",
+    )
+    factory = _Factory()
+    scores, skipped = judge_traces([item], config, factory)
+    assert scores == [] and skipped["same_family"] == 1 and factory.models == []
