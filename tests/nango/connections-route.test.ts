@@ -17,6 +17,8 @@ const state = {
   deleteConnection: vi.fn(),
   getConnection: vi.fn(),
   listConnections: vi.fn(),
+  syncDocuments: vi.fn(),
+  triggerSync: vi.fn(),
 };
 
 function matches(row: Row, filters: Filter[]): boolean {
@@ -97,8 +99,10 @@ async function load() {
       getConnection: state.getConnection,
       deleteConnection: state.deleteConnection,
       listConnections: state.listConnections,
+      triggerSync: state.triggerSync,
     }),
   }));
+  vi.doMock('@/lib/nango/sync-manager', () => ({ syncDocumentsForConnection: state.syncDocuments }));
   vi.doMock('@/lib/supabase/server', () => ({
     createClient: async () => ({
       auth: {
@@ -122,6 +126,8 @@ beforeEach(() => {
   state.listUsers = vi.fn().mockResolvedValue({ data: { users: [{ id: USER_B }] } });
   state.deleteConnection = vi.fn().mockResolvedValue(undefined);
   state.listConnections = vi.fn().mockResolvedValue({ connections: [] });
+  state.syncDocuments = vi.fn().mockResolvedValue({});
+  state.triggerSync = vi.fn().mockResolvedValue(undefined);
   state.getConnection = vi.fn(async (_integration: string, connectionId: string) => {
     if (!state.nangoOwners.has(connectionId)) throw new Error('not found');
     const owner = state.nangoOwners.get(connectionId);
@@ -137,6 +143,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
   vi.doUnmock('@/lib/nango/client');
+  vi.doUnmock('@/lib/nango/sync-manager');
   vi.doUnmock('@/lib/supabase/server');
   vi.doUnmock('@/lib/supabase');
 });
@@ -217,6 +224,42 @@ describe('nango/connections POST ownership', () => {
     const upserts = state.ops.filter((o) => o.op === 'upsert');
     expect(upserts).toHaveLength(1);
     expect(upserts[0].payload).toMatchObject({ user_id: USER_A, connection_id: 'conn-a', provider: 'notion' });
+  });
+});
+
+describe('ME-01: the caller cookies never leave this process', () => {
+  it('POST never sends the Cookie header to any URL, whatever NEXT_PUBLIC_SITE_URL says', async () => {
+    const previous = process.env.NEXT_PUBLIC_SITE_URL;
+    process.env.NEXT_PUBLIC_SITE_URL = 'https://attacker.example.test';
+    try {
+      state.session = { id: USER_A };
+      state.nangoOwners.set('conn-a', USER_A);
+      const route = await load();
+
+      const response = await route.POST(
+        request('POST', { cookie: 'sb-session=placeholder-session; admin_session=placeholder-admin' }, { provider: 'notion', connectionId: 'conn-a' }),
+      );
+      await vi.waitFor(() => expect(state.syncDocuments).toHaveBeenCalledWith('conn-a', 'notion'));
+
+      expect(response.status).toBe(200);
+      expect(fetch).not.toHaveBeenCalled();
+      expect(JSON.stringify(vi.mocked(fetch).mock.calls)).not.toContain('placeholder-session');
+    } finally {
+      if (previous === undefined) delete process.env.NEXT_PUBLIC_SITE_URL;
+      else process.env.NEXT_PUBLIC_SITE_URL = previous;
+    }
+  });
+
+  it('a failing background sync does not fail the registration', async () => {
+    state.session = { id: USER_A };
+    state.nangoOwners.set('conn-a', USER_A);
+    state.syncDocuments = vi.fn().mockRejectedValue(new Error('sync down'));
+    const route = await load();
+
+    const response = await route.POST(request('POST', {}, { provider: 'notion', connectionId: 'conn-a' }));
+
+    expect(response.status).toBe(200);
+    await vi.waitFor(() => expect(state.syncDocuments).toHaveBeenCalled());
   });
 });
 

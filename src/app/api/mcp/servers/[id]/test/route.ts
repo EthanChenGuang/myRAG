@@ -1,83 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
-import { z } from 'zod/v3';
 import { requireAdminOrDeny } from '@/lib/admin-route-auth';
 import { redactUrls } from '@/lib/mcp/server-redact';
-
-// Re-use the same schema from the main route
-const McpServerSchema = z.object({
-  id: z.string().min(1),
-  name: z.string().min(1),
-  description: z.string().optional(),
-  endpoint: z.string().url(),
-  type: z.enum(['http', 'sse']).default('http'),
-  authentication: z.object({
-    type: z.enum(['none', 'bearer', 'api-key', 'basic']).default('none'),
-    credentials: z.object({
-      token: z.string().optional(),
-      apiKey: z.string().optional(),
-      username: z.string().optional(),
-      password: z.string().optional(),
-    }).optional(),
-  }).optional(),
-  settings: z.object({
-    timeout: z.number().default(30000),
-    retryAttempts: z.number().default(3),
-    enabledInChat: z.boolean().default(true),
-    enabledInEmbed: z.boolean().default(false),
-  }).optional(),
-  enabled: z.boolean().default(true),
-});
-
-type McpServer = z.infer<typeof McpServerSchema>;
-
-// Helper functions (duplicated for now, could be moved to shared module)
-function getEnvFilePath(): string {
-  return path.join(process.cwd(), '.env.local');
-}
-
-function parseEnvFile(content: string): Record<string, string> {
-  const env: Record<string, string> = {};
-  const lines = content.split('\n');
-  
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (trimmed && !trimmed.startsWith('#')) {
-      const equalIndex = trimmed.indexOf('=');
-      if (equalIndex > 0) {
-        const key = trimmed.substring(0, equalIndex).trim();
-        const value = trimmed.substring(equalIndex + 1).trim();
-        env[key] = value;
-      }
-    }
-  }
-  
-  return env;
-}
-
-async function loadCustomServers(): Promise<McpServer[]> {
-  try {
-    const envPath = getEnvFilePath();
-    if (!fs.existsSync(envPath)) {
-      return [];
-    }
-    
-    const content = fs.readFileSync(envPath, 'utf-8');
-    const env = parseEnvFile(content);
-    
-    const customServersJson = env.MCP_CUSTOM_SERVERS;
-    if (!customServersJson) {
-      return [];
-    }
-    
-    const customServers = JSON.parse(customServersJson);
-    return Array.isArray(customServers) ? customServers : [];
-  } catch (error) {
-    console.error('Error loading custom MCP servers for testing:', error);
-    return [];
-  }
-}
+import { authHeaders, loadCustomServers, type McpServer } from '@/lib/mcp/custom-servers-store';
 
 async function testServerConnection(server: McpServer): Promise<{ success: boolean; message: string; latency?: number }> {
   try {
@@ -89,15 +13,7 @@ async function testServerConnection(server: McpServer): Promise<{ success: boole
       'Content-Type': 'application/json',
     };
     
-    // Add authentication headers if configured
-    if (server.authentication?.type === 'bearer' && server.authentication.credentials?.token) {
-      headers['Authorization'] = `Bearer ${server.authentication.credentials.token}`;
-    } else if (server.authentication?.type === 'api-key' && server.authentication.credentials?.apiKey) {
-      headers['X-API-Key'] = server.authentication.credentials.apiKey;
-    } else if (server.authentication?.type === 'basic' && server.authentication.credentials?.username && server.authentication.credentials?.password) {
-      const credentials = btoa(`${server.authentication.credentials.username}:${server.authentication.credentials.password}`);
-      headers['Authorization'] = `Basic ${credentials}`;
-    }
+    Object.assign(headers, authHeaders(server));
     
     const response = await fetch(server.endpoint, {
       method: 'HEAD',
@@ -138,15 +54,7 @@ async function discoverTools(server: McpServer): Promise<{ success: boolean; too
       'Content-Type': 'application/json',
     };
     
-    // Add authentication headers if configured
-    if (server.authentication?.type === 'bearer' && server.authentication.credentials?.token) {
-      headers['Authorization'] = `Bearer ${server.authentication.credentials.token}`;
-    } else if (server.authentication?.type === 'api-key' && server.authentication.credentials?.apiKey) {
-      headers['X-API-Key'] = server.authentication.credentials.apiKey;
-    } else if (server.authentication?.type === 'basic' && server.authentication.credentials?.username && server.authentication.credentials?.password) {
-      const credentials = btoa(`${server.authentication.credentials.username}:${server.authentication.credentials.password}`);
-      headers['Authorization'] = `Basic ${credentials}`;
-    }
+    Object.assign(headers, authHeaders(server));
     
     // Try common MCP tool discovery endpoints
     const discoveryEndpoints = [

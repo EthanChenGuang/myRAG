@@ -9,6 +9,7 @@ import {
   silenceConsole,
   type AdminGuardState,
 } from '../helpers/admin-guard-fixture';
+import { loadLikeNext } from '../helpers/next-env-loader';
 
 const ENV_FILE = [
   'NEXT_PUBLIC_APP_NAME=Demo',
@@ -226,6 +227,70 @@ describe('/api/config', () => {
       );
 
       expect(response.status).toBe(400);
+      expect(env.read()).toBe(ENV_FILE);
+    });
+
+    it('a carriage return in a value is rejected and the env file is unchanged', async () => {
+      const env = makeEnvDir(ENV_FILE);
+      asAdmin(state);
+      const route = await load();
+
+      const response = await route.POST(
+        request('/api/config', {
+          method: 'POST',
+          body: { config: { NEXT_PUBLIC_APP_NAME: 'Demo\rNEXT_PUBLIC_SUPABASE_URL=https://attacker' } },
+        }),
+      );
+
+      expect(response.status).toBe(400);
+      expect(env.read()).toBe(ENV_FILE);
+    });
+
+    it.each(['${SUPABASE_SERVICE_ROLE_KEY}', '$SUPABASE_SERVICE_ROLE_KEY', '$`', '$&', '${X:-y}'])(
+      'a value containing %s loads back as that literal text and never expands',
+      async (value) => {
+        const env = makeEnvDir(ENV_FILE);
+        asAdmin(state);
+        const route = await load();
+
+        const response = await route.POST(request('/api/config', { method: 'POST', body: { config: { NEXT_PUBLIC_APP_NAME: value } } }));
+
+        expect(response.status).toBe(200);
+        const loaded = loadLikeNext(env.read());
+        expect(loaded.NEXT_PUBLIC_APP_NAME).toBe(value);
+        const before = loadLikeNext(ENV_FILE);
+        for (const [name, original] of Object.entries(before)) {
+          if (name !== 'NEXT_PUBLIC_APP_NAME') expect(loaded[name]).toBe(original);
+        }
+        expect(Object.keys(loaded).sort()).toEqual(Object.keys(before).sort());
+      },
+    );
+
+    it('structured JSON values with quotes and hashes are written so they load back as the same data', async () => {
+      const env = makeEnvDir(ENV_FILE);
+      asAdmin(state);
+      const route = await load();
+      const groups = [{ title: "O'Brien #1", items: ['`a`', '"b"', '$c'] }];
+
+      const response = await route.POST(
+        request('/api/config', { method: 'POST', body: { config: { NEXT_PUBLIC_SUGGESTION_GROUPS: JSON.stringify(groups, null, 2) } } }),
+      );
+
+      expect(response.status).toBe(200);
+      expect(JSON.parse(loadLikeNext(env.read()).NEXT_PUBLIC_SUGGESTION_GROUPS)).toEqual(groups);
+    });
+
+    it('NEXT_PUBLIC_SITE_URL is not writable over the web', async () => {
+      const env = makeEnvDir(ENV_FILE);
+      asAdmin(state);
+      const route = await load();
+
+      const response = await route.POST(
+        request('/api/config', { method: 'POST', body: { config: { NEXT_PUBLIC_SITE_URL: 'https://attacker.example' } } }),
+      );
+
+      expect(response.status).toBe(400);
+      expect((await response.json()).rejected).toEqual(['NEXT_PUBLIC_SITE_URL']);
       expect(env.read()).toBe(ENV_FILE);
     });
 
