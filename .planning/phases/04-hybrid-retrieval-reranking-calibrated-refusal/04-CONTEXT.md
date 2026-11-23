@@ -414,3 +414,11 @@ These are the IDs the plans cite. Each entry summarizes a decision recorded abov
 
 *Phase: 04-hybrid-retrieval-reranking-calibrated-refusal*
 *Context gathered: 2026-11-23*
+
+## Post-research decisions (2026-11-23, orchestrator under the standing "follow recommendations" instruction)
+
+- **D-30 (resolves F-14): keep a fallback similarity floor.** The `refusal` stage applies a floor read from the active embedding profile's `score_calibration` (Phase 3 F-7) whenever the rerank-score gate returns `not_applied` (reranker `none`, rerank failure, `local_bm25`, or an uncalibrated cell). If the profile has no calibration, the floor is the legacy 0.65. Strict-mode "information not available" behaviour (AGENTS.md §14) must keep firing under v2 with the default `RAG_RERANKER=none`. This supersedes the literal "no refusal" reading of D-23 for the uncalibrated case.
+- **D-31 (resolves F-13): refusal drops candidates.** On refuse, the pipeline drops retrieved candidates, still runs `buildContext`, and `empty`/`below_threshold` takes precedence over `degraded`. Referenced documents survive a refusal.
+- **D-32 (resolves F-20): add cross-language no-answer items.** The golden-additions plan adds cross-language near-miss no-answer items, choosing item ids so that every split cell (lang × split × answerable) reaches its minimum. Reports carry the 95% upper bound on the false-refusal rate next to the point estimate (F-19).
+- **D-33 (resolves F-12): lower-case ids at mint time.** `mintScope` lower-cases ids. If Phase 3 has not landed this by the time Phase 4 runs, the first Phase 4 plan does it, with a test that an upper-case UUID mints the same `scopeKey`.
+- Live checks stay open for verification: the hosted pgvector version and `lc_ctype`, and Cohere/Voyage p95 latency for 75 chunks.
