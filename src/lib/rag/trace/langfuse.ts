@@ -12,6 +12,7 @@ const EXPORT_REQUEST_TIMEOUT_SECONDS = 3;
 // Langfuse drops null attributes, so a stage without a candidate count exports -1 to keep the attribute present.
 const NOT_APPLICABLE = -1;
 const MAX_REVIEW_CONTEXT_CHARS = 40_000;
+const REVIEW_TAG = 'review_candidate';
 
 export interface CollectedTrace {
   traceId: string;
@@ -112,7 +113,7 @@ export async function exportTrace(trace: CollectedTrace, options: ExportTraceOpt
 
   const common = {
     'user.id': trace.tenantKey,
-    'langfuse.trace.tags': trace.tags,
+    'langfuse.trace.tags': trace.review ? [...trace.tags, REVIEW_TAG] : trace.tags,
     'langfuse.trace.metadata.tenantKey': trace.tenantKey,
   };
 

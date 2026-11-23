@@ -15,7 +15,6 @@ export interface FinishTraceOptions {
 }
 
 const BASE_TAGS = ['rag-pipeline'];
-const REVIEW_TAG = 'review_candidate';
 
 function collect(
   collector: TraceCollector,
@@ -32,7 +31,7 @@ function collect(
     profile: collector.profile,
     status: result.status,
     reason: result.reason,
-    tags: [...BASE_TAGS, `profile:${collector.profile}`, `tenant:${collector.tenantKey}`, ...(reviewCandidate ? [REVIEW_TAG] : [])],
+    tags: [...BASE_TAGS, `profile:${collector.profile}`, `tenant:${collector.tenantKey}`],
     startedAt: collector.startedAt,
     endedAt,
     stages,
