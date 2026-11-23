@@ -19,6 +19,24 @@ export interface TemporalQueryContext {
 }
 
 /**
+ * Context used when query analysis is skipped: the same values analyzeQuery returns for a plain semantic query
+ */
+export function defaultQueryContext(): TemporalQueryContext {
+  return {
+    isTemporalQuery: false,
+    isFinancialQuery: false,
+    isSpecificDataQuery: false,
+    timeframe: null,
+    financialMetrics: [],
+    requiredPrecision: 'low',
+    suggestedThreshold: parseFloat(process.env.RAG_LOW_THRESHOLD || '0.35'),
+    searchStrategy: 'semantic_only',
+    requireTemporalMatch: false,
+    reasoningText: 'Query analysis skipped, using the default semantic context',
+  };
+}
+
+/**
  * Analyze query to determine temporal and financial context
  */
 export function analyzeQuery(query: string): TemporalQueryContext {

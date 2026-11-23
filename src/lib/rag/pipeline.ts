@@ -1,61 +1,180 @@
 import { env } from '@/lib/env';
 import { logger } from '@/lib/logger';
 import { RetrievalBackendError } from './backend/supabase-rpc';
+import {
+  CORE_STAGES,
+  FALLBACK_STAGE_TIMEOUT_MS,
+  loadRagConfig,
+  type RagConfig,
+  type StageName,
+} from './config';
 import { getRagDeps } from './deps';
 import { legacyAnalyze, legacyRank, legacySearch } from './legacy/enhanced-retrieval';
-import { assertTenantScope } from './tenant/scope';
-import type { TraceCollector } from './trace/collector';
-import type { Candidate, RetrievalResult, RunRetrievalInput, StageRecord } from './types';
-
-class StageFailure extends Error {
-  constructor(
-    readonly stage: string,
-    readonly reason: string,
-  ) {
-    super(`[RAG Pipeline] stage ${stage} failed: ${reason}`);
-    this.name = 'StageFailure';
-  }
-}
-
-function legacyRecord(name: string, status: StageRecord['status'], startedAt: number, endedAt: number): StageRecord {
-  return {
-    name,
-    status,
-    startedAt,
-    endedAt,
-    latency_ms: Math.max(0, endedAt - startedAt),
-    candidates_in: null,
-    candidates_out: null,
-    rules: [],
-  };
-}
+import { defaultQueryContext } from './query/temporal-query-detector';
+import { assertTenantScope, scopeKey } from './tenant/scope';
+import { createTraceCollector, type TraceCollector } from './trace/collector';
+import type {
+  Candidate,
+  Profile,
+  RetrievalResult,
+  RunRetrievalInput,
+  StageFailureReason,
+  StageOverrides,
+  StageRecord,
+} from './types';
 
 export interface StageSpec {
-  name: string;
+  name: StageName;
   enabled: boolean;
   timeoutMs: number;
   onFail: 'skip' | 'throw';
 }
 
-export type StageOutcome<T> = { skipped: false; value: T } | { skipped: true; reason: 'disabled' | 'failed' | 'timeout' };
+export type StageOutcome<T> =
+  | { skipped: false; value: T }
+  | { skipped: true; reason: 'disabled' | 'failed' | 'timeout' };
 
-export class StageError extends Error {}
+export interface StageRunOptions<T> {
+  candidatesIn?: number | null;
+  candidatesOut?: (value: T) => number | null;
+  detail?: (value: T) => string | undefined;
+}
 
-export function deriveStatus(_records: StageRecord[], _survivingCount: number): RetrievalResult['status'] {
-  return 'ok';
+export class StageError extends Error {
+  readonly stage: string;
+  readonly reason: StageFailureReason;
+  readonly original: unknown;
+
+  constructor(stage: string, reason: StageFailureReason, original?: unknown) {
+    super(`[RAG Pipeline] stage ${stage} ${reason}`);
+    this.name = 'StageError';
+    this.stage = stage;
+    this.reason = reason;
+    this.original = original;
+  }
+}
+
+const MIN_OVERRIDE_TIMEOUT_MS = 1;
+const MAX_OVERRIDE_TIMEOUT_MS = 60000;
+
+function runAgainstSignal<T>(signal: AbortSignal, fn: (signal: AbortSignal) => Promise<T> | T): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(signal.reason);
+    if (signal.aborted) {
+      onAbort();
+      return;
+    }
+    signal.addEventListener('abort', onAbort, { once: true });
+    Promise.resolve()
+      .then(() => fn(signal))
+      .then(resolve, reject)
+      .finally(() => signal.removeEventListener('abort', onAbort));
+  });
 }
 
 export async function runStage<T>(
-  _spec: StageSpec,
-  _parent: AbortSignal,
-  _fn: (signal: AbortSignal) => Promise<T> | T,
-  _collector: TraceCollector,
-  _opts?: { candidatesIn?: number | null; candidatesOut?: (value: T) => number | null },
+  spec: StageSpec,
+  parent: AbortSignal,
+  fn: (signal: AbortSignal) => Promise<T> | T,
+  collector: TraceCollector,
+  options: StageRunOptions<T> = {},
 ): Promise<StageOutcome<T>> {
-  return { skipped: true, reason: 'failed' };
+  if (parent.aborted) throw new StageError(spec.name, 'aborted', parent.reason);
+
+  const candidatesIn = options.candidatesIn ?? null;
+
+  if (!spec.enabled) {
+    const at = collector.now();
+    collector.record({ name: spec.name, status: 'disabled', reason: 'disabled', startedAt: at, endedAt: at, candidatesIn });
+    return { skipped: true, reason: 'disabled' };
+  }
+
+  const signal = AbortSignal.any([parent, AbortSignal.timeout(spec.timeoutMs)]);
+  const startedAt = collector.now();
+
+  try {
+    const value = await runAgainstSignal(signal, fn);
+    signal.throwIfAborted();
+    collector.record({
+      name: spec.name,
+      status: 'ok',
+      startedAt,
+      endedAt: collector.now(),
+      candidatesIn,
+      candidatesOut: options.candidatesOut ? options.candidatesOut(value) : null,
+      detail: options.detail ? options.detail(value) : undefined,
+    });
+    return { skipped: false, value };
+  } catch (error) {
+    const reason: StageFailureReason = parent.aborted ? 'aborted' : signal.aborted ? 'timeout' : 'failed';
+    const endedAt = collector.now();
+
+    if (reason === 'aborted') {
+      collector.record({ name: spec.name, status: 'aborted', reason, startedAt, endedAt, candidatesIn });
+      throw new StageError(spec.name, reason, error);
+    }
+
+    if (spec.onFail === 'throw') {
+      collector.record({
+        name: spec.name,
+        status: reason === 'timeout' ? 'timeout' : 'error',
+        reason,
+        startedAt,
+        endedAt,
+        candidatesIn,
+      });
+      throw new StageError(spec.name, reason, error);
+    }
+
+    collector.record({ name: spec.name, status: 'skipped', reason, startedAt, endedAt, candidatesIn });
+    logger.warn('RAG Pipeline', 'Optional stage skipped', { stage: spec.name, reason });
+    return { skipped: true, reason };
+  }
 }
 
-function emptyResult(traceId: string, status: RetrievalResult['status'], reason: string, stages: StageRecord[]): RetrievalResult {
+export function deriveStatus(records: StageRecord[], survivingCount: number): RetrievalResult['status'] {
+  if (records.some((record) => record.status === 'error' || record.status === 'timeout' || record.status === 'aborted')) {
+    return 'error';
+  }
+  if (records.some((record) => record.status === 'skipped')) return 'degraded';
+  return survivingCount === 0 ? 'empty' : 'ok';
+}
+
+function stageSpec(
+  config: RagConfig,
+  profile: Profile,
+  name: StageName,
+  onFail: StageSpec['onFail'],
+  overrides: StageOverrides | undefined,
+): StageSpec {
+  const core = (CORE_STAGES as readonly string[]).includes(name);
+  const requestOverrides = profile === 'eval' ? overrides : undefined;
+
+  const enabled =
+    core || !(config.disabledStages.has(name) || (requestOverrides?.disabledStages ?? []).includes(name));
+
+  const requested = requestOverrides?.timeouts?.[name];
+  const validRequested =
+    requested !== undefined &&
+    Number.isInteger(requested) &&
+    requested >= MIN_OVERRIDE_TIMEOUT_MS &&
+    requested <= MAX_OVERRIDE_TIMEOUT_MS;
+  const timeoutMs = validRequested ? requested : (config.timeouts[profile][name] ?? FALLBACK_STAGE_TIMEOUT_MS);
+
+  return { name, enabled, timeoutMs, onFail };
+}
+
+function requireValue<T>(outcome: StageOutcome<T>, stage: string): T {
+  if (outcome.skipped) throw new StageError(stage, 'failed');
+  return outcome.value;
+}
+
+function failure(
+  collector: TraceCollector,
+  status: RetrievalResult['status'],
+  reason: string,
+  queryContext: RetrievalResult['queryContext'],
+): RetrievalResult {
   return {
     status,
     reason,
@@ -64,23 +183,33 @@ function emptyResult(traceId: string, status: RetrievalResult['status'], reason:
     usedDocuments: [],
     sourceImages: [],
     links: [],
-    stages,
-    traceId,
-    queryContext: null,
+    stages: collector.stages(),
+    traceId: collector.traceId,
+    queryContext,
   };
+}
+
+function degradedReason(records: StageRecord[]): string {
+  const skipped = records.find((record) => record.status === 'skipped');
+  return skipped ? `${skipped.name}_${skipped.reason ?? 'skipped'}` : 'degraded';
 }
 
 export async function runRetrieval(input: RunRetrievalInput): Promise<RetrievalResult> {
   const deps = getRagDeps();
-  const traceId = deps.randomId();
-  const stages: StageRecord[] = [];
 
-  if (input.scope === null) {
-    return emptyResult(traceId, 'empty', 'no_tenant', stages);
-  }
-  assertTenantScope(input.scope);
+  if (input.scope !== null) assertTenantScope(input.scope);
   const scope = input.scope;
-  const { signal } = input;
+
+  const collector =
+    input.trace ?? createTraceCollector({ profile: input.profile, tenantKey: scope ? scopeKey(scope) : 'none' });
+
+  if (scope === null) {
+    return failure(collector, 'empty', 'no_tenant', null);
+  }
+
+  const { signal, profile } = input;
+  const config = loadRagConfig(deps.ragEnv());
+  const spec = (name: StageName, onFail: StageSpec['onFail']) => stageSpec(config, profile, name, onFail, input.stageOverrides);
 
   const maxResults = input.options?.maxResults ?? parseInt(env.RAG_FINAL_RESULT_COUNT || '25');
   const fallbackToLowerThreshold = input.options?.fallbackToLowerThreshold ?? true;
@@ -88,66 +217,62 @@ export async function runRetrieval(input: RunRetrievalInput): Promise<RetrievalR
   let queryContext: RetrievalResult['queryContext'] = null;
   let candidates: Candidate[] = [];
 
-  const stage = async <T>(name: string, run: () => Promise<T> | T): Promise<T> => {
-    signal.throwIfAborted();
-    const startedAt = deps.now();
-    try {
-      const value = await run();
-      stages.push(legacyRecord(name, 'ok', startedAt, deps.now()));
-      return value;
-    } catch (error) {
-      stages.push(legacyRecord(name, 'error', startedAt, deps.now()));
-      throw error;
-    }
-  };
-
   try {
-    queryContext = await stage('analyze', () => legacyAnalyze(input.query));
-    const analysed = queryContext;
+    const analysis = await runStage(spec('analyze', 'skip'), signal, () => legacyAnalyze(input.query), collector);
+    const analysed = analysis.skipped ? defaultQueryContext() : analysis.value;
+    queryContext = analysed;
 
-    const embedding = await stage('embed', async () => {
-      try {
-        return await deps.embedder(input.query, { signal });
-      } catch (error) {
-        signal.throwIfAborted();
-        throw new StageFailure('embed', error instanceof Error ? error.name : 'embed_failed');
-      }
-    });
-
-    const searched = await stage('search', () =>
-      legacySearch({
-        query: input.query,
-        embedding,
-        queryContext: analysed,
-        maxResults,
-        fallbackToLowerThreshold,
-        scope,
-        client: deps.anonClient(),
-        signal,
-      }),
+    const embedding = requireValue(
+      await runStage(spec('embed', 'throw'), signal, (stageSignal) => deps.embedder(input.query, { signal: stageSignal }), collector),
+      'embed',
     );
 
-    candidates = await stage('legacy_rank', () => legacyRank(searched.results, analysed));
-    const last = stages[stages.length - 1];
-    last.detail = searched.retrievalStrategy;
+    const searched = requireValue(
+      await runStage(
+        spec('search', 'throw'),
+        signal,
+        (stageSignal) =>
+          legacySearch({
+            query: input.query,
+            embedding,
+            queryContext: analysed,
+            maxResults,
+            fallbackToLowerThreshold,
+            scope,
+            client: deps.anonClient(),
+            signal: stageSignal,
+          }),
+        collector,
+        { candidatesOut: (value) => value.results.length, detail: (value) => value.retrievalStrategy },
+      ),
+      'search',
+    );
+
+    const ranked = await runStage(
+      spec('legacy_rank', 'skip'),
+      signal,
+      () => legacyRank(searched.results, analysed),
+      collector,
+      { candidatesIn: searched.results.length, candidatesOut: (value) => value.length },
+    );
+    candidates = ranked.skipped ? searched.results : ranked.value;
   } catch (error) {
-    if (signal.aborted) {
-      return { ...emptyResult(traceId, 'error', 'aborted', stages), queryContext };
-    }
-    if (error instanceof RetrievalBackendError) {
-      logger.error('RAG Pipeline', 'Backend error', { rpc: error.rpc, code: error.code });
-      return { ...emptyResult(traceId, 'error', 'backend_error', stages), queryContext };
-    }
-    if (error instanceof StageFailure) {
+    if (error instanceof StageError) {
+      if (error.reason === 'aborted') return failure(collector, 'error', 'aborted', queryContext);
+      if (error.original instanceof RetrievalBackendError) {
+        logger.error('RAG Pipeline', 'Backend error', { rpc: error.original.rpc, code: error.original.code });
+        return failure(collector, 'error', 'backend_error', queryContext);
+      }
       logger.error('RAG Pipeline', 'Stage failure', { stage: error.stage, reason: error.reason });
-      return { ...emptyResult(traceId, 'error', `${error.stage}_failed`, stages), queryContext };
+      return failure(collector, 'error', `${error.stage}_${error.reason}`, queryContext);
     }
+    if (signal.aborted) return failure(collector, 'error', 'aborted', queryContext);
     throw error;
   }
 
-  if (candidates.length === 0) {
-    return { ...emptyResult(traceId, 'empty', 'no_candidates', stages), queryContext };
-  }
+  const records = collector.stages();
+  const status = deriveStatus(records, candidates.length);
+  const reason = status === 'ok' ? 'ok' : status === 'empty' ? 'no_candidates' : degradedReason(records);
 
-  return { ...emptyResult(traceId, 'ok', 'ok', stages), candidates, queryContext };
+  return { ...failure(collector, status, reason, queryContext), candidates };
 }
