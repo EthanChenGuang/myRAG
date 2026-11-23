@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
+import { env } from '@/lib/env';
+import { createLinkUsageInstructions } from '@/lib/url-extractor';
 import {
-  createFaithfulEnhancedPrompt,
   expectCharacterization,
   readGoldenQuestions,
   startRouteFixture,
@@ -16,18 +17,29 @@ const h = await vi.hoisted(async () => {
 
 vi.mock('ai', async (importOriginal) => ({
   ...(await importOriginal<typeof import('ai')>()),
-  streamText: h.capture.streamText,
+  streamText: async (params: Record<string, unknown>) => ({
+    ...(await h.capture.streamText(params)),
+    toUIMessageStreamResponse: () => new Response('ok'),
+  }),
 }));
 vi.mock('@openrouter/ai-sdk-provider', () => ({
   createOpenRouter: () => (modelId: string) => ({ specificationVersion: 'v3', provider: 'fake', modelId }),
 }));
-vi.mock('@/lib/thinking-rag-enhancer', async (importOriginal) => {
-  const { RAG_MODE_CONFIGS } = await import('@/lib/rag-mode');
-  return {
-    ...(await importOriginal<typeof import('@/lib/thinking-rag-enhancer')>()),
-    createEnhancedRAGPrompt: createFaithfulEnhancedPrompt(RAG_MODE_CONFIGS),
-  };
-});
+
+function defaultEmbedSystemPrompt(): string {
+  return `You are a helpful AI assistant with access to a knowledge base. When answering questions:
+
+1. If the context contains relevant information, use it to provide accurate and specific answers
+2. If information is not available in the context, say so clearly and suggest alternative approaches
+3. Always cite your sources when referencing specific documents
+4. Provide balanced, objective information rather than opinions
+5. For technical topics, include practical steps or examples when appropriate
+
+${createLinkUsageInstructions()}
+
+Context:
+{{context}}`;
+}
 
 function embedRequest(question: string): NextRequest {
   return new NextRequest('http://localhost/api/embed/chat', {
@@ -60,6 +72,14 @@ describe('embed route characterization', () => {
 
   it('hands the model the same system prompt for every fixture question', async () => {
     const { POST } = await fixture.loadRoute('embed/chat');
+    const rag = await import('@/lib/rag');
+    const scope = await rag.resolveEmbedScope({
+      rawBody: {},
+      configuredTenant: '',
+      deploymentMode: 'single-tenant',
+      signal: new AbortController().signal,
+    });
+    if (!scope.ok) throw new Error('single-tenant embed scope should resolve');
     const questions = readGoldenQuestions();
     const actual: Array<{ id: string; system: string }> = [];
     for (const { id, question } of questions) {
@@ -67,7 +87,24 @@ describe('embed route characterization', () => {
       const response = await POST(embedRequest(question));
       await response.text();
       expect(h.capture.calls, `embed route did not reach streamText for ${id}`).toHaveLength(1);
-      actual.push({ id, system: systemTextOf(h.capture.calls[0]) });
+      const system = systemTextOf(h.capture.calls[0]);
+      const chatResult = await rag.runRetrieval({
+        scope: scope.scope,
+        query: question,
+        profile: 'chat',
+        options: {
+          maxResults: parseInt(env.RAG_FINAL_RESULT_COUNT || '25'),
+          fallbackToLowerThreshold: true,
+          isGPTModel: true,
+          ragMode: 'balanced',
+          webSearchEnabled: false,
+        },
+        signal: new AbortController().signal,
+      });
+      expect(system, `embed prompt differs from the shared chat-format assembly for ${id}`).toBe(
+        rag.createEnhancedRAGPrompt(defaultEmbedSystemPrompt(), chatResult.context),
+      );
+      actual.push({ id, system });
     }
     expect(actual).toHaveLength(72);
     expect(actual.every((entry) => entry.system.length > 0)).toBe(true);
