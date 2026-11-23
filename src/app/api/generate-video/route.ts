@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { env } from '../../../lib/env';
+import { resolveTenantScope, runRetrieval, type TenantScope } from '@/lib/rag';
 import { v4 as uuidv4 } from 'uuid';
 import Replicate from 'replicate';
 import { fal } from '@fal-ai/client';
@@ -204,57 +205,6 @@ async function ensureFolderExists(folderPath: string): Promise<boolean> {
 })();
 
 /**
- * Retrieve relevant document context for the prompt
- */
-async function getDocumentContext(prompt: string): Promise<string> {
-  console.log('Getting document context for prompt:', prompt);
-  try {
-    // Check if embeddings module is available
-    let getQueryEmbedding;
-    try {
-      getQueryEmbedding = require('@/lib/document-processor').getQueryEmbedding;
-    } catch (error) {
-      console.log('No embedding module found, skipping context retrieval');
-      return '';
-    }
-
-    // Create embedding for the prompt
-    const embedding = await getQueryEmbedding(prompt);
-
-    if (!embedding) {
-      console.log('No embedding created for prompt, using no context');
-      return '';
-    }
-
-    // Get relevant documents from vector database
-    const { data: chunks, error } = await supabaseAdmin.rpc('match_document_chunks', {
-      query_embedding: embedding,
-      similarity_threshold: 0.3,
-      match_count: 10
-    });
-
-    if (error) {
-      console.error('Error retrieving document chunks:', error);
-      return '';
-    }
-
-    if (!chunks || chunks.length === 0) {
-      console.log('No relevant document chunks found');
-      return '';
-    }
-
-    console.log(`Found ${chunks.length} relevant chunks from documents`);
-
-    // Combine content from chunks
-    const contextText = chunks.map((chunk: { content: string }) => chunk.content).join(' ');
-    return contextText;
-  } catch (error) {
-    console.error('Error getting document context:', error);
-    return '';
-  }
-}
-
-/**
  * Use LLM to rewrite the user's prompt with exact facts from RAG context.
  * This ensures video AI models have specific numbers and details directly in the prompt.
  */
@@ -399,7 +349,7 @@ export async function POST(req: NextRequest) {
     // Add detailed error tracking
     let stage = 'parsing-request';
 
-    const { prompt, useContext, model, aspectRatio, resolution, frameCount, duration, cameraFixed, sourceImage, generateAudio, useFastMode } = await req.json();
+    const { prompt, useContext, model, aspectRatio, resolution, frameCount, duration, cameraFixed, sourceImage, generateAudio, useFastMode, organizationId } = await req.json();
     // Support both legacy `frameCount` and new `duration` - normalize to a string like "8s"
     let videoDuration: string | undefined;
     if (typeof duration === 'string') {
@@ -451,10 +401,39 @@ export async function POST(req: NextRequest) {
     // Get document context if enabled
     stage = 'context-enhancement';
     let enhancedPrompt = prompt;
+    let ragStatus: string | undefined;
+
+    let ragScope: TenantScope | null = null;
+    if (useContext) {
+      const resolved = await resolveTenantScope({ requestedOrganizationId: organizationId, signal: req.signal });
+      if (!resolved.ok) {
+        return NextResponse.json(
+          { error: resolved.status === 503 ? 'Workspace verification is unavailable' : 'Access to this workspace is not allowed', code: resolved.reason },
+          { status: resolved.status },
+        );
+      }
+      ragScope = resolved.scope;
+    }
 
     if (useContext) {
       try {
-        const context = await getDocumentContext(prompt);
+        const retrieval = await runRetrieval({
+          scope: ragScope,
+          query: prompt,
+          profile: 'media',
+          options: { mediaKind: 'video' },
+          signal: req.signal,
+        });
+        ragStatus = retrieval.status;
+
+        if (retrieval.status === 'error' || retrieval.status === 'degraded') {
+          console.error('[Document Search] Video context retrieval failed, continuing without context', {
+            status: retrieval.status,
+            reason: retrieval.reason,
+          });
+        }
+
+        const context = retrieval.context;
 
         if (context) {
           console.log('Adding document context to prompt');
@@ -465,7 +444,10 @@ export async function POST(req: NextRequest) {
           console.log('No document context found, using original prompt');
         }
       } catch (error) {
-        console.error('Error getting context but continuing with original prompt:', error);
+        ragStatus = 'error';
+        console.error('[Document Search] Video context retrieval threw, continuing with original prompt', {
+          error: error instanceof Error ? error.message : 'unknown',
+        });
         // Continue with original prompt rather than failing completely
       }
     }
@@ -1231,7 +1213,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       video: videoUrl,
-      success: true
+      success: true,
+      rag_status: ragStatus
     });
 
   } catch (error: any) {

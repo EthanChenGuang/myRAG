@@ -347,7 +347,7 @@ describe('per-request stage overrides', () => {
   });
 
   test('are ignored for every other profile', async () => {
-    for (const profile of ['chat', 'embed', 'voice', 'media'] as const) {
+    for (const profile of ['chat', 'embed', 'voice'] as const) {
       install({});
       const result = await run(profile, { stageOverrides: { disabledStages: ['legacy_rank'], timeouts: { embed: 1 } } });
       expect(result.status).toBe('ok');

@@ -1,6 +1,6 @@
 import { env } from '@/lib/env';
 import { logger } from '@/lib/logger';
-import { RetrievalBackendError } from './backend/supabase-rpc';
+import { RetrievalBackendError, vectorSearch, type RpcClient } from './backend/supabase-rpc';
 import {
   CORE_STAGES,
   FALLBACK_STAGE_TIMEOUT_MS,
@@ -16,6 +16,7 @@ import {
   type FilteredCandidates,
 } from './context/assemble';
 import { fetchAssemblyRows, type AssemblyRows } from './context/fetch-rows';
+import { formatImageContext, formatVideoContext } from './context/media';
 import { getRagDeps } from './deps';
 import { legacyAnalyze, legacyRank, legacySearch } from './legacy/enhanced-retrieval';
 import { defaultQueryContext } from './query/temporal-query-detector';
@@ -221,6 +222,83 @@ function degradedReason(records: StageRecord[]): string {
   return skipped ? `${skipped.name}_${skipped.reason ?? 'skipped'}` : 'degraded';
 }
 
+const MEDIA_MATCH_COUNT = 10;
+const MEDIA_SIMILARITY_THRESHOLD = 0.3;
+
+async function runMediaPipeline(input: RunRetrievalInput, collector: TraceCollector, scope: NonNullable<RunRetrievalInput['scope']>): Promise<RetrievalResult> {
+  const deps = getRagDeps();
+  const { signal, profile } = input;
+  const config = loadRagConfig(deps.ragEnv());
+  const spec = (name: StageName, onFail: StageSpec['onFail']) => stageSpec(config, profile, name, onFail, input.stageOverrides);
+  const mediaKind = input.options?.mediaKind ?? 'image';
+
+  let candidates: Candidate[] = [];
+  let context = '';
+
+  try {
+    const embedding = requireValue(
+      await runStage(spec('embed', 'throw'), signal, (stageSignal) => deps.embedder(input.query, { signal: stageSignal }), collector),
+      'embed',
+    );
+
+    const rawChunks = requireValue(
+      await runStage(
+        spec('search', 'throw'),
+        signal,
+        (stageSignal) => {
+          const adminClient = deps.adminClient();
+          if (!adminClient) throw new Error('[RAG Media] admin client unavailable');
+          return vectorSearch(scope, embedding, MEDIA_MATCH_COUNT, MEDIA_SIMILARITY_THRESHOLD, {
+            client: adminClient as unknown as RpcClient,
+            signal: stageSignal,
+          });
+        },
+        collector,
+        { candidatesOut: (value) => value.length },
+      ),
+      'search',
+    );
+
+    candidates = rawChunks.map((chunk) => ({
+      chunk_id: chunk.chunk_id,
+      document_id: chunk.document_id,
+      content: chunk.content,
+      similarity: chunk.similarity,
+      metadata: chunk.metadata,
+      temporal_score: 0,
+      financial_score: 0,
+      final_score: chunk.similarity,
+      match_reason: `similarity: ${chunk.similarity.toFixed(3)}`,
+    }));
+
+    const assembled = await runStage(
+      spec('assemble', 'skip'),
+      signal,
+      () => (mediaKind === 'video' ? formatVideoContext(rawChunks) : formatImageContext(rawChunks)),
+      collector,
+      { candidatesIn: rawChunks.length, candidatesOut: (value) => (value === '' ? 0 : rawChunks.length) },
+    );
+    context = assembled.skipped ? '' : assembled.value;
+  } catch (error) {
+    if (error instanceof StageError) {
+      if (error.reason === 'aborted') return failure(collector, 'error', 'aborted', null);
+      if (error.original instanceof RetrievalBackendError) {
+        logger.error('RAG Pipeline', 'Backend error', { rpc: error.original.rpc, code: error.original.code });
+        return failure(collector, 'error', 'backend_error', null);
+      }
+      logger.error('RAG Pipeline', 'Stage failure', { stage: error.stage, reason: error.reason });
+      return failure(collector, 'error', `${error.stage}_${error.reason}`, null);
+    }
+    if (signal.aborted) return failure(collector, 'error', 'aborted', null);
+    throw error;
+  }
+
+  const records = collector.stages();
+  const status = deriveStatus(records, candidates.length);
+  const reason = status === 'ok' ? 'ok' : status === 'empty' ? 'no_candidates' : degradedReason(records);
+  return { ...failure(collector, status, reason, null), candidates, context };
+}
+
 export async function runRetrieval(input: RunRetrievalInput): Promise<RetrievalResult> {
   if (input.scope !== null) assertTenantScope(input.scope);
 
@@ -241,6 +319,8 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
   if (scope === null) {
     return failure(collector, 'empty', 'no_tenant', null);
   }
+
+  if (input.profile === 'media') return runMediaPipeline(input, collector, scope);
 
   const { signal, profile } = input;
   const config = loadRagConfig(deps.ragEnv());

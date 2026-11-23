@@ -83,6 +83,7 @@ export interface RetrievalOptions {
   ragMode?: RagMode;
   webSearchEnabled?: boolean;
   referenced?: ReferencedState | null;
+  mediaKind?: 'image' | 'video';
 }
 
 export interface StageOverrides {
