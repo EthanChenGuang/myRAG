@@ -17,7 +17,7 @@ PR = ROOT / ".github" / "workflows" / "pr-smoke.yml"
 NIGHTLY = ROOT / ".github" / "workflows" / "nightly.yml"
 DOCKERFILE = ROOT / "rag-sidecar" / "Dockerfile"
 
-PR_JOBS = ["ts", "schema-parity", "python", "eval-smoke", "gate-negative-control", "docker-build"]
+PR_JOBS = ["ts", "sibling-types", "schema-parity", "python", "eval-smoke", "gate-negative-control", "docker-build"]
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 USES_LINE_RE = re.compile(r"^\s*(?:-\s+)?uses:\s*(?P<ref>\S+)(?P<rest>.*)$")
 VERSION_COMMENT_RE = re.compile(r"^\s+#\s*v\d+(\.\d+){0,2}\s*$")
@@ -172,6 +172,17 @@ def check_pr(errors: list[str]) -> None:
     for jname, job in jobs.items():
         if re.search(r"tsc-ratchet\.mjs[^\n]*--write", step_text(job)):
             errors.append(f"pr-smoke: job {jname} must not run the tsc ratchet with --write")
+    sibling = jobs.get("sibling-types")
+    if sibling is not None:
+        body = step_text(sibling)
+        for needle in (
+            "npm ci --ignore-scripts --prefix voice-agent",
+            "yarn install --immutable --mode=skip-build",
+            "scripts/ci/sibling-tsc-baseline.json --key voice-agent",
+            "scripts/ci/sibling-tsc-baseline.json --key baileys-whatsapp",
+        ):
+            if needle not in body:
+                errors.append(f"pr-smoke: job sibling-types is missing '{needle}'")
     sp = jobs.get("schema-parity")
     if sp is not None:
         body = step_text(sp)

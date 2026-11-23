@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "packages": {
+    "baileys-whatsapp": {
+      "project": "tsconfig.json",
+      "total": 0,
+      "files": {}
+    },
+    "voice-agent": {
+      "project": "tsconfig.json",
+      "total": 0,
+      "files": {}
+    }
+  }
+}

@@ -55,6 +55,28 @@ jobs:
       - name: Workflow structure check
         run: uv run --directory eval python ../scripts/ci/check-workflows.py
 
+  sibling-types:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+      - name: Install voice-agent from its lockfile
+        run: npm ci --ignore-scripts --prefix voice-agent
+      - name: Install baileys-whatsapp from its lockfile
+        working-directory: baileys-whatsapp
+        env:
+          COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
+        run: |
+          corepack enable
+          yarn install --immutable --mode=skip-build
+      - name: voice-agent type-error ratchet
+        run: node scripts/ci/tsc-ratchet.mjs --cwd voice-agent --baseline scripts/ci/sibling-tsc-baseline.json --key voice-agent
+      - name: baileys-whatsapp type-error ratchet
+        run: node scripts/ci/tsc-ratchet.mjs --cwd baileys-whatsapp --baseline scripts/ci/sibling-tsc-baseline.json --key baileys-whatsapp
+
   schema-parity:
     runs-on: ubuntu-latest
     timeout-minutes: 15
