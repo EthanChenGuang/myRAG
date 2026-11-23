@@ -529,5 +529,11 @@ export const es = {
   whatsAppHours: "horas",
   whatsAppDay: "día",
   whatsAppDays: "días",
+  whatsAppConnectionLost: "Se perdió la conexión de WhatsApp. Vuelve a conectarte.",
+  whatsAppLastSeen: "Última vez visto",
+  whatsAppVerifying: "Verificando...",
+  whatsAppRefreshStatus: "Actualizar estado",
+  whatsAppDisconnected: "Desconectado",
+  whatsAppReconnectMessage: "Conexión perdida. Desconecta y vuelve a conectar WhatsApp para reanudar la mensajería.",
   
 };

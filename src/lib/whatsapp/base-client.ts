@@ -6,6 +6,10 @@ import {
   WhatsAppError
 } from './types';
 
+export function toBlobPart(file: Buffer | ArrayBuffer): Uint8Array<ArrayBuffer> {
+  return Uint8Array.from(file instanceof ArrayBuffer ? new Uint8Array(file) : file);
+}
+
 /**
  * Base interface for WhatsApp client implementations
  * All provider-specific clients must implement this interface
@@ -65,7 +69,7 @@ export abstract class BaseWhatsAppClient {
     sessionId: string,
     to: string,
     text: string
-  ): Promise<{ messageId: string }>;
+  ): Promise<{ messageId: string; status: string }>;
 
   /**
    * Send a media message
