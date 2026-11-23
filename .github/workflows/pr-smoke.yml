@@ -43,11 +43,15 @@ jobs:
       - name: Config drift check
         run: node scripts/check-config.mjs
       - name: Config check and type-check self-tests
-        run: node --test scripts/check-config.test.mjs scripts/typecheck-new.test.mjs
+        run: node --test scripts/check-config.test.mjs scripts/typecheck-new.test.mjs scripts/tests/tsc-ratchet.node-test.mjs
       - name: Zod generator self-test
         run: node --test scripts/tests/gen-zod.node-test.mjs
       - name: New-code type-check
         run: npm run typecheck:new
+      - name: Generate route types
+        run: npx next typegen
+      - name: Type-error ratchet
+        run: node scripts/ci/tsc-ratchet.mjs
       - name: Workflow structure check
         run: uv run --directory eval python ../scripts/ci/check-workflows.py
 

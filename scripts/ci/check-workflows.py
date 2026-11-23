@@ -162,10 +162,16 @@ def check_pr(errors: list[str]) -> None:
             "scripts/check-config.test.mjs",
             "scripts/tests/gen-zod.node-test.mjs",
             "npm run typecheck:new",
+            "next typegen",
+            "scripts/ci/tsc-ratchet.mjs",
+            "scripts/tests/tsc-ratchet.node-test.mjs",
             "scripts/ci/check-workflows.py",
         ):
             if needle not in body:
                 errors.append(f"pr-smoke: job ts is missing '{needle}'")
+    for jname, job in jobs.items():
+        if re.search(r"tsc-ratchet\.mjs[^\n]*--write", step_text(job)):
+            errors.append(f"pr-smoke: job {jname} must not run the tsc ratchet with --write")
     sp = jobs.get("schema-parity")
     if sp is not None:
         body = step_text(sp)
