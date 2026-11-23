@@ -1,0 +1,639 @@
+{
+  "samples": {
+    "Baseline": {
+      "corpus_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "embedder_id": "fixture-embedder",
+      "embedder_version": 1,
+      "golden_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "run_config_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "runs": [
+        {
+          "created_at": "2026-01-01T00:00:00Z",
+          "git_sha": null,
+          "run_config_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "run_id": "run-001"
+        },
+        {
+          "created_at": "2026-01-01T00:00:00Z",
+          "git_sha": null,
+          "run_config_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "run_id": "run-002"
+        },
+        {
+          "created_at": "2026-01-01T00:00:00Z",
+          "git_sha": null,
+          "run_config_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "run_id": "run-003"
+        }
+      ],
+      "schema_version": 1,
+      "slices": {
+        "overall": {
+          "correct_refusal_rate": {
+            "mean": 0.5,
+            "n": 10,
+            "runs": [
+              0.49,
+              0.5,
+              0.51
+            ],
+            "spread": 0.01
+          },
+          "false_refusal_rate": {
+            "mean": 0.5,
+            "n": 10,
+            "runs": [
+              0.49,
+              0.5,
+              0.51
+            ],
+            "spread": 0.01
+          },
+          "mrr": {
+            "mean": 0.5,
+            "n": 10,
+            "runs": [
+              0.49,
+              0.5,
+              0.51
+            ],
+            "spread": 0.01
+          },
+          "recall_at_10": {
+            "mean": 0.5,
+            "n": 10,
+            "runs": [
+              0.49,
+              0.5,
+              0.51
+            ],
+            "spread": 0.01
+          },
+          "recall_at_5": {
+            "mean": 0.5,
+            "n": 10,
+            "runs": [
+              0.49,
+              0.5,
+              0.51
+            ],
+            "spread": 0.01
+          }
+        }
+      },
+      "spread_kind": "stdev_ddof1"
+    },
+    "ConversationTurn": {
+      "content": "Tell me about leave.",
+      "role": "user"
+    },
+    "DraftedItemBatch": {
+      "items": [
+        {
+          "answerable": true,
+          "category": "general",
+          "conversation": [],
+          "expected_answer": "Twenty days per year.",
+          "gold_evidence": [
+            {
+              "document": "handbook.md",
+              "quote": "twenty days",
+              "section": "Leave policy"
+            }
+          ],
+          "language": "en",
+          "question": "How many leave days do employees get?"
+        }
+      ]
+    },
+    "EvalReport": {
+      "by_category": {
+        "general": {
+          "correct_refusal_rate": {
+            "n": 10,
+            "value": 0.5
+          },
+          "false_refusal_rate": {
+            "n": 10,
+            "value": 0.5
+          },
+          "mrr": {
+            "n": 10,
+            "value": 0.5
+          },
+          "recall_at_10": {
+            "n": 10,
+            "value": 0.5
+          },
+          "recall_at_5": {
+            "n": 10,
+            "value": 0.5
+          }
+        }
+      },
+      "by_language": {
+        "en": {
+          "correct_refusal_rate": {
+            "n": 10,
+            "value": 0.5
+          },
+          "false_refusal_rate": {
+            "n": 10,
+            "value": 0.5
+          },
+          "mrr": {
+            "n": 10,
+            "value": 0.5
+          },
+          "recall_at_10": {
+            "n": 10,
+            "value": 0.5
+          },
+          "recall_at_5": {
+            "n": 10,
+            "value": 0.5
+          }
+        }
+      },
+      "by_language_category": {
+        "en:general": {
+          "correct_refusal_rate": {
+            "n": 10,
+            "value": 0.5
+          },
+          "false_refusal_rate": {
+            "n": 10,
+            "value": 0.5
+          },
+          "mrr": {
+            "n": 10,
+            "value": 0.5
+          },
+          "recall_at_10": {
+            "n": 10,
+            "value": 0.5
+          },
+          "recall_at_5": {
+            "n": 10,
+            "value": 0.5
+          }
+        }
+      },
+      "corpus_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "deployment_mode": "single-tenant",
+      "embedder_id": "fixture-embedder",
+      "embedder_version": 1,
+      "golden_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "items": [
+        {
+          "answerable": true,
+          "category": "general",
+          "first_hit_rank": 1,
+          "item_id": "en-general-001",
+          "language": "en",
+          "refused": false,
+          "span_count": 1,
+          "spans_hit_at_10": 1,
+          "spans_hit_at_5": 1
+        }
+      ],
+      "k_values": [
+        5,
+        10
+      ],
+      "notes": [
+        "synthetic sample"
+      ],
+      "overall": {
+        "correct_refusal_rate": {
+          "n": 10,
+          "value": 0.5
+        },
+        "false_refusal_rate": {
+          "n": 10,
+          "value": 0.5
+        },
+        "mrr": {
+          "n": 10,
+          "value": 0.5
+        },
+        "recall_at_10": {
+          "n": 10,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 10,
+          "value": 0.5
+        }
+      },
+      "request_options": {
+        "generator_model": null,
+        "max_results": 10,
+        "organization_id": null,
+        "user_id": null
+      },
+      "run_config_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "run_id": "run-001",
+      "schema_version": 1,
+      "tier": "smoke"
+    },
+    "GateResult": {
+      "mismatches": [],
+      "offenders": [
+        {
+          "baseline_mean": 0.5,
+          "direction": "higher",
+          "metric": "recall_at_5",
+          "observed": 0.3,
+          "slice": "overall",
+          "threshold": 0.45
+        }
+      ],
+      "passed": false,
+      "skipped": [
+        "by_category:table"
+      ]
+    },
+    "GoldenItem": {
+      "answerable": true,
+      "category": "general",
+      "conversation": [
+        {
+          "content": "Tell me about leave.",
+          "role": "user"
+        },
+        {
+          "content": "Which part of the policy?",
+          "role": "assistant"
+        }
+      ],
+      "expected_answer": "Twenty days per year.",
+      "gold_evidence": [
+        {
+          "document": "handbook.md",
+          "quote": "twenty days",
+          "section": "Leave policy"
+        }
+      ],
+      "id": "en-general-001",
+      "language": "en",
+      "provenance": "synthetic_fixture",
+      "question": "How many leave days do employees get?",
+      "review_status": "approved",
+      "split": "dev"
+    },
+    "GoldenSplitManifest": {
+      "assignments": {
+        "en-general-001": "dev",
+        "en-no-answer-001": "test"
+      },
+      "rule": "sha256-first8hex-mod100-lt70-dev",
+      "schema_version": 1
+    },
+    "JudgeConfig": {
+      "base_url": "https://example.invalid/api/v1",
+      "embedding_model": "embed/model-c",
+      "judge_family": "judge-family",
+      "judge_model": "judge/model-a",
+      "max_concurrency": 4,
+      "provider": "openrouter",
+      "temperature": 0.0
+    },
+    "JudgeReport": {
+      "by_category": {
+        "general": {
+          "faithfulness": {
+            "n": 10,
+            "value": 0.5
+          }
+        }
+      },
+      "by_language": {
+        "en": {
+          "faithfulness": {
+            "n": 10,
+            "value": 0.5
+          }
+        }
+      },
+      "generator_family": "generator-family",
+      "generator_model": "generator/model-b",
+      "items": [
+        {
+          "category": "general",
+          "item_id": "en-general-001",
+          "language": "en",
+          "library": "ragas",
+          "metric": "faithfulness",
+          "score": 0.9,
+          "skipped_reason": null
+        },
+        {
+          "category": "general",
+          "item_id": "en-general-001",
+          "language": "en",
+          "library": "deepeval",
+          "metric": "answer_relevance",
+          "score": null,
+          "skipped_reason": "no answer generated"
+        }
+      ],
+      "judge_family": "judge-family",
+      "judge_model": "judge/model-a",
+      "overall": {
+        "faithfulness": {
+          "n": 10,
+          "value": 0.5
+        }
+      },
+      "run_config_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "run_id": "run-001",
+      "schema_version": 1
+    },
+    "NoiseConfig": {
+      "floor": 0.02,
+      "gated_slice_prefixes": [
+        "overall",
+        "language:"
+      ],
+      "k": 3.0,
+      "metrics": {
+        "correct_refusal_rate": "higher",
+        "false_refusal_rate": "lower",
+        "mrr": "higher",
+        "recall_at_10": "higher",
+        "recall_at_5": "higher"
+      },
+      "schema_version": 1
+    },
+    "RagRunRequest": {
+      "conversation": [
+        {
+          "content": "Tell me about leave.",
+          "role": "user"
+        }
+      ],
+      "include_answer": true,
+      "item_id": "en-general-001",
+      "options": {
+        "generator_model": "generator/model-b",
+        "max_results": 10,
+        "organization_id": null,
+        "user_id": null
+      },
+      "query": "How many leave days do employees get?",
+      "rag_mode": "strict",
+      "schema_version": 1,
+      "web_search": false
+    },
+    "RagTrace": {
+      "answer": "Twenty days per year.",
+      "candidates": [
+        {
+          "chunk_id": "chunk-001",
+          "content": "Employees receive twenty days of leave per year.",
+          "document_id": "doc-001",
+          "document_name": "handbook.md",
+          "final_score": 0.85,
+          "has_image": false,
+          "match_reason": "vector",
+          "rank": 1,
+          "similarity": 0.82
+        },
+        {
+          "chunk_id": "chunk-002",
+          "content": "Office hours are nine to five.",
+          "document_id": "doc-002",
+          "document_name": null,
+          "final_score": null,
+          "has_image": false,
+          "match_reason": null,
+          "rank": 2,
+          "similarity": 0.41
+        }
+      ],
+      "citations": [
+        {
+          "chunk_id": "chunk-001",
+          "document_id": "doc-001"
+        }
+      ],
+      "config_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "context": "Employees receive twenty days of leave per year.",
+      "effective_config": {
+        "deployment_mode": "single-tenant",
+        "embedding_model": "text-embedding-3-small",
+        "endpoint_version": "1",
+        "generator_model": null,
+        "rag_env": {
+          "RAG_BEHAVIOR_MODE": "strict"
+        },
+        "rag_prompt_sha256": {
+          "RAG_SYSTEM_PROMPT": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "item_id": "en-general-001",
+      "kept": [
+        {
+          "chunk_id": "chunk-001",
+          "content": "Employees receive twenty days of leave per year.",
+          "document_id": "doc-001",
+          "document_name": "handbook.md",
+          "kept_by": "similarity",
+          "rank": 1,
+          "similarity": 0.82
+        }
+      ],
+      "query": "How many leave days do employees get?",
+      "query_context": {
+        "is_financial_query": false,
+        "is_temporal_query": false,
+        "required_precision": "medium",
+        "search_strategy": "semantic_only",
+        "suggested_threshold": 0.3
+      },
+      "query_transforms": [
+        {
+          "kind": "rewrite",
+          "text": "leave days per year"
+        }
+      ],
+      "refusal_reason": null,
+      "refused": false,
+      "retrieval_strategy": "standard",
+      "schema_version": 1,
+      "stage_latency_ms": {
+        "generation": 0.0,
+        "retrieval": 12.5
+      },
+      "used_documents": [
+        {
+          "document_id": "doc-001",
+          "image_url": "https://example.invalid/image.png",
+          "name": "handbook.md",
+          "similarity": 0.82
+        }
+      ]
+    },
+    "RunManifest": {
+      "corpus_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "created_at": "2026-01-01T00:00:00Z",
+      "deployment_mode": "single-tenant",
+      "edge_errors": 0,
+      "effective_config_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "embedder": {
+        "id": "fixture-embedder",
+        "source_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "version": "1"
+      },
+      "git_sha": null,
+      "golden_path": "eval/fixtures/golden.jsonl",
+      "golden_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "item_count": 1,
+      "request_options": {
+        "generator_model": null,
+        "max_results": 10,
+        "organization_id": null,
+        "user_id": null
+      },
+      "run_config_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "run_id": "run-001",
+      "schema_version": 1,
+      "sql_sha256": {
+        "single-tenant-setup.sql": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "tier": "smoke"
+    },
+    "SidecarError": {
+      "error": "synthetic error"
+    },
+    "SidecarHealth": {
+      "status": "ok"
+    },
+    "SidecarInfo": {
+      "contracts_schema_version": 1,
+      "service": "rag-sidecar",
+      "version": "0.0.0"
+    },
+    "SidecarReady": {
+      "reason": "warming up",
+      "status": "not_ready"
+    }
+  },
+  "variants": {
+    "GoldenItem:no_answer_null_expected": {
+      "model": "GoldenItem",
+      "value": {
+        "answerable": false,
+        "category": "no_answer",
+        "conversation": [],
+        "expected_answer": null,
+        "gold_evidence": [],
+        "id": "en-no-answer-001",
+        "language": "en",
+        "provenance": "synthetic_fixture",
+        "question": "What is the CEO's favourite colour?",
+        "review_status": "approved",
+        "split": "test"
+      }
+    },
+    "RagRunRequest:query_only": {
+      "model": "RagRunRequest",
+      "value": {
+        "query": "How many leave days do employees get?"
+      }
+    },
+    "RagTrace:answer_null": {
+      "model": "RagTrace",
+      "value": {
+        "answer": null,
+        "candidates": [
+          {
+            "chunk_id": "chunk-001",
+            "content": "Employees receive twenty days of leave per year.",
+            "document_id": "doc-001",
+            "document_name": "handbook.md",
+            "final_score": 0.85,
+            "has_image": false,
+            "match_reason": "vector",
+            "rank": 1,
+            "similarity": 0.82
+          },
+          {
+            "chunk_id": "chunk-002",
+            "content": "Office hours are nine to five.",
+            "document_id": "doc-002",
+            "document_name": null,
+            "final_score": null,
+            "has_image": false,
+            "match_reason": null,
+            "rank": 2,
+            "similarity": 0.41
+          }
+        ],
+        "citations": [
+          {
+            "chunk_id": "chunk-001",
+            "document_id": "doc-001"
+          }
+        ],
+        "config_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "context": "Employees receive twenty days of leave per year.",
+        "effective_config": {
+          "deployment_mode": "single-tenant",
+          "embedding_model": "text-embedding-3-small",
+          "endpoint_version": "1",
+          "generator_model": null,
+          "rag_env": {
+            "RAG_BEHAVIOR_MODE": "strict"
+          },
+          "rag_prompt_sha256": {
+            "RAG_SYSTEM_PROMPT": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        },
+        "item_id": "en-general-001",
+        "kept": [
+          {
+            "chunk_id": "chunk-001",
+            "content": "Employees receive twenty days of leave per year.",
+            "document_id": "doc-001",
+            "document_name": "handbook.md",
+            "kept_by": "similarity",
+            "rank": 1,
+            "similarity": 0.82
+          }
+        ],
+        "query": "How many leave days do employees get?",
+        "query_context": {
+          "is_financial_query": false,
+          "is_temporal_query": false,
+          "required_precision": "medium",
+          "search_strategy": "semantic_only",
+          "suggested_threshold": 0.3
+        },
+        "query_transforms": [
+          {
+            "kind": "rewrite",
+            "text": "leave days per year"
+          }
+        ],
+        "refusal_reason": null,
+        "refused": false,
+        "retrieval_strategy": "standard",
+        "schema_version": 1,
+        "stage_latency_ms": {
+          "generation": 0.0,
+          "retrieval": 12.5
+        },
+        "used_documents": [
+          {
+            "document_id": "doc-001",
+            "image_url": "https://example.invalid/image.png",
+            "name": "handbook.md",
+            "similarity": 0.82
+          }
+        ]
+      }
+    }
+  }
+}
