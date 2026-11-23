@@ -4,16 +4,16 @@ milestone: v5.0
 current_phase: 02
 current_phase_name: Unified Retrieval Pipeline & Tenant Scope
 status: executing
-stopped_at: Completed 02-01-PLAN.md
-last_updated: "2026-11-23T14:05:01.749Z"
+stopped_at: Completed 02-03-PLAN.md
+last_updated: "2026-11-23T14:09:24.784Z"
 last_activity: 2026-11-23
-last_activity_desc: Phase 02 plan 02-01 complete
-state_head: 5776570bcca631c02c22b4bf4b237d78de5e0248
+last_activity_desc: Phase 02 plan 02-03 complete
+state_head: 905b330b32ce6cb796c187b4d7f6c3aba5175fa2
 progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 58
-  completed_plans: 23
+  completed_plans: 24
 ---
 
 # Project State
@@ -28,9 +28,9 @@ See: .planning/PROJECT.md (updated 2026-11-22)
 ## Current Position
 
 Phase: 02 (Unified Retrieval Pipeline & Tenant Scope) — EXECUTING
-Plan: 1 of 36 complete (02-01)
+Plan: 2 of 36 complete (02-01, 02-03)
 Status: Executing sequentially
-Last activity: 2026-11-23 — 02-01 complete
+Last activity: 2026-11-23 — 02-03 complete
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -79,6 +79,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P21 | 6min | 2 tasks | 6 files |
 | Phase 01 P22 | 12min | 2 tasks | 7 files |
 | Phase 02 P01 | 25 min | 3 tasks | 9 files |
+| Phase 02 P03 | 9 min | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -122,6 +123,8 @@ Recent decisions affecting current work:
 - [Phase 01]: 01-22: every CI job running eval pytest or the harness syncs eval with --locked --all-extras, enforced by scripts/ci/check-workflows.py
 - [Phase 02]: Root tsconfig excludes voice-agent and baileys-whatsapp and allows .mts import extensions; a per-file tsc ratchet (baseline 231 with route types) is the interim gate until plan 02-36
 - [Phase 02]: voice-agent and baileys-whatsapp both install cleanly and type-check at 0 errors; both are ratcheted in the sibling-types CI job (baileys via Corepack Yarn 4 --immutable --mode=skip-build)
+- [Phase 02]: RAG_VOICE_TOKEN_ prefix and RAG_EMBED_TENANT excluded from eval pins; RAG_PIPELINE, RAG_DISABLED_STAGES, RAG_STAGE_TIMEOUTS pinned at legacy/empty for parity runs
+- [Phase 02]: check-config NAME_PATTERN covers LANGFUSE_*; new Phase 2 env vars land in all five places in plan 02-03 so later plans only read env.X
 
 ### Pending Todos
 
@@ -148,6 +151,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-23T14:05:01.583Z
-Stopped at: Completed 02-01-PLAN.md
+Last session: 2026-11-23T14:09:24.579Z
+Stopped at: Completed 02-03-PLAN.md
 Resume file: None

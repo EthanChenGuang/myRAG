@@ -11,11 +11,16 @@
     {
       "number": "2",
       "name": "Unified Retrieval Pipeline & Tenant Scope",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "number": "3",
       "name": "Unified Ingestion & Embedding Profiles",
+      "status": "pending"
+    },
+    {
+      "number": "3.1",
+      "name": "Tiered Parsing, Incremental Queue & Bulk Backfill (INSERTED)",
       "status": "pending"
     },
     {
@@ -46,8 +51,8 @@
   ],
   "next": {
     "command": "/gsd-progress --next",
-    "label": "Advance to the next step (verify)",
-    "reason": "Phase 1 of 8 · ready to verify"
+    "label": "Advance to the next step",
+    "reason": "Phase 2 of 9 · executing"
   },
-  "updated_at": "2026-11-23T11:17:47.946Z"
+  "updated_at": "2026-11-23T14:09:23.366Z"
 }
