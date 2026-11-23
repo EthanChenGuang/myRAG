@@ -1,0 +1,121 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { expect, vi } from 'vitest';
+import { loadPinnedEvalEnv } from '../../eval/harness/eval-env.mts';
+import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from '../../eval/harness/fake-edge.mts';
+import { createFixtureDatabase, FIXTURE_USER_ID, type DeploymentMode } from '../../eval/harness/pglite-supabase.mts';
+
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+
+export const CORPUS_DIR = path.join(REPO_ROOT, 'eval/fixtures/corpus');
+export const GOLDEN_PATH = path.join(REPO_ROOT, 'eval/fixtures/golden.jsonl');
+export const SNAPSHOT_DIR = path.join(REPO_ROOT, 'tests/fixtures/characterization');
+export const INTERNAL_API_KEY = 'test-internal-api-key-placeholder';
+
+export interface RouteFixture {
+  edge: FakeEdge;
+  fixtureUserId: string;
+  loadRoute<T = Record<string, (...args: any[]) => Promise<Response>>>(routePath: string): Promise<T>;
+  close(): Promise<void>;
+}
+
+export interface GoldenQuestion {
+  id: string;
+  question: string;
+}
+
+export function readGoldenQuestions(): GoldenQuestion[] {
+  return fs
+    .readFileSync(GOLDEN_PATH, 'utf8')
+    .split('\n')
+    .filter((line) => line.trim() !== '')
+    .map((line) => {
+      const item = JSON.parse(line) as { id: string; question: string };
+      return { id: item.id, question: item.question };
+    });
+}
+
+type RagMode = 'strict' | 'balanced' | 'flexible' | 'bypass';
+
+/**
+ * The route's createEnhancedRAGPrompt loads rag-mode through a CommonJS require that vitest cannot resolve.
+ * This copy keeps the same logic and takes the mode configs as an argument.
+ */
+export function createFaithfulEnhancedPrompt(modeConfigs: Record<string, { systemPromptWrapper?: string | null } | undefined>) {
+  return function createEnhancedRAGPrompt(basePrompt: string, context: string, mode: RagMode = 'strict'): string {
+    if (mode === 'bypass') {
+      return basePrompt.replace('{{context}}', '').replace(/Context:\s*$/i, '').trim();
+    }
+    const modeConfig = modeConfigs[mode];
+    if (!modeConfig || !modeConfig.systemPromptWrapper) {
+      return createEnhancedRAGPrompt(basePrompt, context, 'strict');
+    }
+    const cleanedBasePrompt = basePrompt.replace('{{context}}', '').replace(/Context:\s*$/i, '').trim();
+    return modeConfig.systemPromptWrapper.replace('{{context}}', context).replace('{{basePrompt}}', cleanedBasePrompt);
+  };
+}
+
+export function expectCharacterization(name: string, actual: unknown): void {
+  const file = path.join(SNAPSHOT_DIR, `${name}.json`);
+  if (process.env.UPDATE_CHARACTERIZATION === '1') {
+    fs.mkdirSync(SNAPSHOT_DIR, { recursive: true });
+    fs.writeFileSync(file, `${JSON.stringify(actual, null, 2)}\n`);
+    return;
+  }
+  expect(fs.existsSync(file), `characterization snapshot ${name}.json is missing; rerun with UPDATE_CHARACTERIZATION=1`).toBe(true);
+  expect(actual).toEqual(JSON.parse(fs.readFileSync(file, 'utf8')));
+}
+
+export function systemTextOf(params: Record<string, any>): string {
+  if (typeof params.system === 'string') return params.system;
+  const messages: Array<{ role: string; content: unknown }> = Array.isArray(params.messages) ? params.messages : [];
+  return messages
+    .filter((message) => message.role === 'system')
+    .map((message) => (typeof message.content === 'string' ? message.content : JSON.stringify(message.content)))
+    .join('\n\n---SYSTEM-MESSAGE---\n\n');
+}
+
+export async function startRouteFixture(options: { deploymentMode: DeploymentMode }): Promise<RouteFixture> {
+  const { deploymentMode } = options;
+  const fixture = await createFixtureDatabase({ deploymentMode, corpusDir: CORPUS_DIR });
+  let edge: FakeEdge;
+  try {
+    edge = await startFakeEdge({ db: fixture.db });
+  } catch (error) {
+    await fixture.db.close().catch(() => undefined);
+    throw error;
+  }
+
+  const env = process.env as Record<string, string | undefined>;
+  const previous = { ...env };
+  for (const name of Object.keys(env)) {
+    if (name.startsWith('RAG_') || name.startsWith('NEXT_PUBLIC_RAG_')) delete env[name];
+  }
+  Object.assign(env, loadPinnedEvalEnv());
+  Object.assign(env, fixtureProcessEnv(edge.url));
+  env.NODE_ENV = 'test';
+  env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE = deploymentMode;
+  env.OPENAI_EMBEDDING_MODEL = 'text-embedding-3-small';
+  env.NEXT_PUBLIC_EMBED_ENABLED = 'true';
+  env.NEXT_PUBLIC_EMBED_ALLOWED_DOMAINS = '*';
+  env.EMBED_RATE_LIMIT = '100000';
+  env.MYRAG_INTERNAL_API_KEY = INTERNAL_API_KEY;
+
+  return {
+    edge,
+    fixtureUserId: fixture.fixtureUserId ?? FIXTURE_USER_ID,
+    async loadRoute<T>(routePath: string): Promise<T> {
+      vi.resetModules();
+      return (await import(/* @vite-ignore */ `@/app/api/${routePath}/route`)) as T;
+    },
+    async close() {
+      await edge.close();
+      await fixture.db.close().catch(() => undefined);
+      for (const name of Object.keys(env)) {
+        if (!(name in previous)) delete env[name];
+      }
+      Object.assign(env, previous);
+    },
+  };
+}

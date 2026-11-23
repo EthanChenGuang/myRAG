@@ -1,0 +1,3055 @@
+[
+  {
+    "query": "What are the refund windows for annual plans and for monthly plans?",
+    "results": [
+      {
+        "chunk_id": "9ef78ef6-3872-43a6-80ce-47aa6d4b98ed",
+        "document_id": "332012aa-813e-426b-a096-b260624e6cd3",
+        "content": "Document: refund-policy.en.md. Chunk 2 of 5. Content: ## Monthly plans\n\nLumen Valley Instruments accepts refund requests for plans billed once a month. Send the request to the billing team with your order number. The refund is paid to the original payment method within 10 business days. The monthly plans refund window is 14 days from the purchase date.\n[Metadata:   ]",
+        "similarity": 0.5558468036834393,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "3165c183-8863-4fa8-8486-e4edb0a2a137",
+        "document_id": "332012aa-813e-426b-a096-b260624e6cd3",
+        "content": "Document: refund-policy.en.md. Chunk 1 of 5. Content: ## Annual plans\n\nLumen Valley Instruments accepts refund requests for plans billed once a year. Send the request to the billing team with your order number. The refund is paid to the original payment method within 10 business days. The annual plans refund window is 45 days from the purchase date.\n[Metadata:   ]",
+        "similarity": 0.5437900470749046,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "What is the measurement range of the XR-4420 and what does it cost for 1 to 9 units?",
+    "results": [
+      {
+        "chunk_id": "766e439b-a122-4050-8460-762d4ec15824",
+        "document_id": "959e010a-5e5f-4725-a739-cb8cddeeda49",
+        "content": "Document: product-specs.en.md. Chunk 4 of 6. Content: ## Pricing table\n\nAll prices are in US dollars per unit and exclude tax and shipping.\n\n| SKU | Product | 1 to 9 units | 10 to 49 units | 50 or more units |\n| --- | --- | --- | --- | --- |\n| LV-77-0192 | XR-4410 thermal probe | 129.00 | 119.00 | 109.00 |\n| LV-77-0193 | XR-4420 thermal probe | 159.00 | 149.00 | 139.00 |\n| LV-81-0007 | XR-5100 reference thermometer | 489.00 | 469.00 | 449.00 |\n| LV-90-0415 | DL-220 data logger | 79.00 | 72.00 | 65.00 |\n[Metadata:   ]",
+        "similarity": 0.2329339911659487,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "21036617-67a3-48e7-b5f2-57b3ca50353d",
+        "document_id": "959e010a-5e5f-4725-a739-cb8cddeeda49",
+        "content": "Document: product-specs.en.md. Chunk 2 of 6. Content: ## XR-4420 thermal probe\n\nThe XR-4420 thermal probe (SKU LV-77-0193) is a handheld probe for lab benches. Measurement range is -40 to 400 degrees Celsius. Accuracy is plus or minus 0.5 degrees Celsius. Response time is 2 seconds. The probe cable is 3 metres long. Power comes from two AA batteries. The housing is rated IP54. The firmware build shipped with this model is FW-2.8.14.\n[Metadata:   ]",
+        "similarity": 0.20808796343566116,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "8fdaedf8-6cde-46bf-9142-c088e94080ec",
+        "document_id": "959e010a-5e5f-4725-a739-cb8cddeeda49",
+        "content": "Document: product-specs.en.md. Chunk 5 of 6. Content: ## Firmware and compatibility\n\nFirmware build FW-2.8.14 supports the XR-4410, the XR-4420 and the XR-5100. The DL-220 data logger uses its own firmware line, DLF-1.3.2. Device identifiers have the form LVI-XR-000123, where the middle part is the model family and the last six digits are the serial number. To update a probe, connect it over USB-C and run the Lumen Link desktop tool, which is available at https://example.com/downloads/lumen-link.\n[Metadata:   ]",
+        "similarity": 0.20606808012115985,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "ae73bcc9-2e0b-44d6-8492-d143c45c7c9d",
+        "document_id": "959e010a-5e5f-4725-a739-cb8cddeeda49",
+        "content": "Document: product-specs.en.md. Chunk 3 of 6. Content: ## Specification table\n\n| Model | SKU | Range (C) | Accuracy (C) | Interface | Weight (g) |\n| --- | --- | --- | --- | --- | --- |\n| XR-4410 | LV-77-0192 | -40 to 250 | 0.5 | USB-C | 180 |\n| XR-4420 | LV-77-0193 | -40 to 400 | 0.5 | USB-C | 180 |\n| XR-5100 | LV-81-0007 | -200 to 600 | 0.2 | USB-C and RS-485 | 310 |\n| DL-220 | LV-90-0415 | -40 to 125 | 1.0 | Bluetooth LE | 95 |\n[Metadata:   ]",
+        "similarity": 0.1762057664885277,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "When must an order be paid for same-day dispatch with the standard carrier, and how much does express shipping cost?",
+    "results": [
+      {
+        "chunk_id": "821d8054-a2c0-49a0-9685-60bee8f80d9b",
+        "document_id": "b3cea6c0-8718-4ce2-a5cc-4907af5a33fb",
+        "content": "Document: shipping-handbook.en.md. Chunk 1 of 6. Content: ## Carrier cut-off times\n\nLumen Valley Instruments ships from one warehouse. Orders paid before 14:00 on a business day leave the warehouse the same day with the standard carrier. Orders paid after 14:00 leave on the next business day. The express carrier has an earlier cut-off of 12:00 for same-day dispatch. Orders placed on a Saturday or Sunday leave on Monday.\n[Metadata:   ]",
+        "similarity": 0.4451334276556871,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "f60c4db1-087b-4287-bd15-f1d52a701891",
+        "document_id": "4dda7ba2-55f3-4e0f-8cfd-83f2ef597e40",
+        "content": "Document: warehouse-floorplan.png. Chunk 4 of 4. Content: ## Packing and dispatch zone\n\nThe image places the packing and dispatch zone in green on the east side, beside dock door 3. Six packing tables stand in two rows. The express carrier collection point is the red rectangle by the door, and the standard carrier pallets are stacked on the grey area behind it.\n[Metadata:   ]",
+        "similarity": 0.3184038671977334,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "3ba25546-c847-4061-b333-507579a4eb1a",
+        "document_id": "b3cea6c0-8718-4ce2-a5cc-4907af5a33fb",
+        "content": "Document: shipping-handbook.en.md. Chunk 4 of 6. Content: ## Shipping costs\n\nStandard shipping is free for orders above 250 dollars. Below that amount a flat fee of 12 dollars applies. Express shipping always costs 35 dollars. Pallet shipments are quoted by the logistics team before payment, and the quote stays valid for 7 days.\n[Metadata:   ]",
+        "similarity": 0.224652922236229,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "4b8329a5-dafd-46ee-abe6-72593bbe8d3f",
+        "document_id": "b3cea6c0-8718-4ce2-a5cc-4907af5a33fb",
+        "content": "Document: shipping-handbook.en.md. Chunk 3 of 6. Content: ## Delivery times by region\n\nStandard delivery takes 3 to 5 business days within the home country, 5 to 8 business days within the neighbouring region and 8 to 14 business days for all other destinations. Express delivery takes 1 to 2 business days at home and 3 to 4 business days in the neighbouring region. Delivery times count from dispatch, not from the order date.\n[Metadata:   ]",
+        "similarity": 0.19470457890494175,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "Which products does firmware build FW-2.8.14 support?",
+    "results": [
+      {
+        "chunk_id": "8fdaedf8-6cde-46bf-9142-c088e94080ec",
+        "document_id": "959e010a-5e5f-4725-a739-cb8cddeeda49",
+        "content": "Document: product-specs.en.md. Chunk 5 of 6. Content: ## Firmware and compatibility\n\nFirmware build FW-2.8.14 supports the XR-4410, the XR-4420 and the XR-5100. The DL-220 data logger uses its own firmware line, DLF-1.3.2. Device identifiers have the form LVI-XR-000123, where the middle part is the model family and the last six digits are the serial number. To update a probe, connect it over USB-C and run the Lumen Link desktop tool, which is available at https://example.com/downloads/lumen-link.\n[Metadata:   ]",
+        "similarity": 0.362214968666577,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "21036617-67a3-48e7-b5f2-57b3ca50353d",
+        "document_id": "959e010a-5e5f-4725-a739-cb8cddeeda49",
+        "content": "Document: product-specs.en.md. Chunk 2 of 6. Content: ## XR-4420 thermal probe\n\nThe XR-4420 thermal probe (SKU LV-77-0193) is a handheld probe for lab benches. Measurement range is -40 to 400 degrees Celsius. Accuracy is plus or minus 0.5 degrees Celsius. Response time is 2 seconds. The probe cable is 3 metres long. Power comes from two AA batteries. The housing is rated IP54. The firmware build shipped with this model is FW-2.8.14.\n[Metadata:   ]",
+        "similarity": 0.29457238316536793,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "0cc1d8ec-b580-4978-bb22-dc63c5fb6c97",
+        "document_id": "959e010a-5e5f-4725-a739-cb8cddeeda49",
+        "content": "Document: product-specs.en.md. Chunk 1 of 6. Content: ## XR-4410 thermal probe\n\nThe XR-4410 thermal probe (SKU LV-77-0192) is a handheld probe for lab benches. Measurement range is -40 to 250 degrees Celsius. Accuracy is plus or minus 0.5 degrees Celsius. Response time is 2 seconds. The probe cable is 3 metres long. Power comes from two AA batteries. The housing is rated IP54. The firmware build shipped with this model is FW-2.8.14.\n[Metadata:   ]",
+        "similarity": 0.2912840394797487,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "7f1d30a3-23fa-4247-96b0-d7682883b82c",
+        "document_id": "45240c49-6437-4ed6-80d4-b958157b65df",
+        "content": "Document: product-specs.it.md. Chunk 5 of 6. Content: ## Firmware e identificativi\n\nIl firmware VFW-3.6.2 supporta VS-210, VS-220 e VR-700. Il registratore VL-15 usa una linea di firmware separata, VLF-1.1.9. L'identificativo del dispositivo ha la forma VVD-VS-002815: la parte centrale indica la famiglia di modelli e le ultime sei cifre sono il numero di serie. Per aggiornare la sonda, collegarla via USB-C e avviare lo strumento Verde Link, scaricabile da https://example.com/downloads/verde-link.\n[Metadata:   ]",
+        "similarity": 0.22281424345380663,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "What is SKU LV-RC-0030?",
+    "results": [
+      {
+        "chunk_id": "14d86797-5795-41e5-ae46-43a0a2934a19",
+        "document_id": "959e010a-5e5f-4725-a739-cb8cddeeda49",
+        "content": "Document: product-specs.en.md. Chunk 6 of 6. Content: ## Warranty and replacement parts\n\nEvery instrument in this list carries a two year limited warranty that starts on the delivery date. Replacement probe cables are sold under SKU LV-RC-0030 for the 3 metre cable and LV-RC-0050 for a 5 metre cable. Battery covers are sold under SKU LV-BC-0011. Warranty claims go to warranty@example.org with the device identifier and a photo of the label.\n[Metadata:   ]",
+        "similarity": 0.39565443500174924,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "ae73bcc9-2e0b-44d6-8492-d143c45c7c9d",
+        "document_id": "959e010a-5e5f-4725-a739-cb8cddeeda49",
+        "content": "Document: product-specs.en.md. Chunk 3 of 6. Content: ## Specification table\n\n| Model | SKU | Range (C) | Accuracy (C) | Interface | Weight (g) |\n| --- | --- | --- | --- | --- | --- |\n| XR-4410 | LV-77-0192 | -40 to 250 | 0.5 | USB-C | 180 |\n| XR-4420 | LV-77-0193 | -40 to 400 | 0.5 | USB-C | 180 |\n| XR-5100 | LV-81-0007 | -200 to 600 | 0.2 | USB-C and RS-485 | 310 |\n| DL-220 | LV-90-0415 | -40 to 125 | 1.0 | Bluetooth LE | 95 |\n[Metadata:   ]",
+        "similarity": 0.22341237011400739,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "913081bc-2c87-4a4c-b228-fdf50cf7b2cc",
+        "document_id": "68800580-ea11-489e-9d23-5ac0bfacdec7",
+        "content": "Document: scanned-invoice.en.md. Chunk 2 of 5. Content: ## Line items\n\nItem   Descr1ption                       Qty   Un1t price   Amount\nLV-77-O192   XR-4410 thermal probe        8      119.OO      952.OO\nLV-77-O193   XR-4420 thermal probe        2      159.OO      318.OO\nLV-RC-OO5O   Probe cab1e 5 m              4       18.OO       72.OO\n[Metadata:   ]",
+        "similarity": 0.1945057122262056,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "766e439b-a122-4050-8460-762d4ec15824",
+        "document_id": "959e010a-5e5f-4725-a739-cb8cddeeda49",
+        "content": "Document: product-specs.en.md. Chunk 4 of 6. Content: ## Pricing table\n\nAll prices are in US dollars per unit and exclude tax and shipping.\n\n| SKU | Product | 1 to 9 units | 10 to 49 units | 50 or more units |\n| --- | --- | --- | --- | --- |\n| LV-77-0192 | XR-4410 thermal probe | 129.00 | 119.00 | 109.00 |\n| LV-77-0193 | XR-4420 thermal probe | 159.00 | 149.00 | 139.00 |\n| LV-81-0007 | XR-5100 reference thermometer | 489.00 | 469.00 | 449.00 |\n| LV-90-0415 | DL-220 data logger | 79.00 | 72.00 | 65.00 |\n[Metadata:   ]",
+        "similarity": 0.18263349079789537,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "How is a device identifier such as LVI-XR-000123 built up?",
+    "results": [
+      {
+        "chunk_id": "8fdaedf8-6cde-46bf-9142-c088e94080ec",
+        "document_id": "959e010a-5e5f-4725-a739-cb8cddeeda49",
+        "content": "Document: product-specs.en.md. Chunk 5 of 6. Content: ## Firmware and compatibility\n\nFirmware build FW-2.8.14 supports the XR-4410, the XR-4420 and the XR-5100. The DL-220 data logger uses its own firmware line, DLF-1.3.2. Device identifiers have the form LVI-XR-000123, where the middle part is the model family and the last six digits are the serial number. To update a probe, connect it over USB-C and run the Lumen Link desktop tool, which is available at https://example.com/downloads/lumen-link.\n[Metadata:   ]",
+        "similarity": 0.282700572964508,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "What is the refund window for annual plans?",
+    "results": [
+      {
+        "chunk_id": "3165c183-8863-4fa8-8486-e4edb0a2a137",
+        "document_id": "332012aa-813e-426b-a096-b260624e6cd3",
+        "content": "Document: refund-policy.en.md. Chunk 1 of 5. Content: ## Annual plans\n\nLumen Valley Instruments accepts refund requests for plans billed once a year. Send the request to the billing team with your order number. The refund is paid to the original payment method within 10 business days. The annual plans refund window is 45 days from the purchase date.\n[Metadata:   ]",
+        "similarity": 0.6208886895576555,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "9ef78ef6-3872-43a6-80ce-47aa6d4b98ed",
+        "document_id": "332012aa-813e-426b-a096-b260624e6cd3",
+        "content": "Document: refund-policy.en.md. Chunk 2 of 5. Content: ## Monthly plans\n\nLumen Valley Instruments accepts refund requests for plans billed once a month. Send the request to the billing team with your order number. The refund is paid to the original payment method within 10 business days. The monthly plans refund window is 14 days from the purchase date.\n[Metadata:   ]",
+        "similarity": 0.48050776356367475,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "How many days does standard delivery take within the home country?",
+    "results": [
+      {
+        "chunk_id": "4b8329a5-dafd-46ee-abe6-72593bbe8d3f",
+        "document_id": "b3cea6c0-8718-4ce2-a5cc-4907af5a33fb",
+        "content": "Document: shipping-handbook.en.md. Chunk 3 of 6. Content: ## Delivery times by region\n\nStandard delivery takes 3 to 5 business days within the home country, 5 to 8 business days within the neighbouring region and 8 to 14 business days for all other destinations. Express delivery takes 1 to 2 business days at home and 3 to 4 business days in the neighbouring region. Delivery times count from dispatch, not from the order date.\n[Metadata:   ]",
+        "similarity": 0.5329627872838694,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "ec815e75-8353-4331-8b1e-325583bfe839",
+        "document_id": "b3cea6c0-8718-4ce2-a5cc-4907af5a33fb",
+        "content": "Document: shipping-handbook.en.md. Chunk 6 of 6. Content: ## Damaged or lost parcels\n\nReport a damaged parcel within 5 days of delivery and keep the outer box and the foam for inspection. Write to logistics@example.com with the order number and two photos. A parcel that has not arrived 15 business days after dispatch is treated as lost, and the logistics team either sends a replacement or hands the case to the billing team for a refund.\n[Metadata:   ]",
+        "similarity": 0.20219524555094237,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "7e2c0037-f0ea-4c75-986f-4cb8c3bf4eb8",
+        "document_id": "b3cea6c0-8718-4ce2-a5cc-4907af5a33fb",
+        "content": "Document: shipping-handbook.en.md. Chunk 5 of 6. Content: ## Customs and import duties\n\nOrders to destinations outside the home country may be subject to import duties and taxes that are charged by the customs authority of the destination. Lumen Valley Instruments does not collect these amounts. Each parcel carries a commercial invoice that lists the SKU, the declared value and the country of origin of every item.\n[Metadata:   ]",
+        "similarity": 0.16952353715896729,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "What is the cut-off time for same-day dispatch with the express carrier?",
+    "results": [
+      {
+        "chunk_id": "821d8054-a2c0-49a0-9685-60bee8f80d9b",
+        "document_id": "b3cea6c0-8718-4ce2-a5cc-4907af5a33fb",
+        "content": "Document: shipping-handbook.en.md. Chunk 1 of 6. Content: ## Carrier cut-off times\n\nLumen Valley Instruments ships from one warehouse. Orders paid before 14:00 on a business day leave the warehouse the same day with the standard carrier. Orders paid after 14:00 leave on the next business day. The express carrier has an earlier cut-off of 12:00 for same-day dispatch. Orders placed on a Saturday or Sunday leave on Monday.\n[Metadata:   ]",
+        "similarity": 0.5483524357222221,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "f60c4db1-087b-4287-bd15-f1d52a701891",
+        "document_id": "4dda7ba2-55f3-4e0f-8cfd-83f2ef597e40",
+        "content": "Document: warehouse-floorplan.png. Chunk 4 of 4. Content: ## Packing and dispatch zone\n\nThe image places the packing and dispatch zone in green on the east side, beside dock door 3. Six packing tables stand in two rows. The express carrier collection point is the red rectangle by the door, and the standard carrier pallets are stacked on the grey area behind it.\n[Metadata:   ]",
+        "similarity": 0.2291780846821222,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "How long is the warranty on the instruments?",
+    "results": [
+      {
+        "chunk_id": "14d86797-5795-41e5-ae46-43a0a2934a19",
+        "document_id": "959e010a-5e5f-4725-a739-cb8cddeeda49",
+        "content": "Document: product-specs.en.md. Chunk 6 of 6. Content: ## Warranty and replacement parts\n\nEvery instrument in this list carries a two year limited warranty that starts on the delivery date. Replacement probe cables are sold under SKU LV-RC-0030 for the 3 metre cable and LV-RC-0050 for a 5 metre cable. Battery covers are sold under SKU LV-BC-0011. Warranty claims go to warranty@example.org with the device identifier and a photo of the label.\n[Metadata:   ]",
+        "similarity": 0.33747665062687404,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "40fc5177-6cd8-40a1-80fb-c9d5d62b05c8",
+        "document_id": "4dda7ba2-55f3-4e0f-8cfd-83f2ef597e40",
+        "content": "Document: warehouse-floorplan.png. Chunk 1 of 4. Content: ## Overall layout\n\nThe image shows a floor plan of the Lumen Valley Instruments warehouse, drawn from above. The building is a long rectangle with the loading docks along the south wall and the main office in the north-east corner. Three aisles run from the south wall to the north wall, labelled Aisle A, Aisle B and Aisle C from west to east.\n[Metadata:   ]",
+        "similarity": 0.2235620351359946,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "Which items are not eligible for a refund?",
+    "results": [
+      {
+        "chunk_id": "882dd694-ee5e-43ad-b791-7a3c505ec8ec",
+        "document_id": "332012aa-813e-426b-a096-b260624e6cd3",
+        "content": "Document: refund-policy.en.md. Chunk 3 of 5. Content: ## Exceptions\n\nCustom calibration services and devices returned with physical damage are not eligible for a refund. Contact the support team to discuss other exceptions.\n[Metadata:   ]",
+        "similarity": 0.2578678745908456,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "3165c183-8863-4fa8-8486-e4edb0a2a137",
+        "document_id": "332012aa-813e-426b-a096-b260624e6cd3",
+        "content": "Document: refund-policy.en.md. Chunk 1 of 5. Content: ## Annual plans\n\nLumen Valley Instruments accepts refund requests for plans billed once a year. Send the request to the billing team with your order number. The refund is paid to the original payment method within 10 business days. The annual plans refund window is 45 days from the purchase date.\n[Metadata:   ]",
+        "similarity": 0.2549301631436618,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "9ef78ef6-3872-43a6-80ce-47aa6d4b98ed",
+        "document_id": "332012aa-813e-426b-a096-b260624e6cd3",
+        "content": "Document: refund-policy.en.md. Chunk 2 of 5. Content: ## Monthly plans\n\nLumen Valley Instruments accepts refund requests for plans billed once a month. Send the request to the billing team with your order number. The refund is paid to the original payment method within 10 business days. The monthly plans refund window is 14 days from the purchase date.\n[Metadata:   ]",
+        "similarity": 0.25273442235775445,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "c85622b8-a283-4018-a491-8db47d5b38fd",
+        "document_id": "332012aa-813e-426b-a096-b260624e6cd3",
+        "content": "Document: refund-policy.en.md. Chunk 4 of 5. Content: ## Previous policy (2023)\n\nUntil the end of 2023, Lumen Valley Instruments used an earlier refund rule. Any customer could ask for their money back within 30 days of buying a plan, whatever the billing period, and approved refunds were issued as store credit instead of being returned to the original payment method. This earlier rule was retired on 1 January 2024 and no longer applies to new orders.\n[Metadata:   ]",
+        "similarity": 0.16557146647998788,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "0688d354-04c0-4aed-a58d-2d1f1eb5b471",
+        "document_id": "332012aa-813e-426b-a096-b260624e6cd3",
+        "content": "Document: refund-policy.en.md. Chunk 5 of 5. Content: ## How to submit a request\n\nWrite to refunds@example.com with your order number and the email address used at checkout. Phone requests are handled on 555-0142 between 9:00 and 17:00 on weekdays. A refund request is acknowledged within two business days.\n[Metadata:   ]",
+        "similarity": 0.1583034626899582,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "Where are the lithium batteries kept in the warehouse?",
+    "results": [
+      {
+        "chunk_id": "0aa02763-f10b-4517-997a-e61d8f850df3",
+        "document_id": "b3cea6c0-8718-4ce2-a5cc-4907af5a33fb",
+        "content": "Document: shipping-handbook.en.md. Chunk 2 of 6. Content: ## Packaging rules\n\nEvery instrument is packed in a foam-lined box with a moisture sachet. Thermal probes with a cable longer than 3 metres are coiled and fixed with a paper band before boxing. Packages that weigh more than 20 kilograms are shipped on a pallet and are never sent as ordinary parcels. Batteries are packed separately from instruments and carry a lithium handling label when the model uses lithium cells.\n[Metadata:   ]",
+        "similarity": 0.22308212518693438,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "0d8510d1-e1a4-4fd8-aabf-67f86caa540a",
+        "document_id": "4dda7ba2-55f3-4e0f-8cfd-83f2ef597e40",
+        "content": "Document: warehouse-floorplan.png. Chunk 3 of 4. Content: ## Picking aisles\n\nThe image shows Aisle A holding thermal probes and spare cables, Aisle B holding reference thermometers and data loggers, and Aisle C holding packaging material and batteries. Each aisle has shelves on both sides with four levels, and the lithium batteries sit in a fenced cage at the north end of Aisle C.\n[Metadata:   ]",
+        "similarity": 0.2069729813305352,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "What accuracy does it have?",
+    "results": [],
+    "source_images": []
+  },
+  {
+    "query": "And what does it cost for an order below 250 dollars?",
+    "results": [
+      {
+        "chunk_id": "3ba25546-c847-4061-b333-507579a4eb1a",
+        "document_id": "b3cea6c0-8718-4ce2-a5cc-4907af5a33fb",
+        "content": "Document: shipping-handbook.en.md. Chunk 4 of 6. Content: ## Shipping costs\n\nStandard shipping is free for orders above 250 dollars. Below that amount a flat fee of 12 dollars applies. Express shipping always costs 35 dollars. Pallet shipments are quoted by the logistics team before payment, and the quote stays valid for 7 days.\n[Metadata:   ]",
+        "similarity": 0.4010828432193929,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "How many days do I have to ask for it?",
+    "results": [
+      {
+        "chunk_id": "4b8329a5-dafd-46ee-abe6-72593bbe8d3f",
+        "document_id": "b3cea6c0-8718-4ce2-a5cc-4907af5a33fb",
+        "content": "Document: shipping-handbook.en.md. Chunk 3 of 6. Content: ## Delivery times by region\n\nStandard delivery takes 3 to 5 business days within the home country, 5 to 8 business days within the neighbouring region and 8 to 14 business days for all other destinations. Express delivery takes 1 to 2 business days at home and 3 to 4 business days in the neighbouring region. Delivery times count from dispatch, not from the order date.\n[Metadata:   ]",
+        "similarity": 0.24516913736787416,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.3064614217098427,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.24516913736787416,
+        "image_url": null
+      },
+      {
+        "chunk_id": "3165c183-8863-4fa8-8486-e4edb0a2a137",
+        "document_id": "332012aa-813e-426b-a096-b260624e6cd3",
+        "content": "Document: refund-policy.en.md. Chunk 1 of 5. Content: ## Annual plans\n\nLumen Valley Instruments accepts refund requests for plans billed once a year. Send the request to the billing team with your order number. The refund is paid to the original payment method within 10 business days. The annual plans refund window is 45 days from the purchase date.\n[Metadata:   ]",
+        "similarity": 0.15102867970982842,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.1887858496372855,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.15102867970982842,
+        "image_url": null
+      },
+      {
+        "chunk_id": "9ef78ef6-3872-43a6-80ce-47aa6d4b98ed",
+        "document_id": "332012aa-813e-426b-a096-b260624e6cd3",
+        "content": "Document: refund-policy.en.md. Chunk 2 of 5. Content: ## Monthly plans\n\nLumen Valley Instruments accepts refund requests for plans billed once a month. Send the request to the billing team with your order number. The refund is paid to the original payment method within 10 business days. The monthly plans refund window is 14 days from the purchase date.\n[Metadata:   ]",
+        "similarity": 0.14972786610224498,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.18715983262780622,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.14972786610224498,
+        "image_url": null
+      },
+      {
+        "chunk_id": "c85622b8-a283-4018-a491-8db47d5b38fd",
+        "document_id": "332012aa-813e-426b-a096-b260624e6cd3",
+        "content": "Document: refund-policy.en.md. Chunk 4 of 5. Content: ## Previous policy (2023)\n\nUntil the end of 2023, Lumen Valley Instruments used an earlier refund rule. Any customer could ask for their money back within 30 days of buying a plan, whatever the billing period, and approved refunds were issued as store credit instead of being returned to the original payment method. This earlier rule was retired on 1 January 2024 and no longer applies to new orders.\n[Metadata:   ]",
+        "similarity": 0.13745392786399754,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.17181740982999694,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.13745392786399754,
+        "image_url": null
+      },
+      {
+        "chunk_id": "ec815e75-8353-4331-8b1e-325583bfe839",
+        "document_id": "b3cea6c0-8718-4ce2-a5cc-4907af5a33fb",
+        "content": "Document: shipping-handbook.en.md. Chunk 6 of 6. Content: ## Damaged or lost parcels\n\nReport a damaged parcel within 5 days of delivery and keep the outer box and the foam for inspection. Write to logistics@example.com with the order number and two photos. A parcel that has not arrived 15 business days after dispatch is treated as lost, and the logistics team either sends a replacement or hands the case to the billing team for a refund.\n[Metadata:   ]",
+        "similarity": 0.13364463259120357,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.16705579073900445,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.13364463259120357,
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "What is the refund window for quarterly plans?",
+    "results": [
+      {
+        "chunk_id": "9ef78ef6-3872-43a6-80ce-47aa6d4b98ed",
+        "document_id": "332012aa-813e-426b-a096-b260624e6cd3",
+        "content": "Document: refund-policy.en.md. Chunk 2 of 5. Content: ## Monthly plans\n\nLumen Valley Instruments accepts refund requests for plans billed once a month. Send the request to the billing team with your order number. The refund is paid to the original payment method within 10 business days. The monthly plans refund window is 14 days from the purchase date.\n[Metadata:   ]",
+        "similarity": 0.470164807429048,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "3165c183-8863-4fa8-8486-e4edb0a2a137",
+        "document_id": "332012aa-813e-426b-a096-b260624e6cd3",
+        "content": "Document: refund-policy.en.md. Chunk 1 of 5. Content: ## Annual plans\n\nLumen Valley Instruments accepts refund requests for plans billed once a year. Send the request to the billing team with your order number. The refund is paid to the original payment method within 10 business days. The annual plans refund window is 45 days from the purchase date.\n[Metadata:   ]",
+        "similarity": 0.46646076231698763,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "What is the measurement range of the XR-6000 thermal probe?",
+    "results": [
+      {
+        "chunk_id": "21036617-67a3-48e7-b5f2-57b3ca50353d",
+        "document_id": "959e010a-5e5f-4725-a739-cb8cddeeda49",
+        "content": "Document: product-specs.en.md. Chunk 2 of 6. Content: ## XR-4420 thermal probe\n\nThe XR-4420 thermal probe (SKU LV-77-0193) is a handheld probe for lab benches. Measurement range is -40 to 400 degrees Celsius. Accuracy is plus or minus 0.5 degrees Celsius. Response time is 2 seconds. The probe cable is 3 metres long. Power comes from two AA batteries. The housing is rated IP54. The firmware build shipped with this model is FW-2.8.14.\n[Metadata:   ]",
+        "similarity": 0.3807546990435137,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.4759433738043921,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.3807546990435137,
+        "image_url": null
+      },
+      {
+        "chunk_id": "0cc1d8ec-b580-4978-bb22-dc63c5fb6c97",
+        "document_id": "959e010a-5e5f-4725-a739-cb8cddeeda49",
+        "content": "Document: product-specs.en.md. Chunk 1 of 6. Content: ## XR-4410 thermal probe\n\nThe XR-4410 thermal probe (SKU LV-77-0192) is a handheld probe for lab benches. Measurement range is -40 to 250 degrees Celsius. Accuracy is plus or minus 0.5 degrees Celsius. Response time is 2 seconds. The probe cable is 3 metres long. Power comes from two AA batteries. The housing is rated IP54. The firmware build shipped with this model is FW-2.8.14.\n[Metadata:   ]",
+        "similarity": 0.3797624414522126,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.47470305181526573,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.3797624414522126,
+        "image_url": null
+      },
+      {
+        "chunk_id": "913081bc-2c87-4a4c-b228-fdf50cf7b2cc",
+        "document_id": "68800580-ea11-489e-9d23-5ac0bfacdec7",
+        "content": "Document: scanned-invoice.en.md. Chunk 2 of 5. Content: ## Line items\n\nItem   Descr1ption                       Qty   Un1t price   Amount\nLV-77-O192   XR-4410 thermal probe        8      119.OO      952.OO\nLV-77-O193   XR-4420 thermal probe        2      159.OO      318.OO\nLV-RC-OO5O   Probe cab1e 5 m              4       18.OO       72.OO\n[Metadata:   ]",
+        "similarity": 0.2505338967482925,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.3131673709353656,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.2505338967482925,
+        "image_url": null
+      },
+      {
+        "chunk_id": "766e439b-a122-4050-8460-762d4ec15824",
+        "document_id": "959e010a-5e5f-4725-a739-cb8cddeeda49",
+        "content": "Document: product-specs.en.md. Chunk 4 of 6. Content: ## Pricing table\n\nAll prices are in US dollars per unit and exclude tax and shipping.\n\n| SKU | Product | 1 to 9 units | 10 to 49 units | 50 or more units |\n| --- | --- | --- | --- | --- |\n| LV-77-0192 | XR-4410 thermal probe | 129.00 | 119.00 | 109.00 |\n| LV-77-0193 | XR-4420 thermal probe | 159.00 | 149.00 | 139.00 |\n| LV-81-0007 | XR-5100 reference thermometer | 489.00 | 469.00 | 449.00 |\n| LV-90-0415 | DL-220 data logger | 79.00 | 72.00 | 65.00 |\n[Metadata:   ]",
+        "similarity": 0.18551523426447664,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.23189404283059578,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.18551523426447664,
+        "image_url": null
+      },
+      {
+        "chunk_id": "8fdaedf8-6cde-46bf-9142-c088e94080ec",
+        "document_id": "959e010a-5e5f-4725-a739-cb8cddeeda49",
+        "content": "Document: product-specs.en.md. Chunk 5 of 6. Content: ## Firmware and compatibility\n\nFirmware build FW-2.8.14 supports the XR-4410, the XR-4420 and the XR-5100. The DL-220 data logger uses its own firmware line, DLF-1.3.2. Device identifiers have the form LVI-XR-000123, where the middle part is the model family and the last six digits are the serial number. To update a probe, connect it over USB-C and run the Lumen Link desktop tool, which is available at https://example.com/downloads/lumen-link.\n[Metadata:   ]",
+        "similarity": 0.16381510064781946,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.20476887580977432,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.16381510064781946,
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "Who won the football world cup in 2018?",
+    "results": [],
+    "source_images": []
+  },
+  {
+    "query": "What is the capital city of Australia?",
+    "results": [],
+    "source_images": []
+  },
+  {
+    "query": "What is the total due on invoice INV-24-00381?",
+    "results": [
+      {
+        "chunk_id": "a8b0fc80-ffca-4f16-8984-deb9858da091",
+        "document_id": "68800580-ea11-489e-9d23-5ac0bfacdec7",
+        "content": "Document: scanned-invoice.en.md. Chunk 1 of 5. Content: ## lnvoice header\n\nLUMEN VA1LEY lNSTRUMENTS\nlnvoice no. INV-24-00381\nDate of issue: 12 Marcl1 2O24\nCustomer: Harbor Light Laboratories, Unit 4B\nOrder reference: PO-7731\n[Metadata:   ]",
+        "similarity": 0.3120276036131088,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "0bb681d2-4e2d-4f21-b51f-74bd892cd86e",
+        "document_id": "68800580-ea11-489e-9d23-5ac0bfacdec7",
+        "content": "Document: scanned-invoice.en.md. Chunk 5 of 5. Content: ## Footer\n\nTh1s invoice was produced by the Lumen Va1ley lnstruments billing system. Questions about this document go to the billing team, billing@example.net. Goods rema1n the property of Lumen Valley lnstruments until the invoice is paid in full.\n[Metadata:   ]",
+        "similarity": 0.17280512258763348,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "Within how many days of the date of issue is payment due on the invoice?",
+    "results": [
+      {
+        "chunk_id": "95fb2850-16d4-4960-98f8-8c977f792a54",
+        "document_id": "68800580-ea11-489e-9d23-5ac0bfacdec7",
+        "content": "Document: scanned-invoice.en.md. Chunk 4 of 5. Content: ## Payment terms\n\nPayment is due w1thin 45 days of the date of issue. lnterest of 1.5 % per month is added to overdue amounts. Pay by bank transfer and quote the invo1ce no. as the payment reference. A cheque is not accepted.\n[Metadata:   ]",
+        "similarity": 0.4098684665600012,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.5123355832000015,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.4098684665600012,
+        "image_url": null
+      },
+      {
+        "chunk_id": "3165c183-8863-4fa8-8486-e4edb0a2a137",
+        "document_id": "332012aa-813e-426b-a096-b260624e6cd3",
+        "content": "Document: refund-policy.en.md. Chunk 1 of 5. Content: ## Annual plans\n\nLumen Valley Instruments accepts refund requests for plans billed once a year. Send the request to the billing team with your order number. The refund is paid to the original payment method within 10 business days. The annual plans refund window is 45 days from the purchase date.\n[Metadata:   ]",
+        "similarity": 0.2414818484696727,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.30185231058709083,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.2414818484696727,
+        "image_url": null
+      },
+      {
+        "chunk_id": "9ef78ef6-3872-43a6-80ce-47aa6d4b98ed",
+        "document_id": "332012aa-813e-426b-a096-b260624e6cd3",
+        "content": "Document: refund-policy.en.md. Chunk 2 of 5. Content: ## Monthly plans\n\nLumen Valley Instruments accepts refund requests for plans billed once a month. Send the request to the billing team with your order number. The refund is paid to the original payment method within 10 business days. The monthly plans refund window is 14 days from the purchase date.\n[Metadata:   ]",
+        "similarity": 0.23143966512922295,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.2892995814115287,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.23143966512922295,
+        "image_url": null
+      },
+      {
+        "chunk_id": "a8b0fc80-ffca-4f16-8984-deb9858da091",
+        "document_id": "68800580-ea11-489e-9d23-5ac0bfacdec7",
+        "content": "Document: scanned-invoice.en.md. Chunk 1 of 5. Content: ## lnvoice header\n\nLUMEN VA1LEY lNSTRUMENTS\nlnvoice no. INV-24-00381\nDate of issue: 12 Marcl1 2O24\nCustomer: Harbor Light Laboratories, Unit 4B\nOrder reference: PO-7731\n[Metadata:   ]",
+        "similarity": 0.2172540190877535,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.27156752385969185,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.2172540190877535,
+        "image_url": null
+      },
+      {
+        "chunk_id": "4b8329a5-dafd-46ee-abe6-72593bbe8d3f",
+        "document_id": "b3cea6c0-8718-4ce2-a5cc-4907af5a33fb",
+        "content": "Document: shipping-handbook.en.md. Chunk 3 of 6. Content: ## Delivery times by region\n\nStandard delivery takes 3 to 5 business days within the home country, 5 to 8 business days within the neighbouring region and 8 to 14 business days for all other destinations. Express delivery takes 1 to 2 business days at home and 3 to 4 business days in the neighbouring region. Delivery times count from dispatch, not from the order date.\n[Metadata:   ]",
+        "similarity": 0.20241265842652023,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.2530158230331503,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.20241265842652023,
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "What is the price of the DL-220 data logger for 50 or more units?",
+    "results": [
+      {
+        "chunk_id": "766e439b-a122-4050-8460-762d4ec15824",
+        "document_id": "959e010a-5e5f-4725-a739-cb8cddeeda49",
+        "content": "Document: product-specs.en.md. Chunk 4 of 6. Content: ## Pricing table\n\nAll prices are in US dollars per unit and exclude tax and shipping.\n\n| SKU | Product | 1 to 9 units | 10 to 49 units | 50 or more units |\n| --- | --- | --- | --- | --- |\n| LV-77-0192 | XR-4410 thermal probe | 129.00 | 119.00 | 109.00 |\n| LV-77-0193 | XR-4420 thermal probe | 159.00 | 149.00 | 139.00 |\n| LV-81-0007 | XR-5100 reference thermometer | 489.00 | 469.00 | 449.00 |\n| LV-90-0415 | DL-220 data logger | 79.00 | 72.00 | 65.00 |\n[Metadata:   ]",
+        "similarity": 0.24308400539315322,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "8fdaedf8-6cde-46bf-9142-c088e94080ec",
+        "document_id": "959e010a-5e5f-4725-a739-cb8cddeeda49",
+        "content": "Document: product-specs.en.md. Chunk 5 of 6. Content: ## Firmware and compatibility\n\nFirmware build FW-2.8.14 supports the XR-4410, the XR-4420 and the XR-5100. The DL-220 data logger uses its own firmware line, DLF-1.3.2. Device identifiers have the form LVI-XR-000123, where the middle part is the model family and the last six digits are the serial number. To update a probe, connect it over USB-C and run the Lumen Link desktop tool, which is available at https://example.com/downloads/lumen-link.\n[Metadata:   ]",
+        "similarity": 0.15188286161073794,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "Which interface does the XR-5100 have?",
+    "results": [
+      {
+        "chunk_id": "ae73bcc9-2e0b-44d6-8492-d143c45c7c9d",
+        "document_id": "959e010a-5e5f-4725-a739-cb8cddeeda49",
+        "content": "Document: product-specs.en.md. Chunk 3 of 6. Content: ## Specification table\n\n| Model | SKU | Range (C) | Accuracy (C) | Interface | Weight (g) |\n| --- | --- | --- | --- | --- | --- |\n| XR-4410 | LV-77-0192 | -40 to 250 | 0.5 | USB-C | 180 |\n| XR-4420 | LV-77-0193 | -40 to 400 | 0.5 | USB-C | 180 |\n| XR-5100 | LV-81-0007 | -200 to 600 | 0.2 | USB-C and RS-485 | 310 |\n| DL-220 | LV-90-0415 | -40 to 125 | 1.0 | Bluetooth LE | 95 |\n[Metadata:   ]",
+        "similarity": 0.28651065940049314,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "8fdaedf8-6cde-46bf-9142-c088e94080ec",
+        "document_id": "959e010a-5e5f-4725-a739-cb8cddeeda49",
+        "content": "Document: product-specs.en.md. Chunk 5 of 6. Content: ## Firmware and compatibility\n\nFirmware build FW-2.8.14 supports the XR-4410, the XR-4420 and the XR-5100. The DL-220 data logger uses its own firmware line, DLF-1.3.2. Device identifiers have the form LVI-XR-000123, where the middle part is the model family and the last six digits are the serial number. To update a probe, connect it over USB-C and run the Lumen Link desktop tool, which is available at https://example.com/downloads/lumen-link.\n[Metadata:   ]",
+        "similarity": 0.26422745776854617,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "766e439b-a122-4050-8460-762d4ec15824",
+        "document_id": "959e010a-5e5f-4725-a739-cb8cddeeda49",
+        "content": "Document: product-specs.en.md. Chunk 4 of 6. Content: ## Pricing table\n\nAll prices are in US dollars per unit and exclude tax and shipping.\n\n| SKU | Product | 1 to 9 units | 10 to 49 units | 50 or more units |\n| --- | --- | --- | --- | --- |\n| LV-77-0192 | XR-4410 thermal probe | 129.00 | 119.00 | 109.00 |\n| LV-77-0193 | XR-4420 thermal probe | 159.00 | 149.00 | 139.00 |\n| LV-81-0007 | XR-5100 reference thermometer | 489.00 | 469.00 | 449.00 |\n| LV-90-0415 | DL-220 data logger | 79.00 | 72.00 | 65.00 |\n[Metadata:   ]",
+        "similarity": 0.1658294498171946,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "How many grams does the DL-220 weigh?",
+    "results": [],
+    "source_images": []
+  },
+  {
+    "query": "Quali sono i termini per chiedere il rimborso dei piani annuali e di quelli mensili?",
+    "results": [
+      {
+        "chunk_id": "cb66cdc7-d8bf-4346-a673-d82095c8a676",
+        "document_id": "fb5ddaad-1d78-4479-a51a-51dc0824ed5d",
+        "content": "Document: refund-policy.it.md. Chunk 1 of 5. Content: ## Piani annuali\n\nValle Verde Strumenti accetta richieste di rimborso per i piani con fatturazione annuale. La richiesta va inviata all'ufficio amministrazione insieme al numero d'ordine. Il rimborso viene accreditato sul metodo di pagamento originale entro 12 giorni lavorativi. Per i piani annuali il termine per chiedere il rimborso è di 60 giorni dalla data di acquisto.\n[Metadata:   ]",
+        "similarity": 0.4533731206246734,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "0f2c29e3-bd3d-463e-b081-e3d542ede4a3",
+        "document_id": "fb5ddaad-1d78-4479-a51a-51dc0824ed5d",
+        "content": "Document: refund-policy.it.md. Chunk 2 of 5. Content: ## Piani mensili\n\nValle Verde Strumenti accetta richieste di rimborso per i piani con fatturazione mensile. La richiesta va inviata all'ufficio amministrazione insieme al numero d'ordine. Il rimborso viene accreditato sul metodo di pagamento originale entro 12 giorni lavorativi. Per i piani mensili il termine per chiedere il rimborso è di 10 giorni dalla data di acquisto.\n[Metadata:   ]",
+        "similarity": 0.44896840198166366,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "Qual è l'intervallo di misura del VS-220 e quanto costa da 1 a 9 pezzi?",
+    "results": [
+      {
+        "chunk_id": "756b5aa8-1daa-424e-a846-b3faa746fd3e",
+        "document_id": "45240c49-6437-4ed6-80d4-b958157b65df",
+        "content": "Document: product-specs.it.md. Chunk 2 of 6. Content: ## Termometro a sonda VS-220\n\nIl termometro a sonda VS-220 (codice articolo VV-21-0311) è pensato per i controlli di laboratorio e di cucina professionale. L'intervallo di misura va da -50 a 350 gradi Celsius, con una precisione di più o meno 0,3 gradi. Il tempo di risposta è di 3 secondi. Il cavo della sonda è lungo 1,5 metri. Funziona con una batteria al litio CR2032 e la custodia ha grado di protezione IP67. Il firmware installato in fabbrica è VFW-3.6.2.\n[Metadata:   ]",
+        "similarity": 0.3078046687930063,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.38475583599125784,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.3078046687930063,
+        "image_url": null
+      },
+      {
+        "chunk_id": "3ae70509-b583-45f6-a605-98016a4e7528",
+        "document_id": "45240c49-6437-4ed6-80d4-b958157b65df",
+        "content": "Document: product-specs.it.md. Chunk 1 of 6. Content: ## Termometro a sonda VS-210\n\nIl termometro a sonda VS-210 (codice articolo VV-21-0310) è pensato per i controlli di laboratorio e di cucina professionale. L'intervallo di misura va da -50 a 200 gradi Celsius, con una precisione di più o meno 0,3 gradi. Il tempo di risposta è di 3 secondi. Il cavo della sonda è lungo 1,5 metri. Funziona con una batteria al litio CR2032 e la custodia ha grado di protezione IP67. Il firmware installato in fabbrica è VFW-3.6.2.\n[Metadata:   ]",
+        "similarity": 0.27733292738620996,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.34666615923276245,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.27733292738620996,
+        "image_url": null
+      },
+      {
+        "chunk_id": "4c066d33-f8a6-40c0-8e10-dd12ad1a4401",
+        "document_id": "45240c49-6437-4ed6-80d4-b958157b65df",
+        "content": "Document: product-specs.it.md. Chunk 3 of 6. Content: ## Tabella delle specifiche\n\n| Modello | Codice | Intervallo (C) | Precisione (C) | Interfaccia | Peso (g) |\n| --- | --- | --- | --- | --- | --- |\n| VS-210 | VV-21-0310 | da -50 a 200 | 0,3 | USB-C | 95 |\n| VS-220 | VV-21-0311 | da -50 a 350 | 0,3 | USB-C | 95 |\n| VR-700 | VV-33-0042 | da -196 a 700 | 0,1 | USB-C e RS-485 | 420 |\n| VL-15 | VV-48-0905 | da -20 a 70 | 1,2 | Bluetooth LE | 38 |\n[Metadata:   ]",
+        "similarity": 0.22118713911269633,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.2764839238908704,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.22118713911269633,
+        "image_url": null
+      },
+      {
+        "chunk_id": "7f1d30a3-23fa-4247-96b0-d7682883b82c",
+        "document_id": "45240c49-6437-4ed6-80d4-b958157b65df",
+        "content": "Document: product-specs.it.md. Chunk 5 of 6. Content: ## Firmware e identificativi\n\nIl firmware VFW-3.6.2 supporta VS-210, VS-220 e VR-700. Il registratore VL-15 usa una linea di firmware separata, VLF-1.1.9. L'identificativo del dispositivo ha la forma VVD-VS-002815: la parte centrale indica la famiglia di modelli e le ultime sei cifre sono il numero di serie. Per aggiornare la sonda, collegarla via USB-C e avviare lo strumento Verde Link, scaricabile da https://example.com/downloads/verde-link.\n[Metadata:   ]",
+        "similarity": 0.20519789054558135,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.2564973631819767,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.20519789054558135,
+        "image_url": null
+      },
+      {
+        "chunk_id": "b0855c87-8b8e-4b60-9908-22f04639471d",
+        "document_id": "45240c49-6437-4ed6-80d4-b958157b65df",
+        "content": "Document: product-specs.it.md. Chunk 4 of 6. Content: ## Tabella dei prezzi\n\nTutti i prezzi sono in euro per unità, IVA e spedizione escluse.\n\n| Codice | Prodotto | da 1 a 9 pezzi | da 10 a 49 pezzi | 50 pezzi o più |\n| --- | --- | --- | --- | --- |\n| VV-21-0310 | Termometro VS-210 | 94,00 | 86,00 | 79,00 |\n| VV-21-0311 | Termometro VS-220 | 118,00 | 109,00 | 99,00 |\n| VV-33-0042 | Termometro di riferimento VR-700 | 640,00 | 610,00 | 580,00 |\n| VV-48-0905 | Registratore VL-15 | 56,00 | 51,00 | 46,00 |\n[Metadata:   ]",
+        "similarity": 0.149317385358016,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.18664673169752,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.149317385358016,
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "Per quanti mesi sono coperti gli accessori di consumo e entro quanti giorni dalla consegna si può acquistare l'estensione di garanzia?",
+    "results": [
+      {
+        "chunk_id": "ea955655-7208-4fa0-8f8a-e259bd9fa491",
+        "document_id": "b956386c-b598-4884-bc39-b15acb72a252",
+        "content": "Document: warranty-terms.it.md. Chunk 6 of 6. Content: ## Estensione di garanzia\n\nEntro 30 giorni dalla consegna è possibile acquistare un'estensione di garanzia di 12 mesi, al prezzo del 10% del valore dello strumento. L'estensione ha le stesse condizioni e le stesse esclusioni della garanzia di base e si applica a un solo strumento per volta.\n[Metadata:   ]",
+        "similarity": 0.43916612230216984,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.5489576528777123,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.43916612230216984,
+        "image_url": null
+      },
+      {
+        "chunk_id": "e7b89bdf-77f0-4b90-9b80-98f3319ecd83",
+        "document_id": "b956386c-b598-4884-bc39-b15acb72a252",
+        "content": "Document: warranty-terms.it.md. Chunk 1 of 6. Content: ## Durata della garanzia\n\nGli strumenti venduti da Valle Verde Strumenti sono coperti da una garanzia legale e commerciale di 24 mesi a partire dalla data di consegna. Gli accessori di consumo, come batterie e guaine protettive, sono coperti per 6 mesi. La garanzia non si rinnova dopo una riparazione e non viene prolungata dal periodo di fermo dello strumento.\n[Metadata:   ]",
+        "similarity": 0.3891487778627305,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.48643597232841307,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.3891487778627305,
+        "image_url": null
+      },
+      {
+        "chunk_id": "afd07bb5-fa97-41c0-8b75-ec650f244b19",
+        "document_id": "b0f11cff-e756-4458-a963-b53776c9da72",
+        "content": "Document: scanned-receipt.it.md. Chunk 5 of 5. Content: ## Pie di pagina\n\nGrazie per aver scelto Valle Verde Strumenti. Per informazioni sul punto vendita di Citta Esempio scrivere a negozio@example.net. Conservare lo scontrino per la garanzia: 1a garanzia dura 24 mesi dalla data di acquisto.\n[Metadata:   ]",
+        "similarity": 0.22268733560123322,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.2783591695015415,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.22268733560123322,
+        "image_url": null
+      },
+      {
+        "chunk_id": "e2bee7d6-7735-4b8f-b424-393d77af6ee0",
+        "document_id": "b956386c-b598-4884-bc39-b15acb72a252",
+        "content": "Document: warranty-terms.it.md. Chunk 5 of 6. Content: ## Tempi e costi di spedizione\n\nIl centro di assistenza completa la riparazione entro 15 giorni lavorativi dal ricevimento dello strumento. Le spese di spedizione verso il centro sono a carico del cliente, mentre la spedizione di ritorno è a carico di Valle Verde Strumenti per gli interventi in garanzia. Per gli interventi fuori garanzia viene inviato prima un preventivo, valido 10 giorni.\n[Metadata:   ]",
+        "similarity": 0.21763222181526087,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.2720402772690761,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.21763222181526087,
+        "image_url": null
+      },
+      {
+        "chunk_id": "52e54dac-e99f-41bb-9001-2746a0897469",
+        "document_id": "fb5ddaad-1d78-4479-a51a-51dc0824ed5d",
+        "content": "Document: refund-policy.it.md. Chunk 5 of 5. Content: ## Come inviare la richiesta\n\nScrivere a rimborsi@example.com indicando il numero d'ordine e l'indirizzo email usato al momento dell'acquisto. Le richieste telefoniche sono gestite al numero 555-0144 nei giorni feriali dalle 9:00 alle 17:00. La ricezione della richiesta viene confermata entro due giorni lavorativi.\n[Metadata:   ]",
+        "similarity": 0.21666202048266783,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.2708275256033348,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.21666202048266783,
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "Quali modelli supporta il firmware VFW-3.6.2?",
+    "results": [
+      {
+        "chunk_id": "7f1d30a3-23fa-4247-96b0-d7682883b82c",
+        "document_id": "45240c49-6437-4ed6-80d4-b958157b65df",
+        "content": "Document: product-specs.it.md. Chunk 5 of 6. Content: ## Firmware e identificativi\n\nIl firmware VFW-3.6.2 supporta VS-210, VS-220 e VR-700. Il registratore VL-15 usa una linea di firmware separata, VLF-1.1.9. L'identificativo del dispositivo ha la forma VVD-VS-002815: la parte centrale indica la famiglia di modelli e le ultime sei cifre sono il numero di serie. Per aggiornare la sonda, collegarla via USB-C e avviare lo strumento Verde Link, scaricabile da https://example.com/downloads/verde-link.\n[Metadata:   ]",
+        "similarity": 0.2972573177473182,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.3715716471841477,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.2972573177473182,
+        "image_url": null
+      },
+      {
+        "chunk_id": "8fdaedf8-6cde-46bf-9142-c088e94080ec",
+        "document_id": "959e010a-5e5f-4725-a739-cb8cddeeda49",
+        "content": "Document: product-specs.en.md. Chunk 5 of 6. Content: ## Firmware and compatibility\n\nFirmware build FW-2.8.14 supports the XR-4410, the XR-4420 and the XR-5100. The DL-220 data logger uses its own firmware line, DLF-1.3.2. Device identifiers have the form LVI-XR-000123, where the middle part is the model family and the last six digits are the serial number. To update a probe, connect it over USB-C and run the Lumen Link desktop tool, which is available at https://example.com/downloads/lumen-link.\n[Metadata:   ]",
+        "similarity": 0.22108843985463747,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.27636054981829683,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.22108843985463747,
+        "image_url": null
+      },
+      {
+        "chunk_id": "756b5aa8-1daa-424e-a846-b3faa746fd3e",
+        "document_id": "45240c49-6437-4ed6-80d4-b958157b65df",
+        "content": "Document: product-specs.it.md. Chunk 2 of 6. Content: ## Termometro a sonda VS-220\n\nIl termometro a sonda VS-220 (codice articolo VV-21-0311) è pensato per i controlli di laboratorio e di cucina professionale. L'intervallo di misura va da -50 a 350 gradi Celsius, con una precisione di più o meno 0,3 gradi. Il tempo di risposta è di 3 secondi. Il cavo della sonda è lungo 1,5 metri. Funziona con una batteria al litio CR2032 e la custodia ha grado di protezione IP67. Il firmware installato in fabbrica è VFW-3.6.2.\n[Metadata:   ]",
+        "similarity": 0.17273742068414802,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.21592177585518502,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.17273742068414802,
+        "image_url": null
+      },
+      {
+        "chunk_id": "3ae70509-b583-45f6-a605-98016a4e7528",
+        "document_id": "45240c49-6437-4ed6-80d4-b958157b65df",
+        "content": "Document: product-specs.it.md. Chunk 1 of 6. Content: ## Termometro a sonda VS-210\n\nIl termometro a sonda VS-210 (codice articolo VV-21-0310) è pensato per i controlli di laboratorio e di cucina professionale. L'intervallo di misura va da -50 a 200 gradi Celsius, con una precisione di più o meno 0,3 gradi. Il tempo di risposta è di 3 secondi. Il cavo della sonda è lungo 1,5 metri. Funziona con una batteria al litio CR2032 e la custodia ha grado di protezione IP67. Il firmware installato in fabbrica è VFW-3.6.2.\n[Metadata:   ]",
+        "similarity": 0.17096328754765475,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.2137041094345684,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.17096328754765475,
+        "image_url": null
+      },
+      {
+        "chunk_id": "0cc1d8ec-b580-4978-bb22-dc63c5fb6c97",
+        "document_id": "959e010a-5e5f-4725-a739-cb8cddeeda49",
+        "content": "Document: product-specs.en.md. Chunk 1 of 6. Content: ## XR-4410 thermal probe\n\nThe XR-4410 thermal probe (SKU LV-77-0192) is a handheld probe for lab benches. Measurement range is -40 to 250 degrees Celsius. Accuracy is plus or minus 0.5 degrees Celsius. Response time is 2 seconds. The probe cable is 3 metres long. Power comes from two AA batteries. The housing is rated IP54. The firmware build shipped with this model is FW-2.8.14.\n[Metadata:   ]",
+        "similarity": 0.1555151025381937,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.19439387817274212,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.1555151025381937,
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "A cosa corrisponde il codice VV-RC-0061?",
+    "results": [
+      {
+        "chunk_id": "cd212857-2636-433d-8bf6-761321f3f7e7",
+        "document_id": "45240c49-6437-4ed6-80d4-b958157b65df",
+        "content": "Document: product-specs.it.md. Chunk 6 of 6. Content: ## Garanzia e ricambi\n\nTutti gli strumenti elencati hanno una garanzia limitata di due anni dalla data di consegna. I cavi di ricambio si ordinano con il codice VV-RC-0060 per il cavo da 1,5 metri e VV-RC-0061 per quello da 3 metri. La batteria di ricambio ha il codice VV-BT-0007. Le richieste di garanzia vanno inviate a garanzia@example.org con l'identificativo del dispositivo e una foto dell'etichetta.\n[Metadata:   ]",
+        "similarity": 0.3824339657612663,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "cf6bb0c9-8c14-4419-aa00-bc3df83279a3",
+        "document_id": "b0f11cff-e756-4458-a963-b53776c9da72",
+        "content": "Document: scanned-receipt.it.md. Chunk 2 of 5. Content: ## Articoli acquistati\n\nCod.          Descrizione                     Qta   Prezzo   Importo\nVV-21-O31O    Termometro VS-21O                2     94,OO    188,OO\nVV-RC-OO6O    Cavo di ricambio 1,5 m           3     12,OO     36,OO\nVV-BT-OOO7    Batteria CR2O32                  5      3,5O     17,5O\n[Metadata:   ]",
+        "similarity": 0.20474967842536707,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "4c066d33-f8a6-40c0-8e10-dd12ad1a4401",
+        "document_id": "45240c49-6437-4ed6-80d4-b958157b65df",
+        "content": "Document: product-specs.it.md. Chunk 3 of 6. Content: ## Tabella delle specifiche\n\n| Modello | Codice | Intervallo (C) | Precisione (C) | Interfaccia | Peso (g) |\n| --- | --- | --- | --- | --- | --- |\n| VS-210 | VV-21-0310 | da -50 a 200 | 0,3 | USB-C | 95 |\n| VS-220 | VV-21-0311 | da -50 a 350 | 0,3 | USB-C | 95 |\n| VR-700 | VV-33-0042 | da -196 a 700 | 0,1 | USB-C e RS-485 | 420 |\n| VL-15 | VV-48-0905 | da -20 a 70 | 1,2 | Bluetooth LE | 38 |\n[Metadata:   ]",
+        "similarity": 0.19033704842076882,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "b0855c87-8b8e-4b60-9908-22f04639471d",
+        "document_id": "45240c49-6437-4ed6-80d4-b958157b65df",
+        "content": "Document: product-specs.it.md. Chunk 4 of 6. Content: ## Tabella dei prezzi\n\nTutti i prezzi sono in euro per unità, IVA e spedizione escluse.\n\n| Codice | Prodotto | da 1 a 9 pezzi | da 10 a 49 pezzi | 50 pezzi o più |\n| --- | --- | --- | --- | --- |\n| VV-21-0310 | Termometro VS-210 | 94,00 | 86,00 | 79,00 |\n| VV-21-0311 | Termometro VS-220 | 118,00 | 109,00 | 99,00 |\n| VV-33-0042 | Termometro di riferimento VR-700 | 640,00 | 610,00 | 580,00 |\n| VV-48-0905 | Registratore VL-15 | 56,00 | 51,00 | 46,00 |\n[Metadata:   ]",
+        "similarity": 0.15959359040107524,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "Come è composto un identificativo del dispositivo come VVD-VS-002815?",
+    "results": [
+      {
+        "chunk_id": "7f1d30a3-23fa-4247-96b0-d7682883b82c",
+        "document_id": "45240c49-6437-4ed6-80d4-b958157b65df",
+        "content": "Document: product-specs.it.md. Chunk 5 of 6. Content: ## Firmware e identificativi\n\nIl firmware VFW-3.6.2 supporta VS-210, VS-220 e VR-700. Il registratore VL-15 usa una linea di firmware separata, VLF-1.1.9. L'identificativo del dispositivo ha la forma VVD-VS-002815: la parte centrale indica la famiglia di modelli e le ultime sei cifre sono il numero di serie. Per aggiornare la sonda, collegarla via USB-C e avviare lo strumento Verde Link, scaricabile da https://example.com/downloads/verde-link.\n[Metadata:   ]",
+        "similarity": 0.3457956339147281,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "8b8583ea-bf33-4780-aee9-ba5ee9a4676a",
+        "document_id": "b956386c-b598-4884-bc39-b15acb72a252",
+        "content": "Document: warranty-terms.it.md. Chunk 4 of 6. Content: ## Come aprire una richiesta\n\nPer aprire una richiesta bisogna scrivere a garanzia@example.org, allegando l'identificativo del dispositivo, la prova d'acquisto e una foto dell'etichetta. Entro 3 giorni lavorativi il cliente riceve un numero di pratica e le istruzioni per la spedizione. Lo strumento va imballato con cura e inviato al centro di assistenza indicato nelle istruzioni.\n[Metadata:   ]",
+        "similarity": 0.2002903280566133,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "cd212857-2636-433d-8bf6-761321f3f7e7",
+        "document_id": "45240c49-6437-4ed6-80d4-b958157b65df",
+        "content": "Document: product-specs.it.md. Chunk 6 of 6. Content: ## Garanzia e ricambi\n\nTutti gli strumenti elencati hanno una garanzia limitata di due anni dalla data di consegna. I cavi di ricambio si ordinano con il codice VV-RC-0060 per il cavo da 1,5 metri e VV-RC-0061 per quello da 3 metri. La batteria di ricambio ha il codice VV-BT-0007. Le richieste di garanzia vanno inviate a garanzia@example.org con l'identificativo del dispositivo e una foto dell'etichetta.\n[Metadata:   ]",
+        "similarity": 0.18760989598523425,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "756b5aa8-1daa-424e-a846-b3faa746fd3e",
+        "document_id": "45240c49-6437-4ed6-80d4-b958157b65df",
+        "content": "Document: product-specs.it.md. Chunk 2 of 6. Content: ## Termometro a sonda VS-220\n\nIl termometro a sonda VS-220 (codice articolo VV-21-0311) è pensato per i controlli di laboratorio e di cucina professionale. L'intervallo di misura va da -50 a 350 gradi Celsius, con una precisione di più o meno 0,3 gradi. Il tempo di risposta è di 3 secondi. Il cavo della sonda è lungo 1,5 metri. Funziona con una batteria al litio CR2032 e la custodia ha grado di protezione IP67. Il firmware installato in fabbrica è VFW-3.6.2.\n[Metadata:   ]",
+        "similarity": 0.18562954753421657,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "3ae70509-b583-45f6-a605-98016a4e7528",
+        "document_id": "45240c49-6437-4ed6-80d4-b958157b65df",
+        "content": "Document: product-specs.it.md. Chunk 1 of 6. Content: ## Termometro a sonda VS-210\n\nIl termometro a sonda VS-210 (codice articolo VV-21-0310) è pensato per i controlli di laboratorio e di cucina professionale. L'intervallo di misura va da -50 a 200 gradi Celsius, con una precisione di più o meno 0,3 gradi. Il tempo di risposta è di 3 secondi. Il cavo della sonda è lungo 1,5 metri. Funziona con una batteria al litio CR2032 e la custodia ha grado di protezione IP67. Il firmware installato in fabbrica è VFW-3.6.2.\n[Metadata:   ]",
+        "similarity": 0.18372292601702545,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "Qual è il termine per chiedere il rimborso di un piano annuale?",
+    "results": [
+      {
+        "chunk_id": "cb66cdc7-d8bf-4346-a673-d82095c8a676",
+        "document_id": "fb5ddaad-1d78-4479-a51a-51dc0824ed5d",
+        "content": "Document: refund-policy.it.md. Chunk 1 of 5. Content: ## Piani annuali\n\nValle Verde Strumenti accetta richieste di rimborso per i piani con fatturazione annuale. La richiesta va inviata all'ufficio amministrazione insieme al numero d'ordine. Il rimborso viene accreditato sul metodo di pagamento originale entro 12 giorni lavorativi. Per i piani annuali il termine per chiedere il rimborso è di 60 giorni dalla data di acquisto.\n[Metadata:   ]",
+        "similarity": 0.39487918661129895,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "0f2c29e3-bd3d-463e-b081-e3d542ede4a3",
+        "document_id": "fb5ddaad-1d78-4479-a51a-51dc0824ed5d",
+        "content": "Document: refund-policy.it.md. Chunk 2 of 5. Content: ## Piani mensili\n\nValle Verde Strumenti accetta richieste di rimborso per i piani con fatturazione mensile. La richiesta va inviata all'ufficio amministrazione insieme al numero d'ordine. Il rimborso viene accreditato sul metodo di pagamento originale entro 12 giorni lavorativi. Per i piani mensili il termine per chiedere il rimborso è di 10 giorni dalla data di acquisto.\n[Metadata:   ]",
+        "similarity": 0.31294956781884997,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "3ae70509-b583-45f6-a605-98016a4e7528",
+        "document_id": "45240c49-6437-4ed6-80d4-b958157b65df",
+        "content": "Document: product-specs.it.md. Chunk 1 of 6. Content: ## Termometro a sonda VS-210\n\nIl termometro a sonda VS-210 (codice articolo VV-21-0310) è pensato per i controlli di laboratorio e di cucina professionale. L'intervallo di misura va da -50 a 200 gradi Celsius, con una precisione di più o meno 0,3 gradi. Il tempo di risposta è di 3 secondi. Il cavo della sonda è lungo 1,5 metri. Funziona con una batteria al litio CR2032 e la custodia ha grado di protezione IP67. Il firmware installato in fabbrica è VFW-3.6.2.\n[Metadata:   ]",
+        "similarity": 0.1526141507175175,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "756b5aa8-1daa-424e-a846-b3faa746fd3e",
+        "document_id": "45240c49-6437-4ed6-80d4-b958157b65df",
+        "content": "Document: product-specs.it.md. Chunk 2 of 6. Content: ## Termometro a sonda VS-220\n\nIl termometro a sonda VS-220 (codice articolo VV-21-0311) è pensato per i controlli di laboratorio e di cucina professionale. L'intervallo di misura va da -50 a 350 gradi Celsius, con una precisione di più o meno 0,3 gradi. Il tempo di risposta è di 3 secondi. Il cavo della sonda è lungo 1,5 metri. Funziona con una batteria al litio CR2032 e la custodia ha grado di protezione IP67. Il firmware installato in fabbrica è VFW-3.6.2.\n[Metadata:   ]",
+        "similarity": 0.15188882811868676,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "Quanti mesi dura la garanzia degli strumenti a partire dalla consegna?",
+    "results": [
+      {
+        "chunk_id": "e7b89bdf-77f0-4b90-9b80-98f3319ecd83",
+        "document_id": "b956386c-b598-4884-bc39-b15acb72a252",
+        "content": "Document: warranty-terms.it.md. Chunk 1 of 6. Content: ## Durata della garanzia\n\nGli strumenti venduti da Valle Verde Strumenti sono coperti da una garanzia legale e commerciale di 24 mesi a partire dalla data di consegna. Gli accessori di consumo, come batterie e guaine protettive, sono coperti per 6 mesi. La garanzia non si rinnova dopo una riparazione e non viene prolungata dal periodo di fermo dello strumento.\n[Metadata:   ]",
+        "similarity": 0.45577970159157327,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.5697246269894666,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.45577970159157327,
+        "image_url": null
+      },
+      {
+        "chunk_id": "afd07bb5-fa97-41c0-8b75-ec650f244b19",
+        "document_id": "b0f11cff-e756-4458-a963-b53776c9da72",
+        "content": "Document: scanned-receipt.it.md. Chunk 5 of 5. Content: ## Pie di pagina\n\nGrazie per aver scelto Valle Verde Strumenti. Per informazioni sul punto vendita di Citta Esempio scrivere a negozio@example.net. Conservare lo scontrino per la garanzia: 1a garanzia dura 24 mesi dalla data di acquisto.\n[Metadata:   ]",
+        "similarity": 0.33746861630603625,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.42183577038254527,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.33746861630603625,
+        "image_url": null
+      },
+      {
+        "chunk_id": "ea955655-7208-4fa0-8f8a-e259bd9fa491",
+        "document_id": "b956386c-b598-4884-bc39-b15acb72a252",
+        "content": "Document: warranty-terms.it.md. Chunk 6 of 6. Content: ## Estensione di garanzia\n\nEntro 30 giorni dalla consegna è possibile acquistare un'estensione di garanzia di 12 mesi, al prezzo del 10% del valore dello strumento. L'estensione ha le stesse condizioni e le stesse esclusioni della garanzia di base e si applica a un solo strumento per volta.\n[Metadata:   ]",
+        "similarity": 0.32070426972401295,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.40088033715501614,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.32070426972401295,
+        "image_url": null
+      },
+      {
+        "chunk_id": "cd212857-2636-433d-8bf6-761321f3f7e7",
+        "document_id": "45240c49-6437-4ed6-80d4-b958157b65df",
+        "content": "Document: product-specs.it.md. Chunk 6 of 6. Content: ## Garanzia e ricambi\n\nTutti gli strumenti elencati hanno una garanzia limitata di due anni dalla data di consegna. I cavi di ricambio si ordinano con il codice VV-RC-0060 per il cavo da 1,5 metri e VV-RC-0061 per quello da 3 metri. La batteria di ricambio ha il codice VV-BT-0007. Le richieste di garanzia vanno inviate a garanzia@example.org con l'identificativo del dispositivo e una foto dell'etichetta.\n[Metadata:   ]",
+        "similarity": 0.2771191311841162,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.3463989139801452,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.2771191311841162,
+        "image_url": null
+      },
+      {
+        "chunk_id": "e2bee7d6-7735-4b8f-b424-393d77af6ee0",
+        "document_id": "b956386c-b598-4884-bc39-b15acb72a252",
+        "content": "Document: warranty-terms.it.md. Chunk 5 of 6. Content: ## Tempi e costi di spedizione\n\nIl centro di assistenza completa la riparazione entro 15 giorni lavorativi dal ricevimento dello strumento. Le spese di spedizione verso il centro sono a carico del cliente, mentre la spedizione di ritorno è a carico di Valle Verde Strumenti per gli interventi in garanzia. Per gli interventi fuori garanzia viene inviato prima un preventivo, valido 10 giorni.\n[Metadata:   ]",
+        "similarity": 0.17445356362994213,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.21806695453742764,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.17445356362994213,
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "Entro quanti giorni lavorativi il centro di assistenza completa la riparazione?",
+    "results": [
+      {
+        "chunk_id": "e2bee7d6-7735-4b8f-b424-393d77af6ee0",
+        "document_id": "b956386c-b598-4884-bc39-b15acb72a252",
+        "content": "Document: warranty-terms.it.md. Chunk 5 of 6. Content: ## Tempi e costi di spedizione\n\nIl centro di assistenza completa la riparazione entro 15 giorni lavorativi dal ricevimento dello strumento. Le spese di spedizione verso il centro sono a carico del cliente, mentre la spedizione di ritorno è a carico di Valle Verde Strumenti per gli interventi in garanzia. Per gli interventi fuori garanzia viene inviato prima un preventivo, valido 10 giorni.\n[Metadata:   ]",
+        "similarity": 0.38210631734511014,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.47763289668138764,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.38210631734511014,
+        "image_url": null
+      },
+      {
+        "chunk_id": "8b8583ea-bf33-4780-aee9-ba5ee9a4676a",
+        "document_id": "b956386c-b598-4884-bc39-b15acb72a252",
+        "content": "Document: warranty-terms.it.md. Chunk 4 of 6. Content: ## Come aprire una richiesta\n\nPer aprire una richiesta bisogna scrivere a garanzia@example.org, allegando l'identificativo del dispositivo, la prova d'acquisto e una foto dell'etichetta. Entro 3 giorni lavorativi il cliente riceve un numero di pratica e le istruzioni per la spedizione. Lo strumento va imballato con cura e inviato al centro di assistenza indicato nelle istruzioni.\n[Metadata:   ]",
+        "similarity": 0.32828393039634085,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.41035491299542604,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.32828393039634085,
+        "image_url": null
+      },
+      {
+        "chunk_id": "52e54dac-e99f-41bb-9001-2746a0897469",
+        "document_id": "fb5ddaad-1d78-4479-a51a-51dc0824ed5d",
+        "content": "Document: refund-policy.it.md. Chunk 5 of 5. Content: ## Come inviare la richiesta\n\nScrivere a rimborsi@example.com indicando il numero d'ordine e l'indirizzo email usato al momento dell'acquisto. Le richieste telefoniche sono gestite al numero 555-0144 nei giorni feriali dalle 9:00 alle 17:00. La ricezione della richiesta viene confermata entro due giorni lavorativi.\n[Metadata:   ]",
+        "similarity": 0.23710445300499947,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.2963805662562493,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.23710445300499947,
+        "image_url": null
+      },
+      {
+        "chunk_id": "cb66cdc7-d8bf-4346-a673-d82095c8a676",
+        "document_id": "fb5ddaad-1d78-4479-a51a-51dc0824ed5d",
+        "content": "Document: refund-policy.it.md. Chunk 1 of 5. Content: ## Piani annuali\n\nValle Verde Strumenti accetta richieste di rimborso per i piani con fatturazione annuale. La richiesta va inviata all'ufficio amministrazione insieme al numero d'ordine. Il rimborso viene accreditato sul metodo di pagamento originale entro 12 giorni lavorativi. Per i piani annuali il termine per chiedere il rimborso è di 60 giorni dalla data di acquisto.\n[Metadata:   ]",
+        "similarity": 0.20775451937479517,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.25969314921849396,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.20775451937479517,
+        "image_url": null
+      },
+      {
+        "chunk_id": "0f2c29e3-bd3d-463e-b081-e3d542ede4a3",
+        "document_id": "fb5ddaad-1d78-4479-a51a-51dc0824ed5d",
+        "content": "Document: refund-policy.it.md. Chunk 2 of 5. Content: ## Piani mensili\n\nValle Verde Strumenti accetta richieste di rimborso per i piani con fatturazione mensile. La richiesta va inviata all'ufficio amministrazione insieme al numero d'ordine. Il rimborso viene accreditato sul metodo di pagamento originale entro 12 giorni lavorativi. Per i piani mensili il termine per chiedere il rimborso è di 10 giorni dalla data di acquisto.\n[Metadata:   ]",
+        "similarity": 0.20757119036999896,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.2594639879624987,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.20757119036999896,
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "A quale indirizzo email va scritto per aprire una richiesta di garanzia?",
+    "results": [
+      {
+        "chunk_id": "8b8583ea-bf33-4780-aee9-ba5ee9a4676a",
+        "document_id": "b956386c-b598-4884-bc39-b15acb72a252",
+        "content": "Document: warranty-terms.it.md. Chunk 4 of 6. Content: ## Come aprire una richiesta\n\nPer aprire una richiesta bisogna scrivere a garanzia@example.org, allegando l'identificativo del dispositivo, la prova d'acquisto e una foto dell'etichetta. Entro 3 giorni lavorativi il cliente riceve un numero di pratica e le istruzioni per la spedizione. Lo strumento va imballato con cura e inviato al centro di assistenza indicato nelle istruzioni.\n[Metadata:   ]",
+        "similarity": 0.2998530657019611,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.37481633212745136,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.2998530657019611,
+        "image_url": null
+      },
+      {
+        "chunk_id": "52e54dac-e99f-41bb-9001-2746a0897469",
+        "document_id": "fb5ddaad-1d78-4479-a51a-51dc0824ed5d",
+        "content": "Document: refund-policy.it.md. Chunk 5 of 5. Content: ## Come inviare la richiesta\n\nScrivere a rimborsi@example.com indicando il numero d'ordine e l'indirizzo email usato al momento dell'acquisto. Le richieste telefoniche sono gestite al numero 555-0144 nei giorni feriali dalle 9:00 alle 17:00. La ricezione della richiesta viene confermata entro due giorni lavorativi.\n[Metadata:   ]",
+        "similarity": 0.25187569901364226,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.3148446237670528,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.25187569901364226,
+        "image_url": null
+      },
+      {
+        "chunk_id": "cd212857-2636-433d-8bf6-761321f3f7e7",
+        "document_id": "45240c49-6437-4ed6-80d4-b958157b65df",
+        "content": "Document: product-specs.it.md. Chunk 6 of 6. Content: ## Garanzia e ricambi\n\nTutti gli strumenti elencati hanno una garanzia limitata di due anni dalla data di consegna. I cavi di ricambio si ordinano con il codice VV-RC-0060 per il cavo da 1,5 metri e VV-RC-0061 per quello da 3 metri. La batteria di ricambio ha il codice VV-BT-0007. Le richieste di garanzia vanno inviate a garanzia@example.org con l'identificativo del dispositivo e una foto dell'etichetta.\n[Metadata:   ]",
+        "similarity": 0.2125151019449394,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.26564387743117424,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.2125151019449394,
+        "image_url": null
+      },
+      {
+        "chunk_id": "afd07bb5-fa97-41c0-8b75-ec650f244b19",
+        "document_id": "b0f11cff-e756-4458-a963-b53776c9da72",
+        "content": "Document: scanned-receipt.it.md. Chunk 5 of 5. Content: ## Pie di pagina\n\nGrazie per aver scelto Valle Verde Strumenti. Per informazioni sul punto vendita di Citta Esempio scrivere a negozio@example.net. Conservare lo scontrino per la garanzia: 1a garanzia dura 24 mesi dalla data di acquisto.\n[Metadata:   ]",
+        "similarity": 0.1791978549017447,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.22399731862718086,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.1791978549017447,
+        "image_url": null
+      },
+      {
+        "chunk_id": "ea955655-7208-4fa0-8f8a-e259bd9fa491",
+        "document_id": "b956386c-b598-4884-bc39-b15acb72a252",
+        "content": "Document: warranty-terms.it.md. Chunk 6 of 6. Content: ## Estensione di garanzia\n\nEntro 30 giorni dalla consegna è possibile acquistare un'estensione di garanzia di 12 mesi, al prezzo del 10% del valore dello strumento. L'estensione ha le stesse condizioni e le stesse esclusioni della garanzia di base e si applica a un solo strumento per volta.\n[Metadata:   ]",
+        "similarity": 0.17719161494745805,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.22148951868432254,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.17719161494745805,
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "Per quanto tempo è valido il preventivo per gli interventi fuori garanzia?",
+    "results": [
+      {
+        "chunk_id": "e2bee7d6-7735-4b8f-b424-393d77af6ee0",
+        "document_id": "b956386c-b598-4884-bc39-b15acb72a252",
+        "content": "Document: warranty-terms.it.md. Chunk 5 of 6. Content: ## Tempi e costi di spedizione\n\nIl centro di assistenza completa la riparazione entro 15 giorni lavorativi dal ricevimento dello strumento. Le spese di spedizione verso il centro sono a carico del cliente, mentre la spedizione di ritorno è a carico di Valle Verde Strumenti per gli interventi in garanzia. Per gli interventi fuori garanzia viene inviato prima un preventivo, valido 10 giorni.\n[Metadata:   ]",
+        "similarity": 0.3440002210141735,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.43000027626771686,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.3440002210141735,
+        "image_url": null
+      },
+      {
+        "chunk_id": "e7b89bdf-77f0-4b90-9b80-98f3319ecd83",
+        "document_id": "b956386c-b598-4884-bc39-b15acb72a252",
+        "content": "Document: warranty-terms.it.md. Chunk 1 of 6. Content: ## Durata della garanzia\n\nGli strumenti venduti da Valle Verde Strumenti sono coperti da una garanzia legale e commerciale di 24 mesi a partire dalla data di consegna. Gli accessori di consumo, come batterie e guaine protettive, sono coperti per 6 mesi. La garanzia non si rinnova dopo una riparazione e non viene prolungata dal periodo di fermo dello strumento.\n[Metadata:   ]",
+        "similarity": 0.20588384568767104,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.2573548071095888,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.20588384568767104,
+        "image_url": null
+      },
+      {
+        "chunk_id": "cd212857-2636-433d-8bf6-761321f3f7e7",
+        "document_id": "45240c49-6437-4ed6-80d4-b958157b65df",
+        "content": "Document: product-specs.it.md. Chunk 6 of 6. Content: ## Garanzia e ricambi\n\nTutti gli strumenti elencati hanno una garanzia limitata di due anni dalla data di consegna. I cavi di ricambio si ordinano con il codice VV-RC-0060 per il cavo da 1,5 metri e VV-RC-0061 per quello da 3 metri. La batteria di ricambio ha il codice VV-BT-0007. Le richieste di garanzia vanno inviate a garanzia@example.org con l'identificativo del dispositivo e una foto dell'etichetta.\n[Metadata:   ]",
+        "similarity": 0.20146195818814708,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.25182744773518384,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.20146195818814708,
+        "image_url": null
+      },
+      {
+        "chunk_id": "ea955655-7208-4fa0-8f8a-e259bd9fa491",
+        "document_id": "b956386c-b598-4884-bc39-b15acb72a252",
+        "content": "Document: warranty-terms.it.md. Chunk 6 of 6. Content: ## Estensione di garanzia\n\nEntro 30 giorni dalla consegna è possibile acquistare un'estensione di garanzia di 12 mesi, al prezzo del 10% del valore dello strumento. L'estensione ha le stesse condizioni e le stesse esclusioni della garanzia di base e si applica a un solo strumento per volta.\n[Metadata:   ]",
+        "similarity": 0.19951022842953237,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.24938778553691543,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.19951022842953237,
+        "image_url": null
+      },
+      {
+        "chunk_id": "3ae70509-b583-45f6-a605-98016a4e7528",
+        "document_id": "45240c49-6437-4ed6-80d4-b958157b65df",
+        "content": "Document: product-specs.it.md. Chunk 1 of 6. Content: ## Termometro a sonda VS-210\n\nIl termometro a sonda VS-210 (codice articolo VV-21-0310) è pensato per i controlli di laboratorio e di cucina professionale. L'intervallo di misura va da -50 a 200 gradi Celsius, con una precisione di più o meno 0,3 gradi. Il tempo di risposta è di 3 secondi. Il cavo della sonda è lungo 1,5 metri. Funziona con una batteria al litio CR2032 e la custodia ha grado di protezione IP67. Il firmware installato in fabbrica è VFW-3.6.2.\n[Metadata:   ]",
+        "similarity": 0.1733329343796739,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.21666616797459237,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.1733329343796739,
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "Quanto costa l'estensione di garanzia di 12 mesi?",
+    "results": [
+      {
+        "chunk_id": "ea955655-7208-4fa0-8f8a-e259bd9fa491",
+        "document_id": "b956386c-b598-4884-bc39-b15acb72a252",
+        "content": "Document: warranty-terms.it.md. Chunk 6 of 6. Content: ## Estensione di garanzia\n\nEntro 30 giorni dalla consegna è possibile acquistare un'estensione di garanzia di 12 mesi, al prezzo del 10% del valore dello strumento. L'estensione ha le stesse condizioni e le stesse esclusioni della garanzia di base e si applica a un solo strumento per volta.\n[Metadata:   ]",
+        "similarity": 0.46511999119282,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.581399988991025,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.46511999119282,
+        "image_url": null
+      },
+      {
+        "chunk_id": "e7b89bdf-77f0-4b90-9b80-98f3319ecd83",
+        "document_id": "b956386c-b598-4884-bc39-b15acb72a252",
+        "content": "Document: warranty-terms.it.md. Chunk 1 of 6. Content: ## Durata della garanzia\n\nGli strumenti venduti da Valle Verde Strumenti sono coperti da una garanzia legale e commerciale di 24 mesi a partire dalla data di consegna. Gli accessori di consumo, come batterie e guaine protettive, sono coperti per 6 mesi. La garanzia non si rinnova dopo una riparazione e non viene prolungata dal periodo di fermo dello strumento.\n[Metadata:   ]",
+        "similarity": 0.2827705847855942,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.3534632309819927,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.2827705847855942,
+        "image_url": null
+      },
+      {
+        "chunk_id": "cd212857-2636-433d-8bf6-761321f3f7e7",
+        "document_id": "45240c49-6437-4ed6-80d4-b958157b65df",
+        "content": "Document: product-specs.it.md. Chunk 6 of 6. Content: ## Garanzia e ricambi\n\nTutti gli strumenti elencati hanno una garanzia limitata di due anni dalla data di consegna. I cavi di ricambio si ordinano con il codice VV-RC-0060 per il cavo da 1,5 metri e VV-RC-0061 per quello da 3 metri. La batteria di ricambio ha il codice VV-BT-0007. Le richieste di garanzia vanno inviate a garanzia@example.org con l'identificativo del dispositivo e una foto dell'etichetta.\n[Metadata:   ]",
+        "similarity": 0.2365329595171205,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.2956661993964006,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.2365329595171205,
+        "image_url": null
+      },
+      {
+        "chunk_id": "afd07bb5-fa97-41c0-8b75-ec650f244b19",
+        "document_id": "b0f11cff-e756-4458-a963-b53776c9da72",
+        "content": "Document: scanned-receipt.it.md. Chunk 5 of 5. Content: ## Pie di pagina\n\nGrazie per aver scelto Valle Verde Strumenti. Per informazioni sul punto vendita di Citta Esempio scrivere a negozio@example.net. Conservare lo scontrino per la garanzia: 1a garanzia dura 24 mesi dalla data di acquisto.\n[Metadata:   ]",
+        "similarity": 0.20881207086362236,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.26101508857952793,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.20881207086362236,
+        "image_url": null
+      },
+      {
+        "chunk_id": "3927fe78-043d-4503-8d61-f79dc1923e57",
+        "document_id": "b956386c-b598-4884-bc39-b15acb72a252",
+        "content": "Document: warranty-terms.it.md. Chunk 3 of 6. Content: ## Cosa non è coperto\n\nSono esclusi i danni da caduta, da immersione oltre il grado di protezione indicato, da uso di batterie non conformi e da aperture non autorizzate dell'involucro. Sono esclusi anche la taratura periodica e la normale usura dei cavi. Se l'involucro risulta aperto o i sigilli sono rotti, la garanzia decade.\n[Metadata:   ]",
+        "similarity": 0.17767796505716815,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.22209745632146016,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.17767796505716815,
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "Quanto pesa?",
+    "results": [],
+    "source_images": []
+  },
+  {
+    "query": "Entro quanti giorni devo chiederlo?",
+    "results": [
+      {
+        "chunk_id": "e2bee7d6-7735-4b8f-b424-393d77af6ee0",
+        "document_id": "b956386c-b598-4884-bc39-b15acb72a252",
+        "content": "Document: warranty-terms.it.md. Chunk 5 of 6. Content: ## Tempi e costi di spedizione\n\nIl centro di assistenza completa la riparazione entro 15 giorni lavorativi dal ricevimento dello strumento. Le spese di spedizione verso il centro sono a carico del cliente, mentre la spedizione di ritorno è a carico di Valle Verde Strumenti per gli interventi in garanzia. Per gli interventi fuori garanzia viene inviato prima un preventivo, valido 10 giorni.\n[Metadata:   ]",
+        "similarity": 0.22783438102456213,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.28479297628070266,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.22783438102456213,
+        "image_url": null
+      },
+      {
+        "chunk_id": "52e54dac-e99f-41bb-9001-2746a0897469",
+        "document_id": "fb5ddaad-1d78-4479-a51a-51dc0824ed5d",
+        "content": "Document: refund-policy.it.md. Chunk 5 of 5. Content: ## Come inviare la richiesta\n\nScrivere a rimborsi@example.com indicando il numero d'ordine e l'indirizzo email usato al momento dell'acquisto. Le richieste telefoniche sono gestite al numero 555-0144 nei giorni feriali dalle 9:00 alle 17:00. La ricezione della richiesta viene confermata entro due giorni lavorativi.\n[Metadata:   ]",
+        "similarity": 0.21668312947348217,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.2708539118418527,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.21668312947348217,
+        "image_url": null
+      },
+      {
+        "chunk_id": "8b8583ea-bf33-4780-aee9-ba5ee9a4676a",
+        "document_id": "b956386c-b598-4884-bc39-b15acb72a252",
+        "content": "Document: warranty-terms.it.md. Chunk 4 of 6. Content: ## Come aprire una richiesta\n\nPer aprire una richiesta bisogna scrivere a garanzia@example.org, allegando l'identificativo del dispositivo, la prova d'acquisto e una foto dell'etichetta. Entro 3 giorni lavorativi il cliente riceve un numero di pratica e le istruzioni per la spedizione. Lo strumento va imballato con cura e inviato al centro di assistenza indicato nelle istruzioni.\n[Metadata:   ]",
+        "similarity": 0.16591085540870854,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.20738856926088567,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.16591085540870854,
+        "image_url": null
+      },
+      {
+        "chunk_id": "cb66cdc7-d8bf-4346-a673-d82095c8a676",
+        "document_id": "fb5ddaad-1d78-4479-a51a-51dc0824ed5d",
+        "content": "Document: refund-policy.it.md. Chunk 1 of 5. Content: ## Piani annuali\n\nValle Verde Strumenti accetta richieste di rimborso per i piani con fatturazione annuale. La richiesta va inviata all'ufficio amministrazione insieme al numero d'ordine. Il rimborso viene accreditato sul metodo di pagamento originale entro 12 giorni lavorativi. Per i piani annuali il termine per chiedere il rimborso è di 60 giorni dalla data di acquisto.\n[Metadata:   ]",
+        "similarity": 0.16139233383949866,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.2017404172993733,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.16139233383949866,
+        "image_url": null
+      },
+      {
+        "chunk_id": "0f2c29e3-bd3d-463e-b081-e3d542ede4a3",
+        "document_id": "fb5ddaad-1d78-4479-a51a-51dc0824ed5d",
+        "content": "Document: refund-policy.it.md. Chunk 2 of 5. Content: ## Piani mensili\n\nValle Verde Strumenti accetta richieste di rimborso per i piani con fatturazione mensile. La richiesta va inviata all'ufficio amministrazione insieme al numero d'ordine. Il rimborso viene accreditato sul metodo di pagamento originale entro 12 giorni lavorativi. Per i piani mensili il termine per chiedere il rimborso è di 10 giorni dalla data di acquisto.\n[Metadata:   ]",
+        "similarity": 0.14235720897358828,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.17794651121698535,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.14235720897358828,
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "E chi paga la spedizione di ritorno?",
+    "results": [
+      {
+        "chunk_id": "e2bee7d6-7735-4b8f-b424-393d77af6ee0",
+        "document_id": "b956386c-b598-4884-bc39-b15acb72a252",
+        "content": "Document: warranty-terms.it.md. Chunk 5 of 6. Content: ## Tempi e costi di spedizione\n\nIl centro di assistenza completa la riparazione entro 15 giorni lavorativi dal ricevimento dello strumento. Le spese di spedizione verso il centro sono a carico del cliente, mentre la spedizione di ritorno è a carico di Valle Verde Strumenti per gli interventi in garanzia. Per gli interventi fuori garanzia viene inviato prima un preventivo, valido 10 giorni.\n[Metadata:   ]",
+        "similarity": 0.3766522117387201,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "cb66cdc7-d8bf-4346-a673-d82095c8a676",
+        "document_id": "fb5ddaad-1d78-4479-a51a-51dc0824ed5d",
+        "content": "Document: refund-policy.it.md. Chunk 1 of 5. Content: ## Piani annuali\n\nValle Verde Strumenti accetta richieste di rimborso per i piani con fatturazione annuale. La richiesta va inviata all'ufficio amministrazione insieme al numero d'ordine. Il rimborso viene accreditato sul metodo di pagamento originale entro 12 giorni lavorativi. Per i piani annuali il termine per chiedere il rimborso è di 60 giorni dalla data di acquisto.\n[Metadata:   ]",
+        "similarity": 0.15467586330792282,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "0f2c29e3-bd3d-463e-b081-e3d542ede4a3",
+        "document_id": "fb5ddaad-1d78-4479-a51a-51dc0824ed5d",
+        "content": "Document: refund-policy.it.md. Chunk 2 of 5. Content: ## Piani mensili\n\nValle Verde Strumenti accetta richieste di rimborso per i piani con fatturazione mensile. La richiesta va inviata all'ufficio amministrazione insieme al numero d'ordine. Il rimborso viene accreditato sul metodo di pagamento originale entro 12 giorni lavorativi. Per i piani mensili il termine per chiedere il rimborso è di 10 giorni dalla data di acquisto.\n[Metadata:   ]",
+        "similarity": 0.1531730960051606,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "Qual è il termine per chiedere il rimborso dei piani trimestrali?",
+    "results": [
+      {
+        "chunk_id": "cb66cdc7-d8bf-4346-a673-d82095c8a676",
+        "document_id": "fb5ddaad-1d78-4479-a51a-51dc0824ed5d",
+        "content": "Document: refund-policy.it.md. Chunk 1 of 5. Content: ## Piani annuali\n\nValle Verde Strumenti accetta richieste di rimborso per i piani con fatturazione annuale. La richiesta va inviata all'ufficio amministrazione insieme al numero d'ordine. Il rimborso viene accreditato sul metodo di pagamento originale entro 12 giorni lavorativi. Per i piani annuali il termine per chiedere il rimborso è di 60 giorni dalla data di acquisto.\n[Metadata:   ]",
+        "similarity": 0.4467301704618787,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "0f2c29e3-bd3d-463e-b081-e3d542ede4a3",
+        "document_id": "fb5ddaad-1d78-4479-a51a-51dc0824ed5d",
+        "content": "Document: refund-policy.it.md. Chunk 2 of 5. Content: ## Piani mensili\n\nValle Verde Strumenti accetta richieste di rimborso per i piani con fatturazione mensile. La richiesta va inviata all'ufficio amministrazione insieme al numero d'ordine. Il rimborso viene accreditato sul metodo di pagamento originale entro 12 giorni lavorativi. Per i piani mensili il termine per chiedere il rimborso è di 10 giorni dalla data di acquisto.\n[Metadata:   ]",
+        "similarity": 0.4292758829696457,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "3ae70509-b583-45f6-a605-98016a4e7528",
+        "document_id": "45240c49-6437-4ed6-80d4-b958157b65df",
+        "content": "Document: product-specs.it.md. Chunk 1 of 6. Content: ## Termometro a sonda VS-210\n\nIl termometro a sonda VS-210 (codice articolo VV-21-0310) è pensato per i controlli di laboratorio e di cucina professionale. L'intervallo di misura va da -50 a 200 gradi Celsius, con una precisione di più o meno 0,3 gradi. Il tempo di risposta è di 3 secondi. Il cavo della sonda è lungo 1,5 metri. Funziona con una batteria al litio CR2032 e la custodia ha grado di protezione IP67. Il firmware installato in fabbrica è VFW-3.6.2.\n[Metadata:   ]",
+        "similarity": 0.1597349221462392,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "756b5aa8-1daa-424e-a846-b3faa746fd3e",
+        "document_id": "45240c49-6437-4ed6-80d4-b958157b65df",
+        "content": "Document: product-specs.it.md. Chunk 2 of 6. Content: ## Termometro a sonda VS-220\n\nIl termometro a sonda VS-220 (codice articolo VV-21-0311) è pensato per i controlli di laboratorio e di cucina professionale. L'intervallo di misura va da -50 a 350 gradi Celsius, con una precisione di più o meno 0,3 gradi. Il tempo di risposta è di 3 secondi. Il cavo della sonda è lungo 1,5 metri. Funziona con una batteria al litio CR2032 e la custodia ha grado di protezione IP67. Il firmware installato in fabbrica è VFW-3.6.2.\n[Metadata:   ]",
+        "similarity": 0.15672210770520412,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "Qual è l'intervallo di misura del termometro a sonda VS-230?",
+    "results": [
+      {
+        "chunk_id": "3ae70509-b583-45f6-a605-98016a4e7528",
+        "document_id": "45240c49-6437-4ed6-80d4-b958157b65df",
+        "content": "Document: product-specs.it.md. Chunk 1 of 6. Content: ## Termometro a sonda VS-210\n\nIl termometro a sonda VS-210 (codice articolo VV-21-0310) è pensato per i controlli di laboratorio e di cucina professionale. L'intervallo di misura va da -50 a 200 gradi Celsius, con una precisione di più o meno 0,3 gradi. Il tempo di risposta è di 3 secondi. Il cavo della sonda è lungo 1,5 metri. Funziona con una batteria al litio CR2032 e la custodia ha grado di protezione IP67. Il firmware installato in fabbrica è VFW-3.6.2.\n[Metadata:   ]",
+        "similarity": 0.5354081467433357,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "756b5aa8-1daa-424e-a846-b3faa746fd3e",
+        "document_id": "45240c49-6437-4ed6-80d4-b958157b65df",
+        "content": "Document: product-specs.it.md. Chunk 2 of 6. Content: ## Termometro a sonda VS-220\n\nIl termometro a sonda VS-220 (codice articolo VV-21-0311) è pensato per i controlli di laboratorio e di cucina professionale. L'intervallo di misura va da -50 a 350 gradi Celsius, con una precisione di più o meno 0,3 gradi. Il tempo di risposta è di 3 secondi. Il cavo della sonda è lungo 1,5 metri. Funziona con una batteria al litio CR2032 e la custodia ha grado di protezione IP67. Il firmware installato in fabbrica è VFW-3.6.2.\n[Metadata:   ]",
+        "similarity": 0.5250739835005096,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "4c066d33-f8a6-40c0-8e10-dd12ad1a4401",
+        "document_id": "45240c49-6437-4ed6-80d4-b958157b65df",
+        "content": "Document: product-specs.it.md. Chunk 3 of 6. Content: ## Tabella delle specifiche\n\n| Modello | Codice | Intervallo (C) | Precisione (C) | Interfaccia | Peso (g) |\n| --- | --- | --- | --- | --- | --- |\n| VS-210 | VV-21-0310 | da -50 a 200 | 0,3 | USB-C | 95 |\n| VS-220 | VV-21-0311 | da -50 a 350 | 0,3 | USB-C | 95 |\n| VR-700 | VV-33-0042 | da -196 a 700 | 0,1 | USB-C e RS-485 | 420 |\n| VL-15 | VV-48-0905 | da -20 a 70 | 1,2 | Bluetooth LE | 38 |\n[Metadata:   ]",
+        "similarity": 0.19633822197644557,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "7f1d30a3-23fa-4247-96b0-d7682883b82c",
+        "document_id": "45240c49-6437-4ed6-80d4-b958157b65df",
+        "content": "Document: product-specs.it.md. Chunk 5 of 6. Content: ## Firmware e identificativi\n\nIl firmware VFW-3.6.2 supporta VS-210, VS-220 e VR-700. Il registratore VL-15 usa una linea di firmware separata, VLF-1.1.9. L'identificativo del dispositivo ha la forma VVD-VS-002815: la parte centrale indica la famiglia di modelli e le ultime sei cifre sono il numero di serie. Per aggiornare la sonda, collegarla via USB-C e avviare lo strumento Verde Link, scaricabile da https://example.com/downloads/verde-link.\n[Metadata:   ]",
+        "similarity": 0.15692318856715515,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "Chi ha vinto i mondiali di calcio del 2018?",
+    "results": [],
+    "source_images": []
+  },
+  {
+    "query": "Qual è la capitale dell'Australia?",
+    "results": [
+      {
+        "chunk_id": "3ae70509-b583-45f6-a605-98016a4e7528",
+        "document_id": "45240c49-6437-4ed6-80d4-b958157b65df",
+        "content": "Document: product-specs.it.md. Chunk 1 of 6. Content: ## Termometro a sonda VS-210\n\nIl termometro a sonda VS-210 (codice articolo VV-21-0310) è pensato per i controlli di laboratorio e di cucina professionale. L'intervallo di misura va da -50 a 200 gradi Celsius, con una precisione di più o meno 0,3 gradi. Il tempo di risposta è di 3 secondi. Il cavo della sonda è lungo 1,5 metri. Funziona con una batteria al litio CR2032 e la custodia ha grado di protezione IP67. Il firmware installato in fabbrica è VFW-3.6.2.\n[Metadata:   ]",
+        "similarity": 0.20393161358488976,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "756b5aa8-1daa-424e-a846-b3faa746fd3e",
+        "document_id": "45240c49-6437-4ed6-80d4-b958157b65df",
+        "content": "Document: product-specs.it.md. Chunk 2 of 6. Content: ## Termometro a sonda VS-220\n\nIl termometro a sonda VS-220 (codice articolo VV-21-0311) è pensato per i controlli di laboratorio e di cucina professionale. L'intervallo di misura va da -50 a 350 gradi Celsius, con una precisione di più o meno 0,3 gradi. Il tempo di risposta è di 3 secondi. Il cavo della sonda è lungo 1,5 metri. Funziona con una batteria al litio CR2032 e la custodia ha grado di protezione IP67. Il firmware installato in fabbrica è VFW-3.6.2.\n[Metadata:   ]",
+        "similarity": 0.20338733671166698,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "c0e03e32-45c4-48ad-9f0f-015238916504",
+        "document_id": "b956386c-b598-4884-bc39-b15acb72a252",
+        "content": "Document: warranty-terms.it.md. Chunk 2 of 6. Content: ## Cosa è coperto\n\nLa garanzia copre i difetti di fabbricazione e i guasti dell'elettronica che si manifestano durante il normale utilizzo. Il servizio di assistenza ripara o sostituisce lo strumento a propria discrezione, senza costi per il cliente. Se lo strumento viene sostituito, il nuovo esemplare eredita la scadenza della garanzia originale.\n[Metadata:   ]",
+        "similarity": 0.1714208130238607,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "3927fe78-043d-4503-8d61-f79dc1923e57",
+        "document_id": "b956386c-b598-4884-bc39-b15acb72a252",
+        "content": "Document: warranty-terms.it.md. Chunk 3 of 6. Content: ## Cosa non è coperto\n\nSono esclusi i danni da caduta, da immersione oltre il grado di protezione indicato, da uso di batterie non conformi e da aperture non autorizzate dell'involucro. Sono esclusi anche la taratura periodica e la normale usura dei cavi. Se l'involucro risulta aperto o i sigilli sono rotti, la garanzia decade.\n[Metadata:   ]",
+        "similarity": 0.16066334018764517,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "Qual è il totale complessivo dello scontrino?",
+    "results": [
+      {
+        "chunk_id": "00093786-bf58-48ba-89c6-5abd38c6a349",
+        "document_id": "b0f11cff-e756-4458-a963-b53776c9da72",
+        "content": "Document: scanned-receipt.it.md. Chunk 3 of 5. Content: ## Totali\n\nTota1e imponibi1e                              241,5O\nIVA 22 %                                        53,13\nTOTALE COMPLESSIVO                             294,63\nPagato con carta di credito                    294,63\nResto                                            O,OO\n[Metadata:   ]",
+        "similarity": 0.2436078538567481,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "037d1540-850e-446a-ba08-a69b7c6b7d8d",
+        "document_id": "b0f11cff-e756-4458-a963-b53776c9da72",
+        "content": "Document: scanned-receipt.it.md. Chunk 1 of 5. Content: ## Intestazione scontrino\n\nVALLE VERDE STRUMENTI S.R.L.\nVia del Campione 1O, Citta Esempio\nScontrino n. SC-24-0O712\nData: 21 Giugno 2O24    Ora: 1O:42\nCassa: 03    Operatore: Rossi Esempio\n[Metadata:   ]",
+        "similarity": 0.20243007656577938,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "96b82c4c-5d34-4e6c-8222-02a29b8f20a3",
+        "document_id": "b0f11cff-e756-4458-a963-b53776c9da72",
+        "content": "Document: scanned-receipt.it.md. Chunk 4 of 5. Content: ## Condizioni di reso\n\nI1 reso e possibi1e entro 14 giorni dalla data dello scontrino, perche la merce deve essere integra e nella confezione origina1e. Per i1 reso occorre presentare questo scontrino. Gli articoli personalizzati non si possono restituire. Il rimborso avviene sulla stessa carta usata per l'acquisto.\n[Metadata:   ]",
+        "similarity": 0.19714924335614026,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "Entro quanti giorni è possibile il reso, secondo lo scontrino?",
+    "results": [
+      {
+        "chunk_id": "96b82c4c-5d34-4e6c-8222-02a29b8f20a3",
+        "document_id": "b0f11cff-e756-4458-a963-b53776c9da72",
+        "content": "Document: scanned-receipt.it.md. Chunk 4 of 5. Content: ## Condizioni di reso\n\nI1 reso e possibi1e entro 14 giorni dalla data dello scontrino, perche la merce deve essere integra e nella confezione origina1e. Per i1 reso occorre presentare questo scontrino. Gli articoli personalizzati non si possono restituire. Il rimborso avviene sulla stessa carta usata per l'acquisto.\n[Metadata:   ]",
+        "similarity": 0.3222203115618929,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.40277538945236613,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.3222203115618929,
+        "image_url": null
+      },
+      {
+        "chunk_id": "ea955655-7208-4fa0-8f8a-e259bd9fa491",
+        "document_id": "b956386c-b598-4884-bc39-b15acb72a252",
+        "content": "Document: warranty-terms.it.md. Chunk 6 of 6. Content: ## Estensione di garanzia\n\nEntro 30 giorni dalla consegna è possibile acquistare un'estensione di garanzia di 12 mesi, al prezzo del 10% del valore dello strumento. L'estensione ha le stesse condizioni e le stesse esclusioni della garanzia di base e si applica a un solo strumento per volta.\n[Metadata:   ]",
+        "similarity": 0.20863616878326835,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.2607952109790854,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.20863616878326835,
+        "image_url": null
+      },
+      {
+        "chunk_id": "e2bee7d6-7735-4b8f-b424-393d77af6ee0",
+        "document_id": "b956386c-b598-4884-bc39-b15acb72a252",
+        "content": "Document: warranty-terms.it.md. Chunk 5 of 6. Content: ## Tempi e costi di spedizione\n\nIl centro di assistenza completa la riparazione entro 15 giorni lavorativi dal ricevimento dello strumento. Le spese di spedizione verso il centro sono a carico del cliente, mentre la spedizione di ritorno è a carico di Valle Verde Strumenti per gli interventi in garanzia. Per gli interventi fuori garanzia viene inviato prima un preventivo, valido 10 giorni.\n[Metadata:   ]",
+        "similarity": 0.20431909261164904,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.2553988657645613,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.20431909261164904,
+        "image_url": null
+      },
+      {
+        "chunk_id": "037d1540-850e-446a-ba08-a69b7c6b7d8d",
+        "document_id": "b0f11cff-e756-4458-a963-b53776c9da72",
+        "content": "Document: scanned-receipt.it.md. Chunk 1 of 5. Content: ## Intestazione scontrino\n\nVALLE VERDE STRUMENTI S.R.L.\nVia del Campione 1O, Citta Esempio\nScontrino n. SC-24-0O712\nData: 21 Giugno 2O24    Ora: 1O:42\nCassa: 03    Operatore: Rossi Esempio\n[Metadata:   ]",
+        "similarity": 0.17859539624842846,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.22324424531053555,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.17859539624842846,
+        "image_url": null
+      },
+      {
+        "chunk_id": "52e54dac-e99f-41bb-9001-2746a0897469",
+        "document_id": "fb5ddaad-1d78-4479-a51a-51dc0824ed5d",
+        "content": "Document: refund-policy.it.md. Chunk 5 of 5. Content: ## Come inviare la richiesta\n\nScrivere a rimborsi@example.com indicando il numero d'ordine e l'indirizzo email usato al momento dell'acquisto. Le richieste telefoniche sono gestite al numero 555-0144 nei giorni feriali dalle 9:00 alle 17:00. La ricezione della richiesta viene confermata entro due giorni lavorativi.\n[Metadata:   ]",
+        "similarity": 0.17277060125944088,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.21596325157430107,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.17277060125944088,
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "Quanto costa il registratore VL-15 da 50 pezzi in su?",
+    "results": [
+      {
+        "chunk_id": "b0855c87-8b8e-4b60-9908-22f04639471d",
+        "document_id": "45240c49-6437-4ed6-80d4-b958157b65df",
+        "content": "Document: product-specs.it.md. Chunk 4 of 6. Content: ## Tabella dei prezzi\n\nTutti i prezzi sono in euro per unità, IVA e spedizione escluse.\n\n| Codice | Prodotto | da 1 a 9 pezzi | da 10 a 49 pezzi | 50 pezzi o più |\n| --- | --- | --- | --- | --- |\n| VV-21-0310 | Termometro VS-210 | 94,00 | 86,00 | 79,00 |\n| VV-21-0311 | Termometro VS-220 | 118,00 | 109,00 | 99,00 |\n| VV-33-0042 | Termometro di riferimento VR-700 | 640,00 | 610,00 | 580,00 |\n| VV-48-0905 | Registratore VL-15 | 56,00 | 51,00 | 46,00 |\n[Metadata:   ]",
+        "similarity": 0.22336218426711163,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "4c066d33-f8a6-40c0-8e10-dd12ad1a4401",
+        "document_id": "45240c49-6437-4ed6-80d4-b958157b65df",
+        "content": "Document: product-specs.it.md. Chunk 3 of 6. Content: ## Tabella delle specifiche\n\n| Modello | Codice | Intervallo (C) | Precisione (C) | Interfaccia | Peso (g) |\n| --- | --- | --- | --- | --- | --- |\n| VS-210 | VV-21-0310 | da -50 a 200 | 0,3 | USB-C | 95 |\n| VS-220 | VV-21-0311 | da -50 a 350 | 0,3 | USB-C | 95 |\n| VR-700 | VV-33-0042 | da -196 a 700 | 0,1 | USB-C e RS-485 | 420 |\n| VL-15 | VV-48-0905 | da -20 a 70 | 1,2 | Bluetooth LE | 38 |\n[Metadata:   ]",
+        "similarity": 0.17558653333669205,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "7f1d30a3-23fa-4247-96b0-d7682883b82c",
+        "document_id": "45240c49-6437-4ed6-80d4-b958157b65df",
+        "content": "Document: product-specs.it.md. Chunk 5 of 6. Content: ## Firmware e identificativi\n\nIl firmware VFW-3.6.2 supporta VS-210, VS-220 e VR-700. Il registratore VL-15 usa una linea di firmware separata, VLF-1.1.9. L'identificativo del dispositivo ha la forma VVD-VS-002815: la parte centrale indica la famiglia di modelli e le ultime sei cifre sono il numero di serie. Per aggiornare la sonda, collegarla via USB-C e avviare lo strumento Verde Link, scaricabile da https://example.com/downloads/verde-link.\n[Metadata:   ]",
+        "similarity": 0.16196895422403612,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "Qual è la precisione del termometro di riferimento VR-700?",
+    "results": [
+      {
+        "chunk_id": "3ae70509-b583-45f6-a605-98016a4e7528",
+        "document_id": "45240c49-6437-4ed6-80d4-b958157b65df",
+        "content": "Document: product-specs.it.md. Chunk 1 of 6. Content: ## Termometro a sonda VS-210\n\nIl termometro a sonda VS-210 (codice articolo VV-21-0310) è pensato per i controlli di laboratorio e di cucina professionale. L'intervallo di misura va da -50 a 200 gradi Celsius, con una precisione di più o meno 0,3 gradi. Il tempo di risposta è di 3 secondi. Il cavo della sonda è lungo 1,5 metri. Funziona con una batteria al litio CR2032 e la custodia ha grado di protezione IP67. Il firmware installato in fabbrica è VFW-3.6.2.\n[Metadata:   ]",
+        "similarity": 0.25996094109723566,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.3249511763715446,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.25996094109723566,
+        "image_url": null
+      },
+      {
+        "chunk_id": "756b5aa8-1daa-424e-a846-b3faa746fd3e",
+        "document_id": "45240c49-6437-4ed6-80d4-b958157b65df",
+        "content": "Document: product-specs.it.md. Chunk 2 of 6. Content: ## Termometro a sonda VS-220\n\nIl termometro a sonda VS-220 (codice articolo VV-21-0311) è pensato per i controlli di laboratorio e di cucina professionale. L'intervallo di misura va da -50 a 350 gradi Celsius, con una precisione di più o meno 0,3 gradi. Il tempo di risposta è di 3 secondi. Il cavo della sonda è lungo 1,5 metri. Funziona con una batteria al litio CR2032 e la custodia ha grado di protezione IP67. Il firmware installato in fabbrica è VFW-3.6.2.\n[Metadata:   ]",
+        "similarity": 0.25346056612697004,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.31682570765871254,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.25346056612697004,
+        "image_url": null
+      },
+      {
+        "chunk_id": "b0855c87-8b8e-4b60-9908-22f04639471d",
+        "document_id": "45240c49-6437-4ed6-80d4-b958157b65df",
+        "content": "Document: product-specs.it.md. Chunk 4 of 6. Content: ## Tabella dei prezzi\n\nTutti i prezzi sono in euro per unità, IVA e spedizione escluse.\n\n| Codice | Prodotto | da 1 a 9 pezzi | da 10 a 49 pezzi | 50 pezzi o più |\n| --- | --- | --- | --- | --- |\n| VV-21-0310 | Termometro VS-210 | 94,00 | 86,00 | 79,00 |\n| VV-21-0311 | Termometro VS-220 | 118,00 | 109,00 | 99,00 |\n| VV-33-0042 | Termometro di riferimento VR-700 | 640,00 | 610,00 | 580,00 |\n| VV-48-0905 | Registratore VL-15 | 56,00 | 51,00 | 46,00 |\n[Metadata:   ]",
+        "similarity": 0.16894583383687448,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.2111822922960931,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.16894583383687448,
+        "image_url": null
+      },
+      {
+        "chunk_id": "e2bee7d6-7735-4b8f-b424-393d77af6ee0",
+        "document_id": "b956386c-b598-4884-bc39-b15acb72a252",
+        "content": "Document: warranty-terms.it.md. Chunk 5 of 6. Content: ## Tempi e costi di spedizione\n\nIl centro di assistenza completa la riparazione entro 15 giorni lavorativi dal ricevimento dello strumento. Le spese di spedizione verso il centro sono a carico del cliente, mentre la spedizione di ritorno è a carico di Valle Verde Strumenti per gli interventi in garanzia. Per gli interventi fuori garanzia viene inviato prima un preventivo, valido 10 giorni.\n[Metadata:   ]",
+        "similarity": 0.14961361129651918,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.18701701412064897,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.14961361129651918,
+        "image_url": null
+      },
+      {
+        "chunk_id": "c0e03e32-45c4-48ad-9f0f-015238916504",
+        "document_id": "b956386c-b598-4884-bc39-b15acb72a252",
+        "content": "Document: warranty-terms.it.md. Chunk 2 of 6. Content: ## Cosa è coperto\n\nLa garanzia copre i difetti di fabbricazione e i guasti dell'elettronica che si manifestano durante il normale utilizzo. Il servizio di assistenza ripara o sostituisce lo strumento a propria discrezione, senza costi per il cliente. Se lo strumento viene sostituito, il nuovo esemplare eredita la scadenza della garanzia originale.\n[Metadata:   ]",
+        "similarity": 0.1324711434286173,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.16558892928577162,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.1324711434286173,
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "Quanto pesa il VS-220 in grammi?",
+    "results": [
+      {
+        "chunk_id": "756b5aa8-1daa-424e-a846-b3faa746fd3e",
+        "document_id": "45240c49-6437-4ed6-80d4-b958157b65df",
+        "content": "Document: product-specs.it.md. Chunk 2 of 6. Content: ## Termometro a sonda VS-220\n\nIl termometro a sonda VS-220 (codice articolo VV-21-0311) è pensato per i controlli di laboratorio e di cucina professionale. L'intervallo di misura va da -50 a 350 gradi Celsius, con una precisione di più o meno 0,3 gradi. Il tempo di risposta è di 3 secondi. Il cavo della sonda è lungo 1,5 metri. Funziona con una batteria al litio CR2032 e la custodia ha grado di protezione IP67. Il firmware installato in fabbrica è VFW-3.6.2.\n[Metadata:   ]",
+        "similarity": 0.19812325935905062,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "7f1d30a3-23fa-4247-96b0-d7682883b82c",
+        "document_id": "45240c49-6437-4ed6-80d4-b958157b65df",
+        "content": "Document: product-specs.it.md. Chunk 5 of 6. Content: ## Firmware e identificativi\n\nIl firmware VFW-3.6.2 supporta VS-210, VS-220 e VR-700. Il registratore VL-15 usa una linea di firmware separata, VLF-1.1.9. L'identificativo del dispositivo ha la forma VVD-VS-002815: la parte centrale indica la famiglia di modelli e le ultime sei cifre sono il numero di serie. Per aggiornare la sonda, collegarla via USB-C e avviare lo strumento Verde Link, scaricabile da https://example.com/downloads/verde-link.\n[Metadata:   ]",
+        "similarity": 0.17911969302199116,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "年度方案和月度方案的退款期限分别是多少天？",
+    "results": [
+      {
+        "chunk_id": "ba8e89a0-0c5d-40ef-a043-c40146d82ef9",
+        "document_id": "143ce507-a535-4f0f-aa7d-209e63c6666b",
+        "content": "Document: refund-policy.zh.md. Chunk 2 of 5. Content: ## 月度方案\n\n绿谷仪器接受按月付费的方案申请退款。申请人需向财务部提交订单号。退款会在 15 个工作日内原路退回到付款时使用的支付方式。月度方案的退款期限为自购买之日起 7 天。\n[Metadata:   ]",
+        "similarity": 0.5167795901732802,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "9d276a80-8564-409f-99a7-528448a50768",
+        "document_id": "143ce507-a535-4f0f-aa7d-209e63c6666b",
+        "content": "Document: refund-policy.zh.md. Chunk 1 of 5. Content: ## 年度方案\n\n绿谷仪器接受按年付费的方案申请退款。申请人需向财务部提交订单号。退款会在 15 个工作日内原路退回到付款时使用的支付方式。年度方案的退款期限为自购买之日起 60 天。\n[Metadata:   ]",
+        "similarity": 0.5143108861869611,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "GT-310 的测温范围是多少？买 1 至 9 台时单价是多少？",
+    "results": [
+      {
+        "chunk_id": "73c120a8-85df-41e0-94b8-2fb7386ceef5",
+        "document_id": "0b13629f-1a6c-4b41-acff-3b354769544e",
+        "content": "Document: product-specs.zh.md. Chunk 3 of 6. Content: ## 规格对照表\n\n| 型号 | 物料编号 | 测温范围（摄氏度） | 精度（摄氏度） | 通信接口 | 重量（克） |\n| --- | --- | --- | --- | --- | --- |\n| GT-300 | GV-31-0208 | -30 至 80 | 0.4 | USB-C | 62 |\n| GT-310 | GV-31-0209 | -30 至 120 | 0.4 | USB-C | 62 |\n| GT-500 | GV-44-0016 | -80 至 150 | 0.1 | USB-C 和 RS-485 | 240 |\n| HM-90 | GV-52-0731 | 0 至 60 | 1.5 | 蓝牙 5.0 | 48 |\n[Metadata:   ]",
+        "similarity": 0.2374005991995165,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "d6e23a77-8c77-4803-81fe-3e43236915d3",
+        "document_id": "0b13629f-1a6c-4b41-acff-3b354769544e",
+        "content": "Document: product-specs.zh.md. Chunk 2 of 6. Content: ## GT-310 温度记录仪\n\nGT-310 温度记录仪（物料编号 GV-31-0209）适用于冷链运输和仓库巡检。测温范围为零下 30 至 120 摄氏度，精度为正负 0.4 摄氏度。内置存储可保存 32000 条记录，默认每 5 分钟记录一次。电池为一节 CR2450 纽扣电池，外壳防护等级为 IP65。该型号出厂固件版本为 GFW-4.1.7。\n[Metadata:   ]",
+        "similarity": 0.22960868919026023,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "b52e619c-a961-4800-9384-1f417042ca65",
+        "document_id": "0b13629f-1a6c-4b41-acff-3b354769544e",
+        "content": "Document: product-specs.zh.md. Chunk 5 of 6. Content: ## 固件与设备编号\n\n固件 GFW-4.1.7 支持 GT-300、GT-310 和 GT-500 三个型号。HM-90 湿度记录仪使用独立的固件系列，当前版本为 HMF-2.0.3。设备序列号的格式为 GVD-GT-004217，其中中间部分表示型号系列，最后六位数字为流水号。升级固件时，请用 USB-C 数据线连接设备，再运行绿谷配置工具，下载地址为 https://example.com/downloads/green-config。\n[Metadata:   ]",
+        "similarity": 0.18139762386212643,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "3b4bbbf8-c15a-4217-a7d6-688b13bec784",
+        "document_id": "0b13629f-1a6c-4b41-acff-3b354769544e",
+        "content": "Document: product-specs.zh.md. Chunk 1 of 6. Content: ## GT-300 温度记录仪\n\nGT-300 温度记录仪（物料编号 GV-31-0208）适用于冷链运输和仓库巡检。测温范围为零下 30 至 80 摄氏度，精度为正负 0.4 摄氏度。内置存储可保存 32000 条记录，默认每 5 分钟记录一次。电池为一节 CR2450 纽扣电池，外壳防护等级为 IP65。该型号出厂固件版本为 GFW-4.1.7。\n[Metadata:   ]",
+        "similarity": 0.18049492523225674,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "病假期间的工资发放比例是多少，差旅报销要在费用发生后多少天内提交？",
+    "results": [
+      {
+        "chunk_id": "47fd8dba-a366-4732-a244-bedf9a6d776d",
+        "document_id": "def4e5c5-62cc-45f7-bcda-bc84f2e408e7",
+        "content": "Document: employee-handbook.zh.md. Chunk 4 of 6. Content: ## 差旅与报销\n\n出差住宿标准为一线城市每晚不超过 600 元，其他城市每晚不超过 400 元。所有报销必须在费用发生后 30 天内，连同电子发票一并提交。超过期限的报销单，财务部不予受理。单笔金额超过 5000 元的报销，需要部门负责人加签。\n[Metadata:   ]",
+        "similarity": 0.28284507598342823,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "f69907ea-9398-4046-bf30-a3a05afe15f5",
+        "document_id": "def4e5c5-62cc-45f7-bcda-bc84f2e408e7",
+        "content": "Document: employee-handbook.zh.md. Chunk 3 of 6. Content: ## 病假与医疗期\n\n员工因病需要休息时，请当天上午 10 点前通知直属主管，并在返岗后 2 日内补交医院开具的诊断证明。病假期间的工资按基本工资的 80% 发放。连续病假超过 30 天的，由人事部门另行安排医疗期的相关事宜。\n[Metadata:   ]",
+        "similarity": 0.2612042727380617,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "61adef00-564c-4bbc-9df2-0ae85ed0aa0a",
+        "document_id": "def4e5c5-62cc-45f7-bcda-bc84f2e408e7",
+        "content": "Document: employee-handbook.zh.md. Chunk 6 of 6. Content: ## 试用期与转正\n\n新员工的试用期为 3 个月，试用期工资为转正后工资的 90%。转正评估由直属主管在试用期结束前 10 个工作日发起，评估通过后，人事部门会在下一个发薪日起按转正工资发放。\n[Metadata:   ]",
+        "similarity": 0.187229279444873,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "fdfb0895-2027-4fa8-bda9-3c66370242bf",
+        "document_id": "1338762a-94bb-4894-b1a8-4ca497e3f3cc",
+        "content": "Document: scanned-contract.zh.md. Chunk 3 of 6. Content: ## 第二条 费用与付款\n\n本合同年度服务费合计为人民币 36OOO\n元（不含税）。甲方应在合同签订后 15\n日内支付全部服务费的 5O%，其余款项在\n第二次巡检完成后 1O 日内付清。乙方收\n到款项后开具增值税专用发票。\n[Metadata:   ]",
+        "similarity": 0.15524260182992033,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "固件 GFW-4.1.7 支持哪些型号？",
+    "results": [
+      {
+        "chunk_id": "b52e619c-a961-4800-9384-1f417042ca65",
+        "document_id": "0b13629f-1a6c-4b41-acff-3b354769544e",
+        "content": "Document: product-specs.zh.md. Chunk 5 of 6. Content: ## 固件与设备编号\n\n固件 GFW-4.1.7 支持 GT-300、GT-310 和 GT-500 三个型号。HM-90 湿度记录仪使用独立的固件系列，当前版本为 HMF-2.0.3。设备序列号的格式为 GVD-GT-004217，其中中间部分表示型号系列，最后六位数字为流水号。升级固件时，请用 USB-C 数据线连接设备，再运行绿谷配置工具，下载地址为 https://example.com/downloads/green-config。\n[Metadata:   ]",
+        "similarity": 0.35187251478556114,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "d6e23a77-8c77-4803-81fe-3e43236915d3",
+        "document_id": "0b13629f-1a6c-4b41-acff-3b354769544e",
+        "content": "Document: product-specs.zh.md. Chunk 2 of 6. Content: ## GT-310 温度记录仪\n\nGT-310 温度记录仪（物料编号 GV-31-0209）适用于冷链运输和仓库巡检。测温范围为零下 30 至 120 摄氏度，精度为正负 0.4 摄氏度。内置存储可保存 32000 条记录，默认每 5 分钟记录一次。电池为一节 CR2450 纽扣电池，外壳防护等级为 IP65。该型号出厂固件版本为 GFW-4.1.7。\n[Metadata:   ]",
+        "similarity": 0.19583296390863925,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "3b4bbbf8-c15a-4217-a7d6-688b13bec784",
+        "document_id": "0b13629f-1a6c-4b41-acff-3b354769544e",
+        "content": "Document: product-specs.zh.md. Chunk 1 of 6. Content: ## GT-300 温度记录仪\n\nGT-300 温度记录仪（物料编号 GV-31-0208）适用于冷链运输和仓库巡检。测温范围为零下 30 至 80 摄氏度，精度为正负 0.4 摄氏度。内置存储可保存 32000 条记录，默认每 5 分钟记录一次。电池为一节 CR2450 纽扣电池，外壳防护等级为 IP65。该型号出厂固件版本为 GFW-4.1.7。\n[Metadata:   ]",
+        "similarity": 0.19155734680716419,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "物料编号 GV-WM-0019 对应什么配件？",
+    "results": [
+      {
+        "chunk_id": "4e41c7f2-251c-499b-a716-5e8567f5b29a",
+        "document_id": "0b13629f-1a6c-4b41-acff-3b354769544e",
+        "content": "Document: product-specs.zh.md. Chunk 6 of 6. Content: ## 保修与配件\n\n上表所列设备均享有自交付之日起算的三年有限保修。更换用纽扣电池的物料编号为 GV-BT-0045，防水硅胶护套的物料编号为 GV-CS-0072，壁挂支架的物料编号为 GV-WM-0019。申请保修请发送邮件至 warranty@example.org，并附上设备序列号和标签照片。\n[Metadata:   ]",
+        "similarity": 0.546638558717454,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "73c120a8-85df-41e0-94b8-2fb7386ceef5",
+        "document_id": "0b13629f-1a6c-4b41-acff-3b354769544e",
+        "content": "Document: product-specs.zh.md. Chunk 3 of 6. Content: ## 规格对照表\n\n| 型号 | 物料编号 | 测温范围（摄氏度） | 精度（摄氏度） | 通信接口 | 重量（克） |\n| --- | --- | --- | --- | --- | --- |\n| GT-300 | GV-31-0208 | -30 至 80 | 0.4 | USB-C | 62 |\n| GT-310 | GV-31-0209 | -30 至 120 | 0.4 | USB-C | 62 |\n| GT-500 | GV-44-0016 | -80 至 150 | 0.1 | USB-C 和 RS-485 | 240 |\n| HM-90 | GV-52-0731 | 0 至 60 | 1.5 | 蓝牙 5.0 | 48 |\n[Metadata:   ]",
+        "similarity": 0.23122148792935815,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "d6e23a77-8c77-4803-81fe-3e43236915d3",
+        "document_id": "0b13629f-1a6c-4b41-acff-3b354769544e",
+        "content": "Document: product-specs.zh.md. Chunk 2 of 6. Content: ## GT-310 温度记录仪\n\nGT-310 温度记录仪（物料编号 GV-31-0209）适用于冷链运输和仓库巡检。测温范围为零下 30 至 120 摄氏度，精度为正负 0.4 摄氏度。内置存储可保存 32000 条记录，默认每 5 分钟记录一次。电池为一节 CR2450 纽扣电池，外壳防护等级为 IP65。该型号出厂固件版本为 GFW-4.1.7。\n[Metadata:   ]",
+        "similarity": 0.15112204432780907,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "设备序列号 GVD-GT-004217 的格式是怎样构成的？",
+    "results": [
+      {
+        "chunk_id": "b52e619c-a961-4800-9384-1f417042ca65",
+        "document_id": "0b13629f-1a6c-4b41-acff-3b354769544e",
+        "content": "Document: product-specs.zh.md. Chunk 5 of 6. Content: ## 固件与设备编号\n\n固件 GFW-4.1.7 支持 GT-300、GT-310 和 GT-500 三个型号。HM-90 湿度记录仪使用独立的固件系列，当前版本为 HMF-2.0.3。设备序列号的格式为 GVD-GT-004217，其中中间部分表示型号系列，最后六位数字为流水号。升级固件时，请用 USB-C 数据线连接设备，再运行绿谷配置工具，下载地址为 https://example.com/downloads/green-config。\n[Metadata:   ]",
+        "similarity": 0.36690117408287426,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "4e41c7f2-251c-499b-a716-5e8567f5b29a",
+        "document_id": "0b13629f-1a6c-4b41-acff-3b354769544e",
+        "content": "Document: product-specs.zh.md. Chunk 6 of 6. Content: ## 保修与配件\n\n上表所列设备均享有自交付之日起算的三年有限保修。更换用纽扣电池的物料编号为 GV-BT-0045，防水硅胶护套的物料编号为 GV-CS-0072，壁挂支架的物料编号为 GV-WM-0019。申请保修请发送邮件至 warranty@example.org，并附上设备序列号和标签照片。\n[Metadata:   ]",
+        "similarity": 0.1632307038170142,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "年度方案的退款期限是多少天？",
+    "results": [
+      {
+        "chunk_id": "9d276a80-8564-409f-99a7-528448a50768",
+        "document_id": "143ce507-a535-4f0f-aa7d-209e63c6666b",
+        "content": "Document: refund-policy.zh.md. Chunk 1 of 5. Content: ## 年度方案\n\n绿谷仪器接受按年付费的方案申请退款。申请人需向财务部提交订单号。退款会在 15 个工作日内原路退回到付款时使用的支付方式。年度方案的退款期限为自购买之日起 60 天。\n[Metadata:   ]",
+        "similarity": 0.5697366078824729,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "ba8e89a0-0c5d-40ef-a043-c40146d82ef9",
+        "document_id": "143ce507-a535-4f0f-aa7d-209e63c6666b",
+        "content": "Document: refund-policy.zh.md. Chunk 2 of 5. Content: ## 月度方案\n\n绿谷仪器接受按月付费的方案申请退款。申请人需向财务部提交订单号。退款会在 15 个工作日内原路退回到付款时使用的支付方式。月度方案的退款期限为自购买之日起 7 天。\n[Metadata:   ]",
+        "similarity": 0.48251156144085505,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "69cf3e85-8aa4-4a46-9406-3d30c83b8f3d",
+        "document_id": "1338762a-94bb-4894-b1a8-4ca497e3f3cc",
+        "content": "Document: scanned-contract.zh.md. Chunk 5 of 6. Content: ## 第四条 保密与期限\n\n双方对在履行本合同过程中知悉的对方商\n业秘密负有保密义务，保密期限为合同终\n止后 5 年。本合同有效期为 2 年，自签订\n之日起算，期满前 6O 日内任何一方未书\n面提出异议的，合同自动续期 1 年。\n[Metadata:   ]",
+        "similarity": 0.16748512745615718,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "8f67caba-3770-46eb-864a-67673bc650eb",
+        "document_id": "143ce507-a535-4f0f-aa7d-209e63c6666b",
+        "content": "Document: refund-policy.zh.md. Chunk 3 of 5. Content: ## 不予退款的情形\n\n定制校准服务以及因人为损坏而退回的设备，不在退款范围之内。其他特殊情况请联系客服团队协商处理。\n[Metadata:   ]",
+        "similarity": 0.16582284343395826,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "累计工作满 10 年不满 20 年的员工，每年有几天带薪年假？",
+    "results": [
+      {
+        "chunk_id": "90e8ccb4-178b-41f8-b45f-bb53304e7e73",
+        "document_id": "def4e5c5-62cc-45f7-bcda-bc84f2e408e7",
+        "content": "Document: employee-handbook.zh.md. Chunk 1 of 6. Content: ## 年假天数\n\n绿谷仪器的正式员工按累计工作年限享受带薪年假：累计工作满 1 年不满 10 年的，每年 5 天；满 10 年不满 20 年的，每年 10 天；满 20 年及以上的，每年 15 天。当年入职的员工，年假天数按当年剩余的日历天数折算，不足一天的部分舍去。\n[Metadata:   ]",
+        "similarity": 0.7383204010606439,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "bdd8ebb7-f084-48b1-93e5-53de67f172f1",
+        "document_id": "def4e5c5-62cc-45f7-bcda-bc84f2e408e7",
+        "content": "Document: employee-handbook.zh.md. Chunk 2 of 6. Content: ## 年假申请流程\n\n休年假需要至少提前 3 个工作日在人事系统里提交申请，由直属主管审批。连续休假超过 5 个工作日的，还需要部门负责人再批一次。未休完的年假可以顺延到次年 3 月 31 日，过期作废，公司不以现金折算。\n[Metadata:   ]",
+        "similarity": 0.24063679958220807,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "试用期的工资是转正后工资的百分之几？",
+    "results": [
+      {
+        "chunk_id": "61adef00-564c-4bbc-9df2-0ae85ed0aa0a",
+        "document_id": "def4e5c5-62cc-45f7-bcda-bc84f2e408e7",
+        "content": "Document: employee-handbook.zh.md. Chunk 6 of 6. Content: ## 试用期与转正\n\n新员工的试用期为 3 个月，试用期工资为转正后工资的 90%。转正评估由直属主管在试用期结束前 10 个工作日发起，评估通过后，人事部门会在下一个发薪日起按转正工资发放。\n[Metadata:   ]",
+        "similarity": 0.5992242218451369,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "f69907ea-9398-4046-bf30-a3a05afe15f5",
+        "document_id": "def4e5c5-62cc-45f7-bcda-bc84f2e408e7",
+        "content": "Document: employee-handbook.zh.md. Chunk 3 of 6. Content: ## 病假与医疗期\n\n员工因病需要休息时，请当天上午 10 点前通知直属主管，并在返岗后 2 日内补交医院开具的诊断证明。病假期间的工资按基本工资的 80% 发放。连续病假超过 30 天的，由人事部门另行安排医疗期的相关事宜。\n[Metadata:   ]",
+        "similarity": 0.1777661555277572,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "出差住宿在一线城市每晚的标准是多少？",
+    "results": [
+      {
+        "chunk_id": "47fd8dba-a366-4732-a244-bedf9a6d776d",
+        "document_id": "def4e5c5-62cc-45f7-bcda-bc84f2e408e7",
+        "content": "Document: employee-handbook.zh.md. Chunk 4 of 6. Content: ## 差旅与报销\n\n出差住宿标准为一线城市每晚不超过 600 元，其他城市每晚不超过 400 元。所有报销必须在费用发生后 30 天内，连同电子发票一并提交。超过期限的报销单，财务部不予受理。单笔金额超过 5000 元的报销，需要部门负责人加签。\n[Metadata:   ]",
+        "similarity": 0.3769727867294663,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "员工每周最多可以有几天在家办公？",
+    "results": [
+      {
+        "chunk_id": "124e3179-83da-4ae2-9045-f1f8f1ebf7bb",
+        "document_id": "def4e5c5-62cc-45f7-bcda-bc84f2e408e7",
+        "content": "Document: employee-handbook.zh.md. Chunk 5 of 6. Content: ## 远程办公\n\n经主管同意，员工每周最多可以有 2 天在家办公。在家办公的当天，需要在上午 9:30 前于团队频道里打卡，并保持工作时间内即时通讯在线。试用期内的员工不适用远程办公安排。\n[Metadata:   ]",
+        "similarity": 0.5220006678103641,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "因病请假需要在当天几点前通知直属主管？",
+    "results": [
+      {
+        "chunk_id": "f69907ea-9398-4046-bf30-a3a05afe15f5",
+        "document_id": "def4e5c5-62cc-45f7-bcda-bc84f2e408e7",
+        "content": "Document: employee-handbook.zh.md. Chunk 3 of 6. Content: ## 病假与医疗期\n\n员工因病需要休息时，请当天上午 10 点前通知直属主管，并在返岗后 2 日内补交医院开具的诊断证明。病假期间的工资按基本工资的 80% 发放。连续病假超过 30 天的，由人事部门另行安排医疗期的相关事宜。\n[Metadata:   ]",
+        "similarity": 0.3236729564592409,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "bdd8ebb7-f084-48b1-93e5-53de67f172f1",
+        "document_id": "def4e5c5-62cc-45f7-bcda-bc84f2e408e7",
+        "content": "Document: employee-handbook.zh.md. Chunk 2 of 6. Content: ## 年假申请流程\n\n休年假需要至少提前 3 个工作日在人事系统里提交申请，由直属主管审批。连续休假超过 5 个工作日的，还需要部门负责人再批一次。未休完的年假可以顺延到次年 3 月 31 日，过期作废，公司不以现金折算。\n[Metadata:   ]",
+        "similarity": 0.1981721396856866,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "它的精度是多少？",
+    "results": [
+      {
+        "chunk_id": "73c120a8-85df-41e0-94b8-2fb7386ceef5",
+        "document_id": "0b13629f-1a6c-4b41-acff-3b354769544e",
+        "content": "Document: product-specs.zh.md. Chunk 3 of 6. Content: ## 规格对照表\n\n| 型号 | 物料编号 | 测温范围（摄氏度） | 精度（摄氏度） | 通信接口 | 重量（克） |\n| --- | --- | --- | --- | --- | --- |\n| GT-300 | GV-31-0208 | -30 至 80 | 0.4 | USB-C | 62 |\n| GT-310 | GV-31-0209 | -30 至 120 | 0.4 | USB-C | 62 |\n| GT-500 | GV-44-0016 | -80 至 150 | 0.1 | USB-C 和 RS-485 | 240 |\n| HM-90 | GV-52-0731 | 0 至 60 | 1.5 | 蓝牙 5.0 | 48 |\n[Metadata:   ]",
+        "similarity": 0.1718414975310265,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "d6e23a77-8c77-4803-81fe-3e43236915d3",
+        "document_id": "0b13629f-1a6c-4b41-acff-3b354769544e",
+        "content": "Document: product-specs.zh.md. Chunk 2 of 6. Content: ## GT-310 温度记录仪\n\nGT-310 温度记录仪（物料编号 GV-31-0209）适用于冷链运输和仓库巡检。测温范围为零下 30 至 120 摄氏度，精度为正负 0.4 摄氏度。内置存储可保存 32000 条记录，默认每 5 分钟记录一次。电池为一节 CR2450 纽扣电池，外壳防护等级为 IP65。该型号出厂固件版本为 GFW-4.1.7。\n[Metadata:   ]",
+        "similarity": 0.1554633302601196,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "3b4bbbf8-c15a-4217-a7d6-688b13bec784",
+        "document_id": "0b13629f-1a6c-4b41-acff-3b354769544e",
+        "content": "Document: product-specs.zh.md. Chunk 1 of 6. Content: ## GT-300 温度记录仪\n\nGT-300 温度记录仪（物料编号 GV-31-0208）适用于冷链运输和仓库巡检。测温范围为零下 30 至 80 摄氏度，精度为正负 0.4 摄氏度。内置存储可保存 32000 条记录，默认每 5 分钟记录一次。电池为一节 CR2450 纽扣电池，外壳防护等级为 IP65。该型号出厂固件版本为 GFW-4.1.7。\n[Metadata:   ]",
+        "similarity": 0.15206910477627666,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "那没休完的部分可以顺延到什么时候？",
+    "results": [],
+    "source_images": []
+  },
+  {
+    "query": "申请的期限是多久？",
+    "results": [
+      {
+        "chunk_id": "59bf5612-9345-45da-b217-aca50cab1950",
+        "document_id": "143ce507-a535-4f0f-aa7d-209e63c6666b",
+        "content": "Document: refund-policy.zh.md. Chunk 5 of 5. Content: ## 如何提交申请\n\n请发送邮件至 refund@example.com，写明订单号和下单时填写的邮箱。电话申请请拨打 555-0143，工作日 9:00 至 17:00 受理。我们会在两个工作日内确认收到您的申请。\n[Metadata:   ]",
+        "similarity": 0.2576943884682279,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "ba8e89a0-0c5d-40ef-a043-c40146d82ef9",
+        "document_id": "143ce507-a535-4f0f-aa7d-209e63c6666b",
+        "content": "Document: refund-policy.zh.md. Chunk 2 of 5. Content: ## 月度方案\n\n绿谷仪器接受按月付费的方案申请退款。申请人需向财务部提交订单号。退款会在 15 个工作日内原路退回到付款时使用的支付方式。月度方案的退款期限为自购买之日起 7 天。\n[Metadata:   ]",
+        "similarity": 0.1771725084144654,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "9d276a80-8564-409f-99a7-528448a50768",
+        "document_id": "143ce507-a535-4f0f-aa7d-209e63c6666b",
+        "content": "Document: refund-policy.zh.md. Chunk 1 of 5. Content: ## 年度方案\n\n绿谷仪器接受按年付费的方案申请退款。申请人需向财务部提交订单号。退款会在 15 个工作日内原路退回到付款时使用的支付方式。年度方案的退款期限为自购买之日起 60 天。\n[Metadata:   ]",
+        "similarity": 0.17632614335225538,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "69cf3e85-8aa4-4a46-9406-3d30c83b8f3d",
+        "document_id": "1338762a-94bb-4894-b1a8-4ca497e3f3cc",
+        "content": "Document: scanned-contract.zh.md. Chunk 5 of 6. Content: ## 第四条 保密与期限\n\n双方对在履行本合同过程中知悉的对方商\n业秘密负有保密义务，保密期限为合同终\n止后 5 年。本合同有效期为 2 年，自签订\n之日起算，期满前 6O 日内任何一方未书\n面提出异议的，合同自动续期 1 年。\n[Metadata:   ]",
+        "similarity": 0.1619828070494609,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "季度方案的退款期限是多少天？",
+    "results": [
+      {
+        "chunk_id": "ba8e89a0-0c5d-40ef-a043-c40146d82ef9",
+        "document_id": "143ce507-a535-4f0f-aa7d-209e63c6666b",
+        "content": "Document: refund-policy.zh.md. Chunk 2 of 5. Content: ## 月度方案\n\n绿谷仪器接受按月付费的方案申请退款。申请人需向财务部提交订单号。退款会在 15 个工作日内原路退回到付款时使用的支付方式。月度方案的退款期限为自购买之日起 7 天。\n[Metadata:   ]",
+        "similarity": 0.48251156144085505,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "9d276a80-8564-409f-99a7-528448a50768",
+        "document_id": "143ce507-a535-4f0f-aa7d-209e63c6666b",
+        "content": "Document: refund-policy.zh.md. Chunk 1 of 5. Content: ## 年度方案\n\n绿谷仪器接受按年付费的方案申请退款。申请人需向财务部提交订单号。退款会在 15 个工作日内原路退回到付款时使用的支付方式。年度方案的退款期限为自购买之日起 60 天。\n[Metadata:   ]",
+        "similarity": 0.48020661718467295,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "8f67caba-3770-46eb-864a-67673bc650eb",
+        "document_id": "143ce507-a535-4f0f-aa7d-209e63c6666b",
+        "content": "Document: refund-policy.zh.md. Chunk 3 of 5. Content: ## 不予退款的情形\n\n定制校准服务以及因人为损坏而退回的设备，不在退款范围之内。其他特殊情况请联系客服团队协商处理。\n[Metadata:   ]",
+        "similarity": 0.16582284343395826,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "GT-700 温度记录仪的测温范围是多少？",
+    "results": [
+      {
+        "chunk_id": "3b4bbbf8-c15a-4217-a7d6-688b13bec784",
+        "document_id": "0b13629f-1a6c-4b41-acff-3b354769544e",
+        "content": "Document: product-specs.zh.md. Chunk 1 of 6. Content: ## GT-300 温度记录仪\n\nGT-300 温度记录仪（物料编号 GV-31-0208）适用于冷链运输和仓库巡检。测温范围为零下 30 至 80 摄氏度，精度为正负 0.4 摄氏度。内置存储可保存 32000 条记录，默认每 5 分钟记录一次。电池为一节 CR2450 纽扣电池，外壳防护等级为 IP65。该型号出厂固件版本为 GFW-4.1.7。\n[Metadata:   ]",
+        "similarity": 0.3931162252481848,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.49139528156023093,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.3931162252481848,
+        "image_url": null
+      },
+      {
+        "chunk_id": "d6e23a77-8c77-4803-81fe-3e43236915d3",
+        "document_id": "0b13629f-1a6c-4b41-acff-3b354769544e",
+        "content": "Document: product-specs.zh.md. Chunk 2 of 6. Content: ## GT-310 温度记录仪\n\nGT-310 温度记录仪（物料编号 GV-31-0209）适用于冷链运输和仓库巡检。测温范围为零下 30 至 120 摄氏度，精度为正负 0.4 摄氏度。内置存储可保存 32000 条记录，默认每 5 分钟记录一次。电池为一节 CR2450 纽扣电池，外壳防护等级为 IP65。该型号出厂固件版本为 GFW-4.1.7。\n[Metadata:   ]",
+        "similarity": 0.36835262020889403,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.4604407752611175,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.36835262020889403,
+        "image_url": null
+      },
+      {
+        "chunk_id": "f42791cc-262f-453a-a76b-6ded6a14ecc1",
+        "document_id": "0b13629f-1a6c-4b41-acff-3b354769544e",
+        "content": "Document: product-specs.zh.md. Chunk 4 of 6. Content: ## 价格表\n\n价格单位为人民币元，按台计价，不含税，不含运费。\n\n| 物料编号 | 产品 | 1 至 9 台 | 10 至 49 台 | 50 台及以上 |\n| --- | --- | --- | --- | --- |\n| GV-31-0208 | GT-300 温度记录仪 | 388.00 | 358.00 | 328.00 |\n| GV-31-0209 | GT-310 温度记录仪 | 468.00 | 438.00 | 408.00 |\n| GV-44-0016 | GT-500 标准温度计 | 1980.00 | 1880.00 | 1780.00 |\n| GV-52-0731 | HM-90 湿度记录仪 | 238.00 | 218.00 | 198.00 |\n[Metadata:   ]",
+        "similarity": 0.24902208909063753,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.3112776113632969,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.24902208909063753,
+        "image_url": null
+      },
+      {
+        "chunk_id": "8026495c-e52d-4948-aade-565cd0f3592c",
+        "document_id": "1338762a-94bb-4894-b1a8-4ca497e3f3cc",
+        "content": "Document: scanned-contract.zh.md. Chunk 2 of 6. Content: ## 第一条 服务范围\n\n乙方负责对甲方位于示例工业园的 12 台温\n度记录仪和 3 台标准温度计提供定期巡检、\n校准和故障维修服务。巡检每季度进行一\n次，每次巡检结束后乙方应在 5 个工作日\n内向甲方提交书面巡检报告。\n[Metadata:   ]",
+        "similarity": 0.16204384247751805,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.20255480309689755,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.16204384247751805,
+        "image_url": null
+      },
+      {
+        "chunk_id": "b52e619c-a961-4800-9384-1f417042ca65",
+        "document_id": "0b13629f-1a6c-4b41-acff-3b354769544e",
+        "content": "Document: product-specs.zh.md. Chunk 5 of 6. Content: ## 固件与设备编号\n\n固件 GFW-4.1.7 支持 GT-300、GT-310 和 GT-500 三个型号。HM-90 湿度记录仪使用独立的固件系列，当前版本为 HMF-2.0.3。设备序列号的格式为 GVD-GT-004217，其中中间部分表示型号系列，最后六位数字为流水号。升级固件时，请用 USB-C 数据线连接设备，再运行绿谷配置工具，下载地址为 https://example.com/downloads/green-config。\n[Metadata:   ]",
+        "similarity": 0.16026606547861422,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.20033258184826774,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.16026606547861422,
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "2018 年足球世界杯的冠军是哪支球队？",
+    "results": [],
+    "source_images": []
+  },
+  {
+    "query": "珠穆朗玛峰的海拔高度是多少米？",
+    "results": [],
+    "source_images": []
+  },
+  {
+    "query": "设备维护服务合同中，每次巡检结束后要在几个工作日内提交书面巡检报告？",
+    "results": [
+      {
+        "chunk_id": "8026495c-e52d-4948-aade-565cd0f3592c",
+        "document_id": "1338762a-94bb-4894-b1a8-4ca497e3f3cc",
+        "content": "Document: scanned-contract.zh.md. Chunk 2 of 6. Content: ## 第一条 服务范围\n\n乙方负责对甲方位于示例工业园的 12 台温\n度记录仪和 3 台标准温度计提供定期巡检、\n校准和故障维修服务。巡检每季度进行一\n次，每次巡检结束后乙方应在 5 个工作日\n内向甲方提交书面巡检报告。\n[Metadata:   ]",
+        "similarity": 0.40294148764174653,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.5036768595521831,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.40294148764174653,
+        "image_url": null
+      },
+      {
+        "chunk_id": "fdfb0895-2027-4fa8-bda9-3c66370242bf",
+        "document_id": "1338762a-94bb-4894-b1a8-4ca497e3f3cc",
+        "content": "Document: scanned-contract.zh.md. Chunk 3 of 6. Content: ## 第二条 费用与付款\n\n本合同年度服务费合计为人民币 36OOO\n元（不含税）。甲方应在合同签订后 15\n日内支付全部服务费的 5O%，其余款项在\n第二次巡检完成后 1O 日内付清。乙方收\n到款项后开具增值税专用发票。\n[Metadata:   ]",
+        "similarity": 0.20140061278301663,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.2517507659787708,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.20140061278301663,
+        "image_url": null
+      },
+      {
+        "chunk_id": "bdd8ebb7-f084-48b1-93e5-53de67f172f1",
+        "document_id": "def4e5c5-62cc-45f7-bcda-bc84f2e408e7",
+        "content": "Document: employee-handbook.zh.md. Chunk 2 of 6. Content: ## 年假申请流程\n\n休年假需要至少提前 3 个工作日在人事系统里提交申请，由直属主管审批。连续休假超过 5 个工作日的，还需要部门负责人再批一次。未休完的年假可以顺延到次年 3 月 31 日，过期作废，公司不以现金折算。\n[Metadata:   ]",
+        "similarity": 0.1388136598619761,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.17351707482747014,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.1388136598619761,
+        "image_url": null
+      },
+      {
+        "chunk_id": "aba6bb79-15e1-4547-8dd7-a0ce99177467",
+        "document_id": "1338762a-94bb-4894-b1a8-4ca497e3f3cc",
+        "content": "Document: scanned-contract.zh.md. Chunk 1 of 6. Content: ## 设备维护服务合 同\n\n合同编号：GV-MS-2O24-0057\n甲方：示例化工有限公司（以下简称“甲\n方”）\n乙方：绿谷仪器股份有限公司（以下简称\n“乙方”）\n签订日期：2O24 年 6 月 18 日\n甲方代表：陈示例    乙方代表：周样本\n[Metadata:   ]",
+        "similarity": 0.1342066925599366,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.16775836569992075,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.1342066925599366,
+        "image_url": null
+      },
+      {
+        "chunk_id": "59bf5612-9345-45da-b217-aca50cab1950",
+        "document_id": "143ce507-a535-4f0f-aa7d-209e63c6666b",
+        "content": "Document: refund-policy.zh.md. Chunk 5 of 5. Content: ## 如何提交申请\n\n请发送邮件至 refund@example.com，写明订单号和下单时填写的邮箱。电话申请请拨打 555-0143，工作日 9:00 至 17:00 受理。我们会在两个工作日内确认收到您的申请。\n[Metadata:   ]",
+        "similarity": 0.1252116345310766,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.15651454316384572,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.1252116345310766,
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "设备维护服务合同的年度服务费合计是多少元？",
+    "results": [
+      {
+        "chunk_id": "fdfb0895-2027-4fa8-bda9-3c66370242bf",
+        "document_id": "1338762a-94bb-4894-b1a8-4ca497e3f3cc",
+        "content": "Document: scanned-contract.zh.md. Chunk 3 of 6. Content: ## 第二条 费用与付款\n\n本合同年度服务费合计为人民币 36OOO\n元（不含税）。甲方应在合同签订后 15\n日内支付全部服务费的 5O%，其余款项在\n第二次巡检完成后 1O 日内付清。乙方收\n到款项后开具增值税专用发票。\n[Metadata:   ]",
+        "similarity": 0.383078078581116,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "c6dc9636-9b19-4ed1-a499-d794228a83d9",
+        "document_id": "1338762a-94bb-4894-b1a8-4ca497e3f3cc",
+        "content": "Document: scanned-contract.zh.md. Chunk 4 of 6. Content: ## 第三条 违约责任\n\n甲方未按期付款的，每逾期一日，应按未\n付金额的千分之三向乙方支付违约金。乙\n方未按约定时间完成巡检的，每延误一日，\n应向甲方支付年度服务费的千分之一作为\n赔偿，赔偿总额不超过年度服务费的 1O%。\n[Metadata:   ]",
+        "similarity": 0.25204183270794767,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "aba6bb79-15e1-4547-8dd7-a0ce99177467",
+        "document_id": "1338762a-94bb-4894-b1a8-4ca497e3f3cc",
+        "content": "Document: scanned-contract.zh.md. Chunk 1 of 6. Content: ## 设备维护服务合 同\n\n合同编号：GV-MS-2O24-0057\n甲方：示例化工有限公司（以下简称“甲\n方”）\n乙方：绿谷仪器股份有限公司（以下简称\n“乙方”）\n签订日期：2O24 年 6 月 18 日\n甲方代表：陈示例    乙方代表：周样本\n[Metadata:   ]",
+        "similarity": 0.24567892260755875,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "8026495c-e52d-4948-aade-565cd0f3592c",
+        "document_id": "1338762a-94bb-4894-b1a8-4ca497e3f3cc",
+        "content": "Document: scanned-contract.zh.md. Chunk 2 of 6. Content: ## 第一条 服务范围\n\n乙方负责对甲方位于示例工业园的 12 台温\n度记录仪和 3 台标准温度计提供定期巡检、\n校准和故障维修服务。巡检每季度进行一\n次，每次巡检结束后乙方应在 5 个工作日\n内向甲方提交书面巡检报告。\n[Metadata:   ]",
+        "similarity": 0.1904408733197549,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "69cf3e85-8aa4-4a46-9406-3d30c83b8f3d",
+        "document_id": "1338762a-94bb-4894-b1a8-4ca497e3f3cc",
+        "content": "Document: scanned-contract.zh.md. Chunk 5 of 6. Content: ## 第四条 保密与期限\n\n双方对在履行本合同过程中知悉的对方商\n业秘密负有保密义务，保密期限为合同终\n止后 5 年。本合同有效期为 2 年，自签订\n之日起算，期满前 6O 日内任何一方未书\n面提出异议的，合同自动续期 1 年。\n[Metadata:   ]",
+        "similarity": 0.18720123560365032,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "HM-90 湿度记录仪买 50 台及以上时单价是多少？",
+    "results": [
+      {
+        "chunk_id": "f42791cc-262f-453a-a76b-6ded6a14ecc1",
+        "document_id": "0b13629f-1a6c-4b41-acff-3b354769544e",
+        "content": "Document: product-specs.zh.md. Chunk 4 of 6. Content: ## 价格表\n\n价格单位为人民币元，按台计价，不含税，不含运费。\n\n| 物料编号 | 产品 | 1 至 9 台 | 10 至 49 台 | 50 台及以上 |\n| --- | --- | --- | --- | --- |\n| GV-31-0208 | GT-300 温度记录仪 | 388.00 | 358.00 | 328.00 |\n| GV-31-0209 | GT-310 温度记录仪 | 468.00 | 438.00 | 408.00 |\n| GV-44-0016 | GT-500 标准温度计 | 1980.00 | 1880.00 | 1780.00 |\n| GV-52-0731 | HM-90 湿度记录仪 | 238.00 | 218.00 | 198.00 |\n[Metadata:   ]",
+        "similarity": 0.2709663621843449,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "3b4bbbf8-c15a-4217-a7d6-688b13bec784",
+        "document_id": "0b13629f-1a6c-4b41-acff-3b354769544e",
+        "content": "Document: product-specs.zh.md. Chunk 1 of 6. Content: ## GT-300 温度记录仪\n\nGT-300 温度记录仪（物料编号 GV-31-0208）适用于冷链运输和仓库巡检。测温范围为零下 30 至 80 摄氏度，精度为正负 0.4 摄氏度。内置存储可保存 32000 条记录，默认每 5 分钟记录一次。电池为一节 CR2450 纽扣电池，外壳防护等级为 IP65。该型号出厂固件版本为 GFW-4.1.7。\n[Metadata:   ]",
+        "similarity": 0.2286191335632548,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "d6e23a77-8c77-4803-81fe-3e43236915d3",
+        "document_id": "0b13629f-1a6c-4b41-acff-3b354769544e",
+        "content": "Document: product-specs.zh.md. Chunk 2 of 6. Content: ## GT-310 温度记录仪\n\nGT-310 温度记录仪（物料编号 GV-31-0209）适用于冷链运输和仓库巡检。测温范围为零下 30 至 120 摄氏度，精度为正负 0.4 摄氏度。内置存储可保存 32000 条记录，默认每 5 分钟记录一次。电池为一节 CR2450 纽扣电池，外壳防护等级为 IP65。该型号出厂固件版本为 GFW-4.1.7。\n[Metadata:   ]",
+        "similarity": 0.21285389333896065,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "b52e619c-a961-4800-9384-1f417042ca65",
+        "document_id": "0b13629f-1a6c-4b41-acff-3b354769544e",
+        "content": "Document: product-specs.zh.md. Chunk 5 of 6. Content: ## 固件与设备编号\n\n固件 GFW-4.1.7 支持 GT-300、GT-310 和 GT-500 三个型号。HM-90 湿度记录仪使用独立的固件系列，当前版本为 HMF-2.0.3。设备序列号的格式为 GVD-GT-004217，其中中间部分表示型号系列，最后六位数字为流水号。升级固件时，请用 USB-C 数据线连接设备，再运行绿谷配置工具，下载地址为 https://example.com/downloads/green-config。\n[Metadata:   ]",
+        "similarity": 0.15263369851891417,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "GT-500 的通信接口是什么？",
+    "results": [
+      {
+        "chunk_id": "73c120a8-85df-41e0-94b8-2fb7386ceef5",
+        "document_id": "0b13629f-1a6c-4b41-acff-3b354769544e",
+        "content": "Document: product-specs.zh.md. Chunk 3 of 6. Content: ## 规格对照表\n\n| 型号 | 物料编号 | 测温范围（摄氏度） | 精度（摄氏度） | 通信接口 | 重量（克） |\n| --- | --- | --- | --- | --- | --- |\n| GT-300 | GV-31-0208 | -30 至 80 | 0.4 | USB-C | 62 |\n| GT-310 | GV-31-0209 | -30 至 120 | 0.4 | USB-C | 62 |\n| GT-500 | GV-44-0016 | -80 至 150 | 0.1 | USB-C 和 RS-485 | 240 |\n| HM-90 | GV-52-0731 | 0 至 60 | 1.5 | 蓝牙 5.0 | 48 |\n[Metadata:   ]",
+        "similarity": 0.2601731044002453,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "b52e619c-a961-4800-9384-1f417042ca65",
+        "document_id": "0b13629f-1a6c-4b41-acff-3b354769544e",
+        "content": "Document: product-specs.zh.md. Chunk 5 of 6. Content: ## 固件与设备编号\n\n固件 GFW-4.1.7 支持 GT-300、GT-310 和 GT-500 三个型号。HM-90 湿度记录仪使用独立的固件系列，当前版本为 HMF-2.0.3。设备序列号的格式为 GVD-GT-004217，其中中间部分表示型号系列，最后六位数字为流水号。升级固件时，请用 USB-C 数据线连接设备，再运行绿谷配置工具，下载地址为 https://example.com/downloads/green-config。\n[Metadata:   ]",
+        "similarity": 0.17356225478291276,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "HM-90 的重量是多少克？",
+    "results": [],
+    "source_images": []
+  },
+  {
+    "query": "show me the warehouse floorplan image",
+    "results": [
+      {
+        "chunk_id": "40fc5177-6cd8-40a1-80fb-c9d5d62b05c8",
+        "document_id": "4dda7ba2-55f3-4e0f-8cfd-83f2ef597e40",
+        "content": "Document: warehouse-floorplan.png. Chunk 1 of 4. Content: ## Overall layout\n\nThe image shows a floor plan of the Lumen Valley Instruments warehouse, drawn from above. The building is a long rectangle with the loading docks along the south wall and the main office in the north-east corner. Three aisles run from the south wall to the north wall, labelled Aisle A, Aisle B and Aisle C from west to east.\n[Metadata:   ]",
+        "similarity": 0.1680067574957762,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "warehouse floorplan picture",
+    "results": [],
+    "source_images": []
+  },
+  {
+    "query": "what does the logo look like",
+    "results": [],
+    "source_images": []
+  },
+  {
+    "query": "who created this",
+    "results": [],
+    "source_images": []
+  },
+  {
+    "query": "floorplan",
+    "results": [],
+    "source_images": []
+  },
+  {
+    "query": "logo",
+    "results": [],
+    "source_images": []
+  }
+]
