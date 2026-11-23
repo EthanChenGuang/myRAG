@@ -40,11 +40,14 @@ All requirements are written so they can be checked. "Behind a switch" means an 
 
 - [ ] **DATA-01**: One shared `ingest()` path and chunk writer serve chat/Config UI uploads, Nango sync, scrapers and image uploads
 - [ ] **DATA-02**: Every chunk stores the same metadata: tenant, document ID, version, `is_current`, source, document type, document date, language, page or section, content hash, parser used, and the existing URL metadata
-- [ ] **DATA-03**: The user can pick a document type per file at upload (financial/report, contract/legal, product/technical, scanned/image), with an auto-detected default they can change; unclassified documents fall back to `general`
+- [ ] **DATA-03**: The user can pick a document type per file at upload (financial/accounting report, contract/legal, invoice/receipt, product/technical, scanned/image), with a pre-selected default they can change; the default comes from DATA-10, and unclassified documents fall back to `general`
 - [ ] **DATA-04**: The document type selects a processing profile (parser options, chunk size and boundaries, OCR, metadata extraction such as dates and financial figures), and profiles are defined as data, not branching code
 - [ ] **DATA-05**: Docling runs in the sidecar as an async parse job (HybridChunker with table headers repeated in each chunk, explicit tokenizer, OCR languages for zh/en/it) and is switchable with LlamaParse; LlamaParse failure or a missing key falls back to Docling, and `parser_used` is recorded
 - [ ] **DATA-06**: Uploading a file whose normalized content hash already exists in the same tenant does not create duplicate chunks; hashes are never compared across tenants
 - [ ] **DATA-07**: Uploading a new version of a document replaces the old one atomically (new version inserted, `is_current` flipped in one transaction, old version soft-superseded so existing message citations still resolve); retrieval returns current versions only
+- [ ] **DATA-09**: An `invoice` document type extracts invoice fields into structured metadata defined by a Pydantic model (invoice number, issue and due dates, supplier and buyer names and VAT/tax IDs, currency, net, tax and gross totals, line items), keeps line-item tables intact in one chunk with their header, treats invoice numbers and tax IDs as exact terms, and makes supplier, date range and amount range filterable; extraction failures leave the document searchable as plain text and are reported
+- [ ] **DATA-10**: Admins set default document types in the Config UI: a tenant-wide default (a fixed type or "auto-detect") and optional per-source defaults (chat upload, Config UI upload, each Nango connection or folder, scrapers, image upload); precedence is the type picked for the file, then the source default, then the tenant default, then `general`; admins can also change the type of an existing document, which re-processes it through the shared `ingest()` path as a new version
+- [ ] **DATA-11**: PDFs that contain images (charts, photos, scanned pages inside a digital PDF) have those images extracted with their page number, captioned through the existing image-RAG captioning, and stored as image chunks linked to the document and page, so they are retrievable and appear as `source_images` like uploaded images
 - [ ] **DATA-08**: Retrieval can filter by date range, source, document, document type and language
 
 ### Embeddings (EMB)
@@ -268,11 +271,14 @@ Which phases cover which requirements. Updated during roadmap creation.
 | EVAL-16 | Phase 5 | Pending |
 | EVAL-17 | Phase 7 | Pending |
 | XLG-02 | Phase 3 | Pending |
+| DATA-09 | Phase 3 | Pending |
+| DATA-10 | Phase 3 | Pending |
+| DATA-11 | Phase 3 | Pending |
 | XLG-03 | Phase 4 | Pending |
 
 **Coverage:**
-- v1 requirements: 90 total
-- Mapped to phases: 90
+- v1 requirements: 93 total
+- Mapped to phases: 93
 - Unmapped: 0 ✓
 
 **Mapping notes:**
