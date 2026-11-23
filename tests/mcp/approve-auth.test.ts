@@ -22,6 +22,10 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@/lib/tool-execution-state', () => ({ ToolExecutionStateService: mocks.stateService }));
+vi.mock('@/lib/supabase', async () => {
+  const { createFakeAdminDb } = await import('./helpers/fake-admin-db');
+  return { getSupabaseAdmin: () => createFakeAdminDb() };
+});
 vi.mock('@/lib/supabase/server', () => ({
   createClient: async () => ({
     auth: {
@@ -48,6 +52,7 @@ vi.mock('@/lib/dev-logger', () => ({
 }));
 
 import { POST } from '@/app/api/chat/approve/route';
+import { adminDb, adminIds } from './helpers/fake-admin-db';
 
 interface ApprovalGlobals {
   toolApprovalState?: Record<string, unknown>;
@@ -76,6 +81,9 @@ describe('chat/approve route authentication and ownership', () => {
   const globals = globalThis as unknown as ApprovalGlobals;
 
   beforeEach(() => {
+    adminIds.clear();
+    adminIds.add(USER_A);
+    adminDb.failing = false;
     vi.spyOn(console, 'log').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -145,6 +153,22 @@ describe('chat/approve route authentication and ownership', () => {
     session.user = { id: USER_A };
     const response = await POST(approveRequest());
     expect(response.status).toBe(404);
+    expectNothingRan();
+  });
+
+  it('answers 403 when the owner of a planted state is not an admin and runs nothing', async () => {
+    adminIds.clear();
+    session.user = { id: USER_A };
+    const response = await POST(approveRequest());
+    expect(response.status).toBe(403);
+    expectNothingRan();
+  });
+
+  it('answers 503 when the admin lookup fails and runs nothing', async () => {
+    adminDb.failing = true;
+    session.user = { id: USER_A };
+    const response = await POST(approveRequest());
+    expect(response.status).toBe(503);
     expectNothingRan();
   });
 

@@ -17,6 +17,10 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@/lib/tool-execution-state', () => ({ ToolExecutionStateService: mocks.stateService }));
+vi.mock('@/lib/supabase', async () => {
+  const { createFakeAdminDb } = await import('./helpers/fake-admin-db');
+  return { getSupabaseAdmin: () => createFakeAdminDb() };
+});
 vi.mock('@/lib/supabase/server', () => ({
   createClient: async () => ({ auth: { getUser: async () => ({ data: { user: { id: OWNER_ID } } }) } }),
 }));
@@ -36,6 +40,7 @@ vi.mock('@/lib/dev-logger', () => ({
 }));
 
 import { POST } from '@/app/api/chat/approve/route';
+import { adminDb, adminIds } from './helpers/fake-admin-db';
 
 const TOOL_CALL_ID = 'call-approve-params-1';
 const TOOL_PARAMS = { query: 'placeholder query' };
@@ -63,6 +68,9 @@ describe('approve route parameter handling', () => {
   const globals = globalThis as unknown as ApprovalGlobals;
 
   beforeEach(() => {
+    adminIds.clear();
+    adminIds.add(OWNER_ID);
+    adminDb.failing = false;
     vi.spyOn(console, 'log').mockImplementation(() => {});
     mocks.execute.mockReset().mockResolvedValue({});
     mocks.getConnectionStatus.mockReset().mockReturnValue([{ server: 'Fake Server', connected: true }]);
