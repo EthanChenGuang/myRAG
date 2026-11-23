@@ -1,0 +1,27 @@
+{
+  "profiles": {
+    "chat": {
+      "stages": {
+        "assemble": 100,
+        "embed": 200,
+        "search": 400
+      },
+      "total_p50_ms": 1000,
+      "total_p95_ms": 2000
+    },
+    "embed": {
+      "stages": {
+        "assemble": 100,
+        "embed": 200,
+        "search": 400
+      },
+      "total_p50_ms": 1000,
+      "total_p95_ms": 2000
+    },
+    "voice": {
+      "total_p50_ms": 400,
+      "total_p95_ms": 800
+    }
+  },
+  "schema_version": 1
+}

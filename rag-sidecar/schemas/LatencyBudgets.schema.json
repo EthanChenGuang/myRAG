@@ -1,0 +1,60 @@
+{
+  "$defs": {
+    "ProfileBudget": {
+      "additionalProperties": false,
+      "properties": {
+        "stages": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "title": "Stages",
+          "type": "object"
+        },
+        "total_p50_ms": {
+          "exclusiveMinimum": 0,
+          "title": "Total P50 Ms",
+          "type": "number"
+        },
+        "total_p95_ms": {
+          "exclusiveMinimum": 0,
+          "title": "Total P95 Ms",
+          "type": "number"
+        }
+      },
+      "required": [
+        "total_p50_ms",
+        "total_p95_ms"
+      ],
+      "title": "ProfileBudget",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "profiles": {
+      "additionalProperties": {
+        "$ref": "#/$defs/ProfileBudget"
+      },
+      "propertyNames": {
+        "enum": [
+          "chat",
+          "embed",
+          "voice"
+        ]
+      },
+      "title": "Profiles",
+      "type": "object"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "profiles"
+  ],
+  "title": "LatencyBudgets",
+  "type": "object"
+}

@@ -4,6 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from rag_sidecar.contracts.eval_run import GoldenFilter, RagRunOptions
 from rag_sidecar.contracts.golden import Category, Language, Split
+from rag_sidecar.contracts.latency import StageLatency
 
 
 class _Contract(BaseModel):
@@ -56,4 +57,5 @@ class EvalReport(_Contract):
     by_language_category: dict[str, SliceMetrics]
     by_split: dict[str, SliceMetrics]
     items: list[ItemResult]
+    latency: dict[str, StageLatency] | None = None
     notes: list[str] = Field(default_factory=list)

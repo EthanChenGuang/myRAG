@@ -241,6 +241,33 @@
       ],
       "title": "SliceMetrics",
       "type": "object"
+    },
+    "StageLatency": {
+      "additionalProperties": false,
+      "properties": {
+        "n": {
+          "minimum": 0,
+          "title": "N",
+          "type": "integer"
+        },
+        "p50_ms": {
+          "minimum": 0,
+          "title": "P50 Ms",
+          "type": "number"
+        },
+        "p95_ms": {
+          "minimum": 0,
+          "title": "P95 Ms",
+          "type": "number"
+        }
+      },
+      "required": [
+        "p50_ms",
+        "p95_ms",
+        "n"
+      ],
+      "title": "StageLatency",
+      "type": "object"
     }
   },
   "additionalProperties": false,
@@ -345,6 +372,21 @@
       },
       "title": "K Values",
       "type": "array"
+    },
+    "latency": {
+      "anyOf": [
+        {
+          "additionalProperties": {
+            "$ref": "#/$defs/StageLatency"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Latency"
     },
     "notes": {
       "items": {
