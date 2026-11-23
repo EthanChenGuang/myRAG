@@ -244,3 +244,45 @@ test('prints violations sorted by variable name then location', () => {
     cleanup(root);
   }
 });
+
+test('fails when src reads a LANGFUSE variable that is not in the manifest', () => {
+  const root = syntheticTree({
+    files: { 'scripts/init-env.js': 'LANGFUSE_BASE_URL=https://example.invalid\n' },
+    manifest: {
+      schemaVersion: 1,
+      vars: [{ name: 'RAG_PLACEHOLDER', status: 'legacy', knownGaps: ['config-server', 'config-ui', 'env-ts', 'init-env'] }],
+    },
+  });
+  try {
+    write(root, 'src/lib/probe.ts', 'export const probe = process.env.LANGFUSE_SAMPLE_RATE;\n');
+    const { code, out } = run(root);
+    assert.equal(code, 1);
+    assert.match(out, /LANGFUSE_SAMPLE_RATE \[manifest\] used in src\/ or a tracked file but not in the manifest/);
+    assert.match(out, /LANGFUSE_BASE_URL \[manifest\] used in src\/ or a tracked file but not in the manifest/);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('fails when a managed LANGFUSE variable is missing from config-ui', () => {
+  const present = 'LANGFUSE_PUBLIC_KEY=\n';
+  const root = syntheticTree({
+    files: {
+      'scripts/init-env.js': present,
+      'src/lib/env.ts': present,
+      'scripts/config-server.js': present,
+    },
+    manifest: {
+      schemaVersion: 1,
+      vars: [{ name: 'LANGFUSE_PUBLIC_KEY', status: 'managed', knownGaps: [] }],
+    },
+  });
+  try {
+    const { code, out } = run(root);
+    assert.equal(code, 1);
+    assert.match(out, /LANGFUSE_PUBLIC_KEY \[config-ui\] missing from this location/);
+    assert.doesNotMatch(out, /not in the manifest/);
+  } finally {
+    cleanup(root);
+  }
+});
