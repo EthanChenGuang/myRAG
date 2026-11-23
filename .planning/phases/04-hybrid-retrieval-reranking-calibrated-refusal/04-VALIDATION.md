@@ -70,6 +70,7 @@ No test calls a live service. Database tests use PGlite with pgvector 0.8.7; rer
 | Env switches in the five config places and the manifest | AGENTS.md rule 5, D-23 | 04-02 | `node scripts/check-config.mjs && npx vitest run tests/rag/config.test.ts` |
 | Pydantic source with generated Zod, no drift | Project constraint (Pydantic v2) | 04-04, 04-26 | `npm run gen:schemas && npx vitest run tests/contracts.test.ts tests/schema-parity.test.ts` |
 | No query, chunk text or key in trace logs | F-22, C-7 | 04-08 | `npx vitest run tests/rag/trace-log.test.ts` |
+| No current document silently dropped under an active non-legacy chunking profile: legacy-row fallback in both legs, coverage count in the v2 startup warning, admin list and Config UI, in-place repair by rag:rechunk | D-21, D-23, plan-check pass 2 W1 | 04-15, 04-32, 04-33, 04-34, 04-36 | `node --import tsx --test --test-name-pattern="legacy fallback" tests/rag-db/hybrid-filters.test.mts tests/rag-db/hybrid-tenant.test.mts && node --import tsx --test --test-name-pattern="legacy-mode upload under an active profile" tests/rag-db/chunking-cli.test.mts && node --import tsx --test --test-name-pattern="rechunk repairs an active profile in place" tests/rag-db/rechunk.test.mts && npx vitest run tests/rag/v2/startup.test.ts -t "v2 startup warns about documents missing from the active chunking profile"` (each run must report at least one pass and no failure) |
 | Folded setup files apply cleanly on PGlite and equal the migrations, each mode on its own | D-04, Phase 3 D-05, plan-check pass 1 W2 | 04-42 | `node --import tsx --test --test-reporter=tap --test-name-pattern="single-tenant setup" tests/rag-db/schema-equality.test.mts` and the same with `"multi-tenant setup"`, each with `# fail 0` and at least 3 passed |
 | Phase completion against the baseline (D-28 a to d) | ROADMAP rule "proven against the baseline", D-28 | 04-40, 04-42 | `uv run --directory eval python -m rag_eval.phase_compare --spec eval/config/phase4-comparison.json --out eval/reports/phase-04 && jq -e '.passed == true' eval/reports/phase-04/comparison.json` |
 
@@ -117,8 +118,8 @@ Requirements and threat references per plan are in `04-PLAN-INDEX.md`. Kind: tra
 | 04-14-01 | 2 | tdd | `npx vitest run tests/rag/query/filters.test.ts` | ⬜ pending |
 | 04-14-02 | 2 | tdd | `npx vitest run tests/rag/query/timeframe.test.ts tests/rag/query/language.test.ts` | ⬜ pending |
 | 04-15-01 | 2 | tdd | `node --import tsx --test tests/rag-db/hybrid-search.test.mts tests/rag-db/hybrid-grants.test.mts` | ⬜ pending |
-| 04-15-02 | 2 | tdd | `node --import tsx --test tests/rag-db/hybrid-tenant.test.mts` | ⬜ pending |
-| 04-15-03 | 2 | tdd | `node --import tsx --test tests/rag-db/hybrid-filters.test.mts && npm run test-rag -- --out eval/out/p4-15 && jq -e '.paired.all_zero == true' eval/out/p4-15/gate.json` | ⬜ pending |
+| 04-15-02 | 2 | tdd | `node --import tsx --test tests/rag-db/hybrid-tenant.test.mts` (includes `legacy fallback stays inside the tenant`) | ⬜ pending |
+| 04-15-03 | 2 | tdd | `node --import tsx --test tests/rag-db/hybrid-filters.test.mts && npm run test-rag -- --out eval/out/p4-15 && jq -e '.paired.all_zero == true' eval/out/p4-15/gate.json` (includes `legacy fallback for a document missing from the active profile`) | ⬜ pending |
 | 04-16-01 | 2 | tdd | `node --import tsx --test tests/rag-db/relex.test.mts` | ⬜ pending |
 | 04-16-02 | 2 | auto | `node --import tsx --test tests/rag-db/relex.test.mts tests/two-tenant-fixture.test.mts && npm run test-rag -- --out eval/out/p4-16 && jq -e '.passed == true and .paired.all_zero == true' eval/out/p4-16/gate.json` | ⬜ pending |
 | 04-17-01 | 3 | tdd | `npx vitest run tests/rag/backend/pgvector-adapter.test.ts` | ⬜ pending |
@@ -165,25 +166,25 @@ Requirements and threat references per plan are in `04-PLAN-INDEX.md`. Kind: tra
 | 04-37-01 | 7 | tdd | corpus loader tests, per-item baseline equality in both modes (jq over `.items`), smoke gate (exact chain in 04-37-PLAN.md Task 1) | ⬜ pending |
 | 04-37-02 | 7 | tdd | `uv run --directory eval pytest -q tests/test_fixture_coverage.py tests/test_split.py && uv run --project rag-sidecar python -m rag_sidecar.contracts.validate --model GoldenItem --jsonl eval/fixtures/golden.jsonl` | ⬜ pending |
 | 04-37-03 | 7 | auto | per-item baseline equality for every pre-existing id, then both smoke tiers with `paired.all_zero` (exact chain in 04-37-PLAN.md Task 3) | ⬜ pending |
-| 04-32-01 | 8 | tdd | `node --import tsx --test tests/rag-db/rechunk.test.mts` | ⬜ pending |
+| 04-32-01 | 8 | tdd | `node --import tsx --test tests/rag-db/rechunk.test.mts` (includes `rechunk repairs an active profile in place`) | ⬜ pending |
 | 04-32-02 | 8 | auto | `node --import tsx --test tests/rag-db/rechunk.test.mts` | ⬜ pending |
 | 04-38-01 | 8 | tdd | `uv run --directory eval pytest -q tests/test_golden_phase4.py tests/test_fixture_coverage.py tests/test_split.py` | ⬜ pending |
 | 04-38-02 | 8 | tdd | `uv run --directory eval pytest -q tests/test_ingest_golden.py` | ⬜ pending |
 | 04-38-03 | 8 | auto | per-item baseline equality in both modes, then both smoke tiers with `paired.all_zero` against the re-recorded baselines (exact chain in 04-38-PLAN.md Task 3) | ⬜ pending |
 | 04-41-01 | 8 | tdd | `node --import tsx --test tests/rag-db/v2-two-tenant-matrix.test.mts tests/rag-two-tenant.test.mts tests/two-tenant-fixture.test.mts` | ⬜ pending |
 | 04-41-02 | 8 | tdd | `npx vitest run tests/rag/v2/routes-two-tenant-v2.test.ts tests/rag/chat-two-tenant.test.ts` | ⬜ pending |
-| 04-33-01 | 9 | tdd | `node --import tsx --test tests/rag-db/chunking-activation.test.mts tests/rag-db/profile-chunk-writer.test.mts` | ⬜ pending |
+| 04-33-01 | 9 | tdd | `node --import tsx --test tests/rag-db/chunking-activation.test.mts tests/rag-db/profile-chunk-writer.test.mts` (includes `rag_chunking_coverage counts documents missing from each profile`) | ⬜ pending |
 | 04-33-02 | 9 | tdd | `npx vitest run tests/rag/embeddings/registry.test.ts tests/rag/chunking/profile-validate.test.ts && npm run typecheck:new` | ⬜ pending |
-| 04-33-03 | 9 | tdd | `node --import tsx --test tests/rag-db/chunking-cli.test.mts && npm run typecheck:new && node scripts/ci/check-rag-boundary.mjs` | ⬜ pending |
+| 04-33-03 | 9 | tdd | `node --import tsx --test tests/rag-db/chunking-cli.test.mts && npm run typecheck:new && node scripts/ci/check-rag-boundary.mjs` (includes `legacy-mode upload under an active profile stays retrievable and is counted missing`) | ⬜ pending |
 | 04-39-01 | 9 | auto | `uv run --directory eval python -m rag_eval.sweep retrieval --run-config eval/config/runs/v2-recommended.json --out eval/reports/retrieval-sweep-fixture && git diff --exit-code eval/config/retrieval-params.json` | ⬜ pending |
 | 04-39-02 | 9 | auto | calibration run twice with identical checksums (exact chain in 04-39-PLAN.md Task 2) | ⬜ pending |
 | 04-39-03 | 9 | tdd | `uv run --directory eval pytest -q tests/test_fixture_calibration_outputs.py` | ⬜ pending |
 | 04-35-01 | 10 | tdd | `node --import tsx --test tests/rag-db/eval-chunking-profiles.test.mts tests/rag-db/eval-v2-overlay.test.mts` | ⬜ pending |
 | 04-35-02 | 10 | tdd | `uv run --directory eval pytest -q tests/test_sweep_chunking.py tests/test_sweep_retrieval.py` | ⬜ pending |
 | 04-35-03 | 10 | auto | `uv run --project rag-sidecar python -m rag_sidecar.contracts.validate --model ChunkingSweepReport --json eval/reports/chunking-sweep.json && uv run --project rag-sidecar python -m rag_sidecar.contracts.validate --model ChunkingDecision --json eval/decisions/chunking/contract_legal.json` | ⬜ pending |
-| 04-34-01 | 11 | tdd | `npx vitest run tests/rag/chunking-profile-routes.test.ts tests/api/admin-auth.test.ts && npm run typecheck:new` | ⬜ pending |
+| 04-34-01 | 11 | tdd | `npx vitest run tests/rag/chunking-profile-routes.test.ts tests/api/admin-auth.test.ts && npm run typecheck:new` (includes missing_from_active in GET /) | ⬜ pending |
 | 04-34-02 | 11 | tdd | `npx vitest run tests/rag/chunking-profile-routes.test.ts tests/routes/async-params.test.ts` | ⬜ pending |
-| 04-34-03 | 11 | tdd | `npx vitest run tests/rag/refusal/status.test.ts tests/rag/refusal` | ⬜ pending |
+| 04-34-03 | 11 | tdd | `npx vitest run tests/rag/refusal/status.test.ts tests/rag/refusal tests/rag/v2/startup.test.ts` | ⬜ pending |
 | 04-40-01 | 11 | tdd | `uv run --directory eval pytest -q tests/test_phase_compare.py` | ⬜ pending |
 | 04-40-02 | 11 | auto | `uv run --directory eval python -m rag_eval.phase_compare --spec eval/config/phase4-comparison.json --out eval/reports/phase-04 && jq -e '.passed == true' eval/reports/phase-04/comparison.json` | ⬜ pending |
 | 04-36-01 | 12 | tdd | `npx vitest run tests/ui/config-chunking-panel.test.ts && node --check scripts/config-ui/rag-panels/chunking-validate.js` | ⬜ pending |
