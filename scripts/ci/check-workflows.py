@@ -15,11 +15,13 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 PR = ROOT / ".github" / "workflows" / "pr-smoke.yml"
 NIGHTLY = ROOT / ".github" / "workflows" / "nightly.yml"
+DOCKERFILE = ROOT / "rag-sidecar" / "Dockerfile"
 
 PR_JOBS = ["ts", "schema-parity", "python", "eval-smoke", "gate-negative-control", "docker-build"]
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
-TAG_RE = re.compile(r"^v?\d+(\.\d+){0,2}([-.][0-9A-Za-z.]+)?$")
-BRANCH_NAMES = {"main", "master", "develop", "dev", "trunk", "latest", "head"}
+USES_LINE_RE = re.compile(r"^\s*(?:-\s+)?uses:\s*(?P<ref>\S+)(?P<rest>.*)$")
+VERSION_COMMENT_RE = re.compile(r"^\s+#\s*v\d+(\.\d+){0,2}\s*$")
+UV_IMAGE_RE = re.compile(r"ghcr\.io/astral-sh/uv:(?P<version>\d+\.\d+\.\d+)")
 SKIP_NOTICE = "::notice::judge key not configured, skipping"
 TELEMETRY = {
     "DEEPEVAL_TELEMETRY_OPT_OUT": "1",
@@ -80,8 +82,30 @@ def check_common(name: str, data: dict, text: str, errors: list[str]) -> None:
             errors.append(f"{name}: uses '{ref}' has no version pin")
             continue
         version = ref.rsplit("@", 1)[1]
-        if version.lower() in BRANCH_NAMES or not (SHA_RE.match(version) or TAG_RE.match(version)):
-            errors.append(f"{name}: uses '{ref}' is not pinned to a release tag or 40-hex sha")
+        if not SHA_RE.match(version):
+            errors.append(f"{name}: uses '{ref}' must be pinned to a 40-hex commit sha")
+    for line in text.splitlines():
+        match = USES_LINE_RE.match(line)
+        if not match or match.group("ref").startswith(("./", "docker://")):
+            continue
+        if not VERSION_COMMENT_RE.match(match.group("rest")):
+            errors.append(f"{name}: uses '{match.group('ref')}' needs a '# vX.Y.Z' comment naming the pinned release")
+    uv_version = dockerfile_uv_version()
+    for job in (data.get("jobs") or {}).values():
+        for step in all_steps(job):
+            if str(step.get("uses", "")).startswith("astral-sh/setup-uv@"):
+                pinned = str((step.get("with") or {}).get("version", ""))
+                if uv_version is None:
+                    errors.append(f"{name}: cannot read the uv version pinned in rag-sidecar/Dockerfile")
+                elif pinned != uv_version:
+                    errors.append(f"{name}: setup-uv must pin version '{uv_version}' (rag-sidecar/Dockerfile), got {pinned!r}")
+
+
+def dockerfile_uv_version() -> str | None:
+    if not DOCKERFILE.exists():
+        return None
+    match = UV_IMAGE_RE.search(DOCKERFILE.read_text(encoding="utf-8"))
+    return match.group("version") if match else None
 
 
 def check_pr(errors: list[str]) -> None:
@@ -137,6 +161,7 @@ def check_pr(errors: list[str]) -> None:
             "node scripts/check-config.mjs",
             "scripts/check-config.test.mjs",
             "npm run typecheck:new",
+            "scripts/ci/check-workflows.py",
         ):
             if needle not in body:
                 errors.append(f"pr-smoke: job ts is missing '{needle}'")
