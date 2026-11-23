@@ -34,7 +34,7 @@ All requirements are written so they can be checked. "Behind a switch" means an 
 - [ ] **PIPE-07**: Each pipeline stage has its own switch, timeout and degrade-to-skip path; an `AbortSignal` flows through all stages
 - [ ] **PIPE-08**: Unused retrieval modules (`retrieval-strategies.ts`, `optimized-search.ts`, `adaptive-retrieval.ts`, `reranker-adapter.ts`, never-called parts of `thinking-rag-enhancer.ts`) are removed; still-used logic is re-homed under `src/lib/rag/`
 - [ ] **PIPE-09**: With all new switches off (`RAG_PIPELINE=legacy`), the eval results reproduce the baseline within its noise band
-- [ ] **PIPE-10**: Node.js 22 is the documented and enforced runtime (`engines`, docs, CI), as required by the Weaviate and Qdrant clients
+- [x] **PIPE-10**: Node.js 22 is the documented and enforced runtime (`engines`, docs, CI), as required by the Weaviate and Qdrant clients
 
 ### Data Layer (DATA)
 
@@ -214,7 +214,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PIPE-07 | Phase 2 | Pending |
 | PIPE-08 | Phase 2 | Pending |
 | PIPE-09 | Phase 2 | Pending |
-| PIPE-10 | Phase 2 | Pending |
+| PIPE-10 | Phase 2 | Complete |
 | DATA-01 | Phase 3 | Pending |
 | DATA-02 | Phase 3 | Pending |
 | DATA-03 | Phase 3 | Pending |
