@@ -12,9 +12,12 @@ const ORG_O = '00000000-0000-4000-8000-0000000000c1';
 const mode = vi.hoisted(() => ({ value: 'multi-tenant' as 'single-tenant' | 'multi-tenant' }));
 const session = vi.hoisted(() => ({ user: null as { id: string } | null }));
 const livekit = vi.hoisted(() => ({
-  listParticipants: undefined as unknown as (room: string) => Promise<Array<{ identity: string }>>,
-  listedRooms: [] as string[],
+  listRooms: undefined as unknown as () => Promise<Array<{ name: string }>>,
+  createRoom: undefined as unknown as (options: Record<string, unknown>) => Promise<unknown>,
+  created: [] as Array<Record<string, unknown>>,
+  order: [] as string[],
 }));
+const members = vi.hoisted(() => ({ rows: [] as Array<{ organization_id: string; user_id: string }>, owners: {} as Record<string, string> }));
 
 vi.mock('@/lib/deployment-mode', () => ({
   getDeploymentMode: () => mode.value,
@@ -28,12 +31,24 @@ vi.mock('@/lib/supabase/server', () => ({
   }),
 }));
 
+vi.mock('@/lib/auth/organization-handler', () => ({
+  verifyUserOrganizationAccess: async (userId: string, organizationId: string) => {
+    livekit.order.push('repair');
+    if (members.owners[organizationId] === userId) members.rows.push({ organization_id: organizationId, user_id: userId });
+    return { ok: true };
+  },
+}));
+
 vi.mock('livekit-server-sdk', async (importOriginal) => {
   const actual = await importOriginal<typeof import('livekit-server-sdk')>();
   class FakeRoomServiceClient {
-    async listParticipants(room: string) {
-      livekit.listedRooms.push(room);
-      return livekit.listParticipants(room);
+    async listRooms() {
+      return livekit.listRooms();
+    }
+    async createRoom(options: Record<string, unknown>) {
+      livekit.order.push('create');
+      livekit.created.push(options);
+      return livekit.createRoom(options);
     }
   }
   return { ...actual, RoomServiceClient: FakeRoomServiceClient };
@@ -48,6 +63,18 @@ interface JwtPayload {
   sub?: string;
   metadata?: string;
   video?: Record<string, unknown>;
+  exp?: number;
+  nbf?: number;
+}
+
+interface RoomMetadata {
+  v?: number;
+  participant_identity?: string;
+  rag_scope_token?: string;
+}
+
+function createdMetadata(index = 0): RoomMetadata {
+  return JSON.parse(String(livekit.created[index]?.metadata ?? '{}')) as RoomMetadata;
 }
 
 function decodeJwt(token: string): JwtPayload {
@@ -84,15 +111,19 @@ let voiceSecret: string;
 beforeEach(() => {
   mode.value = 'multi-tenant';
   session.user = null;
-  livekit.listedRooms = [];
-  livekit.listParticipants = async () => [{ identity: 'voice-agent-1' }];
+  livekit.created = [];
+  livekit.order = [];
+  livekit.listRooms = async () => [{ name: 'unrelated-room' }];
+  livekit.createRoom = async (options) => options;
+  members.owners = {};
+  members.rows = [{ organization_id: ORG_O, user_id: USER_A }];
   voiceSecret = crypto.randomBytes(24).toString('hex');
   mutableEnv.LIVEKIT_API_KEY = `key-${crypto.randomBytes(6).toString('hex')}`;
   mutableEnv.LIVEKIT_API_SECRET = crypto.randomBytes(32).toString('hex');
   mutableEnv.LIVEKIT_URL = 'wss://livekit.example.test';
   mutableEnv.RAG_VOICE_TOKEN_SECRET = voiceSecret;
   mutableEnv.RAG_VOICE_TOKEN_TTL_SECONDS = '3600';
-  setRagDepsForTests({ adminClient: () => fakeAdmin([{ organization_id: ORG_O, user_id: USER_A }]) });
+  setRagDepsForTests({ adminClient: () => fakeAdmin(members.rows) });
 });
 
 afterEach(() => {
@@ -109,7 +140,8 @@ describe('GET /api/livekit/token', () => {
     expect(body.identity).toMatch(new RegExp(`^user-${USER_A}-[0-9a-f]{8}$`));
     const payload = decodeJwt(body.token);
     expect(payload.sub).toBe(body.identity);
-    expect(payload.video?.room).toBe('myrag-voice');
+    expect(payload.video?.room).toMatch(/^myrag-voice-[0-9a-f]{32}$/);
+    expect(payload.video?.room).toBe(livekit.created[0]?.name);
     expect(payload.video?.roomJoin).toBe(true);
     expect(body.serverUrl).toBe('wss://livekit.example.test');
   });
@@ -117,7 +149,7 @@ describe('GET /api/livekit/token', () => {
   test('puts a verifiable personal voice token in the participant metadata', async () => {
     session.user = { id: USER_A };
     const body = await (await GET(request())).json();
-    const metadata = JSON.parse(decodeJwt(body.token).metadata ?? '{}') as { rag_scope_token?: string };
+    const metadata = createdMetadata();
     expect(typeof metadata.rag_scope_token).toBe('string');
     const verified = verifyVoiceToken(metadata.rag_scope_token, { secret: voiceSecret });
     expect(verified.ok).toBe(true);
@@ -130,7 +162,7 @@ describe('GET /api/livekit/token', () => {
   test('an organization member gets an organization token', async () => {
     session.user = { id: USER_A };
     const body = await (await GET(request(`?organizationId=${ORG_O}`))).json();
-    const metadata = JSON.parse(decodeJwt(body.token).metadata ?? '{}') as { rag_scope_token?: string };
+    const metadata = createdMetadata();
     const verified = verifyVoiceToken(metadata.rag_scope_token, { secret: voiceSecret });
     expect(verified.ok).toBe(true);
     if (verified.ok) {
@@ -154,7 +186,7 @@ describe('GET /api/livekit/token', () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.identity).toMatch(/^user-anon-[0-9a-f]{8}$/);
-    const metadata = JSON.parse(decodeJwt(body.token).metadata ?? '{}') as { rag_scope_token?: string };
+    const metadata = createdMetadata();
     const verified = verifyVoiceToken(metadata.rag_scope_token, { secret: voiceSecret });
     expect(verified.ok).toBe(true);
     if (verified.ok) {
@@ -168,7 +200,7 @@ describe('GET /api/livekit/token', () => {
     mode.value = 'single-tenant';
     session.user = { id: USER_A };
     const body = await (await GET(request())).json();
-    const metadata = JSON.parse(decodeJwt(body.token).metadata ?? '{}') as { rag_scope_token?: string };
+    const metadata = createdMetadata();
     const verified = verifyVoiceToken(metadata.rag_scope_token, { secret: voiceSecret });
     expect(verified.ok).toBe(true);
     if (verified.ok) {
@@ -179,7 +211,7 @@ describe('GET /api/livekit/token', () => {
   test('multi-tenant tokens carry no separate actor claim', async () => {
     session.user = { id: USER_A };
     const body = await (await GET(request(`?organizationId=${ORG_O}`))).json();
-    const metadata = JSON.parse(decodeJwt(body.token).metadata ?? '{}') as { rag_scope_token?: string };
+    const metadata = createdMetadata();
     const verified = verifyVoiceToken(metadata.rag_scope_token, { secret: voiceSecret });
     expect(verified.ok && verified.payload.act).toBeFalsy();
   });
@@ -189,20 +221,31 @@ describe('GET /api/livekit/token', () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.identity).toMatch(/^user-anon-[0-9a-f]{8}$/);
-    expect(decodeJwt(body.token).metadata).toBeUndefined();
+    expect(createdMetadata().rag_scope_token).toBeUndefined();
   });
 
-  test('a 31-character voice secret issues the token without metadata and warns once', async () => {
+  test('a 31-character voice secret gives 503 with no token and no room', async () => {
     session.user = { id: USER_A };
     mutableEnv.RAG_VOICE_TOKEN_SECRET = 'x'.repeat(31);
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const res = await GET(request());
+    expect(res.status).toBe(503);
+    const body = await res.json();
+    expect(body.token).toBeUndefined();
+    expect(livekit.created).toHaveLength(0);
+    const tenantErrors = error.mock.calls.filter((call) => String(call[0]).includes('[RAG Tenant]'));
+    expect(tenantErrors).toHaveLength(1);
+    expect(JSON.stringify(error.mock.calls)).not.toContain('x'.repeat(31));
+  });
+
+  test('a non-numeric voice token TTL falls back to the default and still issues the scope token', async () => {
+    session.user = { id: USER_A };
+    mutableEnv.RAG_VOICE_TOKEN_TTL_SECONDS = 'not-a-number';
     const res = await GET(request());
     expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(decodeJwt(body.token).metadata).toBeUndefined();
-    const tenantWarnings = warn.mock.calls.filter((call) => String(call[0]).includes('[RAG Tenant]'));
-    expect(tenantWarnings).toHaveLength(1);
-    expect(JSON.stringify(warn.mock.calls)).not.toContain('x'.repeat(31));
+    const verified = verifyVoiceToken(createdMetadata().rag_scope_token, { secret: voiceSecret });
+    expect(verified.ok).toBe(true);
+    if (verified.ok) expect(verified.payload.exp - verified.payload.iat).toBe(3600);
   });
 
   test('the grant never allows the participant to update its own metadata', async () => {
@@ -212,25 +255,96 @@ describe('GET /api/livekit/token', () => {
     expect(decodeJwt(body.token).video?.canUpdateOwnMetadata ?? false).toBe(false);
   });
 
-  test('another user participant in the room gives 409 voice_busy and no token', async () => {
+  test('every request gets its own unguessable room and the token only joins that room', async () => {
     session.user = { id: USER_A };
-    livekit.listParticipants = async () => [{ identity: 'voice-agent-1' }, { identity: `user-${USER_B}-abcd1234` }];
-    const res = await GET(request());
-    expect(res.status).toBe(409);
-    const body = await res.json();
-    expect(body).toEqual({ error: 'voice_busy' });
-    expect(livekit.listedRooms).toEqual(['myrag-voice']);
+    const first = await (await GET(request())).json();
+    const second = await (await GET(request())).json();
+    const roomA = decodeJwt(first.token).video?.room;
+    const roomB = decodeJwt(second.token).video?.room;
+    expect(roomA).toMatch(/^myrag-voice-[0-9a-f]{32}$/);
+    expect(roomB).toMatch(/^myrag-voice-[0-9a-f]{32}$/);
+    expect(roomA).not.toBe(roomB);
+    expect(livekit.created.map((c) => c.name)).toEqual([roomA, roomB]);
+    expect(String(roomA)).not.toContain(USER_A);
   });
 
-  test('a participant listing failure logs and proceeds', async () => {
+  test('the room is created server-side for exactly the intended participant and holds two at most', async () => {
     session.user = { id: USER_A };
-    livekit.listParticipants = async () => {
+    const body = await (await GET(request())).json();
+    expect(livekit.created).toHaveLength(1);
+    expect(livekit.created[0]).toMatchObject({ maxParticipants: 2 });
+    expect(createdMetadata().participant_identity).toBe(body.identity);
+  });
+
+  test('the scope token is not in the participant metadata of the room token', async () => {
+    session.user = { id: USER_A };
+    const body = await (await GET(request())).json();
+    expect(decodeJwt(body.token).metadata).toBeUndefined();
+    expect(body.token).not.toContain('rag_scope_token');
+  });
+
+  test('the join token is short lived', async () => {
+    session.user = { id: USER_A };
+    const body = await (await GET(request())).json();
+    const payload = decodeJwt(body.token);
+    expect((payload.exp ?? 0) - Math.floor(Date.now() / 1000)).toBeLessThanOrEqual(600);
+  });
+
+  test('too many active voice rooms gives 409 voice_busy and no token', async () => {
+    session.user = { id: USER_A };
+    livekit.listRooms = async () => [
+      { name: 'myrag-voice-aaaa' },
+      { name: 'myrag-voice-bbbb' },
+      { name: 'myrag-voice-cccc' },
+      { name: 'myrag-voice-dddd' },
+      { name: 'unrelated-room' },
+    ];
+    const res = await GET(request());
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: 'voice_busy' });
+    expect(livekit.created).toHaveLength(0);
+  });
+
+  test('a room listing failure fails closed with 503 and no token', async () => {
+    session.user = { id: USER_A };
+    livekit.listRooms = async () => {
       throw new Error('livekit unreachable');
     };
-    const error = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
     const res = await GET(request());
+    expect(res.status).toBe(503);
+    const body = await res.json();
+    expect(body.token).toBeUndefined();
+    expect(livekit.created).toHaveLength(0);
+  });
+
+  test('a room creation failure fails closed with 503 and no token', async () => {
+    session.user = { id: USER_A };
+    livekit.createRoom = async () => {
+      throw new Error('create failed');
+    };
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const res = await GET(request());
+    expect(res.status).toBe(503);
+    expect((await res.json()).token).toBeUndefined();
+  });
+
+  test('an organization owner without a membership row is repaired before the tenant check', async () => {
+    session.user = { id: USER_B };
+    members.owners = { [ORG_O]: USER_B };
+    const res = await GET(request(`?organizationId=${ORG_O}`));
     expect(res.status).toBe(200);
-    expect(error).toHaveBeenCalled();
+    expect(livekit.order.indexOf('repair')).toBeGreaterThanOrEqual(0);
+    expect(livekit.order.indexOf('repair')).toBeLessThan(livekit.order.indexOf('create'));
+    const verified = verifyVoiceToken(createdMetadata().rag_scope_token, { secret: voiceSecret });
+    expect(verified.ok && verified.payload.tk).toBe(`o:${ORG_O}`);
+  });
+
+  test('a non-owner non-member is still refused after the repair attempt', async () => {
+    session.user = { id: USER_B };
+    const res = await GET(request(`?organizationId=${ORG_O}`));
+    expect(res.status).toBe(403);
+    expect(livekit.created).toHaveLength(0);
   });
 
   test('a missing LiveKit key or secret gives 500', async () => {

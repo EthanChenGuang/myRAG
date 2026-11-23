@@ -294,6 +294,16 @@ export class VoicePipeline {
         console.log(`[VoicePipeline] Scope token ${token ? 'set' : 'not provided'}`);
     }
 
+    public async close() {
+        this.cancelCurrentPlayback = true;
+        this.isProcessing = false;
+        try {
+            await this.stt.close();
+        } catch (error) {
+            console.error('[VoicePipeline] STT close failed:', error);
+        }
+    }
+
     public clearScope() {
         this.scopeToken = undefined;
         this.userId = undefined;
