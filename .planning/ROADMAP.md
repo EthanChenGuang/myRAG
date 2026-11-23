@@ -137,7 +137,7 @@ Plans:
 - [x] 02-19-PLAN.md — Delete retired retrieval modules; ingestion embeddings via @/lib/rag (wave 13)
 - [x] 02-20-PLAN.md — CI boundary check with self-test (wave 14)
 - [x] 02-21-PLAN.md — Stronger negative control (degrade) and final parity proof (wave 15)
-- [ ] 02-24-PLAN.md — Latency budgets and per-stage p50/p95 in eval reports (wave 16)
+- [x] 02-24-PLAN.md — Latency budgets and per-stage p50/p95 in eval reports (wave 16)
 - [ ] 02-25-PLAN.md — EVAL-14 contracts: new categories, production provenance, provenance slices (wave 17)
 - [ ] 02-26-PLAN.md — EVAL-14 fixture items and baseline re-record (wave 18)
 - [ ] 02-27-PLAN.md — EVAL-15 review queue pull/promote (wave 19)
