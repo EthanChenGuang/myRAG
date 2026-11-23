@@ -77,6 +77,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.resetModules();
   vi.doUnmock('@/lib/admin-route-auth');
+  vi.doUnmock('@/lib/supabase');
   vi.doUnmock('@/lib/system-prompt-manager');
   vi.doUnmock('@/lib/supabase/server');
   vi.doUnmock('@/lib/deployment-mode');
@@ -294,6 +295,7 @@ describe('organizations/:id/members/:userId', () => {
         rpc: vi.fn(async () => ({ data: null, error: null })),
       }),
     }));
+    vi.doMock('@/lib/supabase', () => ({ getSupabaseAdmin: () => ({ from: db.from }) }));
     return isPersonalOrganization;
   }
 

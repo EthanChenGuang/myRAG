@@ -14,6 +14,7 @@ const state = {
   settings: [] as Row[],
   adminQueries: 0,
   lookupFails: false,
+  sessionThrows: false,
 };
 
 function fakeAdmin() {
@@ -73,7 +74,12 @@ async function load() {
   vi.resetModules();
   vi.doMock('@/lib/supabase/server', () => ({
     createClient: async () => ({
-      auth: { getUser: async () => ({ data: { user: state.session } }) },
+      auth: {
+        getUser: async () => {
+          if (state.sessionThrows) throw new Error('auth down');
+          return { data: { user: state.session } };
+        },
+      },
     }),
   }));
   vi.doMock('@/lib/supabase', () => ({ getSupabaseAdmin: () => fakeAdmin(), getSupabase: () => ({}) }));
@@ -108,6 +114,7 @@ describe('admin routes authentication', () => {
     state.settings = [{ id: SETTINGS_ID, read_only_doc_dashboard: false }];
     state.adminQueries = 0;
     state.lookupFails = false;
+    state.sessionThrows = false;
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.spyOn(console, 'log').mockImplementation(() => {});
@@ -243,6 +250,7 @@ describe('admin routes authentication', () => {
     });
 
     it('a valid cookie for an admin reads and updates settings and is reported by check and status', async () => {
+      state.session = { id: ADMIN_A };
       const { settings, check, status, session } = await load();
       const cookie = cookieOf(session.mintAdminSessionValue(ADMIN_A)!);
 
@@ -263,6 +271,7 @@ describe('admin routes authentication', () => {
     });
 
     it('admin_users is re-checked on every request, so a removed admin loses access at once', async () => {
+      state.session = { id: ADMIN_A };
       const { settings, check, session } = await load();
       const cookie = cookieOf(session.mintAdminSessionValue(ADMIN_A)!);
       expect((await settings.GET(req('/api/admin/settings', { cookie }))).status).toBe(200);
@@ -272,10 +281,89 @@ describe('admin routes authentication', () => {
     });
 
     it('a failing admin_users lookup gives 503, never access', async () => {
+      state.session = { id: ADMIN_A };
       const { settings, session } = await load();
       const cookie = cookieOf(session.mintAdminSessionValue(ADMIN_A)!);
       state.lookupFails = true;
       expect((await settings.GET(req('/api/admin/settings', { cookie }))).status).toBe(503);
+    });
+  });
+
+  describe('cookie bound to the Supabase session (LO-02)', () => {
+    it('a valid cookie without any Supabase session is refused by settings, check and status', async () => {
+      const { settings, check, status, session } = await load();
+      const cookie = cookieOf(session.mintAdminSessionValue(ADMIN_A)!);
+      state.session = null;
+
+      expect((await settings.GET(req('/api/admin/settings', { cookie }))).status).toBe(401);
+      expect(
+        (await settings.POST(req('/api/admin/settings', { method: 'POST', cookie, body: { read_only_doc_dashboard: true } }))).status,
+      ).toBe(401);
+      expect(state.settings[0].read_only_doc_dashboard).toBe(false);
+      expect(await (await check.GET(req('/api/admin/check', { cookie }))).json()).toEqual({ isAdmin: false });
+      expect((await (await status.GET(req('/api/admin/status', { cookie }))).json()).isAdmin).toBe(false);
+    });
+
+    it('signing out of Supabase ends the capability of a cookie that worked a moment before', async () => {
+      state.session = { id: ADMIN_A };
+      const { settings, session } = await load();
+      const cookie = cookieOf(session.mintAdminSessionValue(ADMIN_A)!);
+      expect((await settings.GET(req('/api/admin/settings', { cookie }))).status).toBe(200);
+      state.session = null;
+      expect((await settings.GET(req('/api/admin/settings', { cookie }))).status).toBe(401);
+    });
+
+    it('a cookie minted for one admin is refused while a different user is signed in, even another admin', async () => {
+      state.admins = [ADMIN_A, ADMIN_B];
+      state.session = { id: ADMIN_B };
+      const { settings, session } = await load();
+      const cookie = cookieOf(session.mintAdminSessionValue(ADMIN_A)!);
+      expect((await settings.GET(req('/api/admin/settings', { cookie }))).status).toBe(200);
+      expect(state.adminQueries).toBeGreaterThan(0);
+      state.admins = [ADMIN_A];
+      state.adminQueries = 0;
+      expect((await settings.GET(req('/api/admin/settings', { cookie }))).status).toBe(403);
+    });
+
+    it('a failing session lookup gives 503 and no access', async () => {
+      const { settings, session } = await load();
+      const cookie = cookieOf(session.mintAdminSessionValue(ADMIN_A)!);
+      state.sessionThrows = true;
+      expect((await settings.GET(req('/api/admin/settings', { cookie }))).status).toBe(503);
+    });
+  });
+
+  describe('missing signing key fails closed (LO-02)', () => {
+    const KEYLESS: Array<[string, () => Record<string, unknown>]> = [
+      ['an empty', () => ({ SUPABASE_SERVICE_ROLE_KEY: '' })],
+      [
+        'an unreadable',
+        () => ({
+          get SUPABASE_SERVICE_ROLE_KEY(): string {
+            throw new Error('SUPABASE_SERVICE_ROLE_KEY is required on the server');
+          },
+        }),
+      ],
+    ];
+
+    it.each(KEYLESS)('with %s service-role key login gives 503 and a previously minted cookie gives 401', async (_label, makeEnv) => {
+      state.session = { id: ADMIN_A };
+      const minted = await load();
+      const value = minted.session.mintAdminSessionValue(ADMIN_A)!;
+      const cookie = cookieOf(value);
+      expect((await minted.settings.GET(req('/api/admin/settings', { cookie }))).status).toBe(200);
+
+      vi.doMock('@/lib/env', () => ({ env: new Proxy(makeEnv(), { get: (target, key) => Reflect.get(target, key) }) }));
+      const keyless = await load();
+      const response = await keyless.login.POST(req('/api/admin/login', { method: 'POST' }));
+      expect(response.status).toBe(503);
+      expect(response.headers.get('set-cookie')).toBeNull();
+      expect(keyless.session.mintAdminSessionValue(ADMIN_A)).toBeNull();
+      expect(keyless.session.verifyAdminSessionValue(value)).toBeNull();
+      state.session = null;
+      expect((await keyless.settings.GET(req('/api/admin/settings', { cookie }))).status).toBe(401);
+      expect(await (await keyless.check.GET(req('/api/admin/check', { cookie }))).json()).toEqual({ isAdmin: false });
+      vi.doUnmock('@/lib/env');
     });
   });
 

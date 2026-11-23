@@ -4,7 +4,8 @@ import fetch from 'node-fetch';
 import { env } from '@/lib/env';
 import { DocumentContent } from '@/types/chat';
 import { createClient } from '@supabase/supabase-js';
-import { embedText } from '@/lib/rag';
+import { embedText, type RagAdminDb } from '@/lib/rag';
+import { checkSingleTenantKbWrite } from '@/lib/kb-write-access';
 import { v4 as uuidv4 } from 'uuid';
 import { extractURLs } from '@/lib/url-extractor';
 import { isMultiTenant, isSingleTenant } from '@/lib/deployment-mode';
@@ -415,10 +416,10 @@ async function storeDocument(
       content: content,
     };
 
-    // SINGLE-TENANT MODE: No user/organization isolation on documents
+    // SINGLE-TENANT MODE: shared knowledge base; user_id records the owner who may later modify it
     if (isSingleTenant()) {
       console.log('Single-tenant mode: document will be shared in knowledge base');
-      // Don't add user_id, uploaded_by, or organization_id - they don't exist in single-tenant schema
+      if (userId) documentData.user_id = userId;
     } else {
       // MULTI-TENANT MODE: Full user/organization isolation
       if (userId) {
@@ -582,12 +583,23 @@ export async function POST(req: Request) {
             { status: 401 }
           );
         }
+        userId = user.id;
       } catch {
         console.error('[ProcessDocument] Session lookup failed');
         return NextResponse.json({ error: 'Authentication unavailable' }, { status: 503 });
       }
-      userId = null;
       organizationId = null;
+
+      if (!isTemporary) {
+        const access = await checkSingleTenantKbWrite({
+          admin: supabaseAdmin as unknown as RagAdminDb,
+          userId,
+          signal: req.signal,
+        });
+        if (!access.ok) {
+          return NextResponse.json({ error: access.error }, { status: access.status });
+        }
+      }
     } else {
       // MULTI-TENANT MODE: Get user_id and optional organization_id
       // Use SSR Supabase client (cookie-aware) to read the user session reliably
@@ -818,8 +830,8 @@ export async function POST(req: Request) {
       file.name,
       text,
       validChunks,
-      userId, // User ID (null in single-tenant, required in multi-tenant)
-      organizationId // Organization ID (optional, NULL for personal/single-tenant)
+      userId,
+      organizationId
     );
     console.log('Document stored successfully with ID:', storedDocumentId);
     console.log(`Successfully stored ${successfulChunks}/${totalChunks} chunks with embeddings`);

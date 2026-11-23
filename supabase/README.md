@@ -97,6 +97,19 @@ Both setup files include:
 - Service role has full access for webhook/backend operations
 - User RLS policies restrict data to authenticated users' own records
 
+## Updating an Existing Database
+
+The setup files are for new databases and are not safe to re-run. For a database created from an earlier version, run the matching file from `patches/` in the SQL Editor (idempotent), before deploying the application code that goes with it:
+
+- `patches/2026-11-security-review-single-tenant.sql`
+- `patches/2026-11-security-review-multi-tenant.sql`
+
+## Single-Tenant Access Model
+
+Everyone can read the shared knowledge base. Writes are limited to the document's owner (`documents.user_id`) and to users in `admin_users`; documents stored before ownership was recorded have no owner and are admin-only. When `admin_settings.read_only_doc_dashboard` is on, only admins may change the knowledge base.
+
+A single-tenant deployment that is meant to be private should also disable public sign-ups in Supabase (Authentication, Sign In / Providers, turn off "Allow new users to sign up"), because any account can read the knowledge base.
+
 ## Nango Integration Details
 
 ### Connection Fields

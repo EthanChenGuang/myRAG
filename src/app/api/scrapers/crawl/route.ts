@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { getSupabaseAdmin } from '@/lib/supabase';
+import type { RagAdminDb } from '@/lib/rag';
+import { checkSingleTenantKbWrite } from '@/lib/kb-write-access';
 import { crawlAndProcess } from '@/lib/scrapers/scraper-adapter';
 import { isFirecrawlEnabled } from '@/lib/scrapers/firecrawl-client';
 import { isHttpUrl, normalizeScrapedUrl } from '@/lib/scrapers/url-utils';
@@ -31,8 +34,21 @@ export async function POST(request: NextRequest) {
         if (!user || authError) {
             return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
         }
-        if (!isSingleTenant()) {
-            userId = user.id;
+        userId = user.id;
+        if (isSingleTenant()) {
+            const admin = getSupabaseAdmin();
+            if (!admin) {
+                console.error('[Crawl API] Database client is not available');
+                return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+            }
+            const access = await checkSingleTenantKbWrite({
+                admin: admin as unknown as RagAdminDb,
+                userId: user.id,
+                signal: request.signal,
+            });
+            if (!access.ok) {
+                return NextResponse.json({ error: access.error }, { status: access.status });
+            }
         }
     } catch {
         console.error('[Crawl API] Session lookup failed');

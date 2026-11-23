@@ -23,6 +23,8 @@ const state = {
   chunks: [] as Row[],
   deletes: [] as Array<{ table: string; filters: Filter[] }>,
   removed: [] as string[][],
+  admins: [] as string[],
+  readOnly: false,
 };
 
 function matches(row: Row, filters: Filter[]): boolean {
@@ -40,7 +42,14 @@ function dataAdmin() {
       }),
     },
     from(table: string) {
-      const rows = table === 'documents' ? state.documents : state.chunks;
+      const rows: Row[] =
+        table === 'documents'
+          ? state.documents
+          : table === 'admin_users'
+            ? state.admins.map((id) => ({ id }))
+            : table === 'admin_settings'
+              ? [{ read_only_doc_dashboard: state.readOnly }]
+              : state.chunks;
       const filters: Filter[] = [];
       let op: 'select' | 'delete' = 'select';
       let limit = Infinity;
@@ -68,6 +77,7 @@ function dataAdmin() {
           return builder;
         },
         order: () => builder,
+        abortSignal: () => builder,
         limit(n: number) {
           limit = n;
           return builder;
@@ -140,6 +150,8 @@ describe('images route', () => {
     state.mode = 'multi-tenant';
     state.session = null;
     state.authThrows = false;
+    state.admins = [];
+    state.readOnly = false;
     state.members = [];
     state.documents = [
       { id: IMG_A, user_id: USER_A, organization_id: null, filename: 'a.png', created_at: '2026-01-03' },
@@ -292,10 +304,47 @@ describe('images route', () => {
     expect(body.images.map((image) => image.id)).toEqual([IMG_ORG_X]);
   });
 
-  it('single-tenant: a signed-in user lists and deletes images', async () => {
+  it('single-tenant: a signed-in non-owner non-admin lists but cannot delete another user image (404)', async () => {
     state.mode = 'single-tenant';
     state.session = { id: USER_A };
-    state.documents = [{ id: IMG_SINGLE, organization_id: null, filename: 's.png', created_at: '2026-01-01' }];
+    state.documents = [{ id: IMG_SINGLE, user_id: USER_B, organization_id: null, filename: 's.png', created_at: '2026-01-01' }];
+    state.chunks = [{ id: 'chunk-s', document_id: IMG_SINGLE, metadata: { image_url: url('s.png') } }];
+    const { GET, DELETE } = await loadRoute();
+    const listed = (await (await GET(req('GET'))).json()) as { images: Array<{ id: string }> };
+    expect(listed.images.map((image) => image.id)).toEqual([IMG_SINGLE]);
+    expect((await DELETE(req('DELETE', `?id=${IMG_SINGLE}`))).status).toBe(404);
+    expect(state.deletes).toEqual([]);
+    expect(state.documents).toHaveLength(1);
+    expect(state.removed).toEqual([]);
+  });
+
+  it('single-tenant: an admin can delete another user image', async () => {
+    state.mode = 'single-tenant';
+    state.session = { id: USER_A };
+    state.admins = [USER_A];
+    state.documents = [{ id: IMG_SINGLE, user_id: USER_B, organization_id: null, filename: 's.png', created_at: '2026-01-01' }];
+    state.chunks = [{ id: 'chunk-s', document_id: IMG_SINGLE, metadata: { image_url: url('s.png') } }];
+    const { DELETE } = await loadRoute();
+    expect((await DELETE(req('DELETE', `?id=${IMG_SINGLE}`))).status).toBe(200);
+    expect(state.documents).toEqual([]);
+  });
+
+  it('single-tenant read_only_doc_dashboard: a non-admin owner gets 403 on DELETE, listing still works', async () => {
+    state.mode = 'single-tenant';
+    state.session = { id: USER_A };
+    state.readOnly = true;
+    state.documents = [{ id: IMG_SINGLE, user_id: USER_A, organization_id: null, filename: 's.png', created_at: '2026-01-01' }];
+    state.chunks = [{ id: 'chunk-s', document_id: IMG_SINGLE, metadata: { image_url: url('s.png') } }];
+    const { GET, DELETE } = await loadRoute();
+    expect((await GET(req('GET'))).status).toBe(200);
+    expect((await DELETE(req('DELETE', `?id=${IMG_SINGLE}`))).status).toBe(403);
+    expect(state.deletes).toEqual([]);
+  });
+
+  it('single-tenant: the owner lists and deletes their own image', async () => {
+    state.mode = 'single-tenant';
+    state.session = { id: USER_A };
+    state.documents = [{ id: IMG_SINGLE, user_id: USER_A, organization_id: null, filename: 's.png', created_at: '2026-01-01' }];
     state.chunks = [{ id: 'chunk-s', document_id: IMG_SINGLE, metadata: { image_url: url('s.png') } }];
     const { GET, DELETE } = await loadRoute();
     const listed = (await (await GET(req('GET'))).json()) as { images: Array<{ id: string }> };

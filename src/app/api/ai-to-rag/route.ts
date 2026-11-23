@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { embedText, repairOwnerMembership, resolveTenantScope } from '@/lib/rag';
+import { embedText, repairOwnerMembership, resolveTenantScope, type RagAdminDb } from '@/lib/rag';
+import { checkSingleTenantKbWrite } from '@/lib/kb-write-access';
 import { isMultiTenant } from '@/lib/deployment-mode';
 import { v4 as uuidv4 } from 'uuid';
 import { env } from '@/lib/env';
@@ -122,9 +123,8 @@ async function storeAIResponseAsDocument(
         filename: filename,
         content: content,
         metadata: metadata,
-        ...(owner.organizationId !== undefined
-          ? { user_id: owner.userId, organization_id: owner.organizationId }
-          : {})
+        user_id: owner.userId,
+        ...(owner.organizationId !== undefined ? { organization_id: owner.organizationId } : {})
       }])
       .select()
       .single();
@@ -249,6 +249,17 @@ export async function POST(req: Request) {
     }
     if (!tenant.scope) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (!isMultiTenant()) {
+      const access = await checkSingleTenantKbWrite({
+        admin: supabaseAdmin as unknown as RagAdminDb,
+        userId: sessionUser.id,
+        signal: req.signal,
+      });
+      if (!access.ok) {
+        return NextResponse.json({ error: access.error }, { status: access.status });
+      }
     }
 
     const owner = {

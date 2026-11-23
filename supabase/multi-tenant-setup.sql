@@ -566,16 +566,21 @@ END $$;
 CREATE OR REPLACE FUNCTION is_org_member(org_id UUID, check_user_id UUID)
 RETURNS BOOLEAN AS $$
 BEGIN
-  RETURN EXISTS (
-    SELECT 1 FROM organization_members
-    WHERE organization_id = org_id AND user_id = check_user_id
+  RETURN COALESCE(
+    (check_user_id = auth.uid() OR auth.role() = 'service_role')
+    AND EXISTS (
+      SELECT 1 FROM organization_members
+      WHERE organization_id = org_id AND user_id = check_user_id
+    ),
+    false
   );
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
-COMMENT ON FUNCTION is_org_member IS 'Helper function to check organization membership without causing RLS recursion';
+COMMENT ON FUNCTION is_org_member IS 'Helper function to check organization membership without causing RLS recursion. Answers only for the calling user (or service_role).';
 
-GRANT EXECUTE ON FUNCTION is_org_member(UUID, UUID) TO authenticated, anon;
+REVOKE EXECUTE ON FUNCTION is_org_member(UUID, UUID) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION is_org_member(UUID, UUID) TO authenticated, anon, service_role;
 
 -- Safe organization creation (creates org AND adds owner as member atomically)
 CREATE OR REPLACE FUNCTION create_organization_safe(
@@ -593,6 +598,10 @@ DECLARE
   v_org organizations;
   v_max_team_members INT;
 BEGIN
+  IF auth.role() IS DISTINCT FROM 'service_role' AND p_owner_id IS DISTINCT FROM auth.uid() THEN
+    RAISE EXCEPTION 'Not authorized to create an organization for another user' USING ERRCODE = '42501';
+  END IF;
+
   -- Set team member limit based on organization type
   -- Personal projects: 1 member (owner only)
   -- Collaborative projects: 5 members (can invite)
@@ -644,7 +653,8 @@ $$;
 
 COMMENT ON FUNCTION create_organization_safe IS 'Safely creates an organization and adds the creator as owner member. Uses SECURITY DEFINER to bypass RLS.';
 
-GRANT EXECUTE ON FUNCTION create_organization_safe TO authenticated;
+REVOKE EXECUTE ON FUNCTION create_organization_safe(TEXT, TEXT, UUID, BOOLEAN) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION create_organization_safe(TEXT, TEXT, UUID, BOOLEAN) TO authenticated, service_role;
 
 -- Vector search with organization filter
 CREATE OR REPLACE FUNCTION match_documents_by_organization(
@@ -956,6 +966,10 @@ $$;
 
 COMMENT ON FUNCTION get_workspace_context(text, uuid) IS 'Resolve organization context from domain or user preferences';
 
+-- SECURITY DEFINER and trusts the caller-supplied user id: only the server-side service role may execute it.
+REVOKE EXECUTE ON FUNCTION get_workspace_context(text, uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION get_workspace_context(text, uuid) TO service_role;
+
 -- Get user organization IDs
 CREATE OR REPLACE FUNCTION get_user_org_ids(check_user_id uuid)
 RETURNS SETOF uuid
@@ -969,6 +983,10 @@ AS $$
 $$;
 
 COMMENT ON FUNCTION get_user_org_ids IS 'Get all organization IDs for a user';
+
+-- SECURITY DEFINER and trusts the caller-supplied user id: only the server-side service role may execute it.
+REVOKE EXECUTE ON FUNCTION get_user_org_ids(uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION get_user_org_ids(uuid) TO service_role;
 
 -- Get user role in organization
 CREATE OR REPLACE FUNCTION get_user_role_in_org(org_id uuid)
@@ -1234,6 +1252,10 @@ $$;
 
 COMMENT ON FUNCTION get_admin_organization_id IS 'Get or create admin organization for config UI uploads';
 
+-- Creates a row when missing and takes no caller identity: only the server-side service role may execute it.
+REVOKE EXECUTE ON FUNCTION get_admin_organization_id() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION get_admin_organization_id() TO service_role;
+
 -- Storage quota check
 CREATE OR REPLACE FUNCTION check_storage_quota(org_id uuid, file_size_bytes bigint)
 RETURNS boolean
@@ -1374,22 +1396,33 @@ BEGIN
 END;
 $$;
 
+REVOKE EXECUTE ON FUNCTION is_admin(UUID) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION is_admin(UUID) TO authenticated, service_role;
+
 -- Subscription check
 CREATE OR REPLACE FUNCTION is_subscribed(user_uuid uuid)
 RETURNS boolean
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public
 AS $$
 BEGIN
-  RETURN EXISTS (
-    SELECT 1
-    FROM subscriptions
-    WHERE user_id = user_uuid
-    AND status = 'active'
-    AND plan_type IN ('pro', 'enterprise')
+  RETURN COALESCE(
+    (user_uuid = auth.uid() OR auth.role() = 'service_role')
+    AND EXISTS (
+      SELECT 1
+      FROM subscriptions
+      WHERE user_id = user_uuid
+      AND status = 'active'
+      AND plan_type IN ('pro', 'enterprise')
+    ),
+    false
   );
 END;
 $$;
+
+REVOKE EXECUTE ON FUNCTION is_subscribed(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION is_subscribed(uuid) TO authenticated, service_role;
 
 -- Trigger functions
 CREATE OR REPLACE FUNCTION set_last_updated_timestamp()
@@ -1762,7 +1795,8 @@ CREATE POLICY "Users can delete chats" ON chats
 -- Tool execution states
 CREATE POLICY "Users can view own tool states" ON tool_execution_states
   FOR SELECT USING (
-    EXISTS (
+    user_id = auth.uid()
+    AND EXISTS (
       SELECT 1 FROM chats
       WHERE chats.id = tool_execution_states.chat_id
         AND chats.user_id = auth.uid()
@@ -1771,7 +1805,8 @@ CREATE POLICY "Users can view own tool states" ON tool_execution_states
 
 CREATE POLICY "Users can insert tool states" ON tool_execution_states
   FOR INSERT WITH CHECK (
-    EXISTS (
+    user_id = auth.uid()
+    AND EXISTS (
       SELECT 1 FROM chats
       WHERE chats.id = tool_execution_states.chat_id
         AND chats.user_id = auth.uid()
@@ -1780,7 +1815,16 @@ CREATE POLICY "Users can insert tool states" ON tool_execution_states
 
 CREATE POLICY "Users can update tool states" ON tool_execution_states
   FOR UPDATE USING (
-    EXISTS (
+    user_id = auth.uid()
+    AND EXISTS (
+      SELECT 1 FROM chats
+      WHERE chats.id = tool_execution_states.chat_id
+        AND chats.user_id = auth.uid()
+    )
+  )
+  WITH CHECK (
+    user_id = auth.uid()
+    AND EXISTS (
       SELECT 1 FROM chats
       WHERE chats.id = tool_execution_states.chat_id
         AND chats.user_id = auth.uid()
@@ -2009,14 +2053,33 @@ CREATE INDEX IF NOT EXISTS idx_nango_connections_provider
 CREATE INDEX IF NOT EXISTS idx_nango_connections_sync_folder
   ON nango_connections(sync_folder_id);
 
--- One Nango connection may belong to exactly one user
+-- One Nango connection may belong to exactly one user.
+-- Rows that already share a connection_id (created before this constraint existed) are reduced to the oldest
+-- row per connection_id, deterministically (created_at, then id), so this step succeeds on every run.
 DO $$
+DECLARE
+  removed integer;
 BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint
     WHERE conname = 'unique_nango_connection_id'
       AND conrelid = 'public.nango_connections'::regclass
   ) THEN
+    DELETE FROM public.nango_connections nc
+    USING (
+      SELECT id,
+             row_number() OVER (
+               PARTITION BY connection_id
+               ORDER BY created_at ASC NULLS LAST, id ASC
+             ) AS rn
+      FROM public.nango_connections
+    ) ranked
+    WHERE nc.id = ranked.id AND ranked.rn > 1;
+    GET DIAGNOSTICS removed = ROW_COUNT;
+    IF removed > 0 THEN
+      RAISE NOTICE 'nango_connections: removed % duplicate connection_id rows', removed;
+    END IF;
+
     ALTER TABLE public.nango_connections
       ADD CONSTRAINT unique_nango_connection_id UNIQUE (connection_id);
   END IF;
@@ -2045,20 +2108,12 @@ CREATE POLICY "Users can view own connections"
   ON nango_connections FOR SELECT
   USING (auth.uid() = user_id);
 
+-- Connections are written only by the server (service role) after it has checked the Nango end_user.
+-- Users get no INSERT/UPDATE/DELETE: a user-written connection_id would bypass that check.
 DROP POLICY IF EXISTS "Users can insert own connections" ON nango_connections;
-CREATE POLICY "Users can insert own connections"
-  ON nango_connections FOR INSERT
-  WITH CHECK (auth.uid() = user_id);
-
 DROP POLICY IF EXISTS "Users can update own connections" ON nango_connections;
-CREATE POLICY "Users can update own connections"
-  ON nango_connections FOR UPDATE
-  USING (auth.uid() = user_id);
-
 DROP POLICY IF EXISTS "Users can delete own connections" ON nango_connections;
-CREATE POLICY "Users can delete own connections"
-  ON nango_connections FOR DELETE
-  USING (auth.uid() = user_id);
+REVOKE INSERT, UPDATE, DELETE ON nango_connections FROM anon, authenticated;
 
 -- Users can only see their own sync records
 DROP POLICY IF EXISTS "Users can view own sync records" ON nango_sync_records;
@@ -2066,15 +2121,10 @@ CREATE POLICY "Users can view own sync records"
   ON nango_sync_records FOR SELECT
   USING (auth.uid() = user_id);
 
+-- Sync records are written only by the server (service role).
 DROP POLICY IF EXISTS "Users can insert own sync records" ON nango_sync_records;
-CREATE POLICY "Users can insert own sync records"
-  ON nango_sync_records FOR INSERT
-  WITH CHECK (auth.uid() = user_id);
-
 DROP POLICY IF EXISTS "Users can update own sync records" ON nango_sync_records;
-CREATE POLICY "Users can update own sync records"
-  ON nango_sync_records FOR UPDATE
-  USING (auth.uid() = user_id);
+REVOKE INSERT, UPDATE, DELETE ON nango_sync_records FROM anon, authenticated;
 
 -- Grant service role access (for webhook and sync operations)
 GRANT ALL ON nango_connections TO service_role;
@@ -2161,7 +2211,7 @@ CREATE POLICY connector_feature_settings_read
   FOR SELECT
   USING (true);
 
--- Helper function to get connection statistics
+-- Helper function to get connection statistics. Callers see only their own connections; service_role may ask for any user.
 CREATE OR REPLACE FUNCTION get_nango_stats(p_user_id UUID)
 RETURNS TABLE (
   provider TEXT,
@@ -2179,13 +2229,16 @@ BEGIN
     COUNT(CASE WHEN nsr.status = 'completed' THEN 1 END) AS synced_files_count,
     COUNT(CASE WHEN nsr.status = 'failed' THEN 1 END) AS failed_files_count
   FROM nango_connections nc
-  LEFT JOIN nango_sync_records nsr ON nc.connection_id = nsr.connection_id
+  LEFT JOIN nango_sync_records nsr
+    ON nc.connection_id = nsr.connection_id AND nsr.user_id = nc.user_id
   WHERE nc.user_id = p_user_id
+    AND (p_user_id = auth.uid() OR auth.role() = 'service_role')
   GROUP BY nc.provider, nc.status, nc.last_sync_at;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
-GRANT EXECUTE ON FUNCTION get_nango_stats(UUID) TO authenticated;
+REVOKE EXECUTE ON FUNCTION get_nango_stats(UUID) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION get_nango_stats(UUID) TO authenticated, service_role;
 
 COMMIT;
 

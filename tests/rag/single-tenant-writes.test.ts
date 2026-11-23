@@ -11,17 +11,32 @@ const state = {
   embedCalls: 0,
   scrapeCalls: 0,
   crawlCalls: 0,
+  admins: [] as string[],
+  readOnly: false,
 };
 
 function adminClient() {
   return {
     from(table: string) {
+      let filter: unknown;
       const builder = {
         insert(rows: unknown) {
           state.inserts.push({ table, rows });
           return builder;
         },
         select: () => builder,
+        eq(_column: string, value: unknown) {
+          filter = value;
+          return builder;
+        },
+        order: () => builder,
+        limit: () => builder,
+        abortSignal: () => builder,
+        maybeSingle: () => {
+          if (table === 'admin_users') return Promise.resolve({ data: state.admins.includes(filter as string) ? { id: filter } : null, error: null });
+          if (table === 'admin_settings') return Promise.resolve({ data: { read_only_doc_dashboard: state.readOnly }, error: null });
+          return Promise.resolve({ data: null, error: null });
+        },
         single: () => Promise.resolve({ data: { id: 'doc' }, error: null }),
         then: (ok: (value: unknown) => unknown, bad?: (reason: unknown) => unknown) =>
           Promise.resolve({ data: null, error: null }).then(ok, bad),
@@ -78,6 +93,10 @@ async function loadProcessDocument() {
       state.embedCalls += 1;
       return [0.1, 0.2];
     },
+    isAdminUser: async (admin: ReturnType<typeof adminClient>, userId: string) => {
+      const { data } = await admin.from('admin_users').eq('id', userId).abortSignal().maybeSingle();
+      return Boolean(data);
+    },
   }));
   vi.doMock('node-fetch', () => ({
     default: async (url: string) => {
@@ -105,6 +124,13 @@ async function loadProcessDocument() {
 
 async function loadScraper(kind: 'scrape' | 'crawl') {
   baseMocks();
+  vi.doMock('@/lib/supabase', () => ({ getSupabaseAdmin: () => adminClient() }));
+  vi.doMock('@/lib/rag', () => ({
+    isAdminUser: async (admin: ReturnType<typeof adminClient>, userId: string) => {
+      const { data } = await admin.from('admin_users').eq('id', userId).abortSignal().maybeSingle();
+      return Boolean(data);
+    },
+  }));
   vi.doMock('@/lib/scrapers/firecrawl-client', () => ({ isFirecrawlEnabled: () => true }));
   vi.doMock('@/lib/scrapers/scraper-adapter', () => ({
     scrapeAndProcess: async () => {
@@ -143,6 +169,8 @@ describe('single-tenant permanent writes require a session', () => {
     state.embedCalls = 0;
     state.scrapeCalls = 0;
     state.crawlCalls = 0;
+    state.admins = [];
+    state.readOnly = false;
     vi.spyOn(console, 'log').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -158,6 +186,7 @@ describe('single-tenant permanent writes require a session', () => {
       '@/lib/env',
       '@supabase/supabase-js',
       '@/lib/rag',
+      '@/lib/supabase',
       'node-fetch',
       '@/lib/scrapers/firecrawl-client',
       '@/lib/scrapers/scraper-adapter',
@@ -245,5 +274,56 @@ describe('single-tenant permanent writes require a session', () => {
     const res = await POST(jsonRequest('/api/scrapers/crawl', { url: 'https://example.com/' }));
     expect(res.status).toBe(200);
     expect(state.crawlCalls).toBe(1);
+  });
+
+  it('process-document: the permanent document is stored with the session user as owner', async () => {
+    state.session = { id: USER };
+    const { POST } = await loadProcessDocument();
+    expect((await POST(docRequest(false))).status).toBe(200);
+    const document = state.inserts.find((entry) => entry.table === 'documents')?.rows as Array<Record<string, unknown>>;
+    expect(document[0]).toMatchObject({ user_id: USER });
+  });
+
+  describe('read_only_doc_dashboard', () => {
+    beforeEach(() => {
+      state.readOnly = true;
+    });
+
+    it('process-document: a non-admin gets 403 for a permanent upload before any parse, insert or embed', async () => {
+      state.session = { id: USER };
+      const { POST } = await loadProcessDocument();
+      const res = await POST(docRequest(false));
+      expect(res.status).toBe(403);
+      expect(state.inserts).toEqual([]);
+      expect(state.llamaCalls).toBe(0);
+      expect(state.embedCalls).toBe(0);
+    });
+
+    it('process-document: temporary processing persists nothing, so it stays allowed', async () => {
+      state.session = { id: USER };
+      const { POST } = await loadProcessDocument();
+      expect((await POST(docRequest(true))).status).toBe(200);
+    });
+
+    it('process-document: an admin can still upload', async () => {
+      state.session = { id: USER };
+      state.admins = [USER];
+      const { POST } = await loadProcessDocument();
+      expect((await POST(docRequest(false))).status).toBe(200);
+      expect(state.inserts.map((entry) => entry.table)).toEqual(['documents', 'document_chunks']);
+    });
+
+    it('scrape and crawl: a non-admin gets 403 and the scraper is not called, an admin succeeds', async () => {
+      state.session = { id: USER };
+      const scrape = await loadScraper('scrape');
+      expect((await scrape.POST(jsonRequest('/api/scrapers/scrape', { url: 'https://example.com/' }))).status).toBe(403);
+      const crawl = await loadScraper('crawl');
+      expect((await crawl.POST(jsonRequest('/api/scrapers/crawl', { url: 'https://example.com/' }))).status).toBe(403);
+      expect(state.scrapeCalls).toBe(0);
+      expect(state.crawlCalls).toBe(0);
+      state.admins = [USER];
+      const adminScrape = await loadScraper('scrape');
+      expect((await adminScrape.POST(jsonRequest('/api/scrapers/scrape', { url: 'https://example.com/' }))).status).toBe(200);
+    });
   });
 });

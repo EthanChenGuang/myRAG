@@ -287,6 +287,27 @@ describe('nango/connections DELETE and PATCH ownership', () => {
     expect(state.rows.map((r) => r.user_id)).toEqual([USER_B]);
   });
 
+  it('keeps the row and answers 502 when the Nango delete fails, so the connection id is never freed', async () => {
+    state.session = { id: USER_A };
+    state.rows = [{ user_id: USER_A, provider: 'notion', connection_id: 'conn-a' }];
+    state.deleteConnection = vi.fn().mockRejectedValue(Object.assign(new Error('upstream down'), { status: 503 }));
+    const route = await load();
+    const response = await route.DELETE(request('DELETE', {}, { provider: 'notion' }));
+    expect(response.status).toBe(502);
+    expect(state.rows).toHaveLength(1);
+    expect(state.ops.filter((o) => o.op === 'delete' || o.op === 'update')).toEqual([]);
+  });
+
+  it('drops the row when Nango reports the connection already gone (404)', async () => {
+    state.session = { id: USER_A };
+    state.rows = [{ user_id: USER_A, provider: 'notion', connection_id: 'conn-a' }];
+    state.deleteConnection = vi.fn().mockRejectedValue(Object.assign(new Error('not found'), { response: { status: 404 } }));
+    const route = await load();
+    const response = await route.DELETE(request('DELETE', {}, { provider: 'notion' }));
+    expect(response.status).toBe(200);
+    expect(state.rows).toEqual([]);
+  });
+
   it('patches only the caller row', async () => {
     state.session = { id: USER_A };
     state.rows = [
