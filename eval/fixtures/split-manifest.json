@@ -1,5 +1,9 @@
 {
   "assignments": {
+    "en-ambiguous-001": "dev",
+    "en-ambiguous-002": "dev",
+    "en-colloquial-001": "dev",
+    "en-colloquial-002": "dev",
     "en-compound-001": "dev",
     "en-compound-002": "dev",
     "en-compound-003": "dev",
@@ -24,6 +28,12 @@
     "en-table-001": "dev",
     "en-table-002": "dev",
     "en-table-003": "dev",
+    "en-typo-001": "dev",
+    "en-typo-002": "dev",
+    "it-ambiguous-001": "dev",
+    "it-ambiguous-002": "dev",
+    "it-colloquial-001": "dev",
+    "it-colloquial-002": "dev",
     "it-compound-001": "dev",
     "it-compound-002": "test",
     "it-compound-003": "test",
@@ -48,6 +58,12 @@
     "it-table-001": "dev",
     "it-table-002": "dev",
     "it-table-003": "dev",
+    "it-typo-001": "test",
+    "it-typo-002": "test",
+    "zh-ambiguous-001": "dev",
+    "zh-ambiguous-002": "dev",
+    "zh-colloquial-001": "dev",
+    "zh-colloquial-002": "test",
     "zh-compound-001": "test",
     "zh-compound-002": "dev",
     "zh-compound-003": "dev",
@@ -71,7 +87,9 @@
     "zh-scanned-002": "dev",
     "zh-table-001": "dev",
     "zh-table-002": "dev",
-    "zh-table-003": "test"
+    "zh-table-003": "test",
+    "zh-typo-001": "dev",
+    "zh-typo-002": "test"
   },
   "rule": "sha256-first8hex-mod100-lt70-dev",
   "schema_version": 1

@@ -23,6 +23,9 @@ PER_LANGUAGE_CATEGORY = {
     "table": 3,
     "scanned": 2,
     "no_answer": 4,
+    "colloquial": 2,
+    "ambiguous": 2,
+    "typo": 2,
 }
 RELATIVE_DATE_LATIN = ("today", "yesterday", "last week", "this month", "oggi", "ieri")
 RELATIVE_DATE_CJK = ("今天", "昨天", "上周", "本月")
@@ -45,10 +48,10 @@ def test_corpus_has_one_image_caption_document():
     assert [doc.filename for doc in documents if doc.image_url] == ["warehouse-floorplan.png"]
 
 
-def test_seventy_two_items_twenty_four_per_language(items):
+def test_ninety_items_thirty_per_language(items):
     counts = collections.Counter(item.language for item in items)
-    assert len(items) == 72
-    assert {language: counts[language] for language in LANGUAGES} == {"zh": 24, "en": 24, "it": 24}
+    assert len(items) == 90
+    assert {language: counts[language] for language in LANGUAGES} == {"zh": 30, "en": 30, "it": 30}
 
 
 def test_every_language_category_cell_has_the_planned_count_and_at_least_two(items):
