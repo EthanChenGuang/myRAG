@@ -175,6 +175,71 @@ describe('generateEvalAnswer', () => {
   });
 });
 
+describe('generateEvalAnswer conversation history', () => {
+  test('sends prior turns in order before the current user turn', async () => {
+    const calls = { count: 0 };
+    const model = mockModel('MOCK-ANSWER', calls);
+    answer.setEvalLanguageModelFactory(() => model);
+    const restore = silentLog();
+    try {
+      await answer.generateEvalAnswer({
+        query: 'What accuracy does it have?',
+        conversation: [
+          { role: 'user', content: 'Tell me about the XR-5100.' },
+          { role: 'assistant', content: 'It is a reference thermometer.' },
+        ],
+        context: 'CTX-EPSILON',
+        ragMode: 'strict',
+        generatorModel: 'anthropic/claude-sonnet-4.5',
+        promptEnv: {},
+      });
+    } finally {
+      restore();
+      answer.setEvalLanguageModelFactory(null);
+    }
+    const turns = model.doGenerateCalls[0].prompt
+      .filter((message) => message.role !== 'system')
+      .map((message) => ({
+        role: message.role,
+        text: Array.isArray(message.content)
+          ? message.content.map((part) => ('text' in part ? part.text : '')).join('')
+          : String(message.content),
+      }));
+    assert.deepEqual(turns, [
+      { role: 'user', text: 'Tell me about the XR-5100.' },
+      { role: 'assistant', text: 'It is a reference thermometer.' },
+      { role: 'user', text: 'What accuracy does it have?' },
+    ]);
+  });
+});
+
+describe('eval route conversation passthrough', () => {
+  test('the route forwards conversation to the generator', async () => {
+    const calls = { count: 0 };
+    const model = mockModel('ROUTE-ANSWER', calls);
+    answer.setEvalLanguageModelFactory(() => model);
+    const restore = silentLog();
+    try {
+      const { status } = await postRoute({
+        query: TRACER_QUESTION,
+        include_answer: true,
+        conversation: [
+          { role: 'user', content: 'PRIOR-USER-TURN' },
+          { role: 'assistant', content: 'PRIOR-ASSISTANT-TURN' },
+        ],
+      });
+      assert.equal(status, 200);
+    } finally {
+      restore();
+      answer.setEvalLanguageModelFactory(null);
+    }
+    assert.equal(model.doGenerateCalls.length, 1);
+    const roles = model.doGenerateCalls[0].prompt.filter((message) => message.role !== 'system').map((message) => message.role);
+    assert.deepEqual(roles, ['user', 'assistant', 'user']);
+    assert.ok(JSON.stringify(model.doGenerateCalls[0].prompt).includes('PRIOR-ASSISTANT-TURN'));
+  });
+});
+
 describe('eval route with include_answer', () => {
   test('returns the generator text for a non-refused item and records the model', async () => {
     const calls = { count: 0 };

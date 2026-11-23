@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) {
     return parsed.response;
   }
-  const { query, options, rag_mode: ragMode, item_id: itemId, include_answer: includeAnswer } = parsed.data;
+  const { query, conversation, options, rag_mode: ragMode, item_id: itemId, include_answer: includeAnswer } = parsed.data;
 
   const deploymentMode = env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE;
   const organizationId = deploymentMode === 'multi-tenant' ? (options?.organization_id ?? null) : null;
@@ -97,7 +97,7 @@ export async function POST(req: NextRequest) {
     if (generatorModel !== null && !filtered.refused) {
       const generationStart = Date.now();
       try {
-        answer = await generateEvalAnswer({ query, context: filtered.context, ragMode, generatorModel });
+        answer = await generateEvalAnswer({ query, conversation, context: filtered.context, ragMode, generatorModel });
       } catch (error: unknown) {
         const name = error instanceof Error ? error.name : 'Error';
         const status = (error as { statusCode?: unknown } | null)?.statusCode;
