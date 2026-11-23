@@ -128,7 +128,7 @@ Plans:
 - [x] 02-13-PLAN.md — Chat references and overview fallback scoped; retired imports removed (wave 9)
 - [x] 02-14-PLAN.md — Embed on the pipeline with configured tenant; widget error rendering (wave 10)
 - [x] 02-16-PLAN.md — Voice-rag and voice-chat on the token scope; no global fallback (wave 11)
-- [ ] 02-23-PLAN.md — Trace id in chat message metadata; masked review-candidate export (wave 11)
+- [x] 02-23-PLAN.md — Trace id in chat message metadata; masked review-candidate export (wave 11)
 - [x] 02-17-PLAN.md — Voice agent forwards the token, single active user, CI job, deploy docs (wave 12)
 - [x] 02-18-PLAN.md — Media routes on the pipeline with the caller's scope (wave 12)
 - [ ] 02-29-PLAN.md — Type fixes: chat route (wave 12)

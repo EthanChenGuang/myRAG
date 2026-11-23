@@ -13,7 +13,7 @@ progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 58
-  completed_plans: 36
+  completed_plans: 37
 ---
 
 # Project State
@@ -28,11 +28,11 @@ See: .planning/PROJECT.md (updated 2026-11-22)
 ## Current Position
 
 Phase: 02 (Unified Retrieval Pipeline & Tenant Scope) — EXECUTING
-Plan: 26 of 36 complete (02-01..19, 02-22, 02-30..35)
+Plan: 27 of 36 complete (02-01..19, 02-22..23, 02-30..35)
 Status: Executing sequentially
 Last activity: 2026-11-23 — 02-08, 09, 10, 15 merged; tsc ratchet 58; 480 vitest tests pass; Phase 3 research + patterns committed
 
-Progress: [███████░░░] 72%
+Progress: [███████░░░] 75%
 
 ## Performance Metrics
 
@@ -98,6 +98,7 @@ Recent decisions affecting current work:
 - [02-18] Media profile = embed, search (k=10, threshold 0.3, admin client), assemble, scoped by `resolveTenantScope`; `rag_status` added to media responses.
 - [02-13] `refs` is an optional stage (5000 ms, skip on failure = degraded); out-of-scope and nonexistent document ids are both ignored and logged under `[RAG Tenant]`; the no-query overview fallback searches only the caller's scope; retired legacy imports are gone from the chat route.
 - [02-19] Eleven retired retrieval modules and `searchSimilarChunks` deleted; ingestion embeds through `@/lib/rag` until Phase 3; old-vs-new proofs run against frozen JSON fixtures; tsc baseline total 216.
+- [02-23] Review candidates sampled by `LANGFUSE_REVIEW_SAMPLE_RATE` (default 0, 'review' prefix) carry masked query/answer on the root observation and masked context/model in metadata, tagged `review_candidate`; chat messages carry `ragTraceId` metadata through DB round trip; embed finishes its trace in `onFinish`.
 - [02-22] Langfuse via OTel replay after response; tenantKey on every span; sampling hashes request id with a per-purpose prefix; masking order e-mail, IBAN, CN ID, IT CF, Luhn card, phones.
 
 - [Roadmap]: Research's 9 phases compressed to 7 for standard granularity: ingestion + embeddings merged (Phase 3); external backends + closeout merged (Phase 7)
