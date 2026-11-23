@@ -1,4 +1,10 @@
-from rag_sidecar.contracts.golden import GoldenItem, GoldSpan
+from rag_sidecar.contracts.golden import (
+    DraftedItemBatch,
+    DraftedItemProposal,
+    GoldenItem,
+    GoldenSplitManifest,
+    GoldSpan,
+)
 from rag_sidecar.contracts.eval_run import (
     ConversationTurn,
     RagRunOptions,
@@ -16,6 +22,11 @@ from rag_sidecar.contracts.eval_run import (
 )
 
 __all__ = [
+    "DraftedItemBatch",
+    "DraftedItemProposal",
+    "GoldenItem",
+    "GoldenSplitManifest",
+    "GoldSpan",
     "ConversationTurn",
     "RagRunOptions",
     "RagRunRequest",

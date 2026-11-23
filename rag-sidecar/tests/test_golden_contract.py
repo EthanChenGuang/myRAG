@@ -1,7 +1,14 @@
 import pytest
 from pydantic import ValidationError
 
-from rag_sidecar.contracts import GoldenItem, GoldSpan
+from rag_sidecar.contracts import (
+    DraftedItemBatch,
+    DraftedItemProposal,
+    GoldenItem,
+    GoldenSplitManifest,
+    GoldSpan,
+)
+from rag_sidecar.export_schemas import CONTRACTS
 
 CATEGORIES = ["multi_turn", "compound", "exact_term", "table", "scanned", "no_answer", "general"]
 
@@ -149,3 +156,80 @@ def test_item_is_frozen():
     item = GoldenItem.model_validate(_item())
     with pytest.raises(ValidationError):
         item.split = "test"
+
+
+SPLIT_RULE = "sha256-first8hex-mod100-lt70-dev"
+
+
+def _proposal(**overrides):
+    base = {
+        "question": "How many leave days do employees get?",
+        "language": "en",
+        "category": "general",
+        "answerable": True,
+        "expected_answer": "Twenty days per year.",
+        "gold_evidence": [_span()],
+    }
+    base.update(overrides)
+    return base
+
+
+def test_split_manifest_valid_and_defaults():
+    manifest = GoldenSplitManifest.model_validate(
+        {"rule": SPLIT_RULE, "assignments": {"en-general-001": "dev", "en-general-002": "test"}}
+    )
+    assert manifest.schema_version == 1
+    assert manifest.assignments["en-general-002"] == "test"
+
+
+def test_split_manifest_rejects_other_split_value():
+    with pytest.raises(ValidationError):
+        GoldenSplitManifest.model_validate({"rule": SPLIT_RULE, "assignments": {"x": "validation"}})
+
+
+def test_split_manifest_rejects_other_rule_name():
+    with pytest.raises(ValidationError):
+        GoldenSplitManifest.model_validate({"rule": "sha256-mod10", "assignments": {}})
+
+
+def test_split_manifest_rejects_unknown_key():
+    with pytest.raises(ValidationError):
+        GoldenSplitManifest.model_validate({"rule": SPLIT_RULE, "assignments": {}, "extra": 1})
+
+
+def test_drafted_proposal_valid():
+    proposal = DraftedItemProposal.model_validate(_proposal())
+    assert proposal.conversation == []
+
+
+@pytest.mark.parametrize("key,value", [("id", "en-general-001"), ("review_status", "draft"), ("split", "dev")])
+def test_drafted_proposal_rejects_assigned_fields(key, value):
+    with pytest.raises(ValidationError):
+        DraftedItemProposal.model_validate(_proposal(**{key: value}))
+
+
+def test_drafted_proposal_has_no_assigned_fields():
+    for key in ("id", "review_status", "split", "provenance"):
+        assert key not in DraftedItemProposal.model_fields
+
+
+def test_drafted_batch_wraps_proposals():
+    batch = DraftedItemBatch.model_validate({"items": [_proposal(), _proposal(question="Another?")]})
+    assert len(batch.items) == 2
+
+
+def test_drafted_batch_rejects_chunk_id_in_span():
+    with pytest.raises(ValidationError):
+        DraftedItemBatch.model_validate({"items": [_proposal(gold_evidence=[_span(chunk_id="x")])]})
+
+
+def test_golden_contracts_registered_in_serialization_mode():
+    registered = {model.__name__: mode for model, mode in CONTRACTS}
+    for name in ("GoldenItem", "GoldenSplitManifest", "DraftedItemBatch"):
+        assert registered[name] == "serialization"
+
+
+def test_golden_item_schema_forbids_additional_properties():
+    schema = GoldenItem.model_json_schema(mode="serialization")
+    assert schema["additionalProperties"] is False
+    assert schema["$defs"]["GoldSpan"]["additionalProperties"] is False

@@ -50,3 +50,28 @@ class GoldenItem(_Contract):
         if len(set(self.gold_evidence)) != len(self.gold_evidence):
             raise ValueError("gold_evidence contains identical spans")
         return self
+
+
+class _SkeletonBase(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+
+class GoldenSplitManifest(_SkeletonBase):
+    schema_version: int = 1
+    rule: str
+    assignments: dict[str, str]
+
+
+class DraftedItemProposal(_SkeletonBase):
+    id: str | None = None
+    question: str
+    conversation: list[ConversationTurn] = Field(default_factory=list)
+    language: str
+    category: str
+    answerable: bool
+    expected_answer: str | None = None
+    gold_evidence: list[GoldSpan] = Field(default_factory=list)
+
+
+class DraftedItemBatch(_SkeletonBase):
+    items: list[DraftedItemProposal]
