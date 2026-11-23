@@ -230,7 +230,7 @@ export async function runRetrieval(input: RunRetrievalInput): Promise<RetrievalR
     createTraceCollector({ profile: input.profile, tenantKey: input.scope ? scopeKey(input.scope) : 'none' });
 
   const result = await runPipeline(input, collector);
-  if (ownsTrace) finishTrace(collector, result);
+  if (ownsTrace) finishTrace(collector, result, { query: input.query });
   return result;
 }
 
