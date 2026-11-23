@@ -126,7 +126,7 @@ export type Chat = {
   created_at: string;
   updated_at: string;
   pinned?: boolean;
-  folder_id?: string;
+  folder_id?: string | null;
   titlePending?: boolean; // True while AI is generating the title
 };
 

@@ -1,15 +1,76 @@
 import type { ToolCallPart, ToolResultPart } from 'ai';
 import type { ContentPart } from '@/types/chat';
 
+export interface LegacyToolCallPart {
+  type: 'tool-call';
+  toolCallId: string;
+  toolName: string;
+  args?: unknown;
+}
+
+export interface LegacyToolResultPart {
+  type: 'tool-result';
+  toolCallId: string;
+  toolName: string;
+  result?: unknown;
+  isError?: boolean;
+  isApproved?: boolean;
+}
+
+export type AnyToolCallPart = ToolCallPart | LegacyToolCallPart;
+export type AnyToolResultPart = (ToolResultPart | LegacyToolResultPart) & { isApproved?: boolean };
+
 interface PrepareToolCallOptions {
-  toolCall: ToolCallPart;
+  toolCall: AnyToolCallPart;
   initialExplanation?: string;
 }
 
 interface PrepareToolResultOptions {
-  toolCall: ToolCallPart;
-  toolResult: ToolResultPart;
+  toolCall: AnyToolCallPart;
+  toolResult: AnyToolResultPart;
   resultExplanation?: string;
+}
+
+/**
+ * Reads the arguments of a tool call part: AI SDK v6 `input`, falling back to the
+ * legacy `args` field of messages stored before the upgrade.
+ */
+export function readToolCallInput(part: AnyToolCallPart): unknown {
+  if ('input' in part && part.input !== undefined) {
+    return part.input;
+  }
+  return (part as LegacyToolCallPart).args;
+}
+
+interface WrappedToolOutput {
+  type: 'text' | 'json' | 'error-text' | 'error-json';
+  value: unknown;
+}
+
+function isWrappedToolOutput(value: unknown): value is WrappedToolOutput {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Record<string, unknown>;
+  return 'value' in candidate
+    && (candidate.type === 'text' || candidate.type === 'json'
+      || candidate.type === 'error-text' || candidate.type === 'error-json');
+}
+
+/**
+ * Reads the result of a tool result part: AI SDK v6 `output` (unwrapping its typed
+ * envelope), falling back to the legacy `result` field of stored messages.
+ */
+export function readToolResultOutput(part: AnyToolResultPart): unknown {
+  if ('output' in part && part.output !== undefined) {
+    return isWrappedToolOutput(part.output) ? part.output.value : part.output;
+  }
+  return (part as LegacyToolResultPart).result;
+}
+
+export function readToolResultIsError(part: AnyToolResultPart): boolean {
+  if ('output' in part && isWrappedToolOutput(part.output)) {
+    return part.output.type === 'error-text' || part.output.type === 'error-json';
+  }
+  return (part as LegacyToolResultPart).isError === true;
 }
 
 // Type guards for content part types
@@ -217,7 +278,7 @@ export function prepareToolCallForStorage(options: PrepareToolCallOptions): any 
       tool: toolCall.toolName || (toolCall as any).tool || 'unknown_tool',
       toolName: toolCall.toolName || (toolCall as any).tool || 'unknown_tool', // Ensure both fields exist
       toolCallId: toolCall.toolCallId || (toolCall as any).id || `fallback_tc_${Date.now()}`, // Ensure both fields exist
-      args: toolCall.args || {},
+      args: readToolCallInput(toolCall) || {},
       proposalExplanation: initialExplanation,
       isApproved: false // Tool calls start as not approved
     };
@@ -250,7 +311,7 @@ export function prepareToolResultForStorage(options: PrepareToolResultOptions): 
     
     // Try to extract explanation from the result if one wasn't explicitly provided
     let extractedExplanation = resultExplanation;
-    let normalizedResult = toolResult.result;
+    let normalizedResult = readToolResultOutput(toolResult);
     
     // Handle nested content structure from MCP
     if (normalizedResult && typeof normalizedResult === 'object') {
@@ -308,7 +369,7 @@ export function prepareToolResultForStorage(options: PrepareToolResultOptions): 
       toolName: toolName, // Ensure both fields exist
       toolCallId: toolCallId, // Store reference to original tool call
       result: normalizedResult,
-      isError: toolResult.isError || false,
+      isError: readToolResultIsError(toolResult),
       isApproved: isApproved,
       resultExplanation: extractedExplanation
     };
