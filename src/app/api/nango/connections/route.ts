@@ -1,10 +1,12 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { getNango, isNangoEnabled } from '@/lib/nango/client';
 import { type SupportedProvider, PROVIDER_CONFIG } from '@/lib/nango/types';
+import { syncDocumentsForConnection } from '@/lib/nango/sync-manager';
 import { requireSessionUser } from '../_lib/session-user';
 
 export const runtime = 'nodejs';
+export const maxDuration = 300;
 
 /**
  * GET /api/nango/connections
@@ -158,18 +160,32 @@ export async function POST(request: NextRequest) {
       throw error;
     }
 
-    // Trigger initial sync in the background
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
-    fetch(`${siteUrl}/api/nango/sync`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Cookie': request.headers.get('cookie') || '',
-      },
-      body: JSON.stringify({ connectionId, provider }),
-    }).catch(e => {
-      console.warn('[Nango] Background sync trigger failed:', e);
-    });
+    // Initial sync runs in this process; the caller's cookies are never sent to another URL
+    const runInitialSync = async () => {
+      try {
+        const providerConfig = PROVIDER_CONFIG[provider];
+        if (providerConfig?.syncName) {
+          try {
+            await nango.triggerSync(integrationId, [connectionId], providerConfig.syncName);
+          } catch (e) {
+            console.warn('[Nango] Could not trigger Nango sync:', e);
+          }
+        }
+        await syncDocumentsForConnection(connectionId, provider);
+        await supabaseAdmin
+          .from('nango_connections')
+          .update({ last_sync_at: new Date().toISOString() })
+          .eq('user_id', userId)
+          .eq('connection_id', connectionId);
+      } catch (e) {
+        console.warn('[Nango] Background sync failed:', e);
+      }
+    };
+    try {
+      after(runInitialSync);
+    } catch {
+      void runInitialSync();
+    }
 
     return NextResponse.json({ connection: data });
 
