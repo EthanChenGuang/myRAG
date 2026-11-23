@@ -1,9 +1,11 @@
 import json
+import math
 import os
 from pathlib import Path
 
-from rag_sidecar.contracts.eval_run import RunManifest
+from rag_sidecar.contracts.eval_run import RagTrace, RunManifest
 from rag_sidecar.contracts.golden import GoldenItem
+from rag_sidecar.contracts.latency import LatencyBudgets, StageLatency
 from rag_sidecar.contracts.report import (
     EvalReport,
     ItemResult,
@@ -12,8 +14,18 @@ from rag_sidecar.contracts.report import (
 )
 
 from rag_eval.metrics import aggregate
+from rag_eval.paths import REPO_ROOT
 
 K_VALUES = [5, 10]
+LATENCY_BUDGETS_PATH = REPO_ROOT / "eval" / "config" / "latency-budgets.json"
+LATENCY_PROFILE = "chat"
+RETRIEVAL_TOTAL = "retrieval_total"
+GENERATION_STAGE = "generation"
+LATENCY_NOTE = (
+    f"Report-only: the gate ignores these numbers. Percentiles are nearest-rank over n traces, compared with the "
+    f"{LATENCY_PROFILE} budgets in eval/config/latency-budgets.json; {RETRIEVAL_TOTAL} sums every stage except "
+    f"{GENERATION_STAGE}. Fixture latencies are not representative of production."
+)
 
 ZH_QUIRK_NOTE = (
     "Filter 1 Chinese empty-term quirk: the chat route's name/content filter derives an empty query term "
@@ -44,7 +56,47 @@ def _embedder_version(version: str | None) -> int | None:
         return None
 
 
-def build_report(manifest: RunManifest, results: list[ItemResult], golden: list[GoldenItem]) -> EvalReport:
+def nearest_rank(values: list[float], quantile: float) -> float:
+    ordered = sorted(values)
+    rank = max(1, math.ceil(quantile * len(ordered)))
+    return ordered[rank - 1]
+
+
+def compute_latency(traces: list[RagTrace]) -> dict[str, StageLatency] | None:
+    by_stage: dict[str, list[float]] = {}
+    totals: list[float] = []
+    for trace in traces:
+        retrieval = 0.0
+        has_retrieval_stage = False
+        for stage, value in trace.stage_latency_ms.items():
+            if not math.isfinite(value) or value < 0:
+                continue
+            by_stage.setdefault(stage, []).append(value)
+            if stage != GENERATION_STAGE:
+                retrieval += value
+                has_retrieval_stage = True
+        if has_retrieval_stage:
+            totals.append(retrieval)
+    if not by_stage:
+        return None
+    if totals:
+        by_stage[RETRIEVAL_TOTAL] = totals
+    return {
+        stage: StageLatency(
+            p50_ms=nearest_rank(values, 0.5), p95_ms=nearest_rank(values, 0.95), n=len(values)
+        )
+        for stage, values in sorted(by_stage.items())
+    }
+
+
+def load_latency_budgets(path: Path | None = None) -> LatencyBudgets:
+    source = Path(path) if path is not None else LATENCY_BUDGETS_PATH
+    return LatencyBudgets.model_validate_json(source.read_text(encoding="utf-8"))
+
+
+def build_report(
+    manifest: RunManifest, results: list[ItemResult], golden: list[GoldenItem], traces: list[RagTrace] | None = None
+) -> EvalReport:
     notes: list[str] = []
     if any(item.language == "zh" for item in golden):
         notes.append(ZH_QUIRK_NOTE)
@@ -63,6 +115,7 @@ def build_report(manifest: RunManifest, results: list[ItemResult], golden: list[
         request_options=manifest.request_options,
         k_values=list(K_VALUES),
         items=list(results),
+        latency=compute_latency(traces) if traces else None,
         notes=notes,
         **aggregate(results, tuple(K_VALUES), gate_split=manifest.golden_filter.gate_split),
     )
@@ -83,7 +136,42 @@ def _table(first_column: str, rows: dict[str, SliceMetrics]) -> list[str]:
     return lines
 
 
-def _render_markdown(report: EvalReport) -> str:
+def _ms(value: float | None) -> str:
+    return "-" if value is None else f"{value:.1f}"
+
+
+def _latency_section(latency: dict[str, StageLatency], budgets: LatencyBudgets) -> list[str]:
+    profile = budgets.profiles.get(LATENCY_PROFILE)
+    header = "| Stage | p50 (ms) | p95 (ms) | n | Budget p50 (ms) | Budget p95 (ms) | Status |"
+    lines = ["## Latency (report-only)", "", LATENCY_NOTE, "", header, "|" + "|".join(["---"] * 7) + "|"]
+    stages = [name for name in latency if name != RETRIEVAL_TOTAL]
+    if RETRIEVAL_TOTAL in latency:
+        stages.append(RETRIEVAL_TOTAL)
+    for name in stages:
+        stat = latency[name]
+        budget_p50: float | None = None
+        budget_p95: float | None = None
+        if profile is not None:
+            if name == RETRIEVAL_TOTAL:
+                budget_p50, budget_p95 = profile.total_p50_ms, profile.total_p95_ms
+            else:
+                budget_p95 = profile.stages.get(name)
+        if budget_p50 is None and budget_p95 is None:
+            status = "-"
+        else:
+            over = (budget_p50 is not None and stat.p50_ms > budget_p50) or (
+                budget_p95 is not None and stat.p95_ms > budget_p95
+            )
+            status = "over" if over else "within"
+        lines.append(
+            f"| {name} | {_ms(stat.p50_ms)} | {_ms(stat.p95_ms)} | {stat.n} | "
+            f"{_ms(budget_p50)} | {_ms(budget_p95)} | {status} |"
+        )
+    lines.append("")
+    return lines
+
+
+def _render_markdown(report: EvalReport, budgets: LatencyBudgets | None = None) -> str:
     lines = [
         f"# Eval report: {report.run_id}",
         "",
@@ -122,6 +210,8 @@ def _render_markdown(report: EvalReport) -> str:
         *_table("Language/category", report.by_language_category),
         "",
     ]
+    if report.latency:
+        lines.extend(_latency_section(report.latency, budgets if budgets is not None else load_latency_budgets()))
     if report.notes:
         lines.extend(["## Notes", ""])
         lines.extend(f"- {note}" for note in report.notes)
@@ -135,12 +225,12 @@ def _atomic_write(path: Path, text: str) -> None:
     os.replace(tmp, path)
 
 
-def write_report(report: EvalReport, out_dir: Path) -> tuple[Path, Path]:
+def write_report(report: EvalReport, out_dir: Path, budgets: LatencyBudgets | None = None) -> tuple[Path, Path]:
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     json_path = out_dir / "report.json"
     md_path = out_dir / "report.md"
     payload = json.dumps(report.model_dump(mode="json"), sort_keys=True, ensure_ascii=False, indent=2) + "\n"
     _atomic_write(json_path, payload)
-    _atomic_write(md_path, _render_markdown(report))
+    _atomic_write(md_path, _render_markdown(report, budgets))
     return json_path, md_path

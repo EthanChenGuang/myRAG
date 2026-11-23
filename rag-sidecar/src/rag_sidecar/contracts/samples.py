@@ -18,10 +18,12 @@ from rag_sidecar.contracts import (
     JudgeConfig,
     JudgeItemScore,
     JudgeReport,
+    LatencyBudgets,
     MetricValue,
     NoiseConfig,
     PairedReport,
     PairedStat,
+    ProfileBudget,
     RagRunOptions,
     RagRunRequest,
     RagTrace,
@@ -32,6 +34,7 @@ from rag_sidecar.contracts import (
     SidecarInfo,
     SidecarReady,
     SliceMetrics,
+    StageLatency,
     TraceCandidate,
     TraceCitation,
     TraceEffectiveConfig,
@@ -207,7 +210,22 @@ def _eval_report() -> EvalReport:
                 first_hit_rank=1,
             )
         ],
+        latency={
+            "embed": StageLatency(p50_ms=4.0, p95_ms=6.0, n=12),
+            "retrieval_total": StageLatency(p50_ms=12.0, p95_ms=20.0, n=12),
+        },
         notes=["synthetic sample"],
+    )
+
+
+def _latency_budgets() -> LatencyBudgets:
+    return LatencyBudgets(
+        profiles={
+            "chat": ProfileBudget(
+                total_p50_ms=1000, total_p95_ms=2000, stages={"embed": 200, "search": 400, "assemble": 100}
+            ),
+            "voice": ProfileBudget(total_p50_ms=400, total_p95_ms=800),
+        }
     )
 
 
@@ -327,6 +345,7 @@ def _models() -> dict[str, Any]:
         "EvalReport": _eval_report(),
         "Baseline": _baseline(),
         "NoiseConfig": NoiseConfig(),
+        "LatencyBudgets": _latency_budgets(),
         "GateResult": GateResult(
             passed=False,
             offenders=[
