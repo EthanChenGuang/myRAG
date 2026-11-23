@@ -1589,6 +1589,9 @@ judge = [
     { name = "deepeval" },
     { name = "ragas" },
 ]
+online = [
+    { name = "httpx" },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -1600,12 +1603,13 @@ requires-dist = [
     { name = "anthropic", marker = "extra == 'draft'", specifier = "==2.12.0" },
     { name = "deepeval", marker = "extra == 'judge'", specifier = "==4.3.4" },
     { name = "httpx", marker = "extra == 'draft'", specifier = "==0.28.1" },
+    { name = "httpx", marker = "extra == 'online'", specifier = "==0.28.1" },
     { name = "pydantic", specifier = ">=2.14.4" },
     { name = "rag-sidecar", editable = "../rag-sidecar" },
     { name = "ragas", marker = "extra == 'draft'", specifier = "==0.4.4" },
     { name = "ragas", marker = "extra == 'judge'", specifier = "==0.4.4" },
 ]
-provides-extras = ["judge", "draft"]
+provides-extras = ["judge", "draft", "online"]
 
 [package.metadata.requires-dev]
 dev = [{ name = "pytest", specifier = "==9.2.0" }]
