@@ -42,6 +42,7 @@ def score_items(traces: list[RagTrace], golden: list[GoldenItem]) -> list[ItemRe
                 language=item.language,
                 category=item.category,
                 split=item.split,
+                provenance=item.provenance,
                 answerable=item.answerable,
                 refused=trace.refused,
                 span_count=len(item.gold_evidence),
@@ -82,15 +83,25 @@ def _group(results: Iterable[ItemResult], key: Callable[[ItemResult], str]) -> d
 
 
 def aggregate(
-    results: list[ItemResult], k_values: tuple[int, ...] = (5, 10), gate_split: str = "dev"
+    results: list[ItemResult],
+    k_values: tuple[int, ...] = (5, 10),
+    gate_split: str = "dev",
+    approved_ids: frozenset[str] | None = None,
 ) -> dict[str, object]:
     if tuple(k_values) != (5, 10):
         raise ValueError(f"unsupported k_values {tuple(k_values)!r}: the report contract carries recall@5 and recall@10")
     gated = [r for r in results if r.split == gate_split]
+    production = [
+        r for r in gated if r.provenance == "production" and (approved_ids is None or r.item_id in approved_ids)
+    ]
+    population = production or gated
     return {
-        "overall": _slice(gated),
-        "by_language": _group(gated, lambda r: r.language),
-        "by_category": _group(gated, lambda r: r.category),
+        "overall": _slice(population),
+        "by_language": _group(population, lambda r: r.language),
+        "by_category": _group(population, lambda r: r.category),
         "by_language_category": _group(gated, lambda r: f"{r.language}/{r.category}"),
         "by_split": _group(results, lambda r: r.split),
+        "by_provenance": _group(gated, lambda r: r.provenance),
+        "by_provenance_category": _group(gated, lambda r: f"{r.provenance}/{r.category}"),
+        "gate_population": "production" if production else "all",
     }

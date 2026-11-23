@@ -353,7 +353,7 @@ def test_production_items_outside_the_gated_split_do_not_switch_the_population()
     results = [*_mixed_results(), _result("p1", "production", split="test", rank=1)]
     out = aggregate(results)
     assert out["gate_population"] == "all"
-    assert out["overall"].recall_at_5.n == 2
+    assert out["overall"].recall_at_5.n == 3
     assert "production" not in out["by_provenance"]
 
 

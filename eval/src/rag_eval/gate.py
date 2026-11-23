@@ -37,6 +37,7 @@ def _mismatches(report: EvalReport, baseline: Baseline) -> list[str]:
         ("embedder_id", report.embedder_id, baseline.embedder_id),
         ("embedder_version", report.embedder_version, baseline.embedder_version),
         ("embedder_source_sha256", report.embedder_source_sha256, baseline.embedder_source_sha256),
+        ("gate_population", report.gate_population, baseline.gate_population),
         ("tier", report.tier, baseline.tier),
         ("deployment_mode", report.deployment_mode, baseline.deployment_mode),
         ("request_options (excluding max_results and degrade)", _scope(report.request_options), _scope(baseline.request_options)),

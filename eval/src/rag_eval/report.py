@@ -38,6 +38,11 @@ GATING_NOTE = (
     "and never gates (D-14)."
 )
 
+PRODUCTION_GATE_NOTE = (
+    "Gate population is production: overall, language and category tables cover the approved production items "
+    "of the gated split only; every other provenance is report-only under By provenance and By provenance and category."
+)
+
 _METRIC_COLUMNS = (
     ("Recall@5", "recall_at_5"),
     ("Recall@10", "recall_at_10"),
@@ -101,6 +106,14 @@ def build_report(
     if any(item.language == "zh" for item in golden):
         notes.append(ZH_QUIRK_NOTE)
     embedder = manifest.embedder
+    aggregated = aggregate(
+        results,
+        tuple(K_VALUES),
+        gate_split=manifest.golden_filter.gate_split,
+        approved_ids=frozenset(item.id for item in golden if item.review_status == "approved"),
+    )
+    if aggregated["gate_population"] == "production":
+        notes.append(PRODUCTION_GATE_NOTE)
     return EvalReport(
         run_id=manifest.run_id,
         tier=manifest.tier,
@@ -117,7 +130,7 @@ def build_report(
         items=list(results),
         latency=compute_latency(traces) if traces else None,
         notes=notes,
-        **aggregate(results, tuple(K_VALUES), gate_split=manifest.golden_filter.gate_split),
+        **aggregated,
     )
 
 
@@ -181,6 +194,7 @@ def _render_markdown(report: EvalReport, budgets: LatencyBudgets | None = None) 
         f"- Run config hash: {report.run_config_hash}",
         f"- Golden sha256: {report.golden_sha256}",
         f"- Scored review statuses: {', '.join(report.golden_filter.review_statuses)}; gated split: {report.golden_filter.gate_split}",
+        f"- Gate population: {report.gate_population}",
         f"- Corpus sha256: {report.corpus_sha256 or 'n/a'}",
         f"- Embedder: {report.embedder_id or 'n/a'} (version {report.embedder_version if report.embedder_version is not None else 'n/a'})",
         "",
@@ -208,6 +222,14 @@ def _render_markdown(report: EvalReport, budgets: LatencyBudgets | None = None) 
         "## By language and category",
         "",
         *_table("Language/category", report.by_language_category),
+        "",
+        "## By provenance",
+        "",
+        *_table("Provenance", report.by_provenance),
+        "",
+        "## By provenance and category",
+        "",
+        *_table("Provenance/category", report.by_provenance_category),
         "",
     ]
     if report.latency:
