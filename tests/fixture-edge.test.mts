@@ -255,7 +255,7 @@ describe('fake edge (PostgREST shim plus /v1/embeddings)', () => {
 
   test('GET documents and document_chunks honour whitelisted select and eq filters', async () => {
     const e = await getEdge();
-    const doc = loadCorpus(REAL_CORPUS).documents[0];
+    const doc = loadCorpus(REAL_CORPUS).documents.find((d) => d.filename === 'refund-policy.en.md')!;
     const res = await fetch(`${e.url}/rest/v1/documents?select=id,filename&id=eq.${doc.id}`);
     assert.deepEqual(await res.json(), [{ id: doc.id, filename: 'refund-policy.en.md' }]);
     const chunks = await fetch(`${e.url}/rest/v1/document_chunks?select=content&document_id=eq.${doc.id}&limit=2`);
@@ -264,7 +264,7 @@ describe('fake edge (PostgREST shim plus /v1/embeddings)', () => {
 
   test('object accept header returns 406 PGRST116 unless exactly one row matches', async () => {
     const e = await getEdge();
-    const doc = loadCorpus(REAL_CORPUS).documents[0];
+    const doc = loadCorpus(REAL_CORPUS).documents.find((d) => d.filename === 'refund-policy.en.md')!;
     const accept = { accept: 'application/vnd.pgrst.object+json' };
     const one = await fetch(`${e.url}/rest/v1/documents?select=id,filename&id=eq.${doc.id}`, { headers: accept });
     assert.equal(one.status, 200);
@@ -282,7 +282,7 @@ describe('fake edge (PostgREST shim plus /v1/embeddings)', () => {
   test('unsupported paths, functions, tables, columns and operators are rejected and recorded in errors', async () => {
     const e = await startFakeEdge({ db: (await createdFixture()).db });
     try {
-      const doc = loadCorpus(REAL_CORPUS).documents[0];
+      const doc = loadCorpus(REAL_CORPUS).documents.find((d) => d.filename === 'refund-policy.en.md')!;
       const statuses = await Promise.all([
         fetch(`${e.url}/nope`).then((r) => r.status),
         post(e, '/rest/v1/rpc/delete_everything', {}).then((r) => r.status),
