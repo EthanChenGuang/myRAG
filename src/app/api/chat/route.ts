@@ -1,4 +1,4 @@
-import { streamText, tool, type ToolSet, type ToolCallPart, type ToolResultPart, convertToModelMessages, createUIMessageStream, createUIMessageStreamResponse, UIMessage, stepCountIs } from 'ai';
+import { streamText, tool, type ToolSet, convertToModelMessages, createUIMessageStream, createUIMessageStreamResponse, UIMessage, stepCountIs } from 'ai';
 import { z } from 'zod/v3';
 // Use the dedicated OpenRouter provider
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
@@ -41,9 +41,37 @@ import { ToolExecutionStateService } from '@/lib/tool-execution-state';
 import { SystemPromptManager, SystemPromptTemplate } from '@/lib/system-prompt-manager';
 import { Language } from '@/translations';
 import { isMultiTenant } from '@/lib/deployment-mode';
+import { writeCustomChunk, buildDocumentSources } from '@/lib/ui-stream-chunks';
 
 // Use Node.js runtime instead of Edge
 export const runtime = 'nodejs';
+
+interface StepToolCall {
+  toolCallId: string;
+  toolName: string;
+  input?: unknown;
+}
+
+interface StepToolResult {
+  type: string;
+  toolCallId?: string;
+  toolName?: string;
+  output?: unknown;
+  [key: string]: unknown;
+}
+
+const describeArgs = (input: unknown): { keys: string[]; bytes: number } => ({
+  keys: input && typeof input === 'object' ? Object.keys(input) : [],
+  bytes: input === undefined ? 0 : JSON.stringify(input)?.length ?? 0
+});
+
+declare global {
+  // `var` is the only way to type a property of globalThis; the cache must outlive a single request
+  // eslint-disable-next-line no-var
+  var mcpImageContext:
+    | Record<string, { imageUrl: string; downloadableUrls: string[]; extractedAt: number }>
+    | undefined;
+}
 
 // Define document reference tool for function calling using the 'tool' helper
 const documentReferenceTool = tool({
@@ -1642,8 +1670,8 @@ export async function POST(req: Request) {
             } catch (error) {
               console.error('API ROUTE: Error converting Base64 to downloadable URL:', error);
               console.log('API ROUTE: Base64 conversion error details:', {
-                errorMessage: error.message,
-                errorStack: error.stack,
+                errorMessage: error instanceof Error ? error.message : String(error),
+                errorStack: error instanceof Error ? error.stack : undefined,
                 imageUrlLength: imageUrl ? imageUrl.length : 0,
                 sessionId: sessionId,
                 hasImageUrl: !!imageUrl,
@@ -1964,11 +1992,11 @@ IMPORTANT:
 
           documentParts.push(
             ...contextUserMessage.content
-              .filter(part => part.type === 'document')
-              .map(part => ({
-                id: part.document.id,
-                name: part.document.name
-              }))
+              .flatMap(part =>
+                part.type === 'document' && part.document?.id
+                  ? [{ id: part.document.id, name: part.document.name }]
+                  : []
+              )
           );
         } else if (typeof contextUserMessage.content === 'string') {
           queryText = contextUserMessage.content;
@@ -2371,7 +2399,7 @@ Context:
 
     // Add multi-step instructions if handling multi-step query
     if (isHandlingMultiStep && multiStepMetadata) {
-      const allStepsDescription = queryClassification.steps
+      const allStepsDescription = (queryClassification.steps ?? [])
         .map((step, idx) => `Step ${idx + 1}: ${step.text}`)
         .join('\n');
 
@@ -2932,7 +2960,9 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
 
             // Get user query for intelligent routing
             const lastUserMsg = messagesForModelExtended.filter(m => m.role === 'user').pop();
-            const userQuery = lastUserMsg?.content || '';
+            const userQuery = typeof lastUserMsg?.content === 'string'
+              ? lastUserMsg.content
+              : lastUserMsg?.content?.find(part => part.type === 'text')?.text || '';
             console.log(`[Universal MCP] Processing user query: "${userQuery}"`);
 
             // Extract recent conversation messages for context-aware tool selection
@@ -3546,8 +3576,8 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
       // First streamText call with merged tools and reasoning
       const result = await streamText({
         ...streamParams,
-        onStepFinish: async (params: { text?: string; toolCalls?: ToolCallPart[]; toolResults?: ToolResultPart[] }) => {
-          let { text, toolCalls = [] as ToolCallPart[], toolResults = [] as ToolResultPart[] } = params;
+        onStepFinish: async (params: { text?: string; toolCalls?: StepToolCall[]; toolResults?: StepToolResult[] }) => {
+          let { text, toolCalls = [] as StepToolCall[], toolResults = [] as StepToolResult[] } = params;
 
           // Clean any malformed useDocument calls from the text
           if (text && isGPTModel) {
@@ -3615,7 +3645,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
             console.log('🔍 [AI STEP DEBUG] ✅ AI CALLED TOOLS:');
             toolCalls.forEach((call, index) => {
               console.log(`🔍 [AI STEP DEBUG]   Tool ${index + 1}: ${call.toolName}`);
-              console.log(`🔍 [AI STEP DEBUG]   Args: ${JSON.stringify(call.args)}`);
+              console.log(`🔍 [AI STEP DEBUG]   Args:`, describeArgs(call.input));
             });
           } else {
             console.log('🔍 [AI STEP DEBUG] ❌ NO TOOLS CALLED - AI responded with text only');
@@ -3683,7 +3713,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
               type: 'tool-result',
               toolName: 'query_documents',
               toolCallId: 'document-sources-' + Date.now(),
-              result: {
+              output: {
                 documents: usedDocuments.map(doc => ({
                   id: doc.id,
                   name: doc.name || doc.filename,
@@ -3720,7 +3750,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                 explicitly_referenced: doc.explicitly_referenced || false,
                 image_url: doc.image_url
               }))
-            } as any);
+            });
 
             // [FIX] We DO need to push a separate source_images part because the frontend
             // directly looks for {type: 'source_images', source_images: [...]} in message.content
@@ -3728,7 +3758,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
               toolResults.push({
                 type: 'source_images',
                 source_images: sourceImages
-              } as any);
+              });
               console.log('[RAG DEBUG] Added top-level source_images part with', sourceImages.length, 'images');
             }
 
@@ -3748,20 +3778,21 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
               if (result && result.toolName !== 'query_documents' && result.toolName !== 'webSearch') {
                 console.log(`API ROUTE: Clearing result for ${result.toolName} to force explicit approval`);
                 // Set result to null to prevent auto-execution
-                result.result = null;
+                result.output = null;
               }
             });
           }
 
           // 🔄 GMAIL SMART TOOL REDIRECTION: Fix draft vs send selection
           // This happens BEFORE user sees the approval UI
-          toolCalls.forEach((call: ToolCallPart) => {
+          toolCalls.forEach((call: StepToolCall) => {
             if (call.toolName === 'gmail_create_draft') {
               // Extract user message from tool call instructions (most reliable source)
-              const userMessage = (call.args?.instructions as string) || '';
+              const instructions = (call.input as { instructions?: unknown } | null | undefined)?.instructions;
+              const userMessage = typeof instructions === 'string' ? instructions : '';
               const intentScore = analyzeEmailIntent(userMessage);
 
-              console.log(`🔄 [CHAT REDIRECTION] Analyzing intent for draft call. User message: "${userMessage}"`);
+              console.log(`🔄 [CHAT REDIRECTION] Analyzing intent for draft call. Instruction length: ${userMessage.length}`);
               console.log(`🔄 [CHAT REDIRECTION] Intent analysis: ${JSON.stringify(intentScore)}`);
 
               // Redirect to send if user clearly intended to send (not draft)
@@ -3777,17 +3808,12 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
           });
 
           // Track toolCalls in approval state
-          toolCalls.forEach((call: ToolCallPart) => {
+          toolCalls.forEach((call: StepToolCall) => {
             // Check if we already have a result for this tool call
             // This happens for tools that execute immediately (like webSearch or query_documents)
             const existingResult = toolResults.find(r => r.toolCallId === call.toolCallId);
             const isAllowedTool = call.toolName === 'webSearch' || call.toolName === 'query_documents';
-            const hasResultPayload = !!(
-              existingResult &&
-              (existingResult.result !== undefined ||
-                (existingResult as any).output !== undefined ||
-                ((existingResult as any).output && (existingResult as any).output.value !== undefined))
-            );
+            const hasResultPayload = existingResult?.output !== undefined;
 
             // If we have a result AND it's an allowed tool, we treat it as already approved/executed
             if (existingResult && hasResultPayload && isAllowedTool) {
@@ -3803,15 +3829,14 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                 executed: false, // Add execution tracking flag
                 toolCall: {
                   name: call.toolName,
-                  params: call.args,
+                  params: call.input,
                   meta: { toolCallId: call.toolCallId }
                 },
                 result: null
               };
 
               // 🎯 CRITICAL DEBUG: Log tool call parameter storage
-              console.log(`[PARAM DEBUG] Tool call ${call.toolName} stored with args:`, call.args);
-              console.log(`[PARAM DEBUG] Final approval state for ${call.toolCallId}:`, (globalThis as any).toolApprovalState[call.toolCallId]);
+              console.log(`[PARAM DEBUG] Tool call ${call.toolName} stored with args:`, describeArgs(call.input));
               console.log('API ROUTE: Requiring explicit approval for call:', call.toolCallId);
             }
           });
@@ -3865,14 +3890,15 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
           }
 
           // Handle reasoning details if present
-          if (event.experimental_providerMetadata?.openrouter?.reasoning_content) {
-            const reasoningContent = event.experimental_providerMetadata.openrouter.reasoning_content;
+          const openrouterMetadata = event.providerMetadata?.openrouter;
+          const reasoningContent = openrouterMetadata?.reasoning_content;
+          if (typeof reasoningContent === 'string' && reasoningContent) {
             console.log('API ROUTE: Reasoning content captured:', reasoningContent.substring(0, 100) + '...');
 
             // Store reasoning details for the response
             (globalThis as any).lastReasoningDetails = {
               content: reasoningContent,
-              token_count: event.experimental_providerMetadata.openrouter.reasoning_tokens || 0,
+              token_count: typeof openrouterMetadata?.reasoning_tokens === 'number' ? openrouterMetadata.reasoning_tokens : 0,
               model: safeModelId,
               effort: reasoningSettings?.effort,
               timestamp: new Date().toISOString()
@@ -3937,12 +3963,12 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
           // Write source_images and metadata FIRST before merging AI stream
           if (precomputedSourceImages.length > 0) {
             console.log('[RAG] Injecting source_images into stream:', precomputedSourceImages.length, 'images');
-            writer.write({
-              type: 'source_images' as any,
+            writeCustomChunk(writer, {
+              type: 'source_images',
               source_images: precomputedSourceImages
             });
-            writer.write({
-              type: 'metadata' as any,
+            writeCustomChunk(writer, {
+              type: 'metadata',
               usedDocuments: usedDocuments.map(doc => ({
                 type: 'document' as const,
                 id: doc.id,
@@ -4005,12 +4031,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
 
           // CRITICAL: For Claude Sonnet 4 with disabled tools, add document sources to metadata
           if (isClaudeSonnet4 && usedDocuments && usedDocuments.length > 0) {
-            metadata.documentSources = usedDocuments.map(doc => ({
-              id: doc.id,
-              name: doc.name || doc.filename,
-              similarity: doc.similarity,
-              chunk_text: doc.chunk_text?.substring(0, 200) + '...'
-            }));
+            metadata.documentSources = buildDocumentSources(usedDocuments);
           }
 
           return Object.keys(metadata).length > 0 ? metadata : undefined;
