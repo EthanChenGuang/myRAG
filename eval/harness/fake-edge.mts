@@ -37,10 +37,29 @@ const RPC_ARGUMENTS: Record<string, { vector: string; allowed: string[] }> = {
 const TABLE_COLUMNS: Record<string, string[]> = {
   documents: ['id', 'filename', 'content', 'metadata', 'created_at', 'source', 'source_provider', 'source_file_id', 'organization_id', 'user_id'],
   document_chunks: ['id', 'document_id', 'content', 'metadata', 'created_at', 'organization_id', 'chunk_index'],
+  organization_members: ['id', 'organization_id', 'user_id', 'role', 'created_at'],
+  organizations: ['id', 'name', 'slug', 'owner_id', 'is_personal', 'subscription_tier', 'created_at'],
 };
 
-const FILTER_COLUMNS = new Set(['id', 'document_id']);
-const READ_PARAMS = new Set(['select', 'limit', ...FILTER_COLUMNS]);
+type FilterOperator = 'eq' | 'in' | 'is.null';
+
+const TABLE_FILTERS: Record<string, Record<string, FilterOperator[]>> = {
+  documents: { id: ['eq', 'in'], organization_id: ['eq', 'is.null'], user_id: ['eq'] },
+  document_chunks: { id: ['eq', 'in'], document_id: ['eq', 'in'] },
+  organization_members: { id: ['eq'], organization_id: ['eq'], user_id: ['eq'] },
+  organizations: { id: ['eq'] },
+};
+
+const OR_ILIKE_COLUMNS: Record<string, string> = {
+  content: '"content"',
+  'metadata->>name': `("metadata"->>'name')`,
+  'metadata->>image_context': `("metadata"->>'image_context')`,
+};
+const IMAGE_URL_PARAM = 'metadata->>image_url';
+const IMAGE_URL_SQL = `("metadata"->>'image_url')`;
+const OR_TABLE = 'document_chunks';
+const MAX_IN_VALUES = 1000;
+const MAX_OR_CONDITIONS = 50;
 const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 const VECTOR_TEXT_RE = /^\[[-+0-9eE.,\s]*\]$/;
 const MAX_BODY_BYTES = 5 * 1024 * 1024;
@@ -144,8 +163,10 @@ function createHandlers(db: PGlite, calls: FakeEdgeCall[]) {
     const allowedColumns = TABLE_COLUMNS[table];
     if (!allowedColumns) throw new Rejection(404, `unsupported table: ${table}`);
 
+    const filters = TABLE_FILTERS[table] ?? {};
     for (const key of new Set(params.keys())) {
-      if (!READ_PARAMS.has(key)) throw new Rejection(400, `unsupported query parameter: ${key}`);
+      const supported = key === 'select' || key === 'limit' || key in filters || (table === OR_TABLE && (key === 'or' || key === IMAGE_URL_PARAM));
+      if (!supported) throw new Rejection(400, `unsupported query parameter: ${key}`);
     }
     const select = params.get('select');
     if (!select) throw new Rejection(400, 'select parameter is required');
@@ -155,15 +176,48 @@ function createHandlers(db: PGlite, calls: FakeEdgeCall[]) {
 
     const where: string[] = [];
     const values: string[] = [];
-    for (const column of FILTER_COLUMNS) {
+    const bind = (value: string, cast = ''): string => {
+      values.push(value);
+      return `$${values.length}${cast}`;
+    };
+
+    for (const [column, operators] of Object.entries(filters)) {
       const raw = params.get(column);
       if (raw === null) continue;
-      if (column === 'document_id' && table !== 'document_chunks') throw new Rejection(400, `unsupported filter column for ${table}: ${column}`);
-      if (!raw.startsWith('eq.')) throw new Rejection(400, `unsupported operator on ${column}: ${raw.split('.')[0]}`);
-      const value = raw.slice(3);
-      if (!UUID_RE.test(value)) throw new Rejection(400, `${column} filter must be a uuid`);
-      values.push(value);
-      where.push(`"${column}" = $${values.length}::uuid`);
+      if (raw === 'is.null' && operators.includes('is.null')) {
+        where.push(`"${column}" IS NULL`);
+      } else if (raw.startsWith('eq.') && operators.includes('eq')) {
+        const value = raw.slice(3);
+        if (!UUID_RE.test(value)) throw new Rejection(400, `${column} filter must be a uuid`);
+        where.push(`"${column}" = ${bind(value, '::uuid')}`);
+      } else if (raw.startsWith('in.(') && raw.endsWith(')') && operators.includes('in')) {
+        const inner = raw.slice(4, -1);
+        const list = inner === '' ? [] : inner.split(',').map((item) => item.trim());
+        if (list.length > MAX_IN_VALUES) throw new Rejection(400, `${column} in-list is limited to ${MAX_IN_VALUES} values`);
+        if (!list.every((item) => UUID_RE.test(item))) throw new Rejection(400, `${column} in-list must contain only uuids`);
+        where.push(list.length === 0 ? 'FALSE' : `"${column}" IN (${list.map((item) => bind(item, '::uuid')).join(', ')})`);
+      } else {
+        throw new Rejection(400, `unsupported operator on ${column}: ${raw.split('.')[0]}`);
+      }
+    }
+
+    if (table === OR_TABLE) {
+      const imageUrl = params.get(IMAGE_URL_PARAM);
+      if (imageUrl !== null) {
+        if (imageUrl !== 'not.is.null') throw new Rejection(400, `unsupported operator on ${IMAGE_URL_PARAM}: ${imageUrl.split('.')[0]}`);
+        where.push(`${IMAGE_URL_SQL} IS NOT NULL`);
+      }
+      for (const orRaw of params.getAll('or')) {
+        if (!orRaw.startsWith('(') || !orRaw.endsWith(')')) throw new Rejection(400, 'or filter must be wrapped in parentheses');
+        const conditions = orRaw.slice(1, -1).split(',');
+        if (conditions.length > MAX_OR_CONDITIONS) throw new Rejection(400, `or filter is limited to ${MAX_OR_CONDITIONS} conditions`);
+        const clauses = conditions.map((condition) => {
+          const match = /^(content|metadata->>name|metadata->>image_context)\.ilike\.(.+)$/s.exec(condition);
+          if (!match) throw new Rejection(400, `unsupported or condition: ${condition}`);
+          return `${OR_ILIKE_COLUMNS[match[1]]} ILIKE ${bind(match[2])}`;
+        });
+        where.push(`(${clauses.join(' OR ')})`);
+      }
     }
 
     let limitSql = '';
