@@ -419,6 +419,13 @@
       "title": "Stage Latency Ms",
       "type": "object"
     },
+    "stage_status": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Stage Status",
+      "type": "object"
+    },
     "used_documents": {
       "items": {
         "$ref": "#/$defs/TraceUsedDocument"

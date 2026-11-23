@@ -160,7 +160,8 @@ def _trace(answer: str | None) -> RagTrace:
         refusal_reason=None,
         answer=answer,
         citations=[TraceCitation(document_id="doc-001", chunk_id="chunk-001")],
-        stage_latency_ms={"retrieval": 12.5, "generation": 0.0},
+        stage_latency_ms={"analyze": 1.5, "embed": 4.0, "search": 7.0, "generation": 0.0},
+        stage_status={"analyze": "ok", "embed": "ok", "search": "ok", "generation": "ok"},
         effective_config=TraceEffectiveConfig(
             rag_env={"RAG_BEHAVIOR_MODE": "strict"},
             rag_prompt_sha256={"RAG_SYSTEM_PROMPT": _HASH_A},

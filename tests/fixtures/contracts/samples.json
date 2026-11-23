@@ -562,8 +562,16 @@
       "retrieval_strategy": "standard",
       "schema_version": 1,
       "stage_latency_ms": {
+        "analyze": 1.5,
+        "embed": 4.0,
         "generation": 0.0,
-        "retrieval": 12.5
+        "search": 7.0
+      },
+      "stage_status": {
+        "analyze": "ok",
+        "embed": "ok",
+        "generation": "ok",
+        "search": "ok"
       },
       "used_documents": [
         {
@@ -727,8 +735,16 @@
         "retrieval_strategy": "standard",
         "schema_version": 1,
         "stage_latency_ms": {
+          "analyze": 1.5,
+          "embed": 4.0,
           "generation": 0.0,
-          "retrieval": 12.5
+          "search": 7.0
+        },
+        "stage_status": {
+          "analyze": "ok",
+          "embed": "ok",
+          "generation": "ok",
+          "search": "ok"
         },
         "used_documents": [
           {

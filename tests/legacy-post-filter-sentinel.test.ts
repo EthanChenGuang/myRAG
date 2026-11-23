@@ -49,7 +49,7 @@ describe('legacy post-filter replica sentinel', () => {
   it.each(REPLICATED_LITERALS)('chat route still contains the %s literal', (label, literal) => {
     const message =
       `src/app/api/chat/route.ts no longer contains the ${label} literal the eval replica copies: ${literal}\n` +
-      'The replica in src/lib/rag-eval/legacy-post-filter.ts (and its tests in tests/legacy-post-filter.test.ts) must be updated in the same change.';
+      'The shared assembly in src/lib/rag/context/assemble.ts (and its tests in tests/legacy-post-filter.test.ts) must be updated in the same change.';
     expect(route.includes(literal), message).toBe(true);
   });
 
@@ -64,7 +64,7 @@ describe('legacy post-filter replica sentinel', () => {
     expect(text, `could not find a unique ${label} in src/app/api/chat/route.ts`).not.toBeNull();
     const digest = createHash('sha256').update(text as string, 'utf8').digest('hex');
     const message =
-      `src/app/api/chat/route.ts changed inside the ${label}. Re-check src/lib/rag-eval/legacy-post-filter.ts ` +
+      `src/app/api/chat/route.ts changed inside the ${label}. Re-check src/lib/rag/context/assemble.ts ` +
       'and tests/legacy-post-filter.test.ts against it, then update the pinned sha256 in this test.';
     expect(digest, message).toBe(sha256);
   });
