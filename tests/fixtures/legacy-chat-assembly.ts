@@ -1,0 +1,518 @@
+// @ts-nocheck -- the region below is a verbatim copy of route code that relies on untyped Supabase results
+// Frozen oracle of the chat route post-filter and context assembly loop.
+// Do not edit: tests/rag/legacy-chat-assembly-oracle.test.ts proves the region below is verbatim the route text.
+// Kept until Phase 4 so the unified pipeline can be diffed against it.
+import type { SupabaseClient } from '@supabase/supabase-js';
+import type { ExtractedURL } from '@/lib/url-extractor';
+
+export interface LegacyRpcRow {
+  chunk_id: string;
+  document_id: string;
+  content: string;
+  similarity: number;
+}
+
+export type LegacySupabase = Omit<SupabaseClient, 'rpc'> & {
+  rpc(
+    fn: string,
+    args: Record<string, unknown>,
+  ): PromiseLike<{ data: LegacyRpcRow[] | null; error: unknown }>;
+};
+
+export interface LegacyUsedDocument {
+  id: string;
+  name: string;
+  filename: string;
+  created_at?: string;
+  content_preview?: string;
+  similarity?: number;
+  matched_chunk?: string;
+  explicitly_referenced?: boolean;
+  image_url?: string;
+  external_url?: string;
+}
+
+export interface LegacySimilarChunk {
+  chunk_id: string;
+  document_id: string;
+  content: string;
+  similarity: number;
+  metadata: Record<string, any>;
+  temporal_score?: number;
+  financial_score?: number;
+  final_score?: number;
+  match_reason?: string;
+}
+
+export interface LegacySourceImage {
+  name: string;
+  size: number;
+  type: string;
+  url: string | undefined;
+}
+
+export interface LegacyChatAssemblyInput {
+  supabase: LegacySupabase;
+  queryText: string;
+  similarChunks: LegacySimilarChunk[];
+  usedDocuments: LegacyUsedDocument[];
+  context: string;
+  model: string;
+  ragMode: 'strict' | 'balanced' | 'flexible' | 'bypass';
+  effectiveDisableRAG: boolean;
+  webSearchEnabled: boolean;
+  ragStartTime: number;
+  normalize: (input: unknown) => string;
+  formatURLsForContext: (urls: ExtractedURL[]) => string;
+  getQueryEmbedding: (text: string) => Promise<number[]>;
+}
+
+export interface LegacyChatAssemblyResult {
+  context: string;
+  usedDocuments: LegacyUsedDocument[];
+  relevantChunks: LegacySimilarChunk[];
+  sourceImages: LegacySourceImage[];
+  shouldRefuseCandidate: boolean;
+}
+
+export async function legacyChatAssembly(input: LegacyChatAssemblyInput): Promise<LegacyChatAssemblyResult> {
+  const {
+    supabase,
+    queryText,
+    similarChunks,
+    model,
+    ragMode,
+    effectiveDisableRAG,
+    webSearchEnabled,
+    ragStartTime,
+    normalize,
+    formatURLsForContext,
+    getQueryEmbedding,
+  } = input;
+  const isGPTModel = model.includes('gpt-4') || model.includes('o1') || model.includes('chatgpt');
+  let context = input.context;
+  let usedDocuments: LegacyUsedDocument[] = [...input.usedDocuments];
+  let precomputedSourceImages: LegacySourceImage[] = [];
+  let ragDuration = 0;
+
+  {
+    if (queryText) {
+        // CHANGE 2: Add keyword-based document filtering
+        const queryTerms = normalize(queryText).split(/\s+/)
+          .filter(term => term.length > 3) // Only consider meaningful terms
+          .map(term => term.replace(/[^a-z0-9]/g, '')); // Remove non-alphanumeric characters
+
+        console.log('Query terms for document filtering:', queryTerms);
+
+        // Add semantic search results to context
+        if (similarChunks.length > 0) {
+          console.log(`Found ${similarChunks.length} similar chunks from semantic search`);
+          console.log('First 2 semantic chunks preview:',
+            similarChunks.slice(0, 2).map(c => `${c.content.substring(0, 100)}... (similarity: ${c.similarity.toFixed(2)})`));
+
+          // Track documents from semantic search
+          for (const chunk of similarChunks) {
+            // Get document metadata first to check relevance
+            const { data: docMetadata, error: metadataError } = await supabase
+              .from('documents')
+              .select('id, filename, created_at, content, metadata')
+              .eq('id', chunk.document_id)
+              .single();
+
+            if (metadataError || !docMetadata) {
+              console.log(`Could not get metadata for document: ${chunk.document_id}`);
+              continue;
+            }
+
+            // [FIX] Explicitly fetch chunk metadata (including image_url) since the RPC doesn't return it
+            if (!chunk.metadata || !chunk.metadata.image_url) {
+              const { data: chunkData } = await supabase
+                .from('document_chunks')
+                .select('metadata')
+                .eq('id', chunk.chunk_id)
+                .single();
+
+              if (chunkData?.metadata) {
+                // Ensure we don't overwrite existing metadata completely if some exists
+                chunk.metadata = { ...(chunk.metadata || {}), ...chunkData.metadata };
+                console.log(`Explicitly fetched metadata for chunk ${chunk.chunk_id}. Has image: ${!!chunk.metadata.image_url}`);
+              }
+            }
+
+            // CHANGE 3: Only include documents that match the query terms or have very high similarity
+            // [FIX] Also include images with reasonable similarity, as they might not match text terms in cross-lingual scenarios
+            const hasImage = !!chunk.metadata?.image_url;
+            const docName = docMetadata.filename.toLowerCase();
+            const isRelevantByName = queryTerms.some(term =>
+              docName.includes(term) ||
+              (docMetadata.content && docMetadata.content.toLowerCase().includes(term))
+            );
+
+            // Include documents with reasonable similarity OR matching terms OR if it's an image with > 0.25 similarity
+            if (chunk.similarity > 0.65 || isRelevantByName || (hasImage && chunk.similarity > 0.25)) {
+              // Check if this document is already in usedDocuments
+              const existingDoc = usedDocuments.find(doc => doc.id === chunk.document_id);
+              if (!existingDoc) {
+                usedDocuments.push({
+                  id: chunk.document_id,
+                  name: docMetadata.filename,
+                  filename: docMetadata.filename,
+                  created_at: docMetadata.created_at,
+                  content_preview: docMetadata.content ? docMetadata.content.substring(0, 200) + '...' : undefined,
+                  similarity: chunk.similarity,
+                  matched_chunk: chunk.content.substring(0, 150) + '...',
+                  explicitly_referenced: false,
+                  image_url: chunk.metadata?.image_url,
+                  external_url: docMetadata.metadata?.external_url
+                });
+
+                console.log(`Added document by relevance check: ${docMetadata.filename} (similarity: ${chunk.similarity.toFixed(2)}, term match: ${isRelevantByName}, hasImage: ${!!chunk.metadata?.image_url})`);
+              } else if (!existingDoc.similarity || chunk.similarity > existingDoc.similarity) {
+                // Update similarity if this chunk has a higher score
+                existingDoc.similarity = chunk.similarity;
+                existingDoc.matched_chunk = chunk.content.substring(0, 150) + '...';
+              }
+            } else {
+              console.log(`Filtered out irrelevant document: ${docMetadata.filename} (similarity: ${chunk.similarity.toFixed(2)}, no matching terms)`);
+            }
+          }
+
+          // Only add content from documents that passed the relevance filter
+          const relevantChunks = similarChunks.filter(chunk =>
+            usedDocuments.some(doc => doc.id === chunk.document_id)
+          );
+
+          if (relevantChunks.length > 0) {
+            // Group chunks by document for better organization
+            const chunksByDocument = new Map<string, Array<{ content: string, similarity: number, chunkNum?: number }>>();
+
+            // Collect URLs from chunk metadata
+            const collectedURLs: ExtractedURL[] = [];
+
+            for (const chunk of relevantChunks) {
+              // Get document name from usedDocuments array (already fetched earlier)
+              const docInfo = usedDocuments.find(doc => doc.id === chunk.document_id);
+              const docName = docInfo?.filename || docInfo?.name || 'Unknown Document';
+
+              // Try to extract chunk number from content if available
+              const chunkMatch = chunk.content.match(/Chunk (\d+) of \d+/);
+              const chunkNum = chunkMatch ? parseInt(chunkMatch[1]) : undefined;
+
+              if (!chunksByDocument.has(docName)) {
+                chunksByDocument.set(docName, []);
+              }
+              chunksByDocument.get(docName)!.push({
+                content: chunk.content,
+                similarity: chunk.similarity,
+                chunkNum
+              });
+
+              // Extract URLs from chunk metadata if available
+              const { data: chunkData } = await supabase
+                .from('document_chunks')
+                .select('metadata')
+                .eq('id', chunk.chunk_id)
+                .single();
+
+              if (chunkData?.metadata?.urls && Array.isArray(chunkData.metadata.urls)) {
+                collectedURLs.push(...chunkData.metadata.urls);
+              }
+            }
+
+            // Build organized context with document grouping
+            const contextParts: string[] = ["\n\n=== RELEVANT INFORMATION FROM DOCUMENTS ==="];
+
+            // Image file extensions to filter out from LLM context
+            // Images are displayed visually via source_images, not cited in text
+            const imageExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg'];
+
+            for (const [docName, chunks] of chunksByDocument) {
+              // Skip image documents - they are displayed visually, not cited in text
+              const isImageDoc = imageExtensions.some(ext => docName.toLowerCase().endsWith(ext));
+              if (isImageDoc) {
+                console.log(`[RAG Context] Skipping image document from LLM context: ${docName}`);
+                continue;
+              }
+
+              // Sort chunks by chunk number if available, otherwise by similarity
+              chunks.sort((a, b) => {
+                if (a.chunkNum && b.chunkNum) return a.chunkNum - b.chunkNum;
+                return b.similarity - a.similarity;
+              });
+
+              // Add document header and chunks with enhanced formatting for GPT models
+              contextParts.push(`\n--- Document: ${docName} (${chunks.length} relevant chunks) ---`);
+
+              // Format chunks with clear source indicators for GPT models
+              const formattedChunks = chunks.map((c, index) => {
+                // Extract the actual content without the prefix
+                const contentMatch = c.content.match(/^Document: [^.]+\.[^.]+\. Chunk \d+ of (\d+)\. Content: (.*)$/s);
+                const totalChunks = contentMatch ? contentMatch[1] : '?';
+                const actualContent = contentMatch ? contentMatch[2] : c.content;
+
+                // Add source citation hint for GPT models
+                if (isGPTModel && c.chunkNum) {
+                  return `[Source: ${docName}]\n${actualContent}`;
+                }
+                return c.content;
+              });
+
+              contextParts.push(...formattedChunks);
+            }
+            contextParts.push("=== END OF RELEVANT INFORMATION ===\n");
+
+            // Add collected URLs to context if any were found
+            if (collectedURLs.length > 0) {
+              // Remove duplicates based on URL
+              const uniqueURLs = Array.from(
+                new Map(collectedURLs.map(url => [url.url, url])).values()
+              );
+
+              const urlSection = formatURLsForContext(uniqueURLs);
+              if (urlSection) {
+                contextParts.push(urlSection);
+                console.log(`Added ${uniqueURLs.length} unique URLs from chunks to context`);
+              }
+            }
+
+            context += contextParts.join('\n\n');
+            console.log(`Added ${relevantChunks.length} organized chunks from ${chunksByDocument.size} documents in filtered semantic search`);
+          }
+        }
+      } else {
+        // Query all chunks to try to gather some relevant context
+        console.log('No specific query text provided, performing general context lookup');
+
+        // Use simple semantic search for general queries
+        const queryEmbedding = await getQueryEmbedding('general information overview');
+        const { data: searchResults } = await supabase
+          .rpc('match_document_chunks', {
+            query_embedding: queryEmbedding,
+            match_count: 5,
+            similarity_threshold: 0.5
+          });
+
+        const similarChunks = (searchResults || []).map(result => ({
+          chunk_id: result.chunk_id,
+          document_id: result.document_id,
+          content: result.content,
+          similarity: result.similarity
+        }));
+        // Build context with validation and enhanced organization
+        const chunksWithContent = similarChunks.filter(chunk => chunk.content && chunk.content.trim().length > 0);
+        if (chunksWithContent.length > 0) {
+          // Group chunks by document for better organization
+          const chunksByDocument = new Map<string, Array<{ content: string, similarity: number, chunkNum?: number }>>();
+
+          // Cache document names to avoid repeated queries
+          const docNameCache = new Map<string, string>();
+
+          for (const chunk of chunksWithContent) {
+            // Get document name from cache or fetch from database
+            let docName = docNameCache.get(chunk.document_id);
+            if (!docName) {
+              const { data: docData } = await supabase
+                .from('documents')
+                .select('filename')
+                .eq('id', chunk.document_id)
+                .single();
+              docName = docData?.filename || 'Unknown Document';
+              docNameCache.set(chunk.document_id, docName);
+            }
+
+            // Try to extract chunk number from content if available
+            const chunkMatch = chunk.content.match(/Chunk (\d+) of \d+/);
+            const chunkNum = chunkMatch ? parseInt(chunkMatch[1]) : undefined;
+
+            if (!chunksByDocument.has(docName)) {
+              chunksByDocument.set(docName, []);
+            }
+            chunksByDocument.get(docName)!.push({
+              content: chunk.content,
+              similarity: chunk.similarity,
+              chunkNum
+            });
+          }
+
+          // Build organized context with document grouping
+          const contextParts: string[] = [];
+          for (const [docName, chunks] of chunksByDocument) {
+            // Sort chunks by chunk number if available, otherwise by similarity
+            chunks.sort((a, b) => {
+              if (a.chunkNum && b.chunkNum) return a.chunkNum - b.chunkNum;
+              return b.similarity - a.similarity;
+            });
+
+            // Add document header and chunks
+            contextParts.push(`=== Document: ${docName} (${chunks.length} relevant chunks) ===`);
+            contextParts.push(...chunks.map(c => c.content));
+          }
+
+          context = contextParts.join('\n\n');
+          console.log(`[RAG Context] Built organized context from ${chunksWithContent.length} chunks across ${chunksByDocument.size} documents, total ${context.length} characters`);
+        } else {
+          context = 'No relevant context found.';
+          console.log('[RAG Context] ⚠️ WARNING: No chunks with actual content found!');
+        }
+
+        // Track documents from general context lookup
+        for (const chunk of similarChunks) {
+          // Check if this document is already in usedDocuments
+          const existingDoc = usedDocuments.find(doc => doc.id === chunk.document_id);
+          if (!existingDoc) {
+            // Get document metadata
+            const { data: docMetadata, error: metadataError } = await supabase
+              .from('documents')
+              .select('id, filename, created_at, content, metadata')
+              .eq('id', chunk.document_id)
+              .single();
+
+            if (!metadataError && docMetadata) {
+              usedDocuments.push({
+                id: chunk.document_id,
+                name: docMetadata.filename,
+                filename: docMetadata.filename,
+                created_at: docMetadata.created_at,
+                content_preview: docMetadata.content ? docMetadata.content.substring(0, 200) + '...' : undefined,
+                similarity: chunk.similarity,
+                matched_chunk: chunk.content.substring(0, 150) + '...',
+                external_url: docMetadata.metadata?.external_url
+              });
+            }
+          }
+        }
+      }
+
+      // Use a fallback if we have no context
+      if (!context.trim()) {
+        context = 'No relevant context found.';
+      }
+
+      // Log final context size for debugging
+      console.log(`Final context size: ${context.length} characters`);
+      console.log(`Final context first 150 chars: "${context.substring(0, 150)}..."`);
+      console.log(`Final context last 150 chars: "...${context.substring(context.length - 150)}"`);
+
+      // Log the documents used for context
+      console.log('API ROUTE: Used documents for context:', usedDocuments.map(doc => ({
+        id: doc.id,
+        name: doc.name,
+        explicitly_referenced: doc.explicitly_referenced || false,
+        similarity: doc.similarity
+      })));
+
+      // CHANGE 4: Make a pre-check to only allow relevant documents
+      const relevantDocumentNames = normalize(queryText).split(/\s+/)
+        .filter(term => term.length > 3) // Only consider meaningful terms
+        .map(term => term.replace(/[^a-z0-9]/g, '')); // Remove non-alphanumeric characters
+
+      console.log('Document filter terms from query:', relevantDocumentNames);
+
+      // Check for NFT-related query to use specific document for that case
+      const isNftRelatedQuery = relevantDocumentNames.some(term => ['nft', 'token', 'digital', 'asset', 'crypto', 'blockchain'].includes(term));
+
+      if (isNftRelatedQuery) {
+        console.log('NFT-related query detected, checking for NFT document');
+        // ... existing code ...
+      }
+
+      // Check for vision/healthcare-related query to use specific document for that case
+      const isVisionCareQuery =
+        normalize(queryText).includes('eyeglass') ||
+        normalize(queryText).includes('prescription') ||
+        normalize(queryText).includes('rx') ||
+        normalize(queryText).includes('glasses') ||
+        normalize(queryText).includes('vision') ||
+        normalize(queryText).includes('doctor') ||
+        normalize(queryText).includes('medical');
+
+      if (isVisionCareQuery) {
+        console.log('API ROUTE: Detected vision/healthcare related query, checking for related document');
+        // ... existing code ...
+      }
+
+      // Only apply minimal filtering - keep all documents with reasonable similarity
+      console.log('API ROUTE: Documents found before filtering:', usedDocuments.length);
+
+      // Log document details for debugging
+      usedDocuments.forEach(doc => {
+        console.log(`Document: ${doc.name || doc.filename}, Similarity: ${doc.similarity?.toFixed(3)}, Explicitly Referenced: ${doc.explicitly_referenced}`);
+      });
+
+      // Apply minimal filtering - be more permissive with document selection
+      usedDocuments = usedDocuments.filter(doc => {
+        // Always keep explicitly referenced documents
+        if (doc.explicitly_referenced) {
+          console.log(`Keeping explicitly referenced document: ${doc.name || doc.filename}`);
+          return true;
+        }
+
+        // Keep all documents with reasonable similarity scores
+        // [FIX] Also keep images with > 0.25 similarity (cross-lingual/low-text match)
+        if (doc.similarity && (doc.similarity >= 0.6 || (doc.image_url && doc.similarity > 0.25))) {
+          console.log(`Keeping document with good similarity: ${doc.name || doc.filename} (${doc.similarity.toFixed(3)}) [Has Image: ${!!doc.image_url}]`);
+          return true;
+        }
+
+        // Check if document name contains any of the query terms
+        const docName = (doc.name || doc.filename || '').toLowerCase();
+        const isRelevantByName = relevantDocumentNames.some(term =>
+          term.length > 3 && docName.includes(term)
+        );
+
+        if (isRelevantByName) {
+          console.log(`Keeping document with matching name: ${doc.name || doc.filename}`);
+          return true;
+        }
+
+        // If no criteria met, filter out
+        console.log(`Filtering out document: ${doc.name || doc.filename} (similarity: ${doc.similarity?.toFixed(3) || 'N/A'})`);
+        return false;
+      });
+
+      console.log('API ROUTE: Filtered documents for context:', usedDocuments.map(doc => ({
+        id: doc.id,
+        name: doc.name,
+        explicitly_referenced: doc.explicitly_referenced || false,
+        similarity: doc.similarity
+      })));
+
+      // 🕐 END TIMING: RAG document retrieval
+      const ragEndTime = Date.now();
+      ragDuration = ragEndTime - ragStartTime;
+      console.log(`[⏱️ RAG TIMING] Optimized RAG completed in ${ragDuration}ms`);
+      console.log(`[⏱️ RAG TIMING] Retrieved ${usedDocuments.length} documents with ${context.length} characters of context`);
+
+      // [FIX] Compute sourceImages from usedDocuments for injection into stream response
+      // This is done BEFORE streamText so we can pass it to createUIMessageStream
+      precomputedSourceImages = usedDocuments
+        .filter(doc => doc.image_url)
+        .map(doc => ({
+          name: doc.name || doc.filename || 'Source Image',
+          size: 0,
+          type: 'image/jpeg',
+          url: doc.image_url
+        }));
+
+      if (precomputedSourceImages.length > 0) {
+        console.log('[RAG] Precomputed source images for stream injection:', precomputedSourceImages.length);
+      }
+
+    } // End of RAG processing (skipped when disableRAG is true)
+
+    const shouldBlockNoContextResponse =
+      !effectiveDisableRAG &&
+      ragMode === 'strict' &&
+      !webSearchEnabled &&
+      usedDocuments.length === 0 &&
+      context.trim().toLowerCase().startsWith('no relevant context found');
+
+  void ragDuration;
+  return {
+    context,
+    usedDocuments,
+    relevantChunks: similarChunks.filter((chunk) => usedDocuments.some((doc) => doc.id === chunk.document_id)),
+    sourceImages: precomputedSourceImages,
+    shouldRefuseCandidate: shouldBlockNoContextResponse,
+  };
+}
