@@ -1463,31 +1463,37 @@ Directives from `CLAUDE.md`, `AGENTS.md` and `.claude/CLAUDE.md` that bind this 
 | A15 | A cosine above 0.999 between hosts is a reasonable equality threshold | P-15 | Tune at live verification |
 | A16 | `python-stdnum` (LGPL) and `reportlab` are acceptable dependency choices | Standard Stack | Hand-roll the three validators with the test vectors; generate fixture PDFs another way |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **How long may a Supabase RPC run with the service key?**
    - What we know: the activation gate counts all current chunks; re-embed batches upsert up to 128 vectors.
    - What's unclear: the effective `statement_timeout` for the `service_role` through PostgREST on the user's plan.
    - Recommendation: design for short statements (batches by bytes, completeness counted per tenant inside one function with an index-only anti-join), set `statement_timeout` on the gate function, and measure on the live project. Live verification item.
+   - RESOLVED: short statements by design. Chunk writes go in byte-sized batches of about 1 MB (plan 03-13), re-embed batches default to 128 rows (plan 03-36), and the activation gate counts completeness inside one function that carries its own `SET statement_timeout` (plan 03-09). The effective timeout on the real chunk count is measured as live item 5 of plan 03-48 Task 1.
 
 2. **Where does the Docling sidecar run, and with how much memory?**
    - What we know: the repo has no deploy config for `rag-sidecar/` (no `fly.toml`); the voice agent runs on a 512 MB Fly machine, far too small for layout, table and OCR models.
    - Recommendation: Phase 3 ships the image and a documented size starting point (4 GB RAM, 2 shared CPUs, one parse worker) [ASSUMED], and the deploy config is a live verification task. `RAG_PARSER=llamaparse` stays the default, so nothing depends on the sidecar until the user turns it on or LlamaParse fails.
+   - RESOLVED: Phase 3 ships the `docling` Docker target with baked models and no runtime download (plan 03-05) and no deploy config. AGENTS.md documents the starting size of 4 GB RAM, 2 CPUs and one parse worker (plan 03-47). `RAG_PARSER=llamaparse` stays the default (plan 03-03). The sidecar's peak memory on real scans is recorded in live item 2 of plan 03-48 Task 2.
 
 3. **Which LlamaParse v2 `version` string to pin?**
    - What we know: `version` is required; `latest` is accepted; the job response carries no version.
    - Recommendation: a constant in the adapter (`'latest'` until a dated value is confirmed from `GET /api/v2/parse/versions` with a real key), recorded in `parser_version`. Live verification item.
+   - RESOLVED: the unified LlamaParse v2 adapter sends `version: "latest"` as a constant, and `parser_used` and `parser_version` record what ran (plan 03-27). The dated value to pin is read from `GET /api/v2/parse/versions` in live item 1 of plan 03-48 Task 2.
 
 4. **Should `chat_upload` and `config_upload` be distinguishable when both post to `/api/process-document`?**
    - Recommendation: the Config UI proxy (`scripts/config-server.js` L2679) adds a form field `upload_source=config_upload`; the route accepts it only when the caller is in `admin_users`, otherwise the source is `chat_upload`. Defaults (D-15) then resolve per source correctly.
+   - RESOLVED: adopted as recommended. The Config UI proxy adds `upload_source=config_upload`, and `/api/process-document` honours it only when requireRagAdmin passes; otherwise the source is `chat_upload` (plan 03-31).
 
 5. **Does the `scanned_image` type apply to uploaded image files in the image-upload path?**
    - What we know: image upload produces one caption chunk; `scanned_image` implies OCR of text pages.
    - Recommendation: `image_upload` keeps the `image_caption` chunker regardless of type (the picker is not shown there); a scanned page uploaded as PNG through chat or Config UI upload goes to Docling with `InputFormat.IMAGE` and full-page OCR.
+   - RESOLVED: adopted as recommended. `image_upload` keeps the `image_caption` chunker whatever the type, as a source rule in the profiles module, and shows no picker (plan 03-32). An image file uploaded through chat or Config UI upload is submitted to the sidecar with `input_format` image (plan 03-27), and the Docling converter registers `InputFormat.IMAGE` with the same pipeline options, including full-page OCR for `scanned_image` (plan 03-15).
 
 6. **Single-tenant write paths that pass a fake user id.**
    - What we know: scrapers pass `'single-tenant-user'` and `storeDocument` requires `user_id`, while the single-tenant table has no such column.
    - Recommendation: under `unified` the writer never sends `user_id` in single-tenant mode (`s:default`); a test ingests through every path in the single-tenant schema.
+   - RESOLVED: adopted as recommended. The writer SQL functions are identical in both schemas (plan 03-10), and writer.ts never sends a user id for an `s:default` scope (plan 03-13). The single-tenant scraper path drops the fake `single-tenant-user` id (plan 03-23), and the ai-to-rag path tests the `s:default` scope (plan 03-24).
 
 ## Environment Availability
 

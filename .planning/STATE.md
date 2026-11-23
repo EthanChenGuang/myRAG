@@ -13,7 +13,7 @@ progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 58
-  completed_plans: 42
+  completed_plans: 43
 ---
 
 # Project State
@@ -28,11 +28,11 @@ See: .planning/PROJECT.md (updated 2026-11-22)
 ## Current Position
 
 Phase: 02 (Unified Retrieval Pipeline & Tenant Scope) — EXECUTING
-Plan: 32 of 36 complete (02-01..25, 02-29..35)
+Plan: 33 of 36 complete (02-01..26, 02-29..35)
 Status: Executing sequentially
 Last activity: 2026-11-23 — 02-08, 09, 10, 15 merged; tsc ratchet 58; 480 vitest tests pass; Phase 3 research + patterns committed
 
-Progress: [█████████░] 89%
+Progress: [█████████░] 92%
 
 ## Performance Metrics
 
@@ -106,6 +106,7 @@ Recent decisions affecting current work:
 - [safety] The Gmail draft→send redirect is removed from the chat and approve routes: the tool that runs is the tool the user approved. The approve-route redirect was live in the shipped app (deliberate behaviour change).
 - [02-24] Latency budgets (D-21) live in `eval/config/latency-budgets.json` and are report-only; `generation` is reported but excluded from `retrieval_total`; nearest-rank p50/p95 per stage in report.md.
 - [02-25] Reports slice by provenance; when approved production items of the gated split exist, `overall`/`by_language`/`by_category` use them (`gate_population`); a gate_population mismatch with the baseline is exit 2.
+- [02-26] Golden set is 90 items (70 dev / 20 test) with 18 synthetic colloquial/ambiguous/typo items; baseline re-recorded (3 runs, zero variance); paired check on the 72 old items is all zero; both it/typo items fall in the test split by the frozen rule.
 - [02-22] Langfuse via OTel replay after response; tenantKey on every span; sampling hashes request id with a per-purpose prefix; masking order e-mail, IBAN, CN ID, IT CF, Luhn card, phones.
 
 - [Roadmap]: Research's 9 phases compressed to 7 for standard granularity: ingestion + embeddings merged (Phase 3); external backends + closeout merged (Phase 7)
