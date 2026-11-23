@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from pydantic import BaseModel, ConfigDict
 from rag_sidecar.contracts.judge import JudgeConfig
 
 from rag_eval.paths import REPO_ROOT
@@ -9,6 +10,40 @@ DEFAULT_CONFIG_PATH = REPO_ROOT / "eval" / "config" / "judge.json"
 
 class JudgeFamilyError(ValueError):
     pass
+
+
+class JudgeFatalError(RuntimeError):
+    pass
+
+
+class JudgeCase(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    item_id: str
+    question: str
+    answer: str
+    contexts: list[str]
+    reference: str | None = None
+
+
+_REJECTION_HINTS = ("temperature", "unsupported", "not supported", "response_format", "json_schema")
+
+
+def raise_if_fatal(exc: BaseException) -> None:
+    """Re-raise provider failures that would repeat for every item as JudgeFatalError."""
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        status = getattr(current, "status_code", None)
+        if status in (401, 403):
+            raise JudgeFatalError(f"judge provider rejected the credentials (HTTP {status})") from exc
+        if status in (400, 404, 422) and any(hint in str(current).lower() for hint in _REJECTION_HINTS):
+            raise JudgeFatalError(
+                f"judge provider rejected the request (HTTP {status}): {str(current)[:300]}; "
+                "the pinned judge cannot run with temperature 0 and structured output, pin another non-Claude judge"
+            ) from exc
+        current = current.__cause__ or current.__context__
 
 
 def load_judge_config(path: Path | None = None) -> JudgeConfig:
