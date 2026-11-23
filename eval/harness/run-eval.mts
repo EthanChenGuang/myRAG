@@ -4,6 +4,7 @@ import path from 'node:path';
 import util from 'node:util';
 import { NextRequest } from 'next/server';
 import { GoldenItemSchema, RagTraceSchema, type GoldenItem, type RagRunRequest } from '../../src/lib/rag-eval/contracts.generated.ts';
+import { loadPinnedEvalEnv } from './eval-env.mts';
 import { createFixtureDatabase, type DeploymentMode } from './pglite-supabase.mts';
 import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from './fake-edge.mts';
 
@@ -62,6 +63,7 @@ export async function prepareInProcessEval(options: { corpusDir: string; deploym
   for (const name of Object.keys(env)) {
     if (name.startsWith('RAG_') || name.startsWith('NEXT_PUBLIC_RAG_')) delete env[name];
   }
+  Object.assign(env, loadPinnedEvalEnv());
   Object.assign(env, fixtureProcessEnv(startedEdge.url));
   const secret = crypto.randomBytes(24).toString('hex');
   env.NODE_ENV = 'test';
