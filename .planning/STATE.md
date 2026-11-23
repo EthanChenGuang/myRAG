@@ -4,7 +4,7 @@ milestone: v5.0
 current_phase: 02
 current_phase_name: Unified Retrieval Pipeline & Tenant Scope
 status: executing
-stopped_at: Completed wave 3 (02-07, 02-33, 02-34)
+stopped_at: Completed waves 4-7 (02-08, 02-09, 02-10, 02-15)
 last_updated: "2026-11-23T14:27:14.194Z"
 last_activity: 2026-11-23
 last_activity_desc: Phase 02 wave 3 merged
@@ -28,11 +28,11 @@ See: .planning/PROJECT.md (updated 2026-11-22)
 ## Current Position
 
 Phase: 02 (Unified Retrieval Pipeline & Tenant Scope) — EXECUTING
-Plan: 13 of 36 complete (02-01..07, 02-30..35)
+Plan: 17 of 36 complete (02-01..10, 02-15, 02-30..35)
 Status: Executing sequentially
-Last activity: 2026-11-23 — wave 3 merged (07, 33, 34); tsc ratchet 58; 249 vitest tests pass
+Last activity: 2026-11-23 — 02-08, 09, 10, 15 merged; tsc ratchet 58; 480 vitest tests pass; Phase 3 research + patterns committed
 
-Progress: [████░░░░░░] 36%
+Progress: [█████░░░░░] 47%
 
 ## Performance Metrics
 
@@ -138,6 +138,10 @@ Recent decisions affecting current work:
 - [Phase 02]: 02-07: runRetrieval equals enhancedRetrieveChunks on all 72 golden questions; scopeKey s:default|u:<id>|o:<id>; RPC errors raise RetrievalBackendError in the re-homed search; 02-20 must forbid importing mintScope outside src/lib/rag/tenant/ and tests
 - [Phase 02]: 02-33: Folder imported from @/types/folder; SidebarState.searchQuery added for UPDATE_SEARCH_QUERY
 - [Phase 02]: 02-34: semantic chunker maxTokens ReferenceError fixed (Phase 3 must re-measure chunking on oversized branches); v6 tool-part envelopes unwrapped with legacy fallback; Chat.folder_id is string | null
+- [Phase 02]: 02-08: config-disabled stages are `disabled`, never degrade the result; RPC errors keep reason `backend_error`; whoever creates the trace collector calls finishTrace; RagDeps.ragEnv() is the injectable config source
+- [Phase 02]: 02-09: post_filter and assemble run for chat, embed and eval (not voice or media); status `empty` with candidates present uses reason `no_relevant_context`; strict refusal needs refusalCandidate AND status empty; PostgREST URL length for 100 ids still a live check
+- [Phase 02]: 02-10: resolvers lowercase ids after the UUID check (mintScope unchanged); embed scope from server config, raw body compared before schema strip; voice org tokens must carry uid; org owners without an organization_members row get 403 — 02-12 must backfill or repair first
+- [Phase 02]: 02-15: LiveKit identity and room (myrag-voice) are server-assigned; any other `user-` participant means 409 voice_busy; deploy voice agent (02-17) before the app
 - [Phase 02]: Node engines pinned to ^22.12.0 (not >=) so Vercel stays on Node 22
 - [Phase 02]: Paired statistics take slice membership from gate-split report items and one fixed-seed RNG per (slice, metric) cell; all_zero needs at least one cell with data
 
@@ -167,5 +171,5 @@ Items acknowledged and deferred at milestone close, most recent first:
 ## Session Continuity
 
 Last session: 2026-11-23T14:27:14.060Z
-Stopped at: Completed wave 3 (02-07, 02-33, 02-34)
+Stopped at: Completed waves 4-7 (02-08, 02-09, 02-10, 02-15)
 Resume file: None

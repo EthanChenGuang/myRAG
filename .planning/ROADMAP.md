@@ -116,11 +116,11 @@ Plans:
 - [x] 02-34-PLAN.md — Type fixes: system-prompt manager, semantic chunker, organization handler, chat utils (wave 3)
 
 **Wave 4–7** *(sequential)*
-- [ ] 02-08-PLAN.md — Stage runner, switches/timeouts, status semantics, abort, trace collector and [RAG Trace] (wave 4)
-- [ ] 02-09-PLAN.md — Shared assembleContext, byte-identical to chat, fixed query count (wave 5)
-- [ ] 02-10-PLAN.md — Tenant resolvers: chat membership, embed config, signed voice token (wave 6)
+- [x] 02-08-PLAN.md — Stage runner, switches/timeouts, status semantics, abort, trace collector and [RAG Trace] (wave 4)
+- [x] 02-09-PLAN.md — Shared assembleContext, byte-identical to chat, fixed query count (wave 5)
+- [x] 02-10-PLAN.md — Tenant resolvers: chat membership, embed config, signed voice token (wave 6)
 - [ ] 02-11-PLAN.md — Eval route on the pipeline; parity with all paired differences zero (wave 7)
-- [ ] 02-15-PLAN.md — Authenticated LiveKit token with server identity and voice RAG token (wave 7)
+- [x] 02-15-PLAN.md — Authenticated LiveKit token with server identity and voice RAG token (wave 7)
 
 **Wave 8–12** *(sequential)*
 - [ ] 02-12-PLAN.md — Chat on the pipeline: verified scope, 403 before stream, status mapping (wave 8)
