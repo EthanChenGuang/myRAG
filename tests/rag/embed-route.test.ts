@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
+import type { TraceCollector } from '@/lib/rag';
 import { TWO_TENANT_IDS } from '../../eval/harness/two-tenant.mts';
 import { startRouteFixture, systemTextOf, type RouteFixture } from '../helpers/route-fixture';
 
@@ -15,6 +16,17 @@ vi.mock('ai', async (importOriginal) => ({
     toUIMessageStreamResponse: () => new Response('model stream'),
   }),
 }));
+const traced = vi.hoisted(() => ({ finished: [] as TraceCollector[] }));
+vi.mock('@/lib/rag/trace/finish', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/rag/trace/finish')>();
+  return {
+    ...actual,
+    finishTrace: (...args: Parameters<typeof actual.finishTrace>) => {
+      traced.finished.push(args[0]);
+      return actual.finishTrace(...args);
+    },
+  };
+});
 vi.mock('@openrouter/ai-sdk-provider', () => ({
   createOpenRouter: () => (modelId: string) => ({ specificationVersion: 'v3', provider: 'fake', modelId }),
 }));
@@ -117,6 +129,23 @@ describe('embed route tenant and status handling', () => {
     expect(system).toContain(PHRASE_O);
     expect(system).not.toContain(PHRASE_A);
     expect(system).not.toContain(PHRASE_B);
+  });
+
+  it('finishes the trace only after the model stream ends and records the final answer on it', async () => {
+    traced.finished.length = 0;
+    const response = await post(embedRequest(), `o:${orgO}`);
+    await response.text();
+
+    expect(h.capture.calls).toHaveLength(1);
+    expect(traced.finished).toHaveLength(0);
+    await (h.capture.calls[0].onFinish as (event: { text: string }) => void)({ text: 'final embed answer' });
+
+    expect(traced.finished).toHaveLength(1);
+    const review = traced.finished[0].reviewContent();
+    expect(review?.answer).toBe('final embed answer');
+    expect(review?.query).toBe(ALL_PHRASES_QUESTION);
+    expect(review?.context).toContain(PHRASE_O);
+    expect(traced.finished[0].traceId).toMatch(/^[0-9a-f]{32}$/);
   });
 
   it('the configured organization decides the tenant when the body names none', async () => {

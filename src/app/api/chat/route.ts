@@ -2003,6 +2003,7 @@ IMPORTANT:
           trace: collector,
         });
         ragTrace = { collector, result };
+        collector.setReviewContent({ query: queryText });
         retrievalResult = result;
 
         console.log('[Document Search] Retrieval finished:', {
@@ -2190,8 +2191,9 @@ IMPORTANT:
       context.trim().toLowerCase().startsWith('no relevant context found');
 
     if (shouldBlockNoContextResponse) {
-      finishRagTrace();
       const responseText = buildNoKnowledgeBaseResponse(fallbackLanguage);
+      ragTrace?.collector.setReviewContent({ answer: responseText, context });
+      finishRagTrace();
       const stream = createUIMessageStream({
         execute: async ({ writer }) => {
           const textId = `text-${Date.now()}`;
@@ -3819,6 +3821,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
         },
         onFinish: async (event) => {
           console.log('API ROUTE: streamText finished, keeping MCP client open for user approval');
+          ragTrace?.collector.setReviewContent({ answer: event.text ?? '', context, model: safeModelId });
 
           // 🕐 END TIMING: AI generation and total request
           const aiEndTime = Date.now();
@@ -3926,6 +3929,8 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
         }
       });
 
+      const ragTraceId = ragTrace?.collector.traceId;
+
       // [FIX] Use createUIMessageStream to inject source_images data part alongside AI response
       const stream = createUIMessageStream({
         execute: async ({ writer }) => {
@@ -3951,7 +3956,12 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
             });
           }
           // Merge AI stream
-          writer.merge(result.toUIMessageStream({ sendStart: precomputedSourceImages.length === 0 }));
+          writer.merge(result.toUIMessageStream({
+            sendStart: precomputedSourceImages.length === 0,
+            ...(ragTraceId
+              ? { messageMetadata: ({ part }) => (part.type === 'start' || part.type === 'finish' ? { ragTraceId } : undefined) }
+              : {}),
+          }));
         },
         onFinish: () => {
           if (ragTrace) {

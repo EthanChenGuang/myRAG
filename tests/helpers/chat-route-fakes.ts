@@ -181,16 +181,20 @@ export function createStreamTextCapture(options: StreamTextCaptureOptions = {}) 
   const streamText = vi.fn(async (params: Record<string, any>) => {
     calls.push(params);
     return {
-      toUIMessageStream: ({ sendStart }: { sendStart?: boolean } = {}) =>
+      toUIMessageStream: ({ sendStart, messageMetadata }: { sendStart?: boolean; messageMetadata?: (options: { part: { type: string } }) => unknown } = {}) =>
         new ReadableStream({
           start(controller) {
-            if (sendStart !== false) controller.enqueue({ type: 'start' });
+            const metadataFor = (type: string) => {
+              const value = messageMetadata?.({ part: { type } });
+              return value == null ? {} : { messageMetadata: value };
+            };
+            if (sendStart !== false) controller.enqueue({ type: 'start', ...metadataFor('start') });
             controller.enqueue({ type: 'text-start', id: 'fake-text' });
             for (const delta of state.deltas) {
               controller.enqueue({ type: 'text-delta', id: 'fake-text', delta });
             }
             controller.enqueue({ type: 'text-end', id: 'fake-text' });
-            controller.enqueue({ type: 'finish' });
+            controller.enqueue({ type: 'finish', ...metadataFor('finish') });
             controller.close();
           },
         }),
