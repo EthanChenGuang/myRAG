@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs/promises';
 import path from 'path';
+import { requireAdminOrDeny } from '@/lib/admin-route-auth';
 
 /**
  * API endpoint for RAG system prompt configuration
@@ -182,6 +183,9 @@ function assemblePrompt(preContext: string, postContext: string): string {
 }
 
 export async function GET(request: NextRequest) {
+  const denied = await requireAdminOrDeny(request);
+  if (denied) return denied;
+
   try {
     const env = await parseEnvFile();
 
@@ -248,6 +252,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const denied = await requireAdminOrDeny(request);
+  if (denied) return denied;
+
   try {
     const body = await request.json();
     const { preContext, postContext } = body;

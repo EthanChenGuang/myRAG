@@ -72,6 +72,13 @@ function createMainAppRequest(apiPath, method, headers = {}) {
   };
 }
 
+function withAuthHeaders(req, headers = {}) {
+  const forwarded = { ...headers };
+  if (req.headers.cookie) forwarded['Cookie'] = req.headers.cookie;
+  if (req.headers.authorization) forwarded['Authorization'] = req.headers.authorization;
+  return forwarded;
+}
+
 function mainAppConnectionError(error) {
   return {
     error: `Unable to connect to main myRAG app at ${getMainAppBaseUrl()}. Check MYRAG_APP_URL or NEXT_PUBLIC_SITE_URL, and make sure the app server is running.`,
@@ -777,12 +784,13 @@ app.get('/api/config/rag-prompt', async (req, res) => {
     console.log('[RAG API] Proxying GET request to main app');
     const response = await fetch(getMainAppUrl('/api/config/rag-prompt'), {
       method: 'GET',
-      headers: {
+      headers: withAuthHeaders(req, {
         'Content-Type': 'application/json',
-      },
+      }),
     });
 
     const data = await response.json();
+    if (!response.ok) return res.status(response.status).json(data);
 
     // Transform the response to match config-ui expectations
     const transformedData = {
@@ -812,9 +820,9 @@ app.post('/api/config/rag-prompt', async (req, res) => {
 
     const response = await fetch(getMainAppUrl('/api/config/rag-prompt'), {
       method: 'POST',
-      headers: {
+      headers: withAuthHeaders(req, {
         'Content-Type': 'application/json',
-      },
+      }),
       body: JSON.stringify({
         preContext,
         postContext
@@ -822,6 +830,7 @@ app.post('/api/config/rag-prompt', async (req, res) => {
     });
 
     const data = await response.json();
+    if (!response.ok) return res.status(response.status).json(data);
 
     // Transform the response to match config-ui expectations
     const transformedData = {
@@ -2868,10 +2877,10 @@ app.post('/api/config/models', async (req, res) => {
     // Prepare the request to the main myRAG app
     const postData = JSON.stringify(req.body);
 
-    const { client, options } = createMainAppRequest('/api/config/models', 'POST', {
+    const { client, options } = createMainAppRequest('/api/config/models', 'POST', withAuthHeaders(req, {
         'Content-Type': 'application/json',
         'Content-Length': Buffer.byteLength(postData)
-    });
+    }));
 
     // Create the request to the main app
     const proxyReq = client.request(options, (proxyRes) => {
@@ -3116,9 +3125,9 @@ app.get('/api/config/connectors', async (req, res) => {
   try {
     console.log('🔄 Config Proxy: Forwarding connectors GET request to main myRAG app...');
 
-    const { client, options } = createMainAppRequest('/api/config/connectors', 'GET', {
+    const { client, options } = createMainAppRequest('/api/config/connectors', 'GET', withAuthHeaders(req, {
         'Content-Type': 'application/json'
-    });
+    }));
 
     const proxyReq = client.request(options, (proxyRes) => {
       console.log(`📡 Config Proxy: Main app responded with status ${proxyRes.statusCode}`);
@@ -3168,10 +3177,10 @@ app.put('/api/config/connectors', async (req, res) => {
 
     const postData = JSON.stringify(req.body);
 
-    const { client, options } = createMainAppRequest('/api/config/connectors', 'PUT', {
+    const { client, options } = createMainAppRequest('/api/config/connectors', 'PUT', withAuthHeaders(req, {
         'Content-Type': 'application/json',
         'Content-Length': Buffer.byteLength(postData)
-    });
+    }));
 
     const proxyReq = client.request(options, (proxyRes) => {
       console.log(`📡 Config Proxy: Main app responded with status ${proxyRes.statusCode}`);
@@ -3220,9 +3229,9 @@ app.get('/api/mcp/servers', async (req, res) => {
   try {
     console.log('🔄 Config Proxy: Forwarding MCP servers GET request to main myRAG app...');
 
-    const { client, options } = createMainAppRequest('/api/mcp/servers', 'GET', {
+    const { client, options } = createMainAppRequest('/api/mcp/servers', 'GET', withAuthHeaders(req, {
         'Content-Type': 'application/json'
-    });
+    }));
 
     const proxyReq = client.request(options, (proxyRes) => {
       console.log(`📡 Config Proxy: Main app responded with status ${proxyRes.statusCode}`);
@@ -3277,10 +3286,10 @@ app.post('/api/mcp/servers', async (req, res) => {
     // Prepare the request to the main myRAG app
     const postData = JSON.stringify(req.body);
 
-    const { client, options } = createMainAppRequest('/api/mcp/servers', 'POST', {
+    const { client, options } = createMainAppRequest('/api/mcp/servers', 'POST', withAuthHeaders(req, {
         'Content-Type': 'application/json',
         'Content-Length': Buffer.byteLength(postData)
-    });
+    }));
 
     // Create the request to the main app
     const proxyReq = client.request(options, (proxyRes) => {

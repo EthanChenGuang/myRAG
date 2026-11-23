@@ -9,6 +9,7 @@ afterEach(() => {
   vi.resetModules();
   vi.doUnmock('stripe');
   vi.doUnmock('@/lib/env');
+  vi.doUnmock('@/lib/admin-route-auth');
   vi.doUnmock('@/lib/supabase/server');
   vi.doUnmock('@/lib/deployment-mode');
   vi.doUnmock('@/lib/document-processor');
@@ -27,6 +28,7 @@ describe('config/models GET', () => {
 
   test('POST answers 400 with the validation message for a model missing required fields', async () => {
     vi.doMock('@/lib/supabase/server', () => ({}));
+    vi.doMock('@/lib/admin-route-auth', () => ({ requireAdminOrDeny: async () => null }));
     const route = await import('@/app/api/config/models/route');
     const res = await route.POST(
       new NextRequest('http://localhost/api/config/models', {
