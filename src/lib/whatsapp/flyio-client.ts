@@ -487,15 +487,8 @@ export class FlyioWhatsAppClient extends BaseWhatsAppClient {
       logger.warn('FlyioWhatsAppClient', 'No webhook secret configured');
       return false;
     }
-    
-    // Simple HMAC validation
-    const crypto = require('crypto');
-    const expectedSignature = crypto
-      .createHmac('sha256', this.webhookSecret)
-      .update(payload)
-      .digest('hex');
-    
-    return signature === expectedSignature;
+
+    return this.hmacSignatureMatches(signature, payload);
   }
 
   /**
