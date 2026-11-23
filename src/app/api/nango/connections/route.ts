@@ -6,6 +6,16 @@ import { requireSessionUser } from '../_lib/session-user';
 
 export const runtime = 'nodejs';
 
+function nangoErrorStatus(error: unknown): number | undefined {
+  const candidate = error as { status?: unknown; response?: { status?: unknown } } | null;
+  const status = candidate?.status ?? candidate?.response?.status;
+  return typeof status === 'number' ? status : undefined;
+}
+
+function isNangoNotFound(error: unknown): boolean {
+  return nangoErrorStatus(error) === 404;
+}
+
 /**
  * GET /api/nango/connections
  * List user's connected providers
@@ -328,7 +338,13 @@ export async function DELETE(request: NextRequest) {
       try {
         await nango.deleteConnection(integrationId, connRecord.connection_id);
       } catch (e) {
-        console.warn('[Nango] Connection may already be deleted from Nango:', e);
+        if (!isNangoNotFound(e)) {
+          console.error('[Nango] Could not delete the connection from Nango; keeping the local record', {
+            provider,
+            status: nangoErrorStatus(e),
+          });
+          return NextResponse.json({ error: 'Failed to disconnect from provider' }, { status: 502 });
+        }
       }
     }
 
