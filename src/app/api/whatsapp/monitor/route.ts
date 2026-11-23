@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { startGlobalMonitoring, stopGlobalMonitoring, getConnectionMonitor } from '@/lib/whatsapp/connection-monitor';
 import { requireUser, requireOwnedSession } from '@/lib/whatsapp/route-auth';
+import { requireAdminOrDeny } from '@/lib/admin-route-auth';
 import { logger } from '@/lib/logger';
 import { env } from '@/lib/env';
 
@@ -38,9 +39,6 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const auth = await requireUser('WhatsAppMonitor');
-    if ('response' in auth) return auth.response;
-
     let body: Record<string, any>;
     try {
       body = await request.json();
@@ -49,6 +47,24 @@ export async function POST(request: Request) {
     }
     const { action } = body;
 
+    if (action === 'start' || action === 'stop') {
+      const denied = await requireAdminOrDeny(request);
+      if (denied) return denied;
+    } else {
+      const auth = await requireUser('WhatsAppMonitor');
+      if ('response' in auth) return auth.response;
+
+      if (action !== 'force_reconnect') {
+        return NextResponse.json(
+          { error: 'Invalid action. Use "start", "stop", or "force_reconnect"' },
+          { status: 400 }
+        );
+      }
+
+      const owned = await requireOwnedSession('WhatsAppMonitor', auth.user.id, body.sessionId);
+      if (owned) return owned.response;
+    }
+
     // Check if WhatsApp is enabled
     if (env.NEXT_PUBLIC_WHATSAPP_ENABLED !== 'true') {
       return NextResponse.json(
@@ -56,16 +72,6 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-
-    if (action !== 'start' && action !== 'stop' && action !== 'force_reconnect') {
-      return NextResponse.json(
-        { error: 'Invalid action. Use "start", "stop", or "force_reconnect"' },
-        { status: 400 }
-      );
-    }
-
-    const denied = await requireOwnedSession('WhatsAppMonitor', auth.user.id, body.sessionId);
-    if (denied) return denied.response;
 
     if (action === 'start') {
       startGlobalMonitoring();

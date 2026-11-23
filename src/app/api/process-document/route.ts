@@ -566,27 +566,25 @@ export async function POST(req: Request) {
     let userId: string | null = null;
     let organizationId: string | null = null;
 
-    // SINGLE-TENANT MODE: documents are shared in the knowledge base, so a permanent
-    // write needs a verified session. Temporary processing persists nothing and stays open.
+    // Every request needs a verified session: permanent writes persist to the knowledge base,
+    // and temporary parsing still spends the operator's LlamaCloud quota.
     if (isSingleTenant()) {
-      if (!isTemporary) {
-        try {
-          const { createClient: createSSRClient } = await import('@/lib/supabase/server');
-          const supabase = await createSSRClient();
-          const {
-            data: { user },
-            error: authError,
-          } = await supabase.auth.getUser();
-          if (!user || authError) {
-            return NextResponse.json(
-              { error: 'Authentication required. Please sign in to add documents to the knowledge base.' },
-              { status: 401 }
-            );
-          }
-        } catch {
-          console.error('[ProcessDocument] Session lookup failed');
-          return NextResponse.json({ error: 'Authentication unavailable' }, { status: 503 });
+      try {
+        const { createClient: createSSRClient } = await import('@/lib/supabase/server');
+        const supabase = await createSSRClient();
+        const {
+          data: { user },
+          error: authError,
+        } = await supabase.auth.getUser();
+        if (!user || authError) {
+          return NextResponse.json(
+            { error: 'Authentication required. Please sign in to process documents.' },
+            { status: 401 }
+          );
         }
+      } catch {
+        console.error('[ProcessDocument] Session lookup failed');
+        return NextResponse.json({ error: 'Authentication unavailable' }, { status: 503 });
       }
       userId = null;
       organizationId = null;
@@ -636,17 +634,10 @@ export async function POST(req: Request) {
           console.log('Personal upload (user workspace)');
         }
       } else {
-        // No session: only allow temporary processing; block permanent uploads.
-        if (!isTemporary) {
-          return NextResponse.json(
-            { error: 'Authentication required. Please sign in and upload from your Personal Workspace.' },
-            { status: 401 }
-          );
-        }
-        // For temporary processing, continue without persisting to DB
-        userId = null;
-        organizationId = null;
-        console.log('No session: allowing temporary processing only (no persistence)');
+        return NextResponse.json(
+          { error: 'Authentication required. Please sign in and upload from your Personal Workspace.' },
+          { status: 401 }
+        );
       }
     }
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateSmartTitle } from '@/lib/title-generator';
 import { DBMessage } from '@/types/chat';
+import { requireSessionUser } from '@/lib/session-auth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -10,6 +11,8 @@ export const dynamic = 'force-dynamic';
  * This runs on the server where API keys are available
  */
 export async function POST(request: NextRequest) {
+  const auth = await requireSessionUser('[Title API]');
+  if ('response' in auth) return auth.response;
   try {
     const body = await request.json();
     const { messages } = body;

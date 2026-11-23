@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { verifyPolarWebhookSignature } from '@/lib/polar-webhook';
+import { claimPolarWebhookId, releasePolarWebhookId, verifyPolarWebhookSignature } from '@/lib/polar-webhook';
 
 // Initialize Supabase client with service role key for admin access
 const supabase = createClient(
@@ -9,6 +9,7 @@ const supabase = createClient(
 );
 
 export async function POST(request: Request) {
+  let claimedId: string | null = null;
   try {
     const webhookSecret = process.env.POLAR_WEBHOOK_SECRET;
     if (!webhookSecret) {
@@ -38,6 +39,13 @@ export async function POST(request: Request) {
       );
     }
 
+    const webhookId = request.headers.get('webhook-id')!;
+    if (!claimPolarWebhookId(webhookId)) {
+      console.warn('[Polar Webhook] Ignored replayed webhook-id');
+      return NextResponse.json({ received: true, status: 'duplicate' });
+    }
+    claimedId = webhookId;
+
     const event = JSON.parse(payload);
     console.log('Received webhook event:', event.type);
     
@@ -64,6 +72,7 @@ export async function POST(request: Request) {
     console.log('Webhook received but subscription handling is disabled');
     return NextResponse.json({ received: true, status: 'subscription_disabled' });
   } catch (error) {
+    if (claimedId) releasePolarWebhookId(claimedId);
     console.error('Error processing webhook:', error);
     return NextResponse.json(
       { error: 'Webhook processing failed' },

@@ -44,16 +44,21 @@ export function checkRateLimit(identifier: string): { allowed: boolean; remainin
   return { allowed: true, remaining: limit - entry.count, resetTime: entry.resetTime };
 }
 
+function lastForwardedHop(header: string | null): string | null {
+  const hops = (header || '').split(',').map(hop => hop.trim()).filter(Boolean);
+  return hops.length > 0 ? hops[hops.length - 1]! : null;
+}
+
+/** The client IP as seen by the nearest trusted proxy; never the left-most, client-controlled X-Forwarded-For entry. */
+export function getTrustedClientIp(request: Request): string {
+  const realIp = request.headers.get('x-real-ip')?.trim();
+  if (process.env.VERCEL) {
+    return realIp || request.headers.get('x-vercel-forwarded-for')?.trim() || lastForwardedHop(request.headers.get('x-forwarded-for')) || 'unknown';
+  }
+  return lastForwardedHop(request.headers.get('x-forwarded-for')) || realIp || 'unknown';
+}
+
 export function getRateLimitIdentifier(request: Request): string {
-  // Try to get IP from various headers
-  const forwarded = request.headers.get('x-forwarded-for');
-  const realIp = request.headers.get('x-real-ip');
-  const cfConnectingIp = request.headers.get('cf-connecting-ip');
-  
-  const ip = forwarded?.split(',')[0] || realIp || cfConnectingIp || 'unknown';
-  
-  // Include origin to separate rate limits per domain
-  const origin = request.headers.get('origin') || 'unknown';
-  
-  return `${ip}:${origin}`;
-} 
+  const tenant = env.RAG_EMBED_TENANT || 'default';
+  return `${getTrustedClientIp(request)}:${tenant}`;
+}

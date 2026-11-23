@@ -22,6 +22,7 @@ const h = vi.hoisted(() => {
     env: {
       NEXT_PUBLIC_WHATSAPP_ENABLED: 'true',
       WHATSAPP_WEBHOOK_SECRET: 'test-webhook-secret-placeholder' as string,
+      WHATSAPP_WEBHOOK_ALLOW_UNSIGNED: '' as string,
       KOYEB_BAILEYS_URL: 'https://koyeb.example.test',
       KOYEB_API_KEY: 'test-koyeb-key-placeholder',
     },
@@ -103,6 +104,7 @@ beforeEach(() => {
     sessionId === 'session-1' ? { sessionId, userId: USER_ID } : sessionId === 'session-other' ? { sessionId, userId: OTHER_USER_ID } : null
   );
   h.state.env.WHATSAPP_WEBHOOK_SECRET = WEBHOOK_SECRET;
+  h.state.env.WHATSAPP_WEBHOOK_ALLOW_UNSIGNED = '';
   vi.unstubAllEnvs();
   h.state.whatsappClient = { sendTextMessage: vi.fn() };
   h.state.webhookHandler.handleWebhook.mockReset();
@@ -357,37 +359,45 @@ describe('/api/whatsapp/monitor', () => {
     expect(response.status).toBe(401);
   });
 
-  it("POST returns 403 for another user's session on stop and force_reconnect", async () => {
+  it("POST returns 403 for another user's session on force_reconnect", async () => {
     const { POST } = await import('@/app/api/whatsapp/monitor/route');
 
-    for (const action of ['stop', 'force_reconnect']) {
-      const response = await POST(jsonRequest(url, 'POST', { action, sessionId: 'session-other' }));
-      expect(response.status).toBe(403);
-    }
+    const response = await POST(jsonRequest(url, 'POST', { action: 'force_reconnect', sessionId: 'session-other' }));
+
+    expect(response.status).toBe(403);
   });
 
-  it('POST returns 400 without a sessionId', async () => {
+  it('POST returns 400 without a sessionId on force_reconnect', async () => {
     const { POST } = await import('@/app/api/whatsapp/monitor/route');
 
-    const response = await POST(jsonRequest(url, 'POST', { action: 'stop' }));
+    const response = await POST(jsonRequest(url, 'POST', { action: 'force_reconnect' }));
 
     expect(response.status).toBe(400);
   });
 });
 
 describe('POST /api/whatsapp/webhook', () => {
-  const payload = JSON.stringify({ sessionId: 'session-1', event: 'status', data: {} });
+  let nonce = 0;
+
+  function makePayload(sentAt: Date = new Date()) {
+    nonce += 1;
+    return JSON.stringify({ sessionId: 'session-1', event: 'status', data: { update: nonce }, timestamp: sentAt.toISOString() });
+  }
 
   function sign(body: string) {
     return createHmac('sha256', WEBHOOK_SECRET).update(body).digest('hex');
   }
 
+  function send(POST: (request: NextRequest) => Promise<Response>, body: string, signature: string | null = sign(body)) {
+    return POST(
+      jsonRequest('http://localhost/api/whatsapp/webhook', 'POST', body, signature ? { 'x-webhook-signature': signature } : {})
+    );
+  }
+
   it('rejects a bad signature with 401 and does not process the event', async () => {
     const { POST } = await import('@/app/api/whatsapp/webhook/route');
 
-    const response = await POST(
-      jsonRequest('http://localhost/api/whatsapp/webhook', 'POST', payload, { 'x-webhook-signature': 'bad-signature' })
-    );
+    const response = await send(POST, makePayload(), 'bad-signature');
 
     expect(response.status).toBe(401);
     expect(h.state.webhookHandler.handleWebhook).not.toHaveBeenCalled();
@@ -396,7 +406,7 @@ describe('POST /api/whatsapp/webhook', () => {
   it('rejects a missing signature with 401', async () => {
     const { POST } = await import('@/app/api/whatsapp/webhook/route');
 
-    const response = await POST(jsonRequest('http://localhost/api/whatsapp/webhook', 'POST', payload));
+    const response = await send(POST, makePayload(), null);
 
     expect(response.status).toBe(401);
     expect(h.state.webhookHandler.handleWebhook).not.toHaveBeenCalled();
@@ -404,14 +414,54 @@ describe('POST /api/whatsapp/webhook', () => {
 
   it('accepts a correctly signed payload and hands it to the webhook handler', async () => {
     const { POST } = await import('@/app/api/whatsapp/webhook/route');
+    const payload = makePayload();
 
-    const response = await POST(
-      jsonRequest('http://localhost/api/whatsapp/webhook', 'POST', payload, { 'x-webhook-signature': sign(payload) })
-    );
+    const response = await send(POST, payload);
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ success: true, received: true });
     expect(h.state.webhookHandler.handleWebhook).toHaveBeenCalledWith(JSON.parse(payload));
+  });
+
+  it('rejects a validly signed payload with a stale timestamp with 401', async () => {
+    const { POST } = await import('@/app/api/whatsapp/webhook/route');
+
+    const response = await send(POST, makePayload(new Date(Date.now() - 6 * 60 * 1000)));
+
+    expect(response.status).toBe(401);
+    expect(h.state.webhookHandler.handleWebhook).not.toHaveBeenCalled();
+  });
+
+  it('rejects a validly signed payload dated in the future with 401', async () => {
+    const { POST } = await import('@/app/api/whatsapp/webhook/route');
+
+    const response = await send(POST, makePayload(new Date(Date.now() + 10 * 60 * 1000)));
+
+    expect(response.status).toBe(401);
+    expect(h.state.webhookHandler.handleWebhook).not.toHaveBeenCalled();
+  });
+
+  it('rejects a validly signed payload without a timestamp with 401', async () => {
+    const { POST } = await import('@/app/api/whatsapp/webhook/route');
+    const body = JSON.stringify({ sessionId: 'session-1', event: 'status', data: { untimed: true } });
+
+    const response = await send(POST, body);
+
+    expect(response.status).toBe(401);
+    expect(h.state.webhookHandler.handleWebhook).not.toHaveBeenCalled();
+  });
+
+  it('processes a replayed signed body only once', async () => {
+    const { POST } = await import('@/app/api/whatsapp/webhook/route');
+    const payload = makePayload();
+
+    const first = await send(POST, payload);
+    const second = await send(POST, payload);
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(await second.json()).toMatchObject({ duplicate: true });
+    expect(h.state.webhookHandler.handleWebhook).toHaveBeenCalledTimes(1);
   });
 
   it('returns 503 in production when the secret is unset and does not call the handler', async () => {
@@ -419,19 +469,68 @@ describe('POST /api/whatsapp/webhook', () => {
     h.state.env.WHATSAPP_WEBHOOK_SECRET = '';
     const { POST } = await import('@/app/api/whatsapp/webhook/route');
 
-    const response = await POST(jsonRequest('http://localhost/api/whatsapp/webhook', 'POST', payload));
+    const response = await send(POST, makePayload(), null);
 
     expect(response.status).toBe(503);
     expect(h.state.webhookHandler.handleWebhook).not.toHaveBeenCalled();
   });
 
-  it('stays permissive in development when the secret is unset', async () => {
+  it('returns 503 in development when the secret is unset and no opt-in is set', async () => {
+    vi.stubEnv('NODE_ENV', 'development');
     h.state.env.WHATSAPP_WEBHOOK_SECRET = '';
     const { POST } = await import('@/app/api/whatsapp/webhook/route');
 
-    const response = await POST(jsonRequest('http://localhost/api/whatsapp/webhook', 'POST', payload));
+    const response = await send(POST, makePayload(), null);
+
+    expect(response.status).toBe(503);
+    expect(h.state.webhookHandler.handleWebhook).not.toHaveBeenCalled();
+  });
+
+  it('accepts unsigned webhooks in development only with the explicit opt-in', async () => {
+    vi.stubEnv('NODE_ENV', 'development');
+    h.state.env.WHATSAPP_WEBHOOK_SECRET = '';
+    h.state.env.WHATSAPP_WEBHOOK_ALLOW_UNSIGNED = 'true';
+    const { POST } = await import('@/app/api/whatsapp/webhook/route');
+    const payload = makePayload();
+
+    const response = await send(POST, payload, null);
 
     expect(response.status).toBe(200);
     expect(h.state.webhookHandler.handleWebhook).toHaveBeenCalledWith(JSON.parse(payload));
+  });
+
+  it('ignores the opt-in in production', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    h.state.env.WHATSAPP_WEBHOOK_SECRET = '';
+    h.state.env.WHATSAPP_WEBHOOK_ALLOW_UNSIGNED = 'true';
+    const { POST } = await import('@/app/api/whatsapp/webhook/route');
+
+    const response = await send(POST, makePayload(), null);
+
+    expect(response.status).toBe(503);
+    expect(h.state.webhookHandler.handleWebhook).not.toHaveBeenCalled();
+  });
+
+  it('does not log message text or phone numbers', async () => {
+    const { logger } = await import('@/lib/logger');
+    const { POST } = await import('@/app/api/whatsapp/webhook/route');
+    nonce += 1;
+    const body = JSON.stringify({
+      sessionId: 'session-1',
+      event: 'message',
+      data: { key: { remoteJid: `${PHONE.slice(1)}@s.whatsapp.net`, fromMe: false, id: 'msg-log-1' }, message: { conversation: 'private message text' } },
+      timestamp: new Date().toISOString(),
+    });
+
+    await send(POST, body);
+
+    const logged = JSON.stringify([
+      ...vi.mocked(logger.info).mock.calls,
+      ...vi.mocked(logger.warn).mock.calls,
+      ...vi.mocked(logger.error).mock.calls,
+    ]);
+    expect(logged).not.toContain('private message text');
+    expect(logged).not.toContain(PHONE.slice(1));
+    expect(logged).toContain('msg-log-1');
   });
 });
