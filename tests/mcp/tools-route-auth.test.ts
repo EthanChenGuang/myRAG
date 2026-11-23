@@ -64,6 +64,46 @@ describe('GET /api/mcp/tools', () => {
   });
 });
 
+describe('LO-04: tool discovery errors are redacted', () => {
+  const SECRET_URL = 'https://hooks.example.test/mcp/placeholder-secret-path?key=placeholder-secret-query';
+
+  it('GET returns no URL from an upstream error message', async () => {
+    asPlainUser(state);
+    discoverAllTools.mockRejectedValue(new Error(`connect ECONNREFUSED ${SECRET_URL} while listing`));
+    const { GET } = await load();
+
+    const response = await GET(request('/api/mcp/tools'));
+    const text = await response.text();
+
+    expect(response.status).toBe(500);
+    expect(text).not.toContain('placeholder-secret');
+    expect(text).not.toContain('hooks.example.test');
+    expect(text).toContain('[url]');
+  });
+
+  it('the log line carries no URL either', async () => {
+    asPlainUser(state);
+    const errorSpy = vi.spyOn(console, 'error');
+    discoverAllTools.mockRejectedValue(new Error(`bad gateway ${SECRET_URL}`));
+    const { GET } = await load();
+
+    await GET(request('/api/mcp/tools'));
+
+    expect(JSON.stringify(errorSpy.mock.calls)).not.toContain('placeholder-secret');
+  });
+
+  it('POST returns no URL from a refresh failure', async () => {
+    asAdmin(state);
+    discoverAllTools.mockRejectedValue(new Error(`timeout ${SECRET_URL}`));
+    const { POST } = await load();
+
+    const response = await POST(request('/api/mcp/tools', { method: 'POST' }));
+
+    expect(response.status).toBe(500);
+    expect(await response.text()).not.toContain('placeholder-secret');
+  });
+});
+
 describe('POST /api/mcp/tools (cache refresh)', () => {
   it('answers 401 without a session', async () => {
     const { POST } = await load();
