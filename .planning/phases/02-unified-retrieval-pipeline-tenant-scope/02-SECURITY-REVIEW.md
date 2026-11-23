@@ -88,7 +88,7 @@ Every service-role request, which carries the service key in its `apikey` and `A
 **Fix:**
 - Route every `.env.local` write through one helper that:
   - rejects any name not in `CONFIG_WRITABLE_ENV_NAMES`;
-  - rejects values that contain `\r`, `\n`, `\0`, ` `, ` ` or `$`, or writes them single-quoted with `'` escaped (single-quoted values are not expanded);
+  - rejects values that contain `\r`, `\n`, `\0`, `U+2028`, `U+2029` or `$`, or writes them single-quoted with `'` escaped (single-quoted values are not expanded);
   - never uses `String.replace` with a replacement string built from data (use a function replacer, or rebuild the file line by line as `config/route.ts` does).
 - Add `RAG_PRE_CONTEXT`, `RAG_POST_CONTEXT`, `NEXT_PUBLIC_*_MODELS` and `MCP_CUSTOM_SERVERS` to an explicit list of structured-value names that use that helper.
 - `get-env` should apply the same `isReadableEnvEntry` filter.
