@@ -70,6 +70,7 @@ export async function GET(req: NextRequest) {
                 scope: resolved.scope,
                 secret: env.RAG_VOICE_TOKEN_SECRET,
                 ttlSeconds: parseInt(env.RAG_VOICE_TOKEN_TTL_SECONDS || '3600', 10),
+                actorUserId: resolved.scope.kind === 'single' ? userId : null,
             });
             if (minted.ok) {
                 metadata = JSON.stringify({ rag_scope_token: minted.token });

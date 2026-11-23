@@ -50,8 +50,8 @@ async function loadRoute(mode: 'single-tenant' | 'multi-tenant'): Promise<RouteM
   return (await import('@/app/api/internal/voice-chat/route')) as unknown as RouteModule;
 }
 
-function token(scope: ReturnType<typeof mintScope>, secret = SECRET): string {
-  const minted = mintVoiceToken({ scope, secret, ttlSeconds: 600 });
+function token(scope: ReturnType<typeof mintScope>, secret = SECRET, actorUserId?: string): string {
+  const minted = mintVoiceToken({ scope, secret, ttlSeconds: 600, actorUserId });
   if (!minted.ok) throw new Error(`mint failed: ${minted.reason}`);
   return minted.token;
 }
@@ -132,11 +132,44 @@ describe('voice-chat route saves under the token tenant', () => {
     expect(insertedRows()).toEqual([]);
   });
 
-  it('a single-tenant token carries no user, so the save is refused as before for anonymous sessions', async () => {
+  it('a single-tenant token without an actor is refused as before for anonymous sessions', async () => {
     const { POST } = await loadRoute('single-tenant');
     const response = await POST(request({ messages: MESSAGES, userId: USER_A }, token(mintScope('single', null, null))));
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({ error: 'Missing userId' });
+    expect(insertedRows()).toEqual([]);
+  });
+
+  it('a single-tenant token with an actor saves under that actor with no organization', async () => {
+    const { POST } = await loadRoute('single-tenant');
+    const response = await POST(request({ messages: MESSAGES }, token(mintScope('single', null, null), SECRET, USER_A)));
+    expect(response.status).toBe(200);
+    const [row] = insertedRows();
+    expect(row).toMatchObject({ user_id: USER_A, organization_id: null, messages: MESSAGES });
+  });
+
+  it('a single-tenant save ignores a body userId that differs from the actor', async () => {
+    const { POST } = await loadRoute('single-tenant');
+    const response = await POST(request({ messages: MESSAGES, userId: USER_B, organizationId: ORG_O }, token(mintScope('single', null, null), SECRET, USER_A)));
+    expect(response.status).toBe(200);
+    const [row] = insertedRows();
+    expect(row).toMatchObject({ user_id: USER_A, organization_id: null });
+  });
+
+  it('a single-tenant token whose actor was swapped after signing is refused and writes nothing', async () => {
+    const { POST } = await loadRoute('single-tenant');
+    const [payloadB64, signature] = token(mintScope('single', null, null), SECRET, USER_A).split('.');
+    const claims = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf8')) as Record<string, unknown>;
+    const tampered = Buffer.from(JSON.stringify({ ...claims, act: USER_B }), 'utf8').toString('base64url');
+    const response = await POST(request({ messages: MESSAGES }, `${tampered}.${signature}`));
+    expect(response.status).toBe(401);
+    expect(insertedRows()).toEqual([]);
+  });
+
+  it('a multi-tenant token whose actor is not the scope user is refused and writes nothing', async () => {
+    const { POST } = await loadRoute('multi-tenant');
+    const response = await POST(request({ messages: MESSAGES }, token(mintScope('personal', USER_A, null), SECRET, USER_B)));
+    expect(response.status).toBe(401);
     expect(insertedRows()).toEqual([]);
   });
 

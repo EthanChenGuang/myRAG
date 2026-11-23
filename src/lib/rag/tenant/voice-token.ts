@@ -16,6 +16,8 @@ export interface VoiceTokenPayload {
   iat: number;
   exp: number;
   aud: 'voice-rag';
+  /** Authenticated session user the token was issued to; present only when the scope itself names no user. */
+  act?: string;
 }
 
 export type MintVoiceTokenResult =
@@ -32,6 +34,7 @@ export interface MintVoiceTokenInput {
   ttlSeconds?: number;
   /** Epoch milliseconds; defaults to the current time. */
   now?: number;
+  actorUserId?: string | null;
 }
 
 export interface VerifyVoiceTokenOptions {
@@ -71,6 +74,7 @@ export function mintVoiceToken(input: MintVoiceTokenInput): MintVoiceTokenResult
     iat,
     exp: iat + Math.floor(ttl),
     aud: VOICE_TOKEN_AUDIENCE,
+    ...(input.actorUserId ? { act: input.actorUserId } : {}),
   };
   const payloadB64 = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
   return { ok: true, token: `${payloadB64}.${hmac(input.secret, payloadB64)}`, payload };
@@ -110,6 +114,7 @@ export function verifyVoiceToken(token: unknown, options: VerifyVoiceTokenOption
     typeof claims.tk !== 'string' ||
     !isNullableString(claims.uid) ||
     !isNullableString(claims.oid) ||
+    (claims.act !== undefined && typeof claims.act !== 'string') ||
     !Number.isInteger(claims.iat) ||
     !Number.isInteger(claims.exp)
   ) {
@@ -126,6 +131,15 @@ export function verifyVoiceToken(token: unknown, options: VerifyVoiceTokenOption
 
   return {
     ok: true,
-    payload: { v: 1, tk: claims.tk, uid: claims.uid, oid: claims.oid, iat, exp, aud: VOICE_TOKEN_AUDIENCE },
+    payload: {
+      v: 1,
+      tk: claims.tk,
+      uid: claims.uid,
+      oid: claims.oid,
+      iat,
+      exp,
+      aud: VOICE_TOKEN_AUDIENCE,
+      ...(typeof claims.act === 'string' ? { act: claims.act } : {}),
+    },
   };
 }

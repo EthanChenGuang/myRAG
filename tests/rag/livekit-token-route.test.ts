@@ -160,7 +160,28 @@ describe('GET /api/livekit/token', () => {
     if (verified.ok) {
       expect(verified.payload.tk).toBe('s:default');
       expect(verified.payload.uid).toBeNull();
+      expect(verified.payload.act).toBeUndefined();
     }
+  });
+
+  test('single-tenant with a session carries the session user as the signed actor and keeps the default scope', async () => {
+    mode.value = 'single-tenant';
+    session.user = { id: USER_A };
+    const body = await (await GET(request())).json();
+    const metadata = JSON.parse(decodeJwt(body.token).metadata ?? '{}') as { rag_scope_token?: string };
+    const verified = verifyVoiceToken(metadata.rag_scope_token, { secret: voiceSecret });
+    expect(verified.ok).toBe(true);
+    if (verified.ok) {
+      expect(verified.payload).toMatchObject({ tk: 's:default', uid: null, oid: null, act: USER_A });
+    }
+  });
+
+  test('multi-tenant tokens carry no separate actor claim', async () => {
+    session.user = { id: USER_A };
+    const body = await (await GET(request(`?organizationId=${ORG_O}`))).json();
+    const metadata = JSON.parse(decodeJwt(body.token).metadata ?? '{}') as { rag_scope_token?: string };
+    const verified = verifyVoiceToken(metadata.rag_scope_token, { secret: voiceSecret });
+    expect(verified.ok && verified.payload.act).toBeFalsy();
   });
 
   test('multi-tenant without a session issues a LiveKit token without a voice token', async () => {
