@@ -6,8 +6,8 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 const INIT_ENV_PATH = path.join(REPO_ROOT, 'scripts/init-env.js');
 const PINNED_PATH = path.join(REPO_ROOT, 'eval/config/rag-eval-env.json');
 
-const EXCLUDED_PREFIXES = ['RAG_EVAL_', 'RAG_SIDECAR_'];
-const EXCLUDED_NAMES = new Set(['RAG_SYSTEM_PROMPT', 'RAG_PRE_CONTEXT', 'RAG_POST_CONTEXT']);
+const EXCLUDED_PREFIXES = ['RAG_EVAL_', 'RAG_SIDECAR_', 'RAG_VOICE_TOKEN_'];
+const EXCLUDED_NAMES = new Set(['RAG_SYSTEM_PROMPT', 'RAG_PRE_CONTEXT', 'RAG_POST_CONTEXT', 'RAG_EMBED_TENANT']);
 
 export function derivePinnedEvalEnv(initEnvText: string): Record<string, string> {
   const pinned: Record<string, string> = {};

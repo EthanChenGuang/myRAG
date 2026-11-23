@@ -2,6 +2,41 @@
   "schemaVersion": 1,
   "vars": [
     {
+      "name": "LANGFUSE_BASE_URL",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "LANGFUSE_CAPTURE_CONTENT",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "LANGFUSE_ENABLED",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "LANGFUSE_PUBLIC_KEY",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "LANGFUSE_REVIEW_SAMPLE_RATE",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "LANGFUSE_SAMPLE_RATE",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "LANGFUSE_SECRET_KEY",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "LLAMACLOUD_ADAPTIVE_LONG_TABLE",
       "status": "legacy",
       "knownGaps": []
@@ -180,6 +215,11 @@
       ]
     },
     {
+      "name": "RAG_DISABLED_STAGES",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "RAG_DIVERSITY_WEIGHT",
       "status": "legacy",
       "knownGaps": [
@@ -196,6 +236,11 @@
         "env-ts",
         "init-env"
       ]
+    },
+    {
+      "name": "RAG_EMBED_TENANT",
+      "status": "managed",
+      "knownGaps": []
     },
     {
       "name": "RAG_ENABLE_ADJACENT_CHUNKS",
@@ -263,8 +308,7 @@
       "name": "RAG_FINAL_RESULT_COUNT",
       "status": "legacy",
       "knownGaps": [
-        "config-ui",
-        "env-ts"
+        "config-ui"
       ]
     },
     {
@@ -365,6 +409,11 @@
       ]
     },
     {
+      "name": "RAG_PIPELINE",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "RAG_POST_CONTEXT",
       "status": "legacy",
       "knownGaps": []
@@ -422,6 +471,11 @@
       ]
     },
     {
+      "name": "RAG_STAGE_TIMEOUTS",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "RAG_SYSTEM_PROMPT",
       "status": "legacy",
       "knownGaps": [
@@ -451,6 +505,16 @@
       "knownGaps": [
         "env-ts"
       ]
+    },
+    {
+      "name": "RAG_VOICE_TOKEN_SECRET",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_VOICE_TOKEN_TTL_SECONDS",
+      "status": "managed",
+      "knownGaps": []
     }
   ]
 }

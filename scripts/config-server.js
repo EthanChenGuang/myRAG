@@ -204,7 +204,7 @@ app.post('/api/config', (req, res) => {
     // Filter out invalid environment variable names and template placeholders
     const fullValues = filterValidEnvVars(rawFullValues);
 
-    for (const name of ['RAG_EVAL_SECRET', 'RAG_SIDECAR_SECRET']) {
+    for (const name of ['RAG_EVAL_SECRET', 'RAG_SIDECAR_SECRET', 'RAG_VOICE_TOKEN_SECRET']) {
       const value = fullValues[name];
       if (typeof value === 'string' && value.length > 0 && value.length < 32) {
         console.warn(`[Config] ${name} is ${value.length} characters; at least 32 are required or the endpoint answers 503`);
@@ -533,6 +533,23 @@ ${fullValues.RAG_EVAL_SECRET !== undefined ? `RAG_EVAL_SECRET=${fullValues.RAG_E
 ${fullValues.RAG_EVAL_ALLOWED_SCOPES !== undefined ? `RAG_EVAL_ALLOWED_SCOPES=${fullValues.RAG_EVAL_ALLOWED_SCOPES}` : 'RAG_EVAL_ALLOWED_SCOPES='}
 ${fullValues.RAG_SIDECAR_URL !== undefined ? `RAG_SIDECAR_URL=${fullValues.RAG_SIDECAR_URL}` : 'RAG_SIDECAR_URL='}
 ${fullValues.RAG_SIDECAR_SECRET !== undefined ? `RAG_SIDECAR_SECRET=${fullValues.RAG_SIDECAR_SECRET}` : 'RAG_SIDECAR_SECRET='}
+
+# Retrieval pipeline
+${fullValues.RAG_PIPELINE !== undefined ? `RAG_PIPELINE=${fullValues.RAG_PIPELINE}` : 'RAG_PIPELINE=legacy'}
+${fullValues.RAG_DISABLED_STAGES !== undefined ? `RAG_DISABLED_STAGES=${fullValues.RAG_DISABLED_STAGES}` : 'RAG_DISABLED_STAGES='}
+${fullValues.RAG_STAGE_TIMEOUTS !== undefined ? `RAG_STAGE_TIMEOUTS=${fullValues.RAG_STAGE_TIMEOUTS}` : 'RAG_STAGE_TIMEOUTS='}
+${fullValues.RAG_EMBED_TENANT !== undefined ? `RAG_EMBED_TENANT=${fullValues.RAG_EMBED_TENANT}` : 'RAG_EMBED_TENANT='}
+${fullValues.RAG_VOICE_TOKEN_SECRET !== undefined ? `RAG_VOICE_TOKEN_SECRET=${fullValues.RAG_VOICE_TOKEN_SECRET}` : 'RAG_VOICE_TOKEN_SECRET='}
+${fullValues.RAG_VOICE_TOKEN_TTL_SECONDS !== undefined ? `RAG_VOICE_TOKEN_TTL_SECONDS=${fullValues.RAG_VOICE_TOKEN_TTL_SECONDS}` : 'RAG_VOICE_TOKEN_TTL_SECONDS=3600'}
+
+# Langfuse tracing
+${fullValues.LANGFUSE_ENABLED !== undefined ? `LANGFUSE_ENABLED=${fullValues.LANGFUSE_ENABLED}` : 'LANGFUSE_ENABLED=false'}
+${fullValues.LANGFUSE_PUBLIC_KEY !== undefined ? `LANGFUSE_PUBLIC_KEY=${fullValues.LANGFUSE_PUBLIC_KEY}` : 'LANGFUSE_PUBLIC_KEY='}
+${fullValues.LANGFUSE_SECRET_KEY !== undefined ? `LANGFUSE_SECRET_KEY=${fullValues.LANGFUSE_SECRET_KEY}` : 'LANGFUSE_SECRET_KEY='}
+${fullValues.LANGFUSE_BASE_URL !== undefined ? `LANGFUSE_BASE_URL=${fullValues.LANGFUSE_BASE_URL}` : 'LANGFUSE_BASE_URL=https://cloud.langfuse.com'}
+${fullValues.LANGFUSE_SAMPLE_RATE !== undefined ? `LANGFUSE_SAMPLE_RATE=${fullValues.LANGFUSE_SAMPLE_RATE}` : 'LANGFUSE_SAMPLE_RATE=0.1'}
+${fullValues.LANGFUSE_CAPTURE_CONTENT !== undefined ? `LANGFUSE_CAPTURE_CONTENT=${fullValues.LANGFUSE_CAPTURE_CONTENT}` : 'LANGFUSE_CAPTURE_CONTENT=false'}
+${fullValues.LANGFUSE_REVIEW_SAMPLE_RATE !== undefined ? `LANGFUSE_REVIEW_SAMPLE_RATE=${fullValues.LANGFUSE_REVIEW_SAMPLE_RATE}` : 'LANGFUSE_REVIEW_SAMPLE_RATE=0'}
 
 # Temporal and Financial Intelligence (Unified RAG)
 ${fullValues.RAG_TEMPORAL_BOOST !== undefined ? `RAG_TEMPORAL_BOOST=${fullValues.RAG_TEMPORAL_BOOST}` : 'RAG_TEMPORAL_BOOST=true'}
@@ -1285,6 +1302,21 @@ RAG_EVAL_SECRET=${getEnvValue('RAG_EVAL_SECRET') || ''}
 RAG_EVAL_ALLOWED_SCOPES=${getEnvValue('RAG_EVAL_ALLOWED_SCOPES') || ''}
 RAG_SIDECAR_URL=${getEnvValue('RAG_SIDECAR_URL') || ''}
 RAG_SIDECAR_SECRET=${getEnvValue('RAG_SIDECAR_SECRET') || ''}
+# Retrieval pipeline
+RAG_PIPELINE=${getEnvValue('RAG_PIPELINE') || 'legacy'}
+RAG_DISABLED_STAGES=${getEnvValue('RAG_DISABLED_STAGES') || ''}
+RAG_STAGE_TIMEOUTS=${getEnvValue('RAG_STAGE_TIMEOUTS') || ''}
+RAG_EMBED_TENANT=${getEnvValue('RAG_EMBED_TENANT') || ''}
+RAG_VOICE_TOKEN_SECRET=${getEnvValue('RAG_VOICE_TOKEN_SECRET') || ''}
+RAG_VOICE_TOKEN_TTL_SECONDS=${getEnvValue('RAG_VOICE_TOKEN_TTL_SECONDS') || '3600'}
+# Langfuse tracing
+LANGFUSE_ENABLED=${getEnvValue('LANGFUSE_ENABLED') || 'false'}
+LANGFUSE_PUBLIC_KEY=${getEnvValue('LANGFUSE_PUBLIC_KEY') || ''}
+LANGFUSE_SECRET_KEY=${getEnvValue('LANGFUSE_SECRET_KEY') || ''}
+LANGFUSE_BASE_URL=${getEnvValue('LANGFUSE_BASE_URL') || 'https://cloud.langfuse.com'}
+LANGFUSE_SAMPLE_RATE=${getEnvValue('LANGFUSE_SAMPLE_RATE') || '0.1'}
+LANGFUSE_CAPTURE_CONTENT=${getEnvValue('LANGFUSE_CAPTURE_CONTENT') || 'false'}
+LANGFUSE_REVIEW_SAMPLE_RATE=${getEnvValue('LANGFUSE_REVIEW_SAMPLE_RATE') || '0'}
 # LlamaCloud configuration
 LLAMACLOUD_PARSING_MODE=${getEnvValue('LLAMACLOUD_PARSING_MODE') || 'balanced'}
 LLAMACLOUD_CHUNK_STRATEGY=${getEnvValue('LLAMACLOUD_CHUNK_STRATEGY') || 'sentence'}
@@ -1604,6 +1636,21 @@ RAG_EVAL_SECRET=${getEnvValue('RAG_EVAL_SECRET') || ''}
 RAG_EVAL_ALLOWED_SCOPES=${getEnvValue('RAG_EVAL_ALLOWED_SCOPES') || ''}
 RAG_SIDECAR_URL=${getEnvValue('RAG_SIDECAR_URL') || ''}
 RAG_SIDECAR_SECRET=${getEnvValue('RAG_SIDECAR_SECRET') || ''}
+# Retrieval pipeline
+RAG_PIPELINE=${getEnvValue('RAG_PIPELINE') || 'legacy'}
+RAG_DISABLED_STAGES=${getEnvValue('RAG_DISABLED_STAGES') || ''}
+RAG_STAGE_TIMEOUTS=${getEnvValue('RAG_STAGE_TIMEOUTS') || ''}
+RAG_EMBED_TENANT=${getEnvValue('RAG_EMBED_TENANT') || ''}
+RAG_VOICE_TOKEN_SECRET=${getEnvValue('RAG_VOICE_TOKEN_SECRET') || ''}
+RAG_VOICE_TOKEN_TTL_SECONDS=${getEnvValue('RAG_VOICE_TOKEN_TTL_SECONDS') || '3600'}
+# Langfuse tracing
+LANGFUSE_ENABLED=${getEnvValue('LANGFUSE_ENABLED') || 'false'}
+LANGFUSE_PUBLIC_KEY=${getEnvValue('LANGFUSE_PUBLIC_KEY') || ''}
+LANGFUSE_SECRET_KEY=${getEnvValue('LANGFUSE_SECRET_KEY') || ''}
+LANGFUSE_BASE_URL=${getEnvValue('LANGFUSE_BASE_URL') || 'https://cloud.langfuse.com'}
+LANGFUSE_SAMPLE_RATE=${getEnvValue('LANGFUSE_SAMPLE_RATE') || '0.1'}
+LANGFUSE_CAPTURE_CONTENT=${getEnvValue('LANGFUSE_CAPTURE_CONTENT') || 'false'}
+LANGFUSE_REVIEW_SAMPLE_RATE=${getEnvValue('LANGFUSE_REVIEW_SAMPLE_RATE') || '0'}
 # LlamaCloud configuration
 LLAMACLOUD_PARSING_MODE=${getEnvValue('LLAMACLOUD_PARSING_MODE') || 'balanced'}
 LLAMACLOUD_CHUNK_STRATEGY=${getEnvValue('LLAMACLOUD_CHUNK_STRATEGY') || 'sentence'}

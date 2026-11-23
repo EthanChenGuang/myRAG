@@ -333,6 +333,37 @@ RAG_SIDECAR_URL=
 RAG_SIDECAR_SECRET=
 
 # -----------------------------
+# RETRIEVAL PIPELINE
+# -----------------------------
+# legacy keeps today's retrieval path; unified switches to the staged pipeline
+RAG_PIPELINE=legacy
+# Stages to skip, comma-separated (empty runs every stage)
+RAG_DISABLED_STAGES=
+# Per-stage time budgets as stage=ms,stage=ms (empty uses the built-in budgets)
+RAG_STAGE_TIMEOUTS=
+# Tenant for embedded chat: s:default | o:<uuid> | u:<uuid> (empty means s:default in single-tenant, fails closed in multi-tenant)
+RAG_EMBED_TENANT=
+# Signing secret for voice retrieval tokens (at least 32 characters)
+RAG_VOICE_TOKEN_SECRET=
+# Lifetime of a voice retrieval token in seconds
+RAG_VOICE_TOKEN_TTL_SECONDS=3600
+
+# -----------------------------
+# LANGFUSE TRACING
+# -----------------------------
+LANGFUSE_ENABLED=false
+LANGFUSE_PUBLIC_KEY=
+# Secret key (at least 32 characters)
+LANGFUSE_SECRET_KEY=
+LANGFUSE_BASE_URL=https://cloud.langfuse.com
+# Share of requests traced, 0 to 1
+LANGFUSE_SAMPLE_RATE=0.1
+# Send prompt and answer text to Langfuse (off keeps only metadata)
+LANGFUSE_CAPTURE_CONTENT=false
+# Share of traces queued for human review, 0 to 1
+LANGFUSE_REVIEW_SAMPLE_RATE=0
+
+# -----------------------------
 # RAG CONFIGURATION (Unified Optimized System)
 # -----------------------------
 # Unified RAG Settings - All features can be toggled individually

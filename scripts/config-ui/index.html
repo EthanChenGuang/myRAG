@@ -6401,6 +6401,166 @@
                                     </div>
                                 </div>
 
+                                <!-- Retrieval pipeline -->
+                                <div class="card bg-base-200 shadow-md mt-6">
+                                    <div class="card-body">
+                                        <h3 class="text-lg font-semibold mb-2">Retrieval pipeline</h3>
+                                        <p class="text-base-content/70 mb-4">Selects the retrieval pipeline and its per-stage controls. Leave the defaults to keep the current behaviour.</p>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">Pipeline</span>
+                                            </label>
+                                            <input type="text" id="RAG_PIPELINE"
+                                                placeholder="legacy"
+                                                class="input input-bordered w-full">
+                                            <label class="label">
+                                                <span class="label-text-alt">legacy keeps the current retrieval path; unified uses the staged pipeline.</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">Disabled stages</span>
+                                            </label>
+                                            <input type="text" id="RAG_DISABLED_STAGES"
+                                                placeholder="stage,stage"
+                                                class="input input-bordered w-full">
+                                            <label class="label">
+                                                <span class="label-text-alt">Comma-separated optional stages to skip; empty runs every stage.</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">Stage timeouts</span>
+                                            </label>
+                                            <input type="text" id="RAG_STAGE_TIMEOUTS"
+                                                placeholder="stage=ms,stage=ms"
+                                                class="input input-bordered w-full">
+                                            <label class="label">
+                                                <span class="label-text-alt">Per-stage time budgets in milliseconds; empty uses the built-in budgets.</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">Embedded chat tenant</span>
+                                            </label>
+                                            <input type="text" id="RAG_EMBED_TENANT"
+                                                placeholder="s:default"
+                                                class="input input-bordered w-full">
+                                            <label class="label">
+                                                <span class="label-text-alt">s:default, o:&lt;uuid&gt; or u:&lt;uuid&gt;. Empty means s:default in single-tenant and fails closed in multi-tenant.</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">Voice token secret</span>
+                                            </label>
+                                            <div class="flex gap-2">
+                                                <input type="password" id="RAG_VOICE_TOKEN_SECRET"
+                                                    placeholder="At least 32 characters"
+                                                    class="input input-bordered flex-1 w-full">
+                                                <button class="btn btn-square btn-outline"
+                                                    data-for="RAG_VOICE_TOKEN_SECRET">👁️</button>
+                                            </div>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">Voice token lifetime (seconds)</span>
+                                            </label>
+                                            <input type="text" id="RAG_VOICE_TOKEN_TTL_SECONDS"
+                                                placeholder="3600"
+                                                class="input input-bordered w-full">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Langfuse tracing -->
+                                <div class="card bg-base-200 shadow-md mt-6">
+                                    <div class="card-body">
+                                        <h3 class="text-lg font-semibold mb-2">Langfuse tracing</h3>
+                                        <p class="text-base-content/70 mb-4">Optional tracing of retrieval requests. Off by default; the secret key stays on the server.</p>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label cursor-pointer justify-start gap-3">
+                                                <input type="checkbox" id="LANGFUSE_ENABLED"
+                                                    class="toggle toggle-primary">
+                                                <span class="label-text">Enable Langfuse tracing</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">Public key</span>
+                                            </label>
+                                            <input type="text" id="LANGFUSE_PUBLIC_KEY"
+                                                placeholder=""
+                                                class="input input-bordered w-full">
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">Secret key</span>
+                                            </label>
+                                            <div class="flex gap-2">
+                                                <input type="password" id="LANGFUSE_SECRET_KEY"
+                                                    placeholder=""
+                                                    class="input input-bordered flex-1 w-full">
+                                                <button class="btn btn-square btn-outline"
+                                                    data-for="LANGFUSE_SECRET_KEY">👁️</button>
+                                            </div>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">Base URL</span>
+                                            </label>
+                                            <input type="text" id="LANGFUSE_BASE_URL"
+                                                placeholder="https://cloud.langfuse.com"
+                                                class="input input-bordered w-full">
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">Trace sample rate</span>
+                                            </label>
+                                            <input type="text" id="LANGFUSE_SAMPLE_RATE"
+                                                placeholder="0.1"
+                                                class="input input-bordered w-full">
+                                            <label class="label">
+                                                <span class="label-text-alt">Share of requests traced, 0 to 1.</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label cursor-pointer justify-start gap-3">
+                                                <input type="checkbox" id="LANGFUSE_CAPTURE_CONTENT"
+                                                    class="toggle toggle-primary">
+                                                <span class="label-text">Send prompt and answer text</span>
+                                            </label>
+                                            <label class="label">
+                                                <span class="label-text-alt text-warning">When off, only metadata is sent to Langfuse.</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">Review sample rate</span>
+                                            </label>
+                                            <input type="text" id="LANGFUSE_REVIEW_SAMPLE_RATE"
+                                                placeholder="0"
+                                                class="input input-bordered w-full">
+                                            <label class="label">
+                                                <span class="label-text-alt">Share of traces queued for human review, 0 to 1. Exported text is PII-masked.</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <!-- Info Box -->
                                 <div class="alert alert-info mt-6">
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
@@ -9136,7 +9296,7 @@
                     this.showSaveIndicator();
                     console.log('Config saved successfully');
 
-                    const shortSecrets = ['RAG_EVAL_SECRET', 'RAG_SIDECAR_SECRET'].filter((name) => {
+                    const shortSecrets = ['RAG_EVAL_SECRET', 'RAG_SIDECAR_SECRET', 'RAG_VOICE_TOKEN_SECRET'].filter((name) => {
                         const value = this.config[name];
                         return typeof value === 'string' && value.length > 0 && value.length < 32;
                     });
