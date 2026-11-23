@@ -8,7 +8,7 @@ import {
   WhatsAppErrorCodes,
   WhatsAppMediaUploadResponse
 } from './types';
-import { BaseWhatsAppClient } from './base-client';
+import { BaseWhatsAppClient, toBlobPart } from './base-client';
 
 /**
  * Fly.io Baileys API Client
@@ -44,9 +44,9 @@ export class FlyioWhatsAppClient extends BaseWhatsAppClient {
   ): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
     
-    const headers: HeadersInit = {
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      ...options.headers
+      ...(options.headers as Record<string, string> | undefined)
     };
 
     if (this.apiKey) {
@@ -455,7 +455,7 @@ export class FlyioWhatsAppClient extends BaseWhatsAppClient {
     logger.info('FlyioWhatsAppClient', `Uploading media for session: ${sessionId}`);
     
     const formData = new FormData();
-    const blob = new Blob([file], { type: mimeType });
+    const blob = new Blob([toBlobPart(file)], { type: mimeType });
     formData.append('file', blob, filename);
     formData.append('sessionId', sessionId);
 

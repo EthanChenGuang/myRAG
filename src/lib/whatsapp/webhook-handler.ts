@@ -98,7 +98,7 @@ export class WhatsAppWebhookHandler {
         logger.info('WhatsAppWebhookHandler', 'Koyeb session status:', status);
         
         // If Koyeb says it's connected but our DB says otherwise, update it
-        if (status.connected && session.status !== 'connected') {
+        if (status.isConnected) {
           logger.info('WhatsAppWebhookHandler', 'Updating session status to connected based on Koyeb status');
           await this.sessionManager.updateSessionStatus(sessionId, 'connected', {
             phoneNumber: whatsappJid.replace('@s.whatsapp.net', '')
@@ -467,7 +467,7 @@ export class WhatsAppWebhookHandler {
                 }
               } catch (e) {
                 // If JSON parsing fails, log the error and the problematic content
-                logger.warn('WhatsAppWebhookHandler', `[STREAM DEBUG] Failed to parse content: ${e.message}`);
+                logger.warn('WhatsAppWebhookHandler', `[STREAM DEBUG] Failed to parse content: ${e instanceof Error ? e.message : String(e)}`);
                 logger.warn('WhatsAppWebhookHandler', `[STREAM DEBUG] Problematic content: ${contentPart.substring(0, 100)}`);
 
                 // Try alternative parsing - remove quotes and use as-is
