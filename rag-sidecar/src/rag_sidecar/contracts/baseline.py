@@ -2,7 +2,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from rag_sidecar.contracts.eval_run import GoldenFilter
+from rag_sidecar.contracts.eval_run import GoldenFilter, RagRunOptions
 
 
 def _default_metric_directions() -> dict[str, Literal["higher", "lower"]]:
@@ -36,11 +36,15 @@ class BaselineRun(_Contract):
 class Baseline(_Contract):
     schema_version: Literal[1] = 1
     spread_kind: Literal["stdev_ddof1"]
+    tier: Literal["smoke", "nightly", "live"]
+    deployment_mode: str
+    request_options: RagRunOptions
     corpus_sha256: str | None = None
     golden_sha256: str
     golden_filter: GoldenFilter
     embedder_id: str | None = None
     embedder_version: int | None = None
+    embedder_source_sha256: str | None = None
     run_config_hash: str
     runs: list[BaselineRun] = Field(min_length=3)
     slices: dict[str, dict[str, BaselineMetricStat]]

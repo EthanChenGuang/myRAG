@@ -127,6 +127,7 @@ def test_build_report_validates_and_copies_manifest_fields():
     assert report.corpus_sha256 == "c" * 64
     assert report.embedder_id == "fixture-embedder"
     assert report.embedder_version == 3
+    assert report.embedder_source_sha256 == "e" * 64
     assert report.request_options.max_results == 10
     assert len(report.items) == 4
     assert set(report.by_language) == {"zh", "it", "en"}

@@ -58,6 +58,7 @@ def build_report(manifest: RunManifest, results: list[ItemResult], golden: list[
         golden_filter=manifest.golden_filter,
         embedder_id=embedder.id if embedder else None,
         embedder_version=_embedder_version(embedder.version) if embedder else None,
+        embedder_source_sha256=embedder.source_sha256 if embedder else None,
         deployment_mode=manifest.deployment_mode,
         request_options=manifest.request_options,
         k_values=list(K_VALUES),

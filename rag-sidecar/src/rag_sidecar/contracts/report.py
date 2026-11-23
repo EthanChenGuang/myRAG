@@ -46,6 +46,7 @@ class EvalReport(_Contract):
     golden_filter: GoldenFilter
     embedder_id: str | None = None
     embedder_version: int | None = None
+    embedder_source_sha256: str | None = None
     deployment_mode: str
     request_options: RagRunOptions
     k_values: list[int]

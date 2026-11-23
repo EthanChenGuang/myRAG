@@ -4,6 +4,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 from rag_sidecar.contracts.baseline import Baseline, GateOffender, GateResult, NoiseConfig
+from rag_sidecar.contracts.eval_run import RagRunOptions
 from rag_sidecar.contracts.report import EvalReport, SliceMetrics
 
 from rag_eval.paths import resolve_cli_path
@@ -23,6 +24,10 @@ def _report_slices(report: EvalReport) -> dict[str, SliceMetrics]:
     return slices
 
 
+def _scope(options: RagRunOptions) -> dict[str, object]:
+    return options.model_dump(exclude={"max_results"})
+
+
 def _mismatches(report: EvalReport, baseline: Baseline) -> list[str]:
     problems: list[str] = []
     checks = (
@@ -30,6 +35,10 @@ def _mismatches(report: EvalReport, baseline: Baseline) -> list[str]:
         ("corpus_sha256", report.corpus_sha256, baseline.corpus_sha256),
         ("embedder_id", report.embedder_id, baseline.embedder_id),
         ("embedder_version", report.embedder_version, baseline.embedder_version),
+        ("embedder_source_sha256", report.embedder_source_sha256, baseline.embedder_source_sha256),
+        ("tier", report.tier, baseline.tier),
+        ("deployment_mode", report.deployment_mode, baseline.deployment_mode),
+        ("request_options (excluding max_results)", _scope(report.request_options), _scope(baseline.request_options)),
     )
     if report.golden_filter != baseline.golden_filter:
         problems.append(

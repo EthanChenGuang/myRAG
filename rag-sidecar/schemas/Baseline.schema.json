@@ -111,6 +111,63 @@
       ],
       "title": "GoldenFilter",
       "type": "object"
+    },
+    "RagRunOptions": {
+      "additionalProperties": false,
+      "properties": {
+        "generator_model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Generator Model"
+        },
+        "max_results": {
+          "anyOf": [
+            {
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Results"
+        },
+        "organization_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Organization Id"
+        },
+        "user_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "User Id"
+        }
+      },
+      "title": "RagRunOptions",
+      "type": "object"
     }
   },
   "additionalProperties": false,
@@ -127,6 +184,10 @@
       "default": null,
       "title": "Corpus Sha256"
     },
+    "deployment_mode": {
+      "title": "Deployment Mode",
+      "type": "string"
+    },
     "embedder_id": {
       "anyOf": [
         {
@@ -138,6 +199,18 @@
       ],
       "default": null,
       "title": "Embedder Id"
+    },
+    "embedder_source_sha256": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Embedder Source Sha256"
     },
     "embedder_version": {
       "anyOf": [
@@ -157,6 +230,9 @@
     "golden_sha256": {
       "title": "Golden Sha256",
       "type": "string"
+    },
+    "request_options": {
+      "$ref": "#/$defs/RagRunOptions"
     },
     "run_config_hash": {
       "title": "Run Config Hash",
@@ -190,10 +266,22 @@
       "const": "stdev_ddof1",
       "title": "Spread Kind",
       "type": "string"
+    },
+    "tier": {
+      "enum": [
+        "smoke",
+        "nightly",
+        "live"
+      ],
+      "title": "Tier",
+      "type": "string"
     }
   },
   "required": [
     "spread_kind",
+    "tier",
+    "deployment_mode",
+    "request_options",
     "golden_sha256",
     "golden_filter",
     "run_config_hash",

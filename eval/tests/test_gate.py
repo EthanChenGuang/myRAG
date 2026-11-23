@@ -55,6 +55,9 @@ def _baseline(overall_spread: float = 0.0, **fields) -> Baseline:
     }
     data = {
         "spread_kind": "stdev_ddof1",
+        "tier": "smoke",
+        "deployment_mode": "single-tenant",
+        "request_options": {},
         "corpus_sha256": "c" * 64,
         "golden_sha256": "g" * 64,
         "golden_filter": {"review_statuses": ["approved"], "gate_split": "dev"},
@@ -172,6 +175,12 @@ def test_data_mismatch_exits_2_but_config_difference_does_not(tmp_path):
     assert run(_report(embedder_version=4)) == 2
     assert run(_report(embedder_id="other")) == 2
     assert run(_report(run_config_hash="z" * 64, request_options={"max_results": 1})) == 0
+    assert run(_report(deployment_mode="multi-tenant")) == 2
+    assert run(_report(tier="live")) == 2
+    assert run(_report(embedder_source_sha256="s" * 64)) == 2
+    assert run(_report(request_options={"organization_id": "11111111-1111-4111-8111-111111111111"})) == 2
+    assert run(_report(request_options={"user_id": "33333333-3333-4333-8333-333333333333", "max_results": 1})) == 2
+    assert run(_report(request_options={"generator_model": "openai/gpt-4.1-mini"})) == 2
 
 
 def test_invalid_input_exits_2(tmp_path):

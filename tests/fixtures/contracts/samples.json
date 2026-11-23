@@ -2,7 +2,9 @@
   "samples": {
     "Baseline": {
       "corpus_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "deployment_mode": "single-tenant",
       "embedder_id": "fixture-embedder",
+      "embedder_source_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "embedder_version": 1,
       "golden_filter": {
         "gate_split": "dev",
@@ -11,6 +13,12 @@
         ]
       },
       "golden_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "request_options": {
+        "generator_model": null,
+        "max_results": 10,
+        "organization_id": null,
+        "user_id": null
+      },
       "run_config_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "runs": [
         {
@@ -87,7 +95,8 @@
           }
         }
       },
-      "spread_kind": "stdev_ddof1"
+      "spread_kind": "stdev_ddof1",
+      "tier": "smoke"
     },
     "ConversationTurn": {
       "content": "Tell me about leave.",
@@ -212,6 +221,7 @@
       "corpus_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       "deployment_mode": "single-tenant",
       "embedder_id": "fixture-embedder",
+      "embedder_source_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "embedder_version": 1,
       "golden_filter": {
         "gate_split": "dev",

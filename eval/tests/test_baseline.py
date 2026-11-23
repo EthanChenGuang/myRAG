@@ -124,3 +124,12 @@ def test_cli_exits_1_on_non_deterministic_runs_without_writing(tmp_path, monkeyp
     assert not target.exists()
     assert "overall mrr" in capsys.readouterr().err
     assert run_dirs == [f"eval/out/baseline/run-{i}" for i in (1, 2, 3)]
+
+
+def test_baseline_carries_run_identity_and_refuses_mixed_deployments():
+    baseline = record_baseline([_report("a"), _report("b"), _report("c")])
+    assert (baseline.tier, baseline.deployment_mode) == ("smoke", "single-tenant")
+    assert baseline.request_options.organization_id is None
+    other = _report("c").model_copy(update={"deployment_mode": "multi-tenant"})
+    with pytest.raises(NonDeterministicRunError, match="deployment_mode"):
+        record_baseline([_report("a"), _report("b"), other])

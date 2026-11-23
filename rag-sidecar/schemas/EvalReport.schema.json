@@ -288,6 +288,18 @@
       "default": null,
       "title": "Embedder Id"
     },
+    "embedder_source_sha256": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Embedder Source Sha256"
+    },
     "embedder_version": {
       "anyOf": [
         {

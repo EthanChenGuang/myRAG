@@ -181,6 +181,7 @@ def _eval_report() -> EvalReport:
         golden_filter=_golden_filter(),
         embedder_id="fixture-embedder",
         embedder_version=1,
+        embedder_source_sha256=_HASH_A,
         deployment_mode="single-tenant",
         request_options=RagRunOptions(max_results=10, generator_model=None),
         k_values=[5, 10],
@@ -220,11 +221,15 @@ def _baseline() -> Baseline:
     ]
     return Baseline(
         spread_kind="stdev_ddof1",
+        tier="smoke",
+        deployment_mode="single-tenant",
+        request_options=RagRunOptions(max_results=10),
         corpus_sha256=_HASH_B,
         golden_sha256=_HASH_C,
         golden_filter=_golden_filter(),
         embedder_id="fixture-embedder",
         embedder_version=1,
+        embedder_source_sha256=_HASH_A,
         run_config_hash=_HASH_A,
         runs=runs,
         slices={"overall": {name: stat for name in _METRICS}},

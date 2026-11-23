@@ -94,6 +94,9 @@ def _baseline(runs=3, **overrides):
     base = {
         "schema_version": 1,
         "spread_kind": "stdev_ddof1",
+        "tier": "smoke",
+        "deployment_mode": "single",
+        "request_options": {},
         "corpus_sha256": "b" * 64,
         "golden_sha256": "c" * 64,
         "golden_filter": {"review_statuses": ["approved"], "gate_split": "dev"},

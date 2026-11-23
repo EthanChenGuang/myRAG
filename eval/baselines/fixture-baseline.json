@@ -1,6 +1,8 @@
 {
   "corpus_sha256": "dd161ceaab5f54f750a7e201e7fb47bac6a1792871e41614b99340e2a0ba4c11",
+  "deployment_mode": "single-tenant",
   "embedder_id": "fixture-ngram",
+  "embedder_source_sha256": "c02cb693ac0518b75b17548283efe9dae572801c23d0fe45a7665b22bc2a6647",
   "embedder_version": 1,
   "golden_filter": {
     "gate_split": "dev",
@@ -9,25 +11,31 @@
     ]
   },
   "golden_sha256": "a124a4eb2c6e45a4a6f983d5f0d96eda1ba67b9a2bed5457ff074496055a62ff",
+  "request_options": {
+    "generator_model": null,
+    "max_results": null,
+    "organization_id": null,
+    "user_id": null
+  },
   "run_config_hash": "a53601b698a2b189f5c99a0205af501727ca4123ef6923e126ca78cddd4163c9",
   "runs": [
     {
-      "created_at": "2026-11-23T11:43:25Z",
-      "git_sha": "6405d31b8e6f7b18b84e0e23cdf67743383c759b",
+      "created_at": "2026-11-23T11:46:35Z",
+      "git_sha": "c5c49b0755c2c93fae45bf34a4ac96c5ff94b485",
       "run_config_hash": "a53601b698a2b189f5c99a0205af501727ca4123ef6923e126ca78cddd4163c9",
-      "run_id": "31afb23d-1a93-4972-90cd-54d980892a04"
+      "run_id": "65ce6925-c6ea-4ec1-912f-b1f2f47c3dab"
     },
     {
-      "created_at": "2026-11-23T11:43:30Z",
-      "git_sha": "6405d31b8e6f7b18b84e0e23cdf67743383c759b",
+      "created_at": "2026-11-23T11:46:40Z",
+      "git_sha": "c5c49b0755c2c93fae45bf34a4ac96c5ff94b485",
       "run_config_hash": "a53601b698a2b189f5c99a0205af501727ca4123ef6923e126ca78cddd4163c9",
-      "run_id": "67d5ad2b-28e9-4743-8c69-d084f39a9b2e"
+      "run_id": "f3037023-2c22-4a83-a265-38f19538bad3"
     },
     {
-      "created_at": "2026-11-23T11:43:34Z",
-      "git_sha": "6405d31b8e6f7b18b84e0e23cdf67743383c759b",
+      "created_at": "2026-11-23T11:46:44Z",
+      "git_sha": "c5c49b0755c2c93fae45bf34a4ac96c5ff94b485",
       "run_config_hash": "a53601b698a2b189f5c99a0205af501727ca4123ef6923e126ca78cddd4163c9",
-      "run_id": "fa30ec5a-10aa-4031-88d5-8ff74f5530fc"
+      "run_id": "142d2638-76d3-4f40-bd01-0ed9ebc2e2ad"
     }
   ],
   "schema_version": 1,
@@ -605,5 +613,6 @@
       }
     }
   },
-  "spread_kind": "stdev_ddof1"
+  "spread_kind": "stdev_ddof1",
+  "tier": "smoke"
 }
