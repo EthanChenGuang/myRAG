@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { embedText } from '@/lib/rag';
+import { embedText, repairOwnerMembership, resolveTenantScope } from '@/lib/rag';
+import { isMultiTenant } from '@/lib/deployment-mode';
 import { v4 as uuidv4 } from 'uuid';
 import { env } from '@/lib/env';
 import OpenAI from 'openai';
@@ -89,7 +90,7 @@ async function generateTitle(content: string): Promise<string> {
     const title = response.choices[0]?.message?.content?.trim() || 'AI Response';
     return title;
   } catch (error) {
-    console.error('Error generating title:', error);
+    console.error('[AI to RAG] Title generation failed:', error instanceof Error ? error.message : 'unknown error');
     // Fallback: Extract first sentence or use default
     const firstSentence = content.match(/^[^.!?]+[.!?]/)?.[0]?.trim();
     return firstSentence ? firstSentence.substring(0, 50) + '...' : 'AI Response';
@@ -107,7 +108,7 @@ async function storeAIResponseAsDocument(
     chatId?: string;
     generatedAt: string;
   },
-  userId: string
+  owner: { userId: string; organizationId?: string | null }
 ) {
   const documentId = uuidv4();
   const filename = `${title} - ${new Date().toISOString().split('T')[0]}.md`;
@@ -121,13 +122,14 @@ async function storeAIResponseAsDocument(
         filename: filename,
         content: content,
         metadata: metadata,
-        user_id: userId
+        user_id: owner.userId,
+        ...(owner.organizationId !== undefined ? { organization_id: owner.organizationId } : {})
       }])
       .select()
       .single();
 
     if (documentError) {
-      console.error('Error storing document:', documentError);
+      console.error('[AI to RAG] Document insert failed:', documentError.message);
       throw documentError;
     }
 
@@ -150,11 +152,11 @@ async function storeAIResponseAsDocument(
                 id: uuidv4(),
                 document_id: documentId,
                 content: batch[index],
-                embedding: result.value
+                embedding: result.value,
+                ...(owner.organizationId !== undefined ? { organization_id: owner.organizationId } : {})
               };
             }
-            console.error(`Failed to generate embedding for chunk at index ${i + index}:`,
-              result.status === 'rejected' ? result.reason : 'Unknown error');
+            console.error('[AI to RAG] Embedding failed for chunk', { index: i + index });
             return null;
           })
           .filter(Boolean);
@@ -165,13 +167,13 @@ async function storeAIResponseAsDocument(
             .insert(chunkInserts);
 
           if (chunkError) {
-            console.error(`Error storing chunk batch:`, chunkError);
+            console.error('[AI to RAG] Chunk batch insert failed:', chunkError.message);
           } else {
             successfulChunks += chunkInserts.length;
           }
         }
       } catch (batchError) {
-        console.error(`Error processing batch:`, batchError);
+        console.error('[AI to RAG] Chunk batch failed:', batchError instanceof Error ? batchError.message : 'unknown error');
       }
     }
 
@@ -182,48 +184,96 @@ async function storeAIResponseAsDocument(
       totalChunks: chunks.length
     };
   } catch (error) {
-    console.error('Error in storeAIResponseAsDocument:', error);
     throw error;
   }
 }
 
 export async function POST(req: Request) {
   try {
-    const { content, messageId, chatId, userId } = await req.json();
+    let sessionUserPromise: Promise<{ id: string } | null> | null = null;
+    const getSessionUser = () => {
+      sessionUserPromise ??= (async () => {
+        const { createClient: createSSRClient } = await import('@/lib/supabase/server');
+        const sbSSR = await createSSRClient();
+        const { data: userRes } = await sbSSR.auth.getUser();
+        return userRes?.user?.id ? { id: userRes.user.id } : null;
+      })();
+      return sessionUserPromise;
+    };
 
-    if (!content) {
+    let sessionUser: { id: string } | null;
+    try {
+      sessionUser = await getSessionUser();
+    } catch {
+      console.error('[AI to RAG] Session lookup failed');
+      return NextResponse.json({ error: 'Authentication unavailable' }, { status: 503 });
+    }
+    if (!sessionUser) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    let body: Record<string, unknown>;
+    try {
+      const parsed = await req.json();
+      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+        return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
+      }
+      body = parsed as Record<string, unknown>;
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    }
+    const { content, messageId, chatId, userId: bodyUserId, organizationId: bodyOrganizationId } = body;
+
+    if (bodyUserId !== undefined && bodyUserId !== null && bodyUserId !== '') {
+      if (typeof bodyUserId !== 'string' || bodyUserId.toLowerCase() !== sessionUser.id.toLowerCase()) {
+        console.warn('[AI to RAG] Body user does not match the session user');
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+    }
+
+    if (typeof content !== 'string' || !content) {
       return NextResponse.json({ error: 'No content provided' }, { status: 400 });
     }
 
-    if (!userId) {
-      return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
+    await repairOwnerMembership({ requestedOrganizationId: bodyOrganizationId, getUser: getSessionUser });
+    const tenant = await resolveTenantScope({
+      requestedOrganizationId: typeof bodyOrganizationId === 'string' ? bodyOrganizationId : null,
+      getUser: getSessionUser,
+      signal: req.signal,
+    });
+    if (!tenant.ok) {
+      const error =
+        tenant.status === 403 ? 'Forbidden' : tenant.status === 401 ? 'Unauthorized' : 'Workspace verification unavailable';
+      return NextResponse.json({ error }, { status: tenant.status });
+    }
+    if (!tenant.scope) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    console.log('Processing AI response for RAG:', {
-      contentLength: content.length,
-      messageId,
-      chatId,
-      userId
-    });
+    const owner = {
+      userId: sessionUser.id,
+      ...(isMultiTenant() ? { organizationId: tenant.scope.organizationId } : {}),
+    };
 
-    // Generate a title for the document
+    console.log('[AI to RAG] Processing AI response', { contentLength: content.length });
+
     const title = await generateTitle(content);
-    console.log('Generated title:', title);
 
-    // Create chunks from the content
     const chunks = createTokenBasedChunks(content, 600, 100);
-    console.log(`Created ${chunks.length} chunks from AI response`);
 
-    // Store the document and chunks
     const metadata = {
       source: 'ai_response',
-      messageId,
-      chatId,
+      messageId: messageId as string,
+      chatId: chatId as string | undefined,
       generatedAt: new Date().toISOString(),
     };
 
-    const result = await storeAIResponseAsDocument(title, content, chunks, metadata, userId);
-    console.log('Successfully stored AI response as document:', result);
+    const result = await storeAIResponseAsDocument(title, content, chunks, metadata, owner);
+    console.log('[AI to RAG] Stored AI response as document', {
+      documentId: result.documentId,
+      chunksStored: result.successfulChunks,
+      totalChunks: result.totalChunks,
+    });
 
     return NextResponse.json({
       success: true,
@@ -235,10 +285,7 @@ export async function POST(req: Request) {
     });
 
   } catch (error) {
-    console.error('Error processing AI response for RAG:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Internal server error' },
-      { status: 500 }
-    );
+    console.error('[AI to RAG] Request failed:', error instanceof Error ? error.message : 'unknown error');
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
