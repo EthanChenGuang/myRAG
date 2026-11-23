@@ -117,7 +117,7 @@ function toVectorText(value: unknown, argName: string): string {
   throw new Rejection(400, `${argName} must be an array of numbers or pgvector text`);
 }
 
-function createHandlers(db: PGlite, calls: FakeEdgeCall[]) {
+function createHandlers(db: PGlite, calls: FakeEdgeCall[], extras: { documentFilenameFilter: boolean }) {
   function embeddings(body: Record<string, unknown>): { payload: unknown } {
     const { input, model, encoding_format: encodingFormat, dimensions } = body;
     if (dimensions !== undefined && dimensions !== 1536) throw new Rejection(400, 'only 1536 dimensions are supported');
@@ -165,7 +165,8 @@ function createHandlers(db: PGlite, calls: FakeEdgeCall[]) {
 
     const filters = TABLE_FILTERS[table] ?? {};
     for (const key of new Set(params.keys())) {
-      const supported = key === 'select' || key === 'limit' || key in filters || (table === OR_TABLE && (key === 'or' || key === IMAGE_URL_PARAM));
+      const filenameFilter = extras.documentFilenameFilter && table === 'documents' && key === 'filename';
+      const supported = key === 'select' || key === 'limit' || key in filters || filenameFilter || (table === OR_TABLE && (key === 'or' || key === IMAGE_URL_PARAM));
       if (!supported) throw new Rejection(400, `unsupported query parameter: ${key}`);
     }
     const select = params.get('select');
@@ -199,6 +200,13 @@ function createHandlers(db: PGlite, calls: FakeEdgeCall[]) {
       } else {
         throw new Rejection(400, `unsupported operator on ${column}: ${raw.split('.')[0]}`);
       }
+    }
+
+    const filenameRaw = extras.documentFilenameFilter && table === 'documents' ? params.get('filename') : null;
+    if (filenameRaw !== null) {
+      if (filenameRaw.startsWith('eq.')) where.push(`"filename" = ${bind(filenameRaw.slice(3))}`);
+      else if (filenameRaw.startsWith('ilike.')) where.push(`"filename" ILIKE ${bind(filenameRaw.slice(6))}`);
+      else throw new Rejection(400, `unsupported operator on filename: ${filenameRaw.split('.')[0]}`);
     }
 
     if (table === OR_TABLE) {
@@ -253,10 +261,16 @@ function createHandlers(db: PGlite, calls: FakeEdgeCall[]) {
   return { embeddings, rpc, read };
 }
 
-export async function startFakeEdge(options: { db: PGlite }): Promise<FakeEdge> {
+export interface FakeEdgeOptions {
+  db: PGlite;
+  /** Opt in to filename eq / ilike filters on documents (the chat route resolves @mentions that way). Off by default. */
+  documentFilenameFilter?: boolean;
+}
+
+export async function startFakeEdge(options: FakeEdgeOptions): Promise<FakeEdge> {
   const errors: FakeEdgeError[] = [];
   const calls: FakeEdgeCall[] = [];
-  const handlers = createHandlers(options.db, calls);
+  const handlers = createHandlers(options.db, calls, { documentFilenameFilter: options.documentFilenameFilter === true });
 
   let queue: Promise<void> = Promise.resolve();
   const enqueue = (task: () => Promise<void>): Promise<void> => {
