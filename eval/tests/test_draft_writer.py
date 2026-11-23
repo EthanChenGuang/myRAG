@@ -240,3 +240,20 @@ def test_nothing_is_written_when_there_are_no_valid_items(private_out):
     out, manifest = private_out
     result = write_drafted_items([_entry("no evidence", gold_evidence=[])], out, manifest_path=manifest)
     assert result.written == [] and not out.exists()
+
+
+def test_a_reviewer_edited_question_does_not_abort_the_next_run(private_out):
+    out, manifest = private_out
+    original = "What is the annual refund window?"
+    first = write_drafted_items([_entry(original)], out, manifest_path=manifest)
+    assert len(first.written) == 1
+    edited = [item.model_copy(update={"question": "What is the refund window for annual plans?"}) for item in load_golden(out)]
+    result = write_drafted_items(
+        [_entry(original), _entry("How long do I have to ask for a refund?")],
+        out,
+        existing_items=edited,
+        manifest_path=manifest,
+    )
+    assert result.duplicates == 1 and len(result.written) == 1
+    questions = sorted(item.question for item in load_golden(out))
+    assert questions == ["How long do I have to ask for a refund?", "What is the refund window for annual plans?"]
