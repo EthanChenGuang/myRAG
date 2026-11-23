@@ -19,7 +19,7 @@ All requirements are written so they can be checked. "Behind a switch" means an 
 - [ ] **EVAL-08**: The eval runner computes Faithfulness, Answer Relevance and Context Recall with DeepEval and Ragas using a pinned judge model from a different family than the generator, with telemetry disabled, and reports results per language and per category
 - [ ] **EVAL-09**: A baseline of the current system is recorded (three runs, config hash per run, mean and spread), and later phases compare against it with paired differences
 - [ ] **EVAL-10**: CI (new `.github/workflows`) runs a PR smoke tier (deterministic metrics on the fixture corpus, schema parity, config check, type-check) and a nightly full tier (judge metrics); a PR fails when a deterministic metric drops beyond the baseline noise band
-- [ ] **EVAL-11**: `npm run test-rag` runs the eval smoke tier (the missing `scripts/test-rag-system.js` reference is fixed)
+- [x] **EVAL-11**: `npm run test-rag` runs the eval smoke tier (the missing `scripts/test-rag-system.js` reference is fixed)
 - [ ] **EVAL-12**: Characterization tests lock today's behavior: strict mode returns "information not available" with no context, webSearch + strict uses Exa results, `source_images` stream and persist, `{{context}}` substitution in `RAG_SYSTEM_PROMPT`
 - [ ] **EVAL-13**: A config manifest lists every RAG env var once, and a `check-config` script (run in CI) fails when any of the five config locations is missing an entry
 
@@ -159,7 +159,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | EVAL-08 | Phase 1 | Pending |
 | EVAL-09 | Phase 1 | Pending |
 | EVAL-10 | Phase 1 | Pending |
-| EVAL-11 | Phase 1 | Pending |
+| EVAL-11 | Phase 1 | Complete |
 | EVAL-12 | Phase 1 | Pending |
 | EVAL-13 | Phase 1 | Pending |
 | PIPE-01 | Phase 2 | Pending |
