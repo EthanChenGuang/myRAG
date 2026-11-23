@@ -119,18 +119,18 @@ Plans:
 - [x] 02-08-PLAN.md — Stage runner, switches/timeouts, status semantics, abort, trace collector and [RAG Trace] (wave 4)
 - [x] 02-09-PLAN.md — Shared assembleContext, byte-identical to chat, fixed query count (wave 5)
 - [x] 02-10-PLAN.md — Tenant resolvers: chat membership, embed config, signed voice token (wave 6)
-- [ ] 02-11-PLAN.md — Eval route on the pipeline; parity with all paired differences zero (wave 7)
+- [x] 02-11-PLAN.md — Eval route on the pipeline; parity with all paired differences zero (wave 7)
 - [x] 02-15-PLAN.md — Authenticated LiveKit token with server identity and voice RAG token (wave 7)
 
 **Wave 8–12** *(sequential)*
-- [ ] 02-12-PLAN.md — Chat on the pipeline: verified scope, 403 before stream, status mapping (wave 8)
-- [ ] 02-22-PLAN.md — Langfuse OTel exporter, sampling, masking, fake endpoint (wave 8)
+- [x] 02-12-PLAN.md — Chat on the pipeline: verified scope, 403 before stream, status mapping (wave 8)
+- [x] 02-22-PLAN.md — Langfuse OTel exporter, sampling, masking, fake endpoint (wave 8)
 - [ ] 02-13-PLAN.md — Chat references and overview fallback scoped; retired imports removed (wave 9)
 - [ ] 02-14-PLAN.md — Embed on the pipeline with configured tenant; widget error rendering (wave 10)
-- [ ] 02-16-PLAN.md — Voice-rag and voice-chat on the token scope; no global fallback (wave 11)
+- [x] 02-16-PLAN.md — Voice-rag and voice-chat on the token scope; no global fallback (wave 11)
 - [ ] 02-23-PLAN.md — Trace id in chat message metadata; masked review-candidate export (wave 11)
-- [ ] 02-17-PLAN.md — Voice agent forwards the token, single active user, CI job, deploy docs (wave 12)
-- [ ] 02-18-PLAN.md — Media routes on the pipeline with the caller's scope (wave 12)
+- [x] 02-17-PLAN.md — Voice agent forwards the token, single active user, CI job, deploy docs (wave 12)
+- [x] 02-18-PLAN.md — Media routes on the pipeline with the caller's scope (wave 12)
 - [ ] 02-29-PLAN.md — Type fixes: chat route (wave 12)
 
 **Wave 13–21** *(sequential)*

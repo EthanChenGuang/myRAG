@@ -7,13 +7,13 @@ status: executing
 stopped_at: Completed waves 4-7 (02-08, 02-09, 02-10, 02-15)
 last_updated: "2026-11-23T14:27:14.194Z"
 last_activity: 2026-11-23
-last_activity_desc: Phase 02 wave 3 merged
+last_activity_desc: Phase 02 plans 11, 12, 16, 17, 18, 22 merged
 state_head: 3facf75a846e7a13be2716bdf7768179dca6018b
 progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 58
-  completed_plans: 27
+  completed_plans: 33
 ---
 
 # Project State
@@ -28,11 +28,11 @@ See: .planning/PROJECT.md (updated 2026-11-22)
 ## Current Position
 
 Phase: 02 (Unified Retrieval Pipeline & Tenant Scope) — EXECUTING
-Plan: 17 of 36 complete (02-01..10, 02-15, 02-30..35)
+Plan: 23 of 36 complete (02-01..12, 02-15..18, 02-22, 02-30..35)
 Status: Executing sequentially
 Last activity: 2026-11-23 — 02-08, 09, 10, 15 merged; tsc ratchet 58; 480 vitest tests pass; Phase 3 research + patterns committed
 
-Progress: [█████░░░░░] 47%
+Progress: [██████░░░░] 64%
 
 ## Performance Metrics
 
@@ -90,6 +90,12 @@ Progress: [█████░░░░░] 47%
 
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
+- [02-11] Eval refusal is `refusalCandidate` with reason `no_relevant_context`; a route that passes `trace` owns `finishTrace`; `stage_status` is part of RagTrace; pipeline error or incomplete assembly in eval is HTTP 500.
+- [02-12] Chat route resolves scope before the stream (403/503 JSON); retrieval error or degraded-without-documents streams a localized "knowledge base temporarily unavailable" error part; org owner without a member row is backfilled by `repairOwnerMembership` only when `organizations.owner_id` matches.
+- [02-16] Voice payload travels in `RetrievalResult.voice`; voice-rag maps error/degraded-without-results to 503, empty to `{results: []}`; scope doc lookup capped at 500, chunk queries batched by 100. Gap fix: single-tenant tokens carry a signed `act` claim and voice-chat saves under it; body user ids are ignored.
+- [02-17] Voice agent sends `x-rag-scope-token`; one active user per agent (guard covers connect/disconnect handlers); a failed KB turn is spoken but not stored.
+- [02-18] Media profile = embed, search (k=10, threshold 0.3, admin client), assemble, scoped by `resolveTenantScope`; `rag_status` added to media responses.
+- [02-22] Langfuse via OTel replay after response; tenantKey on every span; sampling hashes request id with a per-purpose prefix; masking order e-mail, IBAN, CN ID, IT CF, Luhn card, phones.
 
 - [Roadmap]: Research's 9 phases compressed to 7 for standard granularity: ingestion + embeddings merged (Phase 3); external backends + closeout merged (Phase 7)
 - [Roadmap]: Query layer ships two switchable frameworks (`RAG_QUERY_FRAMEWORK=llamaindex|langchain`, default `llamaindex`); LangChain is confined to one adapter that wraps `src/lib/rag/` as a retriever, with zod 4 isolated from the app's zod 3 (user scope change, QRY-08)
