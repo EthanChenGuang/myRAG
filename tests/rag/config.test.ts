@@ -5,6 +5,7 @@ import {
   PROFILE_STAGE_DEFAULTS,
   loadRagConfig,
   resetRagConfigForTests,
+  resolveFinalResultCount,
 } from '@/lib/rag/config';
 
 let warn: MockInstance<(...args: unknown[]) => void>;
@@ -147,5 +148,32 @@ describe('loadRagConfig', () => {
   test('identical env snapshots are memoised', () => {
     const env = { RAG_STAGE_TIMEOUTS: 'embed=2000' };
     expect(loadRagConfig(env)).toBe(loadRagConfig({ ...env }));
+  });
+});
+
+describe('resolveFinalResultCount', () => {
+  test.each<[unknown, string | undefined, number]>([
+    [undefined, undefined, 25],
+    [undefined, '40', 40],
+    [Number.NaN, 'abc', 25],
+    [Number.NaN, '12', 12],
+    [-5, '-3', 25],
+    [0, '0', 25],
+    [undefined, '', 25],
+    [undefined, 'abc', 25],
+    [7, 'abc', 7],
+    [250, undefined, 100],
+    [undefined, '500', 100],
+    [2.5, undefined, 25],
+  ])('request %s with env %s resolves to %s and is never unbounded', (requested, envValue, expected) => {
+    const count = resolveFinalResultCount(requested, envValue);
+    expect(count).toBe(expected);
+    expect(Number.isInteger(count) && count >= 1 && count <= 100).toBe(true);
+  });
+
+  test('an invalid env value is logged once under [RAG Config]', () => {
+    resolveFinalResultCount(undefined, 'abc');
+    resolveFinalResultCount(undefined, 'abc');
+    expect(configWarnings()).toHaveLength(1);
   });
 });

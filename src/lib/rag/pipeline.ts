@@ -5,6 +5,8 @@ import {
   CORE_STAGES,
   FALLBACK_STAGE_TIMEOUT_MS,
   loadRagConfig,
+  resolveFinalResultCount,
+  validResultCount,
   type RagConfig,
   type StageName,
 } from './config';
@@ -470,7 +472,7 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
   const config = loadRagConfig(deps.ragEnv());
   const spec = (name: StageName, onFail: StageSpec['onFail']) => stageSpec(config, profile, name, onFail, input.stageOverrides);
 
-  const maxResults = input.options?.maxResults ?? parseInt(env.RAG_FINAL_RESULT_COUNT || '25');
+  const maxResults = resolveFinalResultCount(input.options?.maxResults, env.RAG_FINAL_RESULT_COUNT);
   const fallbackToLowerThreshold = input.options?.fallbackToLowerThreshold ?? true;
 
   let queryContext: RetrievalResult['queryContext'] = null;
@@ -631,7 +633,7 @@ async function runVoicePipeline(input: RunRetrievalInput, collector: TraceCollec
   const { signal, profile, query } = input;
   const config = loadRagConfig(deps.ragEnv());
   const spec = (name: StageName, onFail: StageSpec['onFail']) => stageSpec(config, profile, name, onFail, input.stageOverrides);
-  const matchCount = input.options?.maxResults ?? VOICE_DEFAULT_MATCH_COUNT;
+  const matchCount = validResultCount(input.options?.maxResults) ?? VOICE_DEFAULT_MATCH_COUNT;
   const requireAdmin = () => {
     const admin = deps.adminClient();
     if (!admin) throw new Error('[RAG Voice] admin client unavailable');

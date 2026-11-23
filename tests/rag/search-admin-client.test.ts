@@ -75,3 +75,24 @@ describe('text search runs on the server-side admin client', () => {
     }
   });
 });
+
+describe('result count never reaches the search unbounded', () => {
+  test.each([Number.NaN, -5, 0])('options.maxResults %s is replaced by a bounded default', async (maxResults) => {
+    const rpc = recordingRpc();
+    installDeps({ embedder: fakeEmbedder().embedder, ragEnv: () => ({}), adminClient: adminWithRpc(rpc.client as never) });
+
+    await runRetrieval({
+      scope: mintScope('single', null, null),
+      query: SEMANTIC_QUERY,
+      profile: 'chat',
+      options: { maxResults },
+      signal: new AbortController().signal,
+    });
+
+    expect(rpc.calls.length).toBeGreaterThan(0);
+    for (const call of rpc.calls) {
+      const count = call.args.match_count as number;
+      expect(Number.isInteger(count) && count >= 1 && count <= 200).toBe(true);
+    }
+  });
+});
