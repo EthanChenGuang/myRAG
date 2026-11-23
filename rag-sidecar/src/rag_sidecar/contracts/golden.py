@@ -52,26 +52,21 @@ class GoldenItem(_Contract):
         return self
 
 
-class _SkeletonBase(BaseModel):
-    model_config = ConfigDict(frozen=True)
+class GoldenSplitManifest(_Contract):
+    schema_version: Literal[1] = 1
+    rule: Literal["sha256-first8hex-mod100-lt70-dev"]
+    assignments: dict[str, Split]
 
 
-class GoldenSplitManifest(_SkeletonBase):
-    schema_version: int = 1
-    rule: str
-    assignments: dict[str, str]
-
-
-class DraftedItemProposal(_SkeletonBase):
-    id: str | None = None
+class DraftedItemProposal(_Contract):
     question: str
     conversation: list[ConversationTurn] = Field(default_factory=list)
-    language: str
-    category: str
+    language: Language
+    category: Category
     answerable: bool
     expected_answer: str | None = None
     gold_evidence: list[GoldSpan] = Field(default_factory=list)
 
 
-class DraftedItemBatch(_SkeletonBase):
+class DraftedItemBatch(_Contract):
     items: list[DraftedItemProposal]

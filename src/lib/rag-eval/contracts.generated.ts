@@ -4,6 +4,15 @@ import { z } from 'zod/v3';
 export const ConversationTurnSchema = z.object({ "content": z.string().min(1), "role": z.enum(["user","assistant"]) }).strict()
 export type ConversationTurn = z.infer<typeof ConversationTurnSchema>
 
+export const DraftedItemBatchSchema = z.object({ "items": z.array(z.object({ "answerable": z.boolean(), "category": z.enum(["multi_turn","compound","exact_term","table","scanned","no_answer","general"]), "conversation": z.array(z.object({ "content": z.string().min(1), "role": z.enum(["user","assistant"]) }).strict()).optional(), "expected_answer": z.union([z.string(), z.null()]).default(null), "gold_evidence": z.array(z.object({ "document": z.string(), "quote": z.string().min(2), "section": z.string() }).strict()).optional(), "language": z.enum(["zh","en","it"]), "question": z.string() }).strict()) }).strict()
+export type DraftedItemBatch = z.infer<typeof DraftedItemBatchSchema>
+
+export const GoldenItemSchema = z.object({ "answerable": z.boolean(), "category": z.enum(["multi_turn","compound","exact_term","table","scanned","no_answer","general"]), "conversation": z.array(z.object({ "content": z.string().min(1), "role": z.enum(["user","assistant"]) }).strict()).optional(), "expected_answer": z.union([z.string(), z.null()]).default(null), "gold_evidence": z.array(z.object({ "document": z.string(), "quote": z.string().min(2), "section": z.string() }).strict()).optional(), "id": z.string().regex(new RegExp("^[a-z0-9][a-z0-9._-]{2,63}$")), "language": z.enum(["zh","en","it"]), "provenance": z.enum(["synthetic_fixture","claude_draft","ragas_generated","human"]), "question": z.string(), "review_status": z.enum(["draft","approved","rejected"]), "split": z.enum(["dev","test"]) }).strict()
+export type GoldenItem = z.infer<typeof GoldenItemSchema>
+
+export const GoldenSplitManifestSchema = z.object({ "assignments": z.record(z.string(), z.enum(["dev","test"])), "rule": z.literal("sha256-first8hex-mod100-lt70-dev"), "schema_version": z.literal(1).default(1) }).strict()
+export type GoldenSplitManifest = z.infer<typeof GoldenSplitManifestSchema>
+
 export const RagRunRequestSchema = z.object({ "conversation": z.array(z.object({ "content": z.string().min(1), "role": z.enum(["user","assistant"]) }).strict()).optional(), "item_id": z.union([z.string(), z.null()]).default(null), "options": z.object({ "max_results": z.union([z.number().int().gte(1).lte(100), z.null()]).default(null), "organization_id": z.union([z.string(), z.null()]).default(null), "user_id": z.union([z.string(), z.null()]).default(null) }).strict().optional(), "query": z.string().min(1).max(4000), "rag_mode": z.enum(["strict","balanced","flexible"]).default("strict"), "schema_version": z.literal(1).default(1), "web_search": z.literal(false).default(false) }).strict()
 export type RagRunRequest = z.infer<typeof RagRunRequestSchema>
 

@@ -1,0 +1,137 @@
+{
+  "$defs": {
+    "ConversationTurn": {
+      "additionalProperties": false,
+      "properties": {
+        "content": {
+          "minLength": 1,
+          "title": "Content",
+          "type": "string"
+        },
+        "role": {
+          "enum": [
+            "user",
+            "assistant"
+          ],
+          "title": "Role",
+          "type": "string"
+        }
+      },
+      "required": [
+        "role",
+        "content"
+      ],
+      "title": "ConversationTurn",
+      "type": "object"
+    },
+    "DraftedItemProposal": {
+      "additionalProperties": false,
+      "properties": {
+        "answerable": {
+          "title": "Answerable",
+          "type": "boolean"
+        },
+        "category": {
+          "enum": [
+            "multi_turn",
+            "compound",
+            "exact_term",
+            "table",
+            "scanned",
+            "no_answer",
+            "general"
+          ],
+          "title": "Category",
+          "type": "string"
+        },
+        "conversation": {
+          "items": {
+            "$ref": "#/$defs/ConversationTurn"
+          },
+          "title": "Conversation",
+          "type": "array"
+        },
+        "expected_answer": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expected Answer"
+        },
+        "gold_evidence": {
+          "items": {
+            "$ref": "#/$defs/GoldSpan"
+          },
+          "title": "Gold Evidence",
+          "type": "array"
+        },
+        "language": {
+          "enum": [
+            "zh",
+            "en",
+            "it"
+          ],
+          "title": "Language",
+          "type": "string"
+        },
+        "question": {
+          "title": "Question",
+          "type": "string"
+        }
+      },
+      "required": [
+        "question",
+        "language",
+        "category",
+        "answerable"
+      ],
+      "title": "DraftedItemProposal",
+      "type": "object"
+    },
+    "GoldSpan": {
+      "additionalProperties": false,
+      "properties": {
+        "document": {
+          "title": "Document",
+          "type": "string"
+        },
+        "quote": {
+          "minLength": 2,
+          "title": "Quote",
+          "type": "string"
+        },
+        "section": {
+          "title": "Section",
+          "type": "string"
+        }
+      },
+      "required": [
+        "document",
+        "section",
+        "quote"
+      ],
+      "title": "GoldSpan",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "items": {
+      "items": {
+        "$ref": "#/$defs/DraftedItemProposal"
+      },
+      "title": "Items",
+      "type": "array"
+    }
+  },
+  "required": [
+    "items"
+  ],
+  "title": "DraftedItemBatch",
+  "type": "object"
+}

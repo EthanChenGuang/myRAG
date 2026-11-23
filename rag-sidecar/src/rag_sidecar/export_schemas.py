@@ -6,7 +6,15 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from rag_sidecar.contracts import ConversationTurn, RagRunRequest, RagTrace, RunManifest
+from rag_sidecar.contracts import (
+    ConversationTurn,
+    DraftedItemBatch,
+    GoldenItem,
+    GoldenSplitManifest,
+    RagRunRequest,
+    RagTrace,
+    RunManifest,
+)
 
 SCHEMAS_DIR = Path(__file__).resolve().parents[2] / "schemas"
 
@@ -17,6 +25,9 @@ CONTRACTS: list[tuple[type[BaseModel], Mode]] = [
     (RagRunRequest, "validation"),
     (RagTrace, "serialization"),
     (RunManifest, "serialization"),
+    (GoldenItem, "serialization"),
+    (GoldenSplitManifest, "serialization"),
+    (DraftedItemBatch, "serialization"),
 ]
 
 
