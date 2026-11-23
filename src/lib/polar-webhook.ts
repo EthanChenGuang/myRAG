@@ -42,3 +42,29 @@ export function verifyPolarWebhookSignature(
   }
   return false;
 }
+
+// A message signed at t is accepted from t-5min to t+5min, so its id must stay recorded for two tolerance windows.
+const REPLAY_TTL_MS = TOLERANCE_SECONDS * 2 * 1000;
+const MAX_TRACKED_IDS = 10_000;
+const seenIds = new Map<string, number>();
+
+/** Records a verified webhook-id. Returns false when the same id was already accepted inside the replay window (per process). */
+export function claimPolarWebhookId(id: string, nowMs: number = Date.now()): boolean {
+  for (const [stored, expiresAt] of seenIds) {
+    if (expiresAt > nowMs) break;
+    seenIds.delete(stored);
+  }
+  if (seenIds.has(id)) return false;
+  while (seenIds.size >= MAX_TRACKED_IDS) {
+    const oldest = seenIds.keys().next().value;
+    if (oldest === undefined) break;
+    seenIds.delete(oldest);
+  }
+  seenIds.set(id, nowMs + REPLAY_TTL_MS);
+  return true;
+}
+
+/** Frees an id after a failed delivery so the provider's retry of the same message is processed. */
+export function releasePolarWebhookId(id: string): void {
+  seenIds.delete(id);
+}
