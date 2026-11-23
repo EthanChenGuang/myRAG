@@ -4,16 +4,16 @@ milestone: v5.0
 current_phase: 01
 current_phase_name: Evaluation Harness & Baseline
 status: executing
-stopped_at: Completed 01-11-PLAN.md
-last_updated: "2026-11-23T10:11:27.450Z"
+stopped_at: Completed 01-12-PLAN.md
+last_updated: "2026-11-23T10:14:59.475Z"
 last_activity: 2026-11-23
 last_activity_desc: Phase 01 execution started
-state_head: e12b7aee2866e20592ff1d9bddb298ccc41fc89b
+state_head: 2ee46f2b297d502afd20163b7d66363a74f47ce3
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 22
-  completed_plans: 11
+  completed_plans: 12
 ---
 
 # Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-11-22)
 ## Current Position
 
 Phase: 01 (Evaluation Harness & Baseline) — EXECUTING
-Plan: 12 of 22
+Plan: 13 of 22
 Status: Ready to execute
 Last activity: 2026-11-23 — Phase 01 execution started
 
@@ -67,6 +67,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P09 | 8min | 2 tasks | 6 files |
 | Phase 01 P10 | 15min | 2 tasks | 5 files |
 | Phase 01 P11 | 15min | 2 tasks | 6 files |
+| Phase 01 P12 | 8min | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -93,6 +94,7 @@ Recent decisions affecting current work:
 - [Phase 01]: 01-09: vitest only collects tests/**/*.test.ts; node:test .mts files stay outside npm test
 - [Phase 01]: 01-10: request_options normalized with nulls before hashing; run_config_hash excludes golden_path, run_id, created_at, git_sha
 - [Phase 01]: 01-11: check-config manifest seeded by measurement (64 vars, 4 managed, 44 legacy with gaps); knownGaps limited to the four tracked locations
+- [Phase 01]: 01-12: secret under 32 chars is treated as unset (503); probe exemption is exact-match /health and /ready only
 
 ### Pending Todos
 
@@ -119,6 +121,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-23T10:11:27.380Z
-Stopped at: Completed 01-11-PLAN.md
+Last session: 2026-11-23T10:14:59.397Z
+Stopped at: Completed 01-12-PLAN.md
 Resume file: None

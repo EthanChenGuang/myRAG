@@ -39,7 +39,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. CI fails when a Pydantic model changes without its regenerated Zod schema, when an RAG env var is missing from any of the five config locations, or when a characterization test breaks; those tests pass on today's code for strict-mode "information not available", webSearch + strict using Exa results, `source_images` streaming and persistence, and `{{context}}` substitution.
   5. Pointed at a workspace, the drafting tool writes span-labelled golden items (document, section, quote, language, category, review status; never chunk IDs) to a gitignored location with a frozen dev/test split, and the nightly tier computes Faithfulness, Answer Relevance and Context Recall with a pinned judge from a different model family and telemetry disabled (verified with a stubbed judge and a fixture workspace).
 **Live verification**: Draft the 50–200 item golden set from a real knowledge-base workspace and have the user review every item; record the three-run baseline on that real set with the OpenAI embedding key and the judge key, then set per-metric improvement targets from it; run the first nightly judge tier with real keys.
-**Plans**: 11/22 plans executed
+**Plans**: 12/22 plans executed
 
 Plans:
 **Wave 1**
@@ -60,7 +60,7 @@ Plans:
 - [x] 01-09-PLAN.md — Vitest infrastructure, route auth matrix, harness concurrency and HTTP transport tests (wave 4)
 - [x] 01-10-PLAN.md — Reproducible runs: pinned eval env, hashed RunManifest, Pydantic validation of traces (wave 4)
 - [x] 01-11-PLAN.md — New env vars in all five config locations, env manifest and check-config with knownGaps ratchet (wave 4)
-- [ ] 01-12-PLAN.md — rag-sidecar FastAPI skeleton: probes, fail-closed shared-secret auth, Dockerfile (wave 4)
+- [x] 01-12-PLAN.md — rag-sidecar FastAPI skeleton: probes, fail-closed shared-secret auth, Dockerfile (wave 4)
 - [ ] 01-13-PLAN.md — Golden/trace loaders, Python corpus reader and deterministic metrics (wave 4)
 
 **Wave 5** *(blocked on Wave 4 completion)*
@@ -167,7 +167,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7. Phases 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Evaluation Harness & Baseline | 11/22 | In Progress | - |
+| 1. Evaluation Harness & Baseline | 12/22 | In Progress | - |
 | 2. Unified Retrieval Pipeline & Tenant Scope | 0/TBD | Not started | - |
 | 3. Unified Ingestion & Embedding Profiles | 0/TBD | Not started | - |
 | 4. Hybrid Retrieval, Reranking & Calibrated Refusal | 0/TBD | Not started | - |
