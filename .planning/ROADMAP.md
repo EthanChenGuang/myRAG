@@ -111,9 +111,9 @@ Plans:
 - [x] 02-35-PLAN.md — Type fixes: remaining lib/API files and async params in dynamic routes (wave 2)
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 02-07-PLAN.md — Tracer: branded TenantScope, re-homed legacy search, runRetrieval equals enhancedRetrieveChunks (wave 3)
-- [ ] 02-33-PLAN.md — Type fixes: providers, settings and UI components (wave 3)
-- [ ] 02-34-PLAN.md — Type fixes: system-prompt manager, semantic chunker, organization handler, chat utils (wave 3)
+- [x] 02-07-PLAN.md — Tracer: branded TenantScope, re-homed legacy search, runRetrieval equals enhancedRetrieveChunks (wave 3)
+- [x] 02-33-PLAN.md — Type fixes: providers, settings and UI components (wave 3)
+- [x] 02-34-PLAN.md — Type fixes: system-prompt manager, semantic chunker, organization handler, chat utils (wave 3)
 
 **Wave 4–7** *(sequential)*
 - [ ] 02-08-PLAN.md — Stage runner, switches/timeouts, status semantics, abort, trace collector and [RAG Trace] (wave 4)

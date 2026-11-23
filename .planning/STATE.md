@@ -4,10 +4,10 @@ milestone: v5.0
 current_phase: 02
 current_phase_name: Unified Retrieval Pipeline & Tenant Scope
 status: executing
-stopped_at: Completed wave 2 (02-06, 02-30, 02-31, 02-32, 02-35)
+stopped_at: Completed wave 3 (02-07, 02-33, 02-34)
 last_updated: "2026-11-23T14:27:14.194Z"
 last_activity: 2026-11-23
-last_activity_desc: Phase 02 wave 2 merged
+last_activity_desc: Phase 02 wave 3 merged
 state_head: 3facf75a846e7a13be2716bdf7768179dca6018b
 progress:
   total_phases: 9
@@ -28,11 +28,11 @@ See: .planning/PROJECT.md (updated 2026-11-22)
 ## Current Position
 
 Phase: 02 (Unified Retrieval Pipeline & Tenant Scope) — EXECUTING
-Plan: 10 of 36 complete (02-01..06, 02-30, 02-31, 02-32, 02-35)
+Plan: 13 of 36 complete (02-01..07, 02-30..35)
 Status: Executing sequentially
-Last activity: 2026-11-23 — wave 2 merged (06, 30, 31, 32, 35); tsc ratchet 122
+Last activity: 2026-11-23 — wave 3 merged (07, 33, 34); tsc ratchet 58; 249 vitest tests pass
 
-Progress: [███░░░░░░░] 28%
+Progress: [████░░░░░░] 36%
 
 ## Performance Metrics
 
@@ -135,6 +135,9 @@ Recent decisions affecting current work:
 - [Phase 02]: 02-31: WhatsApp webhook uses validateWebhookSignature (401 on bad signature); signature compare must become constant-time in code review
 - [Phase 02]: 02-32: embed window body built by toEmbedRequestBody on the v6 useChat
 - [Phase 02]: 02-35: dynamic route handlers await Promise params; PATCH /api/user/preferences returns 401 with no user; Stripe version pinned by typed cast
+- [Phase 02]: 02-07: runRetrieval equals enhancedRetrieveChunks on all 72 golden questions; scopeKey s:default|u:<id>|o:<id>; RPC errors raise RetrievalBackendError in the re-homed search; 02-20 must forbid importing mintScope outside src/lib/rag/tenant/ and tests
+- [Phase 02]: 02-33: Folder imported from @/types/folder; SidebarState.searchQuery added for UPDATE_SEARCH_QUERY
+- [Phase 02]: 02-34: semantic chunker maxTokens ReferenceError fixed (Phase 3 must re-measure chunking on oversized branches); v6 tool-part envelopes unwrapped with legacy fallback; Chat.folder_id is string | null
 - [Phase 02]: Node engines pinned to ^22.12.0 (not >=) so Vercel stays on Node 22
 - [Phase 02]: Paired statistics take slice membership from gate-split report items and one fixed-seed RNG per (slice, metric) cell; all_zero needs at least one cell with data
 
@@ -164,5 +167,5 @@ Items acknowledged and deferred at milestone close, most recent first:
 ## Session Continuity
 
 Last session: 2026-11-23T14:27:14.060Z
-Stopped at: Completed wave 2 (02-06, 02-30, 02-31, 02-32, 02-35)
+Stopped at: Completed wave 3 (02-07, 02-33, 02-34)
 Resume file: None
