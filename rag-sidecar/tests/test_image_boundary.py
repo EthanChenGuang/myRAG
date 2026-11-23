@@ -1,3 +1,4 @@
+import json
 import re
 import tomllib
 from pathlib import Path
@@ -49,11 +50,15 @@ def test_no_secret_is_baked_into_env_or_arg():
             assert "RAG_SIDECAR_SECRET" not in line
 
 
-def test_cmd_uses_non_syncing_uvicorn_entrypoint():
+def test_cmd_runs_venv_uvicorn_without_uv_at_runtime():
+    # The image runs as a system user without a home directory, so invoking uv at
+    # runtime fails to initialise its cache; the CMD must call the venv binary directly.
     cmds = [line for line in _dockerfile_lines() if line.startswith("CMD ")]
-    assert cmds
-    assert "rag_sidecar.main:app" in cmds[0]
-    assert "--no-sync" in cmds[0]
+    assert len(cmds) == 1
+    cmd = json.loads(cmds[0][len("CMD "):])
+    assert cmd[0] == "/app/.venv/bin/uvicorn"
+    assert "rag_sidecar.main:app" in cmd
+    assert all(part not in ("uv", "uvx") for part in cmd)
 
 
 def test_dockerignore_excludes_environment_and_secrets():
