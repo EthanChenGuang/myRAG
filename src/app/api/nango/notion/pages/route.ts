@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { getNango, isNangoEnabled } from '@/lib/nango/client';
+import { requireSessionUser } from '../../_lib/session-user';
 
 export const runtime = 'nodejs';
 
@@ -33,11 +33,9 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-    // Allow access without auth for Config UI, but if user is available use their connection
-    const userId: string | undefined = user?.id;
+    const auth = await requireSessionUser();
+    if (!auth.ok) return auth.response;
+    const userId = auth.user.id;
 
     const { searchParams } = new URL(request.url);
     const mode = searchParams.get('mode') as 'root' | 'children' | 'tree' || 'root';
@@ -50,19 +48,12 @@ export async function GET(request: NextRequest) {
     }
 
     // Get the user's Notion connection
-    let query = supabaseAdmin
+    const { data: connections } = await supabaseAdmin
       .from('nango_connections')
       .select('connection_id')
+      .eq('user_id', userId)
       .eq('provider', 'notion')
       .eq('status', 'connected');
-
-    // If user is authenticated, get their specific connection
-    // If not, get any available connection for the provider
-    if (userId) {
-      query = query.eq('user_id', userId);
-    }
-
-    const { data: connections } = await query;
 
     if (!connections || connections.length === 0) {
       return NextResponse.json(
@@ -71,7 +62,6 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Use the first connection (admin view)
     const connection = connections[0];
 
     const nango = getNango();

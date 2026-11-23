@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { getNango, isNangoEnabled } from '@/lib/nango/client';
 import { type SupportedProvider, PROVIDER_CONFIG } from '@/lib/nango/types';
+import { requireSessionUser } from '../_lib/session-user';
 
 export const runtime = 'nodejs';
 
@@ -16,36 +16,9 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Check if request comes from config-ui (has admin auth header)
-    const authHeader = request.headers.get('authorization');
-    const isConfigUI = authHeader?.startsWith('Bearer ');
-
-    let userId: string;
-
-    if (isConfigUI) {
-      // Config-UI admin access - get first valid user for representative view
-      const supabaseAdmin = getSupabaseAdmin();
-      if (!supabaseAdmin) {
-        return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
-      }
-
-      const { data: users } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1 });
-      userId = users?.users?.[0]?.id || '';
-
-      if (!userId) {
-        // No users yet, return empty connections
-        return NextResponse.json({ connections: [], enabled: true });
-      }
-    } else {
-      // Normal user authentication via Next.js session
-      const supabase = await createClient();
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-      if (authError || !user) {
-        return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
-      }
-      userId = user.id;
-    }
+    const auth = await requireSessionUser();
+    if (!auth.ok) return auth.response;
+    const userId = auth.user.id;
 
     const supabaseAdmin = getSupabaseAdmin();
 
@@ -122,45 +95,16 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    // Check if request comes from config-ui (has admin auth header)
-    const authHeader = request.headers.get('authorization');
-    const isConfigUI = authHeader?.startsWith('Bearer ');
-
-    let userId: string;
-
-    if (isConfigUI) {
-      // Config-UI admin access - get first valid user for representative view
-      const supabaseAdmin = getSupabaseAdmin();
-      if (!supabaseAdmin) {
-        return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
-      }
-
-      const { data: users } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1 });
-      userId = users?.users?.[0]?.id || '';
-
-      if (!userId) {
-        return NextResponse.json(
-          { error: 'No users found - create a user first' },
-          { status: 404 }
-        );
-      }
-    } else {
-      // Normal user authentication via Next.js session
-      const supabase = await createClient();
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-      if (authError || !user) {
-        return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
-      }
-      userId = user.id;
-    }
+    const auth = await requireSessionUser();
+    if (!auth.ok) return auth.response;
+    const userId = auth.user.id;
 
     const { provider, connectionId } = await request.json() as {
       provider: SupportedProvider;
       connectionId: string;
     };
 
-    if (!provider || !connectionId) {
+    if (typeof provider !== 'string' || typeof connectionId !== 'string' || !provider || !connectionId) {
       return NextResponse.json(
         { error: 'Provider and connectionId are required' },
         { status: 400 }
@@ -176,13 +120,19 @@ export async function POST(request: NextRequest) {
     // Verify the connection exists in Nango
     const nango = getNango();
     const integrationId = PROVIDER_CONFIG[provider]?.integrationId || provider;
+    let nangoConnection: Awaited<ReturnType<typeof nango.getConnection>>;
     try {
-      await nango.getConnection(integrationId, connectionId);
-    } catch (e) {
+      nangoConnection = await nango.getConnection(integrationId, connectionId);
+    } catch {
       return NextResponse.json(
         { error: 'Connection not found in Nango' },
         { status: 404 }
       );
+    }
+
+    if (nangoConnection?.end_user?.id !== userId) {
+      console.warn('[Nango] Refused to register a connection owned by another end user');
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     // Upsert connection record
@@ -202,6 +152,9 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) {
+      if (error.code === '23505') {
+        return NextResponse.json({ error: 'Connection already registered' }, { status: 409 });
+      }
       throw error;
     }
 
@@ -242,38 +195,9 @@ export async function PATCH(request: NextRequest) {
   }
 
   try {
-    // Check if request comes from config-ui (has admin auth header)
-    const authHeader = request.headers.get('authorization');
-    const isConfigUI = authHeader?.startsWith('Bearer ');
-
-    let userId: string;
-
-    if (isConfigUI) {
-      // Config-UI admin access - get first valid user for representative view
-      const supabaseAdmin = getSupabaseAdmin();
-      if (!supabaseAdmin) {
-        return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
-      }
-
-      const { data: users } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1 });
-      userId = users?.users?.[0]?.id || '';
-
-      if (!userId) {
-        return NextResponse.json(
-          { error: 'No users found - create a user first' },
-          { status: 404 }
-        );
-      }
-    } else {
-      // Normal user authentication via Next.js session
-      const supabase = await createClient();
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-      if (authError || !user) {
-        return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
-      }
-      userId = user.id;
-    }
+    const auth = await requireSessionUser();
+    if (!auth.ok) return auth.response;
+    const userId = auth.user.id;
 
     const body = await request.json() as {
       provider: SupportedProvider;
@@ -373,38 +297,9 @@ export async function DELETE(request: NextRequest) {
   }
 
   try {
-    // Check if request comes from config-ui (has admin auth header)
-    const authHeader = request.headers.get('authorization');
-    const isConfigUI = authHeader?.startsWith('Bearer ');
-
-    let userId: string;
-
-    if (isConfigUI) {
-      // Config-UI admin access - get first valid user for representative view
-      const supabaseAdmin = getSupabaseAdmin();
-      if (!supabaseAdmin) {
-        return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
-      }
-
-      const { data: users } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1 });
-      userId = users?.users?.[0]?.id || '';
-
-      if (!userId) {
-        return NextResponse.json(
-          { error: 'No users found - create a user first' },
-          { status: 404 }
-        );
-      }
-    } else {
-      // Normal user authentication via Next.js session
-      const supabase = await createClient();
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-      if (authError || !user) {
-        return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
-      }
-      userId = user.id;
-    }
+    const auth = await requireSessionUser();
+    if (!auth.ok) return auth.response;
+    const userId = auth.user.id;
 
     const { provider } = await request.json() as { provider: SupportedProvider };
 
