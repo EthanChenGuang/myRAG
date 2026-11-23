@@ -161,7 +161,7 @@ function generateTitleWithToolCallSupport(
             type: 'tool-call' as const,
             toolName: storedToolCall.name,
             toolCallId: toolCallInfo.toolCallId,
-            args: storedToolCall.params || {}
+            input: storedToolCall.params || {}
           };
 
           const toolTitle = generateChatTitleFromToolCall(toolCallPart);
@@ -176,7 +176,7 @@ function generateTitleWithToolCallSupport(
         type: 'tool-call' as const,
         toolName: toolCallInfo.toolName,
         toolCallId: toolCallInfo.toolCallId,
-        args: {}
+        input: {}
       };
 
       const fallbackTitle = generateChatTitleFromToolCall(fallbackToolCall);

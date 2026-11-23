@@ -46,7 +46,7 @@ function createServiceRoleClient() {
 }
 
 async function ensureOwnerMembershipRow(
-  supabase: ReturnType<typeof createClient>,
+  supabase: ReturnType<typeof createServiceRoleClient>,
   organizationId: string,
   userId: string
 ): Promise<void> {

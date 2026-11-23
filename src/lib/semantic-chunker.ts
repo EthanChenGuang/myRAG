@@ -311,7 +311,7 @@ function chunkContent(
         ? Math.round(targetTokens * (1 - density * 0.3)) // Dense content gets smaller chunks
         : targetTokens;
       
-      if (currentTokens + paragraphTokens > maxTokens && currentChunk.length > 0) {
+      if (currentTokens + paragraphTokens > maxOutputTokens && currentChunk.length > 0) {
         // Create chunk from accumulated paragraphs
         const content = currentChunk.join('\n\n');
         chunks.push({
@@ -331,7 +331,7 @@ function chunkContent(
         
         currentChunk = [paragraph];
         currentTokens = paragraphTokens;
-      } else if (paragraphTokens > maxTokens) {
+      } else if (paragraphTokens > maxOutputTokens) {
         // Paragraph too large, need to split by sentences
         if (currentChunk.length > 0) {
           // Save current chunk first
@@ -355,7 +355,7 @@ function chunkContent(
         }
         
         // Split large paragraph by sentences
-        const sentenceChunks = chunkBySentences(paragraph, adjustedTarget, maxTokens, minTokens);
+        const sentenceChunks = chunkBySentences(paragraph, adjustedTarget, maxOutputTokens, minTokens);
         for (const sentChunk of sentenceChunks) {
           chunks.push({
             content: sentChunk,
@@ -419,7 +419,7 @@ function chunkContent(
     }
   } else if (sentenceBoundaries) {
     // Fall back to sentence-based chunking
-    const sentenceChunks = chunkBySentences(text, targetTokens, maxTokens, minTokens);
+    const sentenceChunks = chunkBySentences(text, targetTokens, maxOutputTokens, minTokens);
     let position = startPosition;
     
     for (const chunk of sentenceChunks) {
@@ -440,7 +440,7 @@ function chunkContent(
     }
   } else {
     // Simple token-based chunking without boundaries
-    const simpleChunks = simpleTokenChunking(text, targetTokens, maxTokens);
+    const simpleChunks = simpleTokenChunking(text, targetTokens, maxOutputTokens);
     let position = startPosition;
     
     for (const chunk of simpleChunks) {
@@ -609,7 +609,7 @@ export function mergeSmallChunks(
   minTokens: number
 ): SemanticChunk[] {
   const merged: SemanticChunk[] = [];
-  let currentMerge: SemanticChunk | null = null;
+  let currentMerge = null as SemanticChunk | null;
   
   for (const chunk of chunks) {
     if (chunk.metadata.tokens < minTokens) {
