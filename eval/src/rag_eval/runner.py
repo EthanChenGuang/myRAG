@@ -52,7 +52,7 @@ def _score(args: argparse.Namespace) -> int:
         return 2
 
     results = score_items(traces, golden)
-    report = build_report(manifest, results, golden)
+    report = build_report(manifest, results, golden, traces)
     write_report(report, resolve_cli_path(args.out))
     overall = report.overall
     print(

@@ -67,6 +67,7 @@ myrag/
 - Supabase stores chats, documents, embeddings, subscriptions, WhatsApp sessions—respect RLS policies.
 - Vector search: 1536‑dim embeddings + HNSW indexes (`m=64`, `ef_construction=200`).
 - Watch console logs for `[Document Search]` to analyse retrieval behaviour.
+- Latency budgets (p50/p95, text chat and voice) live in `eval/config/latency-budgets.json`; eval reports show per-stage latency against them; report-only until live measurements ratify them.
 
 ### Image RAG
 - Images uploaded via Config UI are captioned by GPT-4o Vision and embedded.
