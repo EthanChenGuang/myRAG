@@ -14,7 +14,20 @@ import { optimizedSearch } from '@/lib/optimized-search';
 import { ContentPart, APIMessage, ExtendedMessage, fromAPIMessages, toMessage } from '@/types/chat';
 import { ReasoningConfig, REASONING_MODELS } from '@/lib/types';
 // Import enhanced RAG functionality
-import { enhanceQueryWithReasoning, intelligentSearch, createEnhancedRAGPrompt } from '@/lib/thinking-rag-enhancer';
+import { enhanceQueryWithReasoning, intelligentSearch } from '@/lib/thinking-rag-enhancer';
+import {
+  createEnhancedRAGPrompt,
+  createTraceCollector,
+  finishTrace,
+  knowledgeBaseUnavailableMessage,
+  repairOwnerMembership,
+  resolveTenantScope,
+  runRetrieval,
+  scopeKey,
+  type RetrievalResult,
+  type TenantScope,
+  type TraceCollector,
+} from '@/lib/rag';
 import { enhancedRetrieveChunks } from '@/lib/enhanced-rag-retrieval';
 // Import URL extraction utilities
 import { formatURLsForContext, type ExtractedURL } from '@/lib/url-extractor';
@@ -1180,6 +1193,14 @@ function cleanMalformedDocumentCalls(text: string): string {
 export async function POST(req: Request) {
   console.log('API ROUTE: Starting POST request handler');
 
+  let ragTrace: { collector: TraceCollector; result: RetrievalResult } | null = null;
+  const finishRagTrace = () => {
+    if (!ragTrace) return;
+    const pending = ragTrace;
+    ragTrace = null;
+    finishTrace(pending.collector, pending.result);
+  };
+
   try {
     const { messages: rawMessages, data, imageStorage }: {
       messages: APIMessage[],
@@ -1218,6 +1239,31 @@ export async function POST(req: Request) {
         { status: 500 }
       );
     }
+
+    // The tenant scope comes from the session and a membership check, never from the body alone
+    let sessionUserPromise: Promise<{ id: string } | null> | null = null;
+    const getSessionUser = () => {
+      sessionUserPromise ??= (async () => {
+        const { createClient: createSSRClient } = await import('@/lib/supabase/server');
+        const sbSSR = await createSSRClient();
+        const { data: userRes } = await sbSSR.auth.getUser();
+        return userRes?.user?.id ? { id: userRes.user.id } : null;
+      })();
+      return sessionUserPromise;
+    };
+
+    await repairOwnerMembership({ requestedOrganizationId: data?.organizationId, getUser: getSessionUser });
+    const tenant = await resolveTenantScope({
+      requestedOrganizationId: data?.organizationId,
+      getUser: getSessionUser,
+      signal: req.signal,
+    });
+    if (!tenant.ok) {
+      const error =
+        tenant.status === 403 ? 'Forbidden' : tenant.status === 401 ? 'Unauthorized' : 'Workspace verification unavailable';
+      return NextResponse.json({ error }, { status: tenant.status });
+    }
+    const scope: TenantScope | null = tenant.scope;
 
     // Extract WhatsApp-specific overrides
     const systemPromptOverride = data?.systemPromptOverride;
@@ -1896,6 +1942,7 @@ IMPORTANT:
 
     // Initialize variables for RAG
     let context = '';
+    let retrievalResult: RetrievalResult | null = null;
     let ragStartTime = 0;
     let ragDuration = 0;
 
@@ -2082,272 +2129,36 @@ IMPORTANT:
 
       // Then perform semantic search for the query text
       if (queryText) {
-        let searchResults;
-        const processedQuery = queryText; // Track the processed query for fallback
-
-        // Use optimized intelligent retrieval system
         console.log('[RAG SYSTEM] ========== Starting Intelligent Document Retrieval ==========');
-        console.log('[RAG SYSTEM] Query:', queryText);
 
-        // Use Enhanced RAG Retrieval with Temporal/Financial Intelligence
-        console.log('[RAG SYSTEM] Using Enhanced RAG with Temporal/Financial Intelligence');
+        const collector = createTraceCollector({ profile: 'chat', tenantKey: scope ? scopeKey(scope) : 'none' });
+        const result = await runRetrieval({
+          scope,
+          query: queryText,
+          profile: 'chat',
+          options: {
+            maxResults: parseInt(env.RAG_FINAL_RESULT_COUNT || '25'),
+            fallbackToLowerThreshold: true,
+            isGPTModel,
+            ragMode,
+            webSearchEnabled,
+            referenced: { usedDocuments, context },
+          },
+          signal: req.signal,
+          trace: collector,
+        });
+        ragTrace = { collector, result };
+        retrievalResult = result;
 
-        // Get current organization ID from request data (passed from frontend)
-        let currentOrganizationId: string | null = null;
-        const deploymentMode = env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE;
-
-        if (deploymentMode === 'multi-tenant') {
-          // Use organization ID from request data (set by frontend based on user's current workspace)
-          if (data?.organizationId !== undefined) {
-            currentOrganizationId = data.organizationId === 'null' || data.organizationId === null ? null : data.organizationId;
-            console.log('[RAG SYSTEM] Multi-tenant mode: Using organization from request:', currentOrganizationId || 'personal workspace');
-          } else {
-            console.log('[RAG SYSTEM] Multi-tenant mode: No organization ID in request, using personal workspace');
-          }
-        } else {
-          console.log('[RAG SYSTEM] Single-tenant mode: No organization filtering');
-        }
-
-        // Resolve userId via SSR client for personal workspace filtering
-        const { createClient: createSSRClient } = await import('@/lib/supabase/server');
-        const sbSSR = await createSSRClient();
-        const { data: userRes } = await sbSSR.auth.getUser();
-        const currentUserId = userRes?.user?.id || null;
-
-        const enhancedResult = await enhancedRetrieveChunks(queryText, {
-          maxResults: parseInt(env.RAG_FINAL_RESULT_COUNT || '25'),
-          enableTemporalBoost: true,
-          enableFinancialBoost: true,
-          requireTemporalMatch: false, // Allow graceful fallback
-          fallbackToLowerThreshold: true,
-          organizationId: currentOrganizationId, // tenant filtering
-          userId: currentUserId // personal workspace filtering
+        console.log('[Document Search] Retrieval finished:', {
+          status: result.status,
+          reason: result.reason,
+          candidates: result.candidates.length,
+          documents: result.usedDocuments.length,
         });
 
-        console.log(`[RAG SYSTEM] Enhanced retrieval completed:`);
-        console.log(`  - Query Type: ${enhancedResult.queryContext.isTemporalQuery ? 'Temporal' : ''} ${enhancedResult.queryContext.isFinancialQuery ? 'Financial' : ''} ${enhancedResult.queryContext.isSpecificDataQuery ? 'Specific Data' : ''}`);
-        console.log(`  - Precision: ${enhancedResult.queryContext.requiredPrecision}`);
-        console.log(`  - Strategy: ${enhancedResult.retrievalStrategy}`);
-        console.log(`  - Threshold: ${enhancedResult.queryContext.suggestedThreshold}`);
-        console.log(`  - Total chunks: ${enhancedResult.chunks.length}`);
-        console.log(`  - Reasoning: ${enhancedResult.queryContext.reasoningText}`);
-
-        if (enhancedResult.queryContext.timeframe) {
-          console.log(`  - Timeframe: ${enhancedResult.queryContext.timeframe}`);
-        }
-        if (enhancedResult.queryContext.financialMetrics.length > 0) {
-          console.log(`  - Financial Metrics: ${enhancedResult.queryContext.financialMetrics.join(', ')}`);
-        }
-
-        // Convert to expected format for compatibility
-        searchResults = enhancedResult.chunks.map(chunk => ({
-          chunk_id: chunk.chunk_id,
-          document_id: chunk.document_id,
-          content: chunk.content,
-          similarity: chunk.similarity,
-          metadata: chunk.metadata,
-          // Preserve enhanced scoring information
-          temporal_score: chunk.temporal_score,
-          financial_score: chunk.financial_score,
-          final_score: chunk.final_score,
-          match_reason: chunk.match_reason
-        }));
-        console.log('[RAG SYSTEM] =============================================');
-
-        // Use search results directly - already properly formatted
-        const similarChunks = searchResults || [];
-
-        // Enhanced logging for found chunks
-        console.log(`[Enhanced RAG] Found ${similarChunks.length} relevant chunks`);
-        if (similarChunks.length > 0) {
-          console.log('[Enhanced RAG] Top chunk scores:', similarChunks.slice(0, 3).map(c =>
-            `${c.similarity?.toFixed(3) || c.final_score?.toFixed(3)} (${c.match_reason || 'similarity'})`
-          ));
-          console.log('[Enhanced RAG] First chunk preview:', similarChunks[0].content.substring(0, 200));
-        }
-
-        // CHANGE 2: Add keyword-based document filtering
-        const queryTerms = normalize(queryText).split(/\s+/)
-          .filter(term => term.length > 3) // Only consider meaningful terms
-          .map(term => term.replace(/[^a-z0-9]/g, '')); // Remove non-alphanumeric characters
-
-        console.log('Query terms for document filtering:', queryTerms);
-
-        // Add semantic search results to context
-        if (similarChunks.length > 0) {
-          console.log(`Found ${similarChunks.length} similar chunks from semantic search`);
-          console.log('First 2 semantic chunks preview:',
-            similarChunks.slice(0, 2).map(c => `${c.content.substring(0, 100)}... (similarity: ${c.similarity.toFixed(2)})`));
-
-          // Track documents from semantic search
-          for (const chunk of similarChunks) {
-            // Get document metadata first to check relevance
-            const { data: docMetadata, error: metadataError } = await supabase
-              .from('documents')
-              .select('id, filename, created_at, content, metadata')
-              .eq('id', chunk.document_id)
-              .single();
-
-            if (metadataError || !docMetadata) {
-              console.log(`Could not get metadata for document: ${chunk.document_id}`);
-              continue;
-            }
-
-            // [FIX] Explicitly fetch chunk metadata (including image_url) since the RPC doesn't return it
-            if (!chunk.metadata || !chunk.metadata.image_url) {
-              const { data: chunkData } = await supabase
-                .from('document_chunks')
-                .select('metadata')
-                .eq('id', chunk.chunk_id)
-                .single();
-
-              if (chunkData?.metadata) {
-                // Ensure we don't overwrite existing metadata completely if some exists
-                chunk.metadata = { ...(chunk.metadata || {}), ...chunkData.metadata };
-                console.log(`Explicitly fetched metadata for chunk ${chunk.chunk_id}. Has image: ${!!chunk.metadata.image_url}`);
-              }
-            }
-
-            // CHANGE 3: Only include documents that match the query terms or have very high similarity
-            // [FIX] Also include images with reasonable similarity, as they might not match text terms in cross-lingual scenarios
-            const hasImage = !!chunk.metadata?.image_url;
-            const docName = docMetadata.filename.toLowerCase();
-            const isRelevantByName = queryTerms.some(term =>
-              docName.includes(term) ||
-              (docMetadata.content && docMetadata.content.toLowerCase().includes(term))
-            );
-
-            // Include documents with reasonable similarity OR matching terms OR if it's an image with > 0.25 similarity
-            if (chunk.similarity > 0.65 || isRelevantByName || (hasImage && chunk.similarity > 0.25)) {
-              // Check if this document is already in usedDocuments
-              const existingDoc = usedDocuments.find(doc => doc.id === chunk.document_id);
-              if (!existingDoc) {
-                usedDocuments.push({
-                  id: chunk.document_id,
-                  name: docMetadata.filename,
-                  filename: docMetadata.filename,
-                  created_at: docMetadata.created_at,
-                  content_preview: docMetadata.content ? docMetadata.content.substring(0, 200) + '...' : undefined,
-                  similarity: chunk.similarity,
-                  matched_chunk: chunk.content.substring(0, 150) + '...',
-                  explicitly_referenced: false,
-                  image_url: chunk.metadata?.image_url,
-                  external_url: docMetadata.metadata?.external_url
-                });
-
-                console.log(`Added document by relevance check: ${docMetadata.filename} (similarity: ${chunk.similarity.toFixed(2)}, term match: ${isRelevantByName}, hasImage: ${!!chunk.metadata?.image_url})`);
-              } else if (!existingDoc.similarity || chunk.similarity > existingDoc.similarity) {
-                // Update similarity if this chunk has a higher score
-                existingDoc.similarity = chunk.similarity;
-                existingDoc.matched_chunk = chunk.content.substring(0, 150) + '...';
-              }
-            } else {
-              console.log(`Filtered out irrelevant document: ${docMetadata.filename} (similarity: ${chunk.similarity.toFixed(2)}, no matching terms)`);
-            }
-          }
-
-          // Only add content from documents that passed the relevance filter
-          const relevantChunks = similarChunks.filter(chunk =>
-            usedDocuments.some(doc => doc.id === chunk.document_id)
-          );
-
-          if (relevantChunks.length > 0) {
-            // Group chunks by document for better organization
-            const chunksByDocument = new Map<string, Array<{ content: string, similarity: number, chunkNum?: number }>>();
-
-            // Collect URLs from chunk metadata
-            const collectedURLs: ExtractedURL[] = [];
-
-            for (const chunk of relevantChunks) {
-              // Get document name from usedDocuments array (already fetched earlier)
-              const docInfo = usedDocuments.find(doc => doc.id === chunk.document_id);
-              const docName = docInfo?.filename || docInfo?.name || 'Unknown Document';
-
-              // Try to extract chunk number from content if available
-              const chunkMatch = chunk.content.match(/Chunk (\d+) of \d+/);
-              const chunkNum = chunkMatch ? parseInt(chunkMatch[1]) : undefined;
-
-              if (!chunksByDocument.has(docName)) {
-                chunksByDocument.set(docName, []);
-              }
-              chunksByDocument.get(docName)!.push({
-                content: chunk.content,
-                similarity: chunk.similarity,
-                chunkNum
-              });
-
-              // Extract URLs from chunk metadata if available
-              const { data: chunkData } = await supabase
-                .from('document_chunks')
-                .select('metadata')
-                .eq('id', chunk.chunk_id)
-                .single();
-
-              if (chunkData?.metadata?.urls && Array.isArray(chunkData.metadata.urls)) {
-                collectedURLs.push(...chunkData.metadata.urls);
-              }
-            }
-
-            // Build organized context with document grouping
-            const contextParts: string[] = ["\n\n=== RELEVANT INFORMATION FROM DOCUMENTS ==="];
-
-            // Image file extensions to filter out from LLM context
-            // Images are displayed visually via source_images, not cited in text
-            const imageExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg'];
-
-            for (const [docName, chunks] of chunksByDocument) {
-              // Skip image documents - they are displayed visually, not cited in text
-              const isImageDoc = imageExtensions.some(ext => docName.toLowerCase().endsWith(ext));
-              if (isImageDoc) {
-                console.log(`[RAG Context] Skipping image document from LLM context: ${docName}`);
-                continue;
-              }
-
-              // Sort chunks by chunk number if available, otherwise by similarity
-              chunks.sort((a, b) => {
-                if (a.chunkNum && b.chunkNum) return a.chunkNum - b.chunkNum;
-                return b.similarity - a.similarity;
-              });
-
-              // Add document header and chunks with enhanced formatting for GPT models
-              contextParts.push(`\n--- Document: ${docName} (${chunks.length} relevant chunks) ---`);
-
-              // Format chunks with clear source indicators for GPT models
-              const formattedChunks = chunks.map((c, index) => {
-                // Extract the actual content without the prefix
-                const contentMatch = c.content.match(/^Document: [^.]+\.[^.]+\. Chunk \d+ of (\d+)\. Content: (.*)$/s);
-                const totalChunks = contentMatch ? contentMatch[1] : '?';
-                const actualContent = contentMatch ? contentMatch[2] : c.content;
-
-                // Add source citation hint for GPT models
-                if (isGPTModel && c.chunkNum) {
-                  return `[Source: ${docName}]\n${actualContent}`;
-                }
-                return c.content;
-              });
-
-              contextParts.push(...formattedChunks);
-            }
-            contextParts.push("=== END OF RELEVANT INFORMATION ===\n");
-
-            // Add collected URLs to context if any were found
-            if (collectedURLs.length > 0) {
-              // Remove duplicates based on URL
-              const uniqueURLs = Array.from(
-                new Map(collectedURLs.map(url => [url.url, url])).values()
-              );
-
-              const urlSection = formatURLsForContext(uniqueURLs);
-              if (urlSection) {
-                contextParts.push(urlSection);
-                console.log(`Added ${uniqueURLs.length} unique URLs from chunks to context`);
-              }
-            }
-
-            context += contextParts.join('\n\n');
-            console.log(`Added ${relevantChunks.length} organized chunks from ${chunksByDocument.size} documents in filtered semantic search`);
-          }
-        }
+        context = result.context;
+        usedDocuments = result.usedDocuments;
       } else {
         // Query all chunks to try to gather some relevant context
         console.log('No specific query text provided, performing general context lookup');
@@ -2508,8 +2319,8 @@ IMPORTANT:
         console.log(`Document: ${doc.name || doc.filename}, Similarity: ${doc.similarity?.toFixed(3)}, Explicitly Referenced: ${doc.explicitly_referenced}`);
       });
 
-      // Apply minimal filtering - be more permissive with document selection
-      usedDocuments = usedDocuments.filter(doc => {
+      // Apply minimal filtering - be more permissive with document selection (the pipeline already filtered its own result)
+      if (!retrievalResult) usedDocuments = usedDocuments.filter(doc => {
         // Always keep explicitly referenced documents
         if (doc.explicitly_referenced) {
           console.log(`Keeping explicitly referenced document: ${doc.name || doc.filename}`);
@@ -2554,14 +2365,16 @@ IMPORTANT:
 
       // [FIX] Compute sourceImages from usedDocuments for injection into stream response
       // This is done BEFORE streamText so we can pass it to createUIMessageStream
-      precomputedSourceImages = usedDocuments
-        .filter(doc => doc.image_url)
-        .map(doc => ({
-          name: doc.name || doc.filename || 'Source Image',
-          size: 0,
-          type: 'image/jpeg',
-          url: doc.image_url
-        }));
+      precomputedSourceImages = retrievalResult
+        ? retrievalResult.sourceImages
+        : usedDocuments
+            .filter(doc => doc.image_url)
+            .map(doc => ({
+              name: doc.name || doc.filename || 'Source Image',
+              size: 0,
+              type: 'image/jpeg',
+              url: doc.image_url
+            }));
 
       if (precomputedSourceImages.length > 0) {
         console.log('[RAG] Precomputed source images for stream injection:', precomputedSourceImages.length);
@@ -2569,14 +2382,37 @@ IMPORTANT:
 
     } // End of RAG processing (skipped when disableRAG is true)
 
+    const retrievalFailed =
+      !effectiveDisableRAG &&
+      retrievalResult !== null &&
+      (retrievalResult.status === 'error' || (retrievalResult.status === 'degraded' && usedDocuments.length === 0));
+
+    if (retrievalFailed && retrievalResult) {
+      console.error('[Document Search] Knowledge base unavailable:', {
+        status: retrievalResult.status,
+        reason: retrievalResult.reason,
+      });
+      finishRagTrace();
+      const errorText = knowledgeBaseUnavailableMessage(fallbackLanguage);
+      const stream = createUIMessageStream({
+        execute: async ({ writer }) => {
+          writer.write({ type: 'error', errorText });
+        }
+      });
+
+      return createUIMessageStreamResponse({ stream });
+    }
+
     const shouldBlockNoContextResponse =
       !effectiveDisableRAG &&
       ragMode === 'strict' &&
       !webSearchEnabled &&
+      (retrievalResult === null || retrievalResult.status === 'empty') &&
       usedDocuments.length === 0 &&
       context.trim().toLowerCase().startsWith('no relevant context found');
 
     if (shouldBlockNoContextResponse) {
+      finishRagTrace();
       const responseText = buildNoKnowledgeBaseResponse(fallbackLanguage);
       const stream = createUIMessageStream({
         execute: async ({ writer }) => {
@@ -2611,8 +2447,8 @@ Context:
 
     // NEW: Check for workspace-level system prompt override (highest priority after WhatsApp override)
     let workspacePromptUsed = false;
-    // Get organization ID from request data
-    const workspaceOrgId = data?.organizationId === 'null' || data?.organizationId === null ? null : data?.organizationId;
+    // The organization comes from the verified scope, never from the request body
+    const workspaceOrgId = scope?.organizationId ?? null;
 
     if (isMultiTenant() && workspaceOrgId) {
       console.log('[System Prompt] Checking workspace-level prompt override...');
@@ -4340,6 +4176,10 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
           writer.merge(result.toUIMessageStream({ sendStart: precomputedSourceImages.length === 0 }));
         },
         onFinish: () => {
+          if (ragTrace) {
+            ragTrace.collector.record({ name: 'generation', status: 'ok', startedAt: aiStartTime, endedAt: ragTrace.collector.now() });
+          }
+          finishRagTrace();
           const reasoningDetails = (globalThis as any).lastReasoningDetails;
           const metadata: any = {};
 
@@ -4484,6 +4324,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
       // Return the stream response
       return createUIMessageStreamResponse({ stream });
     } catch (streamError) {
+      finishRagTrace();
       console.error('API ROUTE: Error in streamText:', streamError);
       console.error('API ROUTE: Error details:', streamError instanceof Error ? streamError.message : String(streamError));
       console.error('API ROUTE: Error stack:', streamError instanceof Error ? streamError.stack : "No stack available");
@@ -4531,6 +4372,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
       // Also clear the global reference
       (globalThis as any).persistentMcpClient = null;
     }
+    finishRagTrace();
     console.error('API ROUTE: Error in POST:', error);
     console.error('API ROUTE: Error details:', error instanceof Error ? error.message : String(error));
     console.error('API ROUTE: Error stack:', error instanceof Error ? error.stack : "No stack available");

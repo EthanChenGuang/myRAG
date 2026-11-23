@@ -88,7 +88,7 @@ export function createSupabaseFake() {
       return { data: rows, error: null };
     };
     const builder: Record<string, any> = {};
-    for (const method of ['select', 'like', 'order', 'neq', 'gt', 'gte', 'lt', 'lte', 'not', 'or', 'range']) {
+    for (const method of ['select', 'like', 'order', 'neq', 'gt', 'gte', 'lt', 'lte', 'not', 'or', 'range', 'abortSignal']) {
       builder[method] = (...args: unknown[]) => {
         record(method, args);
         return builder;
@@ -119,6 +119,16 @@ export function createSupabaseFake() {
         const actual = readColumn(row, column);
         return typeof actual === 'string' && matcher.test(actual);
       });
+      return builder;
+    };
+    builder.upsert = (row: Row, options?: { onConflict?: string }) => {
+      record('upsert', [row, options]);
+      const source = store[table];
+      if (Array.isArray(source)) {
+        const keys = (options?.onConflict ?? 'id').split(',');
+        const exists = (source as Row[]).some((existing) => keys.every((key) => existing[key] === row[key]));
+        if (!exists) (source as Row[]).push(row);
+      }
       return builder;
     };
     builder.limit = (count: number) => {
@@ -237,6 +247,46 @@ export function createChatRouteHarness() {
 }
 
 export type ChatRouteHarness = ReturnType<typeof createChatRouteHarness>;
+
+function retrievalRows(fn: string, result: ReturnType<typeof retrievalWith> | undefined): unknown[] {
+  return (result?.chunks ?? []).map((chunk) => {
+    const row = chunk as Record<string, unknown>;
+    return fn === 'match_documents_by_workspace'
+      ? { id: row.chunk_id, document_id: row.document_id, content: row.content, similarity: row.similarity, metadata: row.metadata }
+      : { chunk_id: row.chunk_id, document_id: row.document_id, content: row.content, similarity: row.similarity, metadata: row.metadata };
+  });
+}
+
+/**
+ * Routes the pipeline's retrieval through the fake: the vector RPC on the anonymous client calls `h.retrieval`
+ * (which returns the legacy `{ chunks }` shape), and the assembly lookups read the fake admin client.
+ * Call after vi.resetModules() and before importing the route, so the route shares this deps module.
+ */
+export async function installChatPipeline(h: ChatRouteHarness): Promise<void> {
+  const deps = await import('@/lib/rag/deps');
+  const config = await import('@/lib/rag/config');
+  config.resetRagConfigForTests();
+  deps.resetRagDepsForTests();
+  deps.setRagDepsForTests({
+    embedder: async () => [0.1, 0.2, 0.3],
+    adminClient: () => h.supabase.client as never,
+    anonClient: () => ({
+      rpc(fn: string, args: Record<string, unknown>) {
+        const request = {
+          abortSignal: () => request,
+          then: (onFulfilled: (value: unknown) => unknown, onRejected?: (reason: unknown) => unknown) =>
+            Promise.resolve()
+              .then(async () => {
+                const result = (await h.retrieval(fn, args)) as ReturnType<typeof retrievalWith> | undefined;
+                return { data: retrievalRows(fn, result), error: null };
+              })
+              .then(onFulfilled, onRejected),
+        };
+        return request as never;
+      },
+    }),
+  });
+}
 
 export function emptyRetrieval() {
   return {
