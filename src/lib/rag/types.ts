@@ -95,6 +95,7 @@ export interface RetrievalOptions {
   webSearchEnabled?: boolean;
   mediaKind?: 'image' | 'video';
   generalOverview?: boolean;
+  degrade?: 'drop_top_candidate';
 }
 
 export interface StageOverrides {

@@ -152,6 +152,30 @@ def check_pr(errors: list[str]) -> None:
             errors.append("pr-smoke: gate-negative-control must assert offenders in eval/out/negative/gate.json with jq -e")
         if "--max-results 1" not in body:
             errors.append("pr-smoke: gate-negative-control must run with --max-results 1")
+        if "--degrade drop_top_candidate" not in body:
+            errors.append("pr-smoke: gate-negative-control must run with --degrade drop_top_candidate")
+        if "--out eval/out/negative-degrade" not in body:
+            errors.append("pr-smoke: gate-negative-control degrade step must write to eval/out/negative-degrade")
+        degrade_steps = [
+            str(step.get("run", ""))
+            for step in all_steps(neg)
+            if "--degrade drop_top_candidate" in str(step.get("run", ""))
+        ]
+        if len(degrade_steps) != 1:
+            errors.append("pr-smoke: gate-negative-control must have exactly one --degrade drop_top_candidate step")
+        else:
+            degrade_body = degrade_steps[0]
+            if not re.search(r'test\s+"?\$code"?\s+-eq\s+10\b', degrade_body):
+                errors.append("pr-smoke: the degrade step must assert the regression exit code with 'test \"$code\" -eq 10'")
+            if not re.search(
+                r"jq -e '[^']*\.slice == \"overall\"[^']*\.metric == \"mrr\"[^']*\.threshold - \.observed[^']*>= 0\.05[^']*' eval/out/negative-degrade/gate\.json",
+                degrade_body,
+            ):
+                errors.append("pr-smoke: the degrade step must assert an overall MRR margin >= 0.05 with jq -e on eval/out/negative-degrade/gate.json")
+            if not re.search(r"jq -e '[^']*\.passed == false[^']*\.mismatches \| length == 0[^']*' eval/out/negative-degrade/gate\.json", degrade_body):
+                errors.append("pr-smoke: the degrade step must assert passed false and no mismatches")
+        if body.find("--degrade drop_top_candidate") > body.find("--max-results 1"):
+            errors.append("pr-smoke: the degrade step must run before the max_results control")
     # every job that runs eval pytest or the harness must sync eval with all extras
     for jname, job in jobs.items():
         body = step_text(job)

@@ -27,6 +27,7 @@ async function main(): Promise<number> {
       out: { type: 'string', default: 'eval/out/smoke' },
       'deployment-mode': { type: 'string', default: 'single-tenant' },
       'max-results': { type: 'string' },
+      degrade: { type: 'string' },
       'base-url': { type: 'string' },
       'no-gate': { type: 'boolean', default: false },
       baseline: { type: 'string' },
@@ -52,6 +53,10 @@ async function main(): Promise<number> {
 
   const requestOptions: EvalRequestOptions = {};
   if (maxResults !== undefined) requestOptions.max_results = maxResults;
+  if (values.degrade !== undefined) {
+    if (values.degrade !== 'drop_top_candidate') throw new Error('--degrade must be drop_top_candidate');
+    requestOptions.degrade = values.degrade;
+  }
   for (const [flag, key] of [['org', 'organization_id'], ['user', 'user_id']] as const) {
     const value = values[flag]?.trim();
     if (value === undefined) continue;
