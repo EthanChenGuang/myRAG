@@ -13,6 +13,8 @@ from rag_sidecar.contracts.golden import (
     GoldenSplitManifest,
     GoldSpan,
 )
+from rag_sidecar.contracts.judge import JudgeConfig, JudgeItemScore, JudgeReport
+from rag_sidecar.contracts.sidecar import SidecarError, SidecarHealth, SidecarInfo, SidecarReady
 from rag_sidecar.contracts.report import (
     EvalReport,
     ItemResult,
@@ -36,6 +38,13 @@ from rag_sidecar.contracts.eval_run import (
 )
 
 __all__ = [
+    "JudgeConfig",
+    "JudgeItemScore",
+    "JudgeReport",
+    "SidecarError",
+    "SidecarHealth",
+    "SidecarInfo",
+    "SidecarReady",
     "Baseline",
     "BaselineMetricStat",
     "BaselineRun",

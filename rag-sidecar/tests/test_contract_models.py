@@ -9,11 +9,19 @@ from rag_sidecar.contracts import (
     GateOffender,
     GateResult,
     ItemResult,
+    JudgeConfig,
+    JudgeItemScore,
+    JudgeReport,
     MetricValue,
     NoiseConfig,
     RagRunOptions,
+    SidecarError,
+    SidecarHealth,
+    SidecarInfo,
+    SidecarReady,
     SliceMetrics,
 )
+from rag_sidecar.export_schemas import CONTRACTS
 
 METRICS = ["recall_at_5", "recall_at_10", "mrr", "correct_refusal_rate", "false_refusal_rate"]
 
@@ -234,3 +242,154 @@ class TestGateResult:
                 observed=0.5,
                 direction="up",
             )
+
+
+def _judge_config(**overrides):
+    base = {
+        "judge_model": "vendor/judge-model",
+        "judge_family": "vendor",
+        "provider": "openrouter",
+        "base_url": "https://openrouter.ai/api/v1",
+        "temperature": 0,
+        "embedding_model": "vendor/embedding-model",
+    }
+    base.update(overrides)
+    return base
+
+
+def _judge_item(**overrides):
+    base = {
+        "item_id": "en-general-001",
+        "language": "en",
+        "category": "general",
+        "library": "deepeval",
+        "metric": "faithfulness",
+        "score": 0.9,
+        "skipped_reason": None,
+    }
+    base.update(overrides)
+    return base
+
+
+def _judge_report(**overrides):
+    base = {
+        "schema_version": 1,
+        "run_id": "run-001",
+        "run_config_hash": "a" * 64,
+        "judge_model": "vendor/judge-model",
+        "judge_family": "vendor",
+        "generator_model": "other/generator-model",
+        "generator_family": "other",
+        "items": [_judge_item()],
+        "overall": {"deepeval.faithfulness": _metric(0.9, 1)},
+        "by_language": {"en": {"deepeval.faithfulness": _metric(0.9, 1)}},
+        "by_category": {"general": {"deepeval.faithfulness": _metric(0.9, 1)}},
+    }
+    base.update(overrides)
+    return base
+
+
+class TestJudgeConfig:
+    def test_temperature_zero_validates_with_default_concurrency(self):
+        config = JudgeConfig(**_judge_config())
+        assert config.temperature == 0
+        assert config.max_concurrency == 4
+
+    def test_non_zero_temperature_rejected(self):
+        with pytest.raises(ValidationError):
+            JudgeConfig(**_judge_config(temperature=0.2))
+
+    def test_provider_other_than_openrouter_rejected(self):
+        with pytest.raises(ValidationError):
+            JudgeConfig(**_judge_config(provider="openai"))
+
+    def test_unknown_key_rejected(self):
+        with pytest.raises(ValidationError):
+            JudgeConfig(**_judge_config(seed=1))
+
+    def test_frozen(self):
+        config = JudgeConfig(**_judge_config())
+        with pytest.raises(ValidationError):
+            config.judge_model = "other"
+
+
+class TestJudgeScores:
+    def test_score_in_range_and_skipped_item_accepted(self):
+        assert JudgeItemScore(**_judge_item(score=1.0)).score == 1.0
+        skipped = JudgeItemScore(**_judge_item(score=None, skipped_reason="no_answer item"))
+        assert skipped.score is None
+
+    @pytest.mark.parametrize("score", [1.2, -0.1])
+    def test_score_out_of_range_rejected(self, score):
+        with pytest.raises(ValidationError):
+            JudgeItemScore(**_judge_item(score=score))
+
+    def test_metric_outside_the_three_rejected(self):
+        with pytest.raises(ValidationError):
+            JudgeItemScore(**_judge_item(metric="toxicity"))
+
+    def test_library_outside_deepeval_ragas_rejected(self):
+        with pytest.raises(ValidationError):
+            JudgeItemScore(**_judge_item(library="trulens"))
+
+    def test_report_valid_and_strict(self):
+        report = JudgeReport(**_judge_report())
+        assert report.overall["deepeval.faithfulness"].n == 1
+        with pytest.raises(ValidationError):
+            JudgeReport(**_judge_report(smuggled=1))
+
+    def test_report_empty_slice_is_none_with_zero_count(self):
+        report = JudgeReport(**_judge_report(overall={"ragas.context_recall": _metric(None, 0)}))
+        assert report.overall["ragas.context_recall"].value is None
+
+
+class TestSidecarContracts:
+    def test_health_status_must_be_ok(self):
+        assert SidecarHealth(status="ok").status == "ok"
+        with pytest.raises(ValidationError):
+            SidecarHealth(status="degraded")
+
+    @pytest.mark.parametrize("status", ["ready", "not_ready"])
+    def test_ready_accepts_ready_and_not_ready(self, status):
+        assert SidecarReady(status=status).reason is None
+
+    def test_ready_rejects_other_status(self):
+        with pytest.raises(ValidationError):
+            SidecarReady(status="starting")
+
+    def test_info_service_must_be_rag_sidecar(self):
+        info = SidecarInfo(service="rag-sidecar", version="0.1.0", contracts_schema_version=1)
+        assert info.contracts_schema_version == 1
+        with pytest.raises(ValidationError):
+            SidecarInfo(service="other", version="0.1.0", contracts_schema_version=1)
+
+    def test_error_requires_error_string_and_forbids_extras(self):
+        assert SidecarError(error="boom").error == "boom"
+        with pytest.raises(ValidationError):
+            SidecarError(error="boom", detail="x")
+
+    def test_sidecar_models_are_frozen(self):
+        ready = SidecarReady(status="ready")
+        with pytest.raises(ValidationError):
+            ready.status = "not_ready"
+
+
+class TestRegistry:
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "EvalReport",
+            "Baseline",
+            "NoiseConfig",
+            "GateResult",
+            "JudgeConfig",
+            "JudgeReport",
+            "SidecarHealth",
+            "SidecarReady",
+            "SidecarInfo",
+            "SidecarError",
+        ],
+    )
+    def test_model_registered_in_serialization_mode(self, name):
+        registered = {model.__name__: mode for model, mode in CONTRACTS}
+        assert registered.get(name) == "serialization"
