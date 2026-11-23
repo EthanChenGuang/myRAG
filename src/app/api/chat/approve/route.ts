@@ -12,23 +12,7 @@ function describeConnections(client: unknown): { server: string; connected: bool
   return typeof candidate?.getConnectionStatus === 'function' ? candidate.getConnectionStatus() : [];
 }
 
-// Global cache for Gmail data chaining
 const global_cache = globalThis as any;
-if (!global_cache.gmailCache) {
-  global_cache.gmailCache = {
-    lastFoundEmail: null as any,
-    recentEmails: [] as Array<{
-      id: string;
-      threadId?: string;
-      from: string;
-      subject: string;
-      snippet?: string;
-      timestamp: number;
-    }>,
-    timestamp: null as number | null,
-    MAX_CACHED_EMAILS: 10 // Keep last 10 emails in cache
-  };
-}
 
 // Global cache for MCP tools persistence
 if (!global_cache.mcpToolsCache) {
@@ -594,98 +578,10 @@ async function transformToolParameters(toolName: string, originalParams: any): P
       structuredParams.body = bodyLines.join('\n').trim();
     }
     
-    // Get thread_id from Gmail cache if available (for proper reply threading)
-    if (global_cache.gmailCache?.lastFoundEmail?.thread_id) {
-      structuredParams.thread_id = global_cache.gmailCache.lastFoundEmail.thread_id;
-      devLog.verbose('📧 [GMAIL TRANSFORM] Using cached thread_id:', structuredParams.thread_id);
-    }
-    
-    // If no To field was extracted, try to get it from cache
-    if (!structuredParams.to && global_cache.gmailCache?.lastFoundEmail?.from) {
-      structuredParams.to = global_cache.gmailCache.lastFoundEmail.from;
-      devLog.verbose('📧 [GMAIL TRANSFORM] Using cached sender as To field:', structuredParams.to);
-    }
-    
-    // If still no To field, try to extract from the original user message or cache
-    if (!structuredParams.to) {
-      // Check if we have access to the original user message
-      const userMessage = optimizedParams._userMessage || '';
-      
-      devLog.verbose('📧 [GMAIL TRANSFORM] No To field found, checking user message and cache for email hints');
-      devLog.verbose('📧 [GMAIL TRANSFORM] User message:', userMessage);
-      
-      // Look for common patterns in the user message
-      // 1. Full email addresses
-      const emailRegex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g;
-      const emailMatches = userMessage.match(emailRegex);
-      
-      if (emailMatches && emailMatches.length > 0) {
-        structuredParams.to = emailMatches[0];
-        devLog.verbose('📧 [GMAIL TRANSFORM] Extracted email from user message:', structuredParams.to);
-      } else {
-        // 2. Look for names or usernames mentioned in the user message
-        const namePatterns = [
-          /(?:to|for|email|reply to|draft to)\s+(\w+)(?:\s|,|$)/i,
-          /(\w+)(?:\s+and\s+their|'s)\s+(?:email|message)/i,
-          /write\s+(?:a\s+)?(?:draft|email|reply)\s+to\s+(\w+)/i
-        ];
-        
-        let extractedName = null;
-        for (const pattern of namePatterns) {
-          const match = userMessage.match(pattern);
-          if (match && match[1]) {
-            extractedName = match[1].toLowerCase();
-            devLog.verbose('📧 [GMAIL TRANSFORM] Extracted name from user message:', extractedName);
-            break;
-          }
-        }
-        
-        if (extractedName && global_cache.gmailCache?.recentEmails) {
-            devLog.verbose('📧 [GMAIL TRANSFORM] Searching cache for name:', extractedName);
-            devLog.verbose('📧 [GMAIL TRANSFORM] Cached emails:', global_cache.gmailCache.recentEmails.map((e: any) => ({ from: e.from, fromName: e.fromName })));
-            
-            for (const cachedEmail of global_cache.gmailCache.recentEmails) {
-              const cachedFrom = cachedEmail.from;
-              const cachedFromName = cachedEmail.fromName || '';
-              
-              // Check both email address and name fields for matches
-              if (cachedFrom && cachedFrom.toLowerCase().includes(extractedName)) {
-                structuredParams.to = cachedFrom;
-                devLog.verbose('📧 [GMAIL TRANSFORM] Matched partial email to cached sender:', structuredParams.to);
-                
-                // Also set thread_id if this is the email being replied to
-                if (cachedEmail.threadId) {
-                  structuredParams.thread_id = cachedEmail.threadId;
-                  devLog.verbose('📧 [GMAIL TRANSFORM] Also using thread_id from matched email:', structuredParams.thread_id);
-                }
-                break;
-              } else if (cachedFromName && cachedFromName.toLowerCase().includes(extractedName)) {
-                structuredParams.to = cachedFrom;
-                devLog.verbose('📧 [GMAIL TRANSFORM] Matched name to cached sender:', structuredParams.to);
-                
-                // Also set thread_id if this is the email being replied to
-                if (cachedEmail.threadId) {
-                  structuredParams.thread_id = cachedEmail.threadId;
-                  devLog.verbose('📧 [GMAIL TRANSFORM] Also using thread_id from matched email:', structuredParams.thread_id);
-                }
-                break;
-              }
-            }
-          }
-          
-          // If still no match, check if we have a domain hint and extracted name
-          if (!structuredParams.to && extractedName && userMessage.toLowerCase().includes('@proton.me')) {
-            structuredParams.to = `${extractedName}@proton.me`;
-            devLog.verbose('📧 [GMAIL TRANSFORM] Constructed email with domain hint:', structuredParams.to);
-          }
+    for (const field of ['to', 'subject', 'thread_id'] as const) {
+      if (!structuredParams[field] && typeof originalParams[field] === 'string' && originalParams[field]) {
+        structuredParams[field] = originalParams[field];
       }
-    }
-    
-    // If no Subject was extracted, create a reply subject from cache
-    if (!structuredParams.subject && global_cache.gmailCache?.lastFoundEmail?.subject) {
-      const originalSubject = global_cache.gmailCache.lastFoundEmail.subject;
-      structuredParams.subject = originalSubject.startsWith('Re:') ? originalSubject : `Re: ${originalSubject}`;
-      devLog.verbose('📧 [GMAIL TRANSFORM] Using cached subject as reply:', structuredParams.subject);
     }
     
     // 🎯 PARAMETER ORDER FIX: Create properly ordered parameters for Zapier Gmail API
@@ -1267,6 +1163,26 @@ export async function POST(req: NextRequest) {
       );
     }
     
+    if (!toolApprovalState[toolCallId]) {
+      if (action === 'cancel' && persistentState) {
+        await ToolExecutionStateService.upsert({
+          user_id: userId,
+          chat_id: sessionId || '00000000-0000-0000-0000-000000000000',
+          message_id: Date.now(),
+          tool_call_id: toolCallId,
+          tool_name: persistentState.tool_name,
+          tool_params: persistentState.tool_params,
+          status: 'cancelled'
+        });
+        return NextResponse.json({ success: true, cancelled: true, toolCallId });
+      }
+      console.warn(`API APPROVE: In-memory approval state missing for ${toolCallId}, refusing to execute`);
+      return NextResponse.json(
+        { error: 'Approval expired, ask again', code: 'approval_expired' },
+        { status: 409 }
+      );
+    }
+
     // Update approval state
     toolApprovalState[toolCallId].approved = action === 'approve';
     console.log(`API APPROVE: Updated approval state for ${toolCallId} to ${action === 'approve'}`);
@@ -1615,25 +1531,6 @@ export async function POST(req: NextRequest) {
             ? { ...persistentState.tool_params }
             : { ...toolCall.params };
           
-          console.log('🔍 [GMAIL CACHE STATUS] At Gmail tool execution:', {
-            toolName: toolCall.name,
-            hasGlobalCache: !!global_cache,
-            hasGmailCache: !!global_cache?.gmailCache,
-            hasLastFoundEmail: !!global_cache?.gmailCache?.lastFoundEmail,
-            lastFoundEmailStructure: global_cache?.gmailCache?.lastFoundEmail ? {
-              type: typeof global_cache.gmailCache.lastFoundEmail,
-              keys: Object.keys(global_cache.gmailCache.lastFoundEmail),
-              hasContent: !!global_cache.gmailCache.lastFoundEmail.content,
-              contentLength: global_cache.gmailCache.lastFoundEmail.content?.length || 0
-            } : null,
-            recentEmailsCount: global_cache?.gmailCache?.recentEmails?.length || 0,
-            cacheAge: global_cache?.gmailCache?.timestamp ? `${Date.now() - global_cache.gmailCache.timestamp}ms` : 'N/A'
-          });
-          
-          // Pass user message for email extraction
-          const userMessage = (toolCall.params?.instructions as string) || (body.messages?.[body.messages.length - 1]?.content as string) || '';
-          optimizedParams._userMessage = userMessage;
-          
           // 🎯 CRITICAL FIX: Transform instructions → query for Gmail find_email tools
           // The Zapier MCP client expects 'query' parameter, but AI sends 'instructions'
           if (toolCall.name.includes('find_email') && optimizedParams.instructions && !optimizedParams.query) {
@@ -1661,8 +1558,7 @@ export async function POST(req: NextRequest) {
             name: toolCall.name,
             hasReplyInName: toolCall.name.includes('reply_to_email'),
             hasDraftInName: toolCall.name.includes('create_draft_reply'),
-            params: Object.keys(optimizedParams),
-            cacheExists: !!global_cache?.gmailCache?.lastFoundEmail
+            params: Object.keys(optimizedParams)
           });
 
           // Verify tool name matching (from GMAIL_FIX_PLAN.MD Phase 1, Step 2)
@@ -1672,317 +1568,6 @@ export async function POST(req: NextRequest) {
             includesDraft: toolCall.name.includes('create_draft_reply')
           });
             
-          // Test email extraction function directly (from GMAIL_FIX_PLAN.MD Phase 1, Step 3)
-          // Assuming extractEmailAddressFromSender is defined elsewhere or will be defined
-          // For now, let's define a placeholder if it's not present, or ensure it's correctly scoped
-          // Enhanced version from GMAIL_FIX_PLAN.md Step 2:
-          function extractEmailAddressFromSender(fromField: string): string | null {
-            devLog.verbose('🔍 [EMAIL EXTRACT] Input:', fromField);
-            
-            if (!fromField) {
-              devLog.verbose('🔍 [EMAIL EXTRACT] No fromField provided');
-              return null;
-            }
-
-            // Try multiple patterns
-            const patterns = [
-              /<([^>]+)>/, // "Name <email@domain.com>"
-              /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/, // Direct email
-              /"?([^"]*)"?\s*<([^>]+)>/ // "Name" <email>
-            ];
-
-            for (const pattern of patterns) {
-              const match = fromField.match(pattern);
-              if (match) {
-                const email = match[1] || match[2];
-                devLog.verbose('🔍 [EMAIL EXTRACT] Success:', email, 'using pattern:', pattern);
-                return email;
-              }
-            }
-
-            devLog.verbose('🔍 [EMAIL EXTRACT] Failed - no patterns matched');
-            return null;
-          }
-
-          const testEmail = "Carlos Marcial <carlos@example.com>";
-          const extracted = extractEmailAddressFromSender(testEmail);
-          devLog.verbose('🔍 [EMAIL TEST]', { input: testEmail, output: extracted });
-          
-          if (
-            (toolCall.name.includes('reply_to_email') ||
-              toolCall.name.includes('create_draft_reply'))
-          ) {
-            // Look for the best matching email from cache
-            let cachedEmailData = null;
-            const recentEmails = global_cache?.gmailCache?.recentEmails || [];
-
-            // PRIORITY 1: Check if AI provided an email_id or message_id parameter
-            const providedEmailId = optimizedParams.email_id || optimizedParams.message_id || optimizedParams.id;
-            if (providedEmailId) {
-              console.log(`🔍 [GMAIL REPLY/DRAFT] AI provided email_id: ${providedEmailId}, searching in cache...`);
-
-              // Search in recent emails cache
-              for (const recentEmail of recentEmails) {
-                if (recentEmail.id === providedEmailId ||
-                    recentEmail.messageId === providedEmailId ||
-                    recentEmail.message_id === providedEmailId) {
-                  // Convert cached email format to expected format
-                  cachedEmailData = {
-                    content: [{
-                      text: JSON.stringify({
-                        execution: {
-                          result: [{
-                            id: recentEmail.id || recentEmail.messageId || recentEmail.message_id,
-                            threadId: recentEmail.threadId || recentEmail.thread_id,
-                            from: recentEmail.from,
-                            subject: recentEmail.subject
-                          }]
-                        },
-                        results: [{
-                          id: recentEmail.id || recentEmail.messageId || recentEmail.message_id,
-                          threadId: recentEmail.threadId || recentEmail.thread_id,
-                          from: recentEmail.from,
-                          subject: recentEmail.subject
-                        }]
-                      })
-                    }]
-                  };
-                  console.log(`🔍 [GMAIL REPLY/DRAFT] ✅ Found exact email match for ID: ${providedEmailId}`);
-                  console.log(`🔍 [GMAIL REPLY/DRAFT] Email subject: "${recentEmail.subject}"`);
-                  break;
-                }
-              }
-
-              // Also check lastFoundEmail if it matches the ID
-              if (!cachedEmailData && global_cache?.gmailCache?.lastFoundEmail) {
-                try {
-                  const lastFoundContent = JSON.parse(global_cache.gmailCache.lastFoundEmail.content[0].text);
-                  const lastFoundResult = lastFoundContent.execution?.result?.[0] || lastFoundContent.results?.[0];
-                  if (lastFoundResult && (lastFoundResult.id === providedEmailId ||
-                      lastFoundResult.messageId === providedEmailId)) {
-                    cachedEmailData = global_cache.gmailCache.lastFoundEmail;
-                    console.log(`🔍 [GMAIL REPLY/DRAFT] ✅ Found email in lastFoundEmail cache for ID: ${providedEmailId}`);
-                  }
-                } catch (e) {
-                  console.log(`🔍 [GMAIL REPLY/DRAFT] Could not parse lastFoundEmail cache`);
-                }
-              }
-
-              if (!cachedEmailData) {
-                console.log(`🔍 [GMAIL REPLY/DRAFT] ⚠️ Email ID ${providedEmailId} not found in cache, will proceed with fallback`);
-              }
-            }
-
-            // PRIORITY 2: Check if user mentioned a specific sender in the parameters (only if no email_id match)
-            if (!cachedEmailData) {
-              const paramsStr = JSON.stringify(toolCall.params).toLowerCase();
-
-              // Try to match by sender name mentioned in params
-              for (const recentEmail of recentEmails) {
-                if (recentEmail.from) {
-                  // Handle from as either string or object
-                  const senderString = typeof recentEmail.from === 'string'
-                    ? recentEmail.from
-                    : recentEmail.from.email || recentEmail.from.name || '';
-                  const senderName = senderString.toLowerCase();
-                  // Extract first name or key part of sender
-                  const senderParts = senderName.split(/[\s<@]/);
-                  for (const part of senderParts) {
-                    if (part.length > 2 && paramsStr.includes(part)) {
-                      // Convert cached email format to expected format
-                      cachedEmailData = {
-                        content: [{
-                          text: JSON.stringify({
-                            execution: {
-                              result: [{
-                                id: recentEmail.id || recentEmail.messageId || recentEmail.message_id,
-                                threadId: recentEmail.threadId || recentEmail.thread_id,
-                                from: recentEmail.from,
-                                subject: recentEmail.subject
-                              }]
-                            },
-                            results: [{
-                              id: recentEmail.id || recentEmail.messageId || recentEmail.message_id,
-                              threadId: recentEmail.threadId || recentEmail.thread_id,
-                              from: recentEmail.from,
-                              subject: recentEmail.subject
-                            }]
-                          })
-                        }]
-                      };
-                      console.log(`🔍 [GMAIL REPLY/DRAFT] Found email by sender name match: ${recentEmail.from}`);
-                      console.log(`🔍 [GMAIL REPLY/DRAFT] Email subject: "${recentEmail.subject}"`);
-                      break;
-                    }
-                  }
-                  if (cachedEmailData) break;
-                }
-              }
-            }
-
-            // PRIORITY 3: Fall back to lastFoundEmail if no specific match
-            if (!cachedEmailData && global_cache?.gmailCache?.lastFoundEmail) {
-              cachedEmailData = global_cache.gmailCache.lastFoundEmail;
-              devLog.verbose('🔍 [GMAIL REPLY/DRAFT] Using lastFoundEmail as fallback');
-              console.log('🔍 [GMAIL REPLY/DRAFT] lastFoundEmail structure:', {
-                type: typeof cachedEmailData,
-                keys: cachedEmailData ? Object.keys(cachedEmailData) : [],
-                hasContent: !!cachedEmailData?.content,
-                contentLength: cachedEmailData?.content?.length || 0
-              });
-            } else if (!cachedEmailData) {
-              console.log('🔍 [GMAIL REPLY/DRAFT] No cached email data available:', {
-                hasGlobalCache: !!global_cache,
-                hasGmailCache: !!global_cache?.gmailCache,
-                hasLastFoundEmail: !!global_cache?.gmailCache?.lastFoundEmail,
-                recentEmailsCount: global_cache?.gmailCache?.recentEmails?.length || 0
-              });
-            }
-            
-            if (cachedEmailData) {
-              devLog.verbose('🔍 [GMAIL REPLY/DRAFT] Attempting to use cached email data for auto-population.');
-              
-              // Debug cache structure
-              console.log('🔍 [GMAIL REPLY/DRAFT] Cache structure validation:', {
-                hasCachedData: !!cachedEmailData,
-                hasContent: !!cachedEmailData?.content,
-                contentIsArray: Array.isArray(cachedEmailData?.content),
-                contentLength: cachedEmailData?.content?.length || 0,
-                hasFirstContent: !!cachedEmailData?.content?.[0],
-                hasText: !!cachedEmailData?.content?.[0]?.text,
-                textType: typeof cachedEmailData?.content?.[0]?.text
-              });
-
-            let parsedText = null;
-            if (cachedEmailData?.content?.[0]?.text) {
-              try {
-                console.log('🔍 [GMAIL REPLY/DRAFT] Attempting to parse cached text (first 200 chars):', cachedEmailData.content[0].text.substring(0, 200));
-                parsedText = JSON.parse(cachedEmailData.content[0].text);
-              } catch (e) {
-                console.error('🔍 [GMAIL REPLY/DRAFT] Error parsing cached email content:', e);
-                console.log('🔍 [GMAIL REPLY/DRAFT] Invalid JSON text:', cachedEmailData.content[0].text);
-                // parsedText will remain null
-              }
-            } else {
-              console.log('🔍 [GMAIL REPLY/DRAFT] No text content found in cached email data structure');
-            }
-
-            if (parsedText) {
-              devLog.verbose('🔍 [GMAIL REPLY/DRAFT] Successfully parsed cached text content.');
-              const primaryEmailDataSource = parsedText.execution?.result?.[0]; // Preferred for threadId and as fallback
-              const secondaryEmailDataSource = parsedText.results?.[0];       // Preferred for from/subject
-
-              if (primaryEmailDataSource) {
-                  devLog.verbose("🔍 [GMAIL REPLY/DRAFT] Primary email data source (execution.result[0]):", JSON.stringify(primaryEmailDataSource, null, 2));
-              }
-              if (secondaryEmailDataSource) {
-                  devLog.verbose("🔍 [GMAIL REPLY/DRAFT] Secondary email data source (results[0]):", JSON.stringify(secondaryEmailDataSource, null, 2));
-              }
-
-              // Determine 'to' address
-              const fromDetails = secondaryEmailDataSource?.from || primaryEmailDataSource?.from;
-              if (fromDetails) {
-                const senderEmail = extractEmailAddressFromSender(typeof fromDetails === 'string' ? fromDetails : fromDetails.email || fromDetails.name);
-                            if (senderEmail) {
-                              optimizedParams.to = senderEmail;
-                  devLog.verbose(`🔍 [GMAIL REPLY/DRAFT] Auto-populated TO field: ${senderEmail}`);
-                            } else {
-                  devLog.verbose('🔍 [GMAIL REPLY/DRAFT] Could not extract sender email from:', JSON.stringify(fromDetails, null, 2));
-                }
-              } else {
-                console.log('🔍 [GMAIL REPLY/DRAFT] No "from" details found in cached email to set "to" field.');
-                            }
-
-              // Determine 'thread_id' - UNCONDITIONALLY OVERWRITE/SET from cache if available
-              // Check for both camelCase and snake_case versions, but DO NOT fall back to message ID
-              const threadIdFromCache = primaryEmailDataSource?.threadId || primaryEmailDataSource?.thread_id || 
-                                       secondaryEmailDataSource?.threadId || secondaryEmailDataSource?.thread_id;
-              
-              // Log what we found for debugging
-              console.log('🔍 [GMAIL REPLY/DRAFT] Thread ID extraction:', {
-                primaryThreadId: primaryEmailDataSource?.threadId,
-                primaryThread_id: primaryEmailDataSource?.thread_id,
-                primaryId: primaryEmailDataSource?.id,
-                secondaryThreadId: secondaryEmailDataSource?.threadId,
-                secondaryThread_id: secondaryEmailDataSource?.thread_id,
-                secondaryId: secondaryEmailDataSource?.id,
-                selectedThreadId: threadIdFromCache
-              });
-              if (threadIdFromCache) {
-                if (optimizedParams.thread_id && optimizedParams.thread_id !== threadIdFromCache) {
-                  console.log(`🔍 [GMAIL REPLY/DRAFT] Overwriting AI-provided thread_id "${optimizedParams.thread_id}" with cached thread_id "${threadIdFromCache}".`);
-                } else if (!optimizedParams.thread_id) {
-                  console.log(`🔍 [GMAIL REPLY/DRAFT] Setting thread_id from cache: "${threadIdFromCache}".`);
-                } else {
-                  console.log(`🔍 [GMAIL REPLY/DRAFT] AI-provided thread_id "${optimizedParams.thread_id}" matches cached_id "${threadIdFromCache}". No change needed.`);
-                }
-                optimizedParams.thread_id = threadIdFromCache;
-              } else {
-                console.log('🔍 [GMAIL REPLY/DRAFT] Could not determine thread_id from cached email. Existing thread_id (if any):', optimizedParams.thread_id);
-              }
-
-              // Determine 'subject'
-              const subjectFromCache = secondaryEmailDataSource?.subject || primaryEmailDataSource?.subject;
-              if (subjectFromCache) {
-                if (typeof subjectFromCache === 'string' && !subjectFromCache.toLowerCase().startsWith('re:')) {
-                  optimizedParams.subject = `Re: ${subjectFromCache}`;
-                } else {
-                  optimizedParams.subject = subjectFromCache; 
-                }
-                console.log(`🔍 [GMAIL REPLY/DRAFT] Auto-populated SUBJECT field: ${optimizedParams.subject}`);
-              } else {
-                console.log('🔍 [GMAIL REPLY/DRAFT] No "subject" found in cached email.');
-              }
-
-              // Handle Email Body for Gmail reply/draft tools
-              // For draft reply tools, if we have input but no body, use input as body
-              if (toolCall.name.includes('create_draft_reply') && toolCall.params.input && !toolCall.params.body) {
-                optimizedParams.body = toolCall.params.input;
-                console.log('🔍 [GMAIL BODY GEN] Copying input to body for draft reply');
-              }
-              
-              if (toolCall.params.body || optimizedParams.body) {
-                  console.log('🔍 [GMAIL BODY GEN] AI provided an explicit `body`. Processing for HTML formatting.');
-                  let newBody = toolCall.params.body || optimizedParams.body;
-                  // Convert newlines to <br /> for HTML, unless it already seems to contain basic HTML block tags or <br>.
-                  if (!(/<br\s*\/?>|<p>|<div>/i.test(newBody))) {
-                      newBody = newBody.replace(/\n/g, '<br />\n');
-                      console.log('🔍 [GMAIL BODY GEN] Converted newlines to <br /> for HTML.');
-                  } else {
-                      console.log('🔍 [GMAIL BODY GEN] Body seems to contain HTML tags, using as is regarding line breaks.');
-                  }
-                  optimizedParams.body = newBody;
-                  optimizedParams.body_type = 'html'; // Always set to HTML if we process/provide the body
-                  console.log('🔍 [GMAIL BODY GEN] Final HTML body set. Body type: html.');
-                  if (toolCall.params.instructions) {
-                      // If instructions are also present, pass them along as they might be used by Zapier for other things.
-                      optimizedParams.instructions = toolCall.params.instructions;
-                      console.log('🔍 [GMAIL BODY GEN] `instructions` also present, passing to Zapier:', toolCall.params.instructions);
-                  }
-              } else if (toolCall.params.instructions) {
-                  // AI did not provide `body`, but provided `instructions`.
-                  // Pass `instructions` to Zapier. Zapier might use this as a fallback for the body content.
-                  optimizedParams.instructions = toolCall.params.instructions;
-                  console.log('🔍 [GMAIL BODY GEN] AI did not provide `body`. Passing `instructions` to Zapier. Body content will be determined by Zapier (might use instructions as fallback).');
-                  // We are NOT setting optimizedParams.body or optimizedParams.body_type here based on tool.params.instructions
-              } else {
-                  console.log('🔍 [GMAIL BODY GEN] AI provided neither `body` nor `instructions`. Email body will likely be empty or Zapier might error if body is required.');
-              }
-
-            } else {
-              console.log('🔍 [GMAIL REPLY/DRAFT] Could not parse text from cachedEmailData. Details:', {
-                reason: !cachedEmailData?.content?.[0]?.text ? 'No text content in cache structure' : 'JSON parse failed',
-                cacheStructure: cachedEmailData ? Object.keys(cachedEmailData) : 'null',
-                contentType: cachedEmailData?.content ? typeof cachedEmailData.content : 'undefined',
-                contentLength: cachedEmailData?.content?.length || 0
-              });
-              console.log('🔍 [GMAIL REPLY/DRAFT] Skipping auto-population of to/thread_id/subject.');
-            }
-            } else {
-              console.warn('🔍 [GMAIL REPLY/DRAFT] Attempted to process reply/draft but no cached email found');
-            }
-          }
-          
           // --- BEGINNING OF ADDED/MODIFIED SECTION FOR INSTRUCTIONS ---
           const gmailToolsRequiringInstructionsAndBodyFormatting = [ // Renamed for clarity
             'gmail_send_email',
@@ -2053,9 +1638,6 @@ export async function POST(req: NextRequest) {
             }
             
             optimizedParams.instructions = optimizedInstructions;
-            
-            // Mark this as a find_email operation for later caching
-            optimizedParams._cache_email_result = true;
           }
           
           // PHASE 3: Common Gmail optimizations
@@ -3020,101 +2602,6 @@ export async function POST(req: NextRequest) {
           global.toolApprovalState[toolCallId].result = result;
         }
         
-        // GMAIL_FIX_PLAN.md: Phase 2, Step 1: Verify cache population during find_email
-        console.log('🔍 [CACHE CHECK] find_email params for caching:', JSON.stringify(toolCall.params, null, 2));
-        if (result && global_cache?.gmailCache) {
-          // Parse the actual email data from the result structure
-          let emailsToCache = [];
-          try {
-            if (result?.content?.[0]?.text) {
-              // Old format (wrapped in content array)
-              const parsed = JSON.parse(result.content[0].text);
-              emailsToCache = parsed.results || [];
-            } else if (result?.data?.content?.[0]?.text) {
-              // Universal MCP Client with Zapier format (JSON string in content)
-              const parsed = JSON.parse(result.data.content[0].text);
-              emailsToCache = parsed.results || [];
-            } else if (result?.data?.results) {
-              // Universal MCP Client format (ToolExecutionResult with direct results)
-              emailsToCache = result.data.results;
-            } else if (result?.results) {
-              // Direct Zapier response format
-              emailsToCache = result.results;
-            } else if (Array.isArray(result)) {
-              emailsToCache = result;
-            } else if (result && typeof result === 'object') {
-              emailsToCache = [result];
-            }
-            
-            // Update recent emails cache
-            if (emailsToCache.length > 0) {
-              const currentTime = Date.now();
-              
-              console.log(`🔍 [GMAIL CACHE] Processing ${emailsToCache.length} emails for cache`);
-              
-              // Add new emails to the front of the cache
-              const newCacheEntries = emailsToCache.map((email: any) => {
-                // Extract email address from various formats
-                let fromEmail = '';
-                if (typeof email.from === 'object' && email.from?.email) {
-                  fromEmail = email.from.email;
-                } else if (typeof email.from === 'string') {
-                  fromEmail = email.from;
-                } else if (email.sender) {
-                  fromEmail = email.sender;
-                }
-                
-                return {
-                  id: email.id || email.messageId || email.message_id,
-                  threadId: email.threadId || email.thread_id,
-                  from: fromEmail,
-                  fromName: (typeof email.from === 'object' && email.from?.name) ? email.from.name : '',
-                  subject: email.subject || '',
-                  snippet: email.snippet || email.body_plain?.substring(0, 200) || email.body?.substring(0, 200) || '',
-                  timestamp: currentTime
-                };
-              });
-              
-              // Merge with existing cache, keeping most recent MAX_CACHED_EMAILS
-              global_cache.gmailCache.recentEmails = [
-                ...newCacheEntries,
-                ...global_cache.gmailCache.recentEmails
-              ].slice(0, global_cache.gmailCache.MAX_CACHED_EMAILS);
-              
-              // Also update lastFoundEmail for backward compatibility
-              // Store in the format expected by the reply/draft code
-              if (emailsToCache.length > 0 && emailsToCache[0]) {
-                console.log(`🔍 [GMAIL CACHE] Storing first email in lastFoundEmail cache with proper structure`);
-                global_cache.gmailCache.lastFoundEmail = {
-                  content: [{
-                    text: JSON.stringify({
-                      execution: {
-                        result: [emailsToCache[0]]
-                      },
-                      results: [emailsToCache[0]]
-                    })
-                  }]
-                };
-                console.log(`🔍 [GMAIL CACHE] lastFoundEmail cache structure check:`, {
-                  hasContent: !!global_cache.gmailCache.lastFoundEmail?.content,
-                  hasFirstContent: !!global_cache.gmailCache.lastFoundEmail?.content?.[0],
-                  hasText: !!global_cache.gmailCache.lastFoundEmail?.content?.[0]?.text
-                });
-              } else {
-                console.log(`🔍 [GMAIL CACHE] No emails to cache in lastFoundEmail`);
-                global_cache.gmailCache.lastFoundEmail = null;
-              }
-              global_cache.gmailCache.timestamp = currentTime;
-              
-              console.log(`🔍 [GMAIL CACHE] Cached ${newCacheEntries.length} emails, total cached: ${global_cache.gmailCache.recentEmails.length}`);
-              console.log('🔍 [GMAIL CACHE] Recent email subjects:', 
-                global_cache.gmailCache.recentEmails.map((e: { subject: string }) => e.subject).slice(0, 3));
-            }
-          } catch (e) {
-            console.error('🔍 [GMAIL CACHE] Error caching emails:', e);
-          }
-        }
-
         // GMAIL_FIX_PLAN.md: Step 3: Verify Gmail API Response Structure
         if (toolCall.name.includes('find_email') && result) {
           console.log('🔍 [GMAIL STRUCTURE] Complete email object (or first if array):', JSON.stringify(Array.isArray(result) ? result[0] : result, null, 2));
@@ -3840,7 +3327,6 @@ Would you like me to search for events in a different time range, or would you p
         // Gmail-specific error logging and handling
         if (toolCall?.name?.includes('gmail')) {
           console.log('🔍 [GMAIL ERROR] Gmail-specific diagnostics:');
-          console.log('🔍 [GMAIL ERROR] Gmail Cache State:', JSON.stringify(global_cache?.gmailCache, null, 2));
           
           // Simple Gmail timeout handling
           if (err?.message?.includes('timeout')) {
