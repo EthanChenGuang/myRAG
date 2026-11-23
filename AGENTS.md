@@ -171,6 +171,7 @@ Unified OAuth for Google Drive, Notion, Dropbox:
 ## 15. Quality Checklist
 - Code follows repository style and reuses existing utilities.
 - Linting, type-checks, and domain scripts succeed prior to hand-off.
+- `npx next typegen && npx tsc --noEmit -p tsconfig.json` passes with zero errors; `next build` fails on type errors.
 - No sensitive data introduced; configuration arrays remain synchronized.
 - Task summaries stay concise and focused.
 - Performance guardrails: avoid log spam; scope effects to streaming; prefer `useShallow`.

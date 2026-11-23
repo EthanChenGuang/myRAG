@@ -41,8 +41,8 @@ const nextConfig = {
   // Allow cross-origin requests from ngrok for development
   allowedDevOrigins: ["b5c771ad2e29.ngrok-free.app"],
   typescript: {
-    // This will allow builds to complete even with TypeScript errors
-    ignoreBuildErrors: true,
+    // Type errors fail the build
+    ignoreBuildErrors: false,
   },
   images: {
     remotePatterns,

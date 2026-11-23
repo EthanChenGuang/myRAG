@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-const DEFAULT_BASELINE = 'scripts/ci/tsc-baseline.json';
+const DEFAULT_BASELINE = 'scripts/ci/sibling-tsc-baseline.json';
 const DIAGNOSTIC = /^(.+?)\((\d+),(\d+)\): error TS\d+:/;
 const GLOBAL_DIAGNOSTIC = /^error TS\d+:/;
 
