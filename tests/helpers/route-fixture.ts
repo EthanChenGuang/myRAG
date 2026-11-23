@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { PGlite } from '@electric-sql/pglite';
 import { expect, vi } from 'vitest';
 import { loadPinnedEvalEnv } from '../../eval/harness/eval-env.mts';
 import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from '../../eval/harness/fake-edge.mts';
@@ -76,9 +77,23 @@ export function systemTextOf(params: Record<string, any>): string {
     .join('\n\n---SYSTEM-MESSAGE---\n\n');
 }
 
-export async function startRouteFixture(options: { deploymentMode: DeploymentMode }): Promise<RouteFixture> {
+export interface RouteFixtureOptions {
+  deploymentMode: DeploymentMode;
+  /** Extra rows inserted into the fixture database before the fake edge starts. */
+  seed?: (db: PGlite) => Promise<void>;
+}
+
+export async function startRouteFixture(options: RouteFixtureOptions): Promise<RouteFixture> {
   const { deploymentMode } = options;
   const fixture = await createFixtureDatabase({ deploymentMode, corpusDir: CORPUS_DIR });
+  if (options.seed) {
+    try {
+      await options.seed(fixture.db);
+    } catch (error) {
+      await fixture.db.close().catch(() => undefined);
+      throw error;
+    }
+  }
   let edge: FakeEdge;
   try {
     edge = await startFakeEdge({ db: fixture.db });
