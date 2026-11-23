@@ -12,10 +12,14 @@ KEY = "test-service-key-not-real-0001"
 URL = "https://example-project.supabase.co"
 
 
+MISSING_USER_ID = {"code": "42703", "message": "column documents.user_id does not exist"}
+
+
 class Recorder:
-    def __init__(self, documents, chunks):
+    def __init__(self, documents, chunks, *, multi_tenant: bool = False):
         self.documents = documents
         self.chunks = chunks
+        self.multi_tenant = multi_tenant
         self.requests: list[httpx.Request] = []
 
     def handler(self, request: httpx.Request) -> httpx.Response:
@@ -25,6 +29,14 @@ class Recorder:
         limit = int(params.get("limit", "1000"))
         if request.url.path.endswith("/documents"):
             rows = self.documents
+            if "user_id" in params.get("select", "").split(","):
+                if not self.multi_tenant:
+                    return httpx.Response(400, json=MISSING_USER_ID)
+                rows = [{"user_id": row.get("user_id")} for row in rows]
+            if params.get("organization_id") == "not.is.null":
+                rows = [row for row in rows if row.get("organization_id")]
+            elif params.get("organization_id") == "is.null":
+                rows = [row for row in rows if not row.get("organization_id")]
         else:
             wanted = set(params["document_id"].removeprefix("in.(").removesuffix(")").split(","))
             rows = [row for row in self.chunks if row["document_id"] in wanted or row["document_id"].startswith("foreign")]
@@ -84,9 +96,65 @@ def test_personal_scope_filters_user_and_null_organization():
 
 def test_single_tenant_scope_must_be_explicit_and_filters_null_organization():
     rec = Recorder([{"id": "d1", "filename": "a.md"}], [_chunk("d1", 0, "alpha text")])
-    rec.source(single_tenant=True).documents()
-    for request in rec.of("documents"):
+    docs = rec.source(single_tenant=True).documents()
+    assert [doc.filename for doc in docs] == ["a.md"]
+    reads = [r for r in rec.of("documents") if r.url.params.get("select") == "id,filename"]
+    assert reads
+    for request in reads:
         assert request.url.params["organization_id"] == "is.null"
+
+
+def test_single_tenant_scope_is_refused_on_a_multi_tenant_database():
+    documents = [
+        {"id": "d1", "filename": "a.md", "user_id": USER, "organization_id": None},
+        {"id": "d2", "filename": "b.md", "user_id": "33333333-3333-4333-8333-333333333333", "organization_id": None},
+    ]
+    rec = Recorder(documents, [_chunk("d1", 0, "user one text"), _chunk("d2", 0, "user two text")], multi_tenant=True)
+    with pytest.raises(RuntimeError, match="--single-tenant refused"):
+        rec.source(single_tenant=True).documents()
+    assert not rec.of("document_chunks")
+    assert all(r.url.params.get("select") != "id,filename" for r in rec.of("documents"))
+
+
+def test_single_tenant_scope_is_refused_even_with_one_multi_tenant_owner():
+    documents = [{"id": "d1", "filename": "a.md", "user_id": USER, "organization_id": None}]
+    rec = Recorder(documents, [_chunk("d1", 0, "only user text")], multi_tenant=True)
+    with pytest.raises(RuntimeError, match="multi-tenant"):
+        rec.source(single_tenant=True).documents()
+    assert not rec.of("document_chunks")
+
+
+def test_single_tenant_scope_is_refused_when_documents_belong_to_an_organization():
+    documents = [
+        {"id": "d1", "filename": "a.md", "organization_id": None},
+        {"id": "d2", "filename": "b.md", "organization_id": ORG},
+    ]
+    rec = Recorder(documents, [_chunk("d1", 0, "a"), _chunk("d2", 0, "b")])
+    with pytest.raises(RuntimeError, match="organization"):
+        rec.source(single_tenant=True).documents()
+    assert not rec.of("document_chunks")
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        httpx.Response(401, json={"message": "invalid key"}),
+        httpx.Response(400, json={"code": "PGRST100", "message": "parse error"}),
+        httpx.Response(500, text="boom"),
+    ],
+)
+def test_single_tenant_scope_is_refused_when_the_schema_cannot_be_confirmed(response):
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return response
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    with pytest.raises(RuntimeError, match="could not confirm"):
+        SupabaseWorkspaceSource(URL, KEY, single_tenant=True, client=client).documents()
+    assert len(requests) == 1
+    assert requests[0].url.params["limit"] == "1"
 
 
 def test_chunk_requests_name_only_returned_document_ids_in_batches_of_100():

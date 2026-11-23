@@ -394,7 +394,23 @@ def test_cli_supabase_source_needs_exactly_one_scope_and_credentials(private_out
     assert _run(base + ["--org", "11111111-1111-4111-8111-111111111111", "--single-tenant"], claude=StubClaude()) == 2
     monkeypatch.delenv("NEXT_PUBLIC_SUPABASE_URL", raising=False)
     monkeypatch.delenv("SUPABASE_SERVICE_ROLE_KEY", raising=False)
+    monkeypatch.setenv("NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE", "single-tenant")
     assert _run(base + ["--single-tenant"], claude=StubClaude()) == 3
+    assert not out.exists()
+
+
+@pytest.mark.parametrize("mode", [None, "multi-tenant"])
+def test_cli_single_tenant_needs_single_tenant_deployment_mode(private_out, monkeypatch, capsys, mode):
+    out, manifest = private_out
+    monkeypatch.delenv("NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE", raising=False)
+    monkeypatch.delenv("MYRAG_DEPLOYMENT_MODE", raising=False)
+    if mode:
+        monkeypatch.setenv("NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE", mode)
+    monkeypatch.setenv("NEXT_PUBLIC_SUPABASE_URL", "https://example-project.supabase.co")
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "test-service-key-not-real-0001")
+    base = ["--source", "supabase", "--single-tenant", "--out", str(out), "--n", "60", "--split-manifest", str(manifest)]
+    assert _run(base, claude=StubClaude()) == 2
+    assert "NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE=single-tenant" in capsys.readouterr().err
     assert not out.exists()
 
 
