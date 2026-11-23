@@ -96,6 +96,9 @@ describe('extract-name POST', () => {
   beforeEach(() => {
     process.env.OPENAI_API_KEY = 'test-openai-key-placeholder';
     process.env.NEXT_PUBLIC_NAME_EXTRACTION_ENABLED = 'true';
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: async () => ({ auth: { getUser: async () => ({ data: { user: { id: 'user-placeholder' } } }) } }),
+    }));
   });
 
   async function extract(emailPrefix: string, aiAnswer: string) {
