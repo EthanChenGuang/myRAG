@@ -692,6 +692,7 @@ interface ToolApprovalState {
   [toolCallId: string]: {
     approved: boolean;
     toolCall: any;
+    ownerUserId?: string | null;
     result: any; // Add result field to store pre-fetched result
   };
 }
@@ -1221,6 +1222,14 @@ export async function POST(req: Request) {
         return userRes?.user?.id ? { id: userRes.user.id } : null;
       })();
       return sessionUserPromise;
+    };
+
+    const resolveToolOwnerId = async (): Promise<string | null> => {
+      try {
+        return (await getSessionUser())?.id ?? null;
+      } catch {
+        return null;
+      }
     };
 
     await repairOwnerMembership({ requestedOrganizationId: data?.organizationId, getUser: getSessionUser });
@@ -2754,6 +2763,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                   // Create tool execution state with 'running' status
                   if (sessionId) {
                     await ToolExecutionStateService.upsert({
+                      user_id: await resolveToolOwnerId(),
                       chat_id: sessionId,
                       message_id: messagesForModel.length,
                       tool_call_id: toolCallId,
@@ -2850,6 +2860,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                       // Create tool execution state with 'running' status
                       if (sessionId) {
                         await ToolExecutionStateService.upsert({
+                          user_id: await resolveToolOwnerId(),
                           chat_id: sessionId,
                           message_id: messagesForModel.length,
                           tool_call_id: toolCallId,
@@ -3068,6 +3079,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                   (globalThis as any).toolApprovalState[toolCallId] = {
                     approved: false,
                     executed: false, // Add execution tracking flag
+                    ownerUserId: await resolveToolOwnerId(),
                     toolCall: {
                       name: toolName,
                       params: transformedParams, // Use transformed parameters
@@ -3095,6 +3107,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                     // Create tool execution state with 'running' status
                     if (sessionId) {
                       await ToolExecutionStateService.upsert({
+                        user_id: await resolveToolOwnerId(),
                         chat_id: sessionId,
                         message_id: messagesForModel.length,
                         tool_call_id: actualToolCallId,
@@ -3734,6 +3747,9 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
           }
 
           // Track toolCalls in approval state
+          const stepOwnerUserId = toolCalls.some((call: StepToolCall) => !toolApprovalState[call.toolCallId])
+            ? await resolveToolOwnerId()
+            : null;
           toolCalls.forEach((call: StepToolCall) => {
             // Check if we already have a result for this tool call
             // This happens for tools that execute immediately (like webSearch or query_documents)
@@ -3753,6 +3769,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
               (globalThis as any).toolApprovalState[call.toolCallId] = {
                 approved: false, // Always start unapproved
                 executed: false, // Add execution tracking flag
+                ownerUserId: stepOwnerUserId,
                 toolCall: {
                   name: call.toolName,
                   params: call.input,

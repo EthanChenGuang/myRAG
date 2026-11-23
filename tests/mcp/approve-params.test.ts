@@ -1,12 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 
+const OWNER_ID = vi.hoisted(() => '00000000-0000-4000-8000-0000000000a1');
+
 const mocks = vi.hoisted(() => ({
   execute: vi.fn(),
   getCachedTools: vi.fn(),
   getConnectionStatus: vi.fn(),
   stateService: {
     getByToolCallId: vi.fn(),
+    getForUser: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
     upsert: vi.fn(),
@@ -14,6 +17,9 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@/lib/tool-execution-state', () => ({ ToolExecutionStateService: mocks.stateService }));
+vi.mock('@/lib/supabase/server', () => ({
+  createClient: async () => ({ auth: { getUser: async () => ({ data: { user: { id: OWNER_ID } } }) } }),
+}));
 vi.mock('@/lib/mcp/production-router', () => ({
   productionMcpRouter: {
     getAvailableServers: vi.fn(async () => []),
@@ -61,7 +67,7 @@ describe('approve route parameter handling', () => {
     mocks.execute.mockReset().mockResolvedValue({});
     mocks.getConnectionStatus.mockReset().mockReturnValue([{ server: 'Fake Server', connected: true }]);
     mocks.getCachedTools.mockReset().mockResolvedValue([{ name: 'fake_tool', description: 'Fake', execute: mocks.execute }]);
-    mocks.stateService.getByToolCallId.mockReset().mockResolvedValue({
+    mocks.stateService.getForUser.mockReset().mockResolvedValue({
       tool_call_id: TOOL_CALL_ID,
       tool_params: TOOL_PARAMS,
       chat_id: 'chat-1',
@@ -74,6 +80,7 @@ describe('approve route parameter handling', () => {
       [TOOL_CALL_ID]: {
         approved: false,
         executed: false,
+        ownerUserId: OWNER_ID,
         toolCall: { name: 'fake_tool', params: TOOL_PARAMS, meta: { sessionId: 'session-1' } },
       },
     };
