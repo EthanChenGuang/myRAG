@@ -2,7 +2,7 @@ import { generateText, type LanguageModel } from 'ai';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { env } from '@/lib/env';
 import { SystemPromptManager } from '@/lib/system-prompt-manager';
-import { createEnhancedRAGPrompt } from '@/lib/thinking-rag-enhancer';
+import { createEnhancedRAGPrompt } from '@/lib/rag';
 
 export const EVAL_DEFAULT_SYSTEM_PROMPT = `You are a helpful AI assistant with access to a knowledge base. When answering questions:
 

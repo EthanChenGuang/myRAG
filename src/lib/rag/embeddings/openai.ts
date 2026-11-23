@@ -24,7 +24,10 @@ export async function embedText(text: string, opts: { signal: AbortSignal }): Pr
   return response.data[0].embedding;
 }
 
-export async function embedBatch(texts: string[], opts: { signal: AbortSignal }): Promise<number[][]> {
+export async function embedBatch(
+  texts: string[],
+  opts: { signal: AbortSignal; onUsage?: (totalTokens: number) => void },
+): Promise<number[][]> {
   const all: number[][] = [];
   for (let i = 0; i < texts.length; i += BATCH_SIZE) {
     const response = await getClient().embeddings.create(
@@ -32,6 +35,7 @@ export async function embedBatch(texts: string[], opts: { signal: AbortSignal })
       { signal: opts.signal },
     );
     for (const item of response.data) all.push(item.embedding);
+    opts.onUsage?.(response.usage?.total_tokens || 0);
   }
   return all;
 }

@@ -1,22 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { RAG_MODE_CONFIGS } from '@/lib/rag-mode';
 import { createEnhancedRAGPrompt } from '@/lib/rag/generation/prompt';
 import { knowledgeBaseUnavailableMessage } from '@/lib/rag/generation/messages';
+import frozenCases from '../fixtures/characterization/prompt-builder.json';
 
 type Mode = 'strict' | 'balanced' | 'flexible' | 'bypass';
 
-// Verbatim copy of the pre-pipeline builder in src/lib/thinking-rag-enhancer.ts (its runtime
-// require of ./rag-mode does not resolve under vitest), taking the mode configs from the static import.
-function oldCreateEnhancedRAGPrompt(basePrompt: string, context: string, mode: Mode = 'strict'): string {
-  if (mode === 'bypass') {
-    return basePrompt.replace('{{context}}', '').replace(/Context:\s*$/i, '').trim();
-  }
-  const modeConfig = (RAG_MODE_CONFIGS as Record<string, { systemPromptWrapper: string | null } | undefined>)[mode];
-  if (!modeConfig || !modeConfig.systemPromptWrapper) {
-    return oldCreateEnhancedRAGPrompt(basePrompt, context, 'strict');
-  }
-  const cleanedBasePrompt = basePrompt.replace('{{context}}', '').replace(/Context:\s*$/i, '').trim();
-  return modeConfig.systemPromptWrapper.replace('{{context}}', context).replace('{{basePrompt}}', cleanedBasePrompt);
+// Outputs of the retired pre-pipeline builder, frozen before its module was deleted.
+const FROZEN = frozenCases as Array<{ base: string; context: string; mode: string; output: string }>;
+
+function frozenOutput(base: string, context: string, mode: string): string {
+  const hit = FROZEN.find((entry) => entry.base === base && entry.context === context && entry.mode === mode);
+  expect(hit, `no frozen output for mode ${mode}`).toBeTruthy();
+  return (hit as { output: string }).output;
 }
 
 const BASE_PROMPTS: Array<[string, string]> = [
@@ -41,13 +36,17 @@ describe('createEnhancedRAGPrompt (re-homed)', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
+  it('has a frozen output for every matrix case', () => {
+    expect(FROZEN).toHaveLength(BASE_PROMPTS.length * MODES.length * CONTEXTS.length + 2);
+  });
+
   for (const [baseName, base] of BASE_PROMPTS) {
     for (const mode of MODES) {
       for (const [contextName, context] of CONTEXTS) {
         it(`matches the old output: ${baseName}, ${mode}, ${contextName}`, () => {
           const actual = createEnhancedRAGPrompt(base, context, mode);
           expect(actual).not.toBe('');
-          expect(actual).toBe(oldCreateEnhancedRAGPrompt(base, context, mode));
+          expect(actual).toBe(frozenOutput(base, context, mode));
         });
       }
     }
@@ -55,13 +54,13 @@ describe('createEnhancedRAGPrompt (re-homed)', () => {
 
   it('returns the cleaned base prompt without RAG wrapping in bypass mode', () => {
     const base = 'You are a helpful assistant.\n\nContext:\n{{context}}';
-    expect(createEnhancedRAGPrompt(base, 'CTX', 'bypass')).toBe(oldCreateEnhancedRAGPrompt(base, 'CTX', 'bypass'));
+    expect(createEnhancedRAGPrompt(base, 'CTX', 'bypass')).toBe(frozenOutput(base, 'CTX', 'bypass'));
     expect(createEnhancedRAGPrompt(base, 'CTX', 'bypass')).toBe('You are a helpful assistant.');
   });
 
   it('falls back to strict for an unknown mode', () => {
     const base = 'Base {{context}}';
-    expect(createEnhancedRAGPrompt(base, 'CTX', 'nope' as Mode)).toBe(oldCreateEnhancedRAGPrompt(base, 'CTX', 'strict'));
+    expect(createEnhancedRAGPrompt(base, 'CTX', 'nope' as Mode)).toBe(frozenOutput(base, 'CTX', 'nope'));
   });
 
   it('defaults to strict and leaves no {{context}} placeholder behind', () => {

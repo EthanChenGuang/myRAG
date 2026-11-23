@@ -4,7 +4,7 @@ import fetch from 'node-fetch';
 import { env } from '@/lib/env';
 import { DocumentContent } from '@/types/chat';
 import { createClient } from '@supabase/supabase-js';
-import { getQueryEmbedding } from '@/lib/document-processor';
+import { embedText } from '@/lib/rag';
 import { v4 as uuidv4 } from 'uuid';
 import { extractURLs } from '@/lib/url-extractor';
 import { isMultiTenant, isSingleTenant } from '@/lib/deployment-mode';
@@ -465,7 +465,7 @@ async function storeDocument(
         // Process chunks in parallel within each batch
         // Use allSettled instead of all to handle partial failures
         const embeddingResults = await Promise.allSettled(
-          batch.map(chunk => getQueryEmbedding(chunk))
+          batch.map(chunk => embedText(chunk, { signal: new AbortController().signal }))
         );
         
         // Filter out failed embeddings and prepare batch insert

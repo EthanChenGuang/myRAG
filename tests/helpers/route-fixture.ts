@@ -38,26 +38,6 @@ export function readGoldenQuestions(): GoldenQuestion[] {
     });
 }
 
-type RagMode = 'strict' | 'balanced' | 'flexible' | 'bypass';
-
-/**
- * The route's createEnhancedRAGPrompt loads rag-mode through a CommonJS require that vitest cannot resolve.
- * This copy keeps the same logic and takes the mode configs as an argument.
- */
-export function createFaithfulEnhancedPrompt(modeConfigs: Record<string, { systemPromptWrapper?: string | null } | undefined>) {
-  return function createEnhancedRAGPrompt(basePrompt: string, context: string, mode: RagMode = 'strict'): string {
-    if (mode === 'bypass') {
-      return basePrompt.replace('{{context}}', '').replace(/Context:\s*$/i, '').trim();
-    }
-    const modeConfig = modeConfigs[mode];
-    if (!modeConfig || !modeConfig.systemPromptWrapper) {
-      return createEnhancedRAGPrompt(basePrompt, context, 'strict');
-    }
-    const cleanedBasePrompt = basePrompt.replace('{{context}}', '').replace(/Context:\s*$/i, '').trim();
-    return modeConfig.systemPromptWrapper.replace('{{context}}', context).replace('{{basePrompt}}', cleanedBasePrompt);
-  };
-}
-
 export function expectCharacterization(name: string, actual: unknown): void {
   const file = path.join(SNAPSHOT_DIR, `${name}.json`);
   if (process.env.UPDATE_CHARACTERIZATION === '1') {

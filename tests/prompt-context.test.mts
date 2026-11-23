@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 const PLACEHOLDER = '{{context}}';
 
-let createEnhancedRAGPrompt: typeof import('../src/lib/thinking-rag-enhancer.ts').createEnhancedRAGPrompt;
+let createEnhancedRAGPrompt: typeof import('../src/lib/rag/generation/prompt.ts').createEnhancedRAGPrompt;
 let SystemPromptManager: typeof import('../src/lib/system-prompt-manager.ts').SystemPromptManager;
 
 before(async () => {
@@ -13,7 +13,7 @@ before(async () => {
   process.env.OPENAI_API_KEY = 'test-openai-key-placeholder';
   process.env.OPENROUTER_API_KEY = 'sk-or-abcdefghijklmnopqrstuvwxyzabcdef';
   process.env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE = 'single-tenant';
-  ({ createEnhancedRAGPrompt } = await import('../src/lib/thinking-rag-enhancer.ts'));
+  ({ createEnhancedRAGPrompt } = await import('../src/lib/rag/generation/prompt.ts'));
   ({ SystemPromptManager } = await import('../src/lib/system-prompt-manager.ts'));
 });
 

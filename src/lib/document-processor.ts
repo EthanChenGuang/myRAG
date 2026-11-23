@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { storeDocument } from './supabase';
 import { env } from './env';
-import OpenAI from 'openai';
+import { embedText, embedBatch } from '@/lib/rag';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -19,19 +19,10 @@ const unlink = promisify(fs.unlink);
 
 const LLAMA_CLOUD_API_BASE = 'https://api.cloud.llamaindex.ai/api';
 
-// Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: env.OPENAI_API_KEY,
-});
-
-// Simple embedding functions to replace the deleted embedding-optimizer
+// Embeddings go through the retrieval pipeline module
 async function createEmbedding(text: string): Promise<number[]> {
   try {
-    const response = await openai.embeddings.create({
-      model: env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small',
-      input: text,
-    });
-    return response.data[0].embedding;
+    return await embedText(text, { signal: new AbortController().signal });
   } catch (error) {
     console.error('Error creating embedding:', error);
     throw error;
@@ -45,30 +36,19 @@ async function createBatchEmbeddings(chunks: string[]): Promise<{
   cached: boolean[];
 }> {
   try {
-    // Process in batches of 100 to avoid API limits
-    const batchSize = 100;
-    const allEmbeddings: number[][] = [];
     let totalTokens = 0;
-
-    for (let i = 0; i < chunks.length; i += batchSize) {
-      const batch = chunks.slice(i, i + batchSize);
-      const response = await openai.embeddings.create({
-        model: env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small',
-        input: batch,
-      });
-
-      for (const data of response.data) {
-        allEmbeddings.push(data.embedding);
-      }
-
-      totalTokens += response.usage?.total_tokens || 0;
-    }
+    const embeddings = await embedBatch(chunks, {
+      signal: new AbortController().signal,
+      onUsage: tokens => {
+        totalTokens += tokens;
+      },
+    });
 
     // Simple cost estimation (text-embedding-3-small: $0.00002 per 1K tokens)
     const cost = (totalTokens / 1000) * 0.00002;
 
     return {
-      embeddings: allEmbeddings,
+      embeddings,
       cost,
       tokensUsed: totalTokens,
       cached: new Array(chunks.length).fill(false), // No caching in simple implementation
@@ -95,10 +75,6 @@ function estimateCost(chunks: string[]): { cost: number; tokens: number } {
 // Legacy function for backward compatibility
 async function generateEmbedding(text: string): Promise<number[]> {
   return createEmbedding(text);
-}
-
-async function getQueryEmbedding(query: string): Promise<number[]> {
-  return createEmbedding(query);
 }
 
 // Estimate tokens based on characters (rough approximation)
@@ -521,5 +497,5 @@ async function processImageDocument(
   }
 }
 
-export { processDocument, processImageDocument, getQueryEmbedding };
+export { processDocument, processImageDocument };
 export type { ProcessDocumentMetadata };
