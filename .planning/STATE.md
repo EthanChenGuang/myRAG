@@ -4,16 +4,16 @@ milestone: v5.0
 current_phase: 01
 current_phase_name: Evaluation Harness & Baseline
 status: executing
-stopped_at: Completed 01-19-PLAN.md
-last_updated: "2026-11-23T11:04:29.892Z"
+stopped_at: Completed 01-20-PLAN.md
+last_updated: "2026-11-23T11:09:26.165Z"
 last_activity: 2026-11-23
 last_activity_desc: Phase 01 execution started
-state_head: 554cd6b993e7fef29c937bc855410cf3bd0227e7
+state_head: aa3357597d56b63f132f7b111cdeacc20e1c7290
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 22
-  completed_plans: 19
+  completed_plans: 20
 ---
 
 # Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-11-22)
 ## Current Position
 
 Phase: 01 (Evaluation Harness & Baseline) — EXECUTING
-Plan: 20 of 22
+Plan: 21 of 22
 Status: Ready to execute
 Last activity: 2026-11-23 — Phase 01 execution started
 
@@ -75,6 +75,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P17 | 5min | 3 tasks | 8 files |
 | Phase 01 P18 | 35min | 2 tasks | 10 files |
 | Phase 01 P19 | 25min | 2 tasks | 13 files |
+| Phase 01 P20 | 20min | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -111,6 +112,8 @@ Recent decisions affecting current work:
 - [Phase 01]: 01-18: build_ragas_live verifies Ragas sends temperature 0 because Ragas rewrites it to 1.0 for recognized reasoning-model ids
 - [Phase 01]: 01-19: Claude drafting sends no temperature and no forced tool_choice (claude-sonnet-5-5 rejects both); tool input validated with DraftedItemBatch
 - [Phase 01]: 01-19: Ragas style/length/persona recorded in a gitignored <out>.notes.json sidecar instead of a new GoldenItem field
+- [Phase 01]: 01-20: allow-spread relaxes only metric-value check; run_config_hash must always match across baseline runs
+- [Phase 01]: 01-20: gate data mismatch (exit 2) covers golden, corpus and embedder identity only; live baselines must live under eval/golden/private
 
 ### Pending Todos
 
@@ -137,6 +140,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-23T11:04:29.833Z
-Stopped at: Completed 01-19-PLAN.md
+Last session: 2026-11-23T11:09:26.079Z
+Stopped at: Completed 01-20-PLAN.md
 Resume file: None
