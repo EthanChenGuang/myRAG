@@ -5,6 +5,7 @@ import type { Profile, RunRetrievalInput } from '@/lib/rag/types';
 import type { RagEnvInput } from '@/lib/rag/config';
 import {
   SEMANTIC_QUERY,
+  fakeAssemblyAdmin,
   fakeEmbedder,
   fakeRpcClient,
   installDeps,
@@ -22,6 +23,16 @@ function install(options: { rows?: FakeRow[]; env?: RagEnvInput; adminClient?: (
     embedder: fakeEmbedder().embedder,
     ragEnv: () => options.env ?? {},
     ...(options.adminClient ? { adminClient: options.adminClient as never } : {}),
+  });
+}
+
+function installVoice() {
+  const rpc = fakeRpcClient({ rows: rows(3) });
+  const assemblyAdmin = fakeAssemblyAdmin()() as unknown as { from: unknown };
+  installDeps({
+    embedder: fakeEmbedder().embedder,
+    ragEnv: () => ({ RAG_DISABLED_STAGES: 'voice_keyword_fallback' }),
+    adminClient: (() => ({ rpc: rpc.client.rpc.bind(rpc.client), from: assemblyAdmin.from })) as never,
   });
 }
 
@@ -59,12 +70,20 @@ describe('post_filter and assemble stages', () => {
     expect(result.stages.find((stage) => stage.name === 'assemble')).toMatchObject({ candidates_in: 3, candidates_out: 3 });
   });
 
-  test('the voice profile does not run either stage', async () => {
-    install();
+  test('the voice profile runs its own stages and returns the voice payload instead of assembled context', async () => {
+    installVoice();
     const result = await run('voice');
-    expect(result.stages.map((stage) => stage.name)).toEqual(['analyze', 'embed', 'search', 'legacy_rank']);
+    expect(result.stages.map((stage) => stage.name)).toEqual(['embed', 'search', 'voice_keyword_fallback', 'local_rerank', 'assemble']);
+    expect(result.status).toBe('ok');
     expect(result.context).toBe('');
-    expect(result.candidates).toHaveLength(3);
+    expect(result.candidates).toHaveLength(0);
+    expect(result.voice?.results).toHaveLength(3);
+  });
+
+  test('the voice profile ignores request stage overrides', async () => {
+    installVoice();
+    const result = await run('voice', { stageOverrides: { disabledStages: ['local_rerank'] } });
+    expect(result.stages.find((stage) => stage.name === 'local_rerank')).toMatchObject({ status: 'ok' });
   });
 
   test('zero survivors of the relevance filter is empty with reason no_relevant_context and a refusal candidate', async () => {

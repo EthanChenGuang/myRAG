@@ -1,4 +1,5 @@
 import type { ExtractedURL } from '@/lib/url-extractor';
+import type { VoiceResults } from './context/voice';
 import type { StageName, StageTimeouts } from './config';
 import type { TemporalQueryContext } from './query/temporal-query-detector';
 import type { TenantScope } from './tenant/scope';
@@ -117,4 +118,5 @@ export interface RetrievalResult {
   stages: StageRecord[];
   traceId: string;
   queryContext: TemporalQueryContext | null;
+  voice?: VoiceResults;
 }

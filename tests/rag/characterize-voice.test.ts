@@ -1,5 +1,8 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import crypto from 'node:crypto';
 import { NextRequest } from 'next/server';
+import { mintScope } from '@/lib/rag/tenant/scope';
+import { mintVoiceToken } from '@/lib/rag/tenant/voice-token';
 import {
   expectCharacterization,
   INTERNAL_API_KEY,
@@ -17,10 +20,13 @@ const INTENT_QUERIES = [
   'logo',
 ];
 
+const TOKEN_SECRET = crypto.randomBytes(24).toString('hex');
+let scopeToken = '';
+
 function voiceRequest(query: string, apiKey: string = INTERNAL_API_KEY): NextRequest {
   return new NextRequest('http://localhost/api/internal/voice-rag', {
     method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-api-key': apiKey },
+    headers: { 'content-type': 'application/json', 'x-api-key': apiKey, 'x-rag-scope-token': scopeToken },
     body: JSON.stringify({ query, matchCount: 5 }),
   });
 }
@@ -32,6 +38,10 @@ describe('voice-rag route characterization', () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
     fixture = await startRouteFixture({ deploymentMode: 'single-tenant' });
+    process.env.RAG_VOICE_TOKEN_SECRET = TOKEN_SECRET;
+    const minted = mintVoiceToken({ scope: mintScope('single', null, null), secret: TOKEN_SECRET, ttlSeconds: 3600 });
+    if (!minted.ok) throw new Error(`token mint failed: ${minted.reason}`);
+    scopeToken = minted.token;
   });
 
   afterAll(async () => {

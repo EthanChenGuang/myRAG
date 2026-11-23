@@ -1,6 +1,6 @@
 import { env } from '@/lib/env';
 import { logger } from '@/lib/logger';
-import { RetrievalBackendError, vectorSearch, type RpcClient } from './backend/supabase-rpc';
+import { RetrievalBackendError, vectorSearch, type RawChunk, type RpcClient } from './backend/supabase-rpc';
 import {
   CORE_STAGES,
   FALLBACK_STAGE_TIMEOUT_MS,
@@ -17,12 +17,15 @@ import {
 } from './context/assemble';
 import { fetchAssemblyRows, type AssemblyRows } from './context/fetch-rows';
 import { formatImageContext, formatVideoContext } from './context/media';
+import { assembleVoiceResults, enrichVoiceCandidates, type VoiceResults } from './context/voice';
 import { getRagDeps } from './deps';
 import { legacyAnalyze, legacyRank, legacySearch } from './legacy/enhanced-retrieval';
 import { defaultQueryContext } from './query/temporal-query-detector';
+import { hybridRerank } from './rerank/local-hybrid';
 import { assertTenantScope, scopeKey } from './tenant/scope';
 import { createTraceCollector, type TraceCollector } from './trace/collector';
 import { finishTrace } from './trace/finish';
+import { voiceKeywordFallback, type VoiceChunk } from './voice/keyword-fallback';
 import type {
   Candidate,
   Profile,
@@ -307,7 +310,7 @@ export async function runRetrieval(input: RunRetrievalInput): Promise<RetrievalR
     input.trace ??
     createTraceCollector({ profile: input.profile, tenantKey: input.scope ? scopeKey(input.scope) : 'none' });
 
-  const result = await runPipeline(input, collector);
+  const result = input.profile === 'voice' ? await runVoicePipeline(input, collector) : await runPipeline(input, collector);
   if (ownsTrace) finishTrace(collector, result);
   return result;
 }
@@ -454,4 +457,99 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
     queryTerms: assembly.queryTerms,
     refusalCandidate: assembly.refusalCandidate,
   };
+}
+
+const VOICE_SEARCH_MULTIPLIER = 5;
+const VOICE_SEARCH_THRESHOLD = 0.15;
+const VOICE_DEFAULT_MATCH_COUNT = 5;
+
+function toVoiceChunk(row: RawChunk, scope: NonNullable<RunRetrievalInput['scope']>): VoiceChunk {
+  // Workspace rows have always carried an id; single-tenant rows have not, and the keyword stage dedupes on id.
+  return scope.kind === 'single' ? { ...row } : { ...row, id: row.chunk_id };
+}
+
+async function runVoicePipeline(input: RunRetrievalInput, collector: TraceCollector): Promise<RetrievalResult> {
+  const deps = getRagDeps();
+  const scope = input.scope;
+  if (scope === null) return failure(collector, 'empty', 'no_tenant', null);
+
+  const { signal, profile, query } = input;
+  const config = loadRagConfig(deps.ragEnv());
+  const spec = (name: StageName, onFail: StageSpec['onFail']) => stageSpec(config, profile, name, onFail, input.stageOverrides);
+  const matchCount = input.options?.maxResults ?? VOICE_DEFAULT_MATCH_COUNT;
+  const requireAdmin = () => {
+    const admin = deps.adminClient();
+    if (!admin) throw new Error('[RAG Voice] admin client unavailable');
+    return admin;
+  };
+
+  let voice: VoiceResults = { results: [], source_images: [] };
+
+  try {
+    const embedding = requireValue(
+      await runStage(spec('embed', 'throw'), signal, (stageSignal) => deps.embedder(query, { signal: stageSignal }), collector),
+      'embed',
+    );
+
+    const searched = requireValue(
+      await runStage(
+        spec('search', 'throw'),
+        signal,
+        async (stageSignal) => {
+          const rows = await vectorSearch(scope, embedding, matchCount * VOICE_SEARCH_MULTIPLIER, VOICE_SEARCH_THRESHOLD, {
+            client: requireAdmin() as unknown as RpcClient,
+            signal: stageSignal,
+          });
+          return rows.map((row) => toVoiceChunk(row, scope));
+        },
+        collector,
+        { candidatesOut: (value) => value.length },
+      ),
+      'search',
+    );
+
+    const expanded = await runStage(
+      spec('voice_keyword_fallback', 'skip'),
+      signal,
+      (stageSignal) => voiceKeywordFallback({ query, scope, admin: requireAdmin(), signal: stageSignal, existing: searched }),
+      collector,
+      { candidatesIn: searched.length, candidatesOut: (value) => value.length },
+    );
+    const merged = expanded.skipped ? searched : expanded.value;
+
+    const reranked = await runStage(
+      spec('local_rerank', 'skip'),
+      signal,
+      () => hybridRerank(query, enrichVoiceCandidates(merged), { topK: matchCount, includeScores: true }),
+      collector,
+      { candidatesIn: merged.length, candidatesOut: (value) => value.length },
+    );
+    const ranked = reranked.skipped ? enrichVoiceCandidates(merged) : reranked.value;
+
+    const assembled = await runStage(
+      spec('assemble', 'skip'),
+      signal,
+      () => assembleVoiceResults({ query, chunks: ranked, matchCount }),
+      collector,
+      { candidatesIn: ranked.length, candidatesOut: (value) => value.results.length },
+    );
+    voice = assembled.skipped ? assembleVoiceResults({ query, chunks: ranked, matchCount }) : assembled.value;
+  } catch (error) {
+    if (error instanceof StageError) {
+      if (error.reason === 'aborted') return failure(collector, 'error', 'aborted', null);
+      if (error.original instanceof RetrievalBackendError) {
+        logger.error('RAG Pipeline', 'Backend error', { rpc: error.original.rpc, code: error.original.code });
+        return failure(collector, 'error', 'backend_error', null);
+      }
+      logger.error('RAG Pipeline', 'Stage failure', { stage: error.stage, reason: error.reason });
+      return failure(collector, 'error', `${error.stage}_${error.reason}`, null);
+    }
+    if (signal.aborted) return failure(collector, 'error', 'aborted', null);
+    throw error;
+  }
+
+  const records = collector.stages();
+  const status = deriveStatus(records, voice.results.length);
+  const reason = status === 'ok' ? 'ok' : status === 'empty' ? 'no_candidates' : degradedReason(records);
+  return { ...failure(collector, status, reason, null), voice };
 }
