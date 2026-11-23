@@ -155,8 +155,8 @@ function fakeAdmin(members: Array<{ organization_id: string; user_id: string }>,
           call.filters[column] = value;
           return query;
         },
-        maybeSingle: () => query,
-        abortSignal() {
+        abortSignal: () => query,
+        maybeSingle() {
           if (failure) return Promise.resolve({ data: null, error: { message: failure } });
           const row = members.find((m) => m.organization_id === call.filters.organization_id && m.user_id === call.filters.user_id);
           return Promise.resolve({ data: row ? { organization_id: row.organization_id } : null, error: null });
@@ -274,10 +274,16 @@ describe('resolveVoiceScope', () => {
     ['organization tk without a user', { tk: `o:${ORG_O}`, uid: null, oid: ORG_O }],
     ['organization tk naming another organization', { tk: `o:${ORG_O}`, uid: USER_A, oid: '00000000-0000-4000-8000-0000000000c2' }],
     ['unparseable tk', { tk: 'x:1', uid: USER_A, oid: null }],
-    ['single tk carrying an organization', { tk: 's:default', uid: null, oid: ORG_O }],
   ])('a signed token with %s gives 401', async (_label, overrides) => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const result = await resolveVoiceScope({ headers: headersWith(forge(overrides)), deploymentMode: 'multi-tenant', secret: SECRET, admin: fakeAdmin([{ organization_id: ORG_O, user_id: USER_A }]).admin, signal: signal(), now: NOW_MS });
+    expect(result).toEqual({ ok: false, status: 401, reason: 'bad_scope' });
+    warn.mockRestore();
+  });
+
+  test('a single-tenant token carrying an organization gives 401', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const result = await resolveVoiceScope({ headers: headersWith(forge({ tk: 's:default', uid: null, oid: ORG_O })), deploymentMode: 'single-tenant', secret: SECRET, signal: signal(), now: NOW_MS });
     expect(result).toEqual({ ok: false, status: 401, reason: 'bad_scope' });
     warn.mockRestore();
   });

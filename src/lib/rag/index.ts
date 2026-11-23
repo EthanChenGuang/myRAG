@@ -29,3 +29,7 @@ export type { ResolveTenantScopeInput, TenantResolveFailure, TenantResolveResult
 export { isOrganizationMember } from './tenant/membership';
 export { resolveEmbedScope, parseTenantKey } from './tenant/embed';
 export type { EmbedScopeFailure, EmbedScopeResult, ResolveEmbedScopeInput, TenantKey } from './tenant/embed';
+export { mintVoiceToken, verifyVoiceToken, defaultVoiceTtlSeconds, VOICE_TOKEN_AUDIENCE } from './tenant/voice-token';
+export type { MintVoiceTokenInput, MintVoiceTokenResult, VerifyVoiceTokenResult, VoiceTokenPayload } from './tenant/voice-token';
+export { resolveVoiceScope, VOICE_SCOPE_HEADER } from './tenant/voice';
+export type { ResolveVoiceScopeInput, VoiceScopeResult } from './tenant/voice';

@@ -21,8 +21,8 @@ export async function isOrganizationMember(
     .select('organization_id')
     .eq('organization_id', organizationId)
     .eq('user_id', userId)
-    .maybeSingle()
-    .abortSignal(signal);
+    .abortSignal(signal)
+    .maybeSingle();
   signal.throwIfAborted();
   if (error) throw new MembershipQueryError();
   return data !== null && data !== undefined;

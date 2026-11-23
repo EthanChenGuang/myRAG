@@ -28,11 +28,11 @@ function fakeAdmin(organizations: string[], failure?: string) {
           call.filters[column] = value;
           return query;
         },
-        maybeSingle() {
-          return query;
-        },
         abortSignal(signal: AbortSignal) {
           call.signal = signal;
+          return query;
+        },
+        maybeSingle() {
           if (failure) return Promise.resolve({ data: null, error: { message: failure } });
           const found = table === 'organizations' && organizations.includes(call.filters.id);
           return Promise.resolve({ data: found ? { id: call.filters.id } : null, error: null });

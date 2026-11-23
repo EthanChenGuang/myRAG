@@ -95,8 +95,8 @@ async function organizationExists(admin: MembershipDb, organizationId: string, s
     .from('organizations')
     .select('id')
     .eq('id', organizationId)
-    .maybeSingle()
-    .abortSignal(signal);
+    .abortSignal(signal)
+    .maybeSingle();
   signal.throwIfAborted();
   if (error) throw new Error('[RAG Tenant] organization lookup failed');
   return data !== null && data !== undefined;

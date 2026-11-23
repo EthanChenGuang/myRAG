@@ -34,11 +34,11 @@ function fakeAdmin(members: Member[], failure?: string) {
           call.filters[column] = value;
           return query;
         },
-        maybeSingle() {
-          return query;
-        },
         abortSignal(signal: AbortSignal) {
           call.signal = signal;
+          return query;
+        },
+        maybeSingle() {
           if (failure) return Promise.resolve({ data: null, error: { message: failure } });
           const row = members.find(
             (member) =>
