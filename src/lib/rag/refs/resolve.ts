@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { logger } from '@/lib/logger';
 import { tenantPredicate, type TenantPredicate, type TenantScope } from '../tenant/scope';
 import type { DocumentPartRef, ReferencedState, UsedDocument } from '../types';
 
@@ -45,7 +46,7 @@ export async function resolveDocumentRefs(input: ResolveDocumentRefsInput): Prom
 
   const mentionRefs: DocumentRef[] = [];
   for (const docName of mentions) {
-    console.log(`Looking for document with name matching: "${docName}"`);
+    logger.db('[Document Search] Resolving document mention', { mentionLength: docName.length });
 
     const { data: docs, error } = await scoped(
       admin.from('documents').select('id, filename').ilike('filename', `%${docName}%`).limit(1),
@@ -65,7 +66,7 @@ export async function resolveDocumentRefs(input: ResolveDocumentRefsInput): Prom
     if (!exactError && exactDocs && exactDocs.length > 0) {
       mentionRefs.push({ id: exactDocs[0].id, name: exactDocs[0].filename });
     } else {
-      console.log(`No document found for mention in the caller's scope: "${docName}"`);
+      logger.db('[Document Search] No document found for mention in the caller scope', { mentionLength: docName.length });
     }
   }
 

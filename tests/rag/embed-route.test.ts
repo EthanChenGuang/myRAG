@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { NextRequest } from 'next/server';
 import type { TraceCollector } from '@/lib/rag';
 import { TWO_TENANT_IDS } from '../../eval/harness/two-tenant.mts';
+import { adminWithRpc } from './helpers/pipeline-fakes';
 import { startRouteFixture, systemTextOf, type RouteFixture } from '../helpers/route-fixture';
 
 const h = await vi.hoisted(async () => {
@@ -209,7 +210,7 @@ describe('embed route tenant and status handling', () => {
     };
     const response = await post(embedRequest(), `u:${userA}`, async () => {
       const deps = await import('@/lib/rag/deps');
-      deps.setRagDepsForTests({ anonClient: failing });
+      deps.setRagDepsForTests({ adminClient: adminWithRpc(failing(), deps.getRagDeps().adminClient) });
     });
     const body = await response.text();
 

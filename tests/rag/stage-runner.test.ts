@@ -155,7 +155,7 @@ function install(options: {
   const rpc = fakeRpcClient(options.rpc ?? { rows: rows(3) });
   const embed = fakeEmbedder(options.embedder);
   installDeps({
-    anonClient: () => rpc.client,
+    searchRpc: rpc.client,
     embedder: embed.embedder,
     ragEnv: () => options.env ?? {},
   });

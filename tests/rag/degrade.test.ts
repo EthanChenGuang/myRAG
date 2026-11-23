@@ -5,6 +5,7 @@ import { mintScope } from '@/lib/rag/tenant/scope';
 import type { Profile, RunRetrievalInput } from '@/lib/rag/types';
 import {
   SEMANTIC_QUERY,
+  adminWithRpc,
   fakeAssemblyAdmin,
   fakeEmbedder,
   fakeRpcClient,
@@ -20,7 +21,7 @@ const ROUTE_URL = 'http://localhost/api/internal/rag/run';
 function install(count = 4) {
   const rpc = fakeRpcClient({ rows: rows(count) });
   installDeps({
-    anonClient: () => rpc.client,
+    searchRpc: rpc.client,
     embedder: fakeEmbedder().embedder,
     ragEnv: () => ({}),
   });
@@ -106,8 +107,7 @@ describe('degrade option on the eval route', () => {
     const rpc = fakeRpcClient({ rows: rows(4) });
     deps.setRagDepsForTests({
       embedder: fakeEmbedder().embedder,
-      anonClient: () => rpc.client,
-      adminClient: fakeAssemblyAdmin(),
+      adminClient: adminWithRpc(rpc.client),
     });
     const route = await import('@/app/api/internal/rag/run/route');
     const req = new NextRequest(ROUTE_URL, {

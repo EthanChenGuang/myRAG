@@ -733,9 +733,9 @@ BEGIN
 END;
 $$;
 
--- Grant execute permission to authenticated users
-GRANT EXECUTE ON FUNCTION public.match_documents_by_workspace TO authenticated;
-GRANT EXECUTE ON FUNCTION public.match_documents_by_workspace TO anon;
+-- SECURITY DEFINER and trusts the caller-supplied tenant ids: only the server-side service role may execute it.
+REVOKE EXECUTE ON FUNCTION public.match_documents_by_workspace(vector, integer, double precision, uuid, uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.match_documents_by_workspace(vector, integer, double precision, uuid, uuid) TO service_role;
 
 COMMENT ON FUNCTION public.match_documents_by_workspace IS 
   'Performs workspace-scoped vector similarity search. Filters by personal workspace (user_id + org_id=NULL) or team workspace (organization_id).';
@@ -832,6 +832,9 @@ $$;
 
 COMMENT ON FUNCTION match_document_chunks_by_org IS 'Organization-scoped chunk search with fallback to global documents';
 
+REVOKE EXECUTE ON FUNCTION match_document_chunks_by_org(uuid, vector, integer, double precision) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION match_document_chunks_by_org(uuid, vector, integer, double precision) TO service_role;
+
 -- Document retrieval by type and slug (for document dashboard)
 CREATE OR REPLACE FUNCTION get_documents_by_type_slug(
   p_org_id uuid,
@@ -874,6 +877,9 @@ $$;
 
 COMMENT ON FUNCTION get_documents_by_type_slug IS 'Retrieve documents by type and slug with tenant/global fallback';
 
+REVOKE EXECUTE ON FUNCTION get_documents_by_type_slug(uuid, text, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION get_documents_by_type_slug(uuid, text, text) TO service_role;
+
 -- Workspace-aware document retrieval
 CREATE OR REPLACE FUNCTION get_documents_by_type_slug_workspace(
   p_org_id uuid,
@@ -915,6 +921,9 @@ AS $$
 $$;
 
 COMMENT ON FUNCTION get_documents_by_type_slug_workspace IS '3-tier workspace-aware document retrieval by type and slug';
+
+REVOKE EXECUTE ON FUNCTION get_documents_by_type_slug_workspace(uuid, uuid, text, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION get_documents_by_type_slug_workspace(uuid, uuid, text, text) TO service_role;
 
 -- Get workspace context from domain or user preferences
 CREATE OR REPLACE FUNCTION get_workspace_context(

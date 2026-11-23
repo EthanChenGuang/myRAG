@@ -5,6 +5,8 @@ import {
   CORE_STAGES,
   FALLBACK_STAGE_TIMEOUT_MS,
   loadRagConfig,
+  resolveFinalResultCount,
+  validResultCount,
   type RagConfig,
   type StageName,
 } from './config';
@@ -26,7 +28,7 @@ import {
   type OverviewContext,
 } from './context/overview';
 import { assembleVoiceResults, enrichVoiceCandidates, type VoiceResults } from './context/voice';
-import { getRagDeps } from './deps';
+import { getRagDeps, type RagDeps } from './deps';
 import { legacyAnalyze, legacyRank, legacySearch } from './legacy/enhanced-retrieval';
 import { defaultQueryContext } from './query/temporal-query-detector';
 import { resolveDocumentRefs } from './refs/resolve';
@@ -202,6 +204,12 @@ async function loadRows(candidates: Candidate[], signal: AbortSignal): Promise<A
   return fetchAssemblyRows(candidates, { adminClient, signal });
 }
 
+function requireAdminSearchClient(deps: RagDeps): RpcClient {
+  const admin = deps.adminClient();
+  if (!admin) throw new Error('[RAG Search] admin client unavailable');
+  return admin as unknown as RpcClient;
+}
+
 function survivorCount(assembly: AssembleOutput<Candidate>): number {
   return assembly.usedDocuments.length + assembly.relevantChunks.length;
 }
@@ -230,9 +238,20 @@ function failure(
   };
 }
 
+function assembleDisabledStatus(
+  records: StageRecord[],
+  status: RetrievalResult['status'],
+  reachedAssemble: number,
+): RetrievalResult['status'] {
+  if (status !== 'ok' && status !== 'empty') return status;
+  if (reachedAssemble === 0) return status;
+  return records.some((record) => record.name === 'assemble' && record.status === 'disabled') ? 'degraded' : status;
+}
+
 function degradedReason(records: StageRecord[]): string {
   const skipped = records.find((record) => record.status === 'skipped');
-  return skipped ? `${skipped.name}_${skipped.reason ?? 'skipped'}` : 'degraded';
+  if (skipped) return `${skipped.name}_${skipped.reason ?? 'skipped'}`;
+  return records.some((record) => record.name === 'assemble' && record.status === 'disabled') ? 'assemble_disabled' : 'degraded';
 }
 
 const MEDIA_MATCH_COUNT = 10;
@@ -419,7 +438,8 @@ async function runOverviewPipeline(
     match_reason: `similarity: ${chunk.similarity.toFixed(3)}`,
   }));
   const records = collector.stages();
-  const status = deriveStatus(records, rawChunks.length + overview.usedDocuments.length);
+  const survivors = rawChunks.length + overview.usedDocuments.length;
+  const status = assembleDisabledStatus(records, deriveStatus(records, survivors), survivors);
   const reason = status === 'ok' ? 'ok' : status === 'empty' ? 'no_candidates' : degradedReason(records);
   return { ...failure(collector, status, reason, null), candidates, context: overview.context, usedDocuments: overview.usedDocuments };
 }
@@ -452,7 +472,7 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
   const config = loadRagConfig(deps.ragEnv());
   const spec = (name: StageName, onFail: StageSpec['onFail']) => stageSpec(config, profile, name, onFail, input.stageOverrides);
 
-  const maxResults = input.options?.maxResults ?? parseInt(env.RAG_FINAL_RESULT_COUNT || '25');
+  const maxResults = resolveFinalResultCount(input.options?.maxResults, env.RAG_FINAL_RESULT_COUNT);
   const fallbackToLowerThreshold = input.options?.fallbackToLowerThreshold ?? true;
 
   let queryContext: RetrievalResult['queryContext'] = null;
@@ -484,7 +504,7 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
             maxResults,
             fallbackToLowerThreshold,
             scope,
-            client: deps.anonClient(),
+            client: requireAdminSearchClient(deps),
             signal: stageSignal,
           }),
         collector,
@@ -565,9 +585,19 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
   }
 
   const records = collector.stages();
-  const status = deriveStatus(records, assembly ? survivorCount(assembly) : candidates.length);
+  const status = assembleDisabledStatus(
+    records,
+    deriveStatus(records, assembly ? survivorCount(assembly) : candidates.length),
+    assembly ? 0 : candidates.length,
+  );
   const reason =
-    status === 'ok' ? 'ok' : status === 'empty' ? (candidates.length === 0 ? 'no_candidates' : 'no_relevant_context') : degradedReason(records);
+    status === 'ok'
+      ? 'ok'
+      : status === 'empty'
+        ? candidates.length === 0
+          ? 'no_candidates'
+          : 'no_relevant_context'
+        : degradedReason(records);
 
   const base = failure(collector, status, reason, queryContext);
   if (!assembly) return { ...base, candidates };
@@ -603,7 +633,7 @@ async function runVoicePipeline(input: RunRetrievalInput, collector: TraceCollec
   const { signal, profile, query } = input;
   const config = loadRagConfig(deps.ragEnv());
   const spec = (name: StageName, onFail: StageSpec['onFail']) => stageSpec(config, profile, name, onFail, input.stageOverrides);
-  const matchCount = input.options?.maxResults ?? VOICE_DEFAULT_MATCH_COUNT;
+  const matchCount = validResultCount(input.options?.maxResults) ?? VOICE_DEFAULT_MATCH_COUNT;
   const requireAdmin = () => {
     const admin = deps.adminClient();
     if (!admin) throw new Error('[RAG Voice] admin client unavailable');
@@ -611,6 +641,7 @@ async function runVoicePipeline(input: RunRetrievalInput, collector: TraceCollec
   };
 
   let voice: VoiceResults = { results: [], source_images: [] };
+  let voiceInput = 0;
 
   try {
     const embedding = requireValue(
@@ -660,7 +691,8 @@ async function runVoicePipeline(input: RunRetrievalInput, collector: TraceCollec
       collector,
       { candidatesIn: ranked.length, candidatesOut: (value) => value.results.length },
     );
-    voice = assembled.skipped ? assembleVoiceResults({ query, chunks: ranked, matchCount }) : assembled.value;
+    voiceInput = ranked.length;
+    voice = assembled.skipped ? { results: [], source_images: [] } : assembled.value;
   } catch (error) {
     if (error instanceof StageError) {
       if (error.reason === 'aborted') return failure(collector, 'error', 'aborted', null);
@@ -672,11 +704,12 @@ async function runVoicePipeline(input: RunRetrievalInput, collector: TraceCollec
       return failure(collector, 'error', `${error.stage}_${error.reason}`, null);
     }
     if (signal.aborted) return failure(collector, 'error', 'aborted', null);
-    throw error;
+    logger.error('RAG Pipeline', 'Voice pipeline failure', { name: error instanceof Error ? error.name : 'unknown' });
+    return failure(collector, 'error', 'voice_pipeline_failed', null);
   }
 
   const records = collector.stages();
-  const status = deriveStatus(records, voice.results.length);
+  const status = assembleDisabledStatus(records, deriveStatus(records, voice.results.length), voiceInput);
   const reason = status === 'ok' ? 'ok' : status === 'empty' ? 'no_candidates' : degradedReason(records);
   return { ...failure(collector, status, reason, null), voice };
 }

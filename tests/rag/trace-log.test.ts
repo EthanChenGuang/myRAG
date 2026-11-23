@@ -154,7 +154,7 @@ describe('runRetrieval trace wiring', () => {
     const rpc = fakeRpcClient({
       rows: rows(2).map((row) => ({ ...row, content: `${DISTINCT_CHUNK} ${row.content}` })),
     });
-    installDeps({ anonClient: () => rpc.client, embedder: fakeEmbedder().embedder, ragEnv: () => ({}) });
+    installDeps({ searchRpc: rpc.client, embedder: fakeEmbedder().embedder, ragEnv: () => ({}) });
   }
 
   test('a run that owns its collector logs one content-free line and carries the traceId', async () => {
@@ -205,7 +205,7 @@ describe('runRetrieval trace wiring', () => {
 
   test('a failed run still logs one line with the error status and reason', async () => {
     const rpc = fakeRpcClient({ rows: [] });
-    installDeps({ anonClient: () => rpc.client, embedder: fakeEmbedder({ fail: new Error(DISTINCT_QUERY) }).embedder, ragEnv: () => ({}) });
+    installDeps({ searchRpc: rpc.client, embedder: fakeEmbedder({ fail: new Error(DISTINCT_QUERY) }).embedder, ragEnv: () => ({}) });
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const result = await runRetrieval({
       scope: mintScope('single', null, null),

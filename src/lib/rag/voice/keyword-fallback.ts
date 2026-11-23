@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { logger } from '@/lib/logger';
 import { tenantPredicate, type TenantScope } from '../tenant/scope';
 
 export interface VoiceChunk {
@@ -145,7 +146,7 @@ export async function voiceKeywordFallback(input: VoiceKeywordFallbackInput): Pr
   const { keywords, searchKeywords } = deriveVoiceKeywords(query);
   if (searchKeywords.length === 0) return chunks;
 
-  console.log('[Document Search] Voice keyword search', { keywords: searchKeywords });
+  logger.db('[Document Search] Voice keyword search', { keywordCount: searchKeywords.length });
 
   const documentIds = await inScopeDocumentIds(admin, scope, signal);
   const queryLower = query.toLowerCase();

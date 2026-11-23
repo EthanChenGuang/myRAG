@@ -382,7 +382,7 @@ describe('refs stage in runRetrieval', () => {
   function install(admin: SupabaseClient, env: { RAG_DISABLED_STAGES?: string } = {}) {
     const rpc = fakeRpcClient({ rows: rows(1) });
     installDeps({
-      anonClient: () => rpc.client,
+      searchRpc: rpc.client,
       embedder: fakeEmbedder().embedder,
       ragEnv: () => env,
       adminClient: (() => admin) as never,
@@ -416,7 +416,7 @@ describe('refs stage in runRetrieval', () => {
   it('keeps the referenced context first and does not refuse when the search finds nothing else', async () => {
     const rpc = fakeRpcClient({ rows: [] });
     installDeps({
-      anonClient: () => rpc.client,
+      searchRpc: rpc.client,
       embedder: fakeEmbedder().embedder,
       ragEnv: () => ({}),
       adminClient: (() => filteringAdmin(pipelineTables()).admin) as never,

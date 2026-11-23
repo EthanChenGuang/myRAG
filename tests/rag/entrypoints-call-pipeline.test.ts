@@ -50,7 +50,7 @@ describe('entry point: eval route calls the pipeline', () => {
     const deps = await import('@/lib/rag/deps');
     deps.setRagDepsForTests({
       embedder: async () => [0.1, 0.2, 0.3],
-      anonClient: () => {
+      adminClient: () => {
         const request = {
           abortSignal: () => request,
           then: (onFulfilled: (value: unknown) => unknown, onRejected?: (reason: unknown) => unknown) =>
@@ -58,7 +58,6 @@ describe('entry point: eval route calls the pipeline', () => {
         };
         return { rpc: () => request } as never;
       },
-      adminClient: () => null,
     });
     const route = await import('@/app/api/internal/rag/run/route');
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
@@ -243,16 +242,16 @@ describe('entry point: embed route calls the pipeline', () => {
     const deps = await import('@/lib/rag/deps');
     deps.setRagDepsForTests({
       embedder: async () => [0.1, 0.2, 0.3],
-      anonClient: () => {
-        const request = {
-          abortSignal: () => request,
-          then: (onFulfilled: (value: unknown) => unknown, onRejected?: (reason: unknown) => unknown) =>
-            Promise.resolve({ data: [], error: null }).then(onFulfilled, onRejected),
-        };
-        return { rpc: () => request } as never;
-      },
       adminClient: () =>
         ({
+          rpc: () => {
+            const request = {
+              abortSignal: () => request,
+              then: (onFulfilled: (value: unknown) => unknown, onRejected?: (reason: unknown) => unknown) =>
+                Promise.resolve({ data: [], error: null }).then(onFulfilled, onRejected),
+            };
+            return request;
+          },
           from: () => {
             const query = {
               select: () => query,

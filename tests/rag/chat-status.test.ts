@@ -61,6 +61,7 @@ function seedDocuments(ids: string[]) {
 interface LoadOptions {
   mode?: 'single-tenant' | 'multi-tenant';
   adminClient?: () => unknown;
+  ragEnv?: () => Record<string, string>;
 }
 
 async function loadRoute(options: LoadOptions = {}) {
@@ -79,7 +80,18 @@ async function loadRoute(options: LoadOptions = {}) {
   await installChatPipeline(h);
   if (options.adminClient) {
     const deps = await import('@/lib/rag/deps');
-    deps.setRagDepsForTests({ adminClient: options.adminClient as never });
+    const installed = deps.getRagDeps().adminClient;
+    const custom = options.adminClient;
+    deps.setRagDepsForTests({
+      adminClient: (() => {
+        const rpc = (installed() as { rpc: unknown }).rpc;
+        return new Proxy(custom() as object, { get: (target, key) => (key === 'rpc' ? rpc : Reflect.get(target, key)) });
+      }) as never,
+    });
+  }
+  if (options.ragEnv) {
+    const deps = await import('@/lib/rag/deps');
+    deps.setRagDepsForTests({ ragEnv: options.ragEnv });
   }
   return import('@/app/api/chat/route');
 }
@@ -167,6 +179,15 @@ describe('chat route status mapping', () => {
     expect(body).not.toContain('Information Not Available');
     expect(h.capture.streamText).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(h.capture.calls[0].messages)).toContain('RELEVANT INFORMATION FROM DOCUMENTS');
+  });
+
+  it('a disabled assemble stage never lets strict mode answer from general knowledge with an empty context', async () => {
+    seedDocuments(['1']);
+    h.retrieval.mockResolvedValue(retrievalWith([row('1')]));
+    const body = await readSse(await post(await loadRoute({ ragEnv: () => ({ RAG_DISABLED_STAGES: 'assemble' }) })));
+
+    expect(body).toContain('"type":"error"');
+    expect(h.capture.streamText).not.toHaveBeenCalled();
   });
 
   it('degraded without used documents streams the localized error part', async () => {

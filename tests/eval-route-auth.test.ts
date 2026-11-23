@@ -210,7 +210,7 @@ describe('eval route error responses', () => {
       const res = await post({ secret: SECRET }, { 'x-rag-eval-secret': SECRET }, VALID_BODY, (deps) => {
         deps.setRagDepsForTests({
           embedder: async () => [0.1, 0.2, 0.3],
-          anonClient: () => ({ rpc }) as never,
+          adminClient: () => ({ rpc, from: () => ({}) }) as never,
         });
       });
       expect(rpc).toHaveBeenCalled();
@@ -236,7 +236,7 @@ describe('eval route error responses', () => {
       const res = await post({ secret: SECRET }, { 'x-rag-eval-secret': SECRET }, VALID_BODY, (deps) => {
         deps.setRagDepsForTests({
           embedder: async () => [0.1, 0.2, 0.3],
-          anonClient: () => ({ rpc }) as never,
+          adminClient: () => ({ rpc, from: () => ({}) }) as never,
         });
       });
       expect(rpc).toHaveBeenCalled();

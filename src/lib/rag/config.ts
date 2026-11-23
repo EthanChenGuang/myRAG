@@ -151,6 +151,26 @@ export function loadRagConfig(env: RagEnvInput): RagConfig {
   return config;
 }
 
+export const DEFAULT_FINAL_RESULT_COUNT = 25;
+export const MAX_FINAL_RESULT_COUNT = 100;
+
+export function validResultCount(value: unknown): number | null {
+  const count = typeof value === 'string' && /^\s*\d+\s*$/.test(value) ? Number(value) : value;
+  if (typeof count !== 'number' || !Number.isInteger(count) || count < 1) return null;
+  return Math.min(count, MAX_FINAL_RESULT_COUNT);
+}
+
+/** A caller value wins, then RAG_FINAL_RESULT_COUNT, then 25; anything non-numeric or below 1 never reaches the search limit. */
+export function resolveFinalResultCount(requested: unknown, envValue: string | undefined): number {
+  const fromRequest = validResultCount(requested);
+  if (fromRequest !== null) return fromRequest;
+  const fromEnv = validResultCount(envValue);
+  if (fromEnv === null && envValue !== undefined && envValue.trim() !== '') {
+    problem([], 'result-count', 'Invalid RAG_FINAL_RESULT_COUNT, using the default', { default: DEFAULT_FINAL_RESULT_COUNT });
+  }
+  return fromEnv ?? DEFAULT_FINAL_RESULT_COUNT;
+}
+
 export function resetRagConfigForTests(): void {
   loggedProblems.clear();
   memo.clear();
