@@ -106,10 +106,11 @@ describe('post_filter and assemble stages', () => {
     expect(result.context).toContain('fixture chunk body 2');
   });
 
-  test('a disabled assemble leaves candidates and an empty context, and is not degraded', async () => {
+  test('a disabled assemble with candidates is degraded, never ok with an empty context', async () => {
     install({ env: { RAG_DISABLED_STAGES: 'assemble' } });
     const result = await run('chat');
-    expect(result.status).toBe('ok');
+    expect(result.status).toBe('degraded');
+    expect(result.reason).toBe('assemble_disabled');
     expect(result.candidates).toHaveLength(3);
     expect(result.context).toBe('');
     expect(result.stages.find((stage) => stage.name === 'assemble')).toMatchObject({ status: 'disabled' });
