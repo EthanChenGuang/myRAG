@@ -6,6 +6,7 @@
  */
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { logger } from '@/lib/logger';
 import { McpServerConfig } from '../server-config';
@@ -33,7 +34,9 @@ export class StreamableHttpTransport implements McpTransport {
 
     try {
       // Create StreamableHTTP transport
-      this.transport = new StreamableHTTPClientTransport(new URL(this.config.endpoint));
+      this.transport = new StreamableHTTPClientTransport(new URL(this.config.endpoint), {
+        requestInit: { headers: this.config.transport.headers }
+      });
 
       // Create MCP client
       this.client = new Client(
@@ -165,7 +168,11 @@ export class StreamableHttpTransport implements McpTransport {
     this.errorHandlers.forEach(handler => handler(error));
   }
 
-  getSdkTransport(): any | null {
+  getClient(): Client | null {
+    return this.client;
+  }
+
+  getSdkTransport(): Transport | null {
     return this.transport;
   }
 }

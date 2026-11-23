@@ -94,7 +94,7 @@ export class UniversalMcpClient {
           // However, for tool discovery, it should be fine.
           // Ideally, we should reuse the same Client, but @ai-sdk/mcp currently takes a Transport.
 
-          const mcpClient = createMCPClient(sdkTransport);
+          const mcpClient = await createMCPClient({ transport: sdkTransport });
 
           // Get tools with automatic Zod schemas
           const tools = await mcpClient.tools();
@@ -183,7 +183,6 @@ export class UniversalMcpClient {
         tools = Object.entries(toolsResponse).map(([toolName, toolDef]: [string, any]) => ({
           name: toolName,
           description: toolDef.description || `Tool from ${endpoint.name}`,
-          inputSchema: toolDef.inputSchema || toolDef.schema || {},
           inputSchema: toolDef.parameters || {}
         }));
       } else if (Array.isArray(toolsResponse)) {

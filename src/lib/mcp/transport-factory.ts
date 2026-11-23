@@ -3,6 +3,8 @@
  * Creates appropriate transport implementations based on server configuration
  */
 
+import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { logger } from '@/lib/logger';
 import { McpServerConfig } from './server-config';
 import { StreamableHttpTransport } from './transports/streamable-http-transport';
@@ -21,8 +23,9 @@ export interface McpTransport {
   listTools(): Promise<any>;
   executeTool(name: string, params: any): Promise<any>;
 
-  // Access to underlying SDK Client (for AI SDK optimization)
-  getClient(): any | null; // Typed as 'any' to avoid strict dependency on @modelcontextprotocol/sdk here
+  // Access to the underlying SDK Client and transport (for AI SDK optimization)
+  getClient(): Client | null;
+  getSdkTransport(): Transport | null;
 }
 
 export class TransportFactory {

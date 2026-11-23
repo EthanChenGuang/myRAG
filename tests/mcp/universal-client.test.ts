@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type { McpTransport } from '@/lib/mcp/transport-factory';
 
 const createMCPClient = vi.fn();
@@ -24,7 +25,7 @@ function stubTransport(sdkTransport: object): McpTransport {
     listTools: async () => ({}),
     executeTool: async () => ({}),
     getClient: () => null,
-    getSdkTransport: () => sdkTransport,
+    getSdkTransport: () => sdkTransport as Transport,
   };
 }
 
