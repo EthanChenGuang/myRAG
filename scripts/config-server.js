@@ -204,6 +204,13 @@ app.post('/api/config', (req, res) => {
     // Filter out invalid environment variable names and template placeholders
     const fullValues = filterValidEnvVars(rawFullValues);
 
+    for (const name of ['RAG_EVAL_SECRET', 'RAG_SIDECAR_SECRET']) {
+      const value = fullValues[name];
+      if (typeof value === 'string' && value.length > 0 && value.length < 32) {
+        console.warn(`[Config] ${name} is ${value.length} characters; at least 32 are required or the endpoint answers 503`);
+      }
+    }
+
     // Debug logging
     console.log('API: Received config update request with keys:', Object.keys(fullValues).join(', '));
 
