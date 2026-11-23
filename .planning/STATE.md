@@ -4,16 +4,16 @@ milestone: v5.0
 current_phase: 01
 current_phase_name: Evaluation Harness & Baseline
 status: verifying
-stopped_at: Phase 2 context gathered
-last_updated: "2026-11-23T12:27:03.476Z"
+stopped_at: Completed 02-01-PLAN.md
+last_updated: "2026-11-23T14:05:01.749Z"
 last_activity: 2026-11-23
 last_activity_desc: Phase 01 execution started
-state_head: f7e2e0b3f9c9acf5bc05c3a1448b84ce601d5c8a
+state_head: 5776570bcca631c02c22b4bf4b237d78de5e0248
 progress:
-  total_phases: 8
+  total_phases: 9
   completed_phases: 0
-  total_plans: 22
-  completed_plans: 22
+  total_plans: 58
+  completed_plans: 23
 ---
 
 # Project State
@@ -78,6 +78,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P20 | 20min | 2 tasks | 9 files |
 | Phase 01 P21 | 6min | 2 tasks | 6 files |
 | Phase 01 P22 | 12min | 2 tasks | 7 files |
+| Phase 02 P01 | 25 min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -119,6 +120,8 @@ Recent decisions affecting current work:
 - [Phase 01]: 01-21: null and default cases live as named variants in samples.json so Pydantic and Zod validate the same Python-built values
 - [Phase 01]: 01-22: gh could not resolve action releases; pinned checkout@v4, setup-node@v4, setup-uv@v5, upload-artifact@v4 (confirm on first GitHub run)
 - [Phase 01]: 01-22: every CI job running eval pytest or the harness syncs eval with --locked --all-extras, enforced by scripts/ci/check-workflows.py
+- [Phase 02]: Root tsconfig excludes voice-agent and baileys-whatsapp and allows .mts import extensions; a per-file tsc ratchet (baseline 231 with route types) is the interim gate until plan 02-36
+- [Phase 02]: voice-agent and baileys-whatsapp both install cleanly and type-check at 0 errors; both are ratcheted in the sibling-types CI job (baileys via Corepack Yarn 4 --immutable --mode=skip-build)
 
 ### Pending Todos
 
@@ -145,6 +148,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-23T12:27:03.219Z
-Stopped at: Phase 2 context gathered
-Resume file: .planning/phases/02-unified-retrieval-pipeline-tenant-scope/02-CONTEXT.md
+Last session: 2026-11-23T14:05:01.583Z
+Stopped at: Completed 02-01-PLAN.md
+Resume file: None

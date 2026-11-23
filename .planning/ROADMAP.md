@@ -93,11 +93,11 @@ Plans:
   6. A production request produces one Langfuse trace with a span per stage (latency, candidate counts), sent asynchronously without delaying the answer, with a `[RAG Trace]` log line as the fallback when Langfuse is off or unreachable (tested with a fake Langfuse endpoint), and eval reports show p50/p95 latency per stage against the documented text-chat and voice budgets.
   7. Reports split every metric by provenance and the new `colloquial`, `ambiguous` and `typo` categories; a sampled, PII-masked share of production traces lands in a review queue, and online judge scores appear on the Langfuse traces (tested with a fake Langfuse endpoint and a stub judge).
 **Live verification**: Check tenant resolution against a real Supabase project with personal and organization memberships in both single-tenant and multi-tenant modes; run a voice session with the running `voice-agent/` using the signed token; repeat the legacy-parity check on the real golden set.
-**Plans**: 36 plans
+**Plans**: 1/36 plans executed
 
 Plans:
 **Wave 1**
-- [ ] 02-01-PLAN.md — Type-check config: exclude sibling packages, fix TS5097, per-file tsc ratchet in CI (wave 1)
+- [x] 02-01-PLAN.md — Type-check config: exclude sibling packages, fix TS5097, per-file tsc ratchet in CI (wave 1)
 - [ ] 02-03-PLAN.md — New env vars in the five config places, LANGFUSE_* discovery in check-config (wave 1)
 - [ ] 02-05-PLAN.md — Filtering Supabase fake, fake-edge operators, two-tenant PGlite fixture (wave 1)
 
@@ -262,7 +262,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 5.1 → 6 → 7. 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Evaluation Harness & Baseline | 22/22 | In Progress | - |
-| 2. Unified Retrieval Pipeline & Tenant Scope | 0/TBD | Not started | - |
+| 2. Unified Retrieval Pipeline & Tenant Scope | 1/36 | In Progress | - |
 | 3. Unified Ingestion & Embedding Profiles | 0/TBD | Not started | - |
 | 3.1. Tiered Parsing, Incremental Queue & Bulk Backfill (INSERTED) | 0/TBD | Not started | - |
 | 4. Hybrid Retrieval, Reranking & Calibrated Refusal | 0/TBD | Not started | - |
