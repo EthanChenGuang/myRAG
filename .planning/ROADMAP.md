@@ -39,21 +39,31 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. CI fails when a Pydantic model changes without its regenerated Zod schema, when an RAG env var is missing from any of the five config locations, or when a characterization test breaks; those tests pass on today's code for strict-mode "information not available", webSearch + strict using Exa results, `source_images` streaming and persistence, and `{{context}}` substitution.
   5. Pointed at a workspace, the drafting tool writes span-labelled golden items (document, section, quote, language, category, review status; never chunk IDs) to a gitignored location with a frozen dev/test split, and the nightly tier computes Faithfulness, Answer Relevance and Context Recall with a pinned judge from a different model family and telemetry disabled (verified with a stubbed judge and a fixture workspace).
 **Live verification**: Draft the 50–200 item golden set from a real knowledge-base workspace and have the user review every item; record the three-run baseline on that real set with the OpenAI embedding key and the judge key, then set per-metric improvement targets from it; run the first nightly judge tier with real keys.
-**Plans**: 12 plans
+**Plans**: 22 plans
 
 Plans:
-- [ ] 01-01-PLAN.md — Tracer: one fixture question through the authenticated eval route, real retrieval on PGlite and a TS/Python-validated trace; Vitest infra and route auth tests (wave 1)
-- [ ] 01-02-PLAN.md — Remaining Pydantic contracts, generated Zod, samples round trip and parity tests (wave 2)
-- [ ] 01-03-PLAN.md — New env vars in all five config locations, env manifest and check-config with knownGaps ratchet (wave 2)
-- [ ] 01-04-PLAN.md — Characterization tests: strict refusal, webSearch + Exa, source_images, {{context}}, legacy post-filter sentinel (wave 2)
-- [ ] 01-05-PLAN.md — rag-sidecar FastAPI skeleton: probes, fail-closed shared-secret auth, Dockerfile (wave 3)
-- [ ] 01-06-PLAN.md — Python eval core: locked eval env, matching, split, deterministic metrics, report and score CLI (wave 3)
-- [ ] 01-08-PLAN.md — Eval answer generation (include_answer) and nightly harness entry point (wave 3)
-- [ ] 01-07-PLAN.md — Trilingual fixture corpus and 72-item golden set with integrity tests (wave 4)
-- [ ] 01-09-PLAN.md — Judge tier: DeepEval + Ragas, pinned non-Claude judge, telemetry off, stub-judge tests (wave 4)
-- [ ] 01-10-PLAN.md — Golden-set drafting tool: tenant-scoped sources, verified quotes, private output, frozen split (wave 4)
-- [ ] 01-11-PLAN.md — Three-run fixture baseline, noise-band gate, final npm run test-rag and degraded-config demo (wave 5)
-- [ ] 01-12-PLAN.md — GitHub Actions PR smoke and nightly workflows, new-code type-check (wave 6)
+- [ ] 01-01-PLAN.md — Tracer: Pydantic eval-run contracts through `npm run gen:schemas` to generated zod/v3 schemas that accept Pydantic-built values (wave 1)
+- [ ] 01-02-PLAN.md — PGlite fixture database with the repo SQL and 127.0.0.1 edge fakes running today's unmodified retrieval (wave 2)
+- [ ] 01-03-PLAN.md — Golden-set contracts (GoldenItem, split manifest, drafted-item batch) generated into Zod (wave 2)
+- [ ] 01-04-PLAN.md — Authenticated eval route, legacy post-filter replica and `npm run test-rag` writing the first trace (wave 3)
+- [ ] 01-05-PLAN.md — Report, baseline, noise, gate, judge and sidecar contracts generated into Zod (wave 3)
+- [ ] 01-06-PLAN.md — Locked eval uv project with judge/draft extras, span matching and frozen split (wave 3)
+- [ ] 01-07-PLAN.md — English fixture corpus documents (wave 3)
+- [ ] 01-08-PLAN.md — Chinese and Italian fixture corpus documents (wave 3)
+- [ ] 01-09-PLAN.md — Vitest infrastructure, route auth matrix, harness concurrency and HTTP transport tests (wave 4)
+- [ ] 01-10-PLAN.md — Reproducible runs: pinned eval env, hashed RunManifest, Pydantic validation of traces (wave 4)
+- [ ] 01-11-PLAN.md — New env vars in all five config locations, env manifest and check-config with knownGaps ratchet (wave 4)
+- [ ] 01-12-PLAN.md — rag-sidecar FastAPI skeleton: probes, fail-closed shared-secret auth, Dockerfile (wave 4)
+- [ ] 01-13-PLAN.md — Golden/trace loaders, Python corpus reader and deterministic metrics (wave 4)
+- [ ] 01-14-PLAN.md — Eval answer generation (include_answer) and nightly harness entry point (wave 5)
+- [ ] 01-15-PLAN.md — 72-item trilingual fixture golden set, frozen split and integrity tests (wave 5)
+- [ ] 01-16-PLAN.md — Report writer and score CLI (wave 5)
+- [ ] 01-17-PLAN.md — Characterization tests: strict refusal, webSearch + Exa, source_images, {{context}}, legacy post-filter sentinel (wave 5)
+- [ ] 01-18-PLAN.md — Judge tier: DeepEval + Ragas, pinned non-Claude judge, telemetry off, stub-judge tests (wave 5)
+- [ ] 01-19-PLAN.md — Golden-set drafting tool: tenant-scoped sources, verified quotes, private output, frozen split (wave 5)
+- [ ] 01-20-PLAN.md — Three-run fixture baseline, noise-band gate, final npm run test-rag and degraded-config demo (wave 6)
+- [ ] 01-21-PLAN.md — Contract samples round trip and schema-parity tests over the final contract set (wave 6)
+- [ ] 01-22-PLAN.md — GitHub Actions PR smoke and nightly workflows, new-code type-check (wave 7)
 
 ### Phase 2: Unified Retrieval Pipeline & Tenant Scope
 **Goal**: Text chat, embedded chat and voice get their context from one pipeline that can only search a tenant verified on the server, and answers are unchanged from the baseline
@@ -144,7 +154,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7. Phases 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Evaluation Harness & Baseline | 0/12 | Planned | - |
+| 1. Evaluation Harness & Baseline | 0/22 | Planned | - |
 | 2. Unified Retrieval Pipeline & Tenant Scope | 0/TBD | Not started | - |
 | 3. Unified Ingestion & Embedding Profiles | 0/TBD | Not started | - |
 | 4. Hybrid Retrieval, Reranking & Calibrated Refusal | 0/TBD | Not started | - |

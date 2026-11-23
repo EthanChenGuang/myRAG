@@ -2,7 +2,7 @@
 
 > Full coverage by default. Opt-outs are explicit, reasoned decisions. Phase 1 calls external APIs only from eval tooling (nightly judge tier, live generation, golden drafting); the PR smoke tier calls none of them (127.0.0.1 fakes and stubs).
 
-## OpenRouter (judge model and live eval generator; plans 01-08, 01-09, 01-12)
+## OpenRouter (judge model and live eval generator; plans 01-14, 01-18, 01-22)
 
 | capability | decision | reason |
 |---|---|---|
@@ -16,7 +16,7 @@
 | openrouter.provider-routing-preferences | OPT-OUT | not needed yet: pinned model id is sufficient for reproducibility in Phase 1 |
 | openrouter.generation-stats-and-credits | OPT-OUT | not needed yet: cost tracking is not a Phase 1 requirement |
 
-## Anthropic Messages API (golden-set drafting; plan 01-10)
+## Anthropic Messages API (golden-set drafting; plan 01-19)
 
 | capability | decision | reason |
 |---|---|---|
@@ -30,7 +30,7 @@
 | anthropic.citations | OPT-OUT | explicitly out of scope: Claude Citations are Phase 5 (GEN-01) |
 | anthropic.models-list | OPT-OUT | not needed: drafting model id is pinned in eval/config/draft.json |
 
-## OpenAI API (Ragas answer-relevance embeddings; plan 01-09)
+## OpenAI API (Ragas answer-relevance embeddings; plan 01-18)
 
 | capability | decision | reason |
 |---|---|---|
@@ -38,7 +38,7 @@
 | openai.chat-completions | OPT-OUT | not needed: the judge runs through OpenRouter (D-15, D-22) |
 | openai.other-endpoints (images, audio, files, batches) | OPT-OUT | explicitly out of scope for the eval tier |
 
-## Supabase PostgREST (drafting workspace reader; plan 01-10)
+## Supabase PostgREST (drafting workspace reader; plan 01-19)
 
 | capability | decision | reason |
 |---|---|---|
@@ -52,15 +52,15 @@
 | supabase.auth-user-sessions | OPT-OUT | not needed: the offline tool uses the service-role key with an explicit workspace filter |
 | supabase.realtime | OPT-OUT | not needed |
 
-## DeepEval / Confident AI hosted platform (plan 01-09)
+## DeepEval / Confident AI hosted platform (plan 01-18)
 
 | capability | decision | reason |
 |---|---|---|
 | deepeval.local-metrics-library | INTEGRATE | |
-| deepeval.results-upload-and-dashboard | OPT-OUT | explicitly out of scope: document text must not leave for results hosting (prohibition in plan 01-09) |
+| deepeval.results-upload-and-dashboard | OPT-OUT | explicitly out of scope: document text must not leave for results hosting (prohibition in plan 01-18) |
 | deepeval.telemetry | OPT-OUT | explicitly disabled by DEEPEVAL_TELEMETRY_OPT_OUT=1 (D-15) |
 
-## Ragas (plans 01-09, 01-10)
+## Ragas (plans 01-18, 01-19)
 
 | capability | decision | reason |
 |---|---|---|
