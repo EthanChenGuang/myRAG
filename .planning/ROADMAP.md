@@ -131,7 +131,7 @@ Plans:
 - [x] 02-23-PLAN.md — Trace id in chat message metadata; masked review-candidate export (wave 11)
 - [x] 02-17-PLAN.md — Voice agent forwards the token, single active user, CI job, deploy docs (wave 12)
 - [x] 02-18-PLAN.md — Media routes on the pipeline with the caller's scope (wave 12)
-- [ ] 02-29-PLAN.md — Type fixes: chat route (wave 12)
+- [x] 02-29-PLAN.md — Type fixes: chat route (wave 12)
 
 **Wave 13–21** *(sequential)*
 - [x] 02-19-PLAN.md — Delete retired retrieval modules; ingestion embeddings via @/lib/rag (wave 13)

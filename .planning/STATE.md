@@ -13,7 +13,7 @@ progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 58
-  completed_plans: 38
+  completed_plans: 39
 ---
 
 # Project State
@@ -28,11 +28,11 @@ See: .planning/PROJECT.md (updated 2026-11-22)
 ## Current Position
 
 Phase: 02 (Unified Retrieval Pipeline & Tenant Scope) — EXECUTING
-Plan: 28 of 36 complete (02-01..20, 02-22..23, 02-30..35)
+Plan: 29 of 36 complete (02-01..20, 02-22..23, 02-29..35)
 Status: Executing sequentially
 Last activity: 2026-11-23 — 02-08, 09, 10, 15 merged; tsc ratchet 58; 480 vitest tests pass; Phase 3 research + patterns committed
 
-Progress: [████████░░] 78%
+Progress: [████████░░] 81%
 
 ## Performance Metrics
 
@@ -100,6 +100,8 @@ Recent decisions affecting current work:
 - [02-19] Eleven retired retrieval modules and `searchSimilarChunks` deleted; ingestion embeds through `@/lib/rag` until Phase 3; old-vs-new proofs run against frozen JSON fixtures; tsc baseline total 216.
 - [02-23] Review candidates sampled by `LANGFUSE_REVIEW_SAMPLE_RATE` (default 0, 'review' prefix) carry masked query/answer on the root observation and masked context/model in metadata, tagged `review_candidate`; chat messages carry `ragTraceId` metadata through DB round trip; embed finishes its trace in `onFinish`.
 - [02-20] `scripts/ci/check-rag-boundary.mjs` runs in pr-smoke; rules are an appendable `RULES` array (03-04 adds the single-writer rule); mint-scope rule restricts only the `mintScope` binding outside `src/lib/rag/tenant/`.
+- [02-29] Chat route has 0 tsc errors; reads AI SDK v6 tool fields (`input`/`output`/`providerMetadata`); custom chunks go through `writeCustomChunk`; tool-argument logs carry key names and sizes only.
+- [security] `/api/ai-to-rag` and `/api/documents/[id]` derive the user from the session and verify the tenant scope; another tenant's document id returns 404; anonymous single-tenant delete now gets 401 (deliberate).
 - [02-22] Langfuse via OTel replay after response; tenantKey on every span; sampling hashes request id with a per-purpose prefix; masking order e-mail, IBAN, CN ID, IT CF, Luhn card, phones.
 
 - [Roadmap]: Research's 9 phases compressed to 7 for standard granularity: ingestion + embeddings merged (Phase 3); external backends + closeout merged (Phase 7)
