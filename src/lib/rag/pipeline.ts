@@ -13,6 +13,7 @@ import { legacyAnalyze, legacyRank, legacySearch } from './legacy/enhanced-retri
 import { defaultQueryContext } from './query/temporal-query-detector';
 import { assertTenantScope, scopeKey } from './tenant/scope';
 import { createTraceCollector, type TraceCollector } from './trace/collector';
+import { finishTrace } from './trace/finish';
 import type {
   Candidate,
   Profile,
@@ -195,13 +196,21 @@ function degradedReason(records: StageRecord[]): string {
 }
 
 export async function runRetrieval(input: RunRetrievalInput): Promise<RetrievalResult> {
-  const deps = getRagDeps();
-
   if (input.scope !== null) assertTenantScope(input.scope);
-  const scope = input.scope;
 
+  const ownsTrace = input.trace === undefined;
   const collector =
-    input.trace ?? createTraceCollector({ profile: input.profile, tenantKey: scope ? scopeKey(scope) : 'none' });
+    input.trace ??
+    createTraceCollector({ profile: input.profile, tenantKey: input.scope ? scopeKey(input.scope) : 'none' });
+
+  const result = await runPipeline(input, collector);
+  if (ownsTrace) finishTrace(collector, result);
+  return result;
+}
+
+async function runPipeline(input: RunRetrievalInput, collector: TraceCollector): Promise<RetrievalResult> {
+  const deps = getRagDeps();
+  const scope = input.scope;
 
   if (scope === null) {
     return failure(collector, 'empty', 'no_tenant', null);
