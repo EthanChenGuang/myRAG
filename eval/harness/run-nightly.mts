@@ -1,14 +1,17 @@
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { LiveGenerationKeyMissingError, runEval, type EvalGenerator } from './run-eval.mts';
 import type { DeploymentMode } from './pglite-supabase.mts';
 
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+
 function validateWithPydantic(model: string, flag: '--jsonl' | '--json', file: string): number {
   const result = spawnSync(
     'uv',
-    ['run', '--project', 'rag-sidecar', 'python', '-m', 'rag_sidecar.contracts.validate', '--model', model, flag, file],
-    { stdio: 'inherit' },
+    ['run', '--project', path.join(REPO_ROOT, 'rag-sidecar'), 'python', '-m', 'rag_sidecar.contracts.validate', '--model', model, flag, path.resolve(file)],
+    { stdio: 'inherit', cwd: REPO_ROOT },
   );
   if (result.error) throw result.error;
   return result.status ?? 3;
