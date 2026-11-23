@@ -39,8 +39,35 @@ const embedChatSchema = z.object({
     role: z.enum(['user', 'assistant', 'system']),
     content: z.string()
   })),
-  model: z.string().optional().default('openai/gpt-4o-mini')
+  model: z.string().optional()
 });
+
+const FALLBACK_EMBED_MODEL = 'openai/gpt-4o-mini';
+
+function defaultEmbedModel(): string {
+  return process.env.NEXT_PUBLIC_EMBED_MODEL || env.NEXT_PUBLIC_EMBED_MODEL || FALLBACK_EMBED_MODEL;
+}
+
+function allowedEmbedModels(): Set<string> {
+  const allowed = new Set<string>([defaultEmbedModel()]);
+  try {
+    const configured: unknown = JSON.parse(env.NEXT_PUBLIC_OPENROUTER_MODELS || '[]');
+    if (Array.isArray(configured)) {
+      for (const entry of configured) {
+        const id = (entry as { id?: unknown } | null)?.id;
+        if (typeof id === 'string' && id) allowed.add(id);
+      }
+    }
+  } catch {
+    console.warn('[Embed API] NEXT_PUBLIC_OPENROUTER_MODELS is not valid JSON, only the default embed model is allowed');
+  }
+  return allowed;
+}
+
+function resolveEmbedModel(requested: string | undefined): string {
+  if (requested && allowedEmbedModels().has(requested)) return requested;
+  return defaultEmbedModel();
+}
 
 // Helper function to create a proper AI message for errors (same as main chat API)
 function createErrorResponse(message: string) {
@@ -163,7 +190,9 @@ export async function POST(request: NextRequest) {
       return knowledgeBaseUnavailableResponse(request);
     }
 
-    const { messages, model } = embedChatSchema.parse(body);
+    const parsed = embedChatSchema.parse(body);
+    const messages = parsed.messages.filter(message => message.role !== 'system');
+    const model = resolveEmbedModel(parsed.model);
 
     const userMessages = messages.filter(m => m.role === 'user');
     const lastUserMessage = userMessages[userMessages.length - 1];
