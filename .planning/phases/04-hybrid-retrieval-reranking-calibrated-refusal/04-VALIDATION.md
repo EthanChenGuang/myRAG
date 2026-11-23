@@ -158,14 +158,14 @@ Requirements and threat references per plan are in `04-PLAN-INDEX.md`. Kind: tra
 | 04-31-01 | 7 | tdd | `node --import tsx --test tests/rag-db/profile-chunk-writer.test.mts` | ⬜ pending |
 | 04-31-02 | 7 | tdd | `npx vitest run tests/rag/ingest/parent-child-chunker.test.ts tests/rag/ingest/legal-clauses.test.ts && node scripts/ci/check-rag-boundary.mjs` | ⬜ pending |
 | 04-31-03 | 7 | tdd | `npx vitest run tests/rag/ingest/profile-dual-write.test.ts tests/rag/ingest && node scripts/ci/check-rag-boundary.mjs` | ⬜ pending |
-| 04-37-01 | 7 | tdd | corpus loader tests plus both smoke tiers with `paired.all_zero` (exact chain in 04-37-PLAN.md Task 1) | ⬜ pending |
+| 04-37-01 | 7 | tdd | corpus loader tests, per-item baseline equality in both modes (jq over `.items`), smoke gate (exact chain in 04-37-PLAN.md Task 1) | ⬜ pending |
 | 04-37-02 | 7 | tdd | `uv run --directory eval pytest -q tests/test_fixture_coverage.py tests/test_split.py && uv run --project rag-sidecar python -m rag_sidecar.contracts.validate --model GoldenItem --jsonl eval/fixtures/golden.jsonl` | ⬜ pending |
-| 04-37-03 | 7 | auto | `npm run eval:baseline && npm run test-rag -- --out eval/out/p4-37 && jq -e '.passed == true and .paired.all_zero == true' eval/out/p4-37/gate.json` | ⬜ pending |
+| 04-37-03 | 7 | auto | per-item baseline equality for every pre-existing id, then both smoke tiers with `paired.all_zero` (exact chain in 04-37-PLAN.md Task 3) | ⬜ pending |
 | 04-32-01 | 8 | tdd | `node --import tsx --test tests/rag-db/rechunk.test.mts` | ⬜ pending |
 | 04-32-02 | 8 | auto | `node --import tsx --test tests/rag-db/rechunk.test.mts` | ⬜ pending |
 | 04-38-01 | 8 | tdd | `uv run --directory eval pytest -q tests/test_golden_phase4.py tests/test_fixture_coverage.py tests/test_split.py` | ⬜ pending |
 | 04-38-02 | 8 | tdd | `uv run --directory eval pytest -q tests/test_ingest_golden.py` | ⬜ pending |
-| 04-38-03 | 8 | auto | both smoke tiers with `paired.all_zero` against the re-recorded baselines (exact chain in 04-38-PLAN.md Task 3) | ⬜ pending |
+| 04-38-03 | 8 | auto | per-item baseline equality in both modes, then both smoke tiers with `paired.all_zero` against the re-recorded baselines (exact chain in 04-38-PLAN.md Task 3) | ⬜ pending |
 | 04-41-01 | 8 | tdd | `node --import tsx --test tests/rag-db/v2-two-tenant-matrix.test.mts tests/rag-two-tenant.test.mts tests/two-tenant-fixture.test.mts` | ⬜ pending |
 | 04-41-02 | 8 | tdd | `npx vitest run tests/rag/v2/routes-two-tenant-v2.test.ts tests/rag/chat-two-tenant.test.ts` | ⬜ pending |
 | 04-33-01 | 9 | tdd | `node --import tsx --test tests/rag-db/chunking-activation.test.mts tests/rag-db/profile-chunk-writer.test.mts` | ⬜ pending |
