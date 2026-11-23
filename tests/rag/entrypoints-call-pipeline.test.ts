@@ -198,3 +198,126 @@ describe('entry point: chat route calls the pipeline', () => {
     expect(h.capture.streamText).not.toHaveBeenCalled();
   });
 });
+
+describe('entry point: embed route calls the pipeline', () => {
+  const EMBED_ENV = ['NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE', 'NEXT_PUBLIC_EMBED_ENABLED', 'RAG_EMBED_TENANT'] as const;
+  const EMBED_ORG = '55555555-5555-4555-8555-555555555555';
+  let embedSaved: Record<string, string | undefined>;
+
+  beforeEach(() => {
+    embedSaved = Object.fromEntries(EMBED_ENV.map((name) => [name, env[name]]));
+    env.NEXT_PUBLIC_EMBED_ENABLED = 'true';
+    delete env.RAG_EMBED_TENANT;
+  });
+
+  afterEach(() => {
+    for (const name of EMBED_ENV) {
+      if (embedSaved[name] === undefined) delete env[name];
+      else env[name] = embedSaved[name];
+    }
+    for (const name of ['ai', '@openrouter/ai-sdk-provider', '@/lib/rag']) vi.doUnmock(name);
+    vi.resetModules();
+    vi.restoreAllMocks();
+  });
+
+  async function callEmbedRoute(deploymentMode: string, extraBody: Record<string, unknown> = {}) {
+    env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE = deploymentMode;
+    vi.resetModules();
+    const retrievalSpy = vi.fn();
+    const streamSpy = vi.fn();
+    vi.doMock('ai', async (importOriginal) => ({
+      ...(await importOriginal<typeof import('ai')>()),
+      streamText: async (params: unknown) => {
+        streamSpy(params);
+        return { toUIMessageStreamResponse: () => new Response('model stream') };
+      },
+    }));
+    vi.doMock('@openrouter/ai-sdk-provider', () => ({
+      createOpenRouter: () => (modelId: string) => ({ specificationVersion: 'v3', provider: 'fake', modelId }),
+    }));
+    vi.doMock('@/lib/rag', async (importOriginal) => {
+      const actual = await importOriginal<typeof import('@/lib/rag')>();
+      return {
+        ...actual,
+        runRetrieval: (input: Parameters<typeof actual.runRetrieval>[0]) => {
+          retrievalSpy(input);
+          return actual.runRetrieval(input);
+        },
+      };
+    });
+    const deps = await import('@/lib/rag/deps');
+    deps.setRagDepsForTests({
+      embedder: async () => [0.1, 0.2, 0.3],
+      anonClient: () => {
+        const request = {
+          abortSignal: () => request,
+          then: (onFulfilled: (value: unknown) => unknown, onRejected?: (reason: unknown) => unknown) =>
+            Promise.resolve({ data: [], error: null }).then(onFulfilled, onRejected),
+        };
+        return { rpc: () => request } as never;
+      },
+      adminClient: () =>
+        ({
+          from: () => {
+            const query = {
+              select: () => query,
+              eq: () => query,
+              abortSignal: () => query,
+              maybeSingle: () => Promise.resolve({ data: { id: EMBED_ORG }, error: null }),
+            };
+            return query;
+          },
+        }) as never,
+    });
+    const route = await import('@/app/api/embed/chat/route');
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const res = await route.POST(
+        new NextRequest('http://localhost/api/embed/chat', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-forwarded-for': '203.0.113.21' },
+          body: JSON.stringify({ messages: [{ role: 'user', content: 'What is the refund window?' }], ...extraBody }),
+        }),
+      );
+      await res.text();
+      return { status: res.status, retrievalSpy, streamSpy };
+    } finally {
+      deps.resetRagDepsForTests();
+    }
+  }
+
+  test('single-tenant: runRetrieval is called with profile embed and a minted single scope', async () => {
+    const { status, retrievalSpy, streamSpy } = await callEmbedRoute('single-tenant');
+    expect(status).toBe(200);
+    expect(retrievalSpy).toHaveBeenCalledTimes(1);
+    const input = retrievalSpy.mock.calls[0][0];
+    expect(input.profile).toBe('embed');
+    expect(input.options).toMatchObject({ webSearchEnabled: false });
+    expect(input.signal).toBeInstanceOf(AbortSignal);
+    const scope = await import('@/lib/rag/tenant/scope');
+    expect(scope.isTenantScope(input.scope)).toBe(true);
+    expect(scope.scopeKey(input.scope)).toBe('s:default');
+    expect(streamSpy).toHaveBeenCalledTimes(1);
+  });
+
+  test('multi-tenant: the scope is the configured organization, not anything in the body', async () => {
+    env.RAG_EMBED_TENANT = `o:${EMBED_ORG}`;
+    const { status, retrievalSpy } = await callEmbedRoute('multi-tenant', { organizationId: EMBED_ORG });
+    expect(status).toBe(200);
+    expect(retrievalSpy).toHaveBeenCalledTimes(1);
+    const scope = await import('@/lib/rag/tenant/scope');
+    expect(scope.scopeKey(retrievalSpy.mock.calls[0][0].scope)).toBe(`o:${EMBED_ORG}`);
+  });
+
+  test('a body naming another workspace never reaches runRetrieval', async () => {
+    env.RAG_EMBED_TENANT = `o:${EMBED_ORG}`;
+    const { status, retrievalSpy, streamSpy } = await callEmbedRoute('multi-tenant', {
+      organizationId: '66666666-6666-4666-8666-666666666666',
+    });
+    expect(status).toBe(403);
+    expect(retrievalSpy).not.toHaveBeenCalled();
+    expect(streamSpy).not.toHaveBeenCalled();
+  });
+});
