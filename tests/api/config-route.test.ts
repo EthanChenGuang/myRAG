@@ -294,6 +294,20 @@ describe('/api/config', () => {
       expect(env.read()).toBe(ENV_FILE);
     });
 
+    it('NEXT_PUBLIC_MCP_YOLO_MODE_ENABLED is not writable over the web', async () => {
+      const env = makeEnvDir(ENV_FILE);
+      asAdmin(state);
+      const route = await load();
+
+      const response = await route.POST(
+        request('/api/config', { method: 'POST', body: { config: { NEXT_PUBLIC_MCP_YOLO_MODE_ENABLED: 'true' } } }),
+      );
+
+      expect(response.status).toBe(400);
+      expect((await response.json()).rejected).toEqual(['NEXT_PUBLIC_MCP_YOLO_MODE_ENABLED']);
+      expect(env.read()).toBe(ENV_FILE);
+    });
+
     it('a body without a config object answers 400', async () => {
       const env = makeEnvDir(ENV_FILE);
       asAdmin(state);
