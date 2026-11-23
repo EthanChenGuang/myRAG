@@ -48,7 +48,7 @@ export function useVoiceMode(options: UseVoiceModeOptions = {}): UseVoiceModeRet
     const analyserRef = useRef<AnalyserNode | null>(null);
     const mediaStreamRef = useRef<MediaStream | null>(null);
     const animationFrameRef = useRef<number | null>(null);
-    const dataArrayRef = useRef<Uint8Array | null>(null);
+    const dataArrayRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
 
     // Cleanup function
     const cleanup = useCallback(() => {

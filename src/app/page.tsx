@@ -63,6 +63,7 @@ interface CancellableError extends Error {
 
 interface ExtendedFormEvent extends React.FormEvent<HTMLFormElement> {
   messageContent?: ContentPart | ContentPart[];
+  data?: { settings?: { webSearch?: boolean } };
 }
 
 interface StreamingMessage extends ExtendedMessage {
