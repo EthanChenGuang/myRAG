@@ -12,6 +12,7 @@
     "configure-deployment": "node scripts/configure-deployment.js",
     "db:setup": "bash scripts/setup-database.sh",
     "reprocess-docs": "node scripts/reprocess-documents.js",
+    "test": "vitest run",
     "test-rag": "tsx eval/harness/run-smoke.mts",
     "gen:schemas": "uv run --project rag-sidecar python -m rag_sidecar.export_schemas && node scripts/gen-zod.mjs",
     "db:push": "echo 'Use Supabase dashboard to manage schema'",
@@ -134,7 +135,9 @@
     "ts-node": "^10.9.2",
     "tsx": "4.23.15",
     "typescript": "^5",
-    "typescript-eslint": "^8"
+    "typescript-eslint": "^8",
+    "vite": "7.3.8",
+    "vitest": "5.1.1"
   },
   "packageManager": "pnpm@10.28.1+sha512.7d7dbbca9e99447b7c3bf7a73286afaaf6be99251eb9498baefa7d406892f67b879adb3a1d7e687fc4ccc1a388c7175fbaae567a26ab44d1067b54fcb0d6a316",
   "license": "MIT",
