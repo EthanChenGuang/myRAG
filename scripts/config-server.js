@@ -949,15 +949,13 @@ app.all(/^\/api\/nango\//, async (req, res) => {
 
     console.log(`[Nango Proxy] ${req.method} ${url}`);
 
-    // Build headers - forward Authorization header from config-ui
     const headers = {
       'Content-Type': 'application/json',
     };
 
-    // Forward Authorization header if present (for config-ui admin auth)
-    if (req.headers.authorization) {
-      headers['Authorization'] = req.headers.authorization;
-      console.log(`[Nango Proxy] Forwarding Authorization header`);
+    // The main app authenticates Nango routes from the Supabase session cookie only
+    if (req.headers.cookie) {
+      headers['Cookie'] = req.headers.cookie;
     }
 
     const options = {

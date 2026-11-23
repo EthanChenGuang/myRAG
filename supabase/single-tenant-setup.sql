@@ -1500,6 +1500,19 @@ CREATE INDEX IF NOT EXISTS idx_nango_connections_provider
 CREATE INDEX IF NOT EXISTS idx_nango_connections_sync_folder
   ON nango_connections(sync_folder_id);
 
+-- One Nango connection may belong to exactly one user
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'unique_nango_connection_id'
+      AND conrelid = 'public.nango_connections'::regclass
+  ) THEN
+    ALTER TABLE public.nango_connections
+      ADD CONSTRAINT unique_nango_connection_id UNIQUE (connection_id);
+  END IF;
+END $$;
+
 -- Indexes for nango_sync_records
 CREATE INDEX IF NOT EXISTS idx_nango_sync_records_user_id
   ON nango_sync_records(user_id);
