@@ -79,7 +79,7 @@ async function main(): Promise<number> {
     outDir,
     deploymentMode: deploymentMode as DeploymentMode,
     requestOptions,
-    tier: 'smoke',
+    tier: baseUrl ? 'live' : 'smoke',
     baseUrl,
     includeDrafts: values['include-drafts'],
   });
