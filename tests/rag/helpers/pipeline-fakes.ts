@@ -136,9 +136,21 @@ export function fakeAssemblyAdmin(): RagDeps['adminClient'] {
   return () => client as never;
 }
 
-export function installDeps(partial: Partial<RagDeps> & { ragEnv?: () => RagEnvInput }): void {
+export function adminWithRpc(searchRpc: RpcClient, base: RagDeps['adminClient'] = fakeAssemblyAdmin()): RagDeps['adminClient'] {
+  return () => {
+    const admin = base();
+    if (!admin) return admin;
+    return new Proxy(admin as object, {
+      get: (target, key) => (key === 'rpc' ? searchRpc.rpc.bind(searchRpc) : Reflect.get(target, key)),
+    }) as never;
+  };
+}
+
+export function installDeps(partial: Partial<RagDeps> & { ragEnv?: () => RagEnvInput; searchRpc?: RpcClient }): void {
   resetRagConfigForTests();
-  setRagDepsForTests({ adminClient: fakeAssemblyAdmin(), ...partial });
+  const { searchRpc, ...deps } = partial;
+  const base = deps.adminClient ?? fakeAssemblyAdmin();
+  setRagDepsForTests({ ...deps, adminClient: searchRpc ? adminWithRpc(searchRpc, base) : base });
 }
 
 export function uninstallDeps(): void {

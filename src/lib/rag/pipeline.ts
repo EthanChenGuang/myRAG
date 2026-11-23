@@ -26,7 +26,7 @@ import {
   type OverviewContext,
 } from './context/overview';
 import { assembleVoiceResults, enrichVoiceCandidates, type VoiceResults } from './context/voice';
-import { getRagDeps } from './deps';
+import { getRagDeps, type RagDeps } from './deps';
 import { legacyAnalyze, legacyRank, legacySearch } from './legacy/enhanced-retrieval';
 import { defaultQueryContext } from './query/temporal-query-detector';
 import { resolveDocumentRefs } from './refs/resolve';
@@ -200,6 +200,12 @@ async function loadRows(candidates: Candidate[], signal: AbortSignal): Promise<A
   const adminClient = getRagDeps().adminClient();
   if (!adminClient) throw new Error('[RAG Assemble] admin client unavailable');
   return fetchAssemblyRows(candidates, { adminClient, signal });
+}
+
+function requireAdminSearchClient(deps: RagDeps): RpcClient {
+  const admin = deps.adminClient();
+  if (!admin) throw new Error('[RAG Search] admin client unavailable');
+  return admin as unknown as RpcClient;
 }
 
 function survivorCount(assembly: AssembleOutput<Candidate>): number {
@@ -484,7 +490,7 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
             maxResults,
             fallbackToLowerThreshold,
             scope,
-            client: deps.anonClient(),
+            client: requireAdminSearchClient(deps),
             signal: stageSignal,
           }),
         collector,

@@ -113,7 +113,7 @@ describe('runRetrieval through the re-homed legacy search equals the frozen enha
         return request;
       },
     };
-    deps.setRagDepsForTests({ anonClient: () => failing as never });
+    deps.setRagDepsForTests({ adminClient: () => failing as never });
     try {
       const result = await rag.runRetrieval({
         scope: scopeModule.mintScope('single', null, null),

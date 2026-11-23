@@ -79,7 +79,14 @@ async function loadRoute(options: LoadOptions = {}) {
   await installChatPipeline(h);
   if (options.adminClient) {
     const deps = await import('@/lib/rag/deps');
-    deps.setRagDepsForTests({ adminClient: options.adminClient as never });
+    const installed = deps.getRagDeps().adminClient;
+    const custom = options.adminClient;
+    deps.setRagDepsForTests({
+      adminClient: (() => {
+        const rpc = (installed() as { rpc: unknown }).rpc;
+        return new Proxy(custom() as object, { get: (target, key) => (key === 'rpc' ? rpc : Reflect.get(target, key)) });
+      }) as never,
+    });
   }
   return import('@/app/api/chat/route');
 }

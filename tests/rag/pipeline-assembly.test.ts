@@ -19,7 +19,7 @@ const scope = mintScope('single', null, null);
 function install(options: { rows?: FakeRow[]; env?: RagEnvInput; adminClient?: () => never | null } = {}) {
   const rpc = fakeRpcClient({ rows: options.rows ?? rows(3) });
   installDeps({
-    anonClient: () => rpc.client,
+    searchRpc: rpc.client,
     embedder: fakeEmbedder().embedder,
     ragEnv: () => options.env ?? {},
     ...(options.adminClient ? { adminClient: options.adminClient as never } : {}),
@@ -115,8 +115,14 @@ describe('post_filter and assemble stages', () => {
     expect(result.stages.find((stage) => stage.name === 'assemble')).toMatchObject({ status: 'disabled' });
   });
 
-  test('an unavailable admin client degrades the run but keeps the candidates', async () => {
-    install({ adminClient: () => null });
+  test('a failing row lookup degrades the run but keeps the candidates', async () => {
+    install({
+      adminClient: (() => ({
+        from: () => {
+          throw new Error('rows unavailable');
+        },
+      })) as never,
+    });
     const result = await run('chat');
     expect(result.status).toBe('degraded');
     expect(result.reason).toBe('post_filter_failed');

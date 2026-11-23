@@ -262,7 +262,7 @@ function retrievalRows(fn: string, result: ReturnType<typeof retrievalWith> | un
 }
 
 /**
- * Routes the pipeline's retrieval through the fake: the vector RPC on the anonymous client calls `h.retrieval`
+ * Routes the pipeline's retrieval through the fake: the vector RPC on the admin client calls `h.retrieval`
  * (which returns the legacy `{ chunks }` shape), and the assembly lookups read the fake admin client.
  * Call after vi.resetModules() and before importing the route, so the route shares this deps module.
  */
@@ -273,9 +273,8 @@ export async function installChatPipeline(h: ChatRouteHarness): Promise<void> {
   deps.resetRagDepsForTests();
   deps.setRagDepsForTests({
     embedder: async () => [0.1, 0.2, 0.3],
-    adminClient: () => h.supabase.client as never,
-    anonClient: () => ({
-      rpc(fn: string, args: Record<string, unknown>) {
+    adminClient: () => {
+      const rpc = (fn: string, args: Record<string, unknown>) => {
         const request = {
           abortSignal: () => request,
           then: (onFulfilled: (value: unknown) => unknown, onRejected?: (reason: unknown) => unknown) =>
@@ -287,8 +286,10 @@ export async function installChatPipeline(h: ChatRouteHarness): Promise<void> {
               .then(onFulfilled, onRejected),
         };
         return request as never;
-      },
-    }),
+      };
+      const base = h.supabase.client as object;
+      return new Proxy(base, { get: (target, key) => (key === 'rpc' ? rpc : Reflect.get(target, key)) }) as never;
+    },
   });
 }
 

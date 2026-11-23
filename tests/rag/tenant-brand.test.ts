@@ -9,11 +9,11 @@ const ORG_O = '00000000-0000-4000-8000-0000000000c1';
 
 function spies() {
   const embedder = vi.fn(async () => [0]);
-  const anonClient = vi.fn(() => {
-    throw new Error('anon client must not be used');
+  const adminClient = vi.fn(() => {
+    throw new Error('admin client must not be used');
   });
-  setRagDepsForTests({ embedder, anonClient: anonClient as never });
-  return { embedder, anonClient };
+  setRagDepsForTests({ embedder, adminClient: adminClient as never });
+  return { embedder, adminClient };
 }
 
 const run = (scope: unknown) =>
@@ -29,11 +29,11 @@ describe('runtime brand check', () => {
   });
 
   test('a spread copy of a minted scope is rejected before any stage runs', async () => {
-    const { embedder, anonClient } = spies();
+    const { embedder, adminClient } = spies();
     const copy = { ...mintScope('single', null, null) };
     await expect(run(copy)).rejects.toThrow('[RAG Tenant] unminted scope');
     expect(embedder).not.toHaveBeenCalled();
-    expect(anonClient).not.toHaveBeenCalled();
+    expect(adminClient).not.toHaveBeenCalled();
   });
 
   test('a JSON round-trip of a minted scope is rejected', async () => {

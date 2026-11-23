@@ -143,13 +143,11 @@ describe('media profile', () => {
 
   test('a single scope issues the single-tenant RPC with threshold 0.3 and count 10 on the admin client', async () => {
     const admin = recordingClient(SEEDS.several);
-    const anon = recordingClient([]);
-    installDeps({ adminClient: () => admin.client as never, anonClient: () => anon.client, embedder: fakeEmbedder().embedder });
+    installDeps({ adminClient: () => admin.client as never, embedder: fakeEmbedder().embedder });
     const result = await run(mintScope('single', null, null), 'image');
     expect(admin.calls).toEqual([
       { fn: 'match_document_chunks', args: { query_embedding: [0.1, 0.2, 0.3], match_count: 10, similarity_threshold: 0.3 } },
     ]);
-    expect(anon.calls).toEqual([]);
     expect(result.status).toBe('ok');
     expect(result.context).toBe(oldImageContext(clone(SEEDS.several)));
     expect(result.stages.map((stage) => stage.name)).toEqual(['embed', 'search', 'assemble']);
