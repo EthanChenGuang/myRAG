@@ -68,6 +68,33 @@ describe('mintVoiceToken and verifyVoiceToken', () => {
     expect(Object.keys(JSON.parse(json))).toEqual(['v', 'tk', 'uid', 'oid', 'iat', 'exp', 'aud']);
   });
 
+  test('a token minted with an actor carries it as act and the signature covers it', () => {
+    const minted = mintVoiceToken({ scope: mintScope('single', null, null), secret: SECRET, ttlSeconds: 600, now: NOW_MS, actorUserId: USER_A });
+    if (!minted.ok) throw new Error('unreachable');
+    expect(verifyVoiceToken(minted.token, { secret: SECRET, now: NOW_MS })).toMatchObject({ ok: true, payload: { tk: 's:default', uid: null, act: USER_A } });
+    const [payloadB64, signature] = minted.token.split('.');
+    const claims = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf8')) as Record<string, unknown>;
+    const swapped = b64(JSON.stringify({ ...claims, act: USER_B }));
+    expect(verifyVoiceToken(`${swapped}.${signature}`, { secret: SECRET, now: NOW_MS })).toEqual({ ok: false, status: 401, reason: 'bad_signature' });
+    const stripped = b64(JSON.stringify({ ...claims, act: undefined }));
+    expect(verifyVoiceToken(`${stripped}.${signature}`, { secret: SECRET, now: NOW_MS })).toEqual({ ok: false, status: 401, reason: 'bad_signature' });
+  });
+
+  test('a token minted without an actor has no act claim and an empty actor is not written', () => {
+    for (const actorUserId of [undefined, null, '']) {
+      const minted = mintVoiceToken({ scope: mintScope('single', null, null), secret: SECRET, ttlSeconds: 600, now: NOW_MS, actorUserId });
+      if (!minted.ok) throw new Error('unreachable');
+      expect(Object.keys(JSON.parse(Buffer.from(minted.token.split('.')[0], 'base64url').toString('utf8')))).toEqual(['v', 'tk', 'uid', 'oid', 'iat', 'exp', 'aud']);
+      const verified = verifyVoiceToken(minted.token, { secret: SECRET, now: NOW_MS });
+      expect(verified.ok && 'act' in verified.payload).toBe(false);
+    }
+  });
+
+  test('a signed payload with a non-string act is malformed', () => {
+    expect(verifyVoiceToken(forge({ act: 7 } as never), { secret: SECRET, now: NOW_MS })).toEqual({ ok: false, status: 401, reason: 'malformed' });
+    expect(verifyVoiceToken(forge({ act: null } as never), { secret: SECRET, now: NOW_MS })).toEqual({ ok: false, status: 401, reason: 'malformed' });
+  });
+
   test('a 31-character secret is refused for minting and verification', () => {
     const short = 'x'.repeat(31);
     const minted = mintVoiceToken({ scope: mintScope('single', null, null), secret: short, ttlSeconds: 600, now: NOW_MS });
@@ -252,6 +279,46 @@ describe('resolveVoiceScope', () => {
     for (const scope of [mintScope('personal', USER_A, null), mintScope('org', USER_A, ORG_O)]) {
       const result = await resolveVoiceScope({ headers: headersWith(mint(scope)), deploymentMode: 'single-tenant', secret: SECRET, admin: null, signal: signal(), now: NOW_MS });
       expect(result).toEqual({ ok: false, status: 401, reason: 'mode_mismatch' });
+    }
+    warn.mockRestore();
+  });
+
+  test('a single-tenant token with an actor gives s:default and exposes the verified actor', async () => {
+    const minted = mintVoiceToken({ scope: mintScope('single', null, null), secret: SECRET, ttlSeconds: 600, now: NOW_MS, actorUserId: USER_A });
+    if (!minted.ok) throw new Error('unreachable');
+    const result = await resolveVoiceScope({ headers: headersWith(minted.token), deploymentMode: 'single-tenant', secret: SECRET, signal: signal(), now: NOW_MS });
+    expect(result).toMatchObject({ ok: true, actorUserId: USER_A });
+    if (!result.ok) throw new Error('unreachable');
+    expect(result.scope).toEqual(mintScope('single', null, null));
+    expect(scopeKey(result.scope)).toBe('s:default');
+  });
+
+  test('a single-tenant token without an actor, or with a legacy uid only, has no actor', async () => {
+    for (const token of [mint(mintScope('single', null, null)), forge({ tk: 's:default', uid: USER_A, oid: null })]) {
+      const result = await resolveVoiceScope({ headers: headersWith(token), deploymentMode: 'single-tenant', secret: SECRET, signal: signal(), now: NOW_MS });
+      expect(result).toMatchObject({ ok: true, actorUserId: null });
+    }
+  });
+
+  test('a single-tenant token whose actor is not a uuid gives 401', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const result = await resolveVoiceScope({ headers: headersWith(forge({ tk: 's:default', uid: null, oid: null, act: 'not-a-uuid' } as never)), deploymentMode: 'single-tenant', secret: SECRET, signal: signal(), now: NOW_MS });
+    expect(result).toEqual({ ok: false, status: 401, reason: 'bad_scope' });
+    warn.mockRestore();
+  });
+
+  test('a multi-tenant actor is the scope user, and a different actor gives 401', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { admin } = fakeAdmin([{ organization_id: ORG_O, user_id: USER_A }]);
+    const personal = await resolveVoiceScope({ headers: headersWith(mint(mintScope('personal', USER_A, null))), deploymentMode: 'multi-tenant', secret: SECRET, admin, signal: signal(), now: NOW_MS });
+    expect(personal).toMatchObject({ ok: true, actorUserId: USER_A });
+    const org = await resolveVoiceScope({ headers: headersWith(mint(mintScope('org', USER_A, ORG_O))), deploymentMode: 'multi-tenant', secret: SECRET, admin, signal: signal(), now: NOW_MS });
+    expect(org).toMatchObject({ ok: true, actorUserId: USER_A });
+    const matching = await resolveVoiceScope({ headers: headersWith(forge({ act: USER_A } as never)), deploymentMode: 'multi-tenant', secret: SECRET, admin, signal: signal(), now: NOW_MS });
+    expect(matching).toMatchObject({ ok: true, actorUserId: USER_A });
+    for (const token of [forge({ act: USER_B } as never), forge({ tk: `o:${ORG_O}`, uid: USER_A, oid: ORG_O, act: USER_B } as never)]) {
+      const result = await resolveVoiceScope({ headers: headersWith(token), deploymentMode: 'multi-tenant', secret: SECRET, admin, signal: signal(), now: NOW_MS });
+      expect(result).toEqual({ ok: false, status: 401, reason: 'bad_scope' });
     }
     warn.mockRestore();
   });
