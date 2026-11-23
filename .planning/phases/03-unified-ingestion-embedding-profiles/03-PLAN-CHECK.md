@@ -109,3 +109,35 @@ Fix: add a scope note to each plan in the 03-11 form (which files come from `npm
 ### Recommendation
 
 5 blockers and 1 warning require revision. Findings 1-5 are local edits to 03-07, 03-23, 03-31, 03-32 and 03-33; none needs a re-plan or a wave change, apart from 03-33 gaining a precondition on the nango fix.
+
+## Re-check (pass 3)
+
+**Verdict: ISSUES FOUND, advisory-level only: 0 blockers, 1 warning, 1 info.** Every pass-2 blocker and W1 is resolved in the plan text. Execution can proceed once the warning is either fixed or explicitly accepted.
+
+### Pass-2 items
+- **1 (03-07) resolved.** L52/L54/L81 add a precondition: `admin.ts` must export requireRagAdmin and isAdminUser, and the plan stops if it does not. It also says "never recreates or rewrites the file", and the fix's tests become the regression set.
+- **2 (03-31) resolved.** must_haves L23: no session gives 401 and a failing lookup gives 503 "in both pipelines and in both deployment modes", before any parse, ingest or storeDocument call. `read_first` L82 re-reads the route at HEAD.
+- **3 (03-23) resolved.** L25 covers both modes and both pipelines, and the adapter is not touched. L106 re-reads both routes at HEAD.
+- **4 (03-32) resolved.** L31 and L149: no session gives 401 in both modes, and neither storage, ingest nor `after()` runs. The scope is resolved before `after()`.
+- **5 (03-33) resolved.** L54 adds a precondition on the nango fix (its test files, `unique_nango_connection_id` in both SQL files, the end_user check, and `session-user.ts`). L23 says the owner comes from the unique `nango_connections.user_id` row. T-03-95 adds a two-owner write and delete test.
+- **W1 resolved.** 03-02 L70 and 03-46 L61 add scope notes that name the generated files.
+- **Info 8 resolved.** No plan file contains the trailer line any more.
+
+### Standard checks
+- All 49 plans parse. Every depends_on target exists, and each dependency sits in an earlier wave. No two plans in the same wave share a file.
+- The other checks from pass 2 still hold, and the revisions did not change them: requirement coverage, toggles that restore the old behaviour, the 03-48 baseline comparison, and tenant tests on new paths.
+- 03-05 is still `autonomous: false`. Task 1 is `checkpoint:human-verify gate="blocking-human"` and is never auto-approved. **It remains a human gate.**
+
+### S7 consistency
+- No plan reintroduces a public write, `CORS *`, or a secret echo. 03-43 L55 forbids loosening the config and MCP routes or dropping forwarded auth headers.
+- The 03-43 gate `/api/rag/` `[HEAD=0]` still measures 0 at HEAD.
+
+**1. WARNING [S7 consistency], 03-37/03-39/03-40/03-43**
+- **Required property:** the RAG admin routes use the same admin guard as the config and MCP routes. The Config UI reaches them with the admin session it already has, not a second sign-in.
+- **Evidence:** the routes call requireRagAdmin, which accepts only a Supabase session or Bearer, and not the signed `admin_session` cookie. Because of that, 03-43 L27/L55 builds a separate Supabase password sign-in that keeps the access token in sessionStorage. L27 also forwards only "the Authorization header". S7's `withAuthHeaders` (config-server.js L75) already forwards both Cookie and Authorization, and `src/lib/admin-route-auth.ts` `requireAdminOrDeny` → `requireAdminRequest` accepts the cookie or Bearer, with the same 401/403/503 results.
+- **Recommendation (the 03-43 question): yes, accept `requireAdminRequest` as well as Bearer.** The RAG admin routes should gate with `requireAdminOrDeny`/`checkAdmin` from `@/lib/admin-route-auth`. 03-43 should route its `/api/rag/*` proxy through `withAuthHeaders`. The Supabase password sign-in, the anon-key endpoint and the sessionStorage token should be dropped, or kept only as an optional fallback. The deny-path tests in 03-37/39/40 stay as they are, plus one case where a valid admin cookie is admitted and one where a forged cookie gets 401.
+
+**2. INFO, S8 (not merged).** S8 touches generate-*, mcp/tools, config/reload, organizations, members, nango/sync and Polar. 03-33's precondition already waits on the nango fix. If S8 changes nango/sync scoping, 03-33 should re-read `src/app/api/nango/sync*` at HEAD, which its `src/app/api/nango/*` read_first already covers. No change is needed.
+
+### Recommendation
+Advisory only for blockers. Fix W1 with a local edit to 03-37/39/40 (the guard import) and 03-43 (the proxy and sign-in), or accept it as a known deviation.
