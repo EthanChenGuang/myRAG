@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-11-22)
 ## Current Position
 
 Phase: 02 (Unified Retrieval Pipeline & Tenant Scope) — EXECUTING
-Plan: 36 of 36 complete; security batches S1-S7 merged, S8 running; phase gates (security review, code review, regression, verifier) pending
+Plan: 36 of 36 complete; S1-S8, S9b and Phase 2 review fixes G1-G3 merged; S9a, S9c, S9d in progress; then verifier
 Status: Plans complete, running phase gates
 Last activity: 2026-11-23 — 02-08, 09, 10, 15 merged; tsc ratchet 58; 480 vitest tests pass; Phase 3 research + patterns committed
 
@@ -191,5 +191,16 @@ Items acknowledged and deferred at milestone close, most recent first:
 ## Session Continuity
 
 Last session: 2026-11-23
-Stopped at: 02-28, S7, 02-36 merged (tsc 0, vitest 945, node 86, eval 314, sidecar 184); Phase 3 plan-check pass 3 done
+Stopped at: G1-G3 and S9b merged at 2ef532b (tsc 0, vitest 1139, node 88, eval 315, sidecar 184)
 Resume file: .planning/phases/02-unified-retrieval-pipeline-tenant-scope/.continue-here.md
+
+## Pending Human Actions (session 2026-11-23b)
+
+- Apply on existing multi-tenant databases (or re-run `supabase/multi-tenant-setup.sql`): REVOKE EXECUTE on `match_documents_by_workspace`, `match_document_chunks_by_org`, `get_documents_by_type_slug`, `get_documents_by_type_slug_workspace` FROM PUBLIC, anon, authenticated; GRANT TO service_role. Deploy code first; every server running chat/embed retrieval needs `SUPABASE_SERVICE_ROLE_KEY`.
+- Voice rollout: deploy voice-agent (Fly.io) first, then the app; roll back app first. Voice is briefly unavailable between the two.
+- Production must set `WHATSAPP_WEBHOOK_SECRET`; Baileys and app clocks within 5 minutes.
+- `POLAR_WEBHOOK_SECRET` must be set before the Polar webhook is used (503 until then).
+- Anonymous single-tenant users lose AI titles, name extraction, TTS/STT, temporary document processing, image/video/3D generation (now require login).
+- Config UI on port 3333: operator must be signed in as admin on the main app in the same browser (same host).
+- Package legitimacy approval: Phase 3 (03-05: nine packages plus huggingface_hub) and Phase 3.1 (pdfplumber 0.11.11, ray[data] 2.60.1).
+- Phase 3.1 sidecar worker hosting decision (default assumption: always-on, >=4 GB RAM, 2 vCPU).
