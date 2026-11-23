@@ -130,6 +130,12 @@ def check_pr(errors: list[str]) -> None:
     )
     if not node_ok:
         errors.append("pr-smoke: node-version '22' not set")
+    for jname, job in jobs.items():
+        for step in all_steps(job):
+            if str(step.get("uses", "")).startswith("actions/setup-node@"):
+                pinned = str((step.get("with") or {}).get("node-version"))
+                if pinned != "22":
+                    errors.append(f"pr-smoke: job {jname} setup-node must use node-version '22', got {pinned!r}")
     py_ok = any(
         str((step.get("with") or {}).get("python-version")) == "3.12"
         for job in jobs.values()
@@ -165,6 +171,8 @@ def check_pr(errors: list[str]) -> None:
             "next typegen",
             "scripts/ci/tsc-ratchet.mjs",
             "scripts/tests/tsc-ratchet.node-test.mjs",
+            "scripts/ci/check-node-runtime.mjs",
+            "scripts/tests/check-node-runtime.node-test.mjs",
             "scripts/ci/check-workflows.py",
         ):
             if needle not in body:

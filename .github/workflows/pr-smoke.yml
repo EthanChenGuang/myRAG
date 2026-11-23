@@ -34,6 +34,8 @@ jobs:
           enable-cache: true
           cache-dependency-glob: '**/uv.lock'
       - run: npm ci --ignore-scripts
+      - name: Node runtime check
+        run: node scripts/ci/check-node-runtime.mjs
       - run: uv sync --directory rag-sidecar --locked
       - run: uv sync --directory eval --locked --all-extras
       - name: Vitest suite
@@ -43,7 +45,7 @@ jobs:
       - name: Config drift check
         run: node scripts/check-config.mjs
       - name: Config check and type-check self-tests
-        run: node --test scripts/check-config.test.mjs scripts/typecheck-new.test.mjs scripts/tests/tsc-ratchet.node-test.mjs
+        run: node --test scripts/check-config.test.mjs scripts/typecheck-new.test.mjs scripts/tests/tsc-ratchet.node-test.mjs scripts/tests/check-node-runtime.node-test.mjs
       - name: Zod generator self-test
         run: node --test scripts/tests/gen-zod.node-test.mjs
       - name: New-code type-check
