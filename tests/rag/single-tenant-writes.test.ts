@@ -191,7 +191,25 @@ describe('single-tenant permanent writes require a session', () => {
     expect(state.inserts.map((entry) => entry.table)).toEqual(['documents', 'document_chunks']);
   });
 
-  it('process-document: anonymous temporary processing persists nothing', async () => {
+  it('process-document: anonymous temporary processing returns 401 and never reaches the parser', async () => {
+    const { POST } = await loadProcessDocument();
+    const res = await POST(docRequest(true));
+    expect(res.status).toBe(401);
+    expect(state.inserts).toEqual([]);
+    expect(state.llamaCalls).toBe(0);
+    expect(state.embedCalls).toBe(0);
+  });
+
+  it('process-document: a throwing session lookup on a temporary request returns 503 and never reaches the parser', async () => {
+    state.authThrows = true;
+    const { POST } = await loadProcessDocument();
+    const res = await POST(docRequest(true));
+    expect(res.status).toBe(503);
+    expect(state.llamaCalls).toBe(0);
+  });
+
+  it('process-document: a signed-in temporary request persists nothing', async () => {
+    state.session = { id: USER };
     const { POST } = await loadProcessDocument();
     const res = await POST(docRequest(true));
     expect(res.status).toBe(200);

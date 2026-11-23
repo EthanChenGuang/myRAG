@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { env } from '@/lib/env';
+import { requireSessionUser } from '@/lib/session-auth';
 import {
   elevenLabsTextToSpeech,
   elevenLabsSpeechToText,
@@ -139,6 +140,8 @@ async function handleAudioRequest(
 }
 
 export async function GET(req: Request) {
+  const auth = await requireSessionUser('[Audio API]');
+  if ('response' in auth) return auth.response;
   try {
     const { searchParams } = new URL(req.url);
     const action = searchParams.get('action') || 'speech'; // Default to speech for GET
@@ -157,6 +160,8 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  const auth = await requireSessionUser('[Audio API]');
+  if ('response' in auth) return auth.response;
   try {
     const formData = await req.formData();
     const action = formData.get('action') as string;
