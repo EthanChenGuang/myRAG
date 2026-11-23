@@ -8,6 +8,14 @@ import {
   type RagConfig,
   type StageName,
 } from './config';
+import {
+  buildContext,
+  filterCandidates,
+  type AssembleInput,
+  type AssembleOutput,
+  type FilteredCandidates,
+} from './context/assemble';
+import { fetchAssemblyRows, type AssemblyRows } from './context/fetch-rows';
 import { getRagDeps } from './deps';
 import { legacyAnalyze, legacyRank, legacySearch } from './legacy/enhanced-retrieval';
 import { defaultQueryContext } from './query/temporal-query-detector';
@@ -170,6 +178,20 @@ function requireValue<T>(outcome: StageOutcome<T>, stage: string): T {
   return outcome.value;
 }
 
+const ASSEMBLY_PROFILES: readonly Profile[] = ['chat', 'embed', 'eval'];
+const EMPTY_ROWS: AssemblyRows = { documents: new Map(), chunkMetadata: new Map() };
+
+async function loadRows(candidates: Candidate[], signal: AbortSignal): Promise<AssemblyRows> {
+  if (candidates.length === 0) return EMPTY_ROWS;
+  const adminClient = getRagDeps().adminClient();
+  if (!adminClient) throw new Error('[RAG Assemble] admin client unavailable');
+  return fetchAssemblyRows(candidates, { adminClient, signal });
+}
+
+function survivorCount(assembly: AssembleOutput<Candidate>): number {
+  return assembly.usedDocuments.length + assembly.relevantChunks.length;
+}
+
 function failure(
   collector: TraceCollector,
   status: RetrievalResult['status'],
@@ -229,6 +251,7 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
 
   let queryContext: RetrievalResult['queryContext'] = null;
   let candidates: Candidate[] = [];
+  let assembly: AssembleOutput<Candidate> | null = null;
 
   try {
     const analysis = await runStage(spec('analyze', 'skip'), signal, () => legacyAnalyze(input.query), collector);
@@ -269,6 +292,54 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
       { candidatesIn: searched.results.length, candidatesOut: (value) => value.length },
     );
     candidates = ranked.skipped ? searched.results : ranked.value;
+
+    if ((ASSEMBLY_PROFILES as readonly string[]).includes(profile)) {
+      const assemblyInput = (rows: AssemblyRows, applyRelevanceFilter: boolean): AssembleInput<Candidate> => ({
+        queryText: input.query,
+        candidates,
+        documents: rows.documents,
+        chunkMetadata: rows.chunkMetadata,
+        referenced: input.options?.referenced ?? null,
+        isGPTModel: input.options?.isGPTModel ?? false,
+        ragMode: input.options?.ragMode ?? 'strict',
+        webSearchEnabled: input.options?.webSearchEnabled ?? false,
+        applyRelevanceFilter,
+      });
+
+      let rows: AssemblyRows | null = null;
+      let filtered: FilteredCandidates<Candidate> | null = null;
+
+      const postFilter = await runStage(
+        spec('post_filter', 'skip'),
+        signal,
+        async (stageSignal) => {
+          const loaded = await loadRows(candidates, stageSignal);
+          const result = filterCandidates(assemblyInput(loaded, true));
+          rows = loaded;
+          filtered = result;
+          return result;
+        },
+        collector,
+        { candidatesIn: candidates.length, candidatesOut: (value) => value.relevantChunks.length },
+      );
+
+      const assembled = await runStage(
+        spec('assemble', 'skip'),
+        signal,
+        async (stageSignal) => {
+          const loaded: AssemblyRows = rows ?? (await loadRows(candidates, stageSignal));
+          const applyRelevanceFilter = !postFilter.skipped;
+          const state = filtered ?? filterCandidates(assemblyInput(loaded, applyRelevanceFilter));
+          return buildContext(state, assemblyInput(loaded, applyRelevanceFilter));
+        },
+        collector,
+        {
+          candidatesIn: postFilter.skipped ? candidates.length : postFilter.value.relevantChunks.length,
+          candidatesOut: (value) => value.usedDocuments.length,
+        },
+      );
+      assembly = assembled.skipped ? null : assembled.value;
+    }
   } catch (error) {
     if (error instanceof StageError) {
       if (error.reason === 'aborted') return failure(collector, 'error', 'aborted', queryContext);
@@ -284,8 +355,23 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
   }
 
   const records = collector.stages();
-  const status = deriveStatus(records, candidates.length);
-  const reason = status === 'ok' ? 'ok' : status === 'empty' ? 'no_candidates' : degradedReason(records);
+  const status = deriveStatus(records, assembly ? survivorCount(assembly) : candidates.length);
+  const reason =
+    status === 'ok' ? 'ok' : status === 'empty' ? (candidates.length === 0 ? 'no_candidates' : 'no_relevant_context') : degradedReason(records);
 
-  return { ...failure(collector, status, reason, queryContext), candidates };
+  const base = failure(collector, status, reason, queryContext);
+  if (!assembly) return { ...base, candidates };
+
+  return {
+    ...base,
+    candidates,
+    context: assembly.context,
+    usedDocuments: assembly.usedDocuments,
+    sourceImages: assembly.sourceImages,
+    links: assembly.links,
+    relevantChunks: assembly.relevantChunks,
+    kept: assembly.kept,
+    queryTerms: assembly.queryTerms,
+    refusalCandidate: assembly.refusalCandidate,
+  };
 }

@@ -181,6 +181,8 @@ describe('runRetrieval trace wiring', () => {
       'embed',
       'search',
       'legacy_rank',
+      'post_filter',
+      'assemble',
     ]);
   });
 
@@ -195,7 +197,7 @@ describe('runRetrieval trace wiring', () => {
       trace,
     });
     expect(result.traceId).toBe(trace.traceId);
-    expect(trace.stages().map((stage) => stage.name)).toEqual(['analyze', 'embed', 'search', 'legacy_rank']);
+    expect(trace.stages().map((stage) => stage.name)).toEqual(['analyze', 'embed', 'search', 'legacy_rank', 'post_filter', 'assemble']);
     expect(traceLines()).toHaveLength(0);
     finishTrace(trace, result);
     expect(traceLines()).toHaveLength(1);

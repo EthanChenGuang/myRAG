@@ -177,6 +177,8 @@ describe('runRetrieval failure semantics', () => {
       ['embed', 'ok'],
       ['search', 'ok'],
       ['legacy_rank', 'ok'],
+      ['post_filter', 'ok'],
+      ['assemble', 'ok'],
     ]);
     const search = result.stages.find((s) => s.name === 'search');
     expect(search).toMatchObject({ candidates_out: 3 });

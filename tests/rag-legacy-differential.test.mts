@@ -68,7 +68,15 @@ describe('runRetrieval through the re-homed legacy search equals enhancedRetriev
       });
       assert.deepStrictEqual(fresh.candidates, old.chunks, `candidates differ for: ${question}`);
       assert.deepStrictEqual(fresh.queryContext, old.queryContext, `query context differs for: ${question}`);
-      assert.equal(fresh.status, old.chunks.length > 0 ? 'ok' : 'empty', `status for: ${question}`);
+      if (old.chunks.length === 0) {
+        assert.equal(fresh.status, 'empty', `status for: ${question}`);
+        assert.equal(fresh.reason, 'no_candidates', `reason for: ${question}`);
+      } else if (fresh.status === 'empty') {
+        assert.equal(fresh.reason, 'no_relevant_context', `reason for: ${question}`);
+        assert.equal(fresh.usedDocuments.length + fresh.relevantChunks.length, 0, `survivors for: ${question}`);
+      } else {
+        assert.equal(fresh.status, 'ok', `status for: ${question}`);
+      }
       equal += 1;
       if (old.chunks.length > 0) withCandidates += 1;
     }

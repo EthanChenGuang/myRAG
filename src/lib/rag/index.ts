@@ -24,3 +24,8 @@ export type {
   StageRecord,
   StageRunStatus,
 } from './types';
+export { assembleContext } from './context/assemble';
+export type { AssembleInput, AssembleOutput, AssemblyCandidate, AssemblyDocumentRow } from './context/assemble';
+export { fetchAssemblyRows } from './context/fetch-rows';
+export type { AssemblyRows } from './context/fetch-rows';
+export type { KeptBy, KeptChunk, RagMode, ReferencedState, SourceImage, UsedDocument } from './types';
