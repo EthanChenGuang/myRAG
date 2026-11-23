@@ -4,16 +4,16 @@ milestone: v5.0
 current_phase: 01
 current_phase_name: Evaluation Harness & Baseline
 status: executing
-stopped_at: Completed 01-15-PLAN.md
-last_updated: "2026-11-23T10:37:03.974Z"
+stopped_at: Completed 01-16-PLAN.md
+last_updated: "2026-11-23T10:40:43.826Z"
 last_activity: 2026-11-23
 last_activity_desc: Phase 01 execution started
-state_head: 03d27854a2153c658995994060420a97a340217f
+state_head: bd6c5e8958a12e1e1b12db6d2556dfeee4af9e8a
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 22
-  completed_plans: 15
+  completed_plans: 16
 ---
 
 # Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-11-22)
 ## Current Position
 
 Phase: 01 (Evaluation Harness & Baseline) — EXECUTING
-Plan: 16 of 22
+Plan: 17 of 22
 Status: Ready to execute
 Last activity: 2026-11-23 — Phase 01 execution started
 
@@ -71,6 +71,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P13 | 14min | 2 tasks | 7 files |
 | Phase 01 P14 | 20 min | 2 tasks | 11 files |
 | Phase 01 P15 | 25min | 3 tasks | 7 files |
+| Phase 01 P16 | 10min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -102,6 +103,7 @@ Recent decisions affecting current work:
 - [Phase 01]: 01-14: stub generator records generator_model stub/extractive-v1 so stub and live traces never share a config hash
 - [Phase 01]: 01-14: eval answer prompt replicates the chat route's env-configured branch and is tied to it by a source-reading sentinel test
 - [Phase 01]: 01-15: fixture golden set is 72 items (24 per language) with per-language no_answer items 001-002 near-miss and 003-004 out-of-domain; every gold quote matches exactly one chunk
+- [Phase 01]: 01-16: categories-report-only statement is a fixed line in report.md; notes carry only the zh Filter 1 quirk
 
 ### Pending Todos
 
@@ -128,6 +130,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-23T10:37:03.910Z
-Stopped at: Completed 01-15-PLAN.md
+Last session: 2026-11-23T10:40:43.740Z
+Stopped at: Completed 01-16-PLAN.md
 Resume file: None
