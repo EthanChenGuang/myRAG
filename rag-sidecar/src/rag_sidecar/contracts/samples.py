@@ -21,6 +21,7 @@ from rag_sidecar.contracts import (
     LatencyBudgets,
     MetricValue,
     NoiseConfig,
+    OnlineJudgeConfig,
     PairedReport,
     PairedStat,
     ProfileBudget,
@@ -384,6 +385,12 @@ def _models() -> dict[str, Any]:
             base_url="https://example.invalid/api/v1",
             temperature=0.0,
             embedding_model="embed/model-c",
+            online_judge=OnlineJudgeConfig(
+                sample_rate=0.2,
+                seed=1,
+                judge_model="online-judge/model-d",
+                judge_family="online-judge-family",
+            ),
         ),
         "JudgeReport": _judge_report(),
         "ReviewQueueItem": ReviewQueueItem(

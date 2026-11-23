@@ -23,6 +23,7 @@ USES_LINE_RE = re.compile(r"^\s*(?:-\s+)?uses:\s*(?P<ref>\S+)(?P<rest>.*)$")
 VERSION_COMMENT_RE = re.compile(r"^\s+#\s*v\d+(\.\d+){0,2}\s*$")
 UV_IMAGE_RE = re.compile(r"ghcr\.io/astral-sh/uv:(?P<version>\d+\.\d+\.\d+)")
 SKIP_NOTICE = "::notice::judge key not configured, skipping"
+ONLINE_SKIP_NOTICE = "::notice::langfuse keys not configured, skipping online judge"
 TELEMETRY = {
     "DEEPEVAL_TELEMETRY_OPT_OUT": "1",
     "DEEPEVAL_UPDATE_WARNING_OPT_IN": "0",
@@ -249,6 +250,48 @@ def check_pr(errors: list[str]) -> None:
                 errors.append(f"pr-smoke: job docker-build is missing '{needle}'")
 
 
+def check_online_judge(data: dict, errors: list[str]) -> None:
+    job = (data.get("jobs") or {}).get("online-judge")
+    if job is None:
+        errors.append("nightly: job 'online-judge' missing")
+        return
+    flag = "HAS_ONLINE_JUDGE_KEYS"
+    if flag not in (job.get("env") or {}):
+        errors.append(f"nightly: online-judge job env {flag} missing")
+    flag_expr = str((job.get("env") or {}).get(flag, ""))
+    for secret in ("LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "OPENROUTER_API_KEY"):
+        if f"secrets.{secret} != ''" not in flag_expr:
+            errors.append(f"nightly: online-judge gate must require secrets.{secret}")
+    body = step_text(job)
+    if "uv sync --directory eval --locked --all-extras" not in body:
+        errors.append("nightly: online-judge must sync eval with --locked --all-extras")
+    if "rag_eval.online_judge" not in body:
+        errors.append("nightly: online-judge job is missing 'rag_eval.online_judge'")
+    steps = all_steps(job)
+    ungated = [s for s in steps if f"{flag} == 'true'" not in str(s.get("if", ""))]
+    if (
+        len(ungated) != 1
+        or ONLINE_SKIP_NOTICE not in str(ungated[0].get("run", ""))
+        or f"{flag} != 'true'" not in str(ungated[0].get("if", ""))
+    ):
+        errors.append(f"nightly: only the skip-notice step of online-judge may run without the {flag} == 'true' condition")
+    if len(ungated) == len(steps):
+        errors.append(f"nightly: online-judge steps must be conditioned on {flag}")
+    runner = next((s for s in steps if "rag_eval.online_judge" in str(s.get("run", ""))), None)
+    runner_env = (runner or {}).get("env") or {}
+    for secret in ("LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "OPENROUTER_API_KEY"):
+        if secret not in runner_env:
+            errors.append(f"nightly: online-judge step must receive {secret} through step env")
+    if "LANGFUSE_BASE_URL" not in runner_env:
+        errors.append("nightly: online-judge step must receive LANGFUSE_BASE_URL through step env")
+    for step in steps:
+        run = str(step.get("run", ""))
+        if "secrets." in run:
+            errors.append("nightly: online-judge secrets must be passed through step env, not interpolated into run")
+        if re.search(r"\becho\b.*\bKEY\b", run):
+            errors.append("nightly: an online-judge step appears to echo a key")
+
+
 def check_nightly(errors: list[str]) -> None:
     data, text = load(NIGHTLY)
     check_common("nightly", data, text, errors)
@@ -267,6 +310,7 @@ def check_nightly(errors: list[str]) -> None:
         errors.append("nightly: skip notice missing")
     if "CONFIDENT_API_KEY" in text:
         errors.append("nightly: CONFIDENT_API_KEY must never be set")
+    check_online_judge(data, errors)
     job = (data.get("jobs") or {}).get("judge")
     if job is None:
         errors.append("nightly: job 'judge' missing")

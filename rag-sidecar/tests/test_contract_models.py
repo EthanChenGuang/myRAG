@@ -357,6 +357,37 @@ class TestJudgeConfig:
         with pytest.raises(ValidationError):
             config.judge_model = "other"
 
+    def test_online_judge_is_optional_and_defaults_to_none(self):
+        assert JudgeConfig(**_judge_config()).online_judge is None
+
+    def test_online_judge_block_validates(self):
+        block = {"sample_rate": 0.2, "seed": 7, "judge_model": "other/online-model", "judge_family": "other"}
+        config = JudgeConfig(**_judge_config(online_judge=block))
+        assert config.online_judge is not None
+        assert config.online_judge.sample_rate == 0.2
+        assert config.online_judge.seed == 7
+        assert config.online_judge.judge_model == "other/online-model"
+        assert config.online_judge.judge_family == "other"
+
+    @pytest.mark.parametrize("rate", [-0.01, 1.5])
+    def test_online_judge_sample_rate_out_of_range_rejected(self, rate):
+        block = {"sample_rate": rate, "seed": 7, "judge_model": "other/online-model", "judge_family": "other"}
+        with pytest.raises(ValidationError) as caught:
+            JudgeConfig(**_judge_config(online_judge=block))
+        assert "sample_rate" in str(caught.value)
+
+    def test_online_judge_requires_a_seed(self):
+        block = {"sample_rate": 0.2, "judge_model": "other/online-model", "judge_family": "other"}
+        with pytest.raises(ValidationError) as caught:
+            JudgeConfig(**_judge_config(online_judge=block))
+        assert "seed" in str(caught.value)
+
+    def test_online_judge_unknown_key_rejected(self):
+        block = {"sample_rate": 0.2, "seed": 7, "judge_model": "o/m", "judge_family": "o", "temperature": 1}
+        with pytest.raises(ValidationError) as caught:
+            JudgeConfig(**_judge_config(online_judge=block))
+        assert "temperature" in str(caught.value)
+
 
 class TestJudgeScores:
     def test_score_in_range_and_skipped_item_accepted(self):
