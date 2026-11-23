@@ -1,16 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { env } from '@/lib/env';
-import { getSupabaseAdmin } from '@/lib/supabase';
 import { validateRequest } from '@/lib/api-middleware';
 import {
   createTraceCollector,
   evalScope,
-  fetchAssemblyRows,
   finishTrace,
   runRetrieval,
   scopeKey,
-  type AssemblyRows,
-  type Candidate,
 } from '@/lib/rag';
 import { RagRunRequestSchema, RagTraceSchema } from '@/lib/rag-eval/contracts.generated';
 import { checkEvalAccess } from '@/lib/rag-eval/auth';
@@ -18,20 +14,6 @@ import { buildEffectiveConfig, configHash } from '@/lib/rag-eval/trace';
 import { generateEvalAnswer, isGPTGeneratorModel, resolveGeneratorModel } from '@/lib/rag-eval/answer';
 
 export const runtime = 'nodejs';
-
-const EMPTY_ROWS: AssemblyRows = { documents: new Map(), chunkMetadata: new Map() };
-
-async function loadCandidateRows(candidates: Candidate[], signal: AbortSignal): Promise<AssemblyRows> {
-  if (candidates.length === 0) return EMPTY_ROWS;
-  const adminClient = getSupabaseAdmin();
-  if (!adminClient) return EMPTY_ROWS;
-  try {
-    return await fetchAssemblyRows(candidates, { adminClient, signal });
-  } catch (error: unknown) {
-    console.error('[RAG Eval] candidate row lookup failed:', error instanceof Error ? error.name : 'Error');
-    return EMPTY_ROWS;
-  }
-}
 
 export async function POST(req: NextRequest) {
   const access = checkEvalAccess(req.headers, {
@@ -92,7 +74,9 @@ export async function POST(req: NextRequest) {
       }
 
       const candidates = result.candidates;
-      const rows = await loadCandidateRows(candidates, req.signal);
+      const documentNames = new Map<string, string>();
+      for (const doc of result.usedDocuments) documentNames.set(doc.id, doc.filename || doc.name);
+      for (const chunk of result.kept) documentNames.set(chunk.document_id, chunk.document_name);
 
       let answer: string | null = null;
       const refused = result.refusalCandidate;
@@ -130,12 +114,12 @@ export async function POST(req: NextRequest) {
         candidates: candidates.map((chunk, index) => ({
           chunk_id: chunk.chunk_id,
           document_id: chunk.document_id,
-          document_name: rows.documents.get(chunk.document_id)?.filename ?? null,
+          document_name: documentNames.get(chunk.document_id) ?? null,
           content: chunk.content,
           similarity: chunk.similarity,
           final_score: chunk.final_score ?? null,
           match_reason: chunk.match_reason ?? null,
-          has_image: !!(chunk.metadata?.image_url || rows.chunkMetadata.get(chunk.chunk_id)?.image_url),
+          has_image: !!chunk.metadata?.image_url,
           rank: index + 1,
         })),
         kept: result.kept,
