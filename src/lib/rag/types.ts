@@ -1,5 +1,7 @@
+import type { StageName, StageTimeouts } from './config';
 import type { TemporalQueryContext } from './query/temporal-query-detector';
 import type { TenantScope } from './tenant/scope';
+import type { TraceCollector } from './trace/collector';
 
 export type Profile = 'chat' | 'embed' | 'voice' | 'media' | 'eval';
 
@@ -17,16 +19,31 @@ export interface Candidate {
   match_reason: string;
 }
 
+export type StageRunStatus = 'ok' | 'skipped' | 'disabled' | 'error' | 'timeout' | 'aborted';
+
+export type StageFailureReason = 'failed' | 'timeout' | 'aborted';
+
 export interface StageRecord {
   name: string;
-  status: 'ok' | 'skipped' | 'error';
-  durationMs: number;
+  status: StageRunStatus;
+  reason?: StageFailureReason | 'disabled';
+  startedAt: number;
+  endedAt: number;
+  latency_ms: number;
+  candidates_in: number | null;
+  candidates_out: number | null;
+  rules: string[];
   detail?: string;
 }
 
 export interface RetrievalOptions {
   maxResults?: number;
   fallbackToLowerThreshold?: boolean;
+}
+
+export interface StageOverrides {
+  disabledStages?: StageName[];
+  timeouts?: StageTimeouts;
 }
 
 export interface RunRetrievalInput {
@@ -36,7 +53,8 @@ export interface RunRetrievalInput {
   documentRefs?: string[];
   options?: RetrievalOptions;
   signal: AbortSignal;
-  trace?: unknown;
+  trace?: TraceCollector;
+  stageOverrides?: StageOverrides;
 }
 
 export interface RetrievalResult {

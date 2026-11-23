@@ -4,6 +4,7 @@ import { RetrievalBackendError } from './backend/supabase-rpc';
 import { getRagDeps } from './deps';
 import { legacyAnalyze, legacyRank, legacySearch } from './legacy/enhanced-retrieval';
 import { assertTenantScope } from './tenant/scope';
+import type { TraceCollector } from './trace/collector';
 import type { Candidate, RetrievalResult, RunRetrievalInput, StageRecord } from './types';
 
 class StageFailure extends Error {
@@ -14,6 +15,44 @@ class StageFailure extends Error {
     super(`[RAG Pipeline] stage ${stage} failed: ${reason}`);
     this.name = 'StageFailure';
   }
+}
+
+function legacyRecord(name: string, status: StageRecord['status'], startedAt: number, endedAt: number): StageRecord {
+  return {
+    name,
+    status,
+    startedAt,
+    endedAt,
+    latency_ms: Math.max(0, endedAt - startedAt),
+    candidates_in: null,
+    candidates_out: null,
+    rules: [],
+  };
+}
+
+export interface StageSpec {
+  name: string;
+  enabled: boolean;
+  timeoutMs: number;
+  onFail: 'skip' | 'throw';
+}
+
+export type StageOutcome<T> = { skipped: false; value: T } | { skipped: true; reason: 'disabled' | 'failed' | 'timeout' };
+
+export class StageError extends Error {}
+
+export function deriveStatus(_records: StageRecord[], _survivingCount: number): RetrievalResult['status'] {
+  return 'ok';
+}
+
+export async function runStage<T>(
+  _spec: StageSpec,
+  _parent: AbortSignal,
+  _fn: (signal: AbortSignal) => Promise<T> | T,
+  _collector: TraceCollector,
+  _opts?: { candidatesIn?: number | null; candidatesOut?: (value: T) => number | null },
+): Promise<StageOutcome<T>> {
+  return { skipped: true, reason: 'failed' };
 }
 
 function emptyResult(traceId: string, status: RetrievalResult['status'], reason: string, stages: StageRecord[]): RetrievalResult {
@@ -54,10 +93,10 @@ export async function runRetrieval(input: RunRetrievalInput): Promise<RetrievalR
     const startedAt = deps.now();
     try {
       const value = await run();
-      stages.push({ name, status: 'ok', durationMs: deps.now() - startedAt });
+      stages.push(legacyRecord(name, 'ok', startedAt, deps.now()));
       return value;
     } catch (error) {
-      stages.push({ name, status: 'error', durationMs: deps.now() - startedAt });
+      stages.push(legacyRecord(name, 'error', startedAt, deps.now()));
       throw error;
     }
   };
