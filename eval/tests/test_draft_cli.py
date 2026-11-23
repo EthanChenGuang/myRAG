@@ -1,4 +1,5 @@
 import json
+import re
 import shutil
 import uuid
 from types import SimpleNamespace
@@ -191,7 +192,7 @@ def test_claude_request_names_categories_languages_and_the_real_user_mix():
         assert phrase in text
     assert call["model"] == "claude-sonnet-5-5"
     assert "temperature" not in call
-    assert call["tool_choice"] == {"type": "auto"}
+    assert call["tool_choice"] == {"type": "tool", "name": TOOL_NAME}
     assert call["tools"][0]["name"] == TOOL_NAME
     assert call["tools"][0]["input_schema"] == DraftedItemBatch.model_json_schema()
 
@@ -448,3 +449,35 @@ def test_ragas_evidence_is_not_attributed_to_a_short_chunk_from_another_document
     doc_c = WorkspaceDocument(id="c", filename="c.md", chunks=[near_whole])
     assert _locate(context, [doc_a, doc_c])[0].id == "c"
     assert _locate(context, [doc_a]) is None
+
+
+def test_claude_calls_ask_for_at_most_fifteen_items_and_cover_the_requested_total():
+    docs = DirectoryWorkspaceSource(CORPUS).documents()
+    client = StubClaude([])
+    draft_with_claude(docs, 40, ["en"], client, load_draft_config())
+    asked = [int(re.search(r"Draft (\d+) items", call["messages"][0]["content"]).group(1)) for call in client.calls]
+    assert max(asked) <= claude_drafter.MAX_ITEMS_PER_CALL
+    assert sum(asked) == 40
+
+
+def test_claude_truncated_output_is_rejected_not_parsed():
+    docs = DirectoryWorkspaceSource(CORPUS).documents()
+    outcome = draft_with_claude(docs, 5, ["en"], StubClaude([_claude_item("A valid question?")], stop_reason="max_tokens"), load_draft_config())
+    assert outcome.entries == [] and any("truncated" in reason for reason in outcome.rejected)
+
+
+def test_claude_samples_batches_across_the_workspace_and_warns(capsys):
+    docs = DirectoryWorkspaceSource(CORPUS).documents()
+    config = load_draft_config().model_copy(update={"batch_chars": 1000})
+    all_batches = claude_drafter._batches(docs, config.batch_chars)
+    assert len(all_batches) > 2
+    client = StubClaude([])
+    draft_with_claude(docs, 2, ["en"], client, config)
+    assert len(client.calls) == 2
+    assert claude_drafter._render_units(all_batches[len(all_batches) // 2]) in client.calls[1]["messages"][0]["content"]
+    assert "not sampled" in capsys.readouterr().err
+
+
+def test_claude_document_names_are_escaped_in_the_tag():
+    rendered = claude_drafter._render_units([('a"b<c>.md', 0, "text")])
+    assert '<document name="a&quot;b&lt;c&gt;.md">' in rendered
