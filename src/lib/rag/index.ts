@@ -24,3 +24,6 @@ export type {
   StageRecord,
   StageRunStatus,
 } from './types';
+export { resolveTenantScope } from './tenant/resolve-chat';
+export type { ResolveTenantScopeInput, TenantResolveFailure, TenantResolveResult } from './tenant/resolve-chat';
+export { isOrganizationMember } from './tenant/membership';
