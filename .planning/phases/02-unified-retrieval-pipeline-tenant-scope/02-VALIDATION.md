@@ -188,6 +188,24 @@ The full per-task `<automated>` commands are in each plan; the commands above ar
 
 ---
 
+## Planner Judgment Calls
+
+| # | Call | Plan | Rests on |
+|---|------|------|----------|
+| 1 | OTel/Langfuse packages get an automated registry check (repository URL, no install scripts, not deprecated) and `--ignore-scripts`, no human checkpoint | 02-22 | D-18 (adjusted) |
+| 2 | Phase tracer is 02-07, after config (02-01/03) and characterization (02-05/06) | 02-07 | D-15 (adjusted: config first), D-29 |
+| 3 | Route-level chat snapshot in addition to function-level oracle | 02-06 | D-16, D-17 |
+| 4 | Optional `refs` stage for document references and `@mention` | 02-13 | D-03 (stage list is open), D-12 |
+| 5 | Voice wire contract keeps `debug_info` | 02-16 | D-16 (adjusted: `{results, source_images, debug_info}`) |
+| 6 | Voice "busy" enforced twice: 409 from the token route and a guard in the agent | 02-15, 02-17 | D-10 (adjusted) |
+| 7 | Media routes keep "continue without context" on retrieval error, log it, add `rag_status` | 02-18 | D-06 |
+| 8 | Non-retrieval type-fix plans run early (waves 2–3); the ratchet accepts decreases, so no later plan edits the baseline | 02-30..02-35 | D-15 (adjusted) |
+| 9 | Online-judge model id chosen at execution time (newest non-OpenAI flash model in OpenRouter's public list), stored only as a config value in eval/config/judge.json | 02-28 | D-26 (adjusted: non-OpenAI judge for `openai/*`) |
+
+Plans with four tasks that edit `src/app/api/chat/route.ts` (02-12, 02-13, 02-16, 02-19) are executed one at a time with a fresh executor context; each task is guarded by the 144 chat snapshots, so they are not split further.
+
+The AGENTS.md line added by 02-36 is covered by D-15 and AGENTS.md's own "keep this guide current" rule.
+
 ## Validation Sign-Off
 
 - [ ] All tasks have `<automated>` verify or Wave 0 dependencies
