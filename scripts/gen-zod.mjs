@@ -17,16 +17,27 @@ function parseArgs(argv) {
   return args;
 }
 
-function inline(node, defs) {
-  if (Array.isArray(node)) return node.map((item) => inline(item, defs));
+function fail(message) {
+  throw new Error(message);
+}
+
+function inline(node, defs, stack = []) {
+  if (Array.isArray(node)) return node.map((item) => inline(item, defs, stack));
   if (node && typeof node === 'object') {
     if (typeof node.$ref === 'string') {
       const name = node.$ref.replace('#/$defs/', '');
-      return inline(defs[name], defs);
+      if (stack.includes(name)) fail(`cyclic $ref ${[...stack, name].join(' -> ')}`);
+      if (!(name in defs)) fail(`unresolved $ref ${node.$ref}`);
+      return inline(defs[name], defs, [...stack, name]);
     }
     const out = {};
     for (const [key, value] of Object.entries(node)) {
-      if (key !== '$defs') out[key] = inline(value, defs);
+      if (key !== '$defs') out[key] = inline(value, defs, stack);
+    }
+    if (out.oneOf && out.discriminator) {
+      out.anyOf = out.oneOf;
+      delete out.oneOf;
+      delete out.discriminator;
     }
     return out;
   }
@@ -39,11 +50,16 @@ function main() {
     .readdirSync(schemasDir)
     .filter((file) => file.endsWith('.schema.json'))
     .sort();
+  if (files.length === 0) fail(`no *.schema.json files found in ${schemasDir}`);
 
   const blocks = [];
+  const titles = new Map();
   for (const file of files) {
     const root = JSON.parse(fs.readFileSync(path.join(schemasDir, file), 'utf8'));
     const model = root.title;
+    if (typeof model !== 'string' || model === '') fail(`${file} has no top-level title`);
+    if (titles.has(model)) fail(`duplicate model title ${model} in ${titles.get(model)} and ${file}`);
+    titles.set(model, file);
     const code = jsonSchemaToZod(inline(root, root.$defs ?? {}), {
       name: `${model}Schema`,
       module: 'esm',
@@ -68,9 +84,19 @@ function main() {
 
   fs.mkdirSync(path.dirname(out), { recursive: true });
   const tmp = `${out}.${process.pid}.tmp`;
-  fs.writeFileSync(tmp, text);
-  fs.renameSync(tmp, out);
+  try {
+    fs.writeFileSync(tmp, text);
+    fs.renameSync(tmp, out);
+  } catch (error) {
+    fs.rmSync(tmp, { force: true });
+    throw error;
+  }
   console.log(`[gen-zod] wrote ${path.relative(ROOT, out)} (${files.length} schemas)`);
 }
 
-main();
+try {
+  main();
+} catch (error) {
+  console.error(`[gen-zod] ${error instanceof Error ? error.message : String(error)}`);
+  process.exit(1);
+}

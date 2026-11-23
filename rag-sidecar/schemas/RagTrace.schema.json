@@ -1,0 +1,446 @@
+{
+  "$defs": {
+    "TraceCandidate": {
+      "additionalProperties": false,
+      "properties": {
+        "chunk_id": {
+          "title": "Chunk Id",
+          "type": "string"
+        },
+        "content": {
+          "title": "Content",
+          "type": "string"
+        },
+        "document_id": {
+          "title": "Document Id",
+          "type": "string"
+        },
+        "document_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Document Name"
+        },
+        "final_score": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Final Score"
+        },
+        "has_image": {
+          "title": "Has Image",
+          "type": "boolean"
+        },
+        "match_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Match Reason"
+        },
+        "rank": {
+          "minimum": 1,
+          "title": "Rank",
+          "type": "integer"
+        },
+        "similarity": {
+          "title": "Similarity",
+          "type": "number"
+        }
+      },
+      "required": [
+        "rank",
+        "chunk_id",
+        "document_id",
+        "content",
+        "similarity",
+        "has_image"
+      ],
+      "title": "TraceCandidate",
+      "type": "object"
+    },
+    "TraceCitation": {
+      "additionalProperties": false,
+      "properties": {
+        "chunk_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Chunk Id"
+        },
+        "document_id": {
+          "title": "Document Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "document_id"
+      ],
+      "title": "TraceCitation",
+      "type": "object"
+    },
+    "TraceEffectiveConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "deployment_mode": {
+          "title": "Deployment Mode",
+          "type": "string"
+        },
+        "embedding_model": {
+          "title": "Embedding Model",
+          "type": "string"
+        },
+        "endpoint_version": {
+          "title": "Endpoint Version",
+          "type": "string"
+        },
+        "generator_model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Generator Model"
+        },
+        "rag_env": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Rag Env",
+          "type": "object"
+        },
+        "rag_prompt_sha256": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Rag Prompt Sha256",
+          "type": "object"
+        }
+      },
+      "required": [
+        "rag_env",
+        "rag_prompt_sha256",
+        "deployment_mode",
+        "embedding_model",
+        "endpoint_version"
+      ],
+      "title": "TraceEffectiveConfig",
+      "type": "object"
+    },
+    "TraceKeptChunk": {
+      "additionalProperties": false,
+      "properties": {
+        "chunk_id": {
+          "title": "Chunk Id",
+          "type": "string"
+        },
+        "content": {
+          "title": "Content",
+          "type": "string"
+        },
+        "document_id": {
+          "title": "Document Id",
+          "type": "string"
+        },
+        "document_name": {
+          "title": "Document Name",
+          "type": "string"
+        },
+        "kept_by": {
+          "enum": [
+            "similarity",
+            "name",
+            "image"
+          ],
+          "title": "Kept By",
+          "type": "string"
+        },
+        "rank": {
+          "minimum": 1,
+          "title": "Rank",
+          "type": "integer"
+        },
+        "similarity": {
+          "title": "Similarity",
+          "type": "number"
+        }
+      },
+      "required": [
+        "rank",
+        "chunk_id",
+        "document_id",
+        "document_name",
+        "content",
+        "similarity",
+        "kept_by"
+      ],
+      "title": "TraceKeptChunk",
+      "type": "object"
+    },
+    "TraceQueryContext": {
+      "additionalProperties": false,
+      "properties": {
+        "is_financial_query": {
+          "title": "Is Financial Query",
+          "type": "boolean"
+        },
+        "is_temporal_query": {
+          "title": "Is Temporal Query",
+          "type": "boolean"
+        },
+        "required_precision": {
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "exact"
+          ],
+          "title": "Required Precision",
+          "type": "string"
+        },
+        "search_strategy": {
+          "enum": [
+            "semantic_only",
+            "temporal_boost",
+            "exact_match",
+            "multi_stage"
+          ],
+          "title": "Search Strategy",
+          "type": "string"
+        },
+        "suggested_threshold": {
+          "title": "Suggested Threshold",
+          "type": "number"
+        }
+      },
+      "required": [
+        "is_temporal_query",
+        "is_financial_query",
+        "required_precision",
+        "suggested_threshold",
+        "search_strategy"
+      ],
+      "title": "TraceQueryContext",
+      "type": "object"
+    },
+    "TraceQueryTransform": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "text"
+      ],
+      "title": "TraceQueryTransform",
+      "type": "object"
+    },
+    "TraceUsedDocument": {
+      "additionalProperties": false,
+      "properties": {
+        "document_id": {
+          "title": "Document Id",
+          "type": "string"
+        },
+        "image_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Image Url"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "similarity": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Similarity"
+        }
+      },
+      "required": [
+        "document_id",
+        "name"
+      ],
+      "title": "TraceUsedDocument",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "answer": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Answer"
+    },
+    "candidates": {
+      "items": {
+        "$ref": "#/$defs/TraceCandidate"
+      },
+      "title": "Candidates",
+      "type": "array"
+    },
+    "citations": {
+      "items": {
+        "$ref": "#/$defs/TraceCitation"
+      },
+      "title": "Citations",
+      "type": "array"
+    },
+    "config_hash": {
+      "title": "Config Hash",
+      "type": "string"
+    },
+    "context": {
+      "title": "Context",
+      "type": "string"
+    },
+    "effective_config": {
+      "$ref": "#/$defs/TraceEffectiveConfig"
+    },
+    "item_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Item Id"
+    },
+    "kept": {
+      "items": {
+        "$ref": "#/$defs/TraceKeptChunk"
+      },
+      "title": "Kept",
+      "type": "array"
+    },
+    "query": {
+      "title": "Query",
+      "type": "string"
+    },
+    "query_context": {
+      "$ref": "#/$defs/TraceQueryContext"
+    },
+    "query_transforms": {
+      "items": {
+        "$ref": "#/$defs/TraceQueryTransform"
+      },
+      "title": "Query Transforms",
+      "type": "array"
+    },
+    "refusal_reason": {
+      "anyOf": [
+        {
+          "const": "no_relevant_context",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Refusal Reason"
+    },
+    "refused": {
+      "title": "Refused",
+      "type": "boolean"
+    },
+    "retrieval_strategy": {
+      "title": "Retrieval Strategy",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "stage_latency_ms": {
+      "additionalProperties": {
+        "type": "number"
+      },
+      "title": "Stage Latency Ms",
+      "type": "object"
+    },
+    "used_documents": {
+      "items": {
+        "$ref": "#/$defs/TraceUsedDocument"
+      },
+      "title": "Used Documents",
+      "type": "array"
+    }
+  },
+  "required": [
+    "query",
+    "query_context",
+    "retrieval_strategy",
+    "candidates",
+    "kept",
+    "used_documents",
+    "context",
+    "refused",
+    "citations",
+    "stage_latency_ms",
+    "effective_config",
+    "config_hash"
+  ],
+  "title": "RagTrace",
+  "type": "object"
+}

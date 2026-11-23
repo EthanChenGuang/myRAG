@@ -1,0 +1,190 @@
+{
+  "$defs": {
+    "RagRunOptions": {
+      "additionalProperties": false,
+      "properties": {
+        "max_results": {
+          "anyOf": [
+            {
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Results"
+        },
+        "organization_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Organization Id"
+        },
+        "user_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "User Id"
+        }
+      },
+      "title": "RagRunOptions",
+      "type": "object"
+    },
+    "RunEmbedder": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "source_sha256": {
+          "title": "Source Sha256",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "version",
+        "source_sha256"
+      ],
+      "title": "RunEmbedder",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "corpus_sha256": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Corpus Sha256"
+    },
+    "created_at": {
+      "title": "Created At",
+      "type": "string"
+    },
+    "deployment_mode": {
+      "title": "Deployment Mode",
+      "type": "string"
+    },
+    "edge_errors": {
+      "minimum": 0,
+      "title": "Edge Errors",
+      "type": "integer"
+    },
+    "effective_config_hash": {
+      "title": "Effective Config Hash",
+      "type": "string"
+    },
+    "embedder": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RunEmbedder"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "git_sha": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Git Sha"
+    },
+    "golden_path": {
+      "title": "Golden Path",
+      "type": "string"
+    },
+    "golden_sha256": {
+      "title": "Golden Sha256",
+      "type": "string"
+    },
+    "item_count": {
+      "minimum": 0,
+      "title": "Item Count",
+      "type": "integer"
+    },
+    "request_options": {
+      "$ref": "#/$defs/RagRunOptions"
+    },
+    "run_config_hash": {
+      "title": "Run Config Hash",
+      "type": "string"
+    },
+    "run_id": {
+      "title": "Run Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "sql_sha256": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Sql Sha256",
+      "type": "object"
+    },
+    "tier": {
+      "enum": [
+        "smoke",
+        "nightly",
+        "live"
+      ],
+      "title": "Tier",
+      "type": "string"
+    }
+  },
+  "required": [
+    "run_id",
+    "tier",
+    "created_at",
+    "deployment_mode",
+    "golden_path",
+    "golden_sha256",
+    "sql_sha256",
+    "request_options",
+    "effective_config_hash",
+    "run_config_hash",
+    "item_count",
+    "edge_errors"
+  ],
+  "title": "RunManifest",
+  "type": "object"
+}
