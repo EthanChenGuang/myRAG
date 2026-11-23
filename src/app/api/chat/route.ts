@@ -1438,6 +1438,7 @@ export async function POST(req: Request) {
     let containsImage = false;
     let imageUrl = null;
     let textPrompt = '';
+    let collapsedDocumentParts: { id: string; name: string }[] = [];
 
     // Process image content if present
     if (lastUserMessage && lastUserMessage.role === 'user' && Array.isArray(lastUserMessage.content)) {
@@ -1671,6 +1672,11 @@ export async function POST(req: Request) {
       // If images ARE present, we need to keep the array format so the AI can actually see the images!
       if (!containsImage) {
         console.log('API ROUTE: Converting array content to string for AI compatibility (no images)');
+        collapsedDocumentParts = lastUserMessage.content.flatMap(part =>
+          part.type === 'document' && part.document?.id
+            ? [{ id: part.document.id, name: part.document.name }]
+            : []
+        );
         lastUserMessage.content = textPrompt;
       } else {
         console.log('API ROUTE: Keeping array content with images for AI vision capability');
@@ -1959,6 +1965,7 @@ IMPORTANT:
           );
         } else if (typeof contextUserMessage.content === 'string') {
           queryText = contextUserMessage.content;
+          if (contextUserMessage === lastUserMessage) documentParts.push(...collapsedDocumentParts);
 
           const mentions = queryText.match(/@([^@\s]+)/g);
           if (mentions) {
@@ -2154,19 +2161,37 @@ IMPORTANT:
       (retrievalResult.status === 'error' || (retrievalResult.status === 'degraded' && usedDocuments.length === 0));
 
     if (retrievalFailed && retrievalResult) {
+      const strictWithoutWebSearch = ragMode === 'strict' && !webSearchEnabled;
       console.error('[Document Search] Knowledge base unavailable:', {
         status: retrievalResult.status,
         reason: retrievalResult.reason,
-      });
-      finishRagTrace();
-      const errorText = knowledgeBaseUnavailableMessage(fallbackLanguage);
-      const stream = createUIMessageStream({
-        execute: async ({ writer }) => {
-          writer.write({ type: 'error', errorText });
-        }
+        ragMode,
+        webSearchEnabled,
+        degradedToNoContext: !strictWithoutWebSearch,
       });
 
-      return createUIMessageStreamResponse({ stream });
+      if (strictWithoutWebSearch) {
+        const responseText = buildNoKnowledgeBaseResponse(fallbackLanguage);
+        ragTrace?.collector.setReviewContent({ answer: responseText, context });
+        finishRagTrace();
+        const stream = createUIMessageStream({
+          execute: async ({ writer }) => {
+            const textId = `text-${Date.now()}`;
+            writer.write({ type: 'text-start', id: textId });
+            writer.write({ type: 'text-delta', id: textId, delta: responseText });
+            writer.write({ type: 'text-end', id: textId });
+          }
+        });
+
+        return createUIMessageStreamResponse({ stream });
+      }
+
+      if (ragTrace) {
+        ragTrace.result = { ...ragTrace.result, status: 'degraded' };
+      }
+      context = 'No relevant context found.';
+      usedDocuments = [];
+      precomputedSourceImages = [];
     }
 
     const shouldBlockNoContextResponse =
@@ -2655,6 +2680,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
       }
 
       console.log('API ROUTE: Returning error response:', errorMessage);
+      finishRagTrace();
       return createErrorResponse(errorMessage);
     }
 
@@ -2701,6 +2727,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
 
       if (!modelProvider) {
         console.error('API ROUTE: Failed to get model provider from OpenRouter');
+        finishRagTrace();
         return createErrorResponse("I'm having trouble connecting to the AI service. The model provider could not be initialized.");
       }
 
@@ -3435,6 +3462,18 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
 
       // Convert UI messages to model messages required by streamText
       const modelMessages = await convertToModelMessages(messagesForModel);
+      let requestReasoningDetails: Record<string, unknown> | undefined;
+      const captureReasoningDetails = (openrouterMetadata: Record<string, unknown> | undefined) => {
+        const reasoningContent = openrouterMetadata?.reasoning_content;
+        if (typeof reasoningContent !== 'string' || !reasoningContent) return;
+        requestReasoningDetails = {
+          content: reasoningContent,
+          token_count: typeof openrouterMetadata?.reasoning_tokens === 'number' ? openrouterMetadata.reasoning_tokens : 0,
+          model: safeModelId,
+          effort: reasoningSettings?.effort,
+          timestamp: new Date().toISOString()
+        };
+      };
 
       // Special handling for Claude Sonnet 4 - use different parameters
       const streamParams: any = {
@@ -3832,21 +3871,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
             }
           }
 
-          // Handle reasoning details if present
-          const openrouterMetadata = event.providerMetadata?.openrouter;
-          const reasoningContent = openrouterMetadata?.reasoning_content;
-          if (typeof reasoningContent === 'string' && reasoningContent) {
-            console.log('API ROUTE: Reasoning content captured:', reasoningContent.substring(0, 100) + '...');
-
-            // Store reasoning details for the response
-            (globalThis as any).lastReasoningDetails = {
-              content: reasoningContent,
-              token_count: typeof openrouterMetadata?.reasoning_tokens === 'number' ? openrouterMetadata.reasoning_tokens : 0,
-              model: safeModelId,
-              effort: reasoningSettings?.effort,
-              timestamp: new Date().toISOString()
-            };
-          }
+          captureReasoningDetails(event.providerMetadata?.openrouter);
 
           // Deliberately NOT closing the MCP client here - it will be used for tool execution when approved
 
@@ -3899,6 +3924,44 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
       });
 
       const ragTraceId = ragTrace?.collector.traceId;
+      let generationFailed = false;
+
+      const buildFinishMetadata = () => {
+        const metadata: Record<string, unknown> = {};
+
+        if (isHandlingMultiStep && multiStepMetadata) {
+          metadata.multiStep = {
+            isMultiStep: true,
+            totalSteps: multiStepMetadata.totalSteps,
+            currentStepIndex: multiStepMetadata.currentStepIndex,
+            currentStep: {
+              id: multiStepMetadata.currentStep.id,
+              type: multiStepMetadata.currentStep.type,
+              text: multiStepMetadata.currentStep.text
+            },
+            hasMoreSteps: multiStepMetadata.remainingSteps.length > 0,
+            nextStep: multiStepMetadata.remainingSteps[0] || null,
+            requiresToolApproval: multiStepMetadata.remainingSteps.some(s => s.type === 'mcp')
+          };
+        }
+
+        if (requestReasoningDetails) {
+          metadata.reasoningText = requestReasoningDetails;
+        }
+
+        if (webSearchResults.length > 0) {
+          metadata.webSearch = {
+            toolCallId: webSearchToolCallId,
+            results: webSearchResults
+          };
+        }
+
+        if (isClaudeSonnet4 && usedDocuments && usedDocuments.length > 0) {
+          metadata.documentSources = buildDocumentSources(usedDocuments);
+        }
+
+        return metadata;
+      };
 
       // [FIX] Use createUIMessageStream to inject source_images data part alongside AI response
       const stream = createUIMessageStream({
@@ -3927,60 +3990,29 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
           // Merge AI stream
           writer.merge(result.toUIMessageStream({
             sendStart: precomputedSourceImages.length === 0,
-            ...(ragTraceId
-              ? { messageMetadata: ({ part }) => (part.type === 'start' || part.type === 'finish' ? { ragTraceId } : undefined) }
-              : {}),
+            messageMetadata: ({ part }) => {
+              if (part.type === 'start') return ragTraceId ? { ragTraceId } : undefined;
+              if (part.type === 'finish-step') {
+                captureReasoningDetails(part.providerMetadata?.openrouter);
+                return undefined;
+              }
+              if (part.type !== 'finish') return undefined;
+              const finishMetadata = buildFinishMetadata();
+              if (!ragTraceId && Object.keys(finishMetadata).length === 0) return undefined;
+              return { ...(ragTraceId ? { ragTraceId } : {}), ...finishMetadata };
+            },
           }));
         },
-        onFinish: () => {
+        onFinish: ({ isAborted, finishReason }) => {
           if (ragTrace) {
-            ragTrace.collector.record({ name: 'generation', status: 'ok', startedAt: aiStartTime, endedAt: ragTrace.collector.now() });
+            const status = isAborted ? 'aborted' : generationFailed || finishReason === 'error' ? 'error' : 'ok';
+            ragTrace.collector.record({ name: 'generation', status, startedAt: aiStartTime, endedAt: ragTrace.collector.now() });
           }
           finishRagTrace();
-          const reasoningDetails = (globalThis as any).lastReasoningDetails;
-          const metadata: any = {};
-
-          // Add multi-step metadata if this is a multi-step query
-          if (isHandlingMultiStep && multiStepMetadata) {
-            metadata.multiStep = {
-              isMultiStep: true,
-              totalSteps: multiStepMetadata.totalSteps,
-              currentStepIndex: multiStepMetadata.currentStepIndex,
-              currentStep: {
-                id: multiStepMetadata.currentStep.id,
-                type: multiStepMetadata.currentStep.type,
-                text: multiStepMetadata.currentStep.text
-              },
-              hasMoreSteps: multiStepMetadata.remainingSteps.length > 0,
-              nextStep: multiStepMetadata.remainingSteps[0] || null,
-              requiresToolApproval: multiStepMetadata.remainingSteps.some(s => s.type === 'mcp')
-            };
-            console.log('📝 [MULTI-STEP] Adding multi-step metadata to response');
-          }
-
-          // Add reasoning details if available
-          if (reasoningDetails) {
-            metadata.reasoningText = reasoningDetails;
-            // Clean up after use
-            delete (globalThis as any).lastReasoningDetails;
-          }
-
-          if (webSearchResults.length > 0) {
-            metadata.webSearch = {
-              toolCallId: webSearchToolCallId,
-              results: webSearchResults
-            };
-          }
-
-          // CRITICAL: For Claude Sonnet 4 with disabled tools, add document sources to metadata
-          if (isClaudeSonnet4 && usedDocuments && usedDocuments.length > 0) {
-            metadata.documentSources = buildDocumentSources(usedDocuments);
-          }
-
-          return Object.keys(metadata).length > 0 ? metadata : undefined;
         },
         // Handle tool-related errors in the stream
         onError: error => {
+          generationFailed = true;
           if (error instanceof Error) {
             console.error('API ROUTE: Tool execution error:', error);
 

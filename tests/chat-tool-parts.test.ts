@@ -78,6 +78,17 @@ async function stepParams() {
   return { params: h.capture.calls[0], body };
 }
 
+function finishChunk(body: string): { messageMetadata: Record<string, any> } {
+  for (const line of body.split('\n')) {
+    if (!line.startsWith('data:')) continue;
+    const payload = line.slice(5).trim();
+    if (!payload.startsWith('{')) continue;
+    const chunk = JSON.parse(payload) as { type?: string; messageMetadata?: Record<string, any> };
+    if (chunk.type === 'finish') return { messageMetadata: chunk.messageMetadata ?? {} };
+  }
+  throw new Error('no finish chunk in the stream');
+}
+
 function toolCall(toolCallId: string, toolName: string, input: unknown): StepPart {
   return { type: 'tool-call', toolCallId, toolName, input };
 }
@@ -174,25 +185,36 @@ describe('chat route AI SDK v6 tool parts', () => {
     expect(documentSources?.output?.documents?.[0]).toMatchObject({ id: 'doc-image-1', name: 'diagram.png' });
   });
 
-  it('captures reasoning text from provider metadata when the provider returns it', async () => {
-    const { params } = await stepParams();
-    vi.useFakeTimers();
+  it('sends reasoning from provider metadata through the finish messageMetadata, never through a global', async () => {
+    h.capture.setFinishStepProviderMetadata({ openrouter: { reasoning_content: 'step one then step two', reasoning_tokens: 12 } });
+    const { body } = await stepParams();
 
-    await params.onFinish({
-      text: 'answer',
-      providerMetadata: { openrouter: { reasoning_content: 'step one then step two', reasoning_tokens: 12 } },
-    });
-
-    expect(globals.lastReasoningDetails).toMatchObject({ content: 'step one then step two', token_count: 12 });
+    const finish = finishChunk(body);
+    expect(finish.messageMetadata.reasoningText).toMatchObject({ content: 'step one then step two', token_count: 12 });
+    expect(globals.lastReasoningDetails).toBeUndefined();
   });
 
-  it('does not capture reasoning when provider metadata carries none', async () => {
-    const { params } = await stepParams();
-    vi.useFakeTimers();
+  it('sends no reasoning when provider metadata carries none', async () => {
+    h.capture.setFinishStepProviderMetadata({ openrouter: { usage: 1 } });
+    const { body } = await stepParams();
 
-    await params.onFinish({ text: 'answer', providerMetadata: { openrouter: { usage: 1 } } });
-
+    expect(JSON.stringify(finishChunk(body))).not.toContain('reasoningText');
     expect(globals.lastReasoningDetails).toBeUndefined();
+  });
+
+  it('sends the Claude Sonnet 4 document sources through the finish messageMetadata', async () => {
+    const { POST } = await loadRoute();
+    const body = await readSse(
+      await POST(
+        chatRequest({
+          messages: [{ role: 'user', content: 'zzzz' }],
+          data: { ragMode: 'strict', settings: { webSearch: false, model: 'anthropic/claude-sonnet-4.5' } },
+        }),
+      ),
+    );
+
+    const finish = finishChunk(body);
+    expect(finish.messageMetadata.documentSources).toEqual([expect.objectContaining({ id: 'doc-image-1' })]);
   });
 
   it('writes the source_images and usedDocuments chunks to the wire unchanged', async () => {

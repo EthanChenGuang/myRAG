@@ -175,13 +175,13 @@ export interface StreamTextCaptureOptions {
 }
 
 export function createStreamTextCapture(options: StreamTextCaptureOptions = {}) {
-  const state = { deltas: options.deltas ?? ['ok'] };
+  const state = { deltas: options.deltas ?? ['ok'], finishStepProviderMetadata: undefined as Record<string, unknown> | undefined, streamError: undefined as Error | undefined, abort: false };
   const calls: Array<Record<string, any>> = [];
 
   const streamText = vi.fn(async (params: Record<string, any>) => {
     calls.push(params);
     return {
-      toUIMessageStream: ({ sendStart, messageMetadata }: { sendStart?: boolean; messageMetadata?: (options: { part: { type: string } }) => unknown } = {}) =>
+      toUIMessageStream: ({ sendStart, messageMetadata }: { sendStart?: boolean; messageMetadata?: (options: { part: { type: string; providerMetadata?: Record<string, unknown> } }) => unknown } = {}) =>
         new ReadableStream({
           start(controller) {
             const metadataFor = (type: string) => {
@@ -193,7 +193,19 @@ export function createStreamTextCapture(options: StreamTextCaptureOptions = {}) 
             for (const delta of state.deltas) {
               controller.enqueue({ type: 'text-delta', id: 'fake-text', delta });
             }
+            if (state.streamError) {
+              controller.error(state.streamError);
+              return;
+            }
+            if (state.abort) {
+              controller.enqueue({ type: 'abort' });
+              controller.close();
+              return;
+            }
             controller.enqueue({ type: 'text-end', id: 'fake-text' });
+            if (state.finishStepProviderMetadata) {
+              messageMetadata?.({ part: { type: 'finish-step', providerMetadata: state.finishStepProviderMetadata } });
+            }
             controller.enqueue({ type: 'finish', ...metadataFor('finish') });
             controller.close();
           },
@@ -207,10 +219,22 @@ export function createStreamTextCapture(options: StreamTextCaptureOptions = {}) 
     setDeltas(deltas: string[]) {
       state.deltas = deltas;
     },
+    setStreamError(error: Error | undefined) {
+      state.streamError = error;
+    },
+    setAbort(abort: boolean) {
+      state.abort = abort;
+    },
+    setFinishStepProviderMetadata(metadata: Record<string, unknown> | undefined) {
+      state.finishStepProviderMetadata = metadata;
+    },
     reset() {
       streamText.mockClear();
       calls.length = 0;
       state.deltas = options.deltas ?? ['ok'];
+      state.finishStepProviderMetadata = undefined;
+      state.streamError = undefined;
+      state.abort = false;
     },
   };
 }
