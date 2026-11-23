@@ -4,16 +4,16 @@ milestone: v5.0
 current_phase: 01
 current_phase_name: Evaluation Harness & Baseline
 status: executing
-stopped_at: Completed 01-17-PLAN.md
-last_updated: "2026-11-23T10:46:51.573Z"
+stopped_at: Completed 01-18-PLAN.md
+last_updated: "2026-11-23T10:53:53.148Z"
 last_activity: 2026-11-23
 last_activity_desc: Phase 01 execution started
-state_head: fe6ebc4f137a46f829f5f7e8b453dd0cdf574340
+state_head: 86da8127b298be676d9124d45e619df09712bec7
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 22
-  completed_plans: 17
+  completed_plans: 18
 ---
 
 # Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-11-22)
 ## Current Position
 
 Phase: 01 (Evaluation Harness & Baseline) — EXECUTING
-Plan: 18 of 22
+Plan: 19 of 22
 Status: Ready to execute
 Last activity: 2026-11-23 — Phase 01 execution started
 
@@ -73,6 +73,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P15 | 25min | 3 tasks | 7 files |
 | Phase 01 P16 | 10min | 2 tasks | 3 files |
 | Phase 01 P17 | 5min | 3 tasks | 8 files |
+| Phase 01 P18 | 35min | 2 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -105,6 +106,8 @@ Recent decisions affecting current work:
 - [Phase 01]: 01-14: eval answer prompt replicates the chat route's env-configured branch and is tied to it by a source-reading sentinel test
 - [Phase 01]: 01-15: fixture golden set is 72 items (24 per language) with per-language no_answer items 001-002 near-miss and 003-004 out-of-domain; every gold quote matches exactly one chunk
 - [Phase 01]: 01-16: categories-report-only statement is a fixed line in report.md; notes carry only the zh Filter 1 quirk
+- [Phase 01]: 01-18: Judge provider rejections (credentials, temperature 0, structured output) raise JudgeFatalError and exit 4 instead of being recorded as per-item judge_error
+- [Phase 01]: 01-18: build_ragas_live verifies Ragas sends temperature 0 because Ragas rewrites it to 1.0 for recognized reasoning-model ids
 
 ### Pending Todos
 
@@ -131,6 +134,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-23T10:46:51.507Z
-Stopped at: Completed 01-17-PLAN.md
+Last session: 2026-11-23T10:53:53.078Z
+Stopped at: Completed 01-18-PLAN.md
 Resume file: None
