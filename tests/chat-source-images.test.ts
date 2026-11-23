@@ -107,7 +107,7 @@ describe('chat route source_images', () => {
       { name: 'diagram.png', size: 0, type: 'image/jpeg', url: IMAGE_URL },
     ]);
     const documentSources = toolResults.find((part) => part.toolName === 'query_documents');
-    expect(documentSources?.result.images).toEqual([
+    expect(documentSources?.output.images).toEqual([
       { name: 'diagram.png', size: 0, type: 'image/jpeg', url: IMAGE_URL },
     ]);
   });
