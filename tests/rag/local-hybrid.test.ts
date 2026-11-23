@@ -99,7 +99,7 @@ describe('voiceKeywordFallback', () => {
     expect(orFilters(phrase)).toEqual(['metadata->>name.ilike.%logo%,metadata->>image_context.ilike.%logo%']);
     expect(opsOf(phrase, 'limit')).toEqual([[100]]);
 
-    expect(opsOf(keywords, 'select')).toEqual([['id, document_id, content, metadata, embedding']]);
+    expect(opsOf(keywords, 'select')).toEqual([['id, document_id, content, metadata']]);
     expect(opsOf(keywords, 'limit')).toEqual([[50]]);
 
     for (const call of calls) expect(opsOf(call, 'in')).toEqual([]);
