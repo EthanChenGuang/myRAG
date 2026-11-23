@@ -160,6 +160,7 @@ def check_pr(errors: list[str]) -> None:
             "node --import tsx --test",
             "node scripts/check-config.mjs",
             "scripts/check-config.test.mjs",
+            "scripts/tests/gen-zod.node-test.mjs",
             "npm run typecheck:new",
             "scripts/ci/check-workflows.py",
         ):
