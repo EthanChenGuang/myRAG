@@ -1,0 +1,16 @@
+{
+  "floor": 0.02,
+  "gated_slice_prefixes": [
+    "overall",
+    "language:"
+  ],
+  "k": 3,
+  "metrics": {
+    "correct_refusal_rate": "higher",
+    "false_refusal_rate": "lower",
+    "mrr": "higher",
+    "recall_at_10": "higher",
+    "recall_at_5": "higher"
+  },
+  "schema_version": 1
+}
