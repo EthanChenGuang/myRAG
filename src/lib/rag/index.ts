@@ -40,3 +40,7 @@ export type { AssemblyRows } from './context/fetch-rows';
 export type { KeptBy, KeptChunk, RagMode, ReferencedState, SourceImage, UsedDocument } from './types';
 export type { VoiceResult, VoiceResults, VoiceSourceImage } from './context/voice';
 export { deriveVoiceKeywords } from './voice/keyword-fallback';
+export { createEnhancedRAGPrompt } from './generation/prompt';
+export { knowledgeBaseUnavailableMessage } from './generation/messages';
+export { repairOwnerMembership } from './tenant/repair-owner';
+export type { RepairOwnerMembershipInput } from './tenant/repair-owner';

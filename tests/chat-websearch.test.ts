@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { chatRequest, emptyRetrieval, readSse } from './helpers/chat-route-fakes';
+import { chatRequest, installChatPipeline, emptyRetrieval, readSse } from './helpers/chat-route-fakes';
 
 const h = await vi.hoisted(async () => {
   const fakes = await import('./helpers/chat-route-fakes');
@@ -10,7 +10,6 @@ vi.mock('ai', async (importOriginal) => ({
   ...(await importOriginal<typeof import('ai')>()),
   streamText: h.capture.streamText,
 }));
-vi.mock('@/lib/enhanced-rag-retrieval', () => ({ enhancedRetrieveChunks: h.retrieval }));
 vi.mock('@/lib/document-processor', () => ({ getQueryEmbedding: vi.fn(async () => []) }));
 vi.mock('@/lib/supabase', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/supabase')>()),
@@ -23,7 +22,6 @@ vi.mock('@openrouter/ai-sdk-provider', () => ({
 }));
 vi.mock('exa-js', () => ({ default: h.exa.Exa }));
 vi.mock('@/lib/thinking-rag-enhancer', () => ({
-  createEnhancedRAGPrompt: (base: string, context: string) => base.replace('{{context}}', context),
   enhanceQueryWithReasoning: vi.fn(),
   intelligentSearch: vi.fn(),
   shouldUseEnhancedRAG: () => true,
@@ -31,6 +29,7 @@ vi.mock('@/lib/thinking-rag-enhancer', () => ({
 
 async function loadRoute() {
   vi.resetModules();
+  await installChatPipeline(h);
   return import('@/app/api/chat/route');
 }
 
