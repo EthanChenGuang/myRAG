@@ -23,6 +23,9 @@ const state = {
   chunks: [] as Row[],
   deletes: [] as Array<{ table: string; filters: Array<[string, string, unknown]> }>,
   updates: [] as Array<{ table: string; payload: Row; filters: Array<[string, string, unknown]> }>,
+  admins: [] as string[],
+  readOnly: false,
+  settingsFail: false,
 };
 
 function matches(row: Row, filters: Array<[string, string, unknown]>): boolean {
@@ -32,7 +35,14 @@ function matches(row: Row, filters: Array<[string, string, unknown]>): boolean {
 function dataAdmin() {
   return {
     from(table: string) {
-      const rows = table === 'documents' ? state.documents : state.chunks;
+      const rows: Row[] =
+        table === 'documents'
+          ? state.documents
+          : table === 'admin_users'
+            ? state.admins.map((id) => ({ id }))
+            : table === 'admin_settings'
+              ? [{ read_only_doc_dashboard: state.readOnly }]
+              : state.chunks;
       const filters: Array<[string, string, unknown]> = [];
       let op: 'select' | 'delete' | 'update' = 'select';
       let payload: Row = {};
@@ -49,6 +59,9 @@ function dataAdmin() {
       };
       const builder = {
         select: () => builder,
+        order: () => builder,
+        limit: () => builder,
+        abortSignal: () => builder,
         delete() {
           op = 'delete';
           return builder;
@@ -66,7 +79,10 @@ function dataAdmin() {
           filters.push(['is', column, value]);
           return builder;
         },
-        maybeSingle: () => Promise.resolve({ data: rows.find((row) => matches(row, filters)) ?? null, error: null }),
+        maybeSingle: () =>
+          table === 'admin_settings' && state.settingsFail
+            ? Promise.resolve({ data: null, error: { code: 'XX000', message: 'down' } })
+            : Promise.resolve({ data: rows.find((row) => matches(row, filters)) ?? null, error: null }),
         then: (onFulfilled: (value: unknown) => unknown, onRejected?: (reason: unknown) => unknown) =>
           Promise.resolve(run()).then(onFulfilled, onRejected),
       };
@@ -157,6 +173,9 @@ describe('documents/[id] route', () => {
     ];
     state.deletes = [];
     state.updates = [];
+    state.admins = [];
+    state.readOnly = false;
+    state.settingsFail = false;
     vi.spyOn(console, 'log').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -305,16 +324,80 @@ describe('documents/[id] route', () => {
     expect(state.updates).toEqual([]);
   });
 
-  it('lets a logged-in user delete a document in single-tenant mode', async () => {
+  it('lets the owner delete their own document in single-tenant mode', async () => {
     state.mode = 'single-tenant';
     state.session = { id: USER_A };
-    state.documents = [{ id: DOC_SINGLE, organization_id: null, metadata: {} }];
+    state.documents = [{ id: DOC_SINGLE, user_id: USER_A, organization_id: null, metadata: {} }];
     state.chunks = [{ id: 'chunk-s', document_id: DOC_SINGLE }];
     const { DELETE } = await loadRoute();
     const response = await DELETE(...call('DELETE', DOC_SINGLE));
     expect(response.status).toBe(200);
     expect(state.documents).toEqual([]);
     expect(state.chunks).toEqual([]);
+  });
+
+  describe('single-tenant: any account can sign up, so a session is not enough to change the knowledge base', () => {
+    beforeEach(() => {
+      state.mode = 'single-tenant';
+      state.documents = [
+        { id: DOC_SINGLE, user_id: USER_B, organization_id: null, metadata: { keep: 'yes' } },
+        { id: DOC_A_PERSONAL, user_id: null, organization_id: null, metadata: {} },
+      ];
+      state.chunks = [
+        { id: 'chunk-s', document_id: DOC_SINGLE },
+        { id: 'chunk-legacy', document_id: DOC_A_PERSONAL },
+      ];
+    });
+
+    it('a signed-in non-owner non-admin gets 404 on DELETE and PATCH of another user document and nothing changes', async () => {
+      state.session = { id: USER_A };
+      const { DELETE, PATCH } = await loadRoute();
+      expect((await DELETE(...call('DELETE', DOC_SINGLE))).status).toBe(404);
+      expect((await PATCH(...call('PATCH', DOC_SINGLE, '', { external_url: 'https://example.com/doc' }))).status).toBe(404);
+      expect(state.deletes).toEqual([]);
+      expect(state.updates).toEqual([]);
+      expect(ids(state.documents)).toEqual([DOC_SINGLE, DOC_A_PERSONAL]);
+      expect(state.chunks).toHaveLength(2);
+    });
+
+    it('a legacy document without an owner is admin-only: 404 for a regular user', async () => {
+      state.session = { id: USER_A };
+      const { DELETE } = await loadRoute();
+      expect((await DELETE(...call('DELETE', DOC_A_PERSONAL))).status).toBe(404);
+      expect(ids(state.documents)).toContain(DOC_A_PERSONAL);
+    });
+
+    it('an admin can delete and patch documents they do not own', async () => {
+      state.session = { id: USER_A };
+      state.admins = [USER_A];
+      const { DELETE, PATCH } = await loadRoute();
+      expect((await PATCH(...call('PATCH', DOC_SINGLE, '', { external_url: 'https://example.com/doc' }))).status).toBe(200);
+      expect((await DELETE(...call('DELETE', DOC_SINGLE))).status).toBe(200);
+      expect((await DELETE(...call('DELETE', DOC_A_PERSONAL))).status).toBe(200);
+      expect(state.documents).toEqual([]);
+    });
+
+    it('read_only_doc_dashboard: a non-admin owner gets 403 on DELETE and PATCH, an admin still can', async () => {
+      state.readOnly = true;
+      state.documents = [{ id: DOC_SINGLE, user_id: USER_A, organization_id: null, metadata: {} }];
+      state.session = { id: USER_A };
+      const { DELETE, PATCH } = await loadRoute();
+      expect((await DELETE(...call('DELETE', DOC_SINGLE))).status).toBe(403);
+      expect((await PATCH(...call('PATCH', DOC_SINGLE, '', { external_url: 'https://example.com/doc' }))).status).toBe(403);
+      expect(state.deletes).toEqual([]);
+      expect(state.updates).toEqual([]);
+      state.admins = [USER_A];
+      expect((await DELETE(...call('DELETE', DOC_SINGLE))).status).toBe(200);
+    });
+
+    it('fails closed with 503 when the settings lookup fails', async () => {
+      state.session = { id: USER_A };
+      state.settingsFail = true;
+      state.documents = [{ id: DOC_SINGLE, user_id: USER_A, organization_id: null, metadata: {} }];
+      const { DELETE } = await loadRoute();
+      expect((await DELETE(...call('DELETE', DOC_SINGLE))).status).toBe(503);
+      expect(state.deletes).toEqual([]);
+    });
   });
 
   it('refuses an anonymous delete in single-tenant mode', async () => {

@@ -7,6 +7,10 @@ const state = {
   session: null as { id: string } | null,
   authThrows: false,
   uploads: [] as string[],
+  mode: 'single-tenant' as 'single-tenant' | 'multi-tenant',
+  admins: [] as string[],
+  readOnly: false,
+  processed: [] as string[],
 };
 
 async function loadRoute() {
@@ -21,8 +25,25 @@ async function loadRoute() {
       },
     }),
   }));
+  vi.doMock('@/lib/deployment-mode', () => ({
+    isSingleTenant: () => state.mode === 'single-tenant',
+    isMultiTenant: () => state.mode === 'multi-tenant',
+    getDeploymentMode: () => state.mode,
+  }));
+  vi.doMock('@/lib/rag', () => ({
+    isAdminUser: async (_admin: unknown, userId: string) => state.admins.includes(userId),
+  }));
   vi.doMock('@/lib/supabase', () => ({
     supabaseAdmin: {
+      from: () => {
+        const builder = {
+          select: () => builder,
+          order: () => builder,
+          limit: () => builder,
+          maybeSingle: async () => ({ data: { read_only_doc_dashboard: state.readOnly }, error: null }),
+        };
+        return builder;
+      },
       storage: {
         from: () => ({
           upload: async (path: string) => {
@@ -33,7 +54,11 @@ async function loadRoute() {
       },
     },
   }));
-  vi.doMock('@/lib/document-processor', () => ({ processImageDocument: async () => undefined }));
+  vi.doMock('@/lib/document-processor', () => ({
+    processImageDocument: async (name: string) => {
+      state.processed.push(name);
+    },
+  }));
   vi.doMock('@/lib/logger', () => ({ logger: { info() {}, warn() {}, error() {}, debug() {} } }));
   return import('@/app/api/upload/route');
 }
@@ -50,6 +75,10 @@ describe('upload route', () => {
     state.session = null;
     state.authThrows = false;
     state.uploads = [];
+    state.mode = 'single-tenant';
+    state.admins = [];
+    state.readOnly = false;
+    state.processed = [];
   });
 
   afterEach(() => {
@@ -57,6 +86,8 @@ describe('upload route', () => {
     vi.doUnmock('@/lib/supabase/server');
     vi.doUnmock('@/lib/supabase');
     vi.doUnmock('@/lib/document-processor');
+    vi.doUnmock('@/lib/deployment-mode');
+    vi.doUnmock('@/lib/rag');
     vi.doUnmock('@/lib/logger');
   });
 
@@ -94,5 +125,26 @@ describe('upload route', () => {
     const res = await POST(uploadRequest({}, 'a.b/../../evil'));
     expect(res.status).toBe(200);
     expect(state.uploads[0]).toMatch(new RegExp(`^${USER}/[A-Za-z0-9_.-]+$`));
+  });
+
+  it('read_only_doc_dashboard: a non-admin asking for knowledge-base processing gets 403 and nothing is uploaded or processed', async () => {
+    state.session = { id: USER };
+    state.readOnly = true;
+    const { POST } = await loadRoute();
+    const res = await POST(uploadRequest({ process_rag: 'true' }));
+    expect(res.status).toBe(403);
+    expect(state.uploads).toEqual([]);
+    expect(state.processed).toEqual([]);
+  });
+
+  it('read_only_doc_dashboard: plain chat attachments still upload for a non-admin, and an admin can process into the knowledge base', async () => {
+    state.session = { id: USER };
+    state.readOnly = true;
+    const { POST } = await loadRoute();
+    expect((await POST(uploadRequest())).status).toBe(200);
+    state.admins = [USER];
+    expect((await POST(uploadRequest({ process_rag: 'true' }))).status).toBe(200);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(state.processed).toEqual(['photo.png']);
   });
 });

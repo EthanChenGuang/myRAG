@@ -13,12 +13,27 @@ const state = {
   session: null as { id: string } | null,
   members: [] as Array<{ organization_id: string; user_id: string }>,
   inserts: [] as Array<{ table: string; rows: Row[] }>,
+  admins: [] as string[],
+  readOnly: false,
 };
 
 function writeAdmin() {
   return {
     from(table: string) {
+      let filter: unknown;
       const builder = {
+        eq(_column: string, value: unknown) {
+          filter = value;
+          return builder;
+        },
+        order: () => builder,
+        limit: () => builder,
+        abortSignal: () => builder,
+        maybeSingle: () => {
+          if (table === 'admin_users') return Promise.resolve({ data: state.admins.includes(filter as string) ? { id: filter } : null, error: null });
+          if (table === 'admin_settings') return Promise.resolve({ data: { read_only_doc_dashboard: state.readOnly }, error: null });
+          return Promise.resolve({ data: null, error: null });
+        },
         insert(rows: Row[]) {
           state.inserts.push({ table, rows });
           return builder;
@@ -100,6 +115,8 @@ describe('ai-to-rag route', () => {
     state.session = null;
     state.members = [];
     state.inserts = [];
+    state.admins = [];
+    state.readOnly = false;
     vi.spyOn(console, 'log').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -178,9 +195,21 @@ describe('ai-to-rag route', () => {
     expect(response.status).toBe(200);
     const documents = writesOf('documents');
     expect(documents).toHaveLength(1);
-    expect(documents[0]).not.toHaveProperty('user_id');
+    expect(documents[0]).toMatchObject({ user_id: USER_A });
     expect(documents[0]).not.toHaveProperty('organization_id');
     expect(writesOf('document_chunks')[0]).not.toHaveProperty('organization_id');
+  });
+
+  it('single-tenant read_only_doc_dashboard: a non-admin gets 403 and nothing is written, an admin can still write', async () => {
+    state.mode = 'single-tenant';
+    state.session = { id: USER_A };
+    state.readOnly = true;
+    const POST = await loadPost();
+    expect((await POST(request({}))).status).toBe(403);
+    expect(state.inserts).toEqual([]);
+    state.admins = [USER_A];
+    expect((await POST(request({}))).status).toBe(200);
+    expect(writesOf('documents')).toHaveLength(1);
   });
 
   it('still refuses a mismatched body userId in single-tenant mode', async () => {

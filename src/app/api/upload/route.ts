@@ -3,6 +3,9 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { createClient } from '@/lib/supabase/server';
 import { processImageDocument } from '@/lib/document-processor';
 import { logger } from '@/lib/logger';
+import { isSingleTenant } from '@/lib/deployment-mode';
+import { checkSingleTenantKbWrite } from '@/lib/kb-write-access';
+import type { RagAdminDb } from '@/lib/rag';
 
 /**
  * Dedicated file upload endpoint for MCP tool compatibility
@@ -78,6 +81,17 @@ export async function POST(request: NextRequest) {
     // Parse FormData
     const formData = await request.formData();
     const files = formData.getAll('files') as File[];
+
+    if (formData.get('process_rag') === 'true' && isSingleTenant()) {
+      const access = await checkSingleTenantKbWrite({
+        admin: supabaseAdmin as unknown as RagAdminDb,
+        userId: sessionUser.id,
+        signal: request.signal,
+      });
+      if (!access.ok) {
+        return NextResponse.json({ error: access.error }, { status: access.status });
+      }
+    }
 
     logger.info('Upload API', `Processing ${files.length} files`);
 

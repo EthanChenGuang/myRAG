@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
-import { repairOwnerMembership, resolveTenantScope } from '@/lib/rag';
+import { repairOwnerMembership, resolveTenantScope, type RagAdminDb } from '@/lib/rag';
+import { checkSingleTenantKbWrite } from '@/lib/kb-write-access';
 
 export const runtime = 'nodejs';
 
@@ -10,7 +11,8 @@ const MAX_URL_LENGTH = 2048;
 type Predicate =
   | { kind: 'none' }
   | { kind: 'org'; organizationId: string }
-  | { kind: 'personal'; userId: string };
+  | { kind: 'personal'; userId: string }
+  | { kind: 'owner'; userId: string };
 
 interface Scopable<Q> {
   eq(column: string, value: string): Q;
@@ -31,12 +33,14 @@ function fail(status: number, error: string): Response {
 function applyPredicate<Q extends Scopable<Q>>(query: Q, predicate: Predicate): Q {
   if (predicate.kind === 'org') return query.eq('organization_id', predicate.organizationId);
   if (predicate.kind === 'personal') return query.is('organization_id', null).eq('user_id', predicate.userId);
+  if (predicate.kind === 'owner') return query.eq('user_id', predicate.userId);
   return query;
 }
 
 async function authorize(
   request: NextRequest,
-  requestedOrganizationId: unknown
+  requestedOrganizationId: unknown,
+  write: boolean
 ): Promise<AuthResult> {
   let sessionUserPromise: Promise<{ id: string } | null> | null = null;
   const getSessionUser = () => {
@@ -79,7 +83,15 @@ async function authorize(
   if (!scope) return { ok: false, response: fail(401, 'Unauthorized') };
 
   let predicate: Predicate = { kind: 'none' };
-  if (scope.kind === 'org' && scope.organizationId) {
+  if (write && scope.kind === 'single') {
+    const access = await checkSingleTenantKbWrite({
+      admin: admin as unknown as RagAdminDb,
+      userId: sessionUser.id,
+      signal: request.signal,
+    });
+    if (!access.ok) return { ok: false, response: fail(access.status, access.error) };
+    if (!access.isAdmin) predicate = { kind: 'owner', userId: sessionUser.id };
+  } else if (scope.kind === 'org' && scope.organizationId) {
     predicate = { kind: 'org', organizationId: scope.organizationId };
   } else if (scope.kind === 'personal' && scope.userId) {
     predicate = { kind: 'personal', userId: scope.userId };
@@ -95,7 +107,7 @@ export async function DELETE(
     const { id } = await params;
     if (!UUID_RE.test(id)) return fail(400, 'Invalid document id');
 
-    const auth = await authorize(request, new URL(request.url).searchParams.get('organizationId'));
+    const auth = await authorize(request, new URL(request.url).searchParams.get('organizationId'), true);
     if (!auth.ok) return auth.response;
     const { admin, predicate } = auth.value;
 
@@ -148,7 +160,7 @@ export async function PATCH(
     }
 
     const queryOrganizationId = new URL(request.url).searchParams.get('organizationId');
-    const auth = await authorize(request, queryOrganizationId ?? body.organizationId);
+    const auth = await authorize(request, queryOrganizationId ?? body.organizationId, true);
     if (!auth.ok) return auth.response;
     const { admin, predicate } = auth.value;
 
