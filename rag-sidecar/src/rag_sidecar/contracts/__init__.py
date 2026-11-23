@@ -1,9 +1,23 @@
+from rag_sidecar.contracts.baseline import (
+    Baseline,
+    BaselineMetricStat,
+    BaselineRun,
+    GateOffender,
+    GateResult,
+    NoiseConfig,
+)
 from rag_sidecar.contracts.golden import (
     DraftedItemBatch,
     DraftedItemProposal,
     GoldenItem,
     GoldenSplitManifest,
     GoldSpan,
+)
+from rag_sidecar.contracts.report import (
+    EvalReport,
+    ItemResult,
+    MetricValue,
+    SliceMetrics,
 )
 from rag_sidecar.contracts.eval_run import (
     ConversationTurn,
@@ -22,6 +36,16 @@ from rag_sidecar.contracts.eval_run import (
 )
 
 __all__ = [
+    "Baseline",
+    "BaselineMetricStat",
+    "BaselineRun",
+    "GateOffender",
+    "GateResult",
+    "NoiseConfig",
+    "EvalReport",
+    "ItemResult",
+    "MetricValue",
+    "SliceMetrics",
     "DraftedItemBatch",
     "DraftedItemProposal",
     "GoldenItem",
