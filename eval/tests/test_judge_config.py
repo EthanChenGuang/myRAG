@@ -141,3 +141,38 @@ def test_importing_deepeval_after_the_opt_out_does_not_load_dotenv_files(tmp_pat
     )
     assert result.returncode == 0, result.stderr
     assert result.stdout.split() == ["1", "None"]
+
+
+@pytest.mark.parametrize(
+    ("model_id", "family"),
+    [
+        ("gpt-4o", "openai"),
+        ("o3-mini", "openai"),
+        ("chatgpt-4o-latest", "openai"),
+        ("google/gemini-2.5-pro", "google"),
+        ("nvidia/llama-3.1-nemotron-70b", "meta-llama"),
+        ("deepseek/deepseek-chat", "deepseek"),
+    ],
+)
+def test_generator_family_uses_the_model_name_not_just_the_prefix(model_id: str, family: str) -> None:
+    from rag_eval.judge.config import generator_family
+
+    assert generator_family(model_id) == family
+
+
+@pytest.mark.parametrize("model_id", ["openrouter/auto", "auto", "~anthropic/claude-latest", "mystery/model", "openai/claude-x"])
+def test_generator_family_refuses_routers_aliases_and_unknown_ids(model_id: str) -> None:
+    from rag_eval.judge.config import JudgeFamilyError, generator_family
+
+    with pytest.raises(JudgeFamilyError):
+        generator_family(model_id)
+
+
+def test_unprefixed_or_routed_openai_generators_cannot_be_judged_by_the_openai_judge() -> None:
+    from rag_eval.judge.config import JudgeFamilyError, assert_judge_family_differs, load_judge_config
+
+    config = load_judge_config()
+    assert config.judge_family == "openai"
+    for generator in ("gpt-4o", "openrouter/auto", "o4-mini"):
+        with pytest.raises(JudgeFamilyError):
+            assert_judge_family_differs(config, generator)
