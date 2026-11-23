@@ -13,7 +13,13 @@ let writes: Write[];
 let identity: { id: string; email?: string } | null;
 let sessionCalls: number;
 
-function makeClient() {
+type ClientKind = 'user' | 'service';
+
+// 'user' mimics the shipped RLS: organization_members rows are visible only to the organization owner
+// (organizations.owner_id = OWNER) and to the member themselves, and there is no UPDATE policy at all.
+// 'service' sees and writes everything.
+function makeClient(kind: ClientKind = 'user') {
+  const sees = (userId: unknown) => kind === 'service' || userId === identity?.id || identity?.id === OWNER;
   return {
     auth: {
       getUser: async () => ({ data: { user: identity } }),
@@ -29,16 +35,20 @@ function makeClient() {
       let head = false;
       let payload: unknown;
       const result = () => {
+        if (op === 'update' && table === 'organization_members' && kind === 'user') {
+          return { data: null, error: { message: 'no rows updated: no UPDATE policy' } };
+        }
         if (op !== 'select') {
           writes.push({ op, table, payload, filters: { ...filters } });
           return { data: { ...(payload as object) }, error: null };
         }
         if (table === 'organization_members') {
           if (head) {
-            const owners = Object.values(roles).filter((role) => role === 'owner').length;
-            return { count: filters.role ? owners : Object.keys(roles).length, error: null };
+            const visible = Object.entries(roles).filter(([userId]) => sees(userId));
+            const owners = visible.filter(([, role]) => role === 'owner').length;
+            return { count: filters.role ? owners : visible.length, error: null };
           }
-          const role = roles[filters.user_id as string];
+          const role = sees(filters.user_id) ? roles[filters.user_id as string] : undefined;
           return { data: role ? { role } : null, error: role ? null : { message: 'none' } };
         }
         if (table === 'organizations') return { data: { max_team_members: 50 }, error: null };
@@ -81,9 +91,10 @@ async function load<T>(modulePath: string): Promise<T> {
   vi.resetModules();
   vi.doMock('@/lib/deployment-mode', () => ({ requireMultiTenant: () => undefined }));
   vi.doMock('@/lib/auth/organization-handler', () => ({ isPersonalOrganization: async () => false }));
-  vi.doMock('@/lib/supabase/server', () => ({ createClient: async () => makeClient() }));
+  vi.doMock('@/lib/supabase/server', () => ({ createClient: async () => makeClient('user') }));
+  vi.doMock('@/lib/supabase', () => ({ getSupabaseAdmin: () => makeClient('service') }));
   vi.doMock('next/headers', () => ({ cookies: () => undefined }));
-  vi.doMock('@supabase/auth-helpers-nextjs', () => ({ createRouteHandlerClient: () => makeClient() }));
+  vi.doMock('@supabase/auth-helpers-nextjs', () => ({ createRouteHandlerClient: () => makeClient('user') }));
   return (await import(modulePath)) as T;
 }
 
@@ -123,6 +134,7 @@ afterEach(() => {
   vi.doUnmock('@/lib/deployment-mode');
   vi.doUnmock('@/lib/auth/organization-handler');
   vi.doUnmock('@/lib/supabase/server');
+  vi.doUnmock('@/lib/supabase');
   vi.doUnmock('next/headers');
   vi.doUnmock('@supabase/auth-helpers-nextjs');
 });
@@ -190,6 +202,14 @@ describe('owner role changes', () => {
     expect(writes).toEqual([
       expect.objectContaining({ op: 'update', payload: { role: 'owner' }, filters: { organization_id: ORG, user_id: MEMBER } }),
     ]);
+  });
+
+  it('answers 404 for a user who is not a member, and refuses to demote the last owner', async () => {
+    const { PATCH } = await load<MemberRoute>('@/app/api/organizations/[id]/members/[userId]/route');
+    identity = { id: OWNER };
+    expect((await PATCH(json('PATCH', { role: 'viewer' }), memberParams(SECOND_OWNER) as never)).status).toBe(404);
+    expect((await PATCH(json('PATCH', { role: 'admin' }), memberParams(OWNER) as never)).status).toBe(403);
+    expect(writes).toEqual([]);
   });
 
   it('an admin can still set non-owner roles', async () => {

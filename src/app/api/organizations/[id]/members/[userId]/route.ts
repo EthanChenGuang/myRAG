@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { getSupabaseAdmin } from '@/lib/supabase';
 import { requireMultiTenant } from '@/lib/deployment-mode';
 import { isPersonalOrganization } from '@/lib/auth/organization-handler';
 import { logger } from '@/lib/logger';
@@ -25,6 +26,14 @@ export async function PATCH(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Membership rows are hidden from non-owners by RLS, so role checks and writes use the service role
+    // once the caller has been verified through getUser.
+    const db = getSupabaseAdmin();
+    if (!db) {
+      logger.error('API', 'Database client is not available');
+      return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    }
+
     const body = await request.json();
     const { role } = body;
 
@@ -47,7 +56,7 @@ export async function PATCH(
     }
 
     // Verify requester is admin or owner
-    const { data: requesterMembership } = await supabase
+    const { data: requesterMembership } = await db
       .from('organization_members')
       .select('role')
       .eq('organization_id', id)
@@ -69,14 +78,18 @@ export async function PATCH(
       );
     }
 
-    const { data: targetMember } = await supabase
+    const { data: targetMember } = await db
       .from('organization_members')
       .select('role')
       .eq('organization_id', id)
       .eq('user_id', userId)
       .single();
 
-    if (targetMember?.role === 'owner' && !requesterIsOwner) {
+    if (!targetMember) {
+      return NextResponse.json({ error: 'Member not found' }, { status: 404 });
+    }
+
+    if (targetMember.role === 'owner' && !requesterIsOwner) {
       return NextResponse.json(
         { error: 'Only an owner can change an owner' },
         { status: 403 }
@@ -85,8 +98,8 @@ export async function PATCH(
 
     // Prevent removing the last owner
     if (role !== 'owner') {
-      if (targetMember?.role === 'owner') {
-        const { count } = await supabase
+      if (targetMember.role === 'owner') {
+        const { count } = await db
           .from('organization_members')
           .select('*', { count: 'exact', head: true })
           .eq('organization_id', id)
@@ -102,7 +115,7 @@ export async function PATCH(
     }
 
     // Update member role
-    const { data: member, error: updateError } = await supabase
+    const { data: member, error: updateError } = await db
       .from('organization_members')
       .update({ role })
       .eq('organization_id', id)
@@ -159,6 +172,14 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Membership rows are hidden from non-owners by RLS, so role checks and writes use the service role
+    // once the caller has been verified through getUser.
+    const db = getSupabaseAdmin();
+    if (!db) {
+      logger.error('API', 'Database client is not available');
+      return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    }
+
     // Check if personal organization
     const isPersonal = await isPersonalOrganization(id);
     if (isPersonal) {
@@ -169,7 +190,7 @@ export async function DELETE(
     }
 
     // Get member being removed
-    const { data: targetMember } = await supabase
+    const { data: targetMember } = await db
       .from('organization_members')
       .select('role')
       .eq('organization_id', id)
@@ -184,7 +205,7 @@ export async function DELETE(
     }
 
     // Verify requester has permission
-    const { data: requesterMembership } = await supabase
+    const { data: requesterMembership } = await db
       .from('organization_members')
       .select('role')
       .eq('organization_id', id)
@@ -211,7 +232,7 @@ export async function DELETE(
 
     // Prevent removing the last owner
     if (targetMember.role === 'owner') {
-      const { count } = await supabase
+      const { count } = await db
         .from('organization_members')
         .select('*', { count: 'exact', head: true })
         .eq('organization_id', id)
@@ -226,7 +247,7 @@ export async function DELETE(
     }
 
     // Remove member
-    const { error: deleteError } = await supabase
+    const { error: deleteError } = await db
       .from('organization_members')
       .delete()
       .eq('organization_id', id)
