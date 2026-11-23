@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getQueryEmbedding } from '@/lib/document-processor';
+import { resolveTenantScope, runRetrieval, type TenantScope } from '@/lib/rag';
 import { createClient } from '@supabase/supabase-js';
 import { env } from '@/lib/env';
 import { v4 as uuidv4 } from 'uuid';
@@ -94,6 +94,7 @@ export async function POST(req: NextRequest) {
     let responseFormat: string | undefined;
     const sourceImages: File[] = [];
     let sourceImageUrl: string | null = null;
+    let requestedOrganizationId: unknown = null;
 
     if (contentType.includes('multipart/form-data')) {
       // Handle multipart form data with file upload
@@ -103,6 +104,7 @@ export async function POST(req: NextRequest) {
       size = formData.get('size') as string || aspectRatio; // Backward compatibility
       numOutputs = parseInt(formData.get('numOutputs') as string || '1', 10);
       useContext = formData.get('useContext') === 'true';
+      requestedOrganizationId = formData.get('organizationId');
 
       // Get optional parameters
       quality = formData.get('quality') as string || undefined;
@@ -142,6 +144,7 @@ export async function POST(req: NextRequest) {
       numOutputs = jsonData.numOutputs || 1;
       useContext = jsonData.useContext || false;
       documentContent = jsonData.documentContent || '';
+      requestedOrganizationId = jsonData.organizationId;
 
       // Get optional parameters
       quality = jsonData.quality;
@@ -198,6 +201,21 @@ export async function POST(req: NextRequest) {
         { error: 'REPLICATE_API_TOKEN is not configured. Please check server environment variables.' },
         { status: 500 }
       );
+    }
+
+    let ragScope: TenantScope | null = null;
+    if (useContext && prompt) {
+      const resolved = await resolveTenantScope({
+        requestedOrganizationId: requestedOrganizationId as string | null | undefined,
+        signal: req.signal,
+      });
+      if (!resolved.ok) {
+        return NextResponse.json(
+          { error: resolved.status === 503 ? 'Workspace verification is unavailable' : 'Access to this workspace is not allowed', code: resolved.reason },
+          { status: resolved.status },
+        );
+      }
+      ragScope = resolved.scope;
     }
 
     // If we have source images, upload them to Supabase first to get URLs
@@ -259,71 +277,32 @@ export async function POST(req: NextRequest) {
     console.log('prompt exists:', !!prompt);
     console.log('Will use RAG:', useContext && prompt);
 
+    let ragStatus: string | undefined;
+
     if (useContext && prompt) {
       try {
-        console.log('🔍 RAG: Retrieving document context from vector database');
-        console.log('🔍 RAG: Query prompt:', prompt);
-
-        // Generate embedding for the prompt to find relevant chunks
-        const queryEmbedding = await getQueryEmbedding(prompt);
-        console.log('🔍 RAG: Generated prompt embedding for vector search');
-
-        // Use supabaseAdmin directly to bypass RLS (like video generation does)
-        // The searchSimilarChunks wrapper uses browser client which has no session context
-        const { data: similarChunks, error: ragError } = await supabaseAdmin.rpc('match_document_chunks', {
-          query_embedding: queryEmbedding,
-          similarity_threshold: 0.3,
-          match_count: 10
+        const retrieval = await runRetrieval({
+          scope: ragScope,
+          query: prompt,
+          profile: 'media',
+          options: { mediaKind: 'image' },
+          signal: req.signal,
         });
+        ragStatus = retrieval.status;
 
-        if (ragError) {
-          console.error('🔍 RAG: Error querying chunks:', ragError);
-        }
-        console.log('🔍 RAG: Found similar chunks:', similarChunks?.length || 0);
-
-        if (similarChunks && similarChunks.length > 0) {
-          // Log chunk details for debugging
-          similarChunks.forEach((chunk, idx) => {
-            console.log(`🔍 RAG: Chunk ${idx} - similarity: ${chunk.similarity?.toFixed(3)}, content preview: ${chunk.content?.substring(0, 100)}...`);
+        if (retrieval.status === 'error' || retrieval.status === 'degraded') {
+          console.error('[Document Search] Image context retrieval failed, continuing without context', {
+            status: retrieval.status,
+            reason: retrieval.reason,
           });
+        }
 
-          // Prepare context from retrieved chunks
-          let contextText = '';
-
-          // Group chunks by document for better organization (like in chat API)
-          const chunksByDocument = similarChunks.reduce((acc: any, chunk) => {
-            if (!acc[chunk.document_id]) {
-              acc[chunk.document_id] = [];
-            }
-            acc[chunk.document_id].push(chunk);
-            return acc;
-          }, {});
-
-          // Add chunks grouped by document
-          for (const chunks of Object.values(chunksByDocument)) {
-            const sortedChunks = (chunks as any[])
-              .sort((a, b) => b.similarity - a.similarity)
-              .slice(0, 3); // Take top 3 chunks per document for image generation
-
-            contextText += sortedChunks
-              .map(chunk => chunk.content.trim())
-              .filter(content => content.length > 0)
-              .join('\n---\n');
-            contextText += '\n\n';
-          }
-
-          // Truncate if necessary to avoid exceeding token limits
-          // Increased limit to capture more content including pricing info
-          const truncatedContext = contextText.slice(0, 4000);
-          console.log('🔍 RAG: Truncated context length:', truncatedContext.length);
-          console.log('🔍 RAG: Context preview:', truncatedContext.substring(0, 500) + '...');
-
-          // Build final prompt with context - emphasize using exact data
+        if (retrieval.context) {
           finalPrompt = `IMPORTANT: Use the exact information from this document context when creating the image. Include actual product names, prices, and features mentioned below:
 
 ---
 Document Context:
-${truncatedContext}
+${retrieval.context}
 ---
 
 Now create this image: ${prompt}
@@ -331,13 +310,14 @@ Now create this image: ${prompt}
 Remember: Use the exact prices, product names, and details from the context above - do not make up numbers.`;
 
           console.log('✅ RAG: Successfully augmented prompt with document context');
-          console.log('✅ RAG: Final prompt length:', finalPrompt.length);
         } else {
           console.log('⚠️ RAG: No relevant document chunks found for context');
         }
       } catch (error) {
-        console.error('❌ RAG: Error retrieving document context:', error);
-        // Fallback to prompt without context if error occurs
+        ragStatus = 'error';
+        console.error('[Document Search] Image context retrieval threw, continuing without context', {
+          error: error instanceof Error ? error.message : 'unknown',
+        });
       }
     } else {
       console.log('⚠️ RAG: Skipping RAG - useContext:', useContext, 'prompt:', !!prompt);
@@ -349,7 +329,7 @@ Remember: Use the exact prices, product names, and details from the context abov
     }
 
     // Generate images based on the active provider
-    let generatedUrls: string[] = [];
+    let generatedUrls: (string | null)[] = [];
 
     if (activeProvider === 'openai') {
       // OpenAI generation logic (existing code)
@@ -805,7 +785,8 @@ Remember: Use the exact prices, product names, and details from the context abov
     // Return response with source image URL
     return NextResponse.json({
       images: validUrls,
-      sourceImageUrl
+      sourceImageUrl,
+      rag_status: ragStatus
     });
   } catch (error: any) {
     console.error('Error generating image:', error);
