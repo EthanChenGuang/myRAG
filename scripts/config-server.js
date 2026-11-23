@@ -2946,9 +2946,9 @@ app.post('/api/config/reload', async (req, res) => {
   try {
     console.log('🔄 Config Proxy: Forwarding environment reload request to main myRAG app...');
 
-    const { client, options } = createMainAppRequest('/api/config/reload', 'POST', {
+    const { client, options } = createMainAppRequest('/api/config/reload', 'POST', withAuthHeaders(req, {
         'Content-Type': 'application/json'
-    });
+    }));
 
     const proxyReq = client.request(options, (proxyRes) => {
       console.log(`📡 Config Proxy: Main app responded with status ${proxyRes.statusCode}`);

@@ -17,10 +17,10 @@ export async function GET(
 
     const supabase = await createClient();
     const {
-      data: { session },
-    } = await supabase.auth.getSession();
+      data: { user: authUser },
+    } = await supabase.auth.getUser();
 
-    if (!session) {
+    if (!authUser) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -32,7 +32,7 @@ export async function GET(
       .from('organization_members')
       .select('role')
       .eq('organization_id', id)
-      .eq('user_id', session.user.id)
+      .eq('user_id', authUser.id)
       .single();
 
     if (!userMembership) {
@@ -107,10 +107,10 @@ export async function POST(
 
     const supabase = await createClient();
     const {
-      data: { session },
-    } = await supabase.auth.getSession();
+      data: { user: authUser },
+    } = await supabase.auth.getUser();
 
-    if (!session) {
+    if (!authUser) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -143,12 +143,19 @@ export async function POST(
       .from('organization_members')
       .select('role')
       .eq('organization_id', id)
-      .eq('user_id', session.user.id)
+      .eq('user_id', authUser.id)
       .single();
 
     if (!requesterMembership || !['owner', 'admin'].includes(requesterMembership.role)) {
       return NextResponse.json(
         { error: 'Insufficient permissions' },
+        { status: 403 }
+      );
+    }
+
+    if (role === 'owner' && requesterMembership.role !== 'owner') {
+      return NextResponse.json(
+        { error: 'Only an owner can grant the owner role' },
         { status: 403 }
       );
     }

@@ -18,10 +18,10 @@ export async function PATCH(
 
     const supabase = await createClient();
     const {
-      data: { session },
-    } = await supabase.auth.getSession();
+      data: { user: authUser },
+    } = await supabase.auth.getUser();
 
-    if (!session) {
+    if (!authUser) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -51,7 +51,7 @@ export async function PATCH(
       .from('organization_members')
       .select('role')
       .eq('organization_id', id)
-      .eq('user_id', session.user.id)
+      .eq('user_id', authUser.id)
       .single();
 
     if (!requesterMembership || !['owner', 'admin'].includes(requesterMembership.role)) {
@@ -61,15 +61,30 @@ export async function PATCH(
       );
     }
 
+    const requesterIsOwner = requesterMembership.role === 'owner';
+    if (role === 'owner' && !requesterIsOwner) {
+      return NextResponse.json(
+        { error: 'Only an owner can grant the owner role' },
+        { status: 403 }
+      );
+    }
+
+    const { data: targetMember } = await supabase
+      .from('organization_members')
+      .select('role')
+      .eq('organization_id', id)
+      .eq('user_id', userId)
+      .single();
+
+    if (targetMember?.role === 'owner' && !requesterIsOwner) {
+      return NextResponse.json(
+        { error: 'Only an owner can change an owner' },
+        { status: 403 }
+      );
+    }
+
     // Prevent removing the last owner
     if (role !== 'owner') {
-      const { data: targetMember } = await supabase
-        .from('organization_members')
-        .select('role')
-        .eq('organization_id', id)
-        .eq('user_id', userId)
-        .single();
-
       if (targetMember?.role === 'owner') {
         const { count } = await supabase
           .from('organization_members')
@@ -137,10 +152,10 @@ export async function DELETE(
 
     const supabase = await createClient();
     const {
-      data: { session },
-    } = await supabase.auth.getSession();
+      data: { user: authUser },
+    } = await supabase.auth.getUser();
 
-    if (!session) {
+    if (!authUser) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -173,16 +188,23 @@ export async function DELETE(
       .from('organization_members')
       .select('role')
       .eq('organization_id', id)
-      .eq('user_id', session.user.id)
+      .eq('user_id', authUser.id)
       .single();
 
     // Users can remove themselves, or admins/owners can remove others
-    const isSelf = userId === session.user.id;
+    const isSelf = userId === authUser.id;
     const hasPermission = requesterMembership && ['owner', 'admin'].includes(requesterMembership.role);
 
     if (!isSelf && !hasPermission) {
       return NextResponse.json(
         { error: 'Insufficient permissions' },
+        { status: 403 }
+      );
+    }
+
+    if (!isSelf && targetMember.role === 'owner' && requesterMembership?.role !== 'owner') {
+      return NextResponse.json(
+        { error: 'Only an owner can remove an owner' },
         { status: 403 }
       );
     }

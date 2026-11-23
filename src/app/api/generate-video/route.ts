@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { env } from '../../../lib/env';
 import { resolveTenantScope, runRetrieval, type TenantScope } from '@/lib/rag';
+import { requireSessionUser } from '@/lib/session-auth';
 import { v4 as uuidv4 } from 'uuid';
 import Replicate from 'replicate';
 import { fal } from '@fal-ai/client';
@@ -345,6 +346,9 @@ interface FalStatusResponse {
 
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireSessionUser('[Generate Video]');
+    if ('response' in auth) return auth.response;
+
     console.log('=== Video Generation Request ===');
     // Add detailed error tracking
     let stage = 'parsing-request';
@@ -405,7 +409,7 @@ export async function POST(req: NextRequest) {
 
     let ragScope: TenantScope | null = null;
     if (useContext) {
-      const resolved = await resolveTenantScope({ requestedOrganizationId: organizationId, signal: req.signal });
+      const resolved = await resolveTenantScope({ requestedOrganizationId: organizationId, getUser: auth.getUser, signal: req.signal });
       if (!resolved.ok) {
         return NextResponse.json(
           { error: resolved.status === 503 ? 'Workspace verification is unavailable' : 'Access to this workspace is not allowed', code: resolved.reason },

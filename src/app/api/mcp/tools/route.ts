@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { discoverAllTools } from '@/lib/mcp/universal-client';
 import { logger } from '@/lib/logger';
+import { requireSessionUser } from '@/lib/session-auth';
+import { requireAdminOrDeny } from '@/lib/admin-route-auth';
 
 export const runtime = 'nodejs';
 
@@ -11,6 +13,9 @@ export const runtime = 'nodejs';
  * MCP servers without requiring hardcoded tool definitions.
  */
 export async function GET(request: NextRequest) {
+  const auth = await requireSessionUser('[MCP-Tools-API]');
+  if ('response' in auth) return auth.response;
+
   const startTime = Date.now();
   
   try {
@@ -87,6 +92,9 @@ export async function GET(request: NextRequest) {
  * Refresh the tool cache (force rediscovery)
  */
 export async function POST(request: NextRequest) {
+  const denied = await requireAdminOrDeny(request);
+  if (denied) return denied;
+
   try {
     const { clearUniversalCache } = await import('@/lib/mcp/universal-client');
     

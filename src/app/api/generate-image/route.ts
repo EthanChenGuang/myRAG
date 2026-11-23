@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { resolveTenantScope, runRetrieval, type TenantScope } from '@/lib/rag';
+import { requireSessionUser } from '@/lib/session-auth';
 import { createClient } from '@supabase/supabase-js';
 import { env } from '@/lib/env';
 import { v4 as uuidv4 } from 'uuid';
@@ -80,6 +81,9 @@ const REPLICATE_IMAGE_TO_IMAGE_MODEL = process.env.REPLICATE_IMAGE_TO_IMAGE_MODE
 
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireSessionUser('[Generate Image]');
+    if ('response' in auth) return auth.response;
+
     console.log('=== Image Generation Request ===');
 
     // Check if this is a multipart request with a file
@@ -207,6 +211,7 @@ export async function POST(req: NextRequest) {
     if (useContext && prompt) {
       const resolved = await resolveTenantScope({
         requestedOrganizationId: requestedOrganizationId as string | null | undefined,
+        getUser: auth.getUser,
         signal: req.signal,
       });
       if (!resolved.ok) {

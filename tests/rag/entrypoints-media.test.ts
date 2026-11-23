@@ -16,6 +16,10 @@ vi.mock('@/lib/rag', async (importOriginal) => {
   return { ...actual, runRetrieval: vi.fn(actual.runRetrieval) };
 });
 
+vi.mock('@/lib/supabase/server', () => ({
+  createClient: async () => ({ auth: { getUser: async () => ({ data: { user: { id: '00000000-0000-4000-8000-0000000000a1' } } }) } }),
+}));
+
 vi.mock('@supabase/supabase-js', () => {
   const storage = {
     listBuckets: async () => ({ data: [{ name: 'chat-videos' }], error: null }),

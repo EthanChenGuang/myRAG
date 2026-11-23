@@ -173,7 +173,7 @@ Remember: Use the exact prices, product names, and details from the context abov
 beforeEach(() => {
   uninstallDeps();
   state.mode = 'single-tenant';
-  state.user = null;
+  state.user = { id: USER_A };
   state.imageInputs.length = 0;
   state.videoInputs.length = 0;
   state.rewriteMessages.length = 0;
@@ -233,14 +233,14 @@ describe('generate-image', () => {
     expect(fake.calls[0].args).toMatchObject({ p_org_id: ORG_O });
   });
 
-  test('multi-tenant without a session: no context, no RPC, generation still runs', async () => {
+  test('multi-tenant without a session: 401 before any retrieval or generation', async () => {
     state.mode = 'multi-tenant';
+    state.user = null;
     const fake = install();
     const response = await imagePost({ prompt: 'a poster of our plans', useContext: true });
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(401);
     expect(fake.calls).toEqual([]);
-    expect(state.imageInputs[0].prompt).toBe('a poster of our plans');
-    expect((await response.json()).rag_status).toBe('empty');
+    expect(state.imageInputs).toEqual([]);
   });
 
   test('a non-member organizationId gets 403 before any generation or retrieval', async () => {
@@ -294,13 +294,15 @@ describe('generate-video', () => {
     expect(fake.calls.map((call) => call.fn)).toEqual(['match_documents_by_workspace']);
   });
 
-  test('multi-tenant without a session: no context and no RPC', async () => {
+  test('multi-tenant without a session: 401 before any retrieval or generation', async () => {
     state.mode = 'multi-tenant';
+    state.user = null;
     const fake = install();
-    await videoPost({ prompt: 'a video about our plans', useContext: true });
+    const response = await videoPost({ prompt: 'a video about our plans', useContext: true });
+    expect(response.status).toBe(401);
     expect(fake.calls).toEqual([]);
     expect(state.rewriteMessages).toEqual([]);
-    expect(state.videoInputs[0].prompt).toBe('a video about our plans');
+    expect(state.videoInputs).toEqual([]);
   });
 
   test('a non-member organizationId gets 403 before any generation', async () => {

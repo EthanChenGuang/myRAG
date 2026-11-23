@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { env } from '@/lib/env';
+import { requireSessionUser } from '@/lib/session-auth';
 import { z } from 'zod/v3';
 import { createClient } from '@supabase/supabase-js';
 import { v4 as uuidv4 } from 'uuid';
@@ -120,6 +121,9 @@ async function getImageUrl(base64Image: string): Promise<string> {
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
+  const auth = await requireSessionUser('[Generate 3D]');
+  if ('response' in auth) return auth.response;
+
   console.log('Received 3D generation request');
   
   // Verify that at least one provider is usable

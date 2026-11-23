@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod/v3';
 import { env } from '@/lib/env';
 import { deriveVoiceKeywords, resolveVoiceScope, runRetrieval } from '@/lib/rag';
+import { internalApiKeyMatches } from '@/lib/internal-api-key';
 
 export const runtime = 'nodejs';
 
@@ -25,7 +26,7 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
         }
 
-        if (apiKey !== env.MYRAG_INTERNAL_API_KEY) {
+        if (!internalApiKeyMatches(apiKey, env.MYRAG_INTERNAL_API_KEY)) {
             console.warn('[Internal RAG] Unauthorized access attempt');
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
