@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { VoicePipeline } from './voice_agent.js';
+import { ActiveUserGuard, parseScopeToken } from './participant_scope.js';
 import { AccessToken } from 'livekit-server-sdk';
 import {
     Room,
@@ -300,9 +301,16 @@ async function runAgent() {
 
     await pipeline.start();
 
+    // One active user per agent: a second user's audio is never answered with the first user's scope
+    const activeUserGuard = new ActiveUserGuard();
+
     // Subscribe to tracks automatically
     room.on(RoomEvent.ParticipantConnected, (participant: RemoteParticipant) => {
         if (!participant.identity.startsWith('user-')) return;
+        if (activeUserGuard.active && activeUserGuard.active !== participant.identity) {
+            console.log('[LiveKit] Second user participant connected; keeping the active session untouched');
+            return;
+        }
         console.log(`[LiveKit] User connected: ${participant.identity} - Resetting/Ensuring Clean History`);
         pipeline.reset();
     });
@@ -318,7 +326,15 @@ async function runAgent() {
                 return;
             }
 
+            if (!activeUserGuard.claim(participant.identity)) {
+                console.log(`[LiveKit] Ignoring audio from a second user participant: ${participant.identity}`);
+                return;
+            }
+
             console.log(`[LiveKit] Processing audio from user: ${participant.identity}`);
+
+            // The signed scope token is written server-side into the participant metadata
+            pipeline.setScopeToken(parseScopeToken(participant.metadata));
 
             // Extract User ID from identity (format: user-USER_ID-RANDOM)
             // Example: user-123e4567-e89b-12d3-a456-426614174000-832
@@ -447,6 +463,11 @@ async function runAgent() {
             return;
         }
 
+        if (activeUserGuard.active !== participant.identity) {
+            console.log(`[LiveKit] Ignored user disconnected: ${participant.identity}`);
+            return;
+        }
+
         console.log(`[LiveKit] User disconnected: ${participant.identity}`);
         console.log('[LiveKit] Saving voice conversation...');
 
@@ -463,6 +484,8 @@ async function runAgent() {
             // ALWAYS reset the pipeline history when a user leaves
             // This prevents the next user (or same user reconnecting) from seeing previous chat history
             pipeline.reset();
+            pipeline.clearScope();
+            activeUserGuard.release(participant.identity);
         }
     });
 
