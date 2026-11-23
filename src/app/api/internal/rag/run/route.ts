@@ -155,8 +155,9 @@ export async function POST(req: NextRequest) {
     console.log('[RAG Eval] trace built:', { candidates: candidates.length, kept: filtered.kept.length, refused: filtered.refused });
     return NextResponse.json(checked.data);
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'retrieval failed';
-    console.error('[RAG Eval] retrieval failed:', message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    const name = error instanceof Error ? error.name : 'Error';
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('[RAG Eval] retrieval failed:', { name, message });
+    return NextResponse.json({ error: `retrieval failed: ${name}` }, { status: 500 });
   }
 }

@@ -152,3 +152,36 @@ describe('eval route tenant scope', () => {
     expect(checkEvalScope({ deploymentMode: 'single-tenant', organizationId: null, userId: null, allowedScopes: '' }).ok).toBe(true);
   });
 });
+
+describe('eval route error responses', () => {
+  beforeEach(() => {
+    saved = Object.fromEntries(ENV_NAMES.map((name) => [name, env[name]]));
+  });
+
+  afterEach(() => {
+    for (const name of ENV_NAMES) {
+      if (saved[name] === undefined) delete env[name];
+      else env[name] = saved[name];
+    }
+    vi.doUnmock('@/lib/enhanced-rag-retrieval');
+    vi.resetModules();
+  });
+
+  test('a retrieval failure returns the error name, never the raw message', async () => {
+    const leaky = 'Incorrect API key provided: sk-proj-abcd1234 at db.internal.example:5432';
+    vi.doMock('@/lib/enhanced-rag-retrieval', () => ({
+      enhancedRetrieveChunks: async () => {
+        throw new TypeError(leaky);
+      },
+    }));
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const res = await post({ secret: SECRET }, { 'x-rag-eval-secret': SECRET }, VALID_BODY);
+      expect(res.status).toBe(500);
+      expect(res.json.error).toBe('retrieval failed: TypeError');
+      expect(JSON.stringify(res.json)).not.toContain('sk-proj');
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+});
