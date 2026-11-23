@@ -1,0 +1,24 @@
+## Common rules for every security fix in this batch
+- **Base.** Run `git merge-base --is-ancestor 82a574a HEAD`. If that fails, run `git merge --ff-only 82a574a`, or `git reset --hard 82a574a` if the worktree is clean. Read AGENTS.md.
+- **Audit.** The findings and fixes are in `.planning/phases/02-unified-retrieval-pipeline-tenant-scope/02-API-AUTH-AUDIT.md`. Read your rows there.
+- **Reference implementations.**
+  - Session plus tenant: `src/app/api/documents/[id]/route.ts` and `src/app/api/ai-to-rag/route.ts`. Both use the lazy `@/lib/supabase/server` `auth.getUser()` closure, then `repairOwnerMembership` and `resolveTenantScope` in multi-tenant mode.
+  - Responses: no session gives 401, a throwing auth lookup gives 503, another user's resource gives 404, a non-member gives 403.
+  - Tests: `tests/rag/documents-route.test.ts`.
+- **Don't break callers.**
+  - Grep every caller of each route you change, in `src/` and in `scripts/config-server.js` / `scripts/config-ui/index.html`, which is the Config UI on port 3333.
+  - Keep legitimate callers working. Browser fetches are same-origin and send cookies.
+  - If a caller can't satisfy the new check, change the caller minimally, or report it. Never keep the hole open.
+- **Tests and logging.**
+  - Tests are vitest under `tests/`, using `vi.doMock` after `vi.resetModules()`, with no network.
+  - Each fix has a test that would fail on the old code. Run that test against the old code once to confirm it fails, and say so in your report.
+  - Structured JSON errors. Bracketed log prefixes. Never log secrets, content or Cookie headers.
+- **Gates.** All of these must pass:
+  - `npx vitest run`
+  - `npx next typegen && node scripts/ci/tsc-ratchet.mjs` (it is at 0 errors; keep it at 0)
+  - `node scripts/ci/check-rag-boundary.mjs`
+  - `node --import tsx --test tests/*.test.mts`
+  - If `tests/rag/langfuse-pins.test.ts` fails with ENOENT because the worktree is missing packages, note it and ignore it; the orchestrator re-runs it in the main tree.
+- **Scope.** Edit only the files your brief names, plus their tests and direct callers. Other security fixes are running in parallel on other routes. Don't touch STATE.md, ROADMAP.md or REQUIREMENTS.md. Minimal comments. Placeholder values only.
+- **Commits.** Prefix `fix(security):`. Use your harness's attribution trailers, plus the line `Claude-Session: https://claude.ai/code/session_01X342shLsAZx6PYph2vA7hc`.
+- **Report.** Report the commits, every behaviour change (call out deliberate breaks of old insecure behaviour), any caller changes, the test results, and anything left open.

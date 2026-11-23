@@ -1,0 +1,2198 @@
+diff --git a/scripts/config-server.js b/scripts/config-server.js
+index 4632080..5332791 100644
+--- a/scripts/config-server.js
++++ b/scripts/config-server.js
+@@ -72,6 +72,13 @@ function createMainAppRequest(apiPath, method, headers = {}) {
+   };
+ }
+ 
++function withAuthHeaders(req, headers = {}) {
++  const forwarded = { ...headers };
++  if (req.headers.cookie) forwarded['Cookie'] = req.headers.cookie;
++  if (req.headers.authorization) forwarded['Authorization'] = req.headers.authorization;
++  return forwarded;
++}
++
+ function mainAppConnectionError(error) {
+   return {
+     error: `Unable to connect to main myRAG app at ${getMainAppBaseUrl()}. Check MYRAG_APP_URL or NEXT_PUBLIC_SITE_URL, and make sure the app server is running.`,
+@@ -777,12 +784,13 @@ app.get('/api/config/rag-prompt', async (req, res) => {
+     console.log('[RAG API] Proxying GET request to main app');
+     const response = await fetch(getMainAppUrl('/api/config/rag-prompt'), {
+       method: 'GET',
+-      headers: {
++      headers: withAuthHeaders(req, {
+         'Content-Type': 'application/json',
+-      },
++      }),
+     });
+ 
+     const data = await response.json();
++    if (!response.ok) return res.status(response.status).json(data);
+ 
+     // Transform the response to match config-ui expectations
+     const transformedData = {
+@@ -812,9 +820,9 @@ app.post('/api/config/rag-prompt', async (req, res) => {
+ 
+     const response = await fetch(getMainAppUrl('/api/config/rag-prompt'), {
+       method: 'POST',
+-      headers: {
++      headers: withAuthHeaders(req, {
+         'Content-Type': 'application/json',
+-      },
++      }),
+       body: JSON.stringify({
+         preContext,
+         postContext
+@@ -822,6 +830,7 @@ app.post('/api/config/rag-prompt', async (req, res) => {
+     });
+ 
+     const data = await response.json();
++    if (!response.ok) return res.status(response.status).json(data);
+ 
+     // Transform the response to match config-ui expectations
+     const transformedData = {
+@@ -2870,10 +2879,10 @@ app.post('/api/config/models', async (req, res) => {
+     // Prepare the request to the main myRAG app
+     const postData = JSON.stringify(req.body);
+ 
+-    const { client, options } = createMainAppRequest('/api/config/models', 'POST', {
++    const { client, options } = createMainAppRequest('/api/config/models', 'POST', withAuthHeaders(req, {
+         'Content-Type': 'application/json',
+         'Content-Length': Buffer.byteLength(postData)
+-    });
++    }));
+ 
+     // Create the request to the main app
+     const proxyReq = client.request(options, (proxyRes) => {
+@@ -3118,9 +3127,9 @@ app.get('/api/config/connectors', async (req, res) => {
+   try {
+     console.log('🔄 Config Proxy: Forwarding connectors GET request to main myRAG app...');
+ 
+-    const { client, options } = createMainAppRequest('/api/config/connectors', 'GET', {
++    const { client, options } = createMainAppRequest('/api/config/connectors', 'GET', withAuthHeaders(req, {
+         'Content-Type': 'application/json'
+-    });
++    }));
+ 
+     const proxyReq = client.request(options, (proxyRes) => {
+       console.log(`📡 Config Proxy: Main app responded with status ${proxyRes.statusCode}`);
+@@ -3170,10 +3179,10 @@ app.put('/api/config/connectors', async (req, res) => {
+ 
+     const postData = JSON.stringify(req.body);
+ 
+-    const { client, options } = createMainAppRequest('/api/config/connectors', 'PUT', {
++    const { client, options } = createMainAppRequest('/api/config/connectors', 'PUT', withAuthHeaders(req, {
+         'Content-Type': 'application/json',
+         'Content-Length': Buffer.byteLength(postData)
+-    });
++    }));
+ 
+     const proxyReq = client.request(options, (proxyRes) => {
+       console.log(`📡 Config Proxy: Main app responded with status ${proxyRes.statusCode}`);
+@@ -3222,9 +3231,9 @@ app.get('/api/mcp/servers', async (req, res) => {
+   try {
+     console.log('🔄 Config Proxy: Forwarding MCP servers GET request to main myRAG app...');
+ 
+-    const { client, options } = createMainAppRequest('/api/mcp/servers', 'GET', {
++    const { client, options } = createMainAppRequest('/api/mcp/servers', 'GET', withAuthHeaders(req, {
+         'Content-Type': 'application/json'
+-    });
++    }));
+ 
+     const proxyReq = client.request(options, (proxyRes) => {
+       console.log(`📡 Config Proxy: Main app responded with status ${proxyRes.statusCode}`);
+@@ -3279,10 +3288,10 @@ app.post('/api/mcp/servers', async (req, res) => {
+     // Prepare the request to the main myRAG app
+     const postData = JSON.stringify(req.body);
+ 
+-    const { client, options } = createMainAppRequest('/api/mcp/servers', 'POST', {
++    const { client, options } = createMainAppRequest('/api/mcp/servers', 'POST', withAuthHeaders(req, {
+         'Content-Type': 'application/json',
+         'Content-Length': Buffer.byteLength(postData)
+-    });
++    }));
+ 
+     // Create the request to the main app
+     const proxyReq = client.request(options, (proxyRes) => {
+diff --git a/scripts/config-ui/mcp-config.js b/scripts/config-ui/mcp-config.js
+index 644d4a3..f4f5f78 100644
+--- a/scripts/config-ui/mcp-config.js
++++ b/scripts/config-ui/mcp-config.js
+@@ -140,7 +140,7 @@ class McpConfigManager {
+         </div>
+         <div class="server-details">
+           <div class="server-endpoint">
+-            <strong>Endpoint:</strong> ${server.endpoint}
++            <strong>Host:</strong> ${server.host || ''}${server.hasCredentials ? ' (credentials stored)' : ''}
+           </div>
+           <div class="server-stats">
+             <span class="stat">Type: ${server.type?.toUpperCase() || 'HTTP'}</span>
+@@ -231,8 +231,8 @@ class McpConfigManager {
+               
+               <div class="form-group">
+                 <label for="server-endpoint">Endpoint URL</label>
+-                <input type="url" id="server-endpoint" value="${server.endpoint}" 
+-                       placeholder="https://api.example.com/mcp" required>
++                <input type="url" id="server-endpoint" value="${isEditing ? '' : server.endpoint}"
++                       placeholder="${isEditing ? `Leave blank to keep ${server.host || 'the stored endpoint'}` : 'https://api.example.com/mcp'}" ${isEditing ? '' : 'required'}>
+               </div>
+               
+               <div class="form-group">
+@@ -473,7 +473,7 @@ class McpConfigManager {
+     if (!serverData) return;
+     
+     // Basic validation
+-    if (!serverData.id || !serverData.name || !serverData.endpoint) {
++    if (!serverData.id || !serverData.name || (!this.currentEditingServer && !serverData.endpoint)) {
+       this.showError('Please fill in all required fields');
+       return;
+     }
+@@ -601,7 +601,7 @@ class McpConfigManager {
+       return;
+     }
+ 
+-    const currentEndpoint = server.endpoint !== config.defaultEndpoint ? server.endpoint : '';
++    const currentEndpoint = '';
+ 
+     const dialogHtml = `
+       <div class="modal-overlay" id="builtin-server-dialog-overlay">
+@@ -623,7 +623,7 @@ class McpConfigManager {
+                 <div class="form-group">
+                   <label for="builtin-endpoint">Server Endpoint URL</label>
+                   <input type="url" id="builtin-endpoint" value="${currentEndpoint}" 
+-                         placeholder="${config.placeholder}" required>
++                         placeholder="${server.host ? `Currently ${server.host}; enter the full URL to change it` : config.placeholder}" required>
+                   <small>Enter the URL of your ${serverId} MCP server endpoint</small>
+                 </div>
+                 
+diff --git a/src/app/api/config/connectors/route.ts b/src/app/api/config/connectors/route.ts
+index a0acfec..bd1698c 100644
+--- a/src/app/api/config/connectors/route.ts
++++ b/src/app/api/config/connectors/route.ts
+@@ -1,6 +1,7 @@
+ import { createClient } from '@supabase/supabase-js';
+ import { env } from '@/lib/env';
+ import type { NextRequest } from 'next/server';
++import { adminDenied, checkAdmin, requireAdminOrDeny } from '@/lib/admin-route-auth';
+ 
+ interface ConnectorStats {
+   connected_users: number;
+@@ -9,20 +10,6 @@ interface ConnectorStats {
+   failed_syncs: number;
+ }
+ 
+-interface UserConnection {
+-  connected: boolean;
+-  connection_id: string;
+-  status: string;
+-  connected_at: string | null;
+-  last_sync_at: string | null;
+-  sync_folder_id: string | null;
+-  sync_folder_name: string | null;
+-  sync_folder_path: string | null;
+-  sync_file_ids: string[] | null;
+-  sync_file_names: string[] | null;
+-  sync_enabled: boolean;
+-}
+-
+ interface ConnectorProvider {
+   provider: string;
+   enabled: boolean;
+@@ -32,10 +19,10 @@ interface ConnectorProvider {
+   supported_file_types: string[];
+   max_files_per_sync: number;
+   stats: ConnectorStats;
+-  user_connection?: UserConnection | null;
+ }
+ 
+ interface ConnectorConfigResponse {
++  view: 'admin' | 'public';
+   feature_enabled: boolean;
+   show_on_dashboard: boolean;
+   providers: ConnectorProvider[];
+@@ -59,16 +46,20 @@ const featureSettingsStore: Record<string, boolean> = {
+   show_on_dashboard: true,
+ };
+ 
+-// GET /api/config/connectors - Fetch all connector configurations
++const SUPPORTED_PROVIDERS = ['google-drive', 'dropbox', 'notion'];
++
++const EMPTY_STATS: ConnectorStats = { connected_users: 0, last_sync: null, total_syncs: 0, failed_syncs: 0 };
++
++// GET /api/config/connectors - Connector configuration. Admins also receive aggregate statistics;
++// everyone else gets the public flags the dashboard needs to decide which connectors to show.
+ export async function GET(request: NextRequest) {
++  const admin = await checkAdmin(request);
++  if (!admin.ok && admin.status === 503) return adminDenied(503);
++  const isAdmin = admin.ok;
++
+   try {
+     const supabase = getSupabaseClient();
+ 
+-    // Note: This endpoint is accessed by the Config UI (admin panel) which doesn't have user context.
+-    // Instead of requiring auth, we return representative connection data for all providers.
+-    // This shows admins the connection status and stats.
+-
+-    // Get connector configurations
+     const { data: configs, error: configError } = await supabase
+       .from('connector_config')
+       .select('*')
+@@ -76,81 +67,31 @@ export async function GET(request: NextRequest) {
+ 
+     if (configError) throw configError;
+ 
+-    // Get connection statistics (all users)
+-    const { data: connections, error: connError } = await supabase
+-      .from('nango_connections')
+-      .select('provider, user_id, last_sync_at, status')
+-      .order('provider', { ascending: true });
+-
+-    if (connError) throw connError;
+-
+-    // Get first connected user per provider (for Config UI admin view)
+-    // This shows representative connection data for each provider
+-    const userConnections: any[] = [];
+-    const { data: firstConnections, error: firstConnError } = await supabase
+-      .from('nango_connections')
+-      .select('*')
+-      .eq('status', 'connected')
+-      .order('connected_at', { ascending: false });
+-
+-    if (!firstConnError && firstConnections && firstConnections.length > 0) {
+-      // Get first connection per provider
+-      const seenProviders = new Set<string>();
+-      for (const conn of firstConnections) {
+-        if (!seenProviders.has(conn.provider)) {
+-          userConnections.push(conn);
+-          seenProviders.add(conn.provider);
+-        }
+-      }
+-    }
+-
+-    // Build stats for each provider
+     const statsMap: Record<string, ConnectorStats> = {};
+ 
+-    if (connections) {
+-      for (const conn of connections) {
+-        if (!statsMap[conn.provider]) {
+-          statsMap[conn.provider] = {
+-            connected_users: 0,
+-            last_sync: null,
+-            total_syncs: 0,
+-            failed_syncs: 0,
+-          };
+-        }
++    if (isAdmin) {
++      const { data: connections, error: connError } = await supabase
++        .from('nango_connections')
++        .select('provider, last_sync_at, status')
++        .order('provider', { ascending: true });
+ 
+-        statsMap[conn.provider].connected_users += 1;
+-        if (conn.last_sync_at && new Date(conn.last_sync_at) > new Date(statsMap[conn.provider].last_sync || 0)) {
+-          statsMap[conn.provider].last_sync = conn.last_sync_at;
++      if (connError) throw connError;
++
++      for (const conn of connections || []) {
++        const stats = (statsMap[conn.provider] ||= { ...EMPTY_STATS });
++        stats.connected_users += 1;
++        if (conn.last_sync_at && new Date(conn.last_sync_at) > new Date(stats.last_sync || 0)) {
++          stats.last_sync = conn.last_sync_at;
+         }
+         if (conn.status === 'error') {
+-          statsMap[conn.provider].failed_syncs += 1;
++          stats.failed_syncs += 1;
+         }
+-        statsMap[conn.provider].total_syncs += 1;
++        stats.total_syncs += 1;
+       }
+     }
+ 
+-    // Build user connection map
+-    const userConnectionMap: Record<string, any> = {};
+-    for (const conn of userConnections) {
+-      userConnectionMap[conn.provider] = {
+-        connected: conn.status === 'connected',
+-        connection_id: conn.connection_id,
+-        status: conn.status,
+-        connected_at: conn.connected_at,
+-        last_sync_at: conn.last_sync_at,
+-        sync_folder_id: conn.sync_folder_id,
+-        sync_folder_name: conn.sync_folder_name,
+-        sync_folder_path: conn.sync_folder_path,
+-        sync_file_ids: conn.sync_file_ids,
+-        sync_file_names: conn.sync_file_names,
+-        sync_enabled: conn.sync_enabled,
+-      };
+-    }
+-
+-    // Build response - only include supported providers
+-    const supportedProviders = ['google-drive', 'dropbox', 'notion'];
+-    const providers: any[] = (configs || [])
+-      .filter((config: any) => supportedProviders.includes(config.provider))
++    const providers: ConnectorProvider[] = (configs || [])
++      .filter((config: any) => SUPPORTED_PROVIDERS.includes(config.provider))
+       .map((config: any) => ({
+         provider: config.provider,
+         enabled: config.enabled,
+@@ -159,45 +100,46 @@ export async function GET(request: NextRequest) {
+         description: config.description,
+         supported_file_types: config.supported_file_types || [],
+         max_files_per_sync: config.max_files_per_sync || 100,
+-        stats: statsMap[config.provider] || {
+-          connected_users: 0,
+-          last_sync: null,
+-          total_syncs: 0,
+-          failed_syncs: 0,
+-        },
+-        // Include user connection data (either authenticated user or representative connection for admin view)
+-        user_connection: userConnectionMap[config.provider] || null,
++        stats: statsMap[config.provider] || { ...EMPTY_STATS },
+       }));
+ 
+-    const response: any = {
++    const response: ConnectorConfigResponse = {
++      view: isAdmin ? 'admin' : 'public',
+       feature_enabled: featureSettingsStore.feature_enabled,
+       show_on_dashboard: featureSettingsStore.show_on_dashboard,
+       providers,
+     };
+ 
+-    return Response.json(response);
+-  } catch (error) {
+-    console.error('Error fetching connector config:', error);
++    return Response.json(response, { headers: { 'Cache-Control': 'no-store' } });
++  } catch {
++    console.error('[Connector Config] failed to fetch connector configuration');
+     return Response.json({ error: 'Failed to fetch connector configuration' }, { status: 500 });
+   }
+ }
+ 
+ // PUT /api/config/connectors - Update connector configurations
+ export async function PUT(request: NextRequest) {
+-  try {
+-    const body = await request.json();
+-    const supabase = getSupabaseClient();
++  const denied = await requireAdminOrDeny(request);
++  if (denied) return denied;
+ 
+-    // Verify admin access - for local dev, any auth header is accepted
+-    // In production, this should validate the token properly
+-    const authHeader = request.headers.get('authorization');
+-    if (!authHeader && process.env.NODE_ENV === 'production') {
+-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
++  try {
++    let body: any;
++    try {
++      body = await request.json();
++    } catch {
++      return Response.json({ error: 'Invalid JSON body' }, { status: 400 });
+     }
++    if (!body || typeof body !== 'object') {
++      return Response.json({ error: 'Invalid request body' }, { status: 400 });
++    }
++    const supabase = getSupabaseClient();
+ 
+     // Update each provider configuration
+     if (body.providers && Array.isArray(body.providers)) {
+       for (const provider of body.providers) {
++        if (!provider || !SUPPORTED_PROVIDERS.includes(provider.provider)) {
++          return Response.json({ error: 'Unsupported connector provider' }, { status: 400 });
++        }
+         const { error } = await supabase
+           .from('connector_config')
+           .update({
+@@ -224,12 +166,12 @@ export async function PUT(request: NextRequest) {
+         featureSettingsStore.show_on_dashboard = body.show_on_dashboard;
+       }
+ 
+-      console.log('Feature settings updated:', featureSettingsStore);
++      console.log('[Connector Config] feature settings updated');
+     }
+ 
+     return Response.json({ success: true, message: 'Connector configuration updated' });
+-  } catch (error) {
+-    console.error('Error updating connector config:', error);
++  } catch {
++    console.error('[Connector Config] failed to update connector configuration');
+     return Response.json({ error: 'Failed to update connector configuration' }, { status: 500 });
+   }
+ }
+diff --git a/src/app/api/config/models/route.ts b/src/app/api/config/models/route.ts
+index 364077f..486c290 100644
+--- a/src/app/api/config/models/route.ts
++++ b/src/app/api/config/models/route.ts
+@@ -1,5 +1,6 @@
+ import { NextRequest, NextResponse } from 'next/server';
+ import { env } from '@/lib/env';
++import { requireAdminOrDeny } from '@/lib/admin-route-auth';
+ import fs from 'fs';
+ import path from 'path';
+ 
+@@ -199,10 +200,10 @@ export async function GET(request: NextRequest) {
+ }
+ 
+ export async function POST(request: NextRequest) {
+-  try {
+-    // Skip admin authorization for config UI access
+-    // The config UI itself requires admin access, so we can trust requests from it
++  const denied = await requireAdminOrDeny(request);
++  if (denied) return denied;
+ 
++  try {
+     const body = await request.json();
+     const { provider, openaiModels, openrouterModels, groqModels } = body as ModelConfig;
+ 
+diff --git a/src/app/api/config/rag-prompt/route.ts b/src/app/api/config/rag-prompt/route.ts
+index 679c968..b530019 100644
+--- a/src/app/api/config/rag-prompt/route.ts
++++ b/src/app/api/config/rag-prompt/route.ts
+@@ -1,6 +1,7 @@
+ import { NextRequest, NextResponse } from 'next/server';
+ import fs from 'fs/promises';
+ import path from 'path';
++import { requireAdminOrDeny } from '@/lib/admin-route-auth';
+ 
+ /**
+  * API endpoint for RAG system prompt configuration
+@@ -182,6 +183,9 @@ function assemblePrompt(preContext: string, postContext: string): string {
+ }
+ 
+ export async function GET(request: NextRequest) {
++  const denied = await requireAdminOrDeny(request);
++  if (denied) return denied;
++
+   try {
+     const env = await parseEnvFile();
+ 
+@@ -248,6 +252,9 @@ export async function GET(request: NextRequest) {
+ }
+ 
+ export async function POST(request: NextRequest) {
++  const denied = await requireAdminOrDeny(request);
++  if (denied) return denied;
++
+   try {
+     const body = await request.json();
+     const { preContext, postContext } = body;
+diff --git a/src/app/api/config/route.ts b/src/app/api/config/route.ts
+index a3fb3ef..718cb25 100644
+--- a/src/app/api/config/route.ts
++++ b/src/app/api/config/route.ts
+@@ -2,112 +2,121 @@ import { NextResponse } from 'next/server';
+ import * as fs from 'fs';
+ import * as path from 'path';
+ import * as dotenv from 'dotenv';
+-import { createClient } from '@/lib/supabase/server';
+-import { isSingleTenant } from '@/lib/deployment-mode';
++import { requireAdminOrDeny } from '@/lib/admin-route-auth';
++import {
++  MAX_CONFIG_VALUE_LENGTH,
++  isSecretEnvName,
++  isWritableEnvName,
++} from '@/lib/config-env-allowlist';
+ 
+ export const runtime = 'nodejs';
+ export const dynamic = 'force-dynamic';
+ 
+-// Helper to validate env var name
+-function isValidEnvVarName(key: string) {
+-    return /^[A-Z][A-Z0-9_]*$/i.test(key);
++const NO_STORE = { 'Cache-Control': 'no-store' };
++
++function envFilePath() {
++  return path.resolve(process.cwd(), '.env.local');
+ }
+ 
+-export async function GET() {
+-    // Authentication check for multi-tenant mode
+-    if (!isSingleTenant()) {
+-        try {
+-            const supabase = await createClient();
+-            const { data: { user }, error } = await supabase.auth.getUser();
+-
+-            if (!user || error) {
+-                return new NextResponse("Unauthorized", { status: 401 });
+-            }
+-        } catch (error) {
+-            console.error('Auth error:', error);
+-            // Continue execution to avoid breaking local dev if auth fails
+-            // In production, you might want to be stricter
+-        }
++export async function GET(request: Request) {
++  const denied = await requireAdminOrDeny(request);
++  if (denied) return denied;
++
++  try {
++    const envPath = envFilePath();
++    const parsed = fs.existsSync(envPath) ? dotenv.parse(fs.readFileSync(envPath, 'utf8')) : {};
++
++    const config: Record<string, string> = {};
++    const secrets: Record<string, { set: boolean }> = {};
++    for (const [name, value] of Object.entries(parsed)) {
++      if (isSecretEnvName(name)) {
++        if (value !== '') secrets[name] = { set: true };
++      } else if (isWritableEnvName(name)) {
++        config[name] = value;
++      }
+     }
+ 
+-    try {
+-        const envPath = path.resolve(process.cwd(), '.env.local');
+-        let config: Record<string, string> = {};
+-
+-        if (fs.existsSync(envPath)) {
+-            const fileContent = fs.readFileSync(envPath, 'utf8');
+-            config = dotenv.parse(fileContent);
+-        }
+-
+-        return NextResponse.json({ config });
+-    } catch (error) {
+-        console.error('Error reading config:', error);
+-        return new NextResponse("Internal Server Error", { status: 500 });
+-    }
++    return NextResponse.json({ config, secrets }, { headers: NO_STORE });
++  } catch {
++    console.error('[Config API] failed to read configuration');
++    return NextResponse.json({ success: false, error: 'Failed to read configuration' }, { status: 500 });
++  }
+ }
+ 
+ export async function POST(request: Request) {
+-    // Authentication check for multi-tenant mode
+-    if (!isSingleTenant()) {
+-        try {
+-            const supabase = await createClient();
+-            const { data: { user }, error } = await supabase.auth.getUser();
+-
+-            if (!user || error) {
+-                return new NextResponse("Unauthorized", { status: 401 });
+-            }
+-        } catch (error) {
+-            console.error('Auth error:', error);
+-            return new NextResponse("Unauthorized", { status: 401 });
+-        }
++  const denied = await requireAdminOrDeny(request);
++  if (denied) return denied;
++
++  let body: unknown;
++  try {
++    body = await request.json();
++  } catch {
++    return NextResponse.json({ success: false, error: 'Invalid JSON body' }, { status: 400 });
++  }
++
++  const updates = (body as { config?: unknown } | null)?.config;
++  if (!updates || typeof updates !== 'object' || Array.isArray(updates)) {
++    return NextResponse.json({ success: false, error: 'config must be an object' }, { status: 400 });
++  }
++
++  const rejected: string[] = [];
++  const invalid: string[] = [];
++  const entries: Array<[string, string]> = [];
++  for (const [name, value] of Object.entries(updates)) {
++    if (!isWritableEnvName(name)) {
++      rejected.push(name);
++      continue;
+     }
+-
+-    try {
+-        const body = await request.json();
+-        const updates = body.config || {};
+-        const envPath = path.resolve(process.cwd(), '.env.local');
+-
+-        // Read existing file
+-        let lines: string[] = [];
+-        if (fs.existsSync(envPath)) {
+-            const content = fs.readFileSync(envPath, 'utf8');
+-            lines = content.split('\n');
+-        }
+-
+-        const validUpdates = Object.entries(updates).filter(([key]) => isValidEnvVarName(key));
+-
+-        if (validUpdates.length === 0) {
+-            return NextResponse.json({ success: true, message: 'No valid updates provided' });
++    if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') {
++      invalid.push(name);
++      continue;
++    }
++    const text = String(value);
++    if (text.length > MAX_CONFIG_VALUE_LENGTH || /[\r\n\0]/.test(text)) {
++      invalid.push(name);
++      continue;
++    }
++    entries.push([name, text]);
++  }
++
++  if (rejected.length > 0 || invalid.length > 0) {
++    return NextResponse.json(
++      {
++        success: false,
++        error: 'Configuration contains names or values that are not allowed',
++        rejected,
++        invalid,
++      },
++      { status: 400 },
++    );
++  }
++
++  if (entries.length === 0) {
++    return NextResponse.json({ success: true, message: 'No valid updates provided' });
++  }
++
++  try {
++    const envPath = envFilePath();
++    let lines = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf8').split('\n') : [];
++
++    for (const [name, value] of entries) {
++      let found = false;
++      lines = lines.map((line) => {
++        const match = line.match(/^([A-Za-z0-9_]+)=(.*)$/);
++        if (match && match[1] === name) {
++          found = true;
++          return `${name}=${value}`;
+         }
+-
+-        // Apply updates
+-        validUpdates.forEach(([key, value]) => {
+-            const strValue = String(value);
+-            let found = false;
+-
+-            // Map existing lines to update values
+-            lines = lines.map(line => {
+-                const match = line.match(/^([A-Za-z0-9_]+)=(.*)$/);
+-                // Check if line starts with key= (ignoring comments)
+-                if (match && match[1] === key) {
+-                    found = true;
+-                    return `${key}=${strValue}`;
+-                }
+-                return line;
+-            });
+-
+-            // If not found, append
+-            if (!found) {
+-                lines.push(`${key}=${strValue}`);
+-            }
+-        });
+-
+-        // Write back to file
+-        fs.writeFileSync(envPath, lines.join('\n'));
+-
+-        return NextResponse.json({ success: true, message: 'Configuration saved' });
+-    } catch (error) {
+-        console.error('Error updating config:', error);
+-        return new NextResponse("Internal Server Error", { status: 500 });
++        return line;
++      });
++      if (!found) lines.push(`${name}=${value}`);
+     }
++
++    fs.writeFileSync(envPath, lines.join('\n'));
++    console.log('[Config API] configuration updated', { names: entries.map(([name]) => name) });
++    return NextResponse.json({ success: true, message: 'Configuration saved' });
++  } catch {
++    console.error('[Config API] failed to write configuration');
++    return NextResponse.json({ success: false, error: 'Failed to write configuration' }, { status: 500 });
++  }
+ }
+diff --git a/src/app/api/config/upload-favicon/route.ts b/src/app/api/config/upload-favicon/route.ts
+index 708a192..080c71c 100644
+--- a/src/app/api/config/upload-favicon/route.ts
++++ b/src/app/api/config/upload-favicon/route.ts
+@@ -3,9 +3,13 @@ import { promises as fs } from 'fs';
+ import path from 'path';
+ import { writeFile } from 'fs/promises';
+ import { updateEnvFile } from '@/lib/env-utils';
++import { requireAdminOrDeny } from '@/lib/admin-route-auth';
+ 
+ // This route is used by the config UI to upload favicon files
+ export async function POST(request: NextRequest) {
++  const denied = await requireAdminOrDeny(request);
++  if (denied) return denied;
++
+   try {
+     const formData = await request.formData();
+     const faviconFile = formData.get('favicon') as File;
+diff --git a/src/app/api/config/upload-logo/route.ts b/src/app/api/config/upload-logo/route.ts
+index 59fc3bb..fd64186 100644
+--- a/src/app/api/config/upload-logo/route.ts
++++ b/src/app/api/config/upload-logo/route.ts
+@@ -3,9 +3,13 @@ import { promises as fs } from 'fs';
+ import path from 'path';
+ import { writeFile } from 'fs/promises';
+ import { updateEnvFile } from '@/lib/env-utils';
++import { requireAdminOrDeny } from '@/lib/admin-route-auth';
+ 
+ // This route is used by the config UI to upload logo files
+ export async function POST(request: NextRequest) {
++  const denied = await requireAdminOrDeny(request);
++  if (denied) return denied;
++
+   try {
+     const formData = await request.formData();
+     const logoFile = formData.get('logoFile') as File;
+diff --git a/src/app/api/mcp/health/route.ts b/src/app/api/mcp/health/route.ts
+index 1ddeba5..e6e7807 100644
+--- a/src/app/api/mcp/health/route.ts
++++ b/src/app/api/mcp/health/route.ts
+@@ -1,11 +1,16 @@
+ import { NextResponse } from 'next/server';
+ import { env } from '@/lib/env';
+ import { UniversalMcpClient } from '@/lib/mcp/universal-client';
++import { requireAdminOrDeny } from '@/lib/admin-route-auth';
++import { hostOf, redactUrls } from '@/lib/mcp/server-redact';
+ 
+ /**
+  * Enhanced MCP Health Check API with detailed diagnostics
+  */
+-export async function GET() {
++export async function GET(request: Request) {
++  const denied = await requireAdminOrDeny(request);
++  if (denied) return denied;
++
+   console.log('🔍 [MCP HEALTH API] Starting comprehensive health check');
+   
+   const healthResults = {
+@@ -38,11 +43,11 @@ export async function GET() {
+   // Check Zapier configuration
+   if (env.MCP_ZAPIER_ENDPOINT) {
+     healthResults.zapier.configured = true;
+-    healthResults.zapier.endpoint = env.MCP_ZAPIER_ENDPOINT;
++    healthResults.zapier.endpoint = hostOf(env.MCP_ZAPIER_ENDPOINT);
+     
+     try {
+       const startTime = Date.now();
+-      console.log('🔍 [MCP HEALTH API] Testing Zapier endpoint:', env.MCP_ZAPIER_ENDPOINT);
++      console.log('🔍 [MCP HEALTH API] Testing Zapier endpoint:', hostOf(env.MCP_ZAPIER_ENDPOINT));
+       
+       // Test basic connectivity
+       const response = await fetch(env.MCP_ZAPIER_ENDPOINT, {
+@@ -73,7 +78,15 @@ export async function GET() {
+           // Get enhanced health details if available
+           if (typeof client.getConnectionHealth === 'function') {
+             const healthDetails = await client.getConnectionHealth();
+-            healthResults.universalClient.healthDetails = healthDetails;
++            healthResults.universalClient.healthDetails = healthDetails.map(detail => ({
++              ...detail,
++              endpoint: hostOf(detail.endpoint),
++              lastError: detail.lastError ? redactUrls(String(detail.lastError)) : detail.lastError,
++              diagnostics: {
++                ...detail.diagnostics,
++                errorDetails: detail.diagnostics.errorDetails ? redactUrls(String(detail.diagnostics.errorDetails)) : undefined,
++              },
++            }));
+             
+             // Find Zapier in health details
+             const zapierHealth = healthDetails.find(h => h.server.toLowerCase().includes('zapier'));
+@@ -81,7 +94,7 @@ export async function GET() {
+               healthResults.zapier.diagnostics.canListTools = zapierHealth.diagnostics.canListTools;
+               healthResults.zapier.diagnostics.toolCount = zapierHealth.diagnostics.toolCount;
+               if (zapierHealth.lastError) {
+-                healthResults.zapier.diagnostics.lastError = zapierHealth.lastError;
++                healthResults.zapier.diagnostics.lastError = redactUrls(String(zapierHealth.lastError));
+               }
+             }
+           }
+@@ -96,13 +109,13 @@ export async function GET() {
+           
+         } catch (clientError) {
+           console.error('🔍 [MCP HEALTH API] Client connection failed:', clientError);
+-          healthResults.zapier.diagnostics.lastError = clientError instanceof Error ? clientError.message : 'Client connection failed';
++          healthResults.zapier.diagnostics.lastError = clientError instanceof Error ? redactUrls(clientError.message) : 'Client connection failed';
+         }
+       }
+       
+     } catch (error) {
+       console.error('🔍 [MCP HEALTH API] Zapier connectivity test failed:', error);
+-      healthResults.zapier.diagnostics.lastError = error instanceof Error ? error.message : 'Connection test failed';
++      healthResults.zapier.diagnostics.lastError = error instanceof Error ? redactUrls(error.message) : 'Connection test failed';
+     }
+   } else {
+     console.log('🔍 [MCP HEALTH API] Zapier endpoint not configured');
+diff --git a/src/app/api/mcp/servers/[id]/route.ts b/src/app/api/mcp/servers/[id]/route.ts
+index 41b9ad0..bd41b22 100644
+--- a/src/app/api/mcp/servers/[id]/route.ts
++++ b/src/app/api/mcp/servers/[id]/route.ts
+@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
+ import fs from 'fs';
+ import path from 'path';
+ import { z } from 'zod/v3';
++import { requireAdminOrDeny } from '@/lib/admin-route-auth';
++import { redactUrls } from '@/lib/mcp/server-redact';
++import { toPublicServer } from '@/lib/mcp/server-redact';
+ 
+ // Re-use the same schema from the main route
+ const McpServerSchema = z.object({
+@@ -167,7 +170,7 @@ async function testServerConnection(server: McpServer): Promise<{ success: boole
+   } catch (error: any) {
+     return {
+       success: false,
+-      message: error.name === 'AbortError' ? 'Connection timeout' : `Connection failed: ${error.message}`,
++      message: error.name === 'AbortError' ? 'Connection timeout' : `Connection failed: ${redactUrls(String(error.message))}`,
+     };
+   }
+ }
+@@ -225,7 +228,7 @@ async function discoverTools(server: McpServer): Promise<{ success: boolean; too
+           return {
+             success: true,
+             tools,
+-            message: `Discovered ${tools.length} tools from ${url}`,
++            message: `Discovered ${tools.length} tools`,
+           };
+         }
+       } catch (endpointError) {
+@@ -242,206 +245,190 @@ async function discoverTools(server: McpServer): Promise<{ success: boolean; too
+   } catch (error: any) {
+     return {
+       success: false,
+-      message: error.name === 'AbortError' ? 'Tool discovery timeout' : `Tool discovery failed: ${error.message}`,
++      message: error.name === 'AbortError' ? 'Tool discovery timeout' : `Tool discovery failed: ${redactUrls(String(error.message))}`,
+     };
+   }
+ }
+ 
+-// GET /api/mcp/servers/[id] - Get specific server
+-export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
++type RouteContext = { params: Promise<{ id: string }> };
++
++const CREDENTIAL_FIELDS = ['token', 'apiKey', 'username', 'password'] as const;
++
++// A blank or missing endpoint or credential in an update keeps the stored value; reads never return them.
++function mergeWithStored(body: any, stored: McpServer): any {
++  if (!body || typeof body !== 'object') return body;
++  const merged = { ...body };
++  if (typeof merged.endpoint !== 'string' || merged.endpoint.trim() === '') {
++    merged.endpoint = stored.endpoint;
++  }
++  const authType = merged.authentication?.type ?? 'none';
++  if (authType !== 'none' && authType === (stored.authentication?.type ?? 'none')) {
++    const incoming = merged.authentication?.credentials ?? {};
++    const kept = { ...incoming };
++    for (const field of CREDENTIAL_FIELDS) {
++      if (!kept[field] && stored.authentication?.credentials?.[field]) {
++        kept[field] = stored.authentication.credentials[field];
++      }
++    }
++    merged.authentication = { ...merged.authentication, credentials: kept };
++  }
++  return merged;
++}
++
++// GET /api/mcp/servers/[id] - Get specific server (admin only; endpoint and credentials are never returned)
++export async function GET(req: NextRequest, { params }: RouteContext) {
++  const denied = await requireAdminOrDeny(req);
++  if (denied) return denied;
++
+   const { id } = await params;
+   try {
+-    console.log(`MCP Server API: Fetching server with ID: ${id}`);
+-    
+     const customServers = await loadCustomServers();
+     const server = customServers.find(s => s.id === id);
+-    
++
+     if (!server) {
+       return NextResponse.json(
+         { error: `Server with ID '${id}' not found` },
+         { status: 404 }
+       );
+     }
+-    
+-    return NextResponse.json({ server }, {
+-      headers: {
+-        'Access-Control-Allow-Origin': '*',
+-        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+-        'Access-Control-Allow-Headers': 'Content-Type',
+-      }
+-    });
+-  } catch (error) {
+-    console.error(`MCP Server API: Error fetching server ${id}:`, error);
+-    return NextResponse.json(
+-      { error: 'Failed to fetch MCP server' },
+-      { status: 500 }
+-    );
++
++    return NextResponse.json({ server: toPublicServer(server) }, { headers: { 'Cache-Control': 'no-store' } });
++  } catch {
++    console.error('[MCP Server API] failed to fetch server', { id });
++    return NextResponse.json({ error: 'Failed to fetch MCP server' }, { status: 500 });
+   }
+ }
+ 
+-// PUT /api/mcp/servers/[id] - Update server
+-export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
++// PUT /api/mcp/servers/[id] - Update server (admin only)
++export async function PUT(req: NextRequest, { params }: RouteContext) {
++  const denied = await requireAdminOrDeny(req);
++  if (denied) return denied;
++
+   const { id } = await params;
+   try {
+-    const body = await req.json();
+-    console.log(`MCP Server API: Updating server with ID: ${id}`);
+-    
+-    // Validate the server configuration
+-    const serverConfig = McpServerSchema.parse(body);
+-    
+-    // Ensure the ID matches
+-    if (serverConfig.id !== id) {
+-      return NextResponse.json(
+-        { error: 'Server ID in URL does not match server ID in body' },
+-        { status: 400 }
+-      );
++    let body: any;
++    try {
++      body = await req.json();
++    } catch {
++      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+     }
+-    
+-    // Load existing custom servers
++
+     const customServers = await loadCustomServers();
+     const serverIndex = customServers.findIndex(s => s.id === id);
+-    
++
+     if (serverIndex === -1) {
+       return NextResponse.json(
+         { error: `Server with ID '${id}' not found` },
+         { status: 404 }
+       );
+     }
+-    
+-    // Update the server
++
++    const serverConfig = McpServerSchema.parse(mergeWithStored(body, customServers[serverIndex]));
++
++    if (serverConfig.id !== id) {
++      return NextResponse.json(
++        { error: 'Server ID in URL does not match server ID in body' },
++        { status: 400 }
++      );
++    }
++
+     customServers[serverIndex] = serverConfig;
+     await saveCustomServers(customServers);
+-    
+-    console.log(`MCP Server API: Successfully updated server '${serverConfig.name}'`);
+-    
++
++    console.log('[MCP Server API] server updated', { id });
++
+     return NextResponse.json({
+-      server: serverConfig,
++      server: toPublicServer(serverConfig),
+       message: `Server '${serverConfig.name}' updated successfully`,
+-    }, {
+-      headers: {
+-        'Access-Control-Allow-Origin': '*',
+-        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+-        'Access-Control-Allow-Headers': 'Content-Type',
+-      }
+     });
+   } catch (error: any) {
+-    console.error(`MCP Server API: Error updating server ${id}:`, error);
+-    
+     if (error instanceof z.ZodError) {
+       return NextResponse.json(
+         { error: 'Invalid server configuration', details: error.errors },
+         { status: 400 }
+       );
+     }
+-    
+-    return NextResponse.json(
+-      { error: 'Failed to update MCP server' },
+-      { status: 500 }
+-    );
++
++    console.error('[MCP Server API] failed to update server', { id });
++    return NextResponse.json({ error: 'Failed to update MCP server' }, { status: 500 });
+   }
+ }
+ 
+-// DELETE /api/mcp/servers/[id] - Delete server
+-export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
++// DELETE /api/mcp/servers/[id] - Delete server (admin only)
++export async function DELETE(req: NextRequest, { params }: RouteContext) {
++  const denied = await requireAdminOrDeny(req);
++  if (denied) return denied;
++
+   const { id } = await params;
+   try {
+-    console.log(`MCP Server API: Deleting server with ID: ${id}`);
+-    
+-    // Built-in servers cannot be deleted
+     if (id === 'zapier') {
+       return NextResponse.json(
+         { error: 'Built-in servers cannot be deleted' },
+         { status: 400 }
+       );
+     }
+-    
+-    // Load existing custom servers
++
+     const customServers = await loadCustomServers();
+     const serverIndex = customServers.findIndex(s => s.id === id);
+-    
++
+     if (serverIndex === -1) {
+       return NextResponse.json(
+         { error: `Server with ID '${id}' not found` },
+         { status: 404 }
+       );
+     }
+-    
+-    // Remove the server
++
+     const deletedServer = customServers.splice(serverIndex, 1)[0];
+     await saveCustomServers(customServers);
+-    
+-    console.log(`MCP Server API: Successfully deleted server '${deletedServer.name}'`);
+-    
++
++    console.log('[MCP Server API] server deleted', { id });
++
+     return NextResponse.json({
+       message: `Server '${deletedServer.name}' deleted successfully`,
+-    }, {
+-      headers: {
+-        'Access-Control-Allow-Origin': '*',
+-        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+-        'Access-Control-Allow-Headers': 'Content-Type',
+-      }
+     });
+-  } catch (error) {
+-    console.error(`MCP Server API: Error deleting server ${id}:`, error);
+-    return NextResponse.json(
+-      { error: 'Failed to delete MCP server' },
+-      { status: 500 }
+-    );
++  } catch {
++    console.error('[MCP Server API] failed to delete server', { id });
++    return NextResponse.json({ error: 'Failed to delete MCP server' }, { status: 500 });
+   }
+ }
+ 
+-// POST /api/mcp/servers/[id]/test - Test server connection
+-export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
++// POST /api/mcp/servers/[id] - Test connection or discover tools for a stored server (admin only)
++export async function POST(req: NextRequest, { params }: RouteContext) {
++  const denied = await requireAdminOrDeny(req);
++  if (denied) return denied;
++
+   const { id } = await params;
+   try {
+-    const body = await req.json();
+-    const { action } = body;
+-    
+-    console.log(`MCP Server API: ${action} for server with ID: ${id}`);
+-    
+-    // Load the server configuration
++    let body: any;
++    try {
++      body = await req.json();
++    } catch {
++      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
++    }
++    const action = body?.action;
++
+     const customServers = await loadCustomServers();
+     const server = customServers.find(s => s.id === id);
+-    
++
+     if (!server) {
+       return NextResponse.json(
+         { error: `Server with ID '${id}' not found` },
+         { status: 404 }
+       );
+     }
+-    
++
+     if (action === 'test') {
+-      // Test connection
+-      const result = await testServerConnection(server);
+-      return NextResponse.json(result);
++      return NextResponse.json(await testServerConnection(server));
+     } else if (action === 'discover') {
+-      // Discover tools
+-      const result = await discoverTools(server);
+-      return NextResponse.json(result);
++      return NextResponse.json(await discoverTools(server));
+     } else {
+       return NextResponse.json(
+         { error: 'Invalid action. Supported actions: test, discover' },
+         { status: 400 }
+       );
+     }
+-  } catch (error) {
+-    console.error(`MCP Server API: Error in action for server ${id}:`, error);
+-    return NextResponse.json(
+-      { error: 'Failed to perform server action' },
+-      { status: 500 }
+-    );
++  } catch {
++    console.error('[MCP Server API] server action failed', { id });
++    return NextResponse.json({ error: 'Failed to perform server action' }, { status: 500 });
+   }
+ }
+-
+-// OPTIONS /api/mcp/servers/[id] - Handle CORS preflight requests
+-export async function OPTIONS() {
+-  return new NextResponse(null, {
+-    status: 200,
+-    headers: {
+-      'Access-Control-Allow-Origin': '*',
+-      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+-      'Access-Control-Allow-Headers': 'Content-Type',
+-      'Access-Control-Max-Age': '86400',
+-    },
+-  });
+-} 
+\ No newline at end of file
+diff --git a/src/app/api/mcp/servers/[id]/test/route.ts b/src/app/api/mcp/servers/[id]/test/route.ts
+index 06c8e88..43df22a 100644
+--- a/src/app/api/mcp/servers/[id]/test/route.ts
++++ b/src/app/api/mcp/servers/[id]/test/route.ts
+@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
+ import fs from 'fs';
+ import path from 'path';
+ import { z } from 'zod/v3';
++import { requireAdminOrDeny } from '@/lib/admin-route-auth';
++import { redactUrls } from '@/lib/mcp/server-redact';
+ 
+ // Re-use the same schema from the main route
+ const McpServerSchema = z.object({
+@@ -122,7 +124,7 @@ async function testServerConnection(server: McpServer): Promise<{ success: boole
+   } catch (error: any) {
+     return {
+       success: false,
+-      message: error.name === 'AbortError' ? 'Connection timeout' : `Connection failed: ${error.message}`,
++      message: error.name === 'AbortError' ? 'Connection timeout' : `Connection failed: ${redactUrls(String(error.message))}`,
+     };
+   }
+ }
+@@ -180,7 +182,7 @@ async function discoverTools(server: McpServer): Promise<{ success: boolean; too
+           return {
+             success: true,
+             tools,
+-            message: `Discovered ${tools.length} tools from ${url}`,
++            message: `Discovered ${tools.length} tools`,
+           };
+         }
+       } catch (endpointError) {
+@@ -197,82 +199,48 @@ async function discoverTools(server: McpServer): Promise<{ success: boolean; too
+   } catch (error: any) {
+     return {
+       success: false,
+-      message: error.name === 'AbortError' ? 'Tool discovery timeout' : `Tool discovery failed: ${error.message}`,
++      message: error.name === 'AbortError' ? 'Tool discovery timeout' : `Tool discovery failed: ${redactUrls(String(error.message))}`,
+     };
+   }
+ }
+ 
+-// POST /api/mcp/servers/[id]/test - Test server connection and discover tools
++// POST /api/mcp/servers/[id]/test - Test server connection and discover tools (admin only)
+ export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
++  const denied = await requireAdminOrDeny(req);
++  if (denied) return denied;
++
+   const { id } = await params;
+   try {
+-    const body = await req.json();
+-    const { action } = body;
+-    
+-    console.log(`MCP Server Test API: ${action} for server with ID: ${id}`);
+-    
+-    // Load the server configuration
++    let body: any;
++    try {
++      body = await req.json();
++    } catch {
++      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
++    }
++    const action = body?.action;
++
+     const customServers = await loadCustomServers();
+     const server = customServers.find(s => s.id === id);
+-    
++
+     if (!server) {
+       return NextResponse.json(
+         { error: `Server with ID '${id}' not found` },
+         { status: 404 }
+       );
+     }
+-    
++
+     if (action === 'test') {
+-      // Test connection
+-      const result = await testServerConnection(server);
+-      return NextResponse.json(result, {
+-        headers: {
+-          'Access-Control-Allow-Origin': '*',
+-          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+-          'Access-Control-Allow-Headers': 'Content-Type',
+-        }
+-      });
++      return NextResponse.json(await testServerConnection(server));
+     } else if (action === 'discover') {
+-      // Discover tools
+-      const result = await discoverTools(server);
+-      return NextResponse.json(result, {
+-        headers: {
+-          'Access-Control-Allow-Origin': '*',
+-          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+-          'Access-Control-Allow-Headers': 'Content-Type',
+-        }
+-      });
++      return NextResponse.json(await discoverTools(server));
+     } else {
+       return NextResponse.json(
+         { error: 'Invalid action. Supported actions: test, discover' },
+-        { 
+-          status: 400,
+-          headers: {
+-            'Access-Control-Allow-Origin': '*',
+-            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+-            'Access-Control-Allow-Headers': 'Content-Type',
+-          }
+-        }
++        { status: 400 }
+       );
+     }
+-  } catch (error) {
+-    console.error(`MCP Server Test API: Error in action for server ${id}:`, error);
+-    return NextResponse.json(
+-      { error: 'Failed to perform server action' },
+-      { status: 500 }
+-    );
++  } catch {
++    console.error('[MCP Server Test API] server action failed', { id });
++    return NextResponse.json({ error: 'Failed to perform server action' }, { status: 500 });
+   }
+ }
+-
+-// OPTIONS /api/mcp/servers/[id]/test - Handle CORS preflight requests
+-export async function OPTIONS() {
+-  return new NextResponse(null, {
+-    status: 200,
+-    headers: {
+-      'Access-Control-Allow-Origin': '*',
+-      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+-      'Access-Control-Allow-Headers': 'Content-Type',
+-      'Access-Control-Max-Age': '86400',
+-    },
+-  });
+-} 
+\ No newline at end of file
+diff --git a/src/app/api/mcp/servers/route.ts b/src/app/api/mcp/servers/route.ts
+index 1c0d292..0853522 100644
+--- a/src/app/api/mcp/servers/route.ts
++++ b/src/app/api/mcp/servers/route.ts
+@@ -3,6 +3,8 @@ import { env } from '@/lib/env';
+ import fs from 'fs';
+ import path from 'path';
+ import { z } from 'zod/v3';
++import { requireAdminOrDeny } from '@/lib/admin-route-auth';
++import { toPublicServer } from '@/lib/mcp/server-redact';
+ 
+ // Schema for MCP server configuration
+ const McpServerSchema = z.object({
+@@ -192,155 +194,86 @@ async function testServerConnection(server: McpServer): Promise<{ success: boole
+   }
+ }
+ 
+-// GET /api/mcp/servers - List all servers
+-export async function GET() {
++// GET /api/mcp/servers - List all servers (admin only; endpoints and credentials are never returned)
++export async function GET(req: NextRequest) {
++  const denied = await requireAdminOrDeny(req);
++  if (denied) return denied;
++
+   try {
+-    console.log('MCP Servers API: Fetching all MCP servers');
+-    
+     const customServers = await loadCustomServers();
+     const allServers = [...BUILTIN_SERVERS, ...customServers];
+-    
+-    console.log(`MCP Servers API: Found ${BUILTIN_SERVERS.length} built-in and ${customServers.length} custom servers`);
+-    
++
++    console.log('[MCP Servers API] listed servers', {
++      builtin: BUILTIN_SERVERS.length,
++      custom: customServers.length,
++    });
++
+     return NextResponse.json({
+-      servers: allServers,
++      servers: allServers.map(toPublicServer),
+       builtinCount: BUILTIN_SERVERS.length,
+       customCount: customServers.length,
+       totalCount: allServers.length,
+-    }, {
+-      headers: {
+-        'Access-Control-Allow-Origin': '*',
+-        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+-        'Access-Control-Allow-Headers': 'Content-Type',
+-      }
+-    });
+-  } catch (error) {
+-    console.error('MCP Servers API: Error fetching servers:', error);
+-    return NextResponse.json(
+-      { error: 'Failed to fetch MCP servers' },
+-      { 
+-        status: 500,
+-        headers: {
+-          'Access-Control-Allow-Origin': '*',
+-          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+-          'Access-Control-Allow-Headers': 'Content-Type',
+-        }
+-      }
+-    );
++    }, { headers: { 'Cache-Control': 'no-store' } });
++  } catch {
++    console.error('[MCP Servers API] failed to fetch servers');
++    return NextResponse.json({ error: 'Failed to fetch MCP servers' }, { status: 500 });
+   }
+ }
+ 
+-// POST /api/mcp/servers - Add new custom server
++// POST /api/mcp/servers - Add new custom server (admin only)
+ export async function POST(req: NextRequest) {
++  const denied = await requireAdminOrDeny(req);
++  if (denied) return denied;
++
+   try {
+-    const body = await req.json();
+-    console.log('MCP Servers API: Adding new server:', body.name);
+-    
+-    // Validate the server configuration
++    let body: any;
++    try {
++      body = await req.json();
++    } catch {
++      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
++    }
++
+     const serverConfig = McpServerSchema.parse(body);
+-    
+-    // Load existing custom servers
++
+     const customServers = await loadCustomServers();
+-    
+-    // Check for duplicate IDs
+-    const existingServer = customServers.find(s => s.id === serverConfig.id);
+-    if (existingServer) {
++
++    if (customServers.some(s => s.id === serverConfig.id)) {
+       return NextResponse.json(
+         { error: `Server with ID '${serverConfig.id}' already exists` },
+-        { 
+-          status: 409,
+-          headers: {
+-            'Access-Control-Allow-Origin': '*',
+-            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+-            'Access-Control-Allow-Headers': 'Content-Type',
+-          }
+-        }
++        { status: 409 }
+       );
+     }
+-    
+-    // Check for duplicate built-in server IDs
+-    const builtinServer = BUILTIN_SERVERS.find(s => s.id === serverConfig.id);
+-    if (builtinServer) {
++
++    if (BUILTIN_SERVERS.some(s => s.id === serverConfig.id)) {
+       return NextResponse.json(
+         { error: `Cannot use built-in server ID '${serverConfig.id}'` },
+-        { 
+-          status: 409,
+-          headers: {
+-            'Access-Control-Allow-Origin': '*',
+-            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+-            'Access-Control-Allow-Headers': 'Content-Type',
+-          }
+-        }
++        { status: 409 }
+       );
+     }
+-    
+-    // Add timestamps
+-    const newServer: McpServer = {
+-      ...serverConfig,
+-      // Add any server-side defaults
+-    };
+-    
+-    // Save to custom servers
+-    const updatedServers = [...customServers, newServer];
+-    await saveCustomServers(updatedServers);
+-    
+-    console.log(`MCP Servers API: Successfully added server '${newServer.name}'`);
+-    
++
++    const newServer: McpServer = { ...serverConfig };
++
++    await saveCustomServers([...customServers, newServer]);
++
++    console.log('[MCP Servers API] server added', { id: newServer.id });
++
+     return NextResponse.json({
+-      server: newServer,
++      server: toPublicServer(newServer),
+       message: `Server '${newServer.name}' added successfully`,
+-    }, { 
+-      status: 201,
+-      headers: {
+-        'Access-Control-Allow-Origin': '*',
+-        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+-        'Access-Control-Allow-Headers': 'Content-Type',
+-      }
+-    });
++    }, { status: 201 });
+   } catch (error: any) {
+-    console.error('MCP Servers API: Error adding server:', error);
+-    
+     if (error instanceof z.ZodError) {
+       return NextResponse.json(
+         { error: 'Invalid server configuration', details: error.errors },
+-        { 
+-          status: 400,
+-          headers: {
+-            'Access-Control-Allow-Origin': '*',
+-            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+-            'Access-Control-Allow-Headers': 'Content-Type',
+-          }
+-        }
++        { status: 400 }
+       );
+     }
+-    
+-    return NextResponse.json(
+-      { error: 'Failed to add MCP server' },
+-      { 
+-        status: 500,
+-        headers: {
+-          'Access-Control-Allow-Origin': '*',
+-          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+-          'Access-Control-Allow-Headers': 'Content-Type',
+-        }
+-      }
+-    );
+-  }
+-}
+ 
+-// OPTIONS /api/mcp/servers - Handle CORS preflight requests
+-export async function OPTIONS() {
+-  return new NextResponse(null, {
+-    status: 200,
+-    headers: {
+-      'Access-Control-Allow-Origin': '*',
+-      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+-      'Access-Control-Allow-Headers': 'Content-Type',
+-      'Access-Control-Max-Age': '86400',
+-    },
+-  });
++    console.error('[MCP Servers API] failed to add server');
++    return NextResponse.json({ error: 'Failed to add MCP server' }, { status: 500 });
++  }
+ }
+ 
+ // PUT /api/mcp/servers/[id] - Update server (handled by dynamic route)
+ // DELETE /api/mcp/servers/[id] - Delete server (handled by dynamic route)
+-// POST /api/mcp/servers/[id]/test - Test server connection (handled by dynamic route) 
+\ No newline at end of file
++// POST /api/mcp/servers/[id]/test - Test server connection (handled by dynamic route)
+diff --git a/src/lib/admin-route-auth.ts b/src/lib/admin-route-auth.ts
+new file mode 100644
+index 0000000..ba737d3
+--- /dev/null
++++ b/src/lib/admin-route-auth.ts
+@@ -0,0 +1,37 @@
++import { NextResponse } from 'next/server';
++import { getSupabaseAdmin } from '@/lib/supabase';
++import { requireAdminRequest } from '@/lib/admin-session';
++import type { RagAdminDb, RagAdminResult } from '@/lib/rag';
++
++const MESSAGES: Record<401 | 403 | 503, string> = {
++  401: 'Admin authentication required',
++  403: 'Admin access required',
++  503: 'Admin verification is unavailable',
++};
++
++export function adminDenied(status: 401 | 403 | 503): NextResponse {
++  return NextResponse.json(
++    { success: false, error: MESSAGES[status] },
++    { status, headers: { 'Cache-Control': 'no-store' } },
++  );
++}
++
++export async function checkAdmin(request: Request): Promise<RagAdminResult> {
++  let admin: RagAdminDb | null;
++  try {
++    admin = getSupabaseAdmin() as RagAdminDb | null;
++  } catch {
++    return { ok: false, status: 503, reason: 'admin_check_unavailable' };
++  }
++  try {
++    return await requireAdminRequest({ headers: request.headers, signal: request.signal, admin });
++  } catch {
++    return { ok: false, status: 503, reason: 'auth_unavailable' };
++  }
++}
++
++/** Returns a 401/403/503 response when the caller is not a verified admin, or null when the request may proceed. */
++export async function requireAdminOrDeny(request: Request): Promise<NextResponse | null> {
++  const result = await checkAdmin(request);
++  return result.ok ? null : adminDenied(result.status);
++}
+diff --git a/src/lib/config-env-allowlist.ts b/src/lib/config-env-allowlist.ts
+new file mode 100644
+index 0000000..1fc2e87
+--- /dev/null
++++ b/src/lib/config-env-allowlist.ts
+@@ -0,0 +1,276 @@
++export const SECRET_ENV_NAME = /(KEY|SECRET|TOKEN|PASSWORD|PRIVATE|SERVICE_ROLE|DATABASE_URL|WEBHOOK)/i;
++
++const EXTRA_SECRET_ENV_NAMES = new Set(['MCP_ZAPIER_ENDPOINT', 'MCP_CUSTOM_SERVERS']);
++
++export function isSecretEnvName(name: string): boolean {
++  return SECRET_ENV_NAME.test(name) || EXTRA_SECRET_ENV_NAMES.has(name);
++}
++
++/** Names the Config UI writes to .env.local through POST /api/config. Anything else is refused. */
++export const CONFIG_WRITABLE_ENV_NAMES: ReadonlySet<string> = new Set([
++  'ADMIN_EMAIL',
++  'ADMIN_PASSWORD',
++  'CHAT_TITLE_MAX_TOKENS',
++  'CHAT_TITLE_MODEL',
++  'CHAT_TITLE_TEMPERATURE',
++  'CONNECTORS_SHOW_ON_DASHBOARD',
++  'DEBUG_RAG',
++  'ELEVENLABS_API_KEY',
++  'ELEVENLABS_MODEL_ID',
++  'ELEVENLABS_SIMILARITY_BOOST',
++  'ELEVENLABS_SPEAKER_BOOST',
++  'ELEVENLABS_VOICE_ID',
++  'ELEVENLABS_VOICE_SPEED',
++  'ELEVENLABS_VOICE_STABILITY',
++  'EMBED_RATE_LIMIT',
++  'EMBED_REQUIRE_AUTH',
++  'ENABLE_ORGANIZATIONS',
++  'ENABLE_STORAGE_QUOTAS',
++  'ENABLE_TEAM_INVITES',
++  'ENABLE_USAGE_ANALYTICS',
++  'EXA_API_KEY',
++  'FAL_3D_MODEL',
++  'FAL_API_KEY',
++  'FAL_GUIDANCE_SCALE',
++  'FAL_IMAGE_MODEL',
++  'FAL_IMAGE_TO_IMAGE_MODEL',
++  'FAL_INFERENCE_STEPS',
++  'FAL_VIDEO_DURATION',
++  'FAL_VIDEO_FPS',
++  'FAL_VIDEO_IMAGE_FAST_MODEL',
++  'FAL_VIDEO_IMAGE_MODEL',
++  'FAL_VIDEO_MODEL',
++  'FAL_VIDEO_RESOLUTION',
++  'FAL_VIDEO_TEXT_FAST_MODEL',
++  'FAL_VIDEO_TEXT_MODEL',
++  'FIRECRAWL_API_KEY',
++  'FIRECRAWL_ONLY_MAIN_CONTENT',
++  'FIRECRAWL_WAIT_FOR_JS',
++  'FLYIO_API_KEY',
++  'FLYIO_BAILEYS_URL',
++  'GITHUB_CLIENT_SECRET',
++  'GROQ_API_KEY',
++  'IMAGE_GENERATION_PROVIDER',
++  'KOYEB_API_KEY',
++  'KOYEB_BAILEYS_URL',
++  'LANGFUSE_BASE_URL',
++  'LANGFUSE_CAPTURE_CONTENT',
++  'LANGFUSE_ENABLED',
++  'LANGFUSE_PUBLIC_KEY',
++  'LANGFUSE_REVIEW_SAMPLE_RATE',
++  'LANGFUSE_SAMPLE_RATE',
++  'LANGFUSE_SECRET_KEY',
++  'LLAMACLOUD_ADAPTIVE_LONG_TABLE',
++  'LLAMACLOUD_CHUNK_OVERLAP',
++  'LLAMACLOUD_CHUNK_SIZE',
++  'LLAMACLOUD_CHUNK_STRATEGY',
++  'LLAMACLOUD_HIGH_RES_OCR',
++  'LLAMACLOUD_MULTIMODAL_PARSING',
++  'LLAMACLOUD_OUTLINED_TABLE_EXTRACTION',
++  'LLAMACLOUD_OUTPUT_TABLES_AS_HTML',
++  'LLAMACLOUD_PARSE_MODE',
++  'LLAMACLOUD_PARSE_MODEL',
++  'LLAMACLOUD_PARSING_MODE',
++  'LLAMA_CLOUD_API_KEY',
++  'MAX_COMPLETION_TOKENS',
++  'MCP_CUSTOM_SERVERS',
++  'MCP_ZAPIER_ENDPOINT',
++  'MCP_ZAPIER_ENDPOINT_CHAT_ENABLED',
++  'MCP_ZAPIER_ENDPOINT_EMBED_ENABLED',
++  'MYRAG_APP_URL',
++  'MYRAG_DEPLOYMENT_MODE',
++  'NANGO_HOST',
++  'NANGO_MAX_FILES_PER_SYNC',
++  'NANGO_SECRET_KEY',
++  'NANGO_SUPPORTED_FILE_TYPES',
++  'NANGO_SYNC_INTERVAL_HOURS',
++  'NANGO_WEBHOOK_SECRET',
++  'NEXT_PUBLIC_3D_GENERATION_ENABLED',
++  'NEXT_PUBLIC_AI_LOGO_TYPE',
++  'NEXT_PUBLIC_AI_PROVIDER',
++  'NEXT_PUBLIC_AI_RESPONSE_LOGO_BORDER',
++  'NEXT_PUBLIC_AI_RESPONSE_LOGO_SIZE',
++  'NEXT_PUBLIC_AI_RESPONSE_LOGO_URL',
++  'NEXT_PUBLIC_APP_NAME',
++  'NEXT_PUBLIC_AUDIO_AUTOPLAY',
++  'NEXT_PUBLIC_AUTH_ENABLED',
++  'NEXT_PUBLIC_CHAT_BORDER_ANIMATION_SPEED',
++  'NEXT_PUBLIC_CHAT_BORDER_COLOR',
++  'NEXT_PUBLIC_CHAT_BORDER_COLOR_TEXT',
++  'NEXT_PUBLIC_CHAT_BORDER_ENABLED',
++  'NEXT_PUBLIC_CHAT_BORDER_GRADIENT_COLOR_1',
++  'NEXT_PUBLIC_CHAT_BORDER_GRADIENT_COLOR_1_TEXT',
++  'NEXT_PUBLIC_CHAT_BORDER_GRADIENT_COLOR_2',
++  'NEXT_PUBLIC_CHAT_BORDER_GRADIENT_COLOR_2_TEXT',
++  'NEXT_PUBLIC_CHAT_BORDER_GRADIENT_ENABLED',
++  'NEXT_PUBLIC_CHAT_BORDER_LENGTH',
++  'NEXT_PUBLIC_CHAT_BORDER_WIDTH',
++  'NEXT_PUBLIC_CHAT_INPUT_TEXT_SIZE',
++  'NEXT_PUBLIC_CONNECTORS_ENABLED',
++  'NEXT_PUBLIC_CUSTOM_SMTP_ENABLED',
++  'NEXT_PUBLIC_DEFAULT_BACKGROUND_IMAGE',
++  'NEXT_PUBLIC_DEFAULT_LANGUAGE',
++  'NEXT_PUBLIC_DEFAULT_REASONING_EFFORT',
++  'NEXT_PUBLIC_DEFAULT_THEME',
++  'NEXT_PUBLIC_EMBED_ALLOWED_DOMAINS',
++  'NEXT_PUBLIC_EMBED_AUTO_OPEN',
++  'NEXT_PUBLIC_EMBED_ENABLED',
++  'NEXT_PUBLIC_EMBED_GREETING',
++  'NEXT_PUBLIC_EMBED_MODEL',
++  'NEXT_PUBLIC_EMBED_POSITION',
++  'NEXT_PUBLIC_EMBED_PRIMARY_COLOR',
++  'NEXT_PUBLIC_EMBED_SUGGESTIONS',
++  'NEXT_PUBLIC_EMBED_SUGGESTIONS_ENABLED',
++  'NEXT_PUBLIC_EMBED_TITLE',
++  'NEXT_PUBLIC_FAVICON_URL',
++  'NEXT_PUBLIC_FIRECRAWL_ENABLED',
++  'NEXT_PUBLIC_GITHUB_CLIENT_ID',
++  'NEXT_PUBLIC_GROQ_MODELS',
++  'NEXT_PUBLIC_HEADER_LOGO_TEXT',
++  'NEXT_PUBLIC_HEADER_LOGO_TYPE',
++  'NEXT_PUBLIC_HEADER_LOGO_URL',
++  'NEXT_PUBLIC_HIDE_DOCUMENT_DASHBOARD',
++  'NEXT_PUBLIC_IMAGE_GENERATION_ENABLED',
++  'NEXT_PUBLIC_MANUAL_USERNAME',
++  'NEXT_PUBLIC_MAX_REASONING_TOKENS',
++  'NEXT_PUBLIC_MCP_SYSTEM_ENABLED',
++  'NEXT_PUBLIC_MCP_TOOLS_LIST_ENABLED',
++  'NEXT_PUBLIC_MCP_YOLO_MODE_ENABLED',
++  'NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE',
++  'NEXT_PUBLIC_NAME_EXTRACTION_ENABLED',
++  'NEXT_PUBLIC_NAME_EXTRACTION_MODEL',
++  'NEXT_PUBLIC_NANGO_ENABLED',
++  'NEXT_PUBLIC_OPENAI_MODELS',
++  'NEXT_PUBLIC_OPENROUTER_MODELS',
++  'NEXT_PUBLIC_POLAR_CHECKOUT_ENTERPRISE',
++  'NEXT_PUBLIC_POLAR_CHECKOUT_PRO',
++  'NEXT_PUBLIC_POLAR_PRICE_ID_ENTERPRISE',
++  'NEXT_PUBLIC_POLAR_PRICE_ID_PRO',
++  'NEXT_PUBLIC_RAG_CACHE_ENABLED',
++  'NEXT_PUBLIC_RAG_CACHE_TTL',
++  'NEXT_PUBLIC_RAG_ENHANCEMENT_CONFIDENCE_THRESHOLD',
++  'NEXT_PUBLIC_RAG_PERFORMANCE_MODE',
++  'NEXT_PUBLIC_RAG_QUERY_ENHANCEMENT_ENABLED',
++  'NEXT_PUBLIC_RAG_REASONING_ENABLED',
++  'NEXT_PUBLIC_RAG_RERANKING_ENABLED',
++  'NEXT_PUBLIC_RAG_RERANKING_STRATEGY',
++  'NEXT_PUBLIC_READ_ONLY_DOCUMENTS_ENABLED',
++  'NEXT_PUBLIC_REASONING_ENABLED',
++  'NEXT_PUBLIC_SHOW_REASONING_BY_DEFAULT',
++  'NEXT_PUBLIC_SHOW_SOURCES_ENABLED',
++  'NEXT_PUBLIC_SHOW_SUGGESTIONS',
++  'NEXT_PUBLIC_SIDEBAR_BUTTON_TEXT',
++  'NEXT_PUBLIC_SIDEBAR_BUTTON_URL',
++  'NEXT_PUBLIC_SITE_TITLE',
++  'NEXT_PUBLIC_SITE_URL',
++  'NEXT_PUBLIC_SMTP_FROM_EMAIL',
++  'NEXT_PUBLIC_SMTP_FROM_NAME',
++  'NEXT_PUBLIC_STRIPE_PRICE_ID_ENTERPRISE',
++  'NEXT_PUBLIC_STRIPE_PRICE_ID_PRO',
++  'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY',
++  'NEXT_PUBLIC_STT_DISABLED',
++  'NEXT_PUBLIC_SUGGESTION_GROUPS',
++  'NEXT_PUBLIC_SUPABASE_ANON_KEY',
++  'NEXT_PUBLIC_SUPABASE_URL',
++  'NEXT_PUBLIC_TTS_DISABLED',
++  'NEXT_PUBLIC_USE_DEFAULT_AI_LOGO',
++  'NEXT_PUBLIC_VIDEO_GENERATION_ENABLED',
++  'NEXT_PUBLIC_VOICE_PROVIDER',
++  'NEXT_PUBLIC_WEB_SCRAPER_SHOW_ON_DASHBOARD',
++  'NEXT_PUBLIC_WEB_SEARCH_ENABLED',
++  'NEXT_PUBLIC_WELCOME_MESSAGES',
++  'NEXT_PUBLIC_WELCOME_MESSAGES_TRANSLATIONS',
++  'NEXT_PUBLIC_WELCOME_TEXT',
++  'NEXT_PUBLIC_WELCOME_TEXT_GRADIENT',
++  'NEXT_PUBLIC_WELCOME_TEXT_MODE',
++  'NEXT_PUBLIC_WELCOME_TEXT_TRANSLATIONS',
++  'NEXT_PUBLIC_WHATSAPP_ENABLED',
++  'OPENAI_API_KEY',
++  'OPENAI_EMBEDDING_MODEL',
++  'OPENAI_IMAGE_BACKGROUND',
++  'OPENAI_IMAGE_FORMAT',
++  'OPENAI_IMAGE_MODEL',
++  'OPENAI_IMAGE_MODERATION',
++  'OPENAI_IMAGE_QUALITY',
++  'OPENROUTER_API_KEY',
++  'POLAR_ACCESS_TOKEN',
++  'POLAR_ORGANIZATION_ID',
++  'POLAR_ORGANIZATION_SLUG',
++  'POLAR_WEBHOOK_SECRET',
++  'PROMPT_LIVE_PREVIEW',
++  'RAG_ADAPTIVE_RETRIEVAL',
++  'RAG_ADJACENCY_WINDOW',
++  'RAG_ADJACENT_CHUNKS',
++  'RAG_BEHAVIOR_MODE',
++  'RAG_CACHE_ENABLED',
++  'RAG_COMPLETENESS_CONFIDENCE',
++  'RAG_DISABLED_STAGES',
++  'RAG_DIVERSITY_WEIGHT',
++  'RAG_EMBED_TENANT',
++  'RAG_ENABLE_ADJACENT_CHUNKS',
++  'RAG_ENABLE_HYBRID_SEARCH',
++  'RAG_EVAL_ALLOWED_SCOPES',
++  'RAG_EVAL_ENDPOINT_ENABLED',
++  'RAG_EVAL_SECRET',
++  'RAG_EXACT_THRESHOLD',
++  'RAG_EXTRACT_KEY_TERMS',
++  'RAG_FALLBACK_LOWER_THRESHOLD',
++  'RAG_FINAL_RESULT_COUNT',
++  'RAG_FINANCIAL_BOOST',
++  'RAG_FINANCIAL_CONFIDENCE_MIN',
++  'RAG_HIGH_THRESHOLD',
++  'RAG_INITIAL_MATCH_COUNT',
++  'RAG_LOW_THRESHOLD',
++  'RAG_MATCH_MULTIPLIER',
++  'RAG_MAX_KEY_TERMS',
++  'RAG_MAX_RETRIEVAL_PASSES',
++  'RAG_MEDIUM_THRESHOLD',
++  'RAG_MIN_CONFIDENCE',
++  'RAG_MMR_LAMBDA',
++  'RAG_MULTI_PASS',
++  'RAG_PERFORMANCE_MODE',
++  'RAG_PIPELINE',
++  'RAG_POST_CONTEXT',
++  'RAG_PRE_CONTEXT',
++  'RAG_QUERY_ENHANCEMENT',
++  'RAG_RERANKING',
++  'RAG_RERANKING_STRATEGY',
++  'RAG_SEMANTIC_CLASSIFICATION',
++  'RAG_SIDECAR_SECRET',
++  'RAG_SIDECAR_URL',
++  'RAG_SIMILARITY_THRESHOLD',
++  'RAG_STAGE_TIMEOUTS',
++  'RAG_TEMPORAL_BOOST',
++  'RAG_TEMPORAL_CONFIDENCE_MIN',
++  'RAG_TEMPORAL_MATCHING',
++  'RAG_VOICE_TOKEN_SECRET',
++  'RAG_VOICE_TOKEN_TTL_SECONDS',
++  'REASONING_COST_MULTIPLIER',
++  'REPLICATE_3D_MODEL',
++  'REPLICATE_API_TOKEN',
++  'REPLICATE_IMAGE_MODEL',
++  'REPLICATE_VIDEO_MODEL',
++  'RESEND_API_KEY',
++  'STRIPE_SECRET_KEY',
++  'STRIPE_WEBHOOK_SECRET',
++  'SUPABASE_SERVICE_ROLE_KEY',
++  'USE_CUSTOM_TOKEN_LIMIT',
++  'USE_OPENAI_IMAGE',
++  'USE_REPLICATE_PROVIDER',
++  'VIDEO_GENERATION_PROVIDER',
++  'WHATSAPP_DEFAULT_MODEL',
++  'WHATSAPP_ENABLE_MCP',
++  'WHATSAPP_ENABLE_WEB_SEARCH',
++  'WHATSAPP_MAX_SESSIONS_PER_USER',
++  'WHATSAPP_MAX_TOKENS',
++  'WHATSAPP_MESSAGE_QUEUE_SIZE',
++  'WHATSAPP_PROVIDER',
++  'WHATSAPP_WEBHOOK_SECRET',
++  'WHATSAPP_WEBHOOK_URL',
++]);
++
++export const MAX_CONFIG_VALUE_LENGTH = 20000;
++
++export function isWritableEnvName(name: string): boolean {
++  return CONFIG_WRITABLE_ENV_NAMES.has(name);
++}
+diff --git a/src/lib/mcp/server-redact.ts b/src/lib/mcp/server-redact.ts
+new file mode 100644
+index 0000000..2b6f551
+--- /dev/null
++++ b/src/lib/mcp/server-redact.ts
+@@ -0,0 +1,55 @@
++interface RedactableServer {
++  id: string;
++  name: string;
++  description?: string;
++  endpoint?: string;
++  type?: string;
++  enabled?: boolean;
++  authentication?: {
++    type?: string;
++    credentials?: Record<string, string | undefined>;
++  };
++  settings?: Record<string, unknown>;
++}
++
++export interface PublicMcpServer {
++  id: string;
++  name: string;
++  description?: string;
++  type?: string;
++  enabled: boolean;
++  host: string;
++  hasCredentials: boolean;
++  authentication: { type: string };
++  settings?: Record<string, unknown>;
++}
++
++export function hostOf(endpoint: string | undefined): string {
++  if (!endpoint) return '';
++  try {
++    return new URL(endpoint).host;
++  } catch {
++    return '';
++  }
++}
++
++/** Strips full URLs from free text such as upstream error messages; they can carry account secrets. */
++export function redactUrls(text: string): string {
++  return text.replace(/https?:\/\/\S+/gi, '[url]');
++}
++
++/** The shape any MCP server read returns: the host and a credentials flag, never the endpoint path, query or credentials. */
++export function toPublicServer(server: RedactableServer): PublicMcpServer {
++  const credentials = server.authentication?.credentials ?? {};
++  return {
++    id: server.id,
++    name: server.name,
++    ...(server.description !== undefined ? { description: server.description } : {}),
++    ...(server.type !== undefined ? { type: server.type } : {}),
++    enabled: server.enabled !== false,
++    host: hostOf(server.endpoint),
++    hasCredentials: Object.values(credentials).some((value) => typeof value === 'string' && value !== ''),
++    authentication: { type: server.authentication?.type ?? 'none' },
++    ...(server.settings ? { settings: server.settings } : {}),
++  };
++}
+diff --git a/tests/api/config-route.test.ts b/tests/api/config-route.test.ts
+new file mode 100644
+index 0000000..90b111b
+--- /dev/null
++++ b/tests/api/config-route.test.ts
+@@ -0,0 +1,204 @@
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
++import {
++  asAdmin,
++  asPlainUser,
++  makeEnvDir,
++  mockAdminGuard,
++  newGuardState,
++  request,
++  silenceConsole,
++  type AdminGuardState,
++} from '../helpers/admin-guard-fixture';
++
++const ENV_FILE = [
++  'NEXT_PUBLIC_APP_NAME=Demo',
++  'NEXT_PUBLIC_SHOW_SUGGESTIONS=true',
++  'SUPABASE_SERVICE_ROLE_KEY=placeholder-secret-service-role',
++  'OPENAI_API_KEY=placeholder-secret-openai',
++  'STRIPE_WEBHOOK_SECRET=placeholder-secret-webhook',
++  'MCP_ZAPIER_ENDPOINT=https://hooks.example.test/mcp/placeholder-secret-path',
++  'MCP_CUSTOM_SERVERS=[{"endpoint":"https://x.example.test/placeholder-secret-custom"}]',
++  'UNLISTED_INTERNAL_FLAG=visible-only-if-listed',
++  '',
++].join('\n');
++
++let state: AdminGuardState;
++
++async function load() {
++  vi.resetModules();
++  mockAdminGuard(state);
++  return import('@/app/api/config/route');
++}
++
++describe('/api/config', () => {
++  beforeEach(() => {
++    state = newGuardState();
++    silenceConsole();
++  });
++
++  afterEach(() => {
++    vi.restoreAllMocks();
++    vi.doUnmock('@/lib/supabase/server');
++    vi.doUnmock('@/lib/supabase');
++  });
++
++  describe('authentication', () => {
++    it('GET and POST answer 401 without a session and leave the env file alone', async () => {
++      const env = makeEnvDir(ENV_FILE);
++      const route = await load();
++
++      const get = await route.GET(request('/api/config'));
++      const post = await route.POST(request('/api/config', { method: 'POST', body: { config: { NEXT_PUBLIC_APP_NAME: 'x' } } }));
++
++      expect(get.status).toBe(401);
++      expect(post.status).toBe(401);
++      expect(await get.text()).not.toContain('placeholder-secret');
++      expect(env.read()).toBe(ENV_FILE);
++    });
++
++    it('GET and POST answer 403 for a signed-in non-admin', async () => {
++      const env = makeEnvDir(ENV_FILE);
++      asPlainUser(state);
++      const route = await load();
++
++      const get = await route.GET(request('/api/config'));
++      const post = await route.POST(request('/api/config', { method: 'POST', body: { config: { NEXT_PUBLIC_APP_NAME: 'x' } } }));
++
++      expect(get.status).toBe(403);
++      expect(post.status).toBe(403);
++      expect(env.read()).toBe(ENV_FILE);
++    });
++
++    it('a throwing auth lookup answers 503 on GET and POST, never 200', async () => {
++      const env = makeEnvDir(ENV_FILE);
++      state.authThrows = true;
++      const route = await load();
++
++      const get = await route.GET(request('/api/config'));
++      const post = await route.POST(request('/api/config', { method: 'POST', body: { config: { NEXT_PUBLIC_APP_NAME: 'x' } } }));
++
++      expect(get.status).toBe(503);
++      expect(post.status).toBe(503);
++      expect(await get.text()).not.toContain('placeholder-secret');
++      expect(env.read()).toBe(ENV_FILE);
++    });
++
++    it('a failing admin_users lookup answers 503', async () => {
++      makeEnvDir(ENV_FILE);
++      asAdmin(state);
++      state.lookupFails = true;
++      const route = await load();
++
++      expect((await route.GET(request('/api/config'))).status).toBe(503);
++    });
++  });
++
++  describe('GET as an admin', () => {
++    it('never returns a value whose name looks like a secret', async () => {
++      makeEnvDir(ENV_FILE);
++      asAdmin(state);
++      const route = await load();
++
++      const response = await route.GET(request('/api/config'));
++      const text = await response.text();
++      const body = JSON.parse(text);
++
++      expect(response.status).toBe(200);
++      expect(text).not.toContain('placeholder-secret');
++      expect(body.config.NEXT_PUBLIC_APP_NAME).toBe('Demo');
++      expect(body.config.SUPABASE_SERVICE_ROLE_KEY).toBeUndefined();
++      expect(body.config.OPENAI_API_KEY).toBeUndefined();
++      expect(body.secrets.SUPABASE_SERVICE_ROLE_KEY).toEqual({ set: true });
++      expect(body.secrets.OPENAI_API_KEY).toEqual({ set: true });
++      expect(body.secrets.MCP_ZAPIER_ENDPOINT).toEqual({ set: true });
++    });
++
++    it('only returns names the Config UI can write back', async () => {
++      makeEnvDir(ENV_FILE);
++      asAdmin(state);
++      const route = await load();
++
++      const body = await (await route.GET(request('/api/config'))).json();
++
++      expect(body.config.UNLISTED_INTERNAL_FLAG).toBeUndefined();
++    });
++  });
++
++  describe('POST as an admin', () => {
++    it('writes allowlisted names and leaves the other lines alone', async () => {
++      const env = makeEnvDir(ENV_FILE);
++      asAdmin(state);
++      const route = await load();
++
++      const response = await route.POST(
++        request('/api/config', {
++          method: 'POST',
++          body: { config: { NEXT_PUBLIC_APP_NAME: 'Renamed', NEXT_PUBLIC_WEB_SEARCH_ENABLED: true } },
++        }),
++      );
++
++      expect(response.status).toBe(200);
++      const written = env.read();
++      expect(written).toContain('NEXT_PUBLIC_APP_NAME=Renamed');
++      expect(written).toContain('NEXT_PUBLIC_WEB_SEARCH_ENABLED=true');
++      expect(written).toContain('OPENAI_API_KEY=placeholder-secret-openai');
++    });
++
++    it('a name outside the allowlist answers 400 and leaves the env file unchanged', async () => {
++      const env = makeEnvDir(ENV_FILE);
++      asAdmin(state);
++      const route = await load();
++
++      const response = await route.POST(
++        request('/api/config', { method: 'POST', body: { config: { NODE_OPTIONS: '--require /tmp/x.js' } } }),
++      );
++
++      expect(response.status).toBe(400);
++      expect((await response.json()).rejected).toEqual(['NODE_OPTIONS']);
++      expect(env.read()).toBe(ENV_FILE);
++    });
++
++    it('one bad name rejects the whole request, so no allowlisted name is written', async () => {
++      const env = makeEnvDir(ENV_FILE);
++      asAdmin(state);
++      const route = await load();
++
++      const response = await route.POST(
++        request('/api/config', {
++          method: 'POST',
++          body: { config: { NEXT_PUBLIC_APP_NAME: 'Renamed', LD_PRELOAD: '/tmp/x.so' } },
++        }),
++      );
++
++      expect(response.status).toBe(400);
++      expect(env.read()).toBe(ENV_FILE);
++    });
++
++    it('a value with a line break cannot smuggle a second variable', async () => {
++      const env = makeEnvDir(ENV_FILE);
++      asAdmin(state);
++      const route = await load();
++
++      const response = await route.POST(
++        request('/api/config', {
++          method: 'POST',
++          body: { config: { NEXT_PUBLIC_APP_NAME: 'Demo\nNODE_OPTIONS=--inspect' } },
++        }),
++      );
++
++      expect(response.status).toBe(400);
++      expect(env.read()).toBe(ENV_FILE);
++    });
++
++    it('a body without a config object answers 400', async () => {
++      const env = makeEnvDir(ENV_FILE);
++      asAdmin(state);
++      const route = await load();
++
++      const flat = await route.POST(request('/api/config', { method: 'POST', body: { NEXT_PUBLIC_APP_NAME: 'x' } }));
++
++      expect(flat.status).toBe(400);
++      expect(env.read()).toBe(ENV_FILE);
++    });
++  });
++});
+diff --git a/tests/helpers/admin-guard-fixture.ts b/tests/helpers/admin-guard-fixture.ts
+new file mode 100644
+index 0000000..d5ce34b
+--- /dev/null
++++ b/tests/helpers/admin-guard-fixture.ts
+@@ -0,0 +1,90 @@
++import fs from 'node:fs';
++import os from 'node:os';
++import path from 'node:path';
++import { NextRequest } from 'next/server';
++import { vi } from 'vitest';
++
++export const ADMIN_ID = '00000000-0000-4000-8000-0000000000a1';
++export const USER_ID = '00000000-0000-4000-8000-0000000000b1';
++
++export interface AdminGuardState {
++  session: { id: string } | null;
++  authThrows: boolean;
++  lookupFails: boolean;
++  admins: string[];
++}
++
++export function newGuardState(): AdminGuardState {
++  return { session: null, authThrows: false, lookupFails: false, admins: [ADMIN_ID] };
++}
++
++function fakeAdminClient(state: AdminGuardState) {
++  return {
++    auth: { getUser: async () => ({ data: { user: null }, error: { message: 'invalid' } }) },
++    from() {
++      const filters: Record<string, unknown> = {};
++      const builder = {
++        select: () => builder,
++        abortSignal: () => builder,
++        eq(column: string, value: unknown) {
++          filters[column] = value;
++          return builder;
++        },
++        maybeSingle() {
++          if (state.lookupFails) return Promise.resolve({ data: null, error: { message: 'down' } });
++          const hit = state.admins.includes(filters.id as string);
++          return Promise.resolve({ data: hit ? { id: filters.id } : null, error: null });
++        },
++      };
++      return builder;
++    },
++  };
++}
++
++/** Mocks the cookie session and the admin_users lookup. Call after vi.resetModules() and before importing a route. */
++export function mockAdminGuard(state: AdminGuardState) {
++  vi.doMock('@/lib/supabase/server', () => ({
++    createClient: async () => ({
++      auth: {
++        getUser: async () => {
++          if (state.authThrows) throw new Error('auth down');
++          return { data: { user: state.session } };
++        },
++      },
++    }),
++  }));
++  vi.doMock('@/lib/supabase', () => ({
++    getSupabaseAdmin: () => fakeAdminClient(state),
++    getSupabase: () => ({}),
++  }));
++}
++
++export function asAdmin(state: AdminGuardState) {
++  state.session = { id: ADMIN_ID };
++}
++
++export function asPlainUser(state: AdminGuardState) {
++  state.session = { id: USER_ID };
++}
++
++export function makeEnvDir(content: string): { dir: string; envPath: string; read: () => string } {
++  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'myrag-admin-routes-'));
++  const envPath = path.join(dir, '.env.local');
++  fs.writeFileSync(envPath, content);
++  vi.spyOn(process, 'cwd').mockReturnValue(dir);
++  return { dir, envPath, read: () => fs.readFileSync(envPath, 'utf8') };
++}
++
++export function request(url: string, init: { method?: string; body?: unknown; headers?: Record<string, string> } = {}) {
++  return new NextRequest(`http://localhost${url}`, {
++    method: init.method ?? 'GET',
++    headers: { 'content-type': 'application/json', ...(init.headers ?? {}) },
++    ...(init.body !== undefined ? { body: JSON.stringify(init.body) } : {}),
++  });
++}
++
++export function silenceConsole() {
++  vi.spyOn(console, 'warn').mockImplementation(() => {});
++  vi.spyOn(console, 'error').mockImplementation(() => {});
++  vi.spyOn(console, 'log').mockImplementation(() => {});
++}
