@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import { z } from 'zod/v3';
+import { requireAdminOrDeny } from '@/lib/admin-route-auth';
+import { redactUrls } from '@/lib/mcp/server-redact';
+import { toPublicServer } from '@/lib/mcp/server-redact';
 
 // Re-use the same schema from the main route
 const McpServerSchema = z.object({
@@ -167,7 +170,7 @@ async function testServerConnection(server: McpServer): Promise<{ success: boole
   } catch (error: any) {
     return {
       success: false,
-      message: error.name === 'AbortError' ? 'Connection timeout' : `Connection failed: ${error.message}`,
+      message: error.name === 'AbortError' ? 'Connection timeout' : `Connection failed: ${redactUrls(String(error.message))}`,
     };
   }
 }
@@ -225,7 +228,7 @@ async function discoverTools(server: McpServer): Promise<{ success: boolean; too
           return {
             success: true,
             tools,
-            message: `Discovered ${tools.length} tools from ${url}`,
+            message: `Discovered ${tools.length} tools`,
           };
         }
       } catch (endpointError) {
@@ -242,206 +245,190 @@ async function discoverTools(server: McpServer): Promise<{ success: boolean; too
   } catch (error: any) {
     return {
       success: false,
-      message: error.name === 'AbortError' ? 'Tool discovery timeout' : `Tool discovery failed: ${error.message}`,
+      message: error.name === 'AbortError' ? 'Tool discovery timeout' : `Tool discovery failed: ${redactUrls(String(error.message))}`,
     };
   }
 }
 
-// GET /api/mcp/servers/[id] - Get specific server
-export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+type RouteContext = { params: Promise<{ id: string }> };
+
+const CREDENTIAL_FIELDS = ['token', 'apiKey', 'username', 'password'] as const;
+
+// A blank or missing endpoint or credential in an update keeps the stored value; reads never return them.
+function mergeWithStored(body: any, stored: McpServer): any {
+  if (!body || typeof body !== 'object') return body;
+  const merged = { ...body };
+  if (typeof merged.endpoint !== 'string' || merged.endpoint.trim() === '') {
+    merged.endpoint = stored.endpoint;
+  }
+  const authType = merged.authentication?.type ?? 'none';
+  if (authType !== 'none' && authType === (stored.authentication?.type ?? 'none')) {
+    const incoming = merged.authentication?.credentials ?? {};
+    const kept = { ...incoming };
+    for (const field of CREDENTIAL_FIELDS) {
+      if (!kept[field] && stored.authentication?.credentials?.[field]) {
+        kept[field] = stored.authentication.credentials[field];
+      }
+    }
+    merged.authentication = { ...merged.authentication, credentials: kept };
+  }
+  return merged;
+}
+
+// GET /api/mcp/servers/[id] - Get specific server (admin only; endpoint and credentials are never returned)
+export async function GET(req: NextRequest, { params }: RouteContext) {
+  const denied = await requireAdminOrDeny(req);
+  if (denied) return denied;
+
   const { id } = await params;
   try {
-    console.log(`MCP Server API: Fetching server with ID: ${id}`);
-    
     const customServers = await loadCustomServers();
     const server = customServers.find(s => s.id === id);
-    
+
     if (!server) {
       return NextResponse.json(
         { error: `Server with ID '${id}' not found` },
         { status: 404 }
       );
     }
-    
-    return NextResponse.json({ server }, {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
-      }
-    });
-  } catch (error) {
-    console.error(`MCP Server API: Error fetching server ${id}:`, error);
-    return NextResponse.json(
-      { error: 'Failed to fetch MCP server' },
-      { status: 500 }
-    );
+
+    return NextResponse.json({ server: toPublicServer(server) }, { headers: { 'Cache-Control': 'no-store' } });
+  } catch {
+    console.error('[MCP Server API] failed to fetch server', { id });
+    return NextResponse.json({ error: 'Failed to fetch MCP server' }, { status: 500 });
   }
 }
 
-// PUT /api/mcp/servers/[id] - Update server
-export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+// PUT /api/mcp/servers/[id] - Update server (admin only)
+export async function PUT(req: NextRequest, { params }: RouteContext) {
+  const denied = await requireAdminOrDeny(req);
+  if (denied) return denied;
+
   const { id } = await params;
   try {
-    const body = await req.json();
-    console.log(`MCP Server API: Updating server with ID: ${id}`);
-    
-    // Validate the server configuration
-    const serverConfig = McpServerSchema.parse(body);
-    
-    // Ensure the ID matches
+    let body: any;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    }
+
+    const customServers = await loadCustomServers();
+    const serverIndex = customServers.findIndex(s => s.id === id);
+
+    if (serverIndex === -1) {
+      return NextResponse.json(
+        { error: `Server with ID '${id}' not found` },
+        { status: 404 }
+      );
+    }
+
+    const serverConfig = McpServerSchema.parse(mergeWithStored(body, customServers[serverIndex]));
+
     if (serverConfig.id !== id) {
       return NextResponse.json(
         { error: 'Server ID in URL does not match server ID in body' },
         { status: 400 }
       );
     }
-    
-    // Load existing custom servers
-    const customServers = await loadCustomServers();
-    const serverIndex = customServers.findIndex(s => s.id === id);
-    
-    if (serverIndex === -1) {
-      return NextResponse.json(
-        { error: `Server with ID '${id}' not found` },
-        { status: 404 }
-      );
-    }
-    
-    // Update the server
+
     customServers[serverIndex] = serverConfig;
     await saveCustomServers(customServers);
-    
-    console.log(`MCP Server API: Successfully updated server '${serverConfig.name}'`);
-    
+
+    console.log('[MCP Server API] server updated', { id });
+
     return NextResponse.json({
-      server: serverConfig,
+      server: toPublicServer(serverConfig),
       message: `Server '${serverConfig.name}' updated successfully`,
-    }, {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
-      }
     });
   } catch (error: any) {
-    console.error(`MCP Server API: Error updating server ${id}:`, error);
-    
     if (error instanceof z.ZodError) {
       return NextResponse.json(
         { error: 'Invalid server configuration', details: error.errors },
         { status: 400 }
       );
     }
-    
-    return NextResponse.json(
-      { error: 'Failed to update MCP server' },
-      { status: 500 }
-    );
+
+    console.error('[MCP Server API] failed to update server', { id });
+    return NextResponse.json({ error: 'Failed to update MCP server' }, { status: 500 });
   }
 }
 
-// DELETE /api/mcp/servers/[id] - Delete server
-export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+// DELETE /api/mcp/servers/[id] - Delete server (admin only)
+export async function DELETE(req: NextRequest, { params }: RouteContext) {
+  const denied = await requireAdminOrDeny(req);
+  if (denied) return denied;
+
   const { id } = await params;
   try {
-    console.log(`MCP Server API: Deleting server with ID: ${id}`);
-    
-    // Built-in servers cannot be deleted
     if (id === 'zapier') {
       return NextResponse.json(
         { error: 'Built-in servers cannot be deleted' },
         { status: 400 }
       );
     }
-    
-    // Load existing custom servers
+
     const customServers = await loadCustomServers();
     const serverIndex = customServers.findIndex(s => s.id === id);
-    
+
     if (serverIndex === -1) {
       return NextResponse.json(
         { error: `Server with ID '${id}' not found` },
         { status: 404 }
       );
     }
-    
-    // Remove the server
+
     const deletedServer = customServers.splice(serverIndex, 1)[0];
     await saveCustomServers(customServers);
-    
-    console.log(`MCP Server API: Successfully deleted server '${deletedServer.name}'`);
-    
+
+    console.log('[MCP Server API] server deleted', { id });
+
     return NextResponse.json({
       message: `Server '${deletedServer.name}' deleted successfully`,
-    }, {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
-      }
     });
-  } catch (error) {
-    console.error(`MCP Server API: Error deleting server ${id}:`, error);
-    return NextResponse.json(
-      { error: 'Failed to delete MCP server' },
-      { status: 500 }
-    );
+  } catch {
+    console.error('[MCP Server API] failed to delete server', { id });
+    return NextResponse.json({ error: 'Failed to delete MCP server' }, { status: 500 });
   }
 }
 
-// POST /api/mcp/servers/[id]/test - Test server connection
-export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+// POST /api/mcp/servers/[id] - Test connection or discover tools for a stored server (admin only)
+export async function POST(req: NextRequest, { params }: RouteContext) {
+  const denied = await requireAdminOrDeny(req);
+  if (denied) return denied;
+
   const { id } = await params;
   try {
-    const body = await req.json();
-    const { action } = body;
-    
-    console.log(`MCP Server API: ${action} for server with ID: ${id}`);
-    
-    // Load the server configuration
+    let body: any;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    }
+    const action = body?.action;
+
     const customServers = await loadCustomServers();
     const server = customServers.find(s => s.id === id);
-    
+
     if (!server) {
       return NextResponse.json(
         { error: `Server with ID '${id}' not found` },
         { status: 404 }
       );
     }
-    
+
     if (action === 'test') {
-      // Test connection
-      const result = await testServerConnection(server);
-      return NextResponse.json(result);
+      return NextResponse.json(await testServerConnection(server));
     } else if (action === 'discover') {
-      // Discover tools
-      const result = await discoverTools(server);
-      return NextResponse.json(result);
+      return NextResponse.json(await discoverTools(server));
     } else {
       return NextResponse.json(
         { error: 'Invalid action. Supported actions: test, discover' },
         { status: 400 }
       );
     }
-  } catch (error) {
-    console.error(`MCP Server API: Error in action for server ${id}:`, error);
-    return NextResponse.json(
-      { error: 'Failed to perform server action' },
-      { status: 500 }
-    );
+  } catch {
+    console.error('[MCP Server API] server action failed', { id });
+    return NextResponse.json({ error: 'Failed to perform server action' }, { status: 500 });
   }
 }
-
-// OPTIONS /api/mcp/servers/[id] - Handle CORS preflight requests
-export async function OPTIONS() {
-  return new NextResponse(null, {
-    status: 200,
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
-      'Access-Control-Max-Age': '86400',
-    },
-  });
-} 

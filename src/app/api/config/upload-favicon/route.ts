@@ -3,9 +3,13 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import { writeFile } from 'fs/promises';
 import { updateEnvFile } from '@/lib/env-utils';
+import { requireAdminOrDeny } from '@/lib/admin-route-auth';
 
 // This route is used by the config UI to upload favicon files
 export async function POST(request: NextRequest) {
+  const denied = await requireAdminOrDeny(request);
+  if (denied) return denied;
+
   try {
     const formData = await request.formData();
     const faviconFile = formData.get('favicon') as File;

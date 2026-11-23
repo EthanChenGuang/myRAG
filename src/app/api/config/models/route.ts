@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { env } from '@/lib/env';
+import { requireAdminOrDeny } from '@/lib/admin-route-auth';
 import fs from 'fs';
 import path from 'path';
 
@@ -199,10 +200,10 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  try {
-    // Skip admin authorization for config UI access
-    // The config UI itself requires admin access, so we can trust requests from it
+  const denied = await requireAdminOrDeny(request);
+  if (denied) return denied;
 
+  try {
     const body = await request.json();
     const { provider, openaiModels, openrouterModels, groqModels } = body as ModelConfig;
 
