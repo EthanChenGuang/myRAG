@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { getQueryEmbedding } from '@/lib/document-processor';
+import { embedText } from '@/lib/rag';
 import { v4 as uuidv4 } from 'uuid';
 import { env } from '@/lib/env';
 import OpenAI from 'openai';
@@ -140,7 +140,7 @@ async function storeAIResponseAsDocument(
 
       try {
         const embeddingResults = await Promise.allSettled(
-          batch.map(chunk => getQueryEmbedding(chunk))
+          batch.map(chunk => embedText(chunk, { signal: new AbortController().signal }))
         );
 
         const chunkInserts = embeddingResults
