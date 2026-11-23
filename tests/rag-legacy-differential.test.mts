@@ -1,0 +1,127 @@
+import { after, before, describe, test } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createFixtureDatabase, type FixtureDatabase } from '../eval/harness/pglite-supabase.mts';
+import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from '../eval/harness/fake-edge.mts';
+
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const REAL_CORPUS = path.join(REPO_ROOT, 'eval/fixtures/corpus');
+const GOLDEN = path.join(REPO_ROOT, 'eval/fixtures/golden.jsonl');
+
+const questions: string[] = fs
+  .readFileSync(GOLDEN, 'utf8')
+  .split('\n')
+  .filter((line) => line.trim() !== '')
+  .map((line) => (JSON.parse(line) as { question: string }).question);
+
+const OPTIONS = {
+  maxResults: 25,
+  enableTemporalBoost: true,
+  enableFinancialBoost: true,
+  requireTemporalMatch: false,
+  fallbackToLowerThreshold: true,
+};
+
+describe('runRetrieval through the re-homed legacy search equals enhancedRetrieveChunks', () => {
+  let fixture: FixtureDatabase;
+  let edge: FakeEdge;
+  let legacy: typeof import('@/lib/enhanced-rag-retrieval');
+  let rag: typeof import('@/lib/rag');
+  let scopeModule: typeof import('@/lib/rag/tenant/scope');
+  let deps: typeof import('@/lib/rag/deps');
+
+  before(async () => {
+    fixture = await createFixtureDatabase({ deploymentMode: 'single-tenant', corpusDir: REAL_CORPUS });
+    edge = await startFakeEdge({ db: fixture.db });
+    Object.assign(process.env, fixtureProcessEnv(edge.url));
+    process.env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE = 'single-tenant';
+    legacy = await import('@/lib/enhanced-rag-retrieval');
+    rag = await import('@/lib/rag');
+    scopeModule = await import('@/lib/rag/tenant/scope');
+    deps = await import('@/lib/rag/deps');
+  });
+
+  after(async () => {
+    deps?.resetRagDepsForTests();
+    await edge?.close();
+    await fixture?.db.close();
+  });
+
+  test('the golden set has 72 questions', () => {
+    assert.equal(questions.length, 72);
+  });
+
+  test('all 72 fixture questions return deep-equal candidates and query context', async () => {
+    const scope = scopeModule.mintScope('single', null, null);
+    let equal = 0;
+    let withCandidates = 0;
+    for (const question of questions) {
+      const old = await legacy.enhancedRetrieveChunks(question, OPTIONS);
+      const fresh = await rag.runRetrieval({
+        scope,
+        query: question,
+        profile: 'eval',
+        options: { maxResults: 25, fallbackToLowerThreshold: true },
+        signal: new AbortController().signal,
+      });
+      assert.deepStrictEqual(fresh.candidates, old.chunks, `candidates differ for: ${question}`);
+      assert.deepStrictEqual(fresh.queryContext, old.queryContext, `query context differs for: ${question}`);
+      assert.equal(fresh.status, old.chunks.length > 0 ? 'ok' : 'empty', `status for: ${question}`);
+      equal += 1;
+      if (old.chunks.length > 0) withCandidates += 1;
+    }
+    assert.equal(equal, 72);
+    assert.ok(withCandidates >= 36, `only ${withCandidates} questions returned candidates`);
+    assert.deepEqual(edge.errors, []);
+  });
+
+  test('a null scope returns empty/no_tenant without running a stage', async () => {
+    const before = edge.calls.length;
+    const result = await rag.runRetrieval({ scope: null, query: questions[0], profile: 'eval', signal: new AbortController().signal });
+    assert.equal(result.status, 'empty');
+    assert.equal(result.reason, 'no_tenant');
+    assert.deepEqual(result.stages, []);
+    assert.equal(edge.calls.length, before);
+  });
+
+  test('an RPC error is status error, not an empty result', async () => {
+    const failing = {
+      rpc: () => {
+        const request = {
+          abortSignal: () => request,
+          then: (resolve: (value: unknown) => unknown) => Promise.resolve({ data: null, error: { message: 'boom', code: 'XX000' } }).then(resolve),
+        };
+        return request;
+      },
+    };
+    deps.setRagDepsForTests({ anonClient: () => failing as never });
+    try {
+      const result = await rag.runRetrieval({
+        scope: scopeModule.mintScope('single', null, null),
+        query: questions[0],
+        profile: 'eval',
+        signal: new AbortController().signal,
+      });
+      assert.equal(result.status, 'error');
+      assert.equal(result.reason, 'backend_error');
+      assert.deepEqual(result.candidates, []);
+    } finally {
+      deps.resetRagDepsForTests();
+    }
+  });
+
+  test('an aborted signal is reported as aborted', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const result = await rag.runRetrieval({
+      scope: scopeModule.mintScope('single', null, null),
+      query: questions[0],
+      profile: 'eval',
+      signal: controller.signal,
+    });
+    assert.equal(result.status, 'error');
+    assert.equal(result.reason, 'aborted');
+  });
+});
