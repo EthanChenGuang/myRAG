@@ -28,17 +28,33 @@ PyMuPDF is not used. It is AGPL-3.0, while pypdfium2 is Apache/BSD.
 
 Reducto stays out of scope (REQUIREMENTS "Out of Scope").
 
-## Preflight probe (sidecar, pypdfium2, target < 1 s for 100 pages)
+## Preflight probe: per page, three detection layers (sidecar)
 
-- **Measured per file:**
-  - page count
-  - encryption
-  - share of pages with a text layer
-  - characters per page
-  - image area ratio
-  - table hints: ruling lines, aligned number columns
-  - multi-column hint
-- **Output:** a document class (`text_pdf`, `tables`, `layout`, `scanned`, `mixed`) and a proposed tier. The document-type profile (DATA-04) can raise the proposal with `min_tier` and cap it with `max_tier`. For example, `invoice` has a minimum of `structured`, and `scanned/image` has a minimum of `structured`.
+Routing is decided **per page**, not per file. A 100-page report with tables on 3 pages sends only those 3 pages to `structured`; the other 97 go to `fast`.
+
+| Layer | Method | Cost | Detects | Runs when |
+|---|---|---|---|---|
+| L1 rules | pypdfium2 (text layer, chars, image boxes) + pdfplumber (ruling lines, `find_tables`, word boxes) | a few ms/page, free | scanned, garbled, figures, ruled tables, multi-column | every page |
+| L2 layout model | Docling layout model on that page only | ~0.1–1 s/page, local | borderless tables, tables inside scans, formulas, charts | only pages L1 marks `uncertain` |
+| L3 VLM | page image to a vision model, structured (Pydantic) answer | slowest, paid | very complex pages L1 and L2 disagree on | `RAG_PARSE_VLM_DETECT=true` (default off); counts as cloud, so blocked by `RAG_PARSER_ALLOW_CLOUD=false` and charged to the budget |
+
+**L1 signals per page:**
+- `scanned`: fewer than 30 characters and images cover more than 50% of the page
+- `garbled`: U+FFFD, private-use or mojibake share above 5%
+- `has_figure`: images cover more than 5% (ignores small icons) and the page is not scanned
+- `tables`: pdfplumber ruled-table count, plus an aligned-number-columns hint
+- `multi_col`: text blocks over 20 characters sit wholly in both the left and right halves
+- `uncertain`: aligned number columns without ruling lines, images between 5% and 50% with some text, or scanned pages (a table inside a scan is invisible to rules)
+
+**Page tier:** scanned or garbled → `structured` with OCR (or `premium` if the profile's `min_tier` says so); tables or figure → `structured`; multi-column only → `structured` with the layout model but without TableFormer; otherwise → `fast`. Text formats skip this and use `native`.
+
+**Assembly:** consecutive pages with the same tier are parsed as one page range (Docling `page_range`), and the parts are merged back in page order into one document before chunking, so page numbers, headings and cross-page tables stay intact. A table that spans a tier boundary pulls its neighbour page into the higher tier.
+
+**Per-file output, for the ledger and the report:** page count, encryption, per-page signals and tiers, a document class (`text_pdf`, `tables`, `layout`, `scanned`, `mixed`) and the page share per tier. The document-type profile (DATA-04) still applies: `min_tier` raises every page, `max_tier` caps every page. For example, `invoice` has a minimum of `structured`.
+
+**Libraries:** pypdfium2 (Apache-2.0/BSD-3) and pdfplumber (MIT). PyMuPDF, whose `find_tables` does the same L1 job, is AGPL-3.0 and is not used.
+
+**Target:** L1 under 1 s for 100 pages.
 
 ## Quality check and escalation
 
@@ -53,7 +69,9 @@ A parse result fails the check when any of these holds:
 
 On failure the document is escalated one tier, at most twice, and never above `max_tier` or past a hard constraint. When escalation is blocked, the best result is kept and the document is marked `needs_review`.
 
-Every attempt is recorded in the ledger as `{tier, parser, parser_version, reason, ms, pages, est_cost}`.
+Escalation is per page range: only the ranges that fail are re-parsed one tier up.
+
+Every attempt is recorded in the ledger as `{tier, parser, parser_version, pages, reason, ms, est_cost}`.
 
 ## Hard constraints and budget
 
@@ -182,5 +200,5 @@ Each document gets a Langfuse ingestion trace, following the OBS-01 conventions.
 | LlamaIndex `IngestionPipeline` docstore | Duplicates the ledger and DATA-06/07, which live in Postgres. The main app is TypeScript. |
 | Redis + Celery/RQ, SQS | New infrastructure for about 50 documents a day. A Postgres table queue is enough and is testable in PGlite. |
 | LlamaIndex `RayIngestionPipeline` | Ray Data is offered directly as the optional `--runner ray` (DATA-16) on our own stage functions; LlamaIndex's pipeline is not used. |
-| PyMuPDF | AGPL-3.0 |
+| PyMuPDF | AGPL-3.0; pypdfium2 + pdfplumber cover the same L1 checks |
 | Reducto | Out of scope by user decision |
