@@ -127,7 +127,9 @@ All requirements are written so they can be checked. "Behind a switch" means an 
 
 ### Cross-language & Cache (XLG, CACHE)
 
-- [ ] **XLG-01**: The query language and the tenant knowledge base's dominant language (from the DATA-02 `language` field) are detected; when they differ, the query is translated into the knowledge-base language, original and translated queries are retrieved in parallel and fused with RRF, and the answer is written in the asker's language; supported under both query frameworks (former RQ-04)
+- [ ] **XLG-01**: The query language (script ratio plus zh/en/it stopword scores, mixed-language queries classified by dominant script) and the languages of the tenant knowledge base (share per language from the DATA-02 `language` field) are detected; when the query language is not a knowledge-base language above a 20% share, the query is translated by a small fast model into up to two knowledge-base languages, keeping protected tokens verbatim (rewrite-gate R7/R8); original and translated queries are retrieved in parallel and fused with RRF; the answer is written in the asker's language while cited quotes stay in the source language; translation has its own switch, timeout and budget, and can be turned off per embedding profile when the eval shows the multilingual embedding alone is enough; supported under both query frameworks (former RQ-04)
+- [ ] **XLG-02**: The fixture golden set gains a `cross_lingual` category: questions in English and Italian about Chinese documents, in Chinese and Italian about English documents, and in Chinese and English about Italian documents (at least 4 per direction pair, with span gold evidence in the source document); the slice is scored under today's configuration (`RAG_PIPELINE=legacy`) to record its baseline, reported per query-language/document-language pair, and gated like the language slices from then on
+- [ ] **XLG-03**: Cross-language paths work end to end beyond the embedding: the lexical (BM25) path and the local BM25 reranker use the translated query when the query and document languages differ, the hosted rerankers are multilingual models, and the RNK-05 refusal threshold is calibrated on a cross-lingual slice too so cross-language questions are not falsely refused
 - [ ] **CACHE-01**: A semantic answer cache as locked in `.planning/specs/semantic-cache.md`: default backend is a pgvector table in Supabase with a RedisVL-style `check`/`store` contract, RedisVL `SemanticCache` in the sidecar is the optional backend (`RAG_SEMANTIC_CACHE=off|pgvector|redisvl`, default off); keys are scoped by `TenantScope`, answer language, RAG mode, generator model, retrieval-config hash and query framework, and use the condensed standalone query; a strict distance threshold calibrated on the dev split; questions with protected tokens (exact codes, amounts, quotes), personal data, relative time, webSearch/MCP/images or an unreliable groundedness status bypass the cache; TTL plus invalidation on any document insert, replace or delete in the tenant; a `semantic_cache` Langfuse span; `cache_paraphrase` and `cache_near_miss` golden pairs with the near-miss wrong-hit rate gated at 0; cross-tenant cache leakage is part of the RET-08 canary suite
 
 ## v2 Requirements
@@ -257,10 +259,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | LAT-03 | Phase 6 | Pending |
 | XLG-01 | Phase 6 | Pending |
 | CACHE-01 | Phase 6 | Pending |
+| XLG-02 | Phase 3 | Pending |
+| XLG-03 | Phase 4 | Pending |
 
 **Coverage:**
-- v1 requirements: 84 total
-- Mapped to phases: 84
+- v1 requirements: 86 total
+- Mapped to phases: 86
 - Unmapped: 0 ✓
 
 **Mapping notes:**
