@@ -104,11 +104,11 @@ Plans:
 **Wave 2** *(blocked on Wave 1 completion)*
 - [x] 02-02-PLAN.md — Node.js 22 enforced: engines ^22.12.0, .nvmrc, voice-agent image, CI check, docs (wave 2)
 - [x] 02-04-PLAN.md — Per-item baseline rows and rag_eval.paired; baseline re-recorded from pre-pipeline code (wave 2)
-- [ ] 02-06-PLAN.md — Embed, voice and chat characterization snapshots; frozen chat assembly oracle (wave 2)
-- [ ] 02-30-PLAN.md — Type fixes: MCP approve route and src/lib/mcp (wave 2)
-- [ ] 02-31-PLAN.md — Type fixes: WhatsApp clients, routes and components (wave 2)
-- [ ] 02-32-PLAN.md — Type fixes: embed window on the current useChat API, page/hook fixes (wave 2)
-- [ ] 02-35-PLAN.md — Type fixes: remaining lib/API files and async params in dynamic routes (wave 2)
+- [x] 02-06-PLAN.md — Embed, voice and chat characterization snapshots; frozen chat assembly oracle (wave 2)
+- [x] 02-30-PLAN.md — Type fixes: MCP approve route and src/lib/mcp (wave 2)
+- [x] 02-31-PLAN.md — Type fixes: WhatsApp clients, routes and components (wave 2)
+- [x] 02-32-PLAN.md — Type fixes: embed window on the current useChat API, page/hook fixes (wave 2)
+- [x] 02-35-PLAN.md — Type fixes: remaining lib/API files and async params in dynamic routes (wave 2)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 02-07-PLAN.md — Tracer: branded TenantScope, re-homed legacy search, runRetrieval equals enhancedRetrieveChunks (wave 3)

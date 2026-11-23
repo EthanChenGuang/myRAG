@@ -4,10 +4,10 @@ milestone: v5.0
 current_phase: 02
 current_phase_name: Unified Retrieval Pipeline & Tenant Scope
 status: executing
-stopped_at: Completed 02-04-PLAN.md
+stopped_at: Completed wave 2 (02-06, 02-30, 02-31, 02-32, 02-35)
 last_updated: "2026-11-23T14:27:14.194Z"
 last_activity: 2026-11-23
-last_activity_desc: Phase 02 plan 02-05 complete
+last_activity_desc: Phase 02 wave 2 merged
 state_head: 3facf75a846e7a13be2716bdf7768179dca6018b
 progress:
   total_phases: 9
@@ -28,11 +28,11 @@ See: .planning/PROJECT.md (updated 2026-11-22)
 ## Current Position
 
 Phase: 02 (Unified Retrieval Pipeline & Tenant Scope) — EXECUTING
-Plan: 5 of 36 complete (02-01, 02-02, 02-03, 02-04, 02-05)
+Plan: 10 of 36 complete (02-01..06, 02-30, 02-31, 02-32, 02-35)
 Status: Executing sequentially
-Last activity: 2026-11-23 — 02-04 complete
+Last activity: 2026-11-23 — wave 2 merged (06, 30, 31, 32, 35); tsc ratchet 122
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [███░░░░░░░] 28%
 
 ## Performance Metrics
 
@@ -130,6 +130,11 @@ Recent decisions affecting current work:
 - [Phase 02]: check-config NAME_PATTERN covers LANGFUSE_*; new Phase 2 env vars land in all five places in plan 02-03 so later plans only read env.X
 - [Phase 02]: 02-05: Fake edge operators are opt-in per table and column; tenant filters on documents only, or/image_url on document_chunks only
 - [Phase 02]: 02-05: match_documents_by_workspace does not check membership, so (O, B) returns O chunks; the application layer must enforce the organization_members gate
+- [Phase 02]: 02-06: characterization snapshots (embed/voice/chat) change only via UPDATE_CHARACTERIZATION=1; switch plans list every snapshot diff as intended; frozen chat assembly oracle verbatim from 172c2ad
+- [Phase 02]: 02-30: RoutedTool is the exported type for routed MCP tools; transport headers go through requestInit; discovery/health/approve runtime bugs fixed
+- [Phase 02]: 02-31: WhatsApp webhook uses validateWebhookSignature (401 on bad signature); signature compare must become constant-time in code review
+- [Phase 02]: 02-32: embed window body built by toEmbedRequestBody on the v6 useChat
+- [Phase 02]: 02-35: dynamic route handlers await Promise params; PATCH /api/user/preferences returns 401 with no user; Stripe version pinned by typed cast
 - [Phase 02]: Node engines pinned to ^22.12.0 (not >=) so Vercel stays on Node 22
 - [Phase 02]: Paired statistics take slice membership from gate-split report items and one fixed-seed RNG per (slice, metric) cell; all_zero needs at least one cell with data
 
@@ -159,5 +164,5 @@ Items acknowledged and deferred at milestone close, most recent first:
 ## Session Continuity
 
 Last session: 2026-11-23T14:27:14.060Z
-Stopped at: Completed 02-04-PLAN.md
+Stopped at: Completed wave 2 (02-06, 02-30, 02-31, 02-32, 02-35)
 Resume file: None
