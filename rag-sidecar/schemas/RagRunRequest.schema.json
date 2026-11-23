@@ -1,0 +1,131 @@
+{
+  "$defs": {
+    "ConversationTurn": {
+      "additionalProperties": false,
+      "properties": {
+        "content": {
+          "minLength": 1,
+          "title": "Content",
+          "type": "string"
+        },
+        "role": {
+          "enum": [
+            "user",
+            "assistant"
+          ],
+          "title": "Role",
+          "type": "string"
+        }
+      },
+      "required": [
+        "role",
+        "content"
+      ],
+      "title": "ConversationTurn",
+      "type": "object"
+    },
+    "RagRunOptions": {
+      "additionalProperties": false,
+      "properties": {
+        "max_results": {
+          "anyOf": [
+            {
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Results"
+        },
+        "organization_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Organization Id"
+        },
+        "user_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "User Id"
+        }
+      },
+      "title": "RagRunOptions",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "conversation": {
+      "items": {
+        "$ref": "#/$defs/ConversationTurn"
+      },
+      "title": "Conversation",
+      "type": "array"
+    },
+    "item_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Item Id"
+    },
+    "options": {
+      "$ref": "#/$defs/RagRunOptions"
+    },
+    "query": {
+      "maxLength": 4000,
+      "minLength": 1,
+      "title": "Query",
+      "type": "string"
+    },
+    "rag_mode": {
+      "default": "strict",
+      "enum": [
+        "strict",
+        "balanced",
+        "flexible"
+      ],
+      "title": "Rag Mode",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "web_search": {
+      "const": false,
+      "default": false,
+      "title": "Web Search",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "query"
+  ],
+  "title": "RagRunRequest",
+  "type": "object"
+}

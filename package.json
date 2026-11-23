@@ -13,6 +13,7 @@
     "db:setup": "bash scripts/setup-database.sh",
     "reprocess-docs": "node scripts/reprocess-documents.js",
     "test-rag": "node scripts/test-rag-system.js",
+    "gen:schemas": "uv run --project rag-sidecar python -m rag_sidecar.export_schemas && node scripts/gen-zod.mjs",
     "db:push": "echo 'Use Supabase dashboard to manage schema'",
     "db:seed": "echo 'No seed script configured yet'"
   },
@@ -123,11 +124,13 @@
     "eslint-config-next": "^16.0.3",
     "eslint-plugin-react-hooks": "^5",
     "globals": "^15",
+    "json-schema-to-zod": "2.8.1",
     "postcss": "^8",
     "sharp": "^0.34.3",
     "tailwind-scrollbar": "^3.1.0",
     "tailwindcss": "^3.4.1",
     "ts-node": "^10.9.2",
+    "tsx": "4.23.15",
     "typescript": "^5",
     "typescript-eslint": "^8"
   },
