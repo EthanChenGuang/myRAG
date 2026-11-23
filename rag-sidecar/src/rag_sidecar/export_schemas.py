@@ -7,13 +7,23 @@ from typing import Literal
 from pydantic import BaseModel
 
 from rag_sidecar.contracts import (
+    Baseline,
     ConversationTurn,
     DraftedItemBatch,
+    EvalReport,
+    GateResult,
     GoldenItem,
     GoldenSplitManifest,
+    JudgeConfig,
+    JudgeReport,
+    NoiseConfig,
     RagRunRequest,
     RagTrace,
     RunManifest,
+    SidecarError,
+    SidecarHealth,
+    SidecarInfo,
+    SidecarReady,
 )
 
 SCHEMAS_DIR = Path(__file__).resolve().parents[2] / "schemas"
@@ -28,6 +38,16 @@ CONTRACTS: list[tuple[type[BaseModel], Mode]] = [
     (GoldenItem, "serialization"),
     (GoldenSplitManifest, "serialization"),
     (DraftedItemBatch, "serialization"),
+    (EvalReport, "serialization"),
+    (Baseline, "serialization"),
+    (NoiseConfig, "serialization"),
+    (GateResult, "serialization"),
+    (JudgeConfig, "serialization"),
+    (JudgeReport, "serialization"),
+    (SidecarHealth, "serialization"),
+    (SidecarReady, "serialization"),
+    (SidecarInfo, "serialization"),
+    (SidecarError, "serialization"),
 ]
 
 

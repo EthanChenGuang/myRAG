@@ -1,30 +1,37 @@
-from pydantic import BaseModel
+from typing import Literal
 
+from pydantic import BaseModel, ConfigDict, Field
+
+from rag_sidecar.contracts.golden import Category, Language
 from rag_sidecar.contracts.report import MetricValue
 
 
-class JudgeConfig(BaseModel):
+class _Contract(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+
+class JudgeConfig(_Contract):
     judge_model: str
     judge_family: str
-    provider: str
+    provider: Literal["openrouter"]
     base_url: str
-    temperature: float
+    temperature: float = Field(ge=0.0, le=0.0)
     embedding_model: str
-    max_concurrency: int = 4
+    max_concurrency: int = Field(default=4, ge=1)
 
 
-class JudgeItemScore(BaseModel):
+class JudgeItemScore(_Contract):
     item_id: str
-    language: str
-    category: str
-    library: str
-    metric: str
-    score: float | None = None
+    language: Language
+    category: Category
+    library: Literal["deepeval", "ragas"]
+    metric: Literal["faithfulness", "answer_relevance", "context_recall"]
+    score: float | None = Field(default=None, ge=0.0, le=1.0)
     skipped_reason: str | None = None
 
 
-class JudgeReport(BaseModel):
-    schema_version: int = 1
+class JudgeReport(_Contract):
+    schema_version: Literal[1] = 1
     run_id: str
     run_config_hash: str
     judge_model: str

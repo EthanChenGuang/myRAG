@@ -1,0 +1,43 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "floor": {
+      "default": 0.02,
+      "minimum": 0,
+      "title": "Floor",
+      "type": "number"
+    },
+    "gated_slice_prefixes": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Gated Slice Prefixes",
+      "type": "array"
+    },
+    "k": {
+      "default": 3.0,
+      "minimum": 0,
+      "title": "K",
+      "type": "number"
+    },
+    "metrics": {
+      "additionalProperties": {
+        "enum": [
+          "higher",
+          "lower"
+        ],
+        "type": "string"
+      },
+      "title": "Metrics",
+      "type": "object"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    }
+  },
+  "title": "NoiseConfig",
+  "type": "object"
+}
