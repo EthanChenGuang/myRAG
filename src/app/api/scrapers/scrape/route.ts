@@ -21,6 +21,23 @@ export const maxDuration = 60; // Scraping can take time
 export async function POST(request: NextRequest) {
     console.log('[Scrape API] POST request received');
 
+    let userId: string | null = null;
+    let organizationId: string | null = null;
+
+    try {
+        const supabase = await createClient();
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        if (!user || authError) {
+            return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+        }
+        if (!isSingleTenant()) {
+            userId = user.id;
+        }
+    } catch {
+        console.error('[Scrape API] Session lookup failed');
+        return NextResponse.json({ error: 'Authentication unavailable' }, { status: 503 });
+    }
+
     // Check if Firecrawl is enabled
     if (!isFirecrawlEnabled()) {
         return NextResponse.json(
@@ -30,25 +47,6 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-        // Get authenticated user (required in multi-tenant, optional in single-tenant)
-        let userId: string | null = null;
-        let organizationId: string | null = null;
-
-        if (!isSingleTenant()) {
-            // Multi-tenant mode: authentication required
-            const supabase = await createClient();
-            const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-            if (!user || authError) {
-                return NextResponse.json(
-                    { error: 'Authentication required' },
-                    { status: 401 }
-                );
-            }
-
-            userId = user.id;
-        }
-
         // Parse request body
         const body = await request.json();
         const { url, outputFormat, organizationId: orgIdFromBody } = body;

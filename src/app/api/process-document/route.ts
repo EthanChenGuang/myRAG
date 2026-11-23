@@ -566,11 +566,28 @@ export async function POST(req: Request) {
     let userId: string | null = null;
     let organizationId: string | null = null;
 
-    // SINGLE-TENANT MODE: No authentication required for document uploads
-    // Documents are shared in the knowledge base
+    // SINGLE-TENANT MODE: documents are shared in the knowledge base, so a permanent
+    // write needs a verified session. Temporary processing persists nothing and stays open.
     if (isSingleTenant()) {
-      console.log('Single-tenant mode: document upload (shared knowledge base)');
-      // No user/org tracking needed - documents are shared
+      if (!isTemporary) {
+        try {
+          const { createClient: createSSRClient } = await import('@/lib/supabase/server');
+          const supabase = await createSSRClient();
+          const {
+            data: { user },
+            error: authError,
+          } = await supabase.auth.getUser();
+          if (!user || authError) {
+            return NextResponse.json(
+              { error: 'Authentication required. Please sign in to add documents to the knowledge base.' },
+              { status: 401 }
+            );
+          }
+        } catch {
+          console.error('[ProcessDocument] Session lookup failed');
+          return NextResponse.json({ error: 'Authentication unavailable' }, { status: 503 });
+        }
+      }
       userId = null;
       organizationId = null;
     } else {
