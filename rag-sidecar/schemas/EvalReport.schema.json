@@ -109,6 +109,18 @@
     "RagRunOptions": {
       "additionalProperties": false,
       "properties": {
+        "generator_model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Generator Model"
+        },
         "max_results": {
           "anyOf": [
             {

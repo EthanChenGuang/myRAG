@@ -16,6 +16,7 @@ class RagRunOptions(_Contract):
     max_results: int | None = Field(default=None, ge=1, le=100)
     organization_id: str | None = None
     user_id: str | None = None
+    generator_model: str | None = None
 
 
 class RagRunRequest(_Contract):
@@ -26,6 +27,7 @@ class RagRunRequest(_Contract):
     rag_mode: Literal["strict", "balanced", "flexible"] = "strict"
     web_search: Literal[False] = False
     options: RagRunOptions = Field(default_factory=RagRunOptions)
+    include_answer: bool = False
 
 
 class TraceQueryContext(_Contract):

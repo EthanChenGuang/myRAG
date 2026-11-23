@@ -7,6 +7,7 @@ import { RagRunRequestSchema, RagTraceSchema } from '@/lib/rag-eval/contracts.ge
 import { checkEvalAccess } from '@/lib/rag-eval/auth';
 import { applyLegacyPostFilter, type LegacyDocumentRow } from '@/lib/rag-eval/legacy-post-filter';
 import { buildEffectiveConfig, configHash } from '@/lib/rag-eval/trace';
+import { generateEvalAnswer, isGPTGeneratorModel, resolveGeneratorModel } from '@/lib/rag-eval/answer';
 
 export const runtime = 'nodejs';
 
@@ -26,7 +27,7 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) {
     return parsed.response;
   }
-  const { query, options, rag_mode: ragMode, item_id: itemId } = parsed.data;
+  const { query, options, rag_mode: ragMode, item_id: itemId, include_answer: includeAnswer } = parsed.data;
 
   try {
     const deploymentMode = env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE;
@@ -70,10 +71,8 @@ export async function POST(req: NextRequest) {
       chunkMetadata.set(chunk.chunk_id, (chunkRow?.metadata as Metadata | null | undefined) ?? null);
     }
 
-    const generatorModel = null as string | null;
-    const isGPTModel =
-      generatorModel !== null &&
-      (generatorModel.includes('gpt-4') || generatorModel.includes('o1') || generatorModel.includes('chatgpt'));
+    const generatorModel = includeAnswer ? resolveGeneratorModel(options?.generator_model) : null;
+    const isGPTModel = generatorModel !== null && isGPTGeneratorModel(generatorModel);
 
     const filtered = applyLegacyPostFilter({
       queryText: query,
@@ -87,7 +86,24 @@ export async function POST(req: NextRequest) {
     });
     const postFilterMs = Date.now() - postFilterStart;
 
+    const stageLatency: Record<string, number> = { retrieval: retrievalMs, post_filter: postFilterMs };
+    let answer: string | null = null;
+    if (generatorModel !== null && !filtered.refused) {
+      const generationStart = Date.now();
+      try {
+        answer = await generateEvalAnswer({ query, context: filtered.context, ragMode, generatorModel });
+      } catch (error: unknown) {
+        const name = error instanceof Error ? error.name : 'Error';
+        const status = (error as { statusCode?: unknown } | null)?.statusCode;
+        const detail = typeof status === 'number' ? `${name} (HTTP ${status})` : name;
+        console.error('[RAG Eval] generation failed:', detail);
+        return NextResponse.json({ error: `generation failed: ${detail}` }, { status: 500 });
+      }
+      stageLatency.generation = Date.now() - generationStart;
+    }
+
     const effectiveConfig = buildEffectiveConfig();
+    effectiveConfig.generator_model = generatorModel;
     const trace = {
       schema_version: 1 as const,
       item_id: itemId ?? null,
@@ -117,9 +133,9 @@ export async function POST(req: NextRequest) {
       context: filtered.context,
       refused: filtered.refused,
       refusal_reason: filtered.refusalReason,
-      answer: null,
+      answer,
       citations: [],
-      stage_latency_ms: { retrieval: retrievalMs, post_filter: postFilterMs },
+      stage_latency_ms: stageLatency,
       effective_config: effectiveConfig,
       config_hash: configHash(effectiveConfig),
     };
