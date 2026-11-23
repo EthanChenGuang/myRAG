@@ -59,6 +59,8 @@ KOYEB_API_KEY=
 WHATSAPP_WEBHOOK_URL=
 # Required in production (webhook returns 503 without it). Must match WEBHOOK_SECRET in the Baileys service.
 WHATSAPP_WEBHOOK_SECRET=
+# Development only: accept unsigned webhooks when no secret is set. Ignored in production.
+WHATSAPP_WEBHOOK_ALLOW_UNSIGNED=
 WHATSAPP_ENABLE_MCP=false
 WHATSAPP_ENABLE_WEB_SEARCH=false
 WHATSAPP_DEFAULT_MODEL=openai/gpt-4o-mini
