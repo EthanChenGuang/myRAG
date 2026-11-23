@@ -1,3 +1,4 @@
+from rag_sidecar.contracts.golden import GoldenItem, GoldSpan
 from rag_sidecar.contracts.eval_run import (
     ConversationTurn,
     RagRunOptions,
