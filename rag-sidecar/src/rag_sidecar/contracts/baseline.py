@@ -33,6 +33,21 @@ class BaselineRun(_Contract):
     created_at: str
 
 
+class PairedStat(_Contract):
+    n: int = Field(ge=0)
+    n_nonzero: int = Field(ge=0)
+    mean_d: float | None
+    ci_low: float | None
+    ci_high: float | None
+
+
+class PairedReport(_Contract):
+    seed: int
+    resamples: int = Field(ge=1)
+    all_zero: bool
+    slices: dict[str, dict[str, PairedStat]]
+
+
 class Baseline(_Contract):
     schema_version: Literal[1] = 1
     spread_kind: Literal["stdev_ddof1"]
@@ -48,6 +63,7 @@ class Baseline(_Contract):
     run_config_hash: str
     runs: list[BaselineRun] = Field(min_length=3)
     slices: dict[str, dict[str, BaselineMetricStat]]
+    items: dict[str, dict[str, list[float | None]]] | None = None
 
 
 class NoiseConfig(_Contract):
@@ -72,3 +88,4 @@ class GateResult(_Contract):
     offenders: list[GateOffender]
     skipped: list[str]
     mismatches: list[str]
+    paired: PairedReport | None = None

@@ -20,6 +20,8 @@ from rag_sidecar.contracts import (
     JudgeReport,
     MetricValue,
     NoiseConfig,
+    PairedReport,
+    PairedStat,
     RagRunOptions,
     RagRunRequest,
     RagTrace,
@@ -233,6 +235,7 @@ def _baseline() -> Baseline:
         run_config_hash=_HASH_A,
         runs=runs,
         slices={"overall": {name: stat for name in _METRICS}},
+        items={"item-001": {name: [0.5, 0.5, 0.5] for name in _METRICS}},
     )
 
 
@@ -337,6 +340,17 @@ def _models() -> dict[str, Any]:
             ],
             skipped=["by_category:table"],
             mismatches=[],
+            paired=PairedReport(
+                seed=20261123,
+                resamples=10000,
+                all_zero=False,
+                slices={
+                    "overall": {
+                        "mrr": PairedStat(n=4, n_nonzero=1, mean_d=0.25, ci_low=0.0, ci_high=0.5),
+                        "false_refusal_rate": PairedStat(n=0, n_nonzero=0, mean_d=None, ci_low=None, ci_high=None),
+                    }
+                },
+            ),
         ),
         "JudgeConfig": JudgeConfig(
             judge_model="judge/model-a",

@@ -5,6 +5,8 @@ from rag_sidecar.contracts.baseline import (
     GateOffender,
     GateResult,
     NoiseConfig,
+    PairedReport,
+    PairedStat,
 )
 from rag_sidecar.contracts.golden import (
     DraftedItemBatch,
@@ -52,6 +54,8 @@ __all__ = [
     "GateOffender",
     "GateResult",
     "NoiseConfig",
+    "PairedReport",
+    "PairedStat",
     "EvalReport",
     "ItemResult",
     "MetricValue",

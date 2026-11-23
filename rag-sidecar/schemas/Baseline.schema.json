@@ -231,6 +231,34 @@
       "title": "Golden Sha256",
       "type": "string"
     },
+    "items": {
+      "anyOf": [
+        {
+          "additionalProperties": {
+            "additionalProperties": {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            "type": "object"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Items"
+    },
     "request_options": {
       "$ref": "#/$defs/RagRunOptions"
     },

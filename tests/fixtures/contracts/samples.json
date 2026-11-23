@@ -13,6 +13,35 @@
         ]
       },
       "golden_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "items": {
+        "item-001": {
+          "correct_refusal_rate": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "false_refusal_rate": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "mrr": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "recall_at_10": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "recall_at_5": [
+            0.5,
+            0.5,
+            0.5
+          ]
+        }
+      },
       "request_options": {
         "generator_model": null,
         "max_results": 10,
@@ -296,6 +325,29 @@
           "threshold": 0.45
         }
       ],
+      "paired": {
+        "all_zero": false,
+        "resamples": 10000,
+        "seed": 20261123,
+        "slices": {
+          "overall": {
+            "false_refusal_rate": {
+              "ci_high": null,
+              "ci_low": null,
+              "mean_d": null,
+              "n": 0,
+              "n_nonzero": 0
+            },
+            "mrr": {
+              "ci_high": 0.5,
+              "ci_low": 0.0,
+              "mean_d": 0.25,
+              "n": 4,
+              "n_nonzero": 1
+            }
+          }
+        }
+      },
       "passed": false,
       "skipped": [
         "by_category:table"
