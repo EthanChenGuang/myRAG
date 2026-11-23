@@ -103,6 +103,7 @@ Recent decisions affecting current work:
 - [02-29] Chat route has 0 tsc errors; reads AI SDK v6 tool fields (`input`/`output`/`providerMetadata`); custom chunks go through `writeCustomChunk`; tool-argument logs carry key names and sizes only.
 - [security] `/api/ai-to-rag` and `/api/documents/[id]` derive the user from the session and verify the tenant scope; another tenant's document id returns 404; anonymous single-tenant delete now gets 401 (deliberate).
 - [02-21] `degrade` is honoured only for the eval profile and excluded from the gate's options-identity check; written to the manifest only when set; CI runs a degrade negative control with an MRR margin assertion.
+- [safety] The Gmail draft→send redirect is removed from the chat and approve routes: the tool that runs is the tool the user approved. The approve-route redirect was live in the shipped app (deliberate behaviour change).
 - [02-22] Langfuse via OTel replay after response; tenantKey on every span; sampling hashes request id with a per-purpose prefix; masking order e-mail, IBAN, CN ID, IT CF, Luhn card, phones.
 
 - [Roadmap]: Research's 9 phases compressed to 7 for standard granularity: ingestion + embeddings merged (Phase 3); external backends + closeout merged (Phase 7)
