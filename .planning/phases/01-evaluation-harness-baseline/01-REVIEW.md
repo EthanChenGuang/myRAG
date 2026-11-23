@@ -143,6 +143,13 @@ findings:
     medium: 10
     low: 11
 status: issues_found
+fix_status: partial
+fixed_at: 2026-11-23T12:10:00Z
+fix_summary:
+  in_scope: 25
+  fixed: 22
+  skipped: 3
+  requires_human_verification: [WR-03, WR-05, WR-12, WR-13]
 ---
 
 # Phase 01: Code Review Report
@@ -171,9 +178,54 @@ Severity mapping. The caller asked for critical / high / medium / low. Downstrea
 - **Gate identity (medium).** The gate does not check that the report and baseline come from the same deployment mode, tenant scope or embedder source.
 - **Medium robustness and security issues.** The eval secret is forwarded on redirects. A reviewer's question edit makes the next drafting run abort. DeepEval auto-loads `.env.local`.
 
+## Fix Status
+
+Fixes were applied on branch `claude/ecstatic-hamilton-86gtwv`, one commit per finding, all in the main checkout (no worktree). 22 of 25 findings were fixed and 3 skipped (IN-04, IN-06, IN-09). WR-03, WR-05, WR-12 and WR-13 change measurement or gating logic and need a human check.
+
+| Finding | Status | Commit |
+| --- | --- | --- |
+| CR-01 | fixed | da7cbcb |
+| WR-01 | fixed | f27eeda |
+| WR-02 | fixed | 6405d31 |
+| WR-03 | fixed, needs human check | a9f11ab |
+| WR-04 | fixed | c5c49b0 |
+| WR-05 | fixed, needs human check | 1a52f6a |
+| WR-06 | fixed | d263c9e |
+| WR-07 | fixed | e7fb836 |
+| WR-08 | fixed | fa7cac6 |
+| WR-09 | fixed | 1019da5 |
+| WR-10 | fixed | cfd0cce |
+| WR-11 | fixed | 6ef7e7f, 1f51201 |
+| WR-12 | fixed, needs human check | 270afde |
+| WR-13 | fixed, needs human check | fbf2bfb |
+| IN-01 | fixed, partly | 0ad5171 |
+| IN-02 | fixed | acad605 |
+| IN-03 | fixed | d5119cd |
+| IN-04 | skipped | - |
+| IN-05 | fixed | 850ca82 |
+| IN-06 | skipped | - |
+| IN-07 | fixed | ef5c1d1 |
+| IN-08 | fixed | eaeaf2b |
+| IN-09 | skipped | - |
+| IN-10 | fixed | d27e8ec |
+| IN-11 | fixed | 9dc8685 |
+
+New fixture baseline (`eval/baselines/fixture-baseline.json`, approved items, dev split: 56 of 72 items, 47 answerable and 9 no_answer; zero spread over 3 runs):
+
+| Slice | Recall@5 | Recall@10 | MRR | Correct refusal | False refusal |
+| --- | --- | --- | --- | --- | --- |
+| overall | 0.574 | 0.574 | 0.596 | 0.333 | 0.319 |
+| language:en | 0.472 | 0.472 | 0.500 | 0.333 | 0.389 |
+| language:it | 0.615 | 0.615 | 0.615 | 0.333 | 0.231 |
+| language:zh | 0.656 | 0.656 | 0.688 | 0.333 | 0.312 |
+
+The previous baseline gated all 72 items (overall Recall@5 0.608, MRR 0.633, correct refusal 0.500, false refusal 0.300). The `--max-results 1` negative control still fails with exit 10 and 6 offenders, but the overall Recall@5 margin is thin: 0.5532 observed against a 0.5545 threshold.
+
 ## Critical Issues
 
 ### CR-01: `--single-tenant` drafting scope reads every tenant's personal documents (cross-tenant exfiltration to third-party LLMs)
+
+**Fix status:** fixed (`da7cbcb`)
 
 **Severity:** Critical (BLOCKER)
 **File:** `eval/src/rag_eval/draft/sources.py:79-91` (with `eval/src/rag_eval/draft/cli.py:226-238`)
@@ -204,6 +256,8 @@ if self._single_tenant:
 
 ### WR-01 (High): Eval endpoint trusts caller-chosen `organization_id` / `user_id`, so one global secret reads every tenant
 
+**Fix status:** fixed (`f27eeda`)
+
 **File:** `src/app/api/internal/rag/run/route.ts:33-47`
 **Issue:**
 - `organizationId` and `userId` come straight from the request body (`options.organization_id`, `options.user_id`).
@@ -223,6 +277,8 @@ if (deploymentMode === 'multi-tenant' && (!scope || !allowed.includes(scope))) {
 
 ### WR-02 (High): The gate's "regression" exit code 1 is also Python's crash exit code, so the negative-control job passes on any crash
 
+**Fix status:** fixed (`6405d31`)
+
 **File:** `.github/workflows/pr-smoke.yml:133-139`, `eval/harness/run-smoke.mts:71-98`, `eval/src/rag_eval/gate.py:11-13,180-188`
 **Issue:**
 - `EXIT_REGRESSION = 1`, and the CI negative control asserts `test "$code" -eq 1`.
@@ -236,6 +292,8 @@ if (deploymentMode === 'multi-tenant' && (!scope || !allowed.includes(scope))) {
 - Give regressions a dedicated non-1 code, for example 10, and wrap `main()` so unexpected exceptions return a distinct code such as 70.
 
 ### WR-03 (High): Golden lifecycle fields are ignored, so draft and rejected items are scored and the held-out test split is gated
+
+**Fix status:** fixed: requires human verification (`a9f11ab`; gate population is now the approved dev split, fixture baseline re-recorded)
 
 **File:** `eval/harness/run-eval.mts:151-169,270-295`, `eval/src/rag_eval/runner.py:172-190`, `eval/src/rag_eval/judge/run.py:218-229`
 **Issue:**
@@ -253,6 +311,8 @@ if (deploymentMode === 'multi-tenant' && (!scope || !allowed.includes(scope))) {
 
 ### WR-04 (Medium): `conversation` is accepted but silently dropped, so multi_turn answers and judge scores do not reflect production
 
+**Fix status:** fixed (`c5c49b0`)
+
 **File:** `src/app/api/internal/rag/run/route.ts:30`, `src/lib/rag-eval/answer.ts:118-122`, `eval/harness/run-eval.mts:278`
 **Issue:**
 - The harness sends `item.conversation`, and `RagRunRequestSchema` accepts it.
@@ -264,6 +324,8 @@ if (deploymentMode === 'multi-tenant' && (!scope || !allowed.includes(scope))) {
 **Fix:** Pass `conversation` through to `generateEvalAnswer` as prior `messages`, in the same order the chat route uses. Alternatively, reject non-empty `conversation` with a 400 until it is supported, so the gap is not silent.
 
 ### WR-05 (Medium): The gate does not compare deployment mode, tenant scope, tier or embedder source, so it compares unlike runs
+
+**Fix status:** fixed: requires human verification (`1a52f6a`; new gate mismatch rules)
 
 **File:** `eval/src/rag_eval/gate.py:25-38`, `eval/src/rag_eval/report.py:47-55`, `eval/harness/run-eval.mts:320-322`
 **Issue:** `_mismatches` checks only `golden_sha256`, `corpus_sha256`, `embedder_id` and `embedder_version`. These never trigger a mismatch:
@@ -282,6 +344,8 @@ Live runs record `corpus_sha256 = None` and `embedder = None`, so for live gatin
 **Fix:** Carry `deployment_mode`, `request_options` minus `max_results`, and `embedder_source_sha256` into `Baseline` and `EvalReport`, and add them to `_mismatches`. Then `--max-results 1` remains a legitimate degraded config rather than a mismatch. For live runs, also compare the server's `effective_config.deployment_mode`.
 
 ### WR-06 (Medium): The live tier cannot be scoped to a tenant, so multi-tenant live runs retrieve nothing
+
+**Fix status:** fixed (`d263c9e`)
 
 **File:** `eval/harness/run-smoke.mts:22-34,59-67`, `eval/src/rag_eval/baseline.py:346-349`
 **Issue:**
@@ -302,6 +366,8 @@ Live runs record `corpus_sha256 = None` and `embedder = None`, so for live gatin
 
 ### WR-07 (Medium): The eval secret is forwarded on redirects and can be sent over plain HTTP
 
+**Fix status:** fixed (`e7fb836`)
+
 **File:** `eval/harness/run-eval.mts:238-246`
 **Issue:**
 - `fetch(url, { headers: { 'x-rag-eval-secret': ... } })` uses the default `redirect: 'follow'`.
@@ -321,6 +387,8 @@ const res = await fetch(url, { method: 'POST', redirect: 'error', headers: {...}
 
 ### WR-08 (Medium): After a reviewer edits a question, the next drafting run aborts on a duplicate id and discards the paid LLM output
 
+**Fix status:** fixed (`fa7cac6`)
+
 **File:** `eval/src/rag_eval/draft/writer.py:84-86,108-109,123-126,154`, `eval/src/rag_eval/split.py:308-309`
 **Issue:**
 - Item ids are `draft-<lang>-sha256(normalized question)[:10]`, computed once.
@@ -336,12 +404,16 @@ const res = await fetch(url, { method: 'POST', redirect: 'error', headers: {...}
 
 ### WR-09 (Medium): The raw exception message is returned to the caller
 
+**Fix status:** fixed (`1019da5`)
+
 **File:** `src/app/api/internal/rag/run/route.ts:151-155`
 **Issue:** The catch-all returns `{ error: error.message }`. Messages from Supabase, PostgREST, OpenAI and pgvector can include SQL fragments, internal hostnames, or masked key fragments; OpenAI's "Incorrect API key provided: sk-...abcd" is one example. The generation branch at lines 95-100 already sanitizes to the error's `name` and HTTP status. The retrieval branch does not.
 
 **Fix:** Mirror the generation branch: log `message` server-side and return `{ error: 'retrieval failed' }` plus the error's `name`.
 
 ### WR-10 (Medium): DeepEval auto-loads `.env` / `.env.local` from the current directory, which undercuts the `CONFIDENT_API_KEY` guard
+
+**Fix status:** fixed (`cfd0cce`)
 
 **File:** `eval/src/rag_eval/judge/telemetry.py:25-39`
 **Issue:**
@@ -357,6 +429,8 @@ const res = await fetch(url, { method: 'POST', redirect: 'error', headers: {...}
 
 ### WR-11 (Medium): Actions are pinned to mutable tags, the uv version is unpinned, and the workflow checker is never run
 
+**Fix status:** fixed (`6ef7e7f`; gen-zod self-test added to CI in `1f51201`)
+
 **File:** `.github/workflows/pr-smoke.yml:25-30,108`, `.github/workflows/nightly.yml:213-225,253`, `scripts/ci/check-workflows.py:83`
 **Issue:**
 - `actions/checkout@v4`, `actions/setup-node@v4`, `astral-sh/setup-uv@v5` and `actions/upload-artifact@v4` are major-version tags that can be re-pointed.
@@ -367,6 +441,8 @@ const res = await fetch(url, { method: 'POST', redirect: 'error', headers: {...}
 **Fix:** Pin each action to a 40-hex commit SHA with a version comment, set `version: "0.11.32"` on `setup-uv`, tighten `check-workflows.py` to require SHAs, and run it as a step in the `ts` job.
 
 ### WR-12 (Medium): The judge-family check relies on the model-id prefix, so routers and unprefixed ids bypass it
+
+**Fix status:** fixed: requires human verification (`270afde`; explicit family map, unknown families refused)
 
 **File:** `eval/src/rag_eval/judge/config.py:93-114`
 **Issue:** `generator_family()` returns the text before `/`, or `anthropic` when the id contains "claude". Some generator ids name no provider family, or the wrong one:
@@ -382,6 +458,8 @@ These yield families such as "openrouter" or "gpt-4o" that never equal `judge_fa
 
 ### WR-13 (Medium): Ragas evidence lookup matches a short chunk inside a longer context and attributes the quote to the wrong document
 
+**Fix status:** fixed: requires human verification (`fbf2bfb`; evidence matching rule changed)
+
 **File:** `eval/src/rag_eval/draft/ragas_drafter.py:73-84`
 **Issue:** The fallback in `_locate` accepts `norm in wanted`, meaning the workspace chunk is a substring of the Ragas context, and it scans documents in filename order. A short chunk in document A, such as a heading-only chunk, a price line or a table caption, is often a substring of a context taken from document B. The quote is then taken from A's chunk. `verify_proposal` passes, because the quote really is in A, so the item ships with gold evidence from the wrong document. That makes the recall metrics wrong for the item.
 
@@ -390,6 +468,8 @@ These yield families such as "openrouter" or "gpt-4o" that never equal `judge_fa
 ## Info
 
 ### IN-01 (Low): Pydantic and Zod disagree beyond what the parity test catches
+
+**Fix status:** fixed, partly (`0ad5171`; golden files are validated with Pydantic before the TS run; the `default_factory`/`.optional()` and code-point vs UTF-16 length differences are unchanged)
 
 **File:** `src/lib/rag-eval/contracts.generated.ts:19,31,34`, `rag-sidecar/src/rag_sidecar/contracts/golden.py:37-52`, `baseline.py:122-123`
 **Issue:**
@@ -401,11 +481,15 @@ These yield families such as "openrouter" or "gpt-4o" that never equal `judge_fa
 
 ### IN-02 (Low): The `effective_config.rag_env` denylist is narrow
 
+**Fix status:** fixed (`acad605`; `PASS` alone is not matched, to keep `RAG_MULTI_PASS` and `RAG_MAX_RETRIEVAL_PASSES` in the config identity)
+
 **File:** `src/lib/rag-eval/trace.ts:6,21-29`
 **Issue:** Every `RAG_*` value is echoed back unless the name matches `SECRET|KEY|TOKEN|PASSWORD`. A future `RAG_DB_PASS`, `RAG_*_CREDENTIALS`, `RAG_*_DSN` or a URL with embedded credentials would be returned to the caller and hashed into artifacts.
 **Fix:** Switch to an allow-list taken from `scripts/rag/env-manifest.json` `managed` entries, or extend the pattern to `PASS|CRED|AUTH|DSN|PRIVATE`.
 
 ### IN-03 (Low): The `live` tier is never emitted
+
+**Fix status:** fixed (`d5119cd`)
 
 **File:** `eval/harness/run-smoke.mts:65`
 **Issue:** `tier: 'smoke'` is hard-coded even for `--base-url` runs, so the contract's `live` value is unused and live reports are labelled as smoke.
@@ -413,11 +497,15 @@ These yield families such as "openrouter" or "gpt-4o" that never equal `judge_fa
 
 ### IN-04 (Low): Recall and judge contexts include image-document chunks the generator never sees
 
+**Fix status:** skipped: needs a trace-contract field (`in_context`), a change to the recall and judge-context definitions and another baseline re-record; a metric-definition decision, not a small fix
+
 **File:** `eval/src/rag_eval/metrics.py:16`, `src/lib/rag-eval/legacy-post-filter.ts:151-152,206-219`, `eval/src/rag_eval/judge/run.py:173`
 **Issue:** `kept` lists every chunk of a used document, but context assembly skips image documents. Recall@k and the judge's `contexts` can count evidence that was not in the prompt.
 **Fix:** Mark kept chunks with `in_context` and score recall and faithfulness on those.
 
 ### IN-05 (Low): The post-filter sentinel only checks that literals are present
+
+**Fix status:** fixed (`850ca82`)
 
 **File:** `tests/legacy-post-filter-sentinel.test.ts:9-36`
 **Issue:** The test does not notice if the chat route reorders the filters, adds a branch (for example, an explicit-reference keep path that changes `usedDocuments`), or changes `normalize()`, provided the literals survive somewhere in the 4500-line file.
@@ -425,11 +513,15 @@ These yield families such as "openrouter" or "gpt-4o" that never equal `judge_fa
 
 ### IN-06 (Low): `npm run test-rag` was repurposed
 
+**Fix status:** skipped: the old target `scripts/test-rag-system.js` never existed and the project required "fix or remove `npm run test-rag`", so repurposing it was intended; the remaining fix is a CLAUDE.md/AGENTS.md doc edit, which needs the user's go-ahead
+
 **File:** `package.json:16`
 **Issue:** The script used to run `node scripts/test-rag-system.js`, the RAG health check documented in AGENTS.md and CLAUDE.md. It now runs the smoke harness, so the documented diagnostic silently changes meaning.
 **Fix:** Keep `test-rag` and add `eval:smoke`, or update the docs.
 
 ### IN-07 (Low): Claude drafter robustness gaps
+
+**Fix status:** fixed (`ef5c1d1`)
 
 **File:** `eval/src/rag_eval/draft/claude_drafter.py:55,114,121-130`
 **Issue:**
@@ -442,11 +534,15 @@ These yield families such as "openrouter" or "gpt-4o" that never equal `judge_fa
 
 ### IN-08 (Low): Sidecar base image is not pinned by digest
 
+**Fix status:** fixed (`eaeaf2b`; digest resolved from Docker Hub and verified; not built locally because no Docker daemon is available)
+
 **File:** `rag-sidecar/Dockerfile:1`
 **Issue:** `python:3.12-slim` moves over time, so builds are not reproducible.
 **Fix:** Pin `python:3.12-slim@sha256:<digest>`.
 
 ### IN-09 (Low): Generality without instantiation: `chunkUrlMetadata` duplicates `chunkMetadata`
+
+**Fix status:** skipped: `tests/legacy-post-filter.test.ts` passes a populated `chunkMetadata` with an empty `chunkUrlMetadata`, so the second parameter is a used test seam (the finding's own keep condition)
 
 **File:** `src/app/api/internal/rag/run/route.ts:81-82`, `src/lib/rag-eval/legacy-post-filter.ts:26-27`
 **Category:** necessity
@@ -455,11 +551,15 @@ These yield families such as "openrouter" or "gpt-4o" that never equal `judge_fa
 
 ### IN-10 (Low): Config UI says secrets need 32+ characters but does not enforce it
 
+**Fix status:** fixed (`d27e8ec`; non-blocking warning in the config UI and config-server)
+
 **File:** `scripts/config-ui/index.html:6355-6386`, `src/lib/rag-eval/auth.ts:180-182`
 **Issue:** A shorter secret saves without complaint, and the endpoint then answers 503 "not configured" with no hint why.
 **Fix:** Validate the length in the UI, or have `config-server.js` warn on save.
 
 ### IN-11 (Low): Pydantic validation in `run-nightly` depends on the current directory
+
+**Fix status:** fixed (`9dc8685`)
 
 **File:** `eval/harness/run-nightly.mts:114-121`
 **Issue:** `uv run --project rag-sidecar` is resolved against the current directory, so running from anywhere but the repo root fails with exit 3. `run-smoke.mts` builds an absolute path from `REPO_ROOT` instead.
