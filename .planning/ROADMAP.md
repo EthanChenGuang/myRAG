@@ -141,8 +141,8 @@ Plans:
 - [x] 02-25-PLAN.md — EVAL-14 contracts: new categories, production provenance, provenance slices (wave 17)
 - [x] 02-26-PLAN.md — EVAL-14 fixture items and baseline re-record (wave 18)
 - [x] 02-27-PLAN.md — EVAL-15 review queue pull/promote (wave 19)
-- [ ] 02-28-PLAN.md — EVAL-15 online judge and nightly job (wave 20)
-- [ ] 02-36-PLAN.md — Zero tsc errors, plain tsc in CI, ignoreBuildErrors false (wave 21)
+- [x] 02-28-PLAN.md — EVAL-15 online judge and nightly job (wave 20)
+- [x] 02-36-PLAN.md — Zero tsc errors, plain tsc in CI, ignoreBuildErrors false (wave 21)
 
 ### Phase 3: Unified Ingestion & Embedding Profiles
 **Goal**: Every document enters the knowledge base through one path (typed, deduplicated, versioned and carrying the same metadata), and its chunks are embedded under a switchable embedding profile that can be rolled back

@@ -4,7 +4,7 @@ milestone: v5.0
 current_phase: 02
 current_phase_name: Unified Retrieval Pipeline & Tenant Scope
 status: executing
-stopped_at: Completed waves 4-7 (02-08, 02-09, 02-10, 02-15)
+stopped_at: Phase 02 plans 36/36 merged; gates pending
 last_updated: "2026-11-23T14:27:14.194Z"
 last_activity: 2026-11-23
 last_activity_desc: Phase 02 plans 11, 12, 16, 17, 18, 22 merged
@@ -28,8 +28,8 @@ See: .planning/PROJECT.md (updated 2026-11-22)
 ## Current Position
 
 Phase: 02 (Unified Retrieval Pipeline & Tenant Scope) — EXECUTING
-Plan: 34 of 36 complete (02-01..27, 02-29..35)
-Status: Executing sequentially
+Plan: 36 of 36 complete; security batches S1-S7 merged, S8 running; phase gates (security review, code review, regression, verifier) pending
+Status: Plans complete, running phase gates
 Last activity: 2026-11-23 — 02-08, 09, 10, 15 merged; tsc ratchet 58; 480 vitest tests pass; Phase 3 research + patterns committed
 
 Progress: [█████████░] 94%
@@ -190,6 +190,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-23T14:27:14.060Z
-Stopped at: Completed waves 4-7 (02-08, 02-09, 02-10, 02-15)
-Resume file: None
+Last session: 2026-11-23
+Stopped at: 02-28, S7, 02-36 merged (tsc 0, vitest 945, node 86, eval 314, sidecar 184); Phase 3 plan-check pass 3 done
+Resume file: .planning/phases/02-unified-retrieval-pipeline-tenant-scope/.continue-here.md
