@@ -77,6 +77,16 @@ export interface ReferencedState {
   context: string;
 }
 
+export interface DocumentPartRef {
+  id: string;
+  name: string;
+}
+
+export interface DocumentRefsInput {
+  mentions: string[];
+  documentParts: DocumentPartRef[];
+}
+
 export interface RetrievalOptions {
   maxResults?: number;
   fallbackToLowerThreshold?: boolean;
@@ -96,7 +106,7 @@ export interface RunRetrievalInput {
   scope: TenantScope | null;
   query: string;
   profile: Profile;
-  documentRefs?: string[];
+  documentRefs?: DocumentRefsInput;
   options?: RetrievalOptions;
   signal: AbortSignal;
   trace?: TraceCollector;
