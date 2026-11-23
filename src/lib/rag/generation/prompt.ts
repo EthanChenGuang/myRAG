@@ -17,5 +17,5 @@ export function createEnhancedRAGPrompt(
 
   const cleanedBasePrompt = basePrompt.replace('{{context}}', '').replace(/Context:\s*$/i, '').trim();
 
-  return modeConfig.systemPromptWrapper.replace('{{context}}', context).replace('{{basePrompt}}', cleanedBasePrompt);
+  return modeConfig.systemPromptWrapper.replace('{{basePrompt}}', () => cleanedBasePrompt).replace('{{context}}', () => context);
 }

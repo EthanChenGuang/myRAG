@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { voiceKeywordFallback } from '@/lib/rag/voice/keyword-fallback';
 import { resolveDocumentRefs } from '@/lib/rag/refs/resolve';
 import { mintScope } from '@/lib/rag/tenant/scope';
+import { createEnhancedRAGPrompt } from '@/lib/rag/generation/prompt';
 
 const SECRET_WORD = 'zebrafishquartz';
 
@@ -52,5 +53,17 @@ describe('retrieval hot paths do not log user query content', () => {
       signal: new AbortController().signal,
     });
     expect(loggedText()).not.toContain(SECRET_WORD);
+  });
+});
+
+describe('createEnhancedRAGPrompt substitutes text literally', () => {
+  const BASE = 'You are a helpful assistant.\n\nContext:\n{{context}}';
+
+  test.each(['$$x^2$$', "price $& and $` and $'", '$1 $<name>', 'see {{basePrompt}} here', 'a {{context}} b'])('document text %j is kept verbatim', (context) => {
+    for (const mode of ['strict', 'balanced', 'flexible'] as const) {
+      const output = createEnhancedRAGPrompt(BASE, context, mode);
+      expect(output).toContain(context);
+      expect(output.split('You are a helpful assistant.')).toHaveLength(2);
+    }
   });
 });
