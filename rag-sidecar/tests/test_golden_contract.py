@@ -233,3 +233,23 @@ def test_golden_item_schema_forbids_additional_properties():
     schema = GoldenItem.model_json_schema(mode="serialization")
     assert schema["additionalProperties"] is False
     assert schema["$defs"]["GoldSpan"]["additionalProperties"] is False
+
+
+@pytest.mark.parametrize("category", ["colloquial", "ambiguous", "typo"])
+def test_user_phrasing_categories_validate(category):
+    item = GoldenItem(**_item(category))
+    assert item.category == category
+
+
+def test_production_provenance_validates():
+    assert GoldenItem(**_item("typo", provenance="production")).provenance == "production"
+
+
+def test_unknown_category_slang_rejected():
+    with pytest.raises(ValidationError):
+        GoldenItem(**{**_item("general"), "category": "slang"})
+
+
+def test_unknown_provenance_rejected():
+    with pytest.raises(ValidationError):
+        GoldenItem(**_item("general", provenance="crowd"))
