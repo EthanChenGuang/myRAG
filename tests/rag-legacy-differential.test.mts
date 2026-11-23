@@ -27,7 +27,7 @@ const frozen: FrozenLegacyOutput[] = JSON.parse(
   fs.readFileSync(path.join(REPO_ROOT, 'tests/fixtures/characterization/legacy-candidates.json'), 'utf8'),
 );
 
-const roundTrip = <T>(value: T): T => JSON.parse(JSON.stringify(value));
+const roundTrip = <T,>(value: T): T => JSON.parse(JSON.stringify(value));
 
 describe('runRetrieval through the re-homed legacy search equals the frozen enhancedRetrieveChunks output', () => {
   let fixture: FixtureDatabase;

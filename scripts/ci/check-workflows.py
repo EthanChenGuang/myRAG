@@ -194,7 +194,7 @@ def check_pr(errors: list[str]) -> None:
             "scripts/tests/gen-zod.node-test.mjs",
             "npm run typecheck:new",
             "next typegen",
-            "scripts/ci/tsc-ratchet.mjs",
+            "npx tsc --noEmit -p tsconfig.json",
             "scripts/tests/tsc-ratchet.node-test.mjs",
             "scripts/ci/check-node-runtime.mjs",
             "scripts/tests/check-node-runtime.node-test.mjs",
@@ -204,6 +204,8 @@ def check_pr(errors: list[str]) -> None:
         ):
             if needle not in body:
                 errors.append(f"pr-smoke: job ts is missing '{needle}'")
+        if "scripts/ci/tsc-baseline.json" in body or re.search(r"tsc-ratchet\.mjs(?![^\n]*--cwd)", body):
+            errors.append("pr-smoke: job ts must run plain tsc, not the root tsc ratchet or its baseline")
     for jname, job in jobs.items():
         if re.search(r"tsc-ratchet\.mjs[^\n]*--write", step_text(job)):
             errors.append(f"pr-smoke: job {jname} must not run the tsc ratchet with --write")

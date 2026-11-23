@@ -56,8 +56,8 @@ jobs:
         run: npm run typecheck:new
       - name: Generate route types
         run: npx next typegen
-      - name: Type-error ratchet
-        run: node scripts/ci/tsc-ratchet.mjs
+      - name: Type-check
+        run: npx tsc --noEmit -p tsconfig.json
       - name: Workflow structure check
         run: uv run --directory eval python ../scripts/ci/check-workflows.py
 
