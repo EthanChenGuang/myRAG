@@ -66,7 +66,9 @@ export async function GET() {
         // Test MCP client connection
         try {
           const client = UniversalMcpClient.getInstance();
-          await client.connect();
+
+          // Tool discovery connects every configured server, so health details are read afterwards
+          const tools = await client.discoverAllTools();
           
           // Get enhanced health details if available
           if (typeof client.getConnectionHealth === 'function') {
@@ -84,8 +86,6 @@ export async function GET() {
             }
           }
           
-          // Test tool discovery
-          const tools = await client.discoverAllTools();
           healthResults.zapier.diagnostics.canListTools = true;
           healthResults.zapier.diagnostics.toolCount = tools.length;
           

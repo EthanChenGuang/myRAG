@@ -1,4 +1,4 @@
-// MCP client now handled through our transport system
+import { createMCPClient, type MCPClient } from '@ai-sdk/mcp';
 import fs from 'fs';
 import path from 'path';
 import { devLog } from '@/lib/dev-logger';
@@ -108,6 +108,7 @@ const INTENT_PATTERNS = {
 export class UniversalMcpDiscovery {
   private serverHealth: Map<string, McpServerHealth> = new Map();
   private toolCapabilities: Map<string, UniversalToolCapability> = new Map();
+  private clients: Map<string, MCPClient> = new Map();
   private mcpClient: UniversalMcpClient;
   private lastDiscovery: Date | null = null;
   private isDiscovering = false;
@@ -277,7 +278,7 @@ export class UniversalMcpDiscovery {
 
     try {
       // Zapier requires both application/json and text/event-stream in Accept header
-      const headers = health.name === 'Zapier' 
+      const headers: Record<string, string> = health.name === 'Zapier' 
         ? { 
             'Content-Type': 'application/json',
             'Accept': 'application/json, text/event-stream'
@@ -286,7 +287,7 @@ export class UniversalMcpDiscovery {
             'Content-Type': 'application/json' 
           };
       
-      const client = await experimental_createMCPClient({
+      const client = await createMCPClient({
         transport: { 
           type: 'sse' as const, 
           url: health.endpoint, 
@@ -361,7 +362,7 @@ export class UniversalMcpDiscovery {
       devLog.verbose(`[Universal Discovery] Testing server: ${endpoint.name}`);
       
       // Zapier requires both application/json and text/event-stream in Accept header
-      const headers = endpoint.name === 'Zapier' 
+      const headers: Record<string, string> = endpoint.name === 'Zapier' 
         ? { 
             'Content-Type': 'application/json',
             'Accept': 'application/json, text/event-stream'
@@ -370,7 +371,7 @@ export class UniversalMcpDiscovery {
             'Content-Type': 'application/json' 
           };
       
-      const client = await experimental_createMCPClient({
+      const client = await createMCPClient({
         transport: { 
           type: 'sse' as const, 
           url: endpoint.url, 
@@ -443,7 +444,7 @@ export class UniversalMcpDiscovery {
     const lowerDesc = description.toLowerCase();
     
     // Determine category
-    let category = TOOL_CATEGORIES.UNKNOWN;
+    let category: string = TOOL_CATEGORIES.UNKNOWN;
     let confidence = 0.5;
     let intentKeywords: string[] = [];
     let dataTypes: string[] = [];
@@ -482,7 +483,7 @@ export class UniversalMcpDiscovery {
       description,
       confidence,
       lastUpdated: new Date(),
-      inputSchema: toolDef.parameters || {},
+      parameters: toolDef.parameters || toolDef.inputSchema || {},
       usageStats: {
         successRate: 0.95, // Default optimistic
         avgResponseTime: server.responseTime,
@@ -594,7 +595,7 @@ export class UniversalMcpDiscovery {
     return requirements;
   }
 
-  private async loadCustomServers() {
+  private async loadCustomServers(): Promise<{ id: string; name: string; endpoint: string; enabled: boolean }[]> {
     try {
       const envPath = path.join(process.cwd(), '.env.local');
       if (!fs.existsSync(envPath)) return [];
