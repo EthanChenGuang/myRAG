@@ -56,6 +56,7 @@ All requirements are written so they can be checked. "Behind a switch" means an 
 - [ ] **EMB-02**: Each embedding profile (model + dimension) is stored side by side (`halfvec` where needed, partial HNSW index per profile), and switching the active profile is a pointer flip that can be rolled back
 - [ ] **EMB-03**: The query-time embedding model is derived from the active index profile, and a model or dimension mismatch fails loudly at startup and per request
 - [ ] **EMB-04**: A re-embedding job reads stored chunk text only (never re-parses), runs in batches, resumes from where it stopped, supports dry-run, and can roll back (extends `scripts/rag/reprocess-documents.js`)
+- [ ] **EMB-05**: A new embedding profile can only be activated when it is complete and proven: (a) during a re-embed, every new or replaced document is written to both the active and the target profile (dual-write), so documents uploaded mid-migration are not missing; (b) activation refuses unless 100% of current chunks have a vector in the target profile — a query never searches a mix of old- and new-model vectors; (c) activation refuses unless the eval run on the target profile shows no regression beyond the noise band versus the active profile, with Recall@k reported separately for documents ingested before the migration; (d) every vector row records its `embedding_model` and dimension, and a same-dimension model mismatch (which pgvector would not reject) fails the EMB-03 check
 
 ### Retrieval (RET)
 
@@ -68,6 +69,7 @@ All requirements are written so they can be checked. "Behind a switch" means an 
 - [ ] **RET-07**: Chunk IDs returned by Weaviate or Qdrant are re-validated against Supabase under the caller's scope before use
 - [ ] **RET-08**: A cross-tenant canary test suite (personal vs organization, null organization, removed member, after delete, after version replace, after re-embed) runs against every backend in CI and is a release gate
 - [ ] **RET-09**: Each tenant and backend has an index-ready state; if an external backend is not ready or fails, retrieval falls back to pgvector and reports `degraded`
+- [ ] **RET-10**: Filtered vector search does not lose results when the filter is selective (tenant, document type, date, `documentRefs`): pgvector runs with `hnsw.iterative_scan` (pgvector ≥ 0.8) so a filtered HNSW scan keeps going until it has k matching rows; when the filter matches fewer rows than a configurable cutoff, retrieval does an exact (brute-force) scan over the matching rows instead of the graph; Qdrant creates its payload indexes (tenant, doc type) before data is loaded and uses ACORN for combined strict filters; Weaviate keeps its default ACORN with `flatSearchCutoff`; the eval adds a `selective_filter` category (a small tenant or a rare document type, ≤ 3% of rows) whose Recall@k must match the unfiltered exact-search answer
 
 ### Rerank & Context (RNK)
 
@@ -219,10 +221,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | EMB-02 | Phase 3 | Pending |
 | EMB-03 | Phase 3 | Pending |
 | EMB-04 | Phase 3 | Pending |
+| EMB-05 | Phase 3 | Pending |
 | RET-01 | Phase 4 | Pending |
 | RET-02 | Phase 4 | Pending |
 | RET-03 | Phase 4 | Pending |
 | RET-04 | Phase 4 | Pending |
+| RET-10 | Phase 4 | Pending |
 | RET-05 | Phase 7 | Pending |
 | RET-06 | Phase 7 | Pending |
 | RET-07 | Phase 7 | Pending |
@@ -281,8 +285,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CHK-05 | Phase 4 | Pending |
 
 **Coverage:**
-- v1 requirements: 95 total
-- Mapped to phases: 95
+- v1 requirements: 97 total
+- Mapped to phases: 97
 - Unmapped: 0 ✓
 
 **Mapping notes:**
