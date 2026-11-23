@@ -127,8 +127,9 @@ describe('MCP health route', () => {
   });
 
   it('connects through the client discovery method and returns its health JSON', async () => {
+    vi.doMock('@/lib/admin-route-auth', () => ({ requireAdminOrDeny: async () => null }));
     const { GET } = await import('@/app/api/mcp/health/route');
-    const response: NextResponse = await GET();
+    const response: NextResponse = await GET(new Request('http://localhost/api/mcp/health'));
     const body = (await response.json()) as {
       overall: string;
       zapier: { diagnostics: { canListTools: boolean; toolCount: number; lastError: string | null } };

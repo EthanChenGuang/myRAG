@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import { z } from 'zod/v3';
+import { requireAdminOrDeny } from '@/lib/admin-route-auth';
+import { redactUrls } from '@/lib/mcp/server-redact';
 
 // Re-use the same schema from the main route
 const McpServerSchema = z.object({
@@ -122,7 +124,7 @@ async function testServerConnection(server: McpServer): Promise<{ success: boole
   } catch (error: any) {
     return {
       success: false,
-      message: error.name === 'AbortError' ? 'Connection timeout' : `Connection failed: ${error.message}`,
+      message: error.name === 'AbortError' ? 'Connection timeout' : `Connection failed: ${redactUrls(String(error.message))}`,
     };
   }
 }
@@ -180,7 +182,7 @@ async function discoverTools(server: McpServer): Promise<{ success: boolean; too
           return {
             success: true,
             tools,
-            message: `Discovered ${tools.length} tools from ${url}`,
+            message: `Discovered ${tools.length} tools`,
           };
         }
       } catch (endpointError) {
@@ -197,82 +199,48 @@ async function discoverTools(server: McpServer): Promise<{ success: boolean; too
   } catch (error: any) {
     return {
       success: false,
-      message: error.name === 'AbortError' ? 'Tool discovery timeout' : `Tool discovery failed: ${error.message}`,
+      message: error.name === 'AbortError' ? 'Tool discovery timeout' : `Tool discovery failed: ${redactUrls(String(error.message))}`,
     };
   }
 }
 
-// POST /api/mcp/servers/[id]/test - Test server connection and discover tools
+// POST /api/mcp/servers/[id]/test - Test server connection and discover tools (admin only)
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const denied = await requireAdminOrDeny(req);
+  if (denied) return denied;
+
   const { id } = await params;
   try {
-    const body = await req.json();
-    const { action } = body;
-    
-    console.log(`MCP Server Test API: ${action} for server with ID: ${id}`);
-    
-    // Load the server configuration
+    let body: any;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    }
+    const action = body?.action;
+
     const customServers = await loadCustomServers();
     const server = customServers.find(s => s.id === id);
-    
+
     if (!server) {
       return NextResponse.json(
         { error: `Server with ID '${id}' not found` },
         { status: 404 }
       );
     }
-    
+
     if (action === 'test') {
-      // Test connection
-      const result = await testServerConnection(server);
-      return NextResponse.json(result, {
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type',
-        }
-      });
+      return NextResponse.json(await testServerConnection(server));
     } else if (action === 'discover') {
-      // Discover tools
-      const result = await discoverTools(server);
-      return NextResponse.json(result, {
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type',
-        }
-      });
+      return NextResponse.json(await discoverTools(server));
     } else {
       return NextResponse.json(
         { error: 'Invalid action. Supported actions: test, discover' },
-        { 
-          status: 400,
-          headers: {
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type',
-          }
-        }
+        { status: 400 }
       );
     }
-  } catch (error) {
-    console.error(`MCP Server Test API: Error in action for server ${id}:`, error);
-    return NextResponse.json(
-      { error: 'Failed to perform server action' },
-      { status: 500 }
-    );
+  } catch {
+    console.error('[MCP Server Test API] server action failed', { id });
+    return NextResponse.json({ error: 'Failed to perform server action' }, { status: 500 });
   }
 }
-
-// OPTIONS /api/mcp/servers/[id]/test - Handle CORS preflight requests
-export async function OPTIONS() {
-  return new NextResponse(null, {
-    status: 200,
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
-      'Access-Control-Max-Age': '86400',
-    },
-  });
-} 

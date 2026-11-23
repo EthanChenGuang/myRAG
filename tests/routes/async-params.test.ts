@@ -76,6 +76,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.resetModules();
+  vi.doUnmock('@/lib/admin-route-auth');
   vi.doUnmock('@/lib/system-prompt-manager');
   vi.doUnmock('@/lib/supabase/server');
   vi.doUnmock('@/lib/deployment-mode');
@@ -195,6 +196,10 @@ describe('invites/:token', () => {
   });
 });
 
+function allowAdminRoutes() {
+  vi.doMock('@/lib/admin-route-auth', () => ({ requireAdminOrDeny: async () => null }));
+}
+
 describe('mcp/servers/:id', () => {
   const SERVER = {
     id: 'srv-1',
@@ -211,6 +216,7 @@ describe('mcp/servers/:id', () => {
   }
 
   test('GET returns the server for the awaited id', async () => {
+    allowAdminRoutes();
     const route = await import('@/app/api/mcp/servers/[id]/route');
     mockEnvFile();
     const res = await route.GET(jsonRequest('http://localhost/api/mcp/servers/srv-1', 'GET'), {
@@ -221,6 +227,7 @@ describe('mcp/servers/:id', () => {
   });
 
   test('PUT updates the server matching the awaited id', async () => {
+    allowAdminRoutes();
     const route = await import('@/app/api/mcp/servers/[id]/route');
     const write = mockEnvFile();
     const res = await route.PUT(
@@ -232,6 +239,7 @@ describe('mcp/servers/:id', () => {
   });
 
   test('DELETE removes the server matching the awaited id', async () => {
+    allowAdminRoutes();
     const route = await import('@/app/api/mcp/servers/[id]/route');
     const write = mockEnvFile();
     const res = await route.DELETE(jsonRequest('http://localhost/api/mcp/servers/srv-1', 'DELETE'), {
@@ -242,6 +250,7 @@ describe('mcp/servers/:id', () => {
   });
 
   test('POST runs the requested action for the awaited id', async () => {
+    allowAdminRoutes();
     const route = await import('@/app/api/mcp/servers/[id]/route');
     mockEnvFile();
     vi.stubGlobal('fetch', vi.fn(async () => new Response(null, { status: 200 })));
@@ -255,6 +264,7 @@ describe('mcp/servers/:id', () => {
 
 describe('mcp/servers/:id/test', () => {
   test('POST tests the server matching the awaited id', async () => {
+    allowAdminRoutes();
     const route = await import('@/app/api/mcp/servers/[id]/test/route');
     vi.spyOn(fs, 'existsSync').mockReturnValue(true);
     vi.spyOn(fs, 'readFileSync').mockReturnValue(

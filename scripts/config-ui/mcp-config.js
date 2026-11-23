@@ -140,7 +140,7 @@ class McpConfigManager {
         </div>
         <div class="server-details">
           <div class="server-endpoint">
-            <strong>Endpoint:</strong> ${server.endpoint}
+            <strong>Host:</strong> ${server.host || ''}${server.hasCredentials ? ' (credentials stored)' : ''}
           </div>
           <div class="server-stats">
             <span class="stat">Type: ${server.type?.toUpperCase() || 'HTTP'}</span>
@@ -231,8 +231,8 @@ class McpConfigManager {
               
               <div class="form-group">
                 <label for="server-endpoint">Endpoint URL</label>
-                <input type="url" id="server-endpoint" value="${server.endpoint}" 
-                       placeholder="https://api.example.com/mcp" required>
+                <input type="url" id="server-endpoint" value="${isEditing ? '' : server.endpoint}"
+                       placeholder="${isEditing ? `Leave blank to keep ${server.host || 'the stored endpoint'}` : 'https://api.example.com/mcp'}" ${isEditing ? '' : 'required'}>
               </div>
               
               <div class="form-group">
@@ -473,7 +473,7 @@ class McpConfigManager {
     if (!serverData) return;
     
     // Basic validation
-    if (!serverData.id || !serverData.name || !serverData.endpoint) {
+    if (!serverData.id || !serverData.name || (!this.currentEditingServer && !serverData.endpoint)) {
       this.showError('Please fill in all required fields');
       return;
     }
@@ -601,7 +601,7 @@ class McpConfigManager {
       return;
     }
 
-    const currentEndpoint = server.endpoint !== config.defaultEndpoint ? server.endpoint : '';
+    const currentEndpoint = '';
 
     const dialogHtml = `
       <div class="modal-overlay" id="builtin-server-dialog-overlay">
@@ -623,7 +623,7 @@ class McpConfigManager {
                 <div class="form-group">
                   <label for="builtin-endpoint">Server Endpoint URL</label>
                   <input type="url" id="builtin-endpoint" value="${currentEndpoint}" 
-                         placeholder="${config.placeholder}" required>
+                         placeholder="${server.host ? `Currently ${server.host}; enter the full URL to change it` : config.placeholder}" required>
                   <small>Enter the URL of your ${serverId} MCP server endpoint</small>
                 </div>
                 

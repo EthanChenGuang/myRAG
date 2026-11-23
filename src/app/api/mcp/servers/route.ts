@@ -3,6 +3,8 @@ import { env } from '@/lib/env';
 import fs from 'fs';
 import path from 'path';
 import { z } from 'zod/v3';
+import { requireAdminOrDeny } from '@/lib/admin-route-auth';
+import { toPublicServer } from '@/lib/mcp/server-redact';
 
 // Schema for MCP server configuration
 const McpServerSchema = z.object({
@@ -192,155 +194,86 @@ async function testServerConnection(server: McpServer): Promise<{ success: boole
   }
 }
 
-// GET /api/mcp/servers - List all servers
-export async function GET() {
+// GET /api/mcp/servers - List all servers (admin only; endpoints and credentials are never returned)
+export async function GET(req: NextRequest) {
+  const denied = await requireAdminOrDeny(req);
+  if (denied) return denied;
+
   try {
-    console.log('MCP Servers API: Fetching all MCP servers');
-    
     const customServers = await loadCustomServers();
     const allServers = [...BUILTIN_SERVERS, ...customServers];
-    
-    console.log(`MCP Servers API: Found ${BUILTIN_SERVERS.length} built-in and ${customServers.length} custom servers`);
-    
+
+    console.log('[MCP Servers API] listed servers', {
+      builtin: BUILTIN_SERVERS.length,
+      custom: customServers.length,
+    });
+
     return NextResponse.json({
-      servers: allServers,
+      servers: allServers.map(toPublicServer),
       builtinCount: BUILTIN_SERVERS.length,
       customCount: customServers.length,
       totalCount: allServers.length,
-    }, {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
-      }
-    });
-  } catch (error) {
-    console.error('MCP Servers API: Error fetching servers:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch MCP servers' },
-      { 
-        status: 500,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type',
-        }
-      }
-    );
+    }, { headers: { 'Cache-Control': 'no-store' } });
+  } catch {
+    console.error('[MCP Servers API] failed to fetch servers');
+    return NextResponse.json({ error: 'Failed to fetch MCP servers' }, { status: 500 });
   }
 }
 
-// POST /api/mcp/servers - Add new custom server
+// POST /api/mcp/servers - Add new custom server (admin only)
 export async function POST(req: NextRequest) {
+  const denied = await requireAdminOrDeny(req);
+  if (denied) return denied;
+
   try {
-    const body = await req.json();
-    console.log('MCP Servers API: Adding new server:', body.name);
-    
-    // Validate the server configuration
+    let body: any;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    }
+
     const serverConfig = McpServerSchema.parse(body);
-    
-    // Load existing custom servers
+
     const customServers = await loadCustomServers();
-    
-    // Check for duplicate IDs
-    const existingServer = customServers.find(s => s.id === serverConfig.id);
-    if (existingServer) {
+
+    if (customServers.some(s => s.id === serverConfig.id)) {
       return NextResponse.json(
         { error: `Server with ID '${serverConfig.id}' already exists` },
-        { 
-          status: 409,
-          headers: {
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type',
-          }
-        }
+        { status: 409 }
       );
     }
-    
-    // Check for duplicate built-in server IDs
-    const builtinServer = BUILTIN_SERVERS.find(s => s.id === serverConfig.id);
-    if (builtinServer) {
+
+    if (BUILTIN_SERVERS.some(s => s.id === serverConfig.id)) {
       return NextResponse.json(
         { error: `Cannot use built-in server ID '${serverConfig.id}'` },
-        { 
-          status: 409,
-          headers: {
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type',
-          }
-        }
+        { status: 409 }
       );
     }
-    
-    // Add timestamps
-    const newServer: McpServer = {
-      ...serverConfig,
-      // Add any server-side defaults
-    };
-    
-    // Save to custom servers
-    const updatedServers = [...customServers, newServer];
-    await saveCustomServers(updatedServers);
-    
-    console.log(`MCP Servers API: Successfully added server '${newServer.name}'`);
-    
+
+    const newServer: McpServer = { ...serverConfig };
+
+    await saveCustomServers([...customServers, newServer]);
+
+    console.log('[MCP Servers API] server added', { id: newServer.id });
+
     return NextResponse.json({
-      server: newServer,
+      server: toPublicServer(newServer),
       message: `Server '${newServer.name}' added successfully`,
-    }, { 
-      status: 201,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
-      }
-    });
+    }, { status: 201 });
   } catch (error: any) {
-    console.error('MCP Servers API: Error adding server:', error);
-    
     if (error instanceof z.ZodError) {
       return NextResponse.json(
         { error: 'Invalid server configuration', details: error.errors },
-        { 
-          status: 400,
-          headers: {
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type',
-          }
-        }
+        { status: 400 }
       );
     }
-    
-    return NextResponse.json(
-      { error: 'Failed to add MCP server' },
-      { 
-        status: 500,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type',
-        }
-      }
-    );
-  }
-}
 
-// OPTIONS /api/mcp/servers - Handle CORS preflight requests
-export async function OPTIONS() {
-  return new NextResponse(null, {
-    status: 200,
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
-      'Access-Control-Max-Age': '86400',
-    },
-  });
+    console.error('[MCP Servers API] failed to add server');
+    return NextResponse.json({ error: 'Failed to add MCP server' }, { status: 500 });
+  }
 }
 
 // PUT /api/mcp/servers/[id] - Update server (handled by dynamic route)
 // DELETE /api/mcp/servers/[id] - Delete server (handled by dynamic route)
-// POST /api/mcp/servers/[id]/test - Test server connection (handled by dynamic route) 
+// POST /api/mcp/servers/[id]/test - Test server connection (handled by dynamic route)
