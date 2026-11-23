@@ -188,7 +188,18 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: uv sync --directory rag-sidecar --locked
       - run: uv sync --directory eval --locked --all-extras
-      - name: Degraded run must be rejected by the gate with the regression exit code 10
+      - name: Dropping the top candidate must be rejected by the gate with a clear MRR margin
+        shell: bash
+        run: |
+          set +e
+          npm run test-rag -- --degrade drop_top_candidate --out eval/out/negative-degrade
+          code=$?
+          set -e
+          echo "degrade run exit code: $code"
+          test "$code" -eq 10
+          jq -e '.passed == false and (.mismatches | length == 0)' eval/out/negative-degrade/gate.json
+          jq -e '[.offenders[] | select(.slice == "overall" and .metric == "mrr") | (.threshold - .observed)] | (length == 1 and .[0] >= 0.05)' eval/out/negative-degrade/gate.json
+      - name: Thin control, a degraded run must be rejected by the gate with the regression exit code 10
         shell: bash
         run: |
           set +e
@@ -203,7 +214,9 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: eval-negative-control
-          path: eval/out/negative
+          path: |
+            eval/out/negative
+            eval/out/negative-degrade
           if-no-files-found: warn
 
   docker-build:
