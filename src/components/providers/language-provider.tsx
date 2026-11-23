@@ -33,7 +33,11 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
 
   // Translation function
   const t = (key: TranslationKeys): string => {
-    return translations[language][key] || translations.en[key] || key;
+    const dictionary: Partial<Record<TranslationKeys, unknown>> = translations[language];
+    const localized = dictionary[key];
+    if (typeof localized === 'string' && localized) return localized;
+    const fallback = translations.en[key];
+    return typeof fallback === 'string' && fallback ? fallback : key;
   };
 
   return (

@@ -33,8 +33,8 @@ export const DebouncedSelect = memo(function DebouncedSelect({
 }: DebouncedSelectProps) {
   const [localValue, setLocalValue] = useState(value);
   const [isOpen, setIsOpen] = useState(false);
-  const debounceTimerRef = useRef<NodeJS.Timeout>();
-  const rafRef = useRef<number>();
+  const debounceTimerRef = useRef<NodeJS.Timeout | undefined>(undefined);
+  const rafRef = useRef<number | undefined>(undefined);
 
   // Sync local value with prop value
   useEffect(() => {

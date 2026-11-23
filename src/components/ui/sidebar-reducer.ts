@@ -8,6 +8,7 @@ export interface SidebarState {
   editingFolderId: string | null;
   editingFolderName: string;
   isSearching: boolean;
+  searchQuery: string;
   menuOpenChatId: string | null;
   openDropdownId: string | null;
   isPinnedSectionCollapsed: boolean;
@@ -38,6 +39,7 @@ export type SidebarAction =
 
   // Search actions
   | { type: 'TOGGLE_SEARCH' }
+  | { type: 'UPDATE_SEARCH_QUERY'; query: string }
   | { type: 'CLEAR_SEARCH' }
 
   // Menu and dropdown actions
@@ -79,6 +81,7 @@ export const initialSidebarState: SidebarState = {
   editingFolderId: null,
   editingFolderName: '',
   isSearching: false,
+  searchQuery: '',
   menuOpenChatId: null,
   openDropdownId: null,
   isPinnedSectionCollapsed: false,  // Start with sections open by default
@@ -160,13 +163,16 @@ export function sidebarReducer(state: SidebarState, action: SidebarAction): Side
       };
     
     case 'UPDATE_SEARCH_QUERY':
-      // Search query is managed by chat store, not local state
-      return state;
+      return {
+        ...state,
+        searchQuery: action.query
+      };
     
     case 'CLEAR_SEARCH':
       return {
         ...state,
-        isSearching: false
+        isSearching: false,
+        searchQuery: ''
       };
     
     // Menus
@@ -390,7 +396,7 @@ export function useSidebarReducer() {
 
         return {
           ...initial,
-          collapsedFolders: savedCollapsed ? new Set(JSON.parse(savedCollapsed)) : initial.collapsedFolders,
+          collapsedFolders: savedCollapsed ? new Set<string>(JSON.parse(savedCollapsed)) : initial.collapsedFolders,
           // Load manual preferences immediately to prevent FOUC
           isPinnedSectionCollapsed: pinnedState,
           isFoldersSectionCollapsed: foldersState

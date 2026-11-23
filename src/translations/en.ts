@@ -10,6 +10,7 @@ export const en = {
   logout: "Log out",
   modelSelector: "Select AI model",
   textSize: "Text Size",
+  textSettings: "Text Settings",
   themeToggle: "Toggle theme",
   shareChat: "Share chat",
   uploadDocument: "Upload document",
