@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
 
     if (env.WHATSAPP_WEBHOOK_SECRET) {
       const whatsappClient = getWhatsAppClient();
-      const isValid = !!signature && whatsappClient.verifyWebhookSignature(rawBody, signature);
+      const isValid = !!signature && whatsappClient.validateWebhookSignature(signature, rawBody);
 
       if (!isValid) {
         logger.warn('WhatsApp Webhook', 'Invalid webhook signature');

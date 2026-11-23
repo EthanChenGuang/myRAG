@@ -213,7 +213,7 @@ export function WhatsAppConnectionButton() {
           setSession(data.session);
           if (data.session.status === 'qr_pending') {
             setShowQRModal(true);
-            toast.info('Using existing WhatsApp session. Please scan the QR code.');
+            toast('Using existing WhatsApp session. Please scan the QR code.');
           } else if (data.session.status === 'connected') {
             toast.success(`WhatsApp already connected to ${data.session.phoneNumber}`);
           }

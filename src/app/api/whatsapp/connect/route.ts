@@ -7,6 +7,7 @@ import { env } from '@/lib/env';
 export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
+  let userId: string | undefined;
   try {
     // Check if WhatsApp is enabled
     if (env.NEXT_PUBLIC_WHATSAPP_ENABLED !== 'true') {
@@ -26,6 +27,8 @@ export async function POST(request: NextRequest) {
         { status: 401 }
       );
     }
+
+    userId = user.id;
 
     logger.info('WhatsApp Connect', `User ${user.id} initiating WhatsApp connection`);
 
@@ -50,7 +53,7 @@ export async function POST(request: NextRequest) {
     if (error.code === 'SESSION_EXISTS') {
       // Get the existing session instead of failing
       const sessionManager = getSessionManager();
-      const existingSession = await sessionManager.getActiveSession(user.id);
+      const existingSession = userId ? await sessionManager.getActiveSession(userId) : null;
       
       if (existingSession) {
         return NextResponse.json(

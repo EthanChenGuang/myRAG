@@ -69,7 +69,7 @@ export abstract class BaseWhatsAppClient {
     sessionId: string,
     to: string,
     text: string
-  ): Promise<{ messageId: string }>;
+  ): Promise<{ messageId: string; status: string }>;
 
   /**
    * Send a media message
