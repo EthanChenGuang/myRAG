@@ -23,7 +23,7 @@ This document is the working guide for anyone, human or AI assistant (Claude, Co
 ---
 
 ## 3. Prerequisites & Core Commands
-- Node.js >=20.9.0, npm, Supabase project, API keys for embeddings and preferred models.
+- Node.js 22 (`^22.12.0`, see `.nvmrc`), npm, Supabase project, API keys for embeddings and preferred models.
 - `npm run dev` – boots the app, auto-creates `.env.local` if missing, enables fast refresh.
 - `npm run config` – opens the visual configuration dashboard at `http://localhost:3333` for env management, admin users, and RAG prompt tuning.
 

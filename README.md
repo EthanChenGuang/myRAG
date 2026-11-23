@@ -254,11 +254,13 @@ Build unlimited chatbots for yourself or clients with full white-label support
 ### Prerequisites
 
 ```bash
-✅ Node.js >=20.9.0 and npm
+✅ Node.js 22 (`^22.12.0`, see `.nvmrc`) and npm
 ✅ Supabase account (free tier works)
 ✅ OpenAI API key (for embeddings)
 ✅ At least one AI provider API key
 ```
+
+Vercel picks the Node.js major from `engines.node` in `package.json`; a `>=` range would deploy a newer major, so keep it at `^22.12.0`.
 
 ### Single-Tenant Setup
 
