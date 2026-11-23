@@ -844,12 +844,17 @@ export function DocumentDashboard({
     "Upload"
   );
 
+  const workspaceQuery =
+    isMultiTenant() && !isPersonalMode && currentOrganization
+      ? `?organizationId=${encodeURIComponent(currentOrganization.id)}`
+      : '';
+
   const handleDelete = async (id: string) => {
     try {
       // Add document ID to the deleting list to show spinner
       setDeletingDocIds(prev => [...prev, id]);
 
-      const response = await fetch(`/api/documents/${id}`, {
+      const response = await fetch(`/api/documents/${id}${workspaceQuery}`, {
         method: 'DELETE',
       });
 
@@ -887,7 +892,7 @@ export function DocumentDashboard({
     try {
       setUpdatingUrlDocId(docId);
 
-      const response = await fetch(`/api/documents/${docId}`, {
+      const response = await fetch(`/api/documents/${docId}${workspaceQuery}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
