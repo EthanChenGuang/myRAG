@@ -28,6 +28,7 @@ describe('stage tables', () => {
   test('core and optional stage names are the D-03 names', () => {
     expect([...CORE_STAGES]).toEqual(['embed', 'search']);
     expect([...OPTIONAL_STAGES]).toEqual([
+      'refs',
       'analyze',
       'legacy_rank',
       'post_filter',
@@ -40,6 +41,7 @@ describe('stage tables', () => {
   test('profile defaults match the plan', () => {
     for (const profile of ['chat', 'embed', 'eval', 'media'] as const) {
       expect(PROFILE_STAGE_DEFAULTS[profile]).toEqual({
+        refs: 5000,
         analyze: 1000,
         embed: 15000,
         search: 15000,
@@ -49,6 +51,7 @@ describe('stage tables', () => {
       });
     }
     expect(PROFILE_STAGE_DEFAULTS.voice).toEqual({
+      refs: 5000,
       analyze: 500,
       embed: 5000,
       search: 5000,

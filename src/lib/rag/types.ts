@@ -77,14 +77,24 @@ export interface ReferencedState {
   context: string;
 }
 
+export interface DocumentPartRef {
+  id: string;
+  name: string;
+}
+
+export interface DocumentRefsInput {
+  mentions: string[];
+  documentParts: DocumentPartRef[];
+}
+
 export interface RetrievalOptions {
   maxResults?: number;
   fallbackToLowerThreshold?: boolean;
   isGPTModel?: boolean;
   ragMode?: RagMode;
   webSearchEnabled?: boolean;
-  referenced?: ReferencedState | null;
   mediaKind?: 'image' | 'video';
+  generalOverview?: boolean;
 }
 
 export interface StageOverrides {
@@ -96,7 +106,7 @@ export interface RunRetrievalInput {
   scope: TenantScope | null;
   query: string;
   profile: Profile;
-  documentRefs?: string[];
+  documentRefs?: DocumentRefsInput;
   options?: RetrievalOptions;
   signal: AbortSignal;
   trace?: TraceCollector;

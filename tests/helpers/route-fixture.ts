@@ -1,10 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { PGlite } from '@electric-sql/pglite';
 import { expect, vi } from 'vitest';
 import { loadPinnedEvalEnv } from '../../eval/harness/eval-env.mts';
 import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from '../../eval/harness/fake-edge.mts';
 import { createFixtureDatabase, FIXTURE_USER_ID, type DeploymentMode } from '../../eval/harness/pglite-supabase.mts';
+import { createTwoTenantDatabase } from '../../eval/harness/two-tenant.mts';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
@@ -76,12 +78,33 @@ export function systemTextOf(params: Record<string, any>): string {
     .join('\n\n---SYSTEM-MESSAGE---\n\n');
 }
 
-export async function startRouteFixture(options: { deploymentMode: DeploymentMode }): Promise<RouteFixture> {
+export interface RouteFixtureOptions {
+  deploymentMode: DeploymentMode;
+  /** Two users, a personal document each and an organization document (multi-tenant only). Also lets the edge answer filename lookups. */
+  twoTenant?: boolean;
+  /** Extra rows inserted into the fixture database before the fake edge starts. */
+  seed?: (db: PGlite) => Promise<void>;
+}
+
+export async function startRouteFixture(options: RouteFixtureOptions): Promise<RouteFixture> {
   const { deploymentMode } = options;
-  const fixture = await createFixtureDatabase({ deploymentMode, corpusDir: CORPUS_DIR });
+  if (options.twoTenant && deploymentMode !== 'multi-tenant') {
+    throw new Error('[Route Fixture] twoTenant needs the multi-tenant deployment mode');
+  }
+  const fixture = options.twoTenant
+    ? await createTwoTenantDatabase({ corpusDir: CORPUS_DIR })
+    : await createFixtureDatabase({ deploymentMode, corpusDir: CORPUS_DIR });
+  if (options.seed) {
+    try {
+      await options.seed(fixture.db);
+    } catch (error) {
+      await fixture.db.close().catch(() => undefined);
+      throw error;
+    }
+  }
   let edge: FakeEdge;
   try {
-    edge = await startFakeEdge({ db: fixture.db });
+    edge = await startFakeEdge({ db: fixture.db, documentFilenameFilter: options.twoTenant === true });
   } catch (error) {
     await fixture.db.close().catch(() => undefined);
     throw error;
