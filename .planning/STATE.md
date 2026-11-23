@@ -13,7 +13,7 @@ progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 58
-  completed_plans: 34
+  completed_plans: 35
 ---
 
 # Project State
@@ -28,11 +28,11 @@ See: .planning/PROJECT.md (updated 2026-11-22)
 ## Current Position
 
 Phase: 02 (Unified Retrieval Pipeline & Tenant Scope) — EXECUTING
-Plan: 24 of 36 complete (02-01..13, 02-15..18, 02-22, 02-30..35)
+Plan: 25 of 36 complete (02-01..18, 02-22, 02-30..35)
 Status: Executing sequentially
 Last activity: 2026-11-23 — 02-08, 09, 10, 15 merged; tsc ratchet 58; 480 vitest tests pass; Phase 3 research + patterns committed
 
-Progress: [███████░░░] 67%
+Progress: [███████░░░] 69%
 
 ## Performance Metrics
 
@@ -92,6 +92,7 @@ Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 - [02-11] Eval refusal is `refusalCandidate` with reason `no_relevant_context`; a route that passes `trace` owns `finishTrace`; `stage_status` is part of RagTrace; pipeline error or incomplete assembly in eval is HTTP 500.
 - [02-12] Chat route resolves scope before the stream (403/503 JSON); retrieval error or degraded-without-documents streams a localized "knowledge base temporarily unavailable" error part; org owner without a member row is backfilled by `repairOwnerMembership` only when `organizations.owner_id` matches.
+- [02-14] Embed tenant comes only from `RAG_EMBED_TENANT`; a body naming another workspace gets 403; unconfigured/unknown/unavailable tenant or retrieval error streams the localized unavailable part (language from Accept-Language); embed context now uses the chat assembly format (snapshot regenerated, differences listed in 02-14-SUMMARY).
 - [02-16] Voice payload travels in `RetrievalResult.voice`; voice-rag maps error/degraded-without-results to 503, empty to `{results: []}`; scope doc lookup capped at 500, chunk queries batched by 100. Gap fix: single-tenant tokens carry a signed `act` claim and voice-chat saves under it; body user ids are ignored.
 - [02-17] Voice agent sends `x-rag-scope-token`; one active user per agent (guard covers connect/disconnect handlers); a failed KB turn is spoken but not stored.
 - [02-18] Media profile = embed, search (k=10, threshold 0.3, admin client), assemble, scoped by `resolveTenantScope`; `rag_status` added to media responses.
