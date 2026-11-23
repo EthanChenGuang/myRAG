@@ -5,6 +5,14 @@ export interface EmbedRequestBody {
   model: string;
 }
 
-export function toEmbedRequestBody(_messages: UIMessage[], model: string): EmbedRequestBody {
-  return { messages: [], model };
+export function toEmbedRequestBody(messages: UIMessage[], model: string): EmbedRequestBody {
+  return {
+    messages: messages.map((message) => ({
+      role: message.role,
+      content: message.parts
+        .map((part) => (part.type === 'text' ? part.text : ''))
+        .join(''),
+    })),
+    model,
+  };
 }
