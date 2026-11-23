@@ -1,0 +1,156 @@
+{
+  "$defs": {
+    "ConversationTurn": {
+      "additionalProperties": false,
+      "properties": {
+        "content": {
+          "minLength": 1,
+          "title": "Content",
+          "type": "string"
+        },
+        "role": {
+          "enum": [
+            "user",
+            "assistant"
+          ],
+          "title": "Role",
+          "type": "string"
+        }
+      },
+      "required": [
+        "role",
+        "content"
+      ],
+      "title": "ConversationTurn",
+      "type": "object"
+    },
+    "GoldSpan": {
+      "additionalProperties": false,
+      "properties": {
+        "document": {
+          "title": "Document",
+          "type": "string"
+        },
+        "quote": {
+          "minLength": 2,
+          "title": "Quote",
+          "type": "string"
+        },
+        "section": {
+          "title": "Section",
+          "type": "string"
+        }
+      },
+      "required": [
+        "document",
+        "section",
+        "quote"
+      ],
+      "title": "GoldSpan",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "answerable": {
+      "title": "Answerable",
+      "type": "boolean"
+    },
+    "category": {
+      "enum": [
+        "multi_turn",
+        "compound",
+        "exact_term",
+        "table",
+        "scanned",
+        "no_answer",
+        "general"
+      ],
+      "title": "Category",
+      "type": "string"
+    },
+    "conversation": {
+      "items": {
+        "$ref": "#/$defs/ConversationTurn"
+      },
+      "title": "Conversation",
+      "type": "array"
+    },
+    "expected_answer": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Expected Answer"
+    },
+    "gold_evidence": {
+      "items": {
+        "$ref": "#/$defs/GoldSpan"
+      },
+      "title": "Gold Evidence",
+      "type": "array"
+    },
+    "id": {
+      "pattern": "^[a-z0-9][a-z0-9._-]{2,63}$",
+      "title": "Id",
+      "type": "string"
+    },
+    "language": {
+      "enum": [
+        "zh",
+        "en",
+        "it"
+      ],
+      "title": "Language",
+      "type": "string"
+    },
+    "provenance": {
+      "enum": [
+        "synthetic_fixture",
+        "claude_draft",
+        "ragas_generated",
+        "human"
+      ],
+      "title": "Provenance",
+      "type": "string"
+    },
+    "question": {
+      "title": "Question",
+      "type": "string"
+    },
+    "review_status": {
+      "enum": [
+        "draft",
+        "approved",
+        "rejected"
+      ],
+      "title": "Review Status",
+      "type": "string"
+    },
+    "split": {
+      "enum": [
+        "dev",
+        "test"
+      ],
+      "title": "Split",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "question",
+    "language",
+    "category",
+    "answerable",
+    "review_status",
+    "provenance",
+    "split"
+  ],
+  "title": "GoldenItem",
+  "type": "object"
+}

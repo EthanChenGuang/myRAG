@@ -68,3 +68,10 @@ dash-snapshot.md
 # Local Claude Code session data
 .claude/data/
 .claude/settings.local.json
+
+# Eval harness artifacts
+eval/out/
+eval/golden/private/
+.venv/
+__pycache__/
+.pytest_cache/

@@ -1,177 +1,146 @@
+---
+last_mapped_commit: 41a47818ac26f9ea788ccb18230fb3351065c2a2
+last_mapped_at: 2026-11-22
+---
 # Coding Conventions
 
-**Analysis Date:** 2026-06-01
+**Analysis Date:** 2026-11-22
 
 ## Naming Patterns
 
 **Files:**
-- `kebab-case` for all library modules: `chat-store.ts`, `user-settings-store.ts`, `api-middleware.ts`, `document-processor.ts`
-- `kebab-case` for most UI components: `chat-message.tsx`, `chat-input.tsx`, `document-dashboard.tsx`
-- One exception: `CopyButton.tsx` (PascalCase) exists but is non-standard — follow kebab-case for new files
-- API routes always named `route.ts` inside their directory: `src/app/api/chat/route.ts`
-- Hooks prefixed `use-`: `use-organization.ts`, `use-audio-settings.ts`, `use-touch-device.ts`
-- Stores suffixed `-store`: `chat-store.ts`, `admin-store.ts`, `web-search-store.ts`
+- kebab-case for all TypeScript modules: `src/lib/chat-store.ts`, `src/lib/query-classifier.ts`, `src/lib/whatsapp/types.ts`
+- React components also use kebab-case filenames with PascalCase exports: `src/components/ui/sidebar.tsx` exports `Header`, `ChatInput`, `CollapsibleButton`
+- Next.js route files use the framework names: `src/app/api/chat/route.ts`, `src/app/api/chat/approve/route.ts`
+- Scripts under `scripts/` use kebab-case `.js`: `scripts/rag/check-rag-flow.js`, `scripts/whatsapp/tests/test-formatting.js`
 
 **Functions:**
-- `camelCase` for all functions and async functions: `fetchChats`, `createChat`, `updateChatTitle`
-- Named exports preferred over default exports: `export function Spinner(...)`, `export async function GET(...)`
-- Page/layout components use `export default`: `src/app/page.tsx`, `src/app/layout.tsx`
-- React components: PascalCase names, named exports: `export function UserMenu(...)`, `export function ShareChatButton(...)`
-- Custom hooks: `use` prefix + camelCase: `useCurrentOrganization()`, `useOrganizations()`
+- camelCase for functions and hooks: `validateRequest`, `withValidation` in `src/lib/api-middleware.ts`, `getQueryEmbedding` in `src/lib/document-processor.ts`
+- Named function declarations for exported components and helpers: `export function Header(...)` in `src/components/ui/header.tsx`
+- `React.memo(function Name(...))` and `forwardRef<Handle, Props>(function Name(...))` for memoized/ref-forwarding components, e.g. `src/components/ui/` `CopyButton`, `ChatInput`
 
 **Variables:**
-- `camelCase` for local variables and parameters
-- `SCREAMING_SNAKE_CASE` for module-level constants: `const STORAGE_BUCKET = 'chat-images'`, `const CURRENT_CHAT_KEY = 'currentChatId'`
-- `_prefixed` for intentionally-unused parameters (ESLint `argsIgnorePattern: "^_"`)
+- camelCase for locals; module-level constants in SCREAMING_SNAKE_CASE: `STORAGE_BUCKET`, `CURRENT_CHAT_KEY` in `src/lib/chat-store.ts`, `DOCUMENT_URL_MAP` and `documentReferenceTool` in `src/app/api/chat/route.ts`
+- Unused variables must be prefixed with `_` to satisfy the lint rule (`argsIgnorePattern: "^_"`, `varsIgnorePattern: "^_"`)
 
 **Types:**
-- `PascalCase` for interfaces and type aliases: `interface ChatStore`, `type DeploymentMode`
-- Component Props: `interface {ComponentName}Props` co-located in the same file
-- Context types: `type {Name}ContextType` or `interface {Name}ContextType`
-- Store state interface split into data shape (`UserSettings`) + store interface (`UserSettingsState extends UserSettings`)
-- Generic Record types used for flexible metadata: `Record<string, any>`
-- Exported type-only imports use `import type { ... }` syntax: `import type { Folder } from '@/types/folder'`
+- PascalCase interfaces and type aliases, typically named `*Props`, `*State`, `*Store`, `*Input`: `ChatStore` and `CreateFolderInput` in `src/lib/chat-store.ts`, `ExtendedMessage` and `DBMessage` in `src/types/chat.ts`
+- Prefer `interface` for object shapes (`src/types/chat.ts`); use `type` for unions and imported type-only symbols (`import type { ... }`)
+- Enums are used sparingly for fixed sets: `LogLevel` in `src/lib/logger.ts`
+
+**Event and constant identifiers:**
+- Client events are namespaced strings: `ChatEvents.CHAT_CREATED = 'myrag:chat_created'` in `src/lib/chat-store.ts`
 
 ## Code Style
 
 **Formatting:**
-- No Prettier config detected — formatting is maintained by ESLint + TypeScript strictness
-- Single quotes for strings (consistent across `src/`)
-- 2-space indentation (TypeScript files)
-- Trailing semicolons used throughout
+- No Prettier config at the repository root. The app code in `src/` uses 2-space indentation (no tab-indented files found) and single quotes for imports and strings (about 333 `src/` files import with single quotes versus about 30 with double quotes)
+- Semicolons are used in most files, but not uniformly; match the surrounding file rather than reformatting
+- `baileys-whatsapp/.prettierrc` is the only explicit Prettier configuration: tabs (`useTabs: true`, `tabWidth: 2`), `semi: false`, `singleQuote: true`, `jsxSingleQuote: true`, `arrowParens: "avoid"`, `printWidth: 120`, `trailingComma: "none"`. Apply these settings only inside `baileys-whatsapp/`
 
 **Linting:**
-- ESLint 9 flat config: `eslint.config.mjs`
-- TypeScript-ESLint recommended rules enabled
-- `no-unused-vars`: warn (not error), ignores `_`-prefixed identifiers
-- `@typescript-eslint/no-explicit-any`: warn (not error) — `any` appears in codebase but is treated as smell
-- React Hooks rules: `react-hooks/rules-of-hooks` is error; `react-hooks/exhaustive-deps` is warn
-- API routes and scripts use `commonjs` source type; browser code uses `module`
-- TypeScript `strict: true` mode enforced via `tsconfig.json`
+- ESLint flat config at `eslint.config.mjs` extending `@eslint/js` recommended and `typescript-eslint` recommended
+- `no-unused-vars` is `warn` with `_`-prefix ignore patterns
+- `@typescript-eslint/no-explicit-any` is `warn`. The codebase still uses `any` heavily (roughly 800 occurrences under `src/`), so new code should type values explicitly and avoid adding new `any`
+- `react-hooks/rules-of-hooks` is `error`; `react-hooks/exhaustive-deps` is `warn` for files under `src/**`
+- Node-side files (`src/app/api/**`, `scripts/**`) turn off `no-undef` and `@typescript-eslint/no-require-imports`, so CommonJS `require` is acceptable in scripts
+- `.eslintignore` ignores all files (`**/*`) so ESLint does not block Vercel builds; run `npm run lint` explicitly before handoff
+- Suppression comments are rare (about 4 `eslint-disable`/`@ts-ignore` occurrences under `src/`); do not add new ones without a reason
+
+**TypeScript:**
+- Root `tsconfig.json` has `strict: true`, `target: ES2018`, `moduleResolution: bundler`, `isolatedModules: true`, and the `@/*` path alias mapped to `./src/*`
+- `baileys-whatsapp/tsconfig.json` additionally enables `noUncheckedIndexedAccess` and `verbatimModuleSyntax`; code in that service must use `import type` for type-only imports
 
 ## Import Organization
 
-**Order (conventional, not enforced by tool):**
-1. React and framework: `import React, { ... } from 'react'`; `import { NextRequest } from 'next/server'`
-2. Third-party libraries: `import { create } from 'zustand'`; `import { z } from 'zod/v3'`
-3. Internal `@/` aliases: `import { cn } from '@/lib/utils'`; `import { env } from '@/lib/env'`
-4. Relative imports: `import { generateTitle } from './title-generator'`
-5. Type-only imports last: `import type { Chat } from './supabase'`
+**Order (observed in `src/app/api/chat/route.ts` and `src/lib/chat-store.ts`):**
+1. Framework and third-party packages (`ai`, `zod/v3`, `next/server`, `zustand`, `@supabase/...`)
+2. Project modules via the `@/` alias (`@/lib/supabase`, `@/lib/env`, `@/types/chat`)
+3. Relative imports (`./supabase`, `./title-generator`)
+4. `import type` statements are commonly grouped at the end of the import block
 
 **Path Aliases:**
-- `@/*` maps to `./src/*` (configured in `tsconfig.json`)
-- Use `@/lib/...`, `@/components/...`, `@/types/...` for cross-directory imports
-- Use relative paths only for imports within the same directory
-
-**Zod version:**
-- Always import from `'zod/v3'` (not `'zod'` directly): `import { z } from 'zod/v3'`
+- `@/*` → `src/*` (defined in `tsconfig.json`). Prefer it over deep relative paths such as `../../../lib/...`. Use relative imports only for siblings within the same folder (e.g. `./supabase` inside `src/lib/`)
 
 ## Error Handling
 
-**API routes (`src/app/api/`):**
-- Wrap entire handler in `try/catch`
-- Return structured JSON errors: `NextResponse.json({ error: 'message' }, { status: N })`
-- Auth failures: `{ error: 'Not authenticated' }` with `status: 401`
-- Validation failures: `{ error: 'Invalid request data', details: [...] }` with `status: 400`
-- DB/server errors: `{ error: 'Database error' }` with `status: 500`
-- Use `withValidation()` from `src/lib/api-middleware.ts` for Zod-validated routes
+**API routes (Next.js `src/app/api/**`):**
+- Return structured JSON errors with `NextResponse.json({ error: '...' }, { status: N })`, for example `src/app/api/generate-image/route.ts`
+- Validate request bodies with Zod through `withValidation(schema, handler)` or `validateRequest(req, schema)` from `src/lib/api-middleware.ts`. Validation failures return HTTP 400 with `{ success: false, error, details: [{ path, message }] }`
+- Use `z` from `zod/v3` in API code (this import path is the established pattern in `src/app/api/chat/route.ts` and `src/lib/api-middleware.ts`)
+- Streaming chat responses report errors in-band with `formatErrorSSE(message)` from `src/lib/error-stream.ts`, which emits a UI-message-stream `error` event followed by `[DONE]`. Do not emit the legacy v4 wire format
 
-**Library code (`src/lib/`):**
-- Check `error instanceof Error` before accessing `.message`: `error instanceof Error ? error.message : 'Unknown error'`
-- Catch blocks use `catch (error)` (not `catch (e)` — except `catch (e)` appears occasionally in older code)
-- Re-throw or surface errors via logger, not silently swallowed
+**Client and store code:**
+- Zustand store actions catch Supabase errors and write a human-readable string into `error` state (`ChatStore.error` in `src/lib/chat-store.ts`) rather than throwing into components
+- Domain errors extend `Error`: `WhatsAppError` in `src/lib/whatsapp/types.ts`
 
-**Streaming errors:**
-- Use `formatErrorSSE()` from `src/lib/error-stream.ts` to emit AI SDK v5-compatible SSE error events
-- Never use legacy v4 wire format (`3:"msg"`) in streaming responses
-
-**Zod validation:**
-- Use `schema.safeParse()` (not `.parse()`) to avoid thrown exceptions
-- Check `result.success` before accessing `result.data`
+**Patterns:**
+- Wrap `JSON.parse`/`req.json()` in try/catch and return a 400 on failure (see `validateRequest`)
+- Log the failure with a bracketed prefix before returning (see Logging)
 
 ## Logging
 
-**Framework:** Custom `SmartLogger` singleton (`src/lib/logger.ts`)
-
-**Preferred approach:**
-```typescript
-import { logger } from '@/lib/logger';
-// or named helper functions:
-import { logError, logInfo, logDebug } from '@/lib/logger';
-
-logger.debug('Component', 'message', optionalData);
-logger.error('Component', 'message', error);
-logger.info('Component', 'message');
-```
+**Framework:** `console` with a shared `logger` in `src/lib/logger.ts` (`SmartLogger`), which deduplicates repeated messages (max 2 repeats within 30 seconds) and suppresses DEBUG and ENV INFO logs outside `NODE_ENV === 'development'`
 
 **Patterns:**
-- Component name is first arg: `logger.debug('UploadUtils', ...)`, `logger.error('Nango', ...)`
-- DEBUG logs suppressed in production automatically
-- Log deduplication built-in — avoids spam for repeated identical messages
-- `console.log` / `console.error` used directly in some API routes (legacy pattern; new code should use `logger`)
-- Streaming path: avoid any logging inside `streamText()` callbacks to prevent performance issues
+- Prefix every log line with a bracketed tag naming the subsystem: `console.log('[Document Reference Tool] ...')`, `console.error('[Nango] ...')`, `console.log('[RAG SYSTEM] ...')`, `console.error('[ToolExecutionState] ...')`
+- Use `[Document Search]` for retrieval diagnostics (required by `AGENTS.md` section 6)
+- Log structured data as a second argument object rather than string concatenation: `console.log('[Document Reference Tool] Document referenced:', { documentId, documentName })`
+- Avoid log spam in hot paths (streaming loops, per-token handlers); the codebase already has many verbose `[DEBUG]` lines, so do not add new unconditional debug logs. Prefer `logger` for anything that should be silenced in production
+- Never log API key values; log presence or length only (see the `OPENROUTER_API_KEY_STATUS` pattern in `src/app/api/chat/route.ts`)
 
 ## Comments
 
 **When to Comment:**
-- JSDoc blocks on public utility functions and types: `/** @returns ... */`, `/** @param ... */`
-- Block comments for non-obvious logic sections: `// Debounce rapid events`
-- TODO comments are used sparingly (4 total in `src/`): `// TODO: Add MCP tools detection when implemented`
-- Inline comments preferred over block comments for single-line explanations
+- Keep comments minimal (per `AGENTS.md` section 4). Comments explain why a non-obvious workaround exists, e.g. the explanation of the v5 SSE payload in `src/lib/error-stream.ts`
+- Section headers with `// ---` or `// Folder management` labels group related members inside a large interface (`src/lib/chat-store.ts`)
 
 **JSDoc/TSDoc:**
-- Used on exported lib functions (`src/lib/deployment-mode.ts`, `src/lib/api-middleware.ts`, `src/lib/logger.ts`)
-- Not required on component props or store methods — TypeScript types serve as documentation there
-- `@returns` and `@throws` used where behavior is non-obvious
+- Used on exported utilities and public helpers with `@param` / `@returns` tags, e.g. `validateRequest` and `withValidation` in `src/lib/api-middleware.ts`
+- Not required on components or internal helpers
 
 ## Function Design
 
-**Size:** Large functions exist in API routes (chat `route.ts` is 4255 lines) — this is a known concern. New utility functions should be focused, <100 lines.
+**Size:** Route handlers and chat orchestration are very large (`src/app/api/chat/route.ts` exceeds 1,000 lines). Do not extend that file further when a helper module under `src/lib/` fits; new retrieval or tool logic belongs in `src/lib/`.
 
-**Parameters:** Destructured objects preferred for multi-param functions:
-```typescript
-export function Spinner({ className, size = "md" }: SpinnerProps) { ... }
-```
+**Parameters:** Positional for 1-2 arguments; object or interface props for components (`ChatInputProps`, `HeaderProps`). Options objects for store actions (`CreateFolderInput`, `UpdateFolderInput`).
 
-**Return Values:**
-- Discriminated unions for success/failure: `{ success: true; data: T } | { success: false; response: NextResponse }`
-- Async functions return typed `Promise<T>`: `Promise<string | null>`, `Promise<void>`
-- Avoid `Promise<any>` — use specific types where possible
+**Return Values:** Async functions return `Promise<T | null>` or `Promise<void>` for store actions (`createChat` returns `string | null`). Route helpers return `NextResponse`. Validation helpers return a discriminated union: `{ success: true; data } | { success: false; response }`.
 
 ## Module Design
 
-**Exports:**
-- Named exports preferred: `export function`, `export const`, `export interface`
-- Default exports used only for Next.js page/layout components (`export default function Page()`)
-- Re-export via barrel `index.ts` for sub-modules: `src/lib/nango/index.ts`, `src/components/config-ui/connectors/index.ts`
+**Exports:** Named exports are the norm. Default exports appear only for Next.js pages and layouts. Export interfaces alongside the function that uses them.
 
-**Barrel Files:** Used selectively for sub-directories only — not for top-level `src/lib/` or `src/components/ui/`
+**Zustand stores:**
+- Create stores with `create<State>()(...)` (`src/lib/user-settings-store.ts`) or `create<State>((set) => ...)` (`src/lib/stores/voice-store.ts`)
+- Subscribe in components with selectors and `useShallow` from `zustand/react/shallow`, selecting only the fields a component needs. Example from `src/components/ui/sidebar.tsx`:
+```typescript
+const {
+  chats,
+  fetchChats,
+  setCurrentChat,
+} = useChatStore(
+  useShallow((s) => ({
+    chats: s.chats,
+    fetchChats: s.fetchChats,
+    setCurrentChat: s.setCurrentChat,
+  }))
+)
+```
+- Single-field selectors are fine without `useShallow`: `useChatStore((s) => s.currentChatId)`. Never call `useChatStore()` without a selector in components
 
-## State Management
+**Barrel Files:** Not a dominant pattern. Import concrete modules (`@/lib/supabase`, `@/lib/whatsapp/...`). `@/translations` is the one barrel-style entry point used by routes.
 
-**Zustand:**
-- Store definition: `create<StoreInterface>()((set, get) => ({ ... }))` 
-- Persist middleware: `create<T>()(persist((set, get) => ..., { name: 'storage-key' }))`
-- Store consumption: **always** use `useShallow` from `zustand/react/shallow` to select slices:
-  ```typescript
-  import { useShallow } from 'zustand/react/shallow';
-  const { currentChatId, chats } = useChatStore(
-    useShallow((s) => ({ currentChatId: s.currentChatId, chats: s.chats }))
-  );
-  ```
-- Never subscribe to the entire store: `useChatStore()` without selector is forbidden
+**React:**
+- Functional components only; the React Compiler is enabled in `next.config.js`, so avoid manual `useMemo`/`useCallback` unless a dependency genuinely needs stability
+- Tailwind utility classes for styling; merge conditional classes with `cn()` from `src/lib/utils.ts` (wraps `clsx` and `tailwind-merge`)
+- Animations use Framer Motion; icons come from `lucide-react` and `@tabler/icons-react`
+- Radix primitives are wrapped under `src/components/ui/` (shadcn style, configured by `components.json`)
 
-**React Context:**
-- Used for cross-cutting concerns: Auth, Theme, Language, TextSize, Font, Artifact, Sources
-- Pattern: `createContext<ContextType | undefined>(undefined)` + guard in `useX()` hook
-- Providers live in `src/components/providers/`
+**Prompts:** `RAG_SYSTEM_PROMPT` strings must keep the `{{context}}` placeholder intact (`AGENTS.md` section 6).
 
-## 'use client' Directive
-
-- Required on: page components with state/effects, all components in `src/components/providers/`, hooks using browser APIs
-- API routes never use it (Node.js runtime)
-- Server components (no directive) used for layouts and data-fetch wrappers where possible
+**Environment variables:** Read through `env` from `src/lib/env.ts` in server code. Any new variable must be mirrored in `scripts/init-env.js` and the other model/config locations listed in `AGENTS.md` section 7.
 
 ---
 
-*Convention analysis: 2026-06-01*
+*Convention analysis: 2026-11-22*

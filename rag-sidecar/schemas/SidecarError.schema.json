@@ -1,0 +1,14 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "error": {
+      "title": "Error",
+      "type": "string"
+    }
+  },
+  "required": [
+    "error"
+  ],
+  "title": "SidecarError",
+  "type": "object"
+}

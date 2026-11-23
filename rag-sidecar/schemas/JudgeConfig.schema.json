@@ -1,0 +1,48 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "base_url": {
+      "title": "Base Url",
+      "type": "string"
+    },
+    "embedding_model": {
+      "title": "Embedding Model",
+      "type": "string"
+    },
+    "judge_family": {
+      "title": "Judge Family",
+      "type": "string"
+    },
+    "judge_model": {
+      "title": "Judge Model",
+      "type": "string"
+    },
+    "max_concurrency": {
+      "default": 4,
+      "minimum": 1,
+      "title": "Max Concurrency",
+      "type": "integer"
+    },
+    "provider": {
+      "const": "openrouter",
+      "title": "Provider",
+      "type": "string"
+    },
+    "temperature": {
+      "maximum": 0.0,
+      "minimum": 0.0,
+      "title": "Temperature",
+      "type": "number"
+    }
+  },
+  "required": [
+    "judge_model",
+    "judge_family",
+    "provider",
+    "base_url",
+    "temperature",
+    "embedding_model"
+  ],
+  "title": "JudgeConfig",
+  "type": "object"
+}

@@ -1,245 +1,206 @@
+---
+last_mapped_commit: 41a47818ac26f9ea788ccb18230fb3351065c2a2
+last_mapped_at: 2026-11-22
+---
 # External Integrations
 
-**Analysis Date:** 2026-06-01
+**Analysis Date:** 2026-11-22
 
 ## APIs & External Services
 
-**AI Model Providers:**
-- OpenRouter - Primary chat AI provider (multi-model gateway)
-  - SDK/Client: `@openrouter/ai-sdk-provider` + `openai` raw client
+**LLM and model routing:**
+- OpenAI - Chat models (e.g. `gpt-4o`, `gpt-4o-mini`), embeddings (`text-embedding-3-small` default, `text-embedding-3-large`, `text-embedding-ada-002` referenced), image generation (`gpt-image-1`), vision captioning of uploaded images, Whisper (`whisper-1`) transcription, TTS (`tts-1`)
+  - SDK/Client: `openai` (`src/lib/**`, `src/app/api/**`, `voice-agent/src/agent.ts`)
+  - Auth: `OPENAI_API_KEY`
+- OpenRouter - Multi-model gateway (Anthropic Claude, DeepSeek, Gemini and others, e.g. `anthropic/claude-*`, `deepseek/deepseek-*`)
+  - SDK/Client: `@openrouter/ai-sdk-provider` (`src/lib/openrouter.ts`), `openai` client with OpenRouter base URL
   - Auth: `OPENROUTER_API_KEY`
-  - Client: `src/lib/openrouter.ts` (singleton pattern)
-  - Used in: `src/app/api/chat/route.ts` via `createOpenRouter()`
+  - Model metadata lookup: `src/app/api/config/openrouter-model-info/route.ts`
+- Groq - OpenAI-compatible endpoint `https://api.groq.com/openai/v1` for chat (voice agent option and model list)
+  - Auth: `GROQ_API_KEY`, model list `GROQ_MODELS`
+- Google Gemini - Referenced as a model family (via OpenRouter and model config); no direct Google AI SDK dependency
+- Anthropic - Referenced as a model family (via OpenRouter); no direct Anthropic SDK dependency
 
-- OpenAI - Embeddings, image generation, title generation, fallback chat
-  - SDK/Client: `openai` ^4.103.0, `@ai-sdk/openai` ^2.0.53
-  - Auth: `OPENAI_API_KEY` (required)
-  - Embedding model: `text-embedding-3-small` (1536-dim, configurable via `OPENAI_EMBEDDING_MODEL`)
-  - Image model: GPT-Image-1 (when `IMAGE_GENERATION_PROVIDER=openai`)
-  - Used in: `src/lib/document-processor.ts`, `src/app/api/generate-image/route.ts`
+**Media generation:**
+- Replicate - Image, image-to-image, video, and 3D generation
+  - SDK/Client: `replicate` and `@ai-sdk/replicate`
+  - Auth: `REPLICATE_API_TOKEN`; model IDs `REPLICATE_IMAGE_MODEL`, `REPLICATE_IMAGE_TO_IMAGE_MODEL`, `REPLICATE_VIDEO_MODEL`, `REPLICATE_3D_MODEL`; provider switch `USE_REPLICATE_PROVIDER`
+  - Output hosted at `replicate.delivery` (allowed in `next.config.js` image remote patterns)
+- fal.ai - Flux and other image models
+  - SDK/Client: `@fal-ai/client`, `@fal-ai/serverless-client`, `@ai-sdk/fal`
+  - Auth: `FAL_API_KEY`; switch `USE_FAL_PROVIDER`
+- OpenAI image generation - see OpenAI above; options `OPENAI_IMAGE_QUALITY`, `OPENAI_IMAGE_FORMAT`, `OPENAI_IMAGE_BACKGROUND`, `OPENAI_IMAGE_MODERATION`; switch `USE_OPENAI_IMAGE`, `IMAGE_GENERATION_PROVIDER`
+- Generation routes: `src/app/api/generate-image/route.ts`, `src/app/api/generate-video/route.ts`, `src/app/api/generate-3d/route.ts`
+- Video and 3D providers also named in project docs: Luma, Runway, Meshy. No SDK or endpoint for these appears in the code, so treat them as not integrated.
 
-- Anthropic (via OpenRouter) - Claude models available via `anthropic/claude-*` model IDs
+**Document parsing:**
+- LlamaCloud (LlamaParse) - Document parsing and chunking
+  - Client: direct HTTP to `https://api.cloud.llamaindex.ai/api/v...` (`parsing/upload`, `parsing/job/...`) from the document pipeline (`src/lib/document-processor.ts`)
+  - Auth: `LLAMA_CLOUD_API_KEY`; base `LLAMA_CLOUD_API_BASE`; chunking `LLAMACLOUD_CHUNK_STRATEGY`, `LLAMACLOUD_CHUNK_SIZE`, `LLAMACLOUD_CHUNK_OVERLAP`
 
-- Google Gemini (via OpenRouter) - Gemini models available via `google/gemini-*` model IDs
-
-- DeepSeek (via OpenRouter) - Available via OpenRouter model IDs
-
-**Document AI:**
-- LlamaCloud / LlamaParse - PDF and document parsing
-  - SDK/Client: `llamaindex` ^0.8.30, direct HTTP to `https://api.cloud.llamaindex.ai/api`
-  - Auth: `LLAMA_CLOUD_API_KEY`
-  - Used in: `src/lib/document-processor.ts`, `src/app/api/process-document/route.ts`
-  - Configurable parse mode, chunk strategy, OCR settings via env vars (`LLAMACLOUD_*`)
-
-**Web Search:**
-- Exa - Semantic web search
-  - SDK/Client: `exa-js` ^1.8.26
+**Web search and scraping:**
+- Exa - Web search used by strict RAG when `webSearch` is enabled (`src/app/api/chat/route.ts`, `src/app/api/web-search/route.ts`)
+  - SDK/Client: `exa-js`
   - Auth: `EXA_API_KEY`
-  - Feature flag: `NEXT_PUBLIC_WEB_SEARCH_ENABLED`
-  - Referenced in: `src/lib/env.ts`
+- Firecrawl - Scrape and crawl of URLs
+  - SDK/Client: `@mendable/firecrawl-js`; wrappers in `src/lib/scrapers/firecrawl-client.ts` and `src/lib/scrapers/scraper-adapter.ts`
+  - Auth: `FIRECRAWL_API_KEY`; toggle `FIRECRAWL_ENABLED`; options `FIRECRAWL_ONLY_MAIN_CONTENT`, `FIRECRAWL_WAIT_FOR_JS`, `FIRECRAWL_OUTPUT_FORMAT`
+  - Routes: `src/app/api/scrapers/scrape/route.ts`, `src/app/api/scrapers/crawl/route.ts`, `src/app/api/scrapers/status/route.ts`
+- Brave Search - Optional MCP endpoint `MCP_BRAVE_SEARCH_ENDPOINT`
 
-- OpenRouter web search - Fallback web search via OpenRouter models
-  - Used in: `src/app/api/web-search/route.ts` (delegates to OpenRouter when Exa unavailable)
+**Voice:**
+- LiveKit Cloud - Real-time audio rooms and participant tokens
+  - SDK/Client: `livekit-client`, `@livekit/components-react` (frontend), `livekit-server-sdk` (token minting in `src/app/api/livekit/token/route.ts`), `@livekit/agents`, `@livekit/rtc-node` (voice agent)
+  - Auth: `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`
+- AssemblyAI - Streaming speech-to-text (48 kHz, multilingual)
+  - SDK/Client: `assemblyai` (`voice-agent/src/providers/assemblyai.ts`)
+  - Auth: `ASSEMBLYAI_API_KEY`; language `ASSEMBLYAI_LANGUAGE` (default `en` in `voice-agent/fly.toml`)
+- Resemble.ai - Text-to-speech with word-level timestamps, streamed over WebSocket
+  - Client: HTTP and WebSocket against `p.cluster.resemble.ai` / `f.cluster.resemble.ai` (`RESEMBLE_STREAM_URL`)
+  - Auth: `RESEMBLE_API_KEY`, `RESEMBLE_PROJECT_ID`, `RESEMBLE_VOICE_ID`
+  - Fallback: estimated word timings when timestamp requests fail (per `AGENTS.md`)
+- ElevenLabs - Alternate TTS provider
+  - Client: HTTP against `api.elevenlabs.io`
+  - Settings: `ELEVENLABS_VOICE_STABILITY`, `ELEVENLABS_VOICE_SPEED`, `ELEVENLABS_SIMILARITY_BOOST`; provider switch `TTS_PROVIDER`
+- Silero VAD - Local voice activity detection (`@livekit/agents-plugin-silero`), no external API
 
-**Web Scraping:**
-- Firecrawl - Website crawling and content extraction
-  - SDK/Client: `@mendable/firecrawl-js` ^4.8.2
-  - Auth: `FIRECRAWL_API_KEY`
-  - Feature flag: `NEXT_PUBLIC_FIRECRAWL_ENABLED`
-  - Client: `src/lib/scrapers/firecrawl-client.ts`
-  - Config endpoint: `src/app/api/config/firecrawl/route.ts`
+**Connectors (OAuth and sync):**
+- Nango - Unified OAuth and data sync for Google Drive, Notion, and Dropbox
+  - SDK/Client: `@nangohq/node` (server, `src/lib/nango/client.ts`), `@nangohq/frontend` (`src/lib/hooks/use-nango.ts`)
+  - Auth: `NANGO_SECRET_KEY`; host `NANGO_HOST`; toggle `NANGO_ENABLED` and `NEXT_PUBLIC_NANGO_ENABLED`
+  - Sync: `src/lib/nango/sync-manager.ts`, `src/lib/nango/file-fetcher.ts`, `src/lib/nango/document-adapter.ts`; interval `NANGO_SYNC_INTERVAL_HOURS`; limits `NANGO_MAX_FILES_PER_SYNC`, `NANGO_SUPPORTED_FILE_TYPES`
+  - Dropbox file content is fetched from `content.dropboxapi.com`
+  - Setup docs: `README_NANGO_INTEGRATION.md`
+- Google Drive - Accessed through Nango; MIME types in `GOOGLE_DRIVE_SUPPORTED_MIMETYPES`
 
-**Voice / Audio:**
-- ElevenLabs - Text-to-speech
-  - Auth: `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID` (default: Sarah voice)
-  - Client: `src/lib/elevenlabs-utils.ts`
-  - Configurable via `ELEVENLABS_*` env vars
-  - Feature flag: `NEXT_PUBLIC_TTS_DISABLED`
+**Payments:**
+- Stripe - Subscriptions and checkout
+  - SDK/Client: `stripe` (`src/lib/stripe.ts`)
+  - Auth: `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`; plan prices `STRIPE_PRICE_ID_PRO`, `STRIPE_PRICE_ID_ENTERPRISE` (also `NEXT_PUBLIC_STRIPE_PRICE_ID_*`)
+  - Routes: `src/app/api/create-stripe-checkout/route.ts`, `src/app/api/webhooks/stripe/route.ts`; page `src/app/pricing-stripe/page.tsx`
+- Polar - Alternate subscriptions and one-off sales
+  - Auth: `POLAR_ACCESS_TOKEN`, `POLAR_WEBHOOK_SECRET`, `POLAR_ORGANIZATION_ID`, `POLAR_ORGANIZATION_SLUG`, `POLAR_PRICE_ID_PRO`, `POLAR_PRICE_ID_ENTERPRISE`, `POLAR_CHECKOUT_PRO`, `POLAR_CHECKOUT_ENTERPRISE`; API base `POLAR_API_BASE` (sandbox or production)
+  - Routes: `src/app/api/create-checkout/route.ts`, `src/app/api/webhooks/route.ts`; page `src/app/pricing/page.tsx`
 
-- OpenAI TTS/STT - Built-in voice provider (default)
-  - Provider selected by `NEXT_PUBLIC_VOICE_PROVIDER` (values: `openai` | `elevenlabs`)
-  - Used in: `src/app/api/audio/` routes
+**Email:**
+- Resend - Transactional email
+  - Auth: `RESEND_API_KEY`
+  - Client: HTTP API (no SDK in `package.json`)
 
-**Image Generation:**
-- Fal.ai - Primary image and video generation provider
-  - SDK/Client: `@fal-ai/client` ^1.4.0, `@fal-ai/serverless-client` ^0.15.0
-  - Auth: `FAL_API_KEY`
-  - Provider: `IMAGE_GENERATION_PROVIDER=fal`
-  - Used in: `src/app/api/generate-image/route.ts`, `src/app/api/generate-video/route.ts`, `src/app/api/generate-3d/route.ts`
-  - Default models: `fal-ai/veo3/fast` (video), `fal-ai/trellis` (3D)
+**Messaging:**
+- WhatsApp via Baileys - WhatsApp Web session management, QR pairing, message send and receive
+  - Service: `baileys-whatsapp/` (Express server, `server.ts`), Fly.io (`baileys-whatsapp/fly.toml`) or Koyeb
+  - Client code: `src/lib/whatsapp/client-factory.ts`, `src/lib/whatsapp/koyeb-client.ts`, `src/lib/whatsapp/session-manager.ts`, `src/lib/whatsapp/connection-monitor.ts`, `src/lib/whatsapp/webhook-handler.ts`, `src/lib/whatsapp/message-converter.ts`
+  - Provider selection: `WHATSAPP_PROVIDER`; service URLs `BAILEYS_URL`, `KOYEB_BAILEYS_URL`; `KOYEB_API_KEY`
+  - Shared secret: `WHATSAPP_WEBHOOK_SECRET`; callback URL `WHATSAPP_WEBHOOK_URL`
+  - Limits and defaults: `WHATSAPP_MAX_SESSIONS_PER_USER`, `WHATSAPP_MESSAGE_QUEUE_SIZE`, `WHATSAPP_DEFAULT_MODEL`, `WHATSAPP_MAX_TOKENS`, `WHATSAPP_ENABLE_WEB_SEARCH`, `WHATSAPP_ENABLE_MCP`
+  - Routes: `src/app/api/whatsapp/*` (`webhook`, `connect`, `qr`, `status`, `disconnect`, `conversations`, `monitor`, `provider-info`, `test`, `test-numbers`)
+  - Setup docs: `README_WHATSAPP_INTEGRATION.md`
+  - Note: Baileys uses an unofficial WhatsApp Web protocol. Account bans and protocol breakage are operational risks.
 
-- Replicate - Fallback image/video/3D generation
-  - SDK/Client: `replicate` ^1.0.1
-  - Auth: `REPLICATE_API_TOKEN`
-  - Provider flag: `USE_REPLICATE_PROVIDER=true`
-  - Used in: `src/app/api/generate-image/route.ts`, `src/app/api/generate-video/route.ts`, `src/app/api/generate-3d/route.ts`
-  - Default 3D model: `firtoz/trellis`
+**Model Context Protocol (MCP):**
+- Zapier MCP server - Tool execution via `MCP_ZAPIER_ENDPOINT`
+- Custom MCP servers - `MCP_CUSTOM_SERVERS` (JSON list), plus `MCP_YOURSERVER_ENDPOINT` pattern
+- Client: `@modelcontextprotocol/sdk`, `@ai-sdk/mcp`; router and approval flow in `src/lib/mcp/` and `src/app/api/chat/approve/route.ts`
+- Toggles: `MCP_SYSTEM_ENABLED`, `NEXT_PUBLIC_MCP_SYSTEM_ENABLED`, `MCP_TOOLS_ENABLED`, `MCP_TOOLS_LIST_ENABLED`, `MCP_YOLO_MODE_ENABLED`, `MCP_TOOL_PATTERNS`, `MCP_PROVIDERS`
 
-**MCP (Model Context Protocol):**
-- Zapier MCP - Automation tool execution
-  - Auth: Endpoint-based via `MCP_ZAPIER_ENDPOINT`
-  - Transport: streamable-http (SSE)
-  - Config: `src/lib/mcp/server-config.ts`
-
-- Universal MCP Router - Connects to arbitrary MCP servers
-  - Client: `src/lib/mcp/universal-client.ts`, `src/lib/mcp/smart-router.ts`
-  - Discovery: `src/lib/mcp/discovery.ts`, `src/lib/mcp/universal-discovery.ts`
-  - Approval flow: `src/app/api/mcp/` and `src/app/api/chat/approve/route.ts`
-  - YOLO mode (auto-execute without approval): `NEXT_PUBLIC_MCP_YOLO_MODE_ENABLED`
-
-**Document Connectors (Nango):**
-- Nango - OAuth-based third-party document connectors
-  - SDK/Client: `@nangohq/frontend` ^0.69.14 (OAuth UI), `@nangohq/node` ^0.69.14 (server)
-  - Auth: `NANGO_SECRET_KEY`, `NANGO_WEBHOOK_SECRET`
-  - Host: `NANGO_HOST` (default: `https://api.nango.dev`)
-  - Feature flag: `NEXT_PUBLIC_NANGO_ENABLED`
-  - Client: `src/lib/nango/client.ts`, exported via `src/lib/nango/index.ts`
-  - API routes: `src/app/api/nango/` (connections, files, folders, notion, session, sync, webhook)
-  - Supported providers (defined in `src/lib/nango/types.ts`):
-    - `google-drive` - Google Drive documents
-    - `notion` - Notion pages
-    - `dropbox` - Dropbox files
-    - `box` - Box files
-    - `confluence` - Confluence pages
-
-**Analytics:**
-- Vercel Analytics - Page view and performance tracking
-  - SDK: `@vercel/analytics` ^1.5.0
-  - Used in: `src/app/client-layout.tsx`
+**Other external hosts referenced:**
+- `https://api.openai.com`, `https://openrouter.ai`, `https://api.groq.com`, `https://api.nango.dev`, `https://api.elevenlabs.io`
 
 ## Data Storage
 
 **Databases:**
-- Supabase PostgreSQL - Primary database
-  - Connection: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
-  - Client (browser): `src/lib/supabase/client.ts` via `createBrowserClient` from `@supabase/ssr`
-  - Client (server SSR): `src/lib/supabase/server.ts`
-  - Admin client (bypasses RLS): `src/lib/supabase.ts` `getSupabaseAdmin()`
-  - Middleware: `src/lib/supabase/middleware.ts`
-  - Schema setup: `supabase/single-tenant-setup.sql`, `supabase/multi-tenant-setup.sql`
-
-- pgvector (Supabase extension) - Vector similarity search
-  - Vector dimensions: 1536 (OpenAI `text-embedding-3-small`)
-  - Index type: HNSW with `m=64, ef_construction=200, vector_cosine_ops`
-  - RPC function: `match_document_chunks` (vector similarity search)
-  - Tables: `document_chunks` with `embedding vector(1536)` column
-
-**Key Database Tables:**
-- `chats` - Chat history with JSONB messages
-- `documents` - Uploaded/synced documents with source tracking
-- `document_chunks` - Vector-embedded text chunks for RAG
-- `folders` - Chat folder organization
-- `organizations` - Multi-tenant organizations
-- `organization_members` - Team membership
-- `subscriptions` - Payment subscriptions (Stripe/Polar)
-- `admin_users`, `admin_settings` - Admin access control
+- Supabase PostgreSQL (with pgvector)
+  - Connection: `NEXT_PUBLIC_SUPABASE_URL` (public), `SUPABASE_ANON_KEY` (browser/anon), `SUPABASE_SERVICE_ROLE_KEY` (server only, bypasses RLS)
+  - Client: `@supabase/supabase-js`, `@supabase/ssr`, `@supabase/auth-helpers-nextjs` (server clients in `src/lib/` and API routes)
+  - Vector search: 1536-dimension embeddings in `document_chunks`, HNSW indexes (`m=64`, `ef_construction=200`), retrieval through Postgres RPC (`match_documents`)
+  - Tables referenced in the app include chats, documents, `document_chunks` (embeddings and `metadata.image_url`), subscriptions, WhatsApp sessions
+  - Schema: `supabase/single-tenant-setup.sql`, `supabase/multi-tenant-setup.sql`, instructions in `supabase/README.md`
+  - RLS: multi-tenant policies enforce per-user isolation. Do not bypass with the service role key in user-facing paths.
 
 **File Storage:**
-- Supabase Storage - Generated media (images, videos, 3D models)
-  - Used in: `src/app/api/generate-image/route.ts`, `src/app/api/generate-video/route.ts`, `src/app/api/generate-3d/route.ts`
-  - Bucket paths accessible via `NEXT_PUBLIC_SUPABASE_URL/storage/v1/object/public/**`
+- Supabase Storage - Uploaded documents and generated media. Public URLs match `/storage/v1/object/public/**` (see `next.config.js`).
+- Google Drive, Notion, Dropbox - Read-only sync sources via Nango (see Connectors)
 
 **Caching:**
-- In-memory server-side caching for MCP tools: `src/lib/mcp-cache.ts` (`getCachedTools`, `setCachedTools`)
-- No distributed cache (Redis, etc.) detected
+- In-memory `@cacheable/node-cache` in the WhatsApp service (`baileys-whatsapp/`)
+- Client-side Zustand stores; no Redis or external cache detected
 
 ## Authentication & Identity
 
 **Auth Provider:**
 - Supabase Auth
-  - Browser client: `src/lib/supabase/client.ts`
-  - SSR/server: `src/lib/supabase/server.ts`, `src/lib/supabase/middleware.ts`
-  - Auth helpers: `src/lib/supabase-auth.ts` (exports `signInWithEmail`, `signUpWithEmail`, `signInWithSocial`)
-  - Provider component: `src/components/providers/auth-provider.tsx`
-  - Auth page: `src/app/auth/page.tsx`, signup: `src/app/auth/signup/page.tsx`
-  - Row Level Security (RLS) enforced at database level; admin operations use service role key
-
-**Supported Auth Methods:**
-- Email/password (`supabase.auth.signInWithPassword`, `supabase.auth.signUp`)
-- Google OAuth (`signInWithSocial('google')`)
-- GitHub OAuth (`signInWithSocial('github')`, `supabase.auth.signInWithOAuth`)
-- Magic link (supported by Supabase, optional)
-- Custom SMTP for email (configurable via `NEXT_PUBLIC_CUSTOM_SMTP_ENABLED`)
-
-## Payments
-
-**Stripe:**
-- SDK: `stripe` ^17.6.0
-- Auth: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`
-- Public keys: `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `NEXT_PUBLIC_STRIPE_PRICE_ID_PRO`, `NEXT_PUBLIC_STRIPE_PRICE_ID_ENTERPRISE`
-- Client: `src/lib/stripe.ts` (lazy singleton)
-- Checkout: `src/app/api/create-stripe-checkout/route.ts`
-- Webhook handler: `src/app/api/webhooks/stripe/route.ts`
-- API version: `2025-01-27.acacia`
-
-**Polar:**
-- No SDK — direct URL-based checkout links
-- Auth: `NEXT_PUBLIC_POLAR_CHECKOUT_PRO`, `NEXT_PUBLIC_POLAR_CHECKOUT_ENTERPRISE`, `POLAR_WEBHOOK_SECRET`
-- Client: `src/lib/polar.ts`
-- Checkout: `src/app/api/create-checkout/route.ts`
-- Webhook handler: `src/app/api/webhooks/route.ts` (subscription handling currently disabled)
+  - Methods per `AGENTS.md`: GitHub OAuth, email and password, magic links
+  - Callback: `src/app/auth/callback/page.tsx`
+  - Implementation: Supabase session cookies via `@supabase/ssr`; server routes verify the session and enforce RLS
+- Admin access for the config dashboard and admin features: `ADMIN_EMAIL`, `ADMIN_PASSWORD`
+- Internal service-to-service calls: `MYRAG_INTERNAL_API_KEY` (shared secret for internal API routes)
+- Embed widget: `src/app/api/embed/chat/route.ts`, served with frame-ancestors headers in `vercel.json`
 
 ## Monitoring & Observability
 
 **Error Tracking:**
-- None detected (no Sentry, DataDog, etc.)
+- None detected (no Sentry or similar SDK in `package.json`)
+
+**Analytics:**
+- Vercel Analytics via `@vercel/analytics`
 
 **Logs:**
-- Custom structured logger: `src/lib/logger.ts` (methods: `startup`, `db`, `warn`, `error`, `debug`)
-- Dev logger: `src/lib/dev-logger.ts`
-- Performance monitor: `src/lib/performance-monitor.tsx`
-- Log spam prevention: debug/startup logs gated; high-frequency effects scoped to active states
+- `console` logging throughout. Retrieval logs are tagged `[Document Search]` (see `AGENTS.md`).
+- WhatsApp service uses `pino`.
+- Provider health and status: `src/app/api/whatsapp/monitor/route.ts`, `src/app/api/whatsapp/status/route.ts`
 
 ## CI/CD & Deployment
 
 **Hosting:**
-- Vercel (`vercel.json`): framework `nextjs`, region `iad1`, max function duration 60s
-- WhatsApp Baileys backend: Fly.io (`FLYIO_BAILEYS_URL`, `FLYIO_API_KEY`) or Koyeb (`KOYEB_BAILEYS_URL`, `KOYEB_API_KEY`)
-  - Provider selected by `WHATSAPP_PROVIDER` env var (default: `koyeb`)
+- Main app: Vercel (`vercel.json`, `.vercelignore`, `github.silent: true`)
+- Voice agent: Fly.io (`voice-agent/fly.toml`, `voice-agent/Dockerfile`)
+- WhatsApp service: Fly.io (`baileys-whatsapp/fly.toml`, `baileys-whatsapp/Dockerfile`, `baileys-whatsapp/DEPLOYMENT.md`) or Koyeb
+- Database and storage: Supabase hosted project
 
 **CI Pipeline:**
-- GitHub integration via `vercel.json` (`"github": { "silent": true }`)
-- No dedicated CI workflow files detected (`.github/workflows/` not observed)
+- None detected. No `.github/workflows/` directory in the repository.
+
+## Environment Configuration
+
+**Required env vars (names only, for a minimal working app):**
+- `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
+- `OPENAI_API_KEY` (embeddings and vision, required for RAG ingestion)
+- `OPENROUTER_API_KEY` or another chat provider key
+- `NEXT_PUBLIC_SITE_URL`
+- `ADMIN_EMAIL`, `ADMIN_PASSWORD` for the config dashboard
+
+**Feature-specific (only when the feature is enabled):**
+- Voice: `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `ASSEMBLYAI_API_KEY`, `RESEMBLE_API_KEY`
+- Documents: `LLAMA_CLOUD_API_KEY`
+- Search: `EXA_API_KEY`, `FIRECRAWL_API_KEY`
+- Media: `REPLICATE_API_TOKEN`, `FAL_API_KEY`
+- Payments: `STRIPE_*` or `POLAR_*`
+- Connectors: `NANGO_SECRET_KEY`, `NANGO_WEBHOOK_SECRET`
+- WhatsApp: `WHATSAPP_PROVIDER`, `BAILEYS_URL` or `KOYEB_BAILEYS_URL`, `WHATSAPP_WEBHOOK_SECRET`
+- Email: `RESEND_API_KEY`
+- MCP: `MCP_ZAPIER_ENDPOINT` or `MCP_CUSTOM_SERVERS`
+
+**Secrets location:**
+- Local: `.env.local` at repo root, generated and edited through `npm run dev` and `npm run config` (port 3333). Git-ignored.
+- Deployed: Vercel project environment variables, Fly.io secrets (`fly secrets`), Koyeb environment settings.
+- Template defaults: `scripts/init-env.js`. Keep this file in sync with `src/lib/env.ts`, `scripts/config-server.js`, and `scripts/config-ui/index.html` when adding variables.
+- Env files are never read or copied into project docs.
 
 ## Webhooks & Callbacks
 
 **Incoming:**
-- Stripe: `src/app/api/webhooks/stripe/route.ts` - Subscription lifecycle events
-- Polar: `src/app/api/webhooks/route.ts` - Payment events (subscription handling currently disabled)
-- Nango: `src/app/api/nango/webhook/` - Document sync events from Nango connectors (`NANGO_WEBHOOK_SECRET` for verification)
-- WhatsApp: `src/app/api/whatsapp/` - Incoming WhatsApp messages and session events (`WHATSAPP_WEBHOOK_SECRET`)
+- `src/app/api/webhooks/stripe/route.ts` - Stripe events, verified with `STRIPE_WEBHOOK_SECRET`
+- `src/app/api/webhooks/route.ts` - Polar events, verified with `POLAR_WEBHOOK_SECRET`
+- `src/app/api/nango/webhook/route.ts` - Nango sync and connection events, verified with `NANGO_WEBHOOK_SECRET`
+- `src/app/api/whatsapp/webhook/route.ts` - Inbound WhatsApp messages from the Baileys service, verified with `WHATSAPP_WEBHOOK_SECRET`
+- `src/app/api/chat/approve/route.ts` - MCP tool approval callbacks from the UI
+- `src/app/api/embed/chat/route.ts` - Embed widget chat endpoint
 
 **Outgoing:**
-- WhatsApp messages sent to Baileys service (`KOYEB_BAILEYS_URL` or `FLYIO_BAILEYS_URL`)
-- MCP tool calls to external MCP servers (Zapier, custom endpoints via `MCP_ZAPIER_ENDPOINT`)
-- Generation job status polling (Fal.ai, Replicate callbacks handled inline in route handlers)
-
-## Environment Configuration
-
-**Required env vars:**
-- `OPENAI_API_KEY` - Embeddings + OpenAI features
-- `SUPABASE_SERVICE_ROLE_KEY` - Server-side DB admin
-- `NEXT_PUBLIC_SUPABASE_URL` - Supabase project URL
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY` - Supabase public key
-
-**Important optional env vars:**
-- `OPENROUTER_API_KEY` - Primary chat AI (warns if missing)
-- `FAL_API_KEY` - Image/video/3D generation
-- `REPLICATE_API_TOKEN` - Generation fallback
-- `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` - Payments
-- `LLAMA_CLOUD_API_KEY` - Document parsing
-- `EXA_API_KEY` - Web search
-- `FIRECRAWL_API_KEY` - Web scraping
-- `ELEVENLABS_API_KEY` - ElevenLabs TTS
-- `NANGO_SECRET_KEY` + `NANGO_WEBHOOK_SECRET` - Document connectors
-- `KOYEB_BAILEYS_URL` + `KOYEB_API_KEY` or `FLYIO_BAILEYS_URL` + `FLYIO_API_KEY` - WhatsApp
-
-**Secrets location:**
-- `.env.local` (local development, gitignored)
-- Vercel dashboard environment variables (production)
-- Template/defaults: `scripts/init-env.js`
-- Config dashboard: `http://localhost:3333` via `npm run config`
+- WhatsApp service callbacks to `WHATSAPP_WEBHOOK_URL` (the app's `/api/whatsapp/webhook`)
+- Outbound HTTP calls to LlamaCloud, Exa, Firecrawl, Resemble, ElevenLabs, Stripe, Polar, Resend, Nango, and MCP endpoints (listed above)
 
 ---
 
-*Integration audit: 2026-06-01*
+*Integration audit: 2026-11-22*

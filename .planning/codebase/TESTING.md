@@ -1,154 +1,146 @@
+---
+last_mapped_commit: 41a47818ac26f9ea788ccb18230fb3351065c2a2
+last_mapped_at: 2026-11-22
+---
 # Testing Patterns
 
-**Analysis Date:** 2026-06-01
+**Analysis Date:** 2026-11-22
 
 ## Test Framework
 
 **Runner:**
-- None installed. No `jest.config.*`, `vitest.config.*`, or equivalent config found in the repository.
-- No `@testing-library/react`, `jest`, `vitest`, `mocha`, or similar packages appear in `package.json`.
-
-**Assertion Library:**
-- Not applicable — no test framework present.
+- No test runner is configured for the main Next.js app (`/home/user/myRAG/package.json` has no `test` script and no Jest/Vitest dependency)
+- `baileys-whatsapp/` declares Jest 29 with `ts-jest` and `@types/jest`, configured in `baileys-whatsapp/jest.config.js`. Its test glob is `**/Tests/test.*.+(ts|tsx|js)` under `<rootDir>/src`, but no files match that pattern in the repository, so `npm test` there currently runs zero tests
+- `voice-agent/` has no test script (`voice-agent/package.json` scripts: `dev`, `build`, `start`, `config`)
+- Config: `baileys-whatsapp/jest.config.js`
+- Assertion Library: Jest built-in `expect` (via `@types/jest` in `baileys-whatsapp/`)
 
 **Run Commands:**
 ```bash
-# No test runner configured.
-# The closest equivalent is the RAG diagnostic suite:
-node scripts/rag/check-rag-flow.js       # Validates RAG_SYSTEM_PROMPT env var
-node scripts/rag/decode-rag-prompt.js    # Decodes and inspects system prompt
-node scripts/rag/check-url-metadata.js  # Checks URL metadata pipeline
-node scripts/rag/reprocess-documents.js # Re-runs document processing pipeline
-npm run test-rag                         # Alias: node scripts/test-rag-system.js (if present)
-npm run lint                             # ESLint — closest automated quality gate
+cd baileys-whatsapp && npm test          # Jest (currently no matching test files)
+npm run lint                             # ESLint over the repo (root)
+npx tsc --noEmit                         # Type-check root project (tsconfig.json)
+npm run test-rag                         # node scripts/test-rag-system.js (manual RAG check)
+node scripts/rag/check-rag-flow.js       # RAG flow diagnostics
+node scripts/rag/test-rag-system.js      # RAG diagnostics
+node scripts/rag/decode-rag-prompt.js    # Inspect RAG prompt
+cd baileys-whatsapp && npm run lint      # tsc && eslint src
 ```
+- No watch-mode or coverage script is defined anywhere in the repository
 
 ## Test File Organization
 
-**Location:** No test files detected. No `*.test.*` or `*.spec.*` files found anywhere under `src/` or `scripts/`.
+**Location:**
+- Root app: no co-located or separate `*.test.*` / `*.spec.*` files exist under `src/`
+- Scripts-based tests live in `scripts/whatsapp/tests/` (`test-numbers.js`, `test-numbers-auto.js`, `test-formatting.js`) and `baileys-whatsapp/test-webhook.js`, `baileys-whatsapp/test-server.cjs`
 
-**Naming:** No established pattern — none exist.
+**Naming:**
+- Standalone scripts use `test-*.js` in kebab-case. They are executed with `node`, not a test runner
+- Diagnostic scripts under `scripts/rag/` use verb names (`check-rag-flow.js`, `decode-rag-prompt.js`, `reprocess-documents.js`) and are the documented health checks in `AGENTS.md`
 
-**Structure:** Not applicable.
+**Structure:**
+```
+scripts/whatsapp/tests/
+├── test-formatting.js     # Pure function check: formatResponseForWhatsApp
+├── test-numbers.js        # Phone-number normalization checks
+└── test-numbers-auto.js   # Automated variant
+```
 
 ## Test Structure
 
-**Suite Organization:** No formal test suites exist.
+**Script pattern (observed in `scripts/whatsapp/tests/test-formatting.js`):**
+```javascript
+#!/usr/bin/env node
 
-**Patterns:** No automated unit, integration, or e2e test patterns established.
+/**
+ * Test WhatsApp message formatting with numbers
+ */
+
+// Test the formatting function directly
+function formatResponseForWhatsApp(response) {
+  const formatted = response
+    .replace(/```[\s\S]*?```/g, (match) => { /* ... */ })
+    .trim();
+  return formatted;
+}
+```
+- Tests are self-contained: they copy the function under test rather than importing it from `src/`. When changing the production function, update the copy or refactor it into an importable module first
+- Output is logged to the console; there is no assertion library or non-zero exit on failure
+
+**Patterns:**
+- Setup: inline constants; no shared fixtures or `beforeEach`
+- Teardown: none
+- Assertions: manual comparisons with `console.log` output for inspection
 
 ## Mocking
 
-**Framework:** None.
+**Framework:** None configured for the root app. `baileys-whatsapp/jest.config.js` maps `axios` to its resolved module path (`moduleNameMapper`), which is the only mocking-related config present.
 
-**Patterns:** No mocking infrastructure in place.
+**Patterns:**
+- No existing mock files, `__mocks__` directories, or `jest.mock` calls were found in the repository
+- Environment-dependent modules are reached through `src/lib/env.ts`, which is a singleton (`EnvironmentConfig.getInstance()`); to vary configuration in a script, set `process.env` values before importing it
 
-**What to Mock (recommendations for future test suite):**
-- External AI provider calls (OpenRouter, OpenAI, Anthropic)
-- Supabase client methods (`from()`, `select()`, `insert()`, `rpc()`)
-- `fetch` calls to external services (Fal.ai, Runway, Meshy, WhatsApp)
-- `crypto`, `uuid`, and `nanoid` for deterministic IDs
+**What to Mock:**
+- External AI providers (OpenRouter, OpenAI, Anthropic), Supabase, Nango, LiveKit, and WhatsApp transports. Calls go through SDK clients (`@openrouter/ai-sdk-provider`, `@supabase/supabase-js`, `@nangohq/node`, `livekit-server-sdk`), so mock at the client boundary
 
-**What NOT to Mock (recommendations):**
-- `src/lib/utils.ts` (`cn()` function) — pure, no side effects
-- `src/lib/bm25-scorer.ts`, `src/lib/mmr-scorer.ts` — pure scoring algorithms
-- `src/lib/deployment-mode.ts` — thin env-read wrappers
+**What NOT to Mock:**
+- Pure utilities such as `cn` (`src/lib/utils.ts`), `formatErrorSSE` (`src/lib/error-stream.ts`), and `validateRequest` schema logic (`src/lib/api-middleware.ts`). These are deterministic and should run for real
+- Zod schemas: test them with real inputs
 
 ## Fixtures and Factories
 
-**Test Data:** No fixture or factory files exist.
+**Test Data:**
+- No factory library is in use. Use inline literal objects. Keep values as placeholders, never real phone numbers or customer data (`AGENTS.md` section 4, rule 7)
+- Sample WhatsApp payload data may exist in `baileys-whatsapp/Example/`; treat it as sample data only, and do not copy real identifiers from it
 
-**Location:** No established convention.
+**Location:**
+- Fixtures are not centralized. Put any new fixture next to the test that uses it
 
 ## Coverage
 
-**Requirements:** None enforced — no coverage tooling configured.
+**Requirements:** None enforced. No `coverageThreshold` is set in Jest config, and no coverage script exists.
 
 **View Coverage:**
 ```bash
-# Not available — no test runner configured
+cd baileys-whatsapp && npx jest --coverage   # Only meaningful once test files exist
 ```
 
 ## Test Types
 
-**Unit Tests:** Not present. Candidates for unit testing include:
-- `src/lib/bm25-scorer.ts` — scoring pure functions
-- `src/lib/mmr-scorer.ts` — reranking algorithm
-- `src/lib/chat-title-utils.ts` — title generation helpers
-- `src/lib/url-extractor.ts` — URL parsing logic
-- `src/lib/api-middleware.ts` — `validateRequest()` and `withValidation()` HOF
+**Unit Tests:**
+- Effectively none in the root app. The only unit-style checks are the standalone scripts above and the Jest setup in `baileys-whatsapp/` with no active tests
 
-**Integration Tests:** Not present. Candidates include:
-- RAG pipeline end-to-end: document upload → chunk → embed → search
-- API route handlers via `next-test-api-route-handler` or similar
-- Supabase RLS policy validation
+**Integration Tests:**
+- Manual RAG diagnostics via `scripts/rag/*` and `scripts/test-rag-system.js`, which hit the configured Supabase project and models; they require `.env.local` and are not safe for CI without credentials
 
-**E2E Tests:** Not configured. No Playwright or Cypress setup detected (`.playwright-mcp/` exists but is MCP tooling, not an E2E suite).
+**E2E Tests:**
+- Not used. No Playwright, Cypress, or similar config exists
 
-## Manual / Diagnostic Testing
+## Verification Before Hand-off
 
-The project substitutes formal tests with a set of Node.js diagnostic scripts:
+Because automated tests are sparse, the required verification set from `AGENTS.md` section 15 is:
+1. `npm run lint` at the repo root
+2. `npx tsc --noEmit` at the repo root (strict mode)
+3. `cd baileys-whatsapp && npm run lint` when touching the WhatsApp service
+4. The relevant `scripts/rag/*` or `scripts/whatsapp/tests/*` script for the changed domain
 
-**RAG diagnostics (`scripts/rag/`):**
-- `check-rag-flow.js` — validates `RAG_SYSTEM_PROMPT` contains `{{context}}` placeholder
-- `decode-rag-prompt.js` — decodes URI-encoded prompt for manual inspection
-- `check-url-metadata.js` — checks URL metadata extraction pipeline
-- `reprocess-documents.js` — re-processes documents through chunking/embedding
+## Common Patterns
 
-**Admin diagnostics (`scripts/config-ui/admin/`):**
-- `check-admin.js` — verifies `check_admin_status` and `is_admin` DB functions
-
-**Manual test flow for new chat features:**
-1. `npm run dev` — start dev server
-2. Open `http://localhost:3000` — test in browser
-3. `npm run config` — open config dashboard at `http://localhost:3333`
-4. Check browser console + terminal for `[TAG]: message` log prefixes
-
-## Common Patterns (Recommended When Tests Are Added)
+**Adding a new test (recommended, since no runner exists in the root app):**
+- Add Vitest or Jest deliberately as a new dev dependency rather than ad hoc. If Jest is chosen, reuse `baileys-whatsapp/jest.config.js` conventions and place files under `src/**/__tests__/` or the `Tests/test.*.ts` glob already declared
+- For pure modules, test directly: `validateRequest` with a `NextRequest` built from `new Request(url, { method: 'POST', body: JSON.stringify(...) })` and assert on `success` and `response.status`
 
 **Async Testing:**
-```typescript
-// Recommended pattern using vitest (preferred for Next.js 16):
-import { describe, it, expect, vi } from 'vitest';
-
-it('creates chat title from tool call', async () => {
-  const result = await generateChatTitleFromToolCall(mockToolCallPart);
-  expect(result).toMatch(/^[A-Z]/);
-});
-```
+- Scripts use `async` functions invoked at the top level; no harness-level async support is configured
 
 **Error Testing:**
 ```typescript
-// Test that API middleware rejects invalid bodies
-it('returns 400 on schema mismatch', async () => {
-  const result = await validateRequest(mockReq, schema);
-  expect(result.success).toBe(false);
-  if (!result.success) {
-    expect(result.response.status).toBe(400);
-  }
-});
+// Pattern to follow for validation tests (src/lib/api-middleware.ts)
+const result = await validateRequest(req, schema);
+expect(result.success).toBe(false);
+// result.response.status === 400 and body.details lists { path, message }
 ```
-
-**Mocking Supabase (recommended approach):**
-```typescript
-vi.mock('@/lib/supabase/server', () => ({
-  createClient: vi.fn(() => ({
-    auth: { getUser: vi.fn().mockResolvedValue({ data: { user: mockUser }, error: null }) },
-    from: vi.fn(() => ({ select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis() }))
-  }))
-}));
-```
-
-## Setup Recommendation
-
-To add a test suite aligned with the existing stack:
-
-1. Install: `npm install -D vitest @vitejs/plugin-react @testing-library/react @testing-library/user-event`
-2. Add `vitest.config.ts` at root alongside `next.config.js`
-3. Create `src/__tests__/` or co-locate `*.test.ts` files next to source
-4. Start with pure lib functions: `bm25-scorer.ts`, `mmr-scorer.ts`, `api-middleware.ts`
-5. Add `"test": "vitest"` to `package.json` scripts
 
 ---
 
-*Testing analysis: 2026-06-01*
+*Testing analysis: 2026-11-22*

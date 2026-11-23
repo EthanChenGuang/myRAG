@@ -1,0 +1,53 @@
+{
+  "contract": "1.0.0",
+  "flavor": "core",
+  "milestone": "v5.0",
+  "phases": [
+    {
+      "number": "1",
+      "name": "Evaluation Harness & Baseline",
+      "status": "in_progress"
+    },
+    {
+      "number": "2",
+      "name": "Unified Retrieval Pipeline & Tenant Scope",
+      "status": "pending"
+    },
+    {
+      "number": "3",
+      "name": "Unified Ingestion & Embedding Profiles",
+      "status": "pending"
+    },
+    {
+      "number": "4",
+      "name": "Hybrid Retrieval, Reranking & Calibrated Refusal",
+      "status": "pending"
+    },
+    {
+      "number": "5",
+      "name": "Verified Citations & Groundedness",
+      "status": "pending"
+    },
+    {
+      "number": "5.1",
+      "name": "Prompt Injection Defense (INSERTED)",
+      "status": "pending"
+    },
+    {
+      "number": "6",
+      "name": "Query Layer (LlamaIndex & LangChain)",
+      "status": "pending"
+    },
+    {
+      "number": "7",
+      "name": "External Backends & Release Defaults",
+      "status": "pending"
+    }
+  ],
+  "next": {
+    "command": "/gsd-progress --next",
+    "label": "Advance to the next step",
+    "reason": "Phase 1 of 8 · executing"
+  },
+  "updated_at": "2026-11-23T11:09:25.404Z"
+}

@@ -1,0 +1,173 @@
+{
+  "$defs": {
+    "BaselineMetricStat": {
+      "additionalProperties": false,
+      "properties": {
+        "mean": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Mean"
+        },
+        "n": {
+          "minimum": 0,
+          "title": "N",
+          "type": "integer"
+        },
+        "runs": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Runs",
+          "type": "array"
+        },
+        "spread": {
+          "minimum": 0,
+          "title": "Spread",
+          "type": "number"
+        }
+      },
+      "required": [
+        "mean",
+        "spread",
+        "runs",
+        "n"
+      ],
+      "title": "BaselineMetricStat",
+      "type": "object"
+    },
+    "BaselineRun": {
+      "additionalProperties": false,
+      "properties": {
+        "created_at": {
+          "title": "Created At",
+          "type": "string"
+        },
+        "git_sha": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Git Sha"
+        },
+        "run_config_hash": {
+          "title": "Run Config Hash",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "run_id",
+        "run_config_hash",
+        "created_at"
+      ],
+      "title": "BaselineRun",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "corpus_sha256": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Corpus Sha256"
+    },
+    "embedder_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Embedder Id"
+    },
+    "embedder_version": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Embedder Version"
+    },
+    "golden_sha256": {
+      "title": "Golden Sha256",
+      "type": "string"
+    },
+    "run_config_hash": {
+      "title": "Run Config Hash",
+      "type": "string"
+    },
+    "runs": {
+      "items": {
+        "$ref": "#/$defs/BaselineRun"
+      },
+      "minItems": 3,
+      "title": "Runs",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "slices": {
+      "additionalProperties": {
+        "additionalProperties": {
+          "$ref": "#/$defs/BaselineMetricStat"
+        },
+        "type": "object"
+      },
+      "title": "Slices",
+      "type": "object"
+    },
+    "spread_kind": {
+      "const": "stdev_ddof1",
+      "title": "Spread Kind",
+      "type": "string"
+    }
+  },
+  "required": [
+    "spread_kind",
+    "golden_sha256",
+    "run_config_hash",
+    "runs",
+    "slices"
+  ],
+  "title": "Baseline",
+  "type": "object"
+}

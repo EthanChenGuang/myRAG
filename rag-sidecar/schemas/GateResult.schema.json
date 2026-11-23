@@ -1,0 +1,83 @@
+{
+  "$defs": {
+    "GateOffender": {
+      "additionalProperties": false,
+      "properties": {
+        "baseline_mean": {
+          "title": "Baseline Mean",
+          "type": "number"
+        },
+        "direction": {
+          "enum": [
+            "higher",
+            "lower"
+          ],
+          "title": "Direction",
+          "type": "string"
+        },
+        "metric": {
+          "title": "Metric",
+          "type": "string"
+        },
+        "observed": {
+          "title": "Observed",
+          "type": "number"
+        },
+        "slice": {
+          "title": "Slice",
+          "type": "string"
+        },
+        "threshold": {
+          "title": "Threshold",
+          "type": "number"
+        }
+      },
+      "required": [
+        "slice",
+        "metric",
+        "baseline_mean",
+        "threshold",
+        "observed",
+        "direction"
+      ],
+      "title": "GateOffender",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "mismatches": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Mismatches",
+      "type": "array"
+    },
+    "offenders": {
+      "items": {
+        "$ref": "#/$defs/GateOffender"
+      },
+      "title": "Offenders",
+      "type": "array"
+    },
+    "passed": {
+      "title": "Passed",
+      "type": "boolean"
+    },
+    "skipped": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Skipped",
+      "type": "array"
+    }
+  },
+  "required": [
+    "passed",
+    "offenders",
+    "skipped",
+    "mismatches"
+  ],
+  "title": "GateResult",
+  "type": "object"
+}

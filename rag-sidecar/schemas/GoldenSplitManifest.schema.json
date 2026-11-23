@@ -1,0 +1,33 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "assignments": {
+      "additionalProperties": {
+        "enum": [
+          "dev",
+          "test"
+        ],
+        "type": "string"
+      },
+      "title": "Assignments",
+      "type": "object"
+    },
+    "rule": {
+      "const": "sha256-first8hex-mod100-lt70-dev",
+      "title": "Rule",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "rule",
+    "assignments"
+  ],
+  "title": "GoldenSplitManifest",
+  "type": "object"
+}

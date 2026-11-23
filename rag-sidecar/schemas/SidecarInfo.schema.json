@@ -1,0 +1,25 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "contracts_schema_version": {
+      "title": "Contracts Schema Version",
+      "type": "integer"
+    },
+    "service": {
+      "const": "rag-sidecar",
+      "title": "Service",
+      "type": "string"
+    },
+    "version": {
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "service",
+    "version",
+    "contracts_schema_version"
+  ],
+  "title": "SidecarInfo",
+  "type": "object"
+}

@@ -1,267 +1,277 @@
-<!-- refreshed: 2026-06-01 -->
+---
+last_mapped_commit: 41a47818ac26f9ea788ccb18230fb3351065c2a2
+last_mapped_at: 2026-11-22
+---
+<!-- refreshed: 2026-11-22 -->
 # Architecture
 
-**Analysis Date:** 2026-06-01
+**Analysis Date:** 2026-11-22
 
 ## System Overview
 
 ```text
-┌─────────────────────────────────────────────────────────────────────────┐
-│                        Browser / Client Layer                           │
-│  `src/app/page.tsx` (main chat)  `src/app/embed/` (embeddable widget)   │
-│  React 19 + AI SDK 5 useChat hook + Zustand stores + Framer Motion      │
-└──────────────────────┬───────────────────────────────────────────────────┘
-                       │ HTTP / SSE streaming
-┌──────────────────────▼───────────────────────────────────────────────────┐
-│                     Next.js API Routes (Node.js runtime)                  │
-│  `src/app/api/chat/route.ts`         — core RAG + streaming LLM          │
-│  `src/app/api/chat/approve/route.ts` — MCP tool approval pipeline        │
-│  `src/app/api/process-document/`     — document ingestion                │
-│  `src/app/api/upload/`               — file upload                       │
-│  `src/app/api/generate-image/`       — image generation                  │
-│  `src/app/api/generate-video/`       — video generation                  │
-│  `src/app/api/generate-3d/`          — 3D model generation               │
-│  `src/app/api/whatsapp/`             — WhatsApp webhook/session           │
-│  `src/app/api/admin/`                — admin auth + settings              │
-│  `src/app/api/nango/`                — Nango connector OAuth              │
-│  `src/app/api/config/`               — runtime config endpoints           │
-└───────────┬─────────────────────┬────────────────────────────────────────┘
-            │                     │
-┌───────────▼──────────┐  ┌──────▼────────────────────────────────────────┐
-│    AI / LLM Layer    │  │              Data + Services Layer              │
-│ `src/lib/`           │  │                                                 │
-│  openrouter.ts       │  │  `src/lib/supabase.ts`   — DB + vector store   │
-│  env.ts              │  │  `src/lib/supabase/`     — browser client      │
-│  query-classifier.ts │  │  `src/lib/document-processor.ts` — embed+chunk │
-│  retrieval-strategies│  │  `src/lib/optimized-search.ts`  — hybrid RAG   │
-│  thinking-rag-enh.   │  │  `src/lib/mcp/`          — MCP tool execution  │
-│  system-prompt-mgr.  │  │  `src/lib/whatsapp/`     — WhatsApp provider   │
-│  deployment-mode.ts  │  │  `src/lib/nango/`        — connector sync       │
-│  mcp-cache.ts        │  │  `src/lib/stores/`       — Zustand global state │
-└───────────┬──────────┘  └──────┬────────────────────────────────────────┘
-            │                    │
-┌───────────▼────────────────────▼────────────────────────────────────────┐
-│                      External Services                                   │
-│  Supabase (PostgreSQL + pgvector + Storage + Auth + Realtime)           │
-│  OpenRouter / OpenAI / Anthropic / DeepSeek / Gemini                   │
-│  MCP Zapier endpoint  |  Nango OAuth connectors                         │
-│  Stripe / Polar payments  |  Meshy / Luma / Runway (media generation)   │
-│  WhatsApp (Baileys on Fly.io or Koyeb)                                  │
-└─────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│  Browser UI (Next.js App Router, React 19 client components)        │
+│  `src/app/page.tsx`  `src/app/client-layout.tsx`  `src/components/` │
+│  Zustand stores `src/lib/*-store.ts`, `src/lib/stores/`            │
+└───────────────┬──────────────────────────────┬──────────────────────┘
+                │ fetch / useChat (SSE)        │ Supabase JS (auth, RLS)
+                ▼                              │
+┌───────────────────────────────────────┐      │
+│  Next.js API routes (Node runtime)    │      │
+│  `src/app/api/**/route.ts` (~88)      │      │
+│  Chat: `src/app/api/chat/route.ts`    │      │
+└───┬──────────┬───────────┬────────────┘      │
+    │          │           │                   │
+    ▼          ▼           ▼                   ▼
+┌────────┐ ┌─────────┐ ┌──────────────┐ ┌──────────────────────┐
+│ RAG    │ │ MCP     │ │ AI providers │ │ Supabase (Postgres + │
+│ `src/  │ │ router  │ │ `src/lib/    │ │ pgvector, storage,   │
+│ lib/`  │ │ `src/lib│ │ openrouter`  │ │ auth) `supabase/`    │
+│        │ │ /mcp/`  │ │ `@ai-sdk/*`  │ │                      │
+└───┬────┘ └────┬────┘ └──────────────┘ └──────────▲───────────┘
+    └───────────┴──────────── writes/reads ──────────┘
+
+Side services (separate processes, separate deploys):
+┌──────────────────────────────┐   ┌──────────────────────────────┐
+│ Voice agent `voice-agent/`   │   │ WhatsApp Baileys service     │
+│ LiveKit + AssemblyAI + TTS   │   │ `baileys-whatsapp/server.ts` │
+│ calls RAG via RAGClient      │   │ Express, called by Next.js   │
+│ `voice-agent/src/rag_client.ts`│ │ `src/lib/whatsapp/`          │
+└──────────────────────────────┘   └──────────────────────────────┘
+Admin tooling: `scripts/config-server.js` (Express, port 3333) + `scripts/config-ui/`
 ```
 
 ## Component Responsibilities
 
 | Component | Responsibility | File |
 |-----------|----------------|------|
-| Chat page | Main SPA: message list, input, sidebar orchestration | `src/app/page.tsx` |
-| Chat route | RAG pipeline, streaming LLM, MCP dispatch, image routing | `src/app/api/chat/route.ts` |
-| Approve route | MCP tool approval + YOLO auto-execution | `src/app/api/chat/approve/route.ts` |
-| Document processor | Parse, chunk, embed, store documents | `src/lib/document-processor.ts` |
-| Retrieval strategies | Multi-pass, adjacent-chunk, hybrid RAG retrieval | `src/lib/retrieval-strategies.ts` |
-| Optimized search | Query enhancement + BM25/MMR reranking + cache | `src/lib/optimized-search.ts` |
-| Query classifier | Classify query as conversational/tool/document/multi-step | `src/lib/query-classifier.ts` |
-| Universal MCP client | Dynamic discovery + execution of any MCP tool | `src/lib/mcp/universal-client.ts` |
-| Smart MCP router | Semantic routing to best MCP server/tool with fallback | `src/lib/mcp/smart-router.ts` |
-| System prompt manager | Assemble RAG system prompts with `{{context}}` injection | `src/lib/system-prompt-manager.ts` |
-| Deployment mode | Single-tenant vs multi-tenant feature gating | `src/lib/deployment-mode.ts` |
-| Chat store | Zustand store: chat list, folders, current chat | `src/lib/chat-store.ts` |
-| Supabase manager | Singleton DB client (anon + service-role) | `src/lib/supabase.ts` |
-| WhatsApp factory | Provider-agnostic WhatsApp client (Fly.io or Koyeb) | `src/lib/whatsapp/client-factory.ts` |
-| Client layout | Provider tree + global CSS + mobile viewport setup | `src/app/client-layout.tsx` |
-| Auth provider | Supabase session management + route guards | `src/components/providers/auth-provider.tsx` |
-| Model provider | Available model list + reasoning mode detection | `src/components/providers/model-provider.tsx` |
+| Root layout and providers | Fonts, theme, auth, model, language, sources, artifact providers | `src/app/layout.tsx`, `src/app/client-layout.tsx` |
+| Main chat page | Chat UI state, message streaming via `useChat`, sidebar, persistence | `src/app/page.tsx` |
+| Chat API | Query classification, RAG retrieval, MCP tool planning, `streamText` streaming, persistence | `src/app/api/chat/route.ts` |
+| MCP approval | Executes approved MCP tool calls | `src/app/api/chat/approve/route.ts` |
+| Document ingestion | Parsing, token-based chunking, embeddings, image captioning | `src/lib/document-processor.ts`, `src/app/api/process-document/route.ts`, `src/app/api/upload/route.ts` |
+| Retrieval | Enhanced vector retrieval, comprehensive/aggregate strategies, reranking, MMR, BM25 | `src/lib/enhanced-rag-retrieval.ts`, `src/lib/retrieval-strategies.ts`, `src/lib/optimized-search.ts`, `src/lib/mmr-scorer.ts`, `src/lib/bm25-scorer.ts`, `src/lib/reranker-local.ts` |
+| Query classification | Intent, tool-need, and temporal detection | `src/lib/query-classifier.ts`, `src/lib/temporal-query-detector.ts` |
+| Supabase access | Singleton browser/admin clients, chat and document persistence | `src/lib/supabase.ts`, `src/lib/supabase/client.ts`, `src/lib/supabase/server.ts`, `src/lib/supabase/middleware.ts` |
+| MCP integration | Universal client, transports, smart and production routers, caching | `src/lib/mcp/`, `src/lib/mcp-cache.ts` |
+| Nango connectors | Google Drive / Notion / Dropbox sync into `document_chunks` | `src/lib/nango/`, `src/app/api/nango/` |
+| WhatsApp | Provider factory (Koyeb or Fly.io) and webhook handling | `src/lib/whatsapp/client-factory.ts`, `src/lib/whatsapp/webhook-handler.ts` |
+| Deployment mode | Single vs multi-tenant feature gating | `src/lib/deployment-mode.ts` |
+| Env access | Typed environment access and defaults | `src/lib/env.ts`, `src/lib/env-utils.ts` |
+| Voice pipeline | LiveKit agent, VAD, STT, LLM, TTS, query rewriting | `voice-agent/src/agent.ts`, `voice-agent/src/voice_agent.ts` |
+| Config dashboard | Visual env, admin, model, and RAG prompt management | `scripts/config-server.js`, `scripts/config-ui/index.html` |
 
 ## Pattern Overview
 
-**Overall:** Next.js App Router full-stack SPA with server-side RAG pipeline delivering SSE streams to the client via AI SDK 5's `useChat` hook.
+**Overall:** Monolithic Next.js App Router application (frontend and API routes in one project) with several auxiliary services in subdirectories. Business logic lives in `src/lib/` and is called from route handlers. Persistence and auth are delegated to Supabase.
 
 **Key Characteristics:**
-- Streaming-first: all AI responses delivered as SSE text streams; errors formatted as `formatErrorSSE` payloads (`src/lib/error-stream.ts`)
-- Singleton pattern for shared infrastructure: `SupabaseManager`, `EnvironmentConfig`, `UniversalMcpClient`, `WhatsAppClientFactory`
-- Zustand stores for all client-side state; selectors use `useShallow` from `zustand/react/shallow`
-- Feature flags controlled via `NEXT_PUBLIC_*` env vars read through `src/lib/env.ts` singleton
-- Deployment mode (`single-tenant` | `multi-tenant`) gates org/team/quota features at runtime via `src/lib/deployment-mode.ts`
+- Single Next.js project; `@/` path alias maps to `src/` (`tsconfig.json`).
+- All API handlers are Next.js route handlers (`route.ts`) exporting `POST`/`GET`, with `export const runtime = 'nodejs'` on heavy routes such as `src/app/api/chat/route.ts`.
+- The chat endpoint streams Server-Sent Events via the Vercel AI SDK (`streamText`, `createUIMessageStream`) and the client consumes them with `useChat` from `@ai-sdk/react` in `src/app/page.tsx`.
+- Client state is held in many small Zustand stores, not a single global store (for example `src/lib/chat-store.ts`, `src/lib/web-search-store.ts`, `src/lib/stores/voice-store.ts`).
+- Multi-tenant vs single-tenant behaviour is switched at runtime by `isMultiTenant()` in `src/lib/deployment-mode.ts`, and by SQL setup files in `supabase/`.
+- Provider selection is env-driven: `NEXT_PUBLIC_AI_PROVIDER` (`src/app/api/chat/route.ts`), `WHATSAPP_PROVIDER` (`src/lib/whatsapp/client-factory.ts`), `RAG_BEHAVIOR_MODE` (`src/app/api/chat/route.ts`).
+- React Compiler and `turbopack.root` are enabled in `next.config.js`.
 
 ## Layers
 
-**Client UI Layer:**
-- Purpose: Chat interface, sidebar, document upload, settings, modals
-- Location: `src/app/page.tsx`, `src/components/ui/`, `src/components/providers/`
-- Contains: React components, Framer Motion animations, Zustand selectors, AI SDK `useChat` hook
-- Depends on: API routes (via fetch/SSE), Zustand stores, Supabase browser client
-- Used by: End users directly
+**UI / Presentation:**
+- Purpose: Chat, sidebar, settings, artifact preview, voice overlay, config UI components.
+- Location: `src/components/`, `src/app/**/page.tsx`
+- Contains: React function components, Radix-based primitives in `src/components/ui/`, providers in `src/components/providers/`.
+- Depends on: `src/lib/` stores and hooks, `src/types/`, `src/translations/`.
+- Used by: Next.js routing only.
 
-**API Route Layer:**
-- Purpose: Business logic endpoints — RAG pipeline, LLM streaming, document processing, auth, payments, media generation
-- Location: `src/app/api/`
-- Contains: Next.js `route.ts` files, all with `export const runtime = 'nodejs'`
-- Depends on: `src/lib/` utilities, Supabase admin client, external APIs
-- Used by: Browser client (chat, upload, config), WhatsApp webhook, embed widget
+**Client state and hooks:**
+- Purpose: Zustand stores and React hooks encapsulating client behaviour.
+- Location: `src/lib/*-store.ts`, `src/lib/stores/`, `src/lib/hooks/`, `src/hooks/`, `src/contexts/`
+- Contains: Stores (chat, web search, file upload, organization, reasoning, voice, admin, user settings, ghost mode), hooks (`use-voice-mode.ts`, `use-nango.ts`, `use-organization.ts`).
+- Depends on: `src/lib/supabase/client.ts`, `src/lib/chat-utils.ts`.
+- Used by: `src/app/page.tsx` and components.
 
-**Business Logic / Library Layer:**
-- Purpose: Reusable AI, RAG, store, and integration utilities
+**API / Route handlers:**
+- Purpose: HTTP boundary. Validate input, call services, return JSON or SSE.
+- Location: `src/app/api/**/route.ts`
+- Contains: About 88 route files across chat, documents, folders, MCP, Nango, WhatsApp, organizations, config, admin, scrapers, generators, internal voice endpoints.
+- Depends on: `src/lib/` services, `src/lib/api-middleware.ts` (Zod validation via `withValidation`).
+- Used by: Browser UI, the voice agent (`/api/internal/voice-chat`, `/api/internal/voice-rag`), embeds (`/api/embed/chat`), Stripe and Nango webhooks.
+
+**Service / Domain logic:**
+- Purpose: RAG, MCP routing, document processing, connectors, WhatsApp, payments.
 - Location: `src/lib/`
-- Contains: Zustand stores (`chat-store.ts`, `stores/`), RAG modules, MCP client, document processor, env config, WhatsApp client
-- Depends on: Supabase, OpenAI SDK, `src/types/`
-- Used by: API routes and UI components
+- Contains: `document-processor.ts`, `enhanced-rag-retrieval.ts`, `thinking-rag-enhancer.ts`, `mcp/*`, `nango/*`, `whatsapp/*`, `stripe.ts`, `polar.ts`, `openrouter.ts`, `scrapers/*`.
+- Depends on: `src/lib/env.ts`, `src/lib/supabase.ts`, `src/lib/logger.ts`, external SDKs.
+- Used by: API routes.
 
-**Data / Types Layer:**
-- Purpose: TypeScript interfaces shared across frontend and backend
-- Location: `src/types/` (`chat.ts`, `folder.ts`, `messages.ts`, `events.ts`)
-- Contains: Message types (`ExtendedMessage`, `APIMessage`, `ContentPart`, `DocumentContent`), serialization utilities
-- Depends on: AI SDK `UIMessage` types
-- Used by: All layers
+**Data / Persistence:**
+- Purpose: Supabase tables for chats, documents, `document_chunks` with pgvector embeddings, folders, organizations, subscriptions, WhatsApp sessions.
+- Location: `src/lib/supabase.ts` (`getSupabase()`, `getSupabaseAdmin()`, `searchSimilarChunks`, `createChat`, `updateChat`), schema in `supabase/single-tenant-setup.sql` and `supabase/multi-tenant-setup.sql`.
+- Depends on: `@supabase/supabase-js`, `@supabase/ssr`.
+- Used by: All service and route layers.
+
+**Auxiliary services (separate processes):**
+- Voice agent: `voice-agent/src/` (`VoicePipeline` in `voice_agent.ts`, LiveKit worker in `agent.ts`, `RAGClient` in `rag_client.ts`, providers in `voice-agent/src/providers/`).
+- WhatsApp Baileys: `baileys-whatsapp/server.ts` (Express API with `API_KEY` header check, session map, webhook dispatch) on top of the `src/` Baileys library.
+- Config server: `scripts/config-server.js` (Express on port 3333) serving `scripts/config-ui/index.html`, plus admin and RAG helper scripts in `scripts/`.
 
 ## Data Flow
 
-### Primary Chat Request Path
+### Primary Request Path (chat, streaming)
 
-1. User submits message → `useChat` hook in `src/app/page.tsx`
-2. `DefaultChatTransport` POSTs `APIMessage[]` to `/api/chat`
-3. `POST` handler in `src/app/api/chat/route.ts` begins:
-   - Classifies query via `classifyQuery()` (`src/lib/query-classifier.ts`)
-   - If not bypassed, runs RAG: `optimizedSearch()` or `comprehensiveRetrieval()` → `searchSimilarChunks()` (pgvector HNSW)
-   - Assembles system prompt with `{{context}}` via `SystemPromptManager`
-   - If MCP enabled + query needs tools: discovers tools via `UniversalMcpClient`, passes as `ToolSet` to `streamText()`
-   - Calls `streamText()` with OpenRouter provider (or OpenAI direct)
-4. SSE stream returned to client; `useChat` appends tokens to message state
-5. On stream end, frontend saves chat via `createChat`/`updateChat` in `src/lib/chat-store.ts` → Supabase
+1. The user submits a message in `src/app/page.tsx`, which sends it through `useChat` with `DefaultChatTransport` to the chat endpoint.
+2. `POST` in `src/app/api/chat/route.ts` (line ~1180) parses the body. `ragMode` defaults to `strict`, and `RAG_BEHAVIOR_MODE` env overrides the default.
+3. The query is classified (`classifyQuery`, `shouldSkipMcp` from `src/lib/query-classifier.ts`). Image and URL inputs are handled via `src/lib/url-extractor.ts`.
+4. Retrieval runs. Query embedding comes from `getQueryEmbedding` in `src/lib/document-processor.ts`. Chunks come from `enhancedRetrieveChunks` (`src/lib/enhanced-rag-retrieval.ts`) or `optimizedSearch` / `comprehensiveRetrieval` (`src/lib/retrieval-strategies.ts`), which call `searchSimilarChunks` in `src/lib/supabase.ts`.
+5. MCP tools are considered when `SUPPORTS_TOOLS` is true (provider is openai, openrouter, or groq). Tool cache is in `src/lib/mcp-cache.ts`. Planning goes through `src/lib/mcp/smart-router.ts` and `src/lib/mcp/production-router.ts`, using `src/lib/mcp/universal-client.ts`.
+6. The system prompt is built from the `{{context}}` template via `src/lib/system-prompt-manager.ts` and `src/lib/rag-mode.ts`. When strict mode has no useful context and web search is disabled, the route returns a structured "information not available" response.
+7. `streamText` (Vercel AI SDK) streams tokens through `createUIMessageStream` / `createUIMessageStreamResponse`. Source metadata, `source_images`, and tool results are attached to the stream.
+8. Persistence: `createChat` / `updateChat` in `src/lib/supabase.ts` write messages; the client mirrors them through `src/lib/chat-store.ts`.
 
-### Document Ingestion Path
+### Document Ingestion
 
-1. User uploads file → `/api/upload` (stores in Supabase Storage `chat-attachments`)
-2. `/api/process-document` called: text extraction (LlamaIndex Cloud or PDF.js) → semantic chunking (`src/lib/semantic-chunker.ts`) → embedding via OpenAI `text-embedding-3-small` → stored in `document_chunks` table with pgvector embedding
-3. Document indexed; available for RAG in subsequent chats
+1. Upload enters via `src/app/api/upload/route.ts` (images call `processImageDocument`) or `src/app/api/process-document/route.ts` (calls the document processor).
+2. `uploadAndParseDocument`, `createTokenBasedChunks` (600 tokens, 100 overlap), and `processChunksInBatches` in `src/lib/document-processor.ts` create chunks and embeddings (1536-dim).
+3. Chunks are stored in `document_chunks`. Image chunks carry `metadata.image_url`.
+4. Nango connectors use `src/lib/nango/sync-manager.ts` and `src/lib/nango/document-adapter.ts` to feed the same table. Nango webhooks arrive at `src/app/api/nango/webhook/route.ts`.
 
-### MCP Tool Approval Flow
+### Approval Flow for MCP Tools
 
-1. Chat route calls `streamText()` with MCP tools registered
-2. AI emits `tool_use` event; if `requiresApproval`, stream pauses
-3. Client renders approval UI via `src/components/ui/mcp-tool-box.tsx`
-4. User approves → POST `/api/chat/approve` with `toolCallId`
-5. `ToolExecutionStateService` (`src/lib/tool-execution-state.ts`) marks approved
-6. `UniversalMcpClient` executes tool via appropriate transport
-7. Result injected into conversation; stream resumes
+1. Chat route proposes a tool call and stores state through `src/lib/tool-execution-state.ts` (exposed at `src/app/api/tool-execution-state/route.ts`).
+2. The user approves in the UI, which posts to `src/app/api/chat/approve/route.ts`.
+3. The approve route runs the tool through the MCP router and returns the result.
 
-### WhatsApp Message Path
+### Voice Flow
 
-1. Incoming webhook → `/api/whatsapp/webhook/route.ts`
-2. `WhatsAppClientFactory.getClient()` (`src/lib/whatsapp/client-factory.ts`) returns Fly.io or Koyeb client
-3. Message converted to `APIMessage` via `src/lib/whatsapp/message-converter.ts`
-4. Internal POST to `/api/chat` with `disableRAG` and `systemPromptOverride` options
-5. Response streamed back; `WebhookHandler` sends reply to WhatsApp
+1. Browser joins a LiveKit room. Token issued by `src/app/api/livekit/token/route.ts`.
+2. `voice-agent/src/agent.ts` handles audio, VAD, and the mutex. `voice-agent/src/voice_agent.ts` (`VoicePipeline`) runs STT (`providers/assemblyai.ts`), LLM with query rewriting, and TTS (`providers/resemble.ts`).
+3. Retrieval for voice goes through `voice-agent/src/rag_client.ts`, which calls the app's internal voice RAG endpoint (`src/app/api/internal/voice-rag/route.ts`). Voice chat messages are persisted through `src/app/api/internal/voice-chat/route.ts`.
+
+### WhatsApp Flow
+
+1. Inbound messages hit `src/app/api/whatsapp/webhook/route.ts`.
+2. Outbound sending and session management go through the provider chosen in `src/lib/whatsapp/client-factory.ts` (`koyeb-client.ts` or `flyio-client.ts`, both extending `base-client.ts`), which calls the Baileys service.
+3. `src/lib/whatsapp/session-manager.ts` and `connection-monitor.ts` maintain sessions and health.
 
 **State Management:**
-- Server state: Supabase tables (`chats`, `documents`, `document_chunks`, `folders`, `organizations`)
-- Client state: Zustand stores — `useChatStore`, `useWebSearchStore`, `useFileUploadStore`, `useOrganizationStore`, `useReasoningStore`, `useGhostModeStore`, `useUserSettingsStore`, `useDocumentMentionStore`, `useMultiFileUploadStore`
-- MCP approval state: `globalThis.toolApprovalState` map (server-side, in-memory)
-- MCP tools cache: `getCachedTools`/`setCachedTools` (`src/lib/mcp-cache.ts`)
+- Server: Stateless route handlers. Chat state persists in Supabase. MCP tool and connection caches are in-process (`src/lib/mcp-cache.ts`).
+- Client: Zustand stores plus React state in `src/app/page.tsx`. Store subscriptions use `useShallow` from `zustand/react/shallow`.
 
 ## Key Abstractions
 
-**ExtendedMessage / APIMessage / ContentPart:**
-- Purpose: Multi-modal message with text, image_url, document, generated_image, generated_video, generated_3d_model parts
-- Examples: `src/types/chat.ts`, `src/types/messages.ts`
-- Pattern: `fromAPIMessages()` / `toAPIMessage()` conversion at API boundary
+**Supabase Connection Manager:**
+- Purpose: Single entry point for Supabase clients with build-phase guard and env validation.
+- Examples: `src/lib/supabase.ts` (`SupabaseManager`, `getSupabase`, `getSupabaseAdmin`)
+- Pattern: Singleton with lazy initialization; `supabase` and `supabaseAdmin` exported as Proxies.
 
-**RAG Pipeline Composites:**
-- Purpose: Layered retrieval — basic pgvector similarity → BM25 re-rank → MMR diversity → adjacent chunks
-- Examples: `src/lib/optimized-search.ts`, `src/lib/retrieval-strategies.ts`, `src/lib/enhanced-rag-retrieval.ts`, `src/lib/adaptive-retrieval.ts`
-- Pattern: Each module adds one optimization step; chat route composes them conditionally
+**MCP Router and Client:**
+- Purpose: Route natural-language intents to MCP servers and execute tools.
+- Examples: `src/lib/mcp/universal-client.ts`, `src/lib/mcp/smart-router.ts` (`SmartMcpRouter`), `src/lib/mcp/production-router.ts` (`ProductionMcpRouter`), `src/lib/mcp/transport-factory.ts`, `src/lib/mcp/transports/`
+- Pattern: Strategy-based transports (SSE, streamable HTTP) and per-server query patterns in `src/lib/mcp/query-patterns/servers/`.
 
-**UniversalMcpClient (singleton):**
-- Purpose: Discover and invoke any MCP tool without hardcoded tool names
-- Examples: `src/lib/mcp/universal-client.ts`, `src/lib/mcp/discovery.ts`, `src/lib/mcp/transport-factory.ts`
-- Pattern: `getInstance()` singleton; transport selected by `TransportFactory` (HTTP SSE vs WebSocket vs stdio)
+**WhatsApp Provider Client:**
+- Purpose: Uniform client across Baileys hosting providers.
+- Examples: `src/lib/whatsapp/base-client.ts`, `src/lib/whatsapp/koyeb-client.ts`, `src/lib/whatsapp/flyio-client.ts`
+- Pattern: Abstract base class with factory selection by `WHATSAPP_PROVIDER`.
 
-**SystemPromptManager:**
-- Purpose: Assemble final system prompt from i18n templates with `{{context}}` placeholder replaced at request time
-- Examples: `src/lib/system-prompt-manager.ts`, `src/translations/en.ts`
-- Pattern: Static class with `getPromptTemplate(key, language)` + `assemblePrompt(pre, context, post)`
+**Retrieval Strategies:**
+- Purpose: Choose among retrieval approaches per query.
+- Examples: `src/lib/enhanced-rag-retrieval.ts`, `src/lib/retrieval-strategies.ts`, `src/lib/optimized-search.ts`, `src/lib/adaptive-retrieval.ts`
+- Pattern: Functional pipelines with scorer modules (`mmr-scorer.ts`, `bm25-scorer.ts`, `reranker-adapter.ts`).
 
-**WhatsApp Provider Factory:**
-- Purpose: Return correct WhatsApp API client (Fly.io or Koyeb Baileys) without changing call sites
-- Examples: `src/lib/whatsapp/client-factory.ts`, `src/lib/whatsapp/base-client.ts`
-- Pattern: Factory singleton; provider chosen by `WHATSAPP_PROVIDER` env var
+**Validation Middleware:**
+- Purpose: Zod-based request validation with structured 400 responses.
+- Examples: `src/lib/api-middleware.ts` (`validateRequest`, `withValidation`)
+- Pattern: Route wraps handler; errors returned as `{ success: false, error, details }`.
+
+**Typed Chat Messages:**
+- Purpose: Convert between UI, API, and DB message shapes.
+- Examples: `src/types/chat.ts` (`toAPIMessage`, `toDBMessages`, `fromUIMessage`, `toExtendedMessages`), `src/types/messages.ts`, `src/types/events.ts`
+- Pattern: Pure conversion functions; `ExtendedMessage` carries sources and images.
 
 ## Entry Points
 
-**Main Chat SPA:**
-- Location: `src/app/page.tsx`
-- Triggers: Direct browser navigation to `/`
-- Responsibilities: Chat UI, model selection, file upload, sidebar, MCP tool controls
+**Web app root:**
+- Location: `src/app/layout.tsx` (server layout, metadata), `src/app/page.tsx` (chat home)
+- Triggers: Browser navigation.
+- Responsibilities: Mount providers and the main chat UI.
 
-**Embedded Widget:**
-- Location: `src/app/embed/window/page.tsx`, `src/app/embed/chat.js`
-- Triggers: Third-party site iframes `/embed/window`
-- Responsibilities: Lightweight chat widget with rate limiting (`src/lib/embed-rate-limit.ts`)
+**Chat API:**
+- Location: `src/app/api/chat/route.ts`
+- Triggers: `useChat` POST from the UI and embed clients.
+- Responsibilities: Full RAG + MCP + streaming pipeline.
 
-**Config Dashboard:**
-- Location: `src/app/config-ui/page.tsx` (served at port 3333 via `scripts/config-server.js`)
-- Triggers: `npm run config`
-- Responsibilities: Visual env management, model arrays, RAG prompt tuning, admin users
+**Embed:**
+- Location: `src/app/embed/chat.js/route.ts` (script), `src/app/embed/window/page.tsx`, `src/app/api/embed/chat/route.ts`
+- Triggers: Third-party sites loading the embed script.
+- Responsibilities: Embeddable chat with rate limiting (`src/lib/embed-rate-limit.ts`).
 
-**Auth Flow:**
-- Location: `src/app/auth/page.tsx`, `src/app/auth/callback/route.ts`
-- Triggers: Unauthenticated requests when `NEXT_PUBLIC_AUTH_ENABLED=true`
-- Responsibilities: Supabase OAuth (GitHub), email/password, magic links
+**Shared chat:**
+- Location: `src/app/shared/[shareId]/page.tsx`, `src/app/api/chats/[shareId]/route.ts`
+- Triggers: Share links.
+- Responsibilities: Read-only rendering of shared conversations.
 
-**WhatsApp Webhook:**
-- Location: `src/app/api/whatsapp/webhook/route.ts`
-- Triggers: POST from WhatsApp Baileys deployment
-- Responsibilities: Receive messages, call internal chat API, return AI responses
+**Voice agent worker:**
+- Location: `voice-agent/src/agent.ts`
+- Triggers: LiveKit dispatch; `cd voice-agent && npm run dev`.
+- Responsibilities: Connect to room, run VAD, STT, LLM, TTS.
+
+**WhatsApp service:**
+- Location: `baileys-whatsapp/server.ts`
+- Triggers: HTTP calls from Next.js WhatsApp clients.
+- Responsibilities: Session lifecycle, QR and pairing code, message send and media upload, webhook dispatch.
+
+**Config dashboard:**
+- Location: `scripts/config-server.js` (port 3333), `src/app/config-ui/route.tsx` (in-app route)
+- Triggers: `npm run config`.
+- Responsibilities: Env edits, admin users, model lists, RAG prompt tuning.
 
 ## Architectural Constraints
 
-- **Runtime:** All API routes explicitly declare `export const runtime = 'nodejs'` — no Edge runtime used
-- **Streaming:** All AI responses use AI SDK 5 `streamText()` with SSE; never buffered full responses
-- **Singleton infrastructure:** `SupabaseManager`, `EnvironmentConfig`, `UniversalMcpClient` use `getInstance()` pattern — safe for Node.js single-process; not safe for multi-process without external state
-- **Global state:** `globalThis.toolApprovalState`, `globalThis.persistentMcpClient`, `globalThis.mcpImageContext` used for MCP state in `src/app/api/chat/route.ts` — process-scoped, lost on restart
-- **Circular imports:** `src/lib/supabase.ts` imports `src/lib/env.ts` and `src/lib/document-processor.ts` imports `src/lib/supabase.ts` — keep this chain single-direction
-- **Model synchronization:** Model lists must be kept in sync across 5 locations (`.env.local`, `scripts/init-env.js`, `src/lib/env.ts`, `scripts/config-server.js`, `scripts/config-ui/index.html`)
-- **Deployment mode:** Multi-tenant org/quota features are gated by `isMultiTenant()` from `src/lib/deployment-mode.ts`; defaulting to single-tenant
+- **Threading:** Node.js single-threaded event loop for Next.js routes (`runtime = 'nodejs'`). Voice agent uses a mutex for audio playback (`voice-agent/src/agent.ts`).
+- **Global state:** Module-level singletons: `supabaseManager` in `src/lib/supabase.ts`, `productionMcpRouter` (`src/lib/mcp/production-router.ts`), `smartMcpRouter` (`src/lib/mcp/smart-router.ts`), `WhatsAppClientFactory.instance` (`src/lib/whatsapp/client-factory.ts`), `sessions` Map in `baileys-whatsapp/server.ts`, and MCP caches in `src/lib/mcp-cache.ts`. These are per-process and reset on cold start or across serverless instances.
+- **Circular imports:** Not verified in this pass. `src/app/page.tsx` imports `src/lib/supabase.ts` (type and runtime) and `src/lib/chat-store.ts`, which both import Supabase helpers; keep new imports one-directional.
+- **Middleware:** `src/middleware.disabled.ts` is present but not active (file name disables it). Session refresh logic exists in `src/lib/supabase/middleware.ts` and is not wired in.
+- **Large files:** `src/app/api/chat/route.ts` (~4500 lines), `src/app/page.tsx` (~5000 lines), `scripts/config-server.js` (~3600 lines). Changes here carry high regression risk.
+- **Type checking:** `next.config.js` sets `typescript.ignoreBuildErrors: true`, so type errors do not fail the build.
 
 ## Anti-Patterns
 
-### globalThis as approval state store
+### Monolithic route handlers
 
-**What happens:** `globalThis.toolApprovalState` in `src/app/api/chat/route.ts` holds pending tool approvals across requests.
-**Why it's wrong:** Lost on process restart; incompatible with multi-instance deployments (Vercel serverless, load-balanced containers).
-**Do this instead:** Store approval state in Supabase `tool_execution_state` table via `ToolExecutionStateService` (`src/lib/tool-execution-state.ts`), which already exists for this purpose.
+**What happens:** `src/app/api/chat/route.ts` contains classification, retrieval, MCP planning, prompt building, streaming, and persistence in one file (~4500 lines, one `POST` function starting near line 1180).
+**Why it's wrong:** Hard to test, and changes to one stage risk the others. The `AGENTS.md` strict-RAG rules are spread across the file.
+**Do this instead:** Put new retrieval or prompt logic into a module under `src/lib/` (as with `src/lib/enhanced-rag-retrieval.ts`) and call it from the route. Keep route code to parsing, orchestration, and response shaping.
 
-### Oversized monolithic API route
+### Duplicate retrieval modules
 
-**What happens:** `src/app/api/chat/route.ts` is 4255 lines containing RAG retrieval, MCP dispatch, image routing, multi-step orchestration, email intent detection, and system prompt assembly inline.
-**Why it's wrong:** Extremely difficult to test, extend, or reason about; conditional branches interact non-obviously.
-**Do this instead:** Extract each concern (RAG, MCP dispatch, image routing, multi-step) into dedicated handler modules under `src/lib/chat-handlers/` and compose them in the route handler.
+**What happens:** Several overlapping retrieval modules exist: `src/lib/enhanced-rag-retrieval.ts`, `src/lib/retrieval-strategies.ts`, `src/lib/optimized-search.ts`, `src/lib/adaptive-retrieval.ts`, `src/lib/thinking-rag-enhancer.ts`.
+**Why it's wrong:** Callers may pick different paths, which makes retrieval behaviour hard to reason about.
+**Do this instead:** Add new retrieval behaviour to the module that already owns that strategy, and confirm the route's active path before editing.
 
-### Log spam in hot paths
+### Duplicate Supabase helpers
 
-**What happens:** Extensive `console.log` calls throughout `src/app/api/chat/route.ts` and RAG modules run on every request.
-**Why it's wrong:** Degrades server throughput; clutters observability; `CLAUDE.md` explicitly prohibits this.
-**Do this instead:** Use `logger.debug()` from `src/lib/logger.ts` (suppressed in production) or the `devLog()` helper from `src/lib/dev-logger.ts`.
+**What happens:** Supabase access exists in `src/lib/supabase.ts`, `src/lib/supabase/client.ts`, `src/lib/supabase/server.ts`, and `src/lib/supabase-auth.ts`.
+**Why it's wrong:** Mixed admin and user-scoped clients can bypass RLS if the wrong one is used.
+**Do this instead:** Use the user-scoped client for request-bound data and `getSupabaseAdmin()` only for server tasks that must bypass RLS. Respect the RLS policies in `supabase/*.sql`.
 
 ## Error Handling
 
-**Strategy:** API routes catch errors and return SSE-formatted error events using `formatErrorSSE()` from `src/lib/error-stream.ts`. Structured JSON errors returned for non-streaming endpoints.
+**Strategy:** Structured JSON errors on HTTP routes, and SSE error events on streaming routes.
 
 **Patterns:**
-- SSE errors: `return new Response(formatErrorSSE(message), { headers: { 'Content-Type': 'text/event-stream' } })`
-- REST errors: `return NextResponse.json({ success: false, error: '...', details: [...] }, { status: 4xx })`
-- Provider-specific errors mapped to user-friendly messages via `friendlyProviderErrorMessage()` in `src/app/api/chat/route.ts`
-- Request validation: `withValidation(schema, handler)` from `src/lib/api-middleware.ts` wraps Zod schema validation
+- Request validation failures return HTTP 400 with `{ success: false, error, details }` (`src/lib/api-middleware.ts`).
+- Streaming errors are formatted with `formatErrorSSE` (`src/lib/error-stream.ts`).
+- Retrieval fallbacks fall through to "information not available" in strict mode (`src/app/api/chat/route.ts`).
+- Voice timestamp failures fall back to estimated timings (`voice-agent/src/providers/resemble.ts`).
 
 ## Cross-Cutting Concerns
 
-**Logging:** `src/lib/logger.ts` (`SmartLogger` with deduplication) for server; `src/lib/dev-logger.ts` (`devLog()`) for development-only client/server logs; `NEXT_PUBLIC_DISABLE_DEBUG_LOGS=true` silences all console methods client-side.
-
-**Validation:** Zod (`zod/v3`) used for API input validation; `withValidation()` in `src/lib/api-middleware.ts` wraps route handlers.
-
-**Authentication:** Supabase Auth via `src/components/providers/auth-provider.tsx` (client) and `createRouteHandlerClient` (server routes); `NEXT_PUBLIC_AUTH_ENABLED` feature flag; admin auth via separate `src/app/api/admin/` endpoints.
-
-**i18n:** `src/translations/` contains 18 language files; `src/components/providers/language-provider.tsx` supplies current language; `SystemPromptManager` resolves system prompts by language.
+**Logging:** `src/lib/logger.ts` and `src/lib/dev-logger.ts`, with `console.log` in many places. The `[Document Search]` prefix is used for retrieval diagnostics.
+**Validation:** Zod schemas (`zod/v3` imports) via `src/lib/api-middleware.ts`.
+**Authentication:** Supabase Auth (GitHub OAuth, email/password, magic links) through `src/components/providers/auth-provider.tsx` and `src/lib/supabase-auth.ts`. Admin login is in `src/app/api/admin/login/route.ts`. Auxiliary services use shared API keys (`API_KEY` in `baileys-whatsapp/server.ts`).
 
 ---
 
-*Architecture analysis: 2026-06-01*
+*Architecture analysis: 2026-11-22*

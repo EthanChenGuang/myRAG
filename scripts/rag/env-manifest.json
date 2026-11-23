@@ -1,0 +1,451 @@
+{
+  "schemaVersion": 1,
+  "vars": [
+    {
+      "name": "LLAMACLOUD_ADAPTIVE_LONG_TABLE",
+      "status": "legacy",
+      "knownGaps": []
+    },
+    {
+      "name": "LLAMACLOUD_CHUNK_OVERLAP",
+      "status": "legacy",
+      "knownGaps": []
+    },
+    {
+      "name": "LLAMACLOUD_CHUNK_SIZE",
+      "status": "legacy",
+      "knownGaps": []
+    },
+    {
+      "name": "LLAMACLOUD_CHUNK_STRATEGY",
+      "status": "legacy",
+      "knownGaps": []
+    },
+    {
+      "name": "LLAMACLOUD_HIGH_RES_OCR",
+      "status": "legacy",
+      "knownGaps": []
+    },
+    {
+      "name": "LLAMACLOUD_MULTIMODAL_PARSING",
+      "status": "legacy",
+      "knownGaps": []
+    },
+    {
+      "name": "LLAMACLOUD_OUTLINED_TABLE_EXTRACTION",
+      "status": "legacy",
+      "knownGaps": []
+    },
+    {
+      "name": "LLAMACLOUD_OUTPUT_TABLES_AS_HTML",
+      "status": "legacy",
+      "knownGaps": []
+    },
+    {
+      "name": "LLAMACLOUD_PARSE_MODE",
+      "status": "legacy",
+      "knownGaps": []
+    },
+    {
+      "name": "LLAMACLOUD_PARSE_MODEL",
+      "status": "legacy",
+      "knownGaps": []
+    },
+    {
+      "name": "LLAMACLOUD_PARSING_MODE",
+      "status": "legacy",
+      "knownGaps": []
+    },
+    {
+      "name": "NEXT_PUBLIC_RAG_CACHE_ENABLED",
+      "status": "legacy",
+      "knownGaps": [
+        "config-server",
+        "config-ui",
+        "env-ts"
+      ]
+    },
+    {
+      "name": "NEXT_PUBLIC_RAG_CACHE_TTL",
+      "status": "legacy",
+      "knownGaps": [
+        "config-server",
+        "config-ui",
+        "env-ts"
+      ]
+    },
+    {
+      "name": "NEXT_PUBLIC_RAG_ENHANCEMENT_CONFIDENCE_THRESHOLD",
+      "status": "legacy",
+      "knownGaps": [
+        "config-server",
+        "config-ui",
+        "env-ts"
+      ]
+    },
+    {
+      "name": "NEXT_PUBLIC_RAG_MODE",
+      "status": "legacy",
+      "knownGaps": [
+        "config-server",
+        "config-ui",
+        "env-ts",
+        "init-env"
+      ]
+    },
+    {
+      "name": "NEXT_PUBLIC_RAG_PERFORMANCE_MODE",
+      "status": "legacy",
+      "knownGaps": [
+        "config-server",
+        "config-ui",
+        "env-ts"
+      ]
+    },
+    {
+      "name": "NEXT_PUBLIC_RAG_QUERY_ENHANCEMENT_ENABLED",
+      "status": "legacy",
+      "knownGaps": [
+        "config-server",
+        "config-ui",
+        "env-ts"
+      ]
+    },
+    {
+      "name": "NEXT_PUBLIC_RAG_REASONING_ENABLED",
+      "status": "legacy",
+      "knownGaps": []
+    },
+    {
+      "name": "NEXT_PUBLIC_RAG_RERANKING_ENABLED",
+      "status": "legacy",
+      "knownGaps": [
+        "config-server",
+        "env-ts"
+      ]
+    },
+    {
+      "name": "NEXT_PUBLIC_RAG_RERANKING_STRATEGY",
+      "status": "legacy",
+      "knownGaps": [
+        "config-server",
+        "env-ts"
+      ]
+    },
+    {
+      "name": "OPENAI_EMBEDDING_MODEL",
+      "status": "legacy",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_ADAPTIVE_RETRIEVAL",
+      "status": "legacy",
+      "knownGaps": [
+        "env-ts"
+      ]
+    },
+    {
+      "name": "RAG_ADJACENCY_WINDOW",
+      "status": "legacy",
+      "knownGaps": [
+        "config-ui",
+        "env-ts"
+      ]
+    },
+    {
+      "name": "RAG_ADJACENT_CHUNKS",
+      "status": "legacy",
+      "knownGaps": [
+        "env-ts"
+      ]
+    },
+    {
+      "name": "RAG_BEHAVIOR_MODE",
+      "status": "legacy",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_CACHE_ENABLED",
+      "status": "legacy",
+      "knownGaps": [
+        "env-ts"
+      ]
+    },
+    {
+      "name": "RAG_COMPLETENESS_CONFIDENCE",
+      "status": "legacy",
+      "knownGaps": [
+        "config-ui",
+        "env-ts"
+      ]
+    },
+    {
+      "name": "RAG_DIVERSITY_WEIGHT",
+      "status": "legacy",
+      "knownGaps": [
+        "config-ui",
+        "env-ts"
+      ]
+    },
+    {
+      "name": "RAG_DOCUMENT_COMPLETENESS_THRESHOLD",
+      "status": "legacy",
+      "knownGaps": [
+        "config-server",
+        "config-ui",
+        "env-ts",
+        "init-env"
+      ]
+    },
+    {
+      "name": "RAG_ENABLE_ADJACENT_CHUNKS",
+      "status": "legacy",
+      "knownGaps": [
+        "config-ui",
+        "env-ts"
+      ]
+    },
+    {
+      "name": "RAG_ENABLE_HYBRID_SEARCH",
+      "status": "legacy",
+      "knownGaps": [
+        "config-server",
+        "env-ts"
+      ]
+    },
+    {
+      "name": "RAG_ENABLE_MULTI_PASS",
+      "status": "legacy",
+      "knownGaps": [
+        "config-server",
+        "config-ui",
+        "env-ts",
+        "init-env"
+      ]
+    },
+    {
+      "name": "RAG_EVAL_ENDPOINT_ENABLED",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_EVAL_SECRET",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_EXACT_THRESHOLD",
+      "status": "legacy",
+      "knownGaps": [
+        "env-ts"
+      ]
+    },
+    {
+      "name": "RAG_EXTRACT_KEY_TERMS",
+      "status": "legacy",
+      "knownGaps": [
+        "env-ts"
+      ]
+    },
+    {
+      "name": "RAG_FALLBACK_LOWER_THRESHOLD",
+      "status": "legacy",
+      "knownGaps": [
+        "env-ts"
+      ]
+    },
+    {
+      "name": "RAG_FINAL_RESULT_COUNT",
+      "status": "legacy",
+      "knownGaps": [
+        "config-ui",
+        "env-ts"
+      ]
+    },
+    {
+      "name": "RAG_FINANCIAL_BOOST",
+      "status": "legacy",
+      "knownGaps": [
+        "env-ts"
+      ]
+    },
+    {
+      "name": "RAG_FINANCIAL_CONFIDENCE_MIN",
+      "status": "legacy",
+      "knownGaps": [
+        "config-server",
+        "env-ts"
+      ]
+    },
+    {
+      "name": "RAG_HIGH_THRESHOLD",
+      "status": "legacy",
+      "knownGaps": [
+        "env-ts"
+      ]
+    },
+    {
+      "name": "RAG_INITIAL_MATCH_COUNT",
+      "status": "legacy",
+      "knownGaps": [
+        "config-ui"
+      ]
+    },
+    {
+      "name": "RAG_LOW_THRESHOLD",
+      "status": "legacy",
+      "knownGaps": [
+        "env-ts"
+      ]
+    },
+    {
+      "name": "RAG_MATCH_MULTIPLIER",
+      "status": "legacy",
+      "knownGaps": [
+        "config-ui",
+        "env-ts"
+      ]
+    },
+    {
+      "name": "RAG_MAX_KEY_TERMS",
+      "status": "legacy",
+      "knownGaps": [
+        "env-ts"
+      ]
+    },
+    {
+      "name": "RAG_MAX_RETRIEVAL_PASSES",
+      "status": "legacy",
+      "knownGaps": [
+        "config-ui",
+        "env-ts"
+      ]
+    },
+    {
+      "name": "RAG_MEDIUM_THRESHOLD",
+      "status": "legacy",
+      "knownGaps": [
+        "env-ts"
+      ]
+    },
+    {
+      "name": "RAG_MIN_CONFIDENCE",
+      "status": "legacy",
+      "knownGaps": [
+        "config-ui",
+        "env-ts"
+      ]
+    },
+    {
+      "name": "RAG_MMR_LAMBDA",
+      "status": "legacy",
+      "knownGaps": [
+        "config-ui",
+        "env-ts"
+      ]
+    },
+    {
+      "name": "RAG_MULTI_PASS",
+      "status": "legacy",
+      "knownGaps": [
+        "env-ts"
+      ]
+    },
+    {
+      "name": "RAG_PERFORMANCE_MODE",
+      "status": "legacy",
+      "knownGaps": [
+        "config-ui",
+        "env-ts"
+      ]
+    },
+    {
+      "name": "RAG_POST_CONTEXT",
+      "status": "legacy",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_PRE_CONTEXT",
+      "status": "legacy",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_QUERY_ENHANCEMENT",
+      "status": "legacy",
+      "knownGaps": [
+        "env-ts"
+      ]
+    },
+    {
+      "name": "RAG_RERANKING",
+      "status": "legacy",
+      "knownGaps": [
+        "env-ts"
+      ]
+    },
+    {
+      "name": "RAG_RERANKING_STRATEGY",
+      "status": "legacy",
+      "knownGaps": [
+        "config-ui",
+        "env-ts"
+      ]
+    },
+    {
+      "name": "RAG_SEMANTIC_CLASSIFICATION",
+      "status": "legacy",
+      "knownGaps": [
+        "config-server",
+        "env-ts"
+      ]
+    },
+    {
+      "name": "RAG_SIDECAR_SECRET",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_SIDECAR_URL",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_SIMILARITY_THRESHOLD",
+      "status": "legacy",
+      "knownGaps": [
+        "config-ui"
+      ]
+    },
+    {
+      "name": "RAG_SYSTEM_PROMPT",
+      "status": "legacy",
+      "knownGaps": [
+        "config-server",
+        "config-ui",
+        "init-env"
+      ]
+    },
+    {
+      "name": "RAG_TEMPORAL_BOOST",
+      "status": "legacy",
+      "knownGaps": [
+        "env-ts"
+      ]
+    },
+    {
+      "name": "RAG_TEMPORAL_CONFIDENCE_MIN",
+      "status": "legacy",
+      "knownGaps": [
+        "config-server",
+        "env-ts"
+      ]
+    },
+    {
+      "name": "RAG_TEMPORAL_MATCHING",
+      "status": "legacy",
+      "knownGaps": [
+        "env-ts"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,195 @@
+{
+  "$defs": {
+    "JudgeItemScore": {
+      "additionalProperties": false,
+      "properties": {
+        "category": {
+          "enum": [
+            "multi_turn",
+            "compound",
+            "exact_term",
+            "table",
+            "scanned",
+            "no_answer",
+            "general"
+          ],
+          "title": "Category",
+          "type": "string"
+        },
+        "item_id": {
+          "title": "Item Id",
+          "type": "string"
+        },
+        "language": {
+          "enum": [
+            "zh",
+            "en",
+            "it"
+          ],
+          "title": "Language",
+          "type": "string"
+        },
+        "library": {
+          "enum": [
+            "deepeval",
+            "ragas"
+          ],
+          "title": "Library",
+          "type": "string"
+        },
+        "metric": {
+          "enum": [
+            "faithfulness",
+            "answer_relevance",
+            "context_recall"
+          ],
+          "title": "Metric",
+          "type": "string"
+        },
+        "score": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Score"
+        },
+        "skipped_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Skipped Reason"
+        }
+      },
+      "required": [
+        "item_id",
+        "language",
+        "category",
+        "library",
+        "metric"
+      ],
+      "title": "JudgeItemScore",
+      "type": "object"
+    },
+    "MetricValue": {
+      "additionalProperties": false,
+      "properties": {
+        "n": {
+          "minimum": 0,
+          "title": "N",
+          "type": "integer"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Value"
+        }
+      },
+      "required": [
+        "value",
+        "n"
+      ],
+      "title": "MetricValue",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "by_category": {
+      "additionalProperties": {
+        "additionalProperties": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "type": "object"
+      },
+      "title": "By Category",
+      "type": "object"
+    },
+    "by_language": {
+      "additionalProperties": {
+        "additionalProperties": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "type": "object"
+      },
+      "title": "By Language",
+      "type": "object"
+    },
+    "generator_family": {
+      "title": "Generator Family",
+      "type": "string"
+    },
+    "generator_model": {
+      "title": "Generator Model",
+      "type": "string"
+    },
+    "items": {
+      "items": {
+        "$ref": "#/$defs/JudgeItemScore"
+      },
+      "title": "Items",
+      "type": "array"
+    },
+    "judge_family": {
+      "title": "Judge Family",
+      "type": "string"
+    },
+    "judge_model": {
+      "title": "Judge Model",
+      "type": "string"
+    },
+    "overall": {
+      "additionalProperties": {
+        "$ref": "#/$defs/MetricValue"
+      },
+      "title": "Overall",
+      "type": "object"
+    },
+    "run_config_hash": {
+      "title": "Run Config Hash",
+      "type": "string"
+    },
+    "run_id": {
+      "title": "Run Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "run_id",
+    "run_config_hash",
+    "judge_model",
+    "judge_family",
+    "generator_model",
+    "generator_family",
+    "items",
+    "overall",
+    "by_language",
+    "by_category"
+  ],
+  "title": "JudgeReport",
+  "type": "object"
+}

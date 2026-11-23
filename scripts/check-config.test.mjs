@@ -1,0 +1,246 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const REPO = path.resolve(HERE, '..');
+const SCRIPT = path.join(HERE, 'check-config.mjs');
+const TRACKED = [
+  'scripts/init-env.js',
+  'src/lib/env.ts',
+  'scripts/config-server.js',
+  'scripts/config-ui/index.html',
+];
+const MANIFEST = 'scripts/rag/env-manifest.json';
+
+function run(root) {
+  const result = spawnSync(process.execPath, [SCRIPT, '--root', root], { encoding: 'utf8' });
+  return { code: result.status, out: `${result.stdout}${result.stderr}` };
+}
+
+function write(root, relative, text) {
+  const full = path.join(root, relative);
+  fs.mkdirSync(path.dirname(full), { recursive: true });
+  fs.writeFileSync(full, text);
+}
+
+function copyRealTree() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'check-config-'));
+  for (const relative of [...TRACKED, MANIFEST]) {
+    write(root, relative, fs.readFileSync(path.join(REPO, relative), 'utf8'));
+  }
+  return root;
+}
+
+function syntheticTree({ files = {}, manifest }) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'check-config-syn-'));
+  for (const relative of TRACKED) write(root, relative, files[relative] ?? '');
+  write(root, MANIFEST, JSON.stringify(manifest, null, 2));
+  return root;
+}
+
+function editManifest(root, edit) {
+  const file = path.join(root, MANIFEST);
+  const manifest = JSON.parse(fs.readFileSync(file, 'utf8'));
+  edit(manifest);
+  fs.writeFileSync(file, JSON.stringify(manifest, null, 2));
+}
+
+const cleanup = (root) => fs.rmSync(root, { recursive: true, force: true });
+
+test('passes on the real tree', () => {
+  const result = spawnSync(process.execPath, [SCRIPT], { encoding: 'utf8' });
+  assert.equal(result.status, 0, `${result.stdout}${result.stderr}`);
+});
+
+test('passes on a copy of the tracked files and does not require .env.local', () => {
+  const root = copyRealTree();
+  try {
+    assert.equal(fs.existsSync(path.join(root, '.env.local')), false);
+    const { code, out } = run(root);
+    assert.equal(code, 0, out);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('fails and names the variable and location when a managed variable is deleted from config-server', () => {
+  const root = copyRealTree();
+  try {
+    const file = path.join(root, 'scripts/config-server.js');
+    const text = fs.readFileSync(file, 'utf8').replace(/RAG_EVAL_SECRET/g, 'REMOVED');
+    fs.writeFileSync(file, text);
+    const { code, out } = run(root);
+    assert.equal(code, 1);
+    assert.match(out, /RAG_EVAL_SECRET \[config-server\]/);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('fails when a knownGaps entry is no longer a gap', () => {
+  const root = copyRealTree();
+  try {
+    editManifest(root, (m) => {
+      const entry = m.vars.find((v) => v.name === 'RAG_BEHAVIOR_MODE');
+      entry.knownGaps = ['init-env'];
+    });
+    const { code, out } = run(root);
+    assert.equal(code, 1);
+    assert.match(out, /RAG_BEHAVIOR_MODE \[init-env\] .*knownGaps/);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('fails when src reads a RAG variable that is not in the manifest', () => {
+  const root = copyRealTree();
+  try {
+    write(root, 'src/lib/probe.ts', 'export const probe = process.env.RAG_NOT_IN_MANIFEST;\n');
+    const { code, out } = run(root);
+    assert.equal(code, 1);
+    assert.match(out, /RAG_NOT_IN_MANIFEST \[manifest\]/);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('fails when a managed variable lists knownGaps', () => {
+  const root = copyRealTree();
+  try {
+    editManifest(root, (m) => {
+      const entry = m.vars.find((v) => v.name === 'RAG_EVAL_SECRET');
+      entry.knownGaps = ['config-ui'];
+    });
+    const { code, out } = run(root);
+    assert.equal(code, 1);
+    assert.match(out, /RAG_EVAL_SECRET \[manifest\] managed variable must not list knownGaps/);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('treats RAG_RERANKING and RAG_RERANKING_STRATEGY as distinct names', () => {
+  const root = syntheticTree({
+    files: Object.fromEntries(TRACKED.map((f) => [f, 'RAG_RERANKING_STRATEGY=hybrid\n'])),
+    manifest: {
+      schemaVersion: 1,
+      vars: [
+        { name: 'RAG_RERANKING', status: 'managed', knownGaps: [] },
+        { name: 'RAG_RERANKING_STRATEGY', status: 'managed', knownGaps: [] },
+      ],
+    },
+  });
+  try {
+    const { code, out } = run(root);
+    assert.equal(code, 1);
+    for (const location of ['config-server', 'config-ui', 'env-ts', 'init-env']) {
+      assert.match(out, new RegExp(`RAG_RERANKING \\[${location}\\] missing`));
+    }
+    assert.doesNotMatch(out, /RAG_RERANKING_STRATEGY \[/);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('treats NEXT_PUBLIC_RAG_CACHE_ENABLED and RAG_CACHE_ENABLED as distinct names', () => {
+  const root = syntheticTree({
+    files: Object.fromEntries(TRACKED.map((f) => [f, 'NEXT_PUBLIC_RAG_CACHE_ENABLED=true\n'])),
+    manifest: {
+      schemaVersion: 1,
+      vars: [
+        { name: 'NEXT_PUBLIC_RAG_CACHE_ENABLED', status: 'managed', knownGaps: [] },
+        { name: 'RAG_CACHE_ENABLED', status: 'managed', knownGaps: [] },
+      ],
+    },
+  });
+  try {
+    const { code, out } = run(root);
+    assert.equal(code, 1);
+    assert.match(out, /RAG_CACHE_ENABLED \[init-env\] missing/);
+    assert.doesNotMatch(out, /NEXT_PUBLIC_RAG_CACHE_ENABLED \[/);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('fails when a tracked location file is missing', () => {
+  const root = copyRealTree();
+  try {
+    fs.rmSync(path.join(root, 'scripts/config-ui/index.html'));
+    const { code, out } = run(root);
+    assert.equal(code, 1);
+    assert.match(out, /\[config-ui\] tracked file scripts\/config-ui\/index\.html is missing/);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('fails when the manifest lists zero variables', () => {
+  const root = copyRealTree();
+  try {
+    editManifest(root, (m) => {
+      m.vars = [];
+    });
+    const { code, out } = run(root);
+    assert.equal(code, 1);
+    assert.match(out, /manifest lists zero variables/);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('fails when the manifest lists a name twice', () => {
+  const root = copyRealTree();
+  try {
+    editManifest(root, (m) => {
+      m.vars.push({ ...m.vars.find((v) => v.name === 'RAG_BEHAVIOR_MODE') });
+    });
+    const { code, out } = run(root);
+    assert.equal(code, 1);
+    assert.match(out, /RAG_BEHAVIOR_MODE \[manifest\] listed more than once/);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('checks managed variables against .env.local only when the file exists', () => {
+  const root = copyRealTree();
+  try {
+    write(root, '.env.local', 'RAG_EVAL_ENDPOINT_ENABLED=false\n');
+    const { code, out } = run(root);
+    assert.equal(code, 1);
+    assert.match(out, /RAG_EVAL_SECRET \[env-local\] .*npm run config/);
+    assert.doesNotMatch(out, /RAG_EVAL_ENDPOINT_ENABLED \[env-local\]/);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('prints violations sorted by variable name then location', () => {
+  const root = syntheticTree({
+    manifest: {
+      schemaVersion: 1,
+      vars: [
+        { name: 'RAG_ZETA', status: 'managed', knownGaps: [] },
+        { name: 'RAG_ALPHA', status: 'managed', knownGaps: [] },
+      ],
+    },
+  });
+  try {
+    const { code, out } = run(root);
+    assert.equal(code, 1);
+    const lines = out.split('\n').filter((line) => /^RAG_[A-Z]+ \[/.test(line));
+    const keys = lines.map((line) => line.match(/^(\S+) \[([^\]]+)\]/).slice(1, 3).join(' '));
+    assert.equal(keys.length, 8);
+    assert.deepEqual(keys, [...keys].sort());
+    assert.ok(keys[0].startsWith('RAG_ALPHA config-server'));
+    assert.ok(keys[7].startsWith('RAG_ZETA init-env'));
+  } finally {
+    cleanup(root);
+  }
+});

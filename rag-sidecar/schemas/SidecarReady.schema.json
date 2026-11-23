@@ -1,0 +1,30 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "reason": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reason"
+    },
+    "status": {
+      "enum": [
+        "ready",
+        "not_ready"
+      ],
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "required": [
+    "status"
+  ],
+  "title": "SidecarReady",
+  "type": "object"
+}

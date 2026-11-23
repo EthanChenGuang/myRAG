@@ -1,0 +1,25 @@
+{
+  "batch_chars": 60000,
+  "claude_model": "claude-sonnet-5-5",
+  "claude_share": 0.5,
+  "languages": ["zh", "en", "it"],
+  "max_items": 200,
+  "max_tokens": 8000,
+  "min_items": 50,
+  "personas": [
+    {
+      "name": "New employee",
+      "role_description": "A new employee who does not know the company's internal terms and asks in colloquial everyday words, often vaguely."
+    },
+    {
+      "name": "Non-native speaker",
+      "role_description": "A customer or colleague writing in a second language with simple vocabulary, short sentences and occasional grammar mistakes."
+    },
+    {
+      "name": "Domain expert",
+      "role_description": "A specialist who uses precise product names, codes and terms and wants an exact figure or condition."
+    }
+  ],
+  "ragas_lengths": ["SHORT", "MEDIUM", "LONG"],
+  "ragas_styles": ["PERFECT_GRAMMAR", "POOR_GRAMMAR", "WEB_SEARCH_LIKE", "MISSPELLED"]
+}
