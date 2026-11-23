@@ -1,3 +1,4 @@
+import type { ExtractedURL } from '@/lib/url-extractor';
 import type { StageName, StageTimeouts } from './config';
 import type { TemporalQueryContext } from './query/temporal-query-detector';
 import type { TenantScope } from './tenant/scope';
@@ -36,9 +37,52 @@ export interface StageRecord {
   detail?: string;
 }
 
+export interface UsedDocument {
+  id: string;
+  name: string;
+  filename: string;
+  created_at?: string;
+  content_preview?: string;
+  similarity?: number;
+  matched_chunk?: string;
+  explicitly_referenced?: boolean;
+  image_url?: string;
+  external_url?: string;
+}
+
+export interface SourceImage {
+  name: string;
+  size: number;
+  type: string;
+  url: string | undefined;
+}
+
+export type KeptBy = 'similarity' | 'name' | 'image';
+
+export interface KeptChunk {
+  chunk_id: string;
+  document_id: string;
+  document_name: string;
+  content: string;
+  similarity: number;
+  rank: number;
+  kept_by: KeptBy;
+}
+
+export type RagMode = 'strict' | 'balanced' | 'flexible' | 'bypass';
+
+export interface ReferencedState {
+  usedDocuments: UsedDocument[];
+  context: string;
+}
+
 export interface RetrievalOptions {
   maxResults?: number;
   fallbackToLowerThreshold?: boolean;
+  isGPTModel?: boolean;
+  ragMode?: RagMode;
+  webSearchEnabled?: boolean;
+  referenced?: ReferencedState | null;
 }
 
 export interface StageOverrides {
@@ -62,9 +106,13 @@ export interface RetrievalResult {
   reason: string;
   candidates: Candidate[];
   context: string;
-  usedDocuments: unknown[];
-  sourceImages: unknown[];
-  links: unknown[];
+  usedDocuments: UsedDocument[];
+  sourceImages: SourceImage[];
+  links: ExtractedURL[];
+  relevantChunks: Candidate[];
+  kept: KeptChunk[];
+  queryTerms: string[];
+  refusalCandidate: boolean;
   stages: StageRecord[];
   traceId: string;
   queryContext: TemporalQueryContext | null;
