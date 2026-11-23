@@ -158,7 +158,7 @@ FLYIO_API_KEY=your-api-key  # Must match API_KEY in the Baileys service
 
 # Webhook Configuration (How Baileys talks to myRAG)
 WHATSAPP_WEBHOOK_URL=https://your-myrag-domain.com
-WHATSAPP_WEBHOOK_SECRET=your-secure-secret  # Must match the secret in Baileys service env vars if set
+WHATSAPP_WEBHOOK_SECRET=your-secure-secret  # Required in production. Must match WEBHOOK_SECRET in the Baileys service env vars
 ```
 
 ### 2. Baileys Service Configuration
@@ -170,7 +170,7 @@ Set these environment variables in your deployment platform (Fly.io, Railway, et
 | `PORT` | Service port | `8080` (or provider default) |
 | `WEBHOOK_URL` | Full URL to myRAG webhook | `https://your-myrag-domain.com/api/whatsapp/webhook` |
 | `API_KEY` | Bearer token myRAG must send on every request except `/health`. Must match `FLYIO_API_KEY` | (Required in production) |
-| `WEBHOOK_SECRET` | Signs webhooks to myRAG. Must match `WHATSAPP_WEBHOOK_SECRET`. myRAG also registers it at runtime; webhooks are not sent without one | (Recommended) |
+| `WEBHOOK_SECRET` | Signs webhooks to myRAG. Must match `WHATSAPP_WEBHOOK_SECRET`. myRAG also registers it at runtime; webhooks are not sent without one | (Required in production) |
 | `USE_PAIRING_CODE` | Use code instead of QR | `false` |
 | `PHONE_NUMBER` | Phone # if using Pairing Code | (Required if `USE_PAIRING_CODE=true`) |
 

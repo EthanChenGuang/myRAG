@@ -57,6 +57,7 @@ FLYIO_API_KEY=
 KOYEB_BAILEYS_URL=
 KOYEB_API_KEY=
 WHATSAPP_WEBHOOK_URL=
+# Required in production (webhook returns 503 without it). Must match WEBHOOK_SECRET in the Baileys service.
 WHATSAPP_WEBHOOK_SECRET=
 WHATSAPP_ENABLE_MCP=false
 WHATSAPP_ENABLE_WEB_SEARCH=false

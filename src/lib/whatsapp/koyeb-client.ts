@@ -376,14 +376,7 @@ export class KoyebWhatsAppClient extends BaseWhatsAppClient {
       return false;
     }
 
-    // Simple HMAC validation
-    const crypto = require('crypto');
-    const expectedSignature = crypto
-      .createHmac('sha256', this.webhookSecret)
-      .update(payload)
-      .digest('hex');
-
-    return signature === expectedSignature;
+    return this.hmacSignatureMatches(signature, payload);
   }
 
   /**

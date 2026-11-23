@@ -4,6 +4,7 @@ import { NextRequest } from 'next/server';
 
 const WEBHOOK_SECRET = 'test-webhook-secret-placeholder';
 const USER_ID = 'user-1';
+const OTHER_USER_ID = 'user-2';
 const PHONE = '+10000000000';
 
 type Row = Record<string, unknown>;
@@ -12,9 +13,17 @@ const h = vi.hoisted(() => {
   const state = {
     user: { id: 'user-1' } as { id: string } | null,
     authError: null as Error | null,
+    authThrows: false,
     sessionManager: {
       createSession: vi.fn(),
       getActiveSession: vi.fn(),
+      getSessionById: vi.fn(),
+    },
+    env: {
+      NEXT_PUBLIC_WHATSAPP_ENABLED: 'true',
+      WHATSAPP_WEBHOOK_SECRET: 'test-webhook-secret-placeholder' as string,
+      KOYEB_BAILEYS_URL: 'https://koyeb.example.test',
+      KOYEB_API_KEY: 'test-koyeb-key-placeholder',
     },
     whatsappClient: {
       sendTextMessage: vi.fn(),
@@ -39,7 +48,10 @@ const h = vi.hoisted(() => {
 
   const ssrClient = {
     auth: {
-      getUser: async () => ({ data: { user: state.user }, error: state.authError }),
+      getUser: async () => {
+        if (state.authThrows) throw new Error('auth down');
+        return { data: { user: state.user }, error: state.authError };
+      },
     },
     from: (table: string) => {
       state.ssrQuery.push(['from', [table]]);
@@ -57,14 +69,7 @@ const h = vi.hoisted(() => {
   return { state, ssrClient, adminClient };
 });
 
-vi.mock('@/lib/env', () => ({
-  env: {
-    NEXT_PUBLIC_WHATSAPP_ENABLED: 'true',
-    WHATSAPP_WEBHOOK_SECRET: 'test-webhook-secret-placeholder',
-    KOYEB_BAILEYS_URL: 'https://koyeb.example.test',
-    KOYEB_API_KEY: 'test-koyeb-key-placeholder',
-  },
-}));
+vi.mock('@/lib/env', () => ({ env: h.state.env }));
 vi.mock('@/lib/logger', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
@@ -90,8 +95,15 @@ function jsonRequest(url: string, method: string, body?: unknown, headers: Recor
 beforeEach(() => {
   h.state.user = { id: USER_ID };
   h.state.authError = null;
+  h.state.authThrows = false;
   h.state.sessionManager.createSession.mockReset();
   h.state.sessionManager.getActiveSession.mockReset();
+  h.state.sessionManager.getSessionById.mockReset();
+  h.state.sessionManager.getSessionById.mockImplementation(async (sessionId: string) =>
+    sessionId === 'session-1' ? { sessionId, userId: USER_ID } : sessionId === 'session-other' ? { sessionId, userId: OTHER_USER_ID } : null
+  );
+  h.state.env.WHATSAPP_WEBHOOK_SECRET = WEBHOOK_SECRET;
+  vi.unstubAllEnvs();
   h.state.whatsappClient = { sendTextMessage: vi.fn() };
   h.state.webhookHandler.handleWebhook.mockReset();
   h.state.adminRows = [];
@@ -216,6 +228,9 @@ describe('/api/whatsapp/conversations', () => {
 });
 
 describe('POST /api/whatsapp/test-numbers', () => {
+  const url = 'http://localhost/api/whatsapp/test-numbers';
+  const body = { sessionId: 'session-1', phoneNumber: '10000000000' };
+
   it('returns the message id and status of the send result', async () => {
     (h.state.whatsappClient.sendTextMessage as ReturnType<typeof vi.fn>).mockResolvedValue({
       messageId: 'msg-1',
@@ -223,9 +238,7 @@ describe('POST /api/whatsapp/test-numbers', () => {
     });
     const { POST } = await import('@/app/api/whatsapp/test-numbers/route');
 
-    const response = await POST(
-      jsonRequest('http://localhost/api/whatsapp/test-numbers', 'POST', { sessionId: 'session-1', phoneNumber: '10000000000' })
-    );
+    const response = await POST(jsonRequest(url, 'POST', body));
 
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ success: true, messageId: 'msg-1', status: 'sent' });
@@ -234,6 +247,131 @@ describe('POST /api/whatsapp/test-numbers', () => {
       '10000000000@s.whatsapp.net',
       expect.any(String)
     );
+  });
+
+  it('rejects unauthenticated requests without sending', async () => {
+    h.state.user = null;
+    const { POST } = await import('@/app/api/whatsapp/test-numbers/route');
+
+    const response = await POST(jsonRequest(url, 'POST', body));
+
+    expect(response.status).toBe(401);
+    expect(h.state.whatsappClient.sendTextMessage).not.toHaveBeenCalled();
+  });
+
+  it('returns 503 when the auth lookup throws', async () => {
+    h.state.authThrows = true;
+    const { POST } = await import('@/app/api/whatsapp/test-numbers/route');
+
+    const response = await POST(jsonRequest(url, 'POST', body));
+
+    expect(response.status).toBe(503);
+    expect(h.state.whatsappClient.sendTextMessage).not.toHaveBeenCalled();
+  });
+
+  it("rejects another user's session with 403 without sending", async () => {
+    const { POST } = await import('@/app/api/whatsapp/test-numbers/route');
+
+    const response = await POST(jsonRequest(url, 'POST', { ...body, sessionId: 'session-other' }));
+
+    expect(response.status).toBe(403);
+    expect(h.state.whatsappClient.sendTextMessage).not.toHaveBeenCalled();
+  });
+
+  it('returns 404 in production without sending', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    const { POST } = await import('@/app/api/whatsapp/test-numbers/route');
+
+    const response = await POST(jsonRequest(url, 'POST', body));
+
+    expect(response.status).toBe(404);
+    expect(h.state.whatsappClient.sendTextMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /api/whatsapp/test', () => {
+  const url = 'http://localhost/api/whatsapp/test';
+  const body = { sessionId: 'session-1', to: '10000000000@s.whatsapp.net', message: 'hello' };
+
+  it('sends for the owner of the session', async () => {
+    (h.state.whatsappClient.sendTextMessage as ReturnType<typeof vi.fn>).mockResolvedValue({
+      messageId: 'msg-1',
+      status: 'sent',
+    });
+    const { POST } = await import('@/app/api/whatsapp/test/route');
+
+    const response = await POST(jsonRequest(url, 'POST', body));
+
+    expect(response.status).toBe(200);
+    expect(h.state.whatsappClient.sendTextMessage).toHaveBeenCalled();
+  });
+
+  it('returns 401 with no session and does not send', async () => {
+    h.state.user = null;
+    const { POST } = await import('@/app/api/whatsapp/test/route');
+
+    const response = await POST(jsonRequest(url, 'POST', body));
+
+    expect(response.status).toBe(401);
+    expect(h.state.whatsappClient.sendTextMessage).not.toHaveBeenCalled();
+  });
+
+  it("returns 403 for another user's sessionId and does not send", async () => {
+    const { POST } = await import('@/app/api/whatsapp/test/route');
+
+    const response = await POST(jsonRequest(url, 'POST', { ...body, sessionId: 'session-other' }));
+
+    expect(response.status).toBe(403);
+    expect(h.state.whatsappClient.sendTextMessage).not.toHaveBeenCalled();
+  });
+
+  it('returns 404 in production and does not send', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    const { POST } = await import('@/app/api/whatsapp/test/route');
+
+    const response = await POST(jsonRequest(url, 'POST', body));
+
+    expect(response.status).toBe(404);
+    expect(h.state.whatsappClient.sendTextMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe('/api/whatsapp/monitor', () => {
+  const url = 'http://localhost/api/whatsapp/monitor';
+
+  it('GET returns 401 with no session', async () => {
+    h.state.user = null;
+    const { GET } = await import('@/app/api/whatsapp/monitor/route');
+
+    const response = await GET();
+
+    expect(response.status).toBe(401);
+  });
+
+  it('POST returns 401 with no session', async () => {
+    h.state.user = null;
+    const { POST } = await import('@/app/api/whatsapp/monitor/route');
+
+    const response = await POST(jsonRequest(url, 'POST', { action: 'stop', sessionId: 'session-1' }));
+
+    expect(response.status).toBe(401);
+  });
+
+  it("POST returns 403 for another user's session on stop and force_reconnect", async () => {
+    const { POST } = await import('@/app/api/whatsapp/monitor/route');
+
+    for (const action of ['stop', 'force_reconnect']) {
+      const response = await POST(jsonRequest(url, 'POST', { action, sessionId: 'session-other' }));
+      expect(response.status).toBe(403);
+    }
+  });
+
+  it('POST returns 400 without a sessionId', async () => {
+    const { POST } = await import('@/app/api/whatsapp/monitor/route');
+
+    const response = await POST(jsonRequest(url, 'POST', { action: 'stop' }));
+
+    expect(response.status).toBe(400);
   });
 });
 
@@ -273,6 +411,27 @@ describe('POST /api/whatsapp/webhook', () => {
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ success: true, received: true });
+    expect(h.state.webhookHandler.handleWebhook).toHaveBeenCalledWith(JSON.parse(payload));
+  });
+
+  it('returns 503 in production when the secret is unset and does not call the handler', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    h.state.env.WHATSAPP_WEBHOOK_SECRET = '';
+    const { POST } = await import('@/app/api/whatsapp/webhook/route');
+
+    const response = await POST(jsonRequest('http://localhost/api/whatsapp/webhook', 'POST', payload));
+
+    expect(response.status).toBe(503);
+    expect(h.state.webhookHandler.handleWebhook).not.toHaveBeenCalled();
+  });
+
+  it('stays permissive in development when the secret is unset', async () => {
+    h.state.env.WHATSAPP_WEBHOOK_SECRET = '';
+    const { POST } = await import('@/app/api/whatsapp/webhook/route');
+
+    const response = await POST(jsonRequest('http://localhost/api/whatsapp/webhook', 'POST', payload));
+
+    expect(response.status).toBe(200);
     expect(h.state.webhookHandler.handleWebhook).toHaveBeenCalledWith(JSON.parse(payload));
   });
 });

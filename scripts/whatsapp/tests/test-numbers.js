@@ -63,7 +63,8 @@ async function testWhatsAppNumbers() {
     const response = await fetch('http://localhost:3000/api/whatsapp/test-numbers', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        ...(process.env.MYRAG_SESSION_COOKIE ? { Cookie: process.env.MYRAG_SESSION_COOKIE } : {})
       },
       body: JSON.stringify({
         sessionId,

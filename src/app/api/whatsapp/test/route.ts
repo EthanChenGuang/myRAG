@@ -1,10 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getWhatsAppClient } from '@/lib/whatsapp/client-factory';
 import { logger } from '@/lib/logger';
+import { isProduction, requireUser, requireOwnedSession } from '@/lib/whatsapp/route-auth';
 
 export async function POST(request: NextRequest) {
+  if (isProduction()) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
+
   try {
-    const { sessionId, to, message } = await request.json();
+    const auth = await requireUser('WhatsApp Test');
+    if ('response' in auth) return auth.response;
+
+    let body: { sessionId?: string; to?: string; message?: string };
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    }
+    const { sessionId, to, message } = body;
 
     if (!sessionId || !to || !message) {
       return NextResponse.json(
@@ -12,6 +26,9 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    const denied = await requireOwnedSession('WhatsApp Test', auth.user.id, sessionId);
+    if (denied) return denied.response;
 
     logger.info('WhatsApp Test', 'Testing direct message send');
     logger.info('WhatsApp Test', 'Message details:', {

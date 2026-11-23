@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import {
   KoyebSessionRequest,
   KoyebSessionResponse,
@@ -23,6 +24,18 @@ export abstract class BaseWhatsAppClient {
     this.baseUrl = baseUrl;
     this.apiKey = apiKey;
     this.webhookSecret = webhookSecret || '';
+  }
+
+  protected hmacSignatureMatches(signature: string, payload: string): boolean {
+    if (!this.webhookSecret || typeof signature !== 'string' || !signature) {
+      return false;
+    }
+
+    const expected = crypto.createHmac('sha256', this.webhookSecret).update(payload).digest('hex');
+    const expectedDigest = crypto.createHash('sha256').update(expected).digest();
+    const receivedDigest = crypto.createHash('sha256').update(signature).digest();
+
+    return crypto.timingSafeEqual(expectedDigest, receivedDigest);
   }
 
   /**

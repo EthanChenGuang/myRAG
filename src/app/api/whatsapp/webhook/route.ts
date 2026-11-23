@@ -9,11 +9,20 @@ export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
   try {
-    // Validate webhook signature
+    if (!env.WHATSAPP_WEBHOOK_SECRET && process.env.NODE_ENV === 'production') {
+      logger.error('WhatsApp Webhook', 'WHATSAPP_WEBHOOK_SECRET is not configured; rejecting webhook');
+      return NextResponse.json(
+        { error: 'Webhook verification is not configured' },
+        { status: 503 }
+      );
+    }
+
     const signature = request.headers.get('x-webhook-signature');
     const rawBody = await request.text();
 
-    if (env.WHATSAPP_WEBHOOK_SECRET) {
+    if (!env.WHATSAPP_WEBHOOK_SECRET) {
+      logger.warn('WhatsApp Webhook', 'WHATSAPP_WEBHOOK_SECRET is not set; accepting unverified webhook (development only)');
+    } else {
       const whatsappClient = getWhatsAppClient();
       const isValid = !!signature && whatsappClient.validateWebhookSignature(signature, rawBody);
 

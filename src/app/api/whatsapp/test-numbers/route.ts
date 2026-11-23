@@ -1,14 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getWhatsAppClient } from '@/lib/whatsapp/client-factory';
 import { logger } from '@/lib/logger';
+import { isProduction, requireUser, requireOwnedSession } from '@/lib/whatsapp/route-auth';
 
 /**
  * Test endpoint to send a message with numbers to WhatsApp
  * Use this to diagnose the numbers stripping issue
  */
 export async function POST(request: NextRequest) {
+  if (isProduction()) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
+
   try {
-    const body = await request.json();
+    const auth = await requireUser('WhatsAppTestNumbers');
+    if ('response' in auth) return auth.response;
+
+    let body: Record<string, any>;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    }
     const { sessionId, phoneNumber, testType = 'simple' } = body;
 
     if (!sessionId || !phoneNumber) {
@@ -17,6 +30,9 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    const denied = await requireOwnedSession('WhatsAppTestNumbers', auth.user.id, sessionId);
+    if (denied) return denied.response;
 
     const whatsappClient = getWhatsAppClient();
 

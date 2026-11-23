@@ -5955,7 +5955,7 @@
                                                     <span class="label-text">
                                                         Webhook Secret
                                                         <span class="tooltip tooltip-right"
-                                                            data-tip="Optional but recommended. Used to verify webhook requests are from your Baileys instance, preventing unauthorized access.">
+                                                            data-tip="Required in production (the webhook endpoint returns 503 without it). Used to verify webhook requests are from your Baileys instance. Must match WEBHOOK_SECRET in the Baileys service.">
                                                             <span class="text-info cursor-help ml-1">ⓘ</span>
                                                         </span>
                                                     </span>
@@ -5963,7 +5963,7 @@
                                                 <div class="flex gap-2">
                                                     <input type="password" class="input input-bordered flex-1 w-full"
                                                         id="whatsapp-webhook-secret" data-key="WHATSAPP_WEBHOOK_SECRET"
-                                                        placeholder="Enter webhook secret (optional but recommended)">
+                                                        placeholder="Enter webhook secret (required in production)">
                                                     <button class="btn btn-square btn-outline"
                                                         data-for="whatsapp-webhook-secret">👁️</button>
                                                 </div>
