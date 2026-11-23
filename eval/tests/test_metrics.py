@@ -108,7 +108,7 @@ def test_rank_boundary_is_inclusive_at_k_and_exclusive_after():
     assert (got["6"].spans_hit_at_5, got["6"].spans_hit_at_10) == (0, 1)
     assert (got["10"].spans_hit_at_5, got["10"].spans_hit_at_10) == (0, 1)
     assert (got["11"].spans_hit_at_5, got["11"].spans_hit_at_10) == (0, 0)
-    assert got["11"].first_hit_rank is None
+    assert got["11"].first_hit_rank == 11
 
 
 def test_fewer_than_k_kept_chunks_are_scored_over_what_exists():
