@@ -21,6 +21,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 1: Evaluation Harness & Baseline** - Python sidecar, Pydantic/Zod contract, golden set, eval runner, CI gates and a measured baseline of today's system
 - [ ] **Phase 2: Unified Retrieval Pipeline & Tenant Scope** - Text chat, embedded chat and voice run through one `src/lib/rag/` pipeline that only searches a server-verified tenant, reproducing the baseline
 - [ ] **Phase 3: Unified Ingestion & Embedding Profiles** - One `ingest()` for every upload path with document types, Docling fallback, dedup, versioning, switchable embeddings and rollbackable re-embedding
+- [ ] **Phase 3.1: Tiered Parsing, Incremental Queue & Bulk Backfill** (INSERTED) - Cheapest-tier-that-passes parse routing with escalation, cloud and budget constraints, an ingestion ledger and parse cache, an async upload queue and a budgeted, resumable backfill
 - [ ] **Phase 4: Hybrid Retrieval, Reranking & Calibrated Refusal** - Filtered hybrid search on pgvector, switchable rerankers, edge-ordered context and refusal from calibrated rerank scores
 - [ ] **Phase 5: Verified Citations & Groundedness** - Claude Citations, validated chunk-ID citations for other models, one persisted citation record and a post-stream groundedness badge
 - [ ] **Phase 5.1: Prompt Injection Defense** (INSERTED) - Tagged, instruction-free context, runtime injection detection and an injection eval gated at 0
@@ -162,6 +163,21 @@ Plans:
 **Plans**: TBD
 **UI hint**: yes
 
+### Phase 3.1: Tiered Parsing, Incremental Queue & Bulk Backfill (INSERTED)
+**Goal**: Each document is parsed by the cheapest tier that passes a quality check, never violating the cloud and budget constraints, and both a daily trickle of uploads and a one-time import of a large archive run through the same ledger-driven pipeline: uploads become searchable quickly, and a bulk import has a known cost before it starts and resumes after a crash
+**Depends on**: Phase 3
+**Requirements**: DATA-12, DATA-13, DATA-14, DATA-15, DATA-16, DATA-17
+**Success Criteria** (what must be TRUE):
+  1. With `RAG_PARSE_ROUTING=tiered`, the fixture PDFs are routed by the preflight probe — text PDF to `fast`, table and multi-column PDFs to `structured`, a fully scanned PDF to `premium` (stubbed LlamaParse) — within each document-type profile's min/max tier; a stub that returns empty or garbled text triggers an escalation that is recorded with its reason; with `fixed`, ingestion output equals Phase 3's.
+  2. With `RAG_PARSER_ALLOW_CLOUD=false`, a test proves that no request reaches the LlamaParse stub for any fixture, including escalations; an exhausted premium budget or an over-cap document stays on the best allowed tier and is marked `needs_review`.
+  3. Every fixture ingestion leaves a ledger row with status, class, tier, attempts, pages, estimated cost and stage timings; re-chunking with a different chunk size and the CHK-05 sweep make zero parser calls (parse cache), and running any stage twice produces no duplicate chunks.
+  4. An upload returns 202 with a job id before parsing; the sidecar worker claims jobs with `SKIP LOCKED` (two workers never process the same job); a changed file under the same source key becomes a new version, an unchanged one is skipped, and a Nango deletion soft-deletes it; a failing stub is retried with backoff and then listed as failed with a retry action; a ≤ 20-page digital fixture PDF reaches `ready` within 60 s p95.
+  5. A backfill dry run over a fixture archive with duplicates reports class shares, projected pages per tier, cost and time and refuses to run without `--budget`; the real run skips duplicates, is killed mid-way and resumes without reprocessing ready documents, does not delay a concurrent upload beyond its latency target, and with `RAG_EMBED_BATCH_MODE=batch_api` submits embeddings to a recorded OpenAI Batch API fake in batches of at most 50,000 inputs.
+  6. The parser test set reports, per tier, text similarity, table cell F1, structure accuracy, seconds and cost per page, plus Recall@k on the linked golden items; `tiered` does not lower Recall@k or correct-refusal against `fixed` beyond the noise band, and the report shows premium page share and projected cost per 1,000 pages for both modes.
+**Live verification**: Run the routed parse on a real sample of the user's documents (dry run first) and check the class shares and projected cost; run a small real OpenAI Batch API embedding job; confirm Supabase Realtime status updates and the sidecar worker on the deployed sidecar.
+**Plans**: TBD
+**UI hint**: yes
+
 ### Phase 4: Hybrid Retrieval, Reranking & Calibrated Refusal
 **Goal**: On pgvector, questions in Chinese, English and Italian find the right chunks through filtered hybrid search and reranking, and the system refuses when the best reranked evidence is too weak
 **Depends on**: Phase 3
@@ -248,6 +264,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 5.1 → 6 → 7. 
 | 1. Evaluation Harness & Baseline | 22/22 | In Progress | - |
 | 2. Unified Retrieval Pipeline & Tenant Scope | 0/TBD | Not started | - |
 | 3. Unified Ingestion & Embedding Profiles | 0/TBD | Not started | - |
+| 3.1. Tiered Parsing, Incremental Queue & Bulk Backfill (INSERTED) | 0/TBD | Not started | - |
 | 4. Hybrid Retrieval, Reranking & Calibrated Refusal | 0/TBD | Not started | - |
 | 5. Verified Citations & Groundedness | 0/TBD | Not started | - |
 | 5.1. Prompt Injection Defense (INSERTED) | 0/TBD | Not started | - |

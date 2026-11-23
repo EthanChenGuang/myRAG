@@ -48,6 +48,12 @@ All requirements are written so they can be checked. "Behind a switch" means an 
 - [ ] **DATA-09**: An `invoice` document type extracts invoice fields into structured metadata defined by a Pydantic model (invoice number, issue and due dates, supplier and buyer names and VAT/tax IDs, currency, net, tax and gross totals, line items), keeps line-item tables intact in one chunk with their header, treats invoice numbers and tax IDs as exact terms, and makes supplier, date range and amount range filterable; extraction failures leave the document searchable as plain text and are reported
 - [ ] **DATA-10**: Admins set default document types in the Config UI: a tenant-wide default (a fixed type or "auto-detect") and optional per-source defaults (chat upload, Config UI upload, each Nango connection or folder, scrapers, image upload); precedence is the type picked for the file, then the source default, then the tenant default, then `general`; admins can also change the type of an existing document, which re-processes it through the shared `ingest()` path as a new version
 - [ ] **DATA-11**: PDFs that contain images (charts, photos, scanned pages inside a digital PDF) have those images extracted with their page number, captioned through the existing image-RAG captioning, and stored as image chunks linked to the document and page, so they are retrievable and appear as `source_images` like uploaded images
+- [ ] **DATA-12**: Tiered parse routing (`RAG_PARSE_ROUTING=fixed|tiered`, default `fixed` = Phase 3 behavior): a sidecar preflight probe (pypdfium2: pages, text-layer share, chars per page, image ratio, table and multi-column hints) classifies each file and routes it to the cheapest tier that fits — `native` (existing extractors for txt/md/csv/html/docx), `fast` (Docling on pypdfium2, OCR and table structure off), `structured` (Docling full with TableFormer and zh/en/it OCR) or `premium` (LlamaParse) — within the document-type profile's `min_tier`/`max_tier`; a post-parse quality check (empty text, low chars per page, garbled-character ratio, language mismatch, tables hinted but missing, partial conversion) escalates one tier at a time, at most twice, and every attempt with its reason is recorded (spec: `.planning/specs/ingestion-routing.md`)
+- [ ] **DATA-13**: Hard constraints come before quality, cost and speed: `RAG_PARSER_ALLOW_CLOUD=false` guarantees no file is sent to a cloud parser; a monthly premium-page budget per tenant and a per-document page cap stop tier-3 use when exceeded; a document that cannot reach the tier its check asks for keeps its best result and is marked `needs_review`; budget use is shown in the Config UI
+- [ ] **DATA-14**: An `ingestion_jobs` ledger (RLS, server role only) records per document its status (queued … ready, failed, quarantined, needs_review, skipped_duplicate), class, tier, parser and version, attempts, pages, estimated cost, embedding profile, retries, error and per-stage timings; every stage is idempotent; parser output is cached per tenant by file hash, parser version and options, so re-chunking, the CHK-05 sweep and retries make zero parser calls
+- [ ] **DATA-15**: Incremental ingestion is asynchronous: upload and sync routes return 202 with a job id at once; jobs are claimed from the ledger with `FOR UPDATE SKIP LOCKED` and a lease by a worker in the sidecar (no Redis/Celery); documents have a stable identity (tenant, source, source key) so an unchanged hash is skipped, a changed hash becomes a new version (DATA-07) and a deletion at the source (Nango) soft-deletes the current version; retries back off exponentially up to 3 times and failed jobs are listed in the Config UI with retry; the UI shows status until "ready"; a ≤ 20-page digital PDF is ready within 60 s p95 with fake providers; optional `RAG_PARSE_PROGRESSIVE` publishes a provisional fast-tier version first and replaces it with the routed tier
+- [ ] **DATA-16**: Bulk backfill (`npm run rag:backfill`): hashes and deduplicates within the tenant before parsing; a required dry run on a 1% sample (at least 20 files) reports class shares, projected pages per tier, cost and wall time, and the run refuses to start without `--budget`; jobs run at low priority with a `batch_id` and bounded concurrency so uploads are not starved; chunk rows are written in batches; a killed run resumes by skipping ready jobs; `RAG_EMBED_BATCH_MODE=batch_api` sends backfill embeddings through the OpenAI Batch API (≤ 50,000 inputs per batch, polled and resumable); a backfill into a new embedding profile goes live only through the EMB-05 gate
+- [ ] **DATA-17**: A parser test set (digital text, table, multi-column, scanned zh/en/it, invoice fixtures with expected table grids, reading order and headings) scores each tier on text similarity, table cell F1, structure accuracy, seconds per page and cost per page, and golden items on those documents report Recall@k per tier; routing thresholds are chosen on the dev split, and `tiered` must not lower Recall@k or correct-refusal against `fixed` beyond the noise band while the report shows premium page share and projected cost per 1,000 pages
 - [ ] **DATA-08**: Retrieval can filter by date range, source, document, document type and language
 
 ### Embeddings (EMB)
@@ -277,6 +283,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | EVAL-16 | Phase 5 | Pending |
 | EVAL-17 | Phase 7 | Pending |
 | XLG-02 | Phase 3 | Pending |
+| DATA-12 | Phase 3.1 | Pending |
+| DATA-13 | Phase 3.1 | Pending |
+| DATA-14 | Phase 3.1 | Pending |
+| DATA-15 | Phase 3.1 | Pending |
+| DATA-16 | Phase 3.1 | Pending |
+| DATA-17 | Phase 3.1 | Pending |
 | DATA-09 | Phase 3 | Pending |
 | DATA-10 | Phase 3 | Pending |
 | DATA-11 | Phase 3 | Pending |
@@ -285,14 +297,15 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CHK-05 | Phase 4 | Pending |
 
 **Coverage:**
-- v1 requirements: 97 total
-- Mapped to phases: 97
+- v1 requirements: 103 total
+- Mapped to phases: 103
 - Unmapped: 0 ✓
 
 **Mapping notes:**
 - RET-01, RET-02 and RET-03 are mapped to Phase 4, which builds the retrieval adapter contract, the pgvector hybrid search, the shared tokenizer and backend-agnostic conformance tests. Their "every backend" clauses for Weaviate and Qdrant are verified in Phase 7 (success criterion 3).
 - DATA-08 (metadata filters) is mapped to Phase 4 because filters are applied inside the hybrid search function built there; the metadata it filters on comes from Phase 3.
 - QRY-08 adds a switchable LangChain implementation of the query layer (`RAG_QUERY_FRAMEWORK=llamaindex|langchain`, default `llamaindex`). The former Out of Scope row "LangChain (any layer)" was removed and QRY-06 reworded accordingly.
+- DATA-12..DATA-17 (tiered parse routing, hard constraints and budget, ingestion ledger and parse cache, async incremental queue, bulk backfill, parser eval) were added 2026-11-23 as inserted Phase 3.1, which builds on Phase 3's single `ingest()` path; design in `.planning/specs/ingestion-routing.md`.
 
 ---
 *Requirements defined: 2026-11-22*
