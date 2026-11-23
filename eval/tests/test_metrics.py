@@ -269,3 +269,103 @@ def test_missing_or_duplicate_trace_is_an_error_not_a_silent_skip():
 def test_unsupported_k_values_are_rejected():
     with pytest.raises(ValueError):
         aggregate([], k_values=(3,))
+
+
+def _result(item_id: str, provenance: str, *, category: str = "general", language: str = "en", split: str = "dev",
+            answerable: bool = True, refused: bool = False, rank: int | None = 1) -> ItemResult:
+    hit = 1 if rank is not None and rank <= 5 else 0
+    return ItemResult(
+        item_id=item_id,
+        language=language,
+        category=category,
+        split=split,
+        provenance=provenance,
+        answerable=answerable,
+        refused=refused,
+        span_count=1 if answerable else 0,
+        spans_hit_at_5=hit if answerable else 0,
+        spans_hit_at_10=hit if answerable else 0,
+        first_hit_rank=rank if answerable else None,
+    )
+
+
+def _mixed_results() -> list[ItemResult]:
+    return [
+        _result("s1", "synthetic_fixture", rank=1),
+        _result("s2", "synthetic_fixture", category="typo", rank=None),
+        _result("h1", "human", category="typo", rank=2),
+        _result("h2", "human", category="no_answer", answerable=False, refused=True),
+        _result("t1", "synthetic_fixture", split="test", rank=1),
+    ]
+
+
+def test_score_items_copies_provenance_from_the_golden_item():
+    item = _item("en-a-001", [(DOC, "gold sentence")]).model_copy(update={"provenance": "human"})
+    [result] = score_items([_trace("en-a-001", [(DOC, "gold sentence")])], [item])
+    assert result.provenance == "human"
+
+
+def test_aggregate_splits_every_metric_by_provenance_and_provenance_category():
+    out = aggregate(_mixed_results())
+    assert set(out["by_provenance"]) == {"synthetic_fixture", "human"}
+    assert set(out["by_provenance_category"]) == {
+        "synthetic_fixture/general",
+        "synthetic_fixture/typo",
+        "human/typo",
+        "human/no_answer",
+    }
+    assert out["by_provenance"]["synthetic_fixture"].recall_at_5.n == 2
+    assert out["by_provenance"]["synthetic_fixture"].recall_at_5.value == 0.5
+    assert out["by_provenance"]["human"].correct_refusal_rate.value == 1.0
+    assert out["by_provenance_category"]["human/typo"].mrr.value == 0.5
+    assert out["gate_population"] == "all"
+
+
+def test_without_production_items_the_gated_slices_cover_the_whole_dev_split():
+    results = _mixed_results()
+    out = aggregate(results)
+    dev = [r for r in results if r.split == "dev"]
+    assert out["overall"].recall_at_5.n == len([r for r in dev if r.answerable])
+    assert set(out["by_language"]) == {"en"}
+    assert set(out["by_category"]) == {"general", "typo", "no_answer"}
+    assert out["gate_population"] == "all"
+
+
+def test_production_items_become_the_gated_population_and_others_stay_report_only():
+    results = [
+        *_mixed_results(),
+        _result("p1", "production", category="colloquial", rank=1),
+        _result("p2", "production", category="colloquial", language="zh", rank=4),
+    ]
+    out = aggregate(results)
+    assert out["gate_population"] == "production"
+    assert out["overall"].recall_at_5.n == 2
+    assert out["overall"].mrr.value == (1 + 0.25) / 2
+    assert set(out["by_language"]) == {"en", "zh"}
+    assert out["by_language"]["en"].recall_at_5.n == 1
+    assert set(out["by_category"]) == {"colloquial"}
+    assert set(out["by_provenance"]) == {"synthetic_fixture", "human", "production"}
+    assert out["by_provenance"]["synthetic_fixture"].recall_at_5.n == 2
+    assert out["by_provenance_category"]["production/colloquial"].recall_at_5.n == 2
+
+
+def test_production_items_outside_the_gated_split_do_not_switch_the_population():
+    results = [*_mixed_results(), _result("p1", "production", split="test", rank=1)]
+    out = aggregate(results)
+    assert out["gate_population"] == "all"
+    assert out["overall"].recall_at_5.n == 2
+    assert "production" not in out["by_provenance"]
+
+
+def test_only_approved_production_items_count_when_approved_ids_are_given():
+    results = [
+        _result("s1", "synthetic_fixture"),
+        _result("p1", "production", rank=1),
+        _result("p2", "production", rank=None),
+    ]
+    out = aggregate(results, approved_ids=frozenset({"s1", "p1"}))
+    assert out["gate_population"] == "production"
+    assert out["overall"].recall_at_5.n == 1
+    none_approved = aggregate(results, approved_ids=frozenset({"s1"}))
+    assert none_approved["gate_population"] == "all"
+    assert none_approved["overall"].recall_at_5.n == 3

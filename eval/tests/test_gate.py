@@ -263,6 +263,7 @@ def _item(item_id: str, rank: int | None = 1, language: str = "en") -> dict:
         "language": language,
         "category": "general",
         "split": "dev",
+        "provenance": "synthetic_fixture",
         "answerable": True,
         "refused": False,
         "span_count": 1,
@@ -343,3 +344,25 @@ def test_gate_markdown_says_when_the_baseline_has_no_item_rows(tmp_path):
     assert main(["--report", str(report_path), "--baseline", str(baseline_path), "--noise", str(NOISE_PATH), "--out", str(tmp_path / "out")]) == 0
     assert "no per-item rows" in (tmp_path / "out" / "gate.md").read_text(encoding="utf-8")
     assert json.loads((tmp_path / "out" / "gate.json").read_text(encoding="utf-8"))["paired"] is None
+
+
+def test_gate_population_difference_is_a_mismatch_naming_the_field():
+    result = evaluate_gate(_report(gate_population="production"), _baseline(), _noise())
+    assert not result.passed
+    assert any("gate_population differs" in problem for problem in result.mismatches)
+    assert any("production" in problem and "all" in problem for problem in result.mismatches)
+
+
+def test_matching_production_population_passes():
+    result = evaluate_gate(_report(gate_population="production"), _baseline(gate_population="production"), _noise())
+    assert result.passed and not result.mismatches
+
+
+def test_cli_exits_with_mismatch_code_for_a_population_difference(tmp_path, capsys):
+    report_path = tmp_path / "report.json"
+    baseline_path = tmp_path / "baseline.json"
+    report_path.write_text(_report(gate_population="production").model_dump_json(), encoding="utf-8")
+    baseline_path.write_text(_baseline().model_dump_json(), encoding="utf-8")
+    code = main(["--report", str(report_path), "--baseline", str(baseline_path), "--noise", str(NOISE_PATH), "--out", str(tmp_path / "out")])
+    assert code == 2
+    assert "gate_population" in capsys.readouterr().err
