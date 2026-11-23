@@ -4,11 +4,16 @@ const path = require('path');
 const dotenv = require('dotenv');
 const { exec, spawn } = require('child_process');
 const multer = require('multer');
+const security = require('./config-server-security');
 const app = express();
 const PORT = 3333;
+// Loopback only. CONFIG_UI_HOST can override it, but any other value exposes an unauthenticated .env editor to the network.
+const HOST = process.env.CONFIG_UI_HOST || '127.0.0.1';
 
 // Resolve project root (one level up from this script directory)
-const REPO_ROOT = path.resolve(__dirname, '..');
+const REPO_ROOT = process.env.MYRAG_CONFIG_ROOT
+  ? path.resolve(process.env.MYRAG_CONFIG_ROOT)
+  : path.resolve(__dirname, '..');
 
 // Helper function to get deployment mode from .env.local
 function getDeploymentMode() {
@@ -45,8 +50,6 @@ function getMainAppBaseUrl() {
   return normalizeBaseUrl(
     process.env.MYRAG_APP_URL ||
     getEnvVar('MYRAG_APP_URL') ||
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    getEnvVar('NEXT_PUBLIC_SITE_URL') ||
     'http://localhost:3000'
   );
 }
@@ -81,7 +84,7 @@ function withAuthHeaders(req, headers = {}) {
 
 function mainAppConnectionError(error) {
   return {
-    error: `Unable to connect to main myRAG app at ${getMainAppBaseUrl()}. Check MYRAG_APP_URL or NEXT_PUBLIC_SITE_URL, and make sure the app server is running.`,
+    error: `Unable to connect to main myRAG app at ${getMainAppBaseUrl()}. Check MYRAG_APP_URL, and make sure the app server is running.`,
     details: error.message
   };
 }
@@ -95,28 +98,8 @@ function getSupabaseConfig() {
   };
 }
 
-// Set up multer for file uploads
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    const type = req.body.type || 'ai';
-    const uploadDir = path.join(REPO_ROOT, 'public', 'logos', type);
-
-    // Ensure directory exists
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-
-    cb(null, uploadDir);
-  },
-  filename: function (req, file, cb) {
-    const type = req.body.type || 'ai';
-    const timestamp = Date.now();
-    const extension = path.extname(file.originalname);
-    cb(null, `${type}-logo-${timestamp}${extension}`);
-  }
-});
-
-const upload = multer({ storage: storage });
+// Image uploads are held in memory, validated, and written under server-chosen names
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: security.MAX_IMAGE_BYTES, files: 1 } });
 
 // Separate multer config for document processing (needs memory storage for proxy)
 const documentUpload = multer({
@@ -150,6 +133,8 @@ if (!fs.existsSync(path.join(configUiDir, 'index.html'))) {
   console.log('Created index.html with fix script');
 }
 
+app.use(security.securityMiddleware);
+
 // Serve static files from the config-ui directory
 app.use(express.static(configUiDir));
 app.use(express.json());
@@ -178,7 +163,7 @@ const DEFAULT_OPENAI_MODELS = '[{"id":"gpt-4.1-mini","displayName":"GPT-4.1 Mini
 
 const DEFAULT_OPENROUTER_MODELS = '[{"id":"anthropic/claude-sonnet-4.5","displayName":"Claude Sonnet 4.5","isDefault":true},{"id":"openai/gpt-5.2-chat","displayName":"GPT-5.2"},{"id":"openai/gpt-5-mini","displayName":"GPT-5 Mini"},{"id":"openai/gpt-5","displayName":"GPT-5"},{"id":"anthropic/claude-opus-4.1","displayName":"Claude Opus 4.1"},{"id":"google/gemini-2.5-flash-lite","displayName":"Gemini 2.5 Flash Lite"},{"id":"google/gemini-2.5-flash","displayName":"Gemini 2.5 Flash"},{"id":"meta-llama/llama-4-maverick","displayName":"Llama 4 Maverick","isOpenSource":true},{"id":"cognitivecomputations/dolphin-mistral-24b-venice-edition:free","displayName":"Venice: Uncensored","isFree":true,"isOpenSource":true,"isUncensored":true}]';
 
-// API endpoint to get current .env values
+// API endpoint to get current .env values. Secret values are never returned; secretsSet lists which ones are set.
 app.get('/api/config', (req, res) => {
   try {
     const envPath = path.join(REPO_ROOT, '.env.local');
@@ -186,17 +171,16 @@ app.get('/api/config', (req, res) => {
       ? fs.readFileSync(envPath, 'utf8')
       : '';
 
-    const config = dotenv.parse(envContent || '');
+    const { config, secretsSet } = security.maskConfig(dotenv.parse(envContent || ''));
 
-    // Send the actual values since we're running locally
     res.json({
-      config: config,
-      hasFile: fs.existsSync(envPath),
-      envPath: envPath // For debugging
+      config,
+      secretsSet,
+      hasFile: fs.existsSync(envPath)
     });
   } catch (error) {
     console.error('Error loading configuration:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Failed to load configuration' });
   }
 });
 
@@ -210,6 +194,26 @@ app.post('/api/config', (req, res) => {
 
     // Filter out invalid environment variable names and template placeholders
     const fullValues = filterValidEnvVars(rawFullValues);
+
+    // The UI never receives secret values, so an empty secret means "unchanged"
+    for (const [name, value] of Object.entries(fullValues)) {
+      if (security.isSecretConfigEntry(name, '') && (value === '' || value === null || value === undefined)) {
+        delete fullValues[name];
+      }
+    }
+
+    // A value must stay on one .env.local line: line breaks other than \n are refused, \n is stored as the literal \n
+    const refused = [];
+    for (const [name, value] of Object.entries(fullValues)) {
+      if (value === null || value === undefined || typeof value === 'boolean') continue;
+      const text = typeof value === 'object' ? (Array.isArray(value) ? value.join(',') : JSON.stringify(value)) : value;
+      const safe = security.toEnvLineValue(text);
+      if (safe === null) refused.push(name);
+      else fullValues[name] = safe;
+    }
+    if (refused.length > 0) {
+      return res.status(400).json({ error: 'Configuration contains values that cannot be stored', invalid: refused });
+    }
 
     for (const name of ['RAG_EVAL_SECRET', 'RAG_SIDECAR_SECRET', 'RAG_VOICE_TOKEN_SECRET']) {
       const value = fullValues[name];
@@ -1749,7 +1753,20 @@ app.post('/api/config/upload-logo', upload.single('logoFile'), (req, res) => {
     }
 
     const type = req.body.type || 'ai';
-    const relativePath = `/logos/${type}/${req.file.filename}`;
+    if (!security.LOGO_TYPES.has(type)) {
+      return res.status(400).json({ error: 'Invalid logo type' });
+    }
+
+    const validation = security.validateImageUpload(req.file.originalname, req.file.buffer);
+    if (!validation.ok) {
+      return res.status(400).json({ error: validation.error });
+    }
+
+    const uploadDir = path.join(REPO_ROOT, 'public', 'logos', type);
+    fs.mkdirSync(uploadDir, { recursive: true });
+    const fileName = `${type}-logo-${Date.now()}.${validation.extension}`;
+    fs.writeFileSync(path.join(uploadDir, fileName), req.file.buffer);
+    const relativePath = `/logos/${type}/${fileName}`;
 
     console.log(`API: Logo file uploaded to ${relativePath}`);
 
@@ -1760,28 +1777,25 @@ app.post('/api/config/upload-logo', upload.single('logoFile'), (req, res) => {
     });
   } catch (error) {
     console.error('API: Error uploading logo:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Failed to upload logo' });
   }
 });
 
 // API endpoint for uploading favicon
-app.post('/api/config/upload-favicon', multer({
-  storage: multer.diskStorage({
-    destination: function (req, file, cb) {
-      cb(null, path.join(REPO_ROOT, 'public'));
-    },
-    filename: function (req, file, cb) {
-      const extension = path.extname(file.originalname);
-      cb(null, `favicon${extension}`);
-    }
-  })
-}).single('favicon'), (req, res) => {
+app.post('/api/config/upload-favicon', upload.single('favicon'), (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    const relativePath = `/${req.file.filename}`;
+    const validation = security.validateImageUpload(req.file.originalname, req.file.buffer);
+    if (!validation.ok) {
+      return res.status(400).json({ error: validation.error });
+    }
+
+    const fileName = `favicon.${validation.extension}`;
+    fs.writeFileSync(path.join(REPO_ROOT, 'public', fileName), req.file.buffer);
+    const relativePath = `/${fileName}`;
 
     console.log(`API: Favicon uploaded to ${relativePath}`);
 
@@ -1792,7 +1806,7 @@ app.post('/api/config/upload-favicon', multer({
     });
   } catch (error) {
     console.error('API: Error uploading favicon:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Failed to upload favicon' });
   }
 });
 
@@ -2053,6 +2067,10 @@ app.post('/api/admin/setup', async (req, res) => {
 
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required' });
+    }
+
+    if (security.hasEnvLineBreak(email) || security.hasEnvLineBreak(password)) {
+      return res.status(400).json({ error: 'Email and password cannot contain line breaks' });
     }
 
     console.log('Setting up primary admin:', email);
@@ -2405,11 +2423,11 @@ function execPromise(command, options = {}) {
   });
 }
 
-// API endpoint to get environment variable
+// API endpoint to get environment variable (secret values are never returned)
 app.get('/api/config/get-env', (req, res) => {
   try {
     const varName = req.query.var;
-    if (!varName) {
+    if (!varName || typeof varName !== 'string') {
       return res.status(400).json({ error: 'No variable name provided' });
     }
 
@@ -2419,21 +2437,23 @@ app.get('/api/config/get-env', (req, res) => {
 
     const envVars = parseEnvFile(envContent);
 
+    if (security.isSecretConfigEntry(varName, envVars[varName] || '')) {
+      return res.status(403).json({ success: false, message: 'Variable not available' });
+    }
+
     // Return the variable value if it exists
-    if (varName in envVars) {
-      console.log(`API: Returning environment variable ${varName}:`, envVars[varName]);
+    if (Object.prototype.hasOwnProperty.call(envVars, varName)) {
       return res.json({ success: true, value: envVars[varName] });
     } else {
       // For the border setting, default to true if not found
       if (varName === 'NEXT_PUBLIC_AI_RESPONSE_LOGO_BORDER') {
-        console.log(`API: Variable ${varName} not found, returning default 'true'`);
         return res.json({ success: true, value: 'true' });
       }
       return res.json({ success: false, message: 'Variable not found' });
     }
   } catch (error) {
     console.error('API: Error fetching environment variable:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Failed to read environment variable' });
   }
 });
 
@@ -3652,38 +3672,60 @@ server.on('clientError', (err, socket) => {
   }
 });
 
-// Prevent server from closing on errors
-process.on('uncaughtException', (error) => {
-  console.error('⚠️ Uncaught exception (server will continue):', error);
-  // Don't exit, keep server running
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('⚠️ Unhandled promise rejection:', reason);
-  // Don't exit, keep server running
-});
-
-// Check for .env.local before starting
-const { checkAndCreateEnvFile } = require('./init-env');
-checkAndCreateEnvFile();
-
-// Start the server and automatically open the browser
-server.listen(PORT, () => {
-  console.log(`\n🔧 myRAG Config Tool running at http://localhost:${PORT}`);
-  console.log(`\n✨ Open this URL in your browser to configure myRAG`);
-  console.log(`\n🔄 Live Preview proxy ready - will forward chat requests to ${getMainAppBaseUrl()}`);
-  console.log(`\n📄 Document processing proxy ready - will forward document requests to ${getMainAppBaseUrl()}`);
-  console.log(`\n🌐 Translation API ready - will use OpenAI/OpenRouter for translations`);
-  console.log(`\n⚡ Server configured with enhanced keepalive settings to prevent disconnections`);
-
-  // Try to auto-open the browser (works on most systems)
-  try {
-    const startCmd = process.platform === 'win32' ? 'start' :
-      (process.platform === 'darwin' ? 'open' : 'xdg-open');
-    const { exec } = require('child_process');
-    exec(`${startCmd} http://localhost:${PORT}`);
-    console.log(`\n🌐 Browser opening automatically...`);
-  } catch (err) {
-    console.log(`\n🌐 Please open http://localhost:${PORT} in your browser`);
+app.use((error, req, res, next) => {
+  if (res.headersSent) return next(error);
+  if (error && error.code === 'LIMIT_FILE_SIZE') {
+    return res.status(413).json({ error: 'File is too large' });
   }
+  if (error && (error.type === 'entity.parse.failed' || error.status === 400)) {
+    return res.status(400).json({ error: 'Invalid request body' });
+  }
+  console.error('API: Unhandled error:', error);
+  return res.status(500).json({ error: 'Internal server error' });
 });
+
+function start() {
+  // Prevent server from closing on errors
+  process.on('uncaughtException', (error) => {
+    console.error('⚠️ Uncaught exception (server will continue):', error);
+    // Don't exit, keep server running
+  });
+
+  process.on('unhandledRejection', (reason, promise) => {
+    console.error('⚠️ Unhandled promise rejection:', reason);
+    // Don't exit, keep server running
+  });
+
+  // Check for .env.local before starting
+  const { checkAndCreateEnvFile } = require('./init-env');
+  checkAndCreateEnvFile();
+
+  server.listen(PORT, HOST, () => {
+    console.log(`\n🔧 myRAG Config Tool running at http://localhost:${PORT}`);
+    if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') {
+      console.warn(`\n⚠️ UNSAFE: CONFIG_UI_HOST=${HOST} exposes this unauthenticated .env editor beyond this machine. Unset it unless you fully trust the network.`);
+    }
+    console.log(`\n✨ Open this URL in your browser to configure myRAG`);
+    console.log(`\n🔄 Live Preview proxy ready - will forward chat requests to ${getMainAppBaseUrl()}`);
+    console.log(`\n📄 Document processing proxy ready - will forward document requests to ${getMainAppBaseUrl()}`);
+    console.log(`\n🌐 Translation API ready - will use OpenAI/OpenRouter for translations`);
+    console.log(`\n⚡ Server configured with enhanced keepalive settings to prevent disconnections`);
+
+    // Try to auto-open the browser (works on most systems)
+    try {
+      const startCmd = process.platform === 'win32' ? 'start' :
+        (process.platform === 'darwin' ? 'open' : 'xdg-open');
+      const { exec } = require('child_process');
+      exec(`${startCmd} http://localhost:${PORT}`);
+      console.log(`\n🌐 Browser opening automatically...`);
+    } catch (err) {
+      console.log(`\n🌐 Please open http://localhost:${PORT} in your browser`);
+    }
+  });
+}
+
+if (require.main === module) {
+  start();
+}
+
+module.exports = { app, server, start, HOST, PORT };

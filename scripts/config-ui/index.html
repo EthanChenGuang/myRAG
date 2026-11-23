@@ -3,6 +3,19 @@
 
 <head>
     <meta charset="UTF-8">
+    <script>
+        (function () {
+            const nativeFetch = window.fetch.bind(window);
+            window.fetch = function (input, init) {
+                const request = input instanceof Request ? input : null;
+                const url = new URL(request ? request.url : String(input), window.location.href);
+                if (url.origin !== window.location.origin) return nativeFetch(input, init);
+                const headers = new Headers((init && init.headers) || (request && request.headers) || undefined);
+                headers.set('X-Config-UI', '1');
+                return nativeFetch(input, Object.assign({}, init, { headers: headers }));
+            };
+        })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>myRAG Configuration</title>
 
@@ -4514,7 +4527,7 @@
                                                     <span class="label-text">Favicon</span>
                                                 </label>
                                                 <div class="flex gap-2 items-center">
-                                                    <input type="file" id="faviconFile" accept=".ico,.png,.svg"
+                                                    <input type="file" id="faviconFile" accept=".ico,.png,.jpg,.jpeg,.webp"
                                                         class="file-input file-input-bordered flex-1">
                                                     <div id="faviconPreview"
                                                         class="w-8 h-8 border rounded flex items-center justify-center">
@@ -4522,7 +4535,7 @@
                                                     </div>
                                                 </div>
                                                 <div class="text-sm text-base-content/70 mt-2">
-                                                    Upload a .ico, .png, or .svg file. Recommended size: 32x32px or
+                                                    Upload a .ico, .png, .jpg, or .webp file. Recommended size: 32x32px or
                                                     16x16px for .ico files.
                                                 </div>
                                             </div>
@@ -4977,7 +4990,7 @@
                                                         placeholder="https://example.com/ai-logo.svg"
                                                         class="input input-bordered flex-1 w-full">
                                                     <div class="divider divider-horizontal">OR</div>
-                                                    <input type="file" id="aiLogoFile" accept=".svg,.png"
+                                                    <input type="file" id="aiLogoFile" accept=".png,.jpg,.jpeg,.webp"
                                                         class="file-input file-input-bordered">
                                                 </div>
                                                 <div class="text-sm text-base-content/70 mt-2">
@@ -8956,6 +8969,7 @@
                     const response = await fetch('/api/config');
                     const data = await response.json();
                     this.config = data.config || {};
+                    this.secretsSet = new Set(data.secretsSet || []);
                     // Expose config globally for other components (like workspace selector)
                     window.currentConfig = this.config;
                     console.log('Config loaded:', this.config);
@@ -8965,6 +8979,14 @@
             }
 
             populateFields() {
+                (this.secretsSet || new Set()).forEach((name) => {
+                    const secretField = document.getElementById(name);
+                    if (secretField) {
+                        secretField.value = '';
+                        secretField.placeholder = 'Configured (hidden). Type a new value to replace it.';
+                    }
+                });
+
                 // Populate all form fields with config values
                 Object.entries(this.config).forEach(([key, value]) => {
                     // Skip RAG prompt fields, template modal fields, translation input, and temporary form variables
