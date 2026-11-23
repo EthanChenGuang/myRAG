@@ -164,7 +164,7 @@ export async function POST(req: NextRequest) {
       console.log('[RAG Eval] trace built:', { candidates: candidates.length, kept: result.kept.length, refused });
       return NextResponse.json(checked.data);
     } finally {
-      finishTrace(collector, result);
+      finishTrace(collector, result, { query });
     }
   } catch (error: unknown) {
     const name = error instanceof Error ? error.name : 'Error';

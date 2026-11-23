@@ -311,7 +311,7 @@ export async function runRetrieval(input: RunRetrievalInput): Promise<RetrievalR
     createTraceCollector({ profile: input.profile, tenantKey: input.scope ? scopeKey(input.scope) : 'none' });
 
   const result = input.profile === 'voice' ? await runVoicePipeline(input, collector) : await runPipeline(input, collector);
-  if (ownsTrace) finishTrace(collector, result);
+  if (ownsTrace) finishTrace(collector, result, { query: input.query });
   return result;
 }
 
