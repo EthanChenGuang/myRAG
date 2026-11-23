@@ -76,6 +76,7 @@ function configFor(overrides: Partial<LangfuseConfig> = {}): LangfuseConfig {
     secretKey: PLACEHOLDER_SECRET_KEY,
     baseUrl: fake.url,
     sampleRate: 1,
+    reviewSampleRate: 0,
     captureContent: false,
     ...overrides,
   };

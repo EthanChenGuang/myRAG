@@ -16,6 +16,13 @@ export interface StageEntry {
   detail?: string;
 }
 
+export interface ReviewContent {
+  query?: string;
+  answer?: string;
+  context?: string;
+  model?: string;
+}
+
 export interface TraceCollector {
   readonly traceId: string;
   readonly profile: Profile;
@@ -26,6 +33,8 @@ export interface TraceCollector {
   stages(): StageRecord[];
   toStageLatency(): Record<string, number>;
   toStageStatus(): Record<string, StageRunStatus>;
+  setReviewContent(content: ReviewContent): void;
+  reviewContent(): ReviewContent | null;
 }
 
 export interface TraceCollectorOptions {
@@ -72,6 +81,8 @@ export function createTraceCollector(options: TraceCollectorOptions): TraceColle
       for (const record of records) latency[record.name] = record.latency_ms;
       return latency;
     },
+    setReviewContent() {},
+    reviewContent: () => null,
     toStageStatus() {
       const status: Record<string, StageRunStatus> = {};
       for (const record of records) status[record.name] = record.status;
