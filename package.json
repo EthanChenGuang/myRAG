@@ -12,7 +12,7 @@
     "configure-deployment": "node scripts/configure-deployment.js",
     "db:setup": "bash scripts/setup-database.sh",
     "reprocess-docs": "node scripts/reprocess-documents.js",
-    "test-rag": "node scripts/test-rag-system.js",
+    "test-rag": "tsx eval/harness/run-smoke.mts",
     "gen:schemas": "uv run --project rag-sidecar python -m rag_sidecar.export_schemas && node scripts/gen-zod.mjs",
     "db:push": "echo 'Use Supabase dashboard to manage schema'",
     "db:seed": "echo 'No seed script configured yet'"
