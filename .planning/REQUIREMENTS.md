@@ -131,6 +131,8 @@ All requirements are written so they can be checked. "Behind a switch" means an 
 ### Cross-language & Cache (XLG, CACHE)
 
 - [ ] **XLG-01**: The query language (script ratio plus zh/en/it stopword scores, mixed-language queries classified by dominant script) and the languages of the tenant knowledge base (share per language from the DATA-02 `language` field) are detected; when the query language is not a knowledge-base language above a 20% share, the query is translated by a small fast model into up to two knowledge-base languages, keeping protected tokens verbatim (rewrite-gate R7/R8); original and translated queries are retrieved in parallel and fused with RRF; the answer is written in the asker's language while cited quotes stay in the source language; translation has its own switch, timeout and budget, and can be turned off per embedding profile when the eval shows the multilingual embedding alone is enough; supported under both query frameworks (former RQ-04)
+- [ ] **CHK-04**: Parent-child sizes are configurable in the Config UI per document-type profile: child size (tokens), parent mode (document structure — whole clause or section — with a token cap, or fixed size) and parent size, starting from child 256 / parent 1024 with presets 128/512, 256/1024 and 256/2048 plus custom values; the UI validates the choice — child must fit the active embedding profile's maximum input (hard error), parent must be at least twice the child (hard error), a parent/child ratio outside 4–8 and top-k × parent size above the RNK-03 context budget are warnings; a size change creates a new chunking profile that is re-chunked and re-embedded side by side from stored document text and activated by a pointer flip that can be rolled back (same mechanism as EMB-02/EMB-04)
+- [ ] **CHK-05**: A chunk-size sweep runs the golden set against each candidate chunking profile and reports Recall@k, MRR, refusal rates, judge answer correctness, context tokens sent and latency, overall and per document type, language and question category (fact lookups versus context-heavy questions); the admin sees the comparison in the Config UI and picks the profile per document type, and the decision is recorded with its numbers
 - [ ] **EVAL-14**: The golden set also covers how real users ask: new categories `colloquial` (wording that differs from the document's terms), `ambiguous` (short or underspecified) and `typo` (misspellings, missing accents, mixed scripts), next to the existing ones; every report also splits results by provenance (`production`, `human`, `claude_draft`, `ragas_generated`, `synthetic_fixture`), and once real-user items exist the gate is computed on them, with synthetic items reported for coverage only
 - [ ] **EVAL-15**: A configurable share of production requests (sampled, PII-masked, tenant-tagged) is pulled from their Langfuse traces into a review queue, and an online judge scores a sample of them (faithfulness, answer relevance) with the scores attached to the Langfuse trace, so quality is measured after release and not only before it
 - [ ] **EVAL-16**: Every RAG answer has a helpful / not helpful control (with an optional reason); the vote is stored with the message and sent to Langfuse as a score, and "not helpful" votes and "possibly unreliable" groundedness results automatically enter the review queue
@@ -158,7 +160,7 @@ All requirements are written so they can be checked. "Behind a switch" means an 
 
 - OPS-01 was promoted to v1 as EVAL-15 (2026-11-23)
 - **OPS-02**: Shadow dual-read between backends
-- **OPS-03**: Editable document-type profiles in the Config UI
+- **OPS-03**: Editable document-type profiles in the Config UI (parent-child chunk sizes were promoted to v1 as CHK-04; the other profile settings stay here)
 - **OPS-04**: Blocking answers on low groundedness scores
 
 ## Out of Scope
@@ -275,10 +277,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DATA-10 | Phase 3 | Pending |
 | DATA-11 | Phase 3 | Pending |
 | XLG-03 | Phase 4 | Pending |
+| CHK-04 | Phase 4 | Pending |
+| CHK-05 | Phase 4 | Pending |
 
 **Coverage:**
-- v1 requirements: 93 total
-- Mapped to phases: 93
+- v1 requirements: 95 total
+- Mapped to phases: 95
 - Unmapped: 0 ✓
 
 **Mapping notes:**

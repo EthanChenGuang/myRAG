@@ -115,7 +115,7 @@ Plans:
 ### Phase 4: Hybrid Retrieval, Reranking & Calibrated Refusal
 **Goal**: On pgvector, questions in Chinese, English and Italian find the right chunks through filtered hybrid search and reranking, and the system refuses when the best reranked evidence is too weak
 **Depends on**: Phase 3
-**Requirements**: RET-01, RET-02, RET-03, RET-04, DATA-08, RNK-01, RNK-02, RNK-03, RNK-04, RNK-05, RNK-06, CHK-03, LAT-01, LAT-02, XLG-03
+**Requirements**: RET-01, RET-02, RET-03, RET-04, DATA-08, RNK-01, RNK-02, RNK-03, RNK-04, RNK-05, RNK-06, CHK-03, LAT-01, LAT-02, XLG-03, CHK-04, CHK-05
 **Success Criteria** (what must be TRUE):
   1. Against a local Postgres with pgvector seeded with the fixture corpus, Chinese exact-term queries (model numbers, IDs, names) and their English and Italian counterparts retrieve the expected chunk. The search is hybrid lexical + vector over the shared tokenizer's `lexical_text`, fused with RRF. Filters by date range, source, document, document type and language apply before search, and the hybrid function runs for the server role and is refused for `anon`.
   2. Cohere `rerank-v5.0-pro`/`rerank-v5.0-fast`, Voyage `rerank-3` (with `rerank-2.5` as fallback) and the local BM25 reranker are switchable and rerank an enlarged candidate pool; when a fake reranker times out or errors, the fused order is used and threshold refusal is off for that request.
@@ -125,6 +125,7 @@ Plans:
   6. With `RAG_PARENT_CHILD` on, child hits return their parent once within the token budget and tenant scope, and the eval shows Recall gains on clause/exception items with no other slice dropping beyond the noise band.
   7. Retrieval paths run in parallel, candidates are deduplicated before rerank, the rerank input count is capped and reported, and the fast rerank tier keeps voice within its latency budget.
   8. Cross-language questions also succeed through the lexical path and the local BM25 reranker (translated query), and the refusal threshold calibrated on the cross-lingual slice does not raise its false-refusal rate above the same-language slices beyond the noise band.
+  9. Admin can set child size, parent mode and parent size per document type in the Config UI (presets 128/512, 256/1024, 256/2048 or custom); a child size above the embedding input limit or a parent smaller than twice the child is rejected, ratio and context-budget problems are warned; the new profile is built side by side and can be activated and rolled back; the sweep report compares the candidate profiles on the fixture golden set per document type and question category, and the chosen profile is recorded with its numbers.
 **Live verification**: Calibrate thresholds and sweep pool size and top-k with real Cohere and Voyage keys on the real golden set's dev split, then check them on the holdout split; compare Voyage `rerank-3` with `rerank-2.5` on the zh and it slices; apply the hybrid SQL migration to the real Supabase project and confirm Chinese lexical behavior there.
 **Plans**: TBD
 
