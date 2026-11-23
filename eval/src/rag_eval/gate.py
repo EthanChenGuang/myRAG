@@ -26,7 +26,7 @@ def _report_slices(report: EvalReport) -> dict[str, SliceMetrics]:
 
 
 def _scope(options: RagRunOptions) -> dict[str, object]:
-    return options.model_dump(exclude={"max_results"})
+    return options.model_dump(exclude={"max_results", "degrade"})
 
 
 def _mismatches(report: EvalReport, baseline: Baseline) -> list[str]:
@@ -39,7 +39,7 @@ def _mismatches(report: EvalReport, baseline: Baseline) -> list[str]:
         ("embedder_source_sha256", report.embedder_source_sha256, baseline.embedder_source_sha256),
         ("tier", report.tier, baseline.tier),
         ("deployment_mode", report.deployment_mode, baseline.deployment_mode),
-        ("request_options (excluding max_results)", _scope(report.request_options), _scope(baseline.request_options)),
+        ("request_options (excluding max_results and degrade)", _scope(report.request_options), _scope(baseline.request_options)),
     )
     if report.golden_filter != baseline.golden_filter:
         problems.append(
