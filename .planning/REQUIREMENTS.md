@@ -10,7 +10,7 @@ All requirements are written so they can be checked. "Behind a switch" means an 
 ### Evaluation (EVAL)
 
 - [ ] **EVAL-01**: A Python sidecar service exists in `rag-sidecar/` (FastAPI, Python 3.12, `pydantic>=2.14.4`), with health and readiness endpoints, a Dockerfile, and shared-secret auth that uses a constant-time compare and fails closed when the secret is unset
-- [ ] **EVAL-02**: All structured contracts (sidecar requests/responses, golden-set items, eval results, LLM structured outputs) are defined once as Pydantic v2 models; the TypeScript side uses Zod schemas generated from their JSON Schema, and CI fails when the generated Zod schemas are out of date
+- [x] **EVAL-02**: All structured contracts (sidecar requests/responses, golden-set items, eval results, LLM structured outputs) are defined once as Pydantic v2 models; the TypeScript side uses Zod schemas generated from their JSON Schema, and CI fails when the generated Zod schemas are out of date
 - [x] **EVAL-03**: Golden-set items carry span-based gold evidence (document, section, quoted text), language, category (multi-turn, compound, exact term, table, scanned, no-answer) and review status — never chunk IDs
 - [x] **EVAL-04**: A synthetic fixture corpus and fixture golden set covering Chinese, English and Italian are committed, so CI can run without customer data
 - [ ] **EVAL-05**: Tooling drafts a 50–200 item golden set from a real knowledge-base workspace (Claude-drafted plus Ragas-generated items) for the user to review; real-document items are stored outside git (gitignored path or a dedicated Supabase eval workspace), with a frozen dev/test split; Ragas generation spreads items across query styles (poor grammar, keyword-only, misspelled) and personas, and generated items are tagged `ragas_generated` and treated as coverage tests, not as representative of real users
@@ -21,7 +21,7 @@ All requirements are written so they can be checked. "Behind a switch" means an 
 - [ ] **EVAL-10**: CI (new `.github/workflows`) runs a PR smoke tier (deterministic metrics on the fixture corpus, schema parity, config check, type-check) and a nightly full tier (judge metrics); a PR fails when a deterministic metric drops beyond the baseline noise band
 - [x] **EVAL-11**: `npm run test-rag` runs the eval smoke tier (the missing `scripts/test-rag-system.js` reference is fixed)
 - [x] **EVAL-12**: Characterization tests lock today's behavior: strict mode returns "information not available" with no context, webSearch + strict uses Exa results, `source_images` stream and persist, `{{context}}` substitution in `RAG_SYSTEM_PROMPT`
-- [ ] **EVAL-13**: A config manifest lists every RAG env var once, and a `check-config` script (run in CI) fails when any of the five config locations is missing an entry
+- [x] **EVAL-13**: A config manifest lists every RAG env var once, and a `check-config` script (run in CI) fails when any of the five config locations is missing an entry
 
 ### Pipeline & Tenancy (PIPE)
 
@@ -185,7 +185,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | EVAL-01 | Phase 1 | Pending |
-| EVAL-02 | Phase 1 | Pending |
+| EVAL-02 | Phase 1 | Complete |
 | EVAL-03 | Phase 1 | Complete |
 | EVAL-04 | Phase 1 | Complete |
 | EVAL-05 | Phase 1 | Pending |
@@ -196,7 +196,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | EVAL-10 | Phase 1 | Pending |
 | EVAL-11 | Phase 1 | Complete |
 | EVAL-12 | Phase 1 | Complete |
-| EVAL-13 | Phase 1 | Pending |
+| EVAL-13 | Phase 1 | Complete |
 | PIPE-01 | Phase 2 | Pending |
 | PIPE-02 | Phase 2 | Pending |
 | PIPE-03 | Phase 2 | Pending |

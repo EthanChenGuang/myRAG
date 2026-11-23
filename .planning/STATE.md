@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 milestone: v5.0
 current_phase: 01
 current_phase_name: Evaluation Harness & Baseline
-status: executing
-stopped_at: Completed 01-21-PLAN.md
-last_updated: "2026-11-23T11:13:10.815Z"
+status: verifying
+stopped_at: Completed 01-22-PLAN.md
+last_updated: "2026-11-23T11:17:48.775Z"
 last_activity: 2026-11-23
 last_activity_desc: Phase 01 execution started
-state_head: 28c75f9f0619c444e6aef73daa729cf4cd65aa9c
+state_head: f9dcb8a08fcb9a34e9cbd1d529d442f3cab3d093
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 22
-  completed_plans: 21
+  completed_plans: 22
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-22)
 
 Phase: 01 (Evaluation Harness & Baseline) — EXECUTING
 Plan: 22 of 22
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-11-23 — Phase 01 execution started
 
 Progress: [░░░░░░░░░░] 0%
@@ -77,6 +77,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P19 | 25min | 2 tasks | 13 files |
 | Phase 01 P20 | 20min | 2 tasks | 9 files |
 | Phase 01 P21 | 6min | 2 tasks | 6 files |
+| Phase 01 P22 | 12min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -116,6 +117,8 @@ Recent decisions affecting current work:
 - [Phase 01]: 01-20: allow-spread relaxes only metric-value check; run_config_hash must always match across baseline runs
 - [Phase 01]: 01-20: gate data mismatch (exit 2) covers golden, corpus and embedder identity only; live baselines must live under eval/golden/private
 - [Phase 01]: 01-21: null and default cases live as named variants in samples.json so Pydantic and Zod validate the same Python-built values
+- [Phase 01]: 01-22: gh could not resolve action releases; pinned checkout@v4, setup-node@v4, setup-uv@v5, upload-artifact@v4 (confirm on first GitHub run)
+- [Phase 01]: 01-22: every CI job running eval pytest or the harness syncs eval with --locked --all-extras, enforced by scripts/ci/check-workflows.py
 
 ### Pending Todos
 
@@ -142,6 +145,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-23T11:13:10.750Z
-Stopped at: Completed 01-21-PLAN.md
+Last session: 2026-11-23T11:17:48.714Z
+Stopped at: Completed 01-22-PLAN.md
 Resume file: None
