@@ -32,6 +32,12 @@ class DraftedEntry(BaseModel):
 
 
 @dataclass
+class DraftOutcome:
+    entries: list[DraftedEntry] = field(default_factory=list)
+    rejected: list[str] = field(default_factory=list)
+
+
+@dataclass
 class WriteResult:
     written: list[GoldenItem] = field(default_factory=list)
     duplicates: int = 0
