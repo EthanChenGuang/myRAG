@@ -29,6 +29,7 @@ async function main(): Promise<number> {
       'base-url': { type: 'string' },
       'no-gate': { type: 'boolean', default: false },
       baseline: { type: 'string' },
+      'include-drafts': { type: 'boolean', default: false },
     },
     strict: true,
   });
@@ -64,9 +65,10 @@ async function main(): Promise<number> {
     requestOptions: maxResults === undefined ? {} : { max_results: maxResults },
     tier: 'smoke',
     baseUrl,
+    includeDrafts: values['include-drafts'],
   });
 
-  console.log(`[Eval Harness] wrote ${result.itemCount} trace(s) to ${result.tracesPath}`);
+  console.log(`[Eval Harness] wrote ${result.itemCount} trace(s) to ${result.tracesPath} (${result.skippedCount} golden item(s) not approved, skipped)`);
 
   const scoreCode = runPython('rag_eval.runner', [
     'score',

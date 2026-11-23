@@ -85,6 +85,7 @@ def _manifest(golden_hash: str = "g" * 64) -> RunManifest:
             "corpus_sha256": "c" * 64,
             "golden_path": "eval/fixtures/golden.jsonl",
             "golden_sha256": golden_hash,
+            "golden_filter": {"review_statuses": ["approved"], "gate_split": "dev"},
             "sql_sha256": {},
             "request_options": {"max_results": 10},
             "effective_config_hash": "h" * 64,
@@ -258,3 +259,28 @@ def test_help_lists_the_score_subcommand(capsys: pytest.CaptureFixture[str]):
         main(["--help"])
     assert exc.value.code == 0
     assert "score" in capsys.readouterr().out
+
+
+def test_score_cli_ignores_draft_and_rejected_items_without_traces(tmp_path: Path):
+    golden, traces = _four_items()
+    extra = [
+        _item("en-general-002", "en", answerable=True).model_copy(update={"review_status": "draft"}),
+        _item("en-general-003", "en", answerable=True).model_copy(update={"review_status": "rejected"}),
+    ]
+    traces_path, golden_path, manifest_path, out = _write_inputs(tmp_path, traces, [*golden, *extra])
+    assert main(_score_args(traces_path, golden_path, manifest_path, out)) == 0
+    report = EvalReport.model_validate_json((out / "report.json").read_text(encoding="utf-8"))
+    assert sorted(item.item_id for item in report.items) == sorted(item.id for item in golden)
+    assert report.golden_filter.review_statuses == ["approved"]
+
+
+def test_held_out_test_split_is_reported_but_not_in_gated_slices():
+    golden, traces = _four_items()
+    golden[0] = golden[0].model_copy(update={"split": "test"})
+    report = build_report(_manifest(), score_items(traces, golden), golden)
+    assert "zh" not in report.by_language
+    assert report.overall.recall_at_5.n == 2
+    assert report.by_split["test"].recall_at_5.n == 1
+    assert report.by_split["test"].recall_at_5.value == 1.0
+    assert report.by_split["dev"].recall_at_5.n == 2
+    assert {item.split for item in report.items} == {"dev", "test"}

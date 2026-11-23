@@ -20,7 +20,11 @@ ZH_QUIRK_NOTE = (
     "for Chinese queries, so every retrieved chunk passes Filter 1 and zh retrieval is not narrowed by it; "
     "zh slices can look better than en and it slices for that reason."
 )
-GATING_NOTE = "Categories are report-only; only overall and per-language slices gate (D-20)."
+GATING_NOTE = (
+    "Overall, language and category tables cover the dev split only. Categories are report-only; "
+    "only overall and per-language slices gate (D-20). The held-out test split is reported under By split "
+    "and never gates (D-14)."
+)
 
 _METRIC_COLUMNS = (
     ("Recall@5", "recall_at_5"),
@@ -51,6 +55,7 @@ def build_report(manifest: RunManifest, results: list[ItemResult], golden: list[
         run_config_hash=manifest.run_config_hash,
         corpus_sha256=manifest.corpus_sha256,
         golden_sha256=manifest.golden_sha256,
+        golden_filter=manifest.golden_filter,
         embedder_id=embedder.id if embedder else None,
         embedder_version=_embedder_version(embedder.version) if embedder else None,
         deployment_mode=manifest.deployment_mode,
@@ -58,7 +63,7 @@ def build_report(manifest: RunManifest, results: list[ItemResult], golden: list[
         k_values=list(K_VALUES),
         items=list(results),
         notes=notes,
-        **aggregate(results, tuple(K_VALUES)),
+        **aggregate(results, tuple(K_VALUES), gate_split=manifest.golden_filter.gate_split),
     )
 
 
@@ -86,6 +91,7 @@ def _render_markdown(report: EvalReport) -> str:
         f"- Items: {len(report.items)}",
         f"- Run config hash: {report.run_config_hash}",
         f"- Golden sha256: {report.golden_sha256}",
+        f"- Scored review statuses: {', '.join(report.golden_filter.review_statuses)}; gated split: {report.golden_filter.gate_split}",
         f"- Corpus sha256: {report.corpus_sha256 or 'n/a'}",
         f"- Embedder: {report.embedder_id or 'n/a'} (version {report.embedder_version if report.embedder_version is not None else 'n/a'})",
         "",
@@ -97,6 +103,10 @@ def _render_markdown(report: EvalReport) -> str:
         "## Overall",
         "",
         *_table("Slice", {"overall": report.overall}),
+        "",
+        "## By split",
+        "",
+        *_table("Split", report.by_split),
         "",
         "## By language",
         "",

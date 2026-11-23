@@ -23,6 +23,7 @@ from rag_sidecar.contracts.report import (
 )
 from rag_sidecar.contracts.eval_run import (
     ConversationTurn,
+    GoldenFilter,
     RagRunOptions,
     RagRunRequest,
     RagTrace,
@@ -61,6 +62,7 @@ __all__ = [
     "GoldenSplitManifest",
     "GoldSpan",
     "ConversationTurn",
+    "GoldenFilter",
     "RagRunOptions",
     "RagRunRequest",
     "RagTrace",

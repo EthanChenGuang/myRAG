@@ -199,3 +199,23 @@ describe('concurrency and HTTP transport on one prepared eval', () => {
     expect(httpKeptIds).toEqual(inProcessKeptIds);
   });
 });
+
+describe('golden selection', () => {
+  test('only approved items are run by default, drafts on request, rejected never', async () => {
+    const { goldenFilterFor, selectGolden } = await import('../eval/harness/run-eval.mts');
+    const base = JSON.parse(
+      fs
+        .readFileSync(FULL_GOLDEN_PATH, 'utf8')
+        .split('\n')
+        .find((line) => line.trim() !== '') as string,
+    );
+    const items = [
+      { ...base, id: 'en-a-001', review_status: 'approved' },
+      { ...base, id: 'en-b-002', review_status: 'draft' },
+      { ...base, id: 'en-c-003', review_status: 'rejected' },
+    ];
+    expect(goldenFilterFor(false)).toEqual({ review_statuses: ['approved'], gate_split: 'dev' });
+    expect(selectGolden(items, goldenFilterFor(false)).map((item) => item.id)).toEqual(['en-a-001']);
+    expect(selectGolden(items, goldenFilterFor(true)).map((item) => item.id)).toEqual(['en-a-001', 'en-b-002']);
+  });
+});

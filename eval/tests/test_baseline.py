@@ -25,6 +25,7 @@ def _report(run_id: str = "run-a", config_hash: str = "r" * 64, **overall: float
             "run_config_hash": config_hash,
             "corpus_sha256": "c" * 64,
             "golden_sha256": "g" * 64,
+            "golden_filter": {"review_statuses": ["approved"], "gate_split": "dev"},
             "embedder_id": "fixture-embedder",
             "embedder_version": 3,
             "deployment_mode": "single-tenant",
@@ -34,6 +35,7 @@ def _report(run_id: str = "run-a", config_hash: str = "r" * 64, **overall: float
             "by_language": {"en": _slice(0.4), "zh": _slice(0.7)},
             "by_category": {"general": _slice(0.5)},
             "by_language_category": {},
+            "by_split": {},
             "items": [],
         }
     )

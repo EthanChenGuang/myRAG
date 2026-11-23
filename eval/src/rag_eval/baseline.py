@@ -64,6 +64,7 @@ def record_baseline(
 
     _require_same("run_config_hash", [report.run_config_hash for report in reports])
     _require_same("golden_sha256", [report.golden_sha256 for report in reports])
+    _require_same("golden_filter", [report.golden_filter for report in reports])
     _require_same("corpus_sha256", [report.corpus_sha256 for report in reports])
     _require_same("embedder_id", [report.embedder_id for report in reports])
     _require_same("embedder_version", [report.embedder_version for report in reports])
@@ -86,6 +87,7 @@ def record_baseline(
         spread_kind="stdev_ddof1",
         corpus_sha256=first.corpus_sha256,
         golden_sha256=first.golden_sha256,
+        golden_filter=first.golden_filter,
         embedder_id=first.embedder_id,
         embedder_version=first.embedder_version,
         run_config_hash=first.run_config_hash,
@@ -135,6 +137,8 @@ def _record(args: argparse.Namespace) -> int:
         for flag, value in (("--golden", args.golden), ("--corpus", args.corpus), ("--base-url", args.base_url)):
             if value:
                 command.extend([flag, str(value)])
+        if args.include_drafts:
+            command.append("--include-drafts")
         print(f"[Eval Baseline] run {index}/{args.runs}: {' '.join(command)}")
         result = subprocess.run(command, cwd=REPO_ROOT, check=False, env=os.environ.copy())
         if result.returncode != 0:
@@ -175,6 +179,7 @@ def main(argv: list[str] | None = None) -> int:
     record.add_argument("--corpus")
     record.add_argument("--base-url")
     record.add_argument("--allow-spread", action="store_true")
+    record.add_argument("--include-drafts", action="store_true", help="also score review_status=draft items")
     record.set_defaults(handler=_record)
     args = parser.parse_args(argv)
     return args.handler(args)

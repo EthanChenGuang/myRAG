@@ -2,6 +2,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from rag_sidecar.contracts.eval_run import GoldenFilter
+
 
 def _default_metric_directions() -> dict[str, Literal["higher", "lower"]]:
     return {
@@ -36,6 +38,7 @@ class Baseline(_Contract):
     spread_kind: Literal["stdev_ddof1"]
     corpus_sha256: str | None = None
     golden_sha256: str
+    golden_filter: GoldenFilter
     embedder_id: str | None = None
     embedder_version: int | None = None
     run_config_hash: str

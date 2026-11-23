@@ -23,6 +23,7 @@ async function main(): Promise<number> {
       out: { type: 'string', default: 'eval/out/nightly' },
       'generator-model': { type: 'string' },
       'deployment-mode': { type: 'string', default: 'single-tenant' },
+      'include-drafts': { type: 'boolean', default: false },
     },
     strict: true,
   });
@@ -47,6 +48,7 @@ async function main(): Promise<number> {
       tier: 'nightly',
       includeAnswer: true,
       generator: generator as EvalGenerator,
+      includeDrafts: values['include-drafts'],
     });
   } catch (error) {
     if (error instanceof LiveGenerationKeyMissingError) {

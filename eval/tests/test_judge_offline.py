@@ -288,6 +288,7 @@ def _manifest() -> RunManifest:
             "corpus_sha256": None,
             "golden_path": "golden.jsonl",
             "golden_sha256": "g" * 64,
+            "golden_filter": {"review_statuses": ["approved"], "gate_split": "dev"},
             "sql_sha256": {},
             "request_options": {},
             "effective_config_hash": "h" * 64,

@@ -1,5 +1,33 @@
 {
   "$defs": {
+    "GoldenFilter": {
+      "additionalProperties": false,
+      "properties": {
+        "gate_split": {
+          "const": "dev",
+          "title": "Gate Split",
+          "type": "string"
+        },
+        "review_statuses": {
+          "items": {
+            "enum": [
+              "approved",
+              "draft"
+            ],
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Review Statuses",
+          "type": "array"
+        }
+      },
+      "required": [
+        "review_statuses",
+        "gate_split"
+      ],
+      "title": "GoldenFilter",
+      "type": "object"
+    },
     "RagRunOptions": {
       "additionalProperties": false,
       "properties": {
@@ -136,6 +164,9 @@
       "default": null,
       "title": "Git Sha"
     },
+    "golden_filter": {
+      "$ref": "#/$defs/GoldenFilter"
+    },
     "golden_path": {
       "title": "Golden Path",
       "type": "string"
@@ -190,6 +221,7 @@
     "deployment_mode",
     "golden_path",
     "golden_sha256",
+    "golden_filter",
     "sql_sha256",
     "request_options",
     "effective_config_hash",

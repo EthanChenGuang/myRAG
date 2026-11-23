@@ -25,6 +25,7 @@ def _report(overall=None, languages=None, categories=None, **fields) -> EvalRepo
         "run_config_hash": "r" * 64,
         "corpus_sha256": "c" * 64,
         "golden_sha256": "g" * 64,
+        "golden_filter": {"review_statuses": ["approved"], "gate_split": "dev"},
         "embedder_id": "fixture-embedder",
         "embedder_version": 3,
         "deployment_mode": "single-tenant",
@@ -34,6 +35,7 @@ def _report(overall=None, languages=None, categories=None, **fields) -> EvalRepo
         "by_language": languages if languages is not None else {"en": _slice_values(), "zh": _slice_values()},
         "by_category": categories if categories is not None else {"general": _slice_values()},
         "by_language_category": {},
+        "by_split": {},
         "items": [],
     }
     data.update(fields)
@@ -55,6 +57,7 @@ def _baseline(overall_spread: float = 0.0, **fields) -> Baseline:
         "spread_kind": "stdev_ddof1",
         "corpus_sha256": "c" * 64,
         "golden_sha256": "g" * 64,
+        "golden_filter": {"review_statuses": ["approved"], "gate_split": "dev"},
         "embedder_id": "fixture-embedder",
         "embedder_version": 3,
         "run_config_hash": "r" * 64,
@@ -210,3 +213,9 @@ def test_internal_error_exits_70_not_regression(tmp_path, monkeypatch, capsys):
     assert code != EXIT_REGRESSION
     assert "INTERNAL ERROR" in capsys.readouterr().err
     assert not (tmp_path / "out" / "gate.json").exists()
+
+
+def test_golden_filter_difference_is_a_mismatch(tmp_path):
+    report = _report(golden_filter={"review_statuses": ["approved", "draft"], "gate_split": "dev"})
+    result = evaluate_gate(report, _baseline(), _noise())
+    assert result.mismatches and "golden_filter differs" in result.mismatches[0]

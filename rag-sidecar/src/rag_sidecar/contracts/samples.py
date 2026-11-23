@@ -9,6 +9,7 @@ from rag_sidecar.contracts import (
     DraftedItemProposal,
     EvalReport,
     GateOffender,
+    GoldenFilter,
     GateResult,
     GoldenItem,
     GoldenSplitManifest,
@@ -42,6 +43,10 @@ _HASH_A = "a" * 64
 _HASH_B = "b" * 64
 _HASH_C = "c" * 64
 _METRICS = ["recall_at_5", "recall_at_10", "mrr", "correct_refusal_rate", "false_refusal_rate"]
+
+
+def _golden_filter() -> GoldenFilter:
+    return GoldenFilter(review_statuses=["approved"], gate_split="dev")
 
 
 def _metric() -> MetricValue:
@@ -173,6 +178,7 @@ def _eval_report() -> EvalReport:
         run_config_hash=_HASH_A,
         corpus_sha256=_HASH_B,
         golden_sha256=_HASH_C,
+        golden_filter=_golden_filter(),
         embedder_id="fixture-embedder",
         embedder_version=1,
         deployment_mode="single-tenant",
@@ -182,11 +188,13 @@ def _eval_report() -> EvalReport:
         by_language={"en": _slice_metrics()},
         by_category={"general": _slice_metrics()},
         by_language_category={"en:general": _slice_metrics()},
+        by_split={"dev": _slice_metrics()},
         items=[
             ItemResult(
                 item_id="en-general-001",
                 language="en",
                 category="general",
+                split="dev",
                 answerable=True,
                 refused=False,
                 span_count=1,
@@ -214,6 +222,7 @@ def _baseline() -> Baseline:
         spread_kind="stdev_ddof1",
         corpus_sha256=_HASH_B,
         golden_sha256=_HASH_C,
+        golden_filter=_golden_filter(),
         embedder_id="fixture-embedder",
         embedder_version=1,
         run_config_hash=_HASH_A,
@@ -266,6 +275,7 @@ def _run_manifest() -> RunManifest:
         corpus_sha256=_HASH_B,
         golden_path="eval/fixtures/golden.jsonl",
         golden_sha256=_HASH_C,
+        golden_filter=_golden_filter(),
         sql_sha256={"single-tenant-setup.sql": _HASH_A},
         request_options=RagRunOptions(max_results=10),
         effective_config_hash=_HASH_B,

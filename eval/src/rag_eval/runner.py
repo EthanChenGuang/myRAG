@@ -2,7 +2,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from rag_eval.golden_io import load_golden
+from rag_eval.golden_io import load_golden, select_golden
 from rag_eval.metrics import score_items
 from rag_eval.paths import resolve_cli_path
 from rag_eval.report import build_report, write_report
@@ -42,6 +42,7 @@ def _score(args: argparse.Namespace) -> int:
     except (OSError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
+    golden = select_golden(golden, manifest.golden_filter)
 
     problems = _cross_check([item.id for item in golden], [trace.item_id for trace in traces])
     if problems:
@@ -59,6 +60,7 @@ def _score(args: argparse.Namespace) -> int:
         + " ".join(
             [
                 f"items={len(results)}",
+                f"gated_{manifest.golden_filter.gate_split}={sum(1 for r in results if r.split == manifest.golden_filter.gate_split)}",
                 _rate("recall@5", overall.recall_at_5),
                 _rate("recall@10", overall.recall_at_10),
                 _rate("mrr", overall.mrr),

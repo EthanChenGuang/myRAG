@@ -83,6 +83,34 @@
       ],
       "title": "BaselineRun",
       "type": "object"
+    },
+    "GoldenFilter": {
+      "additionalProperties": false,
+      "properties": {
+        "gate_split": {
+          "const": "dev",
+          "title": "Gate Split",
+          "type": "string"
+        },
+        "review_statuses": {
+          "items": {
+            "enum": [
+              "approved",
+              "draft"
+            ],
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Review Statuses",
+          "type": "array"
+        }
+      },
+      "required": [
+        "review_statuses",
+        "gate_split"
+      ],
+      "title": "GoldenFilter",
+      "type": "object"
     }
   },
   "additionalProperties": false,
@@ -122,6 +150,9 @@
       ],
       "default": null,
       "title": "Embedder Version"
+    },
+    "golden_filter": {
+      "$ref": "#/$defs/GoldenFilter"
     },
     "golden_sha256": {
       "title": "Golden Sha256",
@@ -164,6 +195,7 @@
   "required": [
     "spread_kind",
     "golden_sha256",
+    "golden_filter",
     "run_config_hash",
     "runs",
     "slices"

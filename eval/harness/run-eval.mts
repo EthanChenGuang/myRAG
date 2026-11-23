@@ -55,12 +55,14 @@ export interface RunEvalOptions {
   baseUrl?: string;
   includeAnswer?: boolean;
   generator?: EvalGenerator;
+  includeDrafts?: boolean;
 }
 
 export interface RunEvalResult {
   tracesPath: string;
   logPath: string;
   itemCount: number;
+  skippedCount: number;
   tier: EvalTier;
   deploymentMode: DeploymentMode;
   edgeErrors: number;
@@ -173,6 +175,20 @@ function readGolden(goldenPath: string): GoldenItem[] {
   });
 }
 
+export interface GoldenFilter {
+  review_statuses: Array<'approved' | 'draft'>;
+  gate_split: 'dev';
+}
+
+export function goldenFilterFor(includeDrafts: boolean): GoldenFilter {
+  return { review_statuses: includeDrafts ? ['approved', 'draft'] : ['approved'], gate_split: 'dev' };
+}
+
+export function selectGolden(items: GoldenItem[], filter: GoldenFilter): GoldenItem[] {
+  const statuses = new Set<string>(filter.review_statuses);
+  return items.filter((item) => statuses.has(item.review_status));
+}
+
 function sha256File(filePath: string): string {
   return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
 }
@@ -199,7 +215,7 @@ function redirectConsole(logPath: string): () => void {
 }
 
 export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
-  const { goldenPath, corpusDir, outDir, deploymentMode, tier = 'smoke', baseUrl, includeAnswer = false, generator } = options;
+  const { goldenPath, corpusDir, outDir, deploymentMode, tier = 'smoke', baseUrl, includeAnswer = false, generator, includeDrafts = false } = options;
   const requestOptions: EvalRequestOptions = { ...(options.requestOptions ?? {}) };
 
   let liveApiKey = '';
@@ -218,7 +234,12 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     if (generator === 'stub' && !requestOptions.generator_model) requestOptions.generator_model = STUB_GENERATOR_MODEL;
   }
 
-  const items = readGolden(goldenPath);
+  const goldenFilter = goldenFilterFor(includeDrafts);
+  const allItems = readGolden(goldenPath);
+  const items = selectGolden(allItems, goldenFilter);
+  if (items.length === 0) {
+    throw new Error(`[Eval Harness] no golden items with review_status in [${goldenFilter.review_statuses.join(', ')}] in ${goldenPath}`);
+  }
   fs.mkdirSync(outDir, { recursive: true });
   const tracesPath = path.join(outDir, 'traces.jsonl');
   const logPath = path.join(outDir, 'harness.log');
@@ -340,6 +361,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
         embedder,
         corpus_sha256: manifestInputs.corpusSha256,
         golden_sha256: goldenSha256,
+        golden_filter: goldenFilter,
         sql_sha256: manifestInputs.sqlSha256,
         request_options: normalizedOptions,
         deployment_mode: deploymentMode,
@@ -359,6 +381,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     corpus_sha256: manifestInputs.corpusSha256,
     golden_path: path.relative(process.cwd(), goldenPath) || goldenPath,
     golden_sha256: goldenSha256,
+    golden_filter: goldenFilter,
     sql_sha256: manifestInputs.sqlSha256,
     request_options: normalizedOptions,
     effective_config_hash: effectiveConfigHash,
@@ -369,5 +392,5 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
   const runPath = path.join(outDir, 'run.json');
   fs.writeFileSync(runPath, `${JSON.stringify(manifest, null, 2)}\n`);
 
-  return { tracesPath, logPath, itemCount: items.length, tier, deploymentMode, edgeErrors, runPath, manifest };
+  return { tracesPath, logPath, itemCount: items.length, skippedCount: allItems.length - items.length, tier, deploymentMode, edgeErrors, runPath, manifest };
 }

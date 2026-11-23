@@ -4,6 +4,12 @@
       "corpus_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       "embedder_id": "fixture-embedder",
       "embedder_version": 1,
+      "golden_filter": {
+        "gate_split": "dev",
+        "review_statuses": [
+          "approved"
+        ]
+      },
       "golden_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
       "run_config_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "runs": [
@@ -179,10 +185,40 @@
           }
         }
       },
+      "by_split": {
+        "dev": {
+          "correct_refusal_rate": {
+            "n": 10,
+            "value": 0.5
+          },
+          "false_refusal_rate": {
+            "n": 10,
+            "value": 0.5
+          },
+          "mrr": {
+            "n": 10,
+            "value": 0.5
+          },
+          "recall_at_10": {
+            "n": 10,
+            "value": 0.5
+          },
+          "recall_at_5": {
+            "n": 10,
+            "value": 0.5
+          }
+        }
+      },
       "corpus_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       "deployment_mode": "single-tenant",
       "embedder_id": "fixture-embedder",
       "embedder_version": 1,
+      "golden_filter": {
+        "gate_split": "dev",
+        "review_statuses": [
+          "approved"
+        ]
+      },
       "golden_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
       "items": [
         {
@@ -194,7 +230,8 @@
           "refused": false,
           "span_count": 1,
           "spans_hit_at_10": 1,
-          "spans_hit_at_5": 1
+          "spans_hit_at_5": 1,
+          "split": "dev"
         }
       ],
       "k_values": [
@@ -487,6 +524,12 @@
         "version": "1"
       },
       "git_sha": null,
+      "golden_filter": {
+        "gate_split": "dev",
+        "review_statuses": [
+          "approved"
+        ]
+      },
       "golden_path": "eval/fixtures/golden.jsonl",
       "golden_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
       "item_count": 1,

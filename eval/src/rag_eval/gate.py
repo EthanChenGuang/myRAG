@@ -31,6 +31,10 @@ def _mismatches(report: EvalReport, baseline: Baseline) -> list[str]:
         ("embedder_id", report.embedder_id, baseline.embedder_id),
         ("embedder_version", report.embedder_version, baseline.embedder_version),
     )
+    if report.golden_filter != baseline.golden_filter:
+        problems.append(
+            f"golden_filter differs: report {report.golden_filter.model_dump()!r}, baseline {baseline.golden_filter.model_dump()!r}"
+        )
     for name, observed, recorded in checks:
         if observed != recorded:
             problems.append(f"{name} differs: report {observed!r}, baseline {recorded!r}")
