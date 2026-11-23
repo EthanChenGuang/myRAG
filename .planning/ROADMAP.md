@@ -92,7 +92,56 @@ Plans:
   6. A production request produces one Langfuse trace with a span per stage (latency, candidate counts), sent asynchronously without delaying the answer, with a `[RAG Trace]` log line as the fallback when Langfuse is off or unreachable (tested with a fake Langfuse endpoint), and eval reports show p50/p95 latency per stage against the documented text-chat and voice budgets.
   7. Reports split every metric by provenance and the new `colloquial`, `ambiguous` and `typo` categories; a sampled, PII-masked share of production traces lands in a review queue, and online judge scores appear on the Langfuse traces (tested with a fake Langfuse endpoint and a stub judge).
 **Live verification**: Check tenant resolution against a real Supabase project with personal and organization memberships in both single-tenant and multi-tenant modes; run a voice session with the running `voice-agent/` using the signed token; repeat the legacy-parity check on the real golden set.
-**Plans**: TBD
+**Plans**: 36 plans
+
+Plans:
+**Wave 1**
+- [ ] 02-01-PLAN.md — Type-check config: exclude sibling packages, fix TS5097, per-file tsc ratchet in CI (wave 1)
+- [ ] 02-03-PLAN.md — New env vars in the five config places, LANGFUSE_* discovery in check-config (wave 1)
+- [ ] 02-05-PLAN.md — Filtering Supabase fake, fake-edge operators, two-tenant PGlite fixture (wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 02-02-PLAN.md — Node.js 22 enforced: engines ^22.12.0, .nvmrc, voice-agent image, CI check, docs (wave 2)
+- [ ] 02-04-PLAN.md — Per-item baseline rows and rag_eval.paired; baseline re-recorded from pre-pipeline code (wave 2)
+- [ ] 02-06-PLAN.md — Embed, voice and chat characterization snapshots; frozen chat assembly oracle (wave 2)
+- [ ] 02-30-PLAN.md — Type fixes: MCP approve route and src/lib/mcp (wave 2)
+- [ ] 02-31-PLAN.md — Type fixes: WhatsApp clients, routes and components (wave 2)
+- [ ] 02-32-PLAN.md — Type fixes: embed window on the current useChat API, page/hook fixes (wave 2)
+- [ ] 02-35-PLAN.md — Type fixes: remaining lib/API files and async params in dynamic routes (wave 2)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 02-07-PLAN.md — Tracer: branded TenantScope, re-homed legacy search, runRetrieval equals enhancedRetrieveChunks (wave 3)
+- [ ] 02-33-PLAN.md — Type fixes: providers, settings and UI components (wave 3)
+- [ ] 02-34-PLAN.md — Type fixes: system-prompt manager, semantic chunker, organization handler, chat utils (wave 3)
+
+**Wave 4–7** *(sequential)*
+- [ ] 02-08-PLAN.md — Stage runner, switches/timeouts, status semantics, abort, trace collector and [RAG Trace] (wave 4)
+- [ ] 02-09-PLAN.md — Shared assembleContext, byte-identical to chat, fixed query count (wave 5)
+- [ ] 02-10-PLAN.md — Tenant resolvers: chat membership, embed config, signed voice token (wave 6)
+- [ ] 02-11-PLAN.md — Eval route on the pipeline; parity with all paired differences zero (wave 7)
+- [ ] 02-15-PLAN.md — Authenticated LiveKit token with server identity and voice RAG token (wave 7)
+
+**Wave 8–12** *(sequential)*
+- [ ] 02-12-PLAN.md — Chat on the pipeline: verified scope, 403 before stream, status mapping (wave 8)
+- [ ] 02-22-PLAN.md — Langfuse OTel exporter, sampling, masking, fake endpoint (wave 8)
+- [ ] 02-13-PLAN.md — Chat references and overview fallback scoped; retired imports removed (wave 9)
+- [ ] 02-14-PLAN.md — Embed on the pipeline with configured tenant; widget error rendering (wave 10)
+- [ ] 02-16-PLAN.md — Voice-rag and voice-chat on the token scope; no global fallback (wave 11)
+- [ ] 02-23-PLAN.md — Trace id in chat message metadata; masked review-candidate export (wave 11)
+- [ ] 02-17-PLAN.md — Voice agent forwards the token, single active user, CI job, deploy docs (wave 12)
+- [ ] 02-18-PLAN.md — Media routes on the pipeline with the caller's scope (wave 12)
+- [ ] 02-29-PLAN.md — Type fixes: chat route (wave 12)
+
+**Wave 13–21** *(sequential)*
+- [ ] 02-19-PLAN.md — Delete retired retrieval modules; ingestion embeddings via @/lib/rag (wave 13)
+- [ ] 02-20-PLAN.md — CI boundary check with self-test (wave 14)
+- [ ] 02-21-PLAN.md — Stronger negative control (degrade) and final parity proof (wave 15)
+- [ ] 02-24-PLAN.md — Latency budgets and per-stage p50/p95 in eval reports (wave 16)
+- [ ] 02-25-PLAN.md — EVAL-14 contracts: new categories, production provenance, provenance slices (wave 17)
+- [ ] 02-26-PLAN.md — EVAL-14 fixture items and baseline re-record (wave 18)
+- [ ] 02-27-PLAN.md — EVAL-15 review queue pull/promote (wave 19)
+- [ ] 02-28-PLAN.md — EVAL-15 online judge and nightly job (wave 20)
+- [ ] 02-36-PLAN.md — Zero tsc errors, plain tsc in CI, ignoreBuildErrors false (wave 21)
 
 ### Phase 3: Unified Ingestion & Embedding Profiles
 **Goal**: Every document enters the knowledge base through one path (typed, deduplicated, versioned and carrying the same metadata), and its chunks are embedded under a switchable embedding profile that can be rolled back
