@@ -40,7 +40,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. CI fails when a Pydantic model changes without its regenerated Zod schema, when an RAG env var is missing from any of the five config locations, or when a characterization test breaks; those tests pass on today's code for strict-mode "information not available", webSearch + strict using Exa results, `source_images` streaming and persistence, and `{{context}}` substitution.
   5. Pointed at a workspace, the drafting tool writes span-labelled golden items (document, section, quote, language, category, review status; never chunk IDs) to a gitignored location with a frozen dev/test split, and the nightly tier computes Faithfulness, Answer Relevance and Context Recall with a pinned judge from a different model family and telemetry disabled (verified with a stubbed judge and a fixture workspace).
 **Live verification**: Draft the 50–200 item golden set from a real knowledge-base workspace and have the user review every item; record the three-run baseline on that real set with the OpenAI embedding key and the judge key, then set per-metric improvement targets from it; run the first nightly judge tier with real keys.
-**Plans**: 13/22 plans executed
+**Plans**: 14/22 plans executed
 
 Plans:
 **Wave 1**
@@ -65,7 +65,7 @@ Plans:
 - [x] 01-13-PLAN.md — Golden/trace loaders, Python corpus reader and deterministic metrics (wave 4)
 
 **Wave 5** *(blocked on Wave 4 completion)*
-- [ ] 01-14-PLAN.md — Eval answer generation (include_answer) and nightly harness entry point (wave 5)
+- [x] 01-14-PLAN.md — Eval answer generation (include_answer) and nightly harness entry point (wave 5)
 - [ ] 01-15-PLAN.md — 72-item trilingual fixture golden set, frozen split and integrity tests (wave 5)
 - [ ] 01-16-PLAN.md — Report writer and score CLI (wave 5)
 - [ ] 01-17-PLAN.md — Characterization tests: strict refusal, webSearch + Exa, source_images, {{context}}, legacy post-filter sentinel (wave 5)
@@ -187,7 +187,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 5.1 → 6 → 7. 
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Evaluation Harness & Baseline | 13/22 | In Progress | - |
+| 1. Evaluation Harness & Baseline | 14/22 | In Progress | - |
 | 2. Unified Retrieval Pipeline & Tenant Scope | 0/TBD | Not started | - |
 | 3. Unified Ingestion & Embedding Profiles | 0/TBD | Not started | - |
 | 4. Hybrid Retrieval, Reranking & Calibrated Refusal | 0/TBD | Not started | - |

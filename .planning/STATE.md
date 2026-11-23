@@ -4,16 +4,16 @@ milestone: v5.0
 current_phase: 01
 current_phase_name: Evaluation Harness & Baseline
 status: executing
-stopped_at: Completed 01-13-PLAN.md
-last_updated: "2026-11-23T10:22:33.155Z"
+stopped_at: Completed 01-14-PLAN.md
+last_updated: "2026-11-23T10:29:33.946Z"
 last_activity: 2026-11-23
 last_activity_desc: Phase 01 execution started
-state_head: 144bcd297af6911c067fc1ae049ef317722657a7
+state_head: 1acbda58236008df802f5e9551fc9183d57060e3
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 22
-  completed_plans: 13
+  completed_plans: 14
 ---
 
 # Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-11-22)
 ## Current Position
 
 Phase: 01 (Evaluation Harness & Baseline) — EXECUTING
-Plan: 14 of 22
+Plan: 15 of 22
 Status: Ready to execute
 Last activity: 2026-11-23 — Phase 01 execution started
 
@@ -69,6 +69,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P11 | 15min | 2 tasks | 6 files |
 | Phase 01 P12 | 8min | 2 tasks | 9 files |
 | Phase 01 P13 | 14min | 2 tasks | 7 files |
+| Phase 01 P14 | 20 min | 2 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -97,6 +98,8 @@ Recent decisions affecting current work:
 - [Phase 01]: 01-11: check-config manifest seeded by measurement (64 vars, 4 managed, 44 legacy with gaps); knownGaps limited to the four tracked locations
 - [Phase 01]: 01-12: secret under 32 chars is treated as unset (503); probe exemption is exact-match /health and /ready only
 - [Phase 01]: 01-13: aggregate returns a dict keyed by EvalReport field names and only supports k_values (5, 10); a refused trace scores zero hits; score_items raises on missing or duplicate traces
+- [Phase 01]: 01-14: stub generator records generator_model stub/extractive-v1 so stub and live traces never share a config hash
+- [Phase 01]: 01-14: eval answer prompt replicates the chat route's env-configured branch and is tied to it by a source-reading sentinel test
 
 ### Pending Todos
 
@@ -123,6 +126,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-23T10:22:21.436Z
-Stopped at: Completed 01-13-PLAN.md
+Last session: 2026-11-23T10:29:33.888Z
+Stopped at: Completed 01-14-PLAN.md
 Resume file: None
