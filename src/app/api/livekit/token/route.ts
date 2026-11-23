@@ -2,10 +2,15 @@ import crypto from 'node:crypto';
 import { AccessToken, RoomServiceClient } from 'livekit-server-sdk';
 import { NextRequest, NextResponse } from 'next/server';
 import { env } from '@/lib/env';
-import { mintVoiceToken, resolveTenantScope } from '@/lib/rag';
+import { defaultVoiceTtlSeconds, mintVoiceToken, repairOwnerMembership, resolveTenantScope } from '@/lib/rag';
 
-const VOICE_ROOM = 'myrag-voice';
+const VOICE_ROOM_PREFIX = 'myrag-voice-';
 const USER_IDENTITY_PREFIX = 'user-';
+const MAX_ACTIVE_VOICE_ROOMS = 4;
+const JOIN_TOKEN_TTL_SECONDS = 600;
+const ROOM_EMPTY_TIMEOUT_SECONDS = 60;
+const ROOM_DEPARTURE_TIMEOUT_SECONDS = 20;
+const ROOM_MAX_PARTICIPANTS = 2;
 
 async function sessionUserId(): Promise<string | null> {
     try {
@@ -22,18 +27,8 @@ function roomServiceHost(url: string): string {
     return url.replace(/^wss:/i, 'https:').replace(/^ws:/i, 'http:');
 }
 
-async function anotherUserInRoom(): Promise<boolean> {
-    if (!env.LIVEKIT_URL) return false;
-    try {
-        const client = new RoomServiceClient(roomServiceHost(env.LIVEKIT_URL), env.LIVEKIT_API_KEY, env.LIVEKIT_API_SECRET);
-        const participants = await client.listParticipants(VOICE_ROOM);
-        return participants.some((p) => p.identity.startsWith(USER_IDENTITY_PREFIX));
-    } catch (error: unknown) {
-        console.warn('[LiveKit Token] participant listing failed, continuing', {
-            error: error instanceof Error ? error.message : 'unknown',
-        });
-        return false;
-    }
+function unavailable(error: string) {
+    return NextResponse.json({ error }, { status: 503 });
 }
 
 export async function GET(req: NextRequest) {
@@ -44,47 +39,75 @@ export async function GET(req: NextRequest) {
                 { status: 500 }
             );
         }
+        if (!env.LIVEKIT_URL) {
+            return NextResponse.json({ error: 'LiveKit URL is missing on server' }, { status: 500 });
+        }
 
         const { searchParams } = new URL(req.url);
+        const requestedOrganizationId = searchParams.get('organizationId');
         const userId = await sessionUserId();
+        const getUser = async () => (userId ? { id: userId } : null);
 
+        await repairOwnerMembership({ requestedOrganizationId, getUser });
         const resolved = await resolveTenantScope({
-            requestedOrganizationId: searchParams.get('organizationId'),
-            getUser: async () => (userId ? { id: userId } : null),
+            requestedOrganizationId,
+            getUser,
             signal: req.signal,
         });
         if (!resolved.ok) {
             return NextResponse.json({ error: resolved.reason }, { status: resolved.status });
         }
 
-        if (await anotherUserInRoom()) {
-            return NextResponse.json({ error: 'voice_busy' }, { status: 409 });
-        }
-
-        const suffix = crypto.randomUUID().slice(0, 8);
-        const identity = `${USER_IDENTITY_PREFIX}${userId ? userId.toLowerCase() : 'anon'}-${suffix}`;
-
-        let metadata: string | undefined;
+        let scopeToken: string | undefined;
         if (resolved.scope) {
             const minted = mintVoiceToken({
                 scope: resolved.scope,
                 secret: env.RAG_VOICE_TOKEN_SECRET,
-                ttlSeconds: parseInt(env.RAG_VOICE_TOKEN_TTL_SECONDS || '3600', 10),
+                ttlSeconds: defaultVoiceTtlSeconds(),
                 actorUserId: resolved.scope.kind === 'single' ? userId : null,
             });
-            if (minted.ok) {
-                metadata = JSON.stringify({ rag_scope_token: minted.token });
-            } else {
-                console.warn('[RAG Tenant] voice token not issued', { reason: minted.reason });
+            if (!minted.ok) {
+                console.error('[RAG Tenant] voice token not issued', { reason: minted.reason });
+                return unavailable('voice_unavailable');
             }
+            scopeToken = minted.token;
+        }
+
+        const suffix = crypto.randomUUID().slice(0, 8);
+        const identity = `${USER_IDENTITY_PREFIX}${userId ? userId.toLowerCase() : 'anon'}-${suffix}`;
+        const roomName = `${VOICE_ROOM_PREFIX}${crypto.randomBytes(16).toString('hex')}`;
+
+        const roomService = new RoomServiceClient(roomServiceHost(env.LIVEKIT_URL), env.LIVEKIT_API_KEY, env.LIVEKIT_API_SECRET);
+        try {
+            const rooms = await roomService.listRooms();
+            const active = rooms.filter((room) => room.name.startsWith(VOICE_ROOM_PREFIX)).length;
+            if (active >= MAX_ACTIVE_VOICE_ROOMS) {
+                return NextResponse.json({ error: 'voice_busy' }, { status: 409 });
+            }
+            await roomService.createRoom({
+                name: roomName,
+                emptyTimeout: ROOM_EMPTY_TIMEOUT_SECONDS,
+                departureTimeout: ROOM_DEPARTURE_TIMEOUT_SECONDS,
+                maxParticipants: ROOM_MAX_PARTICIPANTS,
+                metadata: JSON.stringify({
+                    v: 1,
+                    participant_identity: identity,
+                    ...(scopeToken ? { rag_scope_token: scopeToken } : {}),
+                }),
+            });
+        } catch (error: unknown) {
+            console.error('[LiveKit Token] voice room setup failed', {
+                error: error instanceof Error ? error.message : 'unknown',
+            });
+            return unavailable('voice_unavailable');
         }
 
         const at = new AccessToken(env.LIVEKIT_API_KEY, env.LIVEKIT_API_SECRET, {
             identity,
-            ...(metadata ? { metadata } : {}),
+            ttl: JOIN_TOKEN_TTL_SECONDS,
         });
 
-        at.addGrant({ roomJoin: true, room: VOICE_ROOM, canUpdateOwnMetadata: false });
+        at.addGrant({ roomJoin: true, room: roomName, canUpdateOwnMetadata: false });
 
         const token = await at.toJwt();
 

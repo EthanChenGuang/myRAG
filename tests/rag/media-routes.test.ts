@@ -19,8 +19,16 @@ const state = vi.hoisted(() => {
     imageInputs: [] as Array<{ prompt: string }>,
     videoInputs: [] as Array<{ prompt: string }>,
     rewriteMessages: [] as string[],
+    repair: null as null | ((userId: string, organizationId: string) => void),
   };
 });
+
+vi.mock('@/lib/auth/organization-handler', () => ({
+  verifyUserOrganizationAccess: async (userId: string, organizationId: string) => {
+    state.repair?.(userId, organizationId);
+    return { ok: true };
+  },
+}));
 
 vi.mock('@/lib/deployment-mode', () => ({
   getDeploymentMode: () => state.mode,
@@ -177,6 +185,7 @@ beforeEach(() => {
   state.imageInputs.length = 0;
   state.videoInputs.length = 0;
   state.rewriteMessages.length = 0;
+  state.repair = null;
   vi.spyOn(console, 'log').mockImplementation(() => undefined);
   vi.spyOn(console, 'warn').mockImplementation(() => undefined);
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
@@ -230,6 +239,19 @@ describe('generate-image', () => {
     await imagePost({ prompt: 'a poster of our plans', useContext: true, organizationId: ORG_O });
     expect(state.imageInputs[0].prompt).toContain('ORG-ONLY');
     expect(state.imageInputs[0].prompt).not.toContain('ALPHA-ONLY');
+    expect(fake.calls[0].args).toMatchObject({ p_org_id: ORG_O });
+  });
+
+  test('an organization owner without a membership row is repaired before the tenant check', async () => {
+    state.mode = 'multi-tenant';
+    state.user = { id: USER_A };
+    const members: Array<{ organization_id: string; user_id: string }> = [];
+    state.repair = (userId, organizationId) => {
+      if (organizationId === ORG_O) members.push({ organization_id: organizationId, user_id: userId });
+    };
+    const fake = install({ members });
+    const response = await imagePost({ prompt: 'a poster of our plans', useContext: true, organizationId: ORG_O });
+    expect(response.status).not.toBe(403);
     expect(fake.calls[0].args).toMatchObject({ p_org_id: ORG_O });
   });
 
@@ -292,6 +314,19 @@ describe('generate-video', () => {
     expect(state.rewriteMessages[0]).toContain('BRAVO-ONLY');
     expect(state.rewriteMessages[0]).not.toContain('ALPHA-ONLY');
     expect(fake.calls.map((call) => call.fn)).toEqual(['match_documents_by_workspace']);
+  });
+
+  test('an organization owner without a membership row is repaired before the tenant check', async () => {
+    state.mode = 'multi-tenant';
+    state.user = { id: USER_A };
+    const members: Array<{ organization_id: string; user_id: string }> = [];
+    state.repair = (userId, organizationId) => {
+      if (organizationId === ORG_O) members.push({ organization_id: organizationId, user_id: userId });
+    };
+    const fake = install({ members });
+    const response = await videoPost({ prompt: 'a video about our plans', useContext: true, organizationId: ORG_O });
+    expect(response.status).not.toBe(403);
+    expect(fake.calls[0].args).toMatchObject({ p_org_id: ORG_O });
   });
 
   test('multi-tenant without a session: 401 before any retrieval or generation', async () => {

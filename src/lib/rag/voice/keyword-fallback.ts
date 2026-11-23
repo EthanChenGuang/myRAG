@@ -220,7 +220,7 @@ export async function voiceKeywordFallback(input: VoiceKeywordFallbackInput): Pr
       admin,
       documentIds,
       signal,
-      'id, document_id, content, metadata, embedding',
+      'id, document_id, content, metadata',
       (q) => q.or(conditions.join(',')),
       50,
     );

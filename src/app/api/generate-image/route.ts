@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { resolveTenantScope, runRetrieval, type TenantScope } from '@/lib/rag';
+import { repairOwnerMembership, resolveTenantScope, runRetrieval, type TenantScope } from '@/lib/rag';
 import { requireSessionUser } from '@/lib/session-auth';
 import { createClient } from '@supabase/supabase-js';
 import { env } from '@/lib/env';
@@ -209,6 +209,7 @@ export async function POST(req: NextRequest) {
 
     let ragScope: TenantScope | null = null;
     if (useContext && prompt) {
+      await repairOwnerMembership({ requestedOrganizationId, getUser: auth.getUser });
       const resolved = await resolveTenantScope({
         requestedOrganizationId: requestedOrganizationId as string | null | undefined,
         getUser: auth.getUser,

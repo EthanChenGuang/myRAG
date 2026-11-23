@@ -2,8 +2,8 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { VoicePipeline } from './voice_agent.js';
-import { ActiveUserGuard, parseScopeToken } from './participant_scope.js';
-import { AccessToken } from 'livekit-server-sdk';
+import { classifyParticipant, roomServiceHost, selectNewRooms, VOICE_ROOM_PREFIX, type RoomSession } from './room_session.js';
+import { AccessToken, RoomServiceClient } from 'livekit-server-sdk';
 import {
     Room,
     RoomEvent,
@@ -98,24 +98,20 @@ if (missingKeys.length > 0) {
     runAgent();
 }
 
-async function runAgent() {
-    // Initialize the LiveKit agents logger (required for VAD stream)
-    initializeLogger({ pretty: true, level: 'info' });
+const AGENT_IDENTITY = 'voice-agent';
+const ROOM_POLL_INTERVAL_MS = 1000;
+const USER_JOIN_TIMEOUT_MS = 90_000;
+const MAX_SESSIONS = Math.max(1, Number.parseInt(process.env.VOICE_AGENT_MAX_SESSIONS || '', 10) || 4);
 
-    // 0. Load Silero VAD for local speech detection (barge-in/interruption)
-    console.log('[Agent] Loading Silero VAD model...');
-    const vad = await silero.VAD.load({
-        sampleRate: 16000,  // We'll resample 48kHz to 16kHz for VAD
-        minSpeechDuration: 1.0,  // 1 second of continuous speech to trigger (much less sensitive)
-        minSilenceDuration: 0.5,  // 500ms silence to end speech
-        activationThreshold: 0.9,  // Very high threshold to strictly reduce false positives from echo
-    });
-    console.log('[Agent] Silero VAD loaded successfully');
+async function runSession(vad: silero.VAD, roomService: RoomServiceClient, roomName: string, roomSession: RoomSession): Promise<void> {
+    const intendedIdentity = roomSession.participantIdentity;
+    let ended = false;
+    let userJoinTimer: ReturnType<typeof setTimeout> | undefined;
+    let resolveEnded: () => void = () => {};
+    const sessionEnded = new Promise<void>((resolve) => { resolveEnded = resolve; });
 
-    // Create VAD stream at startup (not in event handler!)
-    console.log('[Agent] Creating VAD stream...');
+    // Create the VAD stream for this session
     const vadStream = vad.stream();
-    console.log('[Agent] VAD stream created successfully');
 
     // Interruption state tracking
     let isAgentSpeaking = false;
@@ -156,15 +152,10 @@ async function runAgent() {
         }
     })();
 
-    // 1. Setup LiveKit Token
-    const roomName = 'myrag-voice';
-    // Use a FIXED identity so only one agent can exist at a time
-    // When a new agent connects with the same identity, the old one is kicked out
-    const participantIdentity = 'voice-agent';
-
-    // Use server-sdk for token generation (it's JS/TS compatible)
+    // 1. Setup LiveKit Token (scoped to this session's room only)
     const at = new AccessToken(config.livekitApiKey, config.livekitApiSecret, {
-        identity: participantIdentity,
+        identity: AGENT_IDENTITY,
+        ttl: 300,
     });
     at.addGrant({
         roomJoin: true,
@@ -173,7 +164,7 @@ async function runAgent() {
         canSubscribe: true,
     });
     const token = await at.toJwt();
-    console.log(`[Agent] Generated token for ${participantIdentity}`);
+    console.log(`[Agent] Generated token for ${AGENT_IDENTITY} in ${roomName}`);
     console.log(`[Agent] Display Mode Configured: ${config.displayMode}`);
 
     // 2. Setup Audio Output (Agent -> User)
@@ -292,7 +283,7 @@ async function runAgent() {
                 const str = JSON.stringify(payload);
                 const encoder = new TextEncoder();
                 const data = encoder.encode(str);
-                room.localParticipant.publishData(data, { reliable: true });
+                room.localParticipant.publishData(data, { reliable: true, destination_identities: [intendedIdentity] });
             } catch (e) {
                 console.error('[Agent] Error publishing text data:', e);
             }
@@ -301,15 +292,38 @@ async function runAgent() {
 
     await pipeline.start();
 
-    // One active user per agent: a second user's audio is never answered with the first user's scope
-    const activeUserGuard = new ActiveUserGuard();
+    const removeIntruder = async (identity: string) => {
+        console.warn(`[LiveKit] Removing unexpected participant from ${roomName}`);
+        try {
+            await roomService.removeParticipant(roomName, identity);
+        } catch (e) {
+            console.error('[LiveKit] Failed to remove unexpected participant:', e instanceof Error ? e.message : 'unknown');
+        }
+    };
 
-    // Subscribe to tracks automatically
+    const endSession = async () => {
+        if (ended) return;
+        ended = true;
+        if (userJoinTimer) clearTimeout(userJoinTimer);
+        abortPlayback = true;
+        try { vadStream.close(); } catch { /* already closed */ }
+        await pipeline.close();
+        try { await room.disconnect(); } catch { /* already disconnected */ }
+        try { await roomService.deleteRoom(roomName); } catch { /* room already closed */ }
+        console.log(`[LiveKit] Session ended for ${roomName}`);
+        resolveEnded();
+    };
+
     room.on(RoomEvent.ParticipantConnected, (participant: RemoteParticipant) => {
-        if (!participant.identity.startsWith('user-')) return;
-        if (activeUserGuard.active && activeUserGuard.active !== participant.identity) {
-            console.log('[LiveKit] Second user participant connected; keeping the active session untouched');
+        const role = classifyParticipant(participant.identity, intendedIdentity, AGENT_IDENTITY);
+        if (role === 'intruder') {
+            void removeIntruder(participant.identity);
             return;
+        }
+        if (role !== 'intended') return;
+        if (userJoinTimer) {
+            clearTimeout(userJoinTimer);
+            userJoinTimer = undefined;
         }
         console.log(`[LiveKit] User connected: ${participant.identity} - Resetting/Ensuring Clean History`);
         pipeline.reset();
@@ -320,21 +334,16 @@ async function runAgent() {
         if (track.kind === TrackKind.KIND_AUDIO) {
             console.log(`[LiveKit] Subscribed to audio track from ${participant.identity}`);
 
-            // Only process audio from USER participants, not other agents
-            if (!participant.identity.startsWith('user-')) {
-                console.log(`[LiveKit] Ignoring audio from non-user participant: ${participant.identity}`);
-                return;
-            }
-
-            if (!activeUserGuard.claim(participant.identity)) {
-                console.log(`[LiveKit] Ignoring audio from a second user participant: ${participant.identity}`);
+            // Only process audio from the one participant this room was created for
+            if (classifyParticipant(participant.identity, intendedIdentity, AGENT_IDENTITY) !== 'intended') {
+                console.log('[LiveKit] Ignoring audio from a participant that is not the room owner');
                 return;
             }
 
             console.log(`[LiveKit] Processing audio from user: ${participant.identity}`);
 
-            // The signed scope token is written server-side into the participant metadata
-            pipeline.setScopeToken(parseScopeToken(participant.metadata));
+            // The signed scope token is written server-side into the room metadata when the room is created
+            pipeline.setScopeToken(roomSession.scopeToken);
 
             // Extract User ID from identity (format: user-USER_ID-RANDOM)
             // Example: user-123e4567-e89b-12d3-a456-426614174000-832
@@ -457,14 +466,7 @@ async function runAgent() {
 
     // Handle user disconnect - save conversation to database
     room.on(RoomEvent.ParticipantDisconnected, async (participant: RemoteParticipant) => {
-        // Only process user disconnections (not other agents)
-        if (!participant.identity.startsWith('user-')) {
-            console.log(`[LiveKit] Non-user participant disconnected: ${participant.identity}`);
-            return;
-        }
-
-        if (activeUserGuard.active !== participant.identity) {
-            console.log(`[LiveKit] Ignored user disconnected: ${participant.identity}`);
+        if (classifyParticipant(participant.identity, intendedIdentity, AGENT_IDENTITY) !== 'intended') {
             return;
         }
 
@@ -485,13 +487,29 @@ async function runAgent() {
             // This prevents the next user (or same user reconnecting) from seeing previous chat history
             pipeline.reset();
             pipeline.clearScope();
-            activeUserGuard.release(participant.identity);
+            await endSession();
         }
+    });
+
+    room.on(RoomEvent.Disconnected, () => {
+        void endSession();
     });
 
     try {
         await room.connect(config.livekitUrl, token);
         console.log(`[LiveKit] Connected to room: ${roomName}`);
+
+        for (const [, existing] of room.remoteParticipants) {
+            const role = classifyParticipant(existing.identity, intendedIdentity, AGENT_IDENTITY);
+            if (role === 'intruder') await removeIntruder(existing.identity);
+            else if (role === 'intended') pipeline.reset();
+        }
+        if (!room.remoteParticipants.has(intendedIdentity)) {
+            userJoinTimer = setTimeout(() => {
+                console.warn(`[LiveKit] Intended participant never joined ${roomName}; closing`);
+                void endSession();
+            }, USER_JOIN_TIMEOUT_MS);
+        }
 
         // 5. Publish Agent Audio
         if (!room.localParticipant) {
@@ -512,7 +530,7 @@ async function runAgent() {
             });
             const encoder = new TextEncoder();
             if (room.localParticipant) {
-                await room.localParticipant.publishData(encoder.encode(configPayload), { reliable: true });
+                await room.localParticipant.publishData(encoder.encode(configPayload), { reliable: true, destination_identities: [intendedIdentity] });
                 console.log(`[LiveKit] Broadcasted config packet: ${configPayload}`);
             } else {
                 console.warn('[LiveKit] Cannot send config: localParticipant not available');
@@ -523,7 +541,8 @@ async function runAgent() {
         await sendConfig();
 
         // Send whenever a user joins (to ensure they get the initial state)
-        room.on(RoomEvent.ParticipantConnected, async () => {
+        room.on(RoomEvent.ParticipantConnected, async (participant: RemoteParticipant) => {
+            if (classifyParticipant(participant.identity, intendedIdentity, AGENT_IDENTITY) !== 'intended') return;
             console.log('[LiveKit] New user connected, resending config...');
             await new Promise(r => setTimeout(r, 500)); // Short delay to ensure client is ready
             await sendConfig();
@@ -596,8 +615,7 @@ async function runAgent() {
 
             // Listen for user participants to join
             room.on(RoomEvent.ParticipantConnected, (participant: RemoteParticipant) => {
-                // Only trigger for user participants (not other agents)
-                if (participant.identity.startsWith('user-')) {
+                if (participant.identity === intendedIdentity) {
                     console.log(`[Agent] User "${participant.identity}" joined!`);
                     playSineWave();
                 }
@@ -605,7 +623,7 @@ async function runAgent() {
 
             // Also check if user is already in the room
             for (const [, participant] of room.remoteParticipants) {
-                if (participant.identity.startsWith('user-')) {
+                if (participant.identity === intendedIdentity) {
                     console.log(`[Agent] User "${participant.identity}" already in room!`);
                     playSineWave();
                     break;
@@ -615,5 +633,53 @@ async function runAgent() {
 
     } catch (e) {
         console.error('[LiveKit] Connection Error:', e);
+        await endSession();
+    }
+
+    await sessionEnded;
+}
+
+async function runAgent() {
+    // Initialize the LiveKit agents logger (required for VAD stream)
+    initializeLogger({ pretty: true, level: 'info' });
+
+    // 0. Load Silero VAD for local speech detection (barge-in/interruption)
+    console.log('[Agent] Loading Silero VAD model...');
+    const vad = await silero.VAD.load({
+        sampleRate: 16000,  // We'll resample 48kHz to 16kHz for VAD
+        minSpeechDuration: 1.0,  // 1 second of continuous speech to trigger (much less sensitive)
+        minSilenceDuration: 0.5,  // 500ms silence to end speech
+        activationThreshold: 0.9,  // Very high threshold to strictly reduce false positives from echo
+    });
+    console.log('[Agent] Silero VAD loaded successfully');
+
+    const roomService = new RoomServiceClient(roomServiceHost(config.livekitUrl), config.livekitApiKey, config.livekitApiSecret);
+    const active = new Set<string>();
+    const finished = new Set<string>();
+
+    console.log(`[Agent] Watching for ${VOICE_ROOM_PREFIX}* rooms (max ${MAX_SESSIONS} sessions)`);
+
+    while (true) {
+        try {
+            const rooms = await roomService.listRooms();
+            const present = new Set(rooms.map((room) => room.name));
+            for (const name of finished) if (!present.has(name)) finished.delete(name);
+
+            const taken = new Set([...active, ...finished]);
+            const fresh = selectNewRooms(rooms, taken, MAX_SESSIONS - active.size);
+            for (const { name, session } of fresh) {
+                active.add(name);
+                console.log(`[Agent] Starting session for ${name}`);
+                runSession(vad, roomService, name, session)
+                    .catch((error) => console.error('[Agent] Session error:', error instanceof Error ? error.message : 'unknown'))
+                    .finally(() => {
+                        active.delete(name);
+                        finished.add(name);
+                    });
+            }
+        } catch (error) {
+            console.error('[Agent] Room listing failed:', error instanceof Error ? error.message : 'unknown');
+        }
+        await new Promise((resolve) => setTimeout(resolve, ROOM_POLL_INTERVAL_MS));
     }
 }
