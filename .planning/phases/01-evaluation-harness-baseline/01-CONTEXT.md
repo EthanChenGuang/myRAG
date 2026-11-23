@@ -60,31 +60,31 @@ Out of this phase: any change to how retrieval or generation behaves (later phas
 
 ### Decision index
 IDs cited by the plans; each entry summarizes a decision recorded above in this file.
-- D-01 real retrieval code (enhancedRetrieveChunks + the chat route's post-retrieval filter) against PGlite + pgvector loaded with the repo SQL, behind a Supabase-compatible rpc() adapter (costly)
-- D-02 endpoint contract POST /api/internal/rag/run; off when NODE_ENV=production unless RAG_EVAL_ENDPOINT_ENABLED=true; x-rag-eval-secret compared in constant time with RAG_EVAL_SECRET; refuse all when unset (one-way)
-- D-03 smoke tier invokes the exported route handler in-process from a tsx harness; live tier calls the same endpoint over HTTP with --base-url (costly)
-- D-04 GoldenItem fields (id, question, conversation, language zh|en|it, category multi_turn|compound|exact_term|table|scanned|no_answer|general, answerable, expected_answer, gold_evidence spans document/section/quote, review_status, provenance, split); never chunk IDs (costly)
-- D-05 real-workspace golden items only under gitignored eval/golden/private/, never committed (one-way)
-- D-06 Pydantic v2 is the single source; JSON Schema converted to zod 3 (`zod/v3`) with json-schema-to-zod; generated files committed; CI fails on regeneration diff (costly)
-- D-07 dependency set: Vitest, @electric-sql/pglite, json-schema-to-zod, tsx; FastAPI, uvicorn, pydantic>=2.14.4, httpx, pytest; deepeval and ragas only in a separate eval pyproject; uv with committed uv.lock (costly)
-- D-08 deterministic fixture embedder (hashed character n-grams, 1536 dims, L2-normalized), used only when the eval run selects it
-- D-09 TS harness writes JSONL traces (Pydantic-defined, Zod-validated); Python scores them into report JSON plus Markdown
-- D-10 noise band per metric: baseline mean minus max(3 x spread, 0.02)
-- D-11 baseline at eval/baselines/fixture-baseline.json with a config hash per run
-- D-12 failing-PR demo: a test runs the gate against a degraded config (max results 1) and asserts failure
-- D-13 span match: same document and the chunk contains the normalized quote (whitespace, case, punctuation, width)
-- D-14 split: sha256 of item id decides 70/30 dev/test, recorded in a split manifest; existing items never move
-- D-15 judge: pinned non-Claude judge via OpenRouter at temperature 0; refuse a judge from the generator's family; DeepEval and Ragas telemetry disabled by env
-- D-16 GitHub Actions PR smoke workflow and nightly workflow (judge tier, skipped with a notice without a key); Node 22, Python 3.12
-- D-17 config manifest plus check-config over scripts/init-env.js, src/lib/env.ts, scripts/config-server.js, scripts/config-ui/index.html and .env.local when present
-- D-18 edge fakes: local PostgREST-compatible shim on PGlite and fake OpenAI-compatible /v1/embeddings (base64), wired through NEXT_PUBLIC_SUPABASE_URL and OPENAI_BASE_URL; production retrieval code not edited (costly)
-- D-19 the chat route's two post-retrieval filters replicated in src/lib/rag-eval/legacy-post-filter.ts including the Chinese empty-term behavior, guarded by a source-sentinel test; route.ts not edited
-- D-20 CI gates overall and each language slice; per-category metrics are report-only
-- D-21 sidecar /health unauthenticated liveness; /ready 503 when the secret is unset; every other endpoint refuses without a valid secret
-- D-22 pinned judge model openai/gpt-5-mini via OpenRouter at temperature 0
-- D-23 category `general` means a plain single-fact lookup
-- D-24 new packages accepted without a separate human checkpoint, exact pins: @electric-sql/pglite 0.5.17, @electric-sql/pglite-pgvector 0.0.18, vitest 5.1.1, vite 7.3.8, json-schema-to-zod 2.8.1, tsx 4.23.15, deepeval 4.3.4, ragas 0.4.4
-- D-25 RAG_FINAL_RESULT_COUNT is absent from src/lib/env.ts (route always uses 25); recorded for Phase 2; the degraded demo uses the max_results request option
+- **D-01:** real retrieval code (enhancedRetrieveChunks + the chat route's post-retrieval filter) against PGlite + pgvector loaded with the repo SQL, behind a Supabase-compatible rpc() adapter (costly)
+- **D-02:** endpoint contract POST /api/internal/rag/run; off when NODE_ENV=production unless RAG_EVAL_ENDPOINT_ENABLED=true; x-rag-eval-secret compared in constant time with RAG_EVAL_SECRET; refuse all when unset (one-way)
+- **D-03:** smoke tier invokes the exported route handler in-process from a tsx harness; live tier calls the same endpoint over HTTP with --base-url (costly)
+- **D-04:** GoldenItem fields (id, question, conversation, language zh|en|it, category multi_turn|compound|exact_term|table|scanned|no_answer|general, answerable, expected_answer, gold_evidence spans document/section/quote, review_status, provenance, split); never chunk IDs (costly)
+- **D-05:** real-workspace golden items only under gitignored eval/golden/private/, never committed (one-way)
+- **D-06:** Pydantic v2 is the single source; JSON Schema converted to zod 3 (`zod/v3`) with json-schema-to-zod; generated files committed; CI fails on regeneration diff (costly)
+- **D-07:** dependency set: Vitest, @electric-sql/pglite, json-schema-to-zod, tsx; FastAPI, uvicorn, pydantic>=2.14.4, httpx, pytest; deepeval and ragas only in a separate eval pyproject; uv with committed uv.lock (costly)
+- **D-08:** deterministic fixture embedder (hashed character n-grams, 1536 dims, L2-normalized), used only when the eval run selects it
+- **D-09:** TS harness writes JSONL traces (Pydantic-defined, Zod-validated); Python scores them into report JSON plus Markdown
+- **D-10:** noise band per metric: baseline mean minus max(3 x spread, 0.02)
+- **D-11:** baseline at eval/baselines/fixture-baseline.json with a config hash per run
+- **D-12:** failing-PR demo: a test runs the gate against a degraded config (max results 1) and asserts failure
+- **D-13:** span match: same document and the chunk contains the normalized quote (whitespace, case, punctuation, width)
+- **D-14:** split: sha256 of item id decides 70/30 dev/test, recorded in a split manifest; existing items never move
+- **D-15:** judge: pinned non-Claude judge via OpenRouter at temperature 0; refuse a judge from the generator's family; DeepEval and Ragas telemetry disabled by env
+- **D-16:** GitHub Actions PR smoke workflow and nightly workflow (judge tier, skipped with a notice without a key); Node 22, Python 3.12
+- **D-17:** config manifest plus check-config over scripts/init-env.js, src/lib/env.ts, scripts/config-server.js, scripts/config-ui/index.html and .env.local when present
+- **D-18:** edge fakes: local PostgREST-compatible shim on PGlite and fake OpenAI-compatible /v1/embeddings (base64), wired through NEXT_PUBLIC_SUPABASE_URL and OPENAI_BASE_URL; production retrieval code not edited (costly)
+- **D-19:** the chat route's two post-retrieval filters replicated in src/lib/rag-eval/legacy-post-filter.ts including the Chinese empty-term behavior, guarded by a source-sentinel test; route.ts not edited
+- **D-20:** CI gates overall and each language slice; per-category metrics are report-only
+- **D-21:** sidecar /health unauthenticated liveness; /ready 503 when the secret is unset; every other endpoint refuses without a valid secret
+- **D-22:** pinned judge model openai/gpt-5-mini via OpenRouter at temperature 0
+- **D-23:** category `general` means a plain single-fact lookup
+- **D-24:** new packages accepted without a separate human checkpoint, exact pins: @electric-sql/pglite 0.5.17, @electric-sql/pglite-pgvector 0.0.18, vitest 5.1.1, vite 7.3.8, json-schema-to-zod 2.8.1, tsx 4.23.15, deepeval 4.3.4, ragas 0.4.4
+- **D-25:** RAG_FINAL_RESULT_COUNT is absent from src/lib/env.ts (route always uses 25); recorded for Phase 2; the degraded demo uses the max_results request option
 
 ### Claude's Discretion
 - Exact fixture corpus content and size (synthetic, covering zh/en/it and every category, including tables, scanned-style text and no-answer questions).

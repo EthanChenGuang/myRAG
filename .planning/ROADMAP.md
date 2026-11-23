@@ -42,27 +42,40 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 22 plans
 
 Plans:
+**Wave 1**
 - [ ] 01-01-PLAN.md — Tracer: Pydantic eval-run contracts through `npm run gen:schemas` to generated zod/v3 schemas that accept Pydantic-built values (wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 01-02-PLAN.md — PGlite fixture database with the repo SQL and 127.0.0.1 edge fakes running today's unmodified retrieval (wave 2)
 - [ ] 01-03-PLAN.md — Golden-set contracts (GoldenItem, split manifest, drafted-item batch) generated into Zod (wave 2)
+
+**Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 01-04-PLAN.md — Authenticated eval route, legacy post-filter replica and `npm run test-rag` writing the first trace (wave 3)
 - [ ] 01-05-PLAN.md — Report, baseline, noise, gate, judge and sidecar contracts generated into Zod (wave 3)
 - [ ] 01-06-PLAN.md — Locked eval uv project with judge/draft extras, span matching and frozen split (wave 3)
 - [ ] 01-07-PLAN.md — English fixture corpus documents (wave 3)
 - [ ] 01-08-PLAN.md — Chinese and Italian fixture corpus documents (wave 3)
+
+**Wave 4** *(blocked on Wave 3 completion)*
 - [ ] 01-09-PLAN.md — Vitest infrastructure, route auth matrix, harness concurrency and HTTP transport tests (wave 4)
 - [ ] 01-10-PLAN.md — Reproducible runs: pinned eval env, hashed RunManifest, Pydantic validation of traces (wave 4)
 - [ ] 01-11-PLAN.md — New env vars in all five config locations, env manifest and check-config with knownGaps ratchet (wave 4)
 - [ ] 01-12-PLAN.md — rag-sidecar FastAPI skeleton: probes, fail-closed shared-secret auth, Dockerfile (wave 4)
 - [ ] 01-13-PLAN.md — Golden/trace loaders, Python corpus reader and deterministic metrics (wave 4)
+
+**Wave 5** *(blocked on Wave 4 completion)*
 - [ ] 01-14-PLAN.md — Eval answer generation (include_answer) and nightly harness entry point (wave 5)
 - [ ] 01-15-PLAN.md — 72-item trilingual fixture golden set, frozen split and integrity tests (wave 5)
 - [ ] 01-16-PLAN.md — Report writer and score CLI (wave 5)
 - [ ] 01-17-PLAN.md — Characterization tests: strict refusal, webSearch + Exa, source_images, {{context}}, legacy post-filter sentinel (wave 5)
 - [ ] 01-18-PLAN.md — Judge tier: DeepEval + Ragas, pinned non-Claude judge, telemetry off, stub-judge tests (wave 5)
 - [ ] 01-19-PLAN.md — Golden-set drafting tool: tenant-scoped sources, verified quotes, private output, frozen split (wave 5)
+
+**Wave 6** *(blocked on Wave 5 completion)*
 - [ ] 01-20-PLAN.md — Three-run fixture baseline, noise-band gate, final npm run test-rag and degraded-config demo (wave 6)
 - [ ] 01-21-PLAN.md — Contract samples round trip and schema-parity tests over the final contract set (wave 6)
+
+**Wave 7** *(blocked on Wave 6 completion)*
 - [ ] 01-22-PLAN.md — GitHub Actions PR smoke and nightly workflows, new-code type-check (wave 7)
 
 ### Phase 2: Unified Retrieval Pipeline & Tenant Scope
