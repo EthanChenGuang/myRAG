@@ -106,7 +106,7 @@ describe('embed route characterization', () => {
       );
       actual.push({ id, system });
     }
-    expect(actual).toHaveLength(72);
+    expect(actual).toHaveLength(questions.length);
     expect(actual.every((entry) => entry.system.length > 0)).toBe(true);
     expect(fixture.edge.errors).toHaveLength(0);
     expectCharacterization('embed', actual);

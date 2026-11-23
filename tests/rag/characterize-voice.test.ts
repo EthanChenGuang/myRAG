@@ -71,7 +71,7 @@ describe('voice-rag route characterization', () => {
       const body = (await response.json()) as { results?: unknown; source_images?: unknown; debug_info?: unknown };
       actual.push({ query, results: body.results ?? [], source_images: body.source_images ?? [] });
     }
-    expect(actual).toHaveLength(78);
+    expect(actual).toHaveLength(queries.length);
     expect(actual.some((entry) => Array.isArray(entry.results) && entry.results.length > 0)).toBe(true);
     expectCharacterization('voice', actual);
   });

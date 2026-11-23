@@ -94,20 +94,20 @@ describe('full fixture set through the in-process harness', () => {
   let traces: Trace[] = [];
   const golden = readLines<GoldenLine>(GOLDEN_PATH);
 
-  test('72 items produce 72 traces with zero edge errors', async () => {
+  test('every golden item produces one trace with zero edge errors', async () => {
     vi.resetModules();
     const { runEval } = await import('../eval/harness/run-eval.mts');
     single = await runEval({ goldenPath: GOLDEN_PATH, corpusDir: CORPUS_DIR, outDir: makeTmpDir(), deploymentMode: 'single-tenant' });
     traces = readLines<Trace>(single.tracesPath);
-    expect(golden).toHaveLength(72);
+    expect(golden.length).toBeGreaterThanOrEqual(90);
     expect(single.edgeErrors).toBe(0);
     expect(single.manifest.edge_errors).toBe(0);
-    expect(traces).toHaveLength(72);
+    expect(traces).toHaveLength(golden.length);
     expect(traces.map((trace) => trace.item_id)).toEqual(golden.map((item) => item.id));
   }, TIMEOUT_MS);
 
   test.each(LANGUAGES)('%s: some answerable item keeps its gold document in the top 10 and some out-of-domain item is refused', (language) => {
-    expect(traces).toHaveLength(72);
+    expect(traces).toHaveLength(golden.length);
     const byId = new Map(traces.map((trace) => [trace.item_id, trace]));
     const inLanguage = golden.filter((item) => item.language === language);
 

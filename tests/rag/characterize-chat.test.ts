@@ -108,7 +108,7 @@ describe('chat route characterization (strict mode, web search off)', () => {
         }
       }
     }
-    expect(actual).toHaveLength(144);
+    expect(actual).toHaveLength(questions.length * kinds.length);
     expectCharacterization('chat', actual);
   });
 });
