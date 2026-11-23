@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
         }
 
         // Identity comes from the verified token only; body userId and organizationId are ignored.
-        const userId = scope.scope.userId;
+        const userId = scope.actorUserId;
         const organizationId = scope.scope.organizationId;
 
         if (!userId) {

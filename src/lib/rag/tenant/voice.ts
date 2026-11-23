@@ -9,7 +9,7 @@ import { verifyVoiceToken } from './voice-token';
 export const VOICE_SCOPE_HEADER = 'x-rag-scope-token';
 
 export type VoiceScopeResult =
-  | { ok: true; scope: TenantScope }
+  | { ok: true; scope: TenantScope; actorUserId: string | null }
   | { ok: false; status: 401 | 403 | 503; reason: string };
 
 export interface ResolveVoiceScopeInput {
@@ -49,19 +49,22 @@ export async function resolveVoiceScope(input: ResolveVoiceScopeInput): Promise<
   const key = parseTenantKey(payload.tk);
   const uid = normaliseId(payload.uid);
   const oid = normaliseId(payload.oid);
-  if (!key || uid === undefined || oid === undefined) return refuse(true, 401, 'bad_scope');
+  const act = payload.act === undefined ? null : normaliseId(payload.act);
+  if (!key || uid === undefined || oid === undefined || act === undefined) return refuse(true, 401, 'bad_scope');
 
   const mode = input.deploymentMode ?? getDeploymentMode();
   if ((mode === 'multi-tenant') === (key.kind === 'single')) return refuse(true, 401, 'mode_mismatch');
 
   if (key.kind === 'single') {
     if (oid !== null) return refuse(true, 401, 'bad_scope');
-    return { ok: true, scope: mintScope('single', null, null) };
+    return { ok: true, scope: mintScope('single', null, null), actorUserId: act };
   }
+
+  if (act !== null && act !== uid) return refuse(true, 401, 'bad_scope');
 
   if (key.kind === 'personal') {
     if (oid !== null || uid !== key.userId) return refuse(true, 401, 'bad_scope');
-    return { ok: true, scope: mintScope('personal', key.userId, null) };
+    return { ok: true, scope: mintScope('personal', key.userId, null), actorUserId: key.userId };
   }
 
   if (oid !== key.organizationId || uid === null) return refuse(true, 401, 'bad_scope');
@@ -74,5 +77,5 @@ export async function resolveVoiceScope(input: ResolveVoiceScopeInput): Promise<
     return refuse(true, 503, 'membership_unavailable');
   }
   if (!member) return refuse(true, 403, 'not_a_member');
-  return { ok: true, scope: mintScope('org', uid, key.organizationId) };
+  return { ok: true, scope: mintScope('org', uid, key.organizationId), actorUserId: uid };
 }
