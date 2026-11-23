@@ -1,14 +1,21 @@
-from pydantic import BaseModel
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from rag_sidecar.contracts.eval_run import RagRunOptions
+from rag_sidecar.contracts.golden import Category, Language
 
 
-class MetricValue(BaseModel):
+class _Contract(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+
+class MetricValue(_Contract):
     value: float | None
-    n: int
+    n: int = Field(ge=0)
 
 
-class SliceMetrics(BaseModel):
+class SliceMetrics(_Contract):
     recall_at_5: MetricValue
     recall_at_10: MetricValue
     mrr: MetricValue
@@ -16,22 +23,22 @@ class SliceMetrics(BaseModel):
     false_refusal_rate: MetricValue
 
 
-class ItemResult(BaseModel):
+class ItemResult(_Contract):
     item_id: str
-    language: str
-    category: str
+    language: Language
+    category: Category
     answerable: bool
     refused: bool
-    span_count: int
-    spans_hit_at_5: int
-    spans_hit_at_10: int
-    first_hit_rank: int | None = None
+    span_count: int = Field(ge=0)
+    spans_hit_at_5: int = Field(ge=0)
+    spans_hit_at_10: int = Field(ge=0)
+    first_hit_rank: int | None = Field(default=None, ge=1)
 
 
-class EvalReport(BaseModel):
-    schema_version: int
+class EvalReport(_Contract):
+    schema_version: Literal[1] = 1
     run_id: str
-    tier: str
+    tier: Literal["smoke", "nightly", "live"]
     run_config_hash: str
     corpus_sha256: str | None = None
     golden_sha256: str
@@ -45,4 +52,4 @@ class EvalReport(BaseModel):
     by_category: dict[str, SliceMetrics]
     by_language_category: dict[str, SliceMetrics]
     items: list[ItemResult]
-    notes: list[str]
+    notes: list[str] = Field(default_factory=list)
