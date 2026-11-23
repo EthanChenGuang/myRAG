@@ -9,6 +9,7 @@ export interface ToolExecutionState {
   tool_call_id: string;
   tool_name: string;
   status: ToolExecutionStatus;
+  user_id?: string | null;
   tool_params?: any;
   tool_result?: any;
   error_message?: string;
@@ -22,6 +23,19 @@ export interface CreateToolExecutionStateParams {
   tool_call_id: string;
   tool_name: string;
   tool_params?: any;
+  user_id?: string | null;
+}
+
+export type ChatAccess = 'owned' | 'foreign' | 'absent';
+
+export const PLACEHOLDER_CHAT_ID = '00000000-0000-0000-0000-000000000000';
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isMissingOwnerColumn(error: { code?: string; message?: string } | null | undefined): boolean {
+  if (!error) return false;
+  const message = error.message ?? '';
+  return error.code === '42703' || error.code === 'PGRST204' || (/user_id/.test(message) && /column/.test(message));
 }
 
 export interface UpdateToolExecutionStateParams {
@@ -39,18 +53,27 @@ export class ToolExecutionStateService {
     try {
       console.log('[ToolExecutionState] Creating new state:', params);
       
-      const { data, error } = await supabaseAdmin!
+      const row = {
+        chat_id: params.chat_id,
+        message_id: params.message_id,
+        tool_call_id: params.tool_call_id,
+        tool_name: params.tool_name,
+        status: 'pending' as ToolExecutionStatus,
+        tool_params: params.tool_params
+      };
+      let { data, error } = await supabaseAdmin!
         .from('tool_execution_states')
-        .insert({
-          chat_id: params.chat_id,
-          message_id: params.message_id,
-          tool_call_id: params.tool_call_id,
-          tool_name: params.tool_name,
-          status: 'pending' as ToolExecutionStatus,
-          tool_params: params.tool_params
-        })
+        .insert({ ...row, user_id: params.user_id ?? null })
         .select()
         .single();
+
+      if (isMissingOwnerColumn(error)) {
+        ({ data, error } = await supabaseAdmin!
+          .from('tool_execution_states')
+          .insert(row)
+          .select()
+          .single());
+      }
 
       if (error) {
         console.error('[ToolExecutionState] Error creating state:', error);
@@ -140,6 +163,73 @@ export class ToolExecutionStateService {
     } catch (error) {
       console.error('[ToolExecutionState] Exception getting states by message ID:', error);
       return [];
+    }
+  }
+
+  /**
+   * Resolve a chat against the caller. 'foreign' covers chats owned by someone else or by nobody.
+   */
+  static async getChatAccess(chat_id: string, userId: string): Promise<ChatAccess> {
+    if (!UUID_PATTERN.test(chat_id) || chat_id === PLACEHOLDER_CHAT_ID) return 'absent';
+    const { data, error } = await supabaseAdmin!
+      .from('chats')
+      .select('user_id')
+      .eq('id', chat_id)
+      .maybeSingle();
+    if (error) throw new Error('chat lookup failed');
+    if (!data) return 'absent';
+    return data.user_id === userId ? 'owned' : 'foreign';
+  }
+
+  /**
+   * Latest state for a tool call that belongs to the caller: stamped with their id,
+   * or unstamped (legacy) and attached to a chat they own.
+   */
+  static async getForUser(tool_call_id: string, userId: string): Promise<ToolExecutionState | null> {
+    try {
+      const { data, error } = await supabaseAdmin!
+        .from('tool_execution_states')
+        .select('*')
+        .eq('tool_call_id', tool_call_id)
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      if (error || !data) {
+        if (error) console.error('[ToolExecutionState] Error getting state for user:', error);
+        return null;
+      }
+
+      for (const row of data as ToolExecutionState[]) {
+        if (row.user_id === userId) return row;
+        if (!row.user_id && (await this.getChatAccess(row.chat_id, userId)) === 'owned') return row;
+      }
+      return null;
+    } catch (error) {
+      console.error('[ToolExecutionState] Exception getting state for user:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Update one state row by primary key
+   */
+  static async updateById(id: string, updates: UpdateToolExecutionStateParams): Promise<ToolExecutionState | null> {
+    try {
+      const { data, error } = await supabaseAdmin!
+        .from('tool_execution_states')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('[ToolExecutionState] Error updating state by id:', error);
+        return null;
+      }
+      return data;
+    } catch (error) {
+      console.error('[ToolExecutionState] Exception updating state by id:', error);
+      return null;
     }
   }
 
@@ -244,22 +334,30 @@ export class ToolExecutionStateService {
     try {
       console.log('[ToolExecutionState] Upserting state:', params);
       
-      const { data, error } = await supabaseAdmin!
+      const row = {
+        chat_id: params.chat_id,
+        message_id: params.message_id,
+        tool_call_id: params.tool_call_id,
+        tool_name: params.tool_name,
+        status: params.status || 'pending',
+        tool_params: params.tool_params,
+        tool_result: params.tool_result,
+        error_message: params.error_message
+      };
+      const onConflict = { onConflict: 'chat_id,message_id,tool_call_id' };
+      let { data, error } = await supabaseAdmin!
         .from('tool_execution_states')
-        .upsert({
-          chat_id: params.chat_id,
-          message_id: params.message_id,
-          tool_call_id: params.tool_call_id,
-          tool_name: params.tool_name,
-          status: params.status || 'pending',
-          tool_params: params.tool_params,
-          tool_result: params.tool_result,
-          error_message: params.error_message
-        }, {
-          onConflict: 'chat_id,message_id,tool_call_id'
-        })
+        .upsert(params.user_id ? { ...row, user_id: params.user_id } : row, onConflict)
         .select()
         .single();
+
+      if (isMissingOwnerColumn(error)) {
+        ({ data, error } = await supabaseAdmin!
+          .from('tool_execution_states')
+          .upsert(row, onConflict)
+          .select()
+          .single());
+      }
 
       if (error) {
         console.error('[ToolExecutionState] Error upserting state:', error);

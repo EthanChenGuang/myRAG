@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod/v3';
 import { ToolExecutionStateService } from '@/lib/tool-execution-state';
+import { getToolSessionUser } from '@/lib/tool-execution-auth';
 import { devLog } from '@/lib/dev-logger';
 import { formatToolResultUniversally } from '@/lib/universal-tool-formatter';
 import { findImagesWithFallback } from '@/lib/mcp/image-context-manager';
@@ -1055,6 +1056,12 @@ export async function POST(req: NextRequest) {
     }
     
     const { toolCallId, action, sessionId, params = {} } = parsedData;
+
+    const auth = await getToolSessionUser();
+    if (!auth.ok) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
+    }
+    const userId = auth.userId;
     
     console.log(`API APPROVE: Tool ${toolCallId}, action=${action}`);
     
@@ -1085,8 +1092,17 @@ export async function POST(req: NextRequest) {
       );
     }
     
+    const pendingEntry = toolApprovalState[toolCallId];
+    if (pendingEntry && pendingEntry.ownerUserId !== userId) {
+      console.warn(`API APPROVE: Refusing approval for ${toolCallId}: caller is not the recorded owner`);
+      return NextResponse.json(
+        { error: 'Tool call not found or already processed' },
+        { status: 404 }
+      );
+    }
+
     // Check persistent state first, create if not exists
-    let persistentState = await ToolExecutionStateService.getByToolCallId(toolCallId);
+    let persistentState = await ToolExecutionStateService.getForUser(toolCallId, userId);
     
     // 🔍 CRITICAL FIX: Always ensure persistent state has correct parameters from global state
     if (toolApprovalState[toolCallId]) {
@@ -1154,7 +1170,8 @@ export async function POST(req: NextRequest) {
             message_id: Date.now(),
             tool_call_id: toolCallId,
             tool_name: toolCall.name || 'unknown_tool',
-            tool_params: transformedParams
+            tool_params: transformedParams,
+            user_id: userId
           });
           
           if (persistentState) {
@@ -1325,6 +1342,7 @@ export async function POST(req: NextRequest) {
         console.log(`🔍 [TRANSFORM DEBUG] Has 'files' parameter:`, !!transformedParams.files);
         
         await ToolExecutionStateService.upsert({
+          user_id: userId,
           chat_id: effectiveChatId,
           message_id: Date.now(),
           tool_call_id: toolCallId,
@@ -1333,6 +1351,7 @@ export async function POST(req: NextRequest) {
           status: 'approved'
         });
         await ToolExecutionStateService.upsert({
+          user_id: userId,
           chat_id: effectiveChatId,
           message_id: Date.now(),
           tool_call_id: toolCallId,
@@ -3745,6 +3764,7 @@ Would you like me to search for events in a different time range, or would you p
         if (storedToolCall) {
           // Store the formatted result instead of raw result to prevent [object Object] display issues
           await ToolExecutionStateService.upsert({
+            user_id: userId,
             chat_id: effectiveChatId,
             message_id: Date.now(),
             tool_call_id: toolCallId,
@@ -3835,6 +3855,7 @@ Would you like me to search for events in a different time range, or would you p
             // Update state and return helpful response
             if (storedToolCall) {
               await ToolExecutionStateService.upsert({
+                user_id: userId,
                 chat_id: sessionId || '00000000-0000-0000-0000-000000000000',
                 message_id: Date.now(),
                 tool_call_id: toolCallId,
@@ -3907,6 +3928,7 @@ Would you like me to search for events in a different time range, or would you p
         if (storedToolCall) {
           try {
             await ToolExecutionStateService.upsert({
+              user_id: userId,
               chat_id: effectiveChatId,
               message_id: Date.now(),
               tool_call_id: toolCallId,
@@ -3932,6 +3954,7 @@ Would you like me to search for events in a different time range, or would you p
       const cancelChatId = sessionId || '00000000-0000-0000-0000-000000000000';
       if (cancelledToolCall) {
         await ToolExecutionStateService.upsert({
+          user_id: userId,
           chat_id: cancelChatId,
           message_id: Date.now(),
           tool_call_id: toolCallId,

@@ -683,6 +683,8 @@ CREATE TABLE IF NOT EXISTS tool_execution_states (
   unique(chat_id, message_id, tool_call_id)
 );
 
+ALTER TABLE tool_execution_states ADD COLUMN IF NOT EXISTS user_id uuid;
+
 -- Add indexes for performance
 CREATE INDEX IF NOT EXISTS idx_tool_execution_states_chat_id ON tool_execution_states(chat_id);
 CREATE INDEX IF NOT EXISTS idx_tool_execution_states_message_id ON tool_execution_states(message_id);

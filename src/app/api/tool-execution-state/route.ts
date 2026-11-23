@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { ToolExecutionStateService } from '@/lib/tool-execution-state';
+import { ToolExecutionStateService, PLACEHOLDER_CHAT_ID, type ToolExecutionStatus, type UpdateToolExecutionStateParams } from '@/lib/tool-execution-state';
+import { getToolSessionUser, toolApprovalEntryOwner } from '@/lib/tool-execution-auth';
+
+const NOT_FOUND = () => NextResponse.json({ error: 'Not found' }, { status: 404 });
+const STATUSES: ToolExecutionStatus[] = ['pending', 'approved', 'running', 'completed', 'error', 'cancelled'];
 
 /**
  * Transform tool parameters for better compatibility with MCP clients
@@ -53,8 +57,11 @@ function transformToolParameters(toolName: string, originalParams: any): any {
   return optimizedParams;
 }
 
-  export async function POST(req: NextRequest) {
+export async function POST(req: NextRequest) {
   try {
+    const auth = await getToolSessionUser();
+    if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
+
     const body = await req.json();
     const { chat_id, message_id, tool_call_id, tool_name, tool_params } = body;
 
@@ -64,6 +71,17 @@ function transformToolParameters(toolName: string, originalParams: any): any {
         { status: 400 }
       );
     }
+
+    const entry = toolApprovalEntryOwner(String(tool_call_id));
+    if (entry.exists && entry.ownerUserId !== auth.userId) return NOT_FOUND();
+
+    const access = await ToolExecutionStateService.getChatAccess(String(chat_id), auth.userId);
+    if (access === 'foreign' || (access === 'absent' && !(entry.exists && entry.ownerUserId === auth.userId))) {
+      return NOT_FOUND();
+    }
+
+    const existing = await ToolExecutionStateService.getByToolCallId(String(tool_call_id));
+    if (existing?.user_id && existing.user_id !== auth.userId) return NOT_FOUND();
 
     console.log('[API] Creating tool execution state:', { chat_id, message_id, tool_call_id, tool_name });
     
@@ -81,7 +99,8 @@ function transformToolParameters(toolName: string, originalParams: any): any {
       message_id,
       tool_call_id,
       tool_name,
-      tool_params: transformedParams
+      tool_params: transformedParams,
+      user_id: auth.userId
     });
 
     if (!state) {
@@ -104,6 +123,9 @@ function transformToolParameters(toolName: string, originalParams: any): any {
 
 export async function GET(req: NextRequest) {
   try {
+    const auth = await getToolSessionUser();
+    if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
+
     const { searchParams } = new URL(req.url);
     const tool_call_id = searchParams.get('tool_call_id');
     const chat_id = searchParams.get('chat_id');
@@ -111,14 +133,14 @@ export async function GET(req: NextRequest) {
 
     if (tool_call_id) {
       // Get by tool call ID
-      let state = await ToolExecutionStateService.getByToolCallId(tool_call_id);
+      let state = await ToolExecutionStateService.getForUser(tool_call_id, auth.userId);
       
       // 🎯 CRITICAL FIX: If no persistent state exists, check global toolApprovalState
       if (!state) {
         console.log(`[API] No persistent state found for ${tool_call_id}, checking global state...`);
         
         const global = globalThis as any;
-        if (global.toolApprovalState && global.toolApprovalState[tool_call_id]) {
+        if (global.toolApprovalState && global.toolApprovalState[tool_call_id]?.ownerUserId === auth.userId) {
           const globalToolCall = global.toolApprovalState[tool_call_id].toolCall;
           console.log(`[API] Found global state for ${tool_call_id}:`, globalToolCall);
           
@@ -135,11 +157,12 @@ export async function GET(req: NextRequest) {
             });
             
             state = await ToolExecutionStateService.create({
-              chat_id: '00000000-0000-0000-0000-000000000000', // Placeholder UUID
+              chat_id: PLACEHOLDER_CHAT_ID,
               message_id: Date.now(),
               tool_call_id: tool_call_id,
               tool_name: globalToolCall.name || 'unknown_tool',
-              tool_params: transformedParams
+              tool_params: transformedParams,
+              user_id: auth.userId
             });
             
             if (state) {
@@ -154,11 +177,15 @@ export async function GET(req: NextRequest) {
       
       return NextResponse.json(state);
     } else if (chat_id && message_id) {
-      // Get by message ID
-      const states = await ToolExecutionStateService.getByMessageId(chat_id, parseInt(message_id));
+      const messageNumber = parseInt(message_id, 10);
+      if (Number.isNaN(messageNumber)) {
+        return NextResponse.json({ error: 'Invalid message_id' }, { status: 400 });
+      }
+      if ((await ToolExecutionStateService.getChatAccess(chat_id, auth.userId)) !== 'owned') return NOT_FOUND();
+      const states = await ToolExecutionStateService.getByMessageId(chat_id, messageNumber);
       return NextResponse.json(states);
     } else if (chat_id) {
-      // Get by chat ID
+      if ((await ToolExecutionStateService.getChatAccess(chat_id, auth.userId)) !== 'owned') return NOT_FOUND();
       const states = await ToolExecutionStateService.getByChatId(chat_id);
       return NextResponse.json(states);
     } else {
@@ -178,19 +205,40 @@ export async function GET(req: NextRequest) {
 
 export async function PUT(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { tool_call_id, ...updates } = body;
+    const auth = await getToolSessionUser();
+    if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
-    if (!tool_call_id) {
+    const body = await req.json();
+    const { tool_call_id } = body ?? {};
+
+    if (!tool_call_id || typeof tool_call_id !== 'string') {
       return NextResponse.json(
         { error: 'Missing required field: tool_call_id' },
         { status: 400 }
       );
     }
 
-    console.log('[API] Updating tool execution state:', { tool_call_id, updates });
+    const updates: UpdateToolExecutionStateParams = {};
+    if (body.status !== undefined) {
+      if (!STATUSES.includes(body.status)) {
+        return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
+      }
+      updates.status = body.status;
+    }
+    if (body.tool_result !== undefined) updates.tool_result = body.tool_result;
+    if (body.error_message !== undefined) updates.error_message = body.error_message;
+    if (body.tool_params !== undefined) updates.tool_params = body.tool_params;
 
-    const state = await ToolExecutionStateService.update(tool_call_id, updates);
+    if (Object.keys(updates).length === 0) {
+      return NextResponse.json({ error: 'No updatable fields provided' }, { status: 400 });
+    }
+
+    const existing = await ToolExecutionStateService.getForUser(tool_call_id, auth.userId);
+    if (!existing) return NOT_FOUND();
+
+    console.log('[API] Updating tool execution state:', { tool_call_id, fields: Object.keys(updates) });
+
+    const state = await ToolExecutionStateService.updateById(existing.id, updates);
 
     if (!state) {
       return NextResponse.json(
@@ -208,4 +256,4 @@ export async function PUT(req: NextRequest) {
       { status: 500 }
     );
   }
-} 
+}
