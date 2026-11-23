@@ -85,6 +85,8 @@ def paired_report(report: EvalReport, baseline: Baseline, noise: NoiseConfig) ->
     if baseline.items is None:
         return None
     gated_items = [item for item in report.items if item.split == report.golden_filter.gate_split]
+    if report.gate_population == "production":
+        gated_items = [item for item in gated_items if item.provenance == "production"]
     slices: dict[str, dict[str, PairedStat]] = {}
     for slice_name, members in sorted(_slice_members(gated_items).items()):
         if not is_gated_slice(slice_name, noise):
