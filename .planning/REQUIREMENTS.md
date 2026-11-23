@@ -12,7 +12,7 @@ All requirements are written so they can be checked. "Behind a switch" means an 
 - [ ] **EVAL-01**: A Python sidecar service exists in `rag-sidecar/` (FastAPI, Python 3.12, `pydantic>=2.14.4`), with health and readiness endpoints, a Dockerfile, and shared-secret auth that uses a constant-time compare and fails closed when the secret is unset
 - [ ] **EVAL-02**: All structured contracts (sidecar requests/responses, golden-set items, eval results, LLM structured outputs) are defined once as Pydantic v2 models; the TypeScript side uses Zod schemas generated from their JSON Schema, and CI fails when the generated Zod schemas are out of date
 - [x] **EVAL-03**: Golden-set items carry span-based gold evidence (document, section, quoted text), language, category (multi-turn, compound, exact term, table, scanned, no-answer) and review status — never chunk IDs
-- [ ] **EVAL-04**: A synthetic fixture corpus and fixture golden set covering Chinese, English and Italian are committed, so CI can run without customer data
+- [x] **EVAL-04**: A synthetic fixture corpus and fixture golden set covering Chinese, English and Italian are committed, so CI can run without customer data
 - [ ] **EVAL-05**: Tooling drafts a 50–200 item golden set from a real knowledge-base workspace (Claude-drafted plus Ragas-generated items) for the user to review; real-document items are stored outside git (gitignored path or a dedicated Supabase eval workspace), with a frozen dev/test split
 - [x] **EVAL-06**: An authenticated internal endpoint (`POST /api/internal/rag/run`, disabled in production unless explicitly enabled) runs the real TypeScript retrieval pipeline and returns a trace (query transforms, candidates, scores, final context, answer, citations)
 - [ ] **EVAL-07**: The eval runner computes deterministic retrieval metrics (Recall@k, MRR, matched by gold span) and refusal metrics (correct-refusal rate and false-refusal rate, reported separately) without an LLM judge
@@ -176,7 +176,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | EVAL-01 | Phase 1 | Pending |
 | EVAL-02 | Phase 1 | Pending |
 | EVAL-03 | Phase 1 | Complete |
-| EVAL-04 | Phase 1 | Pending |
+| EVAL-04 | Phase 1 | Complete |
 | EVAL-05 | Phase 1 | Pending |
 | EVAL-06 | Phase 1 | Complete |
 | EVAL-07 | Phase 1 | Pending |
