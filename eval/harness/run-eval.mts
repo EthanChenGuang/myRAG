@@ -4,6 +4,9 @@ import path from 'node:path';
 import util from 'node:util';
 import { NextRequest } from 'next/server';
 import { spawnSync } from 'node:child_process';
+import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import { MockLanguageModelV3 } from 'ai/test';
+import type { LanguageModel } from 'ai';
 import { GoldenItemSchema, RagTraceSchema, RunManifestSchema, type GoldenItem, type RagRunRequest, type RunManifest } from '../../src/lib/rag-eval/contracts.generated.ts';
 import { canonicalJson, configHash } from '../../src/lib/rag-eval/trace.ts';
 import { loadPinnedEvalEnv } from './eval-env.mts';
@@ -17,6 +20,19 @@ export interface EvalRequestOptions {
   max_results?: number | null;
   organization_id?: string | null;
   user_id?: string | null;
+  generator_model?: string | null;
+}
+
+export type EvalGenerator = 'stub' | 'live';
+
+export const STUB_GENERATOR_MODEL = 'stub/extractive-v1';
+export const LIVE_KEY_MISSING_NOTICE = '[RAG Eval] OPENROUTER_API_KEY not set; live generation skipped';
+
+export class LiveGenerationKeyMissingError extends Error {
+  constructor() {
+    super(LIVE_KEY_MISSING_NOTICE);
+    this.name = 'LiveGenerationKeyMissingError';
+  }
 }
 
 export interface InProcessEval {
@@ -37,6 +53,8 @@ export interface RunEvalOptions {
   requestOptions?: EvalRequestOptions;
   tier?: EvalTier;
   baseUrl?: string;
+  includeAnswer?: boolean;
+  generator?: EvalGenerator;
 }
 
 export interface RunEvalResult {
@@ -51,6 +69,42 @@ export interface RunEvalResult {
 }
 
 const ROUTE_PATH = '/api/internal/rag/run';
+const FIRST_SENTENCE_RE = /^[\s\S]*?[.!?。！？](?=\s|$)/;
+const NO_CONTEXT_ANSWER = 'No context was provided.';
+
+function stubAnswerFromSystemPrompt(system: string): string {
+  const marker = system.indexOf('Content:');
+  if (marker === -1) return NO_CONTEXT_ANSWER;
+  const body = system
+    .slice(marker + 'Content:'.length)
+    .split('\n')
+    .filter((line) => !line.trimStart().startsWith('#'))
+    .join('\n')
+    .trim();
+  if (body === '') return NO_CONTEXT_ANSWER;
+  const sentence = FIRST_SENTENCE_RE.exec(body);
+  return (sentence ? sentence[0] : body.split('\n')[0]).trim();
+}
+
+function createStubLanguageModel(): LanguageModel {
+  return new MockLanguageModelV3({
+    provider: 'stub',
+    modelId: STUB_GENERATOR_MODEL,
+    doGenerate: async (callOptions) => {
+      const systemMessage = callOptions.prompt.find((message) => message.role === 'system');
+      const system = systemMessage && typeof systemMessage.content === 'string' ? systemMessage.content : '';
+      return {
+        content: [{ type: 'text' as const, text: stubAnswerFromSystemPrompt(system) }],
+        finishReason: { unified: 'stop' as const, raw: 'stop' },
+        usage: {
+          inputTokens: { total: 0, noCache: 0, cacheRead: 0, cacheWrite: 0 },
+          outputTokens: { total: 0, text: 0, reasoning: 0 },
+        },
+        warnings: [],
+      };
+    },
+  }) as unknown as LanguageModel;
+}
 
 type MutableEnv = Record<string, string | undefined>;
 
@@ -140,7 +194,24 @@ function redirectConsole(logPath: string): () => void {
 }
 
 export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
-  const { goldenPath, corpusDir, outDir, deploymentMode, requestOptions = {}, tier = 'smoke', baseUrl } = options;
+  const { goldenPath, corpusDir, outDir, deploymentMode, tier = 'smoke', baseUrl, includeAnswer = false, generator } = options;
+  const requestOptions: EvalRequestOptions = { ...(options.requestOptions ?? {}) };
+
+  let liveApiKey = '';
+  if (includeAnswer) {
+    if (generator !== 'stub' && generator !== 'live') {
+      throw new Error("[Eval Harness] includeAnswer requires generator 'stub' or 'live'");
+    }
+    if (baseUrl && generator === 'stub') {
+      throw new Error('[Eval Harness] the stub generator cannot be used with --base-url');
+    }
+    if (generator === 'live') {
+      liveApiKey = (process.env.OPENROUTER_API_KEY ?? '').trim();
+      if (liveApiKey === fixtureProcessEnv('').OPENROUTER_API_KEY) liveApiKey = '';
+      if (!baseUrl && liveApiKey === '') throw new LiveGenerationKeyMissingError();
+    }
+    if (generator === 'stub' && !requestOptions.generator_model) requestOptions.generator_model = STUB_GENERATOR_MODEL;
+  }
 
   const items = readGolden(goldenPath);
   fs.mkdirSync(outDir, { recursive: true });
@@ -157,6 +228,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
 
   const restoreConsole = redirectConsole(logPath);
   let inProcess: InProcessEval | undefined;
+  let answerModule: typeof import('../../src/lib/rag-eval/answer.ts') | undefined;
   let edgeErrors = 0;
   let firstEffectiveConfig: unknown = null;
   let manifestInputs: { corpusSha256: string | null; sqlSha256: Record<string, string> } = { corpusSha256: null, sqlSha256: {} };
@@ -175,6 +247,15 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     } else {
       const prepared = await prepareInProcessEval({ corpusDir, deploymentMode });
       inProcess = prepared;
+      if (includeAnswer) {
+        answerModule = await import('../../src/lib/rag-eval/answer.ts');
+        if (generator === 'stub') {
+          answerModule.setEvalLanguageModelFactory(() => createStubLanguageModel());
+        } else {
+          const provider = createOpenRouter({ apiKey: liveApiKey, baseURL: 'https://openrouter.ai/api/v1' });
+          answerModule.setEvalLanguageModelFactory((modelId) => provider(modelId) as unknown as LanguageModel);
+        }
+      }
       send = async (payload) => {
         const req = new NextRequest(`http://localhost${ROUTE_PATH}`, {
           method: 'POST',
@@ -199,6 +280,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
         web_search: false as const,
         options,
         item_id: item.id,
+        ...(includeAnswer ? { include_answer: true as const } : {}),
       } as RagRunRequest;
 
       const { status, body } = await send(payload);
@@ -225,6 +307,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     }
   } finally {
     restoreConsole();
+    answerModule?.setEvalLanguageModelFactory(null);
     if (inProcess) await inProcess.close();
   }
 
@@ -232,6 +315,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     max_results: requestOptions.max_results ?? null,
     organization_id: requestOptions.organization_id ?? null,
     user_id: requestOptions.user_id ?? null,
+    ...(includeAnswer ? { generator_model: requestOptions.generator_model ?? null } : {}),
   };
   const embedder = baseUrl
     ? null
