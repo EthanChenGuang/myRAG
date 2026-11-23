@@ -13,7 +13,7 @@ All requirements are written so they can be checked. "Behind a switch" means an 
 - [ ] **EVAL-02**: All structured contracts (sidecar requests/responses, golden-set items, eval results, LLM structured outputs) are defined once as Pydantic v2 models; the TypeScript side uses Zod schemas generated from their JSON Schema, and CI fails when the generated Zod schemas are out of date
 - [x] **EVAL-03**: Golden-set items carry span-based gold evidence (document, section, quoted text), language, category (multi-turn, compound, exact term, table, scanned, no-answer) and review status — never chunk IDs
 - [x] **EVAL-04**: A synthetic fixture corpus and fixture golden set covering Chinese, English and Italian are committed, so CI can run without customer data
-- [ ] **EVAL-05**: Tooling drafts a 50–200 item golden set from a real knowledge-base workspace (Claude-drafted plus Ragas-generated items) for the user to review; real-document items are stored outside git (gitignored path or a dedicated Supabase eval workspace), with a frozen dev/test split
+- [ ] **EVAL-05**: Tooling drafts a 50–200 item golden set from a real knowledge-base workspace (Claude-drafted plus Ragas-generated items) for the user to review; real-document items are stored outside git (gitignored path or a dedicated Supabase eval workspace), with a frozen dev/test split; Ragas generation spreads items across query styles (poor grammar, keyword-only, misspelled) and personas, and generated items are tagged `ragas_generated` and treated as coverage tests, not as representative of real users
 - [x] **EVAL-06**: An authenticated internal endpoint (`POST /api/internal/rag/run`, disabled in production unless explicitly enabled) runs the real TypeScript retrieval pipeline and returns a trace (query transforms, candidates, scores, final context, answer, citations)
 - [x] **EVAL-07**: The eval runner computes deterministic retrieval metrics (Recall@k, MRR, matched by gold span) and refusal metrics (correct-refusal rate and false-refusal rate, reported separately) without an LLM judge
 - [ ] **EVAL-08**: The eval runner computes Faithfulness, Answer Relevance and Context Recall with DeepEval and Ragas using a pinned judge model from a different family than the generator, with telemetry disabled, and reports results per language and per category
@@ -128,6 +128,10 @@ All requirements are written so they can be checked. "Behind a switch" means an 
 ### Cross-language & Cache (XLG, CACHE)
 
 - [ ] **XLG-01**: The query language (script ratio plus zh/en/it stopword scores, mixed-language queries classified by dominant script) and the languages of the tenant knowledge base (share per language from the DATA-02 `language` field) are detected; when the query language is not a knowledge-base language above a 20% share, the query is translated by a small fast model into up to two knowledge-base languages, keeping protected tokens verbatim (rewrite-gate R7/R8); original and translated queries are retrieved in parallel and fused with RRF; the answer is written in the asker's language while cited quotes stay in the source language; translation has its own switch, timeout and budget, and can be turned off per embedding profile when the eval shows the multilingual embedding alone is enough; supported under both query frameworks (former RQ-04)
+- [ ] **EVAL-14**: The golden set also covers how real users ask: new categories `colloquial` (wording that differs from the document's terms), `ambiguous` (short or underspecified) and `typo` (misspellings, missing accents, mixed scripts), next to the existing ones; every report also splits results by provenance (`production`, `human`, `claude_draft`, `ragas_generated`, `synthetic_fixture`), and once real-user items exist the gate is computed on them, with synthetic items reported for coverage only
+- [ ] **EVAL-15**: A configurable share of production requests (sampled, PII-masked, tenant-tagged) is pulled from their Langfuse traces into a review queue, and an online judge scores a sample of them (faithfulness, answer relevance) with the scores attached to the Langfuse trace, so quality is measured after release and not only before it
+- [ ] **EVAL-16**: Every RAG answer has a helpful / not helpful control (with an optional reason); the vote is stored with the message and sent to Langfuse as a score, and "not helpful" votes and "possibly unreliable" groundedness results automatically enter the review queue
+- [ ] **EVAL-17**: Admins work the review queue in the Config UI: they see the question, answer, retrieved chunks and trace, write the expected answer and span evidence, and promote the case into the golden set with provenance `production` (stored only in the gitignored private path, split assigned by the frozen hash rule, near-duplicates detected); promoted cases are never removed, so every production failure becomes a permanent regression test; a periodic report lists new failures by layer and category
 - [ ] **XLG-02**: The fixture golden set gains a `cross_lingual` category: questions in English and Italian about Chinese documents, in Chinese and Italian about English documents, and in Chinese and English about Italian documents (at least 4 per direction pair, with span gold evidence in the source document); the slice is scored under today's configuration (`RAG_PIPELINE=legacy`) to record its baseline, reported per query-language/document-language pair, and gated like the language slices from then on
 - [ ] **XLG-03**: Cross-language paths work end to end beyond the embedding: the lexical (BM25) path and the local BM25 reranker use the translated query when the query and document languages differ, the hosted rerankers are multilingual models, and the RNK-05 refusal threshold is calibrated on a cross-lingual slice too so cross-language questions are not falsely refused
 - [ ] **CACHE-01**: A semantic answer cache as locked in `.planning/specs/semantic-cache.md`: default backend is a pgvector table in Supabase with a RedisVL-style `check`/`store` contract, RedisVL `SemanticCache` in the sidecar is the optional backend (`RAG_SEMANTIC_CACHE=off|pgvector|redisvl`, default off); keys are scoped by `TenantScope`, answer language, RAG mode, generator model, retrieval-config hash and query framework, and use the condensed standalone query; a strict distance threshold calibrated on the dev split; questions with protected tokens (exact codes, amounts, quotes), personal data, relative time, webSearch/MCP/images or an unreliable groundedness status bypass the cache; TTL plus invalidation on any document insert, replace or delete in the tenant; a `semantic_cache` Langfuse span; `cache_paraphrase` and `cache_near_miss` golden pairs with the near-miss wrong-hit rate gated at 0; cross-tenant cache leakage is part of the RET-08 canary suite
@@ -143,13 +147,13 @@ All requirements are written so they can be checked. "Behind a switch" means an 
 - **UX-01**: Sentence-level highlighting of cited spans
 - **UX-02**: Citation click-through to the source page
 - **UX-03**: Partial answers when only part of a compound question is answerable
-- **UX-04**: User feedback on hallucination warnings
+- UX-04 was promoted to v1 as EVAL-16 (2026-11-23)
 - **UX-05**: Chat filter chips (document type, date, source)
 - **UX-06**: Document version-history UI
 
 ### Operations
 
-- **OPS-01**: Production sampling into the eval pipeline
+- OPS-01 was promoted to v1 as EVAL-15 (2026-11-23)
 - **OPS-02**: Shadow dual-read between backends
 - **OPS-03**: Editable document-type profiles in the Config UI
 - **OPS-04**: Blocking answers on low groundedness scores
@@ -259,12 +263,16 @@ Which phases cover which requirements. Updated during roadmap creation.
 | LAT-03 | Phase 6 | Pending |
 | XLG-01 | Phase 6 | Pending |
 | CACHE-01 | Phase 6 | Pending |
+| EVAL-14 | Phase 2 | Pending |
+| EVAL-15 | Phase 2 | Pending |
+| EVAL-16 | Phase 5 | Pending |
+| EVAL-17 | Phase 7 | Pending |
 | XLG-02 | Phase 3 | Pending |
 | XLG-03 | Phase 4 | Pending |
 
 **Coverage:**
-- v1 requirements: 86 total
-- Mapped to phases: 86
+- v1 requirements: 90 total
+- Mapped to phases: 90
 - Unmapped: 0 ✓
 
 **Mapping notes:**
