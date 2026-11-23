@@ -36,6 +36,13 @@ CREATE SCHEMA storage; CREATE TABLE storage.buckets (id text PRIMARY KEY, name t
 CREATE TABLE storage.objects (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, bucket_id text, name text, owner uuid);
 ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;`;
 
+const SUPABASE_GRANTS_SQL = `
+GRANT USAGE ON SCHEMA public, auth, storage TO anon, authenticated, service_role;
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA auth TO anon, authenticated, service_role;
+ALTER ROLE service_role BYPASSRLS;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;`;
+
 function vectorLiteral(values: number[]): string {
   return `[${values.join(',')}]`;
 }
@@ -43,6 +50,7 @@ function vectorLiteral(values: number[]): string {
 export async function createFixtureDatabase(options: {
   deploymentMode: DeploymentMode;
   corpusDir: string;
+  supabaseGrants?: boolean;
 }): Promise<FixtureDatabase> {
   const { deploymentMode, corpusDir } = options;
   if (deploymentMode !== 'single-tenant' && deploymentMode !== 'multi-tenant') {
@@ -57,6 +65,7 @@ export async function createFixtureDatabase(options: {
   try {
     await db.waitReady;
     await db.exec(SUPABASE_SHIM_SQL);
+    if (options.supabaseGrants) await db.exec(SUPABASE_GRANTS_SQL);
     await db.exec(sqlBytes.toString('utf8'));
 
     const multiTenant = deploymentMode === 'multi-tenant';
