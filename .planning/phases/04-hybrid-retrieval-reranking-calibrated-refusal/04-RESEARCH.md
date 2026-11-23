@@ -2,7 +2,9 @@
 
 **Researched:** 2026-11-23
 **Domain:** pgvector hybrid search (dense + lexical, RRF in TypeScript), hosted rerank APIs (Cohere, Voyage), context assembly, score-threshold refusal, parent-child chunking profiles
-**Confidence:** MEDIUM overall. HIGH for the SQL, pgvector, tokenizer and harness findings (each one was executed here on PGlite: PostgreSQL 18.7, pgvector 0.8.7). MEDIUM for vendor API shapes (official docs, no live key). LOW for vendor latency (no primary source found).
+**Confidence:** MEDIUM overall. HIGH for the SQL, pgvector, tokenizer and harness findings. The core of Pattern 1 was re-executed in this session on PGlite 0.5.17 (PostgreSQL 18.7, pgvector 0.8.7) against the real `multi-tenant-setup.sql` with the two-tenant fixture. HIGH for the Phase 2 contracts, which were read at HEAD. MEDIUM for vendor API shapes (official docs re-fetched this session, no live key). LOW for vendor latency (no primary source found).
+
+**Revision note:** a first draft of this file was cut off by a rate limit. This revision keeps its executed findings, re-grounds it on the Phase 2 code now in `src/lib/rag/` (17 of 36 Phase 2 plans done), corrects stale statements, adds findings F-12 to F-24, and adds "Decisions that need adjusting" (D-01 to D-29).
 
 <user_constraints>
 ## User Constraints (from CONTEXT.md)
@@ -83,7 +85,7 @@ The full text of every decision is in `04-CONTEXT.md` and stays authoritative. T
 
 ## Summary
 
-Phase 4 builds on code that is not in the tree yet. `src/lib/rag/` does not exist (Phase 2 has completed 10 of 36 plans) and Phase 3 has a context and a research file but no plans [VERIFIED: `.planning/STATE.md`, `ls src/lib` this session]. The research therefore targets the planned contracts in 02-07, 02-08, 02-09 and in `03-CONTEXT.md` (D-05 to D-08, D-32 to D-37), and every Phase 4 plan must name the Phase 2 or Phase 3 plan that creates what it extends.
+Phase 4 builds on code that is only partly in the tree. The Phase 2 core is there: `src/lib/rag/` holds `pipeline.ts` (stage runner, `deriveStatus`), `config.ts`, `types.ts`, `deps.ts`, `context/assemble.ts`, `context/fetch-rows.ts`, `tenant/*`, `backend/supabase-rpc.ts` and `trace/*`. That is 17 of 36 Phase 2 plans (02-01 to 02-10, 02-15, 02-30 to 02-35). No route calls `runRetrieval` yet: the eval, chat and voice routes still import `enhancedRetrieveChunks` from `@/lib/enhanced-rag-retrieval` [VERIFIED: `.planning/STATE.md`; `ls -R src/lib/rag`; grep of `src/app/api/internal/rag/run/route.ts:5`, `src/app/api/chat/route.ts:18`, this session]. Phase 3 has a context, a research file and a patterns file but no plans, so none of its columns, tables or the `lexical/tokenize.ts` module exist yet. Each Phase 4 plan must name the Phase 2 or Phase 3 plan that creates what it extends (see "Upstream dependencies").
 
 The vendor facts in RNK-01 hold. Cohere's model page lists `rerank-v5.0-pro` and `rerank-v5.0-fast`, and Voyage's reranker page lists `rerank-3` and `rerank-3-lite` as current with `rerank-2.5` as an older model [CITED: docs.cohere.com/docs/models, docs.voyageai.com/docs/reranker]. Two details differ from what the decisions assume: Voyage evaluates `rerank-3` on its multilingual set and reports it ahead of `rerank-2.5` there, so "2.5 as the multilingual fallback" is a comparison to run, not a known weakness of 3; and neither vendor publishes latency, so the 600 ms and 250 ms timeouts are unproven.
 
