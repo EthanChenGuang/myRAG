@@ -309,7 +309,7 @@ export function VideoGenerationButton({
           aspectRatio: option.value, // Use the NEW value directly
           resolution: selectedResolution.value,
           duration: selectedDuration.value,
-          sourceImage: localSourceImage,
+          sourceImage: localSourceImageData,
           useFastMode,
           enhancePrompt,
           autoFix,
@@ -338,7 +338,7 @@ export function VideoGenerationButton({
           aspectRatio: selectedAspectRatio.value,
           resolution: option.value, // Use the NEW value directly
           duration: selectedDuration.value,
-          sourceImage: localSourceImage,
+          sourceImage: localSourceImageData,
           useFastMode,
           enhancePrompt,
           autoFix,
@@ -367,7 +367,7 @@ export function VideoGenerationButton({
           aspectRatio: selectedAspectRatio.value,
           resolution: selectedResolution.value,
           duration: option.value, // Use the NEW value directly
-          sourceImage: localSourceImage,
+          sourceImage: localSourceImageData,
           useFastMode,
           enhancePrompt,
           autoFix,
@@ -442,7 +442,7 @@ export function VideoGenerationButton({
           aspectRatio: selectedAspectRatio.value,
           resolution: selectedResolution.value,
           duration: selectedDuration.value,
-          sourceImage: localSourceImage,
+          sourceImage: localSourceImageData,
           useFastMode,
           enhancePrompt,
           autoFix,
