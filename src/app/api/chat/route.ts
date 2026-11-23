@@ -45,6 +45,14 @@ import { isMultiTenant } from '@/lib/deployment-mode';
 // Use Node.js runtime instead of Edge
 export const runtime = 'nodejs';
 
+declare global {
+  // `var` is the only way to type a property of globalThis; the cache must outlive a single request
+  // eslint-disable-next-line no-var
+  var mcpImageContext:
+    | Record<string, { imageUrl: string; downloadableUrls: string[]; extractedAt: number }>
+    | undefined;
+}
+
 // Define document reference tool for function calling using the 'tool' helper
 const documentReferenceTool = tool({
   description: 'IMPORTANT: This is a FUNCTION TOOL to track document usage internally. Call this tool when you use information from documents. DO NOT write "useDocument" as text in your response. This tool tracks which documents you referenced to answer the query.',
@@ -1642,8 +1650,8 @@ export async function POST(req: Request) {
             } catch (error) {
               console.error('API ROUTE: Error converting Base64 to downloadable URL:', error);
               console.log('API ROUTE: Base64 conversion error details:', {
-                errorMessage: error.message,
-                errorStack: error.stack,
+                errorMessage: error instanceof Error ? error.message : String(error),
+                errorStack: error instanceof Error ? error.stack : undefined,
                 imageUrlLength: imageUrl ? imageUrl.length : 0,
                 sessionId: sessionId,
                 hasImageUrl: !!imageUrl,
@@ -1964,11 +1972,11 @@ IMPORTANT:
 
           documentParts.push(
             ...contextUserMessage.content
-              .filter(part => part.type === 'document')
-              .map(part => ({
-                id: part.document.id,
-                name: part.document.name
-              }))
+              .flatMap(part =>
+                part.type === 'document' && part.document?.id
+                  ? [{ id: part.document.id, name: part.document.name }]
+                  : []
+              )
           );
         } else if (typeof contextUserMessage.content === 'string') {
           queryText = contextUserMessage.content;
@@ -2371,7 +2379,7 @@ Context:
 
     // Add multi-step instructions if handling multi-step query
     if (isHandlingMultiStep && multiStepMetadata) {
-      const allStepsDescription = queryClassification.steps
+      const allStepsDescription = (queryClassification.steps ?? [])
         .map((step, idx) => `Step ${idx + 1}: ${step.text}`)
         .join('\n');
 
@@ -2932,7 +2940,9 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
 
             // Get user query for intelligent routing
             const lastUserMsg = messagesForModelExtended.filter(m => m.role === 'user').pop();
-            const userQuery = lastUserMsg?.content || '';
+            const userQuery = typeof lastUserMsg?.content === 'string'
+              ? lastUserMsg.content
+              : lastUserMsg?.content?.find(part => part.type === 'text')?.text || '';
             console.log(`[Universal MCP] Processing user query: "${userQuery}"`);
 
             // Extract recent conversation messages for context-aware tool selection
