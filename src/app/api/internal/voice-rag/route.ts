@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({
             results: voice.results,
             source_images: voice.source_images,
-            debug_info: (process.env.NODE_ENV === 'development' || query.includes('debug')) ? {
+            debug_info: process.env.NODE_ENV === 'development' ? {
                 cleanQuery: keywords.cleanQuery,
                 keywords: keywords.keywords,
                 searchKeywords: keywords.searchKeywords
@@ -83,7 +83,7 @@ export async function POST(req: NextRequest) {
         });
 
     } catch (error: unknown) {
-        console.error('[Internal RAG] Error:', error);
-        return NextResponse.json({ error: error instanceof Error ? error.message : 'Internal Server Error' }, { status: 500 });
+        console.error('[Internal RAG] Error:', error instanceof Error ? error.message : 'unknown');
+        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }
