@@ -11,6 +11,7 @@ const DEFAULT_FLUSH_TIMEOUT_MS = 4000;
 const EXPORT_REQUEST_TIMEOUT_SECONDS = 3;
 // Langfuse drops null attributes, so a stage without a candidate count exports -1 to keep the attribute present.
 const NOT_APPLICABLE = -1;
+const MAX_REVIEW_CONTEXT_CHARS = 40_000;
 
 export interface CollectedTrace {
   traceId: string;
@@ -22,6 +23,7 @@ export interface CollectedTrace {
   startedAt: number;
   endedAt: number;
   stages: StageRecord[];
+  review?: { query?: string; answer?: string; context?: string; model?: string };
   content?: { query?: string; chunks?: Array<{ document_name: string; content: string; similarity: number; rank: number }> };
 }
 
@@ -115,8 +117,18 @@ export async function exportTrace(trace: CollectedTrace, options: ExportTraceOpt
   };
 
   const content = trace.content;
+  const review = trace.review;
   const rootAttributes = {
-    metadata: { tenantKey: trace.tenantKey, profile: trace.profile, status: trace.status, reason: trace.reason },
+    metadata: {
+      tenantKey: trace.tenantKey,
+      profile: trace.profile,
+      status: trace.status,
+      reason: trace.reason,
+      ...(review?.context !== undefined ? { context: maskPII(review.context).slice(0, MAX_REVIEW_CONTEXT_CHARS) } : {}),
+      ...(review?.model !== undefined ? { model: review.model } : {}),
+    },
+    ...(review?.query !== undefined ? { input: maskPII(review.query) } : {}),
+    ...(review?.answer !== undefined ? { output: maskPII(review.answer) } : {}),
     ...(content?.query !== undefined ? { input: maskPII(content.query) } : {}),
     ...(content?.chunks !== undefined ? { output: maskPII({ chunks: content.chunks }) } : {}),
   };

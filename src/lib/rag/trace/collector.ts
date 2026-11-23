@@ -52,6 +52,7 @@ export function createTraceCollector(options: TraceCollectorOptions): TraceColle
   const records: StageRecord[] = [];
   const traceId = normaliseTraceId(deps.randomId());
   const startedAt = deps.now();
+  let review: ReviewContent | null = null;
 
   return {
     traceId,
@@ -81,8 +82,10 @@ export function createTraceCollector(options: TraceCollectorOptions): TraceColle
       for (const record of records) latency[record.name] = record.latency_ms;
       return latency;
     },
-    setReviewContent() {},
-    reviewContent: () => null,
+    setReviewContent(content) {
+      review = { ...review, ...content };
+    },
+    reviewContent: () => (review ? { ...review } : null),
     toStageStatus() {
       const status: Record<string, StageRunStatus> = {};
       for (const record of records) status[record.name] = record.status;

@@ -41,7 +41,7 @@ jobs:
       - name: Vitest suite
         run: npx vitest run
       - name: tsx tests
-        run: node --import tsx --test tests/fixture-edge.test.mts tests/prompt-context.test.mts tests/eval-answer.test.mts
+        run: node --import tsx --test tests/fixture-edge.test.mts tests/prompt-context.test.mts tests/eval-answer.test.mts tests/rag-langfuse-export.test.mts tests/rag-langfuse-review.test.mts
       - name: Config drift check
         run: node scripts/check-config.mjs
       - name: Config check and type-check self-tests

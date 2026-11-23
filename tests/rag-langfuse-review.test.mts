@@ -152,7 +152,7 @@ describe('review-candidate export', () => {
     assert.ok(output.includes('[PHONE]'));
     assert.ok(String(root.attributes[`${ATTR}metadata.context`]).includes('Escalations'));
     assert.ok(String(root.attributes[`${ATTR}metadata.context`]).includes('[EMAIL]'));
-    assert.equal(root.attributes[`${ATTR}metadata.model`], MODEL_ID);
+    assert.equal(JSON.parse(String(root.attributes[`${ATTR}metadata.model`])), MODEL_ID);
 
     const everything = attributeText(fake.spans);
     assert.ok(!everything.includes(MARKER_EMAIL), 'query e-mail is masked');
