@@ -119,17 +119,15 @@ describe('chat route AI SDK v6 tool parts', () => {
     expect(entry.approved).toBe(false);
   });
 
-  it('redirects a draft call to send when the call input shows clear send intent', async () => {
+  it('keeps a draft call as a draft when its instructions show send intent', async () => {
     const { params } = await stepParams();
     createdCallIds.push('call-redirect-1');
+    const calls = [toolCall('call-redirect-1', 'gmail_create_draft', { instructions: 'send it now' })];
 
-    await params.onStepFinish({
-      text: '',
-      toolCalls: [toolCall('call-redirect-1', 'gmail_create_draft', { instructions: 'send an email to the team now' })],
-      toolResults: [],
-    });
+    await params.onStepFinish({ text: '', toolCalls: calls, toolResults: [] });
 
-    expect(globals.toolApprovalState['call-redirect-1'].toolCall.name).toBe('gmail_send_email');
+    expect(globals.toolApprovalState['call-redirect-1'].toolCall.name).toBe('gmail_create_draft');
+    expect(calls[0].toolName).toBe('gmail_create_draft');
   });
 
   it('keeps tool-call arguments out of the logs', async () => {

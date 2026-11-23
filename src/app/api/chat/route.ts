@@ -122,56 +122,6 @@ console.log('API ROUTE: Environment check -', {
   OPENROUTER_API_KEY_START: env.OPENROUTER_API_KEY ? env.OPENROUTER_API_KEY.substring(0, 7) : 'n/a'
 });
 
-// 🔄 GMAIL INTENT ANALYSIS: Determine if user wants to send vs draft
-function analyzeEmailIntent(userMessage: string): { shouldSend: boolean; confidence: number; reasoningText: string } {
-  const message = userMessage.toLowerCase();
-
-  // Strong send indicators
-  const sendKeywords = ['send', 'email', 'immediately', 'now', 'dispatch', 'transmit', 'deliver'];
-  const strongSendPhrases = ['send an email', 'send email', 'email to', 'send and email'];
-
-  // Draft indicators
-  const draftKeywords = ['draft', 'prepare', 'create draft', 'make a draft', 'compose draft'];
-
-  let sendScore = 0;
-  let draftScore = 0;
-  let reasoning = '';
-
-  // Check for strong send phrases first (higher weight)
-  for (const phrase of strongSendPhrases) {
-    if (message.includes(phrase)) {
-      sendScore += 3;
-      reasoning += `Strong send phrase: "${phrase}". `;
-      break; // Only count one strong phrase
-    }
-  }
-
-  // Check for send keywords
-  const sendMatches = sendKeywords.filter(keyword => message.includes(keyword));
-  if (sendMatches.length > 0) {
-    sendScore += sendMatches.length * 2;
-    reasoning += `Send keywords: ${sendMatches.join(', ')}. `;
-  }
-
-  // Check for draft keywords
-  const draftMatches = draftKeywords.filter(keyword => message.includes(keyword));
-  if (draftMatches.length > 0) {
-    draftScore += draftMatches.length * 2;
-    reasoning += `Draft keywords: ${draftMatches.join(', ')}. `;
-  }
-
-  // Calculate confidence and decision
-  const totalScore = sendScore + draftScore;
-  const shouldSend = sendScore > draftScore;
-  const confidence = totalScore > 0 ? Math.max(sendScore, draftScore) / (totalScore + 2) : 0.1;
-
-  return {
-    shouldSend,
-    confidence: Math.min(confidence, 0.95), // Cap at 95%
-    reasoningText: reasoning.trim() || 'No clear indicators found'
-  };
-}
-
 // Initialize AI providers based on configuration
 const AI_PROVIDER = env.NEXT_PUBLIC_AI_PROVIDER as 'openai' | 'openrouter' | 'groq';
 
@@ -3782,30 +3732,6 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
               }
             });
           }
-
-          // 🔄 GMAIL SMART TOOL REDIRECTION: Fix draft vs send selection
-          // This happens BEFORE user sees the approval UI
-          toolCalls.forEach((call: StepToolCall) => {
-            if (call.toolName === 'gmail_create_draft') {
-              // Extract user message from tool call instructions (most reliable source)
-              const instructions = (call.input as { instructions?: unknown } | null | undefined)?.instructions;
-              const userMessage = typeof instructions === 'string' ? instructions : '';
-              const intentScore = analyzeEmailIntent(userMessage);
-
-              console.log(`🔄 [CHAT REDIRECTION] Analyzing intent for draft call. Instruction length: ${userMessage.length}`);
-              console.log(`🔄 [CHAT REDIRECTION] Intent analysis: ${JSON.stringify(intentScore)}`);
-
-              // Redirect to send if user clearly intended to send (not draft)
-              if (intentScore.shouldSend && intentScore.confidence >= 0.7) {
-                console.log(`🔄 [CHAT REDIRECTION] HIGH CONFIDENCE SEND INTENT (${intentScore.confidence.toFixed(2)}). Redirecting gmail_create_draft → gmail_send_email`);
-                call.toolName = 'gmail_send_email';
-
-                console.log('🔄 [CHAT REDIRECTION] Tool successfully redirected to gmail_send_email BEFORE user approval');
-              } else {
-                console.log(`🔄 [CHAT REDIRECTION] Keeping as draft. Reason: ${intentScore.shouldSend ? 'Low confidence' : 'Draft intent detected'} (confidence: ${intentScore.confidence.toFixed(2)})`);
-              }
-            }
-          });
 
           // Track toolCalls in approval state
           toolCalls.forEach((call: StepToolCall) => {

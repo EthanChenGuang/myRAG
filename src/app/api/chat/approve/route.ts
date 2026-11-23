@@ -924,55 +924,6 @@ async function transformToolParameters(toolName: string, originalParams: any): P
   return optimizedParams;
 }
 
-function analyzeEmailIntent(userMessage: string): { shouldSend: boolean; confidence: number; reasoningText: string } {
-  const message = userMessage.toLowerCase();
-  
-  // Strong send indicators
-  const sendKeywords = ['send', 'email', 'immediately', 'now', 'dispatch', 'transmit', 'deliver'];
-  const strongSendPhrases = ['send an email', 'send email', 'email to', 'send and email'];
-  
-  // Draft indicators
-  const draftKeywords = ['draft', 'prepare', 'create draft', 'make a draft', 'compose draft'];
-  
-  let sendScore = 0;
-  let draftScore = 0;
-  let reasoning = '';
-  
-  // Check for strong send phrases first (higher weight)
-  for (const phrase of strongSendPhrases) {
-    if (message.includes(phrase)) {
-      sendScore += 3;
-      reasoning += `Strong send phrase: "${phrase}". `;
-      break; // Only count one strong phrase
-    }
-  }
-  
-  // Check for send keywords
-  const sendMatches = sendKeywords.filter(keyword => message.includes(keyword));
-  if (sendMatches.length > 0) {
-    sendScore += sendMatches.length * 2;
-    reasoning += `Send keywords: ${sendMatches.join(', ')}. `;
-  }
-  
-  // Check for draft keywords
-  const draftMatches = draftKeywords.filter(keyword => message.includes(keyword));
-  if (draftMatches.length > 0) {
-    draftScore += draftMatches.length * 2;
-    reasoning += `Draft keywords: ${draftMatches.join(', ')}. `;
-  }
-  
-  // Calculate confidence and decision
-  const totalScore = sendScore + draftScore;
-  const shouldSend = sendScore > draftScore;
-  const confidence = totalScore > 0 ? Math.max(sendScore, draftScore) / (totalScore + 2) : 0.1;
-  
-  return {
-    shouldSend,
-    confidence: Math.min(confidence, 0.95), // Cap at 95%
-    reasoningText: reasoning.trim() || 'No clear indicators found'
-  };
-}
-
 function analyzeCalendarIntent(userMessage: string): { 
   operation: 'find' | 'create' | 'update' | 'delete'; 
   timeScope: 'today' | 'tomorrow' | 'week' | 'month' | 'next' | 'specific';
@@ -1686,54 +1637,6 @@ export async function POST(req: NextRequest) {
             devLog.verbose('🔍 [PARAM TRANSFORM] Final parameter count:', Object.keys(optimizedParams).length);
           }
 
-          // 🔄 GMAIL SMART TOOL REDIRECTION: Fix draft vs send selection
-          // This logic runs BEFORE the existing Gmail optimization
-          if (toolCall.name === 'gmail_create_draft') {
-            // Extract user message from tool call instructions or a fallback
-            const userMessage = (toolCall.params?.instructions as string) || (body.messages?.[body.messages.length - 1]?.content as string) || '';
-            const intentScore = analyzeEmailIntent(userMessage);
-            
-            console.log(`🔄 [GMAIL REDIRECTION] Analyzing intent for draft call. User message: "${userMessage}"`);
-            console.log(`🔄 [GMAIL REDIRECTION] Intent analysis: ${JSON.stringify(intentScore)}`);
-            
-            // Redirect to send if user clearly intended to send (not draft)
-            if (intentScore.shouldSend && intentScore.confidence >= 0.7) {
-              console.log(`🔄 [GMAIL REDIRECTION] HIGH CONFIDENCE SEND INTENT (${intentScore.confidence.toFixed(2)}). Redirecting gmail_create_draft → gmail_send_email`);
-              
-              // 🔧 ATTACHMENT PARAMETER PRESERVATION: Ensure attachment parameters are preserved during redirection
-              const originalParams = { ...optimizedParams };
-              console.log('🔄 [GMAIL REDIRECTION] Original parameters before redirection:', JSON.stringify(originalParams, null, 2));
-              
-              // Preserve attachment-related parameters
-              const attachmentParams = {
-                file: originalParams.file,
-                attachment_url: originalParams.attachment_url,
-                files: originalParams.files,
-                file_url: originalParams.file_url,
-                file_urls: originalParams.file_urls
-              };
-              
-              // Only include attachment parameters that actually exist
-              const preservedAttachmentParams = Object.fromEntries(
-                Object.entries(attachmentParams).filter(([_, value]) => value !== undefined && value !== null)
-              );
-              
-              if (Object.keys(preservedAttachmentParams).length > 0) {
-                console.log('🔄 [GMAIL REDIRECTION] Preserving attachment parameters:', JSON.stringify(preservedAttachmentParams, null, 2));
-                
-                // Merge preserved attachment parameters back into optimizedParams
-                Object.assign(optimizedParams, preservedAttachmentParams);
-              }
-              
-              toolCall.name = 'gmail_send_email';
-              
-              console.log('🔄 [GMAIL REDIRECTION] Tool successfully redirected to gmail_send_email');
-              console.log('🔄 [GMAIL REDIRECTION] Final parameters after redirection:', JSON.stringify(optimizedParams, null, 2));
-            } else {
-              console.log(`🔄 [GMAIL REDIRECTION] Keeping as draft. Reason: ${intentScore.shouldSend ? 'Low confidence' : 'Draft intent detected'} (confidence: ${intentScore.confidence.toFixed(2)})`);
-            }
-          }
-          
           // Add comprehensive logging from GMAIL_FIX_PLAN.md Step 1
           devLog.verbose('🔍 [OPTIMIZATION START] Tool details:', {
             name: toolCall.name,
