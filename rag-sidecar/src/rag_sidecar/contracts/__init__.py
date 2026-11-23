@@ -17,6 +17,7 @@ from rag_sidecar.contracts.golden import (
 )
 from rag_sidecar.contracts.judge import JudgeConfig, JudgeItemScore, JudgeReport
 from rag_sidecar.contracts.latency import LatencyBudgets, ProfileBudget, StageLatency
+from rag_sidecar.contracts.review import ReviewQueueItem
 from rag_sidecar.contracts.sidecar import SidecarError, SidecarHealth, SidecarInfo, SidecarReady
 from rag_sidecar.contracts.report import (
     EvalReport,
@@ -48,6 +49,7 @@ __all__ = [
     "JudgeConfig",
     "JudgeItemScore",
     "JudgeReport",
+    "ReviewQueueItem",
     "SidecarError",
     "SidecarHealth",
     "SidecarInfo",

@@ -18,6 +18,9 @@ draft = [
     "ragas==0.4.4",
     "httpx==0.28.1",
 ]
+online = [
+    "httpx==0.28.1",
+]
 
 [dependency-groups]
 dev = [

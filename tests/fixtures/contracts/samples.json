@@ -667,6 +667,20 @@
         }
       ]
     },
+    "ReviewQueueItem": {
+      "answer_masked": "Twenty days per year.",
+      "captured_at": "2026-01-01T00:00:00.000Z",
+      "context_masked": "Employees receive twenty days of leave per year.",
+      "language": "en",
+      "model": "generator/model-b",
+      "observation_id": "0123456789abcdef",
+      "query_masked": "How many leave days do employees get?",
+      "tags": [
+        "review_candidate"
+      ],
+      "tenant_key": "tenant-a",
+      "trace_id": "0123456789abcdef0123456789abcdef"
+    },
     "RunManifest": {
       "corpus_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       "created_at": "2026-01-01T00:00:00Z",
