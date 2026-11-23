@@ -140,7 +140,7 @@ Plans:
 - [x] 02-24-PLAN.md — Latency budgets and per-stage p50/p95 in eval reports (wave 16)
 - [x] 02-25-PLAN.md — EVAL-14 contracts: new categories, production provenance, provenance slices (wave 17)
 - [x] 02-26-PLAN.md — EVAL-14 fixture items and baseline re-record (wave 18)
-- [ ] 02-27-PLAN.md — EVAL-15 review queue pull/promote (wave 19)
+- [x] 02-27-PLAN.md — EVAL-15 review queue pull/promote (wave 19)
 - [ ] 02-28-PLAN.md — EVAL-15 online judge and nightly job (wave 20)
 - [ ] 02-36-PLAN.md — Zero tsc errors, plain tsc in CI, ignoreBuildErrors false (wave 21)
 
