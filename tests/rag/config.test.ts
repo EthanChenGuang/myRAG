@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi, type MockInstance } from 'vitest';
 import {
   CORE_STAGES,
   OPTIONAL_STAGES,
@@ -7,7 +7,7 @@ import {
   resetRagConfigForTests,
 } from '@/lib/rag/config';
 
-let warn: ReturnType<typeof vi.spyOn>;
+let warn: MockInstance<(...args: unknown[]) => void>;
 
 beforeEach(() => {
   resetRagConfigForTests();
@@ -19,7 +19,9 @@ afterEach(() => {
 });
 
 function configWarnings(): string[] {
-  return warn.mock.calls.map((call) => String(call[0])).filter((line) => line.includes('[RAG Config]'));
+  return warn.mock.calls
+    .filter((call) => String(call[0]).includes('[RAG Config]'))
+    .map((call) => call.map((part) => (typeof part === 'string' ? part : JSON.stringify(part))).join(' '));
 }
 
 describe('stage tables', () => {
