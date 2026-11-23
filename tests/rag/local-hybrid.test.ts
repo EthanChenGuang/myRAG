@@ -93,7 +93,7 @@ describe('voiceKeywordFallback', () => {
     expect(orFilters(images)[0]).toContain('metadata->>image_context.ilike.%logo%,metadata->>name.ilike.%logo%');
 
     expect(opsOf(phrase, 'select')).toEqual([['id, document_id, content, metadata']]);
-    expect(orFilters(phrase)).toEqual(['metadata->>name.ilike.%show%logo%,metadata->>image_context.ilike.%show%logo%']);
+    expect(orFilters(phrase)).toEqual(['metadata->>name.ilike.%logo%,metadata->>image_context.ilike.%logo%']);
     expect(opsOf(phrase, 'limit')).toEqual([[100]]);
 
     expect(opsOf(keywords, 'select')).toEqual([['id, document_id, content, metadata, embedding']]);
