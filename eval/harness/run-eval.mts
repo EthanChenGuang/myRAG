@@ -189,6 +189,20 @@ export function selectGolden(items: GoldenItem[], filter: GoldenFilter): GoldenI
   return items.filter((item) => statuses.has(item.review_status));
 }
 
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+export function assertSafeBaseUrl(baseUrl: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(baseUrl);
+  } catch {
+    throw new Error('[Eval Harness] --base-url is not a valid URL');
+  }
+  if (parsed.protocol === 'https:') return;
+  if (parsed.protocol === 'http:' && LOOPBACK_HOSTS.has(parsed.hostname)) return;
+  throw new Error('[Eval Harness] --base-url must use https (plain http is allowed only for localhost)');
+}
+
 function sha256File(filePath: string): string {
   return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
 }
@@ -248,6 +262,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
 
   let httpSecret = '';
   if (baseUrl) {
+    assertSafeBaseUrl(baseUrl);
     httpSecret = process.env.RAG_EVAL_SECRET ?? '';
     if (!httpSecret) throw new Error('[Eval Harness] RAG_EVAL_SECRET must be set for --base-url runs');
   }
@@ -265,6 +280,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
       send = async (payload) => {
         const res = await fetch(url, {
           method: 'POST',
+          redirect: 'error',
           headers: { 'content-type': 'application/json', 'x-rag-eval-secret': httpSecret },
           body: JSON.stringify(payload),
         });

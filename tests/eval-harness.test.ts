@@ -268,3 +268,53 @@ describe('live runs against a multi-tenant server', () => {
     expect((received.at(-1)?.options as Record<string, unknown>).user_id).toBe(USER_ID);
   });
 });
+
+describe('base URL safety', () => {
+  test('plain http is refused except for loopback hosts', async () => {
+    const { assertSafeBaseUrl } = await import('../eval/harness/run-eval.mts');
+    expect(() => assertSafeBaseUrl('https://eval.example.com')).not.toThrow();
+    expect(() => assertSafeBaseUrl('http://localhost:3000')).not.toThrow();
+    expect(() => assertSafeBaseUrl('http://127.0.0.1:3000')).not.toThrow();
+    expect(() => assertSafeBaseUrl('http://[::1]:3000')).not.toThrow();
+    expect(() => assertSafeBaseUrl('http://eval.example.com')).toThrow(/https/);
+    expect(() => assertSafeBaseUrl('ftp://eval.example.com')).toThrow(/https/);
+    expect(() => assertSafeBaseUrl('not a url')).toThrow(/valid URL/);
+  });
+
+  test('a redirect is not followed, so the secret never reaches the target', async () => {
+    const { runEval } = await import('../eval/harness/run-eval.mts');
+    const targetHits: string[] = [];
+    const target = http.createServer((req, res) => {
+      targetHits.push(String(req.headers['x-rag-eval-secret'] ?? ''));
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end('{}');
+    });
+    await new Promise<void>((resolve) => target.listen(0, '127.0.0.1', resolve));
+    const targetPort = (target.address() as { port: number }).port;
+    const redirector = http.createServer((_req, res) => {
+      res.writeHead(308, { location: `http://127.0.0.1:${targetPort}/api/internal/rag/run` });
+      res.end();
+    });
+    await new Promise<void>((resolve) => redirector.listen(0, '127.0.0.1', resolve));
+    const previousSecret = process.env.RAG_EVAL_SECRET;
+    process.env.RAG_EVAL_SECRET = 'y'.repeat(48);
+    try {
+      await expect(
+        runEval({
+          goldenPath: GOLDEN_PATH,
+          corpusDir: CORPUS_DIR,
+          outDir: makeOutDir(),
+          deploymentMode: 'single-tenant',
+          tier: 'live',
+          baseUrl: `http://127.0.0.1:${(redirector.address() as { port: number }).port}`,
+        }),
+      ).rejects.toThrow();
+      expect(targetHits).toEqual([]);
+    } finally {
+      if (previousSecret === undefined) delete process.env.RAG_EVAL_SECRET;
+      else process.env.RAG_EVAL_SECRET = previousSecret;
+      await new Promise<void>((resolve) => redirector.close(() => resolve()));
+      await new Promise<void>((resolve) => target.close(() => resolve()));
+    }
+  });
+});
