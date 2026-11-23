@@ -432,3 +432,19 @@ def test_cli_help_exits_0(capsys):
 
 def test_claude_module_does_not_import_the_anthropic_sdk_at_import_time():
     assert not hasattr(claude_drafter, "anthropic")
+
+
+def test_ragas_evidence_is_not_attributed_to_a_short_chunk_from_another_document():
+    from rag_eval.draft.ragas_drafter import _locate
+    from rag_eval.draft.sources import WorkspaceDocument
+
+    context = "Pricing table. Unit price is 159.00 dollars for 1 to 9 units of the XR-4420 thermal probe."
+    doc_a = WorkspaceDocument(id="a", filename="a-heading.md", chunks=["Pricing table."])
+    doc_b = WorkspaceDocument(id="b", filename="b-specs.md", chunks=[context + " Bulk orders ship in two weeks."])
+    doc, chunk = _locate(context, [doc_a, doc_b])
+    assert doc.id == "b" and chunk.startswith(context)
+
+    near_whole = context.removesuffix(" thermal probe.")
+    doc_c = WorkspaceDocument(id="c", filename="c.md", chunks=[near_whole])
+    assert _locate(context, [doc_a, doc_c])[0].id == "c"
+    assert _locate(context, [doc_a]) is None
