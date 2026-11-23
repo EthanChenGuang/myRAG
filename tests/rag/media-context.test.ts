@@ -196,6 +196,21 @@ describe('media profile', () => {
     expect(embed.signals).toEqual([]);
   });
 
+  test('per-request stage overrides are ignored for the media profile', async () => {
+    const admin = recordingClient(SEEDS.several);
+    installDeps({ adminClient: () => admin.client as never, embedder: fakeEmbedder().embedder });
+    const result = await runRetrieval({
+      scope: mintScope('single', null, null),
+      query: 'show our pricing',
+      profile: 'media',
+      options: { mediaKind: 'image' },
+      signal: new AbortController().signal,
+      stageOverrides: { disabledStages: ['assemble'], timeouts: { embed: 1 } },
+    });
+    expect(result.status).toBe('ok');
+    expect(result.stages.find((stage) => stage.name === 'assemble')).toMatchObject({ status: 'ok' });
+  });
+
   test('an embedding failure is an error result with empty context', async () => {
     const admin = recordingClient(SEEDS.single);
     installDeps({ adminClient: () => admin.client as never, embedder: fakeEmbedder({ fail: new Error('boom') }).embedder });
