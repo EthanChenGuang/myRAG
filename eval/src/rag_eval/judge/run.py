@@ -277,6 +277,11 @@ def main(argv: list[str] | None = None) -> int:
         from rag_eval.judge.deepeval_judge import OpenRouterDeepEvalLLM
         from rag_eval.judge.ragas_judge import build_ragas_live
 
+        try:
+            check_no_results_upload()
+        except RuntimeError as exc:
+            return _fail(str(exc), EXIT_INPUT)
+
         deepeval_llm = OpenRouterDeepEvalLLM(config, openrouter_key)
         ragas_llm, ragas_embeddings = build_ragas_live(config, openrouter_key, openai_key)
         report = run_judge(

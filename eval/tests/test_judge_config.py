@@ -122,3 +122,22 @@ def test_check_no_results_upload(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("CONFIDENT_API_KEY", "placeholder")
     with pytest.raises(RuntimeError, match="CONFIDENT_API_KEY"):
         check_no_results_upload()
+
+
+def test_importing_deepeval_after_the_opt_out_does_not_load_dotenv_files(tmp_path: Path) -> None:
+    (tmp_path / ".env.local").write_text("CONFIDENT_API_KEY=placeholder-not-a-key\n", encoding="utf-8")
+    (tmp_path / ".env").write_text("CONFIDENT_API_KEY=placeholder-not-a-key\n", encoding="utf-8")
+    code = (
+        "import os\n"
+        "import rag_eval.judge\n"
+        "import deepeval\n"
+        "from rag_eval.judge.telemetry import check_no_results_upload\n"
+        "check_no_results_upload()\n"
+        "print(os.environ['DEEPEVAL_DISABLE_DOTENV'], os.environ.get('CONFIDENT_API_KEY'))\n"
+    )
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("DEEPEVAL", "RAGAS", "CONFIDENT"))}
+    result = subprocess.run(
+        [sys.executable, "-I", "-c", code], capture_output=True, text=True, env=env, cwd=tmp_path, check=False
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.split() == ["1", "None"]

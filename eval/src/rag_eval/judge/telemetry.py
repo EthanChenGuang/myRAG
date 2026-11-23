@@ -6,6 +6,7 @@ def disable_telemetry() -> None:
     os.environ["DEEPEVAL_TELEMETRY_OPT_OUT"] = "1"
     os.environ["DEEPEVAL_UPDATE_WARNING_OPT_IN"] = "0"
     os.environ["RAGAS_DO_NOT_TRACK"] = "true"
+    os.environ["DEEPEVAL_DISABLE_DOTENV"] = "1"
     home = os.environ.get("DEEPEVAL_HOME")
     if not home or not os.path.isdir(home):
         os.environ["DEEPEVAL_HOME"] = tempfile.mkdtemp(prefix="deepeval-home-")
