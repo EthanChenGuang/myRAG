@@ -4,16 +4,16 @@ milestone: v5.0
 current_phase: 01
 current_phase_name: Evaluation Harness & Baseline
 status: executing
-stopped_at: Roadmap and state initialized; ready for `/gsd-plan-phase 1`
-last_updated: "2026-11-23T06:10:47.624Z"
+stopped_at: Completed 01-01-PLAN.md
+last_updated: "2026-11-23T06:17:13.301Z"
 last_activity: 2026-11-23
 last_activity_desc: Phase 01 execution started
-state_head: c6ba3fd2cb66f5079fcab10ab77df18e49b29eaf
+state_head: 871c34164750be5798b3b6755495ba661cb07f1b
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 22
-  completed_plans: 0
+  completed_plans: 1
 ---
 
 # Project State
@@ -28,8 +28,8 @@ See: .planning/PROJECT.md (updated 2026-11-22)
 ## Current Position
 
 Phase: 01 (Evaluation Harness & Baseline) — EXECUTING
-Plan: 1 of 22
-Status: Executing Phase 01
+Plan: 2 of 22
+Status: Ready to execute
 Last activity: 2026-11-23 — Phase 01 execution started
 
 Progress: [░░░░░░░░░░] 0%
@@ -52,6 +52,11 @@ Progress: [░░░░░░░░░░] 0%
 - Trend: -
 
 *Updated after each plan completion*
+**Per-Plan Metrics:**
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| Phase 01 P01 | 7min | 2 tasks | 16 files |
 
 ## Accumulated Context
 
@@ -65,6 +70,8 @@ Recent decisions affecting current work:
 - [Roadmap]: RET-01..03 are mapped to Phase 4 (adapter contract, pgvector, shared tokenizer, backend-agnostic conformance tests); their "every backend" clauses are re-verified in Phase 7 criterion 3
 - [Roadmap]: The lexical approach is fixed by RET-03 (one shared application tokenizer writing `lexical_text`); Node.js 22 is fixed by PIPE-10 and enforced in Phase 2
 - [Roadmap]: Phases 5 and 6 can run in parallel after Phase 4
+- [Phase 01]: 01-01: contract tests for gen-zod use node:test in scripts/tests/*.node-test.mjs (outside vitest globs)
+- [Phase 01]: 01-01: npm ci needs --ignore-scripts in sandbox (onnxruntime-node CUDA postinstall 404)
 
 ### Pending Todos
 
@@ -91,6 +98,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-22
-Stopped at: Roadmap and state initialized; ready for `/gsd-plan-phase 1`
+Last session: 2026-11-23T06:17:13.266Z
+Stopped at: Completed 01-01-PLAN.md
 Resume file: None
