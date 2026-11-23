@@ -47,3 +47,5 @@ export type { RepairOwnerMembershipInput } from './tenant/repair-owner';
 export { resolveDocumentRefs } from './refs/resolve';
 export type { ResolveDocumentRefsInput, ResolvedDocumentRefs } from './refs/resolve';
 export type { DocumentPartRef, DocumentRefsInput } from './types';
+export { assembleOverviewContext, OVERVIEW_QUERY } from './context/overview';
+export type { OverviewChunk, OverviewContext } from './context/overview';

@@ -94,6 +94,7 @@ export interface RetrievalOptions {
   ragMode?: RagMode;
   webSearchEnabled?: boolean;
   mediaKind?: 'image' | 'video';
+  generalOverview?: boolean;
 }
 
 export interface StageOverrides {

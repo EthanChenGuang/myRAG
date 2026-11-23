@@ -2,26 +2,19 @@ import { streamText, tool, type ToolSet, type ToolCallPart, type ToolResultPart,
 import { z } from 'zod/v3';
 // Use the dedicated OpenRouter provider
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
-import { getQueryEmbedding } from '@/lib/document-processor';
-import { searchSimilarChunks, getSupabaseAdmin } from '@/lib/supabase';
+import { getSupabaseAdmin } from '@/lib/supabase';
 import { env, getAppName } from '@/lib/env';
 import { formatErrorSSE } from '@/lib/error-stream';
-// Import enhanced RAG modules for dual-mode support
-import { comprehensiveRetrieval, aggregateChunks, requiresComprehensiveRetrieval } from '@/lib/retrieval-strategies';
-import { optimizedSearch } from '@/lib/optimized-search';
 // Remove direct OpenRouter client import if using AI SDK provider
 // import { getOpenRouterClient } from '@/lib/openrouter';
 import { ContentPart, APIMessage, ExtendedMessage, fromAPIMessages, toMessage } from '@/types/chat';
 import { ReasoningConfig, REASONING_MODELS } from '@/lib/types';
-// Import enhanced RAG functionality
-import { enhanceQueryWithReasoning, intelligentSearch } from '@/lib/thinking-rag-enhancer';
 import {
   createEnhancedRAGPrompt,
   createTraceCollector,
   finishTrace,
   knowledgeBaseUnavailableMessage,
   repairOwnerMembership,
-  resolveDocumentRefs,
   resolveTenantScope,
   runRetrieval,
   scopeKey,
@@ -29,7 +22,6 @@ import {
   type TenantScope,
   type TraceCollector,
 } from '@/lib/rag';
-import { enhancedRetrieveChunks } from '@/lib/enhanced-rag-retrieval';
 // Import URL extraction utilities
 import { formatURLsForContext, type ExtractedURL } from '@/lib/url-extractor';
 // Keep custom tool definitions if needed
@@ -2023,112 +2015,30 @@ IMPORTANT:
         context = result.context;
         usedDocuments = result.usedDocuments;
       } else {
-        // Query all chunks to try to gather some relevant context
         console.log('No specific query text provided, performing general context lookup');
 
-        if (scope && (documentRefs.mentions.length > 0 || documentRefs.documentParts.length > 0)) {
-          const resolvedRefs = await resolveDocumentRefs({ scope, ...documentRefs, admin: supabase, signal: req.signal });
-          usedDocuments = resolvedRefs.usedDocuments;
-        }
+        const collector = createTraceCollector({ profile: 'chat', tenantKey: scope ? scopeKey(scope) : 'none' });
+        const result = await runRetrieval({
+          scope,
+          query: queryText,
+          profile: 'chat',
+          documentRefs,
+          options: { generalOverview: true },
+          signal: req.signal,
+          trace: collector,
+        });
+        ragTrace = { collector, result };
+        retrievalResult = result;
 
-        // Use simple semantic search for general queries
-        const queryEmbedding = await getQueryEmbedding('general information overview');
-        const { data: searchResults } = await supabase
-          .rpc('match_document_chunks', {
-            query_embedding: queryEmbedding,
-            match_count: 5,
-            similarity_threshold: 0.5
-          });
+        console.log('[Document Search] Overview retrieval finished:', {
+          status: result.status,
+          reason: result.reason,
+          candidates: result.candidates.length,
+          documents: result.usedDocuments.length,
+        });
 
-        const similarChunks = (searchResults || []).map(result => ({
-          chunk_id: result.chunk_id,
-          document_id: result.document_id,
-          content: result.content,
-          similarity: result.similarity
-        }));
-        // Build context with validation and enhanced organization
-        const chunksWithContent = similarChunks.filter(chunk => chunk.content && chunk.content.trim().length > 0);
-        if (chunksWithContent.length > 0) {
-          // Group chunks by document for better organization
-          const chunksByDocument = new Map<string, Array<{ content: string, similarity: number, chunkNum?: number }>>();
-
-          // Cache document names to avoid repeated queries
-          const docNameCache = new Map<string, string>();
-
-          for (const chunk of chunksWithContent) {
-            // Get document name from cache or fetch from database
-            let docName = docNameCache.get(chunk.document_id);
-            if (!docName) {
-              const { data: docData } = await supabase
-                .from('documents')
-                .select('filename')
-                .eq('id', chunk.document_id)
-                .single();
-              docName = docData?.filename || 'Unknown Document';
-              docNameCache.set(chunk.document_id, docName);
-            }
-
-            // Try to extract chunk number from content if available
-            const chunkMatch = chunk.content.match(/Chunk (\d+) of \d+/);
-            const chunkNum = chunkMatch ? parseInt(chunkMatch[1]) : undefined;
-
-            if (!chunksByDocument.has(docName)) {
-              chunksByDocument.set(docName, []);
-            }
-            chunksByDocument.get(docName)!.push({
-              content: chunk.content,
-              similarity: chunk.similarity,
-              chunkNum
-            });
-          }
-
-          // Build organized context with document grouping
-          const contextParts: string[] = [];
-          for (const [docName, chunks] of chunksByDocument) {
-            // Sort chunks by chunk number if available, otherwise by similarity
-            chunks.sort((a, b) => {
-              if (a.chunkNum && b.chunkNum) return a.chunkNum - b.chunkNum;
-              return b.similarity - a.similarity;
-            });
-
-            // Add document header and chunks
-            contextParts.push(`=== Document: ${docName} (${chunks.length} relevant chunks) ===`);
-            contextParts.push(...chunks.map(c => c.content));
-          }
-
-          context = contextParts.join('\n\n');
-          console.log(`[RAG Context] Built organized context from ${chunksWithContent.length} chunks across ${chunksByDocument.size} documents, total ${context.length} characters`);
-        } else {
-          context = 'No relevant context found.';
-          console.log('[RAG Context] ⚠️ WARNING: No chunks with actual content found!');
-        }
-
-        // Track documents from general context lookup
-        for (const chunk of similarChunks) {
-          // Check if this document is already in usedDocuments
-          const existingDoc = usedDocuments.find(doc => doc.id === chunk.document_id);
-          if (!existingDoc) {
-            // Get document metadata
-            const { data: docMetadata, error: metadataError } = await supabase
-              .from('documents')
-              .select('id, filename, created_at, content, metadata')
-              .eq('id', chunk.document_id)
-              .single();
-
-            if (!metadataError && docMetadata) {
-              usedDocuments.push({
-                id: chunk.document_id,
-                name: docMetadata.filename,
-                filename: docMetadata.filename,
-                created_at: docMetadata.created_at,
-                content_preview: docMetadata.content ? docMetadata.content.substring(0, 200) + '...' : undefined,
-                similarity: chunk.similarity,
-                matched_chunk: chunk.content.substring(0, 150) + '...',
-                external_url: docMetadata.metadata?.external_url
-              });
-            }
-          }
-        }
+        context = result.context;
+        usedDocuments = result.usedDocuments;
       }
 
       // Use a fallback if we have no context
@@ -2188,7 +2098,7 @@ IMPORTANT:
       });
 
       // Apply minimal filtering - be more permissive with document selection (the pipeline already filtered its own result)
-      if (!retrievalResult) usedDocuments = usedDocuments.filter(doc => {
+      if (!retrievalResult || !queryText) usedDocuments = usedDocuments.filter(doc => {
         // Always keep explicitly referenced documents
         if (doc.explicitly_referenced) {
           console.log(`Keeping explicitly referenced document: ${doc.name || doc.filename}`);

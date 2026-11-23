@@ -17,6 +17,14 @@ import {
 } from './context/assemble';
 import { fetchAssemblyRows, type AssemblyRows } from './context/fetch-rows';
 import { formatImageContext, formatVideoContext } from './context/media';
+import {
+  OVERVIEW_MATCH_COUNT,
+  OVERVIEW_QUERY,
+  OVERVIEW_SIMILARITY_THRESHOLD,
+  assembleOverviewContext,
+  fetchOverviewDocuments,
+  type OverviewContext,
+} from './context/overview';
 import { assembleVoiceResults, enrichVoiceCandidates, type VoiceResults } from './context/voice';
 import { getRagDeps } from './deps';
 import { legacyAnalyze, legacyRank, legacySearch } from './legacy/enhanced-retrieval';
@@ -304,6 +312,118 @@ async function runMediaPipeline(input: RunRetrievalInput, collector: TraceCollec
   return { ...failure(collector, status, reason, null), candidates, context };
 }
 
+async function runRefsStage(
+  input: RunRetrievalInput,
+  scope: NonNullable<RunRetrievalInput['scope']>,
+  stage: StageSpec,
+  collector: TraceCollector,
+): Promise<ReferencedState | null> {
+  const documentRefs = input.documentRefs;
+  if (!documentRefs || (documentRefs.mentions.length === 0 && documentRefs.documentParts.length === 0)) return null;
+
+  const resolved = await runStage(
+    stage,
+    input.signal,
+    (stageSignal) => {
+      const admin = getRagDeps().adminClient();
+      if (!admin) throw new Error('[RAG Refs] admin client unavailable');
+      return resolveDocumentRefs({
+        scope,
+        mentions: documentRefs.mentions,
+        documentParts: documentRefs.documentParts,
+        admin,
+        signal: stageSignal,
+      });
+    },
+    collector,
+    { candidatesOut: (value) => value.usedDocuments.length },
+  );
+  return resolved.skipped ? null : { usedDocuments: resolved.value.usedDocuments, context: resolved.value.context };
+}
+
+async function runOverviewPipeline(
+  input: RunRetrievalInput,
+  collector: TraceCollector,
+  scope: NonNullable<RunRetrievalInput['scope']>,
+): Promise<RetrievalResult> {
+  const deps = getRagDeps();
+  const { signal, profile } = input;
+  const config = loadRagConfig(deps.ragEnv());
+  const spec = (name: StageName, onFail: StageSpec['onFail']) => stageSpec(config, profile, name, onFail, input.stageOverrides);
+
+  let rawChunks: RawChunk[] = [];
+  let overview: OverviewContext = { context: '', usedDocuments: [] };
+
+  try {
+    const referenced = await runRefsStage(input, scope, spec('refs', 'skip'), collector);
+
+    const embedding = requireValue(
+      await runStage(spec('embed', 'throw'), signal, (stageSignal) => deps.embedder(OVERVIEW_QUERY, { signal: stageSignal }), collector),
+      'embed',
+    );
+
+    rawChunks = requireValue(
+      await runStage(
+        spec('search', 'throw'),
+        signal,
+        (stageSignal) => {
+          const adminClient = deps.adminClient();
+          if (!adminClient) throw new Error('[RAG Overview] admin client unavailable');
+          return vectorSearch(scope, embedding, OVERVIEW_MATCH_COUNT, OVERVIEW_SIMILARITY_THRESHOLD, {
+            client: adminClient as unknown as RpcClient,
+            signal: stageSignal,
+          });
+        },
+        collector,
+        { candidatesOut: (value) => value.length },
+      ),
+      'search',
+    );
+
+    const assembled = await runStage(
+      spec('assemble', 'skip'),
+      signal,
+      async (stageSignal) => {
+        const adminClient = deps.adminClient();
+        if (!adminClient) throw new Error('[RAG Overview] admin client unavailable');
+        const documents = await fetchOverviewDocuments(rawChunks, { admin: adminClient, signal: stageSignal });
+        return assembleOverviewContext(rawChunks, documents, referenced?.usedDocuments ?? []);
+      },
+      collector,
+      { candidatesIn: rawChunks.length, candidatesOut: (value) => value.usedDocuments.length },
+    );
+    overview = assembled.skipped ? { context: '', usedDocuments: referenced?.usedDocuments ?? [] } : assembled.value;
+  } catch (error) {
+    if (error instanceof StageError) {
+      if (error.reason === 'aborted') return failure(collector, 'error', 'aborted', null);
+      if (error.original instanceof RetrievalBackendError) {
+        logger.error('RAG Pipeline', 'Backend error', { rpc: error.original.rpc, code: error.original.code });
+        return failure(collector, 'error', 'backend_error', null);
+      }
+      logger.error('RAG Pipeline', 'Stage failure', { stage: error.stage, reason: error.reason });
+      return failure(collector, 'error', `${error.stage}_${error.reason}`, null);
+    }
+    if (signal.aborted) return failure(collector, 'error', 'aborted', null);
+    throw error;
+  }
+
+  const candidates: Candidate[] = rawChunks.map((chunk) => ({
+    chunk_id: chunk.chunk_id,
+    document_id: chunk.document_id,
+    content: chunk.content,
+    similarity: chunk.similarity,
+    metadata: chunk.metadata,
+    temporal_score: 0,
+    financial_score: 0,
+    final_score: chunk.similarity,
+    match_reason: `similarity: ${chunk.similarity.toFixed(3)}`,
+  }));
+  const records = collector.stages();
+  const status = deriveStatus(records, rawChunks.length + overview.usedDocuments.length);
+  const reason = status === 'ok' ? 'ok' : status === 'empty' ? 'no_candidates' : degradedReason(records);
+  return { ...failure(collector, status, reason, null), candidates, context: overview.context, usedDocuments: overview.usedDocuments };
+}
+
 export async function runRetrieval(input: RunRetrievalInput): Promise<RetrievalResult> {
   if (input.scope !== null) assertTenantScope(input.scope);
 
@@ -326,6 +446,7 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
   }
 
   if (input.profile === 'media') return runMediaPipeline(input, collector, scope);
+  if (input.options?.generalOverview) return runOverviewPipeline(input, collector, scope);
 
   const { signal, profile } = input;
   const config = loadRagConfig(deps.ragEnv());
@@ -340,27 +461,7 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
   let referenced: ReferencedState | null = null;
 
   try {
-    const documentRefs = input.documentRefs;
-    if (documentRefs && (documentRefs.mentions.length > 0 || documentRefs.documentParts.length > 0)) {
-      const resolved = await runStage(
-        spec('refs', 'skip'),
-        signal,
-        (stageSignal) => {
-          const admin = deps.adminClient();
-          if (!admin) throw new Error('[RAG Refs] admin client unavailable');
-          return resolveDocumentRefs({
-            scope,
-            mentions: documentRefs.mentions,
-            documentParts: documentRefs.documentParts,
-            admin,
-            signal: stageSignal,
-          });
-        },
-        collector,
-        { candidatesOut: (value) => value.usedDocuments.length },
-      );
-      referenced = resolved.skipped ? null : { usedDocuments: resolved.value.usedDocuments, context: resolved.value.context };
-    }
+    referenced = await runRefsStage(input, scope, spec('refs', 'skip'), collector);
 
     const analysis = await runStage(spec('analyze', 'skip'), signal, () => legacyAnalyze(input.query), collector);
     const analysed = analysis.skipped ? defaultQueryContext() : analysis.value;
