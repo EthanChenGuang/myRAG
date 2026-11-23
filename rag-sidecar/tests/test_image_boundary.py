@@ -17,6 +17,11 @@ def test_base_image_is_python_312_slim():
     assert any(line.startswith("FROM python:3.12-slim") for line in _dockerfile_lines())
 
 
+def test_base_image_is_pinned_by_digest():
+    froms = [line for line in _dockerfile_lines() if line.startswith("FROM ")]
+    assert froms and all(re.fullmatch(r"FROM \S+@sha256:[0-9a-f]{64}( AS \S+)?", line) for line in froms), froms
+
+
 def test_uv_image_is_pinned_to_an_exact_tag():
     copies = [line for line in _dockerfile_lines() if line.startswith("COPY --from=ghcr.io/astral-sh/uv:")]
     assert copies, "uv binary must be copied from the astral image"
