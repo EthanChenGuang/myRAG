@@ -70,6 +70,7 @@ def record_baseline(
     _require_same("embedder_id", [report.embedder_id for report in reports])
     _require_same("embedder_version", [report.embedder_version for report in reports])
     _require_same("embedder_source_sha256", [report.embedder_source_sha256 for report in reports])
+    _require_same("gate_population", [report.gate_population for report in reports])
     _require_same("tier", [report.tier for report in reports])
     _require_same("deployment_mode", [report.deployment_mode for report in reports])
     _require_same("request_options", [report.request_options for report in reports])
@@ -103,6 +104,7 @@ def record_baseline(
         corpus_sha256=first.corpus_sha256,
         golden_sha256=first.golden_sha256,
         golden_filter=first.golden_filter,
+        gate_population=first.gate_population,
         embedder_id=first.embedder_id,
         embedder_version=first.embedder_version,
         embedder_source_sha256=first.embedder_source_sha256,

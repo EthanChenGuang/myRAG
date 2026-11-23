@@ -16,6 +16,7 @@ def _item(item_id: str, language="en", answerable=True, refused=False, span_coun
         language=language,
         category=category,
         split=split,
+        provenance="synthetic_fixture",
         answerable=answerable,
         refused=refused,
         span_count=span_count,

@@ -6,6 +6,7 @@
       "embedder_id": "fixture-embedder",
       "embedder_source_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "embedder_version": 1,
+      "gate_population": "all",
       "golden_filter": {
         "gate_split": "dev",
         "review_statuses": [
@@ -224,6 +225,54 @@
           }
         }
       },
+      "by_provenance": {
+        "synthetic_fixture": {
+          "correct_refusal_rate": {
+            "n": 10,
+            "value": 0.5
+          },
+          "false_refusal_rate": {
+            "n": 10,
+            "value": 0.5
+          },
+          "mrr": {
+            "n": 10,
+            "value": 0.5
+          },
+          "recall_at_10": {
+            "n": 10,
+            "value": 0.5
+          },
+          "recall_at_5": {
+            "n": 10,
+            "value": 0.5
+          }
+        }
+      },
+      "by_provenance_category": {
+        "synthetic_fixture/general": {
+          "correct_refusal_rate": {
+            "n": 10,
+            "value": 0.5
+          },
+          "false_refusal_rate": {
+            "n": 10,
+            "value": 0.5
+          },
+          "mrr": {
+            "n": 10,
+            "value": 0.5
+          },
+          "recall_at_10": {
+            "n": 10,
+            "value": 0.5
+          },
+          "recall_at_5": {
+            "n": 10,
+            "value": 0.5
+          }
+        }
+      },
       "by_split": {
         "dev": {
           "correct_refusal_rate": {
@@ -253,6 +302,7 @@
       "embedder_id": "fixture-embedder",
       "embedder_source_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "embedder_version": 1,
+      "gate_population": "all",
       "golden_filter": {
         "gate_split": "dev",
         "review_statuses": [
@@ -267,6 +317,7 @@
           "first_hit_rank": 1,
           "item_id": "en-general-001",
           "language": "en",
+          "provenance": "synthetic_fixture",
           "refused": false,
           "span_count": 1,
           "spans_hit_at_10": 1,

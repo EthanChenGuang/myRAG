@@ -40,6 +40,7 @@ def _item_result(**overrides):
         "language": "en",
         "category": "general",
         "split": "dev",
+        "provenance": "synthetic_fixture",
         "answerable": True,
         "refused": False,
         "span_count": 2,
@@ -159,6 +160,37 @@ class TestEvalReport:
         with pytest.raises(ValidationError):
             ItemResult(**_item_result(language="fr"))
 
+    def test_item_result_requires_provenance(self):
+        row = _item_result()
+        del row["provenance"]
+        with pytest.raises(ValidationError):
+            ItemResult(**row)
+
+    def test_item_result_accepts_production_provenance(self):
+        assert ItemResult(**_item_result(provenance="production")).provenance == "production"
+
+    def test_report_provenance_fields_default_when_absent(self):
+        report = EvalReport(**_report())
+        assert report.by_provenance == {}
+        assert report.by_provenance_category == {}
+        assert report.gate_population == "all"
+
+    def test_report_accepts_provenance_slices_and_production_population(self):
+        report = EvalReport(
+            **_report(
+                by_provenance={"human": _slice_metrics()},
+                by_provenance_category={"human/typo": _slice_metrics()},
+                gate_population="production",
+            )
+        )
+        assert report.by_provenance["human"].mrr.value == 0.5
+        assert report.by_provenance_category["human/typo"].mrr.n == 10
+        assert report.gate_population == "production"
+
+    def test_report_rejects_unknown_gate_population(self):
+        with pytest.raises(ValidationError):
+            EvalReport(**_report(gate_population="synthetic"))
+
     def test_slice_metrics_requires_all_five_metrics(self):
         partial = _slice_metrics()
         del partial["mrr"]
@@ -167,6 +199,12 @@ class TestEvalReport:
 
 
 class TestBaseline:
+    def test_gate_population_defaults_to_all_and_accepts_production(self):
+        assert Baseline(**_baseline()).gate_population == "all"
+        assert Baseline(**_baseline(gate_population="production")).gate_population == "production"
+        with pytest.raises(ValidationError):
+            Baseline(**_baseline(gate_population="other"))
+
     def test_three_runs_validate(self):
         baseline = Baseline(**_baseline(runs=3))
         assert len(baseline.runs) == 3

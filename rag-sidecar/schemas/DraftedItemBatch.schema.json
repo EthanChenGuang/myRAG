@@ -39,7 +39,10 @@
             "table",
             "scanned",
             "no_answer",
-            "general"
+            "general",
+            "colloquial",
+            "ambiguous",
+            "typo"
           ],
           "title": "Category",
           "type": "string"
