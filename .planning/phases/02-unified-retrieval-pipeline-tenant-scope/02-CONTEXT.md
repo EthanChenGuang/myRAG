@@ -187,3 +187,32 @@ IDs cited by the plans; each entry summarizes a decision recorded above in this 
 
 *Phase: 02-unified-retrieval-pipeline-tenant-scope*
 *Context gathered: 2026-11-23*
+
+## Adjustments after research (2026-11-23, orchestrator decisions under the user's standing "follow your recommendations")
+
+- **D-27 → `engines.node: "^22.12.0"`.** `>=22.12.0` makes Vercel pick Node 26.
+- **D-16 → voice heuristics get a tenant predicate.** The three admin-client `document_chunks` keyword/image queries in voice-rag are scoped to the caller's `TenantScope`. This is an intended behaviour change (results narrow to the caller's tenant). The wire contract to preserve is `{results, source_images}` (plus `debug_info`).
+- **D-24 → the gate ignores `degrade` like `max_results`.** Without that, the negative control exits 2 instead of 10. This is a `gate.py` change with a test.
+- **D-26 → online judge.**
+  - Scores are posted as a JSON array; a 207 is not retried.
+  - The judge-family rule (WR-12) applies: when the answering model is `openai/*`, the online judge uses a non-OpenAI judge, configured separately from `judge.json`. The `JudgeConfig` contract gets an explicit optional `online_judge` key.
+  - With `LANGFUSE_REVIEW_SAMPLE_RATE=0`, nothing is judged. That is the documented default, not a bug.
+- **D-18 → package pins:**
+  - `@opentelemetry/sdk-trace-base` 2.12.1
+  - `@opentelemetry/core` 2.12.1
+  - `@opentelemetry/exporter-trace-otlp-http` and `otlp-exporter-base` 0.223.2
+  - `@opentelemetry/api` 1.9.0
+  - All peers listed explicitly, because `.npmrc` sets `legacy-peer-deps`.
+  - Install via `npm install --ignore-scripts`, with no human checkpoint: the packages are from the official Langfuse and OpenTelemetry orgs and have no postinstall script, and the user said to run autonomously.
+- **D-15 → bug-revealing type errors are fixed as intended behaviour changes.** The ~35–45 errors that mark a runtime bug are fixed to the evidently intended behaviour, and each is listed in its plan's SUMMARY under "Intended behaviour changes":
+  - 12 × TS2304 `ReferenceError`s
+  - AI SDK v4 fields read in the chat route
+  - `params` typed synchronously in dynamic routes (the errors that appear after `next typegen`)
+
+  The config plan (exclude `voice-agent/` and `baileys-whatsapp/` from the root tsconfig, fix TS5097) lands first; flipping `ignoreBuildErrors` lands last. CI runs `next typegen && tsc --noEmit`.
+- **D-10 → voice runs one active user at a time.** The room name is fixed on the server (the client cannot choose it). The agent serves one active user at a time: a second concurrent user gets "voice busy" instead of borrowing the first user's tenant. Per-user rooms and agent dispatch are deferred.
+- **Open questions resolved:**
+  - A stage switched off in config is **not** `degraded`. It is recorded as `skipped` in the trace.
+  - The embed widget renders `type:'error'` stream events as its existing generic error message.
+  - `scripts/rag/reprocess-documents.js` is inside the boundary check, as an allow-listed ingestion script.
+  - The voice-agent and baileys type errors are out of scope for the root `tsc` gate; they are tracked by their own tsconfig in CI only if their dependencies install cleanly.
