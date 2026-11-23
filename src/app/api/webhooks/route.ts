@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { verifyPolarWebhookSignature } from '@/lib/polar';
+import { verifyPolarWebhookSignature } from '@/lib/polar-webhook';
 
 // Initialize Supabase client with service role key for admin access
 const supabase = createClient(
@@ -10,14 +10,25 @@ const supabase = createClient(
 
 export async function POST(request: Request) {
   try {
-    const payload = await request.text();
-    const signature = request.headers.get('polar-signature') || '';
+    const webhookSecret = process.env.POLAR_WEBHOOK_SECRET;
+    if (!webhookSecret) {
+      console.error('[Polar Webhook] POLAR_WEBHOOK_SECRET is not configured');
+      return NextResponse.json(
+        { error: 'Webhook verification unavailable' },
+        { status: 503 }
+      );
+    }
 
-    // Verify webhook signature
+    const payload = await request.text();
+
     const isValid = verifyPolarWebhookSignature(
       payload,
-      signature,
-      process.env.POLAR_WEBHOOK_SECRET!
+      {
+        id: request.headers.get('webhook-id'),
+        timestamp: request.headers.get('webhook-timestamp'),
+        signature: request.headers.get('webhook-signature'),
+      },
+      webhookSecret
     );
 
     if (!isValid) {
