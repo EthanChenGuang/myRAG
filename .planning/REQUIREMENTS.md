@@ -109,7 +109,7 @@ All requirements are written so they can be checked. "Behind a switch" means an 
 - [ ] **OBS-02**: Text chat and voice each have an end-to-end latency budget (p50/p95); eval reports show per-stage latency distributions, and later phases must stay within budget
 - [ ] **LAT-01**: Retrieval paths (query variants, vector and lexical) run in parallel; candidates are deduplicated by chunk ID (and parent ID) before rerank, and the rerank input is capped (default chosen by the RNK-02 sweep, between 50 and 100)
 - [ ] **LAT-02**: Rerank has a fast and a quality tier (Cohere `rerank-v5.0-fast` / Voyage `rerank-3-lite` vs the pro models), chosen per entry point (text chat vs voice)
-- [ ] **LAT-03**: Query rewriting runs only when the router decides it is needed (short, referential or ambiguous questions), uses a small fast model, and produces at most two variants by default
+- [ ] **LAT-03**: Query rewriting runs only when a rule-based gate (no LLM, < 1 ms, zh/en/it) says it is needed, as locked in `.planning/specs/query-rewrite-gate.md` (user rules R0–R4: too short, pronouns with history, relative time, comparison, exact codes kept verbatim; added rules R5–R12: elliptical follow-ups, compound questions, protected literals, language mismatch, keyword-only, vague, long-complete, small talk); the gate returns all fired rules and maps them to transforms, relative dates are normalized deterministically, every rewritten query must keep the protected tokens verbatim or is discarded, rewriting uses a small fast model, and at most two variants are produced by default
 
 ### Chunking (CHK)
 
