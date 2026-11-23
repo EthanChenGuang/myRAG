@@ -176,3 +176,61 @@ def test_unprefixed_or_routed_openai_generators_cannot_be_judged_by_the_openai_j
     for generator in ("gpt-4o", "openrouter/auto", "o4-mini"):
         with pytest.raises(JudgeFamilyError):
             assert_judge_family_differs(config, generator)
+
+
+def test_online_judge_block_is_loaded_from_judge_json() -> None:
+    from rag_eval.judge.config import load_judge_config
+
+    config = load_judge_config()
+    online = getattr(config, "online_judge", None)
+    assert online is not None
+    assert online.sample_rate == 0.2
+    assert online.seed == 20261123
+    assert online.judge_family == "google"
+    assert online.judge_model.startswith("google/")
+    raw = json.loads(JUDGE_JSON.read_text(encoding="utf-8"))
+    assert raw["online_judge"]["judge_model"] == online.judge_model
+
+
+def test_config_without_online_judge_still_loads(tmp_path: Path) -> None:
+    from rag_eval.judge.config import load_judge_config
+
+    raw = json.loads(JUDGE_JSON.read_text(encoding="utf-8"))
+    raw.pop("online_judge", None)
+    path = tmp_path / "judge.json"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    config = load_judge_config(path)
+    assert getattr(config, "online_judge", "missing") is None
+
+
+@pytest.mark.parametrize("mutation", [{"sample_rate": 1.5}, {"sample_rate": -0.1}, {"seed": None}])
+def test_online_judge_rejects_bad_sample_rate_and_missing_seed(tmp_path: Path, mutation: dict[str, object]) -> None:
+    from pydantic import ValidationError
+
+    from rag_eval.judge.config import load_judge_config
+
+    raw = json.loads(JUDGE_JSON.read_text(encoding="utf-8"))
+    assert "online_judge" in raw
+    block = dict(raw["online_judge"])
+    for key, value in mutation.items():
+        if value is None:
+            block.pop(key, None)
+        else:
+            block[key] = value
+    raw["online_judge"] = block
+    path = tmp_path / "judge.json"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    with pytest.raises(ValidationError):
+        load_judge_config(path)
+
+
+def test_online_judge_family_differs_from_openai_generators_and_is_not_claude() -> None:
+    from rag_eval.judge.config import assert_judge_family_differs, load_judge_config
+
+    config = load_judge_config()
+    online = getattr(config, "online_judge", None)
+    assert online is not None
+    assert "claude" not in online.judge_model.lower()
+    assert online.judge_family != "openai"
+    as_judge = config.model_copy(update={"judge_model": online.judge_model, "judge_family": online.judge_family})
+    assert_judge_family_differs(as_judge, "openai/gpt-5-mini")

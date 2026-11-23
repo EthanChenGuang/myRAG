@@ -1,4 +1,37 @@
 {
+  "$defs": {
+    "OnlineJudgeConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "judge_family": {
+          "title": "Judge Family",
+          "type": "string"
+        },
+        "judge_model": {
+          "title": "Judge Model",
+          "type": "string"
+        },
+        "sample_rate": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Sample Rate",
+          "type": "number"
+        },
+        "seed": {
+          "title": "Seed",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "sample_rate",
+        "seed",
+        "judge_model",
+        "judge_family"
+      ],
+      "title": "OnlineJudgeConfig",
+      "type": "object"
+    }
+  },
   "additionalProperties": false,
   "properties": {
     "base_url": {
@@ -22,6 +55,17 @@
       "minimum": 1,
       "title": "Max Concurrency",
       "type": "integer"
+    },
+    "online_judge": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/OnlineJudgeConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "provider": {
       "const": "openrouter",

@@ -4,6 +4,12 @@
   "judge_family": "openai",
   "judge_model": "openai/gpt-5-mini",
   "max_concurrency": 4,
+  "online_judge": {
+    "judge_family": "google",
+    "judge_model": "google/gemini-3.8-flash",
+    "sample_rate": 0.2,
+    "seed": 20261123
+  },
   "provider": "openrouter",
   "temperature": 0
 }

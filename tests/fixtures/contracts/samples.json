@@ -460,6 +460,12 @@
       "judge_family": "judge-family",
       "judge_model": "judge/model-a",
       "max_concurrency": 4,
+      "online_judge": {
+        "judge_family": "online-judge-family",
+        "judge_model": "online-judge/model-d",
+        "sample_rate": 0.2,
+        "seed": 1
+      },
       "provider": "openrouter",
       "temperature": 0.0
     },
