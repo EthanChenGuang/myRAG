@@ -4,16 +4,16 @@ milestone: v5.0
 current_phase: 01
 current_phase_name: Evaluation Harness & Baseline
 status: executing
-stopped_at: Completed 01-10-PLAN.md
-last_updated: "2026-11-23T10:07:26.770Z"
+stopped_at: Completed 01-11-PLAN.md
+last_updated: "2026-11-23T10:11:27.450Z"
 last_activity: 2026-11-23
 last_activity_desc: Phase 01 execution started
-state_head: 80124d0dbdae613ae1e6be07308f8898d5d3dfb3
+state_head: e12b7aee2866e20592ff1d9bddb298ccc41fc89b
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 22
-  completed_plans: 10
+  completed_plans: 11
 ---
 
 # Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-11-22)
 ## Current Position
 
 Phase: 01 (Evaluation Harness & Baseline) — EXECUTING
-Plan: 11 of 22
+Plan: 12 of 22
 Status: Ready to execute
 Last activity: 2026-11-23 — Phase 01 execution started
 
@@ -66,6 +66,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P08 | 10min | 2 tasks | 8 files |
 | Phase 01 P09 | 8min | 2 tasks | 6 files |
 | Phase 01 P10 | 15min | 2 tasks | 5 files |
+| Phase 01 P11 | 15min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -91,6 +92,7 @@ Recent decisions affecting current work:
 - [Phase 01]: 01-07: English fixture corpus kept plain and untuned; image document loads as warehouse-floorplan.png (filename from fixture-meta)
 - [Phase 01]: 01-09: vitest only collects tests/**/*.test.ts; node:test .mts files stay outside npm test
 - [Phase 01]: 01-10: request_options normalized with nulls before hashing; run_config_hash excludes golden_path, run_id, created_at, git_sha
+- [Phase 01]: 01-11: check-config manifest seeded by measurement (64 vars, 4 managed, 44 legacy with gaps); knownGaps limited to the four tracked locations
 
 ### Pending Todos
 
@@ -117,6 +119,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-23T10:07:26.704Z
-Stopped at: Completed 01-10-PLAN.md
+Last session: 2026-11-23T10:11:27.380Z
+Stopped at: Completed 01-11-PLAN.md
 Resume file: None
