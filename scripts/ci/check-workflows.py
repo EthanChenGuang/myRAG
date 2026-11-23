@@ -184,10 +184,16 @@ def check_nightly(errors: list[str]) -> None:
         if needle not in body:
             errors.append(f"nightly: judge job is missing '{needle}'")
     steps = all_steps(job)
-    gated = [s for s in steps if "HAS_JUDGE_KEYS" in str(s.get("if", ""))]
-    ungated = [s for s in steps if "HAS_JUDGE_KEYS" not in str(s.get("if", ""))]
-    if len(ungated) != 1 or SKIP_NOTICE not in str(ungated[0].get("run", "")):
-        errors.append("nightly: only the skip-notice step may run without the HAS_JUDGE_KEYS condition")
+    gated = [s for s in steps if "HAS_JUDGE_KEYS == 'true'" in str(s.get("if", ""))]
+    ungated = [s for s in steps if "HAS_JUDGE_KEYS == 'true'" not in str(s.get("if", ""))]
+    if (
+        len(ungated) != 1
+        or SKIP_NOTICE not in str(ungated[0].get("run", ""))
+        or "HAS_JUDGE_KEYS != 'true'" not in str(ungated[0].get("if", ""))
+    ):
+        errors.append("nightly: only the skip-notice step may run without the HAS_JUDGE_KEYS == 'true' condition")
+    if "HAS_JUDGE_KEYS" not in str((job.get("env") or {}).keys()):
+        errors.append("nightly: job env HAS_JUDGE_KEYS missing")
     if not gated:
         errors.append("nightly: remaining steps must be conditioned on HAS_JUDGE_KEYS")
     # secrets only as step env, never inside run scripts
