@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { MockLanguageModelV3 } from 'ai/test';
 import type { LanguageModel } from 'ai';
-import { GoldenItemSchema, RagTraceSchema, RunManifestSchema, type GoldenItem, type RagRunRequest, type RunManifest } from '../../src/lib/rag-eval/contracts.generated.ts';
+import { GoldenItemSchema, RagTraceSchema, RunManifestSchema, type GoldenItem, type RagRunRequest, type RagTrace, type RunManifest } from '../../src/lib/rag-eval/contracts.generated.ts';
 import { canonicalJson, configHash } from '../../src/lib/rag-eval/trace.ts';
 import { loadPinnedEvalEnv } from './eval-env.mts';
 import { EMBEDDER_ID, EMBEDDER_VERSION, embedderSourceSha256 } from './fixture-embedder.mts';
@@ -256,7 +256,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
   let inProcess: InProcessEval | undefined;
   let answerModule: typeof import('../../src/lib/rag-eval/answer.ts') | undefined;
   let edgeErrors = 0;
-  let firstEffectiveConfig: unknown = null;
+  let firstEffectiveConfig: RagTrace['effective_config'] | null = null;
   let manifestInputs: { corpusSha256: string | null; sqlSha256: Record<string, string> } = { corpusSha256: null, sqlSha256: {} };
   try {
     let send: (payload: RagRunRequest) => Promise<{ status: number; body: unknown }>;
@@ -321,7 +321,16 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
       }
       const trace = RagTraceSchema.parse(body);
       trace.item_id = item.id;
-      if (firstEffectiveConfig === null) firstEffectiveConfig = trace.effective_config;
+      if (firstEffectiveConfig === null) {
+        firstEffectiveConfig = trace.effective_config;
+        const serverMode = trace.effective_config.deployment_mode;
+        if (baseUrl && serverMode !== 'single-tenant' && serverMode !== 'multi-tenant') {
+          throw new Error(`[Eval Harness] server reports unknown deployment_mode ${JSON.stringify(serverMode)}`);
+        }
+        if (baseUrl && serverMode === 'multi-tenant' && !requestOptions.organization_id && !requestOptions.user_id) {
+          throw new Error('[Eval Harness] the server is multi-tenant: pass --org <uuid> or --user <uuid> to scope the run');
+        }
+      }
       fs.appendFileSync(tracesPath, `${JSON.stringify(trace)}\n`);
     }
 
@@ -340,6 +349,12 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     restoreConsole();
     answerModule?.setEvalLanguageModelFactory(null);
     if (inProcess) await inProcess.close();
+  }
+
+  const effectiveDeploymentMode: DeploymentMode =
+    baseUrl && firstEffectiveConfig ? (firstEffectiveConfig.deployment_mode as DeploymentMode) : deploymentMode;
+  if (effectiveDeploymentMode !== deploymentMode) {
+    console.warn(`[Eval Harness] server deployment_mode ${effectiveDeploymentMode} overrides --deployment-mode ${deploymentMode}`);
   }
 
   const normalizedOptions = {
@@ -364,7 +379,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
         golden_filter: goldenFilter,
         sql_sha256: manifestInputs.sqlSha256,
         request_options: normalizedOptions,
-        deployment_mode: deploymentMode,
+        deployment_mode: effectiveDeploymentMode,
       }),
       'utf8',
     )
@@ -376,7 +391,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     tier,
     created_at: new Date().toISOString(),
     git_sha: gitHeadSha(),
-    deployment_mode: deploymentMode,
+    deployment_mode: effectiveDeploymentMode,
     embedder,
     corpus_sha256: manifestInputs.corpusSha256,
     golden_path: path.relative(process.cwd(), goldenPath) || goldenPath,
@@ -392,5 +407,5 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
   const runPath = path.join(outDir, 'run.json');
   fs.writeFileSync(runPath, `${JSON.stringify(manifest, null, 2)}\n`);
 
-  return { tracesPath, logPath, itemCount: items.length, skippedCount: allItems.length - items.length, tier, deploymentMode, edgeErrors, runPath, manifest };
+  return { tracesPath, logPath, itemCount: items.length, skippedCount: allItems.length - items.length, tier, deploymentMode: effectiveDeploymentMode, edgeErrors, runPath, manifest };
 }

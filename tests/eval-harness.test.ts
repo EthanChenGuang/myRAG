@@ -219,3 +219,52 @@ describe('golden selection', () => {
     expect(selectGolden(items, goldenFilterFor(true)).map((item) => item.id)).toEqual(['en-a-001', 'en-b-002']);
   });
 });
+
+describe('live runs against a multi-tenant server', () => {
+  const SAMPLES_PATH = path.join(REPO_ROOT, 'tests/fixtures/contracts/samples.json');
+  const USER_ID = '33333333-3333-4333-8333-333333333333';
+  let server: http.Server;
+  let url = '';
+  let previousSecret: string | undefined;
+  const received: Array<Record<string, unknown>> = [];
+
+  beforeAll(async () => {
+    const sample = JSON.parse(fs.readFileSync(SAMPLES_PATH, 'utf8')).samples.RagTrace;
+    const trace = { ...sample, effective_config: { ...sample.effective_config, deployment_mode: 'multi-tenant' } };
+    server = http.createServer((req, res) => {
+      let raw = '';
+      req.on('data', (chunk) => (raw += chunk));
+      req.on('end', () => {
+        received.push(JSON.parse(raw));
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify(trace));
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    url = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+    previousSecret = process.env.RAG_EVAL_SECRET;
+    process.env.RAG_EVAL_SECRET = 'x'.repeat(48);
+  });
+
+  afterAll(async () => {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    if (previousSecret === undefined) delete process.env.RAG_EVAL_SECRET;
+    else process.env.RAG_EVAL_SECRET = previousSecret;
+  });
+
+  test('an unscoped run is refused and a scoped run records the server deployment mode', async () => {
+    const { runEval } = await import('../eval/harness/run-eval.mts');
+    const base = { goldenPath: GOLDEN_PATH, corpusDir: CORPUS_DIR, deploymentMode: 'single-tenant' as const, tier: 'live' as const, baseUrl: url };
+    await expect(runEval({ ...base, outDir: makeOutDir() })).rejects.toThrow(/--org <uuid> or --user <uuid>/);
+
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const result = await runEval({ ...base, outDir: makeOutDir(), requestOptions: { user_id: USER_ID } });
+      expect(result.manifest.deployment_mode).toBe('multi-tenant');
+      expect(result.manifest.request_options.user_id).toBe(USER_ID);
+    } finally {
+      warn.mockRestore();
+    }
+    expect((received.at(-1)?.options as Record<string, unknown>).user_id).toBe(USER_ID);
+  });
+});

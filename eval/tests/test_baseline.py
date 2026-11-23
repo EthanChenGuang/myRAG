@@ -133,3 +133,29 @@ def test_baseline_carries_run_identity_and_refuses_mixed_deployments():
     other = _report("c").model_copy(update={"deployment_mode": "multi-tenant"})
     with pytest.raises(NonDeterministicRunError, match="deployment_mode"):
         record_baseline([_report("a"), _report("b"), other])
+
+
+def test_cli_forwards_org_and_user_to_every_run(tmp_path, monkeypatch):
+    commands = []
+
+    class _Done:
+        returncode = 0
+        stdout = "deadbeef\n"
+
+    def fake_run(command, **_kwargs):
+        if command[0] == "git":
+            return _Done()
+        commands.append(command)
+        out = baseline_module.resolve_cli_path(command[command.index("--out") + 1])
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "report.json").write_text(_report(f"run-{len(commands)}").model_dump_json(), encoding="utf-8")
+        return _Done()
+
+    monkeypatch.setattr(baseline_module.subprocess, "run", fake_run)
+    org = "11111111-1111-4111-8111-111111111111"
+    user = "33333333-3333-4333-8333-333333333333"
+    assert main(["record", "--runs", "3", "--org", org, "--user", user, "--out", str(tmp_path / "b.json")]) == 0
+    assert len(commands) == 3
+    for command in commands:
+        assert command[command.index("--org") + 1] == org
+        assert command[command.index("--user") + 1] == user

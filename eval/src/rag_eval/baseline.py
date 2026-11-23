@@ -142,7 +142,13 @@ def _record(args: argparse.Namespace) -> int:
     for index in range(1, args.runs + 1):
         run_dir = RUNS_DIR / f"run-{index}"
         command = ["npx", "tsx", "eval/harness/run-smoke.mts", "--no-gate", "--out", str(run_dir)]
-        for flag, value in (("--golden", args.golden), ("--corpus", args.corpus), ("--base-url", args.base_url)):
+        for flag, value in (
+            ("--golden", args.golden),
+            ("--corpus", args.corpus),
+            ("--base-url", args.base_url),
+            ("--org", args.org),
+            ("--user", args.user),
+        ):
             if value:
                 command.extend([flag, str(value)])
         if args.include_drafts:
@@ -187,6 +193,8 @@ def main(argv: list[str] | None = None) -> int:
     record.add_argument("--corpus")
     record.add_argument("--base-url")
     record.add_argument("--allow-spread", action="store_true")
+    record.add_argument("--org", help="organization UUID to scope the run to (multi-tenant)")
+    record.add_argument("--user", help="user UUID to scope the run to (multi-tenant personal workspace)")
     record.add_argument("--include-drafts", action="store_true", help="also score review_status=draft items")
     record.set_defaults(handler=_record)
     args = parser.parse_args(argv)
