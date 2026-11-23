@@ -2,8 +2,9 @@ import json
 import os
 from pathlib import Path
 
-from rag_sidecar.contracts.eval_run import RunManifest
+from rag_sidecar.contracts.eval_run import RagTrace, RunManifest
 from rag_sidecar.contracts.golden import GoldenItem
+from rag_sidecar.contracts.latency import LatencyBudgets, StageLatency
 from rag_sidecar.contracts.report import (
     EvalReport,
     ItemResult,
@@ -44,7 +45,21 @@ def _embedder_version(version: str | None) -> int | None:
         return None
 
 
-def build_report(manifest: RunManifest, results: list[ItemResult], golden: list[GoldenItem]) -> EvalReport:
+def nearest_rank(values: list[float], quantile: float) -> float:
+    return 0.0
+
+
+def compute_latency(traces: list[RagTrace]) -> dict[str, StageLatency] | None:
+    return None
+
+
+def load_latency_budgets(path: Path | None = None) -> LatencyBudgets:
+    return LatencyBudgets(profiles={})
+
+
+def build_report(
+    manifest: RunManifest, results: list[ItemResult], golden: list[GoldenItem], traces: list[RagTrace] | None = None
+) -> EvalReport:
     notes: list[str] = []
     if any(item.language == "zh" for item in golden):
         notes.append(ZH_QUIRK_NOTE)
@@ -135,7 +150,7 @@ def _atomic_write(path: Path, text: str) -> None:
     os.replace(tmp, path)
 
 
-def write_report(report: EvalReport, out_dir: Path) -> tuple[Path, Path]:
+def write_report(report: EvalReport, out_dir: Path, budgets: LatencyBudgets | None = None) -> tuple[Path, Path]:
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     json_path = out_dir / "report.json"
