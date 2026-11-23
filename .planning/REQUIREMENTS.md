@@ -15,7 +15,7 @@ All requirements are written so they can be checked. "Behind a switch" means an 
 - [x] **EVAL-04**: A synthetic fixture corpus and fixture golden set covering Chinese, English and Italian are committed, so CI can run without customer data
 - [ ] **EVAL-05**: Tooling drafts a 50–200 item golden set from a real knowledge-base workspace (Claude-drafted plus Ragas-generated items) for the user to review; real-document items are stored outside git (gitignored path or a dedicated Supabase eval workspace), with a frozen dev/test split
 - [x] **EVAL-06**: An authenticated internal endpoint (`POST /api/internal/rag/run`, disabled in production unless explicitly enabled) runs the real TypeScript retrieval pipeline and returns a trace (query transforms, candidates, scores, final context, answer, citations)
-- [ ] **EVAL-07**: The eval runner computes deterministic retrieval metrics (Recall@k, MRR, matched by gold span) and refusal metrics (correct-refusal rate and false-refusal rate, reported separately) without an LLM judge
+- [x] **EVAL-07**: The eval runner computes deterministic retrieval metrics (Recall@k, MRR, matched by gold span) and refusal metrics (correct-refusal rate and false-refusal rate, reported separately) without an LLM judge
 - [ ] **EVAL-08**: The eval runner computes Faithfulness, Answer Relevance and Context Recall with DeepEval and Ragas using a pinned judge model from a different family than the generator, with telemetry disabled, and reports results per language and per category
 - [ ] **EVAL-09**: A baseline of the current system is recorded (three runs, config hash per run, mean and spread), and later phases compare against it with paired differences
 - [ ] **EVAL-10**: CI (new `.github/workflows`) runs a PR smoke tier (deterministic metrics on the fixture corpus, schema parity, config check, type-check) and a nightly full tier (judge metrics); a PR fails when a deterministic metric drops beyond the baseline noise band
@@ -155,7 +155,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | EVAL-04 | Phase 1 | Complete |
 | EVAL-05 | Phase 1 | Pending |
 | EVAL-06 | Phase 1 | Complete |
-| EVAL-07 | Phase 1 | Pending |
+| EVAL-07 | Phase 1 | Complete |
 | EVAL-08 | Phase 1 | Pending |
 | EVAL-09 | Phase 1 | Pending |
 | EVAL-10 | Phase 1 | Pending |

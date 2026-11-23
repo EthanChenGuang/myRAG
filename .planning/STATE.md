@@ -4,16 +4,16 @@ milestone: v5.0
 current_phase: 01
 current_phase_name: Evaluation Harness & Baseline
 status: executing
-stopped_at: Completed 01-05-PLAN.md
-last_updated: "2026-11-23T06:34:54.477Z"
+stopped_at: Completed 01-06-PLAN.md
+last_updated: "2026-11-23T06:37:29.529Z"
 last_activity: 2026-11-23
 last_activity_desc: Phase 01 execution started
-state_head: a1b339445af4465c0e46876cab35e9113f3b79d9
+state_head: 2f5a1692a6d2cab08df0953aa1f4acb6d583d016
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 22
-  completed_plans: 5
+  completed_plans: 6
 ---
 
 # Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-11-22)
 ## Current Position
 
 Phase: 01 (Evaluation Harness & Baseline) — EXECUTING
-Plan: 6 of 22
+Plan: 7 of 22
 Status: Ready to execute
 Last activity: 2026-11-23 — Phase 01 execution started
 
@@ -61,6 +61,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P03 | 6min | 2 tasks | 8 files |
 | Phase 01 P04 | 20min | 2 tasks | 9 files |
 | Phase 01 P05 | 5min | 2 tasks | 18 files |
+| Phase 01 P06 | 12min | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -82,6 +83,7 @@ Recent decisions affecting current work:
 - [Phase 01]: 01-04: trace kept = chunks entering the context (inherits document's kept_by when the chunk itself failed Filter 1)
 - [Phase 01]: 01-04: eval route does one chunk-metadata lookup per candidate feeding both image-url merge and URL collection
 - [Phase 01]: 01-05: NoiseConfig.metrics defaults to the five report metrics (false_refusal_rate lower); JudgeConfig.temperature required and bounded ge=0 le=0 so Zod enforces the pin
+- [Phase 01]: 01-06: freeze_splits overrides split of new ids with the rule-assigned split and raises only when an existing manifest id disagrees; manifest written only when new ids are added
 
 ### Pending Todos
 
@@ -108,6 +110,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-23T06:34:54.438Z
-Stopped at: Completed 01-05-PLAN.md
+Last session: 2026-11-23T06:37:29.491Z
+Stopped at: Completed 01-06-PLAN.md
 Resume file: None
