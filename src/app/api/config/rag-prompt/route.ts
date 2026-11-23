@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import fs from 'fs/promises';
-import path from 'path';
 import { requireAdminOrDeny } from '@/lib/admin-route-auth';
+import { EnvWriteError, invalidEnvValueReason, readEnvFile, writeEnvUpdates } from '@/lib/env-file';
 
 /**
  * API endpoint for RAG system prompt configuration
@@ -27,119 +26,6 @@ function safeDecodeURIComponent(text: string): string {
   }
 
   return decoded;
-}
-
-// Helper function to prepare text for .env.local (no encoding needed)
-function safeEncodeForEnv(text: string): string {
-  if (!text) return '';
-
-  // Return the text as-is, no encoding
-  // The .env.local file can handle plain text
-  return text;
-}
-
-// Helper function to get .env.local file path
-function getEnvFilePath(): string {
-  return path.join(process.cwd(), '.env.local');
-}
-
-// Helper function to parse .env.local file
-async function parseEnvFile(): Promise<Record<string, string>> {
-  try {
-    const envFilePath = getEnvFilePath();
-    const content = await fs.readFile(envFilePath, 'utf-8');
-    const env: Record<string, string> = {};
-
-    const lines = content.split('\n');
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (trimmed && !trimmed.startsWith('#')) {
-        const equalIndex = trimmed.indexOf('=');
-        if (equalIndex > 0) {
-          const key = trimmed.substring(0, equalIndex).trim();
-          const value = trimmed.substring(equalIndex + 1).trim();
-          env[key] = value;
-        }
-      }
-    }
-
-    return env;
-  } catch (error) {
-    console.error('Error parsing .env.local file:', error);
-    return {};
-  }
-}
-
-// Helper function to update .env.local file
-async function updateEnvFile(updates: Record<string, string>): Promise<void> {
-  try {
-    const envFilePath = getEnvFilePath();
-    let content = '';
-
-    try {
-      content = await fs.readFile(envFilePath, 'utf-8');
-    } catch (error) {
-      console.warn('Could not read .env.local file, creating new one');
-    }
-
-    // Special handling for RAG_PRE_CONTEXT and RAG_POST_CONTEXT
-    const ragKeys = ['RAG_PRE_CONTEXT', 'RAG_POST_CONTEXT'];
-    const ragUpdates: Record<string, string> = {};
-    const otherUpdates: Record<string, string> = {};
-
-    // Separate RAG context updates from other updates
-    for (const [key, value] of Object.entries(updates)) {
-      if (ragKeys.includes(key)) {
-        ragUpdates[key] = value;
-      } else {
-        otherUpdates[key] = value;
-      }
-    }
-
-    // Update non-RAG context variables first
-    for (const [key, value] of Object.entries(otherUpdates)) {
-      const regex = new RegExp(`^${key}=.*$`, 'm');
-      const newLine = `${key}=${value}`;
-
-      if (regex.test(content)) {
-        content = content.replace(regex, newLine);
-      } else {
-        if (!content.endsWith('\n')) content += '\n';
-        content += `${newLine}\n`;
-      }
-    }
-
-    // Handle RAG context variables - place them after RAG_SYSTEM_PROMPT
-    for (const [key, value] of Object.entries(ragUpdates)) {
-      const regex = new RegExp(`^${key}=.*$`, 'm');
-      const newLine = `${key}=${value}`;
-
-      if (regex.test(content)) {
-        // Variable exists, update it in place
-        content = content.replace(regex, newLine);
-      } else {
-        // Variable doesn't exist, add it after RAG_SYSTEM_PROMPT
-        const ragPromptRegex = /^RAG_SYSTEM_PROMPT=.*$/m;
-        const match = content.match(ragPromptRegex);
-
-        if (match) {
-          // Find the position after RAG_SYSTEM_PROMPT line
-          const matchIndex = match.index! + match[0].length;
-          // Insert the new variable after RAG_SYSTEM_PROMPT with a newline
-          content = content.slice(0, matchIndex) + '\n' + newLine + content.slice(matchIndex);
-        } else {
-          // RAG_SYSTEM_PROMPT doesn't exist, append at the end as fallback
-          if (!content.endsWith('\n')) content += '\n';
-          content += `${newLine}\n`;
-        }
-      }
-    }
-
-    await fs.writeFile(envFilePath, content, 'utf-8');
-  } catch (error) {
-    console.error('Error updating .env.local file:', error);
-    throw new Error('Failed to update .env.local file');
-  }
 }
 
 // Helper function to split existing RAG_SYSTEM_PROMPT into pre/post context
@@ -182,12 +68,16 @@ function assemblePrompt(preContext: string, postContext: string): string {
   return assembled.replace(/\n/g, '\\n');
 }
 
+function escapeNewlines(text: string): string {
+  return text.replace(/\r\n/g, '\n').replace(/\n/g, '\\n');
+}
+
 export async function GET(request: NextRequest) {
   const denied = await requireAdminOrDeny(request);
   if (denied) return denied;
 
   try {
-    const env = await parseEnvFile();
+    const env = readEnvFile();
 
     // First, try to get from RAG_PRE_CONTEXT and RAG_POST_CONTEXT
     let preContext = '';
@@ -213,19 +103,6 @@ export async function GET(request: NextRequest) {
       const split = splitExistingPrompt(decodedPrompt);
       preContext = split.preContext;
       postContext = split.postContext;
-
-      // If we successfully split an existing prompt, save the split version
-      if (preContext || postContext) {
-        const updates: Record<string, string> = {};
-        if (preContext) updates.RAG_PRE_CONTEXT = preContext;
-        if (postContext) updates.RAG_POST_CONTEXT = postContext;
-
-        try {
-          await updateEnvFile(updates);
-        } catch (error) {
-          console.warn('Could not save split prompt to .env.local:', error);
-        }
-      }
     }
 
     // Assemble the complete prompt for preview
@@ -278,15 +155,25 @@ export async function POST(request: NextRequest) {
 
     // Save individual sections with escaped newlines for .env.local format
     // The system assembles the prompt as: PRE_CONTEXT + {{context}} + POST_CONTEXT
-    updates.RAG_PRE_CONTEXT = preContext.replace(/\n/g, '\\n');
+    updates.RAG_PRE_CONTEXT = escapeNewlines(preContext);
     if (postContext) {
-      updates.RAG_POST_CONTEXT = postContext.replace(/\n/g, '\\n');
+      updates.RAG_POST_CONTEXT = escapeNewlines(postContext);
+    }
+
+    const invalid = Object.entries(updates)
+      .filter(([, value]) => invalidEnvValueReason(value) !== null)
+      .map(([name]) => name);
+    if (invalid.length > 0) {
+      return NextResponse.json(
+        { success: false, error: 'Prompt text contains characters that cannot be stored', invalid },
+        { status: 400 }
+      );
     }
 
     // Assemble prompt for response (not saved to env file)
     const assembledPrompt = assemblePrompt(preContext, postContext || '');
 
-    await updateEnvFile(updates);
+    writeEnvUpdates(updates);
 
     return NextResponse.json({
       success: true,
@@ -296,26 +183,16 @@ export async function POST(request: NextRequest) {
       assembledPrompt
     });
   } catch (error) {
-    console.error('Error saving RAG prompt configuration:', error);
+    console.error('[RAG Prompt API] failed to save RAG prompt configuration');
+    if (error instanceof EnvWriteError && error.reason !== 'io') {
+      return NextResponse.json(
+        { success: false, error: 'Prompt text cannot be stored in .env.local' },
+        { status: 400 }
+      );
+    }
     return NextResponse.json(
-      {
-        success: false,
-        error: 'Failed to save RAG prompt configuration',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      },
+      { success: false, error: 'Failed to save RAG prompt configuration' },
       { status: 500 }
     );
   }
-}
-
-// Handle OPTIONS request for CORS
-export async function OPTIONS(request: NextRequest) {
-  return new NextResponse(null, {
-    status: 200,
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
-    },
-  });
 }

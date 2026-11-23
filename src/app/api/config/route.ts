@@ -1,13 +1,13 @@
 import { NextResponse } from 'next/server';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as dotenv from 'dotenv';
 import { requireAdminOrDeny } from '@/lib/admin-route-auth';
 import {
   MAX_CONFIG_VALUE_LENGTH,
   isReadableEnvEntry,
   isWritableEnvName,
 } from '@/lib/config-env-allowlist';
+import { EnvWriteError, invalidEnvValueReason, parseEnvContent, stringifyJsonForEnv, writeEnvUpdates } from '@/lib/env-file';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -18,13 +18,24 @@ function envFilePath() {
   return path.resolve(process.cwd(), '.env.local');
 }
 
+function normalizeStructuredValue(text: string): string {
+  const trimmed = text.trim();
+  if (!trimmed.startsWith('[') && !trimmed.startsWith('{')) return text;
+  try {
+    const parsed: unknown = JSON.parse(trimmed);
+    return typeof parsed === 'object' && parsed !== null ? stringifyJsonForEnv(parsed) : text;
+  } catch {
+    return text;
+  }
+}
+
 export async function GET(request: Request) {
   const denied = await requireAdminOrDeny(request);
   if (denied) return denied;
 
   try {
     const envPath = envFilePath();
-    const parsed = fs.existsSync(envPath) ? dotenv.parse(fs.readFileSync(envPath, 'utf8')) : {};
+    const parsed = fs.existsSync(envPath) ? parseEnvContent(fs.readFileSync(envPath, 'utf8')) : {};
 
     const config: Record<string, string> = {};
     for (const [name, value] of Object.entries(parsed)) {
@@ -66,8 +77,8 @@ export async function POST(request: Request) {
       invalid.push(name);
       continue;
     }
-    const text = String(value);
-    if (text.length > MAX_CONFIG_VALUE_LENGTH || /[\r\n\0]/.test(text)) {
+    const text = normalizeStructuredValue(String(value));
+    if (text.length > MAX_CONFIG_VALUE_LENGTH || invalidEnvValueReason(text) !== null) {
       invalid.push(name);
       continue;
     }
@@ -91,26 +102,16 @@ export async function POST(request: Request) {
   }
 
   try {
-    const envPath = envFilePath();
-    let lines = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf8').split('\n') : [];
-
-    for (const [name, value] of entries) {
-      let found = false;
-      lines = lines.map((line) => {
-        const match = line.match(/^([A-Za-z0-9_]+)=(.*)$/);
-        if (match && match[1] === name) {
-          found = true;
-          return `${name}=${value}`;
-        }
-        return line;
-      });
-      if (!found) lines.push(`${name}=${value}`);
-    }
-
-    fs.writeFileSync(envPath, lines.join('\n'));
+    writeEnvUpdates(Object.fromEntries(entries));
     console.log('[Config API] configuration updated', { names: entries.map(([name]) => name) });
     return NextResponse.json({ success: true, message: 'Configuration saved' });
-  } catch {
+  } catch (error) {
+    if (error instanceof EnvWriteError && error.reason !== 'io') {
+      return NextResponse.json(
+        { success: false, error: 'Configuration contains names or values that are not allowed', rejected: [], invalid: error.names },
+        { status: 400 },
+      );
+    }
     console.error('[Config API] failed to write configuration');
     return NextResponse.json({ success: false, error: 'Failed to write configuration' }, { status: 500 });
   }
