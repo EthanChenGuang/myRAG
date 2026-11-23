@@ -196,12 +196,16 @@ def _eval_report() -> EvalReport:
         by_category={"general": _slice_metrics()},
         by_language_category={"en:general": _slice_metrics()},
         by_split={"dev": _slice_metrics()},
+        by_provenance={"synthetic_fixture": _slice_metrics()},
+        by_provenance_category={"synthetic_fixture/general": _slice_metrics()},
+        gate_population="all",
         items=[
             ItemResult(
                 item_id="en-general-001",
                 language="en",
                 category="general",
                 split="dev",
+                provenance="synthetic_fixture",
                 answerable=True,
                 refused=False,
                 span_count=1,

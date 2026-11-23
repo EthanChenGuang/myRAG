@@ -64,7 +64,10 @@
         "table",
         "scanned",
         "no_answer",
-        "general"
+        "general",
+        "colloquial",
+        "ambiguous",
+        "typo"
       ],
       "title": "Category",
       "type": "string"
@@ -114,7 +117,8 @@
         "synthetic_fixture",
         "claude_draft",
         "ragas_generated",
-        "human"
+        "human",
+        "production"
       ],
       "title": "Provenance",
       "type": "string"

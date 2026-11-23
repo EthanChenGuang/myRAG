@@ -43,7 +43,10 @@
             "table",
             "scanned",
             "no_answer",
-            "general"
+            "general",
+            "colloquial",
+            "ambiguous",
+            "typo"
           ],
           "title": "Category",
           "type": "string"
@@ -72,6 +75,17 @@
             "it"
           ],
           "title": "Language",
+          "type": "string"
+        },
+        "provenance": {
+          "enum": [
+            "synthetic_fixture",
+            "claude_draft",
+            "ragas_generated",
+            "human",
+            "production"
+          ],
+          "title": "Provenance",
           "type": "string"
         },
         "refused": {
@@ -107,6 +121,7 @@
         "language",
         "category",
         "split",
+        "provenance",
         "answerable",
         "refused",
         "span_count",
@@ -293,6 +308,20 @@
       "title": "By Language Category",
       "type": "object"
     },
+    "by_provenance": {
+      "additionalProperties": {
+        "$ref": "#/$defs/SliceMetrics"
+      },
+      "title": "By Provenance",
+      "type": "object"
+    },
+    "by_provenance_category": {
+      "additionalProperties": {
+        "$ref": "#/$defs/SliceMetrics"
+      },
+      "title": "By Provenance Category",
+      "type": "object"
+    },
     "by_split": {
       "additionalProperties": {
         "$ref": "#/$defs/SliceMetrics"
@@ -351,6 +380,15 @@
       ],
       "default": null,
       "title": "Embedder Version"
+    },
+    "gate_population": {
+      "default": "all",
+      "enum": [
+        "all",
+        "production"
+      ],
+      "title": "Gate Population",
+      "type": "string"
     },
     "golden_filter": {
       "$ref": "#/$defs/GoldenFilter"

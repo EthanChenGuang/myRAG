@@ -5,9 +5,20 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from rag_sidecar.contracts.eval_run import ConversationTurn
 
 Language = Literal["zh", "en", "it"]
-Category = Literal["multi_turn", "compound", "exact_term", "table", "scanned", "no_answer", "general"]
+Category = Literal[
+    "multi_turn",
+    "compound",
+    "exact_term",
+    "table",
+    "scanned",
+    "no_answer",
+    "general",
+    "colloquial",
+    "ambiguous",
+    "typo",
+]
 ReviewStatus = Literal["draft", "approved", "rejected"]
-Provenance = Literal["synthetic_fixture", "claude_draft", "ragas_generated", "human"]
+Provenance = Literal["synthetic_fixture", "claude_draft", "ragas_generated", "human", "production"]
 Split = Literal["dev", "test"]
 
 

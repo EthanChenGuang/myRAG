@@ -237,6 +237,15 @@
       "default": null,
       "title": "Embedder Version"
     },
+    "gate_population": {
+      "default": "all",
+      "enum": [
+        "all",
+        "production"
+      ],
+      "title": "Gate Population",
+      "type": "string"
+    },
     "golden_filter": {
       "$ref": "#/$defs/GoldenFilter"
     },

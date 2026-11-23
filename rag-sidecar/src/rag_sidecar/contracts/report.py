@@ -3,7 +3,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from rag_sidecar.contracts.eval_run import GoldenFilter, RagRunOptions
-from rag_sidecar.contracts.golden import Category, Language, Split
+from rag_sidecar.contracts.golden import Category, Language, Provenance, Split
 from rag_sidecar.contracts.latency import StageLatency
 
 
@@ -29,6 +29,7 @@ class ItemResult(_Contract):
     language: Language
     category: Category
     split: Split
+    provenance: Provenance
     answerable: bool
     refused: bool
     span_count: int = Field(ge=0)
@@ -56,6 +57,9 @@ class EvalReport(_Contract):
     by_category: dict[str, SliceMetrics]
     by_language_category: dict[str, SliceMetrics]
     by_split: dict[str, SliceMetrics]
+    by_provenance: dict[str, SliceMetrics] = Field(default_factory=dict)
+    by_provenance_category: dict[str, SliceMetrics] = Field(default_factory=dict)
+    gate_population: Literal["all", "production"] = "all"
     items: list[ItemResult]
     latency: dict[str, StageLatency] | None = None
     notes: list[str] = Field(default_factory=list)
