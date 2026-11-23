@@ -14,6 +14,11 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 
 export type DeploymentMode = 'single-tenant' | 'multi-tenant';
 
+const SQL_FILES: Record<DeploymentMode, string> = {
+  'single-tenant': 'supabase/single-tenant-setup.sql',
+  'multi-tenant': 'supabase/multi-tenant-setup.sql',
+};
+
 export interface FixtureDatabase {
   db: PGlite;
   fixtureUserId: string;
@@ -44,7 +49,7 @@ export async function createFixtureDatabase(options: {
     throw new Error(`[Fixture DB] unsupported deployment mode: ${String(deploymentMode)}`);
   }
 
-  const sqlRelpath = `supabase/${deploymentMode}-setup.sql`;
+  const sqlRelpath = SQL_FILES[deploymentMode];
   const sqlBytes = fs.readFileSync(path.join(REPO_ROOT, sqlRelpath));
   const corpus = loadCorpus(corpusDir);
 
