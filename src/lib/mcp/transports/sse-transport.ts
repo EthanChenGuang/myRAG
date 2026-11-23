@@ -5,6 +5,7 @@
  */
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { logger } from '@/lib/logger';
 import { McpServerConfig } from '../server-config';
@@ -33,7 +34,7 @@ export class SseTransport implements McpTransport {
     try {
       // Create SSE transport with proper headers
       this.transport = new SSEClientTransport(new URL(this.config.endpoint), {
-        headers: this.config.transport.headers
+        requestInit: { headers: this.config.transport.headers }
       });
 
       // Create MCP client
@@ -140,7 +141,11 @@ export class SseTransport implements McpTransport {
     this.errorHandlers.forEach(handler => handler(error));
   }
 
-  getSdkTransport(): any | null {
+  getClient(): Client | null {
+    return this.client;
+  }
+
+  getSdkTransport(): Transport | null {
     return this.transport;
   }
 }
