@@ -102,6 +102,7 @@ class RagTrace(_Contract):
     answer: str | None = None
     citations: list[TraceCitation]
     stage_latency_ms: dict[str, float]
+    stage_status: dict[str, str] = Field(default_factory=dict)
     effective_config: TraceEffectiveConfig
     config_hash: str
 

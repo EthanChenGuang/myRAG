@@ -1,17 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { env } from '@/lib/env';
-import { supabase } from '@/lib/supabase';
+import { getSupabaseAdmin } from '@/lib/supabase';
 import { validateRequest } from '@/lib/api-middleware';
-import { enhancedRetrieveChunks } from '@/lib/enhanced-rag-retrieval';
+import {
+  createTraceCollector,
+  evalScope,
+  fetchAssemblyRows,
+  finishTrace,
+  runRetrieval,
+  scopeKey,
+  type AssemblyRows,
+  type Candidate,
+} from '@/lib/rag';
 import { RagRunRequestSchema, RagTraceSchema } from '@/lib/rag-eval/contracts.generated';
-import { checkEvalAccess, checkEvalScope } from '@/lib/rag-eval/auth';
-import { applyLegacyPostFilter, type LegacyDocumentRow } from '@/lib/rag-eval/legacy-post-filter';
+import { checkEvalAccess } from '@/lib/rag-eval/auth';
 import { buildEffectiveConfig, configHash } from '@/lib/rag-eval/trace';
 import { generateEvalAnswer, isGPTGeneratorModel, resolveGeneratorModel } from '@/lib/rag-eval/answer';
 
 export const runtime = 'nodejs';
 
-type Metadata = Record<string, unknown>;
+const EMPTY_ROWS: AssemblyRows = { documents: new Map(), chunkMetadata: new Map() };
+
+async function loadCandidateRows(candidates: Candidate[], signal: AbortSignal): Promise<AssemblyRows> {
+  if (candidates.length === 0) return EMPTY_ROWS;
+  const adminClient = getSupabaseAdmin();
+  if (!adminClient) return EMPTY_ROWS;
+  try {
+    return await fetchAssemblyRows(candidates, { adminClient, signal });
+  } catch (error: unknown) {
+    console.error('[RAG Eval] candidate row lookup failed:', error instanceof Error ? error.name : 'Error');
+    return EMPTY_ROWS;
+  }
+}
 
 export async function POST(req: NextRequest) {
   const access = checkEvalAccess(req.headers, {
@@ -32,128 +52,120 @@ export async function POST(req: NextRequest) {
   const deploymentMode = env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE;
   const organizationId = deploymentMode === 'multi-tenant' ? (options?.organization_id ?? null) : null;
   const userId = options?.user_id ?? null;
-  const scope = checkEvalScope({ deploymentMode, organizationId, userId, allowedScopes: env.RAG_EVAL_ALLOWED_SCOPES });
-  if (!scope.ok) {
+  const scoped = evalScope({ deploymentMode, organizationId, userId, allowedScopes: env.RAG_EVAL_ALLOWED_SCOPES });
+  if (!scoped.ok) {
     console.warn('[RAG Eval] scope refused:', { deploymentMode, hasOrganization: !!organizationId, hasUser: !!userId });
-    return NextResponse.json({ error: scope.error }, { status: scope.status });
+    return NextResponse.json({ error: scoped.error }, { status: scoped.status });
   }
+  const { scope } = scoped;
+
+  const collector = createTraceCollector({ profile: 'eval', tenantKey: scopeKey(scope) });
 
   try {
-    const configuredCount = (env as unknown as Record<string, string | undefined>).RAG_FINAL_RESULT_COUNT;
-
-    const retrievalStart = Date.now();
-    const enhancedResult = await enhancedRetrieveChunks(query, {
-      maxResults: options?.max_results ?? parseInt(configuredCount || '25'),
-      enableTemporalBoost: true,
-      enableFinancialBoost: true,
-      requireTemporalMatch: false,
-      fallbackToLowerThreshold: true,
-      organizationId,
-      userId,
-    });
-    const retrievalMs = Date.now() - retrievalStart;
-
-    const postFilterStart = Date.now();
-    const candidates = enhancedResult.chunks;
-    const documents = new Map<string, LegacyDocumentRow>();
-    const chunkMetadata = new Map<string, Metadata | null>();
-    const documentLookups = new Set<string>();
-
-    for (const chunk of candidates) {
-      if (!documentLookups.has(chunk.document_id)) {
-        documentLookups.add(chunk.document_id);
-        const { data: docRow, error: docError } = await supabase
-          .from('documents')
-          .select('id, filename, created_at, content, metadata')
-          .eq('id', chunk.document_id)
-          .single();
-        if (!docError && docRow) {
-          documents.set(chunk.document_id, docRow as LegacyDocumentRow);
-        }
-      }
-      if (!documents.has(chunk.document_id)) continue;
-
-      const { data: chunkRow } = await supabase.from('document_chunks').select('metadata').eq('id', chunk.chunk_id).single();
-      chunkMetadata.set(chunk.chunk_id, (chunkRow?.metadata as Metadata | null | undefined) ?? null);
-    }
-
     const generatorModel = includeAnswer ? resolveGeneratorModel(options?.generator_model) : null;
     const isGPTModel = generatorModel !== null && isGPTGeneratorModel(generatorModel);
 
-    const filtered = applyLegacyPostFilter({
-      queryText: query,
-      candidates,
-      documents,
-      chunkMetadata,
-      chunkUrlMetadata: chunkMetadata,
-      isGPTModel,
-      ragMode,
-      webSearchEnabled: false,
-    });
-    const postFilterMs = Date.now() - postFilterStart;
-
-    const stageLatency: Record<string, number> = { retrieval: retrievalMs, post_filter: postFilterMs };
-    let answer: string | null = null;
-    if (generatorModel !== null && !filtered.refused) {
-      const generationStart = Date.now();
-      try {
-        answer = await generateEvalAnswer({ query, conversation, context: filtered.context, ragMode, generatorModel });
-      } catch (error: unknown) {
-        const name = error instanceof Error ? error.name : 'Error';
-        const status = (error as { statusCode?: unknown } | null)?.statusCode;
-        const detail = typeof status === 'number' ? `${name} (HTTP ${status})` : name;
-        console.error('[RAG Eval] generation failed:', detail);
-        return NextResponse.json({ error: `generation failed: ${detail}` }, { status: 500 });
-      }
-      stageLatency.generation = Date.now() - generationStart;
-    }
-
-    const effectiveConfig = buildEffectiveConfig();
-    effectiveConfig.generator_model = generatorModel;
-    const trace = {
-      schema_version: 1 as const,
-      item_id: itemId ?? null,
+    const result = await runRetrieval({
+      scope,
       query,
-      query_transforms: [],
-      query_context: {
-        is_financial_query: enhancedResult.queryContext.isFinancialQuery,
-        is_temporal_query: enhancedResult.queryContext.isTemporalQuery,
-        required_precision: enhancedResult.queryContext.requiredPrecision,
-        search_strategy: enhancedResult.queryContext.searchStrategy,
-        suggested_threshold: enhancedResult.queryContext.suggestedThreshold,
+      profile: 'eval',
+      options: {
+        maxResults: options?.max_results ?? parseInt(env.RAG_FINAL_RESULT_COUNT || '25'),
+        isGPTModel,
+        ragMode,
+        webSearchEnabled: false,
       },
-      retrieval_strategy: enhancedResult.retrievalStrategy,
-      candidates: candidates.map((chunk, index) => ({
-        chunk_id: chunk.chunk_id,
-        document_id: chunk.document_id,
-        document_name: documents.get(chunk.document_id)?.filename ?? null,
-        content: chunk.content,
-        similarity: chunk.similarity,
-        final_score: chunk.final_score ?? null,
-        match_reason: chunk.match_reason ?? null,
-        has_image: !!(chunk.metadata?.image_url || chunkMetadata.get(chunk.chunk_id)?.image_url),
-        rank: index + 1,
-      })),
-      kept: filtered.kept,
-      used_documents: filtered.usedDocuments,
-      context: filtered.context,
-      refused: filtered.refused,
-      refusal_reason: filtered.refusalReason,
-      answer,
-      citations: [],
-      stage_latency_ms: stageLatency,
-      effective_config: effectiveConfig,
-      config_hash: configHash(effectiveConfig),
-    };
+      signal: req.signal,
+      trace: collector,
+    });
 
-    const checked = RagTraceSchema.safeParse(trace);
-    if (!checked.success) {
-      console.error('[RAG Eval] trace contract violation:', checked.error.issues.map((issue) => ({ path: issue.path.join('.'), message: issue.message })));
-      return NextResponse.json({ error: 'trace contract violation' }, { status: 500 });
+    try {
+      if (result.status === 'error') {
+        console.error('[RAG Eval] retrieval failed:', { reason: result.reason });
+        return NextResponse.json({ error: 'retrieval failed', reason: result.reason }, { status: 500 });
+      }
+      const assembled = result.stages.find((stage) => stage.name === 'assemble');
+      if (result.queryContext === null || (assembled && assembled.status !== 'ok' && assembled.status !== 'disabled')) {
+        console.error('[RAG Eval] retrieval incomplete:', { status: result.status, reason: result.reason });
+        return NextResponse.json({ error: 'retrieval failed', reason: result.reason }, { status: 500 });
+      }
+
+      const candidates = result.candidates;
+      const rows = await loadCandidateRows(candidates, req.signal);
+
+      let answer: string | null = null;
+      const refused = result.refusalCandidate;
+      if (generatorModel !== null && !refused) {
+        const generationStart = collector.now();
+        try {
+          answer = await generateEvalAnswer({ query, conversation, context: result.context, ragMode, generatorModel });
+        } catch (error: unknown) {
+          const name = error instanceof Error ? error.name : 'Error';
+          const status = (error as { statusCode?: unknown } | null)?.statusCode;
+          const detail = typeof status === 'number' ? `${name} (HTTP ${status})` : name;
+          console.error('[RAG Eval] generation failed:', detail);
+          return NextResponse.json({ error: `generation failed: ${detail}` }, { status: 500 });
+        }
+        collector.record({ name: 'generation', status: 'ok', startedAt: generationStart, endedAt: collector.now() });
+      }
+
+      const retrievalStrategy = result.stages.find((stage) => stage.name === 'search')?.detail ?? 'unknown';
+      const queryContext = result.queryContext;
+      const effectiveConfig = buildEffectiveConfig();
+      effectiveConfig.generator_model = generatorModel;
+      const trace = {
+        schema_version: 1 as const,
+        item_id: itemId ?? null,
+        query,
+        query_transforms: [],
+        query_context: {
+          is_financial_query: queryContext.isFinancialQuery,
+          is_temporal_query: queryContext.isTemporalQuery,
+          required_precision: queryContext.requiredPrecision,
+          search_strategy: queryContext.searchStrategy,
+          suggested_threshold: queryContext.suggestedThreshold,
+        },
+        retrieval_strategy: retrievalStrategy,
+        candidates: candidates.map((chunk, index) => ({
+          chunk_id: chunk.chunk_id,
+          document_id: chunk.document_id,
+          document_name: rows.documents.get(chunk.document_id)?.filename ?? null,
+          content: chunk.content,
+          similarity: chunk.similarity,
+          final_score: chunk.final_score ?? null,
+          match_reason: chunk.match_reason ?? null,
+          has_image: !!(chunk.metadata?.image_url || rows.chunkMetadata.get(chunk.chunk_id)?.image_url),
+          rank: index + 1,
+        })),
+        kept: result.kept,
+        used_documents: result.usedDocuments.map((doc) => ({
+          document_id: doc.id,
+          name: doc.name,
+          similarity: doc.similarity ?? null,
+          image_url: doc.image_url ?? null,
+        })),
+        context: result.context,
+        refused,
+        refusal_reason: refused ? ('no_relevant_context' as const) : null,
+        answer,
+        citations: [],
+        stage_latency_ms: collector.toStageLatency(),
+        stage_status: collector.toStageStatus(),
+        effective_config: effectiveConfig,
+        config_hash: configHash(effectiveConfig),
+      };
+
+      const checked = RagTraceSchema.safeParse(trace);
+      if (!checked.success) {
+        console.error('[RAG Eval] trace contract violation:', checked.error.issues.map((issue) => ({ path: issue.path.join('.'), message: issue.message })));
+        return NextResponse.json({ error: 'trace contract violation' }, { status: 500 });
+      }
+
+      console.log('[RAG Eval] trace built:', { candidates: candidates.length, kept: result.kept.length, refused });
+      return NextResponse.json(checked.data);
+    } finally {
+      finishTrace(collector, result);
     }
-
-    console.log('[RAG Eval] trace built:', { candidates: candidates.length, kept: filtered.kept.length, refused: filtered.refused });
-    return NextResponse.json(checked.data);
   } catch (error: unknown) {
     const name = error instanceof Error ? error.name : 'Error';
     const message = error instanceof Error ? error.message : String(error);

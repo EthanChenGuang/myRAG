@@ -6,7 +6,7 @@ export { createTraceCollector } from './trace/collector';
 export type { TraceCollector, StageEntry } from './trace/collector';
 export { finishTrace } from './trace/finish';
 export type { FinishTraceOptions } from './trace/finish';
-export { isTenantScope } from './tenant/scope';
+export { isTenantScope, scopeKey } from './tenant/scope';
 export { evalScope } from './tenant/eval';
 export type { EvalScopeInput, EvalScopeOutcome } from './tenant/eval';
 export type { TenantScope } from './tenant/scope';
