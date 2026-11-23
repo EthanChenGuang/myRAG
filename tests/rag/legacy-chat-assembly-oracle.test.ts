@@ -10,6 +10,26 @@ const ORACLE_PATH = path.join(REPO_ROOT, 'tests/fixtures/legacy-chat-assembly.ts
 const CHAT_SNAPSHOT_PATH = path.join(REPO_ROOT, 'tests/fixtures/characterization/chat.json');
 const ROUTE_AT_BASELINE = 'git show 172c2ad:src/app/api/chat/route.ts';
 
+interface FrozenCandidates {
+  question: string;
+  chunks: Array<{
+    chunk_id: string;
+    document_id: string;
+    content: string;
+    similarity: number;
+    metadata: unknown;
+    temporal_score?: number;
+    financial_score?: number;
+    final_score?: number;
+    match_reason?: string;
+  }>;
+}
+
+// Candidates of the retired enhancedRetrieveChunks, frozen before its module was deleted.
+const FROZEN_CANDIDATES = JSON.parse(
+  fs.readFileSync(path.join(REPO_ROOT, 'tests/fixtures/characterization/legacy-candidates.json'), 'utf8'),
+) as FrozenCandidates[];
+
 const REGION_START = '// CHANGE 2: Add keyword-based document filtering';
 const REGION_END = "context.trim().toLowerCase().startsWith('no relevant context found');";
 
@@ -60,26 +80,19 @@ describe('frozen chat assembly oracle', () => {
     it.each(['en-general-001', 'en-compound-001'])('assembles a non-empty context for %s', async (itemId) => {
       vi.resetModules();
       const { legacyChatAssembly } = await import('../fixtures/legacy-chat-assembly');
-      const { enhancedRetrieveChunks } = await import('@/lib/enhanced-rag-retrieval');
       const { getSupabaseAdmin } = await import('@/lib/supabase');
       const { formatURLsForContext } = await import('@/lib/url-extractor');
-      const { getQueryEmbedding } = await import('@/lib/document-processor');
-      const { env } = await import('@/lib/env');
+      const { embedText } = await import('@/lib/rag');
+      const getQueryEmbedding = (text: string) => embedText(text, { signal: new AbortController().signal });
 
       const question = readGoldenQuestions().find((item) => item.id === itemId)?.question as string;
       expect(question).toBeTruthy();
       const supabase = getSupabaseAdmin();
       expect(supabase).toBeTruthy();
 
-      const enhanced = await enhancedRetrieveChunks(question, {
-        maxResults: parseInt(env.RAG_FINAL_RESULT_COUNT || '25'),
-        enableTemporalBoost: true,
-        enableFinancialBoost: true,
-        requireTemporalMatch: false,
-        fallbackToLowerThreshold: true,
-        organizationId: null,
-        userId: null,
-      });
+      const frozen = FROZEN_CANDIDATES.find((entry) => entry.question === question);
+      expect(frozen, 'no frozen candidates for the question').toBeTruthy();
+      const enhanced = frozen as FrozenCandidates;
       const similarChunks = enhanced.chunks.map((chunk) => ({
         chunk_id: chunk.chunk_id,
         document_id: chunk.document_id,

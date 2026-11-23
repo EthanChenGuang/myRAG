@@ -16,18 +16,22 @@ const questions: string[] = fs
   .filter((line) => line.trim() !== '')
   .map((line) => (JSON.parse(line) as { question: string }).question);
 
-const OPTIONS = {
-  maxResults: 25,
-  enableTemporalBoost: true,
-  enableFinancialBoost: true,
-  requireTemporalMatch: false,
-  fallbackToLowerThreshold: true,
-};
+interface FrozenLegacyOutput {
+  question: string;
+  chunks: unknown[];
+  queryContext: unknown;
+}
 
-describe('runRetrieval through the re-homed legacy search equals enhancedRetrieveChunks', () => {
+// Output of the retired enhancedRetrieveChunks for each fixture question, frozen before its deletion.
+const frozen: FrozenLegacyOutput[] = JSON.parse(
+  fs.readFileSync(path.join(REPO_ROOT, 'tests/fixtures/characterization/legacy-candidates.json'), 'utf8'),
+);
+
+const roundTrip = <T>(value: T): T => JSON.parse(JSON.stringify(value));
+
+describe('runRetrieval through the re-homed legacy search equals the frozen enhancedRetrieveChunks output', () => {
   let fixture: FixtureDatabase;
   let edge: FakeEdge;
-  let legacy: typeof import('@/lib/enhanced-rag-retrieval');
   let rag: typeof import('@/lib/rag');
   let scopeModule: typeof import('@/lib/rag/tenant/scope');
   let deps: typeof import('@/lib/rag/deps');
@@ -37,7 +41,6 @@ describe('runRetrieval through the re-homed legacy search equals enhancedRetriev
     edge = await startFakeEdge({ db: fixture.db });
     Object.assign(process.env, fixtureProcessEnv(edge.url));
     process.env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE = 'single-tenant';
-    legacy = await import('@/lib/enhanced-rag-retrieval');
     rag = await import('@/lib/rag');
     scopeModule = await import('@/lib/rag/tenant/scope');
     deps = await import('@/lib/rag/deps');
@@ -49,16 +52,17 @@ describe('runRetrieval through the re-homed legacy search equals enhancedRetriev
     await fixture?.db.close();
   });
 
-  test('the golden set has 72 questions', () => {
+  test('the golden set has 72 questions and the frozen output covers each one', () => {
     assert.equal(questions.length, 72);
+    assert.deepEqual(frozen.map((entry) => entry.question), questions);
   });
 
   test('all 72 fixture questions return deep-equal candidates and query context', async () => {
     const scope = scopeModule.mintScope('single', null, null);
     let equal = 0;
     let withCandidates = 0;
-    for (const question of questions) {
-      const old = await legacy.enhancedRetrieveChunks(question, OPTIONS);
+    for (const { question, chunks, queryContext } of frozen) {
+      const old = { chunks, queryContext };
       const fresh = await rag.runRetrieval({
         scope,
         query: question,
@@ -66,8 +70,8 @@ describe('runRetrieval through the re-homed legacy search equals enhancedRetriev
         options: { maxResults: 25, fallbackToLowerThreshold: true },
         signal: new AbortController().signal,
       });
-      assert.deepStrictEqual(fresh.candidates, old.chunks, `candidates differ for: ${question}`);
-      assert.deepStrictEqual(fresh.queryContext, old.queryContext, `query context differs for: ${question}`);
+      assert.deepStrictEqual(roundTrip(fresh.candidates), old.chunks, `candidates differ for: ${question}`);
+      assert.deepStrictEqual(roundTrip(fresh.queryContext), old.queryContext, `query context differs for: ${question}`);
       if (old.chunks.length === 0) {
         assert.equal(fresh.status, 'empty', `status for: ${question}`);
         assert.equal(fresh.reason, 'no_candidates', `reason for: ${question}`);

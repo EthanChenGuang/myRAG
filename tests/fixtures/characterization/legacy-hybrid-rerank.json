@@ -1,0 +1,1012 @@
+{
+  "seeds": {
+    "1": [
+      {
+        "chunk_id": "chunk-1-6",
+        "document_id": "doc-2",
+        "content": "creator creator brand refund floorplan shipping creator creator support logo refund brand floorplan refund logo policy policy invoice warehouse floorplan warehouse onboarding creator logo",
+        "similarity": 0.987,
+        "metadata": {
+          "name": "item-6",
+          "scoreBreakdown": {
+            "semantic": 0.987,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.7896000000000001
+      },
+      {
+        "chunk_id": "chunk-1-2",
+        "document_id": "doc-2",
+        "content": "brand onboarding brand warehouse creator onboarding support shipping onboarding",
+        "similarity": 0.975,
+        "metadata": {
+          "name": "item-2",
+          "scoreBreakdown": {
+            "semantic": 0.975,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.78
+      },
+      {
+        "chunk_id": "chunk-1-3",
+        "document_id": "doc-3",
+        "content": "brand shipping window creator policy floorplan support logo refund",
+        "similarity": 0.951,
+        "metadata": {
+          "name": "item-3",
+          "scoreBreakdown": {
+            "semantic": 0.951,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.7608
+      },
+      {
+        "chunk_id": "chunk-1-1",
+        "document_id": "doc-1",
+        "content": "support policy onboarding support logo shipping warehouse policy window refund logo window shipping warehouse brand logo invoice",
+        "similarity": 0.931,
+        "metadata": {
+          "name": "item-1",
+          "scoreBreakdown": {
+            "semantic": 0.931,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.7448000000000001
+      },
+      {
+        "chunk_id": "chunk-1-5",
+        "document_id": "doc-1",
+        "content": "refund refund onboarding invoice creator brand shipping onboarding shipping creator brand window support shipping floorplan warehouse warehouse refund creator warehouse onboarding brand invoice logo",
+        "similarity": 0.911,
+        "metadata": {
+          "name": "item-5",
+          "scoreBreakdown": {
+            "semantic": 0.911,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.7288000000000001
+      }
+    ],
+    "2": [
+      {
+        "chunk_id": "chunk-2-6",
+        "document_id": "doc-2",
+        "content": "floorplan floorplan shipping invoice warehouse shipping refund brand onboarding creator onboarding warehouse policy",
+        "similarity": 0.908,
+        "metadata": {
+          "name": "item-6",
+          "scoreBreakdown": {
+            "semantic": 0.908,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.7264
+      },
+      {
+        "chunk_id": "chunk-2-8",
+        "document_id": "doc-0",
+        "content": "support shipping floorplan creator warehouse invoice invoice shipping shipping creator invoice refund logo window brand window invoice logo logo warehouse onboarding",
+        "similarity": 0.848,
+        "metadata": {
+          "name": "item-8",
+          "scoreBreakdown": {
+            "semantic": 0.848,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.6784
+      },
+      {
+        "chunk_id": "chunk-2-5",
+        "document_id": "doc-1",
+        "content": "support refund floorplan onboarding refund support refund support",
+        "similarity": 0.575,
+        "metadata": {
+          "name": "item-5",
+          "scoreBreakdown": {
+            "semantic": 0.575,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.45999999999999996
+      },
+      {
+        "chunk_id": "chunk-2-1",
+        "document_id": "doc-1",
+        "content": "invoice creator creator refund brand onboarding creator support shipping shipping brand policy window policy window refund brand",
+        "similarity": 0.518,
+        "metadata": {
+          "name": "item-1",
+          "scoreBreakdown": {
+            "semantic": 0.518,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.41440000000000005
+      },
+      {
+        "chunk_id": "chunk-2-4",
+        "document_id": "doc-0",
+        "content": "floorplan floorplan invoice creator onboarding window invoice window floorplan shipping logo invoice",
+        "similarity": 0.475,
+        "metadata": {
+          "name": "item-4",
+          "scoreBreakdown": {
+            "semantic": 0.475,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.38
+      }
+    ],
+    "3": [
+      {
+        "chunk_id": "chunk-3-1",
+        "document_id": "doc-1",
+        "content": "shipping shipping support policy brand logo logo floorplan policy brand creator brand floorplan invoice support support",
+        "similarity": 0.986,
+        "metadata": {
+          "name": "item-1",
+          "scoreBreakdown": {
+            "semantic": 0.986,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.7888000000000001
+      },
+      {
+        "chunk_id": "chunk-3-9",
+        "document_id": "doc-1",
+        "content": "refund refund onboarding support support onboarding window",
+        "similarity": 0.886,
+        "metadata": {
+          "name": "item-9",
+          "scoreBreakdown": {
+            "semantic": 0.886,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.7088000000000001
+      },
+      {
+        "chunk_id": "chunk-3-3",
+        "document_id": "doc-3",
+        "content": "invoice logo creator support window logo floorplan policy warehouse shipping shipping refund invoice creator",
+        "similarity": 0.848,
+        "metadata": {
+          "name": "item-3",
+          "scoreBreakdown": {
+            "semantic": 0.848,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.6784
+      },
+      {
+        "chunk_id": "chunk-3-0",
+        "document_id": "doc-0",
+        "content": "warehouse support invoice brand support floorplan brand refund invoice window",
+        "similarity": 0.792,
+        "metadata": {
+          "name": "item-0",
+          "scoreBreakdown": {
+            "semantic": 0.792,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.6336
+      },
+      {
+        "chunk_id": "chunk-3-6",
+        "document_id": "doc-2",
+        "content": "support onboarding onboarding window creator floorplan logo invoice invoice brand logo onboarding shipping shipping warehouse",
+        "similarity": 0.582,
+        "metadata": {
+          "name": "item-6",
+          "scoreBreakdown": {
+            "semantic": 0.582,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.4656
+      }
+    ],
+    "4": [
+      {
+        "chunk_id": "chunk-4-2",
+        "document_id": "doc-2",
+        "content": "floorplan policy invoice warehouse logo refund creator warehouse window window floorplan support refund creator window shipping brand creator onboarding",
+        "similarity": 0.908,
+        "metadata": {
+          "name": "item-2",
+          "scoreBreakdown": {
+            "semantic": 0.908,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.7264
+      },
+      {
+        "chunk_id": "chunk-4-3",
+        "document_id": "doc-3",
+        "content": "window warehouse policy logo logo shipping logo refund invoice window window refund invoice support policy shipping logo",
+        "similarity": 0.816,
+        "metadata": {
+          "name": "item-3",
+          "scoreBreakdown": {
+            "semantic": 0.816,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.6528
+      },
+      {
+        "chunk_id": "chunk-4-1",
+        "document_id": "doc-1",
+        "content": "shipping onboarding brand logo brand warehouse policy logo invoice refund warehouse creator refund brand shipping shipping",
+        "similarity": 0.603,
+        "metadata": {
+          "name": "item-1",
+          "scoreBreakdown": {
+            "semantic": 0.603,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.4824
+      },
+      {
+        "chunk_id": "chunk-4-8",
+        "document_id": "doc-0",
+        "content": "window invoice brand brand logo onboarding shipping refund brand window brand invoice",
+        "similarity": 0.52,
+        "metadata": {
+          "name": "item-8",
+          "scoreBreakdown": {
+            "semantic": 0.52,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.41600000000000004
+      },
+      {
+        "chunk_id": "chunk-4-0",
+        "document_id": "doc-0",
+        "content": "floorplan warehouse invoice refund floorplan refund logo warehouse invoice floorplan",
+        "similarity": 0.477,
+        "metadata": {
+          "name": "item-0",
+          "scoreBreakdown": {
+            "semantic": 0.477,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.3816
+      }
+    ],
+    "5": [
+      {
+        "chunk_id": "chunk-5-2",
+        "document_id": "doc-2",
+        "content": "logo invoice policy brand onboarding policy support logo creator logo",
+        "similarity": 0.888,
+        "metadata": {
+          "name": "item-2",
+          "scoreBreakdown": {
+            "semantic": 0.888,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.7104
+      },
+      {
+        "chunk_id": "chunk-5-12",
+        "document_id": "doc-0",
+        "content": "logo shipping support logo warehouse policy logo brand window onboarding support support creator logo window logo logo shipping",
+        "similarity": 0.71,
+        "metadata": {
+          "name": "item-12",
+          "scoreBreakdown": {
+            "semantic": 0.71,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.568
+      },
+      {
+        "chunk_id": "chunk-5-4",
+        "document_id": "doc-0",
+        "content": "brand floorplan window policy window warehouse onboarding onboarding window creator window creator refund floorplan invoice invoice logo warehouse onboarding refund",
+        "similarity": 0.685,
+        "metadata": {
+          "name": "item-4",
+          "scoreBreakdown": {
+            "semantic": 0.685,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.548
+      },
+      {
+        "chunk_id": "chunk-5-6",
+        "document_id": "doc-2",
+        "content": "policy window logo floorplan creator warehouse policy policy logo logo support window floorplan brand logo policy onboarding",
+        "similarity": 0.638,
+        "metadata": {
+          "name": "item-6",
+          "scoreBreakdown": {
+            "semantic": 0.638,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.5104000000000001
+      },
+      {
+        "chunk_id": "chunk-5-3",
+        "document_id": "doc-3",
+        "content": "brand floorplan window window refund window invoice logo window creator window brand refund shipping policy logo",
+        "similarity": 0.568,
+        "metadata": {
+          "name": "item-3",
+          "scoreBreakdown": {
+            "semantic": 0.568,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.45439999999999997
+      }
+    ],
+    "6": [
+      {
+        "chunk_id": "chunk-6-13",
+        "document_id": "doc-1",
+        "content": "policy support refund support policy invoice creator warehouse shipping invoice warehouse logo invoice floorplan logo shipping logo brand shipping invoice brand floorplan onboarding invoice",
+        "similarity": 0.976,
+        "metadata": {
+          "name": "item-13",
+          "scoreBreakdown": {
+            "semantic": 0.976,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.7808
+      },
+      {
+        "chunk_id": "chunk-6-7",
+        "document_id": "doc-3",
+        "content": "policy brand logo floorplan creator creator brand warehouse shipping brand shipping floorplan onboarding invoice invoice floorplan logo brand",
+        "similarity": 0.904,
+        "metadata": {
+          "name": "item-7",
+          "scoreBreakdown": {
+            "semantic": 0.904,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.7232000000000001
+      },
+      {
+        "chunk_id": "chunk-6-0",
+        "document_id": "doc-0",
+        "content": "invoice onboarding support brand window onboarding window warehouse onboarding warehouse",
+        "similarity": 0.846,
+        "metadata": {
+          "name": "item-0",
+          "scoreBreakdown": {
+            "semantic": 0.846,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.6768000000000001
+      },
+      {
+        "chunk_id": "chunk-6-12",
+        "document_id": "doc-0",
+        "content": "warehouse creator support warehouse window onboarding onboarding onboarding policy brand creator support refund warehouse creator refund policy onboarding",
+        "similarity": 0.807,
+        "metadata": {
+          "name": "item-12",
+          "scoreBreakdown": {
+            "semantic": 0.807,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.6456000000000001
+      },
+      {
+        "chunk_id": "chunk-6-6",
+        "document_id": "doc-2",
+        "content": "window support creator brand policy policy window warehouse refund window refund support onboarding warehouse support brand warehouse onboarding onboarding logo warehouse onboarding shipping shipping onboarding",
+        "similarity": 0.679,
+        "metadata": {
+          "name": "item-6",
+          "scoreBreakdown": {
+            "semantic": 0.679,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.5432
+      }
+    ],
+    "7": [
+      {
+        "chunk_id": "chunk-7-6",
+        "document_id": "doc-2",
+        "content": "invoice policy shipping floorplan refund shipping invoice warehouse support refund shipping creator onboarding support policy logo support invoice onboarding onboarding refund support policy",
+        "similarity": 0.981,
+        "metadata": {
+          "name": "item-6",
+          "scoreBreakdown": {
+            "semantic": 0.981,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.7848
+      },
+      {
+        "chunk_id": "chunk-7-12",
+        "document_id": "doc-0",
+        "content": "warehouse shipping logo brand warehouse support",
+        "similarity": 0.975,
+        "metadata": {
+          "name": "item-12",
+          "scoreBreakdown": {
+            "semantic": 0.975,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.78
+      },
+      {
+        "chunk_id": "chunk-7-9",
+        "document_id": "doc-1",
+        "content": "window support window floorplan window support brand floorplan creator logo brand shipping logo refund",
+        "similarity": 0.788,
+        "metadata": {
+          "name": "item-9",
+          "scoreBreakdown": {
+            "semantic": 0.788,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.6304000000000001
+      },
+      {
+        "chunk_id": "chunk-7-4",
+        "document_id": "doc-0",
+        "content": "invoice onboarding logo support policy logo onboarding shipping policy refund logo invoice invoice policy warehouse",
+        "similarity": 0.756,
+        "metadata": {
+          "name": "item-4",
+          "scoreBreakdown": {
+            "semantic": 0.756,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.6048
+      },
+      {
+        "chunk_id": "chunk-7-5",
+        "document_id": "doc-1",
+        "content": "logo brand policy support policy shipping shipping creator logo warehouse brand window brand creator",
+        "similarity": 0.751,
+        "metadata": {
+          "name": "item-5",
+          "scoreBreakdown": {
+            "semantic": 0.751,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.6008
+      }
+    ],
+    "8": [
+      {
+        "chunk_id": "chunk-8-10",
+        "document_id": "doc-2",
+        "content": "policy logo refund refund support shipping logo floorplan warehouse",
+        "similarity": 0.939,
+        "metadata": {
+          "name": "item-10",
+          "scoreBreakdown": {
+            "semantic": 0.939,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.7512
+      },
+      {
+        "chunk_id": "chunk-8-14",
+        "document_id": "doc-2",
+        "content": "warehouse refund onboarding window refund brand support warehouse warehouse onboarding refund refund policy warehouse window support invoice onboarding",
+        "similarity": 0.894,
+        "metadata": {
+          "name": "item-14",
+          "scoreBreakdown": {
+            "semantic": 0.894,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.7152000000000001
+      },
+      {
+        "chunk_id": "chunk-8-12",
+        "document_id": "doc-0",
+        "content": "shipping onboarding invoice onboarding floorplan invoice warehouse creator support onboarding floorplan brand support logo warehouse shipping logo onboarding invoice support logo support logo policy",
+        "similarity": 0.887,
+        "metadata": {
+          "name": "item-12",
+          "scoreBreakdown": {
+            "semantic": 0.887,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.7096
+      },
+      {
+        "chunk_id": "chunk-8-1",
+        "document_id": "doc-1",
+        "content": "creator support policy onboarding creator invoice shipping refund refund invoice invoice onboarding invoice invoice",
+        "similarity": 0.749,
+        "metadata": {
+          "name": "item-1",
+          "scoreBreakdown": {
+            "semantic": 0.749,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.5992000000000001
+      },
+      {
+        "chunk_id": "chunk-8-8",
+        "document_id": "doc-0",
+        "content": "invoice floorplan warehouse onboarding onboarding creator brand logo brand creator logo logo policy invoice",
+        "similarity": 0.721,
+        "metadata": {
+          "name": "item-8",
+          "scoreBreakdown": {
+            "semantic": 0.721,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.5768
+      }
+    ],
+    "9": [
+      {
+        "chunk_id": "chunk-9-8",
+        "document_id": "doc-0",
+        "content": "floorplan logo creator invoice brand logo warehouse support warehouse brand policy refund shipping window invoice brand refund invoice shipping refund refund refund window brand policy",
+        "similarity": 0.993,
+        "metadata": {
+          "name": "item-8",
+          "scoreBreakdown": {
+            "semantic": 0.993,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.7944
+      },
+      {
+        "chunk_id": "chunk-9-16",
+        "document_id": "doc-0",
+        "content": "brand refund logo support window logo logo floorplan refund shipping logo brand logo creator",
+        "similarity": 0.993,
+        "metadata": {
+          "name": "item-16",
+          "scoreBreakdown": {
+            "semantic": 0.993,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.7944
+      },
+      {
+        "chunk_id": "chunk-9-10",
+        "document_id": "doc-2",
+        "content": "brand refund invoice refund policy logo invoice logo floorplan policy warehouse logo refund policy brand floorplan policy",
+        "similarity": 0.905,
+        "metadata": {
+          "name": "item-10",
+          "scoreBreakdown": {
+            "semantic": 0.905,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.7240000000000001
+      },
+      {
+        "chunk_id": "chunk-9-0",
+        "document_id": "doc-0",
+        "content": "window onboarding refund brand brand policy support window window support",
+        "similarity": 0.901,
+        "metadata": {
+          "name": "item-0",
+          "scoreBreakdown": {
+            "semantic": 0.901,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.7208000000000001
+      },
+      {
+        "chunk_id": "chunk-9-3",
+        "document_id": "doc-3",
+        "content": "support brand creator policy logo window warehouse invoice logo onboarding support window support brand policy invoice support policy policy support warehouse creator logo",
+        "similarity": 0.855,
+        "metadata": {
+          "name": "item-3",
+          "scoreBreakdown": {
+            "semantic": 0.855,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.684
+      }
+    ],
+    "10": [
+      {
+        "chunk_id": "chunk-10-1",
+        "document_id": "doc-1",
+        "content": "brand logo policy policy creator brand warehouse creator policy window onboarding policy shipping",
+        "similarity": 0.977,
+        "metadata": {
+          "name": "item-1",
+          "scoreBreakdown": {
+            "semantic": 0.977,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.7816000000000001
+      },
+      {
+        "chunk_id": "chunk-10-4",
+        "document_id": "doc-0",
+        "content": "floorplan creator window refund shipping support warehouse window onboarding support warehouse refund support onboarding window warehouse floorplan support onboarding policy creator logo shipping shipping",
+        "similarity": 0.929,
+        "metadata": {
+          "name": "item-4",
+          "scoreBreakdown": {
+            "semantic": 0.929,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.7432000000000001
+      },
+      {
+        "chunk_id": "chunk-10-6",
+        "document_id": "doc-2",
+        "content": "brand warehouse invoice refund refund logo policy onboarding shipping creator creator floorplan policy creator logo shipping brand",
+        "similarity": 0.927,
+        "metadata": {
+          "name": "item-6",
+          "scoreBreakdown": {
+            "semantic": 0.927,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.7416
+      },
+      {
+        "chunk_id": "chunk-10-12",
+        "document_id": "doc-0",
+        "content": "onboarding refund logo refund window floorplan window shipping warehouse floorplan",
+        "similarity": 0.844,
+        "metadata": {
+          "name": "item-12",
+          "scoreBreakdown": {
+            "semantic": 0.844,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.6752
+      },
+      {
+        "chunk_id": "chunk-10-14",
+        "document_id": "doc-2",
+        "content": "shipping logo refund warehouse refund logo support creator window warehouse brand policy warehouse shipping floorplan window onboarding floorplan onboarding policy",
+        "similarity": 0.844,
+        "metadata": {
+          "name": "item-14",
+          "scoreBreakdown": {
+            "semantic": 0.844,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.6752
+      }
+    ]
+  },
+  "noScores": [
+    {
+      "chunk_id": "chunk-12-6",
+      "document_id": "doc-2",
+      "content": "policy refund warehouse warehouse policy support refund warehouse logo floorplan shipping warehouse warehouse",
+      "similarity": 0.989,
+      "metadata": {
+        "name": "item-6"
+      }
+    },
+    {
+      "chunk_id": "chunk-12-0",
+      "document_id": "doc-0",
+      "content": "brand refund window brand floorplan warehouse floorplan floorplan logo policy",
+      "similarity": 0.955,
+      "metadata": {
+        "name": "item-0"
+      }
+    },
+    {
+      "chunk_id": "chunk-12-7",
+      "document_id": "doc-3",
+      "content": "refund creator onboarding onboarding shipping onboarding logo creator creator shipping policy creator policy policy creator creator window policy invoice policy onboarding onboarding warehouse",
+      "similarity": 0.917,
+      "metadata": {
+        "name": "item-7"
+      }
+    },
+    {
+      "chunk_id": "chunk-12-2",
+      "document_id": "doc-2",
+      "content": "invoice policy warehouse brand support onboarding floorplan invoice shipping",
+      "similarity": 0.888,
+      "metadata": {
+        "name": "item-2"
+      }
+    }
+  ]
+}

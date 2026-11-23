@@ -331,19 +331,21 @@ describe('fake edge (PostgREST shim plus /v1/embeddings)', () => {
     }
   });
 
-  test('the unmodified enhancedRetrieveChunks returns a refund-policy.en.md chunk through the edge with zero errors', async () => {
+  test('runRetrieval returns a refund-policy.en.md chunk through the edge with zero errors', async () => {
     const e = await getEdge();
     Object.assign(process.env, fixtureProcessEnv(e.url));
-    const { enhancedRetrieveChunks } = await import('@/lib/enhanced-rag-retrieval');
-    const result = await enhancedRetrieveChunks(TRACER_QUESTION, {
-      maxResults: 25,
-      enableTemporalBoost: true,
-      enableFinancialBoost: true,
-      requireTemporalMatch: false,
-      fallbackToLowerThreshold: true,
+    process.env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE = 'single-tenant';
+    const rag = await import('@/lib/rag');
+    const { mintScope } = await import('@/lib/rag/tenant/scope');
+    const result = await rag.runRetrieval({
+      scope: mintScope('single', null, null),
+      query: TRACER_QUESTION,
+      profile: 'eval',
+      options: { maxResults: 25, fallbackToLowerThreshold: true },
+      signal: new AbortController().signal,
     });
-    assert.ok(result.chunks.length > 0, `no chunks; edge errors: ${JSON.stringify(e.errors)}`);
-    assert.ok(result.chunks.some((chunk) => chunk.content.startsWith('Document: refund-policy.en.md.')));
+    assert.ok(result.candidates.length > 0, `no chunks; edge errors: ${JSON.stringify(e.errors)}`);
+    assert.ok(result.candidates.some((chunk) => chunk.content.startsWith('Document: refund-policy.en.md.')));
     assert.deepEqual(e.errors, []);
     assert.ok(e.calls.some((c) => c.path === '/v1/embeddings'));
     assert.ok(e.calls.some((c) => c.path === '/rest/v1/rpc/match_document_chunks'));

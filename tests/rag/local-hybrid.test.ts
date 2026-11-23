@@ -1,10 +1,13 @@
 import { describe, expect, test, vi } from 'vitest';
-import { hybridRerank as legacyHybridRerank } from '@/lib/reranker-local';
 import { assembleVoiceResults, enrichVoiceCandidates } from '@/lib/rag/context/voice';
 import { hybridRerank, type ChunkWithScore } from '@/lib/rag/rerank/local-hybrid';
 import { mintScope } from '@/lib/rag/tenant/scope';
 import { deriveVoiceKeywords, voiceKeywordFallback, type VoiceChunk } from '@/lib/rag/voice/keyword-fallback';
 import { opsOf, recordingAdmin, type RecordedCall } from './helpers/recording-admin';
+import frozenHybrid from '../fixtures/characterization/legacy-hybrid-rerank.json';
+
+// Outputs of the retired hybridRerank, frozen before its module was deleted.
+const FROZEN = frozenHybrid as { seeds: Record<string, unknown[]>; noScores: unknown[] };
 
 const USER_A = '00000000-0000-4000-8000-0000000000a1';
 const ORG_O = '00000000-0000-4000-8000-0000000000c1';
@@ -29,10 +32,10 @@ function seededChunks(seed: number, count: number): ChunkWithScore[] {
 }
 
 describe('hybridRerank re-homed', () => {
-  test.each([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])('matches the legacy implementation for seeded candidate set %i', (seed) => {
+  test.each([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])('matches the frozen legacy output for seeded candidate set %i', (seed) => {
     const chunks = seededChunks(seed, 8 + seed);
     const query = 'refund window policy for the logo';
-    const expected = legacyHybridRerank(query, structuredClone(chunks), { topK: 5, includeScores: true });
+    const expected = FROZEN.seeds[String(seed)];
     const actual = hybridRerank(query, structuredClone(chunks), { topK: 5, includeScores: true });
     expect(actual).toEqual(expected);
     expect(actual.length).toBe(5);
@@ -45,7 +48,7 @@ describe('hybridRerank re-homed', () => {
 
   test('drops scores when includeScores is false, as before', () => {
     const chunks = seededChunks(12, 9);
-    const expected = legacyHybridRerank('shipping invoice', structuredClone(chunks), { topK: 4, includeScores: false });
+    const expected = FROZEN.noScores;
     const actual = hybridRerank('shipping invoice', structuredClone(chunks), { topK: 4, includeScores: false });
     expect(actual).toEqual(expected);
     expect(actual.every((chunk) => chunk.rerankScore === undefined)).toBe(true);

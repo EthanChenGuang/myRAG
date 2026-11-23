@@ -119,7 +119,7 @@ describe('entry point: chat route calls the pipeline', () => {
   const savedMode = env[MODE_NAME];
 
   afterEach(() => {
-    for (const name of ['ai', '@/lib/supabase', '@/lib/supabase/server', '@openrouter/ai-sdk-provider', 'exa-js', '@/lib/thinking-rag-enhancer', '@/lib/document-processor', '@/lib/rag']) {
+    for (const name of ['ai', '@/lib/supabase', '@/lib/supabase/server', '@openrouter/ai-sdk-provider', 'exa-js', '@/lib/document-processor', '@/lib/rag']) {
       vi.doUnmock(name);
     }
     if (savedMode === undefined) delete env[MODE_NAME];
@@ -146,11 +146,6 @@ describe('entry point: chat route calls the pipeline', () => {
       createOpenRouter: () => (modelId: string) => ({ specificationVersion: 'v3', provider: 'fake', modelId }),
     }));
     vi.doMock('exa-js', () => ({ default: h.exa.Exa }));
-    vi.doMock('@/lib/thinking-rag-enhancer', () => ({
-      enhanceQueryWithReasoning: vi.fn(),
-      intelligentSearch: vi.fn(),
-      shouldUseEnhancedRAG: () => true,
-    }));
     vi.doMock('@/lib/rag', async (importOriginal) => {
       const actual = await importOriginal<typeof import('@/lib/rag')>();
       return {

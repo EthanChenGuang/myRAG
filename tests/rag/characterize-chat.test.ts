@@ -2,7 +2,6 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { env } from '@/lib/env';
 import { chatRequest } from '../helpers/chat-route-fakes';
 import {
-  createFaithfulEnhancedPrompt,
   expectCharacterization,
   readGoldenQuestions,
   startRouteFixture,
@@ -28,13 +27,6 @@ vi.mock('@openrouter/ai-sdk-provider', () => ({
   createOpenRouter: () => (modelId: string) => ({ specificationVersion: 'v3', provider: 'fake', modelId }),
 }));
 vi.mock('exa-js', () => ({ default: h.exa.Exa }));
-vi.mock('@/lib/thinking-rag-enhancer', async (importOriginal) => {
-  const { RAG_MODE_CONFIGS } = await import('@/lib/rag-mode');
-  return {
-    ...(await importOriginal<typeof import('@/lib/thinking-rag-enhancer')>()),
-    createEnhancedRAGPrompt: createFaithfulEnhancedPrompt(RAG_MODE_CONFIGS),
-  };
-});
 
 const GPT_PATTERN = /gpt-4|o1|chatgpt/;
 

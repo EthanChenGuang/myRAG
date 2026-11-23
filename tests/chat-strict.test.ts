@@ -21,11 +21,6 @@ vi.mock('@openrouter/ai-sdk-provider', () => ({
   createOpenRouter: () => (modelId: string) => ({ specificationVersion: 'v3', provider: 'fake', modelId }),
 }));
 vi.mock('exa-js', () => ({ default: h.exa.Exa }));
-vi.mock('@/lib/thinking-rag-enhancer', () => ({
-  enhanceQueryWithReasoning: vi.fn(),
-  intelligentSearch: vi.fn(),
-  shouldUseEnhancedRAG: () => true,
-}));
 
 async function loadRoute() {
   vi.resetModules();
