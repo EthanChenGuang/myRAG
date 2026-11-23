@@ -37,6 +37,7 @@ import { classifyQuery, shouldSkipMcp } from '@/lib/query-classifier';
 import { getCachedTools, setCachedTools, getCachedConnection, setCachedConnection } from '@/lib/mcp-cache';
 // Import UniversalMcpClient for YOLO mode execution
 import { UniversalMcpClient } from '@/lib/mcp/universal-client';
+import { callerScopeKey, resolveMcpAdminUserId, writeImageContext } from '@/lib/mcp/caller-scope';
 import { ToolExecutionStateService } from '@/lib/tool-execution-state';
 import { SystemPromptManager, SystemPromptTemplate } from '@/lib/system-prompt-manager';
 import { Language } from '@/translations';
@@ -64,14 +65,6 @@ const describeArgs = (input: unknown): { keys: string[]; bytes: number } => ({
   keys: input && typeof input === 'object' ? Object.keys(input) : [],
   bytes: input === undefined ? 0 : JSON.stringify(input)?.length ?? 0
 });
-
-declare global {
-  // `var` is the only way to type a property of globalThis; the cache must outlive a single request
-  // eslint-disable-next-line no-var
-  var mcpImageContext:
-    | Record<string, { imageUrl: string; downloadableUrls: string[]; extractedAt: number }>
-    | undefined;
-}
 
 // Define document reference tool for function calling using the 'tool' helper
 const documentReferenceTool = tool({
@@ -1468,40 +1461,20 @@ export async function POST(req: Request) {
           console.log('API ROUTE: Handling image-to-image generation with prompt:', textPrompt);
 
           try {
-            // Forward any authorization headers from the original request
-            const headers: Record<string, string> = {
-              'Content-Type': 'application/json',
-            };
-
-            // Copy auth headers from original request if present
-            const authHeader = req.headers.get('authorization');
-            if (authHeader) {
-              headers['Authorization'] = authHeader;
-            }
-
-            // Copy cookie header for authentication
-            const cookieHeader = req.headers.get('cookie');
-            if (cookieHeader) {
-              headers['Cookie'] = cookieHeader;
-            }
-
-            console.log('API ROUTE: Forwarding request to image generation API');
-
-            // Send to image generation endpoint
-            const origin = req.headers.get('origin') || 'http://localhost:3000';
-            const apiUrl = new URL('/api/generate-image', origin).toString();
-            console.log('API ROUTE: Sending request to image generation API:', apiUrl);
-
-            const response = await fetch(apiUrl, {
-              method: 'POST',
-              headers,
-              body: JSON.stringify({
-                prompt: textPrompt || 'Generate a variation of this image',
-                size: 'auto',
-                numOutputs: 1,
-                sourceImageUrl: imageUrl
-              }),
-            });
+            // Called in-process: the target is never derived from request headers, and the session comes from the request context
+            const { POST: generateImage } = await import('@/app/api/generate-image/route');
+            const response = await generateImage(
+              new NextRequest('http://localhost/api/generate-image', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  prompt: textPrompt || 'Generate a variation of this image',
+                  size: 'auto',
+                  numOutputs: 1,
+                  sourceImageUrl: imageUrl
+                }),
+              })
+            );
 
             if (!response.ok) {
               console.error('API ROUTE: Image generation failed:', response.statusText);
@@ -1574,6 +1547,8 @@ export async function POST(req: Request) {
 
           // 🔧 FIX: Use downloadable URLs from image context manager instead of Base64 data
           let finalImageUrl = imageUrl;
+          const imageOwnerId = await resolveToolOwnerId();
+          const imageScopeId = imageOwnerId ? callerScopeKey(imageOwnerId, sessionId) : `anonymous::${crypto.randomUUID()}`;
 
           // Check if we have processed downloadable URLs from attached images
           if (downloadableUrls && downloadableUrls.length > 0) {
@@ -1590,7 +1565,7 @@ export async function POST(req: Request) {
                 dataUrl: imageUrl
               }];
 
-              downloadableUrls = await processAttachedImages(sessionId, attachedImages);
+              downloadableUrls = await processAttachedImages(imageScopeId, attachedImages);
 
               if (downloadableUrls.length > 0) {
                 finalImageUrl = downloadableUrls[0];
@@ -1643,28 +1618,17 @@ export async function POST(req: Request) {
             }
           }
 
-          // Store image URL globally for MCP tool use
-          if (!globalThis.mcpImageContext) {
-            globalThis.mcpImageContext = {};
+          // Stored under the verified caller and chat only; anonymous callers never reach MCP tools
+          if (imageOwnerId) {
+            writeImageContext(imageOwnerId, sessionId, {
+              imageUrl: finalImageUrl,
+              downloadableUrls: downloadableUrls || [finalImageUrl],
+              extractedAt: Date.now()
+            });
           }
-
-          // Store the final image URL (preferably downloadable URL, not Base64)
-          globalThis.mcpImageContext[sessionId] = {
-            imageUrl: finalImageUrl,
-            downloadableUrls: downloadableUrls || [finalImageUrl],
-            extractedAt: Date.now()
-          };
-
-          // Also store with the image URL as backup for cross-session retrieval
-          globalThis.mcpImageContext[finalImageUrl] = {
-            imageUrl: finalImageUrl,
-            downloadableUrls: downloadableUrls || [finalImageUrl],
-            extractedAt: Date.now()
-          };
 
           console.log('API ROUTE: Stored image URL for MCP tools:', finalImageUrl);
           console.log('API ROUTE: Stored downloadable URLs:', downloadableUrls || [finalImageUrl]);
-          console.log('API ROUTE: Image storage keys:', Object.keys(globalThis.mcpImageContext));
         }
       }
 
@@ -1690,7 +1654,15 @@ export async function POST(req: Request) {
       ? data.settings.mcpEnabled
       : isMcpEnabled;
 
-    const useMcpForRequest = baseMcpSetting && !shouldSkipMcpForPerformance;
+    const mcpAdminUserId =
+      mcpSystemEnabled && baseMcpSetting && !shouldSkipMcpForPerformance
+        ? await resolveMcpAdminUserId({ getSessionUser, admin: supabase, signal: req.signal })
+        : null;
+    if (mcpSystemEnabled && baseMcpSetting && !shouldSkipMcpForPerformance && !mcpAdminUserId) {
+      console.warn('[MCP Gate] MCP tools are limited to verified admins; this request gets none');
+    }
+    const useMcpForRequest = mcpAdminUserId !== null && baseMcpSetting && !shouldSkipMcpForPerformance;
+    const mcpYoloAllowed = mcpAdminUserId !== null && env.NEXT_PUBLIC_MCP_YOLO_MODE_ENABLED === 'true';
     console.log('API ROUTE: Base MCP setting:', baseMcpSetting);
     console.log('API ROUTE: Use MCP for this request:', useMcpForRequest);
 
@@ -2747,6 +2719,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
       let allTools: Record<string, any> = { ...baseTools };
       if (useMcpForRequest) {
         console.log('API ROUTE: Initializing MCP clients for tool discovery from ALL servers...');
+        const mcpToolScopeKey = callerScopeKey(mcpAdminUserId as string, sessionId);
 
         // ⚡ PERFORMANCE OPTIMIZATION: Check cache first
         const cacheKey = `mcp-tools-${queryClassification.category}`;
@@ -2780,7 +2753,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                 }
 
                 // Check if YOLO mode is enabled
-                const yoloModeEnabled = env.NEXT_PUBLIC_MCP_YOLO_MODE_ENABLED === 'true';
+                const yoloModeEnabled = mcpYoloAllowed;
                 console.log(`[CACHED TOOL] YOLO mode enabled: ${yoloModeEnabled}`);
 
                 if (yoloModeEnabled) {
@@ -2877,7 +2850,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                     }
 
                     // Check if YOLO mode is enabled
-                    const yoloModeEnabled = env.NEXT_PUBLIC_MCP_YOLO_MODE_ENABLED === 'true';
+                    const yoloModeEnabled = mcpYoloAllowed;
                     console.log(`[MCP TOOL] YOLO mode enabled: ${yoloModeEnabled}`);
 
                     if (yoloModeEnabled) {
@@ -2966,7 +2939,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
 
             // Get enhanced tools through production router with conversation context
             console.log(`[Universal MCP] Getting enhanced tools through production router with context...`);
-            const mcpResult = await productionMcpRouter.getEnhancedMcpTools(userQuery, allMcpTools, recentConversation, sessionId);
+            const mcpResult = await productionMcpRouter.getEnhancedMcpTools(userQuery, allMcpTools, recentConversation, mcpToolScopeKey);
             const enhancedMcpTools = mcpResult.tools;
 
             console.log(`[Universal MCP] Production router selected ${Object.keys(enhancedMcpTools).length} tools for query`);
@@ -2974,7 +2947,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
             console.log(`[Universal MCP] Server health:`, mcpResult.serverHealth);
             console.log(`[Universal MCP] Routing decision confidence:`, mcpResult.routingDecisions[0]?.confidence || 0);
 
-            // Store tools in global cache for approval route
+            // Store tools in the process cache for the approval route, keyed by verified admin and chat
             const global_cache = globalThis as any;
             if (!global_cache.mcpToolsCache) {
               global_cache.mcpToolsCache = new Map<string, { tools: any[], timestamp: number }>();
@@ -2986,13 +2959,8 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                 ...tool
               }));
 
-              global_cache.mcpToolsCache.set(sessionId, { tools: toolsArray, timestamp: Date.now() });
-              console.log(`[Universal MCP] ===== TOOL CACHE STORAGE =====`);
-              console.log(`[Universal MCP] Session ID: ${sessionId}`);
-              console.log(`[Universal MCP] Stored ${toolsArray.length} tools: ${toolsArray.map(t => t.name).join(', ')}`);
-              console.log(`[Universal MCP] Global cache sessions: ${Array.from(global_cache.mcpToolsCache.keys()).join(', ')}`);
-              console.log(`[Universal MCP] Global cache size: ${global_cache.mcpToolsCache.size}`);
-              console.log(`[Universal MCP] =============================`);
+              global_cache.mcpToolsCache.set(mcpToolScopeKey, { tools: toolsArray, timestamp: Date.now() });
+              console.log(`[Universal MCP] Cached ${toolsArray.length} tools for the caller's chat`);
             } else {
               console.log(`[Universal MCP] WARNING: No sessionId provided, cannot cache tools!`);
             }
@@ -3121,7 +3089,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                   console.log(`[PARAM DEBUG] Stored approval state:`, (globalThis as any).toolApprovalState[toolCallId]);
 
                   // Check if YOLO mode is enabled
-                  const yoloModeEnabled = env.NEXT_PUBLIC_MCP_YOLO_MODE_ENABLED === 'true';
+                  const yoloModeEnabled = mcpYoloAllowed;
                   console.log(`[ENHANCED TOOL] YOLO mode enabled: ${yoloModeEnabled}`);
 
                   if (yoloModeEnabled) {

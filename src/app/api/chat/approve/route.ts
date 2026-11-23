@@ -4,12 +4,36 @@ import { ToolExecutionStateService } from '@/lib/tool-execution-state';
 import { getToolSessionUser } from '@/lib/tool-execution-auth';
 import { devLog } from '@/lib/dev-logger';
 import { formatToolResultUniversally } from '@/lib/universal-tool-formatter';
-import { findImagesWithFallback } from '@/lib/mcp/image-context-manager';
+import { getDownloadableUrls } from '@/lib/mcp/image-context-manager';
+import {
+  callerScopeKey,
+  deleteImageContext,
+  imageUrlsFromContext,
+  readImageContext,
+} from '@/lib/mcp/caller-scope';
+import { getSupabaseAdmin } from '@/lib/supabase';
+import { isAdminUser, type RagAdminDb } from '@/lib/rag';
 import { isUrlMcpCompatible } from '@/lib/mcp/url-validator';
 
 function describeConnections(client: unknown): { server: string; connected: boolean }[] {
   const candidate = client as { getConnectionStatus?: () => { server: string; connected: boolean }[] } | null;
   return typeof candidate?.getConnectionStatus === 'function' ? candidate.getConnectionStatus() : [];
+}
+
+function callerImageUrls(userId: string, chatIds: Array<string | undefined | null>): string[] {
+  for (const chatId of chatIds) {
+    if (!chatId) continue;
+    const managed = getDownloadableUrls(callerScopeKey(userId, chatId));
+    if (managed.length > 0) return managed;
+    const stored = imageUrlsFromContext(userId, chatId);
+    if (stored.length > 0) return stored;
+  }
+  return [];
+}
+
+interface CallerScope {
+  userId: string;
+  chatId?: string | null;
 }
 
 const global_cache = globalThis as any;
@@ -109,7 +133,7 @@ function applyUniversalParameterMapping(toolName: string, params: any): any {
  * This function applies transformations BEFORE storing in persistent state
  * Supports any MCP server type following JSON-RPC 2.0 specifications
  */
-async function transformToolParameters(toolName: string, originalParams: any): Promise<any> {
+async function transformToolParameters(toolName: string, originalParams: any, scope: CallerScope): Promise<any> {
   let optimizedParams = { ...originalParams };
 
   console.log(`🔧 [TRANSFORM] Starting transformation for tool: ${toolName}`);
@@ -127,14 +151,14 @@ async function transformToolParameters(toolName: string, originalParams: any): P
         
         try {
           const { processAttachedImages } = await import('@/lib/mcp/image-context-manager');
-          const sessionId = originalParams.sessionId || originalParams.session_id || `transform_${crypto.randomUUID()}`;
+          const sessionId = scope.chatId || `transform_${crypto.randomUUID()}`;
           
           const attachedImages = [{
             name: `converted-image-${Date.now()}.png`,
             dataUrl: value
           }];
           
-          const downloadableUrls = await processAttachedImages(sessionId, attachedImages);
+          const downloadableUrls = await processAttachedImages(callerScopeKey(scope.userId, sessionId), attachedImages);
           
           if (downloadableUrls.length > 0) {
             optimizedParams[key] = downloadableUrls[0];
@@ -175,39 +199,15 @@ async function transformToolParameters(toolName: string, originalParams: any): P
         injectionSource = 'direct_params';
         devLog.verbose('🖼️ [IMAGE URL INJECTION] Using directly provided downloadableUrls:', imageUrls.length);
       } else {
-        // Priority 2: Enhanced lookup with fallback strategies
-        const sessionId = originalParams.sessionId || 
-                         originalParams.chatId || 
-                         originalParams._sessionId;
-        
-        console.log(`🔧 [TRANSFORM] Using enhanced lookup for sessionId: ${sessionId}`);
+        // Priority 2: this caller's own context for this chat
+        const sessionId = scope.chatId;
         
         if (sessionId) {
-          // Use the enhanced fallback method from ImageContextManager
-          imageUrls = findImagesWithFallback(sessionId);
-          injectionSource = 'enhanced_context_manager';
+          imageUrls = callerImageUrls(scope.userId, [sessionId]);
+          injectionSource = 'caller_scoped_context';
           
           if (imageUrls.length > 0) {
-            console.log(`🔧 [TRANSFORM] ✅ Enhanced lookup found ${imageUrls.length} URLs`);
-            devLog.verbose('🖼️ [IMAGE URL INJECTION] Enhanced lookup successful:', imageUrls.length);
-          } else {
-            console.log(`🔧 [TRANSFORM] ❌ Enhanced lookup failed, trying global context fallback`);
-            
-            // Final fallback: Try global context
-            if ((globalThis as any).mcpImageContext) {
-              const availableKeys = Object.keys((globalThis as any).mcpImageContext);
-              console.log(`🔧 [TRANSFORM] Global context fallback - trying ${availableKeys.length} keys`);
-              
-              for (const key of availableKeys) {
-                const context = (globalThis as any).mcpImageContext[key];
-                if (context && context.downloadableUrls && context.downloadableUrls.length > 0) {
-                  imageUrls = context.downloadableUrls;
-                  injectionSource = 'global_context_fallback';
-                  console.log(`🔧 [TRANSFORM] ✅ Global context fallback successful: ${key} -> ${imageUrls.length} URLs`);
-                  break;
-                }
-              }
-            }
+            devLog.verbose('🖼️ [IMAGE URL INJECTION] Scoped lookup successful:', imageUrls.length);
           }
         } else {
           devLog.warn('🖼️ [IMAGE URL INJECTION] No session ID available for lookup');
@@ -412,74 +412,17 @@ async function transformToolParameters(toolName: string, originalParams: any): P
     // 🖼️ ENHANCED IMAGE CONTEXT INTEGRATION: Check for images in session context
     // Note: metadata might not be available in transformToolParameters, so we skip this for now
     // This functionality is handled in the main image injection section later in the flow
-    const sessionIdFromMetadata = (originalParams as any)?._sessionId || (originalParams as any)?.sessionId;
-    if (!optimizedParams.attachment_url && !optimizedParams.file && sessionIdFromMetadata) {
-      devLog.verbose('📧 [GMAIL TRANSFORM] No explicit attachment - checking session context for images');
+    if (!optimizedParams.attachment_url && !optimizedParams.file && scope.chatId) {
+      devLog.verbose('📧 [GMAIL TRANSFORM] No explicit attachment - checking this caller\'s session context for images');
       
-      try {
-        // Try to get image URL from Enhanced Image Context Manager
-        const { findImagesWithFallback } = await import('@/lib/mcp/image-context-manager');
-        
-        const imageUrls = findImagesWithFallback(sessionIdFromMetadata);
-        if (imageUrls && imageUrls.length > 0) {
-          const imageUrl = imageUrls[0];
-          devLog.verbose('📧 [GMAIL TRANSFORM] ✅ Found image URL from session context:', imageUrl);
-          
-          // Set both file and attachment_url for Gmail tools
-          optimizedParams.attachment_url = imageUrl;
-          optimizedParams.file = imageUrl.includes('supabase.co/storage/v1/object/public/') 
-            ? `${imageUrl}?download`
-            : imageUrl;
-          
-          devLog.verbose('📧 [GMAIL TRANSFORM] ✅ Injected image URL into Gmail parameters');
-        }
-      } catch (imageContextError) {
-        devLog.verbose('📧 [GMAIL TRANSFORM] ⚠️ Enhanced Image Context Manager not available:', imageContextError);
-      }
-      
-      // Fallback to global context if Enhanced Image Context Manager failed
-      if (!optimizedParams.attachment_url && (globalThis as any).mcpImageContext) {
-        const imageContext = (globalThis as any).mcpImageContext[sessionIdFromMetadata];
-        
-        if (imageContext && imageContext.imageUrl) {
-          devLog.verbose('📧 [GMAIL TRANSFORM] ✅ Found image URL from global context:', imageContext.imageUrl);
-          optimizedParams.attachment_url = imageContext.imageUrl;
-          optimizedParams.file = imageContext.imageUrl.includes('supabase.co/storage/v1/object/public/') 
-            ? `${imageContext.imageUrl}?download`
-            : imageContext.imageUrl;
-        } else if (imageContext && imageContext.downloadableUrls && imageContext.downloadableUrls.length > 0) {
-          const imageUrl = imageContext.downloadableUrls[0];
-          devLog.verbose('📧 [GMAIL TRANSFORM] ✅ Found downloadable URL from global context:', imageUrl);
-          optimizedParams.attachment_url = imageUrl;
-          optimizedParams.file = imageUrl.includes('supabase.co/storage/v1/object/public/') 
-            ? `${imageUrl}?download`
-            : imageUrl;
-        }
-      }
-      
-      // 🚨 EMERGENCY FALLBACK: Check all available image contexts as last resort
-      if (!optimizedParams.attachment_url && (globalThis as any).mcpImageContext) {
-        devLog.verbose('📧 [GMAIL TRANSFORM] ⚠️ No session-specific image found, checking all available contexts');
-        
-        const allContexts = Object.values((globalThis as any).mcpImageContext);
-        for (const ctx of allContexts) {
-          if (ctx && typeof ctx === 'object' && (ctx as any).imageUrl) {
-            devLog.verbose('📧 [GMAIL TRANSFORM] 🚨 Emergency fallback: Using available image URL:', (ctx as any).imageUrl);
-            optimizedParams.attachment_url = (ctx as any).imageUrl;
-            optimizedParams.file = (ctx as any).imageUrl.includes('supabase.co/storage/v1/object/public/') 
-              ? `${(ctx as any).imageUrl}?download`
-              : (ctx as any).imageUrl;
-            break;
-          } else if (ctx && typeof ctx === 'object' && (ctx as any).downloadableUrls && (ctx as any).downloadableUrls.length > 0) {
-            const emergencyUrl = (ctx as any).downloadableUrls[0];
-            devLog.verbose('📧 [GMAIL TRANSFORM] 🚨 Emergency fallback: Using available downloadable URL:', emergencyUrl);
-            optimizedParams.attachment_url = emergencyUrl;
-            optimizedParams.file = emergencyUrl.includes('supabase.co/storage/v1/object/public/') 
-              ? `${emergencyUrl}?download`
-              : emergencyUrl;
-            break;
-          }
-        }
+      const imageUrls = callerImageUrls(scope.userId, [scope.chatId]);
+      if (imageUrls.length > 0) {
+        const imageUrl = imageUrls[0];
+        optimizedParams.attachment_url = imageUrl;
+        optimizedParams.file = imageUrl.includes('supabase.co/storage/v1/object/public/') 
+          ? `${imageUrl}?download`
+          : imageUrl;
+        devLog.verbose('📧 [GMAIL TRANSFORM] ✅ Injected image URL into Gmail parameters');
       }
     }
     
@@ -997,6 +940,26 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    let mcpAdminDb: RagAdminDb | null = null;
+    try {
+      mcpAdminDb = getSupabaseAdmin() as RagAdminDb | null;
+    } catch {
+      mcpAdminDb = null;
+    }
+    if (!mcpAdminDb) {
+      return NextResponse.json({ error: 'Admin verification is unavailable' }, { status: 503 });
+    }
+    let callerIsAdmin: boolean;
+    try {
+      callerIsAdmin = await isAdminUser(mcpAdminDb, userId, req.signal);
+    } catch {
+      return NextResponse.json({ error: 'Admin verification is unavailable' }, { status: 503 });
+    }
+    if (!callerIsAdmin) {
+      console.warn(`API APPROVE: Refusing ${toolCallId}: MCP tool approval is limited to admins`);
+      return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
+    }
+
     // Check persistent state first, create if not exists
     let persistentState = await ToolExecutionStateService.getForUser(toolCallId, userId);
     
@@ -1019,10 +982,9 @@ export async function POST(req: NextRequest) {
           let paramsWithImages = { ...toolCall.params };
           
           console.log(`🔍 [CONTEXT DEBUG] Searching for image context with sessionId: ${effectiveSessionId}`);
-          console.log(`🔍 [CONTEXT DEBUG] Available global context keys:`, (globalThis as any).mcpImageContext ? Object.keys((globalThis as any).mcpImageContext) : 'none');
           
-          if ((globalThis as any).mcpImageContext && (globalThis as any).mcpImageContext[effectiveSessionId]) {
-            const imageContext = (globalThis as any).mcpImageContext[effectiveSessionId];
+          const imageContext = readImageContext(userId, effectiveSessionId);
+          if (imageContext) {
             console.log(`🔍 [CONTEXT DEBUG] Found image context for session ${effectiveSessionId}:`, {
               hasAttachedImages: !!imageContext.attachedImages,
               attachedImagesCount: imageContext.attachedImages?.length || 0,
@@ -1055,7 +1017,7 @@ export async function POST(req: NextRequest) {
           }
           
           // 🎯 CRITICAL FIX: Apply parameter transformation BEFORE storing
-          const transformedParams = await transformToolParameters(toolCall.name, paramsWithImages);
+          const transformedParams = await transformToolParameters(toolCall.name, paramsWithImages, { userId, chatId: effectiveSessionId });
           console.log(`🔍 [PARAM TRANSFORM] Pre-storage transformation for ${toolCall.name}:`);
           console.log(`🔍 [PARAM TRANSFORM]   Original:`, toolCall.params);
           console.log(`🔍 [PARAM TRANSFORM]   With Images:`, paramsWithImages);
@@ -1086,10 +1048,9 @@ export async function POST(req: NextRequest) {
         let globalParamsWithImages = { ...globalParams };
         
         console.log(`🔍 [CONTEXT DEBUG] Update: Searching for image context with sessionId: ${effectiveSessionId}`);
-        console.log(`🔍 [CONTEXT DEBUG] Update: Available global context keys:`, (globalThis as any).mcpImageContext ? Object.keys((globalThis as any).mcpImageContext) : 'none');
         
-        if ((globalThis as any).mcpImageContext && (globalThis as any).mcpImageContext[effectiveSessionId]) {
-          const imageContext = (globalThis as any).mcpImageContext[effectiveSessionId];
+        const imageContext = readImageContext(userId, effectiveSessionId);
+        if (imageContext) {
           console.log(`🔍 [CONTEXT DEBUG] Update: Found image context for session ${effectiveSessionId}:`, {
             hasAttachedImages: !!imageContext.attachedImages,
             attachedImagesCount: imageContext.attachedImages?.length || 0,
@@ -1122,7 +1083,7 @@ export async function POST(req: NextRequest) {
         }
         
         // 🎯 CRITICAL FIX: Apply transformation to global params before comparison
-        const transformedGlobalParams = await transformToolParameters(toolCall.name, globalParamsWithImages);
+        const transformedGlobalParams = await transformToolParameters(toolCall.name, globalParamsWithImages, { userId, chatId: effectiveSessionId });
         
         // Only update if transformed global state has more parameters than persistent state
         if (Object.keys(transformedGlobalParams).length > Object.keys(currentParams).length) {
@@ -1211,10 +1172,9 @@ export async function POST(req: NextRequest) {
         let storedParamsWithImages = { ...storedToolCall.params };
         
         console.log(`🔍 [CONTEXT DEBUG] Execute: Searching for image context with sessionId: ${effectiveSessionId}`);
-        console.log(`🔍 [CONTEXT DEBUG] Execute: Available global context keys:`, (globalThis as any).mcpImageContext ? Object.keys((globalThis as any).mcpImageContext) : 'none');
         
-        if ((globalThis as any).mcpImageContext && (globalThis as any).mcpImageContext[effectiveSessionId]) {
-          const imageContext = (globalThis as any).mcpImageContext[effectiveSessionId];
+        const imageContext = readImageContext(userId, effectiveSessionId);
+        if (imageContext) {
           console.log(`🔍 [CONTEXT DEBUG] Execute: Found image context for session ${effectiveSessionId}:`, {
             hasAttachedImages: !!imageContext.attachedImages,
             attachedImagesCount: imageContext.attachedImages?.length || 0,
@@ -1250,7 +1210,7 @@ export async function POST(req: NextRequest) {
         console.log(`🔍 [TRANSFORM DEBUG] Before transformation for ${storedToolCall.name}:`);
         console.log(`🔍 [TRANSFORM DEBUG] Input params:`, JSON.stringify(storedParamsWithImages, null, 2));
         
-        const transformedParams = await transformToolParameters(storedToolCall.name, storedParamsWithImages);
+        const transformedParams = await transformToolParameters(storedToolCall.name, storedParamsWithImages, { userId, chatId: effectiveSessionId });
         
         console.log(`🔍 [TRANSFORM DEBUG] After transformation for ${storedToolCall.name}:`);
         console.log(`🔍 [TRANSFORM DEBUG] Output params:`, JSON.stringify(transformedParams, null, 2));
@@ -1345,11 +1305,8 @@ export async function POST(req: NextRequest) {
         
         console.log(`API APPROVE: Getting cached tools with chatId: ${chatId}`);
         
-        // First check local global cache
-        console.log(`API APPROVE: Global cache keys: ${Array.from(global_cache.mcpToolsCache.keys()).join(', ')}`);
-        console.log(`API APPROVE: Global cache size: ${global_cache.mcpToolsCache.size}`);
-        
-        const localCache = global_cache.mcpToolsCache.get(chatId);
+        const toolScopeKey = callerScopeKey(userId, chatId);
+        const localCache = global_cache.mcpToolsCache.get(toolScopeKey);
         if (localCache && Date.now() - localCache.timestamp < 15 * 60 * 1000) {
           console.log(`API APPROVE: Found tools in local global cache for ${chatId}: ${localCache.tools.length} tools`);
           console.log(`API APPROVE: Tool names from cache: ${localCache.tools.map((t: any) => t.name).join(', ')}`);
@@ -1357,7 +1314,7 @@ export async function POST(req: NextRequest) {
         } else {
           console.log(`API APPROVE: No tools in local global cache for ${chatId}, trying production router`);
           // Try production router cache
-          cachedTools = await productionMcpRouter.getCachedTools(servers, chatId);
+          cachedTools = await productionMcpRouter.getCachedTools(servers, toolScopeKey);
           console.log(`API APPROVE: Production router returned ${cachedTools.length} tools for session ${chatId}`);
         }
         
@@ -1714,91 +1671,10 @@ export async function POST(req: NextRequest) {
                   console.log('🔍 [GMAIL DEBUG] Original params:', JSON.stringify(optimizedParams, null, 2));
                   console.log('🔍 [GMAIL DEBUG] Session ID from body:', sessionId);
                   console.log('🔍 [GMAIL DEBUG] Session ID from metadata:', metadataSessionId);
-                  console.log('🔍 [GMAIL DEBUG] Available image contexts:', Object.keys((globalThis as any).mcpImageContext || {}));
-                  console.log('🔍 [GMAIL DEBUG] Global image context data:', JSON.stringify((globalThis as any).mcpImageContext, null, 2));
                   console.log('🔍 [GMAIL DEBUG] Body object keys:', Object.keys(body || {}));
-                  console.log('🔍 [GMAIL DEBUG] ToolCall meta:', JSON.stringify(toolCall.meta, null, 2));
                   
-                  let imageUrl = null;
-                  
-                  // Method 1: Try to get image URL from Enhanced Image Context Manager (preferred)
-                  try {
-                    console.log('🔍 [GMAIL DEBUG] Attempting to import Enhanced Image Context Manager...');
-                    const { findImagesWithFallback } = await import('@/lib/mcp/image-context-manager');
-                    console.log('🔍 [GMAIL DEBUG] ✅ Successfully imported Enhanced Image Context Manager');
-                    
-                    // Try to get images using the enhanced fallback method for each session ID
-                    const sessionIds = [sessionId, metadataSessionId].filter(Boolean);
-                    console.log('🔍 [GMAIL DEBUG] Session IDs to check:', sessionIds);
-                    
-                    for (const sid of sessionIds) {
-                      if (sid) {
-                        console.log('🔍 [GMAIL DEBUG] Checking session ID:', sid);
-                        const imageUrls = findImagesWithFallback(sid);
-                        console.log('🔍 [GMAIL DEBUG] findImagesWithFallback returned:', imageUrls);
-                        if (imageUrls && imageUrls.length > 0) {
-                          console.log('🔍 [GMAIL DEBUG] ✅ Found image URLs from Enhanced Context Manager:', imageUrls);
-                          imageUrl = imageUrls[0];
-                          break;
-                        } else {
-                          console.log('🔍 [GMAIL DEBUG] ❌ No images found for session ID:', sid);
-                        }
-                      }
-                    }
-                  } catch (imageContextError) {
-                    console.log('🔍 [GMAIL DEBUG] ⚠️ Enhanced Image Context Manager not available:', imageContextError);
-                  }
-                  
-                  // Method 2: Fallback to global context (legacy support)
-                  if (!imageUrl && (globalThis as any).mcpImageContext) {
-                    console.log('🔍 [GMAIL DEBUG] Checking global context fallback...');
-                    const imageContext = (globalThis as any).mcpImageContext[sessionId] || 
-                                       (globalThis as any).mcpImageContext[metadataSessionId];
-                    
-                    console.log('🔍 [GMAIL DEBUG] Global context for session:', imageContext);
-                    
-                    if (imageContext && (imageContext as any).imageUrl) {
-                      console.log('🔍 [GMAIL DEBUG] ✅ Found image URL from global context:', (imageContext as any).imageUrl);
-                      imageUrl = (imageContext as any).imageUrl;
-                    } else if (imageContext && (imageContext as any).downloadableUrls) {
-                      const downloadableUrls = (imageContext as any).downloadableUrls;
-                      console.log('🔍 [GMAIL DEBUG] Found downloadableUrls:', downloadableUrls);
-                      if (Array.isArray(downloadableUrls) && downloadableUrls.length > 0) {
-                        console.log('🔍 [GMAIL DEBUG] ✅ Found downloadable URLs from global context:', downloadableUrls);
-                        imageUrl = downloadableUrls[0];
-                      }
-                    } else {
-                      console.log('🔍 [GMAIL DEBUG] ❌ No valid image data in global context');
-                    }
-                  } else {
-                    console.log('🔍 [GMAIL DEBUG] ❌ No global context available or image already found');
-                  }
-                  
-                  // Method 3: Emergency fallback - check all available image contexts
-                  if (!imageUrl && (globalThis as any).mcpImageContext) {
-                    console.log('🔍 [GMAIL DEBUG] ⚠️ Emergency fallback: No session-specific image found, checking all available contexts');
-                    
-                    const allContexts = Object.values((globalThis as any).mcpImageContext);
-                    console.log('🔍 [GMAIL DEBUG] Emergency fallback: Found', allContexts.length, 'contexts to check');
-                    
-                    for (const ctx of allContexts) {
-                      console.log('🔍 [GMAIL DEBUG] Emergency fallback: Checking context:', ctx);
-                      if (ctx && typeof ctx === 'object' && (ctx as any).imageUrl) {
-                        console.log('🔍 [GMAIL DEBUG] 🚨 Emergency fallback: Using available image URL:', (ctx as any).imageUrl);
-                        imageUrl = (ctx as any).imageUrl;
-                        break;
-                      } else if (ctx && typeof ctx === 'object' && (ctx as any).downloadableUrls && (ctx as any).downloadableUrls.length > 0) {
-                        const emergencyUrl = (ctx as any).downloadableUrls[0];
-                        console.log('🔍 [GMAIL DEBUG] 🚨 Emergency fallback: Using available downloadable URL:', emergencyUrl);
-                        imageUrl = emergencyUrl;
-                        break;
-                      }
-                    }
-                    
-                    if (!imageUrl) {
-                      console.log('🔍 [GMAIL DEBUG] ❌ Emergency fallback: No valid image found in any context');
-                    }
-                  }
+                  const callerUrls = callerImageUrls(userId, [sessionId, metadataSessionId]);
+                  const imageUrl: string | null = callerUrls.length > 0 ? callerUrls[0] : null;
                   
                   // Apply the image URL to parameters if found
                   if (imageUrl) {
@@ -2010,65 +1886,13 @@ export async function POST(req: NextRequest) {
             console.log(`🔍 [${toolType} DEBUG] Original params:`, JSON.stringify(paramsToUse, null, 2));
             console.log(`🔍 [${toolType} DEBUG] Session ID from body:`, sessionId);
             console.log(`🔍 [${toolType} DEBUG] Session ID from metadata:`, metadataSessionId);
-            console.log(`🔍 [${toolType} DEBUG] Available image contexts:`, Object.keys((globalThis as any).mcpImageContext || {}));
-            console.log(`🔍 [${toolType} DEBUG] Global image context data:`, JSON.stringify((globalThis as any).mcpImageContext, null, 2));
-            
-            let imageUrl = null;
-            
-            // Method 1: Try to get image URL from Enhanced Image Context Manager (preferred)
-            try {
-              const { findImagesWithFallback } = await import('@/lib/mcp/image-context-manager');
-              
-              // Try to get images using the enhanced fallback method for each session ID
-              const sessionIds = [sessionId, metadataSessionId].filter(Boolean);
-              
-              for (const sid of sessionIds) {
-                if (sid) {
-                  const imageUrls = findImagesWithFallback(sid);
-                  if (imageUrls && imageUrls.length > 0) {
-                    console.log(`🔍 [${toolType} DEBUG] ✅ Found image URLs from Enhanced Context Manager:`, imageUrls);
-                    imageUrl = imageUrls[0];
-                    
-                    // If we found multiple images, also inject additional parameters
-                    if (imageUrls.length > 1) {
-                      paramsToUse.files = imageUrls;
-                      paramsToUse.file_urls = imageUrls;
-                    }
-                    break;
-                  }
-                }
-              }
-            } catch (imageContextError) {
-              console.log(`🔍 [${toolType} DEBUG] ⚠️ Enhanced Image Context Manager not available:`, imageContextError);
-            }
-            
-            // Method 2: Fallback to global context (legacy support)
-            if (!imageUrl && (globalThis as any).mcpImageContext) {
-              const imageContext = (globalThis as any).mcpImageContext[sessionId] || 
-                                 (globalThis as any).mcpImageContext[metadataSessionId];
-              
-              if (imageContext && (imageContext as any).imageUrl) {
-                console.log(`🔍 [${toolType} DEBUG] ✅ Found image URL from global context:`, (imageContext as any).imageUrl);
-                imageUrl = (imageContext as any).imageUrl;
-              } else if (imageContext && (imageContext as any).downloadableUrls) {
-                const downloadableUrls = (imageContext as any).downloadableUrls;
-                if (Array.isArray(downloadableUrls) && downloadableUrls.length > 0) {
-                  console.log(`🔍 [${toolType} DEBUG] ✅ Found downloadable URLs from global context:`, downloadableUrls);
-                  imageUrl = downloadableUrls[0];
-                }
-              }
-              
-              // If still no image URL, try to find by checking if any stored URL is valid
-              if (!imageUrl) {
-                console.log('🖼️ [IMAGE INJECTION] No direct session match, checking for any valid image URLs...');
-                const allContexts = Object.values((globalThis as any).mcpImageContext);
-                for (const ctx of allContexts) {
-                  if (ctx && typeof ctx === 'object' && (ctx as any).imageUrl) {
-                    console.log('🖼️ [IMAGE INJECTION] Found candidate image URL:', (ctx as any).imageUrl);
-                    imageUrl = (ctx as any).imageUrl;
-                    break;
-                  }
-                }
+            let imageUrl: string | null = null;
+            const callerUrls = callerImageUrls(userId, [sessionId, metadataSessionId]);
+            if (callerUrls.length > 0) {
+              imageUrl = callerUrls[0];
+              if (callerUrls.length > 1) {
+                paramsToUse.files = callerUrls;
+                paramsToUse.file_urls = callerUrls;
               }
             }
             
@@ -2098,11 +1922,8 @@ export async function POST(req: NextRequest) {
               console.log(`🔍 [${toolType} DEBUG] ✅ Updated params with image URL:`, JSON.stringify(paramsToUse, null, 2));
               
               // Clean up the stored image context after use
-              if ((globalThis as any).mcpImageContext) {
-                delete (globalThis as any).mcpImageContext[sessionId];
-                delete (globalThis as any).mcpImageContext[metadataSessionId];
-                delete (globalThis as any).mcpImageContext[imageUrl];
-              }
+              deleteImageContext(userId, sessionId);
+              deleteImageContext(userId, metadataSessionId);
               console.log(`🔍 [${toolType} DEBUG] ✅ Cleaned up stored image context`);
             } else {
               console.log(`🔍 [${toolType} DEBUG] ❌ No image URL found from any source`);
@@ -2157,7 +1978,7 @@ export async function POST(req: NextRequest) {
                     dataUrl: fileUrl
                   }];
                   
-                  const downloadableUrls = await processAttachedImages(sessionId, attachedImages);
+                  const downloadableUrls = await processAttachedImages(callerScopeKey(userId, sessionId), attachedImages);
                   
                   if (downloadableUrls.length > 0) {
                     paramsToUse.file = downloadableUrls[0];
@@ -2219,23 +2040,13 @@ export async function POST(req: NextRequest) {
           if (toolCall.name.includes('google_drive') && !paramsToUse.file && !paramsToUse.files) {
             console.log('🚨 [EMERGENCY] Missing file parameter for Google Drive tool, attempting direct injection');
             
-            // Try to get image URL from global context
-            const sessionId = body.sessionId || toolCall.meta?.sessionId;
-            const globalImageContext = (globalThis as any).mcpImageContext;
-            
-            if (globalImageContext && sessionId) {
-              const imageContext = globalImageContext[sessionId];
-              if (imageContext && imageContext.downloadableUrls && imageContext.downloadableUrls.length > 0) {
-                paramsToUse.file = imageContext.downloadableUrls[0];
-                console.log('🚨 [EMERGENCY] Injected file URL from global context:', paramsToUse.file);
-              } else if (imageContext && imageContext.imageUrl) {
-                paramsToUse.file = imageContext.imageUrl;
-                console.log('🚨 [EMERGENCY] Injected file URL from imageUrl:', paramsToUse.file);
-              } else {
-                console.log('🚨 [EMERGENCY] No downloadable URLs found in global context');
-              }
+            const emergencyChatId = body.sessionId || toolCall.meta?.sessionId;
+            const emergencyUrls = imageUrlsFromContext(userId, emergencyChatId);
+            if (emergencyUrls.length > 0) {
+              paramsToUse.file = emergencyUrls[0];
+              console.log('🚨 [EMERGENCY] Injected file URL from caller image context:', paramsToUse.file);
             } else {
-              console.log('🚨 [EMERGENCY] No global image context available');
+              console.log('🚨 [EMERGENCY] No image context available for this caller');
             }
             
             // Re-log parameters after emergency injection

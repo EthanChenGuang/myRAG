@@ -18,6 +18,10 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@/lib/tool-execution-state', () => ({ ToolExecutionStateService: mocks.stateService }));
+vi.mock('@/lib/supabase', async () => {
+  const { createFakeAdminDb } = await import('./helpers/fake-admin-db');
+  return { getSupabaseAdmin: () => createFakeAdminDb() };
+});
 vi.mock('@/lib/supabase/server', () => ({
   createClient: async () => ({ auth: { getUser: async () => ({ data: { user: { id: USER_A } } }) } }),
 }));
@@ -40,6 +44,7 @@ vi.mock('@/lib/dev-logger', () => ({
 }));
 
 import { POST } from '@/app/api/chat/approve/route';
+import { adminDb, adminIds } from './helpers/fake-admin-db';
 
 interface ApprovalGlobals {
   toolApprovalState?: Record<string, unknown>;
@@ -98,6 +103,9 @@ describe('approve route executes exactly the approved Gmail parameters', () => {
   const globals = globalThis as unknown as ApprovalGlobals;
 
   beforeEach(() => {
+    adminIds.clear();
+    adminIds.add(USER_A);
+    adminDb.failing = false;
     vi.spyOn(console, 'log').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -192,6 +200,9 @@ describe('approve route after the in-memory approval state is gone', () => {
   const globals = globalThis as unknown as ApprovalGlobals;
 
   beforeEach(() => {
+    adminIds.clear();
+    adminIds.add(USER_A);
+    adminDb.failing = false;
     vi.spyOn(console, 'log').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});
