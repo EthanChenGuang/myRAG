@@ -10,13 +10,13 @@ METRICS = ("recall_at_5", "recall_at_10", "mrr", "correct_refusal_rate", "false_
 NOISE_PATH = Path(__file__).resolve().parents[1] / "config" / "noise.json"
 
 
-def _item(item_id: str, language="en", answerable=True, refused=False, span_count=1, hit5=0, hit10=0, rank=None, split="dev", category="general") -> ItemResult:
+def _item(item_id: str, language="en", answerable=True, refused=False, span_count=1, hit5=0, hit10=0, rank=None, split="dev", category="general", provenance="synthetic_fixture") -> ItemResult:
     return ItemResult(
         item_id=item_id,
         language=language,
         category=category,
         split=split,
-        provenance="synthetic_fixture",
+        provenance=provenance,
         answerable=answerable,
         refused=refused,
         span_count=span_count,
@@ -42,9 +42,10 @@ def _slice() -> dict:
     return {metric: {"value": 0.5, "n": 1} for metric in METRICS}
 
 
-def _report(items: list[ItemResult]) -> EvalReport:
+def _report(items: list[ItemResult], gate_population: str = "all") -> EvalReport:
     return EvalReport.model_validate(
         {
+            "gate_population": gate_population,
             "run_id": "run-x",
             "tier": "smoke",
             "run_config_hash": "r" * 64,
@@ -181,6 +182,26 @@ def test_slice_without_applicable_items_reports_n_zero_and_no_interval():
     stat = paired.slices["overall"]["correct_refusal_rate"]
     assert (stat.n, stat.n_nonzero, stat.mean_d, stat.ci_low, stat.ci_high) == (0, 0, None, None, None)
     assert paired.all_zero is True
+
+
+def test_production_gate_population_pairs_only_production_items():
+    items = [
+        _item("p1", provenance="production", span_count=1, hit5=1, hit10=1, rank=1),
+        _item("p2", provenance="production", language="zh", span_count=1, hit5=0, hit10=1, rank=6),
+        _item("f1", provenance="synthetic_fixture", span_count=1, hit5=1, hit10=1, rank=1),
+        _item("f2", provenance="synthetic_fixture", language="zh", span_count=1, hit5=1, hit10=1, rank=2),
+        _item("f3", provenance="synthetic_fixture", answerable=False, refused=True, span_count=0),
+    ]
+    baseline = _baseline(_rows(items))
+
+    production = paired_report(_report(items, "production"), baseline, _noise())
+    everything = paired_report(_report(items, "all"), baseline, _noise())
+
+    assert production is not None and everything is not None
+    assert production.slices["overall"]["recall_at_5"].n == 2
+    assert everything.slices["overall"]["recall_at_5"].n == 4
+    assert production.slices["overall"]["correct_refusal_rate"].n == 0
+    assert "language:en" in production.slices and production.slices["language:en"]["recall_at_5"].n == 1
 
 
 def test_baseline_without_items_gives_no_paired_report():

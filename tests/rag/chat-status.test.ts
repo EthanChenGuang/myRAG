@@ -7,7 +7,18 @@ const MODE = 'NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE';
 
 const h = await vi.hoisted(async () => {
   const fakes = await import('../helpers/chat-route-fakes');
-  return { ...fakes.createChatRouteHarness(), runSpy: vi.fn() };
+  return { ...fakes.createChatRouteHarness(), runSpy: vi.fn(), traced: [] as Array<{ status: string; reason?: string }> };
+});
+
+vi.mock('@/lib/rag/trace/finish', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/rag/trace/finish')>();
+  return {
+    ...actual,
+    finishTrace: (...args: Parameters<typeof actual.finishTrace>) => {
+      h.traced.push({ status: args[1].status, reason: args[1].reason });
+      return actual.finishTrace(...args);
+    },
+  };
 });
 
 vi.mock('ai', async (importOriginal) => ({
@@ -120,6 +131,7 @@ function flakyAdmin(failuresBeforeSuccess: number) {
 
 describe('chat route status mapping', () => {
   beforeEach(() => {
+    h.traced.length = 0;
     h.capture.reset();
     h.runSpy.mockReset();
     h.retrieval.mockReset();
@@ -149,15 +161,45 @@ describe('chat route status mapping', () => {
     expect(h.capture.streamText).not.toHaveBeenCalled();
   });
 
-  it('status error streams a localized error part instead of the refusal', async () => {
+  it('status error in strict mode with web search off streams the refusal, not an error part, and records the error status', async () => {
     h.retrieval.mockRejectedValue(new Error('vector backend down'));
     const response = await post(await loadRoute(), { settings: { webSearch: false, language: 'zh' } });
     const body = await readSse(response);
 
-    expect(body).toContain('"type":"error"');
-    expect(body).toContain('知识库暂时无法访问');
-    expect(body).not.toContain('Information Not Available');
+    expect(response.status).toBe(200);
+    expect(body).not.toContain('"type":"error"');
+    expect(body).not.toContain('知识库暂时无法访问');
+    expect(body).toContain('text-delta');
     expect(h.capture.streamText).not.toHaveBeenCalled();
+    expect(h.traced).toHaveLength(1);
+    expect(h.traced[0].status).toBe('error');
+  });
+
+  it('status error with web search on still answers with no knowledge-base context and flags the trace degraded', async () => {
+    h.retrieval.mockRejectedValue(new Error('vector backend down'));
+    const body = await readSse(await post(await loadRoute(), { settings: { webSearch: true } }));
+
+    expect(body).not.toContain('"type":"error"');
+    expect(body).not.toContain('Information Not Available');
+    expect(h.capture.streamText).toHaveBeenCalledTimes(1);
+    expect(Object.keys(h.capture.calls[0].tools)).toContain('webSearch');
+    expect(JSON.stringify(h.capture.calls[0].messages)).not.toContain('RELEVANT INFORMATION FROM DOCUMENTS');
+    const logged = vi.mocked(console.error).mock.calls.filter((call) => call[0] === '[Document Search] Knowledge base unavailable:');
+    expect(logged).toHaveLength(1);
+    expect(logged[0][1]).toMatchObject({ status: 'error', degradedToNoContext: true });
+    expect(h.traced).toHaveLength(1);
+    expect(h.traced[0].status).toBe('degraded');
+  });
+
+  it.each(['balanced', 'flexible'])('status error in %s mode answers without knowledge-base context', async (ragMode) => {
+    h.retrieval.mockRejectedValue(new Error('vector backend down'));
+    const body = await readSse(await post(await loadRoute(), { ragMode, settings: { webSearch: false } }));
+
+    expect(body).not.toContain('"type":"error"');
+    expect(body).not.toContain('Information Not Available');
+    expect(h.capture.streamText).toHaveBeenCalledTimes(1);
+    expect(h.traced).toHaveLength(1);
+    expect(h.traced[0].status).toBe('degraded');
   });
 
   it('status error logs under [Document Search] without the query text', async () => {
@@ -184,21 +226,57 @@ describe('chat route status mapping', () => {
   it('a disabled assemble stage never lets strict mode answer from general knowledge with an empty context', async () => {
     seedDocuments(['1']);
     h.retrieval.mockResolvedValue(retrievalWith([row('1')]));
-    const body = await readSse(await post(await loadRoute({ ragEnv: () => ({ RAG_DISABLED_STAGES: 'assemble' }) })));
+    const body = await readSse(await post(await loadRoute({ ragEnv: () => ({ RAG_DISABLED_STAGES: 'assemble' }) }), { settings: { webSearch: false } }));
 
-    expect(body).toContain('"type":"error"');
+    expect(body).toContain('text-delta');
     expect(h.capture.streamText).not.toHaveBeenCalled();
   });
 
-  it('degraded without used documents streams the localized error part', async () => {
+  it('degraded without used documents in strict mode with web search off streams the refusal and records the degraded status', async () => {
     seedDocuments(['1']);
     h.retrieval.mockResolvedValue(retrievalWith([row('1')]));
     const body = await readSse(await post(await loadRoute({ adminClient: flakyAdmin(10) }), { settings: { webSearch: false, language: 'it' } }));
 
-    expect(body).toContain('"type":"error"');
-    expect(body).toContain('La base di conoscenza non è al momento disponibile');
-    expect(body).not.toContain('Information Not Available');
+    expect(body).not.toContain('"type":"error"');
+    expect(body).not.toContain('La base di conoscenza non è al momento disponibile');
+    expect(body).toContain('text-delta');
     expect(h.capture.streamText).not.toHaveBeenCalled();
+    expect(h.traced).toHaveLength(1);
+    expect(h.traced[0].status).toBe('degraded');
+  });
+
+  it('degraded without used documents in flexible mode answers from general knowledge', async () => {
+    seedDocuments(['1']);
+    h.retrieval.mockResolvedValue(retrievalWith([row('1')]));
+    const body = await readSse(await post(await loadRoute({ adminClient: flakyAdmin(10) }), { ragMode: 'flexible', settings: { webSearch: false } }));
+
+    expect(body).not.toContain('"type":"error"');
+    expect(h.capture.streamText).toHaveBeenCalledTimes(1);
+  });
+
+  it('a text-plus-document array message passes the document reference to retrieval', async () => {
+    const route = await loadRoute();
+    await readSse(
+      await route.POST(
+        chatRequest({
+          messages: [
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: QUESTION },
+                { type: 'document', document: { id: 'doc-attached', name: 'attached-policy.md' } },
+              ],
+            },
+          ],
+          data: { ragMode: 'flexible', settings: { webSearch: false } },
+        }),
+      ),
+    );
+
+    expect(h.runSpy).toHaveBeenCalledTimes(1);
+    const input = h.runSpy.mock.calls[0][0];
+    expect(input.query).toBe(QUESTION);
+    expect(input.documentRefs.documentParts).toEqual([{ id: 'doc-attached', name: 'attached-policy.md' }]);
   });
 
   it('single-tenant retrieves with the single scope and the global vector RPC', async () => {

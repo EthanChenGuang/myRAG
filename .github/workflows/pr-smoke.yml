@@ -41,7 +41,7 @@ jobs:
       - name: Vitest suite
         run: npx vitest run
       - name: tsx tests
-        run: node --import tsx --test tests/fixture-edge.test.mts tests/prompt-context.test.mts tests/eval-answer.test.mts tests/rag-langfuse-export.test.mts tests/rag-langfuse-review.test.mts
+        run: node --import tsx --test tests/*.test.mts
       - name: Config drift check
         run: node scripts/check-config.mjs
       - name: RAG boundary check
@@ -59,7 +59,9 @@ jobs:
       - name: Type-check
         run: npx tsc --noEmit -p tsconfig.json
       - name: Workflow structure check
-        run: uv run --directory eval python ../scripts/ci/check-workflows.py
+        run: |
+          uv run --directory eval python ../scripts/ci/check-workflows.py
+          uv run --directory eval python -m unittest discover -s ../scripts/tests -p 'test_check_workflows.py'
 
   sibling-types:
     runs-on: ubuntu-latest

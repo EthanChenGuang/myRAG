@@ -31,6 +31,7 @@ import { CollapsibleButton } from './collapsible-button';
 // Import the WebSearchButton component
 import { WebSearchButton } from './web-search-button';
 import { useReasoningStore } from '@/lib/stores/reasoning-store';
+import { getActiveOrganizationId } from '@/lib/active-organization';
 // Import the MCPToolsButton component
 import { MCPToolsButton } from './mcp-tools-button';
 // Import the ReasoningButton component
@@ -1707,6 +1708,8 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
         if (config.moderation) formData.append('moderation', config.moderation);
         if (config.responseFormat) formData.append('responseFormat', config.responseFormat);
         if (config.maskImage) formData.append('maskImage', config.maskImage);
+        const activeOrganizationId = getActiveOrganizationId();
+        if (activeOrganizationId) formData.append('organizationId', activeOrganizationId);
 
         // Debug: Log all FormData keys being sent
         console.log('Frontend: FormData keys being sent:', Array.from(formData.keys()));
@@ -1733,6 +1736,8 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
         if (config.compression !== undefined) jsonData.compression = config.compression;
         if (config.moderation) jsonData.moderation = config.moderation;
         if (config.responseFormat) jsonData.responseFormat = config.responseFormat;
+        const activeOrganizationId = getActiveOrganizationId();
+        if (activeOrganizationId) jsonData.organizationId = activeOrganizationId;
 
         requestData = JSON.stringify(jsonData);
       }
@@ -2026,6 +2031,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
         cameraFixed: cameraFixed || false,
         sourceImage: sourceImagesWithUrls.length > 0 ? { base64: sourceImagesWithUrls[0].url, type: 'url' } : undefined,
         generateAudio: generateAudio ?? true, // Default to true for Veo3 audio generation
+        organizationId: getActiveOrganizationId(),
       };
 
       console.log('Making video generation request with:', requestBody);
