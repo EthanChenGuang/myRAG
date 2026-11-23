@@ -150,11 +150,11 @@ describe('assembleContext is byte-identical to the frozen chat assembly oracle',
     return actual;
   }
 
-  test('the golden set has 72 questions', () => {
-    assert.equal(questions.length, 72);
+  test('the golden set has at least the original 72 questions', () => {
+    assert.ok(questions.length >= 72, `golden set has ${questions.length} questions`);
   });
 
-  test('72 questions x isGPTModel {true, false} x {no reference, one referenced document} give 0 differences', async () => {
+  test('every golden question x isGPTModel {true, false} x {no reference, one referenced document} give 0 differences', async () => {
     const scope = scopeModule.mintScope('single', null, null);
     const firstDocument = (await fixture.db.query<{ id: string }>('SELECT id FROM documents ORDER BY filename LIMIT 1')).rows[0];
     assert.ok(firstDocument);
@@ -191,7 +191,7 @@ describe('assembleContext is byte-identical to the frozen chat assembly oracle',
     console.log(
       `[assemble differential] compared ${compared} cases, 0 differences (used documents in ${withUsedDocuments}, referenced ${withReference}, refusal candidates ${withRefusalCandidate})`,
     );
-    assert.equal(compared, 288);
+    assert.equal(compared, questions.length * 4);
     assert.ok(withUsedDocuments >= 100, `only ${withUsedDocuments} cases produced used documents`);
     assert.ok(withRefusalCandidate >= 1, 'no case exercised the refusal candidate');
     assert.deepEqual(edge.errors, []);

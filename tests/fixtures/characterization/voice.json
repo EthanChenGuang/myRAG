@@ -1,5 +1,61 @@
 [
   {
+    "query": "express cut-off?",
+    "results": [
+      {
+        "chunk_id": "821d8054-a2c0-49a0-9685-60bee8f80d9b",
+        "document_id": "b3cea6c0-8718-4ce2-a5cc-4907af5a33fb",
+        "content": "Document: shipping-handbook.en.md. Chunk 1 of 6. Content: ## Carrier cut-off times\n\nLumen Valley Instruments ships from one warehouse. Orders paid before 14:00 on a business day leave the warehouse the same day with the standard carrier. Orders paid after 14:00 leave on the next business day. The express carrier has an earlier cut-off of 12:00 for same-day dispatch. Orders placed on a Saturday or Sunday leave on Monday.\n[Metadata:   ]",
+        "similarity": 0.30750795513297535,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "pallet limit?",
+    "results": [
+      {
+        "chunk_id": "0aa02763-f10b-4517-997a-e61d8f850df3",
+        "document_id": "b3cea6c0-8718-4ce2-a5cc-4907af5a33fb",
+        "content": "Document: shipping-handbook.en.md. Chunk 2 of 6. Content: ## Packaging rules\n\nEvery instrument is packed in a foam-lined box with a moisture sachet. Thermal probes with a cable longer than 3 metres are coiled and fixed with a paper band before boxing. Packages that weigh more than 20 kilograms are shipped on a pallet and are never sent as ordinary parcels. Batteries are packed separately from instruments and carry a lithium handling label when the model uses lithium cells.\n[Metadata:   ]",
+        "similarity": 0.15304902530301356,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "how long do I have to send back a yearly plan?",
+    "results": [
+      {
+        "chunk_id": "c85622b8-a283-4018-a491-8db47d5b38fd",
+        "document_id": "332012aa-813e-426b-a096-b260624e6cd3",
+        "content": "Document: refund-policy.en.md. Chunk 4 of 5. Content: ## Previous policy (2023)\n\nUntil the end of 2023, Lumen Valley Instruments used an earlier refund rule. Any customer could ask for their money back within 30 days of buying a plan, whatever the billing period, and approved refunds were issued as store credit instead of being returned to the original payment method. This earlier rule was retired on 1 January 2024 and no longer applies to new orders.\n[Metadata:   ]",
+        "similarity": 0.150459812403409,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "my parcel is taking forever, when do you give up on it and call it lost?",
+    "results": [
+      {
+        "chunk_id": "ec815e75-8353-4331-8b1e-325583bfe839",
+        "document_id": "b3cea6c0-8718-4ce2-a5cc-4907af5a33fb",
+        "content": "Document: shipping-handbook.en.md. Chunk 6 of 6. Content: ## Damaged or lost parcels\n\nReport a damaged parcel within 5 days of delivery and keep the outer box and the foam for inspection. Write to logistics@example.com with the order number and two photos. A parcel that has not arrived 15 business days after dispatch is treated as lost, and the logistics team either sends a replacement or hands the case to the billing team for a refund.\n[Metadata:   ]",
+        "similarity": 0.203435025745199,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
     "query": "What are the refund windows for annual plans and for monthly plans?",
     "results": [
       {
@@ -782,6 +838,233 @@
   {
     "query": "How many grams does the DL-220 weigh?",
     "results": [],
+    "source_images": []
+  },
+  {
+    "query": "refnd windw for anual plans",
+    "results": [
+      {
+        "chunk_id": "3165c183-8863-4fa8-8486-e4edb0a2a137",
+        "document_id": "332012aa-813e-426b-a096-b260624e6cd3",
+        "content": "Document: refund-policy.en.md. Chunk 1 of 5. Content: ## Annual plans\n\nLumen Valley Instruments accepts refund requests for plans billed once a year. Send the request to the billing team with your order number. The refund is paid to the original payment method within 10 business days. The annual plans refund window is 45 days from the purchase date.\n[Metadata:   ]",
+        "similarity": 0.308087527905066,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "9ef78ef6-3872-43a6-80ce-47aa6d4b98ed",
+        "document_id": "332012aa-813e-426b-a096-b260624e6cd3",
+        "content": "Document: refund-policy.en.md. Chunk 2 of 5. Content: ## Monthly plans\n\nLumen Valley Instruments accepts refund requests for plans billed once a month. Send the request to the billing team with your order number. The refund is paid to the original payment method within 10 business days. The monthly plans refund window is 14 days from the purchase date.\n[Metadata:   ]",
+        "similarity": 0.2731413650856005,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "how mush dose standrd shiping cost bellow 250 dolars",
+    "results": [
+      {
+        "chunk_id": "3ba25546-c847-4061-b333-507579a4eb1a",
+        "document_id": "b3cea6c0-8718-4ce2-a5cc-4907af5a33fb",
+        "content": "Document: shipping-handbook.en.md. Chunk 4 of 6. Content: ## Shipping costs\n\nStandard shipping is free for orders above 250 dollars. Below that amount a flat fee of 12 dollars applies. Express shipping always costs 35 dollars. Pallet shipments are quoted by the logistics team before payment, and the quote stays valid for 7 days.\n[Metadata:   ]",
+        "similarity": 0.19674446054664296,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "Estensione, entro quando?",
+    "results": [
+      {
+        "chunk_id": "ea955655-7208-4fa0-8f8a-e259bd9fa491",
+        "document_id": "b956386c-b598-4884-bc39-b15acb72a252",
+        "content": "Document: warranty-terms.it.md. Chunk 6 of 6. Content: ## Estensione di garanzia\n\nEntro 30 giorni dalla consegna è possibile acquistare un'estensione di garanzia di 12 mesi, al prezzo del 10% del valore dello strumento. L'estensione ha le stesse condizioni e le stesse esclusioni della garanzia di base e si applica a un solo strumento per volta.\n[Metadata:   ]",
+        "similarity": 0.38192124477897527,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "e2bee7d6-7735-4b8f-b424-393d77af6ee0",
+        "document_id": "b956386c-b598-4884-bc39-b15acb72a252",
+        "content": "Document: warranty-terms.it.md. Chunk 5 of 6. Content: ## Tempi e costi di spedizione\n\nIl centro di assistenza completa la riparazione entro 15 giorni lavorativi dal ricevimento dello strumento. Le spese di spedizione verso il centro sono a carico del cliente, mentre la spedizione di ritorno è a carico di Valle Verde Strumenti per gli interventi in garanzia. Per gli interventi fuori garanzia viene inviato prima un preventivo, valido 10 giorni.\n[Metadata:   ]",
+        "similarity": 0.1722316371115058,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "Conferma della richiesta di rimborso, in quanto tempo?",
+    "results": [
+      {
+        "chunk_id": "cb66cdc7-d8bf-4346-a673-d82095c8a676",
+        "document_id": "fb5ddaad-1d78-4479-a51a-51dc0824ed5d",
+        "content": "Document: refund-policy.it.md. Chunk 1 of 5. Content: ## Piani annuali\n\nValle Verde Strumenti accetta richieste di rimborso per i piani con fatturazione annuale. La richiesta va inviata all'ufficio amministrazione insieme al numero d'ordine. Il rimborso viene accreditato sul metodo di pagamento originale entro 12 giorni lavorativi. Per i piani annuali il termine per chiedere il rimborso è di 60 giorni dalla data di acquisto.\n[Metadata:   ]",
+        "similarity": 0.2860607164556582,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "0f2c29e3-bd3d-463e-b081-e3d542ede4a3",
+        "document_id": "fb5ddaad-1d78-4479-a51a-51dc0824ed5d",
+        "content": "Document: refund-policy.it.md. Chunk 2 of 5. Content: ## Piani mensili\n\nValle Verde Strumenti accetta richieste di rimborso per i piani con fatturazione mensile. La richiesta va inviata all'ufficio amministrazione insieme al numero d'ordine. Il rimborso viene accreditato sul metodo di pagamento originale entro 12 giorni lavorativi. Per i piani mensili il termine per chiedere il rimborso è di 10 giorni dalla data di acquisto.\n[Metadata:   ]",
+        "similarity": 0.2832814504857514,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "52e54dac-e99f-41bb-9001-2746a0897469",
+        "document_id": "fb5ddaad-1d78-4479-a51a-51dc0824ed5d",
+        "content": "Document: refund-policy.it.md. Chunk 5 of 5. Content: ## Come inviare la richiesta\n\nScrivere a rimborsi@example.com indicando il numero d'ordine e l'indirizzo email usato al momento dell'acquisto. Le richieste telefoniche sono gestite al numero 555-0144 nei giorni feriali dalle 9:00 alle 17:00. La ricezione della richiesta viene confermata entro due giorni lavorativi.\n[Metadata:   ]",
+        "similarity": 0.26401224112621546,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "5b6575e8-379a-4515-8c8c-5e19b1064e0d",
+        "document_id": "fb5ddaad-1d78-4479-a51a-51dc0824ed5d",
+        "content": "Document: refund-policy.it.md. Chunk 3 of 5. Content: ## Eccezioni\n\nI servizi di taratura su misura e gli strumenti restituiti con danni causati dall'utente non danno diritto al rimborso. Per altri casi particolari scrivere all'assistenza clienti, che valuterà la richiesta.\n[Metadata:   ]",
+        "similarity": 0.22755969936482867,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "8b8583ea-bf33-4780-aee9-ba5ee9a4676a",
+        "document_id": "b956386c-b598-4884-bc39-b15acb72a252",
+        "content": "Document: warranty-terms.it.md. Chunk 4 of 6. Content: ## Come aprire una richiesta\n\nPer aprire una richiesta bisogna scrivere a garanzia@example.org, allegando l'identificativo del dispositivo, la prova d'acquisto e una foto dell'etichetta. Entro 3 giorni lavorativi il cliente riceve un numero di pratica e le istruzioni per la spedizione. Lo strumento va imballato con cura e inviato al centro di assistenza indicato nelle istruzioni.\n[Metadata:   ]",
+        "similarity": 0.1648298267848879,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "Ho preso l'abbonamento per un anno, fino a quando posso farmi ridare i soldi?",
+    "results": [
+      {
+        "chunk_id": "96b82c4c-5d34-4e6c-8222-02a29b8f20a3",
+        "document_id": "b0f11cff-e756-4458-a963-b53776c9da72",
+        "content": "Document: scanned-receipt.it.md. Chunk 4 of 5. Content: ## Condizioni di reso\n\nI1 reso e possibi1e entro 14 giorni dalla data dello scontrino, perche la merce deve essere integra e nella confezione origina1e. Per i1 reso occorre presentare questo scontrino. Gli articoli personalizzati non si possono restituire. Il rimborso avviene sulla stessa carta usata per l'acquisto.\n[Metadata:   ]",
+        "similarity": 0.22531596497643136,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "5f717f10-61d7-4427-b414-1554737c9390",
+        "document_id": "fb5ddaad-1d78-4479-a51a-51dc0824ed5d",
+        "content": "Document: refund-policy.it.md. Chunk 4 of 5. Content: ## Politica precedente (fino al 2023)\n\nFino alla fine del 2023 l'azienda applicava una regola più vecchia: qualsiasi cliente poteva domandare la restituzione del denaro entro 25 giorni dal pagamento, qualunque fosse il periodo di fatturazione, ma l'importo veniva restituito solo come credito sul conto cliente e non sul metodo di pagamento usato. Questa regola è stata abrogata il 1 gennaio 2024 e non vale più per i nuovi ordini.\n[Metadata:   ]",
+        "similarity": 0.21854040944247966,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "Se apro io lo strumento per vedere cos'ha, la garanzia vale ancora?",
+    "results": [
+      {
+        "chunk_id": "c0e03e32-45c4-48ad-9f0f-015238916504",
+        "document_id": "b956386c-b598-4884-bc39-b15acb72a252",
+        "content": "Document: warranty-terms.it.md. Chunk 2 of 6. Content: ## Cosa è coperto\n\nLa garanzia copre i difetti di fabbricazione e i guasti dell'elettronica che si manifestano durante il normale utilizzo. Il servizio di assistenza ripara o sostituisce lo strumento a propria discrezione, senza costi per il cliente. Se lo strumento viene sostituito, il nuovo esemplare eredita la scadenza della garanzia originale.\n[Metadata:   ]",
+        "similarity": 0.2794178312385798,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.3492722890482247,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.2794178312385798,
+        "image_url": null
+      },
+      {
+        "chunk_id": "ea955655-7208-4fa0-8f8a-e259bd9fa491",
+        "document_id": "b956386c-b598-4884-bc39-b15acb72a252",
+        "content": "Document: warranty-terms.it.md. Chunk 6 of 6. Content: ## Estensione di garanzia\n\nEntro 30 giorni dalla consegna è possibile acquistare un'estensione di garanzia di 12 mesi, al prezzo del 10% del valore dello strumento. L'estensione ha le stesse condizioni e le stesse esclusioni della garanzia di base e si applica a un solo strumento per volta.\n[Metadata:   ]",
+        "similarity": 0.2684611405316457,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.33557642566455714,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.2684611405316457,
+        "image_url": null
+      },
+      {
+        "chunk_id": "e7b89bdf-77f0-4b90-9b80-98f3319ecd83",
+        "document_id": "b956386c-b598-4884-bc39-b15acb72a252",
+        "content": "Document: warranty-terms.it.md. Chunk 1 of 6. Content: ## Durata della garanzia\n\nGli strumenti venduti da Valle Verde Strumenti sono coperti da una garanzia legale e commerciale di 24 mesi a partire dalla data di consegna. Gli accessori di consumo, come batterie e guaine protettive, sono coperti per 6 mesi. La garanzia non si rinnova dopo una riparazione e non viene prolungata dal periodo di fermo dello strumento.\n[Metadata:   ]",
+        "similarity": 0.25508776057187305,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.31885970071484127,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.25508776057187305,
+        "image_url": null
+      },
+      {
+        "chunk_id": "e2bee7d6-7735-4b8f-b424-393d77af6ee0",
+        "document_id": "b956386c-b598-4884-bc39-b15acb72a252",
+        "content": "Document: warranty-terms.it.md. Chunk 5 of 6. Content: ## Tempi e costi di spedizione\n\nIl centro di assistenza completa la riparazione entro 15 giorni lavorativi dal ricevimento dello strumento. Le spese di spedizione verso il centro sono a carico del cliente, mentre la spedizione di ritorno è a carico di Valle Verde Strumenti per gli interventi in garanzia. Per gli interventi fuori garanzia viene inviato prima un preventivo, valido 10 giorni.\n[Metadata:   ]",
+        "similarity": 0.19521614666804626,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.24402018333505782,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.19521614666804626,
+        "image_url": null
+      },
+      {
+        "chunk_id": "cd212857-2636-433d-8bf6-761321f3f7e7",
+        "document_id": "45240c49-6437-4ed6-80d4-b958157b65df",
+        "content": "Document: product-specs.it.md. Chunk 6 of 6. Content: ## Garanzia e ricambi\n\nTutti gli strumenti elencati hanno una garanzia limitata di due anni dalla data di consegna. I cavi di ricambio si ordinano con il codice VV-RC-0060 per il cavo da 1,5 metri e VV-RC-0061 per quello da 3 metri. La batteria di ricambio ha il codice VV-BT-0007. Le richieste di garanzia vanno inviate a garanzia@example.org con l'identificativo del dispositivo e una foto dell'etichetta.\n[Metadata:   ]",
+        "similarity": 0.179207575793565,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.22400946974195624,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.179207575793565,
+        "image_url": null
+      }
+    ],
     "source_images": []
   },
   {
@@ -2276,6 +2559,168 @@
     "source_images": []
   },
   {
+    "query": "Perche la garanzia non e valida se lo strumento cade per terra?",
+    "results": [
+      {
+        "chunk_id": "c0e03e32-45c4-48ad-9f0f-015238916504",
+        "document_id": "b956386c-b598-4884-bc39-b15acb72a252",
+        "content": "Document: warranty-terms.it.md. Chunk 2 of 6. Content: ## Cosa è coperto\n\nLa garanzia copre i difetti di fabbricazione e i guasti dell'elettronica che si manifestano durante il normale utilizzo. Il servizio di assistenza ripara o sostituisce lo strumento a propria discrezione, senza costi per il cliente. Se lo strumento viene sostituito, il nuovo esemplare eredita la scadenza della garanzia originale.\n[Metadata:   ]",
+        "similarity": 0.28439309273169133,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.35549136591461417,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.28439309273169133,
+        "image_url": null
+      },
+      {
+        "chunk_id": "ea955655-7208-4fa0-8f8a-e259bd9fa491",
+        "document_id": "b956386c-b598-4884-bc39-b15acb72a252",
+        "content": "Document: warranty-terms.it.md. Chunk 6 of 6. Content: ## Estensione di garanzia\n\nEntro 30 giorni dalla consegna è possibile acquistare un'estensione di garanzia di 12 mesi, al prezzo del 10% del valore dello strumento. L'estensione ha le stesse condizioni e le stesse esclusioni della garanzia di base e si applica a un solo strumento per volta.\n[Metadata:   ]",
+        "similarity": 0.26860563023871276,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.33575703779839094,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.26860563023871276,
+        "image_url": null
+      },
+      {
+        "chunk_id": "e7b89bdf-77f0-4b90-9b80-98f3319ecd83",
+        "document_id": "b956386c-b598-4884-bc39-b15acb72a252",
+        "content": "Document: warranty-terms.it.md. Chunk 1 of 6. Content: ## Durata della garanzia\n\nGli strumenti venduti da Valle Verde Strumenti sono coperti da una garanzia legale e commerciale di 24 mesi a partire dalla data di consegna. Gli accessori di consumo, come batterie e guaine protettive, sono coperti per 6 mesi. La garanzia non si rinnova dopo una riparazione e non viene prolungata dal periodo di fermo dello strumento.\n[Metadata:   ]",
+        "similarity": 0.2521709540603637,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.3152136925754546,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.2521709540603637,
+        "image_url": null
+      },
+      {
+        "chunk_id": "e2bee7d6-7735-4b8f-b424-393d77af6ee0",
+        "document_id": "b956386c-b598-4884-bc39-b15acb72a252",
+        "content": "Document: warranty-terms.it.md. Chunk 5 of 6. Content: ## Tempi e costi di spedizione\n\nIl centro di assistenza completa la riparazione entro 15 giorni lavorativi dal ricevimento dello strumento. Le spese di spedizione verso il centro sono a carico del cliente, mentre la spedizione di ritorno è a carico di Valle Verde Strumenti per gli interventi in garanzia. Per gli interventi fuori garanzia viene inviato prima un preventivo, valido 10 giorni.\n[Metadata:   ]",
+        "similarity": 0.2044323825771608,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.255540478221451,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.2044323825771608,
+        "image_url": null
+      },
+      {
+        "chunk_id": "afd07bb5-fa97-41c0-8b75-ec650f244b19",
+        "document_id": "b0f11cff-e756-4458-a963-b53776c9da72",
+        "content": "Document: scanned-receipt.it.md. Chunk 5 of 5. Content: ## Pie di pagina\n\nGrazie per aver scelto Valle Verde Strumenti. Per informazioni sul punto vendita di Citta Esempio scrivere a negozio@example.net. Conservare lo scontrino per la garanzia: 1a garanzia dura 24 mesi dalla data di acquisto.\n[Metadata:   ]",
+        "similarity": 0.17359344666380078,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.21699180832975096,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.17359344666380078,
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "a quale indirizo email si scrive per un rimbroso?",
+    "results": [
+      {
+        "chunk_id": "52e54dac-e99f-41bb-9001-2746a0897469",
+        "document_id": "fb5ddaad-1d78-4479-a51a-51dc0824ed5d",
+        "content": "Document: refund-policy.it.md. Chunk 5 of 5. Content: ## Come inviare la richiesta\n\nScrivere a rimborsi@example.com indicando il numero d'ordine e l'indirizzo email usato al momento dell'acquisto. Le richieste telefoniche sono gestite al numero 555-0144 nei giorni feriali dalle 9:00 alle 17:00. La ricezione della richiesta viene confermata entro due giorni lavorativi.\n[Metadata:   ]",
+        "similarity": 0.16672499974743782,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "试用期多久？",
+    "results": [
+      {
+        "chunk_id": "61adef00-564c-4bbc-9df2-0ae85ed0aa0a",
+        "document_id": "def4e5c5-62cc-45f7-bcda-bc84f2e408e7",
+        "content": "Document: employee-handbook.zh.md. Chunk 6 of 6. Content: ## 试用期与转正\n\n新员工的试用期为 3 个月，试用期工资为转正后工资的 90%。转正评估由直属主管在试用期结束前 10 个工作日发起，评估通过后，人事部门会在下一个发薪日起按转正工资发放。\n[Metadata:   ]",
+        "similarity": 0.42141260590253937,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "多少钱的报销要加签？",
+    "results": [
+      {
+        "chunk_id": "47fd8dba-a366-4732-a244-bedf9a6d776d",
+        "document_id": "def4e5c5-62cc-45f7-bcda-bc84f2e408e7",
+        "content": "Document: employee-handbook.zh.md. Chunk 4 of 6. Content: ## 差旅与报销\n\n出差住宿标准为一线城市每晚不超过 600 元，其他城市每晚不超过 400 元。所有报销必须在费用发生后 30 天内，连同电子发票一并提交。超过期限的报销单，财务部不予受理。单笔金额超过 5000 元的报销，需要部门负责人加签。\n[Metadata:   ]",
+        "similarity": 0.24361121844912104,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "买了年度套餐想退钱，最晚几天内要提出来？",
+    "results": [],
+    "source_images": []
+  },
+  {
+    "query": "出差回来报销，发票最晚啥时候要交？",
+    "results": [
+      {
+        "chunk_id": "47fd8dba-a366-4732-a244-bedf9a6d776d",
+        "document_id": "def4e5c5-62cc-45f7-bcda-bc84f2e408e7",
+        "content": "Document: employee-handbook.zh.md. Chunk 4 of 6. Content: ## 差旅与报销\n\n出差住宿标准为一线城市每晚不超过 600 元，其他城市每晚不超过 400 元。所有报销必须在费用发生后 30 天内，连同电子发票一并提交。超过期限的报销单，财务部不予受理。单笔金额超过 5000 元的报销，需要部门负责人加签。\n[Metadata:   ]",
+        "similarity": 0.22434982600366982,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
     "query": "年度方案和月度方案的退款期限分别是多少天？",
     "results": [
       {
@@ -3011,6 +3456,42 @@
   {
     "query": "HM-90 的重量是多少克？",
     "results": [],
+    "source_images": []
+  },
+  {
+    "query": "病价期间的工资发方比例是多少？",
+    "results": [
+      {
+        "chunk_id": "f69907ea-9398-4046-bf30-a3a05afe15f5",
+        "document_id": "def4e5c5-62cc-45f7-bcda-bc84f2e408e7",
+        "content": "Document: employee-handbook.zh.md. Chunk 3 of 6. Content: ## 病假与医疗期\n\n员工因病需要休息时，请当天上午 10 点前通知直属主管，并在返岗后 2 日内补交医院开具的诊断证明。病假期间的工资按基本工资的 80% 发放。连续病假超过 30 天的，由人事部门另行安排医疗期的相关事宜。\n[Metadata:   ]",
+        "similarity": 0.19312943211026545,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "61adef00-564c-4bbc-9df2-0ae85ed0aa0a",
+        "document_id": "def4e5c5-62cc-45f7-bcda-bc84f2e408e7",
+        "content": "Document: employee-handbook.zh.md. Chunk 6 of 6. Content: ## 试用期与转正\n\n新员工的试用期为 3 个月，试用期工资为转正后工资的 90%。转正评估由直属主管在试用期结束前 10 个工作日发起，评估通过后，人事部门会在下一个发薪日起按转正工资发放。\n[Metadata:   ]",
+        "similarity": 0.1924478136158576,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "chuchai 住宿 一线城市 每晚多少钱？",
+    "results": [
+      {
+        "chunk_id": "47fd8dba-a366-4732-a244-bedf9a6d776d",
+        "document_id": "def4e5c5-62cc-45f7-bcda-bc84f2e408e7",
+        "content": "Document: employee-handbook.zh.md. Chunk 4 of 6. Content: ## 差旅与报销\n\n出差住宿标准为一线城市每晚不超过 600 元，其他城市每晚不超过 400 元。所有报销必须在费用发生后 30 天内，连同电子发票一并提交。超过期限的报销单，财务部不予受理。单笔金额超过 5000 元的报销，需要部门负责人加签。\n[Metadata:   ]",
+        "similarity": 0.28484422420138666,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
     "source_images": []
   },
   {

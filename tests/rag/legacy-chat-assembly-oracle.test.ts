@@ -30,6 +30,10 @@ const FROZEN_CANDIDATES = JSON.parse(
   fs.readFileSync(path.join(REPO_ROOT, 'tests/fixtures/characterization/legacy-candidates.json'), 'utf8'),
 ) as FrozenCandidates[];
 
+const FROZEN_QUESTIONS = new Set(FROZEN_CANDIDATES.map((entry) => entry.question));
+const FROZEN_ITEMS = readGoldenQuestions().filter((item) => FROZEN_QUESTIONS.has(item.question));
+const ORACLE_ITEM_IDS = ['en-general-001', 'en-compound-001'].filter((id) => FROZEN_ITEMS.some((item) => item.id === id));
+
 const REGION_START = '// CHANGE 2: Add keyword-based document filtering';
 const REGION_END = "context.trim().toLowerCase().startsWith('no relevant context found');";
 
@@ -62,6 +66,12 @@ describe('frozen chat assembly oracle', () => {
     expect(oracle.split(REGION_START)).toHaveLength(2);
   });
 
+  it('runs only over the questions whose legacy candidates were frozen', () => {
+    expect(FROZEN_CANDIDATES).toHaveLength(72);
+    expect(FROZEN_ITEMS).toHaveLength(FROZEN_CANDIDATES.length);
+    expect(ORACLE_ITEM_IDS).toEqual(['en-general-001', 'en-compound-001']);
+  });
+
   describe('executed against the fixture edge', () => {
     let fixture: RouteFixture;
 
@@ -77,7 +87,7 @@ describe('frozen chat assembly oracle', () => {
       vi.restoreAllMocks();
     });
 
-    it.each(['en-general-001', 'en-compound-001'])('assembles a non-empty context for %s', async (itemId) => {
+    it.each(ORACLE_ITEM_IDS)('assembles a non-empty context for %s', async (itemId) => {
       vi.resetModules();
       const { legacyChatAssembly } = await import('../fixtures/legacy-chat-assembly');
       const { getSupabaseAdmin } = await import('@/lib/supabase');
@@ -85,7 +95,7 @@ describe('frozen chat assembly oracle', () => {
       const { embedText } = await import('@/lib/rag');
       const getQueryEmbedding = (text: string) => embedText(text, { signal: new AbortController().signal });
 
-      const question = readGoldenQuestions().find((item) => item.id === itemId)?.question as string;
+      const question = FROZEN_ITEMS.find((item) => item.id === itemId)?.question as string;
       expect(question).toBeTruthy();
       const supabase = getSupabaseAdmin();
       expect(supabase).toBeTruthy();
