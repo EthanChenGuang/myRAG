@@ -8,6 +8,7 @@ import { loadCorpus } from '../eval/harness/corpus.mts';
 import { EMBEDDER_ID, EMBEDDER_VERSION, embedText, embedderSourceSha256 } from '../eval/harness/fixture-embedder.mts';
 import { FIXTURE_USER_ID, createFixtureDatabase } from '../eval/harness/pglite-supabase.mts';
 import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from '../eval/harness/fake-edge.mts';
+import { TWO_TENANT_IDS, createTwoTenantDatabase, type TwoTenantDatabase } from '../eval/harness/two-tenant.mts';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const REAL_CORPUS = path.join(REPO_ROOT, 'eval/fixtures/corpus');
@@ -352,4 +353,106 @@ describe('fake edge (PostgREST shim plus /v1/embeddings)', () => {
     fixture ??= await createFixtureDatabase({ deploymentMode: 'single-tenant', corpusDir: REAL_CORPUS });
     return fixture;
   }
+});
+
+describe('fake edge operators on the two-tenant fixture', () => {
+  let tenant: TwoTenantDatabase | undefined;
+  let edge: FakeEdge | undefined;
+  const ids = TWO_TENANT_IDS;
+  const sorted = (values: string[]) => [...values].sort();
+
+  const getEdge = async (): Promise<FakeEdge> => {
+    tenant ??= await createTwoTenantDatabase();
+    edge ??= await startFakeEdge({ db: tenant.db });
+    return edge;
+  };
+  const get = async (table: string, query: Record<string, string>) => {
+    const e = await getEdge();
+    return fetch(`${e.url}/rest/v1/${table}?${new URLSearchParams(query).toString()}`);
+  };
+  const getIds = async (table: string, query: Record<string, string>): Promise<string[]> => {
+    const res = await get(table, { select: 'id', ...query });
+    assert.equal(res.status, 200, `status ${res.status} for ${table} ${JSON.stringify(query)}`);
+    return ((await res.json()) as Array<{ id: string }>).map((row) => row.id);
+  };
+
+  after(async () => {
+    await edge?.close();
+    await tenant?.db.close();
+  });
+
+  test('documents id=in.(...) returns exactly the listed rows', async () => {
+    assert.deepEqual(await getIds('documents', { id: `in.(${ids.docO},${ids.docA})` }), sorted([ids.docA, ids.docO]));
+    assert.deepEqual(await getIds('documents', { id: 'in.()' }), []);
+  });
+
+  test('document_chunks document_id=in.(...) and id=in.(...) return exactly the listed rows', async () => {
+    assert.deepEqual(await getIds('document_chunks', { document_id: `in.(${ids.docB},${ids.docO})` }), sorted([ids.chunkB, ids.chunkO]));
+    assert.deepEqual(await getIds('document_chunks', { id: `in.(${ids.chunkA})` }), [ids.chunkA]);
+  });
+
+  test('or with ilike on content, metadata->>name and metadata->>image_context plus not.is.null on metadata->>image_url', async () => {
+    const logoOr = '(metadata->>name.ilike.%LOGO%,metadata->>image_context.ilike.%logo%,content.ilike.%logo%)';
+    assert.deepEqual(await getIds('document_chunks', { or: logoOr, 'metadata->>image_url': 'not.is.null' }), [ids.chunkO]);
+    assert.deepEqual(await getIds('document_chunks', { or: '(content.ilike.%bravo%)' }), [ids.chunkB]);
+    assert.deepEqual(await getIds('document_chunks', { or: '(metadata->>name.ilike.%nothing-matches%)' }), []);
+    const notNull = await getIds('document_chunks', { 'metadata->>image_url': 'not.is.null' });
+    assert.ok(notNull.includes(ids.chunkO));
+    assert.ok(!notNull.includes(ids.chunkA));
+  });
+
+  test('documents tenant filters: organization_id eq/is.null and user_id eq', async () => {
+    assert.deepEqual(await getIds('documents', { organization_id: 'is.null', user_id: `eq.${ids.userA}` }), [ids.docA]);
+    assert.deepEqual(await getIds('documents', { organization_id: 'is.null', user_id: `eq.${ids.userB}` }), [ids.docB]);
+    assert.deepEqual(await getIds('documents', { organization_id: `eq.${ids.orgO}` }), [ids.docO]);
+  });
+
+  test('organization_members and organizations GET with eq filters', async () => {
+    const member = await get('organization_members', { select: 'id,role', organization_id: `eq.${ids.orgO}`, user_id: `eq.${ids.userA}` });
+    assert.equal(member.status, 200);
+    const memberRows = (await member.json()) as Array<{ role: string }>;
+    assert.equal(memberRows.length, 1);
+    assert.equal(memberRows[0].role, 'member');
+
+    const stranger = await get('organization_members', { select: 'id', organization_id: `eq.${ids.orgO}`, user_id: `eq.${ids.userB}` });
+    assert.equal(stranger.status, 200);
+    assert.deepEqual(await stranger.json(), []);
+
+    const org = await get('organizations', { select: 'id,name', id: `eq.${ids.orgO}` });
+    assert.equal(org.status, 200);
+    assert.equal(((await org.json()) as unknown[]).length, 1);
+  });
+
+  test('every supported read is recorded as a GET in edge.calls', async () => {
+    const e = await getEdge();
+    e.calls.length = 0;
+    await getIds('documents', { id: `in.(${ids.docA})` });
+    await getIds('document_chunks', { document_id: `in.(${ids.docA})` });
+    assert.deepEqual(
+      e.calls.map((c) => `${c.method} ${c.path}`),
+      ['GET /rest/v1/documents', 'GET /rest/v1/document_chunks'],
+    );
+  });
+
+  test('any other operator still returns 400 and is counted as an edge error', async () => {
+    const e = await getEdge();
+    const before = e.errors.length;
+    const attempts: Array<[string, Record<string, string>]> = [
+      ['document_chunks', { select: 'id', content: 'fts.x' }],
+      ['document_chunks', { select: 'id', or: '(content.eq.x)' }],
+      ['document_chunks', { select: 'id', or: '(metadata->>other.ilike.%x%)' }],
+      ['document_chunks', { select: 'id', 'metadata->>image_url': 'is.null' }],
+      ['documents', { select: 'id', or: '(content.ilike.%x%)' }],
+      ['documents', { select: 'id', id: 'in.(not-a-uuid)' }],
+      ['documents', { select: 'id', user_id: `in.(${ids.userA})` }],
+      ['documents', { select: 'id', organization_id: `neq.${ids.orgO}` }],
+      ['organization_members', { select: 'id', role: 'eq.member' }],
+      ['organizations', { select: 'id,documents(id)' }],
+    ];
+    for (const [table, query] of attempts) {
+      const res = await get(table, query);
+      assert.equal(res.status, 400, `${table} ${JSON.stringify(query)} returned ${res.status}`);
+    }
+    assert.equal(e.errors.length - before, attempts.length);
+  });
 });
