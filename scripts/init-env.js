@@ -319,6 +319,18 @@ RAG_SIMILARITY_THRESHOLD=0.45
 RAG_BEHAVIOR_MODE=strict
 
 # -----------------------------
+# RAG EVALUATION & SIDECAR
+# -----------------------------
+# Eval endpoint exposes document content; keep it off in production
+RAG_EVAL_ENDPOINT_ENABLED=false
+# Shared secret for the eval endpoint (at least 32 characters)
+RAG_EVAL_SECRET=
+# Base URL of the Python sidecar service
+RAG_SIDECAR_URL=
+# Shared secret for the sidecar (at least 32 characters)
+RAG_SIDECAR_SECRET=
+
+# -----------------------------
 # RAG CONFIGURATION (Unified Optimized System)
 # -----------------------------
 # Unified RAG Settings - All features can be toggled individually

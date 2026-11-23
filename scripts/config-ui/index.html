@@ -6330,6 +6330,63 @@
                                         ignore all uploaded documents and knowledge base content.</span>
                                 </div>
 
+                                <!-- Evaluation & Sidecar -->
+                                <div class="card bg-base-200 shadow-md mt-6">
+                                    <div class="card-body">
+                                        <h3 class="text-lg font-semibold mb-2">Evaluation &amp; Sidecar</h3>
+                                        <p class="text-base-content/70 mb-4">Settings for the RAG evaluation endpoint
+                                            and the Python sidecar service. Secrets must be at least 32 characters.</p>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label cursor-pointer justify-start gap-3">
+                                                <input type="checkbox" id="RAG_EVAL_ENDPOINT_ENABLED"
+                                                    class="toggle toggle-primary">
+                                                <span class="label-text">Enable evaluation endpoint</span>
+                                            </label>
+                                            <label class="label">
+                                                <span class="label-text-alt text-warning">The endpoint returns document
+                                                    content. Keep it off in production unless an evaluation run needs
+                                                    it.</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">Evaluation endpoint secret</span>
+                                            </label>
+                                            <div class="flex gap-2">
+                                                <input type="password" id="RAG_EVAL_SECRET"
+                                                    placeholder="At least 32 characters"
+                                                    class="input input-bordered flex-1 w-full">
+                                                <button class="btn btn-square btn-outline"
+                                                    data-for="RAG_EVAL_SECRET">👁️</button>
+                                            </div>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">Sidecar URL</span>
+                                            </label>
+                                            <input type="text" id="RAG_SIDECAR_URL"
+                                                placeholder="http://localhost:8000"
+                                                class="input input-bordered w-full">
+                                        </div>
+
+                                        <div class="form-control">
+                                            <label class="label">
+                                                <span class="label-text">Sidecar secret</span>
+                                            </label>
+                                            <div class="flex gap-2">
+                                                <input type="password" id="RAG_SIDECAR_SECRET"
+                                                    placeholder="At least 32 characters"
+                                                    class="input input-bordered flex-1 w-full">
+                                                <button class="btn btn-square btn-outline"
+                                                    data-for="RAG_SIDECAR_SECRET">👁️</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <!-- Info Box -->
                                 <div class="alert alert-info mt-6">
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"

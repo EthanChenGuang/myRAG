@@ -520,6 +520,12 @@ ${fullValues.RAG_SIMILARITY_THRESHOLD !== undefined ? `RAG_SIMILARITY_THRESHOLD=
 # RAG Behavior Mode: strict, balanced, flexible, bypass
 ${fullValues.RAG_BEHAVIOR_MODE !== undefined ? `RAG_BEHAVIOR_MODE=${fullValues.RAG_BEHAVIOR_MODE}` : 'RAG_BEHAVIOR_MODE=strict'}
 
+# RAG Evaluation & Sidecar
+${fullValues.RAG_EVAL_ENDPOINT_ENABLED !== undefined ? `RAG_EVAL_ENDPOINT_ENABLED=${fullValues.RAG_EVAL_ENDPOINT_ENABLED}` : 'RAG_EVAL_ENDPOINT_ENABLED=false'}
+${fullValues.RAG_EVAL_SECRET !== undefined ? `RAG_EVAL_SECRET=${fullValues.RAG_EVAL_SECRET}` : 'RAG_EVAL_SECRET='}
+${fullValues.RAG_SIDECAR_URL !== undefined ? `RAG_SIDECAR_URL=${fullValues.RAG_SIDECAR_URL}` : 'RAG_SIDECAR_URL='}
+${fullValues.RAG_SIDECAR_SECRET !== undefined ? `RAG_SIDECAR_SECRET=${fullValues.RAG_SIDECAR_SECRET}` : 'RAG_SIDECAR_SECRET='}
+
 # Temporal and Financial Intelligence (Unified RAG)
 ${fullValues.RAG_TEMPORAL_BOOST !== undefined ? `RAG_TEMPORAL_BOOST=${fullValues.RAG_TEMPORAL_BOOST}` : 'RAG_TEMPORAL_BOOST=true'}
 ${fullValues.RAG_FINANCIAL_BOOST !== undefined ? `RAG_FINANCIAL_BOOST=${fullValues.RAG_FINANCIAL_BOOST}` : 'RAG_FINANCIAL_BOOST=true'}
@@ -1265,6 +1271,11 @@ RAG_INITIAL_MATCH_COUNT=${getEnvValue('RAG_INITIAL_MATCH_COUNT') || '60'}
 RAG_SIMILARITY_THRESHOLD=${getEnvValue('RAG_SIMILARITY_THRESHOLD') || '0.45'}
 # RAG Behavior Mode: strict, balanced, flexible, bypass
 RAG_BEHAVIOR_MODE=${getEnvValue('RAG_BEHAVIOR_MODE') || 'strict'}
+# RAG Evaluation & Sidecar
+RAG_EVAL_ENDPOINT_ENABLED=${getEnvValue('RAG_EVAL_ENDPOINT_ENABLED') || 'false'}
+RAG_EVAL_SECRET=${getEnvValue('RAG_EVAL_SECRET') || ''}
+RAG_SIDECAR_URL=${getEnvValue('RAG_SIDECAR_URL') || ''}
+RAG_SIDECAR_SECRET=${getEnvValue('RAG_SIDECAR_SECRET') || ''}
 # LlamaCloud configuration
 LLAMACLOUD_PARSING_MODE=${getEnvValue('LLAMACLOUD_PARSING_MODE') || 'balanced'}
 LLAMACLOUD_CHUNK_STRATEGY=${getEnvValue('LLAMACLOUD_CHUNK_STRATEGY') || 'sentence'}
@@ -1578,6 +1589,11 @@ RAG_INITIAL_MATCH_COUNT=${getEnvValue('RAG_INITIAL_MATCH_COUNT') || '60'}
 RAG_SIMILARITY_THRESHOLD=${getEnvValue('RAG_SIMILARITY_THRESHOLD') || '0.45'}
 # RAG Behavior Mode: strict, balanced, flexible, bypass
 RAG_BEHAVIOR_MODE=${getEnvValue('RAG_BEHAVIOR_MODE') || 'strict'}
+# RAG Evaluation & Sidecar
+RAG_EVAL_ENDPOINT_ENABLED=${getEnvValue('RAG_EVAL_ENDPOINT_ENABLED') || 'false'}
+RAG_EVAL_SECRET=${getEnvValue('RAG_EVAL_SECRET') || ''}
+RAG_SIDECAR_URL=${getEnvValue('RAG_SIDECAR_URL') || ''}
+RAG_SIDECAR_SECRET=${getEnvValue('RAG_SIDECAR_SECRET') || ''}
 # LlamaCloud configuration
 LLAMACLOUD_PARSING_MODE=${getEnvValue('LLAMACLOUD_PARSING_MODE') || 'balanced'}
 LLAMACLOUD_CHUNK_STRATEGY=${getEnvValue('LLAMACLOUD_CHUNK_STRATEGY') || 'sentence'}
