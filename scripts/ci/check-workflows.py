@@ -17,6 +17,10 @@ PR = ROOT / ".github" / "workflows" / "pr-smoke.yml"
 NIGHTLY = ROOT / ".github" / "workflows" / "nightly.yml"
 DOCKERFILE = ROOT / "rag-sidecar" / "Dockerfile"
 
+TESTS_DIR = ROOT / "tests"
+TSX_GLOB = "tests/*.test.mts"
+TSX_COMMAND_RE = re.compile(r"node\s+--import\s+tsx\s+--test\b(?P<args>[^\n]*)")
+
 PR_JOBS = ["ts", "sibling-types", "voice-agent", "schema-parity", "python", "eval-smoke", "gate-negative-control", "docker-build"]
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 USES_LINE_RE = re.compile(r"^\s*(?:-\s+)?uses:\s*(?P<ref>\S+)(?P<rest>.*)$")
@@ -107,6 +111,24 @@ def dockerfile_uv_version() -> str | None:
         return None
     match = UV_IMAGE_RE.search(DOCKERFILE.read_text(encoding="utf-8"))
     return match.group("version") if match else None
+
+
+def check_tsx_tests_covered(workflows: list[dict], tests_dir: Path, errors: list[str]) -> None:
+    files = sorted(p.name for p in tests_dir.glob("*.test.mts"))
+    if not files:
+        return
+    args = ""
+    for data in workflows:
+        for job in (data.get("jobs") or {}).values():
+            for step in all_steps(job):
+                for match in TSX_COMMAND_RE.finditer(str(step.get("run", ""))):
+                    args += " " + match.group("args")
+    tokens = args.split()
+    if TSX_GLOB in tokens:
+        return
+    for name in files:
+        if f"tests/{name}" not in tokens:
+            errors.append(f"workflows: tests/{name} is not run by any 'node --import tsx --test' step; use the {TSX_GLOB} glob")
 
 
 def check_pr(errors: list[str]) -> None:
@@ -354,6 +376,8 @@ def main() -> int:
         check_nightly(errors)
     else:
         print("check-workflows: nightly.yml does not exist yet, skipping nightly assertions")
+    workflows = [load(path)[0] for path in (PR, NIGHTLY) if path.exists()]
+    check_tsx_tests_covered(workflows, TESTS_DIR, errors)
     if errors:
         print("check-workflows: FAILED")
         for e in errors:
