@@ -17,7 +17,7 @@ PR = ROOT / ".github" / "workflows" / "pr-smoke.yml"
 NIGHTLY = ROOT / ".github" / "workflows" / "nightly.yml"
 DOCKERFILE = ROOT / "rag-sidecar" / "Dockerfile"
 
-PR_JOBS = ["ts", "sibling-types", "schema-parity", "python", "eval-smoke", "gate-negative-control", "docker-build"]
+PR_JOBS = ["ts", "sibling-types", "voice-agent", "schema-parity", "python", "eval-smoke", "gate-negative-control", "docker-build"]
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 USES_LINE_RE = re.compile(r"^\s*(?:-\s+)?uses:\s*(?P<ref>\S+)(?P<rest>.*)$")
 VERSION_COMMENT_RE = re.compile(r"^\s+#\s*v\d+(\.\d+){0,2}\s*$")
@@ -191,6 +191,21 @@ def check_pr(errors: list[str]) -> None:
         ):
             if needle not in body:
                 errors.append(f"pr-smoke: job sibling-types is missing '{needle}'")
+    voice = jobs.get("voice-agent")
+    if voice is not None:
+        body = step_text(voice)
+        for needle in (
+            "npm ci --ignore-scripts",
+            "npm test",
+            "scripts/ci/sibling-tsc-baseline.json --key voice-agent",
+        ):
+            if needle not in body:
+                errors.append(f"pr-smoke: job voice-agent is missing '{needle}'")
+        if not any(
+            step.get("working-directory") == "voice-agent" and "npm test" in str(step.get("run", ""))
+            for step in all_steps(voice)
+        ):
+            errors.append("pr-smoke: job voice-agent must run npm test in the voice-agent working directory")
     sp = jobs.get("schema-parity")
     if sp is not None:
         body = step_text(sp)

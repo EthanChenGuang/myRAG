@@ -241,6 +241,20 @@ The voice agent runs as a separate Node.js service. See the main [deployment doc
 - [ ] `MYRAG_INTERNAL_API_KEY` matches between main app and voice-agent
 - [ ] Voice agent deployed on same network or with public endpoint
 - [ ] Environment variables set for chosen LLM provider
+- [ ] `RAG_VOICE_TOKEN_SECRET` set on the main app (see "Voice RAG token" below)
+
+### Voice RAG token
+
+Voice retrieval is tenant-scoped by a signed token instead of a bare user id.
+
+- **What it is:** when a user starts a voice session, the app (`/api/livekit/token`) signs a scope token and writes it into the LiveKit participant metadata (`{"rag_scope_token": "..."}`). The agent reads it when the user's audio track is subscribed and sends it as the `x-rag-scope-token` header, next to `x-api-key`, to `/api/internal/voice-rag` and `/api/internal/voice-chat`. With no token in the metadata the agent sends no header, so an app without token support keeps working.
+- **Configuration (main app only):** `RAG_VOICE_TOKEN_SECRET` (32 or more characters; never give it to the voice agent) and `RAG_VOICE_TOKEN_TTL_SECONDS` (default 3600).
+- **Deploy order:** deploy the voice agent first, then the app. The new agent only sends the header when a token exists, so it is harmless against the old app. The app starts issuing tokens only after it is deployed.
+- **Rollback:** roll back both together. An app-only rollback restores the old unscoped behaviour; an agent-only rollback leaves the app issuing tokens that nobody forwards, so voice answers lose the knowledge base.
+- **One active user per agent:** the agent serves one `user-` participant at a time. Audio from a second user participant is ignored (and logged by identity) until the first one disconnects; the token route answers 409 while the agent is busy.
+- **Expiry:** tokens last `RAG_VOICE_TOKEN_TTL_SECONDS` and are not refreshed. A session longer than that loses knowledge-base access: the agent says "I can't reach the knowledge base right now. Please try again in a moment." instead of answering without context. Token refresh is deferred.
+- **Failures are spoken:** a 401/403 (token rejected), 503 (knowledge base unavailable) or network error from the app makes the agent speak that line for the turn rather than answering from general knowledge.
+- **Tests:** `cd voice-agent && npm test` (also run by the `voice-agent` job in `pr-smoke`).
 
 ---
 
