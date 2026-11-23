@@ -4,16 +4,16 @@ milestone: v5.0
 current_phase: 01
 current_phase_name: Evaluation Harness & Baseline
 status: executing
-stopped_at: Completed 01-06-PLAN.md
-last_updated: "2026-11-23T06:37:29.529Z"
+stopped_at: Completed 01-07-PLAN.md
+last_updated: "2026-11-23T06:40:16.938Z"
 last_activity: 2026-11-23
 last_activity_desc: Phase 01 execution started
-state_head: 2f5a1692a6d2cab08df0953aa1f4acb6d583d016
+state_head: ed6504c84320f0363ddc04822bd7bdab57e7f198
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 22
-  completed_plans: 6
+  completed_plans: 7
 ---
 
 # Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-11-22)
 ## Current Position
 
 Phase: 01 (Evaluation Harness & Baseline) — EXECUTING
-Plan: 7 of 22
+Plan: 8 of 22
 Status: Ready to execute
 Last activity: 2026-11-23 — Phase 01 execution started
 
@@ -62,6 +62,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P04 | 20min | 2 tasks | 9 files |
 | Phase 01 P05 | 5min | 2 tasks | 18 files |
 | Phase 01 P06 | 12min | 2 tasks | 9 files |
+| Phase 01 P07 | 12min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -84,6 +85,7 @@ Recent decisions affecting current work:
 - [Phase 01]: 01-04: eval route does one chunk-metadata lookup per candidate feeding both image-url merge and URL collection
 - [Phase 01]: 01-05: NoiseConfig.metrics defaults to the five report metrics (false_refusal_rate lower); JudgeConfig.temperature required and bounded ge=0 le=0 so Zod enforces the pin
 - [Phase 01]: 01-06: freeze_splits overrides split of new ids with the rule-assigned split and raises only when an existing manifest id disagrees; manifest written only when new ids are added
+- [Phase 01]: 01-07: English fixture corpus kept plain and untuned; image document loads as warehouse-floorplan.png (filename from fixture-meta)
 
 ### Pending Todos
 
@@ -110,6 +112,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-23T06:37:29.491Z
-Stopped at: Completed 01-06-PLAN.md
+Last session: 2026-11-23T06:40:16.882Z
+Stopped at: Completed 01-07-PLAN.md
 Resume file: None
