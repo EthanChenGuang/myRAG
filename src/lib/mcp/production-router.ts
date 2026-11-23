@@ -23,8 +23,11 @@ export interface ProductionRouterConfig {
   debugMode: boolean;
 }
 
+// Chat API consumers still read the legacy `parameters` Zod schema off routed tools.
+export type RoutedTool = Tool & { parameters?: z.ZodTypeAny };
+
 export interface EnhancedMcpTools {
-  tools: Record<string, Tool>;
+  tools: Record<string, RoutedTool>;
   serverHealth: Array<{
     serverId: string;
     name: string;

@@ -47,8 +47,10 @@ function approveRequest(): NextRequest {
   });
 }
 
-function errorLogText(spy: ReturnType<typeof vi.spyOn>): string {
-  return spy.mock.calls.map(call => call.map(part => (typeof part === 'string' ? part : JSON.stringify(part))).join(' ')).join('\n');
+function errorLogText(spy: { mock: { calls: unknown[][] } }): string {
+  return spy.mock.calls
+    .map(call => call.map(part => (typeof part === 'string' ? part : JSON.stringify(part))).join(' '))
+    .join('\n');
 }
 
 describe('approve route parameter handling', () => {

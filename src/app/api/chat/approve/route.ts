@@ -6,6 +6,11 @@ import { formatToolResultUniversally } from '@/lib/universal-tool-formatter';
 import { findImagesWithFallback } from '@/lib/mcp/image-context-manager';
 import { isUrlMcpCompatible } from '@/lib/mcp/url-validator';
 
+function describeConnections(client: unknown): { server: string; connected: boolean }[] {
+  const candidate = client as { getConnectionStatus?: () => { server: string; connected: boolean }[] } | null;
+  return typeof candidate?.getConnectionStatus === 'function' ? candidate.getConnectionStatus() : [];
+}
+
 // Global cache for Gmail data chaining
 const global_cache = globalThis as any;
 if (!global_cache.gmailCache) {
@@ -1561,7 +1566,7 @@ export async function POST(req: NextRequest) {
               );
               
               const transport = new SSEClientTransport(new URL(endpoint.url), {
-                headers: { 'Content-Type': 'application/json' }
+                requestInit: { headers: { 'Content-Type': 'application/json' } }
               });
               await mcpClient.connect(transport);
               
@@ -2659,7 +2664,7 @@ export async function POST(req: NextRequest) {
                   }
                 } catch (error) {
                   console.error('🔍 [URL VALIDATION] ❌ Error converting Base64 to downloadable URL:', error);
-                  throw new Error(`Error processing Base64 image: ${error.message}`);
+                  throw new Error(`Error processing Base64 image: ${error instanceof Error ? error.message : String(error)}`);
                 }
               } else {
                 // Validate regular URLs (not Base64)
@@ -2919,8 +2924,8 @@ export async function POST(req: NextRequest) {
           } catch (innerError) {
             console.error('🔴 [ERROR] Error in tool-specific processing:', innerError);
             console.error('🔴 [ERROR] Error details:', {
-              message: innerError.message,
-              stack: innerError.stack,
+              message: innerError instanceof Error ? innerError.message : String(innerError),
+              stack: innerError instanceof Error ? innerError.stack : undefined,
               toolName: toolCall.name,
               paramsToUse
             });
@@ -2978,7 +2983,7 @@ export async function POST(req: NextRequest) {
         if (!result || (typeof result === 'object' && Object.keys(result).length === 0)) {
           console.error('🔴 [ZAPIER ERROR] Tool execution returned empty/null result');
           console.error('🔴 [ZAPIER ERROR] Tool:', toolCall.name);
-          console.error('🔴 [ZAPIER ERROR] Parameters sent:', paramsToUse);
+          console.error('🔴 [ZAPIER ERROR] Parameters sent:', persistentState?.tool_params || toolCall.params);
 
           // Check if this is a Gmail tool that should have created something
           if (toolCall.name.includes('gmail') && toolCall.name.includes('create')) {
@@ -3181,7 +3186,7 @@ export async function POST(req: NextRequest) {
               
               console.log(`🔍 [GMAIL CACHE] Cached ${newCacheEntries.length} emails, total cached: ${global_cache.gmailCache.recentEmails.length}`);
               console.log('🔍 [GMAIL CACHE] Recent email subjects:', 
-                global_cache.gmailCache.recentEmails.map(e => e.subject).slice(0, 3));
+                global_cache.gmailCache.recentEmails.map((e: { subject: string }) => e.subject).slice(0, 3));
             }
           } catch (e) {
             console.error('🔍 [GMAIL CACHE] Error caching emails:', e);
@@ -3783,7 +3788,8 @@ Would you like me to search for events in a different time range, or would you p
             };
           } else if (formattedResult && typeof formattedResult === 'object') {
             // Try to extract meaningful content
-            const textContent = formattedResult.text || formattedResult.message || formattedResult.response || JSON.stringify(formattedResult, null, 2);
+            const malformedResult = formattedResult as unknown as { text?: string; message?: string; response?: string };
+            const textContent = malformedResult.text || malformedResult.message || malformedResult.response || JSON.stringify(formattedResult, null, 2);
             formattedResult = {
               content: [{ type: 'text', text: textContent }],
               isError: false
@@ -3873,9 +3879,10 @@ Would you like me to search for events in a different time range, or would you p
         // Connection diagnostics
         if (activeClient) {
           console.log('🔴 [MCP ERROR] Active Client Details:');
-          console.log('🔴 [MCP ERROR] - Client endpoint:', activeClient.endpoint || 'unknown');
-          console.log('🔴 [MCP ERROR] - Client connected:', activeClient.connected || 'unknown');
-          console.log('🔴 [MCP ERROR] - Client tools count:', activeClient.tools?.length || 'unknown');
+          const connections = describeConnections(activeClient);
+          console.log('🔴 [MCP ERROR] - Client servers:', connections.map(c => c.server).join(', ') || 'unknown');
+          console.log('🔴 [MCP ERROR] - Client connected:', connections.some(c => c.connected));
+          console.log('🔴 [MCP ERROR] - Client tools count:', Object.keys(allMcpTools).length);
         }
         
         // Environment diagnostics
@@ -3974,7 +3981,7 @@ Would you like me to search for events in a different time range, or would you p
           debugInfo: {
             hasActiveClient: !!activeClient,
             activeClientType: activeClient?.constructor?.name || 'unknown',
-            activeClientEndpoint: activeClient?.endpoint || 'unknown',
+            activeClientEndpoint: describeConnections(activeClient).map(c => c.server).join(', ') || 'unknown',
             toolFound: !!allMcpTools[toolCall?.name],
             cachedToolsCount: cachedTools?.length || 0,
             errorType: typeof error,
