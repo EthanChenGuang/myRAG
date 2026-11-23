@@ -43,7 +43,7 @@ jobs:
           cache-dependency-glob: '**/uv.lock'
       - name: Install Node dependencies
         if: env.HAS_JUDGE_KEYS == 'true'
-        run: npm ci
+        run: npm ci --ignore-scripts
       - name: Sync eval project
         if: env.HAS_JUDGE_KEYS == 'true'
         run: uv sync --directory eval --locked --all-extras

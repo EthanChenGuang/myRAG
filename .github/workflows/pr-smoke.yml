@@ -33,7 +33,7 @@ jobs:
           python-version: '3.12'
           enable-cache: true
           cache-dependency-glob: '**/uv.lock'
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - run: uv sync --directory rag-sidecar --locked
       - run: uv sync --directory eval --locked --all-extras
       - name: Vitest suite
@@ -66,7 +66,7 @@ jobs:
           python-version: '3.12'
           enable-cache: true
           cache-dependency-glob: '**/uv.lock'
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - run: uv sync --directory rag-sidecar --locked
       - name: Regenerate schemas and Zod
         run: npm run gen:schemas
@@ -106,7 +106,7 @@ jobs:
           python-version: '3.12'
           enable-cache: true
           cache-dependency-glob: '**/uv.lock'
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - run: uv sync --directory rag-sidecar --locked
       - run: uv sync --directory eval --locked --all-extras
       - name: Smoke tier against the committed baseline
@@ -134,7 +134,7 @@ jobs:
           python-version: '3.12'
           enable-cache: true
           cache-dependency-glob: '**/uv.lock'
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - run: uv sync --directory rag-sidecar --locked
       - run: uv sync --directory eval --locked --all-extras
       - name: Degraded run must be rejected by the gate with the regression exit code 10
