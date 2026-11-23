@@ -74,6 +74,7 @@ export async function POST(req: NextRequest) {
         isGPTModel,
         ragMode,
         webSearchEnabled: false,
+        ...(options?.degrade ? { degrade: options.degrade } : {}),
       },
       signal: req.signal,
       trace: collector,

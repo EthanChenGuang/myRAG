@@ -27,6 +27,19 @@
     "RagRunOptions": {
       "additionalProperties": false,
       "properties": {
+        "degrade": {
+          "anyOf": [
+            {
+              "const": "drop_top_candidate",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Degrade"
+        },
         "generator_model": {
           "anyOf": [
             {

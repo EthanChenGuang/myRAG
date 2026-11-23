@@ -501,6 +501,7 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
       { candidatesIn: searched.results.length, candidatesOut: (value) => value.length },
     );
     candidates = ranked.skipped ? searched.results : ranked.value;
+    if (profile === 'eval' && input.options?.degrade === 'drop_top_candidate') candidates = candidates.slice(1);
 
     if ((ASSEMBLY_PROFILES as readonly string[]).includes(profile)) {
       const assemblyInput = (rows: AssemblyRows, applyRelevanceFilter: boolean): AssembleInput<Candidate> => ({

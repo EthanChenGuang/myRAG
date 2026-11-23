@@ -43,6 +43,7 @@
         }
       },
       "request_options": {
+        "degrade": null,
         "generator_model": null,
         "max_results": 10,
         "organization_id": null,
@@ -303,6 +304,7 @@
         }
       },
       "request_options": {
+        "degrade": null,
         "generator_model": null,
         "max_results": 10,
         "organization_id": null,
@@ -475,6 +477,7 @@
       "include_answer": true,
       "item_id": "en-general-001",
       "options": {
+        "degrade": "drop_top_candidate",
         "generator_model": "generator/model-b",
         "max_results": 10,
         "organization_id": null,
@@ -604,6 +607,7 @@
       "golden_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
       "item_count": 1,
       "request_options": {
+        "degrade": null,
         "generator_model": null,
         "max_results": 10,
         "organization_id": null,

@@ -17,6 +17,7 @@ class RagRunOptions(_Contract):
     organization_id: str | None = None
     user_id: str | None = None
     generator_model: str | None = None
+    degrade: Literal["drop_top_candidate"] | None = None
 
 
 class RagRunRequest(_Contract):

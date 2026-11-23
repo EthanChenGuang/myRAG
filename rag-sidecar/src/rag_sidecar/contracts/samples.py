@@ -302,7 +302,7 @@ def _models() -> dict[str, Any]:
             query="How many leave days do employees get?",
             conversation=[ConversationTurn(role="user", content="Tell me about leave.")],
             rag_mode="strict",
-            options=RagRunOptions(max_results=10, generator_model="generator/model-b"),
+            options=RagRunOptions(max_results=10, generator_model="generator/model-b", degrade="drop_top_candidate"),
             include_answer=True,
         ),
         "RagTrace": _trace("Twenty days per year."),

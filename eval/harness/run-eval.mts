@@ -21,6 +21,7 @@ export interface EvalRequestOptions {
   organization_id?: string | null;
   user_id?: string | null;
   generator_model?: string | null;
+  degrade?: 'drop_top_candidate' | null;
 }
 
 export type EvalGenerator = 'stub' | 'live';
@@ -377,6 +378,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     max_results: requestOptions.max_results ?? null,
     organization_id: requestOptions.organization_id ?? null,
     user_id: requestOptions.user_id ?? null,
+    ...(requestOptions.degrade ? { degrade: requestOptions.degrade } : {}),
     ...(includeAnswer ? { generator_model: requestOptions.generator_model ?? null } : {}),
   };
   const embedder = baseUrl
