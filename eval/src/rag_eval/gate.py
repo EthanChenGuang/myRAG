@@ -9,8 +9,9 @@ from rag_sidecar.contracts.report import EvalReport, SliceMetrics
 from rag_eval.paths import resolve_cli_path
 
 EXIT_PASS = 0
-EXIT_REGRESSION = 1
 EXIT_MISMATCH = 2
+EXIT_REGRESSION = 10
+EXIT_INTERNAL = 70
 
 
 def _report_slices(report: EvalReport) -> dict[str, SliceMetrics]:
@@ -116,11 +117,11 @@ def render_gate_markdown(
 ) -> str:
     lines = ["# Eval gate", ""]
     if result.mismatches:
-        lines.append("Result: MISMATCH (exit 2)")
+        lines.append(f"Result: MISMATCH (exit {EXIT_MISMATCH})")
         lines.append("")
         lines.extend(f"- {problem}" for problem in result.mismatches)
         return "\n".join(lines) + "\n"
-    lines.append("Result: PASS (exit 0)" if result.passed else "Result: FAIL (exit 1)")
+    lines.append(f"Result: PASS (exit {EXIT_PASS})" if result.passed else f"Result: FAIL (exit {EXIT_REGRESSION})")
     lines.append("")
     lines.append("## Offenders")
     lines.append("")
@@ -169,7 +170,7 @@ def _read(path: Path) -> str:
         return handle.read()
 
 
-def main(argv: list[str] | None = None) -> int:
+def _main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="rag_eval.gate", description="myRAG eval noise-band gate")
     parser.add_argument("--report", required=True, type=Path)
     parser.add_argument("--baseline", required=True, type=Path)
@@ -206,6 +207,16 @@ def main(argv: list[str] | None = None) -> int:
         return EXIT_REGRESSION
     print(f"gate: PASS ({len(result.skipped)} skipped)")
     return EXIT_PASS
+
+
+def main(argv: list[str] | None = None) -> int:
+    try:
+        return _main(argv)
+    except SystemExit:
+        raise
+    except Exception as exc:  # noqa: BLE001 - any crash must not look like a regression
+        print(f"gate: INTERNAL ERROR {type(exc).__name__}: {exc}", file=sys.stderr)
+        return EXIT_INTERNAL
 
 
 if __name__ == "__main__":

@@ -5,7 +5,8 @@ from pathlib import Path
 from rag_sidecar.contracts.baseline import Baseline, NoiseConfig
 from rag_sidecar.contracts.report import EvalReport
 
-from rag_eval.gate import evaluate_gate, main
+import rag_eval.gate as gate_module
+from rag_eval.gate import EXIT_INTERNAL, EXIT_REGRESSION, evaluate_gate, main
 
 METRICS = ("recall_at_5", "recall_at_10", "mrr", "correct_refusal_rate", "false_refusal_rate")
 NOISE_PATH = Path(__file__).resolve().parents[1] / "config" / "noise.json"
@@ -186,8 +187,26 @@ def test_gate_leaves_baseline_unchanged(tmp_path):
 
     code = main(["--report", str(report_path), "--baseline", str(baseline_path), "--noise", str(noise_path), "--out", str(tmp_path / "out")])
 
-    assert code == 1
+    assert code == EXIT_REGRESSION == 10
     after = {p: hashlib.sha256(p.read_bytes()).hexdigest() for p in (baseline_path, noise_path)}
     assert before == after
     gate = json.loads((tmp_path / "out" / "gate.json").read_text(encoding="utf-8"))
     assert gate["passed"] is False and gate["offenders"][0]["metric"] == "recall_at_10"
+
+
+def test_internal_error_exits_70_not_regression(tmp_path, monkeypatch, capsys):
+    report_path = tmp_path / "report.json"
+    baseline_path = tmp_path / "baseline.json"
+    report_path.write_text(_report().model_dump_json(), encoding="utf-8")
+    baseline_path.write_text(_baseline().model_dump_json(), encoding="utf-8")
+
+    def boom(*_args, **_kwargs):
+        raise AttributeError("metric does not exist")
+
+    monkeypatch.setattr(gate_module, "evaluate_gate", boom)
+    code = main(["--report", str(report_path), "--baseline", str(baseline_path), "--noise", str(NOISE_PATH), "--out", str(tmp_path / "out")])
+
+    assert code == EXIT_INTERNAL == 70
+    assert code != EXIT_REGRESSION
+    assert "INTERNAL ERROR" in capsys.readouterr().err
+    assert not (tmp_path / "out" / "gate.json").exists()

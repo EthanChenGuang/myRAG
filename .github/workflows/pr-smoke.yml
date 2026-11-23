@@ -128,7 +128,7 @@ jobs:
       - run: npm ci
       - run: uv sync --directory rag-sidecar --locked
       - run: uv sync --directory eval --locked --all-extras
-      - name: Degraded run must be rejected by the gate with exit code 1
+      - name: Degraded run must be rejected by the gate with the regression exit code 10
         shell: bash
         run: |
           set +e
@@ -136,7 +136,8 @@ jobs:
           code=$?
           set -e
           echo "degraded run exit code: $code"
-          test "$code" -eq 1
+          test "$code" -eq 10
+          jq -e '.passed == false and (.offenders | length > 0) and (.mismatches | length == 0)' eval/out/negative/gate.json
       - name: Upload negative-control output
         if: always()
         uses: actions/upload-artifact@v4

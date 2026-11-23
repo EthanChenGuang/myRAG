@@ -116,8 +116,10 @@ def check_pr(errors: list[str]) -> None:
     neg = jobs.get("gate-negative-control")
     if neg is not None:
         body = step_text(neg)
-        if not re.search(r'test\s+"?\$code"?\s+-eq\s+1\b', body):
-            errors.append("pr-smoke: gate-negative-control must assert exit code with 'test \"$code\" -eq 1'")
+        if not re.search(r'test\s+"?\$code"?\s+-eq\s+10\b', body):
+            errors.append("pr-smoke: gate-negative-control must assert the regression exit code with 'test \"$code\" -eq 10'")
+        if not re.search(r"jq -e '[^']*\.offenders \| length > 0[^']*' eval/out/negative/gate\.json", body):
+            errors.append("pr-smoke: gate-negative-control must assert offenders in eval/out/negative/gate.json with jq -e")
         if "--max-results 1" not in body:
             errors.append("pr-smoke: gate-negative-control must run with --max-results 1")
     # every job that runs eval pytest or the harness must sync eval with all extras
