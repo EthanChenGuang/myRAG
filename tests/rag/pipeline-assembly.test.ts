@@ -125,19 +125,6 @@ describe('post_filter and assemble stages', () => {
     expect(result.stages.filter((stage) => stage.status === 'skipped').map((stage) => stage.name)).toEqual(['post_filter', 'assemble']);
   });
 
-  test('the referenced state is passed through and leads the context', async () => {
-    install({ rows: [] });
-    const referenced = {
-      usedDocuments: [{ id: 'dref', name: 'ref.md', filename: 'ref.md', explicitly_referenced: true }],
-      context: '\n\n=== DOCUMENT: "ref.md" ===\nreferenced body\n=== END OF DOCUMENT ===\n',
-    };
-    const result = await run('chat', { options: { referenced } });
-    expect(result.status).toBe('ok');
-    expect(result.context).toBe(referenced.context);
-    expect(result.usedDocuments.map((doc) => doc.id)).toEqual(['dref']);
-    expect(result.refusalCandidate).toBe(false);
-  });
-
   test('isGPTModel and ragMode reach the assembly', async () => {
     install({
       rows: rows(1).map((row) => ({ ...row, content: 'Document: doc-1.md. Chunk 1 of 2. Content: the body' })),

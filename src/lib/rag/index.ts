@@ -44,3 +44,6 @@ export { createEnhancedRAGPrompt } from './generation/prompt';
 export { knowledgeBaseUnavailableMessage } from './generation/messages';
 export { repairOwnerMembership } from './tenant/repair-owner';
 export type { RepairOwnerMembershipInput } from './tenant/repair-owner';
+export { resolveDocumentRefs } from './refs/resolve';
+export type { ResolveDocumentRefsInput, ResolvedDocumentRefs } from './refs/resolve';
+export type { DocumentPartRef, DocumentRefsInput } from './types';

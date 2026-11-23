@@ -2,6 +2,7 @@ import type { Profile } from './types';
 
 export const CORE_STAGES = ['embed', 'search'] as const;
 export const OPTIONAL_STAGES = [
+  'refs',
   'analyze',
   'legacy_rank',
   'post_filter',
@@ -17,6 +18,7 @@ export type StageName = CoreStageName | OptionalStageName;
 export type StageTimeouts = Partial<Record<StageName, number>>;
 
 const STANDARD_TIMEOUTS: StageTimeouts = {
+  refs: 5000,
   analyze: 1000,
   embed: 15000,
   search: 15000,
@@ -31,6 +33,7 @@ export const PROFILE_STAGE_DEFAULTS: Record<Profile, StageTimeouts> = {
   eval: { ...STANDARD_TIMEOUTS },
   media: { ...STANDARD_TIMEOUTS },
   voice: {
+    refs: 5000,
     analyze: 500,
     embed: 5000,
     search: 5000,

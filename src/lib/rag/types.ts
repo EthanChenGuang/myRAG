@@ -93,7 +93,6 @@ export interface RetrievalOptions {
   isGPTModel?: boolean;
   ragMode?: RagMode;
   webSearchEnabled?: boolean;
-  referenced?: ReferencedState | null;
   mediaKind?: 'image' | 'video';
 }
 

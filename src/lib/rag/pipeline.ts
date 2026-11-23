@@ -21,6 +21,7 @@ import { assembleVoiceResults, enrichVoiceCandidates, type VoiceResults } from '
 import { getRagDeps } from './deps';
 import { legacyAnalyze, legacyRank, legacySearch } from './legacy/enhanced-retrieval';
 import { defaultQueryContext } from './query/temporal-query-detector';
+import { resolveDocumentRefs } from './refs/resolve';
 import { hybridRerank } from './rerank/local-hybrid';
 import { assertTenantScope, scopeKey } from './tenant/scope';
 import { createTraceCollector, type TraceCollector } from './trace/collector';
@@ -29,6 +30,7 @@ import { voiceKeywordFallback, type VoiceChunk } from './voice/keyword-fallback'
 import type {
   Candidate,
   Profile,
+  ReferencedState,
   RetrievalResult,
   RunRetrievalInput,
   StageFailureReason,
@@ -335,8 +337,31 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
   let queryContext: RetrievalResult['queryContext'] = null;
   let candidates: Candidate[] = [];
   let assembly: AssembleOutput<Candidate> | null = null;
+  let referenced: ReferencedState | null = null;
 
   try {
+    const documentRefs = input.documentRefs;
+    if (documentRefs && (documentRefs.mentions.length > 0 || documentRefs.documentParts.length > 0)) {
+      const resolved = await runStage(
+        spec('refs', 'skip'),
+        signal,
+        (stageSignal) => {
+          const admin = deps.adminClient();
+          if (!admin) throw new Error('[RAG Refs] admin client unavailable');
+          return resolveDocumentRefs({
+            scope,
+            mentions: documentRefs.mentions,
+            documentParts: documentRefs.documentParts,
+            admin,
+            signal: stageSignal,
+          });
+        },
+        collector,
+        { candidatesOut: (value) => value.usedDocuments.length },
+      );
+      referenced = resolved.skipped ? null : { usedDocuments: resolved.value.usedDocuments, context: resolved.value.context };
+    }
+
     const analysis = await runStage(spec('analyze', 'skip'), signal, () => legacyAnalyze(input.query), collector);
     const analysed = analysis.skipped ? defaultQueryContext() : analysis.value;
     queryContext = analysed;
@@ -382,7 +407,7 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
         candidates,
         documents: rows.documents,
         chunkMetadata: rows.chunkMetadata,
-        referenced: input.options?.referenced ?? null,
+        referenced,
         isGPTModel: input.options?.isGPTModel ?? false,
         ragMode: input.options?.ragMode ?? 'strict',
         webSearchEnabled: input.options?.webSearchEnabled ?? false,

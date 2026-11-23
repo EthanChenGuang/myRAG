@@ -1,7 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { runRetrieval } from '@/lib/rag';
 import { resolveDocumentRefs } from '@/lib/rag/refs/resolve';
 import { mintScope, type TenantScope } from '@/lib/rag/tenant/scope';
+import { SEMANTIC_QUERY, fakeEmbedder, fakeRpcClient, installDeps, rows, uninstallDeps } from './helpers/pipeline-fakes';
 
 const USER_A = '00000000-0000-4000-8000-0000000000a1';
 const USER_B = '00000000-0000-4000-8000-0000000000b1';
@@ -159,7 +161,7 @@ const single: TenantScope = mintScope('single', null, null);
 const signal = new AbortController().signal;
 
 describe('resolveDocumentRefs', () => {
-  let warn: ReturnType<typeof vi.spyOn>;
+  let warn: { mock: { calls: unknown[][] } };
 
   beforeEach(() => {
     vi.spyOn(console, 'log').mockImplementation(() => {});
@@ -266,7 +268,7 @@ describe('resolveDocumentRefs', () => {
     expect(opsOf(chunkCalls[0], 'eq')).toEqual([['document_id', DOC_A]]);
     expect(JSON.stringify(calls)).not.toContain(`"document_id","${DOC_B}"`);
 
-    const tenantWarnings = warn.mock.calls.filter((args) => String(args[0]).startsWith('[RAG Tenant]'));
+    const tenantWarnings = warn.mock.calls.filter((args: unknown[]) => String(args[0]).startsWith('[RAG Tenant]'));
     expect(tenantWarnings).toHaveLength(1);
     expect(tenantWarnings[0][1]).toEqual({ ignoredReferences: 1 });
   });
@@ -276,7 +278,7 @@ describe('resolveDocumentRefs', () => {
 
     await resolveDocumentRefs({ scope: personalA, mentions: [], documentParts: [{ id: DOC_A, name: 'alpha-handbook.md' }], admin, signal });
 
-    expect(warn.mock.calls.filter((args) => String(args[0]).startsWith('[RAG Tenant]'))).toHaveLength(0);
+    expect(warn.mock.calls.filter((args: unknown[]) => String(args[0]).startsWith('[RAG Tenant]'))).toHaveLength(0);
   });
 
   it('produces the same used document entry and context section as the inline route code', async () => {
@@ -355,5 +357,122 @@ describe('resolveDocumentRefs', () => {
 
     expect(calls.length).toBeGreaterThan(0);
     for (const call of calls) expect(call.signal).toBe(controller.signal);
+  });
+});
+
+describe('refs stage in runRetrieval', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    uninstallDeps();
+  });
+
+  function pipelineTables(): Tables {
+    const tables = seed();
+    tables.documents.push({ id: 'doc-1', filename: 'doc-1.md', created_at: CREATED_AT, content: null, metadata: null });
+    tables.document_chunks.push({ id: 'chunk-1', document_id: 'doc-1', content: 'fixture chunk body 1', metadata: null });
+    return tables;
+  }
+
+  function install(admin: SupabaseClient, env: { RAG_DISABLED_STAGES?: string } = {}) {
+    const rpc = fakeRpcClient({ rows: rows(1) });
+    installDeps({
+      anonClient: () => rpc.client,
+      embedder: fakeEmbedder().embedder,
+      ragEnv: () => env,
+      adminClient: (() => admin) as never,
+    });
+  }
+
+  function run(documentRefs?: { mentions: string[]; documentParts: Array<{ id: string; name: string }> }) {
+    return runRetrieval({
+      scope: single,
+      query: SEMANTIC_QUERY,
+      profile: 'chat',
+      documentRefs,
+      signal: new AbortController().signal,
+    });
+  }
+
+  it('runs refs before analyze and hands the referenced documents to the assembly', async () => {
+    install(filteringAdmin(pipelineTables()).admin);
+
+    const result = await run({ mentions: ['alpha-handbook'], documentParts: [] });
+
+    expect(result.status).toBe('ok');
+    expect(result.stages.map((stage) => stage.name)).toEqual(['refs', 'analyze', 'embed', 'search', 'legacy_rank', 'post_filter', 'assemble']);
+    expect(result.stages[0]).toMatchObject({ status: 'ok', candidates_out: 1 });
+    expect(result.usedDocuments[0]).toMatchObject({ id: DOC_A, explicitly_referenced: true });
+    expect(result.usedDocuments.map((doc) => doc.id)).toContain('doc-1');
+    expect(result.context).toContain('=== DOCUMENT: "alpha-handbook.md" ===');
+    expect(result.context).toContain('alpha chunk one');
+  });
+
+  it('keeps the referenced context first and does not refuse when the search finds nothing else', async () => {
+    const rpc = fakeRpcClient({ rows: [] });
+    installDeps({
+      anonClient: () => rpc.client,
+      embedder: fakeEmbedder().embedder,
+      ragEnv: () => ({}),
+      adminClient: (() => filteringAdmin(pipelineTables()).admin) as never,
+    });
+
+    const result = await run({ mentions: [], documentParts: [{ id: DOC_A, name: 'alpha-handbook.md' }] });
+
+    expect(result.status).toBe('ok');
+    expect(result.usedDocuments.map((doc) => doc.id)).toEqual([DOC_A]);
+    expect(result.context).toBe('\n\n=== DOCUMENT: "alpha-handbook.md" ===\nalpha chunk one\n\nalpha chunk two\n=== END OF DOCUMENT ===\n');
+    expect(result.refusalCandidate).toBe(false);
+  });
+
+  it('adds no refs stage when no references are given', async () => {
+    install(filteringAdmin(pipelineTables()).admin);
+
+    const empty = await run({ mentions: [], documentParts: [] });
+    const absent = await run();
+
+    for (const result of [empty, absent]) {
+      expect(result.stages.map((stage) => stage.name)).not.toContain('refs');
+    }
+  });
+
+  it('RAG_DISABLED_STAGES=refs skips the lookup and records the stage as disabled', async () => {
+    const { admin, calls } = filteringAdmin(pipelineTables());
+    install(admin, { RAG_DISABLED_STAGES: 'refs' });
+
+    const result = await run({ mentions: ['alpha-handbook'], documentParts: [] });
+
+    expect(result.stages[0]).toMatchObject({ name: 'refs', status: 'disabled' });
+    expect(result.usedDocuments.map((doc) => doc.id)).not.toContain(DOC_A);
+    expect(calls.some((call) => opsOf(call, 'ilike').length > 0)).toBe(false);
+    expect(result.status).toBe('ok');
+  });
+
+  it('a failing refs stage is skipped and the result is degraded, not an error', async () => {
+    const working = filteringAdmin(pipelineTables()).admin;
+    const failing = {
+      from(table: string) {
+        if (table === 'documents') {
+          const builder = working.from(table) as unknown as { ilike: (...args: unknown[]) => unknown };
+          builder.ilike = () => {
+            throw new Error('documents lookup unavailable');
+          };
+          return builder;
+        }
+        return working.from(table);
+      },
+    } as unknown as SupabaseClient;
+    install(failing);
+
+    const result = await run({ mentions: ['alpha-handbook'], documentParts: [] });
+
+    expect(result.stages[0]).toMatchObject({ name: 'refs', status: 'skipped', reason: 'failed' });
+    expect(result.status).toBe('degraded');
+    expect(result.usedDocuments.map((doc) => doc.id)).toEqual(['doc-1']);
   });
 });

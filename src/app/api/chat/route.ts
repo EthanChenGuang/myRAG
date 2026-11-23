@@ -21,6 +21,7 @@ import {
   finishTrace,
   knowledgeBaseUnavailableMessage,
   repairOwnerMembership,
+  resolveDocumentRefs,
   resolveTenantScope,
   runRetrieval,
   scopeKey,
@@ -1959,173 +1960,35 @@ IMPORTANT:
       const contextUserMessage = contextUserMessages[contextUserMessages.length - 1];
 
       let queryText = '';
-      let documentReferences: { id: string; name: string }[] = [];
+      const mentionNames: string[] = [];
+      const documentParts: { id: string; name: string }[] = [];
 
       if (contextUserMessage) {
-        // Check for array content with document references
         if (Array.isArray(contextUserMessage.content)) {
-          console.log('Last user message has array content:', contextUserMessage.content);
-
-          // Find text parts
           const textPart = contextUserMessage.content.find(part => part.type === 'text');
           if (textPart && textPart.text) {
             queryText = textPart.text;
           }
 
-          // Collect document references from explicit document parts
-          const explicitDocRefs = contextUserMessage.content
-            .filter(part => part.type === 'document')
-            .map(part => ({
-              id: part.document.id,
-              name: part.document.name
-            }));
-
-          documentReferences = [...explicitDocRefs];
-
-          console.log('Found explicit document references:', documentReferences);
+          documentParts.push(
+            ...contextUserMessage.content
+              .filter(part => part.type === 'document')
+              .map(part => ({
+                id: part.document.id,
+                name: part.document.name
+              }))
+          );
         } else if (typeof contextUserMessage.content === 'string') {
-          // If it's a string, use it as the query text and check for @mentions
           queryText = contextUserMessage.content;
 
-          // Extract @mentions from the text using regex
-          const mentionRegex = /@([^@\s]+)/g;
-          const mentions = queryText.match(mentionRegex);
-
-          if (mentions && mentions.length > 0) {
-            console.log('Found document mentions in text:', mentions);
-
-            // Look up documents by name for each @mention
-            for (const mention of mentions) {
-              const docName = mention.substring(1); // Remove the @ symbol
-              console.log(`Looking for document with name matching: "${docName}"`);
-
-              // Query Supabase for document by name
-              const { data: docs, error } = await supabase
-                .from('documents')
-                .select('id, filename')
-                .ilike('filename', `%${docName}%`)
-                .limit(1);
-
-              if (!error && docs && docs.length > 0) {
-                documentReferences.push({
-                  id: docs[0].id,
-                  name: docs[0].filename
-                });
-                console.log(`Found document for mention ${mention}:`, docs[0]);
-              } else {
-                console.log(`No document found for mention ${mention} using ilike search`);
-
-                // Try alternative approach - use exact match on name
-                const { data: exactDocs, error: exactError } = await supabase
-                  .from('documents')
-                  .select('id, filename')
-                  .eq('filename', docName)
-                  .limit(1);
-
-                if (!exactError && exactDocs && exactDocs.length > 0) {
-                  documentReferences.push({
-                    id: exactDocs[0].id,
-                    name: exactDocs[0].filename
-                  });
-                  console.log(`Found document using exact match for ${mention}:`, exactDocs[0]);
-                } else {
-                  // Log more details for debugging
-                  console.log(`Still no document found for mention ${mention}. Available documents:`);
-                  const { data: allDocs } = await supabase
-                    .from('documents')
-                    .select('id, filename')
-                    .limit(10);
-
-                  console.log('Available documents:', allDocs);
-                }
-              }
-            }
+          const mentions = queryText.match(/@([^@\s]+)/g);
+          if (mentions) {
+            mentionNames.push(...mentions.map(mention => mention.substring(1)));
           }
         }
       }
 
-      // Build context from explicitly referenced documents first
-      // (context already initialized above)
-
-      if (documentReferences.length > 0) {
-        console.log(`Processing ${documentReferences.length} document references`);
-
-        for (const docRef of documentReferences) {
-          console.log(`Fetching chunks for document: ${docRef.name} (${docRef.id})`);
-
-          const { data: docMetadata, error: metadataError } = await supabase
-            .from('documents')
-            .select('id, filename, created_at, content, metadata')
-            .eq('id', docRef.id)
-            .single();
-
-          if (!metadataError && docMetadata) {
-            // Track this document as used
-            usedDocuments.push({
-              id: docRef.id,
-              name: docRef.name,
-              filename: docMetadata.filename,
-              created_at: docMetadata.created_at,
-              content_preview: docMetadata.content ? docMetadata.content.substring(0, 200) + '...' : undefined,
-              explicitly_referenced: true, // Mark as explicitly referenced
-              external_url: docMetadata.metadata?.external_url
-            });
-          }
-
-          const { data: chunks, error } = await supabase
-            .from('document_chunks')
-            .select('content')
-            .eq('document_id', docRef.id)
-            .limit(30); // Get more chunks for referenced documents
-
-          if (error) {
-            console.error(`Error fetching chunks for document ${docRef.id}:`, error);
-            continue;
-          }
-
-          if (chunks && chunks.length > 0) {
-            console.log(`Found ${chunks.length} chunks for document ${docRef.id}`);
-            console.log('First 3 chunks preview:', chunks.slice(0, 3).map(c => c.content.substring(0, 100) + '...'));
-
-            const docContent = chunks.map(chunk => chunk.content).join('\n\n');
-            context += `\n\n=== DOCUMENT: "${docRef.name}" ===\n${docContent}\n=== END OF DOCUMENT ===\n`;
-            console.log(`Added ${chunks.length} chunks (${docContent.length} chars) from document "${docRef.name}"`);
-          } else {
-            console.log(`No chunks found for document ${docRef.id}`);
-
-            // If no chunks are found, try to get the full document text
-            const { data: docData, error: docError } = await supabase
-              .from('documents')
-              .select('content, text')
-              .eq('id', docRef.id)
-              .single();
-
-            if (!docError && docData) {
-              const fullText = docData.text || docData.content || '';
-              if (fullText) {
-                context += `\n\n=== DOCUMENT: "${docRef.name}" ===\n${fullText}\n=== END OF DOCUMENT ===\n`;
-                console.log(`Added full text (${fullText.length} chars) from document "${docRef.name}"`);
-              }
-            } else {
-              // Try to get all available chunks without filtering
-              const { data: allChunks, error: allChunksError } = await supabase
-                .from('document_chunks')
-                .select('*')
-                .eq('document_id', docRef.id)
-                .limit(30);
-
-              if (!allChunksError && allChunks && allChunks.length > 0) {
-                const allContent = allChunks.map(chunk => chunk.content).join('\n\n');
-                context += `\n\n=== DOCUMENT: "${docRef.name}" ===\n${allContent}\n=== END OF DOCUMENT ===\n`;
-                console.log(`Added ${allChunks.length} chunks (${allContent.length} chars) from broader query for "${docRef.name}"`);
-              } else {
-                console.log(`No content found for document ${docRef.id} after multiple attempts`);
-                context += `\n\nDocument "${docRef.name}" was referenced but no content could be retrieved.\n`;
-              }
-            }
-          }
-        }
-      }
+      const documentRefs = { mentions: mentionNames, documentParts };
 
       // Then perform semantic search for the query text
       if (queryText) {
@@ -2136,13 +1999,13 @@ IMPORTANT:
           scope,
           query: queryText,
           profile: 'chat',
+          documentRefs,
           options: {
             maxResults: parseInt(env.RAG_FINAL_RESULT_COUNT || '25'),
             fallbackToLowerThreshold: true,
             isGPTModel,
             ragMode,
             webSearchEnabled,
-            referenced: { usedDocuments, context },
           },
           signal: req.signal,
           trace: collector,
@@ -2162,6 +2025,11 @@ IMPORTANT:
       } else {
         // Query all chunks to try to gather some relevant context
         console.log('No specific query text provided, performing general context lookup');
+
+        if (scope && (documentRefs.mentions.length > 0 || documentRefs.documentParts.length > 0)) {
+          const resolvedRefs = await resolveDocumentRefs({ scope, ...documentRefs, admin: supabase, signal: req.signal });
+          usedDocuments = resolvedRefs.usedDocuments;
+        }
 
         // Use simple semantic search for general queries
         const queryEmbedding = await getQueryEmbedding('general information overview');
