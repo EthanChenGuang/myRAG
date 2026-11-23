@@ -44,7 +44,7 @@ const REASONING_MODEL_PATTERNS: Record<string, { method: 'effort' | 'max_tokens'
 };
 
 // Function to detect if a model supports reasoning - now uses stored model data
-function detectReasoningSupport(model: Model): { supportsReasoning: boolean; reasoningMethod?: 'effort' | 'max_tokens' | 'both' } {
+function detectReasoningSupport(model: Model): { supportsReasoning: boolean; reasoningMethod?: 'effort' | 'max_tokens' | 'both' | 'none' } {
   // First check if the model has reasoning metadata stored (from config UI)
   if (typeof model.supportsReasoning === 'boolean') {
     return {
