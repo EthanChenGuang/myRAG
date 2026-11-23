@@ -80,8 +80,30 @@ The full text of every decision is in `04-CONTEXT.md` and stays authoritative. T
 | CHK-05 | Chunk-size sweep report, decision recorded | Pattern 8, Pattern 10 |
 | LAT-01 | Paths in parallel, dedupe before rerank, capped rerank input | Pattern 3, Latency Budget |
 | LAT-02 | Fast and quality rerank tiers per entry point | Pattern 5 (tier resolution), Latency Budget |
-| XLG-03 | Cross-language via lexical path and local BM25 with translated query; cross-lingual calibration | Pattern 3 (variants), Pattern 7 (cells), finding F-5 |
+| XLG-03 | Cross-language via lexical path and local BM25 with translated query; cross-lingual calibration | Pattern 3 (variants), Pattern 7 (cells), findings F-5, F-20 |
 </phase_requirements>
+
+## Project Constraints (from CLAUDE.md)
+
+These come from `./CLAUDE.md` (which includes `AGENTS.md`) and `.claude/CLAUDE.md`, and carry the authority of locked decisions.
+
+| # | Directive | Where it bites in Phase 4 |
+|---|-----------|---------------------------|
+| C-1 | Every new `.env.local` variable goes into `scripts/init-env.js`, `src/lib/env.ts`, `scripts/config-server.js` and the Config UI; model lists stay in sync in five places | D-23's 15 names, plus `scripts/rag/env-manifest.json` and `node scripts/check-config.mjs` |
+| C-2 | Do not break shipped behaviour: strict "information not available", webSearch with Exa, `source_images`, `RAG_SYSTEM_PROMPT` with `{{context}}`, the voice and embed paths | F-13, F-14 (strict refusal under v2), D-15 format, D-25 voice contract |
+| C-3 | Multi-tenant safety: RLS and tenant isolation must not get weaker; cross-tenant leakage is the worst failure | Pattern 1 key checks, F-12, conformance two-tenant cases, `rag_fetch_parents` |
+| C-4 | Every new component has a switch; off returns to current behaviour | All D-23 switches default off; `RAG_PIPELINE=legacy` runs none of this phase |
+| C-5 | Each phase is compared with the baseline; a layer that drops beyond noise is not done | D-28; noise band `floor 0.02`, `k 3`, gated slices `overall` and `language:` (`eval/config/noise.json`) |
+| C-6 | A total latency budget for rewrite + retrieval + rerank; voice has a lower budget and may run fewer steps | Latency Budget, F-23 |
+| C-7 | No secrets committed; placeholders in tests and docs; never log key values | `COHERE_API_KEY=` placeholder; adapters log status codes only |
+| C-8 | Docling, HHEM, DeepEval and Ragas live in the Python sidecar, called over HTTP | Not used by this phase; the sweeps and calibration live in `eval/` (Python), the request path stays in TS |
+| C-9 | Pydantic v2 (`pydantic>=2.14.4`) is the source for every structured contract; Zod is generated from its JSON Schema and checked in CI | `RetrievalParams`, `RefusalThresholds`, `RefusalCalibrationConfig`, `ChunkingProfile`, `RetrievalFilters`, `RagRunOptions.retrieval_overrides`, `RagTrace` additions; `npm run gen:schemas` |
+| C-10 | pgvector dims above 2,000 need `halfvec` or reduction | Pattern 1 dense routing by `embedding_profiles.storage` |
+| C-11 | API code: Zod from `zod/v3`, `withValidation` / `validateRequest`, structured JSON errors, `formatErrorSSE` for streams | `retrievalFilters` body field, admin routes |
+| C-12 | Bracketed log prefixes (`[Document Search]` for retrieval, `[RAG Trace]`, `[RAG Config]`); no new unconditional debug logs in hot paths | New stages log through the trace, not per candidate |
+| C-13 | `@/` imports, kebab-case files, no new `any`, no new `eslint-disable`, `_` prefix for unused vars, minimal comments, docs only on request | All new modules under `src/lib/rag/` |
+| C-14 | Run lint, type-checks (`npm run typecheck:new`, tsc ratchet) and the relevant scripts before hand-off | Sampling Rate |
+| C-15 | Work goes through GSD commands; planning and execution artifacts stay in sync | Plans cite this file's findings by ID |
 
 ## Summary
 
@@ -545,7 +567,7 @@ Notes for the planner:
 ```typescript
 // src/lib/rag/backend/types.ts — sketch; D-01 names are locked
 export interface RetrievalFilters {
-  dateRange?: { from?: string; to?: string; keepUndated?: boolean };
+  dateRange?: { from?: string; to?: string };     // explicit only; derived ranges are trace-only (F-4)
   sources?: string[]; documentIds?: string[]; docTypes?: string[]; languages?: string[];
   readonly currentOnly: true;
 }
@@ -573,14 +595,16 @@ export interface RetrievalBackend {
 
 ```typescript
 // src/lib/rag/backend/pgvector.ts — sketch
-export function createPgvectorBackend(deps: { adminClient: SupabaseClient; env: RagEnv }): RetrievalBackend {
+export function createPgvectorBackend(deps: { adminClient: () => SupabaseClient | null; env: RagEnv }): RetrievalBackend {
   return {
     id: 'pgvector',
     async search(req) {
       assertTenantScope(req.scope);                              // runtime brand check (Phase 2 D-07)
-      const { data, error } = await deps.adminClient
+      const client = deps.adminClient();                         // RagDeps.adminClient() may return null
+      if (!client) throw new RetrievalBackendError('hybrid_search_chunks', 'admin_unavailable');
+      const { data, error } = await client
         .rpc('hybrid_search_chunks', {
-          p_tenant_key: req.scope.tenantKey,                     // the only tenant input
+          p_tenant_key: scopeKey(req.scope),                     // the only tenant input; TenantScope has no tenantKey field (F-12)
           p_profile_id: req.embeddingProfileId,
           p_query_embedding: req.denseVector,
           p_lexical_tokens: req.lexicalTokens,
@@ -593,7 +617,7 @@ export function createPgvectorBackend(deps: { adminClient: SupabaseClient; env: 
         })
         .abortSignal(req.signal);
       req.signal.throwIfAborted();                               // postgrest resolves on abort (Phase 2 research)
-      if (error) throw new RetrievalBackendError('hybrid_search_chunks', error.code);
+      if (error) throw new RetrievalBackendError('hybrid_search_chunks', error.code ?? null);   // constructor takes string | null
       return splitLegs(data);                                    // group by leg, keep SQL rank order
     },
     async health() { /* cheap select 1 through the admin client */ },
@@ -602,7 +626,7 @@ export function createPgvectorBackend(deps: { adminClient: SupabaseClient; env: 
 }
 ```
 
-The empty-array filter must mean "no filter" in TypeScript (send `null`), because `= ANY('{}')` matches nothing. The conformance suite has a case for it.
+The empty-array filter must mean "no filter" in TypeScript (send `null`), because `= ANY('{}')` matches nothing (re-executed: `p_sources => '{}'` returned no rows). The conformance suite has a case for it. `RagEnv` in the sketch stands for the extended `RagEnvInput` of `src/lib/rag/config.ts`. Read `RAG_HNSW_ITERATIVE_SCAN` and `RAG_EXACT_SCAN_CUTOFF` through `loadRagConfig`, never from `process.env` in the adapter.
 
 ### Pattern 3: RRF, variants, dedupe, cap
 
@@ -726,16 +750,18 @@ Rules shared by every adapter and by the stage:
 - Tier resolution (`select.ts`): chat, embed and eval read `RAG_RERANK_TIER_CHAT`; voice reads `RAG_RERANK_TIER_VOICE`. Cohere: quality `rerank-v5.0-pro`, fast `rerank-v5.0-fast`. Voyage: quality `rerank-3` unless `RAG_RERANK_VOYAGE_MODEL_BY_LANG` names another model for the query language; fast `rerank-3-lite`.
 - `local_bm25`: BM25 (k1 1.2, b 0.75) over the pool using the Pattern 4 tokenizer, IDF from the pool, divided by the pool maximum. It uses the variant in the candidate's language when one exists (D-22). Today's `tokenize()` drops every non-ASCII character (`.replace(/[^\w\s]/g, ' ')`, `src/lib/reranker-local.ts:73-79`), so Chinese text currently produces no tokens at all.
 - Fake reranker (D-27): a pure function of query and document text: fixture-embedder cosine plus IDF-weighted query-token coverage, with per-language offsets, injected latency and injected failure. It must not read golden data; a test asserts its signature takes only text and options.
-- Cohere spans are codepoint offsets. Convert through `Array.from(text)` before slicing a JavaScript string (`'𠮷野家 … 😀'` has length 21 but 19 codepoints, executed).
+- Cohere spans are codepoint offsets. Convert through `Array.from(text)` before slicing a JavaScript string. Executed this session: `'𠮷野家 … 😀'` has `length` 9 but 7 codepoints. The first draft gave 21 and 19, which does not match that string.
+- Voyage: the reranker guide shows the Python SDK object (`results`, `total_tokens`). The raw HTTP response is `{ object: 'list', data: [{ relevance_score, index }], model, usage: { total_tokens } }`. Parse `data`. The recorded fixture must use the HTTP shape [CITED: docs.voyageai.com/reference/reranker-api, re-fetched this session].
 - Boundary check: add a rule that `api.cohere.com`, `api.voyageai.com` and a `/rerank` fetch may appear only under `src/lib/rag/rerank/` (extends Phase 2 D-14).
 - Record `usage` in the rerank span so the first live run shows the real billing unit.
 
 ### Pattern 6: Context assembly (extends `assembleContext`)
 
-1. **Merge.** Group reranked candidates by document. Within a document, chunks with consecutive `chunk_index` (or the same `parent_id`) form one block; a block's rank is its best member's rank; members are printed in `chunk_index` order.
-2. **Budget.** Walk blocks in rank order, count the rendered block with `tiktoken` `cl100k_base`, and stop adding when the next block would exceed `RAG_CONTEXT_TOKEN_BUDGET`. Always keep the rank-1 block, truncated if it alone is over budget. Selection happens before ordering, so the budget drops the worst blocks, not the middle ones.
-3. **Order.** With `RAG_CONTEXT_EDGE_ORDER=true`: odd ranks ascending, then even ranks descending (`1, 3, 5, …, 6, 4, 2`). Otherwise rank order.
-4. **Render.** Reuse the Phase 2 block renderer, labels, links section and `source_images` unchanged.
+1. **Merge.** Group reranked candidates by document. Within a document, chunks with consecutive `chunk_index` (or the same `parent_id`) form one run, and each run is printed as one block. A document group's rank is its best member's rank, and its runs are printed in `chunk_index` order (F-24).
+2. **Budget.** Walk the reranked chunks in rank order and add each one to its document group. Count the rendered context with `tiktoken` `cl100k_base`, and stop adding when the next chunk would exceed `RAG_CONTEXT_TOKEN_BUDGET`. Always keep the rank-1 chunk, truncated if it alone is over budget. Selection happens before ordering, so the budget drops the worst chunks, not the middle ones.
+3. **Order.** Order the document groups. With `RAG_CONTEXT_EDGE_ORDER=true`: odd group ranks ascending, then even ranks descending (`1, 3, 5, …, 6, 4, 2`). Otherwise rank order. Today's renderer orders groups by first appearance in the candidate list, which is rank order once candidates arrive reranked, so "switch off" equals today's grouping.
+4. **Render.** Reuse the Phase 2 renderer (`buildContext`): the `=== RELEVANT INFORMATION FROM DOCUMENTS ===` frame, the per-document header, `[Source: …]` labels for GPT models, the links section and `source_images`, all unchanged. The one change is that `buildContext` takes the group order as input instead of deriving it from `Map` insertion order. Legacy passes nothing, so its output stays byte-identical (`tests/rag-assemble-differential.test.mts` and `tests/rag/assemble.test.ts` exist at HEAD).
+5. **Image documents.** `buildContext` skips documents whose filename ends in an image extension (`IMAGE_EXTENSIONS`, `assemble.ts:56, 182-183`) but still lists them in `usedDocuments` and `sourceImages`. Do not count them against the token budget.
 
 ```typescript
 // src/lib/rag/context/edge-order.ts
@@ -748,7 +774,7 @@ export function edgeOrder<T>(byRank: T[]): T[] {
 
 `tiktoken`: creating the encoder took 107 ms once; counting 15,728 tokens took 19.5 ms (executed). Create it once per process.
 
-Under v2 there is no `post_filter` stage (D-24), so the legacy relevance filter (similarity above 0.65, name match) does not run and only the refusal stage can refuse.
+Under v2 there is no `post_filter` stage (D-24). `assemble` calls `filterCandidates` with `applyRelevanceFilter: false`, so the legacy relevance filter (similarity above 0.65, name match) does not run and only the refusal stage can refuse. Whether that stage gets a similarity-floor basis when no calibrated rerank cell applies is F-14.
 
 ### Pattern 7: Refusal gate and calibration
 
@@ -770,6 +796,25 @@ export function decideRefusal(i: GateInput): RefusalRecord {
 }
 ```
 
+Applying the decision inside `runPipeline` (F-13). The only change to the entry points is the new reason string:
+
+```typescript
+// src/lib/rag/pipeline.ts (v2 branch) — sketch
+const record = decideRefusal(gateInput);                       // or the F-14 similarity floor when not_applied
+const survivors = record.decision === 'refuse' ? [] : reranked;
+const state = filterCandidates(assemblyInput(rows, survivors, /* applyRelevanceFilter */ false));
+const assembly = buildContext(state, assemblyInput(rows, survivors, false)); // referenced docs kept; refusalCandidate by the existing rule
+// ...
+const status = record.decision === 'refuse' ? 'empty' : deriveStatus(records, survivorCount(assembly));
+const reason = record.decision === 'refuse' ? 'below_threshold' : /* existing reason logic */ reasonFor(status, records);
+// RetrievalResult also gains: refusal: record; retrievalConfigHash
+// In the eval profile only, the pre-refusal candidates and would-be context go to the trace, never to the model (D-19).
+```
+
+- Referenced documents keep `refusalCandidate` false, so strict mode answers from them. That matches today, where referenced documents are always in `usedDocuments`.
+- The refusal stage and `deriveStatus`: a refusal is a decision, not a failure, so the stage records `ok` and carries the decision in its `counts` and `detail` (F-22).
+- `RagTrace.refusal_reason` is `Literal["no_relevant_context"] | None` today [VERIFIED: `rag-sidecar/src/rag_sidecar/contracts/eval_run.py:101`]. It gains `"below_threshold"` (and `"below_similarity_floor"` if F-14 is accepted). Regenerate the Zod schema.
+
 ```python
 # eval/src/rag_eval/calibrate/refusal.py — sketch of the fit; receives dev items only
 def fit_threshold(answerable: list[float], no_answer: list[float], target: float) -> FitResult:
@@ -788,9 +833,24 @@ Tool flow (`python -m rag_eval.calibrate refusal`):
 1. Run the eval endpoint with refusal off for every approved item, collect the top rerank score, the query language and the top candidate's language.
 2. Split by `item.split`. Pass only dev rows to `fit_threshold`, per cell. A cell under the dev minimums is `insufficient_data`.
 3. Apply each fitted threshold to the cell's test rows. Compute counts and rates only. Under the holdout minimums: `insufficient_data`. Over the pass rule (A-3): `failed_holdout`. Otherwise `calibrated`.
-4. Write `refusal-thresholds.json` (cell key, threshold, dev and holdout metrics and counts, status, config hash, tokenizer version, rerank text version, reranker model, `holdout_evaluations`, date) and a Markdown report with the same-versus-cross comparison for XLG-03.
+4. Write `refusal-thresholds.json` (cell key, threshold, dev and holdout metrics and counts, the exact one-sided 95% upper bound of each false-refusal rate (F-19), status, config hash, tokenizer version, rerank text version, reranker model, `holdout_evaluations`, date) and a Markdown report with the same-versus-cross comparison for XLG-03.
 
-Golden additions must be checked against this: a test computes, per cell, the dev and test counts from a fixture run and fails if a cell the phase needs is short. Because `assign_split` is a pure function of the item id (`eval/src/rag_eval/split.py:11-13`), the author can see the split of a new id before adding it.
+```python
+# eval/src/rag_eval/calibrate/bounds.py — stdlib only (math.comb), no scipy
+from math import comb
+def binom_cdf(k: int, n: int, p: float) -> float:
+    return sum(comb(n, i) * p**i * (1 - p) ** (n - i) for i in range(k + 1))
+def upper_bound(k: int, n: int, alpha: float = 0.05) -> float:
+    """Clopper-Pearson one-sided upper bound: largest p with P(X <= k | n, p) >= alpha (bisection)."""
+    if n == 0: return 1.0
+    lo, hi = k / n, 1.0
+    for _ in range(60):
+        mid = (lo + hi) / 2
+        lo, hi = (mid, hi) if binom_cdf(k, n, mid) > alpha else (lo, mid)
+    return hi            # k = 0 gives 1 - alpha ** (1 / n): 0.153 for n = 18
+```
+
+Golden additions must be checked against this: a test computes, per cell, the dev and test counts from a fixture run and fails if a cell the phase needs is short. Because `assign_split` is a pure function of the item id (`def assign_split(item_id: str) -> str:` with `bucket = int(hashlib.sha256(item_id.encode()).hexdigest()[:8], 16) % 100` and `"dev" if bucket < 70 else "test"` [VERIFIED: `eval/src/rag_eval/split.py:11-13`]), the author can see the split of a new id before adding it. Today's counts are in F-20. Pairing is decided at run time from the top candidate's language (A-4), so cross-cell counts are only known after a fixture run. The count test therefore runs on the recorded fixture eval output, not on the golden file alone.
 
 ### Pattern 8: Sweeps
 
@@ -872,7 +932,8 @@ Rollback: set `RAG_PIPELINE=legacy` (instant, no data change). The new function,
 | Live service config | The Supabase project needs the new functions, grants, columns, tables and GIN index; PostgREST must reload its schema cache to see the function [ASSUMED: Supabase reloads on DDL; the explicit `NOTIFY` covers it] | Apply migrations; live verification item |
 | Live service config | pgvector extension version and database `lc_ctype` on the hosted project are unknown | Inventory queries above. `RAG_HNSW_ITERATIVE_SCAN` other than `off` needs 0.8.0 or newer |
 | OS-registered state | None. Verified: no cron, queue or scheduler entry is added; `rag:relex` and the re-chunk job are run by hand | None |
-| Secrets and env vars | New: `COHERE_API_KEY`, `COHERE_BASE_URL` and 13 switches (D-23). Reused: `VOYAGE_API_KEY`, `VOYAGE_BASE_URL` (Phase 3). Inert look-alikes already in `scripts/init-env.js` L387-392: `RAG_ENABLE_HYBRID_SEARCH=false`, `RAG_RERANKING=true`, `RAG_RERANKING_STRATEGY=hybrid` | Add the 15 names in the five config locations and `scripts/rag/env-manifest.json`; set them in Vercel. Label the old three as legacy in the Config UI so nobody toggles the wrong one |
+| Secrets and env vars | New: `COHERE_API_KEY`, `COHERE_BASE_URL` and 13 switches (D-23). Reused: `VOYAGE_API_KEY`, `VOYAGE_BASE_URL` (Phase 3). Inert look-alikes already in `scripts/init-env.js` L387-392: `RAG_ENABLE_HYBRID_SEARCH=false`, `RAG_RERANKING=true`, `RAG_RERANKING_STRATEGY=hybrid`, and at L406 `RAG_TEMPORAL_MATCHING=false`, which 02-07 stopped reading (F-15) | Add the 15 names in the five config locations and `scripts/rag/env-manifest.json`; set them in Vercel. Label the old names as legacy in the Config UI so nobody toggles the wrong one |
+| Stored data | Tenant ids minted with upper-case letters exist only in memory (scopes are not persisted). The `tenant_key` columns Phase 3 adds are built from `uuid::text`, which is lower case | None stored. Code edit only (F-12) |
 | Build artifacts | `src/lib/rag-eval/contracts.generated.ts`, `rag-sidecar/schemas/*.schema.json`, `tests/fixtures/contracts/samples.json`, characterization snapshots | Regenerate with `npm run gen:schemas`; add a v2 voice snapshot; CI already diffs the generated files |
 
 ## Common Pitfalls
@@ -942,6 +1003,23 @@ Rollback: set `RAG_PIPELINE=legacy` (instant, no data change). The new function,
 **What goes wrong:** `anon` fails because the shim never granted table access, and the test passes for the wrong reason.
 **How to avoid:** Pattern 9's shim privileges and an assertion on the message `permission denied for function hybrid_search_chunks`.
 
+### P-16: A refusal that strict mode never sees
+**What goes wrong:** the refusal stage sets `status: 'empty'`, but chat still answers, because strict refusal also needs `refusalCandidate`. Or another optional stage was skipped and `deriveStatus` reports `degraded`.
+**How to avoid:** F-13. On refuse, run `buildContext` with zero retrieved candidates, and let the refusal decision take precedence over `degraded`. Test the chat mapping end to end with a fake reranker below threshold, both with an analyze stage that is skipped and with one that runs.
+**Warning signs:** eval `refused` is false while the trace shows `refusal.decision = 'refuse'`.
+
+### P-17: Config memo hides new switches
+**What goes wrong:** `loadRagConfig` memoizes on a snapshot of only three variables, so a test or a warm instance that changes `RAG_RERANKER` keeps the old config.
+**How to avoid:** put every D-23 name into `RagEnvInput` and into the memo key, and add a test that flips one switch between two calls.
+
+### P-18: Calibration that cannot fail
+**What goes wrong:** with 3 no-answer and 13 to 18 answerable dev items per cell, the fit picks the threshold just below the lowest answerable score. The holdout check then decides on 1 or 2 items.
+**How to avoid:** F-19's bound in every report, F-20's extra items, and the holdout minimums in `refusal-calibration.json`. The fixture run proves the tooling, not the thresholds.
+
+### P-19: The admin client returns `null`
+**What goes wrong:** without `SUPABASE_SERVICE_ROLE_KEY`, `adminClient()` returns `null`. An adapter that falls back to the anon client hits `42501` on every request. One that returns `[]` turns an outage into "no results", and so into a strict refusal.
+**How to avoid:** throw `RetrievalBackendError` (reason `backend_error`). The startup check logs a missing service key once when `RAG_PIPELINE=v2`.
+
 ## Code Examples
 
 The executed SQL is in Pattern 1; the adapter, fusion, reranker, edge-order, gate and fit sketches are in Patterns 2 to 7. Two more that the plans will copy:
@@ -1000,7 +1078,20 @@ Budgets are p95 targets per stage. They extend the Phase 2 D-21 file and stay re
 | compress | 50 ms | off | Local scoring; provider spans ride on the rerank call |
 | **Retrieval total** | **about 1,460 ms, inside 2,000 ms** | **about 810 ms against 800 ms** | Phase 2 D-21 totals |
 
-Voice does not fit if every stage hits its own limit, so the voice profile needs a request deadline: `rerankTimeout = min(250, 800 − elapsed − 50)`, and when less than about 80 ms remains the rerank stage is skipped before it starts and recorded as `skipped / budget_exhausted` (degraded, refusal not applied). That is what D-25's injected-delay test should exercise. Exact-scan cost for reference: 1,950 rows at 1,536 dimensions took 16.9 ms and the bounded count 0.8 ms in PGlite.
+Voice does not fit if every stage hits its own limit, so the voice profile needs a request deadline: `rerankTimeout = min(250, 800 − elapsed − 50)`, and when less than about 80 ms remains the rerank stage is skipped before it starts and recorded as `skipped / budget_exhausted` (degraded, refusal not applied). That is what D-25's injected-delay test should exercise. F-23 shows this needs no change to `runStage`: the spec's `timeoutMs` is computed at call time. The voice stage timeouts in `PROFILE_STAGE_DEFAULTS.voice` today are `embed: 5000` and `search: 5000` [VERIFIED: `src/lib/rag/config.ts:33-41`]. Those are failure limits, not budgets, so the deadline rule, not the stage timeouts, is what keeps voice inside 800 ms.
+
+Recommended Phase 4 values for `PROFILE_STAGE_DEFAULTS` (failure limits; the budgets above are separate and report-only):
+
+| Stage | chat / embed | voice | eval |
+|-------|--------------|-------|------|
+| `translate` | 1,000 | 300 | 1,000 |
+| `dedupe`, `refusal` | 1,000 | 300 | 1,000 |
+| `rerank` | 600 (D-10) | 250 (D-10), deadline-capped | 60,000 (D-10 "none", F-16) |
+| `expand_parents` | 3,000 | 1,000 | 10,000 |
+| `compress` | 1,000 | not run (D-25) | 1,000 |
+| `exact_id_lookup` | Phase 3's value | Phase 3's value | Phase 3's value |
+
+Cost per chat query at the starting pool (75 chunks of about 512 tokens, 20-token query): about 40K rerank tokens, so about $0.002 on Voyage `rerank-3` or Cohere `rerank-v5.0-pro` if the secondary per-token price is right (A7). Exact-scan cost for reference: 1,950 rows at 1,536 dimensions took 16.9 ms and the bounded count 0.8 ms in PGlite.
 
 ## Risks
 
@@ -1014,6 +1105,45 @@ Voice does not fit if every stage hits its own limit, so the voice profile needs
 | Fixture numbers read as real gains | Medium | Medium | F-9 wording in the report; live verification decides |
 | `rag:relex` churn on a large table | Medium | Low | Batches, dry run, `VACUUM (ANALYZE)` |
 | Chunk text sent to Cohere and Voyage | Certain when switched on | Depends on tenant | `RAG_RERANKER=none` by default; list both vendors in the Phase 7 data-flow inventory; no query or chunk text in logs |
+| Strict refusal disappears under v2 without a calibrated reranker | Certain unless F-14 is decided | High (AGENTS.md §14 behaviour) | F-14 decision; a v2-all-off eval row for `correct_refusal_rate` next to legacy |
+| Mixed-case tenant ids reject every v2 call for that tenant | Medium (eval path mints directly) | Medium (fails closed, so outage, not leak) | F-12 lowercasing at mint time plus a conformance case |
+| A refusal that strict mode ignores | Certain if implemented as status only | High | F-13 routing and P-16 test |
+
+## Decisions That Need Adjusting (D-01 to D-29)
+
+"Holds" means the planner can use the decision as written. "Adjust" means the intent stands but a detail must change, and the planner should cite the finding. "Decide" means the orchestrator must choose before the affected plan is written. Nothing here reopens a decision's intent.
+
+| Decision | Verdict | What changes | Evidence |
+|----------|---------|--------------|----------|
+| D-01 Backend contract | Adjust | The tenant input is `scopeKey(req.scope)`, not `scope.tenantKey`. Ids are lower case. The adapter throws `RetrievalBackendError` when `adminClient()` is `null` | F-12, P-19 |
+| D-02 RRF in TS | Holds | Fixed list order for deterministic float sums; tie by chunk id | Pattern 3 |
+| D-03 Conformance suite | Adjust | Add cases: an upper-case id minted through eval, an empty-array filter rejected by Zod, `lexical_tsv` NULL rows invisible, a stopwords-only query giving `legs.lexical = []`. "Selective filter equals exact search" holds only on the exact path; iterative scan gets a recall floor | F-6, F-12, P-3, P-12 |
+| D-04 `hybrid_search_chunks` | Adjust | Build the vector with `rag_lexical_tsvector(lexical_text)`, not `to_tsvector('simple', …)`. Keep it in a trigger-maintained plain column, not a generated one. Use dynamic SQL for the `halfvec` typmod and the partial index. Set `ef_search` per call. The key regex is lower case. The rest (grants, `SECURITY INVOKER`, raises, admin client, one-way) stands | F-1, F-2, P-1, F-12, Pattern 1 |
+| D-05 Filters | Adjust | Derived date ranges are trace-only in Phase 4; explicit `retrievalFilters.dateRange` applies. Zod rejects empty arrays; the adapter sends `null` for "no filter" | F-4, F-15, P-12 |
+| D-06 Iterative scan and cutoff | Adjust | Apply with `set_config(…, true)` inside the function. Add a version guard (`iterative_scan_unsupported`). Assert equality only on the exact path. Phase 3's profile RPC differs (always `relaxed_order`); D-06 governs v2 | A-6, F-6, F-17, F-18 |
+| D-07 Tokenizer | Holds | Rules as data; the v2 bump also covers Phase 3 v1's case-preserving identifiers and apostrophes | Pattern 4; `03-RESEARCH.md` Pattern 9 |
+| D-08 `lexical_text` ownership | Adjust | `lexical_version` is a column. `rag:relex` writes through a service-role batch RPC, and the trigger fills `lexical_tsv`. Image chunks add filename, `metadata.name` and `metadata.image_context` | A-7, F-2, F-10 |
+| D-09 Rerankers | Adjust (wording) | `rerank-2.5` is a per-language override decided by eval, not "the multilingual fallback". AI SDK `rerank()` exists in `ai@6.0.3` but is not used. Never send `top_n` / `top_k`. `local_bm25` is `relative` | F-7, A-5, F-3 |
+| D-10 Tiers and timeouts | Adjust | `RAG_STAGE_TIMEOUTS` gains optional `profile.stage=ms` entries; eval "none" = 60,000 ms. Voice rerank uses a per-request deadline | F-16, F-23 |
+| D-11 Failure handling | Holds | Add the skip detail `budget_exhausted`. A partial or malformed vendor response is a failure | Pattern 5, F-23 |
+| D-12 Retrieval params | Holds | Read `eval/config/*.json` by static import so the file is bundled | Project structure note, A3 |
+| D-13 Parallel search and dedupe | Adjust | The span counts need a new numeric `counts` field in the trace | F-22 |
+| D-14 Retrieval sweep | Holds | `RagRunOptions` gains `retrieval_overrides` (it is `extra="forbid"` today) | Pattern 8 |
+| D-15 Assembly | Adjust | Edge order permutes document groups, not individual runs, so the header format stays exact. `buildContext` takes the group order as an input; legacy passes none | F-24, Pattern 6 |
+| D-16 Compression | Holds | Codepoint offsets; never compress merged or parent blocks by member spans | P-11, A-10 |
+| D-17 Threshold file | Adjust | Cells also record `rerank_text_version`, the calibration config hash and the 95% upper bounds. They go stale when either version changes | A-11, A-12, F-19 |
+| D-18 Calibration tool | Adjust | The rules for the holdout read, the pass rule and the minimums are fixed before the first run. Report the Clopper-Pearson bound. Run the cell-count check on fixture run output | A-2, A-3, F-19, F-20 |
+| D-19 Refusal stage | Adjust | Refuse means: drop the retrieved candidates, still run `buildContext` (so `refusalCandidate` follows the existing rule and referenced documents survive), then set `status: 'empty'`, `reason: 'below_threshold'`, overriding `degraded`. `RagTrace.refusal_reason` gains `below_threshold` | F-13, P-16 |
+| D-20 Parent table | Holds | `rag_fetch_parents(p_tenant_key, p_parent_ids)` with the same key checks | Pattern 10 |
+| D-21 Chunking profiles | Adjust | The Config UI panel shows the latest sweep report (read-only admin route), because CHK-05 requires the admin to see the comparison there | F-21 |
+| D-22 Translation seam | Holds | `p_lexical_languages` restricts translated variants to their language | Pattern 3 |
+| D-23 Env vars | Decide + adjust | `RAG_PIPELINE` must accept `v2` (`parsePipeline` rejects it today). `RagEnvInput` and the memo key gain all 15 names. **Decide** whether "no refusal" for v2-all-off stands or a similarity floor applies | F-14, P-17, Phase 2 contracts table |
+| D-24 Stage names | Adjust | Add `fuse` to `CORE_STAGES` and the rest to `OPTIONAL_STAGES`. `RetrievalResult` gains `refusal` and `retrievalConfigHash`. The hash also covers `RERANK_TEXT_VERSION` and the thresholds file hash. `KeptBy` gains v2 values | A-12, Phase 2 contracts table |
+| D-25 Voice | Adjust | A per-request deadline caps the rerank timeout. The lexical text carries image metadata so the lexical leg can replace `voice_keyword_fallback` | F-10, F-23 |
+| D-26 Golden additions | Adjust | Add cross-language near-miss no-answer items (at least 4 per language) and English answerable test items. Ids may be stratified by `assign_split` | F-20, A15 |
+| D-27 Fake reranker and fixtures | Holds | The recorded Voyage fixture uses the HTTP `data[]` shape | Pattern 5 |
+| D-28 Completion | Adjust | (b) the refusal part runs with the fake calibrated reranker, because `local_bm25` cannot drive refusal; success criterion 4 is read as "correct refusal improves at the target false-refusal point estimate". (c) the iterative-scan comparison runs on the synthetic selective-filter database, because the fixture never uses the index | F-3, F-6, P-10 |
+| D-29 Rollout order | Adjust | Step 0: the Phase 2 plans this phase needs (02-11, 02-12 to 02-14, 02-16, 02-20, 02-22, 02-24) and the Phase 3 migrations, tokenizer v1 and harness migration loader. Step 7 (refusal) must land with the F-13 routing in the same plan | Upstream dependencies |
 
 ## Assumptions Log
 
@@ -1029,6 +1159,11 @@ Voice does not fit if every stage hits its own limit, so the voice profile needs
 | A8 | Cohere and Voyage scores are stable enough across requests for a fixed threshold | Pattern 7 | Thresholds drift; the holdout check and re-calibration on model change catch it |
 | A9 | `jieba-wasm` and `nodejieba` are the relevant alternative packages | Alternatives | None; they are not recommended |
 | A10 | Holdout minimums (1 and 2 on fixtures, 3 and 6 on the real set) and the one-item tolerance are acceptable to the user | A-3 | Cells are accepted or rejected too easily; values live in `refusal-calibration.json` |
+| A11 | pgvector versions before 0.8.0 also reserve the `hnsw.` prefix, so setting `hnsw.iterative_scan` there raises instead of doing nothing | F-18 | If wrong, the call silently runs without iterative scan. The explicit version guard covers both cases |
+| A12 | The per-stage failure limits in the Latency Budget table (translate, dedupe, refusal, expand_parents, compress) are reasonable | Latency Budget | Stages time out too early or too late; they are code defaults, adjustable through `RAG_STAGE_TIMEOUTS` |
+| A13 | A similarity floor from `score_calibration` keeps v2-all-off strict refusal close to legacy | F-14 | The floor over-refuses or under-refuses on a new embedding profile; the eval row decides |
+| A14 | Phase 3 will lowercase ids in `mintScope` (its research F-13) | F-12 | If not, the first Phase 4 backend plan must do it |
+| A15 | Stratifying new golden ids by their hash split is acceptable and is not split gaming, because no outcome is used | F-20 | The user may prefer pure random ids; then more items are needed per cell |
 
 ## Open Questions
 
@@ -1045,12 +1180,20 @@ Voice does not fit if every stage hits its own limit, so the voice profile needs
    - What we know: Voyage's aggregate favours `rerank-3`.
    - Recommendation: the planned live comparison; leave the override empty until it shows a gap beyond the noise band.
 
-4. **Will Phase 3 adopt its research's proposals (SQL writer functions, clearing superseded vectors, `chunk_index` in single-tenant)?**
-   - What we know: they are recommendations in an uncommitted `03-RESEARCH.md`.
-   - Recommendation: Phase 4 plans depend on outcomes, not on those mechanisms: "a chunk row has `tenant_key`, `lexical_text`, `chunk_index`, `language`". Re-check when Phase 3 is planned.
+4. **Will Phase 3 adopt its research's proposals (SQL writer functions, clearing superseded vectors, `chunk_index` in single-tenant, lower-case ids in `mintScope`)?**
+   - What we know: they are recommendations in `03-RESEARCH.md`, which `.planning/STATE.md` lists as committed. Phase 3 has no plans yet.
+   - Recommendation: Phase 4 plans depend on outcomes, not on those mechanisms: "a chunk row has `tenant_key`, `lexical_text`, `chunk_index`, `language`; scope ids are lower case". Re-check when Phase 3 is planned. If lowercasing does not land, the Phase 4 backend plan adds it (F-12).
 
 5. **Should the analyzer-derived date range ever be a hard filter?**
-   - Recommendation: F-4. Compare on and off in the eval before anyone turns `RAG_TEMPORAL_MATCHING` on for v2.
+   - Recommendation: not in Phase 4 (F-4, F-15). It is trace-only. A later phase may add a switch, after an eval comparison.
+
+6. **Does v2 keep a relevance floor when no calibrated rerank cell applies? (F-14)**
+   - What we know: without one, v2 strict mode refuses only on zero candidates, and AGENTS.md lists that response as behaviour to preserve.
+   - What's unclear: whether the user prefers D-23's literal "no refusal" or a legacy-like floor.
+   - Recommendation: the similarity floor from `score_calibration`, applied only when the rerank gate is `not_applied`, recorded as `basis: 'similarity_floor'`. The orchestrator confirms before planning the refusal plan.
+
+7. **How many cross-language no-answer items does the fixture need? (F-20)**
+   - Recommendation: at least 4 per question language, with ids chosen so each fixture cell reaches 3 dev and 1 test no-answer items. Confirm before the golden-additions plan.
 
 ## Environment Availability
 
@@ -1076,7 +1219,7 @@ Voice does not fit if every stage hits its own limit, so the voice profile needs
 | Framework | Vitest 5.1.1 (`tests/**/*.test.ts`); `node --import tsx --test` for `.test.mts`; pytest 9.2.0 for `eval/` and `rag-sidecar/` |
 | Config file | `vitest.config.ts`; `eval/pyproject.toml`; `rag-sidecar/pyproject.toml` |
 | Quick run command | `npx vitest run tests/rag/<area>` |
-| Full suite command | `npx vitest run && uv run --directory eval pytest -q && uv run --directory rag-sidecar pytest -q && node scripts/check-config.mjs && node scripts/ci/check-rag-boundary.mjs && npm run typecheck:new` |
+| Full suite command | `npx vitest run && uv run --directory eval pytest -q && uv run --directory rag-sidecar pytest -q && node scripts/check-config.mjs && npm run typecheck:new`, plus `node scripts/ci/check-rag-boundary.mjs` once Phase 2 plan 02-20 has created it (it is not in `scripts/ci/` at HEAD) |
 
 No test calls a live service. Database tests use PGlite; rerankers use recorded responses or the fake.
 
@@ -1093,7 +1236,7 @@ No test calls a live service. Database tests use PGlite; rerankers use recorded 
 | DATA-08 | Each filter alone and combined, on both legs; empty array rejected; filters never widen; derived date range off by default | PGlite + unit | `npx vitest run tests/rag/sql/hybrid-filters.test.ts tests/rag/query` | no, Wave 0 |
 | RNK-01 | Cohere and Voyage adapters parse recorded responses; request body and header shape; tier and per-language model resolution; `local_bm25` on zh text | unit | `npx vitest run tests/rag/rerank` | no, Wave 0 |
 | RNK-02 | Sweep over a fake eval endpoint picks the smallest configuration within the noise band and writes the params file with numbers | pytest | `uv run --directory eval pytest -q tests/test_sweep_retrieval.py` | no, Wave 0 |
-| RNK-03 | Adjacent merge, rank selection inside the budget, edge order; switch off equals rank order; legacy byte identity still holds | unit + differential | `npx vitest run tests/rag/context && node --import tsx --test tests/rag-assemble-differential.test.mts` | partly (differential arrives with Phase 2 plan 02-09) |
+| RNK-03 | Adjacent merge, rank selection inside the budget, edge order of document groups; switch off equals rank order; legacy byte identity still holds | unit + differential | `npx vitest run tests/rag/context tests/rag/assemble.test.ts && node --import tsx --test tests/rag-assemble-differential.test.mts` | partly: `tests/rag/assemble.test.ts` and `tests/rag-assemble-differential.test.mts` exist at HEAD; `tests/rag/context/` is Wave 0 |
 | RNK-04 | Switch off leaves the context byte-identical; tables, images and short chunks untouched; kept text is verbatim; codepoint offsets | unit | `npx vitest run tests/rag/context/compress.test.ts` | no, Wave 0 |
 | RNK-05 | Gate decisions for every branch; fit on dev; poisoned test scores do not move thresholds; holdout statuses; stale cell ignored | unit + pytest | `npx vitest run tests/rag/refusal && uv run --directory eval pytest -q tests/test_calibrate_refusal.py` | no, Wave 0 |
 | RNK-06 | Timeout, HTTP error, abort and partial response: fused order kept, status `degraded`, refusal `not_applied / reranker_unavailable`; `none` is `disabled` | unit | `npx vitest run tests/rag/rerank/rerank-stage.test.ts` | no, Wave 0 |
@@ -1104,6 +1247,13 @@ No test calls a live service. Database tests use PGlite; rerankers use recorded 
 | LAT-02 | Voice uses the fast tier; with injected delays the voice profile stays under 800 ms and skips rerank when the deadline is near | unit (fake timers) | `npx vitest run tests/rag/v2/voice-budget.test.ts` | no, Wave 0 |
 | XLG-03 | Translated variant drives the lexical leg and `local_bm25`; hosted rerankers get the original; cross cells calibrated and compared | unit + pytest | `npx vitest run tests/rag/v2/translation-seam.test.ts && uv run --directory eval pytest -q tests/test_calibrate_refusal.py` | no, Wave 0 |
 | D-23 | 15 env vars in five places and the manifest | script | `node scripts/check-config.mjs` | yes |
+| D-23 / P-17 | `RAG_PIPELINE=v2` parses; flipping one D-23 switch between two `loadRagConfig` calls changes the config | unit | `npx vitest run tests/rag/config.test.ts` | file exists; cases Wave 0 |
+| F-12 | Upper-case UUID minted through the eval path reaches SQL in lower case; the SQL rejects an upper-case key | unit + PGlite | `npx vitest run tests/rag/backend-conformance tests/rag/sql/hybrid-tenant.test.ts` | no, Wave 0 |
+| F-13 / P-16 | Below-threshold fake reranker: strict chat streams "information not available"; balanced gets no KB context; referenced documents survive; a skipped `analyze` stage does not turn the refusal into `degraded` | unit + route | `npx vitest run tests/rag/v2/refusal-routing.test.ts tests/chat-strict.test.ts` | `tests/chat-strict.test.ts` exists; v2 cases Wave 0 |
+| F-14 | (if accepted) the similarity floor applies only when the gate is `not_applied`, never on a missing dense similarity | unit | `npx vitest run tests/rag/refusal` | no, Wave 0 |
+| F-16 | `voice.rerank=200` changes voice only; unprefixed entries parse as today | unit | `npx vitest run tests/rag/config.test.ts` | file exists; cases Wave 0 |
+| F-21 | Chunking report route: 401 and 403 without `admin_users`, report JSON with it | route | `npx vitest run tests/routes/chunking-profiles.test.ts` | no, Wave 0 |
+| F-22 | New trace `counts` and `refusal` fields are numbers and keys only; distinctive query and chunk strings absent from the log line | unit | `npx vitest run tests/rag/trace-log.test.ts` | file exists; cases Wave 0 |
 | D-09 | Rerank HTTP only under `src/lib/rag/rerank/` | script | `node scripts/ci/check-rag-boundary.mjs` | arrives with Phase 2 plan 02-20 |
 | D-28 (a) | Legacy run: gate exit 0 and all paired differences zero | eval smoke | `npm run test-rag -- --out eval/out/smoke` | yes |
 | D-28 (b), (c) | Recommended v2 run against the baseline and against `v2-all-off`; one run per switch | eval | new harness flags for pipeline and overrides | no, Wave 0 |
@@ -1122,7 +1272,12 @@ No test calls a live service. Database tests use PGlite; rerankers use recorded 
 - [ ] Fake reranker module and its purity test
 - [ ] Contracts: `RetrievalParams`, `RefusalThresholds`, `RefusalCalibrationConfig`, `ChunkingProfile`, `RetrievalFilters`; `RagRunOptions.retrieval_overrides`; `RagTrace` additions (`refusal`, `below_threshold` as a refusal reason, rerank scores on candidates, new `kept_by` values); `Category` gains `selective_filter`. Today: `refusal_reason: Literal["no_relevant_context"] | None` (`eval_run.py:101`), `kept_by: Literal["similarity", "name", "image"]` (`eval_run.py:60`), `Category = Literal["multi_turn", "compound", "exact_term", "table", "scanned", "no_answer", "general"]` (`golden.py:8`)
 - [ ] Eval harness flags for a v2 run and per-request overrides; report slices `by_doc_type`, `by_question_kind`, per-leg hit rate, `rerank_skipped_rate`
-- [ ] CI: add the new `.test.mts` files, if any, to the explicit `node --import tsx --test` list in `.github/workflows/pr-smoke.yml`
+- [ ] CI: add the new `.test.mts` files, if any, to the explicit `node --import tsx --test` list in `.github/workflows/pr-smoke.yml`. Today that list is `tests/fixture-edge.test.mts tests/prompt-context.test.mts tests/eval-answer.test.mts` (`pr-smoke.yml:44`). Prefer `tests/**/*.test.ts` for new suites, so vitest collects them without a CI edit
+- [ ] `src/lib/rag/config.ts`: `RAG_PIPELINE=v2`, the D-23 names in `RagEnvInput` and the memo key, the v2 stage names, profile-prefixed timeouts (F-16, P-17)
+- [ ] `src/lib/rag/trace/`: `counts` on stage entries, the numeric `refusal` object in the log payload (F-22)
+- [ ] Tenant ids lower-cased at mint time, unless Phase 3 already did it (F-12)
+- [ ] Golden: cross-language near-miss no-answer items and English answerable test items, after parity (F-20)
+- [ ] `tests/rag/status.test.ts` (exists): add the refusal-precedence cases (F-13)
 
 ## Security Domain
 
@@ -1152,12 +1307,18 @@ No test calls a live service. Database tests use PGlite; rerankers use recorded 
 | Oversized inputs to the function | Denial of service | Limits 0 to 200, cutoff up to 100,000, at most 64 tokens of at most 255 bytes |
 | Tampered thresholds or params | Tampering | Committed files written only by tools, reviewed in pull requests, validated by generated Zod at load |
 | Chunking-profile admin routes without auth | Elevation of privilege | `admin_users` check, fail closed, route tests for 401 and 403 |
+| Tenant key in a non-canonical form (upper-case UUID) | Denial of service (fails closed) | Lower-case at mint time; the SQL check stays strict and raises rather than matching loosely (F-12) |
+| Admin client missing, adapter falls back to anon or to `[]` | Denial of service, and wrong refusals | Throw `RetrievalBackendError`; never fall back (P-19) |
+| Refusal record or rerank scores leaking content into logs | Information disclosure | Numbers and cell keys only in the log payload (F-22) |
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- Executed in this session on PGlite 0.5.17 (PostgreSQL 18.7, pgvector 0.8.7): Pattern 1 SQL against both setup files; `ef_search`, iterative-scan, `halfvec` and planner probes; table-rewrite and trigger probes; HNSW build timings; lexical ranking comparison on the dev split
-- Executed on Node 22.23.5 / ICU 78.3: `Intl.Segmenter` word and sentence probes; `tiktoken` timings
+- Re-executed in this revision on PGlite 0.5.17 (PostgreSQL 18.7, pgvector 0.8.7) through `eval/harness/two-tenant.mts`: Pattern 1 SQL; two-tenant isolation on both legs; upper-case, injected and wrong-mode keys; empty-array and foreign-document filters; token injection; exact cutoff; GUC reset; the reserved `hnsw.` prefix; `anon` / `authenticated` / `service_role`; the `ef_search` cap (39 rows) and the function's 75 rows with the index forced; parser versus verbatim tsvector; `ts_rank_cd` positions
+- Executed in the first draft only (not repeated): the single-tenant run, the `halfvec` profile path, quarantine, the table-rewrite and trigger probes, the iterative-scan recall numbers (F-6), HNSW build timings, the lexical ranking comparison on the dev split, `tiktoken` timings
+- Re-executed on Node 22.23.5 / ICU 78.3: `Intl.Segmenter` word and sentence probes (zh, it), codepoint count
+- Phase 2 code read at HEAD: `src/lib/rag/{types,pipeline,config,deps,index}.ts`, `tenant/{scope,embed,eval}.ts`, `backend/supabase-rpc.ts`, `context/{assemble,fetch-rows}.ts`, `trace/{collector,finish,log}.ts`, `legacy/enhanced-retrieval.ts`, `query/temporal-query-detector.ts`; summaries 02-07 to 02-10
+- Golden counts computed this session from `eval/fixtures/golden.jsonl` with the `assign_split` rule
 - Repository files read: `supabase/multi-tenant-setup.sql` (L140-231, L644-833), `supabase/single-tenant-setup.sql`, `eval/harness/*.mts`, `eval/src/rag_eval/split.py` and `paired.py`, `rag-sidecar/src/rag_sidecar/contracts/golden.py` and `eval_run.py`, `src/lib/reranker-local.ts`, `src/lib/enhanced-rag-retrieval.ts`, `src/app/api/internal/rag/run/route.ts`, `eval/baselines/fixture-baseline.json`, `eval/config/noise.json`
 - `nix/ext/versions.json` in github.com/supabase/postgres (`develop`): packaged pgvector versions
 
@@ -1165,10 +1326,11 @@ No test calls a live service. Database tests use PGlite; rerankers use recorded 
 - https://docs.cohere.com/docs/models, https://docs.cohere.com/reference/rerank, https://docs.cohere.com/docs/rerank-overview, https://docs.cohere.com/docs/reranking-best-practices, https://cohere.com/pricing
 - https://docs.voyageai.com/docs/reranker, https://docs.voyageai.com/reference/reranker-api, https://docs.voyageai.com/docs/pricing, https://blog.voyageai.com/2026/09/30/rerank-3/
 - https://github.com/pgvector/pgvector (README at v0.8.7)
-- https://supabase.com/docs/guides/ai/vector-indexes/hnsw-indexes (this page carries a note addressed to AI agents asking them to append a feedback report; it was treated as data and ignored)
+- https://supabase.com/docs/guides/ai/vector-indexes/hnsw-indexes (read by the first draft; only its technical content is used)
+- Re-fetched in this revision: https://docs.voyageai.com/docs/reranker (models, limits), https://docs.voyageai.com/reference/reranker-api (HTTP `data[]` shape), https://docs.cohere.com/reference/rerank (endpoint, `relevant_spans`, codepoint offsets, error codes)
 - https://www.postgresql.org/docs/current/textsearch-controls.html, https://www.postgresql.org/docs/current/textsearch-parsers.html
 - https://plg.uwaterloo.ca/~gvcormac/cormacksigir09-rrf.pdf, https://aclanthology.org/2024.tacl-1.9/, https://arxiv.org/abs/1705.08500
-- `.planning/phases/03-unified-ingestion-embedding-profiles/03-RESEARCH.md` (uncommitted when read; its proposals are not decisions yet)
+- `.planning/phases/03-unified-ingestion-embedding-profiles/03-RESEARCH.md` (listed as committed in `.planning/STATE.md`; its proposals are not decisions until Phase 3 is planned). Sections read: D-05 to D-08, D-32 to D-38, findings F-7, F-9 and F-13, Pattern 6 (`match_chunks_by_profile`), Pattern 9 (tokenizer v1), the migration plan, "Evaluation Additions"
 
 ### Tertiary (LOW confidence)
 - Web search summaries for Cohere Rerank 5 pricing and latency (openrouter.ai, marktechpost.com, alphasignal.ai listings; two of the pages could not be fetched)
@@ -1177,15 +1339,27 @@ No test calls a live service. Database tests use PGlite; rerankers use recorded 
 ## Metadata
 
 **Confidence breakdown:**
-- Standard stack: HIGH. Nothing new is installed; versions were read from `node_modules` and the lock files.
-- Architecture: HIGH for the SQL function, grants, tokenizer behaviour and harness limits (executed); MEDIUM for Pattern 10 (design only) and for everything that depends on Phase 2 and Phase 3 landing as planned.
-- Pitfalls: HIGH where reproduced (P-1 to P-5, P-7, P-15); MEDIUM for P-6, P-8, P-9 (reasoned, not measured on real data).
-- Vendor facts: MEDIUM. The research seam rates fetched pages LOW (`classify-confidence --provider webfetch`); they are official pages and carry `[CITED]` tags plus a live verification item.
+
+| Area | Level | Reason |
+|------|-------|--------|
+| Standard stack | HIGH | Nothing new is installed; versions read from `node_modules` this session (vitest 5.1.1, tiktoken 1.0.22, zod 3.25.76, supabase-js 2.76.1, PGlite 0.5.17, pglite-pgvector 0.0.18, tsx 4.23.15, ai 6.0.3) |
+| SQL function, grants, tenant checks | HIGH | Re-executed on PGlite with the real multi-tenant schema and the two-tenant fixture |
+| Phase 2 integration (F-12, F-13, F-16, F-22 to F-24) | HIGH | Read from the code at HEAD, with verbatim quotes |
+| Phase 3 integration (columns, profiles, tokenizer v1) | MEDIUM | Phase 3 has research but no plans; stand-in columns were used |
+| Tokenizer behaviour | HIGH | Re-executed on Node 22.23.5 / ICU 78.3; ICU drift is a known risk (P-6) |
+| Rerank API shapes | MEDIUM | Official docs re-fetched; no live key |
+| Rerank latency and pricing | LOW | No primary latency source; v5 per-token prices from secondary sources |
+| Refusal calibration method | MEDIUM | The method (selective classification, exact binomial bound) is standard; fixture counts are too small to show the target (F-19, F-20) |
+| Context assembly | HIGH for the format constraints (read), MEDIUM for gains (lost-in-the-middle is a published effect, unmeasured here) |
+| Parent-child and chunking profiles (Pattern 10) | MEDIUM | Design only, not executed |
+| Pitfalls | HIGH where reproduced (P-1 to P-5, P-7, P-12, P-15, P-16 by code reading); MEDIUM for P-6, P-8, P-9 |
+
+The research seam rates fetched pages LOW (`classify-confidence --provider webfetch`). They are official pages and carry `[CITED]` tags plus a live verification item.
 
 **Process notes:**
 - The research-plan seam routed library questions to Context7, which is not available in this session; official documentation was fetched directly instead.
-- Digests were not written to the research store, because this task was limited to files inside the phase directory.
-- The first run of the lexical ranking probe scored all answerable fixture items, test split included, and printed aggregate hit counts only. It was re-run on the dev split, and only the dev numbers appear above. No setting was chosen from either run.
+- Digests were not written to the research store, because this task was limited to one file inside the phase directory. No git command was run.
+- The first draft's lexical ranking probe first scored all answerable fixture items, test split included, and printed aggregate hit counts only. It was re-run on the dev split, and only the dev numbers appear above. No setting was chosen from either run. This revision read no test-split scores; the golden counts per split are item counts, not outcomes.
 
 **Research date:** 2026-11-23
 **Valid until:** 2026-11-30 for vendor model lists, pricing and API shapes; 2026-12-23 for the SQL, pgvector, tokenizer and harness findings, provided Phase 2 and Phase 3 land the contracts named above.
