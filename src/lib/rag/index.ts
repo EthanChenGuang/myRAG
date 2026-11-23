@@ -33,3 +33,8 @@ export { mintVoiceToken, verifyVoiceToken, defaultVoiceTtlSeconds, VOICE_TOKEN_A
 export type { MintVoiceTokenInput, MintVoiceTokenResult, VerifyVoiceTokenResult, VoiceTokenPayload } from './tenant/voice-token';
 export { resolveVoiceScope, VOICE_SCOPE_HEADER } from './tenant/voice';
 export type { ResolveVoiceScopeInput, VoiceScopeResult } from './tenant/voice';
+export { assembleContext } from './context/assemble';
+export type { AssembleInput, AssembleOutput, AssemblyCandidate, AssemblyDocumentRow } from './context/assemble';
+export { fetchAssemblyRows } from './context/fetch-rows';
+export type { AssemblyRows } from './context/fetch-rows';
+export type { KeptBy, KeptChunk, RagMode, ReferencedState, SourceImage, UsedDocument } from './types';

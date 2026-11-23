@@ -107,9 +107,38 @@ export function fakeEmbedder(options: FakeEmbedderOptions = {}): {
   return { embedder, signals };
 }
 
+export function fakeAssemblyAdmin(): RagDeps['adminClient'] {
+  const client = {
+    from(table: string) {
+      let ids: string[] = [];
+      const builder = {
+        select() {
+          return builder;
+        },
+        in(_column: string, values: string[]) {
+          ids = values;
+          return builder;
+        },
+        abortSignal() {
+          return builder;
+        },
+        then(onFulfilled: (value: unknown) => unknown, onRejected?: (reason: unknown) => unknown) {
+          const data =
+            table === 'documents'
+              ? ids.map((id) => ({ id, filename: `${id}.md`, created_at: null, content: null, metadata: null }))
+              : ids.map((id) => ({ id, metadata: null }));
+          return Promise.resolve({ data, error: null }).then(onFulfilled, onRejected);
+        },
+      };
+      return builder;
+    },
+  };
+  return () => client as never;
+}
+
 export function installDeps(partial: Partial<RagDeps> & { ragEnv?: () => RagEnvInput }): void {
   resetRagConfigForTests();
-  setRagDepsForTests(partial);
+  setRagDepsForTests({ adminClient: fakeAssemblyAdmin(), ...partial });
 }
 
 export function uninstallDeps(): void {
