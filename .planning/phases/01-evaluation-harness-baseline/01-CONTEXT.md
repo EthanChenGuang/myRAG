@@ -48,6 +48,16 @@ Out of this phase: any change to how retrieval or generation behaves (later phas
 - [CI] Q: "Which CI provider and layout?" → Selected: "GitHub Actions: a PR smoke workflow (deterministic metrics on the fixture corpus, schema parity, config check, type-check of new code, characterization tests, sidecar tests) and a nightly workflow (judge metrics, skipped with a notice when no judge key is configured); Node 22, Python 3.12" — workflow files
 - [Config] Q: "How is config drift checked?" → Selected: "A manifest of RAG env vars plus a check-config script over scripts/init-env.js, src/lib/env.ts, scripts/config-server.js and scripts/config-ui/index.html, and .env.local when it exists" — script and JSON
 
+### Resolved after research (user delegated: "use your judgment and continue autonomously")
+- The Supabase-compatible adapter is realized as edge fakes: the eval harness starts a local PostgREST-compatible HTTP shim backed by PGlite and a fake OpenAI-compatible `/v1/embeddings` endpoint (base64 encoding supported), and points `NEXT_PUBLIC_SUPABASE_URL` and `OPENAI_BASE_URL` at them; production retrieval code is not edited in this phase — **Reversibility:** costly — every DB-backed eval and conformance test builds on the shim
+- The chat route's two post-retrieval filters are replicated in `src/lib/rag-eval/legacy-post-filter.ts` (including the current Chinese-query behavior where an empty query term matches every chunk), guarded by a source-sentinel test that fails if the original route code changes; `src/app/api/chat/route.ts` is not edited; extraction happens in Phase 2
+- CI gates on the overall metrics and on each language slice; per-category metrics are reported but do not gate
+- Sidecar `/health` is unauthenticated liveness; `/ready` returns 503 when the shared secret is unset; every other endpoint refuses without a valid secret
+- Pinned judge model: `openai/gpt-5-mini` via OpenRouter at temperature 0 (generator default is Claude, so families differ)
+- `general` category means a plain single-fact lookup
+- The package-legitimacy audit flagged new packages only as too-new / unknown-downloads; the researcher installed and exercised each one, so they are accepted without a separate human checkpoint; exact versions are pinned (`@electric-sql/pglite` 0.5.17 with `@electric-sql/pglite-pgvector` 0.0.18, `vitest` 5.1.1 with `vite` 7.3.8, `json-schema-to-zod` 2.8.1, `deepeval` 4.3.4, `ragas` 0.4.4)
+- `RAG_FINAL_RESULT_COUNT` is missing from `src/lib/env.ts` (route always uses 25); recorded for Phase 2, and the degraded-config demo uses the `maxResults` request option instead
+
 ### Claude's Discretion
 - Exact fixture corpus content and size (synthetic, covering zh/en/it and every category, including tables, scanned-style text and no-answer questions).
 - Report layout and wording for the eval Markdown summary.
