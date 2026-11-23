@@ -122,8 +122,9 @@ async function storeAIResponseAsDocument(
         filename: filename,
         content: content,
         metadata: metadata,
-        user_id: owner.userId,
-        ...(owner.organizationId !== undefined ? { organization_id: owner.organizationId } : {})
+        ...(owner.organizationId !== undefined
+          ? { user_id: owner.userId, organization_id: owner.organizationId }
+          : {})
       }])
       .select()
       .single();
