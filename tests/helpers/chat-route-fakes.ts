@@ -18,38 +18,122 @@ export interface FakeChunkRow {
   metadata?: Record<string, unknown> | null;
 }
 
+export interface SupabaseCall {
+  table: string;
+  method: string;
+  args: unknown[];
+}
+
+export interface SupabaseRpcCall {
+  rpc: string;
+  args: unknown;
+}
+
 export interface SupabaseFakeStore {
   documents: FakeDocumentRow[];
   document_chunks: FakeChunkRow[];
-  [table: string]: object[];
+  calls: Array<SupabaseCall | SupabaseRpcCall>;
+  rpcCalls: SupabaseRpcCall[];
+  reset(): void;
+  [table: string]: object[] | (() => void);
+}
+
+function readColumn(row: Record<string, unknown>, column: string): unknown {
+  const [head, ...path] = column.split('->>');
+  let value: unknown = row[head];
+  for (const key of path) {
+    value = value && typeof value === 'object' ? (value as Record<string, unknown>)[key] : undefined;
+  }
+  return value;
+}
+
+function likeToRegExp(pattern: string): RegExp {
+  const source = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/%/g, '.*').replace(/_/g, '.');
+  return new RegExp(`^${source}$`, 'is');
 }
 
 export function createSupabaseFake() {
-  const store: SupabaseFakeStore = { documents: [], document_chunks: [] };
+  const calls: Array<SupabaseCall | SupabaseRpcCall> = [];
+  const rpcCalls: SupabaseRpcCall[] = [];
+  const store: SupabaseFakeStore = {
+    documents: [],
+    document_chunks: [],
+    calls,
+    rpcCalls,
+    reset() {
+      calls.length = 0;
+      rpcCalls.length = 0;
+    },
+  };
 
   function from(table: string) {
-    const filters: Array<[string, unknown]> = [];
-    const run = (single: boolean) => {
-      const rows = (store[table] ?? []).filter((row) =>
-        filters.every(([column, value]) => (row as Record<string, unknown>)[column] === value),
-      );
+    type Row = Record<string, unknown>;
+    const predicates: Array<(row: Row) => boolean> = [];
+    let limit: number | undefined;
+    const record = (method: string, args: unknown[]) => {
+      calls.push({ table, method, args });
+    };
+    const rowsFor = (): Row[] => {
+      const source = store[table];
+      const all = (Array.isArray(source) ? source : []) as Row[];
+      const matched = all.filter((row) => predicates.every((predicate) => predicate(row)));
+      return limit === undefined ? matched : matched.slice(0, limit);
+    };
+    const run = (single: boolean, nullWhenEmpty = false) => {
+      const rows = rowsFor();
       if (single) {
-        return rows.length > 0
-          ? { data: rows[0], error: null }
-          : { data: null, error: { message: 'No rows found', code: 'PGRST116' } };
+        if (rows.length > 0) return { data: rows[0], error: null };
+        return nullWhenEmpty ? { data: null, error: null } : { data: null, error: { message: 'No rows found', code: 'PGRST116' } };
       }
       return { data: rows, error: null };
     };
-    const builder: Record<string, unknown> = {};
-    for (const method of ['select', 'ilike', 'like', 'limit', 'order', 'in', 'neq', 'gt', 'gte', 'lt', 'lte', 'is', 'not', 'or', 'range']) {
-      builder[method] = () => builder;
+    const builder: Record<string, any> = {};
+    for (const method of ['select', 'like', 'order', 'neq', 'gt', 'gte', 'lt', 'lte', 'not', 'or', 'range']) {
+      builder[method] = (...args: unknown[]) => {
+        record(method, args);
+        return builder;
+      };
     }
     builder.eq = (column: string, value: unknown) => {
-      filters.push([column, value]);
+      record('eq', [column, value]);
+      predicates.push((row) => readColumn(row, column) === value);
       return builder;
     };
-    builder.single = async () => run(true);
-    builder.maybeSingle = async () => run(true);
+    builder.in = (column: string, values: unknown[]) => {
+      record('in', [column, values]);
+      predicates.push((row) => values.includes(readColumn(row, column)));
+      return builder;
+    };
+    builder.is = (column: string, value: unknown) => {
+      record('is', [column, value]);
+      predicates.push((row) => {
+        const actual = readColumn(row, column);
+        return value === null ? actual === null || actual === undefined : actual === value;
+      });
+      return builder;
+    };
+    builder.ilike = (column: string, pattern: string) => {
+      record('ilike', [column, pattern]);
+      const matcher = likeToRegExp(pattern);
+      predicates.push((row) => {
+        const actual = readColumn(row, column);
+        return typeof actual === 'string' && matcher.test(actual);
+      });
+      return builder;
+    };
+    builder.limit = (count: number) => {
+      record('limit', [count]);
+      limit = count;
+      return builder;
+    };
+    builder.single = async () => {
+      record('single', []);
+      return run(true);
+    };
+    builder.maybeSingle = async () => {
+      record('maybeSingle', []);
+      return run(true, true);
+    };
     builder.then = (resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) =>
       Promise.resolve(run(false)).then(resolve, reject);
     return builder;
@@ -57,7 +141,12 @@ export function createSupabaseFake() {
 
   const client = {
     from: vi.fn(from),
-    rpc: vi.fn(async () => ({ data: [], error: null })),
+    rpc: vi.fn(async (name: string, args?: unknown) => {
+      const entry = { rpc: name, args };
+      calls.push(entry);
+      rpcCalls.push(entry);
+      return { data: [], error: null };
+    }),
   };
 
   return { client, store };
