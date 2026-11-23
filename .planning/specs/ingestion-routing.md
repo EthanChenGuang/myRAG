@@ -131,7 +131,13 @@ Each stage is idempotent: running a stage twice yields the same chunks and never
      - `RAG_EMBED_BATCH_MODE=sync|batch_api` (default `sync`). With `batch_api`, OpenAI embeddings go through the Batch API: 50% cheaper, up to 24 h, at most 50,000 inputs per batch. The run splits, submits, polls and resumes.
      - The incremental path always embeds synchronously.
      - Providers without a batch API embed synchronously.
-  5. **Into a new embedding profile:** when the backfill fills a new profile, it writes side by side and goes live only through the EMB-05 activation gate (blue-green).
+  5. **Runner** (`--runner worker|ray`, default `worker`):
+   - `worker`: the sidecar worker pool claims jobs from the ledger with `SKIP LOCKED`. No extra infrastructure.
+   - `ray`: Ray Data reads the queued job ids of the batch and maps the same per-document stage functions (preflight → parse → check → chunk → embed) across a Ray cluster. CPU-heavy stages (Docling layout and OCR) get their own actor pool; API-bound stages (LlamaParse, embeddings) are capped by provider rate limits.
+   - Both runners write through the same ledger functions. Leases, budget checks, dedup, idempotent chunk writes, priority and resume behave the same, and a batch can switch runners mid-run.
+   - Ray is an optional dependency group of the sidecar (`uv sync --extra ray`), excluded from the default image, and its use is recorded on the ledger (`runner`).
+   - It pays off for millions of pages, heavy local OCR, or self-hosted GPU embedding. At ~1M pages the default worker runner is enough.
+6. **Into a new embedding profile:** when the backfill fills a new profile, it writes side by side and goes live only through the EMB-05 activation gate (blue-green).
 
 ## Parser evaluation (DATA-17)
 
@@ -175,6 +181,6 @@ Each document gets a Langfuse ingestion trace, following the OBS-01 conventions.
 |---|---|
 | LlamaIndex `IngestionPipeline` docstore | Duplicates the ledger and DATA-06/07, which live in Postgres. The main app is TypeScript. |
 | Redis + Celery/RQ, SQS | New infrastructure for about 50 documents a day. A Postgres table queue is enough and is testable in PGlite. |
-| Ray Data / `RayIngestionPipeline` | Not needed at this volume. Concurrency comes from the sidecar worker pool. |
+| LlamaIndex `RayIngestionPipeline` | Ray Data is offered directly as the optional `--runner ray` (DATA-16) on our own stage functions; LlamaIndex's pipeline is not used. |
 | PyMuPDF | AGPL-3.0 |
 | Reducto | Out of scope by user decision |

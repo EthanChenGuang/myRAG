@@ -1,13 +1,13 @@
 ---
 gsd_state_version: "1.0"
 milestone: v5.0
-current_phase: 01
-current_phase_name: Evaluation Harness & Baseline
-status: verifying
+current_phase: 02
+current_phase_name: Unified Retrieval Pipeline & Tenant Scope
+status: executing
 stopped_at: Completed 02-01-PLAN.md
 last_updated: "2026-11-23T14:05:01.749Z"
 last_activity: 2026-11-23
-last_activity_desc: Phase 01 execution started
+last_activity_desc: Phase 02 plan 02-01 complete
 state_head: 5776570bcca631c02c22b4bf4b237d78de5e0248
 progress:
   total_phases: 9
@@ -23,14 +23,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-11-22)
 
 **Core value:** Questions the knowledge base can answer get correct answers with accurate citations; questions it cannot answer get an explicit "I don't know". Both are proven by eval scores.
-**Current focus:** Phase 01 — Evaluation Harness & Baseline
+**Current focus:** Phase 02 — Unified Retrieval Pipeline & Tenant Scope (Phase 01 code complete; its human verification items remain open)
 
 ## Current Position
 
-Phase: 01 (Evaluation Harness & Baseline) — EXECUTING
-Plan: 22 of 22
-Status: Phase complete — ready for verification
-Last activity: 2026-11-23 — Phase 01 execution started
+Phase: 02 (Unified Retrieval Pipeline & Tenant Scope) — EXECUTING
+Plan: 1 of 36 complete (02-01)
+Status: Executing sequentially
+Last activity: 2026-11-23 — 02-01 complete
 
 Progress: [░░░░░░░░░░] 0%
 
