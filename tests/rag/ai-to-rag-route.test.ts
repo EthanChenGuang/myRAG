@@ -178,7 +178,7 @@ describe('ai-to-rag route', () => {
     expect(response.status).toBe(200);
     const documents = writesOf('documents');
     expect(documents).toHaveLength(1);
-    expect(documents[0]).toMatchObject({ user_id: USER_A });
+    expect(documents[0]).not.toHaveProperty('user_id');
     expect(documents[0]).not.toHaveProperty('organization_id');
     expect(writesOf('document_chunks')[0]).not.toHaveProperty('organization_id');
   });
