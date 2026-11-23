@@ -30,11 +30,14 @@ const BUCKET_NAME = 'chat-images';
 function generateUniqueFilename(originalName: string): string {
   const timestamp = Date.now();
   const randomSuffix = Math.random().toString(36).substring(2, 8);
-  const extension = originalName.split('.').pop() || '';
-  const nameWithoutExt = originalName.replace(`.${extension}`, '');
+  const rawExtension = originalName.includes('.') ? originalName.split('.').pop() || '' : '';
+  const nameWithoutExt = rawExtension ? originalName.slice(0, -(rawExtension.length + 1)) : originalName;
+  const extension = rawExtension.replace(/[^a-zA-Z0-9]/g, '');
   const sanitizedName = nameWithoutExt.replace(/[^a-zA-Z0-9-_]/g, '_');
 
-  return `${sanitizedName}_${timestamp}_${randomSuffix}.${extension}`;
+  return extension
+    ? `${sanitizedName}_${timestamp}_${randomSuffix}.${extension}`
+    : `${sanitizedName}_${timestamp}_${randomSuffix}`;
 }
 
 /**
@@ -49,6 +52,20 @@ export async function POST(request: NextRequest) {
   try {
     logger.info('Upload API', 'File upload request received');
 
+    let user: { id: string } | null = null;
+    try {
+      const supabase = await createClient();
+      const { data, error: authError } = await supabase.auth.getUser();
+      user = !authError && data?.user?.id ? { id: data.user.id } : null;
+    } catch {
+      logger.error('Upload API', 'Session lookup failed');
+      return NextResponse.json({ error: 'Authentication unavailable' }, { status: 503 });
+    }
+    if (!user) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    }
+    const sessionUser = user;
+
     // Check if supabaseAdmin is available
     if (!supabaseAdmin) {
       logger.error('Upload API', 'Supabase admin client not available');
@@ -61,9 +78,8 @@ export async function POST(request: NextRequest) {
     // Parse FormData
     const formData = await request.formData();
     const files = formData.getAll('files') as File[];
-    const sessionId = formData.get('sessionId') as string;
 
-    logger.info('Upload API', `Processing ${files.length} files for session: ${sessionId || 'unknown'}`);
+    logger.info('Upload API', `Processing ${files.length} files`);
 
     if (files.length === 0) {
       return NextResponse.json(
@@ -91,7 +107,7 @@ export async function POST(request: NextRequest) {
 
         // Generate unique filename
         const uniqueFilename = generateUniqueFilename(file.name);
-        const filePath = sessionId ? `${sessionId}/${uniqueFilename}` : uniqueFilename;
+        const filePath = `${sessionUser.id}/${uniqueFilename}`;
 
         // Convert file to buffer
         const arrayBuffer = await file.arrayBuffer();
@@ -157,38 +173,31 @@ export async function POST(request: NextRequest) {
           return;
         }
 
-        const supabase = await createClient();
-        const { data: { user } } = await supabase.auth.getUser();
+        logger.info('Upload API', `Starting background image processing for user ${sessionUser.id}`);
 
-        if (user) {
-          logger.info('Upload API', `Starting background image processing for user ${user.id}`);
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          const result = uploadResults.find(r => r.originalName === file.name);
 
-          for (let i = 0; i < files.length; i++) {
-            const file = files[i];
-            const result = uploadResults.find(r => r.originalName === file.name);
+          if (result && file.type.startsWith('image/')) {
+            logger.info('Upload API', `Processing image for RAG: ${file.name}`);
 
-            if (result && file.type.startsWith('image/')) {
-              logger.info('Upload API', `Processing image for RAG: ${file.name}`);
+            // Get file buffer again
+            const arrayBuffer = await file.arrayBuffer();
+            const buffer = Buffer.from(arrayBuffer);
 
-              // Get file buffer again
-              const arrayBuffer = await file.arrayBuffer();
-              const buffer = Buffer.from(arrayBuffer);
-
-              // Process in background without awaiting
-              processImageDocument(file.name, buffer, {
-                user_id: user.id,
-                source: 'upload',
-                image_url: result.downloadUrl,
-                image_type: file.type,
-                image_context: imageContext || undefined,
-                source_file_id: result.filePath
-              }).catch(err => {
-                logger.error('Upload API', `Error in background image processing for ${file.name}:`, err);
-              });
-            }
+            // Process in background without awaiting
+            processImageDocument(file.name, buffer, {
+              user_id: sessionUser.id,
+              source: 'upload',
+              image_url: result.downloadUrl,
+              image_type: file.type,
+              image_context: imageContext || undefined,
+              source_file_id: result.filePath
+            }).catch(err => {
+              logger.error('Upload API', `Error in background image processing for ${file.name}:`, err);
+            });
           }
-        } else {
-          logger.warn('Upload API', 'No authenticated user found for image processing - skipping RAG indexing');
         }
       } catch (error) {
         logger.error('Upload API', 'Background image processing failed:', error);
