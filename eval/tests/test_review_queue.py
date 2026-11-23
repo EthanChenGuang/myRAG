@@ -1,5 +1,8 @@
 import base64
 import json
+import re
+import subprocess
+from pathlib import Path
 
 import httpx
 import pytest
@@ -7,7 +10,10 @@ from fake_langfuse import FakeLangfuse
 from pydantic import ValidationError
 from rag_sidecar.contracts.review import ReviewQueueItem
 
+from rag_eval.draft import writer
+from rag_eval.golden_io import load_golden
 from rag_eval.langfuse_api import DEFAULT_BASE_URL, LangfuseApi, LangfuseApiError
+from rag_eval.review_queue import detect_language, main, mask_text
 
 PUBLIC_KEY = "pk-test-placeholder"
 SECRET_KEY = "sk-test-placeholder"
@@ -137,3 +143,247 @@ def test_api_error_status_raises_without_leaking_the_keys():
 
 def test_api_default_base_url_is_langfuse_cloud():
     assert DEFAULT_BASE_URL == "https://cloud.langfuse.com"
+
+
+FROM, TO = "2026-11-01T00:00:00Z", "2026-11-30T00:00:00Z"
+
+
+@pytest.fixture
+def private_root(tmp_path, monkeypatch):
+    repo = tmp_path / "repo"
+    private = repo / "eval" / "golden" / "private"
+    private.mkdir(parents=True)
+    (repo / ".gitignore").write_text("eval/golden/private/\n", encoding="utf-8")
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    monkeypatch.setattr(writer, "REPO_ROOT", repo)
+    monkeypatch.setattr(writer, "PRIVATE_DIR", private)
+    monkeypatch.setattr(writer, "DEFAULT_MANIFEST", private / "split-manifest.json")
+    return private
+
+
+def _configure(monkeypatch, fake: FakeLangfuse) -> None:
+    monkeypatch.setenv("LANGFUSE_BASE_URL", fake.url)
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", PUBLIC_KEY)
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", SECRET_KEY)
+
+
+def _stage_span(n: int, parent: int) -> dict:
+    return {
+        "id": f"{n + 100:016x}",
+        "traceId": f"{parent:032x}",
+        "parentObservationId": f"{parent:016x}",
+        "name": "search",
+        "type": "SPAN",
+        "startTime": f"2026-11-{parent:02d}T10:00:01.000Z",
+        "userId": "tenant-a",
+        "tags": ["review_candidate"],
+        "input": None,
+        "output": None,
+        "metadata": {"latency_ms": "12", "status": json.dumps("ok")},
+    }
+
+
+def _read_queue(private: Path) -> list[dict]:
+    (path,) = sorted((private / "review-queue").glob("*.jsonl"))
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+
+def _write_queue(private: Path, *items: dict, name: str = "queue.jsonl") -> Path:
+    path = private / "review-queue" / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("".join(json.dumps(ReviewQueueItem(**item).model_dump(mode="json")) + "\n" for item in items), encoding="utf-8")
+    return path
+
+
+def test_mask_text_replaces_each_pii_pattern():
+    assert mask_text("write to jane.doe@example.com now") == "write to [EMAIL] now"
+    assert mask_text("IBAN IT60X0542811101000000123456 end") == "IBAN [IBAN] end"
+    assert mask_text("card 4111 1111 1111 1111 ok") == "card [CARD] ok"
+    assert mask_text("call +39 333 123 4567 today") == "call [PHONE] today"
+    assert mask_text("tel 13812345678 ok") == "tel [PHONE] ok"
+    assert mask_text("id 11010519491231002X ok") == "id [ID] ok"
+    assert mask_text("cf RSSMRA85T10A562S and rssmra85t10a562s") == "cf [ID] and [ID]"
+
+
+def test_mask_text_keeps_a_digit_run_that_fails_the_luhn_check():
+    assert mask_text("ref 1234 5678 9012 3456 ok") == "ref 1234 5678 9012 3456 ok"
+    assert mask_text("plain text with no personal data") == "plain text with no personal data"
+
+
+def test_detect_language_picks_zh_it_or_en():
+    assert detect_language("我可以请几天年假") == "zh"
+    assert detect_language("Quanti giorni di ferie posso avere per anno?") == "it"
+    assert detect_language("How many leave days do employees get?") == "en"
+
+
+def test_pull_writes_one_line_per_candidate_under_the_private_queue(private_root, monkeypatch, capsys):
+    root = _obs(1)
+    with FakeLangfuse([root, _stage_span(1, 1), _obs(2)]) as fake:
+        _configure(monkeypatch, fake)
+        assert main(["pull", "--from", FROM, "--to", TO]) == 0
+    (path,) = sorted((private_root / "review-queue").glob("*.jsonl"))
+    assert path.name == "2026-11-01T00-00-00Z_2026-11-30T00-00-00Z.jsonl"
+    rows = _read_queue(private_root)
+    assert [row["observation_id"] for row in rows] == [f"{1:016x}", f"{2:016x}"]
+    first = ReviewQueueItem.model_validate(rows[0])
+    assert first.trace_id == f"{1:032x}"
+    assert first.tenant_key == "tenant-a"
+    assert first.captured_at == "2026-11-01T10:00:00.000Z"
+    assert first.query_masked == "How many leave days do employees get?"
+    assert first.answer_masked == "Twenty days per year."
+    assert first.context_masked == "Employees receive twenty days of leave per year."
+    assert first.model == "generator/model-b"
+    assert first.tags == ["review_candidate"]
+    assert "wrote 2 items" in capsys.readouterr().out
+
+
+def test_pull_follows_the_cursor_across_pages_including_an_empty_one(private_root, monkeypatch):
+    with FakeLangfuse(pages=[[_obs(1), _obs(2)], [], [_obs(3)]]) as fake:
+        _configure(monkeypatch, fake)
+        assert main(["pull", "--from", FROM, "--to", TO]) == 0
+        assert len(fake.observation_requests()) == 3
+    assert [row["trace_id"] for row in _read_queue(private_root)] == [f"{n:032x}" for n in (1, 2, 3)]
+
+
+def test_pull_reads_plain_strings_as_well_as_json_encoded_ones(private_root, monkeypatch):
+    plain = _obs(
+        1,
+        input="Plain question?",
+        output="Plain answer.",
+        metadata={"context": "Plain context.", "model": "generator/model-b"},
+    )
+    with FakeLangfuse([plain]) as fake:
+        _configure(monkeypatch, fake)
+        assert main(["pull", "--from", FROM, "--to", TO]) == 0
+    (row,) = _read_queue(private_root)
+    assert (row["query_masked"], row["answer_masked"], row["context_masked"]) == ("Plain question?", "Plain answer.", "Plain context.")
+
+
+def test_pull_masks_content_that_arrives_unmasked(private_root, monkeypatch):
+    leaky = _obs(
+        1,
+        input=json.dumps("Mail me at jane.doe@example.com or call +39 333 123 4567"),
+        output=json.dumps("Sent to jane.doe@example.com"),
+        metadata={"context": json.dumps("Card 4111 1111 1111 1111 on file"), "model": json.dumps("generator/model-b")},
+    )
+    with FakeLangfuse([leaky]) as fake:
+        _configure(monkeypatch, fake)
+        assert main(["pull", "--from", FROM, "--to", TO]) == 0
+    (row,) = _read_queue(private_root)
+    assert row["query_masked"] == "Mail me at [EMAIL] or call [PHONE]"
+    assert row["answer_masked"] == "Sent to [EMAIL]"
+    assert row["context_masked"] == "Card [CARD] on file"
+    text = json.dumps(row)
+    assert "jane.doe" not in text and "4111" not in text and "333 123" not in text
+
+
+def test_pull_refuses_an_output_outside_the_private_directory(private_root, monkeypatch, tmp_path, capsys):
+    outside = tmp_path / "queue.jsonl"
+    with FakeLangfuse([_obs(1)]) as fake:
+        _configure(monkeypatch, fake)
+        assert main(["pull", "--from", FROM, "--to", TO, "--out", str(outside)]) == 6
+        assert fake.requests == []
+    assert not outside.exists()
+    assert "eval/golden/private" in capsys.readouterr().err
+    with FakeLangfuse([_obs(1)]) as fake:
+        _configure(monkeypatch, fake)
+        assert main(["pull", "--from", FROM, "--to", TO, "--out-dir", str(tmp_path)]) == 6
+    assert list(tmp_path.glob("*.jsonl")) == []
+
+
+def test_pull_without_keys_prints_a_notice_and_exits_zero(private_root, monkeypatch, capsys):
+    with FakeLangfuse([_obs(1)]) as fake:
+        monkeypatch.setenv("LANGFUSE_BASE_URL", fake.url)
+        assert main(["pull", "--from", FROM, "--to", TO]) == 0
+        monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", PUBLIC_KEY)
+        assert main(["pull", "--from", FROM, "--to", TO]) == 0
+        assert fake.requests == []
+    out = capsys.readouterr().out
+    assert out.count("::notice::langfuse keys not configured, skipping review queue") == 2
+    assert not (private_root / "review-queue").exists()
+
+
+def test_pull_never_prints_the_keys_and_reports_an_api_failure(private_root, monkeypatch, capsys):
+    with FakeLangfuse([_obs(1)]) as fake:
+        fake.observations_status = 500
+        _configure(monkeypatch, fake)
+        assert main(["pull", "--from", FROM, "--to", TO]) == 4
+    captured = capsys.readouterr()
+    assert "500" in captured.err
+    assert PUBLIC_KEY not in captured.out + captured.err and SECRET_KEY not in captured.out + captured.err
+    assert not (private_root / "review-queue").exists()
+
+
+def test_pull_rejects_a_window_that_ends_before_it_starts(private_root, monkeypatch):
+    with FakeLangfuse([_obs(1)]) as fake:
+        _configure(monkeypatch, fake)
+        assert main(["pull", "--from", TO, "--to", FROM]) == 2
+        assert main(["pull", "--from", "yesterday", "--to", TO]) == 2
+        assert fake.requests == []
+
+
+def test_promote_writes_a_draft_production_item_under_the_private_directory(private_root):
+    queue = _write_queue(private_root, _queue_item())
+    out = private_root / "promoted.jsonl"
+    assert main(["promote", _queue_item()["trace_id"], "--queue", str(queue), "--out", str(out)]) == 0
+    (item,) = load_golden(out)
+    assert item.provenance == "production"
+    assert item.review_status == "draft"
+    assert item.question == "How many leave days do employees get?"
+    assert item.language == "en"
+    assert item.gold_evidence == []
+    assert re.fullmatch(r"prod-en-[0-9a-f]{10}", item.id)
+    assert item.split in ("dev", "test")
+    assert json.loads((private_root / "split-manifest.json").read_text(encoding="utf-8"))["assignments"][item.id] == item.split
+
+
+def test_promote_finds_the_item_in_the_default_queue_and_writes_the_default_file(private_root):
+    _write_queue(private_root, _queue_item(), name="a.jsonl")
+    _write_queue(private_root, _queue_item(trace_id="f" * 32, observation_id="f" * 16, query_masked="Quanti giorni di ferie posso avere per anno?"), name="b.jsonl")
+    assert main(["promote", "f" * 32]) == 0
+    (item,) = load_golden(private_root / "promoted.jsonl")
+    assert item.language == "it" and item.id.startswith("prod-it-")
+
+
+def test_promote_honours_the_stored_language_and_an_explicit_override(private_root):
+    _write_queue(private_root, _queue_item(language="zh", query_masked="How many leave days do employees get?"))
+    assert main(["promote", _queue_item()["trace_id"]]) == 0
+    assert load_golden(private_root / "promoted.jsonl")[0].language == "zh"
+    out = private_root / "override.jsonl"
+    assert main(["promote", _queue_item()["trace_id"], "--language", "it", "--out", str(out)]) == 0
+    assert load_golden(out)[0].language == "it"
+
+
+def test_promote_twice_keeps_one_item(private_root, capsys):
+    _write_queue(private_root, _queue_item())
+    assert main(["promote", _queue_item()["trace_id"]]) == 0
+    assert main(["promote", _queue_item()["trace_id"]]) == 0
+    assert len(load_golden(private_root / "promoted.jsonl")) == 1
+    assert "already" in capsys.readouterr().out
+
+
+def test_promote_an_unknown_id_or_a_blank_query_exits_two(private_root, capsys):
+    _write_queue(private_root, _queue_item(), _queue_item(trace_id="e" * 32, observation_id="e" * 16, query_masked="   "))
+    assert main(["promote", "0" * 32]) == 2
+    assert main(["promote", "e" * 32]) == 2
+    assert not (private_root / "promoted.jsonl").exists()
+    assert "not found" in capsys.readouterr().err
+
+
+def test_promote_refuses_an_output_outside_the_private_directory(private_root, tmp_path, capsys):
+    queue = _write_queue(private_root, _queue_item())
+    outside = tmp_path / "promoted.jsonl"
+    assert main(["promote", _queue_item()["trace_id"], "--queue", str(queue), "--out", str(outside)]) == 6
+    assert not outside.exists()
+    assert "eval/golden/private" in capsys.readouterr().err
+
+
+def test_private_files_stay_ignored_by_git(private_root, monkeypatch):
+    with FakeLangfuse([_obs(1)]) as fake:
+        _configure(monkeypatch, fake)
+        assert main(["pull", "--from", FROM, "--to", TO]) == 0
+    assert main(["promote", f"{1:032x}"]) == 0
+    status = subprocess.run(
+        ["git", "status", "--porcelain", "eval/golden/private"], cwd=private_root.parents[2], capture_output=True, text=True, check=True
+    )
+    assert status.stdout.strip() == ""
