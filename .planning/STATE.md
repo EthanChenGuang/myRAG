@@ -4,16 +4,16 @@ milestone: v5.0
 current_phase: 01
 current_phase_name: Evaluation Harness & Baseline
 status: executing
-stopped_at: Completed 01-09-PLAN.md
-last_updated: "2026-11-23T10:03:01.008Z"
+stopped_at: Completed 01-10-PLAN.md
+last_updated: "2026-11-23T10:07:26.770Z"
 last_activity: 2026-11-23
 last_activity_desc: Phase 01 execution started
-state_head: 657f25079360402488a5da5249094a5d96828482
+state_head: 80124d0dbdae613ae1e6be07308f8898d5d3dfb3
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 22
-  completed_plans: 9
+  completed_plans: 10
 ---
 
 # Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-11-22)
 ## Current Position
 
 Phase: 01 (Evaluation Harness & Baseline) — EXECUTING
-Plan: 10 of 22
+Plan: 11 of 22
 Status: Ready to execute
 Last activity: 2026-11-23 — Phase 01 execution started
 
@@ -65,6 +65,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P07 | 12min | 2 tasks | 6 files |
 | Phase 01 P08 | 10min | 2 tasks | 8 files |
 | Phase 01 P09 | 8min | 2 tasks | 6 files |
+| Phase 01 P10 | 15min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -89,6 +90,7 @@ Recent decisions affecting current work:
 - [Phase 01]: 01-06: freeze_splits overrides split of new ids with the rule-assigned split and raises only when an existing manifest id disagrees; manifest written only when new ids are added
 - [Phase 01]: 01-07: English fixture corpus kept plain and untuned; image document loads as warehouse-floorplan.png (filename from fixture-meta)
 - [Phase 01]: 01-09: vitest only collects tests/**/*.test.ts; node:test .mts files stay outside npm test
+- [Phase 01]: 01-10: request_options normalized with nulls before hashing; run_config_hash excludes golden_path, run_id, created_at, git_sha
 
 ### Pending Todos
 
@@ -115,6 +117,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-23T10:03:00.933Z
-Stopped at: Completed 01-09-PLAN.md
+Last session: 2026-11-23T10:07:26.704Z
+Stopped at: Completed 01-10-PLAN.md
 Resume file: None
