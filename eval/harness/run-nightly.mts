@@ -40,10 +40,17 @@ async function main(): Promise<number> {
     throw new Error(`--deployment-mode must be single-tenant or multi-tenant, got ${String(deploymentMode)}`);
   }
 
+  const goldenPath = path.resolve(values.golden as string);
+  const goldenCode = validateWithPydantic('GoldenItem', '--jsonl', goldenPath);
+  if (goldenCode !== 0) {
+    console.error('[Eval Harness] golden file failed Pydantic validation; nothing was run');
+    return 2;
+  }
+
   let result;
   try {
     result = await runEval({
-      goldenPath: path.resolve(values.golden as string),
+      goldenPath,
       corpusDir: path.resolve(values.corpus as string),
       outDir: path.resolve(values.out as string),
       deploymentMode: deploymentMode as DeploymentMode,

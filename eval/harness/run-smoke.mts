@@ -69,6 +69,10 @@ async function main(): Promise<number> {
 
   const goldenPath = path.resolve(values.golden as string);
   const outDir = path.resolve(values.out as string);
+  if (runPython('rag_sidecar.contracts.validate', ['--model', 'GoldenItem', '--jsonl', goldenPath]) !== 0) {
+    console.error('[Eval Harness] golden file failed Pydantic validation; nothing was run');
+    return 2;
+  }
   const result = await runEval({
     goldenPath,
     corpusDir: path.resolve(values.corpus as string),
