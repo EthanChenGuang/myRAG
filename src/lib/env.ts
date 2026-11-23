@@ -162,6 +162,10 @@ class EnvironmentConfig {
       RAG_SIMILARITY_THRESHOLD: process.env.RAG_SIMILARITY_THRESHOLD,
       LLAMACLOUD_MULTIMODAL_PARSING: process.env.LLAMACLOUD_MULTIMODAL_PARSING || 'true',
       OPENAI_EMBEDDING_MODEL: process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small',
+      RAG_EVAL_ENDPOINT_ENABLED: process.env.RAG_EVAL_ENDPOINT_ENABLED || 'false',
+      RAG_EVAL_SECRET: process.env.RAG_EVAL_SECRET || '',
+      RAG_SIDECAR_URL: process.env.RAG_SIDECAR_URL || '',
+      RAG_SIDECAR_SECRET: process.env.RAG_SIDECAR_SECRET || '',
 
       // Embed widget server configuration
       EMBED_RATE_LIMIT: process.env.EMBED_RATE_LIMIT || '100',
