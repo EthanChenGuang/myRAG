@@ -203,9 +203,9 @@ async function discoverTools(server: McpServer): Promise<{ success: boolean; too
 }
 
 // POST /api/mcp/servers/[id]/test - Test server connection and discover tools
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   try {
-    const { id } = params;
     const body = await req.json();
     const { action } = body;
     
@@ -256,7 +256,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       );
     }
   } catch (error) {
-    console.error(`MCP Server Test API: Error in action for server ${params.id}:`, error);
+    console.error(`MCP Server Test API: Error in action for server ${id}:`, error);
     return NextResponse.json(
       { error: 'Failed to perform server action' },
       { status: 500 }

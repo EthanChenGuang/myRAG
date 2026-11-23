@@ -4,10 +4,11 @@ import { Language } from '@/translations';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { lang: string } }
+  { params }: { params: Promise<{ lang: string }> }
 ) {
   try {
-    const lang = params.lang as Language;
+    const { lang: langParam } = await params;
+    const lang = langParam as Language;
     
     // Validate language code
     const validLanguages: Language[] = ['en', 'es', 'pt', 'fr', 'de', 'ru', 'lt', 'zh', 'ja', 'ko', 'hi', 'ar'];

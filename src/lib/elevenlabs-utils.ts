@@ -140,7 +140,7 @@ class ElevenLabsService {
       }
 
       // Combine all chunks into a single Blob
-      return new Blob(chunks, { type: 'audio/mpeg' });
+      return new Blob(chunks.map(chunk => new Uint8Array(chunk)), { type: 'audio/mpeg' });
     } finally {
       reader.releaseLock();
     }

@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { env } from '@/lib/env';
-import { createAdminClient } from '@/lib/supabase/server';
-import { cookies } from 'next/headers';
 import fs from 'fs';
 import path from 'path';
 
@@ -243,7 +241,7 @@ export async function POST(request: NextRequest) {
       groqModels.forEach((model, i) => validateModel(model, i, 'Groq'));
     } catch (validationError) {
       return NextResponse.json(
-        { error: validationError.message },
+        { error: validationError instanceof Error ? validationError.message : String(validationError) },
         { status: 400 }
       );
     }

@@ -248,9 +248,9 @@ async function discoverTools(server: McpServer): Promise<{ success: boolean; too
 }
 
 // GET /api/mcp/servers/[id] - Get specific server
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   try {
-    const { id } = params;
     console.log(`MCP Server API: Fetching server with ID: ${id}`);
     
     const customServers = await loadCustomServers();
@@ -271,7 +271,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       }
     });
   } catch (error) {
-    console.error(`MCP Server API: Error fetching server ${params.id}:`, error);
+    console.error(`MCP Server API: Error fetching server ${id}:`, error);
     return NextResponse.json(
       { error: 'Failed to fetch MCP server' },
       { status: 500 }
@@ -280,9 +280,9 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 }
 
 // PUT /api/mcp/servers/[id] - Update server
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   try {
-    const { id } = params;
     const body = await req.json();
     console.log(`MCP Server API: Updating server with ID: ${id}`);
     
@@ -325,7 +325,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
       }
     });
   } catch (error: any) {
-    console.error(`MCP Server API: Error updating server ${params.id}:`, error);
+    console.error(`MCP Server API: Error updating server ${id}:`, error);
     
     if (error instanceof z.ZodError) {
       return NextResponse.json(
@@ -342,9 +342,9 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 }
 
 // DELETE /api/mcp/servers/[id] - Delete server
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   try {
-    const { id } = params;
     console.log(`MCP Server API: Deleting server with ID: ${id}`);
     
     // Built-in servers cannot be deleted
@@ -382,7 +382,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
       }
     });
   } catch (error) {
-    console.error(`MCP Server API: Error deleting server ${params.id}:`, error);
+    console.error(`MCP Server API: Error deleting server ${id}:`, error);
     return NextResponse.json(
       { error: 'Failed to delete MCP server' },
       { status: 500 }
@@ -391,9 +391,9 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
 }
 
 // POST /api/mcp/servers/[id]/test - Test server connection
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   try {
-    const { id } = params;
     const body = await req.json();
     const { action } = body;
     
@@ -425,7 +425,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       );
     }
   } catch (error) {
-    console.error(`MCP Server API: Error in action for server ${params.id}:`, error);
+    console.error(`MCP Server API: Error in action for server ${id}:`, error);
     return NextResponse.json(
       { error: 'Failed to perform server action' },
       { status: 500 }

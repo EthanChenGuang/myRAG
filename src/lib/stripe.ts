@@ -11,7 +11,8 @@ const getStripe = (): Stripe => {
       throw new Error('STRIPE_SECRET_KEY is not defined');
     }
     stripe = new Stripe(env.STRIPE_SECRET_KEY, {
-      apiVersion: '2025-01-27.acacia'
+      // Pinned account API version is intentional; the installed typings only know a newer one
+      apiVersion: '2025-01-27.acacia' as Stripe.LatestApiVersion
     });
   }
   return stripe;

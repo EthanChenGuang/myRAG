@@ -14,7 +14,7 @@ import { logger } from '@/lib/logger';
  */
 export async function POST(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     requireMultiTenant();
@@ -28,7 +28,7 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const orgId = params.id;
+    const { id: orgId } = await params;
 
     // Validate organization ID
     if (!orgId || typeof orgId !== 'string') {

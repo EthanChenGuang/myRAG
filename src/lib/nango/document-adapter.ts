@@ -24,13 +24,15 @@ export async function processDocumentWithMetadata(
   logger.debug('Nango', `Processing document with metadata: ${filename}`);
 
   // Use the existing document processor with all metadata including user_id
-  const documentId = await processDocument(filename, buffer, {
+  // Stored sources include 'nango' although the processor's declared union omits it
+  const metadata = {
     user_id: options.userId,
     source: options.source || 'nango',
     source_provider: options.sourceProvider,
     source_file_id: options.sourceFileId,
     source_connection_id: options.sourceConnectionId,
-  });
+  } as Parameters<typeof processDocument>[2];
+  const documentId = await processDocument(filename, buffer, metadata);
 
   logger.debug('Nango', `Processed document ${documentId} with source metadata`);
   return documentId;

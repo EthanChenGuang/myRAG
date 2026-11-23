@@ -126,7 +126,7 @@ Respond with ONLY the display name, nothing else.`;
           
           if (extractedName) {
             // Determine type based on the extraction
-            const type = extractedName.includes(' ') || 
+            const type: 'person' | 'company' = extractedName.includes(' ') || 
                          extractedName.toLowerCase().includes('corp') ||
                          extractedName.toLowerCase().includes('inc') ||
                          extractedName.toLowerCase().includes('company') 
