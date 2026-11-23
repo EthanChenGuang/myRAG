@@ -4,16 +4,16 @@ milestone: v5.0
 current_phase: 01
 current_phase_name: Evaluation Harness & Baseline
 status: executing
-stopped_at: Completed 01-08-PLAN.md
-last_updated: "2026-11-23T06:42:58.065Z"
+stopped_at: Completed 01-09-PLAN.md
+last_updated: "2026-11-23T10:03:01.008Z"
 last_activity: 2026-11-23
 last_activity_desc: Phase 01 execution started
-state_head: a05ceae458d98ac3cfb452f9aaac2a829a025a2f
+state_head: 657f25079360402488a5da5249094a5d96828482
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 22
-  completed_plans: 8
+  completed_plans: 9
 ---
 
 # Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-11-22)
 ## Current Position
 
 Phase: 01 (Evaluation Harness & Baseline) — EXECUTING
-Plan: 9 of 22
+Plan: 10 of 22
 Status: Ready to execute
 Last activity: 2026-11-23 — Phase 01 execution started
 
@@ -64,6 +64,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P06 | 12min | 2 tasks | 9 files |
 | Phase 01 P07 | 12min | 2 tasks | 6 files |
 | Phase 01 P08 | 10min | 2 tasks | 8 files |
+| Phase 01 P09 | 8min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -87,6 +88,7 @@ Recent decisions affecting current work:
 - [Phase 01]: 01-05: NoiseConfig.metrics defaults to the five report metrics (false_refusal_rate lower); JudgeConfig.temperature required and bounded ge=0 le=0 so Zod enforces the pin
 - [Phase 01]: 01-06: freeze_splits overrides split of new ids with the rule-assigned split and raises only when an existing manifest id disagrees; manifest written only when new ids are added
 - [Phase 01]: 01-07: English fixture corpus kept plain and untuned; image document loads as warehouse-floorplan.png (filename from fixture-meta)
+- [Phase 01]: 01-09: vitest only collects tests/**/*.test.ts; node:test .mts files stay outside npm test
 
 ### Pending Todos
 
@@ -113,6 +115,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-23T06:42:58.025Z
-Stopped at: Completed 01-08-PLAN.md
+Last session: 2026-11-23T10:03:00.933Z
+Stopped at: Completed 01-09-PLAN.md
 Resume file: None
