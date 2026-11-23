@@ -45,12 +45,13 @@ describe('scheduleAfterResponse', () => {
     afterMock.mockReset();
   });
 
-  test('hands the task to after() inside a request scope', () => {
+  test('hands the task to after() inside a request scope', async () => {
     const task = vi.fn(async () => undefined);
     scheduleAfterResponse(task);
     expect(afterMock).toHaveBeenCalledTimes(1);
-    expect(afterMock.mock.calls[0][0]).toBe(task);
     expect(task).not.toHaveBeenCalled();
+    await afterMock.mock.calls[0][0]();
+    expect(task).toHaveBeenCalledTimes(1);
   });
 
   test('runs the task detached when after() throws outside a request scope', async () => {
