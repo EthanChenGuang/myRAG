@@ -89,7 +89,7 @@ Plans:
   3. With `RAG_PIPELINE=legacy` and every new switch off, the eval smoke tier reproduces the Phase 1 baseline within its noise band, running on Node.js 22, which `engines`, the docs and CI enforce.
   4. Fault-injection tests show that a failing or timed-out stage is logged and surfaced as `error` or `degraded`, never as "information not available"; that only a verified `empty` result triggers the strict-mode refusal; that each stage can be switched off or skipped on timeout; and that aborting a request cancels in-flight stages.
   5. All three entry points share one context-assembly step (dedupe, grouping, source labels, links section, images), and a query-counting test shows its database query count stays fixed as the number of returned chunks grows.
-  6. A production request logs one `[RAG Trace]` line with per-stage latency and candidate counts (switchable, no per-token logging), and eval reports show p50/p95 latency per stage against the documented text-chat and voice budgets.
+  6. A production request produces one Langfuse trace with a span per stage (latency, candidate counts), sent asynchronously without delaying the answer, with a `[RAG Trace]` log line as the fallback when Langfuse is off or unreachable (tested with a fake Langfuse endpoint), and eval reports show p50/p95 latency per stage against the documented text-chat and voice budgets.
 **Live verification**: Check tenant resolution against a real Supabase project with personal and organization memberships in both single-tenant and multi-tenant modes; run a voice session with the running `voice-agent/` using the signed token; repeat the legacy-parity check on the real golden set.
 **Plans**: TBD
 

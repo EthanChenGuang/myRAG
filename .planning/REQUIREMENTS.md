@@ -101,11 +101,11 @@ All requirements are written so they can be checked. "Behind a switch" means an 
 - [ ] **ADM-01**: Every new provider and switch can be configured in the Config UI, with masked secrets, a Test-connection button and an index-compatibility warning when the active embedding profile and backend don't match
 - [ ] **ADM-02**: A full regression on the locked test split sets the final defaults for backend, embedding profile and reranker, and the decision is recorded with the numbers
 - [ ] **ADM-03**: `AGENTS.md`, `.env` templates and setup docs describe the sidecar, providers, switches, sync and eval workflow
-- [ ] **ADM-04**: A vendor data-flow inventory lists which content goes to which external service (Vectara, Cohere, Voyage, DeepInfra, Weaviate, Qdrant, Anthropic, LlamaCloud)
+- [ ] **ADM-04**: A vendor data-flow inventory lists which content goes to which external service (Vectara, Cohere, Voyage, DeepInfra, Weaviate, Qdrant, Anthropic, LlamaCloud, Langfuse)
 
 ### Observability & Latency (OBS, LAT)
 
-- [ ] **OBS-01**: Every pipeline stage (query transforms, each retrieval path, fusion, rerank, context assembly, generation, groundedness) records its latency and candidate count on production requests, in one structured `[RAG Trace]` log line per request (switchable, no per-token logging) whose fields match the eval trace's `stage_latency_ms`
+- [ ] **OBS-01**: Every pipeline stage (query transforms incl. the rewrite gate, each retrieval path, fusion, rerank, context assembly, generation, groundedness) is traced with Langfuse (user decision 2026-11-23): one trace per request with a span per stage carrying latency, candidate count and the rule IDs/transforms chosen, linked by `traceId` to the chat message; self-hosted or Langfuse Cloud via `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` / `LANGFUSE_BASE_URL` (mirrored to the five config locations), switchable, sampled, flushed asynchronously so it never blocks or delays the response, tagged with tenant ID but with query/chunk text masked unless explicitly enabled; when Langfuse is off or unreachable a structured `[RAG Trace]` log line with the same fields is the fallback; span fields match the eval trace `stage_latency_ms`
 - [ ] **OBS-02**: Text chat and voice each have an end-to-end latency budget (p50/p95); eval reports show per-stage latency distributions, and later phases must stay within budget
 - [ ] **LAT-01**: Retrieval paths (query variants, vector and lexical) run in parallel; candidates are deduplicated by chunk ID (and parent ID) before rerank, and the rerank input is capped (default chosen by the RNK-02 sweep, between 50 and 100)
 - [ ] **LAT-02**: Rerank has a fast and a quality tier (Cohere `rerank-v5.0-fast` / Voyage `rerank-3-lite` vs the pro models), chosen per entry point (text chat vs voice)
@@ -156,7 +156,7 @@ All requirements are written so they can be checked. "Behind a switch" means an 
 
 | Feature | Reason |
 |---------|--------|
-| Third-ranked products (Reducto, DSPy, Gemini Embedding, Elasticsearch/OpenSearch, Qwen3-Reranker, Galileo Luna-2, Langfuse) | User chose the top two per layer |
+| Third-ranked products (Reducto, DSPy, Gemini Embedding, Elasticsearch/OpenSearch, Qwen3-Reranker, Galileo Luna-2) | User chose the top two per layer (Langfuse was later chosen for tracing, see OBS-01) |
 | Retiring pgvector | User wants it kept permanently |
 | Self-hosted GPU for Qwen3-Embedding-8B | User chose hosted inference |
 | Blocking answers on HHEM scores | This milestone only records and warns |

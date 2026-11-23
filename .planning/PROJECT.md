@@ -74,7 +74,7 @@ myRAG 是一个基于 Next.js + Supabase 的 AI 聊天产品，核心是从用�
 
 ### Out of Scope
 
-- 每层第三名的方案（Reducto、DSPy、Gemini Embedding、Elasticsearch/OpenSearch、Qwen3-Reranker、Galileo Luna-2、Langfuse）— 用户只选每层前两名
+- 每层第三名的方案（Reducto、DSPy、Gemini Embedding、Elasticsearch/OpenSearch、Qwen3-Reranker、Galileo Luna-2）— 用户只选每层前两名（Langfuse 后来被选为耗时追踪工具，见 Key Decisions）
 - 下线 pgvector — 用户要求长期保留，与 Weaviate、Qdrant 并存
 - 自己部署 GPU 跑 Qwen3-Embedding-8B — 用户选择第三方托管推理
 - 根据 HHEM 分数拦截回答 — 这一期只记录和提示
@@ -109,6 +109,7 @@ myRAG 是一个基于 Next.js + Supabase 的 AI 聊天产品，核心是从用�
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
+| 耗时追踪用 Langfuse：每次请求一个 trace，每一步一个 span（耗时、候选数、改写规则）；异步发送、可采样、可关闭，默认遮蔽问题和 chunk 原文；Langfuse 不可用时退回结构化 `[RAG Trace]` 日志 | 用户决定（2026-11-23）；先测量再优化 | — Pending |
 | 每层取排名前两名：功能互补的一起用，功能相同的做成可切换 provider | 用户要求；可切换便于用评估比较 | — Pending |
 | pgvector、Weaviate、Qdrant 三个检索后端并存，pgvector 长期保留并作为默认 | 用户要求保留 pgvector；默认是否改由评估决定 | — Pending |
 | Supabase 是文档、权限、租户的唯一数据源，向量同步到外部向量库 | 保住现有 RLS 和多租户模型 | — Pending |

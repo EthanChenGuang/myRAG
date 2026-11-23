@@ -114,6 +114,7 @@ function needsRewrite(q: string, ctx: { hasHistory: boolean; kbLang?: Lang; now:
 
 - **Protected tokens.** Every rewritten or translated query must contain every protected token verbatim. A variant that drops or alters one is discarded and logged, and the original is used.
 - **Variant limit.** The router keeps at most 2 variants by default (LAT-03).
+- **Tracing.** The rule IDs, chosen transforms and gate latency are recorded on the query-transform span in Langfuse (OBS-01).
 - **Budget.** The gate itself must stay under 1 ms. A transform that exceeds its budget is skipped (QRY-05).
 
 ## Required tests (fixture table, zh/en/it each)
