@@ -210,7 +210,7 @@ async function fetchWithRetry(url: string, options: any, maxRetries = 3): Promis
       
     } catch (error) {
       lastError = error as Error;
-      console.error(`💥 Attempt ${attempt} failed:`, error.message);
+      console.error(`💥 Attempt ${attempt} failed:`, error instanceof Error ? error.message : error);
       
       if (attempt < maxRetries) {
         const delay = Math.pow(2, attempt) * 1000;
