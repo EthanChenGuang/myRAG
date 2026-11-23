@@ -184,6 +184,32 @@ def test_data_mismatch_exits_2_but_config_difference_does_not(tmp_path):
     assert run(_report(request_options={"generator_model": "openai/gpt-4.1-mini"})) == 2
 
 
+def test_degrade_difference_is_judged_by_metrics_not_rejected_as_a_mismatch(tmp_path):
+    baseline_path = tmp_path / "baseline.json"
+    baseline_path.write_text(_baseline().model_dump_json(), encoding="utf-8")
+
+    def run(report: EvalReport) -> int:
+        report_path = tmp_path / "report.json"
+        report_path.write_text(report.model_dump_json(), encoding="utf-8")
+        return main(
+            ["--report", str(report_path), "--baseline", str(baseline_path), "--noise", str(NOISE_PATH), "--out", str(tmp_path / "out")]
+        )
+
+    degraded = {"degrade": "drop_top_candidate"}
+    assert evaluate_gate(_report(request_options=degraded), _baseline(), _noise()).mismatches == []
+    assert run(_report(request_options=degraded)) == 0
+    assert run(_report(request_options={**degraded, "max_results": 1})) == 0
+    assert run(_report(request_options=degraded, overall=_slice_values(mrr=0.4))) == 10
+    assert run(_report(request_options={**degraded, "organization_id": "11111111-1111-4111-8111-111111111111"})) == 2
+
+
+def test_identity_label_names_both_excluded_fields():
+    report = _report(golden_sha256="x" * 64, request_options={"organization_id": "11111111-1111-4111-8111-111111111111"})
+    result = evaluate_gate(report, _baseline(), _noise())
+    label = next(problem for problem in result.mismatches if problem.startswith("request_options"))
+    assert label.startswith("request_options (excluding max_results and degrade) differs")
+
+
 def test_invalid_input_exits_2(tmp_path):
     missing = tmp_path / "missing.json"
     assert main(["--report", str(missing), "--baseline", str(missing), "--noise", str(NOISE_PATH), "--out", str(tmp_path / "out")]) == 2
