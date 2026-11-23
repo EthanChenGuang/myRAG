@@ -1,7 +1,21 @@
+import { RAG_MODE_CONFIGS } from '@/lib/rag-mode';
+
 export function createEnhancedRAGPrompt(
-  _basePrompt: string,
-  _context: string,
-  _mode: 'strict' | 'balanced' | 'flexible' | 'bypass' = 'strict',
+  basePrompt: string,
+  context: string,
+  mode: 'strict' | 'balanced' | 'flexible' | 'bypass' = 'strict',
 ): string {
-  return '';
+  if (mode === 'bypass') {
+    return basePrompt.replace('{{context}}', '').replace(/Context:\s*$/i, '').trim();
+  }
+
+  const modeConfig = RAG_MODE_CONFIGS[mode];
+  if (!modeConfig || !modeConfig.systemPromptWrapper) {
+    console.warn(`[RAG MODE] Unknown mode "${mode}", falling back to strict`);
+    return createEnhancedRAGPrompt(basePrompt, context, 'strict');
+  }
+
+  const cleanedBasePrompt = basePrompt.replace('{{context}}', '').replace(/Context:\s*$/i, '').trim();
+
+  return modeConfig.systemPromptWrapper.replace('{{context}}', context).replace('{{basePrompt}}', cleanedBasePrompt);
 }

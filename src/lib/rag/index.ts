@@ -38,3 +38,5 @@ export type { AssembleInput, AssembleOutput, AssemblyCandidate, AssemblyDocument
 export { fetchAssemblyRows } from './context/fetch-rows';
 export type { AssemblyRows } from './context/fetch-rows';
 export type { KeptBy, KeptChunk, RagMode, ReferencedState, SourceImage, UsedDocument } from './types';
+export { createEnhancedRAGPrompt } from './generation/prompt';
+export { knowledgeBaseUnavailableMessage } from './generation/messages';
