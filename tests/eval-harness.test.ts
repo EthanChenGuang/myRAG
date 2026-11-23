@@ -8,7 +8,7 @@ import { NextRequest } from 'next/server';
 import type { InProcessEval, RunEvalResult } from '../eval/harness/run-eval.mts';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const GOLDEN_PATH = path.join(REPO_ROOT, 'eval/fixtures/golden.jsonl');
+const FULL_GOLDEN_PATH = path.join(REPO_ROOT, 'eval/fixtures/golden.jsonl');
 const CORPUS_DIR = path.join(REPO_ROOT, 'eval/fixtures/corpus');
 const ROUTE_PATH = '/api/internal/rag/run';
 const TRACER_ITEM_ID = 'en-general-001';
@@ -29,6 +29,19 @@ interface Trace {
 }
 
 const tmpDirs: string[] = [];
+
+const TRACER_GOLDEN_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'eval-harness-tracer-'));
+tmpDirs.push(TRACER_GOLDEN_DIR);
+const GOLDEN_PATH = path.join(TRACER_GOLDEN_DIR, 'tracer.jsonl');
+fs.writeFileSync(
+  GOLDEN_PATH,
+  fs
+    .readFileSync(FULL_GOLDEN_PATH, 'utf8')
+    .split('\n')
+    .filter((line) => line.includes(`"id": "${TRACER_ITEM_ID}"`))
+    .map((line) => `${line}\n`)
+    .join(''),
+);
 
 function makeOutDir(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'eval-harness-test-'));
