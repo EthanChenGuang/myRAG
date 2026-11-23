@@ -49,3 +49,5 @@ export type { ResolveDocumentRefsInput, ResolvedDocumentRefs } from './refs/reso
 export type { DocumentPartRef, DocumentRefsInput } from './types';
 export { assembleOverviewContext, OVERVIEW_QUERY } from './context/overview';
 export type { OverviewChunk, OverviewContext } from './context/overview';
+export { requireRagAdmin, isAdminUser } from './tenant/admin';
+export type { RagAdminDb, RagAdminResult, RequireRagAdminInput } from './tenant/admin';
