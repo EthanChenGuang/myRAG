@@ -6,6 +6,7 @@ import { getSupabaseAdmin } from '@/lib/supabase';
 import { generateTitle, generateSmartTitle } from '@/lib/title-generator';
 import type { DBMessage } from '@/types/chat';
 import { v4 as uuidv4 } from 'uuid';
+import { internalApiKeyMatches } from '@/lib/internal-api-key';
 
 export const runtime = 'nodejs';
 
@@ -27,7 +28,7 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
         }
 
-        if (apiKey !== env.MYRAG_INTERNAL_API_KEY) {
+        if (!internalApiKeyMatches(apiKey, env.MYRAG_INTERNAL_API_KEY)) {
             console.warn('[Voice Chat API] Unauthorized access attempt');
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
