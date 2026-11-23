@@ -346,11 +346,12 @@ function calculateTemporalConfidence(value: string, type: TemporalEntity['type']
 }
 
 function calculateFinancialConfidence(value: string, type: FinancialEntity['type']): number {
-  const baseConfidence = {
+  const weights: Partial<Record<FinancialEntity['type'], number>> = {
     currency_amount: 0.9,
     percentage: 0.8,
     metric: 0.7
-  }[type] || 0.5;
+  };
+  const baseConfidence = weights[type] || 0.5;
 
   // Boost confidence for larger amounts (more significant)
   if (value.includes('B') || value.includes('M')) {

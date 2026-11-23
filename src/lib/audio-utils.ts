@@ -562,7 +562,7 @@ async function appendChunkToSourceBuffer(chunk: Uint8Array): Promise<void> {
           return;
         }
 
-        currentSourceBuffer.appendBuffer(chunk);
+        currentSourceBuffer.appendBuffer(new Uint8Array(chunk));
         resolve();
       } catch (error) {
         console.error('Error appending chunk:', error);
