@@ -4,16 +4,16 @@ milestone: v5.0
 current_phase: 02
 current_phase_name: Unified Retrieval Pipeline & Tenant Scope
 status: executing
-stopped_at: Completed 02-02-PLAN.md
-last_updated: "2026-11-23T14:20:05.473Z"
+stopped_at: Completed 02-04-PLAN.md
+last_updated: "2026-11-23T14:27:14.194Z"
 last_activity: 2026-11-23
 last_activity_desc: Phase 02 plan 02-05 complete
-state_head: 8aa516151cd2172ae4e25ad8c818d60bfd1d957f
+state_head: 3facf75a846e7a13be2716bdf7768179dca6018b
 progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 58
-  completed_plans: 26
+  completed_plans: 27
 ---
 
 # Project State
@@ -28,9 +28,9 @@ See: .planning/PROJECT.md (updated 2026-11-22)
 ## Current Position
 
 Phase: 02 (Unified Retrieval Pipeline & Tenant Scope) — EXECUTING
-Plan: 4 of 36 complete (02-01, 02-02, 02-03, 02-05)
+Plan: 5 of 36 complete (02-01, 02-02, 02-03, 02-04, 02-05)
 Status: Executing sequentially
-Last activity: 2026-11-23 — 02-02 complete
+Last activity: 2026-11-23 — 02-04 complete
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -82,6 +82,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 02 P03 | 9 min | 2 tasks | 9 files |
 | Phase 02 P05 | 5 min | 2 tasks | 6 files |
 | Phase 02 P02 | 12 min | 2 tasks | 13 files |
+| Phase 02 P04 | 8 min | 2 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -130,6 +131,7 @@ Recent decisions affecting current work:
 - [Phase 02]: 02-05: Fake edge operators are opt-in per table and column; tenant filters on documents only, or/image_url on document_chunks only
 - [Phase 02]: 02-05: match_documents_by_workspace does not check membership, so (O, B) returns O chunks; the application layer must enforce the organization_members gate
 - [Phase 02]: Node engines pinned to ^22.12.0 (not >=) so Vercel stays on Node 22
+- [Phase 02]: Paired statistics take slice membership from gate-split report items and one fixed-seed RNG per (slice, metric) cell; all_zero needs at least one cell with data
 
 ### Pending Todos
 
@@ -156,6 +158,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-23T14:20:05.287Z
-Stopped at: Completed 02-02-PLAN.md
+Last session: 2026-11-23T14:27:14.060Z
+Stopped at: Completed 02-04-PLAN.md
 Resume file: None
