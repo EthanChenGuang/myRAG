@@ -38,3 +38,5 @@ export type { AssembleInput, AssembleOutput, AssemblyCandidate, AssemblyDocument
 export { fetchAssemblyRows } from './context/fetch-rows';
 export type { AssemblyRows } from './context/fetch-rows';
 export type { KeptBy, KeptChunk, RagMode, ReferencedState, SourceImage, UsedDocument } from './types';
+export type { VoiceResult, VoiceResults, VoiceSourceImage } from './context/voice';
+export { deriveVoiceKeywords } from './voice/keyword-fallback';
