@@ -10,7 +10,12 @@ const KEY_LABEL = 'myrag-admin-session-v1';
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function signingKey(serviceKey: string | undefined): Buffer | null {
-  const secret = serviceKey ?? env.SUPABASE_SERVICE_ROLE_KEY;
+  let secret: string | undefined;
+  try {
+    secret = serviceKey ?? env.SUPABASE_SERVICE_ROLE_KEY;
+  } catch {
+    return null;
+  }
   if (!secret) return null;
   return createHmac('sha256', secret).update(KEY_LABEL).digest();
 }
@@ -85,15 +90,33 @@ interface AdminCookieAuthInput {
   signal: AbortSignal;
   nowMs?: number;
   serviceKey?: string;
+  getCookieUser?: () => Promise<{ id: string } | null>;
+}
+
+async function currentSessionUser(): Promise<{ id: string } | null> {
+  const { createClient } = await import('@/lib/supabase/server');
+  const supabase = await createClient();
+  const { data } = await supabase.auth.getUser();
+  return data?.user?.id ? { id: data.user.id } : null;
 }
 
 /**
- * A valid signed admin_session cookie whose user is still in admin_users right now.
- * A missing, tampered or expired cookie gives 401; the admin_users row is looked up on every call.
+ * A valid signed admin_session cookie, presented together with a live Supabase session for the same user,
+ * whose user is still in admin_users right now. The cookie alone is never enough, so signing out of Supabase
+ * ends the admin capability at once. A missing, tampered or expired cookie gives 401, and so does a missing or
+ * different session; the admin_users row is looked up on every call.
  */
 export async function requireAdminCookie(input: AdminCookieAuthInput): Promise<RagAdminResult> {
   const verified = verifyAdminSessionValue(readCookie(input.headers, ADMIN_SESSION_COOKIE), input);
   if (!verified) return { ok: false, status: 401, reason: 'no_admin_session' };
+  let sessionUser: { id: string } | null;
+  try {
+    sessionUser = await (input.getCookieUser ?? currentSessionUser)();
+  } catch {
+    return { ok: false, status: 503, reason: 'auth_unavailable' };
+  }
+  if (!sessionUser) return { ok: false, status: 401, reason: 'no_session' };
+  if (String(sessionUser.id).toLowerCase() !== verified.userId) return { ok: false, status: 401, reason: 'session_mismatch' };
   const admin = input.admin === undefined ? (getSupabaseAdmin() as RagAdminDb | null) : input.admin;
   if (!admin) return { ok: false, status: 503, reason: 'admin_check_unavailable' };
   try {
@@ -106,15 +129,20 @@ export async function requireAdminCookie(input: AdminCookieAuthInput): Promise<R
   return { ok: true, userId: verified.userId };
 }
 
-/** requireRagAdmin, or a valid signed admin cookie whose user is still an admin. */
-export async function requireAdminRequest(
-  input: AdminCookieAuthInput & { getCookieUser?: () => Promise<{ id: string } | null> },
-): Promise<RagAdminResult> {
-  const viaCookie = await requireAdminCookie(input);
-  if (viaCookie.ok || viaCookie.reason !== 'no_admin_session') return viaCookie;
+const COOKIE_NOT_USABLE = new Set(['no_admin_session', 'no_session', 'session_mismatch']);
+
+/** requireRagAdmin, or a valid signed admin cookie plus a matching live session whose user is still an admin. */
+export async function requireAdminRequest(input: AdminCookieAuthInput): Promise<RagAdminResult> {
+  let userPromise: Promise<{ id: string } | null> | null = null;
+  const getCookieUser = () => {
+    userPromise ??= (input.getCookieUser ?? currentSessionUser)();
+    return userPromise;
+  };
+  const viaCookie = await requireAdminCookie({ ...input, getCookieUser });
+  if (viaCookie.ok || !COOKIE_NOT_USABLE.has(viaCookie.reason)) return viaCookie;
   return requireRagAdmin({
     headers: input.headers,
-    getCookieUser: input.getCookieUser,
+    getCookieUser,
     admin: input.admin,
     signal: input.signal,
   });
