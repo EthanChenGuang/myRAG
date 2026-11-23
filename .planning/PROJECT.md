@@ -109,6 +109,7 @@ myRAG 是一个基于 Next.js + Supabase 的 AI 聊天产品，核心是从用�
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
+| 语义缓存：默认用 Supabase pgvector 表（RedisVL 风格的 check/store 接口），RedisVL SemanticCache 放侧车作为可选后端；不用 LangCache（预览期、价格未定、多一个厂商）、不用 LiteLLM/Bifrost（按整段 prompt 缓存，无法按租户失效）、不用 GPTCache（停更） | 用户要求选型（2026-11-23）；无新基础设施、适配 serverless、复用 TenantScope 和 RLS | — Pending |
 | 耗时追踪用 Langfuse：每次请求一个 trace，每一步一个 span（耗时、候选数、改写规则）；异步发送、可采样、可关闭，默认遮蔽问题和 chunk 原文；Langfuse 不可用时退回结构化 `[RAG Trace]` 日志；先用 Langfuse Cloud Hobby 免费版（每月 5 万 unit，约 5000 次请求，超出靠采样），量大后改自部署，只换 `LANGFUSE_BASE_URL` 和密钥 | 用户决定（2026-11-23）；先测量再优化 | — Pending |
 | 每层取排名前两名：功能互补的一起用，功能相同的做成可切换 provider | 用户要求；可切换便于用评估比较 | — Pending |
 | pgvector、Weaviate、Qdrant 三个检索后端并存，pgvector 长期保留并作为默认 | 用户要求保留 pgvector；默认是否改由评估决定 | — Pending |
