@@ -5,7 +5,8 @@ from pathlib import Path
 from rag_sidecar.contracts.baseline import Baseline, NoiseConfig
 from rag_sidecar.contracts.report import EvalReport
 
-from rag_eval.gate import evaluate_gate, main
+import rag_eval.gate as gate_module
+from rag_eval.gate import EXIT_INTERNAL, EXIT_REGRESSION, evaluate_gate, main
 
 METRICS = ("recall_at_5", "recall_at_10", "mrr", "correct_refusal_rate", "false_refusal_rate")
 NOISE_PATH = Path(__file__).resolve().parents[1] / "config" / "noise.json"
@@ -24,6 +25,7 @@ def _report(overall=None, languages=None, categories=None, **fields) -> EvalRepo
         "run_config_hash": "r" * 64,
         "corpus_sha256": "c" * 64,
         "golden_sha256": "g" * 64,
+        "golden_filter": {"review_statuses": ["approved"], "gate_split": "dev"},
         "embedder_id": "fixture-embedder",
         "embedder_version": 3,
         "deployment_mode": "single-tenant",
@@ -33,6 +35,7 @@ def _report(overall=None, languages=None, categories=None, **fields) -> EvalRepo
         "by_language": languages if languages is not None else {"en": _slice_values(), "zh": _slice_values()},
         "by_category": categories if categories is not None else {"general": _slice_values()},
         "by_language_category": {},
+        "by_split": {},
         "items": [],
     }
     data.update(fields)
@@ -52,8 +55,12 @@ def _baseline(overall_spread: float = 0.0, **fields) -> Baseline:
     }
     data = {
         "spread_kind": "stdev_ddof1",
+        "tier": "smoke",
+        "deployment_mode": "single-tenant",
+        "request_options": {},
         "corpus_sha256": "c" * 64,
         "golden_sha256": "g" * 64,
+        "golden_filter": {"review_statuses": ["approved"], "gate_split": "dev"},
         "embedder_id": "fixture-embedder",
         "embedder_version": 3,
         "run_config_hash": "r" * 64,
@@ -168,6 +175,12 @@ def test_data_mismatch_exits_2_but_config_difference_does_not(tmp_path):
     assert run(_report(embedder_version=4)) == 2
     assert run(_report(embedder_id="other")) == 2
     assert run(_report(run_config_hash="z" * 64, request_options={"max_results": 1})) == 0
+    assert run(_report(deployment_mode="multi-tenant")) == 2
+    assert run(_report(tier="live")) == 2
+    assert run(_report(embedder_source_sha256="s" * 64)) == 2
+    assert run(_report(request_options={"organization_id": "11111111-1111-4111-8111-111111111111"})) == 2
+    assert run(_report(request_options={"user_id": "33333333-3333-4333-8333-333333333333", "max_results": 1})) == 2
+    assert run(_report(request_options={"generator_model": "openai/gpt-4.1-mini"})) == 2
 
 
 def test_invalid_input_exits_2(tmp_path):
@@ -186,8 +199,32 @@ def test_gate_leaves_baseline_unchanged(tmp_path):
 
     code = main(["--report", str(report_path), "--baseline", str(baseline_path), "--noise", str(noise_path), "--out", str(tmp_path / "out")])
 
-    assert code == 1
+    assert code == EXIT_REGRESSION == 10
     after = {p: hashlib.sha256(p.read_bytes()).hexdigest() for p in (baseline_path, noise_path)}
     assert before == after
     gate = json.loads((tmp_path / "out" / "gate.json").read_text(encoding="utf-8"))
     assert gate["passed"] is False and gate["offenders"][0]["metric"] == "recall_at_10"
+
+
+def test_internal_error_exits_70_not_regression(tmp_path, monkeypatch, capsys):
+    report_path = tmp_path / "report.json"
+    baseline_path = tmp_path / "baseline.json"
+    report_path.write_text(_report().model_dump_json(), encoding="utf-8")
+    baseline_path.write_text(_baseline().model_dump_json(), encoding="utf-8")
+
+    def boom(*_args, **_kwargs):
+        raise AttributeError("metric does not exist")
+
+    monkeypatch.setattr(gate_module, "evaluate_gate", boom)
+    code = main(["--report", str(report_path), "--baseline", str(baseline_path), "--noise", str(NOISE_PATH), "--out", str(tmp_path / "out")])
+
+    assert code == EXIT_INTERNAL == 70
+    assert code != EXIT_REGRESSION
+    assert "INTERNAL ERROR" in capsys.readouterr().err
+    assert not (tmp_path / "out" / "gate.json").exists()
+
+
+def test_golden_filter_difference_is_a_mismatch(tmp_path):
+    report = _report(golden_filter={"review_statuses": ["approved", "draft"], "gate_split": "dev"})
+    result = evaluate_gate(report, _baseline(), _noise())
+    assert result.mismatches and "golden_filter differs" in result.mismatches[0]

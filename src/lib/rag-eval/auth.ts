@@ -36,3 +36,39 @@ export function checkEvalAccess(headers: Headers, config: EvalAccessConfig): Eva
 
   return { ok: true };
 }
+
+export type EvalScopeResult = { ok: true } | { ok: false; status: 403; error: string };
+
+export interface EvalScopeConfig {
+  deploymentMode: string | undefined;
+  organizationId: string | null;
+  userId: string | null;
+  allowedScopes: string | undefined;
+}
+
+export function parseAllowedScopes(value: string | undefined): Set<string> {
+  return new Set(
+    (value ?? '')
+      .split(',')
+      .map((entry) => entry.trim().toLowerCase())
+      .filter((entry) => entry !== ''),
+  );
+}
+
+export function evalScopeKey(organizationId: string | null, userId: string | null): string | null {
+  if (organizationId) return `org:${organizationId.trim().toLowerCase()}`;
+  if (userId) return `user:${userId.trim().toLowerCase()}`;
+  return null;
+}
+
+export function checkEvalScope(config: EvalScopeConfig): EvalScopeResult {
+  if (config.deploymentMode !== 'multi-tenant') return { ok: true };
+  const scope = evalScopeKey(config.organizationId, config.userId);
+  if (scope === null) {
+    return { ok: false, status: 403, error: 'Scope required: set options.organization_id or options.user_id' };
+  }
+  if (!parseAllowedScopes(config.allowedScopes).has(scope)) {
+    return { ok: false, status: 403, error: 'Scope not allowed' };
+  }
+  return { ok: true };
+}

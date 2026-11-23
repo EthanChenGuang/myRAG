@@ -1,3 +1,6 @@
+import html
+import math
+import sys
 from typing import Any, Sequence
 
 from pydantic import ValidationError
@@ -8,6 +11,7 @@ from rag_eval.draft.sources import WorkspaceDocument
 from rag_eval.draft.writer import DraftedEntry, DraftOutcome
 
 TOOL_NAME = "submit_drafted_items"
+MAX_ITEMS_PER_CALL = 15
 CATEGORY_SHARES = (
     ("general", "straightforward questions answered by one passage"),
     ("exact_term", "questions built around a product name, code, SKU, number or other exact term"),
@@ -52,7 +56,7 @@ def _render_units(units: Sequence[tuple[str, int, str]]) -> str:
         if name != current:
             if current is not None:
                 parts.append("</document>")
-            parts.append(f'<document name="{name}">')
+            parts.append(f'<document name="{html.escape(name, quote=True)}">')
             current = name
         parts.append(f"<chunk number=\"{index + 1}\">\n{text}\n</chunk>")
     if current is not None:
@@ -75,6 +79,18 @@ def _batches(docs: Sequence[WorkspaceDocument], budget_chars: int) -> list[list[
     if current:
         batches.append(current)
     return batches
+
+
+def _spread(batches: list[list[tuple[str, int, str]]], n: int) -> list[list[tuple[str, int, str]]]:
+    if len(batches) <= n:
+        return batches
+    picked = [batches[math.floor(i * len(batches) / n)] for i in range(n)]
+    print(
+        f"[Draft] {len(batches) - n} of {len(batches)} workspace batches were not sampled because n={n}; "
+        "raise n to draft from all of them",
+        file=sys.stderr,
+    )
+    return picked
 
 
 def _split_counts(n: int, parts: int) -> list[int]:
@@ -111,14 +127,20 @@ def draft_with_claude(
     batches = _batches(docs, config.batch_chars)
     if not batches or n <= 0:
         return outcome
-    batches = batches[:n]
+    batches = _spread(batches, n)
     tool = {
         "name": TOOL_NAME,
         "description": "Submit the drafted golden-set items for this batch of documents.",
         "input_schema": DraftedItemBatch.model_json_schema(),
     }
     system = _system_prompt(languages)
-    for number, (units, count) in enumerate(zip(batches, _split_counts(n, len(batches))), start=1):
+    calls = [
+        (units, part)
+        for units, count in zip(batches, _split_counts(n, len(batches)))
+        for part in _split_counts(count, max(1, math.ceil(count / MAX_ITEMS_PER_CALL)))
+        if part > 0
+    ]
+    for number, (units, count) in enumerate(calls, start=1):
         content = f"{_render_units(units)}\n\nDraft {count} items from these documents and submit them with {TOOL_NAME}."
         response = client.messages.create(
             model=config.claude_model,
@@ -126,10 +148,14 @@ def draft_with_claude(
             system=system,
             messages=[{"role": "user", "content": content}],
             tools=[tool],
-            tool_choice={"type": "auto"},
+            tool_choice={"type": "tool", "name": TOOL_NAME},
         )
-        if getattr(response, "stop_reason", None) == "refusal":
+        stop_reason = getattr(response, "stop_reason", None)
+        if stop_reason == "refusal":
             outcome.rejected.append(f"claude refused batch {number}")
+            continue
+        if stop_reason == "max_tokens":
+            outcome.rejected.append(f"claude output truncated at max_tokens for batch {number}")
             continue
         block = next(
             (b for b in response.content if getattr(b, "type", None) == "tool_use" and getattr(b, "name", None) == TOOL_NAME),

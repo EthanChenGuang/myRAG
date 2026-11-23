@@ -4,13 +4,15 @@ from pathlib import Path
 
 from pydantic import ValidationError
 from rag_sidecar.contracts.baseline import Baseline, GateOffender, GateResult, NoiseConfig
+from rag_sidecar.contracts.eval_run import RagRunOptions
 from rag_sidecar.contracts.report import EvalReport, SliceMetrics
 
 from rag_eval.paths import resolve_cli_path
 
 EXIT_PASS = 0
-EXIT_REGRESSION = 1
 EXIT_MISMATCH = 2
+EXIT_REGRESSION = 10
+EXIT_INTERNAL = 70
 
 
 def _report_slices(report: EvalReport) -> dict[str, SliceMetrics]:
@@ -22,6 +24,10 @@ def _report_slices(report: EvalReport) -> dict[str, SliceMetrics]:
     return slices
 
 
+def _scope(options: RagRunOptions) -> dict[str, object]:
+    return options.model_dump(exclude={"max_results"})
+
+
 def _mismatches(report: EvalReport, baseline: Baseline) -> list[str]:
     problems: list[str] = []
     checks = (
@@ -29,7 +35,15 @@ def _mismatches(report: EvalReport, baseline: Baseline) -> list[str]:
         ("corpus_sha256", report.corpus_sha256, baseline.corpus_sha256),
         ("embedder_id", report.embedder_id, baseline.embedder_id),
         ("embedder_version", report.embedder_version, baseline.embedder_version),
+        ("embedder_source_sha256", report.embedder_source_sha256, baseline.embedder_source_sha256),
+        ("tier", report.tier, baseline.tier),
+        ("deployment_mode", report.deployment_mode, baseline.deployment_mode),
+        ("request_options (excluding max_results)", _scope(report.request_options), _scope(baseline.request_options)),
     )
+    if report.golden_filter != baseline.golden_filter:
+        problems.append(
+            f"golden_filter differs: report {report.golden_filter.model_dump()!r}, baseline {baseline.golden_filter.model_dump()!r}"
+        )
     for name, observed, recorded in checks:
         if observed != recorded:
             problems.append(f"{name} differs: report {observed!r}, baseline {recorded!r}")
@@ -116,11 +130,11 @@ def render_gate_markdown(
 ) -> str:
     lines = ["# Eval gate", ""]
     if result.mismatches:
-        lines.append("Result: MISMATCH (exit 2)")
+        lines.append(f"Result: MISMATCH (exit {EXIT_MISMATCH})")
         lines.append("")
         lines.extend(f"- {problem}" for problem in result.mismatches)
         return "\n".join(lines) + "\n"
-    lines.append("Result: PASS (exit 0)" if result.passed else "Result: FAIL (exit 1)")
+    lines.append(f"Result: PASS (exit {EXIT_PASS})" if result.passed else f"Result: FAIL (exit {EXIT_REGRESSION})")
     lines.append("")
     lines.append("## Offenders")
     lines.append("")
@@ -169,7 +183,7 @@ def _read(path: Path) -> str:
         return handle.read()
 
 
-def main(argv: list[str] | None = None) -> int:
+def _main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="rag_eval.gate", description="myRAG eval noise-band gate")
     parser.add_argument("--report", required=True, type=Path)
     parser.add_argument("--baseline", required=True, type=Path)
@@ -206,6 +220,16 @@ def main(argv: list[str] | None = None) -> int:
         return EXIT_REGRESSION
     print(f"gate: PASS ({len(result.skipped)} skipped)")
     return EXIT_PASS
+
+
+def main(argv: list[str] | None = None) -> int:
+    try:
+        return _main(argv)
+    except SystemExit:
+        raise
+    except Exception as exc:  # noqa: BLE001 - any crash must not look like a regression
+        print(f"gate: INTERNAL ERROR {type(exc).__name__}: {exc}", file=sys.stderr)
+        return EXIT_INTERNAL
 
 
 if __name__ == "__main__":

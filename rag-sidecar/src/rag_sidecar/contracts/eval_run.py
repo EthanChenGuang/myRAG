@@ -112,6 +112,11 @@ class RunEmbedder(_Contract):
     source_sha256: str
 
 
+class GoldenFilter(_Contract):
+    review_statuses: list[Literal["approved", "draft"]] = Field(min_length=1)
+    gate_split: Literal["dev"]
+
+
 class RunManifest(_Contract):
     schema_version: Literal[1] = 1
     run_id: str
@@ -123,6 +128,7 @@ class RunManifest(_Contract):
     corpus_sha256: str | None = None
     golden_path: str
     golden_sha256: str
+    golden_filter: GoldenFilter
     sql_sha256: dict[str, str]
     request_options: RagRunOptions
     effective_config_hash: str

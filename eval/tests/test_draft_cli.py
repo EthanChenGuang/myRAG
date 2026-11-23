@@ -1,4 +1,5 @@
 import json
+import re
 import shutil
 import uuid
 from types import SimpleNamespace
@@ -191,7 +192,7 @@ def test_claude_request_names_categories_languages_and_the_real_user_mix():
         assert phrase in text
     assert call["model"] == "claude-sonnet-5-5"
     assert "temperature" not in call
-    assert call["tool_choice"] == {"type": "auto"}
+    assert call["tool_choice"] == {"type": "tool", "name": TOOL_NAME}
     assert call["tools"][0]["name"] == TOOL_NAME
     assert call["tools"][0]["input_schema"] == DraftedItemBatch.model_json_schema()
 
@@ -394,7 +395,23 @@ def test_cli_supabase_source_needs_exactly_one_scope_and_credentials(private_out
     assert _run(base + ["--org", "11111111-1111-4111-8111-111111111111", "--single-tenant"], claude=StubClaude()) == 2
     monkeypatch.delenv("NEXT_PUBLIC_SUPABASE_URL", raising=False)
     monkeypatch.delenv("SUPABASE_SERVICE_ROLE_KEY", raising=False)
+    monkeypatch.setenv("NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE", "single-tenant")
     assert _run(base + ["--single-tenant"], claude=StubClaude()) == 3
+    assert not out.exists()
+
+
+@pytest.mark.parametrize("mode", [None, "multi-tenant"])
+def test_cli_single_tenant_needs_single_tenant_deployment_mode(private_out, monkeypatch, capsys, mode):
+    out, manifest = private_out
+    monkeypatch.delenv("NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE", raising=False)
+    monkeypatch.delenv("MYRAG_DEPLOYMENT_MODE", raising=False)
+    if mode:
+        monkeypatch.setenv("NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE", mode)
+    monkeypatch.setenv("NEXT_PUBLIC_SUPABASE_URL", "https://example-project.supabase.co")
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "test-service-key-not-real-0001")
+    base = ["--source", "supabase", "--single-tenant", "--out", str(out), "--n", "60", "--split-manifest", str(manifest)]
+    assert _run(base, claude=StubClaude()) == 2
+    assert "NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE=single-tenant" in capsys.readouterr().err
     assert not out.exists()
 
 
@@ -416,3 +433,51 @@ def test_cli_help_exits_0(capsys):
 
 def test_claude_module_does_not_import_the_anthropic_sdk_at_import_time():
     assert not hasattr(claude_drafter, "anthropic")
+
+
+def test_ragas_evidence_is_not_attributed_to_a_short_chunk_from_another_document():
+    from rag_eval.draft.ragas_drafter import _locate
+    from rag_eval.draft.sources import WorkspaceDocument
+
+    context = "Pricing table. Unit price is 159.00 dollars for 1 to 9 units of the XR-4420 thermal probe."
+    doc_a = WorkspaceDocument(id="a", filename="a-heading.md", chunks=["Pricing table."])
+    doc_b = WorkspaceDocument(id="b", filename="b-specs.md", chunks=[context + " Bulk orders ship in two weeks."])
+    doc, chunk = _locate(context, [doc_a, doc_b])
+    assert doc.id == "b" and chunk.startswith(context)
+
+    near_whole = context.removesuffix(" thermal probe.")
+    doc_c = WorkspaceDocument(id="c", filename="c.md", chunks=[near_whole])
+    assert _locate(context, [doc_a, doc_c])[0].id == "c"
+    assert _locate(context, [doc_a]) is None
+
+
+def test_claude_calls_ask_for_at_most_fifteen_items_and_cover_the_requested_total():
+    docs = DirectoryWorkspaceSource(CORPUS).documents()
+    client = StubClaude([])
+    draft_with_claude(docs, 40, ["en"], client, load_draft_config())
+    asked = [int(re.search(r"Draft (\d+) items", call["messages"][0]["content"]).group(1)) for call in client.calls]
+    assert max(asked) <= claude_drafter.MAX_ITEMS_PER_CALL
+    assert sum(asked) == 40
+
+
+def test_claude_truncated_output_is_rejected_not_parsed():
+    docs = DirectoryWorkspaceSource(CORPUS).documents()
+    outcome = draft_with_claude(docs, 5, ["en"], StubClaude([_claude_item("A valid question?")], stop_reason="max_tokens"), load_draft_config())
+    assert outcome.entries == [] and any("truncated" in reason for reason in outcome.rejected)
+
+
+def test_claude_samples_batches_across_the_workspace_and_warns(capsys):
+    docs = DirectoryWorkspaceSource(CORPUS).documents()
+    config = load_draft_config().model_copy(update={"batch_chars": 1000})
+    all_batches = claude_drafter._batches(docs, config.batch_chars)
+    assert len(all_batches) > 2
+    client = StubClaude([])
+    draft_with_claude(docs, 2, ["en"], client, config)
+    assert len(client.calls) == 2
+    assert claude_drafter._render_units(all_batches[len(all_batches) // 2]) in client.calls[1]["messages"][0]["content"]
+    assert "not sampled" in capsys.readouterr().err
+
+
+def test_claude_document_names_are_escaped_in_the_tag():
+    rendered = claude_drafter._render_units([('a"b<c>.md', 0, "text")])
+    assert '<document name="a&quot;b&lt;c&gt;.md">' in rendered

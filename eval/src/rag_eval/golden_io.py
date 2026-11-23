@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 
 from pydantic import ValidationError
+from rag_sidecar.contracts.eval_run import GoldenFilter
 from rag_sidecar.contracts.golden import GoldenItem
 
 
@@ -25,6 +26,11 @@ def load_golden(path: Path) -> list[GoldenItem]:
         first_line_of[item.id] = number
         items.append(item)
     return items
+
+
+def select_golden(items: list[GoldenItem], golden_filter: GoldenFilter) -> list[GoldenItem]:
+    statuses = set(golden_filter.review_statuses)
+    return [item for item in items if item.review_status in statuses]
 
 
 def write_golden(path: Path, items: list[GoldenItem]) -> None:

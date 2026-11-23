@@ -107,6 +107,7 @@ def write_drafted_items(
 
     existing = list(existing_items)
     seen_questions = {_question_key(item.question) for item in existing}
+    seen_ids = {item.id for item in existing}
     assignments = load_manifest(manifest)
     result = WriteResult()
     new_items: list[GoldenItem] = []
@@ -124,6 +125,9 @@ def write_drafted_items(
             result.duplicates += 1
             continue
         item_id = _item_id(proposal.language, proposal.question)
+        if item_id in seen_ids:
+            result.duplicates += 1
+            continue
         try:
             item = GoldenItem(
                 id=item_id,
@@ -143,6 +147,7 @@ def write_drafted_items(
             result.invalid.append(f"invalid item: {first['msg']}")
             continue
         seen_questions.add(key)
+        seen_ids.add(item_id)
         new_items.append(item)
         if entry.notes:
             new_notes[item_id] = dict(entry.notes)

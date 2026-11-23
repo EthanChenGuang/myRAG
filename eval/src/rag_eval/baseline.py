@@ -64,9 +64,14 @@ def record_baseline(
 
     _require_same("run_config_hash", [report.run_config_hash for report in reports])
     _require_same("golden_sha256", [report.golden_sha256 for report in reports])
+    _require_same("golden_filter", [report.golden_filter for report in reports])
     _require_same("corpus_sha256", [report.corpus_sha256 for report in reports])
     _require_same("embedder_id", [report.embedder_id for report in reports])
     _require_same("embedder_version", [report.embedder_version for report in reports])
+    _require_same("embedder_source_sha256", [report.embedder_source_sha256 for report in reports])
+    _require_same("tier", [report.tier for report in reports])
+    _require_same("deployment_mode", [report.deployment_mode for report in reports])
+    _require_same("request_options", [report.request_options for report in reports])
 
     per_run = [_slices(report) for report in reports]
     _require_same("slice set", [sorted(slices) for slices in per_run])
@@ -84,10 +89,15 @@ def record_baseline(
     first = reports[0]
     return Baseline(
         spread_kind="stdev_ddof1",
+        tier=first.tier,
+        deployment_mode=first.deployment_mode,
+        request_options=first.request_options,
         corpus_sha256=first.corpus_sha256,
         golden_sha256=first.golden_sha256,
+        golden_filter=first.golden_filter,
         embedder_id=first.embedder_id,
         embedder_version=first.embedder_version,
+        embedder_source_sha256=first.embedder_source_sha256,
         run_config_hash=first.run_config_hash,
         runs=[
             {"run_id": report.run_id, "run_config_hash": report.run_config_hash, "git_sha": sha, "created_at": stamp}
@@ -132,9 +142,17 @@ def _record(args: argparse.Namespace) -> int:
     for index in range(1, args.runs + 1):
         run_dir = RUNS_DIR / f"run-{index}"
         command = ["npx", "tsx", "eval/harness/run-smoke.mts", "--no-gate", "--out", str(run_dir)]
-        for flag, value in (("--golden", args.golden), ("--corpus", args.corpus), ("--base-url", args.base_url)):
+        for flag, value in (
+            ("--golden", args.golden),
+            ("--corpus", args.corpus),
+            ("--base-url", args.base_url),
+            ("--org", args.org),
+            ("--user", args.user),
+        ):
             if value:
                 command.extend([flag, str(value)])
+        if args.include_drafts:
+            command.append("--include-drafts")
         print(f"[Eval Baseline] run {index}/{args.runs}: {' '.join(command)}")
         result = subprocess.run(command, cwd=REPO_ROOT, check=False, env=os.environ.copy())
         if result.returncode != 0:
@@ -175,6 +193,9 @@ def main(argv: list[str] | None = None) -> int:
     record.add_argument("--corpus")
     record.add_argument("--base-url")
     record.add_argument("--allow-spread", action="store_true")
+    record.add_argument("--org", help="organization UUID to scope the run to (multi-tenant)")
+    record.add_argument("--user", help="user UUID to scope the run to (multi-tenant personal workspace)")
+    record.add_argument("--include-drafts", action="store_true", help="also score review_status=draft items")
     record.set_defaults(handler=_record)
     args = parser.parse_args(argv)
     return args.handler(args)

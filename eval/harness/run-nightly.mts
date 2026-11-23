@@ -1,14 +1,17 @@
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { LiveGenerationKeyMissingError, runEval, type EvalGenerator } from './run-eval.mts';
 import type { DeploymentMode } from './pglite-supabase.mts';
 
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+
 function validateWithPydantic(model: string, flag: '--jsonl' | '--json', file: string): number {
   const result = spawnSync(
     'uv',
-    ['run', '--project', 'rag-sidecar', 'python', '-m', 'rag_sidecar.contracts.validate', '--model', model, flag, file],
-    { stdio: 'inherit' },
+    ['run', '--project', path.join(REPO_ROOT, 'rag-sidecar'), 'python', '-m', 'rag_sidecar.contracts.validate', '--model', model, flag, path.resolve(file)],
+    { stdio: 'inherit', cwd: REPO_ROOT },
   );
   if (result.error) throw result.error;
   return result.status ?? 3;
@@ -23,6 +26,7 @@ async function main(): Promise<number> {
       out: { type: 'string', default: 'eval/out/nightly' },
       'generator-model': { type: 'string' },
       'deployment-mode': { type: 'string', default: 'single-tenant' },
+      'include-drafts': { type: 'boolean', default: false },
     },
     strict: true,
   });
@@ -36,10 +40,17 @@ async function main(): Promise<number> {
     throw new Error(`--deployment-mode must be single-tenant or multi-tenant, got ${String(deploymentMode)}`);
   }
 
+  const goldenPath = path.resolve(values.golden as string);
+  const goldenCode = validateWithPydantic('GoldenItem', '--jsonl', goldenPath);
+  if (goldenCode !== 0) {
+    console.error('[Eval Harness] golden file failed Pydantic validation; nothing was run');
+    return 2;
+  }
+
   let result;
   try {
     result = await runEval({
-      goldenPath: path.resolve(values.golden as string),
+      goldenPath,
       corpusDir: path.resolve(values.corpus as string),
       outDir: path.resolve(values.out as string),
       deploymentMode: deploymentMode as DeploymentMode,
@@ -47,6 +58,7 @@ async function main(): Promise<number> {
       tier: 'nightly',
       includeAnswer: true,
       generator: generator as EvalGenerator,
+      includeDrafts: values['include-drafts'],
     });
   } catch (error) {
     if (error instanceof LiveGenerationKeyMissingError) {

@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { MockLanguageModelV3 } from 'ai/test';
 import type { LanguageModel } from 'ai';
-import { GoldenItemSchema, RagTraceSchema, RunManifestSchema, type GoldenItem, type RagRunRequest, type RunManifest } from '../../src/lib/rag-eval/contracts.generated.ts';
+import { GoldenItemSchema, RagTraceSchema, RunManifestSchema, type GoldenItem, type RagRunRequest, type RagTrace, type RunManifest } from '../../src/lib/rag-eval/contracts.generated.ts';
 import { canonicalJson, configHash } from '../../src/lib/rag-eval/trace.ts';
 import { loadPinnedEvalEnv } from './eval-env.mts';
 import { EMBEDDER_ID, EMBEDDER_VERSION, embedderSourceSha256 } from './fixture-embedder.mts';
@@ -55,12 +55,14 @@ export interface RunEvalOptions {
   baseUrl?: string;
   includeAnswer?: boolean;
   generator?: EvalGenerator;
+  includeDrafts?: boolean;
 }
 
 export interface RunEvalResult {
   tracesPath: string;
   logPath: string;
   itemCount: number;
+  skippedCount: number;
   tier: EvalTier;
   deploymentMode: DeploymentMode;
   edgeErrors: number;
@@ -108,8 +110,12 @@ function createStubLanguageModel(): LanguageModel {
 
 type MutableEnv = Record<string, string | undefined>;
 
-export async function prepareInProcessEval(options: { corpusDir: string; deploymentMode: DeploymentMode }): Promise<InProcessEval> {
-  const { corpusDir, deploymentMode } = options;
+export async function prepareInProcessEval(options: {
+  corpusDir: string;
+  deploymentMode: DeploymentMode;
+  allowedScopes?: string[];
+}): Promise<InProcessEval> {
+  const { corpusDir, deploymentMode, allowedScopes = [] } = options;
   const fixture = await createFixtureDatabase({ deploymentMode, corpusDir });
   let edge: FakeEdge | undefined;
   try {
@@ -131,6 +137,7 @@ export async function prepareInProcessEval(options: { corpusDir: string; deploym
   env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE = deploymentMode;
   env.OPENAI_EMBEDDING_MODEL = 'text-embedding-3-small';
   env.RAG_EVAL_SECRET = secret;
+  env.RAG_EVAL_ALLOWED_SCOPES = [`user:${fixture.fixtureUserId}`, ...allowedScopes].join(',');
 
   const route = await import('../../src/app/api/internal/rag/run/route.ts');
 
@@ -168,6 +175,34 @@ function readGolden(goldenPath: string): GoldenItem[] {
   });
 }
 
+export interface GoldenFilter {
+  review_statuses: Array<'approved' | 'draft'>;
+  gate_split: 'dev';
+}
+
+export function goldenFilterFor(includeDrafts: boolean): GoldenFilter {
+  return { review_statuses: includeDrafts ? ['approved', 'draft'] : ['approved'], gate_split: 'dev' };
+}
+
+export function selectGolden(items: GoldenItem[], filter: GoldenFilter): GoldenItem[] {
+  const statuses = new Set<string>(filter.review_statuses);
+  return items.filter((item) => statuses.has(item.review_status));
+}
+
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+export function assertSafeBaseUrl(baseUrl: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(baseUrl);
+  } catch {
+    throw new Error('[Eval Harness] --base-url is not a valid URL');
+  }
+  if (parsed.protocol === 'https:') return;
+  if (parsed.protocol === 'http:' && LOOPBACK_HOSTS.has(parsed.hostname)) return;
+  throw new Error('[Eval Harness] --base-url must use https (plain http is allowed only for localhost)');
+}
+
 function sha256File(filePath: string): string {
   return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
 }
@@ -194,7 +229,7 @@ function redirectConsole(logPath: string): () => void {
 }
 
 export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
-  const { goldenPath, corpusDir, outDir, deploymentMode, tier = 'smoke', baseUrl, includeAnswer = false, generator } = options;
+  const { goldenPath, corpusDir, outDir, deploymentMode, tier = 'smoke', baseUrl, includeAnswer = false, generator, includeDrafts = false } = options;
   const requestOptions: EvalRequestOptions = { ...(options.requestOptions ?? {}) };
 
   let liveApiKey = '';
@@ -213,7 +248,12 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     if (generator === 'stub' && !requestOptions.generator_model) requestOptions.generator_model = STUB_GENERATOR_MODEL;
   }
 
-  const items = readGolden(goldenPath);
+  const goldenFilter = goldenFilterFor(includeDrafts);
+  const allItems = readGolden(goldenPath);
+  const items = selectGolden(allItems, goldenFilter);
+  if (items.length === 0) {
+    throw new Error(`[Eval Harness] no golden items with review_status in [${goldenFilter.review_statuses.join(', ')}] in ${goldenPath}`);
+  }
   fs.mkdirSync(outDir, { recursive: true });
   const tracesPath = path.join(outDir, 'traces.jsonl');
   const logPath = path.join(outDir, 'harness.log');
@@ -222,6 +262,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
 
   let httpSecret = '';
   if (baseUrl) {
+    assertSafeBaseUrl(baseUrl);
     httpSecret = process.env.RAG_EVAL_SECRET ?? '';
     if (!httpSecret) throw new Error('[Eval Harness] RAG_EVAL_SECRET must be set for --base-url runs');
   }
@@ -230,7 +271,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
   let inProcess: InProcessEval | undefined;
   let answerModule: typeof import('../../src/lib/rag-eval/answer.ts') | undefined;
   let edgeErrors = 0;
-  let firstEffectiveConfig: unknown = null;
+  let firstEffectiveConfig: RagTrace['effective_config'] | null = null;
   let manifestInputs: { corpusSha256: string | null; sqlSha256: Record<string, string> } = { corpusSha256: null, sqlSha256: {} };
   try {
     let send: (payload: RagRunRequest) => Promise<{ status: number; body: unknown }>;
@@ -239,13 +280,19 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
       send = async (payload) => {
         const res = await fetch(url, {
           method: 'POST',
+          redirect: 'error',
           headers: { 'content-type': 'application/json', 'x-rag-eval-secret': httpSecret },
           body: JSON.stringify(payload),
         });
         return { status: res.status, body: await res.json().catch(() => null) };
       };
     } else {
-      const prepared = await prepareInProcessEval({ corpusDir, deploymentMode });
+      const requestedScope = requestOptions.organization_id
+        ? `org:${requestOptions.organization_id}`
+        : requestOptions.user_id
+          ? `user:${requestOptions.user_id}`
+          : null;
+      const prepared = await prepareInProcessEval({ corpusDir, deploymentMode, allowedScopes: requestedScope ? [requestedScope] : [] });
       inProcess = prepared;
       if (includeAnswer) {
         answerModule = await import('../../src/lib/rag-eval/answer.ts');
@@ -290,7 +337,16 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
       }
       const trace = RagTraceSchema.parse(body);
       trace.item_id = item.id;
-      if (firstEffectiveConfig === null) firstEffectiveConfig = trace.effective_config;
+      if (firstEffectiveConfig === null) {
+        firstEffectiveConfig = trace.effective_config;
+        const serverMode = trace.effective_config.deployment_mode;
+        if (baseUrl && serverMode !== 'single-tenant' && serverMode !== 'multi-tenant') {
+          throw new Error(`[Eval Harness] server reports unknown deployment_mode ${JSON.stringify(serverMode)}`);
+        }
+        if (baseUrl && serverMode === 'multi-tenant' && !requestOptions.organization_id && !requestOptions.user_id) {
+          throw new Error('[Eval Harness] the server is multi-tenant: pass --org <uuid> or --user <uuid> to scope the run');
+        }
+      }
       fs.appendFileSync(tracesPath, `${JSON.stringify(trace)}\n`);
     }
 
@@ -309,6 +365,12 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     restoreConsole();
     answerModule?.setEvalLanguageModelFactory(null);
     if (inProcess) await inProcess.close();
+  }
+
+  const effectiveDeploymentMode: DeploymentMode =
+    baseUrl && firstEffectiveConfig ? (firstEffectiveConfig.deployment_mode as DeploymentMode) : deploymentMode;
+  if (effectiveDeploymentMode !== deploymentMode) {
+    console.warn(`[Eval Harness] server deployment_mode ${effectiveDeploymentMode} overrides --deployment-mode ${deploymentMode}`);
   }
 
   const normalizedOptions = {
@@ -330,9 +392,10 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
         embedder,
         corpus_sha256: manifestInputs.corpusSha256,
         golden_sha256: goldenSha256,
+        golden_filter: goldenFilter,
         sql_sha256: manifestInputs.sqlSha256,
         request_options: normalizedOptions,
-        deployment_mode: deploymentMode,
+        deployment_mode: effectiveDeploymentMode,
       }),
       'utf8',
     )
@@ -344,11 +407,12 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     tier,
     created_at: new Date().toISOString(),
     git_sha: gitHeadSha(),
-    deployment_mode: deploymentMode,
+    deployment_mode: effectiveDeploymentMode,
     embedder,
     corpus_sha256: manifestInputs.corpusSha256,
     golden_path: path.relative(process.cwd(), goldenPath) || goldenPath,
     golden_sha256: goldenSha256,
+    golden_filter: goldenFilter,
     sql_sha256: manifestInputs.sqlSha256,
     request_options: normalizedOptions,
     effective_config_hash: effectiveConfigHash,
@@ -359,5 +423,5 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
   const runPath = path.join(outDir, 'run.json');
   fs.writeFileSync(runPath, `${JSON.stringify(manifest, null, 2)}\n`);
 
-  return { tracesPath, logPath, itemCount: items.length, tier, deploymentMode, edgeErrors, runPath, manifest };
+  return { tracesPath, logPath, itemCount: items.length, skippedCount: allItems.length - items.length, tier, deploymentMode: effectiveDeploymentMode, edgeErrors, runPath, manifest };
 }

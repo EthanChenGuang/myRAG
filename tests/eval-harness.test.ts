@@ -199,3 +199,122 @@ describe('concurrency and HTTP transport on one prepared eval', () => {
     expect(httpKeptIds).toEqual(inProcessKeptIds);
   });
 });
+
+describe('golden selection', () => {
+  test('only approved items are run by default, drafts on request, rejected never', async () => {
+    const { goldenFilterFor, selectGolden } = await import('../eval/harness/run-eval.mts');
+    const base = JSON.parse(
+      fs
+        .readFileSync(FULL_GOLDEN_PATH, 'utf8')
+        .split('\n')
+        .find((line) => line.trim() !== '') as string,
+    );
+    const items = [
+      { ...base, id: 'en-a-001', review_status: 'approved' },
+      { ...base, id: 'en-b-002', review_status: 'draft' },
+      { ...base, id: 'en-c-003', review_status: 'rejected' },
+    ];
+    expect(goldenFilterFor(false)).toEqual({ review_statuses: ['approved'], gate_split: 'dev' });
+    expect(selectGolden(items, goldenFilterFor(false)).map((item) => item.id)).toEqual(['en-a-001']);
+    expect(selectGolden(items, goldenFilterFor(true)).map((item) => item.id)).toEqual(['en-a-001', 'en-b-002']);
+  });
+});
+
+describe('live runs against a multi-tenant server', () => {
+  const SAMPLES_PATH = path.join(REPO_ROOT, 'tests/fixtures/contracts/samples.json');
+  const USER_ID = '33333333-3333-4333-8333-333333333333';
+  let server: http.Server;
+  let url = '';
+  let previousSecret: string | undefined;
+  const received: Array<Record<string, unknown>> = [];
+
+  beforeAll(async () => {
+    const sample = JSON.parse(fs.readFileSync(SAMPLES_PATH, 'utf8')).samples.RagTrace;
+    const trace = { ...sample, effective_config: { ...sample.effective_config, deployment_mode: 'multi-tenant' } };
+    server = http.createServer((req, res) => {
+      let raw = '';
+      req.on('data', (chunk) => (raw += chunk));
+      req.on('end', () => {
+        received.push(JSON.parse(raw));
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify(trace));
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    url = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+    previousSecret = process.env.RAG_EVAL_SECRET;
+    process.env.RAG_EVAL_SECRET = 'x'.repeat(48);
+  });
+
+  afterAll(async () => {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    if (previousSecret === undefined) delete process.env.RAG_EVAL_SECRET;
+    else process.env.RAG_EVAL_SECRET = previousSecret;
+  });
+
+  test('an unscoped run is refused and a scoped run records the server deployment mode', async () => {
+    const { runEval } = await import('../eval/harness/run-eval.mts');
+    const base = { goldenPath: GOLDEN_PATH, corpusDir: CORPUS_DIR, deploymentMode: 'single-tenant' as const, tier: 'live' as const, baseUrl: url };
+    await expect(runEval({ ...base, outDir: makeOutDir() })).rejects.toThrow(/--org <uuid> or --user <uuid>/);
+
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const result = await runEval({ ...base, outDir: makeOutDir(), requestOptions: { user_id: USER_ID } });
+      expect(result.manifest.deployment_mode).toBe('multi-tenant');
+      expect(result.manifest.request_options.user_id).toBe(USER_ID);
+    } finally {
+      warn.mockRestore();
+    }
+    expect((received.at(-1)?.options as Record<string, unknown>).user_id).toBe(USER_ID);
+  });
+});
+
+describe('base URL safety', () => {
+  test('plain http is refused except for loopback hosts', async () => {
+    const { assertSafeBaseUrl } = await import('../eval/harness/run-eval.mts');
+    expect(() => assertSafeBaseUrl('https://eval.example.com')).not.toThrow();
+    expect(() => assertSafeBaseUrl('http://localhost:3000')).not.toThrow();
+    expect(() => assertSafeBaseUrl('http://127.0.0.1:3000')).not.toThrow();
+    expect(() => assertSafeBaseUrl('http://[::1]:3000')).not.toThrow();
+    expect(() => assertSafeBaseUrl('http://eval.example.com')).toThrow(/https/);
+    expect(() => assertSafeBaseUrl('ftp://eval.example.com')).toThrow(/https/);
+    expect(() => assertSafeBaseUrl('not a url')).toThrow(/valid URL/);
+  });
+
+  test('a redirect is not followed, so the secret never reaches the target', async () => {
+    const { runEval } = await import('../eval/harness/run-eval.mts');
+    const targetHits: string[] = [];
+    const target = http.createServer((req, res) => {
+      targetHits.push(String(req.headers['x-rag-eval-secret'] ?? ''));
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end('{}');
+    });
+    await new Promise<void>((resolve) => target.listen(0, '127.0.0.1', resolve));
+    const targetPort = (target.address() as { port: number }).port;
+    const redirector = http.createServer((_req, res) => {
+      res.writeHead(308, { location: `http://127.0.0.1:${targetPort}/api/internal/rag/run` });
+      res.end();
+    });
+    await new Promise<void>((resolve) => redirector.listen(0, '127.0.0.1', resolve));
+    const previousSecret = process.env.RAG_EVAL_SECRET;
+    process.env.RAG_EVAL_SECRET = 'y'.repeat(48);
+    try {
+      await expect(
+        runEval({
+          goldenPath: GOLDEN_PATH,
+          corpusDir: CORPUS_DIR,
+          outDir: makeOutDir(),
+          deploymentMode: 'single-tenant',
+          tier: 'live',
+          baseUrl: `http://127.0.0.1:${(redirector.address() as { port: number }).port}`,
+        }),
+      ).rejects.toThrow();
+      expect(targetHits).toEqual([]);
+    } finally {
+      if (previousSecret === undefined) delete process.env.RAG_EVAL_SECRET;
+      else process.env.RAG_EVAL_SECRET = previousSecret;
+      await new Promise<void>((resolve) => redirector.close(() => resolve()));
+      await new Promise<void>((resolve) => target.close(() => resolve()));
+    }
+  });
+});

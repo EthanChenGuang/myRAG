@@ -25,6 +25,11 @@ export interface EvalPromptEnv {
   RAG_SYSTEM_PROMPT?: string;
 }
 
+export interface EvalConversationTurn {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
 export type EvalLanguageModelFactory = (_modelId: string) => LanguageModel;
 
 const defaultFactory: EvalLanguageModelFactory = (modelId) => {
@@ -105,20 +110,25 @@ function maxOutputTokensForModel(modelId: string): number {
   return 4096;
 }
 
+export function buildEvalMessages(query: string, conversation: EvalConversationTurn[] = []): EvalConversationTurn[] {
+  return [...conversation.map((turn) => ({ role: turn.role, content: turn.content })), { role: 'user', content: query }];
+}
+
 export async function generateEvalAnswer(input: {
   query: string;
+  conversation?: EvalConversationTurn[];
   context: string;
   ragMode: EvalRagMode;
   generatorModel: string;
   signal?: AbortSignal;
   promptEnv?: EvalPromptEnv;
 }): Promise<string> {
-  const { query, context, ragMode, generatorModel, signal, promptEnv } = input;
+  const { query, conversation, context, ragMode, generatorModel, signal, promptEnv } = input;
   const system = buildEvalSystemPrompt({ context, ragMode, promptEnv });
   const result = await generateText({
     model: currentFactory(generatorModel),
     system,
-    messages: [{ role: 'user', content: query }],
+    messages: buildEvalMessages(query, conversation),
     temperature: 0.1,
     maxOutputTokens: maxOutputTokensForModel(generatorModel),
     abortSignal: signal,

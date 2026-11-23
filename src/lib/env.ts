@@ -164,6 +164,7 @@ class EnvironmentConfig {
       OPENAI_EMBEDDING_MODEL: process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small',
       RAG_EVAL_ENDPOINT_ENABLED: process.env.RAG_EVAL_ENDPOINT_ENABLED || 'false',
       RAG_EVAL_SECRET: process.env.RAG_EVAL_SECRET || '',
+      RAG_EVAL_ALLOWED_SCOPES: process.env.RAG_EVAL_ALLOWED_SCOPES || '',
       RAG_SIDECAR_URL: process.env.RAG_SIDECAR_URL || '',
       RAG_SIDECAR_SECRET: process.env.RAG_SIDECAR_SECRET || '',
 

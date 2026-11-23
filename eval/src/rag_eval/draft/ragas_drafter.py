@@ -19,6 +19,7 @@ _ITALIAN_WORDS = frozenset(
     "anche più può dove quando devo posso vorrei è".split()
 )
 _HEADING = re.compile(r"^#{1,6}[ \t]+(.+?)[ \t]*$", re.MULTILINE)
+MIN_CONTAINED_SHARE = 0.8
 _SENTENCES = re.compile(r"(?<=[.!?。！？])\s+|\n+")
 _CODE_TOKEN = re.compile(r"\b(?=[A-Za-z0-9-]*[A-Za-z])(?=[A-Za-z0-9-]*\d)[A-Za-z0-9-]{3,}\b")
 
@@ -75,12 +76,23 @@ def _locate(context: str, docs: Sequence[WorkspaceDocument]) -> tuple[WorkspaceD
         for chunk in doc.chunks:
             if chunk == context:
                 return doc, chunk
+    best: tuple[int, float, WorkspaceDocument, str] | None = None
     for doc in docs:
         for chunk in doc.chunks:
             norm = normalize_text(chunk)
-            if wanted in norm or norm in wanted:
-                return doc, chunk
-    return None
+            if not norm:
+                continue
+            if norm == wanted:
+                tier, overlap = 3, 1.0
+            elif wanted in norm:
+                tier, overlap = 2, len(wanted) / len(norm)
+            elif norm in wanted and len(norm) >= MIN_CONTAINED_SHARE * len(wanted):
+                tier, overlap = 1, len(norm) / len(wanted)
+            else:
+                continue
+            if best is None or (tier, overlap) > best[:2]:
+                best = (tier, overlap, doc, chunk)
+    return (best[2], best[3]) if best else None
 
 
 def _category(question: str, chunk: str) -> str:

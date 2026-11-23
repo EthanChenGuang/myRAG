@@ -25,6 +25,7 @@ def _report(run_id: str = "run-a", config_hash: str = "r" * 64, **overall: float
             "run_config_hash": config_hash,
             "corpus_sha256": "c" * 64,
             "golden_sha256": "g" * 64,
+            "golden_filter": {"review_statuses": ["approved"], "gate_split": "dev"},
             "embedder_id": "fixture-embedder",
             "embedder_version": 3,
             "deployment_mode": "single-tenant",
@@ -34,6 +35,7 @@ def _report(run_id: str = "run-a", config_hash: str = "r" * 64, **overall: float
             "by_language": {"en": _slice(0.4), "zh": _slice(0.7)},
             "by_category": {"general": _slice(0.5)},
             "by_language_category": {},
+            "by_split": {},
             "items": [],
         }
     )
@@ -122,3 +124,38 @@ def test_cli_exits_1_on_non_deterministic_runs_without_writing(tmp_path, monkeyp
     assert not target.exists()
     assert "overall mrr" in capsys.readouterr().err
     assert run_dirs == [f"eval/out/baseline/run-{i}" for i in (1, 2, 3)]
+
+
+def test_baseline_carries_run_identity_and_refuses_mixed_deployments():
+    baseline = record_baseline([_report("a"), _report("b"), _report("c")])
+    assert (baseline.tier, baseline.deployment_mode) == ("smoke", "single-tenant")
+    assert baseline.request_options.organization_id is None
+    other = _report("c").model_copy(update={"deployment_mode": "multi-tenant"})
+    with pytest.raises(NonDeterministicRunError, match="deployment_mode"):
+        record_baseline([_report("a"), _report("b"), other])
+
+
+def test_cli_forwards_org_and_user_to_every_run(tmp_path, monkeypatch):
+    commands = []
+
+    class _Done:
+        returncode = 0
+        stdout = "deadbeef\n"
+
+    def fake_run(command, **_kwargs):
+        if command[0] == "git":
+            return _Done()
+        commands.append(command)
+        out = baseline_module.resolve_cli_path(command[command.index("--out") + 1])
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "report.json").write_text(_report(f"run-{len(commands)}").model_dump_json(), encoding="utf-8")
+        return _Done()
+
+    monkeypatch.setattr(baseline_module.subprocess, "run", fake_run)
+    org = "11111111-1111-4111-8111-111111111111"
+    user = "33333333-3333-4333-8333-333333333333"
+    assert main(["record", "--runs", "3", "--org", org, "--user", user, "--out", str(tmp_path / "b.json")]) == 0
+    assert len(commands) == 3
+    for command in commands:
+        assert command[command.index("--org") + 1] == org
+        assert command[command.index("--user") + 1] == user

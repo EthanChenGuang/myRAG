@@ -3,10 +3,10 @@ import json
 from pathlib import Path
 
 import pytest
-from rag_sidecar.contracts.eval_run import RunManifest
+from rag_sidecar.contracts.eval_run import GoldenFilter, RunManifest
 from rag_sidecar.contracts.golden import GoldenItem
 
-from rag_eval.golden_io import golden_sha256, load_golden, write_golden
+from rag_eval.golden_io import golden_sha256, load_golden, select_golden, write_golden
 from rag_eval.traces import load_manifest, load_traces
 
 
@@ -72,6 +72,7 @@ def _manifest_dict() -> dict:
         "deployment_mode": "single",
         "golden_path": "eval/fixtures/golden.jsonl",
         "golden_sha256": "0" * 64,
+        "golden_filter": {"review_statuses": ["approved"], "gate_split": "dev"},
         "sql_sha256": {},
         "request_options": {},
         "effective_config_hash": "1" * 64,
@@ -169,3 +170,16 @@ def test_load_manifest_validates_with_run_manifest(tmp_path: Path):
     broken.write_text(json.dumps({**_manifest_dict(), "tier": "bogus"}), encoding="utf-8")
     with pytest.raises(ValueError):
         load_manifest(broken)
+
+
+def test_select_golden_keeps_only_listed_review_statuses():
+    base = _item("en-a-001")
+    items = [
+        base,
+        base.model_copy(update={"id": "en-b-002", "review_status": "draft"}),
+        base.model_copy(update={"id": "en-c-003", "review_status": "rejected"}),
+    ]
+    approved = select_golden(items, GoldenFilter(review_statuses=["approved"], gate_split="dev"))
+    assert [i.id for i in approved] == ["en-a-001"]
+    with_drafts = select_golden(items, GoldenFilter(review_statuses=["approved", "draft"], gate_split="dev"))
+    assert [i.id for i in with_drafts] == ["en-a-001", "en-b-002"]

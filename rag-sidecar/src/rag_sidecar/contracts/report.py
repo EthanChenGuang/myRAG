@@ -2,8 +2,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from rag_sidecar.contracts.eval_run import RagRunOptions
-from rag_sidecar.contracts.golden import Category, Language
+from rag_sidecar.contracts.eval_run import GoldenFilter, RagRunOptions
+from rag_sidecar.contracts.golden import Category, Language, Split
 
 
 class _Contract(BaseModel):
@@ -27,6 +27,7 @@ class ItemResult(_Contract):
     item_id: str
     language: Language
     category: Category
+    split: Split
     answerable: bool
     refused: bool
     span_count: int = Field(ge=0)
@@ -42,8 +43,10 @@ class EvalReport(_Contract):
     run_config_hash: str
     corpus_sha256: str | None = None
     golden_sha256: str
+    golden_filter: GoldenFilter
     embedder_id: str | None = None
     embedder_version: int | None = None
+    embedder_source_sha256: str | None = None
     deployment_mode: str
     request_options: RagRunOptions
     k_values: list[int]
@@ -51,5 +54,6 @@ class EvalReport(_Contract):
     by_language: dict[str, SliceMetrics]
     by_category: dict[str, SliceMetrics]
     by_language_category: dict[str, SliceMetrics]
+    by_split: dict[str, SliceMetrics]
     items: list[ItemResult]
     notes: list[str] = Field(default_factory=list)

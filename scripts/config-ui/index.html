@@ -6365,6 +6365,20 @@
 
                                         <div class="form-control mb-4">
                                             <label class="label">
+                                                <span class="label-text">Evaluation allowed scopes</span>
+                                            </label>
+                                            <input type="text" id="RAG_EVAL_ALLOWED_SCOPES"
+                                                placeholder="org:&lt;uuid&gt;,user:&lt;uuid&gt;"
+                                                class="input input-bordered w-full">
+                                            <label class="label">
+                                                <span class="label-text-alt">Multi-tenant only. Comma-separated
+                                                    workspaces the evaluation endpoint may read; empty denies
+                                                    every workspace.</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
                                                 <span class="label-text">Sidecar URL</span>
                                             </label>
                                             <input type="text" id="RAG_SIDECAR_URL"
@@ -9121,6 +9135,14 @@
 
                     this.showSaveIndicator();
                     console.log('Config saved successfully');
+
+                    const shortSecrets = ['RAG_EVAL_SECRET', 'RAG_SIDECAR_SECRET'].filter((name) => {
+                        const value = this.config[name];
+                        return typeof value === 'string' && value.length > 0 && value.length < 32;
+                    });
+                    if (shortSecrets.length > 0) {
+                        showToast(`${shortSecrets.join(' and ')} must be at least 32 characters; the endpoint answers 503 until it is`, 'warning');
+                    }
                 } catch (error) {
                     console.error('Error saving config:', error);
 

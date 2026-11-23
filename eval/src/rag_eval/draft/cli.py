@@ -61,6 +61,14 @@ def _load_source(args: argparse.Namespace) -> list[WorkspaceDocument] | int:
     if sum(scoped) != 1:
         print("supabase source needs exactly one of --org, --user, --single-tenant", file=sys.stderr)
         return EXIT_INPUT
+    if args.single_tenant:
+        mode = os.environ.get("NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE") or os.environ.get("MYRAG_DEPLOYMENT_MODE")
+        if mode != "single-tenant":
+            print(
+                "--single-tenant needs NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE=single-tenant; use --org or --user for a multi-tenant database",
+                file=sys.stderr,
+            )
+            return EXIT_INPUT
     url = os.environ.get("NEXT_PUBLIC_SUPABASE_URL")
     key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
     if not url or not key:

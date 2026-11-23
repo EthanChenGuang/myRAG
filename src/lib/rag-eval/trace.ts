@@ -3,7 +3,9 @@ import crypto from 'node:crypto';
 export const ENDPOINT_VERSION = 'rag-eval/1';
 
 const PROMPT_VARIABLES = ['RAG_SYSTEM_PROMPT', 'RAG_PRE_CONTEXT', 'RAG_POST_CONTEXT'] as const;
-const SENSITIVE_NAME = /SECRET|KEY|TOKEN|PASSWORD/;
+const SENSITIVE_NAME = /SECRET|KEY|TOKEN|PASSWORD|PASSWD|PWD|CRED|AUTH|DSN|PRIVATE|COOKIE|SESSION/;
+const URL_WITH_CREDENTIALS = /^[a-z][a-z0-9+.-]*:\/\/[^/?#\s]*@/i;
+const ACCESS_PREFIXES = ['RAG_EVAL_', 'RAG_SIDECAR_'] as const;
 
 export interface EffectiveConfig {
   deployment_mode: string;
@@ -23,9 +25,11 @@ export function buildEffectiveConfig(): EffectiveConfig {
   for (const name of Object.keys(process.env).sort()) {
     if (!name.startsWith('RAG_') && !name.startsWith('NEXT_PUBLIC_RAG_')) continue;
     if (SENSITIVE_NAME.test(name)) continue;
+    if (ACCESS_PREFIXES.some((prefix) => name.startsWith(prefix))) continue;
     if ((PROMPT_VARIABLES as readonly string[]).includes(name)) continue;
     const value = process.env[name];
     if (value === undefined) continue;
+    if (URL_WITH_CREDENTIALS.test(value.trim())) continue;
     ragEnv[name] = value;
   }
 

@@ -2,12 +2,13 @@ import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import { runEval } from './run-eval.mts';
+import { runEval, type EvalRequestOptions } from './run-eval.mts';
 import type { DeploymentMode } from './pglite-supabase.mts';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const DEFAULT_BASELINE = path.join(REPO_ROOT, 'eval/baselines/fixture-baseline.json');
 const NOISE_PATH = path.join(REPO_ROOT, 'eval/config/noise.json');
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function runPython(module: string, args: string[]): number {
   const result = spawnSync('uv', ['run', '--directory', path.join(REPO_ROOT, 'eval'), 'python', '-m', module, ...args], {
@@ -29,6 +30,9 @@ async function main(): Promise<number> {
       'base-url': { type: 'string' },
       'no-gate': { type: 'boolean', default: false },
       baseline: { type: 'string' },
+      'include-drafts': { type: 'boolean', default: false },
+      org: { type: 'string' },
+      user: { type: 'string' },
     },
     strict: true,
   });
@@ -46,6 +50,15 @@ async function main(): Promise<number> {
     }
   }
 
+  const requestOptions: EvalRequestOptions = {};
+  if (maxResults !== undefined) requestOptions.max_results = maxResults;
+  for (const [flag, key] of [['org', 'organization_id'], ['user', 'user_id']] as const) {
+    const value = values[flag]?.trim();
+    if (value === undefined) continue;
+    if (!UUID_RE.test(value)) throw new Error(`--${flag} must be a UUID`);
+    requestOptions[key] = value.toLowerCase();
+  }
+
   const gate = !values['no-gate'];
   const baseUrl = values['base-url'];
   if (gate && baseUrl && values.baseline === undefined) {
@@ -56,17 +69,22 @@ async function main(): Promise<number> {
 
   const goldenPath = path.resolve(values.golden as string);
   const outDir = path.resolve(values.out as string);
+  if (runPython('rag_sidecar.contracts.validate', ['--model', 'GoldenItem', '--jsonl', goldenPath]) !== 0) {
+    console.error('[Eval Harness] golden file failed Pydantic validation; nothing was run');
+    return 2;
+  }
   const result = await runEval({
     goldenPath,
     corpusDir: path.resolve(values.corpus as string),
     outDir,
     deploymentMode: deploymentMode as DeploymentMode,
-    requestOptions: maxResults === undefined ? {} : { max_results: maxResults },
-    tier: 'smoke',
+    requestOptions,
+    tier: baseUrl ? 'live' : 'smoke',
     baseUrl,
+    includeDrafts: values['include-drafts'],
   });
 
-  console.log(`[Eval Harness] wrote ${result.itemCount} trace(s) to ${result.tracesPath}`);
+  console.log(`[Eval Harness] wrote ${result.itemCount} trace(s) to ${result.tracesPath} (${result.skippedCount} golden item(s) not approved, skipped)`);
 
   const scoreCode = runPython('rag_eval.runner', [
     'score',

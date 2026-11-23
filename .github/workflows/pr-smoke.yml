@@ -1,0 +1,193 @@
+name: pr-smoke
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DEEPEVAL_TELEMETRY_OPT_OUT: '1'
+  DEEPEVAL_UPDATE_WARNING_OPT_IN: '0'
+  RAGAS_DO_NOT_TRACK: 'true'
+
+jobs:
+  ts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+        with:
+          version: '0.11.32'
+          python-version: '3.12'
+          enable-cache: true
+          cache-dependency-glob: '**/uv.lock'
+      - run: npm ci --ignore-scripts
+      - run: uv sync --directory rag-sidecar --locked
+      - run: uv sync --directory eval --locked --all-extras
+      - name: Vitest suite
+        run: npx vitest run
+      - name: tsx tests
+        run: node --import tsx --test tests/fixture-edge.test.mts tests/prompt-context.test.mts tests/eval-answer.test.mts
+      - name: Config drift check
+        run: node scripts/check-config.mjs
+      - name: Config check and type-check self-tests
+        run: node --test scripts/check-config.test.mjs scripts/typecheck-new.test.mjs
+      - name: Zod generator self-test
+        run: node --test scripts/tests/gen-zod.node-test.mjs
+      - name: New-code type-check
+        run: npm run typecheck:new
+      - name: Workflow structure check
+        run: uv run --directory eval python ../scripts/ci/check-workflows.py
+
+  schema-parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+        with:
+          version: '0.11.32'
+          python-version: '3.12'
+          enable-cache: true
+          cache-dependency-glob: '**/uv.lock'
+      - run: npm ci --ignore-scripts
+      - run: uv sync --directory rag-sidecar --locked
+      - name: Regenerate schemas and Zod
+        run: npm run gen:schemas
+      - name: Committed output must equal regenerated output
+        run: git diff --exit-code -- rag-sidecar/schemas src/lib/rag-eval/contracts.generated.ts tests/fixtures/contracts/samples.json
+
+  python:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+        with:
+          version: '0.11.32'
+          python-version: '3.12'
+          enable-cache: true
+          cache-dependency-glob: '**/uv.lock'
+      - run: uv sync --directory rag-sidecar --locked
+      - run: uv sync --directory eval --locked --all-extras
+      - name: rag-sidecar pytest
+        run: uv run --directory rag-sidecar pytest -q
+      - name: eval pytest
+        run: uv run --directory eval pytest -q
+
+  eval-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+        with:
+          version: '0.11.32'
+          python-version: '3.12'
+          enable-cache: true
+          cache-dependency-glob: '**/uv.lock'
+      - run: npm ci --ignore-scripts
+      - run: uv sync --directory rag-sidecar --locked
+      - run: uv sync --directory eval --locked --all-extras
+      - name: Smoke tier against the committed baseline
+        run: npm run test-rag -- --out eval/out/smoke
+      - name: Upload smoke output
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: eval-smoke
+          path: eval/out/smoke
+          if-no-files-found: warn
+
+  gate-negative-control:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+        with:
+          version: '0.11.32'
+          python-version: '3.12'
+          enable-cache: true
+          cache-dependency-glob: '**/uv.lock'
+      - run: npm ci --ignore-scripts
+      - run: uv sync --directory rag-sidecar --locked
+      - run: uv sync --directory eval --locked --all-extras
+      - name: Degraded run must be rejected by the gate with the regression exit code 10
+        shell: bash
+        run: |
+          set +e
+          npm run test-rag -- --max-results 1 --out eval/out/negative
+          code=$?
+          set -e
+          echo "degraded run exit code: $code"
+          test "$code" -eq 10
+          jq -e '.passed == false and (.offenders | length > 0) and (.mismatches | length == 0)' eval/out/negative/gate.json
+      - name: Upload negative-control output
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: eval-negative-control
+          path: eval/out/negative
+          if-no-files-found: warn
+
+  docker-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Build the sidecar image
+        run: docker build -t rag-sidecar:ci rag-sidecar
+      - name: Probes without a secret (fail closed)
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run -d --name sidecar-nosecret -p 8000:8000 rag-sidecar:ci
+          trap 'docker logs sidecar-nosecret || true; docker rm -f sidecar-nosecret || true' EXIT
+          curl -sS --retry 30 --retry-delay 2 --retry-all-errors -o /dev/null http://127.0.0.1:8000/health
+          health=$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/health)
+          ready=$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/ready)
+          echo "health=$health ready=$ready"
+          test "$health" = "200"
+          test "$ready" = "503"
+      - name: Probes and auth with a secret
+        shell: bash
+        run: |
+          set -euo pipefail
+          secret=$(head -c 64 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 48)
+          echo "::add-mask::$secret"
+          test "${#secret}" -eq 48
+          docker run -d --name sidecar-secret -p 8001:8000 -e RAG_SIDECAR_SECRET="$secret" rag-sidecar:ci
+          trap 'docker logs sidecar-secret || true; docker rm -f sidecar-secret || true' EXIT
+          curl -sS --retry 30 --retry-delay 2 --retry-all-errors -o /dev/null http://127.0.0.1:8001/health
+          ready=$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:8001/ready)
+          anon=$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:8001/v1/info)
+          authed=$(curl -sS -o /dev/null -w '%{http_code}' -H "x-sidecar-secret: $secret" http://127.0.0.1:8001/v1/info)
+          echo "ready=$ready info_without_header=$anon info_with_header=$authed"
+          test "$ready" = "200"
+          test "$anon" = "401"
+          test "$authed" = "200"

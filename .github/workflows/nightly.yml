@@ -1,0 +1,75 @@
+name: nightly
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+env:
+  DEEPEVAL_TELEMETRY_OPT_OUT: '1'
+  DEEPEVAL_UPDATE_WARNING_OPT_IN: '0'
+  RAGAS_DO_NOT_TRACK: 'true'
+
+jobs:
+  judge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      HAS_JUDGE_KEYS: ${{ secrets.OPENROUTER_API_KEY != '' && secrets.OPENAI_API_KEY != '' }}
+    steps:
+      - name: Skip notice when judge keys are absent
+        if: env.HAS_JUDGE_KEYS != 'true'
+        run: echo "::notice::judge key not configured, skipping"
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        if: env.HAS_JUDGE_KEYS == 'true'
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        if: env.HAS_JUDGE_KEYS == 'true'
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+        if: env.HAS_JUDGE_KEYS == 'true'
+        with:
+          version: '0.11.32'
+          python-version: '3.12'
+          enable-cache: true
+          cache-dependency-glob: '**/uv.lock'
+      - name: Install Node dependencies
+        if: env.HAS_JUDGE_KEYS == 'true'
+        run: npm ci --ignore-scripts
+      - name: Sync eval project
+        if: env.HAS_JUDGE_KEYS == 'true'
+        run: uv sync --directory eval --locked --all-extras
+      - name: Sync rag-sidecar project
+        if: env.HAS_JUDGE_KEYS == 'true'
+        run: uv sync --directory rag-sidecar --locked
+      - name: Generate answered traces with the live generator
+        if: env.HAS_JUDGE_KEYS == 'true'
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: npx tsx eval/harness/run-nightly.mts --generator live --out eval/out/nightly
+      - name: Judge tier
+        if: env.HAS_JUDGE_KEYS == 'true'
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: >-
+          uv run --directory eval python -m rag_eval.judge.run
+          --traces eval/out/nightly/traces.jsonl
+          --golden eval/fixtures/golden.jsonl
+          --manifest eval/out/nightly/run.json
+          --out eval/out/nightly
+      - name: Upload nightly output
+        if: always() && env.HAS_JUDGE_KEYS == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: eval-nightly
+          path: eval/out/nightly
+          if-no-files-found: warn

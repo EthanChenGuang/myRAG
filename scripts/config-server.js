@@ -204,6 +204,13 @@ app.post('/api/config', (req, res) => {
     // Filter out invalid environment variable names and template placeholders
     const fullValues = filterValidEnvVars(rawFullValues);
 
+    for (const name of ['RAG_EVAL_SECRET', 'RAG_SIDECAR_SECRET']) {
+      const value = fullValues[name];
+      if (typeof value === 'string' && value.length > 0 && value.length < 32) {
+        console.warn(`[Config] ${name} is ${value.length} characters; at least 32 are required or the endpoint answers 503`);
+      }
+    }
+
     // Debug logging
     console.log('API: Received config update request with keys:', Object.keys(fullValues).join(', '));
 
@@ -523,6 +530,7 @@ ${fullValues.RAG_BEHAVIOR_MODE !== undefined ? `RAG_BEHAVIOR_MODE=${fullValues.R
 # RAG Evaluation & Sidecar
 ${fullValues.RAG_EVAL_ENDPOINT_ENABLED !== undefined ? `RAG_EVAL_ENDPOINT_ENABLED=${fullValues.RAG_EVAL_ENDPOINT_ENABLED}` : 'RAG_EVAL_ENDPOINT_ENABLED=false'}
 ${fullValues.RAG_EVAL_SECRET !== undefined ? `RAG_EVAL_SECRET=${fullValues.RAG_EVAL_SECRET}` : 'RAG_EVAL_SECRET='}
+${fullValues.RAG_EVAL_ALLOWED_SCOPES !== undefined ? `RAG_EVAL_ALLOWED_SCOPES=${fullValues.RAG_EVAL_ALLOWED_SCOPES}` : 'RAG_EVAL_ALLOWED_SCOPES='}
 ${fullValues.RAG_SIDECAR_URL !== undefined ? `RAG_SIDECAR_URL=${fullValues.RAG_SIDECAR_URL}` : 'RAG_SIDECAR_URL='}
 ${fullValues.RAG_SIDECAR_SECRET !== undefined ? `RAG_SIDECAR_SECRET=${fullValues.RAG_SIDECAR_SECRET}` : 'RAG_SIDECAR_SECRET='}
 
@@ -1274,6 +1282,7 @@ RAG_BEHAVIOR_MODE=${getEnvValue('RAG_BEHAVIOR_MODE') || 'strict'}
 # RAG Evaluation & Sidecar
 RAG_EVAL_ENDPOINT_ENABLED=${getEnvValue('RAG_EVAL_ENDPOINT_ENABLED') || 'false'}
 RAG_EVAL_SECRET=${getEnvValue('RAG_EVAL_SECRET') || ''}
+RAG_EVAL_ALLOWED_SCOPES=${getEnvValue('RAG_EVAL_ALLOWED_SCOPES') || ''}
 RAG_SIDECAR_URL=${getEnvValue('RAG_SIDECAR_URL') || ''}
 RAG_SIDECAR_SECRET=${getEnvValue('RAG_SIDECAR_SECRET') || ''}
 # LlamaCloud configuration
@@ -1592,6 +1601,7 @@ RAG_BEHAVIOR_MODE=${getEnvValue('RAG_BEHAVIOR_MODE') || 'strict'}
 # RAG Evaluation & Sidecar
 RAG_EVAL_ENDPOINT_ENABLED=${getEnvValue('RAG_EVAL_ENDPOINT_ENABLED') || 'false'}
 RAG_EVAL_SECRET=${getEnvValue('RAG_EVAL_SECRET') || ''}
+RAG_EVAL_ALLOWED_SCOPES=${getEnvValue('RAG_EVAL_ALLOWED_SCOPES') || ''}
 RAG_SIDECAR_URL=${getEnvValue('RAG_SIDECAR_URL') || ''}
 RAG_SIDECAR_SECRET=${getEnvValue('RAG_SIDECAR_SECRET') || ''}
 # LlamaCloud configuration

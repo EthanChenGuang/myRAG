@@ -224,6 +224,11 @@
       ]
     },
     {
+      "name": "RAG_EVAL_ALLOWED_SCOPES",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "RAG_EVAL_ENDPOINT_ENABLED",
       "status": "managed",
       "knownGaps": []

@@ -12,7 +12,7 @@ from rag_sidecar.contracts.judge import JudgeConfig, JudgeItemScore, JudgeReport
 from rag_sidecar.contracts.report import MetricValue
 
 import rag_eval.judge  # noqa: F401  (applies the telemetry opt-out before the judge libraries load)
-from rag_eval.golden_io import load_golden
+from rag_eval.golden_io import load_golden, select_golden
 from rag_eval.judge.config import (
     DEFAULT_CONFIG_PATH,
     JudgeCase,
@@ -251,6 +251,7 @@ def main(argv: list[str] | None = None) -> int:
         generator_model = generator_model_of(traces)
     except (OSError, ValueError) as exc:
         return _fail(str(exc), EXIT_INPUT)
+    golden = select_golden(golden, manifest.golden_filter)
 
     problems = _cross_check([item.id for item in golden], [trace.item_id for trace in traces])
     if problems:
@@ -275,6 +276,11 @@ def main(argv: list[str] | None = None) -> int:
     try:
         from rag_eval.judge.deepeval_judge import OpenRouterDeepEvalLLM
         from rag_eval.judge.ragas_judge import build_ragas_live
+
+        try:
+            check_no_results_upload()
+        except RuntimeError as exc:
+            return _fail(str(exc), EXIT_INPUT)
 
         deepeval_llm = OpenRouterDeepEvalLLM(config, openrouter_key)
         ragas_llm, ragas_embeddings = build_ragas_live(config, openrouter_key, openai_key)

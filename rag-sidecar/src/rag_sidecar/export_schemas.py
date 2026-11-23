@@ -25,8 +25,11 @@ from rag_sidecar.contracts import (
     SidecarInfo,
     SidecarReady,
 )
+from rag_sidecar.contracts.samples import build_samples
 
-SCHEMAS_DIR = Path(__file__).resolve().parents[2] / "schemas"
+REPO_ROOT = Path(__file__).resolve().parents[3]
+SCHEMAS_DIR = REPO_ROOT / "rag-sidecar" / "schemas"
+SAMPLES_PATH = REPO_ROOT / "tests" / "fixtures" / "contracts" / "samples.json"
 
 Mode = Literal["validation", "serialization"]
 
@@ -63,19 +66,24 @@ def _write_atomic(path: Path, text: str) -> None:
         raise
 
 
-def export_all(schemas_dir: Path = SCHEMAS_DIR) -> list[Path]:
-    schemas_dir.mkdir(parents=True, exist_ok=True)
+def _dump(value: object) -> str:
+    return json.dumps(value, sort_keys=True, indent=2, ensure_ascii=False) + "\n"
+
+
+def export_all(out_dir: Path = SCHEMAS_DIR, samples_path: Path = SAMPLES_PATH) -> list[Path]:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    samples_path.parent.mkdir(parents=True, exist_ok=True)
     written: list[Path] = []
     for model, mode in CONTRACTS:
-        schema = model.model_json_schema(mode=mode)
-        text = json.dumps(schema, sort_keys=True, indent=2, ensure_ascii=False) + "\n"
-        target = schemas_dir / f"{model.__name__}.schema.json"
-        _write_atomic(target, text)
+        target = out_dir / f"{model.__name__}.schema.json"
+        _write_atomic(target, _dump(model.model_json_schema(mode=mode)))
         written.append(target)
     expected = {path.name for path in written}
-    for stale in schemas_dir.glob("*.schema.json"):
+    for stale in out_dir.glob("*.schema.json"):
         if stale.name not in expected:
             stale.unlink()
+    _write_atomic(samples_path, _dump(build_samples()))
+    written.append(samples_path)
     return written
 
 

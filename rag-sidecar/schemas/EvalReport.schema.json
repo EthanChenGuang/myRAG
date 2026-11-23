@@ -1,5 +1,33 @@
 {
   "$defs": {
+    "GoldenFilter": {
+      "additionalProperties": false,
+      "properties": {
+        "gate_split": {
+          "const": "dev",
+          "title": "Gate Split",
+          "type": "string"
+        },
+        "review_statuses": {
+          "items": {
+            "enum": [
+              "approved",
+              "draft"
+            ],
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Review Statuses",
+          "type": "array"
+        }
+      },
+      "required": [
+        "review_statuses",
+        "gate_split"
+      ],
+      "title": "GoldenFilter",
+      "type": "object"
+    },
     "ItemResult": {
       "additionalProperties": false,
       "properties": {
@@ -64,12 +92,21 @@
           "minimum": 0,
           "title": "Spans Hit At 5",
           "type": "integer"
+        },
+        "split": {
+          "enum": [
+            "dev",
+            "test"
+          ],
+          "title": "Split",
+          "type": "string"
         }
       },
       "required": [
         "item_id",
         "language",
         "category",
+        "split",
         "answerable",
         "refused",
         "span_count",
@@ -216,6 +253,13 @@
       "title": "By Language Category",
       "type": "object"
     },
+    "by_split": {
+      "additionalProperties": {
+        "$ref": "#/$defs/SliceMetrics"
+      },
+      "title": "By Split",
+      "type": "object"
+    },
     "corpus_sha256": {
       "anyOf": [
         {
@@ -244,6 +288,18 @@
       "default": null,
       "title": "Embedder Id"
     },
+    "embedder_source_sha256": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Embedder Source Sha256"
+    },
     "embedder_version": {
       "anyOf": [
         {
@@ -255,6 +311,9 @@
       ],
       "default": null,
       "title": "Embedder Version"
+    },
+    "golden_filter": {
+      "$ref": "#/$defs/GoldenFilter"
     },
     "golden_sha256": {
       "title": "Golden Sha256",
@@ -316,6 +375,7 @@
     "tier",
     "run_config_hash",
     "golden_sha256",
+    "golden_filter",
     "deployment_mode",
     "request_options",
     "k_values",
@@ -323,6 +383,7 @@
     "by_language",
     "by_category",
     "by_language_category",
+    "by_split",
     "items"
   ],
   "title": "EvalReport",

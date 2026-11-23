@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { validateRequest } from '@/lib/api-middleware';
 import { enhancedRetrieveChunks } from '@/lib/enhanced-rag-retrieval';
 import { RagRunRequestSchema, RagTraceSchema } from '@/lib/rag-eval/contracts.generated';
-import { checkEvalAccess } from '@/lib/rag-eval/auth';
+import { checkEvalAccess, checkEvalScope } from '@/lib/rag-eval/auth';
 import { applyLegacyPostFilter, type LegacyDocumentRow } from '@/lib/rag-eval/legacy-post-filter';
 import { buildEffectiveConfig, configHash } from '@/lib/rag-eval/trace';
 import { generateEvalAnswer, isGPTGeneratorModel, resolveGeneratorModel } from '@/lib/rag-eval/answer';
@@ -27,12 +27,18 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) {
     return parsed.response;
   }
-  const { query, options, rag_mode: ragMode, item_id: itemId, include_answer: includeAnswer } = parsed.data;
+  const { query, conversation, options, rag_mode: ragMode, item_id: itemId, include_answer: includeAnswer } = parsed.data;
+
+  const deploymentMode = env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE;
+  const organizationId = deploymentMode === 'multi-tenant' ? (options?.organization_id ?? null) : null;
+  const userId = options?.user_id ?? null;
+  const scope = checkEvalScope({ deploymentMode, organizationId, userId, allowedScopes: env.RAG_EVAL_ALLOWED_SCOPES });
+  if (!scope.ok) {
+    console.warn('[RAG Eval] scope refused:', { deploymentMode, hasOrganization: !!organizationId, hasUser: !!userId });
+    return NextResponse.json({ error: scope.error }, { status: scope.status });
+  }
 
   try {
-    const deploymentMode = env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE;
-    const organizationId = deploymentMode === 'multi-tenant' ? (options?.organization_id ?? null) : null;
-    const userId = options?.user_id ?? null;
     const configuredCount = (env as unknown as Record<string, string | undefined>).RAG_FINAL_RESULT_COUNT;
 
     const retrievalStart = Date.now();
@@ -91,7 +97,7 @@ export async function POST(req: NextRequest) {
     if (generatorModel !== null && !filtered.refused) {
       const generationStart = Date.now();
       try {
-        answer = await generateEvalAnswer({ query, context: filtered.context, ragMode, generatorModel });
+        answer = await generateEvalAnswer({ query, conversation, context: filtered.context, ragMode, generatorModel });
       } catch (error: unknown) {
         const name = error instanceof Error ? error.name : 'Error';
         const status = (error as { statusCode?: unknown } | null)?.statusCode;
@@ -149,8 +155,9 @@ export async function POST(req: NextRequest) {
     console.log('[RAG Eval] trace built:', { candidates: candidates.length, kept: filtered.kept.length, refused: filtered.refused });
     return NextResponse.json(checked.data);
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'retrieval failed';
-    console.error('[RAG Eval] retrieval failed:', message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    const name = error instanceof Error ? error.name : 'Error';
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('[RAG Eval] retrieval failed:', { name, message });
+    return NextResponse.json({ error: `retrieval failed: ${name}` }, { status: 500 });
   }
 }
