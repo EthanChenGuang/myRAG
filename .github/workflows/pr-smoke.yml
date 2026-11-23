@@ -168,7 +168,7 @@ jobs:
           set -euo pipefail
           docker run -d --name sidecar-nosecret -p 8000:8000 rag-sidecar:ci
           trap 'docker logs sidecar-nosecret || true; docker rm -f sidecar-nosecret || true' EXIT
-          curl -sS --retry 30 --retry-delay 2 --retry-connrefused -o /dev/null http://127.0.0.1:8000/health
+          curl -sS --retry 30 --retry-delay 2 --retry-all-errors -o /dev/null http://127.0.0.1:8000/health
           health=$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/health)
           ready=$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/ready)
           echo "health=$health ready=$ready"
@@ -183,7 +183,7 @@ jobs:
           test "${#secret}" -eq 48
           docker run -d --name sidecar-secret -p 8001:8000 -e RAG_SIDECAR_SECRET="$secret" rag-sidecar:ci
           trap 'docker logs sidecar-secret || true; docker rm -f sidecar-secret || true' EXIT
-          curl -sS --retry 30 --retry-delay 2 --retry-connrefused -o /dev/null http://127.0.0.1:8001/health
+          curl -sS --retry 30 --retry-delay 2 --retry-all-errors -o /dev/null http://127.0.0.1:8001/health
           ready=$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:8001/ready)
           anon=$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:8001/v1/info)
           authed=$(curl -sS -o /dev/null -w '%{http_code}' -H "x-sidecar-secret: $secret" http://127.0.0.1:8001/v1/info)
