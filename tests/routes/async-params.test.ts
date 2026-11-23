@@ -149,12 +149,12 @@ describe('folders/:id', () => {
 });
 
 describe('invites/:token', () => {
-  function mockInvites(db: FakeDb, session: unknown = null) {
+  function mockInvites(db: FakeDb, authUser: unknown = null) {
     vi.doMock('@/lib/deployment-mode', () => ({ requireMultiTenant: () => undefined }));
     vi.doMock('next/headers', () => ({ cookies: () => undefined }));
     vi.doMock('@supabase/auth-helpers-nextjs', () => ({
       createRouteHandlerClient: () => ({
-        auth: { getSession: async () => ({ data: { session } }) },
+        auth: { getUser: async () => ({ data: { user: authUser } }) },
         from: db.from,
       }),
     }));
@@ -186,7 +186,7 @@ describe('invites/:token', () => {
 
   test('POST looks the invitation up by the awaited token', async () => {
     const db = fakeDb([{ data: null, error: { message: 'not found' } }]);
-    mockInvites(db, { user: { id: 'user-1', email: 'invitee@example.invalid' } });
+    mockInvites(db, { id: 'user-1', email: 'invitee@example.invalid' });
     const route = await import('@/app/api/invites/[token]/route');
     const res = await route.POST(new Request('http://localhost/api/invites/tok-1', { method: 'POST' }), {
       params: asyncParams({ token: 'tok-1' }),
@@ -289,7 +289,7 @@ describe('organizations/:id/members/:userId', () => {
     vi.doMock('@/lib/auth/organization-handler', () => ({ isPersonalOrganization }));
     vi.doMock('@/lib/supabase/server', () => ({
       createClient: async () => ({
-        auth: { getSession: async () => ({ data: { session: { user: { id: 'user-1' } } } }) },
+        auth: { getUser: async () => ({ data: { user: { id: 'user-1' } } }) },
         from: db.from,
         rpc: vi.fn(async () => ({ data: null, error: null })),
       }),
@@ -347,7 +347,7 @@ describe('organizations/:id/share', () => {
     vi.doMock('@/lib/deployment-mode', () => ({ requireMultiTenant: () => undefined }));
     vi.doMock('@/lib/supabase/server', () => ({
       createClient: async () => ({
-        auth: { getSession: async () => ({ data: { session: { user: { id: 'user-1' } } } }) },
+        auth: { getUser: async () => ({ data: { user: { id: 'user-1' } } }) },
         from: db.from,
         rpc,
       }),

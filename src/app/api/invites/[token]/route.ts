@@ -112,10 +112,10 @@ export async function POST(
 
     const supabase = createRouteHandlerClient({ cookies });
     const {
-      data: { session },
-    } = await supabase.auth.getSession();
+      data: { user: authUser },
+    } = await supabase.auth.getUser();
 
-    if (!session) {
+    if (!authUser) {
       return NextResponse.json(
         { error: 'You must be logged in to accept invitations' },
         { status: 401 }
@@ -137,7 +137,7 @@ export async function POST(
     }
 
     // Verify user email matches invitation
-    if (session.user.email?.toLowerCase() !== invite.email.toLowerCase()) {
+    if (authUser.email?.toLowerCase() !== invite.email.toLowerCase()) {
       return NextResponse.json(
         {
           error: `This invitation was sent to ${invite.email}. Please log in with that email address.`,
@@ -172,7 +172,7 @@ export async function POST(
       .from('organization_members')
       .select('id')
       .eq('organization_id', invite.organization_id)
-      .eq('user_id', session.user.id)
+      .eq('user_id', authUser.id)
       .single();
 
     if (existingMember) {
@@ -193,7 +193,7 @@ export async function POST(
       .from('organization_members')
       .insert({
         organization_id: invite.organization_id,
-        user_id: session.user.id,
+        user_id: authUser.id,
         role: invite.role,
       })
       .select()
@@ -220,7 +220,7 @@ export async function POST(
       .eq('id', invite.organization_id)
       .single();
 
-    logger.info('API', `User ${session.user.id} accepted invitation to organization ${invite.organization_id}`);
+    logger.info('API', `User ${authUser.id} accepted invitation to organization ${invite.organization_id}`);
 
     return NextResponse.json({
       success: true,
