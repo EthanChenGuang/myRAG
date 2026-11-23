@@ -12,6 +12,9 @@ import '@livekit/components-styles';
 import { useEffect, useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Mic, Loader2 } from 'lucide-react';
+import { useOrganizationStore } from '@/lib/stores/organization-store';
+import { isMultiTenant } from '@/lib/deployment-mode';
+import { toast } from '@/components/ui/use-toast';
 
 export default function VoiceWidget() {
     const [token, setToken] = useState<string>('');
@@ -41,30 +44,22 @@ export default function VoiceWidget() {
             try {
                 setIsConnecting(true);
 
-                // Get Auth Session for User ID
-                let userId = 'anon';
-                try {
-                    // Dynamic import to avoid SSR issues if any
-                    const { createClient } = await import('@/lib/supabase/client');
-                    const supabase = createClient();
-                    const { data: { session } } = await supabase.auth.getSession();
-                    if (session?.user?.id) {
-                        userId = session.user.id;
-                        console.log('[VoiceWidget] Authenticated as user:', userId);
+                let organizationQuery = '';
+                if (isMultiTenant()) {
+                    const { currentOrganization, isPersonalMode } = useOrganizationStore.getState();
+                    if (!isPersonalMode && currentOrganization?.id) {
+                        organizationQuery = `?organizationId=${encodeURIComponent(currentOrganization.id)}`;
                     }
-                } catch (err) {
-                    console.error('[VoiceWidget] Error fetching session:', err);
                 }
-
-                // Append random suffix to allow multiple tabs/sessions for same user if needed, 
-                // but prefix with user ID for RAG context
-                const identity = `user-${userId}-${Math.floor(Math.random() * 1000)}`;
-
-                const resp = await fetch(`/api/livekit/token?room=myrag-voice&username=${identity}`);
+                const resp = await fetch(`/api/livekit/token${organizationQuery}`);
                 const data = await resp.json();
 
                 if (data.error) {
                     console.error('Failed to get token:', data.error);
+                    if (data.error === 'voice_busy') {
+                        toast({ description: 'Voice is busy, try again in a moment', variant: 'destructive' });
+                    }
+                    setShouldConnect(false);
                     return;
                 }
 
