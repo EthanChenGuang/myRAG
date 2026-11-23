@@ -3,8 +3,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import util from 'node:util';
 import { NextRequest } from 'next/server';
-import { GoldenItemSchema, RagTraceSchema, type GoldenItem, type RagRunRequest } from '../../src/lib/rag-eval/contracts.generated.ts';
+import { spawnSync } from 'node:child_process';
+import { GoldenItemSchema, RagTraceSchema, RunManifestSchema, type GoldenItem, type RagRunRequest, type RunManifest } from '../../src/lib/rag-eval/contracts.generated.ts';
+import { canonicalJson, configHash } from '../../src/lib/rag-eval/trace.ts';
 import { loadPinnedEvalEnv } from './eval-env.mts';
+import { EMBEDDER_ID, EMBEDDER_VERSION, embedderSourceSha256 } from './fixture-embedder.mts';
 import { createFixtureDatabase, type DeploymentMode } from './pglite-supabase.mts';
 import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from './fake-edge.mts';
 
@@ -21,6 +24,8 @@ export interface InProcessEval {
   secret: string;
   edge: FakeEdge;
   fixtureUserId: string;
+  corpusSha256: string;
+  sqlSha256: Record<string, string>;
   close: () => Promise<void>;
 }
 
@@ -41,6 +46,8 @@ export interface RunEvalResult {
   tier: EvalTier;
   deploymentMode: DeploymentMode;
   edgeErrors: number;
+  runPath: string;
+  manifest: RunManifest;
 }
 
 const ROUTE_PATH = '/api/internal/rag/run';
@@ -78,6 +85,8 @@ export async function prepareInProcessEval(options: { corpusDir: string; deploym
     secret,
     edge: startedEdge,
     fixtureUserId: fixture.fixtureUserId,
+    corpusSha256: fixture.corpusSha256,
+    sqlSha256: fixture.sqlSha256,
     close: async () => {
       await startedEdge.close();
       await fixture.db.close().catch(() => undefined);
@@ -103,6 +112,17 @@ function readGolden(goldenPath: string): GoldenItem[] {
     }
     return parsed.data;
   });
+}
+
+function sha256File(filePath: string): string {
+  return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
+}
+
+function gitHeadSha(): string | null {
+  const result = spawnSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' });
+  if (result.status !== 0) return null;
+  const sha = result.stdout.trim();
+  return sha === '' ? null : sha;
 }
 
 function redirectConsole(logPath: string): () => void {
@@ -138,6 +158,8 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
   const restoreConsole = redirectConsole(logPath);
   let inProcess: InProcessEval | undefined;
   let edgeErrors = 0;
+  let firstEffectiveConfig: unknown = null;
+  let manifestInputs: { corpusSha256: string | null; sqlSha256: Record<string, string> } = { corpusSha256: null, sqlSha256: {} };
   try {
     let send: (payload: RagRunRequest) => Promise<{ status: number; body: unknown }>;
     if (baseUrl) {
@@ -186,10 +208,12 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
       }
       const trace = RagTraceSchema.parse(body);
       trace.item_id = item.id;
+      if (firstEffectiveConfig === null) firstEffectiveConfig = trace.effective_config;
       fs.appendFileSync(tracesPath, `${JSON.stringify(trace)}\n`);
     }
 
     if (inProcess) {
+      manifestInputs = { corpusSha256: inProcess.corpusSha256, sqlSha256: inProcess.sqlSha256 };
       edgeErrors = inProcess.edge.errors.length;
       if (edgeErrors > 0) {
         const sample = inProcess.edge.errors
@@ -204,5 +228,52 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     if (inProcess) await inProcess.close();
   }
 
-  return { tracesPath, logPath, itemCount: items.length, tier, deploymentMode, edgeErrors };
+  const normalizedOptions = {
+    max_results: requestOptions.max_results ?? null,
+    organization_id: requestOptions.organization_id ?? null,
+    user_id: requestOptions.user_id ?? null,
+  };
+  const embedder = baseUrl
+    ? null
+    : { id: EMBEDDER_ID, version: String(EMBEDDER_VERSION), source_sha256: embedderSourceSha256() };
+  const goldenSha256 = sha256File(goldenPath);
+  const effectiveConfigHash = configHash(firstEffectiveConfig);
+  const runConfigHash = crypto
+    .createHash('sha256')
+    .update(
+      canonicalJson({
+        effective_config_hash: effectiveConfigHash,
+        embedder,
+        corpus_sha256: manifestInputs.corpusSha256,
+        golden_sha256: goldenSha256,
+        sql_sha256: manifestInputs.sqlSha256,
+        request_options: normalizedOptions,
+        deployment_mode: deploymentMode,
+      }),
+      'utf8',
+    )
+    .digest('hex');
+
+  const manifest = RunManifestSchema.parse({
+    schema_version: 1,
+    run_id: crypto.randomUUID(),
+    tier,
+    created_at: new Date().toISOString(),
+    git_sha: gitHeadSha(),
+    deployment_mode: deploymentMode,
+    embedder,
+    corpus_sha256: manifestInputs.corpusSha256,
+    golden_path: path.relative(process.cwd(), goldenPath) || goldenPath,
+    golden_sha256: goldenSha256,
+    sql_sha256: manifestInputs.sqlSha256,
+    request_options: normalizedOptions,
+    effective_config_hash: effectiveConfigHash,
+    run_config_hash: runConfigHash,
+    item_count: items.length,
+    edge_errors: edgeErrors,
+  });
+  const runPath = path.join(outDir, 'run.json');
+  fs.writeFileSync(runPath, `${JSON.stringify(manifest, null, 2)}\n`);
+
+  return { tracesPath, logPath, itemCount: items.length, tier, deploymentMode, edgeErrors, runPath, manifest };
 }
