@@ -108,8 +108,12 @@ function createStubLanguageModel(): LanguageModel {
 
 type MutableEnv = Record<string, string | undefined>;
 
-export async function prepareInProcessEval(options: { corpusDir: string; deploymentMode: DeploymentMode }): Promise<InProcessEval> {
-  const { corpusDir, deploymentMode } = options;
+export async function prepareInProcessEval(options: {
+  corpusDir: string;
+  deploymentMode: DeploymentMode;
+  allowedScopes?: string[];
+}): Promise<InProcessEval> {
+  const { corpusDir, deploymentMode, allowedScopes = [] } = options;
   const fixture = await createFixtureDatabase({ deploymentMode, corpusDir });
   let edge: FakeEdge | undefined;
   try {
@@ -131,6 +135,7 @@ export async function prepareInProcessEval(options: { corpusDir: string; deploym
   env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE = deploymentMode;
   env.OPENAI_EMBEDDING_MODEL = 'text-embedding-3-small';
   env.RAG_EVAL_SECRET = secret;
+  env.RAG_EVAL_ALLOWED_SCOPES = [`user:${fixture.fixtureUserId}`, ...allowedScopes].join(',');
 
   const route = await import('../../src/app/api/internal/rag/run/route.ts');
 
@@ -245,7 +250,12 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
         return { status: res.status, body: await res.json().catch(() => null) };
       };
     } else {
-      const prepared = await prepareInProcessEval({ corpusDir, deploymentMode });
+      const requestedScope = requestOptions.organization_id
+        ? `org:${requestOptions.organization_id}`
+        : requestOptions.user_id
+          ? `user:${requestOptions.user_id}`
+          : null;
+      const prepared = await prepareInProcessEval({ corpusDir, deploymentMode, allowedScopes: requestedScope ? [requestedScope] : [] });
       inProcess = prepared;
       if (includeAnswer) {
         answerModule = await import('../../src/lib/rag-eval/answer.ts');

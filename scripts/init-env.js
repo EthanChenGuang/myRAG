@@ -325,6 +325,8 @@ RAG_BEHAVIOR_MODE=strict
 RAG_EVAL_ENDPOINT_ENABLED=false
 # Shared secret for the eval endpoint (at least 32 characters)
 RAG_EVAL_SECRET=
+# Multi-tenant scopes the eval endpoint may read, comma-separated org:<uuid> or user:<uuid> (empty denies all)
+RAG_EVAL_ALLOWED_SCOPES=
 # Base URL of the Python sidecar service
 RAG_SIDECAR_URL=
 # Shared secret for the sidecar (at least 32 characters)

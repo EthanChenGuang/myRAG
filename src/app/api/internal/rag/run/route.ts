@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { validateRequest } from '@/lib/api-middleware';
 import { enhancedRetrieveChunks } from '@/lib/enhanced-rag-retrieval';
 import { RagRunRequestSchema, RagTraceSchema } from '@/lib/rag-eval/contracts.generated';
-import { checkEvalAccess } from '@/lib/rag-eval/auth';
+import { checkEvalAccess, checkEvalScope } from '@/lib/rag-eval/auth';
 import { applyLegacyPostFilter, type LegacyDocumentRow } from '@/lib/rag-eval/legacy-post-filter';
 import { buildEffectiveConfig, configHash } from '@/lib/rag-eval/trace';
 import { generateEvalAnswer, isGPTGeneratorModel, resolveGeneratorModel } from '@/lib/rag-eval/answer';
@@ -29,10 +29,16 @@ export async function POST(req: NextRequest) {
   }
   const { query, options, rag_mode: ragMode, item_id: itemId, include_answer: includeAnswer } = parsed.data;
 
+  const deploymentMode = env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE;
+  const organizationId = deploymentMode === 'multi-tenant' ? (options?.organization_id ?? null) : null;
+  const userId = options?.user_id ?? null;
+  const scope = checkEvalScope({ deploymentMode, organizationId, userId, allowedScopes: env.RAG_EVAL_ALLOWED_SCOPES });
+  if (!scope.ok) {
+    console.warn('[RAG Eval] scope refused:', { deploymentMode, hasOrganization: !!organizationId, hasUser: !!userId });
+    return NextResponse.json({ error: scope.error }, { status: scope.status });
+  }
+
   try {
-    const deploymentMode = env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE;
-    const organizationId = deploymentMode === 'multi-tenant' ? (options?.organization_id ?? null) : null;
-    const userId = options?.user_id ?? null;
     const configuredCount = (env as unknown as Record<string, string | undefined>).RAG_FINAL_RESULT_COUNT;
 
     const retrievalStart = Date.now();

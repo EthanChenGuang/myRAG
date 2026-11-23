@@ -4,6 +4,7 @@ export const ENDPOINT_VERSION = 'rag-eval/1';
 
 const PROMPT_VARIABLES = ['RAG_SYSTEM_PROMPT', 'RAG_PRE_CONTEXT', 'RAG_POST_CONTEXT'] as const;
 const SENSITIVE_NAME = /SECRET|KEY|TOKEN|PASSWORD/;
+const ACCESS_PREFIXES = ['RAG_EVAL_', 'RAG_SIDECAR_'] as const;
 
 export interface EffectiveConfig {
   deployment_mode: string;
@@ -23,6 +24,7 @@ export function buildEffectiveConfig(): EffectiveConfig {
   for (const name of Object.keys(process.env).sort()) {
     if (!name.startsWith('RAG_') && !name.startsWith('NEXT_PUBLIC_RAG_')) continue;
     if (SENSITIVE_NAME.test(name)) continue;
+    if (ACCESS_PREFIXES.some((prefix) => name.startsWith(prefix))) continue;
     if ((PROMPT_VARIABLES as readonly string[]).includes(name)) continue;
     const value = process.env[name];
     if (value === undefined) continue;
