@@ -10,10 +10,11 @@ import { logger } from '@/lib/logger';
  */
 export async function GET(
   request: Request,
-  { params }: { params: { token: string } }
+  { params }: { params: Promise<{ token: string }> }
 ) {
   try {
     requireMultiTenant();
+    const { token } = await params;
 
     const supabase = createRouteHandlerClient({ cookies });
 
@@ -33,7 +34,7 @@ export async function GET(
           slug
         )
       `)
-      .eq('token', params.token)
+      .eq('token', token)
       .single();
 
     if (error || !invite) {
@@ -65,7 +66,7 @@ export async function GET(
       await supabase
         .from('team_invitations')
         .update({ status: 'expired' })
-        .eq('token', params.token);
+        .eq('token', token);
 
       return NextResponse.json(
         { error: 'This invitation has expired' },
@@ -103,10 +104,11 @@ export async function GET(
  */
 export async function POST(
   request: Request,
-  { params }: { params: { token: string } }
+  { params }: { params: Promise<{ token: string }> }
 ) {
   try {
     requireMultiTenant();
+    const { token } = await params;
 
     const supabase = createRouteHandlerClient({ cookies });
     const {
@@ -124,7 +126,7 @@ export async function POST(
     const { data: invite, error: inviteError } = await supabase
       .from('team_invitations')
       .select('*')
-      .eq('token', params.token)
+      .eq('token', token)
       .single();
 
     if (inviteError || !invite) {

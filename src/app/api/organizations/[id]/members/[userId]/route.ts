@@ -10,10 +10,11 @@ import { logger } from '@/lib/logger';
  */
 export async function PATCH(
   request: Request,
-  { params }: { params: { id: string; userId: string } }
+  { params }: { params: Promise<{ id: string; userId: string }> }
 ) {
   try {
     requireMultiTenant();
+    const { id, userId } = await params;
 
     const supabase = await createClient();
     const {
@@ -37,7 +38,7 @@ export async function PATCH(
     }
 
     // Check if personal organization
-    const isPersonal = await isPersonalOrganization(params.id);
+    const isPersonal = await isPersonalOrganization(id);
     if (isPersonal) {
       return NextResponse.json(
         { error: 'Cannot modify personal organization membership' },
@@ -49,7 +50,7 @@ export async function PATCH(
     const { data: requesterMembership } = await supabase
       .from('organization_members')
       .select('role')
-      .eq('organization_id', params.id)
+      .eq('organization_id', id)
       .eq('user_id', session.user.id)
       .single();
 
@@ -65,15 +66,15 @@ export async function PATCH(
       const { data: targetMember } = await supabase
         .from('organization_members')
         .select('role')
-        .eq('organization_id', params.id)
-        .eq('user_id', params.userId)
+        .eq('organization_id', id)
+        .eq('user_id', userId)
         .single();
 
       if (targetMember?.role === 'owner') {
         const { count } = await supabase
           .from('organization_members')
           .select('*', { count: 'exact', head: true })
-          .eq('organization_id', params.id)
+          .eq('organization_id', id)
           .eq('role', 'owner');
 
         if (count === 1) {
@@ -89,8 +90,8 @@ export async function PATCH(
     const { data: member, error: updateError } = await supabase
       .from('organization_members')
       .update({ role })
-      .eq('organization_id', params.id)
-      .eq('user_id', params.userId)
+      .eq('organization_id', id)
+      .eq('user_id', userId)
       .select()
       .single();
 
@@ -102,7 +103,7 @@ export async function PATCH(
       );
     }
 
-    logger.info('API', `Updated role for user ${params.userId} in org ${params.id} to ${role}`);
+    logger.info('API', `Updated role for user ${userId} in org ${id} to ${role}`);
 
     return NextResponse.json(member);
   } catch (error: any) {
@@ -128,10 +129,11 @@ export async function PATCH(
  */
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string; userId: string } }
+  { params }: { params: Promise<{ id: string; userId: string }> }
 ) {
   try {
     requireMultiTenant();
+    const { id, userId } = await params;
 
     const supabase = await createClient();
     const {
@@ -143,7 +145,7 @@ export async function DELETE(
     }
 
     // Check if personal organization
-    const isPersonal = await isPersonalOrganization(params.id);
+    const isPersonal = await isPersonalOrganization(id);
     if (isPersonal) {
       return NextResponse.json(
         { error: 'Cannot remove members from personal organizations' },
@@ -155,8 +157,8 @@ export async function DELETE(
     const { data: targetMember } = await supabase
       .from('organization_members')
       .select('role')
-      .eq('organization_id', params.id)
-      .eq('user_id', params.userId)
+      .eq('organization_id', id)
+      .eq('user_id', userId)
       .single();
 
     if (!targetMember) {
@@ -170,12 +172,12 @@ export async function DELETE(
     const { data: requesterMembership } = await supabase
       .from('organization_members')
       .select('role')
-      .eq('organization_id', params.id)
+      .eq('organization_id', id)
       .eq('user_id', session.user.id)
       .single();
 
     // Users can remove themselves, or admins/owners can remove others
-    const isSelf = params.userId === session.user.id;
+    const isSelf = userId === session.user.id;
     const hasPermission = requesterMembership && ['owner', 'admin'].includes(requesterMembership.role);
 
     if (!isSelf && !hasPermission) {
@@ -190,7 +192,7 @@ export async function DELETE(
       const { count } = await supabase
         .from('organization_members')
         .select('*', { count: 'exact', head: true })
-        .eq('organization_id', params.id)
+        .eq('organization_id', id)
         .eq('role', 'owner');
 
       if (count === 1) {
@@ -205,8 +207,8 @@ export async function DELETE(
     const { error: deleteError } = await supabase
       .from('organization_members')
       .delete()
-      .eq('organization_id', params.id)
-      .eq('user_id', params.userId);
+      .eq('organization_id', id)
+      .eq('user_id', userId);
 
     if (deleteError) {
       logger.error('API', `Error removing member: ${deleteError.message}`);
@@ -216,7 +218,7 @@ export async function DELETE(
       );
     }
 
-    logger.info('API', `Removed user ${params.userId} from organization ${params.id}`);
+    logger.info('API', `Removed user ${userId} from organization ${id}`);
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
