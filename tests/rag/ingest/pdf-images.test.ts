@@ -401,6 +401,28 @@ describe('the images stage on many pictures', () => {
     expect(seen).toEqual([1, 3]);
   });
 
+  it('never captions a picture twice: a stored caption is used even when the saved progress does not know it yet', async () => {
+    const { pictures, artifacts } = many(2);
+    const seen: number[] = [];
+    setCaptionerForTests(async (bytes) => {
+      seen.push(bytes[4]!);
+      return `Picture ${bytes[4]} shows a dock.`;
+    });
+    const { ctx, store, ready } = stageContext(pictures, artifacts);
+    await ready;
+    await store.put(`s:default/${FAKE_LINEAGE_ID}/1/caption-1.txt`, new TextEncoder().encode('Stored caption of the first picture.'), { contentType: 'text/plain' });
+    ctx.state.images = { nextIndex: 0, captioned: 0 };
+
+    const outcome = await imagesStage.run(ctx);
+
+    expect(outcome).toMatchObject({ kind: 'next' });
+    expect(seen).toEqual([2]);
+    expect(ctx.work.chunks.filter((chunk) => chunk.chunk_kind === 'image').map((chunk) => chunk.content)).toEqual([
+      'Stored caption of the first picture.',
+      'Picture 2 shows a dock.',
+    ]);
+  });
+
   it('yields before the vision call when the request budget is nearly gone, then the next run continues with the next picture', async () => {
     const { pictures, artifacts } = many(2);
     let clock = 1_000_000;

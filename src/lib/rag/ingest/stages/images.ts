@@ -191,10 +191,9 @@ async function runPictures(ctx: StageContext): Promise<StageOutcome> {
   const selection = selectPictures(pictures);
   const { kept } = selection;
   const initial = ctx.state.images;
-  const resumeFrom = initial?.nextIndex ?? 0;
   const skipped = new Set<number>(initial?.skipped ?? []);
   let captioned = initial?.captioned ?? 0;
-  let nextIndex = resumeFrom;
+  let nextIndex = initial?.nextIndex ?? 0;
   let uploaded = initial?.uploaded ?? 0;
   const lost = selection.skippedInvalid;
   const outcomeCode = (): string => `kept_${kept.length - skipped.size}.small_${selection.skippedSmall}.cap_${selection.skippedOverCap}.lost_${lost + skipped.size}`;
@@ -216,7 +215,8 @@ async function runPictures(ctx: StageContext): Promise<StageOutcome> {
   for (let index = 0; index < kept.length; index += 1) {
     if (skipped.has(index)) continue;
     const picture = kept[index] as ParsedPicture;
-    let caption = index < resumeFrom ? await storedCaption(ctx, index) : null;
+    // A resumed run looks for a stored caption of every picture: a request can end between storing a caption and saving the progress.
+    let caption = initial !== null ? await storedCaption(ctx, index) : null;
     if (caption === null) {
       const loaded = await loadPicture(ctx, picture);
       if ('skip' in loaded) {
