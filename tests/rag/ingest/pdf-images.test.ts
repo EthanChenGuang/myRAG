@@ -24,7 +24,7 @@ import { resetInjectionRulesForTests } from '@/lib/rag/security/injection-scan';
 import { mintScope } from '@/lib/rag/tenant/scope';
 import { FAKE_DOCUMENT_ID, FAKE_LINEAGE_ID, callsOf, fakeIngestDb, installIngestDeps, uninstallIngestDeps, type RecordedRpc } from '../../helpers/ingest-fakes';
 import { fixtureBytes } from '../../helpers/fake-sidecar';
-import { FAKE_PUBLIC_IMAGE_BASE, installFakePublicImageStore, type FakePublicImageStore } from '../../helpers/fake-public-image-store';
+import { FAKE_PUBLIC_IMAGE_BASE, installFakePublicImageStore } from '../../helpers/fake-public-image-store';
 import recorded from '../../fixtures/ingest/caption-recorded.json';
 
 const RECORDED_DIR = join(process.cwd(), 'eval/fixtures/ingest/recorded');
