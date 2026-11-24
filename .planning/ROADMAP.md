@@ -93,7 +93,7 @@ Plans:
   6. A production request produces one Langfuse trace with a span per stage (latency, candidate counts), sent asynchronously without delaying the answer, with a `[RAG Trace]` log line as the fallback when Langfuse is off or unreachable (tested with a fake Langfuse endpoint), and eval reports show p50/p95 latency per stage against the documented text-chat and voice budgets.
   7. Reports split every metric by provenance and the new `colloquial`, `ambiguous` and `typo` categories; a sampled, PII-masked share of production traces lands in a review queue, and online judge scores appear on the Langfuse traces (tested with a fake Langfuse endpoint and a stub judge).
 **Live verification**: Check tenant resolution against a real Supabase project with personal and organization memberships in both single-tenant and multi-tenant modes; run a voice session with the running `voice-agent/` using the signed token; repeat the legacy-parity check on the real golden set.
-**Plans**: 5/36 plans executed
+**Plans**: 36/36 plans executed; verification gaps closed by G4 (re-verification running)
 
 Plans:
 **Wave 1**
@@ -226,7 +226,7 @@ Plans:
   5. A backfill dry run over a fixture archive with duplicates reports class shares, projected pages per tier, cost and time and refuses to run without `--budget`; the real run skips duplicates, is killed mid-way and resumes without reprocessing ready documents, does not delay a concurrent upload beyond its latency target, and with `RAG_EMBED_BATCH_MODE=batch_api` submits embeddings to a recorded OpenAI Batch API fake in batches of at most 50,000 inputs; the same fixture backfill run with `--runner ray` on a local Ray instance produces the same ledger rows and chunks as `--runner worker`, respects the budget and resumes after a kill, and the default sidecar image contains no Ray.
   6. The parser test set reports, per tier, text similarity, table cell F1, structure accuracy, seconds and cost per page, plus Recall@k on the linked golden items; `tiered` does not lower Recall@k or correct-refusal against `fixed` beyond the noise band, and the report shows premium page share and projected cost per 1,000 pages for both modes.
 **Live verification**: Run the routed parse on a real sample of the user's documents (dry run first) and check the class shares and projected cost; run a small real OpenAI Batch API embedding job; confirm Supabase Realtime status updates and the sidecar worker on the deployed sidecar.
-**Plans**: TBD
+**Plans**: 54 plans in 14 waves — see `phases/03.1-tiered-parsing-incremental-queue-bulk-backfill/03.1-PLAN-INDEX.md`
 **UI hint**: yes
 
 ### Phase 4: Hybrid Retrieval, Reranking & Calibrated Refusal
@@ -245,7 +245,7 @@ Plans:
   9. Admin can set child size, parent mode and parent size per document type in the Config UI (presets 128/512, 256/1024, 256/2048 or custom); a child size above the embedding input limit or a parent smaller than twice the child is rejected, ratio and context-budget problems are warned; the new profile is built side by side and can be activated and rolled back; the sweep report compares the candidate profiles on the fixture golden set per document type and question category, and the chosen profile is recorded with its numbers.
   10. With a `selective_filter` golden category (a tenant or document type at ≤ 3% of rows), filtered pgvector retrieval with `hnsw.iterative_scan` and the exact-scan cutoff returns the same top-k as an unfiltered exact search over the matching rows; the eval reports Recall@k for this category with iterative scan off and on (RET-10).
 **Live verification**: Calibrate thresholds and sweep pool size and top-k with real Cohere and Voyage keys on the real golden set's dev split, then check them on the holdout split; compare Voyage `rerank-3` with `rerank-2.5` on the zh and it slices; apply the hybrid SQL migration to the real Supabase project and confirm Chinese lexical behavior there.
-**Plans**: TBD
+**Plans**: 45 plans (04-01..04-45) — see `phases/04-hybrid-retrieval-reranking-calibrated-refusal/04-PLAN-INDEX.md`
 
 ### Phase 5: Verified Citations & Groundedness
 **Goal**: Every RAG answer cites only chunks that were actually sent to the model, its citations survive later document changes, and users can see whether the answer was checked for groundedness
@@ -313,10 +313,10 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 5.1 → 6 → 7. 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Evaluation Harness & Baseline | 22/22 | In Progress | - |
-| 2. Unified Retrieval Pipeline & Tenant Scope | 5/36 | In Progress | - |
-| 3. Unified Ingestion & Embedding Profiles | 0/TBD | Not started | - |
-| 3.1. Tiered Parsing, Incremental Queue & Bulk Backfill (INSERTED) | 0/TBD | Not started | - |
-| 4. Hybrid Retrieval, Reranking & Calibrated Refusal | 0/TBD | Not started | - |
+| 2. Unified Retrieval Pipeline & Tenant Scope | 36/36 | Verifying | - |
+| 3. Unified Ingestion & Embedding Profiles | 0/49 | Planned | - |
+| 3.1. Tiered Parsing, Incremental Queue & Bulk Backfill (INSERTED) | 0/54 | Planned (plan-check running) | - |
+| 4. Hybrid Retrieval, Reranking & Calibrated Refusal | 0/45 | Planned | - |
 | 5. Verified Citations & Groundedness | 0/TBD | Not started | - |
 | 5.1. Prompt Injection Defense (INSERTED) | 0/TBD | Not started | - |
 | 6. Query Layer (LlamaIndex & LangChain) | 0/TBD | Not started | - |
