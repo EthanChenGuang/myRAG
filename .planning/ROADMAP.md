@@ -209,7 +209,7 @@ Plans:
 - [x] 03-43-PLAN.md — Build the Config UI side of Phase 3 (wave 10)
 - [x] 03-44-PLAN.md — Show Phase 3's success criteria 1, 2, 4, 6, 7 and 9 in ingest mode (wave 9)
 - [x] 03-45-PLAN.md — Make the eval harness able to measure any embedding profile (wave 9)
-- [ ] 03-46-PLAN.md — Compare embedding profiles on the golden set per language and per cross-lingual pair (wave 10)
+- [x] 03-46-PLAN.md — Compare embedding profiles on the golden set per language and per cross-lingual pair (wave 10)
 - [ ] 03-47-PLAN.md — Close Phase 3 (wave 11)
 - [ ] 03-48-PLAN.md — Run the Phase 3 live verification items from the ROADMAP as explicit human checkpoints (the orchestrator… (wave 12)
 **UI hint**: yes
