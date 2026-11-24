@@ -9,6 +9,7 @@ const USER_A = '00000000-0000-4000-8000-0000000000b1';
 const USER_B = '00000000-0000-4000-8000-0000000000b2';
 const ORG_X = '00000000-0000-4000-8000-0000000000c1';
 const ORG_Y = '00000000-0000-4000-8000-0000000000c2';
+const DOC_ID = '00000000-0000-4000-8000-0000000000d1';
 const REPO_ROOT = path.resolve(__dirname, '../..');
 
 type Row = Record<string, unknown>;
@@ -508,6 +509,163 @@ describe('admin doc-type-defaults routes', () => {
     expect(source).toContain("'@/lib/admin-route-auth'");
     expect(source).not.toContain('requireRagAdmin');
     expect(source).not.toMatch(/rag_(get|set|delete)_doc_type_default/);
+    expect(source).toContain("from 'zod/v3'");
+  });
+});
+
+const DOC_TYPE_CHANGE = `/api/rag/admin/documents/${DOC_ID}/doc-type`;
+
+type ChangeOutcome =
+  | { ok: true; result: { status: 'ready' | 'processing'; documentId: string; version: number } }
+  | { ok: false; reason: string };
+
+const changeState = {
+  scope: null as { kind: 'personal'; userId: string; organizationId: null } | null,
+  scopeError: null as 'unavailable' | 'not_admin' | null,
+  change: { ok: true, result: { status: 'ready' as const, documentId: DOC_ID, version: 2 } } as ChangeOutcome,
+  changeCalls: [] as Array<{ documentId: string; docType: string }>,
+  scopeCalls: [] as string[],
+};
+
+async function loadDocTypeChange() {
+  vi.resetModules();
+  vi.doMock('@/lib/deployment-mode', () => ({
+    getDeploymentMode: () => state.mode,
+    isMultiTenant: () => state.mode === 'multi-tenant',
+    isSingleTenant: () => state.mode === 'single-tenant',
+  }));
+  vi.doMock('@/lib/supabase/server', () => ({
+    createClient: async () => ({
+      auth: {
+        getUser: async () => {
+          if (state.sessionThrows) throw new Error('auth down');
+          return { data: { user: state.session } };
+        },
+      },
+    }),
+  }));
+  vi.doMock('@/lib/supabase', () => ({ getSupabaseAdmin: () => guardClient(), getSupabase: () => ({}) }));
+  vi.doMock('@/lib/rag', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('@/lib/rag')>();
+    class MockAdminDocumentScopeError extends Error {
+      readonly reason: 'unavailable' | 'not_admin';
+      constructor(reason: 'unavailable' | 'not_admin') {
+        super(reason);
+        this.reason = reason;
+      }
+    }
+    return {
+      ...actual,
+      AdminDocumentScopeError: MockAdminDocumentScopeError,
+      scopeForAdminDocument: async (input: { documentId: string }) => {
+        changeState.scopeCalls.push(input.documentId);
+        if (changeState.scopeError === 'unavailable') throw new MockAdminDocumentScopeError('unavailable');
+        if (changeState.scopeError === 'not_admin') throw new MockAdminDocumentScopeError('not_admin');
+        return changeState.scope;
+      },
+      changeDocumentType: async (input: { documentId: string; docType: string }) => {
+        changeState.changeCalls.push({ documentId: input.documentId, docType: input.docType });
+        return changeState.change;
+      },
+    };
+  });
+  const session = await import('@/lib/admin-session');
+  const route = await import('@/app/api/rag/admin/documents/[id]/doc-type/route');
+  return { session, route };
+}
+
+describe('POST /api/rag/admin/documents/{id}/doc-type', () => {
+  beforeEach(() => {
+    changeState.scope = { kind: 'personal', userId: ADMIN_ID, organizationId: null };
+    changeState.scopeError = null;
+    changeState.change = { ok: true, result: { status: 'ready', documentId: DOC_ID, version: 2 } };
+    changeState.changeCalls = [];
+    changeState.scopeCalls = [];
+  });
+
+  it('changes the type and returns 200 when the new version is ready', async () => {
+    state.session = { id: ADMIN_ID };
+    const { route } = await loadDocTypeChange();
+    const response = await route.POST(
+      req(DOC_TYPE_CHANGE, { method: 'POST', body: { docType: 'contract_legal' } }),
+      { params: Promise.resolve({ id: DOC_ID }) },
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ success: true, id: DOC_ID, status: 'ready', version: 2 });
+    expect(changeState.changeCalls).toEqual([{ documentId: DOC_ID, docType: 'contract_legal' }]);
+    expect(logged.some((line) => line.includes('[RAG Admin]') && line.includes('doc_type_change'))).toBe(true);
+  });
+
+  it('returns 202 when the new version is still processing', async () => {
+    state.session = { id: ADMIN_ID };
+    changeState.change = { ok: true, result: { status: 'processing', documentId: DOC_ID, version: 2 } };
+    const { route } = await loadDocTypeChange();
+    expect((await route.POST(req(DOC_TYPE_CHANGE, { method: 'POST', body: { docType: 'general' } }), { params: Promise.resolve({ id: DOC_ID }) })).status).toBe(202);
+  });
+
+  it.each([
+    ['memo', 400],
+    ['', 400],
+    [{ extra: 'general' }, 400],
+  ] as const)('refuses invalid body %o with %i', async (body, status) => {
+    state.session = { id: ADMIN_ID };
+    const { route } = await loadDocTypeChange();
+    const response = await route.POST(req(DOC_TYPE_CHANGE, { method: 'POST', body }), { params: Promise.resolve({ id: DOC_ID }) });
+    expect(response.status).toBe(status);
+    expect(changeState.changeCalls).toEqual([]);
+    expect(changeState.scopeCalls).toEqual([]);
+  });
+
+  it('gives 404 for an unknown document and never calls changeDocumentType', async () => {
+    state.session = { id: ADMIN_ID };
+    changeState.scope = null;
+    const { route } = await loadDocTypeChange();
+    expect((await route.POST(req(DOC_TYPE_CHANGE, { method: 'POST', body: { docType: 'general' } }), { params: Promise.resolve({ id: DOC_ID }) })).status).toBe(404);
+    expect(changeState.changeCalls).toEqual([]);
+  });
+
+  it('gives 403 without a session, to a non-admin, and when scope refuses the actor', async () => {
+    const { route } = await loadDocTypeChange();
+    expect((await route.POST(req(DOC_TYPE_CHANGE, { method: 'POST', body: { docType: 'general' } }), { params: Promise.resolve({ id: DOC_ID }) })).status).toBe(401);
+    state.session = { id: USER_A };
+    expect((await route.POST(req(DOC_TYPE_CHANGE, { method: 'POST', body: { docType: 'general' } }), { params: Promise.resolve({ id: DOC_ID }) })).status).toBe(403);
+    state.session = { id: ADMIN_ID };
+    changeState.scopeError = 'not_admin';
+    expect((await route.POST(req(DOC_TYPE_CHANGE, { method: 'POST', body: { docType: 'general' } }), { params: Promise.resolve({ id: DOC_ID }) })).status).toBe(403);
+    expect(changeState.changeCalls).toEqual([]);
+  });
+
+  it('gives 503 when auth or scope lookup fails and when change is unavailable', async () => {
+    const { route } = await loadDocTypeChange();
+    state.sessionThrows = true;
+    expect((await route.POST(req(DOC_TYPE_CHANGE, { method: 'POST', body: { docType: 'general' } }), { params: Promise.resolve({ id: DOC_ID }) })).status).toBe(503);
+    state.sessionThrows = false;
+    state.session = { id: ADMIN_ID };
+    state.lookupFails = true;
+    expect((await route.POST(req(DOC_TYPE_CHANGE, { method: 'POST', body: { docType: 'general' } }), { params: Promise.resolve({ id: DOC_ID }) })).status).toBe(503);
+    state.lookupFails = false;
+    changeState.scopeError = 'unavailable';
+    expect((await route.POST(req(DOC_TYPE_CHANGE, { method: 'POST', body: { docType: 'general' } }), { params: Promise.resolve({ id: DOC_ID }) })).status).toBe(503);
+    changeState.scopeError = null;
+    changeState.change = { ok: false, reason: 'unavailable' };
+    expect((await route.POST(req(DOC_TYPE_CHANGE, { method: 'POST', body: { docType: 'general' } }), { params: Promise.resolve({ id: DOC_ID }) })).status).toBe(503);
+  });
+
+  it('admits a signed admin_session cookie and never runs change before the guard passes', async () => {
+    const { session, route } = await loadDocTypeChange();
+    state.session = { id: ADMIN_ID };
+    const cookie = cookieOf(session.mintAdminSessionValue(ADMIN_ID));
+    expect((await route.POST(req(DOC_TYPE_CHANGE, { method: 'POST', cookie, body: { docType: 'general' } }), { params: Promise.resolve({ id: DOC_ID }) })).status).toBe(200);
+    state.session = { id: USER_A };
+    expect((await route.POST(req(DOC_TYPE_CHANGE, { method: 'POST', cookie: cookieOf(session.mintAdminSessionValue(USER_A)), body: { docType: 'general' } }), { params: Promise.resolve({ id: DOC_ID }) })).status).toBe(403);
+    expect(changeState.scopeCalls.length).toBe(1);
+  });
+
+  it('keeps checkAdmin and changeDocumentType on the shared path and never requireRagAdmin', () => {
+    const source = fs.readFileSync(path.join(REPO_ROOT, 'src/app/api/rag/admin/documents/[id]/doc-type/route.ts'), 'utf8');
+    expect(source).toMatch(/\bcheckAdmin\b/);
+    expect(source).toMatch(/\bchangeDocumentType\b/);
+    expect(source).not.toContain('requireRagAdmin');
     expect(source).toContain("from 'zod/v3'");
   });
 });
