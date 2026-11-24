@@ -5,7 +5,7 @@ import { fetchFileContent } from './file-fetcher';
 import { PROVIDER_CONFIG, type NangoFileRecord, type SupportedProvider, type SyncStats } from './types';
 import { env } from '@/lib/env';
 import { logger } from '@/lib/logger';
-import { nangoOwnerScope, scopeKey } from '@/lib/rag';
+import { nangoOwnerScope, queueConfigFromProcessEnv, scopeKey, softDeleteLineage } from '@/lib/rag';
 
 const SUPPORTED_EXTENSIONS = (env.NANGO_SUPPORTED_FILE_TYPES || 'pdf,doc,docx,txt,md').split(',');
 const MAX_FILES_PER_SYNC = parseInt(env.NANGO_MAX_FILES_PER_SYNC || '100');
@@ -97,6 +97,62 @@ async function fetchGoogleDriveFiles(
     }
 }
 
+function orphanUsesSoftDelete(): boolean {
+    if (nangoPipeline() !== 'unified') return false;
+    try {
+        return queueConfigFromProcessEnv().ingestAsync;
+    } catch {
+        return false;
+    }
+}
+
+async function collectNangoLineageIds(
+    supabaseAdmin: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
+    tenantKey: string,
+    connectionId: string,
+    fileId: string
+): Promise<string[]> {
+    const lineageIds = new Set<string>();
+    for (const column of ['source_key', 'source_file_id'] as const) {
+        const { data, error } = await supabaseAdmin
+            .from('documents')
+            .select('id, lineage_id')
+            .eq('tenant_key', tenantKey)
+            .eq('source', 'nango')
+            .eq('source_connection_id', connectionId)
+            .eq(column, fileId);
+        if (error) throw error;
+        for (const row of (data ?? []) as Array<{ id: string; lineage_id: string | null }>) {
+            lineageIds.add(row.lineage_id ?? row.id);
+        }
+    }
+    return Array.from(lineageIds);
+}
+
+async function softDeleteNangoLineages(
+    supabaseAdmin: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
+    tenantKey: string,
+    connectionId: string,
+    fileId: string,
+    userId: string
+): Promise<boolean> {
+    try {
+        const lineages = await collectNangoLineageIds(supabaseAdmin, tenantKey, connectionId, fileId);
+        if (lineages.length === 0) return true;
+        const owner = nangoOwnerScope({ ownerUserId: userId });
+        if (!owner.ok) return false;
+        const signal = AbortSignal.timeout(120_000);
+        for (const lineageId of lineages) {
+            const result = await softDeleteLineage(owner.scope, lineageId, 'nango', { signal });
+            if (!result.ok) return false;
+        }
+        return true;
+    } catch (error) {
+        logger.error('Nango', `Failed to soft-delete the lineage of ${fileId}`, error);
+        return false;
+    }
+}
+
 /**
  * Delete every version of the files a source no longer has, inside one tenant. A file is found by its identity
  * (the provider file id of this connection), never by the document id a sync record holds: that id can name another
@@ -110,23 +166,8 @@ async function deleteNangoLineages(
     fileId: string
 ): Promise<boolean> {
     try {
-        const lineageIds = new Set<string>();
-        for (const column of ['source_key', 'source_file_id'] as const) {
-            const { data, error } = await supabaseAdmin
-                .from('documents')
-                .select('id, lineage_id')
-                .eq('tenant_key', tenantKey)
-                .eq('source', 'nango')
-                .eq('source_connection_id', connectionId)
-                .eq(column, fileId);
-            if (error) throw error;
-            for (const row of (data ?? []) as Array<{ id: string; lineage_id: string | null }>) {
-                lineageIds.add(row.lineage_id ?? row.id);
-            }
-        }
-        if (lineageIds.size === 0) return true;
-
-        const lineages = Array.from(lineageIds);
+        const lineages = await collectNangoLineageIds(supabaseAdmin, tenantKey, connectionId, fileId);
+        if (lineages.length === 0) return true;
         const { data: versions, error: versionsError } = await supabaseAdmin
             .from('documents')
             .select('id')
@@ -219,7 +260,10 @@ async function deleteOrphanedDocuments(
             for (const record of batch) {
                 try {
                     if (tenantKey !== null) {
-                        if (!(await deleteNangoLineages(supabaseAdmin, tenantKey, connectionId, record.file_id))) {
+                        const removed = orphanUsesSoftDelete()
+                            ? await softDeleteNangoLineages(supabaseAdmin, tenantKey, connectionId, record.file_id, userId)
+                            : await deleteNangoLineages(supabaseAdmin, tenantKey, connectionId, record.file_id);
+                        if (!removed) {
                             continue;
                         }
                     } else if (record.document_id) {
