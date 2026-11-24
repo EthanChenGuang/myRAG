@@ -1,0 +1,227 @@
+{
+  "schema_version": 1,
+  "profiles": [
+    {
+      "id": "general@1",
+      "version": 1,
+      "doc_type": "general",
+      "parser": {
+        "preference": [
+          "configured"
+        ],
+        "docling": {
+          "ocr": false,
+          "force_full_page_ocr": false,
+          "table_mode": "fast",
+          "heading_hierarchy": true,
+          "generate_picture_images": false
+        },
+        "ocr_languages": [
+          "en"
+        ]
+      },
+      "chunker": {
+        "kind": "markdown_sections",
+        "max_tokens": 512,
+        "overlap_tokens": 64,
+        "repeat_table_header": false,
+        "min_chunk_tokens": 32,
+        "clause_patterns": [],
+        "lead_in_phrases": []
+      },
+      "extractors": [
+        "dates"
+      ],
+      "embedding_text_template": {
+        "version": 1,
+        "header": null
+      },
+      "scan_injection": false
+    },
+    {
+      "id": "financial_report@1",
+      "version": 1,
+      "doc_type": "financial_report",
+      "parser": {
+        "preference": [
+          "configured"
+        ],
+        "docling": {
+          "ocr": false,
+          "force_full_page_ocr": false,
+          "table_mode": "fast",
+          "heading_hierarchy": true,
+          "generate_picture_images": false
+        },
+        "ocr_languages": [
+          "en"
+        ]
+      },
+      "chunker": {
+        "kind": "markdown_sections",
+        "max_tokens": 512,
+        "overlap_tokens": 64,
+        "repeat_table_header": false,
+        "min_chunk_tokens": 32,
+        "clause_patterns": [],
+        "lead_in_phrases": []
+      },
+      "extractors": [
+        "dates"
+      ],
+      "embedding_text_template": {
+        "version": 1,
+        "header": null
+      },
+      "scan_injection": false
+    },
+    {
+      "id": "contract_legal@1",
+      "version": 1,
+      "doc_type": "contract_legal",
+      "parser": {
+        "preference": [
+          "configured"
+        ],
+        "docling": {
+          "ocr": false,
+          "force_full_page_ocr": false,
+          "table_mode": "fast",
+          "heading_hierarchy": true,
+          "generate_picture_images": false
+        },
+        "ocr_languages": [
+          "en"
+        ]
+      },
+      "chunker": {
+        "kind": "markdown_sections",
+        "max_tokens": 512,
+        "overlap_tokens": 64,
+        "repeat_table_header": false,
+        "min_chunk_tokens": 32,
+        "clause_patterns": [],
+        "lead_in_phrases": []
+      },
+      "extractors": [
+        "dates"
+      ],
+      "embedding_text_template": {
+        "version": 1,
+        "header": null
+      },
+      "scan_injection": false
+    },
+    {
+      "id": "invoice_receipt@1",
+      "version": 1,
+      "doc_type": "invoice_receipt",
+      "parser": {
+        "preference": [
+          "configured"
+        ],
+        "docling": {
+          "ocr": false,
+          "force_full_page_ocr": false,
+          "table_mode": "fast",
+          "heading_hierarchy": true,
+          "generate_picture_images": false
+        },
+        "ocr_languages": [
+          "en"
+        ]
+      },
+      "chunker": {
+        "kind": "markdown_sections",
+        "max_tokens": 512,
+        "overlap_tokens": 64,
+        "repeat_table_header": false,
+        "min_chunk_tokens": 32,
+        "clause_patterns": [],
+        "lead_in_phrases": []
+      },
+      "extractors": [
+        "dates"
+      ],
+      "embedding_text_template": {
+        "version": 1,
+        "header": null
+      },
+      "scan_injection": false
+    },
+    {
+      "id": "product_technical@1",
+      "version": 1,
+      "doc_type": "product_technical",
+      "parser": {
+        "preference": [
+          "configured"
+        ],
+        "docling": {
+          "ocr": false,
+          "force_full_page_ocr": false,
+          "table_mode": "fast",
+          "heading_hierarchy": true,
+          "generate_picture_images": false
+        },
+        "ocr_languages": [
+          "en"
+        ]
+      },
+      "chunker": {
+        "kind": "markdown_sections",
+        "max_tokens": 512,
+        "overlap_tokens": 64,
+        "repeat_table_header": false,
+        "min_chunk_tokens": 32,
+        "clause_patterns": [],
+        "lead_in_phrases": []
+      },
+      "extractors": [
+        "dates"
+      ],
+      "embedding_text_template": {
+        "version": 1,
+        "header": null
+      },
+      "scan_injection": false
+    },
+    {
+      "id": "scanned_image@1",
+      "version": 1,
+      "doc_type": "scanned_image",
+      "parser": {
+        "preference": [
+          "configured"
+        ],
+        "docling": {
+          "ocr": false,
+          "force_full_page_ocr": false,
+          "table_mode": "fast",
+          "heading_hierarchy": true,
+          "generate_picture_images": false
+        },
+        "ocr_languages": [
+          "en"
+        ]
+      },
+      "chunker": {
+        "kind": "markdown_sections",
+        "max_tokens": 512,
+        "overlap_tokens": 64,
+        "repeat_table_header": false,
+        "min_chunk_tokens": 32,
+        "clause_patterns": [],
+        "lead_in_phrases": []
+      },
+      "extractors": [
+        "dates"
+      ],
+      "embedding_text_template": {
+        "version": 1,
+        "header": null
+      },
+      "scan_injection": false
+    }
+  ]
+}
