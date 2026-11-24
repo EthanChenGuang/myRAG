@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { scopeKey } from '@/lib/rag/tenant/scope';
-import type { IngestInput, IngestResult } from '@/lib/rag';
+import type { IngestInput, IngestResult, TenantScope } from '@/lib/rag';
 
 const OWNER_A = '00000000-0000-4000-8000-0000000000a1';
 const FILE_ID = 'drive-file-1';
@@ -12,6 +11,7 @@ const state = {
   mode: 'multi-tenant' as 'single-tenant' | 'multi-tenant',
   configThrows: false,
   ingestResults: [] as IngestResult[],
+  scopeKey: (_scope: TenantScope): string => '',
 };
 
 const processDocument = vi.fn();
@@ -36,6 +36,8 @@ async function loadAdapter() {
       return { pipeline: state.pipeline };
     },
   }));
+  const scope = await vi.importActual<typeof import('@/lib/rag/tenant/scope')>('@/lib/rag/tenant/scope');
+  state.scopeKey = scope.scopeKey;
   return import('@/lib/nango/document-adapter');
 }
 
@@ -126,7 +128,7 @@ describe('nango document adapter, unified pipeline', () => {
     expect(processDocument).not.toHaveBeenCalled();
     expect(ingest).toHaveBeenCalledTimes(1);
     const input = ingestInput();
-    expect(scopeKey(input.scope)).toBe(`u:${OWNER_A}`);
+    expect(state.scopeKey(input.scope)).toBe(`u:${OWNER_A}`);
     expect(input).toMatchObject({
       source: 'nango',
       sourceKey: FILE_ID,
@@ -148,7 +150,7 @@ describe('nango document adapter, unified pipeline', () => {
 
     await processDocumentWithMetadata('Report.pdf', Buffer.from('x'), { ...baseOptions, userId: 'single-tenant-user' });
 
-    expect(scopeKey(ingestInput().scope)).toBe('s:default');
+    expect(state.scopeKey(ingestInput().scope)).toBe('s:default');
   });
 
   it('refuses an owner that is not a UUID in multi-tenant mode: typed error, ingest never called', async () => {
