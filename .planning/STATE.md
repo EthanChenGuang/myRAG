@@ -3,9 +3,9 @@ gsd_state_version: "1.0"
 milestone: v5.0
 current_phase: 02
 current_phase_name: Unified Retrieval Pipeline & Tenant Scope
-status: executing
-stopped_at: 03.1-04/07 + 04-05 merged; 04-06 + 03.1-08 executors running; 03-48 live blocked
-last_updated: "2026-11-24T12:45:00.000Z"
+status: paused
+stopped_at: PAUSE-96 Claude Code takeover; trunk 201b66b; 4 executors STOPPED with WIP on origin/exec/*; sec-rpc-2 queued not started
+last_updated: "2026-11-24T12:48:00.000Z"
 package_legitimacy_03_1_04:
   approved_at: "2026-11-24"
   lock_commit: 3e83978e482f67da5ce6d463f39251f3e21e8bf4

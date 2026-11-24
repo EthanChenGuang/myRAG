@@ -1,6 +1,10 @@
 # Executor ledger (one executor per plan)
 
-**Rule (Guang):** At most one **executor** subagent per plan id. Parallelism is across **different** plans with **disjoint** `files_modified`. Review/verify agents are separate roles and may run in parallel with executors.
+**Rule (Guang):** Keep **exactly 4 executors RUNNING** at all times; refill **in the same step as each merge** (batch `Task` spawns in one orchestrator message). At most one **executor** subagent per plan id. Parallelism is across **different** plans with **disjoint** `files_modified`. Review/verify agents are separate roles and may run in parallel with executors.
+
+**Account switch (Guang 2026-11-24):** Maintained cold-resume doc `.planning/NEXT-ACCOUNT-PROMPT.md` on trunk; update after every merge. Executors **push after each task commit**. `PAUSE-96` → pause protocol in that file.
+
+**Parallelism failure mode (2026-11-24):** Orchestrator handled completion notifications **one per turn** → only the latest `Task` was visible while 3 others stayed `RUNNING`; worktrees were **not ff’d** and **no `origin/exec/*` pushes** → looked like a single agent. Fix: verify `cursor-cloud` RUNNING count; batch refill; ff/rebase all `wt/*`; require push after each task commit.
 
 ## Remaining plans (execution queue)
 
@@ -96,11 +100,16 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | 03.1-18 | [bc-34cb4e3b](bc-34cb4e3b-b843-5ba6-94da-c58cb5093dc2) **merged** | exec/03.1-18 — vitest 14 + PGlite 6 |
 | 04-17 | [bc-c1e4ed28](bc-c1e4ed28-8308-557d-a69c-46ed9166e777) **merged** | exec/04-17 — conformance 42 |
 | 04-15 | [bc-2f4f0524](bc-2f4f0524-6984-5e57-a50a-249d0a960a27) **merged** | exec/04-15 |
-| 04-18 | [bc-78743196](bc-78743196-9471-5cda-8414-1d4c80c9d85f) RUNNING | exec/04-18 |
+| 04-18 | [bc-78743196](bc-78743196-9471-5cda-8414-1d4c80c9d85f) **COMPLETE** (post-PAUSE; not merged) | `origin/exec/04-18` @ `b4a6b3c` |
 | 03.1-20 | [bc-7530e5d1](bc-7530e5d1-02b0-5c59-bf06-0bd96367216e) **merged** | exec/03.1-20 — PGlite 13 |
-| 03.1-23 | [bc-ab1e9b2d](bc-ab1e9b2d-301d-50ad-85d3-54b3af5e3261) RUNNING | exec/03.1-23 |
+| 03.1-23 | [bc-ab1e9b2d](bc-ab1e9b2d-301d-50ad-85d3-54b3af5e3261) **merged** | exec/03.1-23 |
 | 04-44 | [bc-e6e2bd84](bc-e6e2bd84-1486-5c1d-b545-6f44a20de765) **merged** | exec/04-44 — params-hash 15 |
 | 03.1-25 | [bc-1f542e8a](bc-1f542e8a-f80a-58a7-99bb-5c47f655d0ce) RUNNING | exec/03.1-25 |
+| 04-19 | [bc-eafdad13](bc-eafdad13-4e57-5750-a00f-8bc029517ee2) **merged** | exec/04-19 — tracer 6 + vitest 18 |
+| 04-45 | [bc-32843230](bc-32843230-3c15-53cb-be49-93f84da0a3bb) **merged** | exec/04-45 — vitest 13 |
+| 03-48-sec-rpc | [bc-049b7ab0](bc-049b7ab0-c778-50b5-bce6-77842e48a55e) **merged** | exec/03-48-sec-rpc — PGlite 2/2 |
+| 04-20 | [bc-36e7beb3](bc-36e7beb3-7655-51e7-964a-e1082fa083c3) **COMPLETE** (post-PAUSE; not merged) | `origin/exec/04-20` @ `081224a` |
+| 03-48-setup-idempotent | [bc-b37c0b7a](bc-b37c0b7a-eb5e-51b0-83b2-b0e870bb6318) **COMPLETE** (post-PAUSE; not merged) | `origin/exec/03-48-setup-idempotent` @ `90635ae` |
 
 ## Remaining plan inventory (file-overlap basis)
 
@@ -114,20 +123,33 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 
 **Wave 1 (4):** 04-01–04 **parallel**; **04-05 → 04-06 → 04-07** one executor tree (PGlite migration order).
 
-## Wave E (active — target 3–4 executors)
+## Wave E — **PAUSE-96 STOPPED** (2026-11-24 ~13:48 Europe/Rome; Claude Code resumes)
 
-| Plan | bcId | Worktree | Notes |
-|------|------|----------|-------|
-| 03.1-23 | [bc-ab1e9b2d](bc-ab1e9b2d-301d-50ad-85d3-54b3af5e3261) RUNNING | `wt/03.1-23` | Docling presets + converters |
-| 03.1-25 | [bc-1f542e8a](bc-1f542e8a-f80a-58a7-99bb-5c47f655d0ce) RUNNING | `wt/03.1-25` | backfill sources + inventory |
-| 04-19 | SPAWN | `wt/04-19` | v2 search pipeline (unblocked by 04-44) |
-| 04-18 | [bc-78743196](bc-78743196-9471-5cda-8414-1d4c80c9d85f) RUNNING | `wt/04-18` | selective-filter harness |
+All four executors **stopped**; WIP on `origin/exec/*` + patches in `.planning/paused/patches/`. **Do not spawn** until `/gsd-resume-work`. See `.planning/CLAUDE-CODE-HANDOFF-PROMPT.md`.
+
+## Wave E snapshot at pause (was **4 RUNNING**)
+
+| Plan | bcId | Cloud | Worktree | WIP signal |
+|------|------|-------|----------|------------|
+| 03.1-23 | [bc-ab1e9b2d](bc-ab1e9b2d-301d-50ad-85d3-54b3af5e3261) | **merged** | — | pytest 67 |
+| 03-48-setup-idempotent | [bc-b37c0b7a](bc-b37c0b7a-eb5e-51b0-83b2-b0e870bb6318) | **COMPLETE** | `wt/03-48-setup-idempotent` | **merge-ready** `90635ae`; idempotency tests pass; note residual `schema-equality` relex RPC failures on merge |
+| 03.1-25 | [bc-1f542e8a](bc-1f542e8a-f80a-58a7-99bb-5c47f655d0ce) | **STOPPED** | `wt/03.1-25` | WIP `7c5f7f8` on `origin/exec/03.1-25` |
+| 04-18 | [bc-78743196](bc-78743196-9471-5cda-8414-1d4c80c9d85f) | **COMPLETE** | `wt/04-18` | **merge-ready** `b4a6b3c` (RET-10 harness; 7 PGlite tests) |
+| 04-20 | [bc-36e7beb3](bc-36e7beb3-7655-51e7-964a-e1082fa083c3) | **COMPLETE** | `wt/04-20` | **merge-ready** `081224a` (`11c0e0f` feat + SUMMARY); supersedes pause WIP `b5e47fe` — **do not merge until resume** |
+
+**Overflow queue (spawn next free slot, same turn as merge):**
+
+| Plan | Worktree ready | Notes |
+|------|----------------|-------|
+| **03-48-setup-idempotent** | `wt/03-48-setup-idempotent` | **COMPLETE** — merge on resume |
+| **03-48-sec-rpc-2** | (create on spawn) | **next free slot**; [03-48-FOLLOWUP-SECURITY-RPC-2-PLAN.md](../phases/03-unified-ingestion-embedding-profiles/03-48-FOLLOWUP-SECURITY-RPC-2-PLAN.md) — full DEFINER inventory (live 23); `tests/rag/search-rpc-grants.test.ts` must pass |
 
 **03-48 follow-ups (one executor per plan when a slot frees — do not duplicate running work):**
 
 | Plan id | PLAN file | Priority |
 |---------|-----------|----------|
-| `03-48-sec-rpc` | [03-48-FOLLOWUP-SECURITY-RPC-PLAN.md](../phases/03-unified-ingestion-embedding-profiles/03-48-FOLLOWUP-SECURITY-RPC-PLAN.md) | D-08 / live anon EXECUTE hole |
+| `03-48-sec-rpc` | [03-48-FOLLOWUP-SECURITY-RPC-PLAN.md](../phases/03-unified-ingestion-embedding-profiles/03-48-FOLLOWUP-SECURITY-RPC-PLAN.md) | **merged** — four search RPCs (`0409`) |
+| `03-48-sec-rpc-2` | [03-48-FOLLOWUP-SECURITY-RPC-2-PLAN.md](../phases/03-unified-ingestion-embedding-profiles/03-48-FOLLOWUP-SECURITY-RPC-2-PLAN.md) | overflow — full inventory; vitest gate |
 | `03-48-setup-idempotent` | [03-48-FOLLOWUP-SETUP-IDEMPOTENT-PLAN.md](../phases/03-unified-ingestion-embedding-profiles/03-48-FOLLOWUP-SETUP-IDEMPOTENT-PLAN.md) | 42710 on re-run setup |
 
 **03-48 live Supabase:** Guang/box agent only for production DB; Task 1 logged in `03-48-SUMMARY.md`.

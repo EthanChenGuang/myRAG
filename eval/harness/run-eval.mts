@@ -127,8 +127,11 @@ export async function prepareInProcessEval(options: {
   allowedScopes?: string[];
   embeddingProfileId?: string;
   ingestFixture?: import('./pglite-supabase.mts').FixtureDatabase;
+  /** Applied after the pinned eval env, before the eval route is imported. */
+  envOverrides?: Record<string, string>;
 }): Promise<InProcessEval> {
-  const { corpusDir, deploymentMode, fixtureMode, allowedScopes = [], embeddingProfileId, ingestFixture } = options;
+  const { corpusDir, deploymentMode, fixtureMode, allowedScopes = [], embeddingProfileId, ingestFixture, envOverrides } =
+    options;
   const existingSecret = process.env.RAG_EVAL_SECRET ?? '';
   const secret = existingSecret.length >= 32 ? existingSecret : crypto.randomBytes(24).toString('hex');
   const evalEnv = {
@@ -153,7 +156,7 @@ export async function prepareInProcessEval(options: {
   applyFixtureProcessEnv({
     edgeUrl: startedEdge.url,
     deploymentMode,
-    extra: evalEnv,
+    extra: { ...evalEnv, ...envOverrides },
     vendorEmbeddingRoutes: !!(embeddingProfileId || ingestFixture),
   });
 
