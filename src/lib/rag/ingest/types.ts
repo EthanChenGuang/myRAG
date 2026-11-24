@@ -98,7 +98,7 @@ export function emptyIngestState(): IngestState {
   };
 }
 
-export type ChunkKind = 'text' | 'table';
+export type ChunkKind = 'text' | 'table' | 'invoice_header';
 
 /** A chunk as the chunker produces it: plain content, never prefixed with its path or document name. */
 export interface ChunkDraft {

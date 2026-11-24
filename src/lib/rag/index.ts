@@ -101,3 +101,5 @@ export type {
   IngestStatusView,
   ResumeIngestOptions,
 } from './ingest';
+export { findInvoices } from './retrieval/invoices';
+export type { FindInvoicesDeps, InvoiceFilters, InvoiceHit } from './retrieval/invoices';

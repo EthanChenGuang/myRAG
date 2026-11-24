@@ -70,6 +70,12 @@ export interface DocumentFields {
   source_provider?: string | null;
   source_file_id?: string | null;
   source_connection_id?: string | null;
+  invoice_number?: string | null;
+  supplier_name?: string | null;
+  supplier_tax_id?: string | null;
+  issue_date?: string | null;
+  gross_total?: string | null;
+  currency?: string | null;
   status?: 'processing' | 'quarantined' | 'failed' | 'deleted';
   metadata?: Record<string, unknown>;
 }
