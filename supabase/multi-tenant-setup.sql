@@ -1020,6 +1020,7 @@ RETURNS SETOF uuid
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
+SET search_path = pg_catalog, public
 AS $$
   SELECT organization_id
   FROM organization_members
@@ -1037,6 +1038,7 @@ CREATE OR REPLACE FUNCTION get_user_role_in_org(org_id uuid)
 RETURNS text
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = pg_catalog, public
 AS $$
 DECLARE
   user_role TEXT;
@@ -1057,6 +1059,7 @@ CREATE OR REPLACE FUNCTION get_user_current_org()
 RETURNS uuid
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = pg_catalog, public
 AS $$
 DECLARE
   org_id UUID;
@@ -1085,6 +1088,7 @@ RETURNS boolean
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
+SET search_path = pg_catalog, public
 AS $$
   -- User can view if it's their own membership
   SELECT member_user_id = auth.uid()
@@ -1112,6 +1116,7 @@ CREATE OR REPLACE FUNCTION delete_folder(
 RETURNS boolean
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = pg_catalog, public
 AS $$
 BEGIN
   IF NOT EXISTS (
@@ -1146,6 +1151,7 @@ RETURNS TABLE (
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = pg_catalog, public
 AS $$
 BEGIN
   RETURN QUERY
@@ -1167,6 +1173,7 @@ CREATE OR REPLACE FUNCTION move_chats_to_folder(
 RETURNS integer
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = pg_catalog, public
 AS $$
 DECLARE
   updated_count INTEGER;
@@ -1200,6 +1207,7 @@ CREATE OR REPLACE FUNCTION share_chat(
 RETURNS uuid
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = pg_catalog, public
 AS $$
 DECLARE
   new_share_id uuid;
@@ -1229,6 +1237,7 @@ CREATE OR REPLACE FUNCTION unshare_chat(chat_uuid uuid)
 RETURNS boolean
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = pg_catalog, public
 AS $$
 BEGIN
   IF NOT EXISTS (
@@ -1253,6 +1262,7 @@ CREATE OR REPLACE FUNCTION get_admin_organization_id()
 RETURNS uuid
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = pg_catalog, public
 AS $$
 DECLARE
   admin_org_id UUID;
@@ -1386,6 +1396,7 @@ CREATE OR REPLACE FUNCTION share_personal_organization(
 RETURNS BOOLEAN
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = pg_catalog, public
 AS $$
 DECLARE
   org_record RECORD;
@@ -1421,6 +1432,7 @@ CREATE OR REPLACE FUNCTION check_admin_status()
 RETURNS BOOLEAN
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = pg_catalog, public
 AS $$
 BEGIN
   RETURN EXISTS (
@@ -1433,6 +1445,7 @@ CREATE OR REPLACE FUNCTION is_admin(user_uuid UUID)
 RETURNS BOOLEAN
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = pg_catalog, public
 AS $$
 BEGIN
   RETURN EXISTS (

@@ -80,9 +80,9 @@ describe('0411 repairs databases that already have the 13 functions without a se
   });
 
   test('every ALTER FUNCTION sits behind a guard and the migration changes nothing but search_path', () => {
-    expect((sql.match(/ALTER FUNCTION/g) ?? []).length).toBe(FORMERLY_UNFIXED.length);
-    expect((sql.match(/to_regprocedure\(/g) ?? []).length).toBe(FORMERLY_UNFIXED.length);
     const code = sql.replace(/--.*$/gm, '');
+    expect((code.match(/ALTER FUNCTION/g) ?? []).length).toBe(FORMERLY_UNFIXED.length);
+    expect((code.match(/to_regprocedure\(/g) ?? []).length).toBe(FORMERLY_UNFIXED.length);
     expect(code).not.toMatch(/\bCREATE\s+(OR\s+REPLACE\s+)?FUNCTION\b|\bGRANT\s|\bREVOKE\s/i);
   });
 });
