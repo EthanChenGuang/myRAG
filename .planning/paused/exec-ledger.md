@@ -85,7 +85,7 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | 04-13 | [bc-1df13648](bc-1df13648-cd9d-57fe-b726-181165f7ff56) **merged** | exec/04-13 |
 | 04-15 | [bc-2f4f0524](bc-2f4f0524-6984-5e57-a50a-249d0a960a27) RUNNING | exec/04-15 |
 | 04-12 | [bc-7e4cdf1c](bc-7e4cdf1c-68e8-51f1-92c1-f1c5b1bb0abc) **merged** | exec/04-12 |
-| 04-16 | [bc-d3b679cb](bc-d3b679cb-baac-50ce-8ff9-c0829a4fb24f) RUNNING | exec/04-16 |
+| 04-16 | [bc-d3b679cb](bc-d3b679cb-baac-50ce-8ff9-c0829a4fb24f) **merged** | exec/04-16 — relex 9+8 tests |
 | 04-14 | [bc-136b100d](bc-136b100d-6b2f-51bc-b0da-cf8849a609c2) **merged** | exec/04-14 |
 | 03.1-14 | [bc-6ed38246](bc-6ed38246-5368-58ee-9409-cafed132af21) RUNNING | exec/03.1-14 |
 | 03.1-13 | [bc-e72d1c49](bc-e72d1c49-cec3-59a1-ad07-7c158b89a381) **merged** | exec/03.1-13 |
@@ -109,7 +109,7 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | Plan | bcId | Worktree | Notes |
 |------|------|----------|-------|
 | 03.1-14 | [bc-6ed38246](bc-6ed38246-5368-58ee-9409-cafed132af21) RUNNING | `wt/03.1-14` | Refill after 04-14 |
-| 04-16 | [bc-d3b679cb](bc-d3b679cb-baac-50ce-8ff9-c0829a4fb24f) RUNNING | `wt/04-16` | rag:relex |
+| 03.1-17 | SPAWN | `wt/03.1-17` | Refill after 04-16 (04-17 blocked on 04-15) |
 | 04-15 | [bc-2f4f0524](bc-2f4f0524-6984-5e57-a50a-249d0a960a27) RUNNING | `wt/04-15` | hybrid_search RPC |
 | 03.1-16 | [bc-572eafe6](bc-572eafe6-375e-5fac-b690-23e40f4403cd) RUNNING | `wt/03.1-16` | L1 preflight |
 
