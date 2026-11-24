@@ -176,8 +176,6 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
 
   const capped = deduped.skipped ? sliceCap(fused, params.rerank_input_cap) : deduped.value;
 
-  await runStage(spec('rerank', 'skip'), signal, async () => null, collector);
-
   return { fusedHits: capped.hits, dedupeCounts: capped.counts };
 }
 

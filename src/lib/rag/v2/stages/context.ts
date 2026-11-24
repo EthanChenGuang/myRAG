@@ -26,6 +26,7 @@ import type { RetrievalParams } from '@/lib/rag-eval/contracts.generated';
 
 export interface ContextRerankInput {
   ran: boolean;
+  scoreByChunk?: Map<string, number>;
   spansByChunk?: Map<string, RerankSpan[]>;
   prefixLengthByChunk?: Map<string, number>;
 }
@@ -67,7 +68,7 @@ function assemblyRowsFromHits(hits: FusedHit[]): AssemblyRows {
   return { documents, chunkMetadata };
 }
 
-function fusedToCandidate(row: FusedHit): Candidate {
+function fusedToCandidate(row: FusedHit, rerankScore?: number): Candidate {
   const similarity = row.hit.similarity ?? 0;
   const legs = Object.fromEntries(Object.entries(row.ranks).map(([key, rank]) => [key, rank]));
   return {
@@ -84,6 +85,7 @@ function fusedToCandidate(row: FusedHit): Candidate {
     parent_id: row.hit.parentId,
     legs,
     language: row.hit.language,
+    ...(rerankScore !== undefined ? { rerank_score: rerankScore } : {}),
   };
 }
 
@@ -124,7 +126,7 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
   const spec = (name: StageName, onFail: StageSpec['onFail']) => stageSpec(config, profile, name, onFail, stageOverrides);
   const settings = v2ProfileSettings(profile, config);
   const topHits = fusedHits.slice(0, params.final_top_k);
-  const candidates = topHits.map(fusedToCandidate);
+  const candidates = topHits.map((row) => fusedToCandidate(row, rerank?.scoreByChunk?.get(row.hit.chunkId)));
   const rows = assemblyRowsFromHits(topHits);
   const hitById = new Map(topHits.map((row) => [row.hit.chunkId, row.hit]));
   const rankById = new Map(candidates.map((candidate, index) => [candidate.chunk_id, index + 1]));
