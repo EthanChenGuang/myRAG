@@ -63,9 +63,38 @@ export interface IngestStatusReport {
   reason: string | null;
 }
 
+/** A version that has been processing for longer than this is failed by the next status read; there is no worker until Phase 3.1. */
+export const STALE_PROCESSING_MS = 24 * 60 * 60 * 1000;
+export const STALE_PROCESSING_REASON = 'stale_processing';
+
+const REASON_CODE = /^[a-z0-9][a-z0-9_:.-]{0,63}$/;
+
+function failureCodeOf(state: Record<string, unknown>): string | null {
+  const reason = state.failure_reason;
+  return typeof reason === 'string' && REASON_CODE.test(reason) ? reason : null;
+}
+
+function warningsOf(row: IngestDocumentRow): string[] {
+  const warnings: string[] = [];
+  if (row.status === 'processing' && objectOf(row.processingState.parseJob)) warnings.push('parse_pending');
+  if (Array.isArray(row.processingState.embeddingGaps) && row.processingState.embeddingGaps.length > 0) warnings.push('embedding_gaps');
+  return warnings;
+}
+
+/** Only a processing row with a readable creation time strictly older than 24 hours is stale; anything else is left alone. */
+function isStale(row: IngestDocumentRow, now: number): boolean {
+  if (row.status !== 'processing') return false;
+  const created = Date.parse(row.createdAt);
+  return Number.isFinite(created) && now - created > STALE_PROCESSING_MS;
+}
+
 /**
  * The status of one document of the caller's tenant, read through the tenant-checked writer function.
  * An id that is not a UUID, does not exist or belongs to another tenant returns null.
+ *
+ * This read is also the reaper: a version of the caller's own tenant that has been processing for more than
+ * 24 hours is marked failed (reason stale_processing) and reported as failed. A failed version is not resumed;
+ * uploading the file again starts a new version. The reaper touches nothing else and logs the id and the age only.
  */
 export async function getIngestStatusReport(
   scope: TenantScope,
@@ -82,18 +111,33 @@ export async function getIngestStatusReport(
   if (!writer) throw new IngestWriterError('rag_get_ingest_document', 'db_unavailable');
   const row = await writer.getDocument(documentId);
   if (!row) return null;
-  return {
-    view: {
-      status: row.status,
-      version: row.version,
-      processingStatus: row.processingStatus,
-      lastCompleted: lastCompletedOf(row.processingState),
-      parserUsed: row.parserUsed,
-      docType: row.docType,
-    },
-    warnings: [],
-    reason: null,
+
+  const view: IngestStatusView = {
+    status: row.status,
+    version: row.version,
+    processingStatus: row.processingStatus,
+    lastCompleted: lastCompletedOf(row.processingState),
+    parserUsed: row.parserUsed,
+    docType: row.docType,
   };
+  const now = getIngestDeps().now();
+  if (isStale(row, now)) {
+    try {
+      await writer.markFailed(documentId, STALE_PROCESSING_REASON);
+      console.warn('[Ingest] reaped stale processing version', {
+        documentId,
+        ageHours: Math.floor((now - Date.parse(row.createdAt)) / 3_600_000),
+      });
+      return { view: { ...view, status: 'failed', processingStatus: 'failed' }, warnings: [], reason: STALE_PROCESSING_REASON };
+    } catch (error) {
+      console.error('[Ingest] could not reap a stale processing version', {
+        documentId,
+        error: error instanceof Error ? error.name : 'unknown',
+        ...(error instanceof IngestWriterError ? { rpc: error.rpc, code: error.code } : {}),
+      });
+    }
+  }
+  return { view, warnings: warningsOf(row), reason: row.status === 'failed' ? failureCodeOf(row.processingState) : null };
 }
 
 export async function getIngestStatus(

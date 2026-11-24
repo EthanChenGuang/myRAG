@@ -1,7 +1,8 @@
-import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+import { handleIngestResume } from '../../_lib/handlers';
 
 export const runtime = 'nodejs';
 
-export async function POST(): Promise<Response> {
-  return NextResponse.json({ error: 'Not implemented' }, { status: 501 });
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }): Promise<Response> {
+  return handleIngestResume(request, params);
 }

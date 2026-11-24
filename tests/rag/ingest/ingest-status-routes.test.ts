@@ -152,8 +152,7 @@ async function loadRoutes() {
     resumeSpy = vi.fn(actual.resumeIngest);
     return { ...actual, resumeIngest: resumeSpy };
   });
-  const { setRagDepsForTests } = await import('@/lib/rag/deps');
-  setRagDepsForTests({ adminClient: () => memberAndAdminDb() as never });
+  vi.doMock('@/lib/supabase', () => ({ getSupabaseAdmin: () => memberAndAdminDb(), supabaseAdmin: memberAndAdminDb() }));
   const { setIngestDepsForTests } = await import('@/lib/rag/ingest/deps');
   setIngestDepsForTests({ db: () => fakeDb(), now: () => state.now, rehydrate: async () => false });
   const status = await import('@/app/api/rag/ingest/[id]/route');
@@ -184,7 +183,7 @@ describe('GET /api/rag/ingest/[id]', () => {
     state.rpcFails = false;
     state.now = NOW;
     state.docs = [
-      docRow(DOC_A, `u:${USER_A}`, { processing_state: { lastCompleted: 'parse', parseJob: { parser: 'docling', jobId: 'job1', submittedAt: 'x', attempt: 1 } } }),
+      docRow(DOC_A, `u:${USER_A}`, { processing_state: { lastCompleted: 'store_original', parseJob: { parser: 'docling', jobId: 'job1', submittedAt: 'x', attempt: 1 } } }),
       docRow(DOC_B, `u:${USER_B}`),
       docRow(DOC_ORG, `o:${ORG_X}`),
       docRow(DOC_SINGLE, 's:default'),
@@ -198,6 +197,7 @@ describe('GET /api/rag/ingest/[id]', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.resetModules();
+    vi.doUnmock('@/lib/supabase');
     vi.doUnmock('@/lib/supabase/server');
     vi.doUnmock('@/lib/deployment-mode');
     vi.doUnmock('@/lib/rag');
@@ -236,7 +236,7 @@ describe('GET /api/rag/ingest/[id]', () => {
       status: 'processing',
       version: 1,
       processingStatus: 'processing',
-      lastCompleted: 'parse',
+      lastCompleted: 'store_original',
       parserUsed: 'docling',
       docType: 'general',
       warnings: ['parse_pending'],
@@ -389,6 +389,7 @@ describe('POST /api/rag/ingest/[id]/resume', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.resetModules();
+    vi.doUnmock('@/lib/supabase');
     vi.doUnmock('@/lib/supabase/server');
     vi.doUnmock('@/lib/deployment-mode');
     vi.doUnmock('@/lib/rag');

@@ -108,3 +108,5 @@ export type {
 export { loadIngestConfig } from './ingest/config';
 export { findInvoices } from './retrieval/invoices';
 export type { FindInvoicesDeps, InvoiceFilters, InvoiceHit } from './retrieval/invoices';
+export { getIngestStatusReport, STALE_PROCESSING_MS } from './ingest/status';
+export type { IngestStatusReport } from './ingest/status';
