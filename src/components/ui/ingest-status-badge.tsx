@@ -55,6 +55,7 @@ export function IngestStatusBadge({ state, language, className }: IngestStatusBa
   return (
     <span
       role="status"
+      aria-live="polite"
       aria-label={label}
       title={state.reason ? `${label} (${state.reason})` : label}
       className={cn('inline-flex min-w-0 items-center gap-1.5 text-xs font-medium', TONE_CLASSES[tone], className)}
