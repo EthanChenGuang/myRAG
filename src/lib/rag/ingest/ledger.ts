@@ -114,7 +114,9 @@ async function callRpc(
   if (response.error) {
     throw new IngestLedgerError(rpc, ledgerCode(rpc, response.error.code, response.error.message));
   }
-  return (response.data ?? []) as Row[];
+  // PostgREST answers a function that returns one composite row or one scalar with the bare value; a set comes as an array.
+  const data: unknown = response.data;
+  return (Array.isArray(data) ? data : data === null || data === undefined ? [] : [data]) as Row[];
 }
 
 async function callOne(rpc: string, args: Record<string, unknown>, options: LedgerCallOptions): Promise<Row> {
