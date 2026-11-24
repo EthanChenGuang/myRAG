@@ -75,7 +75,8 @@ export function createLedgerStateStore(input: LedgerStateStoreInput): StateStore
           worker: input.worker,
           stage,
           status,
-          stageState: { ...ctx.state, cursor: stage },
+          // Before parse has finished (a pending parse job) the run has no post-parse position to resume from.
+          stageState: ctx.state.lastCompleted === null ? { ...ctx.state } : { ...ctx.state, cursor: stage },
           timingMs,
         },
         { signal: input.signal, ...(input.ledgerDeps ? { deps: input.ledgerDeps } : {}) },
