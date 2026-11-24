@@ -188,6 +188,8 @@ Guang approval: **批准安装** → `approved` (2026-11-24 Europe/Rome). Orches
 
 **03.1-25:** Two executors (Cursor bc-1f542e8a → `494d60a`; Claude Code pre-/clear executor → `c8d0b6f`), both from WIP `7c5f7f8`. Merged Cursor first (`feb9555`), then the Claude version (`d544c36`), which passes the Cursor tests and adds SSRF/symlink/bucket hardening. Canonical: `d544c36`. Deferred from its SUMMARY: folder upload to `rag-originals` belongs to **03.1-46**; generated Zod lacks the path/url cross-field rule (`tests/ingest-queue-contracts.test.ts`, 03.1-02).
 
+**03-48-sec-rpc-2:** A pre-/clear Claude Code executor and this session's executor shared `wt/03-48-sec-rpc-2`. The first stopped editing once it saw the second's commits and only reviewed. One set of commits (`17f5b29`, `0a6db8a`, `48cbf62`), merged as `7ea728a`. No duplicate code.
+
 ## Spawn checklist
 
 1. Read **Active wave** and **Serialized** tables.
