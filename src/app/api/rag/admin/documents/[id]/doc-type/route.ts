@@ -4,7 +4,7 @@ import { adminDenied, checkAdmin } from '@/lib/admin-route-auth';
 import {
   AdminDocumentScopeError,
   changeDocumentType,
-  DOC_TYPE_CHOICES,
+  DOC_TYPE_IDS,
   scopeForAdminDocument,
 } from '@/lib/rag';
 
@@ -16,7 +16,7 @@ const NO_STORE = { 'Cache-Control': 'no-store' };
 const ParamsSchema = z.object({ id: z.string().uuid() });
 const BodySchema = z
   .object({
-    docType: z.enum(DOC_TYPE_CHOICES),
+    docType: z.enum(DOC_TYPE_IDS),
   })
   .strict();
 
