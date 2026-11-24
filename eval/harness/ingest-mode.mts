@@ -38,6 +38,7 @@ function ingestCorpusSha256(corpusSha256: string): string {
 export async function buildIngestFixtureDatabase(options: {
   deploymentMode: DeploymentMode;
   corpusDir: string;
+  processEnv?: Record<string, string>;
   supabaseGrants?: boolean;
   migrations?: boolean;
   setupSqlPath?: string;
@@ -49,7 +50,7 @@ export async function buildIngestFixtureDatabase(options: {
   let uninstall: (() => Promise<void>) | undefined;
   try {
     edge = await startFakeEdge({ db: empty.db });
-    applyFixtureProcessEnv({ edgeUrl: edge.url, deploymentMode });
+    applyFixtureProcessEnv({ edgeUrl: edge.url, deploymentMode, extra: options.processEnv });
 
     const { fixtureAdminClient, installIngestFakes } = await import('./ingest-fakes.mts');
     const { ingest } = await import('@/lib/rag/ingest');

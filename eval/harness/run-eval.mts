@@ -10,7 +10,7 @@ import type { LanguageModel } from 'ai';
 import { GoldenItemSchema, RagTraceSchema, RunManifestSchema, type GoldenItem, type RagRunRequest, type RagTrace, type RunManifest } from '../../src/lib/rag-eval/contracts.generated.ts';
 import { canonicalJson, configHash } from '../../src/lib/rag-eval/trace.ts';
 import { EMBEDDER_ID, EMBEDDER_VERSION, embedderSourceSha256 } from './fixture-embedder.mts';
-import { createFixtureDatabase, type DeploymentMode, type FixtureMode } from './pglite-supabase.mts';
+import { createFixtureDatabase, FIXTURE_USER_ID, type DeploymentMode, type FixtureMode } from './pglite-supabase.mts';
 import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from './fake-edge.mts';
 import { applyFixtureProcessEnv } from './process-env.mts';
 
@@ -110,8 +110,6 @@ function createStubLanguageModel(): LanguageModel {
   }) as unknown as LanguageModel;
 }
 
-type MutableEnv = Record<string, string | undefined>;
-
 export async function prepareInProcessEval(options: {
   corpusDir: string;
   deploymentMode: DeploymentMode;
@@ -119,7 +117,9 @@ export async function prepareInProcessEval(options: {
   allowedScopes?: string[];
 }): Promise<InProcessEval> {
   const { corpusDir, deploymentMode, fixtureMode, allowedScopes = [] } = options;
-  const fixture = await createFixtureDatabase({ deploymentMode, corpusDir, fixtureMode });
+  const secret = crypto.randomBytes(24).toString('hex');
+  const evalEnv = { RAG_EVAL_SECRET: secret, RAG_EVAL_ALLOWED_SCOPES: [`user:${FIXTURE_USER_ID}`, ...allowedScopes].join(',') };
+  const fixture = await createFixtureDatabase({ deploymentMode, corpusDir, fixtureMode, processEnv: evalEnv });
   let edge: FakeEdge | undefined;
   try {
     // The ingest mode ingests the corpus through its own edge and hands it over: a second edge would have another URL than the
@@ -131,11 +131,7 @@ export async function prepareInProcessEval(options: {
   }
   const startedEdge = edge;
 
-  const env = process.env as MutableEnv;
-  applyFixtureProcessEnv({ edgeUrl: startedEdge.url, deploymentMode });
-  const secret = crypto.randomBytes(24).toString('hex');
-  env.RAG_EVAL_SECRET = secret;
-  env.RAG_EVAL_ALLOWED_SCOPES = [`user:${fixture.fixtureUserId}`, ...allowedScopes].join(',');
+  applyFixtureProcessEnv({ edgeUrl: startedEdge.url, deploymentMode, extra: evalEnv });
 
   const route = await import('../../src/app/api/internal/rag/run/route.ts');
 

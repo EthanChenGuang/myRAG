@@ -98,6 +98,8 @@ export async function createFixtureDatabase(options: {
   deploymentMode: DeploymentMode;
   corpusDir: string;
   fixtureMode?: FixtureMode;
+  /** Variables the run reads from the app environment; the ingest mode sets them before it imports the app, which is earlier than the caller can. */
+  processEnv?: Record<string, string>;
   supabaseGrants?: boolean;
   migrations?: boolean;
   setupSqlPath?: string;
@@ -116,6 +118,7 @@ export async function createFixtureDatabase(options: {
     return buildIngestFixtureDatabase({
       deploymentMode,
       corpusDir,
+      processEnv: options.processEnv,
       supabaseGrants: options.supabaseGrants,
       migrations: options.migrations,
       setupSqlPath: options.setupSqlPath,
