@@ -166,12 +166,16 @@ jobs:
       - run: uv sync --directory eval --locked --all-extras
       - name: Smoke tier against the committed baseline
         run: npm run test-rag -- --out eval/out/smoke
+      - name: Ingest-mode smoke tier against the ingest baseline
+        run: npm run test-rag -- --fixture-mode ingest --out eval/out/smoke-ingest
       - name: Upload smoke output
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: eval-smoke
-          path: eval/out/smoke
+          path: |
+            eval/out/smoke
+            eval/out/smoke-ingest
           if-no-files-found: warn
 
   gate-negative-control:
