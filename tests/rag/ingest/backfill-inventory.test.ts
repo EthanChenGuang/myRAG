@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { mkdtemp, mkdir, rm, symlink, truncate, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -535,7 +536,13 @@ describe('listSource manifest', () => {
 });
 
 describe('listSource bucket', () => {
-  function bucketOf(tree: Record<string, Array<{ name: string; id: string | null; size?: number }>>) {
+  const SCOPE_SINGLE = mintScope('single', null, null);
+  const SCOPE_A = mintScope('personal', USER_A, null);
+  const SCOPE_B = mintScope('personal', USER_B, null);
+  const SCOPE_ORG = mintScope('org', null, ORG_O);
+  const APP_BUCKETS = ['rag-originals', 'chat-images', 'chat-attachments', 'chat-videos', '3d-models', 'backgrounds'];
+
+  function bucketOf(tree: Record<string, Array<{ name: string; id: string | null; size?: number | null }>>) {
     const lists: Array<{ prefix: string; offset: number }> = [];
     const download = vi.fn(async (objectPath: string) => ({ data: new Blob([`bytes of ${objectPath}`]), error: null }));
     const bucket: BackfillStorageBucket = {
@@ -545,7 +552,11 @@ describe('listSource bucket', () => {
         const offset = options?.offset ?? 0;
         const limit = options?.limit ?? 100;
         return {
-          data: rows.slice(offset, offset + limit).map((r) => ({ name: r.name, id: r.id, metadata: r.id === null ? null : { size: r.size ?? 10 } })),
+          data: rows.slice(offset, offset + limit).map((r) => ({
+            name: r.name,
+            id: r.id,
+            metadata: r.id === null ? null : r.size === null ? {} : { size: r.size ?? 10 },
+          })),
           error: null,
         };
       },
@@ -555,6 +566,8 @@ describe('listSource bucket', () => {
     return { deps: { storage: { from } } satisfies BackfillSourceDeps, lists, download, from };
   }
 
+  const allow = (...names: string[]) => ({ allowedBuckets: names, scope: SCOPE_SINGLE });
+
   test('lists nested prefixes and every page without downloading anything', async () => {
     const many = Array.from({ length: 1_500 }, (_, i) => ({ name: `f${String(i).padStart(4, '0')}.pdf`, id: `id-${i}` }));
     const { deps, lists, download, from } = bucketOf({
@@ -562,7 +575,7 @@ describe('listSource bucket', () => {
       folder: [{ name: 'inner.txt', id: 'id-inner' }, { name: 'deeper', id: null }],
       'folder/deeper': [{ name: 'leaf.md', id: 'id-leaf' }],
     });
-    const { items } = await drain({ kind: 'bucket', ref: 'fixture-bucket', deps });
+    const { items } = await drain({ kind: 'bucket', ref: 'fixture-bucket', deps, ...allow('fixture-bucket') });
     expect(items).toHaveLength(1_500 + 2);
     expect(items.map((i) => i.sourceKey)).toContain('folder/inner.txt');
     expect(items.map((i) => i.sourceKey)).toContain('folder/deeper/leaf.md');
@@ -575,16 +588,16 @@ describe('listSource bucket', () => {
     expect(download).toHaveBeenCalledTimes(1);
   });
 
-  test('refuses buckets that hold other tenants\' files, invalid names, a missing client and list errors', async () => {
+  test('refuses invalid names, a missing client and list errors', async () => {
     const { deps } = bucketOf({ '': [] });
-    for (const ref of ['rag-originals', 'chat-images', '', 'UPPER', '../x', 'a/b', 'x']) {
-      await expect(drain({ kind: 'bucket', ref, deps })).rejects.toMatchObject({ name: 'SourceRejection' });
+    for (const ref of ['', 'UPPER', '../x', 'a/b', 'x']) {
+      await expect(drain({ kind: 'bucket', ref, deps, ...allow(ref, 'fixture-bucket') })).rejects.toMatchObject({ name: 'SourceRejection' });
     }
-    await expect(drain({ kind: 'bucket', ref: 'fixture-bucket' })).rejects.toMatchObject({ reason: 'bucket_storage_unavailable' });
+    await expect(drain({ kind: 'bucket', ref: 'fixture-bucket', ...allow('fixture-bucket') })).rejects.toMatchObject({ reason: 'bucket_storage_unavailable' });
     const failing: BackfillSourceDeps = {
       storage: { from: () => ({ list: async () => ({ data: null, error: { message: 'boom' } }), download: vi.fn() }) },
     };
-    await expect(drain({ kind: 'bucket', ref: 'fixture-bucket', deps: failing })).rejects.toMatchObject({ reason: 'bucket_list_failed' });
+    await expect(drain({ kind: 'bucket', ref: 'fixture-bucket', deps: failing, ...allow('fixture-bucket') })).rejects.toMatchObject({ reason: 'bucket_list_failed' });
   });
 
   test('an object over the size limit is refused', async () => {
@@ -594,9 +607,94 @@ describe('listSource bucket', () => {
         { name: 'huge.pdf', id: 'b', size: ORIGINALS_MAX_BYTES + 1 },
       ],
     });
-    const { items, reasons } = await drain({ kind: 'bucket', ref: 'fixture-bucket', deps });
+    const { items, reasons } = await drain({ kind: 'bucket', ref: 'fixture-bucket', deps, ...allow('fixture-bucket') });
     expect(items.map((i) => i.sourceKey)).toEqual(['small.pdf']);
     expect(reasons).toEqual(['too_large']);
+  });
+
+  test('every bucket the application owns is refused, even when the operator lists it, and nothing is listed or downloaded', async () => {
+    const fromSetup = ['supabase/single-tenant-setup.sql', 'supabase/multi-tenant-setup.sql'].flatMap((file) =>
+      [...readFileSync(path.join(process.cwd(), file), 'utf8').matchAll(/INSERT INTO storage\.buckets[^;]*?VALUES\s*\(\s*'([a-z0-9._-]+)'/g)].map((m) => m[1] as string),
+    );
+    expect(fromSetup.length).toBeGreaterThanOrEqual(5);
+    for (const name of new Set([...APP_BUCKETS, ...fromSetup])) {
+      const { deps, lists, download, from } = bucketOf({ '': [{ name: 'tenantB-user', id: null }], 'tenantB-user': [{ name: 'secret.pdf', id: 'x' }] });
+      await expect(drain({ kind: 'bucket', ref: name, deps, ...allow(name) })).rejects.toMatchObject({ reason: 'bucket_internal' });
+      expect(lists).toEqual([]);
+      expect(download).not.toHaveBeenCalled();
+      expect(from).not.toHaveBeenCalled();
+    }
+  });
+
+  test('a bucket that is not on the allow-list is refused: absent, empty and different lists all deny', async () => {
+    const { deps, lists, from } = bucketOf({ '': [{ name: 'a.pdf', id: 'x' }] });
+    const base = { kind: 'bucket' as const, ref: 'fixture-bucket', deps, scope: SCOPE_SINGLE };
+    await expect(drain(base)).rejects.toMatchObject({ reason: 'bucket_not_allowed' });
+    await expect(drain({ ...base, allowedBuckets: [] })).rejects.toMatchObject({ reason: 'bucket_not_allowed' });
+    await expect(drain({ ...base, allowedBuckets: ['other-bucket'] })).rejects.toMatchObject({ reason: 'bucket_not_allowed' });
+    await expect(drain({ ...base, allowedBuckets: ['Fixture-Bucket', ' fixture-bucket'] })).rejects.toMatchObject({ reason: 'bucket_not_allowed' });
+    expect(lists).toEqual([]);
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  test('a bucket source needs a minted tenant scope: none, a look-alike object and a string are refused', async () => {
+    const { deps, lists } = bucketOf({ '': [{ name: 'a.pdf', id: 'x' }] });
+    const base = { kind: 'bucket' as const, ref: 'fixture-bucket', deps, allowedBuckets: ['fixture-bucket'] };
+    await expect(drain(base)).rejects.toMatchObject({ reason: 'bucket_scope_required' });
+    await expect(drain({ ...base, scope: { kind: 'single', userId: null, organizationId: null } as never })).rejects.toMatchObject({ reason: 'bucket_scope_required' });
+    await expect(drain({ ...base, scope: TENANT_A as never })).rejects.toMatchObject({ reason: 'bucket_scope_required' });
+    expect(lists).toEqual([]);
+  });
+
+  test('two tenants: tenant A never lists or opens tenant B objects, and the other way round', async () => {
+    const tree = {
+      '': [{ name: 'u', id: null }, { name: 'o', id: null }],
+      u: [{ name: USER_A, id: null }, { name: USER_B, id: null }],
+      [`u/${USER_A}`]: [{ name: 'a1.pdf', id: 'a1' }, { name: 'sub', id: null }],
+      [`u/${USER_A}/sub`]: [{ name: 'a2.pdf', id: 'a2' }],
+      [`u/${USER_B}`]: [{ name: 'b1.pdf', id: 'b1' }, { name: 'sub', id: null }],
+      [`u/${USER_B}/sub`]: [{ name: 'b2.pdf', id: 'b2' }],
+      o: [{ name: ORG_O, id: null }],
+      [`o/${ORG_O}`]: [{ name: 'org.pdf', id: 'o1' }],
+    };
+    for (const [scope, own, other] of [
+      [SCOPE_A, USER_A, USER_B],
+      [SCOPE_B, USER_B, USER_A],
+    ] as const) {
+      const { deps, lists, download } = bucketOf(tree);
+      const { items } = await drain({ kind: 'bucket', ref: 'shared-bucket', deps, allowedBuckets: ['shared-bucket'], scope });
+      expect(items.map((i) => i.sourceKey).sort()).toEqual([`u/${own}/${own === USER_A ? 'a1' : 'b1'}.pdf`, `u/${own}/sub/${own === USER_A ? 'a2' : 'b2'}.pdf`]);
+      for (const entry of items) await readAll(await entry.open());
+      const touched = [...lists.map((l) => l.prefix), ...download.mock.calls.map((c) => String(c[0]))];
+      expect(touched.length).toBeGreaterThan(0);
+      expect(touched.every((p) => p === `u/${own}` || p.startsWith(`u/${own}/`))).toBe(true);
+      expect(touched.some((p) => p.includes(other))).toBe(false);
+      expect(lists.some((l) => l.prefix === '' || l.prefix === 'u')).toBe(false);
+    }
+    const { deps, lists } = bucketOf(tree);
+    const org = await drain({ kind: 'bucket', ref: 'shared-bucket', deps, allowedBuckets: ['shared-bucket'], scope: SCOPE_ORG });
+    expect(org.items.map((i) => i.sourceKey)).toEqual([`o/${ORG_O}/org.pdf`]);
+    expect(lists.every((l) => l.prefix === `o/${ORG_O}` || l.prefix.startsWith(`o/${ORG_O}/`))).toBe(true);
+  });
+
+  test('a storage answer that reaches outside the tenant prefix is refused row by row and never opened', async () => {
+    const hostile = {
+      [`u/${USER_A}`]: [
+        { name: 'ok.pdf', id: 'ok' },
+        { name: `../${USER_B}/b1.pdf`, id: 'x1' },
+        { name: `/u/${USER_B}/b1.pdf`, id: 'x2' },
+        { name: `u/${USER_B}/b1.pdf`, id: 'x3' },
+        { name: '..', id: null },
+        { name: '.', id: null },
+        { name: `${USER_B}/b1.pdf`, id: 'x4' },
+      ],
+    };
+    const { deps, lists, download } = bucketOf(hostile);
+    const { items, reasons } = await drain({ kind: 'bucket', ref: 'shared-bucket', deps, allowedBuckets: ['shared-bucket'], scope: SCOPE_A });
+    expect(items.map((i) => i.sourceKey)).toEqual([`u/${USER_A}/ok.pdf`]);
+    expect(reasons).toEqual(Array.from({ length: 6 }, () => 'outside_prefix'));
+    expect(lists.every((l) => l.prefix === `u/${USER_A}`)).toBe(true);
+    expect(download).not.toHaveBeenCalled();
   });
 });
 
