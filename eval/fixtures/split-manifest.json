@@ -113,7 +113,19 @@
     "zh-table-002": "dev",
     "zh-table-003": "test",
     "zh-typo-001": "dev",
-    "zh-typo-002": "test"
+    "zh-typo-002": "test",
+    "en-selective-filter-001": "dev",
+    "en-selective-filter-002": "test",
+    "en-selective-filter-003": "dev",
+    "en-selective-filter-004": "test",
+    "it-selective-filter-001": "test",
+    "it-selective-filter-002": "test",
+    "it-selective-filter-003": "dev",
+    "it-selective-filter-004": "dev",
+    "zh-selective-filter-001": "dev",
+    "zh-selective-filter-002": "dev",
+    "zh-selective-filter-003": "dev",
+    "zh-selective-filter-004": "dev"
   },
   "rule": "sha256-first8hex-mod100-lt70-dev",
   "schema_version": 1

@@ -1,3 +1,4 @@
+<!-- fixture-meta {"doc_type":"general"} -->
 ## Annual plans
 
 Lumen Valley Instruments accepts refund requests for plans billed once a year. Send the request to the billing team with your order number. The refund is paid to the original payment method within 10 business days. The annual plans refund window is 45 days from the purchase date.

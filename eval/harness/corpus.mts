@@ -9,6 +9,26 @@ const DEFAULT_CREATED_AT = '2025-01-15T00:00:00.000Z';
 const META_RE = /^<!--\s*fixture-meta\s+(\{.*\})\s*-->\s*$/;
 const CHUNK_MARKER = '<!-- chunk -->';
 
+export const CORPUS_DOC_TYPES = [
+  'financial_report',
+  'contract_legal',
+  'invoice_receipt',
+  'product_technical',
+  'scanned_image',
+  'general',
+] as const;
+export type CorpusDocType = (typeof CORPUS_DOC_TYPES)[number];
+const DEFAULT_DOC_TYPE: CorpusDocType = 'general';
+
+function resolveDocType(meta: Record<string, unknown>, relpath: string): CorpusDocType {
+  const raw = meta.doc_type;
+  if (raw === undefined) return DEFAULT_DOC_TYPE;
+  if (typeof raw !== 'string' || !(CORPUS_DOC_TYPES as readonly string[]).includes(raw)) {
+    throw new Error(`[Fixture Corpus] invalid doc_type in ${relpath}`);
+  }
+  return raw as CorpusDocType;
+}
+
 export interface CorpusChunk {
   index: number;
   id: string;
@@ -23,6 +43,7 @@ export interface CorpusDocument {
   filename: string;
   imageUrl: string | null;
   createdAt: string;
+  docType: CorpusDocType;
   id: string;
   content: string;
   chunks: CorpusChunk[];
@@ -107,6 +128,7 @@ export function loadCorpus(corpusDir: string): LoadedCorpus {
       filename,
       imageUrl: typeof meta.image_url === 'string' ? meta.image_url : null,
       createdAt: typeof meta.created_at === 'string' ? meta.created_at : DEFAULT_CREATED_AT,
+      docType: resolveDocType(meta, relpath),
       id: uuidFromDigest(`doc:${relpath}`),
       content: texts.join('\n\n'),
       chunks: texts.map((text, index) => ({

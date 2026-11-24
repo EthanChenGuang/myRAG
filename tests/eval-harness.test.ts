@@ -38,7 +38,11 @@ fs.writeFileSync(
   fs
     .readFileSync(FULL_GOLDEN_PATH, 'utf8')
     .split('\n')
-    .filter((line) => line.includes(`"id": "${TRACER_ITEM_ID}"`))
+    .filter((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return false;
+      return (JSON.parse(trimmed) as { id: string }).id === TRACER_ITEM_ID;
+    })
     .map((line) => `${line}\n`)
     .join(''),
 );
