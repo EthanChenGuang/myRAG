@@ -1,0 +1,77 @@
+From f50cae2e502a8870380e92ce568595e1e079af2e Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 24 Nov 2026 09:33:35 +0000
+Subject: [PATCH 6/6] fix(03-38): a resumed run reuses every stored picture
+ caption, so no picture is captioned twice
+
+- a request can end between storing a caption and saving the progress; resumed runs now look for the stored caption of each picture
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01X342shLsAZx6PYph2vA7hc
+---
+ src/lib/rag/ingest/stages/images.ts |  6 +++---
+ tests/rag/ingest/pdf-images.test.ts | 22 ++++++++++++++++++++++
+ 2 files changed, 25 insertions(+), 3 deletions(-)
+
+diff --git a/src/lib/rag/ingest/stages/images.ts b/src/lib/rag/ingest/stages/images.ts
+index cee75b0..eee9fba 100644
+--- a/src/lib/rag/ingest/stages/images.ts
++++ b/src/lib/rag/ingest/stages/images.ts
+@@ -191,10 +191,9 @@ async function runPictures(ctx: StageContext): Promise<StageOutcome> {
+   const selection = selectPictures(pictures);
+   const { kept } = selection;
+   const initial = ctx.state.images;
+-  const resumeFrom = initial?.nextIndex ?? 0;
+   const skipped = new Set<number>(initial?.skipped ?? []);
+   let captioned = initial?.captioned ?? 0;
+-  let nextIndex = resumeFrom;
++  let nextIndex = initial?.nextIndex ?? 0;
+   let uploaded = initial?.uploaded ?? 0;
+   const lost = selection.skippedInvalid;
+   const outcomeCode = (): string => `kept_${kept.length - skipped.size}.small_${selection.skippedSmall}.cap_${selection.skippedOverCap}.lost_${lost + skipped.size}`;
+@@ -216,7 +215,8 @@ async function runPictures(ctx: StageContext): Promise<StageOutcome> {
+   for (let index = 0; index < kept.length; index += 1) {
+     if (skipped.has(index)) continue;
+     const picture = kept[index] as ParsedPicture;
+-    let caption = index < resumeFrom ? await storedCaption(ctx, index) : null;
++    // A resumed run looks for a stored caption of every picture: a request can end between storing a caption and saving the progress.
++    let caption = initial !== null ? await storedCaption(ctx, index) : null;
+     if (caption === null) {
+       const loaded = await loadPicture(ctx, picture);
+       if ('skip' in loaded) {
+diff --git a/tests/rag/ingest/pdf-images.test.ts b/tests/rag/ingest/pdf-images.test.ts
+index bc9772c..f3592b7 100644
+--- a/tests/rag/ingest/pdf-images.test.ts
++++ b/tests/rag/ingest/pdf-images.test.ts
+@@ -401,6 +401,28 @@ describe('the images stage on many pictures', () => {
+     expect(seen).toEqual([1, 3]);
+   });
+ 
++  it('never captions a picture twice: a stored caption is used even when the saved progress does not know it yet', async () => {
++    const { pictures, artifacts } = many(2);
++    const seen: number[] = [];
++    setCaptionerForTests(async (bytes) => {
++      seen.push(bytes[4]!);
++      return `Picture ${bytes[4]} shows a dock.`;
++    });
++    const { ctx, store, ready } = stageContext(pictures, artifacts);
++    await ready;
++    await store.put(`s:default/${FAKE_LINEAGE_ID}/1/caption-1.txt`, new TextEncoder().encode('Stored caption of the first picture.'), { contentType: 'text/plain' });
++    ctx.state.images = { nextIndex: 0, captioned: 0 };
++
++    const outcome = await imagesStage.run(ctx);
++
++    expect(outcome).toMatchObject({ kind: 'next' });
++    expect(seen).toEqual([2]);
++    expect(ctx.work.chunks.filter((chunk) => chunk.chunk_kind === 'image').map((chunk) => chunk.content)).toEqual([
++      'Stored caption of the first picture.',
++      'Picture 2 shows a dock.',
++    ]);
++  });
++
+   it('yields before the vision call when the request budget is nearly gone, then the next run continues with the next picture', async () => {
+     const { pictures, artifacts } = many(2);
+     let clock = 1_000_000;
+-- 
+2.43.0
+

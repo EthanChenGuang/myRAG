@@ -1,0 +1,344 @@
+From 1f327ce8eba2f4d87599af11b9e153a8e8ef9beb Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 24 Nov 2026 09:25:10 +0000
+Subject: [PATCH 2/4] feat(03-39): doc-type defaults routes for the picker and
+ the admin
+
+- GET /api/rag/doc-type-defaults: session first in both modes, tenant scope through resolveTenantScope, D-15 order, hidden under the legacy pipeline
+- GET and PUT /api/rag/admin/doc-type-defaults: checkAdmin guard, membership-checked workspace, updated_by from the verified admin
+- resolvePickerDefault, listDocTypeDefaults, setDocTypeDefault exported from the rag index
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01X342shLsAZx6PYph2vA7hc
+---
+ .../api/rag/admin/doc-type-defaults/route.ts  | 103 +++++++++++++++++-
+ src/app/api/rag/doc-type-defaults/route.ts    |  71 +++++++++++-
+ src/lib/rag/index.ts                          |   3 +
+ .../rag/ingest/profiles/doc-type-defaults.ts  |  50 +++++++++
+ .../rag/ingest/profiles/resolve-doc-type.ts   |  32 +++++-
+ 5 files changed, 249 insertions(+), 10 deletions(-)
+ create mode 100644 src/lib/rag/ingest/profiles/doc-type-defaults.ts
+
+diff --git a/src/app/api/rag/admin/doc-type-defaults/route.ts b/src/app/api/rag/admin/doc-type-defaults/route.ts
+index 58c41d2..8910e32 100644
+--- a/src/app/api/rag/admin/doc-type-defaults/route.ts
++++ b/src/app/api/rag/admin/doc-type-defaults/route.ts
+@@ -1,9 +1,104 @@
++import { NextResponse } from 'next/server';
++import { z } from 'zod/v3';
++import { adminDenied, checkAdmin } from '@/lib/admin-route-auth';
++import {
++  DOC_TYPE_CHOICES,
++  DOC_TYPE_DEFAULT_SOURCE_KINDS,
++  DocTypeDefaultsError,
++  listDocTypeDefaults,
++  resolveAdminWorkspaceScope,
++  setDocTypeDefault,
++  type DocTypeDefaultRow,
++} from '@/lib/rag';
++
+ export const runtime = 'nodejs';
+ 
+-export async function GET(): Promise<Response> {
+-  return Response.json({ success: false, error: 'Not implemented' }, { status: 501 });
++const TAG = '[RAG Admin]';
++const NO_STORE = { 'Cache-Control': 'no-store' };
++
++const QuerySchema = z.object({ organizationId: z.string().max(64).nullish() });
++const BodySchema = z
++  .object({
++    organizationId: z.string().max(64).nullish(),
++    sourceKind: z.enum(DOC_TYPE_DEFAULT_SOURCE_KINDS),
++    sourceRef: z.string().trim().min(1).max(200).nullish(),
++    docType: z.enum(DOC_TYPE_CHOICES),
++  })
++  .strict();
++
++function fail(status: number, error: string, details?: Array<{ path: string; message: string }>): NextResponse {
++  return NextResponse.json(details ? { success: false, error, details } : { success: false, error }, { status, headers: NO_STORE });
++}
++
++const invalid = (error: z.ZodError): NextResponse =>
++  fail(400, 'Invalid request data', error.errors.map((issue) => ({ path: issue.path.join('.'), message: issue.message })));
++
++function itemOf(row: DocTypeDefaultRow) {
++  return { source_kind: row.sourceKind, source_ref: row.sourceRef, doc_type: row.docType, updated_by: row.updatedBy, updated_at: row.updatedAt };
++}
++
++function failureOf(error: unknown): NextResponse {
++  if (error instanceof DocTypeDefaultsError && error.reason !== null) return fail(400, 'Invalid request data');
++  console.error(`${TAG} doc type defaults call failed`, {
++    error: error instanceof Error ? error.name : 'unknown',
++    ...(error instanceof DocTypeDefaultsError ? { rpc: error.rpc, code: error.code } : {}),
++  });
++  return fail(503, 'Document type defaults are unavailable');
+ }
+ 
+-export async function PUT(): Promise<Response> {
+-  return Response.json({ success: false, error: 'Not implemented' }, { status: 501 });
++/** The default document types of one workspace of the verified admin: the tenant default, the per-source defaults and the Nango ones. */
++export async function GET(request: Request): Promise<Response> {
++  const admin = await checkAdmin(request);
++  if (!admin.ok) return adminDenied(admin.status);
++
++  const parsed = QuerySchema.safeParse({ organizationId: new URL(request.url).searchParams.get('organizationId') });
++  if (!parsed.success) return invalid(parsed.error);
++
++  const workspace = await resolveAdminWorkspaceScope({
++    adminUserId: admin.userId,
++    requestedOrganizationId: parsed.data.organizationId ?? null,
++    signal: request.signal,
++  });
++  if (!workspace.ok) return fail(workspace.status, workspace.status === 403 ? 'Forbidden' : 'Workspace verification unavailable');
++
++  try {
++    const rows = await listDocTypeDefaults(workspace.scope, { signal: request.signal });
++    return NextResponse.json({ success: true, items: rows.map(itemOf) }, { headers: NO_STORE });
++  } catch (error) {
++    return failureOf(error);
++  }
++}
++
++/** Sets or replaces one default. updated_by is the id of the admin the guard verified; the body cannot name an actor. */
++export async function PUT(request: Request): Promise<Response> {
++  const admin = await checkAdmin(request);
++  if (!admin.ok) return adminDenied(admin.status);
++
++  let body: unknown;
++  try {
++    body = await request.json();
++  } catch {
++    return fail(400, 'Invalid request data', [{ path: '', message: 'Body is not valid JSON' }]);
++  }
++  const parsed = BodySchema.safeParse(body);
++  if (!parsed.success) return invalid(parsed.error);
++
++  const workspace = await resolveAdminWorkspaceScope({
++    adminUserId: admin.userId,
++    requestedOrganizationId: parsed.data.organizationId ?? null,
++    signal: request.signal,
++  });
++  if (!workspace.ok) return fail(workspace.status, workspace.status === 403 ? 'Forbidden' : 'Workspace verification unavailable');
++
++  try {
++    const row = await setDocTypeDefault(
++      workspace.scope,
++      { sourceKind: parsed.data.sourceKind, sourceRef: parsed.data.sourceRef ?? null, docType: parsed.data.docType, updatedBy: admin.userId },
++      { signal: request.signal },
++    );
++    console.log(`${TAG} doc type default set`, { action: 'set_doc_type_default', sourceKind: row.sourceKind, docType: row.docType });
++    return NextResponse.json({ success: true, item: itemOf(row) }, { headers: NO_STORE });
++  } catch (error) {
++    return failureOf(error);
++  }
+ }
+diff --git a/src/app/api/rag/doc-type-defaults/route.ts b/src/app/api/rag/doc-type-defaults/route.ts
+index 47f11dd..182f009 100644
+--- a/src/app/api/rag/doc-type-defaults/route.ts
++++ b/src/app/api/rag/doc-type-defaults/route.ts
+@@ -1,5 +1,72 @@
++import { NextResponse } from 'next/server';
++import { z } from 'zod/v3';
++import { requireSessionUser } from '@/lib/session-auth';
++import { DocTypeDefaultsError, INGEST_SOURCES, docTypePickerEnabled, resolvePickerDefault, resolveTenantScope } from '@/lib/rag';
++
+ export const runtime = 'nodejs';
+ 
+-export async function GET(): Promise<Response> {
+-  return Response.json({ success: false, error: 'Not implemented' }, { status: 501 });
++const TAG = '[Doc Type Defaults]';
++const NO_STORE = { 'Cache-Control': 'no-store' };
++const REF_MAX = 200;
++
++const QuerySchema = z.object({
++  source: z.enum(INGEST_SOURCES),
++  organizationId: z.string().max(64).nullish(),
++  nangoConnectionId: z.string().trim().min(1).max(REF_MAX).nullish(),
++  nangoFolderId: z.string().trim().min(1).max(REF_MAX).nullish(),
++});
++
++function fail(status: number, error: string, details?: Array<{ path: string; message: string }>): NextResponse {
++  return NextResponse.json(details ? { success: false, error, details } : { success: false, error }, { status, headers: NO_STORE });
++}
++
++/**
++ * The type the upload picker pre-selects for the caller's tenant (D-15, D-17). The session comes first, in both deployment modes; the
++ * tenant is the session user's own, or an organization they are a member of. Under the legacy pipeline the picker stays hidden.
++ */
++export async function GET(request: Request): Promise<Response> {
++  const session = await requireSessionUser(TAG);
++  if ('response' in session) return session.response;
++
++  const url = new URL(request.url);
++  const parsed = QuerySchema.safeParse({
++    source: url.searchParams.get('source') ?? undefined,
++    organizationId: url.searchParams.get('organizationId'),
++    nangoConnectionId: url.searchParams.get('nangoConnectionId'),
++    nangoFolderId: url.searchParams.get('nangoFolderId'),
++  });
++  if (!parsed.success) {
++    return fail(400, 'Invalid request data', parsed.error.errors.map((issue) => ({ path: issue.path.join('.'), message: issue.message })));
++  }
++
++  if (!docTypePickerEnabled()) return NextResponse.json({ enabled: false }, { headers: NO_STORE });
++
++  const tenant = await resolveTenantScope({
++    requestedOrganizationId: parsed.data.organizationId ?? null,
++    getUser: session.getUser,
++    signal: request.signal,
++  });
++  if (!tenant.ok) {
++    return fail(tenant.status, tenant.status === 403 ? 'Forbidden' : tenant.status === 401 ? 'Unauthorized' : 'Workspace verification unavailable');
++  }
++  if (!tenant.scope) return fail(401, 'Unauthorized');
++
++  try {
++    const choice = await resolvePickerDefault(
++      tenant.scope,
++      {
++        source: parsed.data.source,
++        nangoConnectionId: parsed.data.nangoConnectionId ?? null,
++        nangoFolderId: parsed.data.nangoFolderId ?? null,
++      },
++      { signal: request.signal },
++    );
++    return NextResponse.json({ enabled: true, docType: choice.docType, origin: choice.origin }, { headers: NO_STORE });
++  } catch (error) {
++    console.error(`${TAG} defaults lookup failed`, {
++      error: error instanceof Error ? error.name : 'unknown',
++      ...(error instanceof DocTypeDefaultsError ? { rpc: error.rpc, code: error.code } : {}),
++    });
++    return fail(503, 'Document type defaults are unavailable');
++  }
+ }
+diff --git a/src/lib/rag/index.ts b/src/lib/rag/index.ts
+index bce5dab..3077ab4 100644
+--- a/src/lib/rag/index.ts
++++ b/src/lib/rag/index.ts
+@@ -122,3 +122,6 @@ export type {
+   QuarantineItem,
+   ReleaseQuarantinedResult,
+ } from './ingest/quarantine-admin';
++export { docTypePickerEnabled, resolvePickerDefault, listDocTypeDefaults, setDocTypeDefault, DocTypeDefaultsError, DOC_TYPE_DEFAULT_SOURCE_KINDS, DOC_TYPE_IDS, DOC_TYPE_CHOICES } from './ingest/profiles/doc-type-defaults';
++export type { DocTypeChoice, DocTypeDefaultRow, DocTypeDefaultSourceKind, PickerDefault, SetDocTypeDefaultInput } from './ingest/profiles/doc-type-defaults';
++export { INGEST_SOURCES } from './ingest/types';
+diff --git a/src/lib/rag/ingest/profiles/doc-type-defaults.ts b/src/lib/rag/ingest/profiles/doc-type-defaults.ts
+new file mode 100644
+index 0000000..ae05ee5
+--- /dev/null
++++ b/src/lib/rag/ingest/profiles/doc-type-defaults.ts
+@@ -0,0 +1,50 @@
++import { ProcessingProfileSetSchema } from '@/lib/rag-eval/contracts.generated';
++import type { TenantScope } from '../../tenant/scope';
++import { loadIngestConfig } from '../config';
++import { getIngestDeps } from '../deps';
++import {
++  getDocTypeDefaults,
++  resolvePickerDefault as resolveDefault,
++  setDocTypeDefault as setDefault,
++  type DocTypeDefaultRow,
++  type DocTypeDefaultsDeps,
++  type DocTypeDefaultsSelector,
++  type PickerDefault,
++  type SetDocTypeDefaultInput,
++} from './resolve-doc-type';
++
++export { DOC_TYPE_DEFAULT_SOURCE_KINDS, DocTypeDefaultsError } from './resolve-doc-type';
++export type { DocTypeChoice, DocTypeDefaultRow, DocTypeDefaultSourceKind, DocTypeDefaultsSelector, PickerDefault, SetDocTypeDefaultInput } from './resolve-doc-type';
++
++/** The six document type identifiers (D-12), from the generated profile schema. */
++export const DOC_TYPE_IDS = ProcessingProfileSetSchema.shape.profiles.element.shape.doc_type.options;
++/** What a default may be: a type or auto-detect. */
++export const DOC_TYPE_CHOICES = [...DOC_TYPE_IDS, 'auto'] as const;
++
++export interface DocTypeDefaultsCallOptions {
++  signal: AbortSignal;
++}
++
++function depsOf(options: DocTypeDefaultsCallOptions): DocTypeDefaultsDeps {
++  return { db: getIngestDeps().db, signal: options.signal };
++}
++
++/** The picker exists only under the unified pipeline: under legacy it stays hidden and nothing about uploads changes (D-17). */
++export function docTypePickerEnabled(): boolean {
++  return loadIngestConfig(getIngestDeps().ingestEnv()).pipeline === 'unified';
++}
++
++/** The type the picker pre-selects for the caller's tenant and source (D-15 steps 2 to 6; auto stays auto). */
++export function resolvePickerDefault(scope: TenantScope, selector: DocTypeDefaultsSelector, options: DocTypeDefaultsCallOptions): Promise<PickerDefault> {
++  return resolveDefault(scope, selector, depsOf(options));
++}
++
++/** Every default row of the caller's tenant, for the admin list. */
++export function listDocTypeDefaults(scope: TenantScope, options: DocTypeDefaultsCallOptions): Promise<DocTypeDefaultRow[]> {
++  return getDocTypeDefaults(scope, undefined, depsOf(options));
++}
++
++/** Creates or replaces one default of the caller's tenant. Only a route that passed the admin guard may call it; updatedBy is that admin's id. */
++export function setDocTypeDefault(scope: TenantScope, input: SetDocTypeDefaultInput, options: DocTypeDefaultsCallOptions): Promise<DocTypeDefaultRow> {
++  return setDefault(scope, input, depsOf(options));
++}
+diff --git a/src/lib/rag/ingest/profiles/resolve-doc-type.ts b/src/lib/rag/ingest/profiles/resolve-doc-type.ts
+index ee252bd..47512b4 100644
+--- a/src/lib/rag/ingest/profiles/resolve-doc-type.ts
++++ b/src/lib/rag/ingest/profiles/resolve-doc-type.ts
+@@ -255,13 +255,15 @@ export async function deleteDocTypeDefault(
+   return rows[0]?.deleted === true;
+ }
+ 
+-interface Choice {
++interface DefaultChoice {
+   value: DocTypeChoice;
+-  origin: 'picked' | 'source_default' | 'tenant_default';
++  origin: 'source_default' | 'tenant_default';
+ }
+ 
++type Choice = DefaultChoice | { value: DocTypeChoice; origin: 'picked' };
++
+ /** Steps 2 to 5 of the order: Nango folder, Nango connection, source, tenant. */
+-function chooseDefault(rows: readonly DocTypeDefaultRow[], input: ResolveDocTypeInput): Choice | null {
++function chooseDefault(rows: readonly DocTypeDefaultRow[], input: ResolveDocTypeInput): DefaultChoice | null {
+   const nango = input.source === 'nango';
+   const folderId = present(input.nangoFolderId);
+   const connectionId = present(input.nangoConnectionId);
+@@ -278,6 +280,27 @@ function chooseDefault(rows: readonly DocTypeDefaultRow[], input: ResolveDocType
+   return null;
+ }
+ 
++export interface PickerDefault {
++  docType: DocTypeChoice;
++  origin: 'source_default' | 'tenant_default' | 'fallback';
++}
++
++/**
++ * The default the upload picker pre-selects: steps 2 to 6 of the D-15 order for the caller's tenant, with an auto default returned as auto
++ * (no detection runs here). Throws DocTypeDefaultsError when the defaults cannot be read; the picker route reports that, it does not guess.
++ */
++export async function resolvePickerDefault(scope: TenantScope, selector: DocTypeDefaultsSelector, deps: DocTypeDefaultsDeps): Promise<PickerDefault> {
++  const rows = await loadDefaults(scope, selector, deps, []);
++  const choice = chooseDefault(rows, {
++    source: selector.source,
++    nangoConnectionId: selector.nangoConnectionId,
++    nangoFolderId: selector.nangoFolderId,
++    filename: '',
++    mimeType: '',
++  });
++  return choice === null ? { docType: 'general', origin: 'fallback' } : { docType: choice.value, origin: choice.origin };
++}
++
+ /** Rules first; the optional classifier runs only when the switch is on, the rules are below the floor and there is text. */
+ async function runDetection(input: DetectDocTypeInput, config: IngestConfig, signal: AbortSignal, warnings: string[]): Promise<DocTypeDetection> {
+   const rules = detectDocType(input);
+@@ -356,7 +379,8 @@ function stable(value: unknown): string {
+   return JSON.stringify(value) ?? 'null';
+ }
+ 
+-function sameParserOptions(a: ProcessingProfile, b: ProcessingProfile): boolean {
++/** True when two profiles ask a parser for the same output, so a stored parse of one is valid for the other. */
++export function sameParserOptions(a: ProcessingProfile, b: ProcessingProfile): boolean {
+   return stable(a.parser) === stable(b.parser);
+ }
+ 
+-- 
+2.43.0
+

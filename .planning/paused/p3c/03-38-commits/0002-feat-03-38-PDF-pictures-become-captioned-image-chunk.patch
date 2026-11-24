@@ -1,0 +1,464 @@
+From 7e3ca8a4dcfa0fe9e0876fd064ff6af335e98642 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 24 Nov 2026 09:25:49 +0000
+Subject: [PATCH 2/6] feat(03-38): PDF pictures become captioned image chunks
+ behind RAG_PDF_IMAGE_CHUNKS
+
+- selectPictures: 0.02 page-area floor, 30 per document in page order, counts in the stage outcome
+- images stage: caption each kept picture once with the shared captioner (progress in the images slice, resumable), scan captions, then store the pictures under rag/<tenant_key>/<lineage_id>/<version>/ in chat-images and add image chunks with page, section path and image_url
+- a caption that matches the injection scan quarantines the document before anything is stored publicly or written as an image chunk
+- parse keeps pictures.json (switch on only) and rehydrate rebuilds image chunks from stored captions after resume
+- the image_chunks_unavailable warning of plan 03-32 is gone: the switch now does the work
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01X342shLsAZx6PYph2vA7hc
+---
+ src/lib/rag/ingest/artifacts.ts               |   2 +
+ src/lib/rag/ingest/images/select.ts           |  31 ++-
+ src/lib/rag/ingest/runner.ts                  |  20 +-
+ src/lib/rag/ingest/stages/images.ts           | 225 +++++++++++++++++-
+ src/lib/rag/ingest/stages/parse.ts            |   7 +-
+ tests/rag/ingest/pdf-images.test.ts           |   2 +-
+ tests/rag/ingest/runner.test.ts               |   4 +-
+ .../ingest/write-path-image-upload.test.ts    |   4 +-
+ 8 files changed, 279 insertions(+), 16 deletions(-)
+
+diff --git a/src/lib/rag/ingest/artifacts.ts b/src/lib/rag/ingest/artifacts.ts
+index 1388c69..220e32d 100644
+--- a/src/lib/rag/ingest/artifacts.ts
++++ b/src/lib/rag/ingest/artifacts.ts
+@@ -6,6 +6,8 @@ export const PARSE_ARTIFACT = 'parse.md';
+ export const DOCLING_ARTIFACT = 'docling.json';
+ /** The parser's own chunks (Docling), kept so a resumed run chunks the same way as an uninterrupted one. */
+ export const PARSE_CHUNKS_ARTIFACT = 'chunks.json';
++/** The pictures the parser found, kept (with RAG_PDF_IMAGE_CHUNKS on) so a resumed run selects and captions the same ones. */
++export const PICTURES_ARTIFACT = 'pictures.json';
+ 
+ const TENANT_KEY = /^[a-z]:[a-z0-9-]{1,64}$/;
+ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+diff --git a/src/lib/rag/ingest/images/select.ts b/src/lib/rag/ingest/images/select.ts
+index c42c42a..720d4ac 100644
+--- a/src/lib/rag/ingest/images/select.ts
++++ b/src/lib/rag/ingest/images/select.ts
+@@ -12,8 +12,35 @@ export interface PictureSelection {
+   kept: ParsedPicture[];
+   skippedSmall: number;
+   skippedOverCap: number;
++  /** A picture with no usable page or area; never kept. */
++  skippedInvalid: number;
+ }
+ 
+-export function selectPictures(_pictures: readonly ParsedPicture[]): PictureSelection {
+-  return { kept: [], skippedSmall: 0, skippedOverCap: 0 };
++/**
++ * Which pictures of a parse result become image chunks: those with a valid page that cover at least MIN_PAGE_AREA_SHARE of it, in page
++ * order (parser order within a page), the first MAX_PICTURES_PER_DOCUMENT of them. Small pictures are dropped before the cap, so a
++ * decoration never takes the place of a figure. The result depends on the pictures only, so a resumed run selects the same ones.
++ */
++export function selectPictures(pictures: readonly ParsedPicture[]): PictureSelection {
++  const ordered = pictures
++    .map((picture, position) => ({ picture, position }))
++    .sort((a, b) => a.picture.page - b.picture.page || a.position - b.position);
++  const eligible: ParsedPicture[] = [];
++  let skippedSmall = 0;
++  let skippedInvalid = 0;
++  for (const { picture } of ordered) {
++    if (!Number.isInteger(picture.page) || picture.page < 1 || !Number.isFinite(picture.page_area_share) || picture.page_area_share < 0) {
++      skippedInvalid += 1;
++    } else if (picture.page_area_share < MIN_PAGE_AREA_SHARE) {
++      skippedSmall += 1;
++    } else {
++      eligible.push(picture);
++    }
++  }
++  return {
++    kept: eligible.slice(0, MAX_PICTURES_PER_DOCUMENT),
++    skippedSmall,
++    skippedOverCap: Math.max(0, eligible.length - MAX_PICTURES_PER_DOCUMENT),
++    skippedInvalid,
++  };
+ }
+diff --git a/src/lib/rag/ingest/runner.ts b/src/lib/rag/ingest/runner.ts
+index 5ce699b..069c53a 100644
+--- a/src/lib/rag/ingest/runner.ts
++++ b/src/lib/rag/ingest/runner.ts
+@@ -1,5 +1,5 @@
+ import { ParseResultSchema } from '@/lib/rag-eval/contracts.generated';
+-import { PARSE_ARTIFACT, PARSE_CHUNKS_ARTIFACT, isArtifactName, loadArtifact, originalName, versionPrefix } from './artifacts';
++import { PARSE_ARTIFACT, PARSE_CHUNKS_ARTIFACT, PICTURES_ARTIFACT, isArtifactName, loadArtifact, originalName, versionPrefix } from './artifacts';
+ import { ObjectStoreError } from './object-store';
+ import { IngestWriterError, createIngestWriter } from './writer';
+ import { chunkStage } from './stages/chunk';
+@@ -289,6 +289,18 @@ async function loadParseChunks(ctx: StageContext): Promise<ParseResultChunks | n
+   }
+ }
+ 
++/** The pictures the parser found, stored next to parse.md when RAG_PDF_IMAGE_CHUNKS was on; null when there are none or they do not validate. */
++async function loadPictures(ctx: StageContext): Promise<StageContext['work']['pictures']> {
++  const stored = await loadArtifact(ctx, PICTURES_ARTIFACT);
++  if (!stored) return null;
++  try {
++    const parsed = ParseResultSchema.shape.pictures.safeParse(JSON.parse(new TextDecoder('utf-8').decode(stored.bytes)));
++    return parsed.success && parsed.data.length > 0 ? parsed.data : null;
++  } catch {
++    return null;
++  }
++}
++
+ /**
+  * Rebuilds what the stages after ctx.state.lastCompleted read from memory, from the stored artifacts and no upload.
+  * Parse output comes from parse.md; without it the stored original is parsed again, and without that the run fails
+@@ -323,6 +335,7 @@ export async function rehydrateFromStore(ctx: StageContext): Promise<RehydrateRe
+       ctx.work.parseText = new TextDecoder('utf-8').decode(parsed.bytes);
+       ctx.work.parserVersion = ctx.work.parserVersion ?? 'stored';
+       ctx.work.parseChunks = await loadParseChunks(ctx);
++      if (ctx.config.pdfImageChunks) ctx.work.pictures = await loadPictures(ctx);
+     } else {
+       if (!(await loadOriginal(originalFile))) return { failed: 'original_unavailable' };
+       const failure = await rerun(parseStage, ctx);
+@@ -339,8 +352,9 @@ export async function rehydrateFromStore(ctx: StageContext): Promise<RehydrateRe
+     if (failure !== null) return { failed: failure };
+   }
+ 
+-  // The caption of a picture document is its only chunk; it is read back from the stored caption, so no model is called again.
+-  if (ctx.work.captionOnly && reached(last, 'images')) {
++  // The caption of a picture document is its only chunk, and the pictures of a PDF add chunks: both are read back from the stored
++  // captions (and the public keys follow from the lineage), so no model is called again.
++  if ((ctx.work.captionOnly || ctx.config.pdfImageChunks) && reached(last, 'images')) {
+     const outcome = await imagesStage.run(ctx);
+     if (outcome.kind === 'yield') return false;
+     if (outcome.kind !== 'next') return { failed: outcome.kind === 'fail' ? outcome.reason : 'rehydrate_failed' };
+diff --git a/src/lib/rag/ingest/stages/images.ts b/src/lib/rag/ingest/stages/images.ts
+index 3928885..cee75b0 100644
+--- a/src/lib/rag/ingest/stages/images.ts
++++ b/src/lib/rag/ingest/stages/images.ts
+@@ -2,10 +2,12 @@ import { enrichChunkWithURLs } from '@/lib/url-extractor';
+ import { detectLanguage } from '../../lang/detect';
+ import { lexicalText } from '../../lexical/tokenize';
+ import { scanText, type InjectionScanResult } from '../../security/injection-scan';
+-import { loadArtifact, originalName, saveArtifact } from '../artifacts';
++import { isArtifactName, loadArtifact, originalName, saveArtifact } from '../artifacts';
+ import { CaptionError, captionImage } from '../captioner';
+ import { contentHash } from '../hash';
+ import { imageContextOf, validImageUrl } from '../image-options';
++import { PUBLIC_IMAGE_MAX_BYTES, getPublicImageStore, publicImageExtension, publicImageKey } from '../images/public-store';
++import { selectPictures, type ParsedPicture } from '../images/select';
+ import {
+   IngestStageError,
+   requireDocument,
+@@ -126,15 +128,228 @@ async function runCaptionOnly(ctx: StageContext): Promise<StageOutcome> {
+   return { kind: 'next', outcome };
+ }
+ 
++const MEDIA_BY_EXTENSION: Readonly<Record<string, string>> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif' };
++/** Less than this left before the deadline: the run yields instead of starting a public upload. */
++const UPLOAD_MIN_MS = 2000;
++const UPLOAD_MAX_MS = 15000;
++
++function warn(ctx: StageContext, code: string): void {
++  if (!ctx.warnings.includes(code)) ctx.warnings.push(code);
++}
++
++/** The media type of a stored picture: its stored type when it is an image the chat can show, else the one its name says; null otherwise. */
++function pictureMediaType(contentType: string | null, imageRef: string): string | null {
++  const stored = (contentType ?? '').split(';')[0]?.trim().toLowerCase() ?? '';
++  if (publicImageExtension(stored) !== null) return stored === 'image/jpg' ? 'image/jpeg' : stored;
++  const dot = imageRef.lastIndexOf('.');
++  return MEDIA_BY_EXTENSION[dot < 0 ? '' : imageRef.slice(dot + 1).toLowerCase()] ?? null;
++}
++
++type LoadedPicture = { bytes: Uint8Array; mimeType: string } | { skip: string };
++
++/** The bytes of one parsed picture from the private store (the parser's artifact); a reason when they cannot be used. */
++async function loadPicture(ctx: StageContext, picture: ParsedPicture): Promise<LoadedPicture> {
++  if (!isArtifactName(picture.image_ref)) return { skip: 'unavailable' };
++  let stored;
++  try {
++    stored = await loadArtifact(ctx, picture.image_ref);
++  } catch (error) {
++    if (ctx.signal.aborted) throw error;
++    return { skip: 'unavailable' };
++  }
++  if (!stored) return { skip: 'unavailable' };
++  if (stored.bytes.byteLength > PUBLIC_IMAGE_MAX_BYTES) return { skip: 'too_large' };
++  const mimeType = pictureMediaType(stored.contentType, picture.image_ref);
++  return mimeType === null ? { skip: 'unsupported_type' } : { bytes: stored.bytes, mimeType };
++}
++
++/** The section path of the last text chunk that starts on or before the page; the parse result carries no heading for a picture. */
++function sectionPathAt(chunks: readonly ChunkDraft[], page: number): string[] {
++  let path: string[] = [];
++  for (const chunk of chunks) {
++    if (chunk.page_start !== null && chunk.page_start <= page) path = chunk.section_path;
++  }
++  return path.slice();
++}
++
++/**
++ * The pictures inside a document (D-29), behind RAG_PDF_IMAGE_CHUNKS. Pictures are selected (area floor, cap), then, in page order:
++ *  1. each is captioned once with the shared captioner, inside the request budget; the caption is stored as caption-<n>.txt and the
++ *     progress in the images slice, so a resumed run continues with the next picture and never captions one twice;
++ *  2. each caption is scanned like document text; a match quarantines the document and nothing is stored publicly or written as an image chunk;
++ *  3. only then are the pictures stored in the public bucket under rag/<tenant_key>/<lineage_id>/<version>/, and an image chunk
++ *     (page, section path of the enclosing text, image_url, caption) is added per picture.
++ * A picture that cannot be used (bytes gone, type unsupported, caption or upload failed) is left out with a warning; the document is not failed.
++ */
++async function runPictures(ctx: StageContext): Promise<StageOutcome> {
++  const identity = requireIdentity(ctx, 'images');
++  const document = requireDocument(ctx, 'images');
++  const pictures = ctx.work.pictures ?? [];
++  if (pictures.length === 0) return { kind: 'next', outcome: 'images_none' };
++  if (ctx.state.quarantine !== null) return { kind: 'next', outcome: 'images_quarantined' };
++
++  const selection = selectPictures(pictures);
++  const { kept } = selection;
++  const initial = ctx.state.images;
++  const resumeFrom = initial?.nextIndex ?? 0;
++  const skipped = new Set<number>(initial?.skipped ?? []);
++  let captioned = initial?.captioned ?? 0;
++  let nextIndex = resumeFrom;
++  let uploaded = initial?.uploaded ?? 0;
++  const lost = selection.skippedInvalid;
++  const outcomeCode = (): string => `kept_${kept.length - skipped.size}.small_${selection.skippedSmall}.cap_${selection.skippedOverCap}.lost_${lost + skipped.size}`;
++
++  const record = (): void => {
++    ctx.state.images = { ...(initial ?? { nextIndex: 0, captioned: 0 }), nextIndex, captioned, skipped: [...skipped].sort((a, b) => a - b), uploaded };
++  };
++  const giveUp = (index: number, reason: string): void => {
++    skipped.add(index);
++    warn(ctx, `image_skipped:${reason}`);
++  };
++  const yieldNow = async (): Promise<StageOutcome> => {
++    record();
++    await ctx.writer.saveState(document.id, 'processing', { ...ctx.state });
++    return { kind: 'yield', reason: 'deadline' };
++  };
++
++  const captions = new Map<number, string>();
++  for (let index = 0; index < kept.length; index += 1) {
++    if (skipped.has(index)) continue;
++    const picture = kept[index] as ParsedPicture;
++    let caption = index < resumeFrom ? await storedCaption(ctx, index) : null;
++    if (caption === null) {
++      const loaded = await loadPicture(ctx, picture);
++      if ('skip' in loaded) {
++        giveUp(index, loaded.skip);
++        nextIndex = index + 1;
++        continue;
++      }
++      const made = await captionWithinBudget(ctx, loaded.bytes, loaded.mimeType);
++      if (made === null) return yieldNow();
++      if (typeof made === 'object') {
++        giveUp(index, 'caption_failed');
++        nextIndex = index + 1;
++        continue;
++      }
++      if (made === '') {
++        giveUp(index, 'caption_empty');
++        nextIndex = index + 1;
++        continue;
++      }
++      caption = made;
++      await saveCaption(ctx, index, caption);
++      captioned += 1;
++      nextIndex = index + 1;
++      record();
++      await ctx.writer.saveState(document.id, 'processing', { ...ctx.state });
++    }
++    if (ctx.config.injectionScan !== 'off') {
++      let result: InjectionScanResult;
++      try {
++        result = scanText(caption);
++      } catch (error) {
++        console.error('[Ingest] injection scan unavailable', { reason: error instanceof Error ? error.message : 'unknown' });
++        return { kind: 'fail', reason: 'injection_scan_unavailable' };
++      }
++      if (result.matched) {
++        await quarantineDocument(ctx, 'images', result);
++        nextIndex = kept.length;
++        record();
++        return { kind: 'next', outcome: 'quarantined' };
++      }
++    }
++    captions.set(index, caption);
++  }
++  nextIndex = kept.length;
++
++  const store = getPublicImageStore();
++  const urls = new Map<number, { url: string; mimeType: string }>();
++  for (let index = 0; index < kept.length; index += 1) {
++    const caption = captions.get(index);
++    if (caption === undefined) continue;
++    const picture = kept[index] as ParsedPicture;
++    const loaded = await loadPicture(ctx, picture);
++    if ('skip' in loaded) {
++      giveUp(index, loaded.skip);
++      continue;
++    }
++    const ordinal = kept.slice(0, index + 1).filter((entry) => entry.page === picture.page).length;
++    let key: string;
++    try {
++      key = publicImageKey(identity.tenantKey, document.lineageId, document.version, picture.page, ordinal, publicImageExtension(loaded.mimeType) as string);
++    } catch {
++      giveUp(index, 'store_failed');
++      continue;
++    }
++    try {
++      if (index >= uploaded) {
++        const remaining = ctx.deadline - ctx.deps.now();
++        if (remaining < UPLOAD_MIN_MS) {
++          uploaded = index;
++          return yieldNow();
++        }
++        const budget = AbortSignal.timeout(Math.min(UPLOAD_MAX_MS, Math.max(UPLOAD_MIN_MS, remaining - CAPTION_RESERVE_MS)));
++        try {
++          await store.put(key, loaded.bytes, { contentType: loaded.mimeType, signal: AbortSignal.any([ctx.signal, budget]) });
++        } catch (error) {
++          if (ctx.signal.aborted) throw error;
++          if (budget.aborted) {
++            uploaded = index;
++            return yieldNow();
++          }
++          throw error;
++        }
++      }
++      urls.set(index, { url: store.urlFor(key), mimeType: loaded.mimeType });
++    } catch (error) {
++      if (ctx.signal.aborted) throw error;
++      console.error('[Ingest] public image store failed', { error: error instanceof Error ? error.name : 'unknown' });
++      giveUp(index, 'store_failed');
++    }
++  }
++  uploaded = kept.length;
++  record();
++
++  const text = ctx.work.chunks.filter((chunk) => chunk.chunk_kind !== 'image');
++  const images: ChunkDraft[] = [];
++  for (let index = 0; index < kept.length; index += 1) {
++    const stored = urls.get(index);
++    const caption = captions.get(index);
++    if (!stored || caption === undefined) continue;
++    const picture = kept[index] as ParsedPicture;
++    const section_path = sectionPathAt(text, picture.page);
++    const position = text.length + images.length;
++    images.push({
++      content: caption,
++      section_path,
++      chunk_kind: 'image',
++      page_start: picture.page,
++      page_end: picture.page,
++      metadata: enrichChunkWithURLs(caption, {
++        image_url: stored.url,
++        image_type: stored.mimeType,
++        document_title: identity.filename,
++        chunk_index: position,
++        chunk_position: position + 1,
++      }) as Record<string, unknown>,
++      content_hash: contentHash(caption),
++      lexical_text: lexicalText(section_path, caption),
++    });
++  }
++  const all = [...text, ...images];
++  for (const draft of all) draft.metadata = { ...draft.metadata, total_chunks: all.length };
++  ctx.work.chunks = all;
++  return { kind: 'next', outcome: outcomeCode() };
++}
++
+ /**
+- * Picture captioning. A picture document is captioned here; the pictures inside a PDF arrive with plan 03-38. With
+- * RAG_PDF_IMAGE_CHUNKS off (the default) every other document passes; switched on before that plan lands it says so and still passes.
++ * Picture captioning. A picture document is captioned whole (the image_caption chunker); with RAG_PDF_IMAGE_CHUNKS on, the pictures
++ * the parser found inside any other document become image chunks of it. With the switch off (the default) every other document passes.
+  */
+ async function run(ctx: StageContext): Promise<StageOutcome> {
+   if (ctx.work.captionOnly) return runCaptionOnly(ctx);
+   if (!ctx.config.pdfImageChunks) return { kind: 'next', disabled: true, outcome: 'images_off' };
+-  ctx.warnings.push('image_chunks_unavailable');
+-  return { kind: 'next', disabled: true, fallbackReason: 'image_chunks_unavailable' };
++  return runPictures(ctx);
+ }
+ 
+ export const imagesStage: StageSpec = { name: 'images', minMsNeeded: 0, run };
+diff --git a/src/lib/rag/ingest/stages/parse.ts b/src/lib/rag/ingest/stages/parse.ts
+index e378b04..085ed90 100644
+--- a/src/lib/rag/ingest/stages/parse.ts
++++ b/src/lib/rag/ingest/stages/parse.ts
+@@ -1,5 +1,5 @@
+ import type { ParseResult } from '@/lib/rag-eval/contracts.generated';
+-import { DOCLING_ARTIFACT, PARSE_ARTIFACT, PARSE_CHUNKS_ARTIFACT, isArtifactName, originalName, saveArtifact } from '../artifacts';
++import { DOCLING_ARTIFACT, PARSE_ARTIFACT, PARSE_CHUNKS_ARTIFACT, PICTURES_ARTIFACT, isArtifactName, originalName, saveArtifact } from '../artifacts';
+ import { imageContextOf, validImageUrl } from '../image-options';
+ import { buildParserChain, parseWithFallback, type ChainOutcome } from '../parsers/chain';
+ import type { ParseArtifact, PendingJob } from '../parsers/shared';
+@@ -168,6 +168,11 @@ async function applyResult(ctx: StageContext, parsed: Parsed): Promise<void> {
+     const bytes = new TextEncoder().encode(JSON.stringify(ctx.work.parseChunks));
+     await stored(ctx, () => saveArtifact(ctx, PARSE_CHUNKS_ARTIFACT, bytes, 'application/json'));
+   }
++  // Only with the picture switch on, so the stored set of a run with it off is what it was.
++  if (ctx.config.pdfImageChunks && result.parser !== 'text' && result.pictures.length > 0) {
++    const bytes = new TextEncoder().encode(JSON.stringify(result.pictures));
++    await stored(ctx, () => saveArtifact(ctx, PICTURES_ARTIFACT, bytes, 'application/json'));
++  }
+   await stored(ctx, () => saveArtifact(ctx, PARSE_ARTIFACT, new TextEncoder().encode(ctx.work.parseText ?? ''), 'text/markdown'));
+ }
+ 
+diff --git a/tests/rag/ingest/pdf-images.test.ts b/tests/rag/ingest/pdf-images.test.ts
+index 9f81228..bc9772c 100644
+--- a/tests/rag/ingest/pdf-images.test.ts
++++ b/tests/rag/ingest/pdf-images.test.ts
+@@ -24,7 +24,7 @@ import { resetInjectionRulesForTests } from '@/lib/rag/security/injection-scan';
+ import { mintScope } from '@/lib/rag/tenant/scope';
+ import { FAKE_DOCUMENT_ID, FAKE_LINEAGE_ID, callsOf, fakeIngestDb, installIngestDeps, uninstallIngestDeps, type RecordedRpc } from '../../helpers/ingest-fakes';
+ import { fixtureBytes } from '../../helpers/fake-sidecar';
+-import { FAKE_PUBLIC_IMAGE_BASE, installFakePublicImageStore, type FakePublicImageStore } from '../../helpers/fake-public-image-store';
++import { FAKE_PUBLIC_IMAGE_BASE, installFakePublicImageStore } from '../../helpers/fake-public-image-store';
+ import recorded from '../../fixtures/ingest/caption-recorded.json';
+ 
+ const RECORDED_DIR = join(process.cwd(), 'eval/fixtures/ingest/recorded');
+diff --git a/tests/rag/ingest/runner.test.ts b/tests/rag/ingest/runner.test.ts
+index ce3648b..1d89d6a 100644
+--- a/tests/rag/ingest/runner.test.ts
++++ b/tests/rag/ingest/runner.test.ts
+@@ -515,7 +515,7 @@ describe('registered stages and their switched-off behaviour', () => {
+     expect(callsOf(calls, 'rag_mark_document_failed').map((call) => call.args.p_reason)).toEqual(['injection_scan_unavailable']);
+   });
+ 
+-  test('images passes with RAG_PDF_IMAGE_CHUNKS false and warns without failing when it is true but no captioner exists yet', async () => {
++  test('images passes with RAG_PDF_IMAGE_CHUNKS false, and with it true a document with no pictures passes without a warning', async () => {
+     const off = fakeIngestDb();
+     installIngestDeps({ db: off.db, env: { RAG_PDF_IMAGE_CHUNKS: 'false' } });
+     const disabled = await upload();
+@@ -527,7 +527,7 @@ describe('registered stages and their switched-off behaviour', () => {
+     expect(disabled.status).toBe('ready');
+     expect(disabled.warnings).not.toContain('image_chunks_unavailable');
+     expect(enabled.status).toBe('ready');
+-    expect(enabled.warnings).toContain('image_chunks_unavailable');
++    expect(enabled.warnings).not.toContain('image_chunks_unavailable');
+   });
+ });
+ 
+diff --git a/tests/rag/ingest/write-path-image-upload.test.ts b/tests/rag/ingest/write-path-image-upload.test.ts
+index 021c31d..6a57a95 100644
+--- a/tests/rag/ingest/write-path-image-upload.test.ts
++++ b/tests/rag/ingest/write-path-image-upload.test.ts
+@@ -286,7 +286,7 @@ describe('an image upload through ingest()', () => {
+     expect(callsOf(calls, 'rag_write_chunks')).toHaveLength(0);
+   });
+ 
+-  it('leaves documents that are not images on the switch behaviour of the images stage', async () => {
++  it('leaves documents that are not images with no pictures untouched when the picture switch is on', async () => {
+     const seen = captionWith(recorded.captions.chart);
+     const { db } = fakeIngestDb();
+     installIngestDeps({ db, env: { RAG_PDF_IMAGE_CHUNKS: 'true' } });
+@@ -302,7 +302,7 @@ describe('an image upload through ingest()', () => {
+     });
+ 
+     expect(result.status).toBe('ready');
+-    expect(result.warnings).toContain('image_chunks_unavailable');
++    expect(result.warnings).not.toContain('image_chunks_unavailable');
+     expect(seen).toHaveLength(0);
+   });
+ });
+-- 
+2.43.0
+

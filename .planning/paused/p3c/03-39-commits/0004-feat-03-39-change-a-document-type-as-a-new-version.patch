@@ -1,0 +1,1392 @@
+From b63ba37c3cb8f239383ce1aae4433f27b6c4c9bc Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 24 Nov 2026 09:35:02 +0000
+Subject: [PATCH 4/4] feat(03-39): change a document type as a new version
+
+- migration 0317: rag_begin_document_version gains p_force_new_version (skips the file-hash skip, resumes only the same type); rag_get_document_for_type_change and rag_admin_document_scope for the operation
+- changeDocumentType re-runs ingest() on the same identity from the stored original; the stored parse output is reused with no parser call when it serves the new profile, otherwise the original is parsed again
+- the forced-version state is saved with the run, so a resume does not turn into a content duplicate; only changeDocumentType sets it
+- scopeForAdminDocument mints the document own tenant scope for the tenants the admin administers, null for any other id
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01X342shLsAZx6PYph2vA7hc
+---
+ src/lib/rag/index.ts                          |   4 +
+ src/lib/rag/ingest/change-doc-type.ts         | 158 +++++++++-
+ src/lib/rag/ingest/index.ts                   |   1 +
+ .../rag/ingest/profiles/resolve-doc-type.ts   |  15 +-
+ src/lib/rag/ingest/stages/dedup.ts            |   6 +-
+ src/lib/rag/ingest/stages/parse.ts            |  81 ++++-
+ src/lib/rag/ingest/status.ts                  |  19 ++
+ src/lib/rag/ingest/types.ts                   |  16 +
+ src/lib/rag/ingest/writer.ts                  |   3 +
+ src/lib/rag/tenant/ingest-scope.ts            |  63 +++-
+ supabase/migrations/0317_doc_type_change.sql  | 207 +++++++++++++
+ tests/helpers/doc-type-change-harness.mts     | 218 ++++++++++++++
+ .../doc-type-change-single-tenant.test.mts    |  46 +++
+ tests/rag-db/doc-type-change.test.mts         | 279 ++----------------
+ 14 files changed, 835 insertions(+), 281 deletions(-)
+ create mode 100644 supabase/migrations/0317_doc_type_change.sql
+ create mode 100644 tests/helpers/doc-type-change-harness.mts
+ create mode 100644 tests/rag-db/doc-type-change-single-tenant.test.mts
+
+diff --git a/src/lib/rag/index.ts b/src/lib/rag/index.ts
+index 3077ab4..9bc4f73 100644
+--- a/src/lib/rag/index.ts
++++ b/src/lib/rag/index.ts
+@@ -125,3 +125,7 @@ export type {
+ export { docTypePickerEnabled, resolvePickerDefault, listDocTypeDefaults, setDocTypeDefault, DocTypeDefaultsError, DOC_TYPE_DEFAULT_SOURCE_KINDS, DOC_TYPE_IDS, DOC_TYPE_CHOICES } from './ingest/profiles/doc-type-defaults';
+ export type { DocTypeChoice, DocTypeDefaultRow, DocTypeDefaultSourceKind, PickerDefault, SetDocTypeDefaultInput } from './ingest/profiles/doc-type-defaults';
+ export { INGEST_SOURCES } from './ingest/types';
++export { changeDocumentType } from './ingest/change-doc-type';
++export type { ChangeDocumentTypeFailure, ChangeDocumentTypeInput, ChangeDocumentTypeResult } from './ingest/change-doc-type';
++export { scopeForAdminDocument, AdminDocumentScopeError } from './tenant/ingest-scope';
++export type { AdminDocumentScopeInput } from './tenant/ingest-scope';
+diff --git a/src/lib/rag/ingest/change-doc-type.ts b/src/lib/rag/ingest/change-doc-type.ts
+index 51f5226..05deaf5 100644
+--- a/src/lib/rag/ingest/change-doc-type.ts
++++ b/src/lib/rag/ingest/change-doc-type.ts
+@@ -1,19 +1,167 @@
+-import type { TenantScope } from '../tenant/scope';
+-import type { DocType } from './profiles/load';
+-import type { IngestResult } from './types';
++import { assertTenantScope, scopeKey, type TenantScope } from '../tenant/scope';
++import { isArtifactName, loadArtifact, versionPrefix, type ArtifactContext } from './artifacts';
++import { getIngestDeps } from './deps';
++import { ingest } from './index';
++import { DOC_TYPE_IDS } from './profiles/doc-type-defaults';
++import { profileFor, type DocType } from './profiles/load';
++import { storedParseServes } from './profiles/resolve-doc-type';
++import { INGEST_SOURCES, type IngestOptions, type IngestOrigin, type IngestResult, type IngestSource, type TypeChangeState } from './types';
+ 
+ export type ChangeDocumentTypeFailure = 'not_found' | 'not_changeable' | 'original_unavailable' | 'invalid_doc_type' | 'unavailable';
+ 
+ export interface ChangeDocumentTypeInput {
++  /** The tenant of the document, from a resolver; a document of any other tenant is reported as not_found. */
+   scope: TenantScope;
+   documentId: string;
+   docType: DocType;
+   signal: AbortSignal;
++  /** Request budget for the run. Defaults to the ingest default. */
+   deadlineMs?: number;
+ }
+ 
+ export type ChangeDocumentTypeResult = { ok: true; result: IngestResult } | { ok: false; reason: ChangeDocumentTypeFailure };
+ 
+-export async function changeDocumentType(_input: ChangeDocumentTypeInput): Promise<ChangeDocumentTypeResult> {
+-  return { ok: false, reason: 'unavailable' };
++type Row = Record<string, unknown>;
++
++const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
++const REUSABLE_PARSERS = ['docling', 'llamaparse', 'text'] as const;
++
++const fail = (reason: ChangeDocumentTypeFailure): ChangeDocumentTypeResult => ({ ok: false, reason });
++
++function text(row: Row, key: string): string | null {
++  const value = row[key];
++  return typeof value === 'string' && value !== '' ? value : null;
++}
++
++function objectOf(value: unknown): Row | null {
++  return typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as Row) : null;
++}
++
++function isDocType(value: string | null): value is DocType {
++  return value !== null && (DOC_TYPE_IDS as readonly string[]).includes(value);
++}
++
++function sourceOf(value: string | null): IngestSource | null {
++  return INGEST_SOURCES.find((source) => source === value) ?? null;
++}
++
++/** What the new version carries over from the one it replaces: the origin fields, the caller metadata and, for a picture, its URL and context. */
++function optionsOf(row: Row): IngestOptions {
++  const origin: IngestOrigin = {};
++  const provider = text(row, 'source_provider');
++  const fileId = text(row, 'source_file_id');
++  const connectionId = text(row, 'source_connection_id');
++  if (provider !== null) origin.sourceProvider = provider;
++  if (fileId !== null) origin.sourceFileId = fileId;
++  if (connectionId !== null) origin.sourceConnectionId = connectionId;
++
++  const options: IngestOptions = { origin, documentMetadata: objectOf(row.metadata) ?? {} };
++  const images = objectOf(objectOf(row.processing_state)?.images);
++  const imageUrl = images ? text(images, 'imageUrl') : null;
++  const imageContext = images ? text(images, 'imageContext') : null;
++  if (imageUrl !== null) options.imageUrl = imageUrl;
++  if (imageContext !== null) options.imageContext = imageContext;
++  return options;
++}
++
++/** The part of the saved state this run needs from the version it replaces; reuse needs a valid profile id, a known parser and a version. */
++function typeChangeOf(row: Row, source: IngestSource, from: DocType, to: DocType, version: number): TypeChangeState {
++  const stored = profileFor(source, from);
++  const parser = REUSABLE_PARSERS.find((name) => name === text(row, 'parser_used'));
++  const parserVersion = text(row, 'parser_version');
++  const reusable =
++    parser !== undefined && parserVersion !== null && text(row, 'processing_profile_id') === stored.id && storedParseServes(stored, profileFor(source, to));
++  return reusable ? { reuseParseOfVersion: version, reusedParser: { parser, version: parserVersion } } : { reuseParseOfVersion: null, reusedParser: null };
++}
++
++async function readDocument(scope: TenantScope, documentId: string, signal: AbortSignal): Promise<Row | null | 'unavailable'> {
++  const db = getIngestDeps().db();
++  if (!db) {
++    console.error('[Ingest] admin client unavailable');
++    return 'unavailable';
++  }
++  try {
++    signal.throwIfAborted();
++    const response = await db.rpc('rag_get_document_for_type_change', { p_document_id: documentId.toLowerCase(), p_tenant_key: scopeKey(scope).toLowerCase() }).abortSignal(signal);
++    signal.throwIfAborted();
++    if (response.error) {
++      console.error('[Ingest] type change lookup failed', { code: response.error.code ?? null });
++      return 'unavailable';
++    }
++    return ((response.data ?? [])[0] as Row | undefined) ?? null;
++  } catch (error) {
++    if (signal.aborted) throw error;
++    console.error('[Ingest] type change lookup failed', { error: error instanceof Error ? error.name : 'unknown' });
++    return 'unavailable';
++  }
++}
++
++/**
++ * Re-runs ingest() on the same identity with a new type, as a new version through the D-11 swap (D-18). The file bytes come from the stored
++ * original, so the caller sends nothing. When the stored parse output is valid for the new type's parser options (storedParseServes), the run
++ * starts from it and calls no parser; otherwise the stored original is parsed again. The unchanged file hash and content hash do not skip
++ * the run: it carries the forced-version state, which only this function sets. A document of another tenant, an unknown id and a document
++ * that is not the current ready version create nothing. The caller must have passed the admin guard; the version it creates keeps the
++ * owner and the organization of the one it replaces.
++ */
++export async function changeDocumentType(input: ChangeDocumentTypeInput): Promise<ChangeDocumentTypeResult> {
++  const { scope, documentId, docType, signal } = input;
++  try {
++    assertTenantScope(scope);
++  } catch {
++    return fail('unavailable');
++  }
++  if (!UUID.test(documentId)) return fail('not_found');
++  if (!isDocType(docType)) return fail('invalid_doc_type');
++
++  const row = await readDocument(scope, documentId, signal);
++  if (row === 'unavailable') return fail('unavailable');
++  if (row === null) return fail('not_found');
++  if (row.is_current !== true || row.status !== 'ready') return fail('not_changeable');
++
++  const lineageId = text(row, 'lineage_id');
++  const version = typeof row.version === 'number' && Number.isInteger(row.version) ? row.version : null;
++  const originalPath = text(row, 'original_path');
++  if (lineageId === null || version === null || originalPath === null) return fail('original_unavailable');
++  const tenantKey = scopeKey(scope).toLowerCase();
++  let prefix: string;
++  try {
++    prefix = versionPrefix(tenantKey, lineageId, version);
++  } catch {
++    return fail('original_unavailable');
++  }
++  const name = originalPath.startsWith(prefix) ? originalPath.slice(prefix.length) : '';
++  if (!isArtifactName(name)) return fail('original_unavailable');
++
++  const source = sourceOf(text(row, 'source'));
++  const sourceKey = text(row, 'source_key');
++  if (source === null || sourceKey === null) return fail('not_changeable');
++  const previousType = text(row, 'doc_type');
++  if (!isDocType(previousType)) return fail('not_changeable');
++
++  const artifactCtx: ArtifactContext = { identity: { tenantKey }, document: { lineageId, version }, signal, state: { artifacts: {} } };
++  let original;
++  try {
++    original = await loadArtifact(artifactCtx, name);
++  } catch (error) {
++    if (signal.aborted) throw error;
++    console.error('[Ingest] type change could not read the original', { error: error instanceof Error ? error.name : 'unknown' });
++    return fail('unavailable');
++  }
++  if (original === null) return fail('original_unavailable');
++
++  const result = await ingest({
++    scope,
++    source,
++    sourceKey,
++    filename: text(row, 'filename') ?? sourceKey,
++    mimeType: original.contentType || 'application/octet-stream',
++    file: original.bytes,
++    docType,
++    options: optionsOf(row),
++    typeChange: typeChangeOf(row, source, previousType, docType, version),
++    signal,
++    ...(input.deadlineMs !== undefined ? { deadlineMs: input.deadlineMs } : {}),
++  });
++  return { ok: true, result };
+ }
+diff --git a/src/lib/rag/ingest/index.ts b/src/lib/rag/ingest/index.ts
+index 1a8f203..c28e3c8 100644
+--- a/src/lib/rag/ingest/index.ts
++++ b/src/lib/rag/ingest/index.ts
+@@ -50,6 +50,7 @@ export async function ingest(input: IngestInput): Promise<IngestResult> {
+     parserUsed: null,
+     work: { parseText: null, parserVersion: null, chunks: [], chunksWritten: 0 },
+   };
++  if (input.typeChange) ctx.state.typeChange = { ...input.typeChange };
+   const trace = createIngestTrace(input.scope, input.trace);
+   const result = await runIngestStages(ctx, REGISTERED_STAGES, { trace });
+   if (trace?.owned) finishIngestTrace(trace, result);
+diff --git a/src/lib/rag/ingest/profiles/resolve-doc-type.ts b/src/lib/rag/ingest/profiles/resolve-doc-type.ts
+index 47512b4..fb6a1e3 100644
+--- a/src/lib/rag/ingest/profiles/resolve-doc-type.ts
++++ b/src/lib/rag/ingest/profiles/resolve-doc-type.ts
+@@ -379,11 +379,22 @@ function stable(value: unknown): string {
+   return JSON.stringify(value) ?? 'null';
+ }
+ 
+-/** True when two profiles ask a parser for the same output, so a stored parse of one is valid for the other. */
+-export function sameParserOptions(a: ProcessingProfile, b: ProcessingProfile): boolean {
++function sameParserOptions(a: ProcessingProfile, b: ProcessingProfile): boolean {
+   return stable(a.parser) === stable(b.parser);
+ }
+ 
++/**
++ * True when a parse made for the `stored` profile is a valid parse for the `wanted` one (D-18): the parser options are equal, except that
++ * pictures the stored parse generated and the wanted profile does not ask for are simply left unused. The other way round (the wanted
++ * profile needs pictures the stored parse did not generate) is a different parse.
++ */
++export function storedParseServes(stored: ProcessingProfile, wanted: ProcessingProfile): boolean {
++  const comparable = wanted.parser.docling.generate_picture_images
++    ? wanted.parser
++    : { ...wanted.parser, docling: { ...wanted.parser.docling, generate_picture_images: stored.parser.docling.generate_picture_images } };
++  return stable(stored.parser) === stable(comparable);
++}
++
+ /**
+  * Second step of detection (F-10): on the parsed text, a type that was auto-detected may change once. A type that was picked, came
+  * from a default or fell back is never changed. Updates the identity and the state slice; the caller re-parses once when
+diff --git a/src/lib/rag/ingest/stages/dedup.ts b/src/lib/rag/ingest/stages/dedup.ts
+index a132b33..cee69b0 100644
+--- a/src/lib/rag/ingest/stages/dedup.ts
++++ b/src/lib/rag/ingest/stages/dedup.ts
+@@ -21,6 +21,7 @@ async function runFileHashDedup(ctx: StageContext): Promise<StageOutcome> {
+     docTypeOrigin: identity.docTypeOrigin,
+     profileId: identity.profile.id,
+     profileVersion: identity.profile.version,
++    ...(ctx.state.typeChange ? { forceNewVersion: true } : {}),
+   });
+   if (begun.outcome === 'skipped_duplicate') {
+     return {
+@@ -50,7 +51,8 @@ async function runContentHashDedup(ctx: StageContext): Promise<StageOutcome> {
+   // A picture parses to no text, so its content is the file itself; otherwise every image would match every other.
+   const identity = requireIdentity(ctx, 'content_hash_dedup');
+   const hash = contentHash(identity.profile.chunker.kind === 'image_caption' ? `image:${identity.fileSha256}` : (ctx.work.parseText ?? ''));
+-  const duplicateOf = await ctx.writer.findContentDuplicate(hash, document.id);
++  // A type change re-processes the same content as a new version of the same document: the version it replaces always has this hash.
++  const duplicateOf = ctx.state.typeChange ? null : await ctx.writer.findContentDuplicate(hash, document.id);
+   if (duplicateOf !== null) {
+     await removeArtifacts(ctx);
+     await ctx.writer.setFields(document.id, {
+@@ -76,7 +78,7 @@ async function runContentHashDedup(ctx: StageContext): Promise<StageOutcome> {
+     content_hash: hash,
+     metadata: { content_hash_version: HASH_NORMALIZATION_VERSION },
+   });
+-  return { kind: 'next' };
++  return ctx.state.typeChange ? { kind: 'next', outcome: 'forced_version' } : { kind: 'next' };
+ }
+ 
+ export const fileHashDedupStage: StageSpec = { name: 'file_hash_dedup', minMsNeeded: 0, run: runFileHashDedup };
+diff --git a/src/lib/rag/ingest/stages/parse.ts b/src/lib/rag/ingest/stages/parse.ts
+index e378b04..2dd1fd8 100644
+--- a/src/lib/rag/ingest/stages/parse.ts
++++ b/src/lib/rag/ingest/stages/parse.ts
+@@ -1,5 +1,15 @@
+ import type { ParseResult } from '@/lib/rag-eval/contracts.generated';
+-import { DOCLING_ARTIFACT, PARSE_ARTIFACT, PARSE_CHUNKS_ARTIFACT, isArtifactName, originalName, saveArtifact } from '../artifacts';
++import { ParseResultSchema } from '@/lib/rag-eval/contracts.generated';
++import {
++  DOCLING_ARTIFACT,
++  PARSE_ARTIFACT,
++  PARSE_CHUNKS_ARTIFACT,
++  isArtifactName,
++  loadArtifact,
++  originalName,
++  saveArtifact,
++  type ArtifactContext,
++} from '../artifacts';
+ import { imageContextOf, validImageUrl } from '../image-options';
+ import { buildParserChain, parseWithFallback, type ChainOutcome } from '../parsers/chain';
+ import type { ParseArtifact, PendingJob } from '../parsers/shared';
+@@ -95,6 +105,55 @@ function wholeImage(ctx: StageContext, bytes: Uint8Array | null): { parsed: Pars
+   return { parsed: { result: imageResult(originalName(identity.filename)), artifacts: [], warnings: [] } };
+ }
+ 
++/**
++ * The parse output an earlier version of this lineage stored (the admin type change with equal parser options, D-18): parse.md, the
++ * parser's own chunks and the Docling JSON are read back from that version's prefix, and no parser runs. Null when parse.md is not
++ * there or the parser that made it was not recorded; the caller then parses the stored original instead.
++ */
++async function reuseStoredParse(ctx: StageContext, previousVersion: number): Promise<Parsed | null> {
++  const identity = requireIdentity(ctx, 'parse');
++  const document = requireDocument(ctx, 'parse');
++  const reused = ctx.state.typeChange?.reusedParser ?? null;
++  if (reused === null) return null;
++  const earlier: ArtifactContext = {
++    identity,
++    document: { lineageId: document.lineageId, version: previousVersion },
++    signal: ctx.signal,
++    state: { artifacts: {} },
++  };
++  const markdown = await loadArtifact(earlier, PARSE_ARTIFACT);
++  if (!markdown) return null;
++
++  let chunks: ParseResult['chunks'] = [];
++  const storedChunks = await loadArtifact(earlier, PARSE_CHUNKS_ARTIFACT);
++  if (storedChunks) {
++    try {
++      const checked = ParseResultSchema.shape.chunks.safeParse(JSON.parse(new TextDecoder('utf-8').decode(storedChunks.bytes)));
++      if (checked.success) chunks = checked.data;
++    } catch {
++      chunks = [];
++    }
++  }
++  const docling = await loadArtifact(earlier, DOCLING_ARTIFACT);
++  const result: ParseResult = {
++    markdown: new TextDecoder('utf-8').decode(markdown.bytes),
++    chunks,
++    pictures: [],
++    page_count: 0,
++    language: null,
++    parser: reused.parser,
++    parser_version: reused.version,
++    partial: false,
++    text_layer_page_share: null,
++    warnings: [],
++  };
++  return {
++    result,
++    artifacts: docling ? [{ name: DOCLING_ARTIFACT, bytes: docling.bytes, contentType: docling.contentType || 'application/json' }] : [],
++    warnings: ['parse_reused'],
++  };
++}
++
+ /** The job a previous call saved in processing_state, when it has the shape this code wrote. */
+ function savedJob(ctx: StageContext): PendingJob | null {
+   const job = ctx.state.parseJob;
+@@ -192,14 +251,20 @@ async function run(ctx: StageContext): Promise<StageOutcome> {
+     parsed = { result: textResult(stripBom(ctx.input.text)), artifacts: [], warnings: [] };
+   } else {
+     if (bytes === null) return { kind: 'fail', reason: 'no_parser_available' };
+-    if (ctx.deadline - ctx.deps.now() < MIN_PARSE_MS) return { kind: 'yield', reason: 'deadline' };
+-    const first = await runChain(ctx, bytes, savedJob(ctx));
+-    if (first.kind === 'failed') {
+-      ctx.state.parseJob = null;
+-      return { kind: 'fail', reason: first.reason };
++    const previousVersion = ctx.state.typeChange?.reuseParseOfVersion ?? null;
++    const reused = previousVersion === null ? null : await reuseStoredParse(ctx, previousVersion);
++    if (reused !== null) {
++      parsed = reused;
++    } else {
++      if (ctx.deadline - ctx.deps.now() < MIN_PARSE_MS) return { kind: 'yield', reason: 'deadline' };
++      const first = await runChain(ctx, bytes, savedJob(ctx));
++      if (first.kind === 'failed') {
++        ctx.state.parseJob = null;
++        return { kind: 'fail', reason: first.reason };
++      }
++      if (first.kind === 'pending') return { kind: 'yield', reason: 'parse_pending' };
++      parsed = first;
+     }
+-    if (first.kind === 'pending') return { kind: 'yield', reason: 'parse_pending' };
+-    parsed = first;
+   }
+ 
+   const refined = await refineDocTypeAfterParse(ctx, {
+diff --git a/src/lib/rag/ingest/status.ts b/src/lib/rag/ingest/status.ts
+index 9e09449..8d88513 100644
+--- a/src/lib/rag/ingest/status.ts
++++ b/src/lib/rag/ingest/status.ts
+@@ -16,6 +16,7 @@ import {
+   type RehydrateResult,
+   type StageContext,
+   type StageName,
++  type TypeChangeState,
+ } from './types';
+ import { IngestWriterError, createIngestWriter, type IngestDocumentRow, type IngestOriginRow, type IngestWriter } from './writer';
+ 
+@@ -152,6 +153,22 @@ function objectOf<T>(value: unknown): T | null {
+   return typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as T) : null;
+ }
+ 
++const REUSED_PARSERS = ['docling', 'llamaparse', 'text'] as const;
++
++/** The type-change slice of a saved state; anything that does not have the shape this code wrote is dropped. */
++function typeChangeOf(value: unknown): TypeChangeState | null {
++  const slice = objectOf<Record<string, unknown>>(value);
++  if (!slice) return null;
++  const version = slice.reuseParseOfVersion;
++  if (version !== null && !(typeof version === 'number' && Number.isInteger(version) && version >= 1)) return null;
++  const parser = objectOf<Record<string, unknown>>(slice.reusedParser);
++  const reused =
++    parser && REUSED_PARSERS.some((name) => name === parser.parser) && typeof parser.version === 'string' && parser.version !== ''
++      ? { parser: parser.parser as (typeof REUSED_PARSERS)[number], version: parser.version }
++      : null;
++  return { reuseParseOfVersion: version, reusedParser: reused };
++}
++
+ /** The persisted state of a row, with every slice checked for shape; anything unreadable falls back to its empty value. */
+ function stateOf(row: IngestDocumentRow): IngestState {
+   const raw = row.processingState;
+@@ -165,6 +182,8 @@ function stateOf(row: IngestDocumentRow): IngestState {
+   state.quarantine = objectOf<NonNullable<IngestState['quarantine']>>(raw.quarantine);
+   state.invoice = objectOf<NonNullable<IngestState['invoice']>>(raw.invoice);
+   state.images = objectOf<NonNullable<IngestState['images']>>(raw.images);
++  const typeChange = typeChangeOf(raw.typeChange);
++  if (typeChange) state.typeChange = typeChange;
+   if (Array.isArray(raw.embeddingTargets)) state.embeddingTargets = raw.embeddingTargets.filter((id): id is string => typeof id === 'string');
+   if (Array.isArray(raw.embeddingGaps)) state.embeddingGaps = raw.embeddingGaps as IngestState['embeddingGaps'];
+   return state;
+diff --git a/src/lib/rag/ingest/types.ts b/src/lib/rag/ingest/types.ts
+index 5be4bfa..d188da1 100644
+--- a/src/lib/rag/ingest/types.ts
++++ b/src/lib/rag/ingest/types.ts
+@@ -48,6 +48,18 @@ export interface IngestOptions {
+   [key: string]: unknown;
+ }
+ 
++/**
++ * Set by changeDocumentType alone (the admin type change): the run starts a new version of a file whose bytes did not change, so the
++ * file-hash and content-hash skips do not apply, and it may start from the stored parse output of an earlier version of the same lineage.
++ * A user upload never sets it. It is kept in the saved state, so a resumed run knows it too.
++ */
++export interface TypeChangeState {
++  /** The version whose parse.md (and chunks.json, docling.json) this run starts from; null: parse the stored original. */
++  reuseParseOfVersion: number | null;
++  /** parser_used and parser_version of that version, kept on the new row when its parse output is reused. */
++  reusedParser: { parser: 'docling' | 'llamaparse' | 'text'; version: string } | null;
++}
++
+ interface IngestInputBase {
+   scope: TenantScope;
+   source: IngestSource;
+@@ -61,6 +73,8 @@ interface IngestInputBase {
+   trace?: TraceCollector;
+   /** Request budget in milliseconds from the start of the call. Defaults to DEFAULT_INGEST_DEADLINE_MS. */
+   deadlineMs?: number;
++  /** Admin type change only; see TypeChangeState. */
++  typeChange?: TypeChangeState;
+ }
+ 
+ export type IngestInput = IngestInputBase &
+@@ -94,6 +108,8 @@ export interface IngestState {
+   images: { nextIndex: number; captioned: number; imageUrl?: string; imageContext?: string; mimeType?: string } | null;
+   embeddingTargets: string[];
+   embeddingGaps: Array<{ profileId: string; chunkIndex: number }>;
++  /** Present on an admin type change only; absent on every other run. */
++  typeChange?: TypeChangeState;
+ }
+ 
+ export function emptyIngestState(): IngestState {
+diff --git a/src/lib/rag/ingest/writer.ts b/src/lib/rag/ingest/writer.ts
+index c6c62a8..3e3e700 100644
+--- a/src/lib/rag/ingest/writer.ts
++++ b/src/lib/rag/ingest/writer.ts
+@@ -55,6 +55,8 @@ export interface BeginArgs {
+   docTypeOrigin: DocTypeOrigin;
+   profileId: string;
+   profileVersion: number;
++  /** The admin type change only: begin a new version although the file is unchanged. Never set by a user upload. */
++  forceNewVersion?: boolean;
+ }
+ 
+ export type BeginResult =
+@@ -288,6 +290,7 @@ export function createIngestWriter(input: CreateIngestWriterInput): IngestWriter
+         p_doc_type_origin: args.docTypeOrigin,
+         p_profile_id: args.profileId,
+         p_profile_version: args.profileVersion,
++        ...(args.forceNewVersion ? { p_force_new_version: true } : {}),
+       });
+       const outcome = text(row, 'outcome');
+       if (outcome === 'skipped_duplicate') {
+diff --git a/src/lib/rag/tenant/ingest-scope.ts b/src/lib/rag/tenant/ingest-scope.ts
+index d511afd..0ffeda6 100644
+--- a/src/lib/rag/tenant/ingest-scope.ts
++++ b/src/lib/rag/tenant/ingest-scope.ts
+@@ -1,3 +1,4 @@
++import type { SupabaseClient } from '@supabase/supabase-js';
+ import { getDeploymentMode } from '@/lib/deployment-mode';
+ import { getRagDeps } from '../deps';
+ import { isOrganizationMember, type MembershipDb } from './membership';
+@@ -80,10 +81,13 @@ export function nangoOwnerScope(input: NangoOwnerScopeInput): IngestScopeResult
+ 
+ export interface AdminDocumentScopeInput {
+   documentId: string;
++  /** The id of the admin the route guard verified. The database checks admin_users again and limits the answer to the tenants this user administers. */
+   adminUserId: string;
+   signal: AbortSignal;
++  admin?: Pick<SupabaseClient, 'rpc'> | null;
+ }
+ 
++/** Why the tenant of a document could not be resolved: the actor is not an admin (the database says so), or the lookup failed. */
+ export class AdminDocumentScopeError extends Error {
+   readonly reason: 'not_admin' | 'unavailable';
+ 
+@@ -94,6 +98,61 @@ export class AdminDocumentScopeError extends Error {
+   }
+ }
+ 
+-export async function scopeForAdminDocument(_input: AdminDocumentScopeInput): Promise<TenantScope | null> {
+-  return null;
++const TENANT_KEY_RE = /^(?:s:default|([uo]):([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}))$/;
++
++function lower(value: unknown): string | null {
++  return typeof value === 'string' && UUID_RE.test(value) ? value.toLowerCase() : null;
++}
++
++/**
++ * The tenant scope of one existing document, for the admin type change. The database returns the document's own tenant key and owner only
++ * when the actor administers that tenant (the single tenant; or the actor's personal tenant and the organizations where the actor is owner or
++ * admin), so a document of any other tenant reads exactly like an unknown id: null. The scope is the document's own, with the uploader as its
++ * user, so a new version keeps its owner. Its only caller is the type-change route, after that route's admin guard passed. Throws
++ * AdminDocumentScopeError when the actor is not in admin_users or the lookup fails.
++ */
++export async function scopeForAdminDocument(input: AdminDocumentScopeInput): Promise<TenantScope | null> {
++  const documentId = lower(input.documentId);
++  if (documentId === null) return null;
++  const actor = lower(input.adminUserId);
++  if (actor === null) throw new AdminDocumentScopeError('unavailable');
++  const admin = input.admin === undefined ? getRagDeps().adminClient() : input.admin;
++  if (!admin) throw new AdminDocumentScopeError('unavailable');
++
++  let rows: unknown[] | null;
++  try {
++    input.signal.throwIfAborted();
++    const response = await admin.rpc('rag_admin_document_scope', { p_document_id: documentId, p_actor: actor }).abortSignal(input.signal);
++    input.signal.throwIfAborted();
++    if (response.error) {
++      if (/^not_admin\b/.test(response.error.message ?? '')) throw new AdminDocumentScopeError('not_admin');
++      console.warn('[RAG Tenant] admin document scope refused', { reason: 'lookup_failed', code: response.error.code ?? null });
++      throw new AdminDocumentScopeError('unavailable');
++    }
++    rows = response.data as unknown[] | null;
++  } catch (error) {
++    if (error instanceof AdminDocumentScopeError) throw error;
++    if (input.signal.aborted) throw error;
++    console.warn('[RAG Tenant] admin document scope refused', { reason: 'lookup_failed' });
++    throw new AdminDocumentScopeError('unavailable');
++  }
++
++  const row = rows?.[0] as { tenant_key?: unknown; user_id?: unknown; organization_id?: unknown } | undefined;
++  if (!row) return null;
++  const key = typeof row.tenant_key === 'string' ? TENANT_KEY_RE.exec(row.tenant_key) : null;
++  if (!key) {
++    console.warn('[RAG Tenant] admin document scope refused', { reason: 'invalid_tenant_key' });
++    throw new AdminDocumentScopeError('unavailable');
++  }
++  const userId = lower(row.user_id);
++  const organizationId = lower(row.organization_id);
++  try {
++    if (row.tenant_key === 's:default') return mintScope('single', null, null);
++    if (key[1] === 'o' && key[2] === organizationId) return mintScope('org', userId, organizationId);
++    if (key[1] === 'u' && key[2] === userId && organizationId === null) return mintScope('personal', userId, null);
++  } catch {
++    // falls through to the refusal below
++  }
++  console.warn('[RAG Tenant] admin document scope refused', { reason: 'tenant_key_mismatch' });
++  throw new AdminDocumentScopeError('unavailable');
+ }
+diff --git a/supabase/migrations/0317_doc_type_change.sql b/supabase/migrations/0317_doc_type_change.sql
+new file mode 100644
+index 0000000..a12d50c
+--- /dev/null
++++ b/supabase/migrations/0317_doc_type_change.sql
+@@ -0,0 +1,207 @@
++-- 0317: change the document type of an existing document as a new version (Phase 3, D-18, DATA-10).
++-- An admin type change re-runs the ingest pipeline on the same identity (tenant_key, source, source_key) with the new type. The file bytes did not
++-- change, so the file-hash skip of rag_begin_document_version (D-10) would turn that run into skipped_duplicate. This file adds a flag,
++-- p_force_new_version (default false), that the type-change path alone sets: it skips the file-hash duplicate check, and it resumes a processing
++-- row only when that row already carries the requested type. Every other caller omits the flag and keeps D-10 as before.
++-- Adding a parameter makes a new signature, so the 11-argument function of 0310 is dropped first: with both present, a call that names 11
++-- arguments would match both and fail as ambiguous. Re-applying 0310 after this file brings the old overload back until this file runs again.
++-- Two read functions for the type-change path, both SECURITY DEFINER and executable by service_role only:
++--   rag_get_document_for_type_change: what the operation needs from the current version of one document (identity, type, parser, stored
++--     original, origin fields, caller metadata, saved state). Another tenant's id and an unknown id return no row.
++--   rag_admin_document_scope: the tenant of a document, for the tenants p_actor administers only (rag_admin_tenant_keys of 0316: the single
++--     tenant; or the actor's personal tenant and the organizations where the actor is owner or admin). Any other document, and an unknown
++--     id, return no row, so ids of other tenants are not probed. A p_actor outside admin_users raises not_admin.
++-- Idempotent: DROP FUNCTION IF EXISTS, CREATE OR REPLACE with fixed signatures, then REVOKE and GRANT.
++
++BEGIN;
++
++DROP FUNCTION IF EXISTS rag_begin_document_version(text, uuid, uuid, text, text, text, text, text, text, text, integer);
++
++CREATE OR REPLACE FUNCTION rag_begin_document_version(
++  p_tenant_key text,
++  p_user_id uuid,
++  p_org_id uuid,
++  p_source text,
++  p_source_key text,
++  p_filename text,
++  p_file_sha256 text,
++  p_doc_type text,
++  p_doc_type_origin text,
++  p_profile_id text,
++  p_profile_version integer,
++  p_force_new_version boolean DEFAULT false
++)
++RETURNS TABLE (outcome text, document_id uuid, version integer, lineage_id uuid, duplicate_of uuid)
++LANGUAGE plpgsql
++SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++#variable_conflict use_column
++DECLARE
++  multi_tenant boolean;
++  expected_key text;
++  duplicate_id uuid;
++  existing record;
++  previous record;
++  new_id uuid := gen_random_uuid();
++  new_version integer;
++  new_lineage uuid;
++  carried jsonb := '{}'::jsonb;
++  forced boolean := COALESCE(p_force_new_version, false);
++BEGIN
++  IF p_tenant_key IS NULL OR p_source_key IS NULL OR p_source_key = '' THEN
++    RAISE EXCEPTION 'invalid_argument: p_tenant_key and p_source_key are required';
++  END IF;
++  IF p_source IS NULL OR p_source NOT IN ('chat_upload', 'config_upload', 'nango', 'scraper', 'image_upload', 'ai_to_rag') THEN
++    RAISE EXCEPTION 'invalid_source: %', COALESCE(p_source, '(null)');
++  END IF;
++
++  -- user_id is NOT NULL in the multi-tenant schema and nullable in the single-tenant one.
++  multi_tenant := EXISTS (
++    SELECT 1 FROM pg_attribute
++    WHERE attrelid = 'public.documents'::regclass AND attname = 'user_id' AND attnotnull AND NOT attisdropped
++  );
++  IF multi_tenant THEN
++    expected_key := CASE WHEN p_org_id IS NOT NULL THEN 'o:' || p_org_id::text ELSE 'u:' || p_user_id::text END;
++  ELSE
++    expected_key := 's:default';
++  END IF;
++  IF p_tenant_key IS DISTINCT FROM expected_key THEN
++    RAISE EXCEPTION 'tenant_mismatch' USING DETAIL = 'p_tenant_key is not the tenant key of the given user and organization';
++  END IF;
++  IF multi_tenant AND p_user_id IS NULL THEN
++    RAISE EXCEPTION 'invalid_argument: p_user_id is required';
++  END IF;
++
++  PERFORM pg_advisory_xact_lock(hashtextextended(p_tenant_key || '|' || p_source || '|' || p_source_key, 0));
++
++  IF p_file_sha256 IS NOT NULL AND NOT forced THEN
++    SELECT d.id INTO duplicate_id
++    FROM documents d
++    WHERE d.tenant_key = p_tenant_key AND d.file_sha256 = p_file_sha256 AND d.is_current AND d.status = 'ready'
++    ORDER BY d.created_at, d.id
++    LIMIT 1;
++    IF FOUND THEN
++      RETURN QUERY SELECT 'skipped_duplicate'::text, NULL::uuid, NULL::integer, NULL::uuid, duplicate_id;
++      RETURN;
++    END IF;
++  END IF;
++
++  SELECT d.id, d.version, d.lineage_id INTO existing
++  FROM documents d
++  WHERE d.tenant_key = p_tenant_key AND d.source = p_source AND d.source_key = p_source_key
++    AND d.status = 'processing' AND NOT d.is_current AND d.file_sha256 IS NOT DISTINCT FROM p_file_sha256
++    AND (NOT forced OR d.doc_type = COALESCE(p_doc_type, 'general'))
++  ORDER BY d.version DESC
++  LIMIT 1;
++  IF FOUND THEN
++    RETURN QUERY SELECT 'resumed'::text, existing.id, existing.version, existing.lineage_id, NULL::uuid;
++    RETURN;
++  END IF;
++
++  SELECT d.lineage_id, d.metadata INTO previous
++  FROM documents d
++  WHERE d.tenant_key = p_tenant_key AND d.source = p_source AND d.source_key = p_source_key
++  ORDER BY d.is_current DESC, d.version DESC, d.created_at DESC
++  LIMIT 1;
++  IF FOUND THEN
++    new_lineage := previous.lineage_id;
++    SELECT COALESCE(max(d.version), 0) + 1 INTO new_version FROM documents d WHERE d.lineage_id = new_lineage;
++    IF previous.metadata ? 'external_url' THEN
++      carried := jsonb_build_object('external_url', previous.metadata -> 'external_url');
++    END IF;
++  ELSE
++    new_lineage := new_id;
++    new_version := 1;
++  END IF;
++
++  INSERT INTO documents (
++    id, lineage_id, version, is_current, status, source, source_key, filename, content, metadata,
++    user_id, organization_id, file_sha256, doc_type, doc_type_origin, processing_profile_id, processing_profile_version
++  ) VALUES (
++    new_id, new_lineage, new_version, false, 'processing', p_source, p_source_key, COALESCE(NULLIF(p_filename, ''), p_source_key), '', carried,
++    CASE WHEN multi_tenant THEN p_user_id END, CASE WHEN multi_tenant THEN p_org_id END, p_file_sha256,
++    COALESCE(p_doc_type, 'general'), COALESCE(p_doc_type_origin, 'fallback'), p_profile_id, p_profile_version
++  );
++
++  RETURN QUERY SELECT 'created'::text, new_id, new_version, new_lineage, NULL::uuid;
++END
++$$;
++
++-- The current version of one document of p_tenant_key as the type change needs it. The caller checks is_current and status itself.
++CREATE OR REPLACE FUNCTION rag_get_document_for_type_change(
++  p_document_id uuid,
++  p_tenant_key text
++)
++RETURNS TABLE (
++  lineage_id uuid,
++  version integer,
++  is_current boolean,
++  status text,
++  source text,
++  source_key text,
++  filename text,
++  doc_type text,
++  processing_profile_id text,
++  parser_used text,
++  parser_version text,
++  original_path text,
++  source_provider text,
++  source_file_id text,
++  source_connection_id text,
++  metadata jsonb,
++  processing_state jsonb
++)
++LANGUAGE plpgsql
++STABLE
++SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++#variable_conflict use_column
++BEGIN
++  RETURN QUERY
++  SELECT d.lineage_id, d.version, d.is_current, d.status, d.source, d.source_key, d.filename, d.doc_type, d.processing_profile_id,
++         d.parser_used, d.parser_version, d.original_path, d.source_provider, d.source_file_id, d.source_connection_id,
++         COALESCE(d.metadata, '{}'::jsonb), COALESCE(d.processing_state, '{}'::jsonb)
++  FROM documents d
++  WHERE d.id = p_document_id AND d.tenant_key = p_tenant_key;
++END
++$$;
++
++-- The tenant a document belongs to, for an admin who administers that tenant. user_id and organization_id are the row's own, so the
++-- new version keeps its owner. No row for an unknown id or a tenant the actor does not administer.
++CREATE OR REPLACE FUNCTION rag_admin_document_scope(
++  p_document_id uuid,
++  p_actor uuid
++)
++RETURNS TABLE (
++  tenant_key text,
++  user_id uuid,
++  organization_id uuid
++)
++LANGUAGE plpgsql
++STABLE
++SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++#variable_conflict use_column
++DECLARE
++  keys text[];
++BEGIN
++  keys := rag_admin_tenant_keys(p_actor);
++  RETURN QUERY
++  SELECT d.tenant_key, d.user_id, d.organization_id
++  FROM documents d
++  WHERE d.id = p_document_id AND d.tenant_key = ANY (keys);
++END
++$$;
++
++REVOKE ALL ON FUNCTION rag_begin_document_version(text, uuid, uuid, text, text, text, text, text, text, text, integer, boolean) FROM PUBLIC, anon, authenticated;
++REVOKE ALL ON FUNCTION rag_get_document_for_type_change(uuid, text) FROM PUBLIC, anon, authenticated;
++REVOKE ALL ON FUNCTION rag_admin_document_scope(uuid, uuid) FROM PUBLIC, anon, authenticated;
++
++GRANT EXECUTE ON FUNCTION rag_begin_document_version(text, uuid, uuid, text, text, text, text, text, text, text, integer, boolean) TO service_role;
++GRANT EXECUTE ON FUNCTION rag_get_document_for_type_change(uuid, text) TO service_role;
++GRANT EXECUTE ON FUNCTION rag_admin_document_scope(uuid, uuid) TO service_role;
++
++COMMIT;
+diff --git a/tests/helpers/doc-type-change-harness.mts b/tests/helpers/doc-type-change-harness.mts
+new file mode 100644
+index 0000000..10604e9
+--- /dev/null
++++ b/tests/helpers/doc-type-change-harness.mts
+@@ -0,0 +1,218 @@
++import assert from 'node:assert/strict';
++import { mock } from 'node:test';
++import path from 'node:path';
++import { fileURLToPath } from 'node:url';
++import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from '../../eval/harness/fake-edge.mts';
++import { TWO_TENANT_IDS } from '../../eval/harness/two-tenant.mts';
++import type { FixtureDatabase } from '../../eval/harness/pglite-supabase.mts';
++import type { ParseRequest, DocumentParser, NetworkParserName } from '@/lib/rag/ingest/parsers/shared';
++import type { FakeObjectStore } from './fake-object-store';
++
++/** Wiring shared by the two doc-type-change test files. They are separate files because the admin client of the app is a per-process singleton: one process serves one deployment mode. */
++export type Row = Record<string, unknown>;
++
++export const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
++export const CORPUS = path.join(REPO_ROOT, 'eval/fixtures/corpus');
++export const A = TWO_TENANT_IDS.userA;
++export const B = TWO_TENANT_IDS.userB;
++export const ORG = TWO_TENANT_IDS.orgO;
++export const ST_ADMIN = '00000000-0000-4000-8000-0000000000f3';
++export const ST_PLAIN = '00000000-0000-4000-8000-0000000000f4';
++const encoder = new TextEncoder();
++
++const AGREEMENT = [
++  '# Supply Agreement',
++  '',
++  'Article 1 Payment. The buyer pays every invoice within thirty days of the invoice date and bears the bank charges of the transfer to the seller.',
++  '',
++  'Article 2 Delivery. The seller delivers the goods to the receiving dock of the buyer on the agreed date and notifies the carrier in advance of the visit.',
++  '',
++  'Article 3 Liability. Each party answers for the damage it causes to the other party under this agreement up to the value of the contract in force.',
++  '',
++].join('\n');
++
++interface Parsers {
++  llama: ParseRequest[];
++  docling: ParseRequest[];
++}
++
++function recordingParser(name: NetworkParserName, markdown: string, calls: ParseRequest[]): DocumentParser {
++  return {
++    name,
++    unavailableReason: () => null,
++    async parse(request) {
++      calls.push(request);
++      return {
++        kind: 'done',
++        result: {
++          markdown,
++          chunks: [],
++          pictures: [],
++          page_count: 2,
++          language: 'en',
++          parser: name,
++          parser_version: `${name}-test`,
++          partial: false,
++          text_layer_page_share: null,
++          warnings: [],
++        },
++        artifacts: name === 'docling' ? [{ name: 'docling.json', bytes: encoder.encode('{"fake":true}'), contentType: 'application/json' }] : [],
++        warnings: [],
++      };
++    },
++  };
++}
++
++interface Modules {
++  ingest: typeof import('@/lib/rag/ingest');
++  change: typeof import('@/lib/rag/ingest/change-doc-type');
++  adminScope: typeof import('@/lib/rag/tenant/ingest-scope');
++  scopes: typeof import('@/lib/rag/tenant/scope');
++  deps: typeof import('@/lib/rag/ingest/deps');
++  config: typeof import('@/lib/rag/ingest/config');
++  objectStore: typeof import('@/lib/rag/ingest/object-store');
++  fakeStore: typeof import('./fake-object-store');
++  resolver: typeof import('@/lib/rag/tenant/resolve-chat');
++  supabase: typeof import('@/lib/supabase');
++  llama: typeof import('@/lib/rag/ingest/parsers/llamaparse-v2');
++  sidecar: typeof import('@/lib/rag/ingest/parsers/sidecar-docling');
++}
++
++async function loadModules(): Promise<Modules> {
++  return {
++    ingest: await import('@/lib/rag/ingest'),
++    change: await import('@/lib/rag/ingest/change-doc-type'),
++    adminScope: await import('@/lib/rag/tenant/ingest-scope'),
++    scopes: await import('@/lib/rag/tenant/scope'),
++    deps: await import('@/lib/rag/ingest/deps'),
++    config: await import('@/lib/rag/ingest/config'),
++    objectStore: await import('@/lib/rag/ingest/object-store'),
++    fakeStore: await import('./fake-object-store'),
++    resolver: await import('@/lib/rag/tenant/resolve-chat'),
++    supabase: await import('@/lib/supabase'),
++    llama: await import('@/lib/rag/ingest/parsers/llamaparse-v2'),
++    sidecar: await import('@/lib/rag/ingest/parsers/sidecar-docling'),
++  };
++}
++
++export const signal = () => new AbortController().signal;
++
++/** Shared fixture wiring for one deployment mode. */
++export function harness(mode: 'multi-tenant' | 'single-tenant') {
++  let fixture: FixtureDatabase;
++  let edge: FakeEdge;
++  let m: Modules;
++  let store: FakeObjectStore;
++  let parsers: Parsers;
++  let counter = 0;
++
++  const rows = async (sql: string, params: unknown[] = []): Promise<Row[]> => (await fixture.db.query<Row>(sql, params)).rows;
++
++  const setup = async (build: () => Promise<FixtureDatabase>) => {
++    fixture = await build();
++    edge = await startFakeEdge({ db: fixture.db });
++    Object.assign(process.env, fixtureProcessEnv(edge.url));
++    process.env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE = mode;
++    process.env.MYRAG_DEPLOYMENT_MODE = mode;
++    m = await loadModules();
++  };
++
++  const teardown = async () => {
++    await edge?.close();
++    await fixture?.db.close();
++  };
++
++  const each = () => {
++    store = m.fakeStore.createFakeObjectStore();
++    m.objectStore.setObjectStoreForTests(store);
++    m.config.resetIngestConfigForTests();
++    m.deps.setIngestDepsForTests({ ingestEnv: () => ({}) });
++    parsers = { llama: [], docling: [] };
++    m.llama.setLlamaParseParserForTests(recordingParser('llamaparse', AGREEMENT, parsers.llama));
++    m.sidecar.setSidecarParserForTests(recordingParser('docling', AGREEMENT, parsers.docling));
++  };
++
++  const afterEachTest = () => {
++    m.objectStore.resetObjectStoreForTests();
++    m.deps.resetIngestDepsForTests();
++    m.config.resetIngestConfigForTests();
++    m.llama.resetLlamaParseParserForTests();
++    m.sidecar.resetSidecarParserForTests();
++    mock.restoreAll();
++  };
++
++  const scopeOf = async (userId: string, organizationId: string | null = null) => {
++    const resolved = await m.resolver.resolveTenantScope({
++      requestedOrganizationId: organizationId,
++      deploymentMode: mode,
++      getUser: async () => ({ id: userId }),
++      admin: m.supabase.getSupabaseAdmin(),
++      signal: signal(),
++    });
++    assert.ok(resolved.ok && resolved.scope, 'scope must resolve');
++    return resolved.scope;
++  };
++
++  /** A PDF-named upload through the parser chain; the nonce keeps every upload distinct so no dedup applies. */
++  const uploadPdf = async (userId: string, options: { filename?: string; source?: 'config_upload' | 'nango'; organizationId?: string | null; extra?: Row } = {}) => {
++    counter += 1;
++    const filename = options.filename ?? `agreement-${counter}.pdf`;
++    const bytes = encoder.encode(`%PDF-1.4 fixture ${mode} ${counter}`);
++    const source = options.source ?? 'config_upload';
++    parsers.llama.length = 0;
++    m.llama.setLlamaParseParserForTests(recordingParser('llamaparse', `${AGREEMENT}\nReference nr${mode.slice(0, 1)}${counter}.\n`, parsers.llama));
++    parsers.docling.length = 0;
++    m.sidecar.setSidecarParserForTests(recordingParser('docling', `${AGREEMENT}\nReference nr${mode.slice(0, 1)}${counter}.\n`, parsers.docling));
++    const result = await m.ingest.ingest({
++      scope: await scopeOf(userId, options.organizationId ?? null),
++      source,
++      sourceKey: source === 'nango' ? `file-${counter}` : `root/${filename}`,
++      file: bytes,
++      filename,
++      mimeType: 'application/pdf',
++      ...(options.extra ?? {}),
++      signal: signal(),
++    });
++    assert.equal(result.status, 'ready');
++    assert.ok(result.documentId);
++    return { result, id: result.documentId, bytes, filename, counter };
++  };
++
++  const documentRow = async (id: string) =>
++    (
++      await rows(
++        `SELECT id, version, is_current, status, doc_type, doc_type_origin, processing_profile_id, parser_used, parser_version, original_path,
++                superseded_by, lineage_id, user_id, organization_id, source, source_key, source_provider, source_file_id, source_connection_id, metadata, processing_state
++         FROM documents WHERE id = $1`,
++        [id],
++      )
++    )[0] as Row;
++
++  const chunksOf = (id: string) =>
++    rows('SELECT chunk_index, content, section_path, is_current, status FROM document_chunks WHERE document_id = $1 ORDER BY chunk_index', [id]);
++
++  return {
++    get fixture() {
++      return fixture;
++    },
++    get m() {
++      return m;
++    },
++    get store() {
++      return store;
++    },
++    get parsers() {
++      return parsers;
++    },
++    rows,
++    setup,
++    teardown,
++    each,
++    afterEachTest,
++    scopeOf,
++    uploadPdf,
++    documentRow,
++    chunksOf,
++  };
++}
++
+diff --git a/tests/rag-db/doc-type-change-single-tenant.test.mts b/tests/rag-db/doc-type-change-single-tenant.test.mts
+new file mode 100644
+index 0000000..3aa497d
+--- /dev/null
++++ b/tests/rag-db/doc-type-change-single-tenant.test.mts
+@@ -0,0 +1,46 @@
++import { after, afterEach, before, beforeEach, describe, test } from 'node:test';
++import assert from 'node:assert/strict';
++import { createFixtureDatabase } from '../../eval/harness/pglite-supabase.mts';
++import { CORPUS, ST_ADMIN, ST_PLAIN, harness, signal } from '../helpers/doc-type-change-harness.mts';
++
++describe('single-tenant: changing the type of a document', () => {
++  const h = harness('single-tenant');
++
++  before(async () => {
++    await h.setup(async () => {
++      const fixture = await createFixtureDatabase({ deploymentMode: 'single-tenant', corpusDir: CORPUS, supabaseGrants: true });
++      await fixture.db.query('INSERT INTO auth.users (id, email) VALUES ($1, $2), ($3, $4)', [ST_ADMIN, 'st-admin@example.invalid', ST_PLAIN, 'st-plain@example.invalid']);
++      await fixture.db.query('INSERT INTO admin_users (id) VALUES ($1)', [ST_ADMIN]);
++      return fixture;
++    });
++  });
++  after(() => h.teardown());
++  beforeEach(() => h.each());
++  afterEach(() => h.afterEachTest());
++
++  test('general to product_technical: version 2 of the single tenant document, equal parser options, no parser call', async () => {
++    const first = await h.uploadPdf(ST_ADMIN);
++    const callsBefore = [h.parsers.llama.length, h.parsers.docling.length];
++    const scope = await h.m.adminScope.scopeForAdminDocument({ documentId: first.id, adminUserId: ST_ADMIN, signal: signal() });
++    assert.ok(scope);
++    assert.equal(h.m.scopes.scopeKey(scope), 's:default');
++
++    const changed = await h.m.change.changeDocumentType({ scope, documentId: first.id, docType: 'product_technical', signal: signal() });
++
++    assert.ok(changed.ok);
++    assert.equal(changed.result.status, 'ready');
++    assert.equal(changed.result.version, 2);
++    assert.deepEqual([h.parsers.llama.length, h.parsers.docling.length], callsBefore);
++    const next = await h.documentRow(changed.result.documentId as string);
++    assert.equal(next.doc_type, 'product_technical');
++    assert.equal(next.doc_type_origin, 'picked');
++    assert.equal((await h.documentRow(first.id)).is_current, false);
++    assert.ok(h.store.keys().every((key) => key.startsWith('s:default/')));
++  });
++
++  test('a user who is not in admin_users gets no scope, and an unknown id gets none either', async () => {
++    const first = await h.uploadPdf(ST_ADMIN);
++    await assert.rejects(h.m.adminScope.scopeForAdminDocument({ documentId: first.id, adminUserId: ST_PLAIN, signal: signal() }), { name: 'AdminDocumentScopeError', reason: 'not_admin' });
++    assert.equal(await h.m.adminScope.scopeForAdminDocument({ documentId: '00000000-0000-4000-8000-0000000000aa', adminUserId: ST_ADMIN, signal: signal() }), null);
++  });
++});
+diff --git a/tests/rag-db/doc-type-change.test.mts b/tests/rag-db/doc-type-change.test.mts
+index 9f401a6..fdb7824 100644
+--- a/tests/rag-db/doc-type-change.test.mts
++++ b/tests/rag-db/doc-type-change.test.mts
+@@ -1,228 +1,16 @@
+-import { after, afterEach, before, beforeEach, describe, mock, test } from 'node:test';
++import { after, afterEach, before, beforeEach, describe, test } from 'node:test';
+ import assert from 'node:assert/strict';
+ import fs from 'node:fs';
+ import path from 'node:path';
+-import { fileURLToPath } from 'node:url';
+-import { createFixtureDatabase, type FixtureDatabase } from '../../eval/harness/pglite-supabase.mts';
+-import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from '../../eval/harness/fake-edge.mts';
+-import { TWO_TENANT_IDS, createTwoTenantDatabase, type TwoTenantDatabase } from '../../eval/harness/two-tenant.mts';
+-import type { ParseRequest, DocumentParser, NetworkParserName } from '@/lib/rag/ingest/parsers/shared';
++import { createTwoTenantDatabase } from '../../eval/harness/two-tenant.mts';
+ import type { RpcClient } from '@/lib/rag/backend/supabase-rpc';
+-import type { FakeObjectStore } from '../helpers/fake-object-store';
+-
+-type Row = Record<string, unknown>;
+-
+-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+-const CORPUS = path.join(REPO_ROOT, 'eval/fixtures/corpus');
+-const A = TWO_TENANT_IDS.userA;
+-const B = TWO_TENANT_IDS.userB;
+-const ORG = TWO_TENANT_IDS.orgO;
+-const ST_ADMIN = '00000000-0000-4000-8000-0000000000f3';
+-const ST_PLAIN = '00000000-0000-4000-8000-0000000000f4';
+-const encoder = new TextEncoder();
+-
+-const AGREEMENT = [
+-  '# Supply Agreement',
+-  '',
+-  'Article 1 Payment. The buyer pays every invoice within thirty days of the invoice date and bears the bank charges of the transfer to the seller.',
+-  '',
+-  'Article 2 Delivery. The seller delivers the goods to the receiving dock of the buyer on the agreed date and notifies the carrier in advance of the visit.',
+-  '',
+-  'Article 3 Liability. Each party answers for the damage it causes to the other party under this agreement up to the value of the contract in force.',
+-  '',
+-].join('\n');
+-
+-interface Parsers {
+-  llama: ParseRequest[];
+-  docling: ParseRequest[];
+-}
+-
+-function recordingParser(name: NetworkParserName, markdown: string, calls: ParseRequest[]): DocumentParser {
+-  return {
+-    name,
+-    unavailableReason: () => null,
+-    async parse(request) {
+-      calls.push(request);
+-      return {
+-        kind: 'done',
+-        result: {
+-          markdown,
+-          chunks: [],
+-          pictures: [],
+-          page_count: 2,
+-          language: 'en',
+-          parser: name,
+-          parser_version: `${name}-test`,
+-          partial: false,
+-          text_layer_page_share: null,
+-          warnings: [],
+-        },
+-        artifacts: name === 'docling' ? [{ name: 'docling.json', bytes: encoder.encode('{"fake":true}'), contentType: 'application/json' }] : [],
+-        warnings: [],
+-      };
+-    },
+-  };
+-}
+-
+-interface Modules {
+-  ingest: typeof import('@/lib/rag/ingest');
+-  change: typeof import('@/lib/rag/ingest/change-doc-type');
+-  adminScope: typeof import('@/lib/rag/tenant/ingest-scope');
+-  scopes: typeof import('@/lib/rag/tenant/scope');
+-  deps: typeof import('@/lib/rag/ingest/deps');
+-  config: typeof import('@/lib/rag/ingest/config');
+-  objectStore: typeof import('@/lib/rag/ingest/object-store');
+-  fakeStore: typeof import('../helpers/fake-object-store');
+-  resolver: typeof import('@/lib/rag/tenant/resolve-chat');
+-  supabase: typeof import('@/lib/supabase');
+-  llama: typeof import('@/lib/rag/ingest/parsers/llamaparse-v2');
+-  sidecar: typeof import('@/lib/rag/ingest/parsers/sidecar-docling');
+-}
+-
+-async function loadModules(): Promise<Modules> {
+-  return {
+-    ingest: await import('@/lib/rag/ingest'),
+-    change: await import('@/lib/rag/ingest/change-doc-type'),
+-    adminScope: await import('@/lib/rag/tenant/ingest-scope'),
+-    scopes: await import('@/lib/rag/tenant/scope'),
+-    deps: await import('@/lib/rag/ingest/deps'),
+-    config: await import('@/lib/rag/ingest/config'),
+-    objectStore: await import('@/lib/rag/ingest/object-store'),
+-    fakeStore: await import('../helpers/fake-object-store'),
+-    resolver: await import('@/lib/rag/tenant/resolve-chat'),
+-    supabase: await import('@/lib/supabase'),
+-    llama: await import('@/lib/rag/ingest/parsers/llamaparse-v2'),
+-    sidecar: await import('@/lib/rag/ingest/parsers/sidecar-docling'),
+-  };
+-}
+-
+-const signal = () => new AbortController().signal;
+-
+-/** Shared fixture wiring for one deployment mode. */
+-function harness(mode: 'multi-tenant' | 'single-tenant') {
+-  let fixture: FixtureDatabase;
+-  let edge: FakeEdge;
+-  let m: Modules;
+-  let store: FakeObjectStore;
+-  let parsers: Parsers;
+-  let counter = 0;
+-
+-  const rows = async (sql: string, params: unknown[] = []): Promise<Row[]> => (await fixture.db.query<Row>(sql, params)).rows;
+-
+-  const setup = async (build: () => Promise<FixtureDatabase>) => {
+-    fixture = await build();
+-    edge = await startFakeEdge({ db: fixture.db });
+-    Object.assign(process.env, fixtureProcessEnv(edge.url));
+-    process.env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE = mode;
+-    process.env.MYRAG_DEPLOYMENT_MODE = mode;
+-    m = await loadModules();
+-  };
+-
+-  const teardown = async () => {
+-    await edge?.close();
+-    await fixture?.db.close();
+-  };
+-
+-  const each = () => {
+-    store = m.fakeStore.createFakeObjectStore();
+-    m.objectStore.setObjectStoreForTests(store);
+-    m.config.resetIngestConfigForTests();
+-    m.deps.setIngestDepsForTests({ ingestEnv: () => ({}) });
+-    parsers = { llama: [], docling: [] };
+-    m.llama.setLlamaParseParserForTests(recordingParser('llamaparse', AGREEMENT, parsers.llama));
+-    m.sidecar.setSidecarParserForTests(recordingParser('docling', AGREEMENT, parsers.docling));
+-  };
+-
+-  const afterEachTest = () => {
+-    m.objectStore.resetObjectStoreForTests();
+-    m.deps.resetIngestDepsForTests();
+-    m.config.resetIngestConfigForTests();
+-    m.llama.resetLlamaParseParserForTests();
+-    m.sidecar.resetSidecarParserForTests();
+-    mock.restoreAll();
+-  };
+-
+-  const scopeOf = async (userId: string, organizationId: string | null = null) => {
+-    const resolved = await m.resolver.resolveTenantScope({
+-      requestedOrganizationId: organizationId,
+-      deploymentMode: mode,
+-      getUser: async () => ({ id: userId }),
+-      admin: m.supabase.getSupabaseAdmin(),
+-      signal: signal(),
+-    });
+-    assert.ok(resolved.ok && resolved.scope, 'scope must resolve');
+-    return resolved.scope;
+-  };
+-
+-  /** A PDF-named upload through the parser chain; the nonce keeps every upload distinct so no dedup applies. */
+-  const uploadPdf = async (userId: string, options: { filename?: string; source?: 'config_upload' | 'nango'; organizationId?: string | null; extra?: Row } = {}) => {
+-    counter += 1;
+-    const filename = options.filename ?? `agreement-${counter}.pdf`;
+-    const bytes = encoder.encode(`%PDF-1.4 fixture ${mode} ${counter}`);
+-    const source = options.source ?? 'config_upload';
+-    parsers.llama.length = 0;
+-    m.llama.setLlamaParseParserForTests(recordingParser('llamaparse', `${AGREEMENT}\nReference nr${mode.slice(0, 1)}${counter}.\n`, parsers.llama));
+-    parsers.docling.length = 0;
+-    m.sidecar.setSidecarParserForTests(recordingParser('docling', `${AGREEMENT}\nReference nr${mode.slice(0, 1)}${counter}.\n`, parsers.docling));
+-    const result = await m.ingest.ingest({
+-      scope: await scopeOf(userId, options.organizationId ?? null),
+-      source,
+-      sourceKey: source === 'nango' ? `file-${counter}` : `root/${filename}`,
+-      file: bytes,
+-      filename,
+-      mimeType: 'application/pdf',
+-      ...(options.extra ?? {}),
+-      signal: signal(),
+-    });
+-    assert.equal(result.status, 'ready');
+-    assert.ok(result.documentId);
+-    return { result, id: result.documentId, bytes, filename, counter };
+-  };
+-
+-  const documentRow = async (id: string) =>
+-    (
+-      await rows(
+-        `SELECT id, version, is_current, status, doc_type, doc_type_origin, processing_profile_id, parser_used, parser_version, original_path,
+-                superseded_by, lineage_id, user_id, organization_id, source, source_key, source_provider, source_file_id, source_connection_id, metadata, processing_state
+-         FROM documents WHERE id = $1`,
+-        [id],
+-      )
+-    )[0] as Row;
+-
+-  const chunksOf = (id: string) =>
+-    rows('SELECT chunk_index, content, section_path, is_current, status FROM document_chunks WHERE document_id = $1 ORDER BY chunk_index', [id]);
+-
+-  return {
+-    get fixture() {
+-      return fixture;
+-    },
+-    get m() {
+-      return m;
+-    },
+-    get store() {
+-      return store;
+-    },
+-    get parsers() {
+-      return parsers;
+-    },
+-    rows,
+-    setup,
+-    teardown,
+-    each,
+-    afterEachTest,
+-    scopeOf,
+-    uploadPdf,
+-    documentRow,
+-    chunksOf,
+-  };
+-}
++import { A, B, ORG, REPO_ROOT, harness, signal, type Row } from '../helpers/doc-type-change-harness.mts';
+ 
+ describe('multi-tenant: changing the type of a document creates a new version', () => {
+   const h = harness('multi-tenant');
+ 
+   before(async () => {
+     await h.setup(createTwoTenantDatabase);
+-    await h.fixture.db.query('INSERT INTO auth.users (id, email) VALUES ($1, $2)', [ST_ADMIN, 'outside-admin@example.invalid']);
+     await h.fixture.db.query('INSERT INTO admin_users (id) VALUES ($1)', [A]);
+     await h.fixture.db.query("UPDATE organization_members SET role = 'owner' WHERE organization_id = $1 AND user_id = $2", [ORG, A]);
+   });
+@@ -471,58 +259,25 @@ describe('multi-tenant: changing the type of a document creates a new version',
+     assert.equal(replaced.organization_id, ORG);
+   });
+ 
+-  test('only the type-change operation sets the forced-version state', () => {
+-    const offenders: string[] = [];
++  test('only the type-change operation builds the forced-version state; the ingest entry point and the status reader only carry it', () => {
++    const builders: string[] = [];
++    const carriers: string[] = [];
+     const walk = (dir: string) => {
+       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+         const full = path.join(dir, entry.name);
+-        if (entry.isDirectory()) walk(full);
+-        else if (/\.(ts|tsx)$/.test(entry.name) && /\btypeChange\s*[:=]/.test(fs.readFileSync(full, 'utf8'))) offenders.push(path.relative(REPO_ROOT, full));
++        if (entry.isDirectory()) {
++          walk(full);
++          continue;
++        }
++        if (!/\.(ts|tsx)$/.test(entry.name)) continue;
++        const source = fs.readFileSync(full, 'utf8');
++        const rel = path.relative(REPO_ROOT, full);
++        if (/\btypeChange\s*:/.test(source)) builders.push(rel);
++        if (/\.typeChange\s*=/.test(source)) carriers.push(rel);
+       }
+     };
+     walk(path.join(REPO_ROOT, 'src'));
+-    assert.deepEqual(offenders.sort(), ['src/lib/rag/ingest/change-doc-type.ts', 'src/lib/rag/ingest/index.ts', 'src/lib/rag/ingest/types.ts'].sort());
+-  });
+-});
+-
+-describe('single-tenant: changing the type of a document', () => {
+-  const h = harness('single-tenant');
+-
+-  before(async () => {
+-    await h.setup(async () => {
+-      const fixture = await createFixtureDatabase({ deploymentMode: 'single-tenant', corpusDir: CORPUS, supabaseGrants: true });
+-      await fixture.db.query('INSERT INTO auth.users (id, email) VALUES ($1, $2), ($3, $4)', [ST_ADMIN, 'st-admin@example.invalid', ST_PLAIN, 'st-plain@example.invalid']);
+-      await fixture.db.query('INSERT INTO admin_users (id) VALUES ($1)', [ST_ADMIN]);
+-      return fixture;
+-    });
+-  });
+-  after(() => h.teardown());
+-  beforeEach(() => h.each());
+-  afterEach(() => h.afterEachTest());
+-
+-  test('general to product_technical: version 2 of the single tenant document, equal parser options, no parser call', async () => {
+-    const first = await h.uploadPdf(ST_ADMIN);
+-    const callsBefore = [h.parsers.llama.length, h.parsers.docling.length];
+-    const scope = await h.m.adminScope.scopeForAdminDocument({ documentId: first.id, adminUserId: ST_ADMIN, signal: signal() });
+-    assert.ok(scope);
+-    assert.equal(h.m.scopes.scopeKey(scope), 's:default');
+-
+-    const changed = await h.m.change.changeDocumentType({ scope, documentId: first.id, docType: 'product_technical', signal: signal() });
+-
+-    assert.ok(changed.ok);
+-    assert.equal(changed.result.status, 'ready');
+-    assert.equal(changed.result.version, 2);
+-    assert.deepEqual([h.parsers.llama.length, h.parsers.docling.length], callsBefore);
+-    const next = await h.documentRow(changed.result.documentId as string);
+-    assert.equal(next.doc_type, 'product_technical');
+-    assert.equal(next.doc_type_origin, 'picked');
+-    assert.equal((await h.documentRow(first.id)).is_current, false);
+-    assert.ok(h.store.keys().every((key) => key.startsWith('s:default/')));
+-  });
+-
+-  test('a user who is not in admin_users gets no scope, and an unknown id gets none either', async () => {
+-    const first = await h.uploadPdf(ST_ADMIN);
+-    await assert.rejects(h.m.adminScope.scopeForAdminDocument({ documentId: first.id, adminUserId: ST_PLAIN, signal: signal() }), { name: 'AdminDocumentScopeError', reason: 'not_admin' });
+-    assert.equal(await h.m.adminScope.scopeForAdminDocument({ documentId: '00000000-0000-4000-8000-0000000000aa', adminUserId: ST_ADMIN, signal: signal() }), null);
++    assert.deepEqual(builders, ['src/lib/rag/ingest/change-doc-type.ts']);
++    assert.deepEqual(carriers.sort(), ['src/lib/rag/ingest/index.ts', 'src/lib/rag/ingest/status.ts']);
+   });
+ });
+-- 
+2.43.0
+
