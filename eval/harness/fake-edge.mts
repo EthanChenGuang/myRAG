@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { PGlite } from '@electric-sql/pglite';
+import { fakeRerankScores } from './fake-reranker.mts';
 import { embedText } from './fixture-embedder.mts';
 
 export interface FakeEdgeError {
@@ -274,6 +275,139 @@ function parseJsonObject(raw: string): Record<string, unknown> {
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Rejection(400, 'request body must be a JSON object');
   return parsed as Record<string, unknown>;
+}
+
+const FAKE_RERANK_MODEL_RE = /^fake-/;
+
+function requireBearer(req: http.IncomingMessage): void {
+  const auth = req.headers.authorization;
+  if (typeof auth !== 'string' || !/^Bearer\s+\S+/i.test(auth)) {
+    throw new Rejection(401, 'missing or invalid authorization');
+  }
+}
+
+function parsePositiveHeader(req: http.IncomingMessage, name: string): number {
+  const raw = req.headers[name];
+  const value = typeof raw === 'string' ? Number(raw) : NaN;
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function assertFakeRerankModel(model: unknown): string {
+  if (typeof model !== 'string' || !FAKE_RERANK_MODEL_RE.test(model)) {
+    throw new Rejection(400, 'only fake-* rerank model ids are supported on the fixture edge');
+  }
+  return model;
+}
+
+function parseRerankDocuments(value: unknown): string[] {
+  if (!Array.isArray(value) || value.length === 0 || !value.every((x) => typeof x === 'string')) {
+    throw new Rejection(400, 'documents must be a non-empty array of strings');
+  }
+  return value;
+}
+
+function splitSentences(text: string): string[] {
+  const parts = text
+    .split(/(?<=[.!?。！？\n])\s*/u)
+    .map((segment) => segment.trim())
+    .filter((segment) => segment.length > 0);
+  return parts.length > 0 ? parts : [text];
+}
+
+function bestRelevantSpan(query: string, document: string): { start: number; end: number; score: number } | undefined {
+  let best: { start: number; end: number; score: number } | undefined;
+  for (const sentence of splitSentences(document)) {
+    const score = fakeRerankScores(query, [sentence])[0] ?? 0;
+    const byteIndex = document.indexOf(sentence);
+    if (byteIndex < 0) continue;
+    const start = Array.from(document.slice(0, byteIndex)).length;
+    const end = start + Array.from(sentence).length;
+    if (!best || score > best.score) best = { start, end, score };
+  }
+  return best;
+}
+
+function rerankUsageTokens(query: string, docs: string[]): number {
+  const text = query + docs.join('');
+  return Math.max(1, Math.ceil(text.length / 4));
+}
+
+async function handleFakeCohereRerank(
+  req: http.IncomingMessage,
+  body: Record<string, unknown>,
+  calls: FakeEdgeCall[],
+): Promise<unknown> {
+  requireBearer(req);
+  if (String(req.headers['x-fake-rerank-fail'] ?? '') === '1') {
+    throw new Rejection(503, 'fixture rerank failure injected');
+  }
+  const delayMs = parsePositiveHeader(req, 'x-fake-rerank-delay-ms');
+  if (delayMs > 0) await sleep(delayMs);
+
+  const model = assertFakeRerankModel(body.model);
+  const query = typeof body.query === 'string' ? body.query : '';
+  if (!query) throw new Rejection(400, 'query must be a string');
+  const documents = parseRerankDocuments(body.documents);
+  calls.push({ method: 'POST', path: '/v2/rerank', model });
+
+  const wantSpans =
+    body.relevant_spans !== undefined &&
+    typeof body.relevant_spans === 'object' &&
+    body.relevant_spans !== null &&
+    (body.relevant_spans as { mode?: string }).mode === 'enabled';
+
+  const scores = fakeRerankScores(query, documents, {});
+  const results = scores
+    .map((relevance_score, index) => {
+      const row: Record<string, unknown> = { index, relevance_score };
+      if (wantSpans) {
+        const span = bestRelevantSpan(query, documents[index] ?? '');
+        if (span) row.relevant_spans = [{ start: span.start, end: span.end, score: span.score }];
+      }
+      return row;
+    })
+    .sort((a, b) => (b.relevance_score as number) - (a.relevance_score as number));
+
+  return {
+    id: 'fixture-response-id-placeholder',
+    results,
+    meta: { billed_units: { search_units: 1 } },
+  };
+}
+
+async function handleFakeVoyageRerank(
+  req: http.IncomingMessage,
+  body: Record<string, unknown>,
+  calls: FakeEdgeCall[],
+): Promise<unknown> {
+  requireBearer(req);
+  if (String(req.headers['x-fake-rerank-fail'] ?? '') === '1') {
+    throw new Rejection(503, 'fixture rerank failure injected');
+  }
+  const delayMs = parsePositiveHeader(req, 'x-fake-rerank-delay-ms');
+  if (delayMs > 0) await sleep(delayMs);
+
+  const model = assertFakeRerankModel(body.model);
+  const query = typeof body.query === 'string' ? body.query : '';
+  if (!query) throw new Rejection(400, 'query must be a string');
+  const documents = parseRerankDocuments(body.documents);
+  calls.push({ method: 'POST', path: '/v1/rerank', model });
+
+  const scores = fakeRerankScores(query, documents, {});
+  const data = scores
+    .map((relevance_score, index) => ({ relevance_score, index }))
+    .sort((a, b) => b.relevance_score - a.relevance_score);
+
+  return {
+    object: 'list',
+    data,
+    model,
+    usage: { total_tokens: rerankUsageTokens(query, documents) },
+  };
 }
 
 function toVectorText(value: unknown, argName: string): string {
@@ -654,6 +788,12 @@ export async function startFakeEdge(options: FakeEdgeOptions): Promise<FakeEdge>
         }
       } else if (pathname.startsWith('/storage/v1/')) {
         throw new Rejection(404, `unsupported path: ${pathname}`);
+      } else if (pathname === '/v2/rerank') {
+        if (method !== 'POST') throw new Rejection(405, `unsupported method ${method} for ${pathname}`);
+        send(res, 200, await handleFakeCohereRerank(req, parseJsonObject(await readBody(req)), calls));
+      } else if (pathname === '/v1/rerank') {
+        if (method !== 'POST') throw new Rejection(405, `unsupported method ${method} for ${pathname}`);
+        send(res, 200, await handleFakeVoyageRerank(req, parseJsonObject(await readBody(req)), calls));
       } else if (pathname === '/v1/embeddings') {
         if (method !== 'POST') throw new Rejection(405, `unsupported method ${method} for ${pathname}`);
         const { payload } = handlers.embeddings(parseJsonObject(await readBody(req)));
@@ -722,6 +862,9 @@ export function fixtureProcessEnv(edgeUrl: string, options?: { vendorEmbeddingRo
     SUPABASE_SERVICE_ROLE_KEY: 'fixture-service-role-key-placeholder',
     VOYAGE_API_KEY: 'voyage-fixture-placeholder-key-00000000',
     DEEPINFRA_API_KEY: 'deepinfra-fixture-placeholder-key-00',
+    COHERE_BASE_URL: edgeUrl.replace(/\/+$/, ''),
+    COHERE_API_KEY: 'cohere-fixture-placeholder-key-00000000',
+    VOYAGE_BASE_URL: `${edgeUrl.replace(/\/+$/, '')}/v1`,
   };
   if (options?.vendorEmbeddingRoutes) {
     env.VOYAGE_BASE_URL = `${edgeUrl}/voyage/v1`;
