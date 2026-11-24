@@ -60,13 +60,17 @@ interface GoogleDriveFile {
     webViewLink?: string;
 }
 
+/** Most listing pages one run reads; a folder with more than this many pages is treated as cut short. */
+const MAX_LISTING_PAGES = 200;
+
 /**
- * Fetch files from Google Drive using proxy API
+ * Fetch every file of a Google Drive folder through the proxy API, following nextPageToken. `complete` is false when a later page failed
+ * or the page limit was reached: the list is then a prefix of the folder and must not be used to decide that a file is gone.
  */
 async function fetchGoogleDriveFiles(
     connectionId: string,
     folderId?: string
-): Promise<GoogleDriveFile[]> {
+): Promise<{ files: GoogleDriveFile[]; complete: boolean }> {
     const nango = getNango();
 
     // Build query - get files from specific folder or root
@@ -75,26 +79,35 @@ async function fetchGoogleDriveFiles(
         query += ` and '${folderId}' in parents`;
     }
 
-    try {
-        const response = await nango.proxy({
-            providerConfigKey: 'google-drive',
-            connectionId: connectionId,
-            method: 'GET',
-            endpoint: '/drive/v3/files',
-            params: {
-                q: query,
-                pageSize: MAX_FILES_PER_SYNC.toString(),
-                fields: 'files(id,name,mimeType,modifiedTime,size,parents,webViewLink)',
-                orderBy: 'modifiedTime desc',
-            },
-        });
-
-        const data = response.data as { files?: GoogleDriveFile[] };
-        return data.files || [];
-    } catch (error) {
-        logger.error('Nango', 'Failed to fetch Google Drive files', error);
-        throw error;
+    const files: GoogleDriveFile[] = [];
+    let pageToken: string | undefined;
+    for (let page = 0; page < MAX_LISTING_PAGES; page++) {
+        try {
+            const response = await nango.proxy({
+                providerConfigKey: 'google-drive',
+                connectionId: connectionId,
+                method: 'GET',
+                endpoint: '/drive/v3/files',
+                params: {
+                    q: query,
+                    pageSize: MAX_FILES_PER_SYNC.toString(),
+                    fields: 'nextPageToken,files(id,name,mimeType,modifiedTime,size,parents,webViewLink)',
+                    orderBy: 'modifiedTime desc',
+                    ...(pageToken ? { pageToken } : {}),
+                },
+            });
+            const data = response.data as { files?: GoogleDriveFile[]; nextPageToken?: string };
+            files.push(...(data.files || []));
+            if (!data.nextPageToken) return { files, complete: true };
+            pageToken = data.nextPageToken;
+        } catch (error) {
+            logger.error('Nango', 'Failed to fetch Google Drive files', error);
+            if (page === 0) throw error;
+            return { files, complete: false };
+        }
     }
+    logger.error('Nango', `Google Drive listing stopped after ${MAX_LISTING_PAGES} pages`);
+    return { files, complete: false };
 }
 
 function orphanUsesSoftDelete(): boolean {
@@ -323,8 +336,8 @@ async function syncGoogleDriveDocuments(
     supabaseAdmin: ReturnType<typeof getSupabaseAdmin>,
     folderId?: string | null,
     skipOrphanDeletion: boolean = false
-): Promise<SyncStats & { fileIds?: string[] }> {
-    const stats: SyncStats & { fileIds?: string[] } = { processed: 0, failed: 0, skipped: 0, deleted: 0 };
+): Promise<SyncStats & { fileIds?: string[]; listingComplete?: boolean }> {
+    const stats: SyncStats & { fileIds?: string[]; listingComplete?: boolean } = { processed: 0, failed: 0, skipped: 0, deleted: 0 };
 
     if (!supabaseAdmin) {
         throw new Error('Supabase admin client not available');
@@ -337,25 +350,33 @@ async function syncGoogleDriveDocuments(
 
     try {
         // Fetch files from the selected Google Drive folder
-        const files = await fetchGoogleDriveFiles(connectionId, folderId);
-        logger.debug('Nango', `Found ${files.length} files in Google Drive folder ${folderId}`);
+        const listing = await fetchGoogleDriveFiles(connectionId, folderId);
+        stats.listingComplete = listing.complete;
+        logger.debug('Nango', `Found ${listing.files.length} files in Google Drive folder ${folderId}`);
+
+        // Deletion detection sees every listed file; the files that are synced stay the first page, as before pagination.
+        const files = listing.files.slice(0, MAX_FILES_PER_SYNC);
 
         // Build set of current file IDs for deletion detection
-        const currentFileIds = new Set(files.map(f => f.id));
+        const currentFileIds = new Set(listing.files.map(f => f.id));
 
         // Delete documents that no longer exist in Google Drive
         // This handles the case where user deleted files from Google Drive
         // Skip if called from multi-folder mode (will be done once at the end)
         if (!skipOrphanDeletion) {
-            stats.deleted = await deleteOrphanedDocuments(
-                connectionId,
-                userId,
-                currentFileIds,
-                supabaseAdmin
-            );
+            if (listing.complete) {
+                stats.deleted = await deleteOrphanedDocuments(
+                    connectionId,
+                    userId,
+                    currentFileIds,
+                    supabaseAdmin
+                );
+            } else {
+                logger.error('Nango', `Orphan deletion skipped: the listing of folder ${folderId} is incomplete`);
+            }
         } else {
             // Return file IDs for multi-folder mode to aggregate
-            stats.fileIds = files.map(f => f.id);
+            stats.fileIds = listing.files.map(f => f.id);
         }
 
         // Filter to supported file types
@@ -1163,6 +1184,7 @@ export async function syncDocumentsForConnection(
                 logger.debug('Nango', `Syncing ${fileIds.length} Google Drive folders`);
                 const combinedStats: SyncStats = { processed: 0, failed: 0, skipped: 0, deleted: 0 };
                 const allFileIds: string[] = [];
+                let listingsComplete = true;
 
                 for (const folderIdItem of fileIds) {
                     try {
@@ -1175,15 +1197,22 @@ export async function syncDocumentsForConnection(
                         if (folderStats.fileIds) {
                             allFileIds.push(...folderStats.fileIds);
                         }
+                        if (folderStats.listingComplete === false) listingsComplete = false;
                     } catch (folderError) {
                         logger.error('Nango', `Failed to sync Google Drive folder ${folderIdItem}`, folderError);
                         combinedStats.failed++;
+                        listingsComplete = false;
                     }
                 }
 
-                // Now do orphan deletion once with ALL file IDs from ALL folders
-                const allFileIdsSet = new Set(allFileIds);
-                combinedStats.deleted = await deleteOrphanedDocuments(connectionId, userId, allFileIdsSet, supabaseAdmin);
+                // Now do orphan deletion once with ALL file IDs from ALL folders, and only when every folder was listed to the end:
+                // the files of a folder that failed or was cut short are not in the set and would be deleted as orphans.
+                if (listingsComplete) {
+                    const allFileIdsSet = new Set(allFileIds);
+                    combinedStats.deleted = await deleteOrphanedDocuments(connectionId, userId, allFileIdsSet, supabaseAdmin);
+                } else {
+                    logger.error('Nango', 'Orphan deletion skipped: a Google Drive folder listing was incomplete');
+                }
 
                 logger.debug('Nango', `Multi-folder Google Drive sync complete: ${combinedStats.processed} processed, ${combinedStats.failed} failed, ${combinedStats.skipped} skipped`);
                 return combinedStats;
