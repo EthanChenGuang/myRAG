@@ -89,12 +89,20 @@ interface SearchEnv {
   profileRequireActive: boolean;
 }
 
+function evalRpcThreshold(threshold: number, profileRequireActive: boolean): number {
+  if (profileRequireActive) return threshold;
+  const override = process.env.RAG_EVAL_RETRIEVAL_MIN_SIMILARITY;
+  if (override === undefined || override.trim() === '') return threshold;
+  const parsed = Number(override);
+  return Number.isFinite(parsed) ? parsed : threshold;
+}
+
 function search(env: SearchEnv, vector: number[], matchCount: number, threshold: number): Promise<RawChunk[]> {
   return searchByEmbedding(
     env.scope,
     { vector, profile: env.profile },
     matchCount,
-    threshold,
+    evalRpcThreshold(threshold, env.profileRequireActive),
     { client: env.client, signal: env.signal, requireActive: env.profileRequireActive },
   );
 }

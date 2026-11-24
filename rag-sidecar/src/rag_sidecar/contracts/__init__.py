@@ -39,6 +39,15 @@ from rag_sidecar.contracts.ingest import (
 )
 from rag_sidecar.contracts.judge import JudgeConfig, JudgeItemScore, JudgeReport, OnlineJudgeConfig
 from rag_sidecar.contracts.latency import LatencyBudgets, ProfileBudget, StageLatency
+from rag_sidecar.contracts.profiles import (
+    ActivationEvidence,
+    ComparisonSliceBlock,
+    EmbeddingProfileComparison,
+    PreMigrationEvidence,
+    PreMigrationSlice,
+    ProfileComparisonEntry,
+    ProfileMetricBlocks,
+)
 from rag_sidecar.contracts.review import ReviewQueueItem
 from rag_sidecar.contracts.sidecar import SidecarError, SidecarHealth, SidecarInfo, SidecarReady
 from rag_sidecar.contracts.report import (
@@ -85,6 +94,13 @@ __all__ = [
     "ParserSettings",
     "ProcessingProfile",
     "ProcessingProfileSet",
+    "ActivationEvidence",
+    "ComparisonSliceBlock",
+    "EmbeddingProfileComparison",
+    "PreMigrationEvidence",
+    "PreMigrationSlice",
+    "ProfileComparisonEntry",
+    "ProfileMetricBlocks",
     "LatencyBudgets",
     "ProfileBudget",
     "StageLatency",

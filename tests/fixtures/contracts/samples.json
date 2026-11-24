@@ -1,5 +1,16 @@
 {
   "samples": {
+    "ActivationEvidence": {
+      "backfill_run_id": "01234567-0123-4012-8012-0123456789ab",
+      "baseline_profile": "openai-3-small-1536",
+      "gate_passed": true,
+      "pre_migration": {
+        "n": 2,
+        "passed": true
+      },
+      "recorded_at": "2026-11-24T12:00:00.000Z",
+      "target_profile": "voyage-4-large-2048"
+    },
     "Baseline": {
       "corpus_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       "deployment_mode": "single-tenant",
@@ -164,6 +175,520 @@
           "question": "How many leave days do employees get?"
         }
       ]
+    },
+    "EmbeddingProfileComparison": {
+      "active_profile": "openai-3-small-1536",
+      "backfill_run_id": "01234567-0123-4012-8012-0123456789ab",
+      "baseline_profile": "openai-3-small-1536",
+      "gate_passed": true,
+      "notes": [
+        "Fixture sample only."
+      ],
+      "pre_migration": {
+        "mrr": {
+          "n": 2,
+          "value": 0.25
+        },
+        "n": 2,
+        "passed": true,
+        "recall_at_10": {
+          "n": 2,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 0.5
+        }
+      },
+      "profiles": [
+        {
+          "default_candidate": null,
+          "default_candidate_note": null,
+          "metrics": {
+            "candidates": {
+              "by_category": {
+                "cross_lingual": {
+                  "correct_refusal_rate": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "false_refusal_rate": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "mrr": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "recall_at_10": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "recall_at_5": {
+                    "n": 10,
+                    "value": 0.5
+                  }
+                },
+                "general": {
+                  "correct_refusal_rate": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "false_refusal_rate": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "mrr": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "recall_at_10": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "recall_at_5": {
+                    "n": 10,
+                    "value": 0.5
+                  }
+                }
+              },
+              "by_language": {
+                "en": {
+                  "correct_refusal_rate": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "false_refusal_rate": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "mrr": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "recall_at_10": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "recall_at_5": {
+                    "n": 10,
+                    "value": 0.5
+                  }
+                }
+              },
+              "by_language_pair": {
+                "en->zh": {
+                  "correct_refusal_rate": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "false_refusal_rate": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "mrr": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "recall_at_10": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "recall_at_5": {
+                    "n": 10,
+                    "value": 0.5
+                  }
+                }
+              },
+              "overall": {
+                "correct_refusal_rate": {
+                  "n": 10,
+                  "value": 0.5
+                },
+                "false_refusal_rate": {
+                  "n": 10,
+                  "value": 0.5
+                },
+                "mrr": {
+                  "n": 10,
+                  "value": 0.5
+                },
+                "recall_at_10": {
+                  "n": 10,
+                  "value": 0.5
+                },
+                "recall_at_5": {
+                  "n": 10,
+                  "value": 0.5
+                }
+              }
+            },
+            "gated": {
+              "by_category": {
+                "cross_lingual": {
+                  "correct_refusal_rate": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "false_refusal_rate": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "mrr": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "recall_at_10": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "recall_at_5": {
+                    "n": 10,
+                    "value": 0.5
+                  }
+                },
+                "general": {
+                  "correct_refusal_rate": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "false_refusal_rate": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "mrr": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "recall_at_10": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "recall_at_5": {
+                    "n": 10,
+                    "value": 0.5
+                  }
+                }
+              },
+              "by_language": {
+                "en": {
+                  "correct_refusal_rate": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "false_refusal_rate": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "mrr": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "recall_at_10": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "recall_at_5": {
+                    "n": 10,
+                    "value": 0.5
+                  }
+                }
+              },
+              "by_language_pair": {
+                "en->zh": {
+                  "correct_refusal_rate": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "false_refusal_rate": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "mrr": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "recall_at_10": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "recall_at_5": {
+                    "n": 10,
+                    "value": 0.5
+                  }
+                }
+              },
+              "overall": {
+                "correct_refusal_rate": {
+                  "n": 10,
+                  "value": 0.5
+                },
+                "false_refusal_rate": {
+                  "n": 10,
+                  "value": 0.5
+                },
+                "mrr": {
+                  "n": 10,
+                  "value": 0.5
+                },
+                "recall_at_10": {
+                  "n": 10,
+                  "value": 0.5
+                },
+                "recall_at_5": {
+                  "n": 10,
+                  "value": 0.5
+                }
+              }
+            }
+          },
+          "profile_id": "openai-3-small-1536"
+        },
+        {
+          "default_candidate": false,
+          "default_candidate_note": "does not beat baseline on cross_lingual",
+          "metrics": {
+            "candidates": {
+              "by_category": {
+                "cross_lingual": {
+                  "correct_refusal_rate": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "false_refusal_rate": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "mrr": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "recall_at_10": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "recall_at_5": {
+                    "n": 10,
+                    "value": 0.5
+                  }
+                },
+                "general": {
+                  "correct_refusal_rate": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "false_refusal_rate": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "mrr": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "recall_at_10": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "recall_at_5": {
+                    "n": 10,
+                    "value": 0.5
+                  }
+                }
+              },
+              "by_language": {
+                "en": {
+                  "correct_refusal_rate": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "false_refusal_rate": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "mrr": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "recall_at_10": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "recall_at_5": {
+                    "n": 10,
+                    "value": 0.5
+                  }
+                }
+              },
+              "by_language_pair": {
+                "en->zh": {
+                  "correct_refusal_rate": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "false_refusal_rate": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "mrr": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "recall_at_10": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "recall_at_5": {
+                    "n": 10,
+                    "value": 0.5
+                  }
+                }
+              },
+              "overall": {
+                "correct_refusal_rate": {
+                  "n": 10,
+                  "value": 0.5
+                },
+                "false_refusal_rate": {
+                  "n": 10,
+                  "value": 0.5
+                },
+                "mrr": {
+                  "n": 10,
+                  "value": 0.5
+                },
+                "recall_at_10": {
+                  "n": 10,
+                  "value": 0.5
+                },
+                "recall_at_5": {
+                  "n": 10,
+                  "value": 0.5
+                }
+              }
+            },
+            "gated": {
+              "by_category": {
+                "cross_lingual": {
+                  "correct_refusal_rate": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "false_refusal_rate": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "mrr": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "recall_at_10": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "recall_at_5": {
+                    "n": 10,
+                    "value": 0.5
+                  }
+                },
+                "general": {
+                  "correct_refusal_rate": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "false_refusal_rate": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "mrr": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "recall_at_10": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "recall_at_5": {
+                    "n": 10,
+                    "value": 0.5
+                  }
+                }
+              },
+              "by_language": {
+                "en": {
+                  "correct_refusal_rate": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "false_refusal_rate": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "mrr": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "recall_at_10": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "recall_at_5": {
+                    "n": 10,
+                    "value": 0.5
+                  }
+                }
+              },
+              "by_language_pair": {
+                "en->zh": {
+                  "correct_refusal_rate": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "false_refusal_rate": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "mrr": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "recall_at_10": {
+                    "n": 10,
+                    "value": 0.5
+                  },
+                  "recall_at_5": {
+                    "n": 10,
+                    "value": 0.5
+                  }
+                }
+              },
+              "overall": {
+                "correct_refusal_rate": {
+                  "n": 10,
+                  "value": 0.5
+                },
+                "false_refusal_rate": {
+                  "n": 10,
+                  "value": 0.5
+                },
+                "mrr": {
+                  "n": 10,
+                  "value": 0.5
+                },
+                "recall_at_10": {
+                  "n": 10,
+                  "value": 0.5
+                },
+                "recall_at_5": {
+                  "n": 10,
+                  "value": 0.5
+                }
+              }
+            }
+          },
+          "profile_id": "voyage-4-large-2048"
+        }
+      ],
+      "schema_version": 1
     },
     "EvalReport": {
       "by_category": {

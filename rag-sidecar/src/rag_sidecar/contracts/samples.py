@@ -27,6 +27,13 @@ from rag_sidecar.contracts import (
     JudgeItemScore,
     JudgeReport,
     LatencyBudgets,
+    ActivationEvidence,
+    ComparisonSliceBlock,
+    EmbeddingProfileComparison,
+    PreMigrationEvidence,
+    PreMigrationSlice,
+    ProfileComparisonEntry,
+    ProfileMetricBlocks,
     MetricValue,
     NoiseConfig,
     OnlineJudgeConfig,
@@ -480,6 +487,54 @@ def _run_manifest() -> RunManifest:
     )
 
 
+def _comparison_block() -> ComparisonSliceBlock:
+    metrics = _slice_metrics()
+    return ComparisonSliceBlock(
+        overall=metrics,
+        by_language={"en": metrics},
+        by_category={"general": metrics, "cross_lingual": metrics},
+        by_language_pair={"en->zh": metrics},
+    )
+
+
+def _profile_comparison() -> EmbeddingProfileComparison:
+    profile_metrics = ProfileMetricBlocks(gated=_comparison_block(), candidates=_comparison_block())
+    return EmbeddingProfileComparison(
+        baseline_profile="openai-3-small-1536",
+        active_profile="openai-3-small-1536",
+        profiles=[
+            ProfileComparisonEntry(profile_id="openai-3-small-1536", metrics=profile_metrics),
+            ProfileComparisonEntry(
+                profile_id="voyage-4-large-2048",
+                metrics=profile_metrics,
+                default_candidate=False,
+                default_candidate_note="does not beat baseline on cross_lingual",
+            ),
+        ],
+        pre_migration=PreMigrationSlice(
+            n=2,
+            passed=True,
+            recall_at_5=MetricValue(value=0.5, n=2),
+            recall_at_10=MetricValue(value=0.5, n=2),
+            mrr=MetricValue(value=0.25, n=2),
+        ),
+        gate_passed=True,
+        backfill_run_id="01234567-0123-4012-8012-0123456789ab",
+        notes=["Fixture sample only."],
+    )
+
+
+def _activation_evidence() -> ActivationEvidence:
+    return ActivationEvidence(
+        target_profile="voyage-4-large-2048",
+        baseline_profile="openai-3-small-1536",
+        gate_passed=True,
+        pre_migration=PreMigrationEvidence(passed=True, n=2),
+        backfill_run_id="01234567-0123-4012-8012-0123456789ab",
+        recorded_at="2026-11-24T12:00:00.000Z",
+    )
+
+
 def _models() -> dict[str, Any]:
     return {
         "ConversationTurn": ConversationTurn(role="user", content="Tell me about leave."),
@@ -602,6 +657,8 @@ def _models() -> dict[str, Any]:
         "SidecarReady": SidecarReady(status="not_ready", reason="warming up"),
         "SidecarInfo": SidecarInfo(service="rag-sidecar", version="0.0.0", contracts_schema_version=1),
         "SidecarError": SidecarError(error="synthetic error"),
+        "EmbeddingProfileComparison": _profile_comparison(),
+        "ActivationEvidence": _activation_evidence(),
     }
 
 

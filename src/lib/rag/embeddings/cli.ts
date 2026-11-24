@@ -9,6 +9,7 @@ export type ParsedEmbeddingArgs =
   | { ok: true; command: 'status' }
   | { ok: true; command: 'activate'; profileId: string }
   | { ok: true; command: 'rollback' }
+  | { ok: true; command: 'record-evidence'; profileId: string; evidencePath: string }
   | { ok: true; command: 'set-status'; profileId: string; status: SettableStatus }
   | { ok: false; error: string };
 
@@ -24,6 +25,7 @@ export const USAGE = [
   'usage: npm run rag:embedding -- status',
   '       npm run rag:embedding -- activate <profileId>',
   '       npm run rag:embedding -- rollback',
+  '       npm run rag:embedding -- record-evidence <comparison.json> --target <profileId>',
   '       npm run rag:embedding -- set-status <profileId> available|backfilling|retired',
 ].join('\n');
 
@@ -36,6 +38,15 @@ export function parseEmbeddingArgs(argv: string[]): ParsedEmbeddingArgs {
       return rest.length === 0 ? { ok: true, command: 'status' } : { ok: false, error: 'status takes no arguments' };
     case 'rollback':
       return rest.length === 0 ? { ok: true, command: 'rollback' } : { ok: false, error: 'rollback takes no arguments' };
+    case 'record-evidence': {
+      const targetFlag = rest.indexOf('--target');
+      const evidencePath = rest[0];
+      const profileId = targetFlag >= 0 ? profileArgument(rest[targetFlag + 1]) : null;
+      if (targetFlag < 0 || rest.length < 3 || profileId === null || !evidencePath) {
+        return { ok: false, error: 'record-evidence needs <comparison.json> --target <profileId>' };
+      }
+      return { ok: true, command: 'record-evidence', profileId, evidencePath };
+    }
     case 'activate': {
       const profileId = profileArgument(rest[0]);
       if (rest.length !== 1 || profileId === null) return { ok: false, error: 'activate needs one profile id' };
@@ -114,6 +125,36 @@ export async function main(argv: string[] = process.argv.slice(2), io: CliIo = c
         );
       }
       if (status.switch === 'off') io.out(`[Embedding] warning: ${SWITCH_OFF_WARNING}`);
+      return 0;
+    }
+
+    if (parsed.command === 'record-evidence') {
+      const { readFileSync } = await import('node:fs');
+      const { ActivationEvidenceSchema, EmbeddingProfileComparisonSchema } = await import('@/lib/rag-eval/contracts.generated');
+      const raw = JSON.parse(readFileSync(parsed.evidencePath, 'utf8')) as unknown;
+      const comparison = EmbeddingProfileComparisonSchema.safeParse(raw);
+      const evidenceInput = comparison.success
+        ? {
+            target_profile: parsed.profileId,
+            baseline_profile: comparison.data.active_profile,
+            gate_passed: comparison.data.gate_passed,
+            pre_migration: { passed: comparison.data.pre_migration.passed, n: comparison.data.pre_migration.n },
+            backfill_run_id: comparison.data.backfill_run_id,
+            recorded_at: new Date().toISOString(),
+          }
+        : raw;
+      const evidence = ActivationEvidenceSchema.safeParse(evidenceInput);
+      if (!evidence.success) {
+        io.err(`[Embedding] comparison or evidence JSON is invalid: ${evidence.error.issues.map((i) => i.message).join('; ')}`);
+        return 2;
+      }
+      if (evidence.data.target_profile !== parsed.profileId) {
+        io.err('[Embedding] --target must match evidence.target_profile');
+        return 2;
+      }
+      const result = await ops.recordEmbeddingEvalEvidence(parsed.profileId, evidence.data, cliActor());
+      if (!result.ok) return refused(result);
+      io.out(`[Embedding] recorded eval evidence on ${result.profileId}`);
       return 0;
     }
 

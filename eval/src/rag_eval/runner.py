@@ -51,7 +51,7 @@ def _score(args: argparse.Namespace) -> int:
             print(f"  {problem}", file=sys.stderr)
         return 2
 
-    results = score_items(traces, golden)
+    results = score_items(traces, golden, rank_field=args.rank_source)
     report = build_report(manifest, results, golden, traces)
     write_report(report, resolve_cli_path(args.out))
     overall = report.overall
@@ -80,6 +80,12 @@ def main(argv: list[str] | None = None) -> int:
     score.add_argument("--golden", required=True, type=Path)
     score.add_argument("--manifest", required=True, type=Path)
     score.add_argument("--out", required=True, type=Path)
+    score.add_argument(
+        "--rank-source",
+        choices=("kept", "candidates"),
+        default="kept",
+        help="rank list used for recall (candidates = threshold-free RPC list)",
+    )
     score.set_defaults(handler=_score)
     args = parser.parse_args(argv)
     return args.handler(args)

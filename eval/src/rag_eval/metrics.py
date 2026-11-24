@@ -1,4 +1,5 @@
 from collections.abc import Callable, Iterable
+from typing import Literal
 
 from rag_sidecar.contracts.eval_run import RagTrace
 from rag_sidecar.contracts.golden import GoldenItem
@@ -18,19 +19,20 @@ def _pair_members(results: Iterable[ItemResult]) -> list[ItemResult]:
     return [r for r in results if r.category == CROSS_LINGUAL and r.evidence_language is not None]
 
 
-def _first_rank_per_span(trace: RagTrace, item: GoldenItem) -> list[int | None]:
+def _first_rank_per_span(trace: RagTrace, item: GoldenItem, *, ranked) -> list[int | None]:
     ranks: list[int | None] = []
     for span in item.gold_evidence:
         rank = None
-        for position, chunk in enumerate(trace.kept, start=1):
-            if chunk_matches_span(chunk.document_name, chunk.content, span):
+        for position, chunk in enumerate(ranked, start=1):
+            document_name = getattr(chunk, "document_name", None) or ""
+            if chunk_matches_span(document_name, chunk.content, span):
                 rank = position
                 break
         ranks.append(rank)
     return ranks
 
 
-def score_items(traces: list[RagTrace], golden: list[GoldenItem]) -> list[ItemResult]:
+def score_items(traces: list[RagTrace], golden: list[GoldenItem], *, rank_field: Literal["kept", "candidates"] = "kept") -> list[ItemResult]:
     by_id: dict[str, RagTrace] = {}
     for trace in traces:
         if trace.item_id is None:
@@ -44,7 +46,8 @@ def score_items(traces: list[RagTrace], golden: list[GoldenItem]) -> list[ItemRe
         trace = by_id.get(item.id)
         if trace is None:
             raise ValueError(f"no trace for golden item {item.id!r}")
-        ranks = [] if trace.refused else [r for r in _first_rank_per_span(trace, item) if r is not None]
+        ranked = trace.kept if rank_field == "kept" else trace.candidates
+        ranks = [] if trace.refused else [r for r in _first_rank_per_span(trace, item, ranked=ranked) if r is not None]
         results.append(
             ItemResult(
                 item_id=item.id,
