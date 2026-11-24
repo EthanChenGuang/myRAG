@@ -210,6 +210,18 @@ describe('registry', () => {
     expect(provider.maxInputTokens).toBeGreaterThan(0);
   });
 
+  it('registers the voyage and qwen3 providers with their supported dims', () => {
+    const voyage = getEmbeddingProvider('voyage');
+    expect(voyage.id).toBe('voyage');
+    expect(voyage.model).toBe('voyage-4-large');
+    expect(voyage.supportedDims).toEqual([256, 512, 1024, 2048]);
+    const qwen = getEmbeddingProvider('qwen3');
+    expect(qwen.id).toBe('qwen3');
+    expect(qwen.model).toBe('Qwen/Qwen3-Embedding-8B');
+    expect(qwen.supportedDims).toContain(2048);
+    expect(canonicalModelId(qwen.model)).toBe(qwen.model);
+  });
+
   it('throws on an unknown provider id without echoing secrets', () => {
     expect(() => getEmbeddingProvider('cohere')).toThrow(/\[Embedding Profile\] unknown embedding provider/);
   });
