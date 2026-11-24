@@ -178,11 +178,11 @@ export function deriveStatus(records: StageRecord[], survivingCount: number): Re
   if (records.some((record) => record.status === 'error' || record.status === 'timeout' || record.status === 'aborted')) {
     return 'error';
   }
-  if (records.some((record) => record.status === 'skipped')) return 'degraded';
+  if (records.some((record) => record.status === 'skipped' || record.status === 'degraded')) return 'degraded';
   return survivingCount === 0 ? 'empty' : 'ok';
 }
 
-function stageSpec(
+export function stageSpec(
   config: RagConfig,
   profile: Profile,
   name: StageName,
@@ -206,7 +206,7 @@ function stageSpec(
   return { name, enabled, timeoutMs, onFail };
 }
 
-function requireValue<T>(outcome: StageOutcome<T>, stage: string): T {
+export function requireValue<T>(outcome: StageOutcome<T>, stage: string): T {
   if (outcome.skipped) throw new StageError(stage, 'failed');
   return outcome.value;
 }
@@ -231,7 +231,7 @@ function survivorCount(assembly: AssembleOutput<Candidate>): number {
   return assembly.usedDocuments.length + assembly.relevantChunks.length;
 }
 
-function failure(
+export function failure(
   collector: TraceCollector,
   status: RetrievalResult['status'],
   reason: string,
@@ -255,7 +255,7 @@ function failure(
   };
 }
 
-function assembleDisabledStatus(
+export function assembleDisabledStatus(
   records: StageRecord[],
   status: RetrievalResult['status'],
   reachedAssemble: number,
@@ -265,7 +265,7 @@ function assembleDisabledStatus(
   return records.some((record) => record.name === 'assemble' && record.status === 'disabled') ? 'degraded' : status;
 }
 
-function degradedReason(records: StageRecord[]): string {
+export function degradedReason(records: StageRecord[]): string {
   const skipped = records.find((record) => record.status === 'skipped');
   if (skipped) return `${skipped.name}_${skipped.reason ?? 'skipped'}`;
   return records.some((record) => record.name === 'assemble' && record.status === 'disabled') ? 'assemble_disabled' : 'degraded';
@@ -491,7 +491,20 @@ export async function runRetrieval(input: RunRetrievalInput): Promise<RetrievalR
     input.trace ??
     createTraceCollector({ profile: input.profile, tenantKey: input.scope ? scopeKey(input.scope) : 'none' });
 
-  const result = input.profile === 'voice' ? await runVoicePipeline(input, collector) : await runPipeline(input, collector);
+  const deps = getRagDeps();
+  const config = loadRagConfig(deps.ragEnv());
+  const useV2 =
+    config.pipeline === 'v2' &&
+    !input.options?.generalOverview &&
+    input.profile !== 'voice' &&
+    input.profile !== 'media' &&
+    (['chat', 'embed', 'eval'] as const).includes(input.profile as 'chat' | 'embed' | 'eval');
+
+  const result = input.profile === 'voice'
+    ? await runVoicePipeline(input, collector)
+    : useV2
+      ? await (await import('./v2/pipeline')).runV2Pipeline(input, collector)
+      : await runPipeline(input, collector);
   if (ownsTrace) finishTrace(collector, result, { query: input.query });
   return result;
 }
