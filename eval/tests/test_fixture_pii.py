@@ -35,10 +35,27 @@ def email_violations(text: str) -> list[str]:
     return [m.group(0) for m in EMAIL_RE.finditer(text) if m.group(1).lower() not in ALLOWED_EMAIL_DOMAINS]
 
 
+INGEST_FIXTURES = FIXTURES / "ingest"
+INGEST_FILE_COUNT = 30
+
+
+def _ingest_files():
+    """Text of the typed ingestion fixtures: the specs every PDF is built from, the Markdown for the text path,
+    the manifest and the recorded parse results and Docling JSON (the PDFs and pictures are binary renderings of these)."""
+    return [
+        INGEST_FIXTURES / "specs.py",
+        *sorted((INGEST_FIXTURES / "text").glob("*.md")),
+        INGEST_FIXTURES / "manifest.json",
+        *sorted((INGEST_FIXTURES / "recorded").glob("*.json")),
+    ]
+
+
 def _fixture_files():
-    files = sorted((FIXTURES / "corpus").rglob("*.md")) + [FIXTURES / "golden.jsonl", FIXTURES / "split-manifest.json"]
-    assert len(files) == 15
-    return files
+    corpus = sorted((FIXTURES / "corpus").rglob("*.md")) + [FIXTURES / "golden.jsonl", FIXTURES / "split-manifest.json"]
+    assert len(corpus) == 15
+    ingest = _ingest_files()
+    assert len(ingest) == INGEST_FILE_COUNT
+    return corpus + ingest
 
 
 def test_fixture_text_has_only_reserved_phone_numbers():

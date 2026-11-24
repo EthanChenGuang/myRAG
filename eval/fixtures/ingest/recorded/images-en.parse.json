@@ -1,0 +1,66 @@
+{
+  "artifacts": [
+    "docling.json",
+    "picture-1.png",
+    "picture-2.png"
+  ],
+  "chunks": [
+    {
+      "contextualized_text": "Example Sensor Hub Product Sheet\nThe Example Sensor Hub is a fictional device used to test document parsing.\nFigure 1. Front view of the example device.",
+      "headings": [
+        "Example Sensor Hub Product Sheet"
+      ],
+      "is_table": false,
+      "pages": [
+        1
+      ],
+      "table_header": null,
+      "text": "The Example Sensor Hub is a fictional device used to test document parsing.\nFigure 1. Front view of the example device."
+    },
+    {
+      "contextualized_text": "Example Sensor Hub Product Sheet\nRear panel\nThe rear panel carries two connectors and a status light.\nFigure 2. Rear view of the example device.",
+      "headings": [
+        "Example Sensor Hub Product Sheet",
+        "Rear panel"
+      ],
+      "is_table": false,
+      "pages": [
+        2
+      ],
+      "table_header": null,
+      "text": "The rear panel carries two connectors and a status light.\nFigure 2. Rear view of the example device."
+    }
+  ],
+  "language": "en",
+  "markdown": "## Example Sensor Hub Product Sheet\n\nThe Example Sensor Hub is a fictional device used to test document parsing.\n\n<!-- image -->\n\nFigure 1. Front view of the example device.\n\n### Rear panel\n\nThe rear panel carries two connectors and a status light.\n\n<!-- image -->\n\nFigure 2. Rear view of the example device.",
+  "page_count": 2,
+  "parser": "docling",
+  "parser_version": "docling-2.107.1",
+  "partial": false,
+  "pictures": [
+    {
+      "bbox": [
+        147.64,
+        117.5,
+        447.64,
+        317.5
+      ],
+      "image_ref": "picture-1.png",
+      "page": 1,
+      "page_area_share": 0.11972217769488384
+    },
+    {
+      "bbox": [
+        147.64,
+        117.5,
+        447.64,
+        317.5
+      ],
+      "image_ref": "picture-2.png",
+      "page": 2,
+      "page_area_share": 0.11972217769488384
+    }
+  ],
+  "text_layer_page_share": 1.0,
+  "warnings": []
+}
