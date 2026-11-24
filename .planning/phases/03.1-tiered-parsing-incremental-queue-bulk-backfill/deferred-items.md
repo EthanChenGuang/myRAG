@@ -33,3 +33,17 @@ Wiring belongs to a later plan (thread-side bridge or a detect step outside the 
 `body.children` still points at `#/texts/0..3`, so `DoclingDocument.load_from_json` raises (the `vlm/` recordings fail validation
 too). `RecordedRangeConverter` would crash on these pages under the fast preset; preflight never routes them there, so no current
 test hits it. The 03.1-42 tests use their own empty pages instead. Fix belongs to the recording script (03.1-13).
+
+## 5. Parse fixture data limits the parser scores (found by 03.1-44)
+
+`eval/reports/phase-03.1/parser-eval-details.json` shows three places where the fixture data, not a parser, lowers the scores:
+
+- `expected/mixed-routing.json` lists 2 headings, but the PDF and every recorded output have 10 (Section 2-6, Table block 7-8,
+  Embedded scan slip). `parse_specs.py` builds `facts["headings"]` for this fixture by hand and misses eight, so headings F1 for
+  a faithful output is 0.333.
+- The recorded outputs of `multi-column-en` page 2 hold only the heading; the two `ColumnParagraph` blocks are missing
+  (`ingest/record_parse_results.py` does not emit them), so structured text similarity is 0.377 and reading order 0.3.
+- Recorded premium markdown has no `#` headings and no pipe tables (`build_recorded.py` joins block texts), so premium headings F1
+  and table F1 (invoice) are 0.
+
+Fix in the fixture generator (03.1-13 files), then regenerate the recordings and rerun `python -m rag_eval.parser_eval`.
