@@ -6,6 +6,7 @@
 - Do not install or lock any new Python or npm package. If a task needs one, stop that task and report it (03-05 owns the Python installs and is waiting for user approval).
 - Gates in the worktree, all must pass before you return: `npx next typegen && npx tsc --noEmit -p tsconfig.json` (0 errors); `npx vitest run`; `node --import tsx --test tests/*.test.mts`; `node scripts/ci/check-rag-boundary.mjs`; `python3 scripts/ci/check-workflows.py`; `node scripts/check-config.mjs`; if you touched rag-sidecar: `(cd rag-sidecar && /root/.local/bin/uv run --frozen pytest -q)`. tests/rag/langfuse-pins.test.ts may ENOENT in a worktree — note it, the orchestrator reruns.
 - Write SUMMARY.md (03-NN-SUMMARY.md in the phase dir) and commit it last. Do not touch STATE.md, ROADMAP.md, REQUIREMENTS.md.
+- **Account switch / cold resume (Guang):** After **every task commit**, `git push -u origin exec/<plan-id>` so WIP is never only on the VM. If stopping mid-plan, commit WIP with message `wip(<plan>): …` and push before exiting.
 - Commit messages end with the attribution the executor session supplies, e.g.:
   Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
   Claude-Session: https://claude.ai/code/session_01SEn5g9gV3RHr18oaonxqof

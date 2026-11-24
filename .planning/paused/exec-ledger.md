@@ -2,6 +2,8 @@
 
 **Rule (Guang):** Keep **exactly 4 executors RUNNING** at all times; refill **in the same step as each merge** (batch `Task` spawns in one orchestrator message). At most one **executor** subagent per plan id. Parallelism is across **different** plans with **disjoint** `files_modified`. Review/verify agents are separate roles and may run in parallel with executors.
 
+**Account switch (Guang 2026-11-24):** Maintained cold-resume doc `.planning/NEXT-ACCOUNT-PROMPT.md` on trunk; update after every merge. Executors **push after each task commit**. `PAUSE-96` → pause protocol in that file.
+
 **Parallelism failure mode (2026-11-24):** Orchestrator handled completion notifications **one per turn** → only the latest `Task` was visible while 3 others stayed `RUNNING`; worktrees were **not ff’d** and **no `origin/exec/*` pushes** → looked like a single agent. Fix: verify `cursor-cloud` RUNNING count; batch refill; ff/rebase all `wt/*`; require push after each task commit.
 
 ## Remaining plans (execution queue)
@@ -106,6 +108,7 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | 04-19 | [bc-eafdad13](bc-eafdad13-4e57-5750-a00f-8bc029517ee2) **merged** | exec/04-19 — tracer 6 + vitest 18 |
 | 04-45 | [bc-32843230](bc-32843230-3c15-53cb-be49-93f84da0a3bb) **merged** | exec/04-45 — vitest 13 |
 | 03-48-sec-rpc | [bc-049b7ab0](bc-049b7ab0-c778-50b5-bce6-77842e48a55e) RUNNING | exec/03-48-sec-rpc |
+| 04-20 | [bc-36e7beb3](bc-36e7beb3-7655-51e7-964a-e1082fa083c3) RUNNING | exec/04-20 |
 
 ## Remaining plan inventory (file-overlap basis)
 
@@ -134,7 +137,6 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | Plan | Worktree ready | Notes |
 |------|----------------|-------|
 | **03-48-sec-rpc** | `wt/03-48-sec-rpc` | **RUNNING** (see Wave E) |
-| **03-48-setup-idempotent** | (create on spawn) | setup 42710 |
 | **03-48-setup-idempotent** | (create on spawn) | setup 42710 fix |
 
 **03-48 follow-ups (one executor per plan when a slot frees — do not duplicate running work):**

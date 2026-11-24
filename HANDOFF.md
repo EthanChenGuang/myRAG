@@ -47,6 +47,12 @@ Orchestrator applies this **fallback chain** per role. **Never use Grok** for an
 
 `model_overrides` in `.planning/config.json` pins **primary** targets when quota exists; orchestrator implements the fallback table above when Task/spawn fails on quota.
 
+## Account switch (96% usage)
+
+- **Cold resume:** `.planning/NEXT-ACCOUNT-PROMPT.md` — self-contained paste for a new Cursor account; updated after every trunk merge.
+- **Executors:** push `origin/exec/<plan>` after each task commit.
+- **`PAUSE-96`:** stop spawns → executor patches in `.planning/paused/patches/` → `/gsd-pause-work` → refresh NEXT-ACCOUNT-PROMPT + HANDOFF → push → stop.
+
 ## Parallelism (mandatory)
 
 **Keep exactly 4 executors RUNNING at all times; refill in the same step as each merge** (one orchestrator message: merge + tests + ledger + batch `Task` until 4 `RUNNING` + ff all `wt/*`). Confirm count with `cursor-cloud` when UI shows fewer. See `.planning/paused/exec-ledger.md` Wave E.

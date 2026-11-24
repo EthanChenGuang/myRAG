@@ -20,7 +20,8 @@ After each wave/merge, or when context feels ~60% full:
 - **Never** more than one executor on the same plan id.
 - **Before every spawn:** read `.planning/paused/exec-ledger.md` (plan → agent → status); confirm with `cursor-cloud` list (status `RUNNING`) when the UI count looks wrong.
 - **Merge refill (same turn):** On any merge to the integration branch, in **one assistant message** (batch): merge tests → ledger update → **all** missing `Task` spawns to restore **4** `RUNNING` → fast-forward every active `wt/*` worktree from trunk (rebase local WIP if ff fails). Do **not** end a turn with &lt;4 executors unless the ledger records **why** (fewer runnable plans).
-- **Visibility:** Executors must `git push -u origin exec/<plan>` after each task commit so parallel work is visible on GitHub; orchestrator reports all four bcIds in every status reply.
+- **Visibility:** Executors must `git push -u origin exec/<plan>` after **each task commit** (and WIP commits if pausing). Orchestrator updates `.planning/NEXT-ACCOUNT-PROMPT.md` after **every merge** and pushes with trunk; reports all four bcIds in status replies.
+- **Account switch (~96% usage):** On message `PAUSE-96`, follow Guang's pause protocol (patches, no half merges, `/gsd-pause-work`, refresh `NEXT-ACCOUNT-PROMPT.md`). See that file for cold-resume paste prompt.
 - **Retry** only after the previous agent for that plan is confirmed stopped (`IDLE`); log duplicates in the ledger.
 
 ## 3. Autonomy
