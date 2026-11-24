@@ -140,6 +140,8 @@ async function loadSyncManager(memory: ReturnType<typeof createMemoryDb>) {
       ingestScope.nangoOwnerScope({ ownerUserId: input.ownerUserId, deploymentMode: state.mode }),
     currentIngestConfig: () => ({ pipeline: state.pipeline }),
     scopeKey: scopeModule.scopeKey,
+    softDeleteLineage,
+    queueConfigFromProcessEnv: () => ({ ingestAsync: state.ingestAsync }),
   }));
 
   return import('@/lib/nango/sync-manager');
