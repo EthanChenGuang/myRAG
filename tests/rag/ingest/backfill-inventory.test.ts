@@ -34,6 +34,22 @@ vi.mock('node:crypto', async (importOriginal) => {
   return { ...actual, default: { ...actual, createHash }, createHash };
 });
 
+const fsFaults = vi.hoisted(() => ({ lstat: [] as string[], readdir: [] as string[], stat: [] as string[] }));
+
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  type Call = (...args: unknown[]) => Promise<unknown>;
+  const faulty = (name: 'lstat' | 'readdir' | 'stat', code: string): Call => {
+    const real = actual[name] as unknown as Call;
+    return async (target, ...rest) => {
+      if (fsFaults[name].some((suffix) => String(target).endsWith(suffix))) throw Object.assign(new Error(`${code}: simulated`), { code });
+      return real(target, ...rest);
+    };
+  };
+  const wrapped = { ...actual, lstat: faulty('lstat', 'ENOENT'), readdir: faulty('readdir', 'EACCES'), stat: faulty('stat', 'ENOENT') };
+  return { ...wrapped, default: wrapped };
+});
+
 const USER_A = '00000000-0000-4000-8000-0000000000a1';
 const USER_B = '00000000-0000-4000-8000-0000000000b1';
 const ORG_O = '00000000-0000-4000-8000-0000000000c1';
@@ -285,6 +301,25 @@ describe('listSource folder', () => {
     expect(logged).not.toContain(root);
     warn.mockRestore();
     log.mockRestore();
+  });
+
+  test('a file that vanishes (lstat), cannot be stat-ed or a directory that cannot be read counts as unreadable and the walk goes on', async () => {
+    await mkdir(path.join(root, 'locked'));
+    await writeFile(path.join(root, 'locked', 'hidden-from-us.txt'), 'x');
+    await writeFile(path.join(root, 'gone.txt'), 'gone');
+    await writeFile(path.join(root, 'late.txt'), 'late');
+    fsFaults.lstat = [`${path.sep}gone.txt`];
+    fsFaults.readdir = [`${path.sep}locked`];
+    fsFaults.stat = [`${path.sep}late.txt`];
+    try {
+      const { items, reasons } = await drain({ kind: 'folder', ref: root });
+      expect(items.map((i) => i.sourceKey)).toEqual(['a.txt', 'a..b.txt', 'nested/b.txt', 'nested/deeper/c.txt'].sort());
+      expect(reasons).toEqual(['path_unreadable', 'path_unreadable', 'path_unreadable']);
+    } finally {
+      fsFaults.lstat = [];
+      fsFaults.readdir = [];
+      fsFaults.stat = [];
+    }
   });
 
   test('an aborted signal stops the listing', async () => {
