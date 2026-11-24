@@ -78,10 +78,13 @@ function pgliteRpcClient(db: PGlite): RpcClient {
       const run = db
         .query<RelexRow>(sql, keys.map((key) => args[key]))
         .then((result): RpcResponse => ({ data: result.rows as unknown[], error: null }))
-        .catch((error: unknown): RpcResponse => ({
-          data: null,
-          error: { code: 'P0001', message: error instanceof Error ? error.message : String(error) },
-        }));
+        .catch((error: unknown): RpcResponse => {
+          const code = (error as { code?: unknown } | null)?.code;
+          return {
+            data: null,
+            error: { code: typeof code === 'string' ? code : 'P0001', message: error instanceof Error ? error.message : String(error) },
+          };
+        });
       const request: RpcRequest = {
         abortSignal: () => request,
         then: (onFulfilled, onRejected) => run.then(onFulfilled, onRejected),
@@ -146,7 +149,7 @@ export async function createFixtureDatabase(options: {
   supabaseGrants?: boolean;
   migrations?: boolean;
   setupSqlPath?: string;
-  /** Rebuild lexical_text after corpus load (default true). */
+  /** Rebuild lexical_text after corpus load. Defaults to whether migrations run: the relex RPCs come from 0402, so a migrations:false caller applies them and then calls runFixtureRelex. */
   relex?: boolean;
 }): Promise<FixtureDatabase> {
   const { deploymentMode, corpusDir } = options;
@@ -213,10 +216,10 @@ export async function createFixtureDatabase(options: {
         }
       }
     }
-    if (options.relex !== false) {
+    if (options.relex ?? (options.migrations !== false)) {
       await runFixtureRelex(db);
+      sqlSha256[LEXICAL_SHA_KEY] = crypto.createHash('sha256').update(String(LEXICAL_VERSION)).digest('hex');
     }
-    sqlSha256[LEXICAL_SHA_KEY] = crypto.createHash('sha256').update(String(LEXICAL_VERSION)).digest('hex');
   } catch (error) {
     await db.close().catch(() => undefined);
     throw error;

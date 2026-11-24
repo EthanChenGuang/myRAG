@@ -6,11 +6,14 @@ import { isTenantKey } from '../writer';
 /** Bad arguments or limits; nothing was written. */
 export class RelexInputError extends Error {
   readonly code: string;
+  /** The failing RPC's error code (SQLSTATE or PostgREST code), when there is one. */
+  readonly rpcCode: string | null;
 
-  constructor(code: string) {
-    super(`[RAG Relex] ${code}`);
+  constructor(code: string, rpcCode: string | null = null) {
+    super(`[RAG Relex] ${code}${rpcCode ? ` (${rpcCode})` : ''}`);
     this.name = 'RelexInputError';
     this.code = code;
+    this.rpcCode = rpcCode;
   }
 }
 
@@ -84,7 +87,7 @@ async function callRpc(db: RpcClient, signal: AbortSignal, rpc: string, args: Re
   signal.throwIfAborted();
   const response = await db.rpc(rpc, args).abortSignal(signal);
   signal.throwIfAborted();
-  if (response.error) throw new RelexInputError(`rpc_failed:${rpc}`);
+  if (response.error) throw new RelexInputError(`rpc_failed:${rpc}`, response.error.code ?? null);
   return (response.data ?? []) as Row[];
 }
 
