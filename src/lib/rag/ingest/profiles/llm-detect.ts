@@ -1,7 +1,5 @@
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
-import { generateObject, type LanguageModel } from 'ai';
+import type { LanguageModel } from 'ai';
 import { DocTypeDetectionSchema, type DocTypeDetection } from '@/lib/rag-eval/contracts.generated';
-import { env } from '@/lib/env';
 
 /** A small, cheap model from the default OpenRouter list in src/lib/env.ts, so no new setting is needed. */
 export const DOC_TYPE_LLM_MODEL_ID = 'google/gemini-2.5-flash-lite';
@@ -33,7 +31,13 @@ export type LlmDetectResult = { ok: true; detection: DocTypeDetection } | { ok: 
 
 class LlmUnavailableError extends Error {}
 
+// The SDK, the provider and the environment are loaded only when the classifier is switched on and actually called.
 const defaultCall: LlmDetectCall = async ({ filename, text, signal }) => {
+  const [{ env }, { createOpenRouter }, { generateObject }] = await Promise.all([
+    import('@/lib/env'),
+    import('@openrouter/ai-sdk-provider'),
+    import('ai'),
+  ]);
   const apiKey = env.OPENROUTER_API_KEY;
   if (!apiKey) throw new LlmUnavailableError('no key');
   const provider = createOpenRouter({ apiKey, baseURL: 'https://openrouter.ai/api/v1' });

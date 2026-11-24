@@ -29,6 +29,9 @@ export type StageName =
 export type DocTypeOrigin = 'picked' | 'source_default' | 'tenant_default' | 'auto' | 'fallback';
 
 export interface IngestOptions {
+  /** Nango sync only: the connection and folder the file came from, which the admin doc-type defaults can name. */
+  nangoConnectionId?: string;
+  nangoFolderId?: string;
   [key: string]: unknown;
 }
 
@@ -38,7 +41,8 @@ interface IngestInputBase {
   sourceKey: string;
   filename: string;
   mimeType: string;
-  docType?: DocType;
+  /** The type picked for the file, or 'auto' to detect it. Absent: the admin defaults decide. */
+  docType?: DocType | 'auto';
   options?: IngestOptions;
   signal: AbortSignal;
   trace?: TraceCollector;

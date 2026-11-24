@@ -1,25 +1,11 @@
 import { assertTenantScope, scopeKey } from '../../tenant/scope';
 import { fileSha256 } from '../hash';
 import { normalizeFilename } from '../identity';
-import { getProcessingProfile, type DocType, type ProcessingProfile } from '../profiles/load';
-import {
-  INGEST_SOURCES,
-  IngestStageError,
-  type DocTypeOrigin,
-  type StageContext,
-  type StageOutcome,
-  type StageSpec,
-} from '../types';
+import { resolveDocType } from '../profiles/resolve-doc-type';
+import { INGEST_SOURCES, IngestStageError, type StageContext, type StageOutcome, type StageSpec } from '../types';
 
-function resolveProfile(picked: DocType | undefined): { docType: DocType; origin: DocTypeOrigin; profile: ProcessingProfile; invalid: boolean } {
-  if (picked !== undefined) {
-    try {
-      return { docType: picked, origin: 'picked', profile: getProcessingProfile(picked), invalid: false };
-    } catch {
-      return { docType: 'general', origin: 'fallback', profile: getProcessingProfile('general'), invalid: true };
-    }
-  }
-  return { docType: 'general', origin: 'fallback', profile: getProcessingProfile('general'), invalid: false };
+function optionId(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() !== '' ? value : null;
 }
 
 async function run(ctx: StageContext): Promise<StageOutcome> {
@@ -34,8 +20,23 @@ async function run(ctx: StageContext): Promise<StageOutcome> {
   if (typeof input.sourceKey !== 'string' || input.sourceKey.trim() === '') throw new IngestStageError('identify', 'invalid_source_key');
 
   const bytes = input.file ?? null;
-  const resolved = resolveProfile(input.docType);
-  if (resolved.invalid) ctx.warnings.push('doc_type_invalid');
+  const resolved = await resolveDocType(
+    input.scope,
+    {
+      picked: input.docType,
+      source: input.source,
+      nangoConnectionId: optionId(input.options?.nangoConnectionId),
+      nangoFolderId: optionId(input.options?.nangoFolderId),
+      filename: input.filename,
+      mimeType: input.mimeType,
+      text: input.text ?? null,
+    },
+    { db: ctx.deps.db, config: ctx.config, signal: ctx.signal },
+  );
+  ctx.warnings.push(...resolved.warnings);
+  ctx.state.docTypeDetection = resolved.detection
+    ? { signals: resolved.detection.signals, refined: null, reparsed: false, detection: resolved.detection }
+    : null;
 
   ctx.identity = {
     tenantKey: scopeKey(input.scope).toLowerCase(),
