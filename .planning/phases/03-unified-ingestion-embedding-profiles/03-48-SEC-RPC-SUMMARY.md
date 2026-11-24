@@ -34,6 +34,7 @@ status: complete
 ## Operator
 
 - Apply `0409` on live multi-tenant DB when promoting past Task 1 baseline (after app version that searches on service-role is deployed).
+- **Follow-up:** plan **`03-48-sec-rpc-2`** — full live inventory (23 SECURITY DEFINER); failing gate is `tests/rag/search-rpc-grants.test.ts` inventory test (not noise).
 
 ## Self-Check: PASSED
 

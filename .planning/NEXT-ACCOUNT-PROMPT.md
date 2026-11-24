@@ -48,7 +48,7 @@ If Guang sends a message starting with **`PAUSE-96`:** stop spawning; each execu
 |------|--------|----------------------|
 | 03.1-14..18, 20, 23 | lang/quality, ledger, backfill SQL, Docling converters | `exec/03.1-*` merged |
 | 04-15..17, 19, 44, 45 | hybrid RPC, pgvector conformance, v2 pipeline, params, rerank | `exec/04-*` merged |
-| 03-48-sec-rpc | in flight — see below | `14ec6d9` on `origin/exec/03-48-sec-rpc` |
+| 03-48-sec-rpc | **merged** `0409` grant revoke | `44c0573` on `origin/exec/03-48-sec-rpc` |
 
 Full registry: `.planning/paused/exec-ledger.md` (rows marked **merged**).
 
@@ -60,8 +60,8 @@ Full registry: `.planning/paused/exec-ledger.md` (rows marked **merged**).
 |------|------|----------|-----------------|----------------|
 | **03.1-25** | `bc-1f542e8a-f80a-58a7-99bb-5c47f655d0ce` | `wt/03.1-25` | **missing** — push urgently | Untracked: `src/lib/rag/ingest/backfill/*`, `backfill-scope.ts`, tests |
 | **04-18** | `bc-78743196-9471-5cda-8414-1d4c80c9d85f` | `wt/04-18` | **missing** — push urgently | Untracked: `eval/harness/selective-filter.mts`, `tests/rag-db/selective-filter.test.mts` |
-| **03-48-sec-rpc** | `bc-049b7ab0-c778-50b5-bce6-77842e48a55e` | `wt/03-48-sec-rpc` | **`14ec6d9`** | Migration `0409_*` revoke; uncommitted SUMMARY edits |
-| **04-20** | `bc-36e7beb3-7655-51e7-964a-e1082fa083c3` | `wt/04-20` | **missing** — push urgently | Modified: `pipeline.ts`, `v2/stages/search.ts` (in progress) |
+| **03-48-setup-idempotent** | `bc-b37c0b7a-eb5e-51b0-83b2-b0e870bb6318` | `wt/03-48-setup-idempotent` | TBD | setup 42710 fix |
+| **04-20** | `bc-36e7beb3-7655-51e7-964a-e1082fa083c3` | `wt/04-20` | check remote | refusal routing stages |
 
 **On resume:** `git fetch origin`, ff or rebase each `wt/<plan>` to `origin/claude/ecstatic-hamilton-86gtwv`. If executor IDLE, **resume only if policy allows** or spawn fresh executor on same plan after confirming bcId stopped (one agent per plan).
 
@@ -71,7 +71,8 @@ Full registry: `.planning/paused/exec-ledger.md` (rows marked **merged**).
 
 | Plan | PLAN file | Ready when |
 |------|-----------|------------|
-| **03-48-setup-idempotent** | `.planning/phases/03-unified-ingestion-embedding-profiles/03-48-FOLLOWUP-SETUP-IDEMPOTENT-PLAN.md` | after sec-rpc merges or parallel if disjoint |
+| **03-48-setup-idempotent** | `.planning/phases/03-unified-ingestion-embedding-profiles/03-48-FOLLOWUP-SETUP-IDEMPOTENT-PLAN.md` | RUNNING (Wave E) |
+| **03-48-sec-rpc-2** | `.planning/phases/03-unified-ingestion-embedding-profiles/03-48-FOLLOWUP-SECURITY-RPC-2-PLAN.md` | **next free slot** — full SECURITY DEFINER inventory; `npx vitest run tests/rag/search-rpc-grants.test.ts` must pass |
 | **04-21+** | `04-PLAN-INDEX.md` wave 4+ | follow `depends_on` |
 | **03.1-26, 24, 21…** | `03.1-PLAN-INDEX.md` | **03.1-19** waits on **03.1-27** |
 
@@ -82,8 +83,8 @@ Full registry: `.planning/paused/exec-ledger.md` (rows marked **merged**).
 | Item | Owner / blocker |
 |------|----------------|
 | **03-48 Task 1 live** | Guang/box; live at **0351**; trunk has **0352–0356**, **0401–0409+** — promote on box only |
-| **23 anon EXECUTE on SECURITY DEFINER RPCs** | **03-48-sec-rpc** executor (PGlite + migration) |
-| **`multi-tenant-setup.sql` 42710** | **03-48-setup-idempotent** plan |
+| **23 anon EXECUTE on SECURITY DEFINER RPCs** | **partial** — `0409` closes 4 search RPCs; **`03-48-sec-rpc-2` queued** for remaining ~19 + vitest inventory |
+| **`multi-tenant-setup.sql` 42710** | **03-48-setup-idempotent** RUNNING |
 | **03-48 SUMMARY Task 1/2** | Task 2 partial: **Docling T2.2 CI Docker only** on cloud VM; **DeepInfra T2.4b 402**; **Voyage billing** for reembed |
 | **03-48 Task 3** | Re-embed, profiles, Nango, Config UI — pending keys/billing/deploy |
 | **`schema-equality.test.mts`** | 4 fails until setup fold (03.1-52 / 04-42) |

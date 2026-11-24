@@ -137,14 +137,15 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 
 | Plan | Worktree ready | Notes |
 |------|----------------|-------|
-| **03-48-sec-rpc** | `wt/03-48-sec-rpc` | **RUNNING** (see Wave E) |
-| **03-48-setup-idempotent** | (create on spawn) | setup 42710 fix |
+| **03-48-setup-idempotent** | `wt/03-48-setup-idempotent` | RUNNING — see Wave E |
+| **03-48-sec-rpc-2** | (create on spawn) | **next free slot**; [03-48-FOLLOWUP-SECURITY-RPC-2-PLAN.md](../phases/03-unified-ingestion-embedding-profiles/03-48-FOLLOWUP-SECURITY-RPC-2-PLAN.md) — full DEFINER inventory (live 23); `tests/rag/search-rpc-grants.test.ts` must pass |
 
 **03-48 follow-ups (one executor per plan when a slot frees — do not duplicate running work):**
 
 | Plan id | PLAN file | Priority |
 |---------|-----------|----------|
-| `03-48-sec-rpc` | [03-48-FOLLOWUP-SECURITY-RPC-PLAN.md](../phases/03-unified-ingestion-embedding-profiles/03-48-FOLLOWUP-SECURITY-RPC-PLAN.md) | D-08 / live anon EXECUTE hole |
+| `03-48-sec-rpc` | [03-48-FOLLOWUP-SECURITY-RPC-PLAN.md](../phases/03-unified-ingestion-embedding-profiles/03-48-FOLLOWUP-SECURITY-RPC-PLAN.md) | **merged** — four search RPCs (`0409`) |
+| `03-48-sec-rpc-2` | [03-48-FOLLOWUP-SECURITY-RPC-2-PLAN.md](../phases/03-unified-ingestion-embedding-profiles/03-48-FOLLOWUP-SECURITY-RPC-2-PLAN.md) | overflow — full inventory; vitest gate |
 | `03-48-setup-idempotent` | [03-48-FOLLOWUP-SETUP-IDEMPOTENT-PLAN.md](../phases/03-unified-ingestion-embedding-profiles/03-48-FOLLOWUP-SETUP-IDEMPOTENT-PLAN.md) | 42710 on re-run setup |
 
 **03-48 live Supabase:** Guang/box agent only for production DB; Task 1 logged in `03-48-SUMMARY.md`.
