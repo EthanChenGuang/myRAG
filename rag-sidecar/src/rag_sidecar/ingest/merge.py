@@ -112,16 +112,39 @@ def merge(parts: Sequence[DoclingDocument], n_pages: int) -> DoclingDocument:
     return merged
 
 
+def _shift_pages(doc: DoclingDocument, offset: int) -> DoclingDocument:
+    """A deep copy of ``doc`` with every page number moved by ``offset``; the input is left alone."""
+    shifted = doc.model_copy(deep=True)
+    shifted.pages = {
+        page_no + offset: page.model_copy(update={"page_no": page_no + offset}) for page_no, page in shifted.pages.items()
+    }
+    for collection in (shifted.texts, shifted.tables, shifted.pictures, shifted.key_value_items, shifted.form_items):
+        for item in collection:
+            for provenance in item.prov or []:
+                provenance.page_no += offset
+    return shifted
+
+
 def join_page_parts(parts: Sequence[DoclingDocument]) -> DoclingDocument:
-    """Join non-overlapping parts without renumbering page_no (recorded assembly)."""
+    """Join non-overlapping parts, keeping the page numbers of the file.
+
+    Contiguous parts are concatenated with the body tree rebuilt; DoclingDocument.concatenate numbers pages from 1, so parts that
+    start later are moved down first and the result is moved back. Parts with a gap between them are only listed side by side
+    (recorded assembly).
+    """
     if not parts:
         raise MergeInvariantError("merge_invariant:no_parts")
     if len(parts) == 1:
         return parts[0]
     page_sets = [sorted(part.pages) for part in parts]
     flat = sorted({page for pages in page_sets for page in pages})
-    if flat == list(range(1, flat[-1] + 1)):
-        return merge(parts, flat[-1])
+    if flat == list(range(flat[0], flat[-1] + 1)):
+        ordered = sorted(parts, key=lambda part: min(part.pages))
+        if flat[0] == 1:
+            return merge(ordered, flat[-1])
+        offset = flat[0] - 1
+        lowered = [_shift_pages(part, -offset) for part in ordered]
+        return _shift_pages(merge(lowered, flat[-1] - offset), offset)
     merged = parts[0].model_copy(deep=True)
     merged.pages = {key: value for part in parts for key, value in part.pages.items()}
     merged.texts = []
