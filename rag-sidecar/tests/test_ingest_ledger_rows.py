@@ -107,3 +107,14 @@ def test_advance_and_fail_accept_table_rows():
     assert advanced.status == "parsing"
     failed = asyncio.run(client.fail(_JOB_ID, "worker-a", error_class="x", retryable=False))
     assert failed.id == _JOB_ID
+
+
+def _attempt_client(payload: object) -> LedgerClient:
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, json=payload))
+    return LedgerClient(base_url="https://example.supabase.co", service_key="sb_secret_placeholder", client=httpx.AsyncClient(transport=transport))
+
+
+def test_record_attempt_reads_a_bare_number_and_a_one_column_row():
+    for payload in (3, [3], {"rag_record_parse_attempt": 3}, [{"rag_record_parse_attempt": 3}]):
+        number = asyncio.run(_attempt_client(payload).record_attempt(_JOB_ID, "worker-a", {"reason": "fixed_chain"}))
+        assert number == 3, payload
