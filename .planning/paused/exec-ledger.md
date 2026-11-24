@@ -123,15 +123,19 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 
 **Wave 1 (4):** 04-01–04 **parallel**; **04-05 → 04-06 → 04-07** one executor tree (PGlite migration order).
 
-## Wave E (active — **exactly 4** executors; cloud-verified 2026-11-24 ~13:34 Europe/Rome)
+## Wave E — **PAUSE-96 STOPPED** (2026-11-24 ~13:48 Europe/Rome; Claude Code resumes)
+
+All four executors **stopped**; WIP on `origin/exec/*` + patches in `.planning/paused/patches/`. **Do not spawn** until `/gsd-resume-work`. See `.planning/CLAUDE-CODE-HANDOFF-PROMPT.md`.
+
+## Wave E snapshot at pause (was **4 RUNNING**)
 
 | Plan | bcId | Cloud | Worktree | WIP signal |
 |------|------|-------|----------|------------|
 | 03.1-23 | [bc-ab1e9b2d](bc-ab1e9b2d-301d-50ad-85d3-54b3af5e3261) | **merged** | — | pytest 67 |
-| 03-48-setup-idempotent | [bc-b37c0b7a](bc-b37c0b7a-eb5e-51b0-83b2-b0e870bb6318) | **RUNNING** | `wt/03-48-setup-idempotent` | setup 42710 |
-| 03.1-25 | [bc-1f542e8a](bc-1f542e8a-f80a-58a7-99bb-5c47f655d0ce) | **RUNNING** | `wt/03.1-25` | backfill inventory |
-| 04-18 | [bc-78743196](bc-78743196-9471-5cda-8414-1d4c80c9d85f) | **RUNNING** | `wt/04-18` | selective-filter harness untracked; ff’d to trunk |
-| 04-20 | [bc-36e7beb3](bc-36e7beb3-7655-51e7-964a-e1082fa083c3) | **RUNNING** | `wt/04-20` | query/rank refusal stages |
+| 03-48-setup-idempotent | [bc-b37c0b7a](bc-b37c0b7a-eb5e-51b0-83b2-b0e870bb6318) | **STOPPED** | `wt/03-48-setup-idempotent` | WIP `d1c5821` on `origin/exec/03-48-setup-idempotent` |
+| 03.1-25 | [bc-1f542e8a](bc-1f542e8a-f80a-58a7-99bb-5c47f655d0ce) | **STOPPED** | `wt/03.1-25` | WIP `7c5f7f8` on `origin/exec/03.1-25` |
+| 04-18 | [bc-78743196](bc-78743196-9471-5cda-8414-1d4c80c9d85f) | **STOPPED** | `wt/04-18` | WIP `258a14f` on `origin/exec/04-18` |
+| 04-20 | [bc-36e7beb3](bc-36e7beb3-7655-51e7-964a-e1082fa083c3) | **STOPPED** | `wt/04-20` | WIP `b5e47fe` on `origin/exec/04-20` |
 
 **Overflow queue (spawn next free slot, same turn as merge):**
 

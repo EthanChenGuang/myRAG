@@ -6,7 +6,8 @@ You are the **GSD orchestrator** for **myRAG**. Continue parallel plan execution
 
 - **Repository:** `https://github.com/EthanChenGuang/myRAG`
 - **Integration branch (only push target):** `claude/ecstatic-hamilton-86gtwv`
-- **Trunk HEAD at last update:** `0508cc5` (2026-11-24 ~13:46 Europe/Rome; includes `0409_search_rpc_revoke.sql`) — run `git fetch origin && git log -1 --oneline origin/claude/ecstatic-hamilton-86gtwv` after clone.
+- **PAUSE-96 active:** Claude Code resumes via `.planning/CLAUDE-CODE-HANDOFF-PROMPT.md` + `/gsd-resume-work` (not a new Cursor account).
+- **Trunk HEAD at last update:** `201b66b` (2026-11-24 ~13:48 Europe/Rome) — run `git fetch origin && git log -1 --oneline origin/claude/ecstatic-hamilton-86gtwv` after clone.
 - **No PR** unless Guang asks. **No secrets / real customer data** — fake fixtures only.
 
 ## Read state (in order)
@@ -38,7 +39,7 @@ You are the **GSD orchestrator** for **myRAG**. Continue parallel plan execution
 
 ## PAUSE-96 protocol
 
-If Guang sends a message starting with **`PAUSE-96`:** stop spawning; each executor saves `.planning/paused/patches/<plan>.patch`, commits+pushes WIP, stops; **do not merge half-done plans**; run `/gsd-pause-work`; refresh this file + HANDOFF; push trunk; reply with final SHA + patch list.
+**Executed 2026-11-24.** Patches: `.planning/paused/patches/{03.1-25,04-18,04-20,03-48-setup-idempotent}.patch`. Claude Code: read `.planning/CLAUDE-CODE-HANDOFF-PROMPT.md`.
 
 ---
 

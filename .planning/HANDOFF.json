@@ -1,0 +1,45 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-11-24T12:48:00Z",
+  "phase": "03",
+  "phase_name": "Unified Ingestion & Embedding Profiles (parallel 03.1 + 04)",
+  "phase_dir": ".planning/phases/03-unified-ingestion-embedding-profiles",
+  "plan": null,
+  "task": null,
+  "total_tasks": null,
+  "status": "paused",
+  "pause_reason": "PAUSE-96 Claude Code takeover",
+  "trunk_branch": "claude/ecstatic-hamilton-86gtwv",
+  "trunk_sha": "201b66b",
+  "completed_tasks": [],
+  "remaining_tasks": [
+    {"id": "03.1-25", "name": "backfill inventory", "status": "in_progress", "exec_branch": "exec/03.1-25", "wip_commit": "7c5f7f8"},
+    {"id": "04-18", "name": "selective-filter harness", "status": "in_progress", "exec_branch": "exec/04-18", "wip_commit": "258a14f"},
+    {"id": "04-20", "name": "refusal routing stages", "status": "in_progress", "exec_branch": "exec/04-20", "wip_commit": "b5e47fe"},
+    {"id": "03-48-setup-idempotent", "name": "multi-tenant-setup 42710", "status": "in_progress", "exec_branch": "exec/03-48-setup-idempotent", "wip_commit": "d1c5821"},
+    {"id": "03-48-sec-rpc-2", "name": "full DEFINER RPC grants", "status": "not_started", "note": "overflow; vitest inventory gate"}
+  ],
+  "blockers": [
+    {"description": "Live Supabase at 0351; trunk migrations 0352+ not on production", "type": "human_action", "workaround": "Guang/box agent only"},
+    {"description": "Voyage billing / DeepInfra 402 for re-embed and docling T2.4b", "type": "external", "workaround": "fake fixtures in CI"},
+    {"description": "search-rpc-grants.test.ts inventory red until 03-48-sec-rpc-2", "type": "technical", "workaround": "expected; do not treat as noise"}
+  ],
+  "async_jobs": [],
+  "human_actions_pending": [
+    {"action": "Vercel deploy + live migration promote 0352+", "context": "03-48 Task 3", "blocking": true},
+    {"action": "Voyage billing / DeepInfra balance", "context": "re-embed and Docling T2.4b", "blocking": true}
+  ],
+  "decisions": [
+    {"decision": "03-48-sec-rpc merged four search RPCs only (0409); sec-rpc-2 queued for remaining 23", "rationale": "vitest inventory is acceptance gate", "phase": "03-48"},
+    {"decision": "Claude Code takes over from Cursor at PAUSE-96", "rationale": "96% usage", "phase": "orchestration"}
+  ],
+  "uncommitted_files": [],
+  "patches": [
+    ".planning/paused/patches/03.1-25.patch",
+    ".planning/paused/patches/04-18.patch",
+    ".planning/paused/patches/04-20.patch",
+    ".planning/paused/patches/03-48-setup-idempotent.patch"
+  ],
+  "next_action": "/gsd-resume-work then read CLAUDE-CODE-HANDOFF-PROMPT.md",
+  "context_notes": "Orchestrator saved WIP on four exec branches; no new spawns including sec-rpc-2."
+}

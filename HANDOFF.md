@@ -1,7 +1,25 @@
-# HANDOFF — Phase 3 (Cloud Agent)
+# HANDOFF — Phase 3 (PAUSE-96 → Claude Code)
 
 **Branch:** `claude/ecstatic-hamilton-86gtwv` (push only; no PR)  
-**GSD runtime:** `.cursor/` GSD 1.23.0 only (`RUNTIME_DIR=$(git rev-parse --show-toplevel)/.cursor`)
+**Trunk at pause:** `201b66b` (2026-11-24 ~13:48 Europe/Rome)  
+**Takeover:** **Claude Code** with GSD in `.claude/` — start with `/gsd-resume-work` and `.planning/CLAUDE-CODE-HANDOFF-PROMPT.md`
+
+## PAUSE-96 status
+
+- **No spawns** at pause (including `03-48-sec-rpc-2`).
+- **No half-merges.**
+- Executors **STOPPED**; WIP pushed:
+
+| Plan | Branch | WIP commit | Patch |
+|------|--------|------------|-------|
+| 03.1-25 | `exec/03.1-25` | `7c5f7f8` | `.planning/paused/patches/03.1-25.patch` |
+| 04-18 | `exec/04-18` | `258a14f` | `.planning/paused/patches/04-18.patch` |
+| 04-20 | `exec/04-20` | `b5e47fe` | `.planning/paused/patches/04-20.patch` |
+| 03-48-setup-idempotent | `exec/03-48-setup-idempotent` | `d1c5821` | `.planning/paused/patches/03-48-setup-idempotent.patch` |
+
+Cursor bcIds: `bc-1f542e8a`, `bc-78743196`, `bc-36e7beb3`, `bc-b37c0b7a` (+ push nudges `bc-8f62493e`, `bc-ca34e9a0`) — assume **stopped**.
+
+**Machine state:** `.planning/HANDOFF.json`, `.planning/.continue-here.md`
 
 ## UI / frontend (Guang)
 
@@ -47,59 +65,30 @@ Orchestrator applies this **fallback chain** per role. **Never use Grok** for an
 
 `model_overrides` in `.planning/config.json` pins **primary** targets when quota exists; orchestrator implements the fallback table above when Task/spawn fails on quota.
 
-## Account switch (96% usage)
+## Account switch / pause
 
-- **Cold resume:** `.planning/NEXT-ACCOUNT-PROMPT.md` — self-contained paste for a new Cursor account; updated after every trunk merge.
+- **Cold resume (Cursor):** `.planning/NEXT-ACCOUNT-PROMPT.md`
+- **Claude Code resume:** `.planning/CLAUDE-CODE-HANDOFF-PROMPT.md`
 - **Executors:** push `origin/exec/<plan>` after each task commit.
-- **`PAUSE-96`:** stop spawns → executor patches in `.planning/paused/patches/` → `/gsd-pause-work` → refresh NEXT-ACCOUNT-PROMPT + HANDOFF → push → stop.
+- **`PAUSE-96`:** completed 2026-11-24 — patches + WIP branches above.
 
-## Parallelism (mandatory)
+## Parallelism (when resumed)
 
-**Keep exactly 4 executors RUNNING at all times; refill in the same step as each merge** (one orchestrator message: merge + tests + ledger + batch `Task` until 4 `RUNNING` + ff all `wt/*`). Confirm count with `cursor-cloud` when UI shows fewer. See `.planning/paused/exec-ledger.md` Wave E.
+**Keep exactly 4 executors RUNNING** whenever dependency-ready disjoint plans exist; refill in the same step as each merge. See `.planning/paused/exec-ledger.md`.
 
-**Wave E now (4 RUNNING):** [03.1-23](bc-ab1e9b2d-301d-50ad-85d3-54b3af5e3261), [03.1-25](bc-1f542e8a-f80a-58a7-99bb-5c47f655d0ce), [04-18](bc-78743196-9471-5cda-8414-1d4c80c9d85f), [04-19](bc-eafdad13-4e57-5750-a00f-8bc029517ee2).
+**Overflow first after slot frees:** `03-48-sec-rpc-2` (vitest inventory gate).
 
-**Overflow queue:** `04-45`, `03-48-sec-rpc` worktrees on trunk (spawn on next merge, same turn).
+## Done before pause
 
-## Done this session
+- **03-48-sec-rpc** merged (`0409`, trunk `cec95b3`)
+- **03-48-sec-rpc-2** planned, **not started**
+- Phase 3.1 / 4 wave through **04-45**, **04-19**, **03.1-23** merged (see exec-ledger)
 
-- Trunk: Phase **3.1** wave 3 + Phase **4** through **04-44** merged; integration @ `450662e`
-- Rules: `.cursor/rules/orchestration.mdc` — **exactly 4** executors + same-turn batch refill
-
-## Next step
-
-1. On **any** executor completion: merge + gates on trunk → **batch-spawn** until 4 RUNNING (use overflow queue).
-2. **03-48** live DB: Guang/box only; integration agents use **03-48-sec-rpc** / **setup-idempotent** worktrees.
-3. No duplicate plan ids; push only `claude/ecstatic-hamilton-86gtwv`; no PR.
-3. Review + verification (`followups-notes.md`, D-08).
-4. REQUIREMENTS/ROADMAP/STATE; Phase 3.1 then Phase 4.
-
-## How to verify
+## How to verify (trunk)
 
 ```bash
-export RUNTIME_DIR="$(git rev-parse --show-toplevel)/.cursor"
-export PATH="$HOME/.local/bin:$PATH"
-npx next typegen && NODE_OPTIONS=--max-old-space-size=8192 npx tsc --noEmit -p tsconfig.json
-npx vitest run
-node --import tsx --test tests/*.test.mts
-node --import tsx --test tests/rag-db/*.test.mts
-npm run test-rag -- --out /tmp/rag-pre && npm run test-rag -- --fixture-mode ingest --out /tmp/rag-ingest
+export RUNTIME_DIR="$(git rev-parse --show-toplevel)/.claude"
+node --import tsx --test tests/rag-db/search-rpc-grants-pglite.test.mts
+npx vitest run tests/rag/search-rpc-grants.test.ts   # 1 fail until sec-rpc-2
+node scripts/ci/check-rag-boundary.mjs
 ```
-
-## Executed without Sonnet gsd-executor
-
-| Plan | Reason |
-|------|--------|
-| 03-39 Task 3 (admin doc-type route) | Orchestrator worktree after Sonnet quota failures |
-| 03-42 | Composer `gsd-executor` (`inherit`) after two Sonnet Task failures |
-
-## Executor dedupe (Guang)
-
-- **Ledger:** `.planning/paused/exec-ledger.md` — one executor per plan; check before every `Task` spawn.
-- **03-44 DUPLICATE EXECUTION:** [bc-cdb95a3d](bc-cdb95a3d-1ebc-5b58-a6a1-46d7c48b8221), [bc-9cd7df41](bc-9cd7df41-c92d-5032-a8a1-d1547071d01f), [bc-645e437f](bc-645e437f-c0b8-5e86-a96d-f80cec58aab7) — canonical merge via bc-645e437f only.
-
-## Open for Guang
-
-- **03-48** live checkpoint (manual)
-- Apply migrations **0315–0319** (0316 two stems)
-- Package installs only if new deps appear in remaining plans
