@@ -146,8 +146,11 @@ export { changeDocumentType } from './ingest/change-doc-type';
 export { enqueueIngest, submitIngest } from './ingest/enqueue';
 export type { EnqueueIngestOptions, EnqueueResult } from './ingest/enqueue';
 export { queueConfigFromProcessEnv } from './ingest/queue-config';
+<<<<<<< HEAD
 export type { QueueConfig } from './ingest/queue-config';
 export { scheduleIngestWake } from './ingest/wake';
+=======
+>>>>>>> origin/claude/ecstatic-hamilton-86gtwv
 export { handleAdvance } from './ingest/callbacks/advance';
 export { handleParseExternal } from './ingest/callbacks/parse-external';
 export { checkSidecarSecret } from './ingest/callbacks/internal-auth';

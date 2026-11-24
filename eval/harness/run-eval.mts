@@ -11,6 +11,7 @@ import type { LanguageModel } from 'ai';
 import { GoldenItemSchema, RagTraceSchema, RunManifestSchema, type GoldenItem, type RagRunRequest, type RagTrace, type RunManifest } from '../../src/lib/rag-eval/contracts.generated.ts';
 import { canonicalJson, configHash } from '../../src/lib/rag-eval/trace.ts';
 import { EMBEDDER_ID, EMBEDDER_VERSION, embedderSourceSha256 } from './fixture-embedder.mts';
+import { ingestModeRetrievalEnv } from './ingest-mode.mts';
 import { createFixtureDatabase, FIXTURE_USER_ID, type DeploymentMode, type FixtureMode } from './pglite-supabase.mts';
 import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from './fake-edge.mts';
 import { applyFixtureProcessEnv } from './process-env.mts';
@@ -176,10 +177,12 @@ export async function prepareInProcessEval(options: {
   }
   const startedEdge = edge;
 
+  const retrievalEnv =
+    fixtureMode === 'ingest' ? { ...ingestModeRetrievalEnv(), ...envOverrides } : envOverrides;
   applyFixtureProcessEnv({
     edgeUrl: startedEdge.url,
     deploymentMode,
-    extra: { ...evalEnv, ...envOverrides },
+    extra: { ...evalEnv, ...retrievalEnv },
     vendorEmbeddingRoutes: !!(embeddingProfileId || ingestFixture),
   });
 

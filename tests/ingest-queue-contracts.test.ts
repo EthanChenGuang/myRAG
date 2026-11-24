@@ -54,7 +54,7 @@ const invalidByModel: Record<
   ParseExternalResponse: (sample) => ({ ...sample, status: 'bogus' }),
   AdvanceRequest: (sample) => ({ ...sample, deadline_ms: 99_999 }),
   AdvanceResponse: (sample) => ({ ...sample, done: 'yes' }),
-  BackfillManifestEntry: () => ({ source_key: 'a', path: '/x', url: 'http://example.com/x' }),
+  BackfillManifestEntry: () => ({ source_key: '', path: null, url: null }),
   BackfillDryRunReport: (sample) => ({ ...sample, fits_budget: 'yes' }),
   ParserExpected: (sample) => ({
     ...sample,
