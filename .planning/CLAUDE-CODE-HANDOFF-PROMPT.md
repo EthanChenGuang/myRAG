@@ -68,7 +68,7 @@ Full registry: `.planning/paused/exec-ledger.md` rows marked **merged**.
 
 | Plan | exec branch | WIP commit | Patch on trunk | Resume |
 |------|-------------|------------|----------------|--------|
-| **03.1-25** | `exec/03.1-25` | **`423f649`** (IN_PROGRESS) | patch superseded | Resume executor on branch; backfill scope/sources/inventory — **no SUMMARY yet** |
+| **03.1-25** | `exec/03.1-25` | **`494d60a`** (COMPLETE) | patch superseded | **Merge on resume** (DATA-16); targeted `backfill-inventory.test.ts`; mind vitest OOM with `listSource` |
 | **04-18** | `exec/04-18` | **`b4a6b3c`** (COMPLETE) | patch superseded | **Merge on resume** — `eval/harness/selective-filter.mts`, 7 PGlite tests (RET-10) |
 | **04-20** | `exec/04-20` | **`081224a`** (COMPLETE) | `.planning/paused/patches/04-20.patch` (superseded) | **Merge first on resume:** SUMMARY on branch; feats `11c0e0f`, docs `081224a` |
 | **03-48-setup-idempotent** | `exec/03-48-setup-idempotent` | **`90635ae`** (COMPLETE) | patch superseded | **Merge on resume**; idempotency re-run tests pass; full `schema-equality` may still show unrelated relex RPC fails |
