@@ -25,15 +25,15 @@ All requirements are written so they can be checked. "Behind a switch" means an 
 
 ### Pipeline & Tenancy (PIPE)
 
-- [ ] **PIPE-01**: One retrieval pipeline module (`src/lib/rag/`) is the only code that calls embedding providers, retrieval backends and rerankers; text chat, embedded chat and voice all call it
-- [ ] **PIPE-02**: Every retrieval call requires a branded `TenantScope` that only `resolveTenantScope()` can create, after verifying workspace or organization membership server-side; an `organizationId` from the request body is never trusted directly
-- [ ] **PIPE-03**: Embedded chat resolves its tenant from the embed widget's server-side configuration (the owning workspace), never from the caller
-- [ ] **PIPE-04**: Voice retrieval resolves its tenant from a signed, expiring token minted by the app, not from a bare caller-supplied `userId`, and never falls back to a global search
-- [ ] **PIPE-05**: Context assembly (dedupe, grouping, source labels, links section, image handling) lives in the pipeline and is shared by all three entry points, without per-chunk N+1 lookups
+- [x] **PIPE-01**: One retrieval pipeline module (`src/lib/rag/`) is the only code that calls embedding providers, retrieval backends and rerankers; text chat, embedded chat and voice all call it
+- [x] **PIPE-02**: Every retrieval call requires a branded `TenantScope` that only `resolveTenantScope()` can create, after verifying workspace or organization membership server-side; an `organizationId` from the request body is never trusted directly
+- [x] **PIPE-03**: Embedded chat resolves its tenant from the embed widget's server-side configuration (the owning workspace), never from the caller
+- [x] **PIPE-04**: Voice retrieval resolves its tenant from a signed, expiring token minted by the app, not from a bare caller-supplied `userId`, and never falls back to a global search
+- [x] **PIPE-05**: Context assembly (dedupe, grouping, source labels, links section, image handling) lives in the pipeline and is shared by all three entry points, without per-chunk N+1 lookups
 - [ ] **PIPE-06**: The pipeline returns a discriminated status (`ok | empty | error | degraded`); only a verified `empty` result may trigger the "information not available" refusal, and errors are logged and surfaced as errors
-- [ ] **PIPE-07**: Each pipeline stage has its own switch, timeout and degrade-to-skip path; an `AbortSignal` flows through all stages
-- [ ] **PIPE-08**: Unused retrieval modules (`retrieval-strategies.ts`, `optimized-search.ts`, `adaptive-retrieval.ts`, `reranker-adapter.ts`, never-called parts of `thinking-rag-enhancer.ts`) are removed; still-used logic is re-homed under `src/lib/rag/`
-- [ ] **PIPE-09**: With all new switches off (`RAG_PIPELINE=legacy`), the eval results reproduce the baseline within its noise band
+- [x] **PIPE-07**: Each pipeline stage has its own switch, timeout and degrade-to-skip path; an `AbortSignal` flows through all stages
+- [x] **PIPE-08**: Unused retrieval modules (`retrieval-strategies.ts`, `optimized-search.ts`, `adaptive-retrieval.ts`, `reranker-adapter.ts`, never-called parts of `thinking-rag-enhancer.ts`) are removed; still-used logic is re-homed under `src/lib/rag/`
+- [x] **PIPE-09**: With all new switches off (`RAG_PIPELINE=legacy`), the eval results reproduce the baseline within its noise band
 - [x] **PIPE-10**: Node.js 22 is the documented and enforced runtime (`engines`, docs, CI), as required by the Weaviate and Qdrant clients
 
 ### Data Layer (DATA)
@@ -116,8 +116,8 @@ All requirements are written so they can be checked. "Behind a switch" means an 
 
 ### Observability & Latency (OBS, LAT)
 
-- [ ] **OBS-01**: Every pipeline stage (query transforms incl. the rewrite gate, each retrieval path, fusion, rerank, context assembly, generation, groundedness) is traced with Langfuse (user decision 2026-11-23): one trace per request with a span per stage carrying latency, candidate count and the rule IDs/transforms chosen, linked by `traceId` to the chat message; starting on the free Langfuse Cloud Hobby plan (default `LANGFUSE_BASE_URL=https://cloud.langfuse.com`, sample rate configurable to stay within its monthly unit quota), switchable to self-hosted by changing only the base URL and keys, via `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` / `LANGFUSE_BASE_URL` (mirrored to the five config locations), switchable, sampled, flushed asynchronously so it never blocks or delays the response, tagged with tenant ID but with query/chunk text masked unless explicitly enabled; when Langfuse is off or unreachable a structured `[RAG Trace]` log line with the same fields is the fallback; span fields match the eval trace `stage_latency_ms`
-- [ ] **OBS-02**: Text chat and voice each have an end-to-end latency budget (p50/p95); eval reports show per-stage latency distributions, and later phases must stay within budget
+- [x] **OBS-01**: Every pipeline stage (query transforms incl. the rewrite gate, each retrieval path, fusion, rerank, context assembly, generation, groundedness) is traced with Langfuse (user decision 2026-11-23): one trace per request with a span per stage carrying latency, candidate count and the rule IDs/transforms chosen, linked by `traceId` to the chat message; starting on the free Langfuse Cloud Hobby plan (default `LANGFUSE_BASE_URL=https://cloud.langfuse.com`, sample rate configurable to stay within its monthly unit quota), switchable to self-hosted by changing only the base URL and keys, via `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` / `LANGFUSE_BASE_URL` (mirrored to the five config locations), switchable, sampled, flushed asynchronously so it never blocks or delays the response, tagged with tenant ID but with query/chunk text masked unless explicitly enabled; when Langfuse is off or unreachable a structured `[RAG Trace]` log line with the same fields is the fallback; span fields match the eval trace `stage_latency_ms`
+- [x] **OBS-02**: Text chat and voice each have an end-to-end latency budget (p50/p95); eval reports show per-stage latency distributions, and later phases must stay within budget
 - [ ] **LAT-01**: Retrieval paths (query variants, vector and lexical) run in parallel; candidates are deduplicated by chunk ID (and parent ID) before rerank, and the rerank input is capped (default chosen by the RNK-02 sweep, between 50 and 100)
 - [ ] **LAT-02**: Rerank has a fast and a quality tier (Cohere `rerank-v5.0-fast` / Voyage `rerank-3-lite` vs the pro models), chosen per entry point (text chat vs voice)
 - [ ] **LAT-03**: Query rewriting runs only when a rule-based gate (no LLM, < 1 ms, zh/en/it) says it is needed, as locked in `.planning/specs/query-rewrite-gate.md` (user rules R0–R4: too short, pronouns with history, relative time, comparison, exact codes kept verbatim; added rules R5–R12: elliptical follow-ups, compound questions, protected literals, language mismatch, keyword-only, vague, long-complete, small talk); the gate returns all fired rules and maps them to transforms, relative dates are normalized deterministically, every rewritten query must keep the protected tokens verbatim or is discarded, rewriting uses a small fast model, and at most two variants are produced by default
@@ -141,8 +141,8 @@ All requirements are written so they can be checked. "Behind a switch" means an 
 - [ ] **XLG-01**: The query language (script ratio plus zh/en/it stopword scores, mixed-language queries classified by dominant script) and the languages of the tenant knowledge base (share per language from the DATA-02 `language` field) are detected; when the query language is not a knowledge-base language above a 20% share, the query is translated by a small fast model into up to two knowledge-base languages, keeping protected tokens verbatim (rewrite-gate R7/R8); original and translated queries are retrieved in parallel and fused with RRF; the answer is written in the asker's language while cited quotes stay in the source language; translation has its own switch, timeout and budget, and can be turned off per embedding profile when the eval shows the multilingual embedding alone is enough; supported under both query frameworks (former RQ-04)
 - [ ] **CHK-04**: Parent-child sizes are configurable in the Config UI per document-type profile: child size (tokens), parent mode (document structure — whole clause or section — with a token cap, or fixed size) and parent size, starting from child 256 / parent 1024 with presets 128/512, 256/1024 and 256/2048 plus custom values; the UI validates the choice — child must fit the active embedding profile's maximum input (hard error), parent must be at least twice the child (hard error), a parent/child ratio outside 4–8 and top-k × parent size above the RNK-03 context budget are warnings; a size change creates a new chunking profile that is re-chunked and re-embedded side by side from stored document text and activated by a pointer flip that can be rolled back (same mechanism as EMB-02/EMB-04)
 - [ ] **CHK-05**: A chunk-size sweep runs the golden set against each candidate chunking profile and reports Recall@k, MRR, refusal rates, judge answer correctness, context tokens sent and latency, overall and per document type, language and question category (fact lookups versus context-heavy questions); the admin sees the comparison in the Config UI and picks the profile per document type, and the decision is recorded with its numbers
-- [ ] **EVAL-14**: The golden set also covers how real users ask: new categories `colloquial` (wording that differs from the document's terms), `ambiguous` (short or underspecified) and `typo` (misspellings, missing accents, mixed scripts), next to the existing ones; every report also splits results by provenance (`production`, `human`, `claude_draft`, `ragas_generated`, `synthetic_fixture`), and once real-user items exist the gate is computed on them, with synthetic items reported for coverage only
-- [ ] **EVAL-15**: A configurable share of production requests (sampled, PII-masked, tenant-tagged) is pulled from their Langfuse traces into a review queue, and an online judge scores a sample of them (faithfulness, answer relevance) with the scores attached to the Langfuse trace, so quality is measured after release and not only before it
+- [x] **EVAL-14**: The golden set also covers how real users ask: new categories `colloquial` (wording that differs from the document's terms), `ambiguous` (short or underspecified) and `typo` (misspellings, missing accents, mixed scripts), next to the existing ones; every report also splits results by provenance (`production`, `human`, `claude_draft`, `ragas_generated`, `synthetic_fixture`), and once real-user items exist the gate is computed on them, with synthetic items reported for coverage only
+- [x] **EVAL-15**: A configurable share of production requests (sampled, PII-masked, tenant-tagged) is pulled from their Langfuse traces into a review queue, and an online judge scores a sample of them (faithfulness, answer relevance) with the scores attached to the Langfuse trace, so quality is measured after release and not only before it
 - [ ] **EVAL-16**: Every RAG answer has a helpful / not helpful control (with an optional reason); the vote is stored with the message and sent to Langfuse as a score, and "not helpful" votes and "possibly unreliable" groundedness results automatically enter the review queue
 - [ ] **EVAL-17**: Admins work the review queue in the Config UI: they see the question, answer, retrieved chunks and trace, write the expected answer and span evidence, and promote the case into the golden set with provenance `production` (stored only in the gitignored private path, split assigned by the frozen hash rule, near-duplicates detected); promoted cases are never removed, so every production failure becomes a permanent regression test; a periodic report lists new failures by layer and category
 - [ ] **XLG-02**: The fixture golden set gains a `cross_lingual` category: questions in English and Italian about Chinese documents, in Chinese and Italian about English documents, and in Chinese and English about Italian documents (at least 4 per direction pair, with span gold evidence in the source document); the slice is scored under today's configuration (`RAG_PIPELINE=legacy`) to record its baseline, reported per query-language/document-language pair, and gated like the language slices from then on
@@ -205,15 +205,15 @@ Which phases cover which requirements. Updated during roadmap creation.
 | EVAL-11 | Phase 1 | Complete |
 | EVAL-12 | Phase 1 | Complete |
 | EVAL-13 | Phase 1 | Complete |
-| PIPE-01 | Phase 2 | Pending |
-| PIPE-02 | Phase 2 | Pending |
-| PIPE-03 | Phase 2 | Pending |
-| PIPE-04 | Phase 2 | Pending |
-| PIPE-05 | Phase 2 | Pending |
+| PIPE-01 | Phase 2 | Complete |
+| PIPE-02 | Phase 2 | Complete |
+| PIPE-03 | Phase 2 | Complete |
+| PIPE-04 | Phase 2 | Complete |
+| PIPE-05 | Phase 2 | Complete (override: voice keeps its own result list per the 02-CONTEXT D-16 adjustment) |
 | PIPE-06 | Phase 2 | Pending |
-| PIPE-07 | Phase 2 | Pending |
-| PIPE-08 | Phase 2 | Pending |
-| PIPE-09 | Phase 2 | Pending |
+| PIPE-07 | Phase 2 | Complete |
+| PIPE-08 | Phase 2 | Complete |
+| PIPE-09 | Phase 2 | Complete |
 | PIPE-10 | Phase 2 | Complete |
 | DATA-01 | Phase 3 | Pending |
 | DATA-02 | Phase 3 | Pending |
@@ -263,8 +263,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ADM-02 | Phase 7 | Pending |
 | ADM-03 | Phase 7 | Pending |
 | ADM-04 | Phase 7 | Pending |
-| OBS-01 | Phase 2 | Pending |
-| OBS-02 | Phase 2 | Pending |
+| OBS-01 | Phase 2 | Complete |
+| OBS-02 | Phase 2 | Complete |
 | CHK-01 | Phase 3 | Pending |
 | CHK-02 | Phase 3 | Pending |
 | SEC-01 | Phase 3 | Pending |
@@ -278,8 +278,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | LAT-03 | Phase 6 | Pending |
 | XLG-01 | Phase 6 | Pending |
 | CACHE-01 | Phase 6 | Pending |
-| EVAL-14 | Phase 2 | Pending |
-| EVAL-15 | Phase 2 | Pending |
+| EVAL-14 | Phase 2 | Complete |
+| EVAL-15 | Phase 2 | Complete |
 | EVAL-16 | Phase 5 | Pending |
 | EVAL-17 | Phase 7 | Pending |
 | XLG-02 | Phase 3 | Pending |

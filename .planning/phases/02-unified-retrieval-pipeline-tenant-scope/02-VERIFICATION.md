@@ -443,3 +443,9 @@ Phase-required parity is intact: all paired differences are zero against both ba
 
 _Verified: 2026-11-24T00:05:53Z_
 _Verifier: Claude (gsd-verifier)_
+
+## Orchestrator decisions after verification (2026-11-24)
+
+- **SC5 / PIPE-05: accepted with override.** Voice keeps its own result list as planned under the D-16 adjustment; chat and embed share one assembly step. Marked complete in REQUIREMENTS.md with the override noted.
+- **Gap 1 (SC4 / PIPE-06):** the strict + web-search-off refusal introduced by G3 (MD-02) was an orchestrator error against D-06; being reverted to the in-band "knowledge base unavailable" error in fix batch G4. PIPE-06 stays pending until G4 merges.
+- **Gaps 2, 3 and IN-01:** fixed in G4 (post-deploy search-RPC revoke patch, voice deploy docs, eval-only stage overrides), together with the AGENTS.md updates listed above.
