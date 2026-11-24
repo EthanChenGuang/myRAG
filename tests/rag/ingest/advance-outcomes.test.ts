@@ -4,6 +4,7 @@ import { mintScope } from '@/lib/rag/tenant/scope';
 import { buildQueueIngestTrace, finishQueueIngestTrace as finishQueueIngestTraceActual } from '@/lib/rag/ingest/queue-trace';
 import { createIngestTrace, finishIngestTrace } from '@/lib/rag/ingest/trace';
 import { handleAdvance } from '@/lib/rag/ingest/callbacks/advance';
+import type { ParseCacheContent } from '@/lib/rag/ingest/parse-cache';
 import type { StageContext } from '@/lib/rag/ingest/types';
 
 const JOB_ID = '00000000-0000-4000-8000-000000000001';
@@ -174,7 +175,7 @@ vi.mock('@/lib/rag/ingest/queued-context', () => ({
       document: { id: DOC_ID, version: 1, lineageId: 'lineage', resumed: false },
       parserUsed: 'docling',
       work: { parseText: 'Hello world', parseChunks: null, pictures: null, parserVersion: '2', templateRow: null, chunks: [], chunksWritten: 0 },
-    } satisfies StageContext,
+    } as unknown as StageContext,
   })),
 }));
 
@@ -182,21 +183,7 @@ vi.mock('@/lib/rag/ingest/parse-cache', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/rag/ingest/parse-cache')>();
   return {
     ...actual,
-    readParseResultForJob: vi.fn(async () => ({
-    result: {
-      markdown: 'Hello world',
-      chunks: [],
-      pictures: [],
-      page_count: 2,
-      parser: 'docling',
-      parser_version: '2',
-      partial: false,
-      warnings: [],
-      text_layer_page_share: null,
-    },
-    artifacts: [],
-    entry: { id: CACHE_ID },
-  })),
+    readParseResultForJob: vi.fn(),
   };
 });
 
@@ -243,7 +230,7 @@ vi.mock('@/lib/rag/ingest/deps', () => ({
   }),
 }));
 
-const defaultCache = async () => ({
+const defaultCache = async (): Promise<ParseCacheContent> => ({
   result: {
     markdown: 'Hello world',
     chunks: [],
@@ -254,9 +241,20 @@ const defaultCache = async () => ({
     partial: false,
     warnings: [],
     text_layer_page_share: null,
+    language: null,
   },
   artifacts: [],
-  entry: { id: CACHE_ID },
+  entry: {
+    id: CACHE_ID,
+    tenantKey: 's:default',
+    fileSha256: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    parser: 'docling',
+    parserVersion: '2',
+    optionsHash: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+    objectPrefix: 's:default/_parse-cache/test/',
+    result: {},
+    byteSize: null,
+  },
 });
 
 beforeEach(async () => {

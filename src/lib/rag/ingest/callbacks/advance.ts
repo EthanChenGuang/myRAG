@@ -49,7 +49,7 @@ function pageParserMap(job: IngestionJob): Map<number, string> | null {
 
 function parsersOf(job: IngestionJob): string[] {
   const set = new Set<string>();
-  for (const range of job.page_ranges) {
+  for (const range of job.page_ranges ?? []) {
     if (range.parser) set.add(range.parser);
   }
   return [...set].sort();

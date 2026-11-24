@@ -23,6 +23,7 @@ function pagesBetween(start: number, end: number): number {
 export function buildQueueIngestTrace(job: IngestionJob, trace: IngestTrace): void {
   const { collector } = trace;
   const now = collector.now;
+  const timings = job.timings ?? {};
 
   const detect = job.detect_counts;
   if (detect) {
@@ -36,7 +37,7 @@ export function buildQueueIngestTrace(job: IngestionJob, trace: IngestTrace): vo
     });
   }
 
-  for (const attempt of job.attempts) {
+  for (const attempt of job.attempts ?? []) {
     const started = now();
     const pages = pagesBetween(attempt.pages.start, attempt.pages.end);
     collector.record({
@@ -55,13 +56,13 @@ export function buildQueueIngestTrace(job: IngestionJob, trace: IngestTrace): vo
     });
   }
 
-  if (typeof job.timings.check === 'number') {
+  if (typeof timings.check === 'number') {
     const started = now();
-    collector.record({ name: 'check', status: 'ok', startedAt: started, endedAt: started + job.timings.check });
+    collector.record({ name: 'check', status: 'ok', startedAt: started, endedAt: started + timings.check });
   }
 
   for (const stage of POST_PARSE) {
-    const ms = job.timings[stage];
+    const ms = timings[stage];
     if (typeof ms !== 'number') continue;
     const started = now();
     collector.record({ name: stage, status: 'ok', startedAt: started, endedAt: started + ms });
