@@ -71,9 +71,10 @@ for (const mode of MODES) {
         `SELECT indexdef FROM pg_indexes WHERE schemaname = 'public' AND indexname = 'ingestion_jobs_claim_queued_idx'`,
       );
       const indexdef = def.rows[0]?.indexdef ?? '';
-      assert.match(indexdef, /priority DESC, created_at ASC/i);
-      assert.match(indexdef, /kind.*ingest.*dry_run/si);
-      assert.match(indexdef, /status.*queued/i);
+      assert.match(indexdef, /priority DESC, created_at/i);
+      assert.match(indexdef, /'ingest'/i);
+      assert.match(indexdef, /'dry_run'/i);
+      assert.match(indexdef, /status = 'queued'/i);
       await db.exec('SET enable_seqscan = off');
       const plan = await db.query<Record<string, string>>(
         `EXPLAIN (FORMAT TEXT)

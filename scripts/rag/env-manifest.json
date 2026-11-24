@@ -436,12 +436,12 @@
     {
       "name": "RAG_INGEST_MAINTENANCE_INTERVAL_SECONDS",
       "status": "managed",
-      "knownGaps": ["config-ui"]
+      "knownGaps": []
     },
     {
       "name": "RAG_INGEST_MAINTENANCE",
       "status": "managed",
-      "knownGaps": ["config-ui"]
+      "knownGaps": []
     },
     {
       "name": "RAG_INITIAL_MATCH_COUNT",

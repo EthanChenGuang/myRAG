@@ -1,14 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { setIngestDepsForTests, resetIngestDepsForTests } from '@/lib/rag/ingest/deps';
+import { setLedgerDepsForTests, resetLedgerDepsForTests } from '@/lib/rag/ingest/ledger';
 import { runIngestionMaintenance } from '@/lib/rag/ingest/maintenance';
 
 describe('runIngestionMaintenance', () => {
   beforeEach(() => {
-    resetIngestDepsForTests();
+    resetLedgerDepsForTests();
   });
 
   afterEach(() => {
-    resetIngestDepsForTests();
+    resetLedgerDepsForTests();
     vi.unstubAllEnvs();
   });
 
@@ -22,10 +22,10 @@ describe('runIngestionMaintenance', () => {
         then: (resolve: (value: unknown) => void) => resolve(payload),
       };
     });
-    setIngestDepsForTests({ db: () => ({ rpc }) as never });
+    setLedgerDepsForTests({ db: () => ({ rpc }) as never });
     vi.stubEnv('RAG_INGEST_JOB_RETENTION_DAYS', '45');
 
-    const result = await runIngestionMaintenance();
+    const result = await runIngestionMaintenance({ signal: new AbortController().signal });
     expect(result).toEqual({ archived: 2, purged: 2, retention_days: 45 });
     expect(rpc).toHaveBeenCalledWith('rag_purge_stale_ingestion_jobs', {
       p_retention_days: 45,

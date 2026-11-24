@@ -6846,6 +6846,32 @@
 
                                         <div class="form-control mb-4">
                                             <label class="label">
+                                                <span class="label-text">Job retention (days)</span>
+                                            </label>
+                                            <input type="number" min="1" step="1" placeholder="90" id="RAG_INGEST_JOB_RETENTION_DAYS"
+                                                class="input input-bordered w-full">
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">Maintenance loop</span>
+                                            </label>
+                                            <select id="RAG_INGEST_MAINTENANCE" class="select select-bordered w-full">
+                                                <option value="on">on</option>
+                                                <option value="off">off</option>
+                                            </select>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">Maintenance interval (seconds)</span>
+                                            </label>
+                                            <input type="number" min="60" step="60" placeholder="3600" id="RAG_INGEST_MAINTENANCE_INTERVAL_SECONDS"
+                                                class="input input-bordered w-full">
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
                                                 <span class="label-text">Progressive publish</span>
                                             </label>
                                             <select id="RAG_PARSE_PROGRESSIVE" class="select select-bordered w-full">

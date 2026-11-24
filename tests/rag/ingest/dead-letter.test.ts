@@ -1,15 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { countIngestionDeadLetters, emitDeadLetterAlert } from '@/lib/rag/ingest/dead-letter';
-import { setIngestDepsForTests, resetIngestDepsForTests } from '@/lib/rag/ingest/deps';
+import { emitDeadLetterAlert } from '@/lib/rag/ingest/dead-letter';
+import { countDeadLetterJobs } from '@/lib/rag/ingest/ledger';
+import { setLedgerDepsForTests, resetLedgerDepsForTests } from '@/lib/rag/ingest/ledger';
 import { logger } from '@/lib/logger';
 
 describe('dead letter alerting', () => {
   beforeEach(() => {
-    resetIngestDepsForTests();
+    resetLedgerDepsForTests();
   });
 
   afterEach(() => {
-    resetIngestDepsForTests();
+    resetLedgerDepsForTests();
     vi.restoreAllMocks();
   });
 
@@ -19,8 +20,8 @@ describe('dead letter alerting', () => {
       abortSignal: () => payload,
       then: (resolve: (value: unknown) => void) => resolve(payload),
     }));
-    setIngestDepsForTests({ db: () => ({ rpc }) as never });
-    await expect(countIngestionDeadLetters()).resolves.toBe(3);
+    setLedgerDepsForTests({ db: () => ({ rpc }) as never });
+    await expect(countDeadLetterJobs(null, { signal: new AbortController().signal })).resolves.toBe(3);
   });
 
   it('warns only when count is positive', () => {

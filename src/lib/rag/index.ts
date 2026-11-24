@@ -122,6 +122,7 @@ export type { FindInvoicesDeps, InvoiceFilters, InvoiceHit } from './retrieval/i
 export { getIngestStatusReport, STALE_PROCESSING_MS } from './ingest/status';
 export type { IngestStatusReport } from './ingest/status';
 export { IngestLedgerError, deleteJob, getJobForScope, listJobs, listJobsPage, retryJob } from './ingest/ledger';
+export { runIngestionMaintenance } from './ingest/maintenance';
 export type { JobsPage, ListJobsArgs } from './ingest/ledger';
 export { PARSE_TIERS, ParseAdminError, listTierBounds, readBudgetView, setTierOverride } from './ingest/parse-admin';
 export type { BudgetTenantUsage, BudgetView, ParseTierName, SetTierOverrideInput, TierBoundsItem, TierBoundsPair, TierOverrideView } from './ingest/parse-admin';
@@ -147,7 +148,7 @@ export { enqueueIngest, submitIngest } from './ingest/enqueue';
 export type { EnqueueIngestOptions, EnqueueResult } from './ingest/enqueue';
 export { handleAdvance } from './ingest/callbacks/advance';
 export { handleParseExternal } from './ingest/callbacks/parse-external';
-export { checkSidecarSecret } from './ingest/callbacks/internal-auth';
+export { checkSidecarSecret, SIDECAR_SECRET_HEADER } from './ingest/callbacks/internal-auth';
 export type { ChangeDocumentTypeFailure, ChangeDocumentTypeInput, ChangeDocumentTypeResult } from './ingest/change-doc-type';
 export { scopeForAdminDocument, AdminDocumentScopeError } from './tenant/ingest-scope';
 export type { AdminDocumentScopeInput } from './tenant/ingest-scope';

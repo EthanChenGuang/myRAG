@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { checkSidecarSecret, SIDECAR_SECRET_HEADER } from '@/lib/rag/ingest/callbacks/internal-auth';
-import { IngestLedgerError, runIngestionMaintenance } from '@/lib/rag/ingest/maintenance';
+import { checkSidecarSecret, SIDECAR_SECRET_HEADER, IngestLedgerError, runIngestionMaintenance } from '@/lib/rag';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
