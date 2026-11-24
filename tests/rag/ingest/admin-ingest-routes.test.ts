@@ -36,6 +36,7 @@ const OPERATOR_KEYS = [
   'mime_type',
   'needs_review_reason',
   'pages',
+  'provisional',
   'retries',
   'source',
   'stage',
@@ -44,7 +45,17 @@ const OPERATOR_KEYS = [
   'tier',
   'updated_at',
 ];
-const HIDDEN_KEYS = ['original_ref', 'settings', 'stage_state', 'source_key', 'file_sha256', 'locked_by', 'timings', 'trace_id'];
+const HIDDEN_KEYS = [
+  'original_ref',
+  'settings',
+  'stage_state',
+  'source_key',
+  'file_sha256',
+  'locked_by',
+  'timings',
+  'trace_id',
+  'provisional_published_at',
+];
 
 type Row = Record<string, unknown>;
 
@@ -424,6 +435,21 @@ describe('admin ingest job routes', () => {
       const secondBody = await second.json();
       expect(secondBody.items.map((item: Row) => item.id)).toEqual([id(2), id(1)]);
       expect(secondBody.next_cursor).toBeNull();
+    });
+
+    it('maps provisional_published_at to a boolean provisional and hides the timestamp', async () => {
+      asAdminA();
+      const tenant = `u:${ADMIN_A}`;
+      state.jobs = [
+        jobRow(1, tenant, { provisional_published_at: '2026-11-24T12:00:00.000Z' }),
+        jobRow(2, tenant, { provisional_published_at: null }),
+      ];
+      const { list } = await loadRoutes();
+      const body = await (await list.GET(req(BASE))).json();
+      const byId = Object.fromEntries(body.items.map((item: Row) => [item.id, item]));
+      expect(byId[id(1)].provisional).toBe(true);
+      expect(byId[id(2)].provisional).toBe(false);
+      expect(JSON.stringify(body)).not.toContain('provisional_published_at');
     });
 
     it('never repeats or skips a row when a newer job arrives between pages', async () => {

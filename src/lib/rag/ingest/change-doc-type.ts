@@ -1,7 +1,8 @@
 import { assertTenantScope, scopeKey, type TenantScope } from '../tenant/scope';
 import { isArtifactName, loadArtifact, versionPrefix, type ArtifactContext } from './artifacts';
 import { getIngestDeps } from './deps';
-import { ingest } from './index';
+import { submitIngest } from './enqueue';
+import { queueConfigFromProcessEnv } from './queue-config';
 import { DOC_TYPE_IDS } from './profiles/doc-type-defaults';
 import { profileFor, type DocType } from './profiles/load';
 import { storedParseServes } from './profiles/resolve-doc-type';
@@ -150,18 +151,34 @@ export async function changeDocumentType(input: ChangeDocumentTypeInput): Promis
   }
   if (original === null) return fail('original_unavailable');
 
-  const result = await ingest({
-    scope,
-    source,
-    sourceKey,
-    filename: text(row, 'filename') ?? sourceKey,
-    mimeType: original.contentType || 'application/octet-stream',
-    file: original.bytes,
-    docType,
-    options: optionsOf(row),
-    typeChange: typeChangeOf(row, source, previousType, docType, version),
-    signal,
-    ...(input.deadlineMs !== undefined ? { deadlineMs: input.deadlineMs } : {}),
-  });
-  return { ok: true, result };
+  const outcome = await submitIngest(
+    {
+      scope,
+      source,
+      sourceKey,
+      filename: text(row, 'filename') ?? sourceKey,
+      mimeType: original.contentType || 'application/octet-stream',
+      file: original.bytes,
+      docType,
+      options: optionsOf(row),
+      typeChange: typeChangeOf(row, source, previousType, docType, version),
+      signal,
+      ...(input.deadlineMs !== undefined ? { deadlineMs: input.deadlineMs } : {}),
+    },
+    { queueConfig: queueConfigFromProcessEnv },
+  );
+  if ('jobId' in outcome) {
+    return {
+      ok: true,
+      result: {
+        status: 'processing',
+        documentId: outcome.documentId,
+        version: null,
+        parserUsed: null,
+        chunkCount: 0,
+        warnings: [],
+      },
+    };
+  }
+  return { ok: true, result: outcome };
 }
