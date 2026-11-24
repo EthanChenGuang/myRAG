@@ -1,35 +1,27 @@
-# Handoff: exec/03.1-36 → claude/ecstatic-hamilton-86gtwv
+# HANDOFF — Plan 03.1-33 (exec/03.1-33)
 
-**Plan:** 03.1-36 Config UI Ingestion panel + upload monitor + `provisional` projection
+**Branch:** `exec/03.1-33` → base `claude/ecstatic-hamilton-86gtwv`  
+**Requirement:** DATA-15 (Nango sync on ingest queue under async switch)
 
-## Branch / PR
+## Done
 
-- Branch: `exec/03.1-36`
-- Base: `claude/ecstatic-hamilton-86gtwv`
-- Summary: `.planning/phases/03.1-tiered-parsing-incremental-queue-bulk-backfill/03.1-36-SUMMARY.md`
+- Unified Nango `document-adapter` enqueues via `submitIngest` when `RAG_INGEST_PIPELINE=unified` and `RAG_INGEST_ASYNC=on`; inline `ingest()` when async is off.
+- `tests/rag/ingest/enqueue-nango.test.ts` (8 cases): adapter dispatch + two-owner queued sync, provider skip, version-2 on byte change.
+- Barrel: `queueConfigFromProcessEnv` exported from `@/lib/rag` (boundary hygiene; adapter uses env gate for mock compatibility).
 
-## What shipped
+## Next
 
-1. RAG administration **Ingestion** section (`#rag-administration-ingestion`) with jobs, tier bounds, and relocated 03.1-03 settings.
-2. Shared job strings in `status-monitor.js`; upload polling via `process-documents.js` + inline `DocumentProcessor` 202 handling.
-3. Admin API: `provisional: boolean` on `projectJob` (timestamp still hidden).
+- Merge PR; downstream **03.1-39** (soft delete) and ledger consumers can assume Nango jobs exist under async.
+- Remaining write-path plans (03.1-29…32) still need their own `submitIngest` wiring on trunk.
 
-## MED-4 / Q4
+## How to verify
 
-UI-SPEC default retained: **any admin** may edit deployment-wide tier bounds, with `tiers.note` warning. Safer owner-only restriction left for PO override (ledger deferred item).
+```bash
+npx vitest run tests/rag/ingest/enqueue-nango.test.ts tests/rag/ingest/write-path-nango.test.ts tests/nango
+npx next typegen && npx tsc --noEmit -p tsconfig.json
+node scripts/ci/check-rag-boundary.mjs
+```
 
-## Gates (executor)
+## Open questions
 
-- Vitest (plan scope): **110/110** pass
-- TypeScript: **0** errors
-- check-rag-boundary, check-config, check-workflows: pass
-- frontend-design SUMMARY gate (isolated): pass
-
-## Operator follow-up
-
-- Visual UAT on Config UI (documented in SUMMARY): panel retry/delete, settings Save All Changes, upload monitor after 03.1-29 lands.
-- Full-repo vitest has 5 known-unrelated failures; no action required for this PR unless CI enforces full suite.
-
-## Blockers
-
-None.
+- None for this plan. Async gate intentionally mirrors queue-config via env in the adapter only so 03-33 tests stay untouched; confirm product wants strict `queueConfigFromProcessEnv()` once mocks use `importOriginal`.

@@ -5,6 +5,13 @@ import time
 from pathlib import Path
 
 import httpx
+import pytest
+from pydantic import SecretStr, ValidationError
+
+from rag_sidecar.main import create_app
+from rag_sidecar.settings import SidecarSettings
+
+SECRET_48 = "s" * 48
 
 SIDECAR_DIR = Path(__file__).resolve().parent.parent
 BOOT_TIMEOUT_SECONDS = 20
@@ -14,6 +21,52 @@ def _free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind(("127.0.0.1", 0))
         return sock.getsockname()[1]
+
+
+@pytest.mark.parametrize(
+    "sidecar_env",
+    [None, "", "production", "TEST"],
+)
+def test_recorded_converter_requires_test_env(sidecar_env):
+    with pytest.raises(ValidationError) as error:
+        SidecarSettings(
+            secret=SecretStr(SECRET_48),
+            ingest_converter="recorded",
+            ingest_recorded_dir="/tmp/recorded-fixtures",
+            sidecar_env=sidecar_env,
+        )
+    assert "recorded_converter_requires_test_env" in str(error.value)
+
+
+def test_recorded_dir_with_docling_converter_requires_test_env():
+    with pytest.raises(ValidationError) as error:
+        SidecarSettings(
+            secret=SecretStr(SECRET_48),
+            ingest_recorded_dir="/tmp/recorded-fixtures",
+            sidecar_env=None,
+        )
+    assert "recorded_converter_requires_test_env" in str(error.value)
+
+
+def test_recorded_converter_allowed_in_test_env():
+    settings = SidecarSettings(
+        secret=SecretStr(SECRET_48),
+        ingest_converter="recorded",
+        ingest_recorded_dir="/tmp/recorded-fixtures",
+        sidecar_env="test",
+    )
+    assert settings.ingest_converter == "recorded"
+
+
+def test_create_app_refuses_recorded_converter_outside_tests():
+    with pytest.raises(ValidationError):
+        create_app(
+            SidecarSettings(
+                secret=SecretStr(SECRET_48),
+                ingest_converter="recorded",
+                ingest_recorded_dir="/tmp/recorded-fixtures",
+            )
+        )
 
 
 def test_locked_environment_boots_and_answers_probes(tmp_path):
