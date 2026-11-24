@@ -11,6 +11,8 @@ import type { Profile } from '@/lib/rag/types';
 import { effectiveRetrievalParams } from '@/lib/rag/v2/retrieval-params';
 import { runContextStages, type ContextStagesInput } from '@/lib/rag/v2/stages/context';
 import { hit } from '../fusion/helpers';
+import type { RpcClient, RpcRequest, RpcResponse } from '@/lib/rag/backend/supabase-rpc';
+import { resetRagDepsForTests, setRagDepsForTests } from '@/lib/rag/deps';
 
 vi.mock('@/lib/rag/context/compress', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/rag/context/compress')>();
@@ -31,6 +33,7 @@ interface Spec {
   chunkIndex: number;
   content?: string;
   metadata?: Record<string, unknown>;
+  parentId?: string | null;
 }
 
 function fusedList(specs: Spec[]): FusedHit[] {
@@ -40,6 +43,7 @@ function fusedList(specs: Spec[]): FusedHit[] {
       hit: hit(spec.chunkId, {
         rank,
         documentId: spec.documentId,
+        parentId: spec.parentId ?? null,
         chunkIndex: spec.chunkIndex,
         content: spec.content ?? `body of ${spec.chunkId}`,
         similarity: 0.9 - rank * 0.01,
@@ -349,5 +353,196 @@ describe('runContextStages compress (D-16)', () => {
     const { assembly } = await promise;
     expect(stageCounts(collector, 'compress')?.status).toBe('skipped');
     expect(assembly!.context).toContain(long);
+  });
+});
+
+const SINGLE_KEY = 's:default';
+
+interface ParentFixture {
+  id: string;
+  documentId: string;
+  content: string;
+  tenantKey?: string;
+}
+
+function parentsAdmin(parents: ParentFixture[], options: { error?: { message: string; code?: string } } = {}) {
+  const calls: Array<{ fn: string; args: Record<string, unknown> }> = [];
+  const client: RpcClient = {
+    rpc(fn: string, args: Record<string, unknown>): RpcRequest {
+      calls.push({ fn, args });
+      const asked = new Set((args.p_parent_ids as string[] | undefined) ?? []);
+      const request: RpcRequest = {
+        abortSignal: () => request,
+        then(onFulfilled, onRejected) {
+          const response: RpcResponse = options.error
+            ? { data: null, error: options.error }
+            : {
+                data: parents
+                  .filter((parent) => asked.has(parent.id))
+                  .map((parent) => ({
+                    id: parent.id,
+                    document_id: parent.documentId,
+                    tenant_key: parent.tenantKey ?? SINGLE_KEY,
+                    version: 1,
+                    is_current: true,
+                    chunking_profile_id: 'legacy',
+                    section_path: ['Section'],
+                    content: parent.content,
+                    token_count: 20,
+                    parent_index: 0,
+                  })),
+                error: null,
+              };
+          return Promise.resolve(response).then(onFulfilled, onRejected);
+        },
+      };
+      return request;
+    },
+  };
+  return { client, calls };
+}
+
+function occurrences(text: string, needle: string): number {
+  return text.split(needle).length - 1;
+}
+
+describe('runContextStages expand_parents (D-20)', () => {
+  const PARENT_A = 'parent-alpha';
+  const PARENT_B = 'parent-beta';
+  const parentSpecs: Spec[] = [
+    { chunkId: 'a-3', documentId: 'doc-a', filename: 'alpha.pdf', chunkIndex: 3, parentId: PARENT_A },
+    { chunkId: 'b-1', documentId: 'doc-b', filename: 'beta.pdf', chunkIndex: 1, parentId: PARENT_B },
+    { chunkId: 'a-4', documentId: 'doc-a', filename: 'alpha.pdf', chunkIndex: 4, parentId: PARENT_A },
+  ];
+  const parents: ParentFixture[] = [
+    { id: PARENT_A, documentId: 'doc-a', content: 'ALPHA PARENT: the full alpha section with its surrounding detail.' },
+    { id: PARENT_B, documentId: 'doc-b', content: 'BETA PARENT: the full beta section with its surrounding detail.' },
+  ];
+  const on = { RAG_PARENT_CHILD: 'true' };
+
+  beforeEach(() => {
+    resetRagConfigForTests();
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    resetRagDepsForTests();
+    resetRagConfigForTests();
+  });
+
+  it('is recorded disabled, makes no call and leaves the context byte-identical when the switch is off', async () => {
+    const { client, calls } = parentsAdmin(parents);
+    setRagDepsForTests({ adminClient: () => client as never });
+    const withParentIds = run(parentSpecs);
+    const out = await withParentIds.promise;
+    const withoutParentIds = await run(parentSpecs.map((spec) => ({ ...spec, parentId: null }))).promise;
+
+    expect(stageCounts(withParentIds.collector, 'expand_parents')?.status).toBe('disabled');
+    expect(calls).toHaveLength(0);
+    expect(out.assembly!.context).toBe(withoutParentIds.assembly!.context);
+    expect(out.assembly!.context).toContain('body of a-3');
+  });
+
+  it('renders each parent once under its document header instead of its children', async () => {
+    const { client, calls } = parentsAdmin(parents);
+    setRagDepsForTests({ adminClient: () => client as never });
+    const { promise, collector } = run(parentSpecs, on);
+    const { assembly, candidates } = await promise;
+    const context = assembly!.context;
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.fn).toBe('rag_fetch_parents');
+    expect(calls[0]?.args).toEqual({ p_tenant_key: SINGLE_KEY, p_parent_ids: [PARENT_A, PARENT_B] });
+    expect(occurrences(context, parents[0]!.content)).toBe(1);
+    expect(occurrences(context, parents[1]!.content)).toBe(1);
+    expect(context).not.toContain('body of a-3');
+    expect(context).not.toContain('body of a-4');
+    expect(context.indexOf('--- Document: alpha.pdf')).toBeLessThan(context.indexOf(parents[0]!.content));
+    expect(context.indexOf('--- Document: beta.pdf')).toBeLessThan(context.indexOf(parents[1]!.content));
+    expect(context).toContain('--- Document: alpha.pdf (1 relevant chunks) ---');
+    expect(candidates.map((candidate) => candidate.chunk_id)).toEqual(['a-3', 'b-1', 'a-4']);
+
+    const record = stageCounts(collector, 'expand_parents');
+    expect(record?.status).toBe('ok');
+    expect(record?.candidates_in).toBe(3);
+    expect(record?.counts).toMatchObject({ parents_fetched: 2, parents_used: 2 });
+    const expandAt = collector.stages().findIndex((row) => row.name === 'expand_parents');
+    const assembleAt = collector.stages().findIndex((row) => row.name === 'assemble');
+    expect(expandAt).toBeGreaterThanOrEqual(0);
+    expect(expandAt).toBeLessThan(assembleAt);
+  });
+
+  it('keeps the child where the parent does not fit the token budget', async () => {
+    const big = Array.from({ length: 400 }, (_, index) => `bigword${index}`).join(' ');
+    const bigParents: ParentFixture[] = [
+      { id: PARENT_A, documentId: 'doc-a', content: 'ALPHA PARENT: short section.' },
+      { id: PARENT_B, documentId: 'doc-b', content: big },
+    ];
+    const { client } = parentsAdmin(bigParents);
+    setRagDepsForTests({ adminClient: () => client as never });
+    const { promise, collector } = run(parentSpecs, { ...on, RAG_CONTEXT_TOKEN_BUDGET: '120' });
+    const { assembly } = await promise;
+    const context = assembly!.context;
+
+    expect(context).toContain('ALPHA PARENT: short section.');
+    expect(context).toContain('body of b-1');
+    expect(context).not.toContain('bigword0');
+    expect(stageCounts(collector, 'expand_parents')?.counts).toMatchObject({ parents_fetched: 2, parents_used: 1 });
+  });
+
+  it('uses the children when the fetch fails and records the stage skipped', async () => {
+    const { client } = parentsAdmin(parents, { error: { message: 'down', code: '57014' } });
+    setRagDepsForTests({ adminClient: () => client as never });
+    const off = await run(parentSpecs).promise;
+    const { promise, collector } = run(parentSpecs, on);
+    const { assembly } = await promise;
+
+    expect(stageCounts(collector, 'expand_parents')?.status).toBe('skipped');
+    expect(assembly!.context).toBe(off.assembly!.context);
+  });
+
+  it('uses the children when there is no admin client', async () => {
+    setRagDepsForTests({ adminClient: () => null });
+    const { promise, collector } = run(parentSpecs, on);
+    const { assembly } = await promise;
+    expect(stageCounts(collector, 'expand_parents')?.status).toBe('skipped');
+    expect(assembly!.context).toContain('body of a-3');
+  });
+
+  it('never shows a parent of another tenant: the children stay', async () => {
+    const foreign = parents.map((parent) => ({ ...parent, tenantKey: 'u:00000000-0000-4000-8000-0000000000b1' }));
+    const { client, calls } = parentsAdmin(foreign);
+    setRagDepsForTests({ adminClient: () => client as never });
+    const { promise } = run(parentSpecs, on);
+    const { assembly } = await promise;
+    expect(calls).toHaveLength(1);
+    expect(assembly!.context).not.toContain('PARENT:');
+    expect(assembly!.context).toContain('body of a-3');
+    expect(assembly!.context).toContain('body of b-1');
+  });
+
+  it('records candidates_in 0 and makes no call when nothing survived', async () => {
+    const { client, calls } = parentsAdmin(parents);
+    setRagDepsForTests({ adminClient: () => client as never });
+    const { promise, collector } = run([], on);
+    await promise;
+    const record = stageCounts(collector, 'expand_parents');
+    expect(record?.status).toBe('ok');
+    expect(record?.candidates_in).toBe(0);
+    expect(calls).toHaveLength(0);
+  });
+
+  it('leaves a parent block uncompressed while an ordinary chunk of the same size is compressed', async () => {
+    const longParent = sentenceBlock('Parent', 40);
+    const { client } = parentsAdmin([{ id: PARENT_A, documentId: 'doc-a', content: longParent }]);
+    setRagDepsForTests({ adminClient: () => client as never });
+    const spec: Spec = { chunkId: 'a-1', documentId: 'doc-a', filename: 'alpha.pdf', chunkIndex: 1, parentId: PARENT_A, content: 'short child' };
+
+    const expanded = await run([spec], { ...on, RAG_CONTEXT_COMPRESSION: 'true' }).promise;
+    expect(expanded.assembly!.context).toContain(longParent);
+
+    const control = await run([{ ...spec, parentId: null, content: longParent }], { RAG_CONTEXT_COMPRESSION: 'true' }).promise;
+    expect(control.assembly!.context).not.toContain(longParent);
   });
 });
