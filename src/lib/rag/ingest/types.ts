@@ -38,6 +38,10 @@ export interface IngestOrigin {
 
 export interface IngestOptions {
   origin?: IngestOrigin;
+  /** Image uploads only: the public URL of the stored picture, written to the chunk metadata so the chat can show it. */
+  imageUrl?: string;
+  /** Image uploads only: the free text the uploader gave the picture, kept as plain metadata. */
+  imageContext?: string;
   /** Nango sync only: the connection and folder the file came from, which the admin doc-type defaults can name. */
   nangoConnectionId?: string;
   nangoFolderId?: string;
@@ -86,7 +90,8 @@ export interface IngestState {
   docTypeDetection: { signals: string[]; refined: DocType | null; reparsed: boolean; detection?: DocTypeDetection } | null;
   quarantine: { ruleIds: string[]; released: boolean } | null;
   invoice: { extractor: string; status: string } | null;
-  images: { nextIndex: number; captioned: number } | null;
+  /** Caption progress, and for a whole image what a resumed run needs without the upload: the public URL, the context and the media type. */
+  images: { nextIndex: number; captioned: number; imageUrl?: string; imageContext?: string; mimeType?: string } | null;
   embeddingTargets: string[];
   embeddingGaps: Array<{ profileId: string; chunkIndex: number }>;
 }
@@ -158,6 +163,10 @@ export interface IngestWork {
   parseText: string | null;
   /** Docling's own chunks from the parse result; the chunk stage uses them when the profile allows. */
   parseChunks?: ParseResult['chunks'] | null;
+  /** The pictures the parser found (a whole image is one picture), for the images stage. */
+  pictures?: ParseResult['pictures'] | null;
+  /** Set by the chunk stage when the chunker is image_caption: the images stage produces the only chunk. */
+  captionOnly?: boolean;
   parserVersion: string | null;
   /** Promoted document columns of this run (the invoice fields); the profile's embedding header template renders from them. */
   templateRow?: Record<string, string | null> | null;
