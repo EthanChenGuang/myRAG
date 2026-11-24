@@ -55,6 +55,9 @@ class IngestionMaintenanceLoop:
 
     async def _run_once(self) -> None:
         try:
+            dead = await self._ledger.count_dead_letters()
+            if dead > 0:
+                logger.warning("[RAG Ingest] ingestion dead letters present count=%s signal=ingestion_dead_letters", dead)
             result = await self._rpc_purge()
             purged = int(result.get("purged", 0))
             if purged > 0:

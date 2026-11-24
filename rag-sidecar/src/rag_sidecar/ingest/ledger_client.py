@@ -232,6 +232,14 @@ class LedgerClient:
             return int(first)
         raise LedgerError("record_attempt returned unexpected payload")
 
+    async def count_dead_letters(self, tenant_key: str | None = None) -> int:
+        payload = await self._rpc("rag_count_ingestion_dead_letters", {"p_tenant_key": tenant_key})
+        if isinstance(payload, (int, float)):
+            return int(payload)
+        if isinstance(payload, str) and payload.isdigit():
+            return int(payload)
+        return 0
+
     async def purge_stale(self, *, retention_days: int, batch_size: int = 500) -> dict[str, Any]:
         payload = await self._rpc(
             "rag_purge_stale_ingestion_jobs",
@@ -239,16 +247,24 @@ class LedgerClient:
         )
         return payload if isinstance(payload, dict) else {"archived": 0, "purged": 0}
 
-    async def fail(self, job_id: str, worker: str, *, error_class: str, retryable: bool) -> IngestionJob:
-        payload = await self._rpc(
-            "rag_fail_ingestion_job",
-            {
-                "p_job_id": job_id,
-                "p_worker": worker,
-                "p_error_class": error_class,
-                "p_retryable": retryable,
-            },
-        )
+    async def fail(
+        self,
+        job_id: str,
+        worker: str,
+        *,
+        error_class: str,
+        retryable: bool,
+        last_error: str | None = None,
+    ) -> IngestionJob:
+        body = {
+            "p_job_id": job_id,
+            "p_worker": worker,
+            "p_error_class": error_class,
+            "p_retryable": retryable,
+        }
+        if last_error is not None:
+            body["p_last_error"] = last_error
+        payload = await self._rpc("rag_fail_ingestion_job", body)
         rows = self._rows(payload)
         if not rows:
             raise LedgerError("fail returned no row")

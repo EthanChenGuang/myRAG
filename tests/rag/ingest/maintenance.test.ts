@@ -13,11 +13,15 @@ describe('runIngestionMaintenance', () => {
   });
 
   it('maps purge RPC counts', async () => {
-    const payload = { data: { archived: 2, purged: 2, retention_days: 45 }, error: null };
-    const rpc = vi.fn(() => ({
-      abortSignal: () => payload,
-      then: (resolve: (value: unknown) => void) => resolve(payload),
-    }));
+    const countPayload = { data: 0, error: null };
+    const purgePayload = { data: { archived: 2, purged: 2, retention_days: 45 }, error: null };
+    const rpc = vi.fn((fn: string) => {
+      const payload = fn === 'rag_count_ingestion_dead_letters' ? countPayload : purgePayload;
+      return {
+        abortSignal: () => payload,
+        then: (resolve: (value: unknown) => void) => resolve(payload),
+      };
+    });
     setIngestDepsForTests({ db: () => ({ rpc }) as never });
     vi.stubEnv('RAG_INGEST_JOB_RETENTION_DAYS', '45');
 
