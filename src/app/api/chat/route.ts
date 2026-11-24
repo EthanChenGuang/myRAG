@@ -13,11 +13,14 @@ import {
   createEnhancedRAGPrompt,
   createTraceCollector,
   finishTrace,
+  isV2Pipeline,
   knowledgeBaseUnavailableMessage,
+  parseRetrievalFilters,
   repairOwnerMembership,
   resolveTenantScope,
   runRetrieval,
   scopeKey,
+  type RetrievalFilterInput,
   type RetrievalResult,
   type TenantScope,
   type TraceCollector,
@@ -1167,6 +1170,7 @@ export async function POST(req: Request) {
   };
 
   try {
+    const requestBody = await req.json();
     const { messages: rawMessages, data, imageStorage }: {
       messages: APIMessage[],
       data?: {
@@ -1193,7 +1197,20 @@ export async function POST(req: Request) {
         ragMode?: 'strict' | 'balanced' | 'flexible' | 'bypass' // RAG behavior mode
       },
       imageStorage?: Record<string, string> // Add imageStorage for attached images
-    } = await req.json();
+    } = requestBody;
+
+    // Only the v2 pipeline reads this field; under legacy the body is handled exactly as before
+    let retrievalFilters: RetrievalFilterInput | undefined;
+    if (isV2Pipeline()) {
+      const filtersParsed = parseRetrievalFilters(requestBody?.retrievalFilters);
+      if (!filtersParsed.ok) {
+        return NextResponse.json(
+          { success: false, error: 'Invalid request data', details: filtersParsed.details },
+          { status: 400 }
+        );
+      }
+      retrievalFilters = filtersParsed.filters;
+    }
 
     // Initialize Supabase client
     const supabase = getSupabaseAdmin();
@@ -1967,6 +1984,7 @@ IMPORTANT:
           },
           signal: req.signal,
           trace: collector,
+          ...(retrievalFilters ? { retrievalFilters } : {}),
         });
         ragTrace = { collector, result };
         collector.setReviewContent({ query: queryText });
