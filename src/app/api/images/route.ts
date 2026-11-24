@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
-import { repairOwnerMembership, resolveTenantScope, type RagAdminDb } from '@/lib/rag';
+import { removeDocumentObjects, repairOwnerMembership, resolveTenantScope, type RagAdminDb } from '@/lib/rag';
 import { checkSingleTenantKbWrite } from '@/lib/kb-write-access';
-import { removeDocumentObjects } from '@/lib/rag/ingest/remove-document-objects';
 
 export const runtime = 'nodejs';
 

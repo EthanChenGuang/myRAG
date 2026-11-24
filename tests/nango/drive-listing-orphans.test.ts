@@ -77,6 +77,7 @@ async function loadSyncManager(memory: ReturnType<typeof createMemoryDb>) {
   const identity = await vi.importActual<typeof import('@/lib/rag/ingest/identity')>('@/lib/rag/ingest/identity');
   const ingestScope = await vi.importActual<typeof import('@/lib/rag/tenant/ingest-scope')>('@/lib/rag/tenant/ingest-scope');
   const scopeModule = await vi.importActual<typeof import('@/lib/rag/tenant/scope')>('@/lib/rag/tenant/scope');
+  const objects = await vi.importActual<typeof import('@/lib/rag/ingest/remove-document-objects')>('@/lib/rag/ingest/remove-document-objects');
   vi.doMock('@/lib/supabase', () => ({ getSupabaseAdmin: () => memory.admin }));
   vi.doMock('@/lib/nango/client', () => ({ getNango: () => ({ proxy, listRecords: vi.fn() }) }));
   vi.doMock('@/lib/nango/file-fetcher', () => ({ fetchFileContent: vi.fn() }));
@@ -91,6 +92,7 @@ async function loadSyncManager(memory: ReturnType<typeof createMemoryDb>) {
     currentIngestConfig: () => ({ pipeline: 'unified' }),
     scopeKey: scopeModule.scopeKey,
     softDeleteLineage: vi.fn(),
+    removeDocumentObjects: objects.removeDocumentObjects,
     queueConfigFromProcessEnv: () => ({ ingestAsync: false }),
   }));
   return import('@/lib/nango/sync-manager');

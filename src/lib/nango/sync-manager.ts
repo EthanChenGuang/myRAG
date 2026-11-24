@@ -5,8 +5,7 @@ import { fetchFileContent } from './file-fetcher';
 import { PROVIDER_CONFIG, type NangoFileRecord, type SupportedProvider, type SyncStats } from './types';
 import { env } from '@/lib/env';
 import { logger } from '@/lib/logger';
-import { nangoOwnerScope, queueConfigFromProcessEnv, scopeKey, softDeleteLineage } from '@/lib/rag';
-import { removeDocumentObjects, type DocumentObjectRow } from '@/lib/rag/ingest/remove-document-objects';
+import { nangoOwnerScope, queueConfigFromProcessEnv, removeDocumentObjects, scopeKey, softDeleteLineage, type DocumentObjectRow } from '@/lib/rag';
 
 const SUPPORTED_EXTENSIONS = (env.NANGO_SUPPORTED_FILE_TYPES || 'pdf,doc,docx,txt,md').split(',');
 const MAX_FILES_PER_SYNC = parseInt(env.NANGO_MAX_FILES_PER_SYNC || '100');
