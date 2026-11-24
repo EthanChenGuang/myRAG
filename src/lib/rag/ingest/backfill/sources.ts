@@ -218,6 +218,24 @@ async function fetchUrlBytes(url: string, deps: BackfillSourceDeps, signal: Abor
   throw new SourceRejection('manifest_redirect');
 }
 
+/** Passes a stream through and fails it with too_large as soon as more than max bytes have flowed (the size seen at listing can be stale). */
+function limitBytes(source: NodeJS.ReadableStream, max: number): Readable {
+  async function* capped(): AsyncGenerator<Buffer> {
+    let seen = 0;
+    try {
+      for await (const chunk of source) {
+        const piece = typeof chunk === 'string' ? Buffer.from(chunk) : (chunk as Buffer);
+        seen += piece.byteLength;
+        if (seen > max) throw new SourceRejection('too_large');
+        yield piece;
+      }
+    } finally {
+      (source as Partial<Readable>).destroy?.();
+    }
+  }
+  return Readable.from(capped(), { objectMode: false });
+}
+
 function extname(name: string): string {
   const base = path.basename(name);
   const dot = base.lastIndexOf('.');
@@ -313,7 +331,7 @@ async function* listFolder(ref: string, deps: BackfillSourceDeps, signal: AbortS
           const again = await realpath(joined);
           if (!inside(root, again)) throw new SourceRejection('outside_root');
           if (hasHiddenSegment(path.relative(root, again))) throw new SourceRejection('hidden_path');
-          return createReadStream(again);
+          return limitBytes(createReadStream(again), ORIGINALS_MAX_BYTES);
         },
       };
     }
@@ -387,7 +405,8 @@ async function* listBucket(
           async open() {
             const { data: blob, error: downloadError } = await api.download(full);
             if (downloadError || !blob) throw new SourceRejection('bucket_download_failed');
-            return Readable.from([Buffer.from(await blob.arrayBuffer())]);
+            if (blob.size > ORIGINALS_MAX_BYTES) throw new SourceRejection('too_large');
+            return limitBytes(Readable.fromWeb(blob.stream() as never), ORIGINALS_MAX_BYTES);
           },
         };
       }
@@ -500,7 +519,7 @@ async function* listManifest(ref: string, explicitRoot: string | undefined, deps
             const again = await realpath(resolved);
             if (!inside(root, again)) throw new SourceRejection('outside_root');
             if (hasHiddenSegment(path.relative(root, again))) throw new SourceRejection('hidden_path');
-            return createReadStream(again);
+            return limitBytes(createReadStream(again), ORIGINALS_MAX_BYTES);
           },
         };
         continue;
