@@ -127,12 +127,15 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 
 | Plan | Worktree / branch | Status |
 |------|-------------------|--------|
-| 03.1-19 | `wt/03.1-19` / `exec/03.1-19` | **RUNNING** (gsd-executor) |
+| 03.1-19 | `wt/03.1-19` / `exec/03.1-19` | **merged** |
 | 04-21 | `wt/04-21` / `exec/04-21` | **RUNNING** (gsd-executor) |
-| 04-22 | `wt/04-22` / `exec/04-22` | **RUNNING** (gsd-executor) |
+| 04-22 | `wt/04-22` / `exec/04-22` | **merged** |
 | 03.1-24 | `wt/03.1-24` / `exec/03.1-24` | **RUNNING** (gsd-executor) |
 | 03.1-26 | `wt/03.1-26` / `exec/03.1-26` | **RUNNING** (gsd-executor) |
 | 04-31 | `wt/04-31` / `exec/04-31` | **RUNNING** (gsd-executor) |
+| 03.1-21 | `wt/03.1-21` / `exec/03.1-21` | **RUNNING** (gsd-executor, base `e3b4d12`) |
+| 03.1-22 | `wt/03.1-22` / `exec/03.1-22` | **RUNNING** (gsd-executor, base `e3b4d12`) |
+| 04-27 | `wt/04-27` / `exec/04-27` | **RUNNING** (gsd-executor, base `e3b4d12`) |
 
 ## Wave E — **PAUSE-96 STOPPED** (2026-11-24 ~13:48 Europe/Rome; Claude Code resumes)
 
