@@ -8,12 +8,35 @@ dependencies = [
     "uvicorn==0.54.0",
     "httpx==0.28.1",
     "pydantic>=2.14.4",
+    "python-multipart==0.0.34",
+    "python-stdnum==2.2",
+]
+
+[project.optional-dependencies]
+chunking = ["docling-core[chunking-openai]==2.107.1", "huggingface_hub==1.33.0", "tiktoken==0.14.0"]
+docling = [
+  "docling[rapidocr]==2.150.1", "docling-core[chunking-openai]==2.107.1",
+  "tiktoken==0.14.0", "pypdfium2==5.15.2",
 ]
 
 [dependency-groups]
 dev = [
     "pytest==9.2.0",
 ]
+
+[tool.uv]
+exclude-newer = "2026-11-17T00:00:00Z"
+exclude-newer-package = { fastapi = "2026-11-25T00:00:00Z", pydantic = "2026-11-25T00:00:00Z", pydantic-core = "2026-11-25T00:00:00Z", annotated-doc = "2026-11-25T00:00:00Z", certifi = "2026-11-25T00:00:00Z" }
+constraint-dependencies = ["rapidocr==3.10.0", "onnxruntime==1.32.0", "docling-slim==2.150.1", "transformers==5.23.0"]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu" }]
+torchvision = [{ index = "pytorch-cpu" }]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
