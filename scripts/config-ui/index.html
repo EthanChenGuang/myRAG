@@ -6643,6 +6643,133 @@
                                             </label>
                                         </div>
 
+                                        <h4 class="text-md font-semibold mt-6 mb-2">Ingestion</h4>
+                                        <p class="text-base-content/70 mb-4 text-sm">Phase 3.1 queue, tiered parsing and async ingest switches. Defaults keep Phase 3 behaviour.</p>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">Parse routing</span>
+                                            </label>
+                                            <select id="RAG_PARSE_ROUTING" class="select select-bordered w-full">
+                                                <option value="fixed">fixed</option>
+                                                <option value="tiered">tiered</option>
+                                            </select>
+                                            <label class="label">
+                                                <span class="label-text-alt">tiered needs unified pipeline and async ingest.</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">Allow cloud parsers</span>
+                                            </label>
+                                            <select id="RAG_PARSER_ALLOW_CLOUD" class="select select-bordered w-full">
+                                                <option value="true">true</option>
+                                                <option value="false">false</option>
+                                            </select>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">Premium page budget (month)</span>
+                                            </label>
+                                            <input type="number" min="0" step="1" placeholder="0" id="RAG_PARSE_PREMIUM_PAGE_BUDGET"
+                                                class="input input-bordered w-full">
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">Premium pages per document cap</span>
+                                            </label>
+                                            <input type="number" min="1" step="1" placeholder="200" id="RAG_PARSE_PREMIUM_MAX_PAGES_PER_DOC"
+                                                class="input input-bordered w-full">
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">Parse escalation</span>
+                                            </label>
+                                            <select id="RAG_PARSE_ESCALATION" class="select select-bordered w-full">
+                                                <option value="on">on</option>
+                                                <option value="off">off</option>
+                                            </select>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">VLM page detection</span>
+                                            </label>
+                                            <select id="RAG_PARSE_VLM_DETECT" class="select select-bordered w-full">
+                                                <option value="false">false</option>
+                                                <option value="true">true</option>
+                                            </select>
+                                            <label class="label">
+                                                <span class="label-text-alt">Active only under tiered routing.</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">VLM model override</span>
+                                            </label>
+                                            <input type="text" placeholder="" id="RAG_PARSE_VLM_MODEL"
+                                                class="input input-bordered w-full">
+                                            <label class="label">
+                                                <span class="label-text-alt">empty = image captioning model</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">Async ingest queue</span>
+                                            </label>
+                                            <select id="RAG_INGEST_ASYNC" class="select select-bordered w-full">
+                                                <option value="off">off</option>
+                                                <option value="on">on</option>
+                                            </select>
+                                            <label class="label">
+                                                <span class="label-text-alt">on needs unified pipeline.</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">Worker concurrency</span>
+                                            </label>
+                                            <input type="number" min="1" step="1" placeholder="2" id="RAG_INGEST_WORKER_CONCURRENCY"
+                                                class="input input-bordered w-full">
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">Progressive publish</span>
+                                            </label>
+                                            <select id="RAG_PARSE_PROGRESSIVE" class="select select-bordered w-full">
+                                                <option value="false">false</option>
+                                                <option value="true">true</option>
+                                            </select>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">Embed batch mode</span>
+                                            </label>
+                                            <select id="RAG_EMBED_BATCH_MODE" class="select select-bordered w-full">
+                                                <option value="sync">sync</option>
+                                                <option value="batch_api">batch_api</option>
+                                            </select>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">Ingest realtime UI</span>
+                                            </label>
+                                            <select id="NEXT_PUBLIC_RAG_INGEST_REALTIME" class="select select-bordered w-full">
+                                                <option value="false">false</option>
+                                                <option value="true">true</option>
+                                            </select>
+                                        </div>
+
                                         <div class="form-control mb-4">
                                             <label class="label">
                                                 <span class="label-text">Voyage API key</span>
