@@ -196,6 +196,12 @@ async function post(jobId: string, payload: unknown, secret: string | null | und
   } catch {
     json = { raw: text };
   }
+  if (res.status === 200 && Array.isArray(json.pages)) {
+    // The worker's contract (DetectVlmPageResult) requires exactly one of verdict and refused on every page result.
+    for (const page of json.pages as Array<{ verdict: unknown; refused: unknown }>) {
+      expect((page.verdict === null) !== (page.refused === null)).toBe(true);
+    }
+  }
   return { status: res.status, json, text };
 }
 
@@ -437,7 +443,7 @@ describe('detect-vlm guard order and metering', () => {
 });
 
 describe('detect-vlm answer validation', () => {
-  it('returns a page whose answer fails PageStructureVerdict validation as failed and keeps the others', async () => {
+  it('leaves a page whose answer fails PageStructureVerdict validation out of the answer and keeps the others', async () => {
     const ledger = fakeLedger();
     install(ledger);
     const answers: unknown[] = [
@@ -451,17 +457,11 @@ describe('detect-vlm answer validation', () => {
     const res = await post(JOB, body([1, 2, 3, 4, 5]));
     expect(res.status).toBe(200);
     const pages = DetectVlmResponseSchema.parse(res.json).pages;
-    expect(pages.map((page) => [page.page, page.refused, page.verdict === null ? 'none' : 'verdict'])).toEqual([
-      [1, null, 'verdict'],
-      [2, null, 'none'],
-      [3, null, 'none'],
-      [4, null, 'none'],
-      [5, null, 'none'],
-    ]);
+    expect(pages.map((page) => page.page)).toEqual([1]);
     expect(stub.inputs).toHaveLength(5);
   });
 
-  it('returns a page whose model call throws as failed without failing the request or logging the image', async () => {
+  it('leaves a page whose model call throws out of the answer without failing the request or logging the image', async () => {
     const ledger = fakeLedger();
     install(ledger);
     installStub((index, input) => {
@@ -471,8 +471,9 @@ describe('detect-vlm answer validation', () => {
     const res = await post(JOB, body([7, 8]));
     expect(res.status).toBe(200);
     const pages = DetectVlmResponseSchema.parse(res.json).pages;
+    expect(pages).toHaveLength(1);
+    expect(pages[0]).toMatchObject({ page: 7, refused: null });
     expect(pages[0]?.verdict).not.toBeNull();
-    expect(pages[1]).toEqual({ page: 8, refused: null, verdict: null });
     const logged = loggedText();
     expect(logged).not.toContain(PIXEL_MARKER);
     expect(logged).not.toContain(pngBase64('8'));

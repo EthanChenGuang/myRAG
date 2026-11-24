@@ -149,8 +149,9 @@ async function closeReservation(handle: Reservation | null, sent: number, signal
 /**
  * The L3 callback: vision-model verdicts for the pages on which the worker's L1 and L2 disagree (D-50). The guard runs first (cloud
  * switch, one vlm budget page per image, batch USD), and nothing leaves before it passes. Every page sent counts against the budget
- * whatever the answer, so a page that makes the model answer badly cannot be used to spend unmetered. A refused or failed page comes
- * back without a verdict and the worker keeps the higher tier of L1 and L2 (D-49).
+ * whatever the answer, so a page that makes the model answer badly cannot be used to spend unmetered. A refused page comes back
+ * with its refusal reason; a failed page is left out of the answer, because the worker's contract allows a page result only with a
+ * verdict or a refusal. Either way the worker keeps the higher tier of L1 and L2 for the page (D-49).
  */
 export async function handleDetectVlm(
   jobId: string,
@@ -201,7 +202,10 @@ export async function handleDetectVlm(
       status: 200,
       body: {
         worker_id: body.worker_id,
-        pages: images.map((image, index) => ({ page: image.page, refused: null, verdict: outcomes[index]?.verdict ?? null })),
+        pages: images.flatMap((image, index) => {
+          const verdict = outcomes[index]?.verdict ?? null;
+          return verdict === null ? [] : [{ page: image.page, refused: null, verdict }];
+        }),
       },
     };
   } catch (error) {
