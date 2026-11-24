@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { repairOwnerMembership, resolveTenantScope, type RagAdminDb } from '@/lib/rag';
 import { checkSingleTenantKbWrite } from '@/lib/kb-write-access';
+import { removeDocumentObjects } from '@/lib/rag/ingest/remove-document-objects';
 
 export const runtime = 'nodejs';
 
@@ -165,7 +166,7 @@ export async function DELETE(request: NextRequest): Promise<Response> {
     const { admin, predicate } = auth.value;
 
     const { data: doc, error: lookupError } = await applyPredicate(
-      admin.from('documents').select('id, filename').eq('id', id),
+      admin.from('documents').select('id, filename, tenant_key, lineage_id, version, original_path, processing_state').eq('id', id),
       predicate
     ).maybeSingle();
     if (lookupError) {
@@ -192,6 +193,9 @@ export async function DELETE(request: NextRequest): Promise<Response> {
       console.error('[Images API] Document delete failed', { code: documentError.code });
       return fail(500, 'Failed to delete image');
     }
+
+    // Best effort and after the rows: a stored original or parse file of the image leaves the private bucket; a failure is logged only.
+    if (typeof doc.tenant_key === 'string') await removeDocumentObjects({ tenantKey: doc.tenant_key, rows: [doc] });
 
     if (typeof imageUrl === 'string') {
       try {

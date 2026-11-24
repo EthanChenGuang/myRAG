@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { repairOwnerMembership, resolveTenantScope, scopeKey, type RagAdminDb } from '@/lib/rag';
 import { checkSingleTenantKbWrite } from '@/lib/kb-write-access';
+import { removeDocumentObjects, type DocumentObjectRow } from '@/lib/rag/ingest/remove-document-objects';
 
 export const runtime = 'nodejs';
 
@@ -126,14 +127,15 @@ export async function DELETE(
     // Deleting a document deletes every version of its lineage, in this tenant only.
     const lineageId: string = owned.lineage_id ?? owned.id;
     const { data: versions, error: versionsError } = await applyPredicate(
-      admin.from('documents').select('id').eq('lineage_id', lineageId).eq('tenant_key', tenantKey),
+      admin.from('documents').select('id, version, lineage_id, original_path, processing_state').eq('lineage_id', lineageId).eq('tenant_key', tenantKey),
       predicate
     );
     if (versionsError) {
       console.error('[Documents] Version lookup failed', { code: versionsError.code });
       return fail(500, 'Failed to delete document');
     }
-    const versionIds = Array.from(new Set([id, ...((versions ?? []) as Array<{ id: string }>).map((version) => version.id)]));
+    const versionRows = (versions ?? []) as DocumentObjectRow[];
+    const versionIds = Array.from(new Set([id, ...versionRows.map((version) => version.id)]));
 
     const { error: chunksError } = await admin.from('document_chunks').delete().in('document_id', versionIds);
     if (chunksError) {
@@ -150,6 +152,10 @@ export async function DELETE(
       return fail(500, 'Failed to delete document');
     }
 
+    // Best effort and after the rows: the originals and parse files of every version leave the private bucket, and a storage failure
+    // is reported in the answer without undoing the delete.
+    const objects = await removeDocumentObjects({ tenantKey, rows: versionRows });
+    if (objects.failed > 0) return NextResponse.json({ success: true, artifacts_failed: objects.failed });
     return NextResponse.json({ success: true });
   } catch {
     console.error('[Documents] Delete request failed');

@@ -1,5 +1,5 @@
 import type { RpcClient } from '../backend/supabase-rpc';
-import { removeArtifacts, versionPrefix, type ArtifactContext } from './artifacts';
+import { removeVersionObjects } from './artifacts';
 import { getIngestDeps } from './deps';
 
 export type QuarantineFailure = 'not_found' | 'not_quarantined' | 'not_admin' | 'invalid_argument' | 'unavailable';
@@ -189,7 +189,7 @@ export async function deleteQuarantined(input: QuarantineActionInput): Promise<D
   const version = row ? integer(row, 'version') : null;
   if (!row || documentId === null || lineageId === null || tenantKey === null || version === null) return { ok: false, reason: 'unavailable' };
 
-  const cleanup = await removeStoredObjects({ tenantKey, lineageId, version, keys: strings(row, 'artifact_keys'), signal: input.signal });
+  const cleanup = await removeVersionObjects({ tenantKey, lineageId, version, keys: strings(row, 'artifact_keys'), signal: input.signal });
   if (cleanup.failed > 0) {
     console.error('[RAG Admin] stored objects of a deleted quarantined version were not all removed', {
       documentId,
@@ -199,35 +199,4 @@ export async function deleteQuarantined(input: QuarantineActionInput): Promise<D
     });
   }
   return { ok: true, documentId, version, ruleIds: strings(row, 'rule_ids'), artifactsRemoved: cleanup.removed, artifactsFailed: cleanup.failed };
-}
-
-async function removeStoredObjects(input: {
-  tenantKey: string;
-  lineageId: string;
-  version: number;
-  keys: string[];
-  signal: AbortSignal;
-}): Promise<{ removed: number; failed: number }> {
-  if (input.keys.length === 0) return { removed: 0, failed: 0 };
-  let prefix: string;
-  try {
-    prefix = versionPrefix(input.tenantKey, input.lineageId, input.version);
-  } catch {
-    return { removed: 0, failed: input.keys.length };
-  }
-  const own = input.keys.filter((key) => key.startsWith(prefix));
-  if (own.length === 0) return { removed: 0, failed: 0 };
-  const artifacts: Record<string, string> = {};
-  own.forEach((key, index) => {
-    artifacts[`object-${index}`] = key;
-  });
-  const context: ArtifactContext = {
-    identity: { tenantKey: input.tenantKey },
-    document: { lineageId: input.lineageId, version: input.version },
-    signal: input.signal,
-    state: { artifacts },
-  };
-  await removeArtifacts(context);
-  const failed = Object.keys(context.state.artifacts).length;
-  return { removed: own.length - failed, failed };
 }

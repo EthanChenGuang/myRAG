@@ -6,6 +6,7 @@ import { PROVIDER_CONFIG, type NangoFileRecord, type SupportedProvider, type Syn
 import { env } from '@/lib/env';
 import { logger } from '@/lib/logger';
 import { nangoOwnerScope, queueConfigFromProcessEnv, scopeKey, softDeleteLineage } from '@/lib/rag';
+import { removeDocumentObjects, type DocumentObjectRow } from '@/lib/rag/ingest/remove-document-objects';
 
 const SUPPORTED_EXTENSIONS = (env.NANGO_SUPPORTED_FILE_TYPES || 'pdf,doc,docx,txt,md').split(',');
 const MAX_FILES_PER_SYNC = parseInt(env.NANGO_MAX_FILES_PER_SYNC || '100');
@@ -183,12 +184,13 @@ async function deleteNangoLineages(
         if (lineages.length === 0) return true;
         const { data: versions, error: versionsError } = await supabaseAdmin
             .from('documents')
-            .select('id')
+            .select('id, version, lineage_id, original_path, processing_state')
             .in('lineage_id', lineages)
             .eq('tenant_key', tenantKey)
             .eq('source', 'nango');
         if (versionsError) throw versionsError;
-        const versionIds = ((versions ?? []) as Array<{ id: string }>).map((version) => version.id);
+        const versionRows = (versions ?? []) as DocumentObjectRow[];
+        const versionIds = versionRows.map((version) => version.id);
 
         if (versionIds.length > 0) {
             const { error: chunksError } = await supabaseAdmin.from('document_chunks').delete().in('document_id', versionIds);
@@ -201,6 +203,8 @@ async function deleteNangoLineages(
             .eq('tenant_key', tenantKey)
             .eq('source', 'nango');
         if (documentsError) throw documentsError;
+        // Best effort and after the rows: the originals and parse files of the removed versions leave the private bucket.
+        await removeDocumentObjects({ tenantKey, rows: versionRows });
         return true;
     } catch (error) {
         logger.error('Nango', `Failed to delete the lineage of ${fileId}`, error);

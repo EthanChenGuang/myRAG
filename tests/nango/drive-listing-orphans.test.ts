@@ -215,4 +215,45 @@ describe('Google Drive listing and orphan deletion', () => {
     expect(stats.deleted).toBe(1);
     expect(memory.documentIds()).toEqual(['doc-1', 'doc-2', 'doc-other']);
   });
+
+  it('removes the stored original and parse files of a hard-deleted orphan, in its own tenant only (W2)', async () => {
+    remote.pages[FOLDER] = [[file('f1'), file('f2')]];
+    const own = (name: string) => `${TENANT}/${LINEAGE(3)}/1/${name}`;
+    const foreign = `u:${OTHER}/${LINEAGE(4)}/1/original.pdf`;
+    const memory = seed();
+    Object.assign(memory.tables.documents?.find((row) => row.id === 'doc-gone') as Row, {
+      original_path: own('original.pdf'),
+      processing_state: { artifacts: { 'parse.md': own('parse.md'), 'docling.json': own('docling.json'), 'tampered.pdf': foreign } },
+    });
+    const { syncDocumentsForConnection } = await loadSyncManager(memory);
+    const { installFakeObjectStore } = await import('../helpers/fake-object-store');
+    const store = installFakeObjectStore();
+    for (const key of [own('original.pdf'), own('parse.md'), own('docling.json'), foreign]) {
+      await store.put(key, new Uint8Array([1]), { contentType: 'application/octet-stream' });
+    }
+
+    const stats = await syncDocumentsForConnection(CONNECTION, 'google-drive');
+
+    expect(stats.deleted).toBe(1);
+    expect(memory.documentIds()).toEqual(['doc-1', 'doc-2', 'doc-other']);
+    expect(store.keys()).toEqual([foreign]);
+  });
+
+  it('keeps the orphan delete going when the storage removal fails (W2)', async () => {
+    remote.pages[FOLDER] = [[file('f1'), file('f2')]];
+    const original = `${TENANT}/${LINEAGE(3)}/1/original.pdf`;
+    const memory = seed();
+    Object.assign(memory.tables.documents?.find((row) => row.id === 'doc-gone') as Row, { original_path: original });
+    const { syncDocumentsForConnection } = await loadSyncManager(memory);
+    const { installFakeObjectStore } = await import('../helpers/fake-object-store');
+    const store = installFakeObjectStore();
+    await store.put(original, new Uint8Array([1]), { contentType: 'application/octet-stream' });
+    store.failOn('remove');
+
+    const stats = await syncDocumentsForConnection(CONNECTION, 'google-drive');
+
+    expect(stats.deleted).toBe(1);
+    expect(memory.documentIds()).toEqual(['doc-1', 'doc-2', 'doc-other']);
+    expect(store.keys()).toEqual([original]);
+  });
 });
