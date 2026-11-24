@@ -21,6 +21,9 @@ const FUNCTIONS = ['rag_find_invoices', 'rag_exact_id_documents', 'rag_set_docum
 const IT_IVA = '99999999990';
 const IT_IVA_2 = '00000010017';
 const USCC = '91000000MA0000000N';
+const TAX_FIELDS = '00000021006';
+const TAX_EXACT = '00000031203';
+const TAX_ISOLATION = '00000041210';
 
 type Row = Record<string, unknown>;
 
@@ -168,7 +171,7 @@ for (const mode of MODES) {
         fields: {
           invoice_number: 'FT-2025-00417',
           supplier_name: 'Esempio Fornitore S.r.l.',
-          supplier_tax_id: IT_IVA,
+          supplier_tax_id: TAX_FIELDS,
           issue_date: '2025-03-15',
           gross_total: '1220.50',
           currency: 'EUR',
@@ -184,7 +187,7 @@ for (const mode of MODES) {
       assert.deepEqual(row, {
         invoice_number: 'FT-2025-00417',
         supplier_name: 'Esempio Fornitore S.r.l.',
-        supplier_tax_id: IT_IVA,
+        supplier_tax_id: TAX_FIELDS,
         issue_date: '2025-03-15',
         gross_total: '1220.5000',
         currency: 'EUR',
@@ -226,7 +229,7 @@ for (const mode of MODES) {
       assert.deepEqual(await ids(scopeA, { supplier, amountRange: { min: '10' } }), ['AMT-100', 'AMT-10000'], '9 is below 10 numerically, 10000 is above');
       assert.deepEqual(await ids(scopeA, { supplier, amountRange: { max: '100' } }), ['AMT-100', 'AMT-9'], 'the upper bound is inclusive');
       assert.deepEqual(await ids(scopeA, { supplier, amountRange: { min: '9', max: '100.00' } }), ['AMT-100', 'AMT-9']);
-      assert.deepEqual(await ids(scopeA, { supplier, dateRange: { from: '2025-04-15', to: '2025-04-30' } }), ['AMT-10000', 'AMT-100']);
+      assert.deepEqual(await ids(scopeA, { supplier, dateRange: { from: '2025-04-15', to: '2025-04-30' } }), ['AMT-100', 'AMT-10000']);
       assert.deepEqual(await ids(scopeA, { supplier, dateRange: { from: '2025-04-16' } }), ['AMT-10000']);
       assert.deepEqual(await ids(scopeA, { supplier, currency: 'USD' }), ['AMT-10000']);
       assert.deepEqual(await ids(scopeA, { supplier, currency: 'EUR', amountRange: { min: '50' } }), ['AMT-100']);
@@ -293,7 +296,7 @@ for (const mode of MODES) {
       await requireSchema();
       await seed(scopeA, {
         sourceKey: `exact-invoice-${mode}`,
-        fields: { invoice_number: 'EXA-2025-00417', supplier_name: 'Exact Test Co', supplier_tax_id: IT_IVA, issue_date: '2025-03-15', gross_total: '10.00', currency: 'EUR' },
+        fields: { invoice_number: 'EXA-2025-00417', supplier_name: 'Exact Test Co', supplier_tax_id: TAX_EXACT, issue_date: '2025-03-15', gross_total: '10.00', currency: 'EUR' },
         lexical: ['Invoice EXA-2025-00417 header block', 'Item table rows for the order', 'Unrelated narrative paragraph'],
         kinds: ['invoice_header', 'table', 'text'],
       });
@@ -308,12 +311,12 @@ for (const mode of MODES) {
         (await pgliteRpc(db).rpc('rag_exact_id_documents', { p_tenant_key: keyOf(scope), p_tokens: tokens, p_limit: 20 })).data as Row[];
 
       const byNumber = await lookup(['EXA-2025-00417']);
-      assert.deepEqual(byNumber.map((row) => row.matched_field).sort(), ['invoice_number', 'invoice_number', 'lexical_text'].sort(), 'header and table by field, plus the lexical hit on the header text');
+      assert.deepEqual(byNumber.map((row) => row.matched_field), ['invoice_number', 'invoice_number'], 'header and table by column; the header also matches by text but is returned once');
       const kinds = new Set(byNumber.map((row) => (row.content as string).slice(0, 12)));
       assert.ok(kinds.has('Invoice EXA-') && kinds.has('Item table r'));
       assert.ok(!byNumber.some((row) => (row.content as string).startsWith('Unrelated')), 'the narrative chunk of the same document is not an invoice chunk');
 
-      assert.ok((await lookup([IT_IVA.toLowerCase()])).length >= 2, 'tax id, case-insensitive');
+      assert.ok((await lookup([TAX_EXACT.toLowerCase()])).length === 2, 'tax id, case-insensitive');
       assert.deepEqual(
         (await lookup(['TP-7A100'])).map((row) => row.content),
         ['The thermal probe model TP-7A100 mounts on the rail'],
@@ -367,13 +370,13 @@ for (const mode of MODES) {
       test('tenant B never sees tenant A invoices through any filter, and the same tax id in B returns only B', async () => {
         await requireSchema();
         assert.ok(scopeB);
-        await seed(scopeA, { sourceKey: 'iso-a', fields: { invoice_number: 'ISO-A-1', supplier_name: 'Shared Supplier Spa', supplier_tax_id: IT_IVA, issue_date: '2025-07-01', gross_total: '777.00', currency: 'EUR' }, lexical: ['Invoice ISO-A-1 for model ZX-9000'], kinds: ['invoice_header'] });
-        await seed(scopeB, { sourceKey: 'iso-b', fields: { invoice_number: 'ISO-B-1', supplier_name: 'Shared Supplier Spa', supplier_tax_id: IT_IVA, issue_date: '2025-07-01', gross_total: '777.00', currency: 'EUR' }, lexical: ['Invoice ISO-B-1 for model ZX-9000'], kinds: ['invoice_header'] });
+        await seed(scopeA, { sourceKey: 'iso-a', fields: { invoice_number: 'ISO-A-1', supplier_name: 'Shared Supplier Spa', supplier_tax_id: TAX_ISOLATION, issue_date: '2025-07-01', gross_total: '777.00', currency: 'EUR' }, lexical: ['Invoice ISO-A-1 for model ZX-9000'], kinds: ['invoice_header'] });
+        await seed(scopeB, { sourceKey: 'iso-b', fields: { invoice_number: 'ISO-B-1', supplier_name: 'Shared Supplier Spa', supplier_tax_id: TAX_ISOLATION, issue_date: '2025-07-01', gross_total: '777.00', currency: 'EUR' }, lexical: ['Invoice ISO-B-1 for model ZX-9000'], kinds: ['invoice_header'] });
 
         const filtersets: InvoiceFilters[] = [
           {},
           { supplier: 'Shared Supplier' },
-          { supplier: IT_IVA },
+          { supplier: TAX_ISOLATION },
           { dateRange: { from: '2025-07-01', to: '2025-07-01' } },
           { amountRange: { min: '777', max: '777' } },
           { currency: 'EUR' },
@@ -384,14 +387,14 @@ for (const mode of MODES) {
           assert.ok(!seenByA.some((number) => number.startsWith('ISO-B')), `A sees B with ${JSON.stringify(filters)}`);
           assert.ok(!seenByB.some((number) => number.startsWith('ISO-A')), `B sees A with ${JSON.stringify(filters)}`);
         }
-        assert.deepEqual(await ids(scopeA, { supplier: IT_IVA }), ['ISO-A-1']);
-        assert.deepEqual(await ids(scopeB as TenantScope, { supplier: IT_IVA }), ['ISO-B-1']);
+        assert.deepEqual(await ids(scopeA, { supplier: TAX_ISOLATION }), ['ISO-A-1']);
+        assert.deepEqual(await ids(scopeB as TenantScope, { supplier: TAX_ISOLATION }), ['ISO-B-1']);
 
         const lookup = async (scope: TenantScope, token: string) =>
           ((await pgliteRpc(db).rpc('rag_exact_id_documents', { p_tenant_key: keyOf(scope), p_tokens: [token], p_limit: 20 })).data as Row[]).map((row) => row.content);
-        assert.deepEqual(await lookup(scopeA, 'ISO-A-1'), ['Invoice ISO-A-1 for model ZX-9000', 'Invoice ISO-A-1 for model ZX-9000'].slice(0, (await lookup(scopeA, 'ISO-A-1')).length));
+        assert.deepEqual(await lookup(scopeA, 'ISO-A-1'), ['Invoice ISO-A-1 for model ZX-9000']);
         assert.deepEqual(await lookup(scopeB as TenantScope, 'ISO-A-1'), [], 'B cannot find A by invoice number');
-        assert.deepEqual(await lookup(scopeB as TenantScope, IT_IVA), ['Invoice ISO-B-1 for model ZX-9000']);
+        assert.deepEqual(await lookup(scopeB as TenantScope, TAX_ISOLATION), ['Invoice ISO-B-1 for model ZX-9000']);
         const modelHits = (await lookup(scopeA, 'ZX-9000')).concat(await lookup(scopeB as TenantScope, 'ZX-9000'));
         assert.deepEqual(modelHits.sort(), ['Invoice ISO-A-1 for model ZX-9000', 'Invoice ISO-B-1 for model ZX-9000']);
         assert.equal((await lookup(scopeA, 'ZX-9000')).length, 1, 'a model token stays inside its tenant');
