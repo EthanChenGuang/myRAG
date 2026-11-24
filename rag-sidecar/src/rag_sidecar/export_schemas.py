@@ -9,15 +9,18 @@ from pydantic import BaseModel
 from rag_sidecar.contracts import (
     Baseline,
     ConversationTurn,
+    DocTypeDetection,
     DraftedItemBatch,
     EvalReport,
     GateResult,
     GoldenItem,
     GoldenSplitManifest,
+    InjectionRuleSet,
     JudgeConfig,
     JudgeReport,
     LatencyBudgets,
     NoiseConfig,
+    ProcessingProfileSet,
     RagRunRequest,
     RagTrace,
     ReviewQueueItem,
@@ -37,6 +40,9 @@ Mode = Literal["validation", "serialization"]
 
 CONTRACTS: list[tuple[type[BaseModel], Mode]] = [
     (ConversationTurn, "validation"),
+    (ProcessingProfileSet, "validation"),
+    (DocTypeDetection, "validation"),
+    (InjectionRuleSet, "validation"),
     (RagRunRequest, "validation"),
     (RagTrace, "serialization"),
     (RunManifest, "serialization"),

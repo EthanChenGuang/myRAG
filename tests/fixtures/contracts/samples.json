@@ -135,6 +135,15 @@
       "content": "Tell me about leave.",
       "role": "user"
     },
+    "DocTypeDetection": {
+      "confidence": 0.85,
+      "doc_type": "invoice_receipt",
+      "method": "rules",
+      "signals": [
+        "keyword:invoice",
+        "pattern:invoice_number"
+      ]
+    },
     "DraftedItemBatch": {
       "items": [
         {
@@ -458,6 +467,32 @@
       "rule": "sha256-first8hex-mod100-lt70-dev",
       "schema_version": 1
     },
+    "InjectionRuleSet": {
+      "rules": [
+        {
+          "id": "en-ignore-previous",
+          "kind": "phrase",
+          "language": "en",
+          "pattern": "ignore previous instructions",
+          "severity": "high"
+        },
+        {
+          "id": "zh-ignore-previous",
+          "kind": "phrase",
+          "language": "zh",
+          "pattern": "忽略之前的指令",
+          "severity": "high"
+        },
+        {
+          "id": "any-you-are-now",
+          "kind": "regex",
+          "language": "any",
+          "pattern": "you\\s+are\\s+now\\b",
+          "severity": "low"
+        }
+      ],
+      "schema_version": 1
+    },
     "JudgeConfig": {
       "base_url": "https://example.invalid/api/v1",
       "embedding_model": "embed/model-c",
@@ -557,6 +592,271 @@
         "recall_at_10": "higher",
         "recall_at_5": "higher"
       },
+      "schema_version": 1
+    },
+    "ProcessingProfileSet": {
+      "profiles": [
+        {
+          "chunker": {
+            "clause_patterns": [],
+            "kind": "markdown_sections",
+            "lead_in_phrases": [],
+            "max_tokens": 512,
+            "min_chunk_tokens": 32,
+            "overlap_tokens": 64,
+            "repeat_table_header": false
+          },
+          "doc_type": "general",
+          "embedding_text_template": {
+            "header": null,
+            "version": 1
+          },
+          "extractors": [
+            "dates"
+          ],
+          "id": "general@1",
+          "max_tier": null,
+          "min_tier": null,
+          "parent_child": null,
+          "parser": {
+            "docling": {
+              "force_full_page_ocr": false,
+              "generate_picture_images": true,
+              "heading_hierarchy": true,
+              "ocr": true,
+              "table_mode": "fast"
+            },
+            "ocr_languages": [
+              "zh",
+              "en",
+              "it"
+            ],
+            "preference": [
+              "configured"
+            ]
+          },
+          "scan_injection": true,
+          "version": 1
+        },
+        {
+          "chunker": {
+            "clause_patterns": [],
+            "kind": "markdown_sections",
+            "lead_in_phrases": [],
+            "max_tokens": 512,
+            "min_chunk_tokens": 32,
+            "overlap_tokens": 64,
+            "repeat_table_header": true
+          },
+          "doc_type": "financial_report",
+          "embedding_text_template": {
+            "header": null,
+            "version": 1
+          },
+          "extractors": [
+            "dates"
+          ],
+          "id": "financial_report@1",
+          "max_tier": null,
+          "min_tier": null,
+          "parent_child": null,
+          "parser": {
+            "docling": {
+              "force_full_page_ocr": false,
+              "generate_picture_images": true,
+              "heading_hierarchy": true,
+              "ocr": true,
+              "table_mode": "accurate"
+            },
+            "ocr_languages": [
+              "zh",
+              "en",
+              "it"
+            ],
+            "preference": [
+              "configured"
+            ]
+          },
+          "scan_injection": true,
+          "version": 1
+        },
+        {
+          "chunker": {
+            "clause_patterns": [
+              "^Art\\.?\\s*\\d+",
+              "^Article\\s+\\d+"
+            ],
+            "kind": "legal_clauses",
+            "lead_in_phrases": [
+              "except as follows"
+            ],
+            "max_tokens": 768,
+            "min_chunk_tokens": 32,
+            "overlap_tokens": 0,
+            "repeat_table_header": false
+          },
+          "doc_type": "contract_legal",
+          "embedding_text_template": {
+            "header": "Contract {title}",
+            "version": 1
+          },
+          "extractors": [
+            "dates"
+          ],
+          "id": "contract_legal@1",
+          "max_tier": "premium",
+          "min_tier": "fast",
+          "parent_child": {
+            "child_max_tokens": 256,
+            "parent_max_tokens": 2048
+          },
+          "parser": {
+            "docling": {
+              "force_full_page_ocr": false,
+              "generate_picture_images": true,
+              "heading_hierarchy": true,
+              "ocr": true,
+              "table_mode": "fast"
+            },
+            "ocr_languages": [
+              "zh",
+              "en",
+              "it"
+            ],
+            "preference": [
+              "configured"
+            ]
+          },
+          "scan_injection": true,
+          "version": 1
+        },
+        {
+          "chunker": {
+            "clause_patterns": [],
+            "kind": "markdown_sections",
+            "lead_in_phrases": [],
+            "max_tokens": 512,
+            "min_chunk_tokens": 32,
+            "overlap_tokens": 64,
+            "repeat_table_header": false
+          },
+          "doc_type": "invoice_receipt",
+          "embedding_text_template": {
+            "header": null,
+            "version": 1
+          },
+          "extractors": [
+            "dates"
+          ],
+          "id": "invoice_receipt@1",
+          "max_tier": null,
+          "min_tier": null,
+          "parent_child": null,
+          "parser": {
+            "docling": {
+              "force_full_page_ocr": false,
+              "generate_picture_images": true,
+              "heading_hierarchy": true,
+              "ocr": true,
+              "table_mode": "fast"
+            },
+            "ocr_languages": [
+              "zh",
+              "en",
+              "it"
+            ],
+            "preference": [
+              "configured"
+            ]
+          },
+          "scan_injection": true,
+          "version": 1
+        },
+        {
+          "chunker": {
+            "clause_patterns": [],
+            "kind": "markdown_sections",
+            "lead_in_phrases": [],
+            "max_tokens": 512,
+            "min_chunk_tokens": 32,
+            "overlap_tokens": 64,
+            "repeat_table_header": false
+          },
+          "doc_type": "product_technical",
+          "embedding_text_template": {
+            "header": null,
+            "version": 1
+          },
+          "extractors": [
+            "dates"
+          ],
+          "id": "product_technical@1",
+          "max_tier": null,
+          "min_tier": null,
+          "parent_child": null,
+          "parser": {
+            "docling": {
+              "force_full_page_ocr": false,
+              "generate_picture_images": true,
+              "heading_hierarchy": true,
+              "ocr": true,
+              "table_mode": "fast"
+            },
+            "ocr_languages": [
+              "zh",
+              "en",
+              "it"
+            ],
+            "preference": [
+              "configured"
+            ]
+          },
+          "scan_injection": true,
+          "version": 1
+        },
+        {
+          "chunker": {
+            "clause_patterns": [],
+            "kind": "markdown_sections",
+            "lead_in_phrases": [],
+            "max_tokens": 512,
+            "min_chunk_tokens": 32,
+            "overlap_tokens": 64,
+            "repeat_table_header": false
+          },
+          "doc_type": "scanned_image",
+          "embedding_text_template": {
+            "header": null,
+            "version": 1
+          },
+          "extractors": [
+            "dates"
+          ],
+          "id": "scanned_image@1",
+          "max_tier": null,
+          "min_tier": null,
+          "parent_child": null,
+          "parser": {
+            "docling": {
+              "force_full_page_ocr": true,
+              "generate_picture_images": true,
+              "heading_hierarchy": true,
+              "ocr": true,
+              "table_mode": "fast"
+            },
+            "ocr_languages": [
+              "zh",
+              "en",
+              "it"
+            ],
+            "preference": [
+              "docling"
+            ]
+          },
+          "scan_injection": true,
+          "version": 1
+        }
+      ],
       "schema_version": 1
     },
     "RagRunRequest": {

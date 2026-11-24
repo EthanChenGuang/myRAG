@@ -1,0 +1,77 @@
+{
+  "$defs": {
+    "InjectionRule": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9._-]{1,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "phrase",
+            "regex"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "language": {
+          "enum": [
+            "zh",
+            "en",
+            "it",
+            "any"
+          ],
+          "title": "Language",
+          "type": "string"
+        },
+        "pattern": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Pattern",
+          "type": "string"
+        },
+        "severity": {
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "title": "Severity",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "language",
+        "pattern",
+        "kind",
+        "severity"
+      ],
+      "title": "InjectionRule",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "rules": {
+      "items": {
+        "$ref": "#/$defs/InjectionRule"
+      },
+      "title": "Rules",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "rules"
+  ],
+  "title": "InjectionRuleSet",
+  "type": "object"
+}

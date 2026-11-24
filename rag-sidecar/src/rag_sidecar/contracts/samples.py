@@ -5,6 +5,7 @@ from rag_sidecar.contracts import (
     BaselineMetricStat,
     BaselineRun,
     ConversationTurn,
+    DocTypeDetection,
     DraftedItemBatch,
     DraftedItemProposal,
     EvalReport,
@@ -14,6 +15,8 @@ from rag_sidecar.contracts import (
     GoldenItem,
     GoldenSplitManifest,
     GoldSpan,
+    InjectionRule,
+    InjectionRuleSet,
     ItemResult,
     JudgeConfig,
     JudgeItemScore,
@@ -24,6 +27,8 @@ from rag_sidecar.contracts import (
     OnlineJudgeConfig,
     PairedReport,
     PairedStat,
+    ProcessingProfile,
+    ProcessingProfileSet,
     ProfileBudget,
     RagRunOptions,
     RagRunRequest,
@@ -50,6 +55,83 @@ _HASH_A = "a" * 64
 _HASH_B = "b" * 64
 _HASH_C = "c" * 64
 _METRICS = ["recall_at_5", "recall_at_10", "mrr", "correct_refusal_rate", "false_refusal_rate"]
+
+
+_DOC_TYPES = [
+    "general",
+    "financial_report",
+    "contract_legal",
+    "invoice_receipt",
+    "product_technical",
+    "scanned_image",
+]
+_SAMPLE_CLAUSE_PATTERNS = [r"^Art\.?\s*\d+", r"^Article\s+\d+"]
+
+
+def _processing_profile(doc_type: str) -> ProcessingProfile:
+    legal = doc_type == "contract_legal"
+    scanned = doc_type == "scanned_image"
+    return ProcessingProfile.model_validate(
+        {
+            "id": f"{doc_type}@1",
+            "version": 1,
+            "doc_type": doc_type,
+            "parser": {
+                "preference": ["docling"] if scanned else ["configured"],
+                "docling": {
+                    "ocr": True,
+                    "force_full_page_ocr": scanned,
+                    "table_mode": "accurate" if doc_type == "financial_report" else "fast",
+                    "heading_hierarchy": True,
+                    "generate_picture_images": True,
+                },
+                "ocr_languages": ["zh", "en", "it"],
+            },
+            "chunker": {
+                "kind": "legal_clauses" if legal else "markdown_sections",
+                "max_tokens": 768 if legal else 512,
+                "overlap_tokens": 0 if legal else 64,
+                "repeat_table_header": doc_type == "financial_report",
+                "min_chunk_tokens": 32,
+                "clause_patterns": _SAMPLE_CLAUSE_PATTERNS if legal else [],
+                "lead_in_phrases": ["except as follows"] if legal else [],
+            },
+            "extractors": ["dates"],
+            "embedding_text_template": {"version": 1, "header": "Contract {title}" if legal else None},
+            "scan_injection": True,
+            "min_tier": "fast" if legal else None,
+            "max_tier": "premium" if legal else None,
+            "parent_child": {"parent_max_tokens": 2048, "child_max_tokens": 256} if legal else None,
+        }
+    )
+
+
+def _injection_rules() -> InjectionRuleSet:
+    return InjectionRuleSet(
+        rules=[
+            InjectionRule(
+                id="en-ignore-previous",
+                language="en",
+                pattern="ignore previous instructions",
+                kind="phrase",
+                severity="high",
+            ),
+            InjectionRule(
+                id="zh-ignore-previous",
+                language="zh",
+                pattern="忽略之前的指令",
+                kind="phrase",
+                severity="high",
+            ),
+            InjectionRule(
+                id="any-you-are-now",
+                language="any",
+                pattern=r"you\s+are\s+now\b",
+                kind="regex",
+                severity="low",
+            ),
+        ]
+    )
 
 
 def _golden_filter() -> GoldenFilter:
@@ -321,6 +403,11 @@ def _run_manifest() -> RunManifest:
 def _models() -> dict[str, Any]:
     return {
         "ConversationTurn": ConversationTurn(role="user", content="Tell me about leave."),
+        "ProcessingProfileSet": ProcessingProfileSet(profiles=[_processing_profile(name) for name in _DOC_TYPES]),
+        "DocTypeDetection": DocTypeDetection(
+            doc_type="invoice_receipt", confidence=0.85, signals=["keyword:invoice", "pattern:invoice_number"], method="rules"
+        ),
+        "InjectionRuleSet": _injection_rules(),
         "RagRunRequest": RagRunRequest(
             item_id="en-general-001",
             query="How many leave days do employees get?",
