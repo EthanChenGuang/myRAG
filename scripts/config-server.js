@@ -892,6 +892,7 @@ app.post('/api/upload', documentUpload.array('files'), async (req, res) => {
     if (req.body.image_context) {
       formData.append('image_context', req.body.image_context);
     }
+    formData.append('upload_source', 'config_upload');
 
     // Forward authentication headers (Cookie, Authorization) so the backend knows the user
     const headers = {};
@@ -2788,6 +2789,13 @@ app.post('/api/process-document', documentUpload.single('file'), async (req, res
     if (req.body.organization_id) {
       form.append('organization_id', req.body.organization_id);
       console.log('📂 Adding organization_id to form:', req.body.organization_id);
+    }
+
+    // Marks the upload as coming from the Config UI. The app honours it only for a signed-in admin
+    // whose session matches the admin check, and ignores it otherwise.
+    form.append('upload_source', 'config_upload');
+    if (req.body.doc_type) {
+      form.append('doc_type', req.body.doc_type);
     }
 
     const { client, options } = createMainAppRequest('/api/process-document', 'POST', {
