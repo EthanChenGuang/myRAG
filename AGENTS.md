@@ -76,6 +76,13 @@ myrag/
 - Retrieved images streamed as `source_images` in chat responses.
 - Images displayed above AI text, not cited in sources.
 
+### Unified ingestion
+- Unified path entry point: `ingest()` and `resumeIngest()` in `src/lib/rag/ingest/` (13 stages: identify → file_hash_dedup → store_original → parse → content_hash_dedup → scan_injection → chunk → enrich → extract → images → embed → write → publish).
+- Fresh projects run `supabase/single-tenant-setup.sql` or `supabase/multi-tenant-setup.sql`, then apply ordered files under `supabase/migrations/` (common file first, then `.single-tenant.sql` / `.multi-tenant.sql` for that mode). Folded setup files already include Phase 3 (0301–0319); migrations remain the upgrade path and must be idempotent on top.
+- Switches (defaults in `src/lib/env.ts`): `RAG_INGEST_PIPELINE=legacy` (legacy writers vs unified pipeline), `RAG_EMBEDDING_PROFILES=off`, `RAG_INJECTION_SCAN=off`, `RAG_EXACT_ID_LOOKUP=false`, `RAG_PDF_IMAGE_CHUNKS=false`.
+- Originals land in the private **`rag-originals`** storage bucket; quarantined documents stay out of retrieval (D-08 filter on current, ready rows—no env switch).
+- Writer and search RPCs (`rag_*`, `match_chunks_by_profile`) are **service_role** only; tests assert anon/authenticated cannot execute them.
+
 ---
 
 ## 7. AI Model Management
@@ -189,6 +196,10 @@ Unified OAuth for Google Drive, Notion, Dropbox:
 | `npm run config` | Configuration dashboard (port 3333) |
 | `cd voice-agent && npm run dev` | Voice agent service |
 | `node scripts/rag/*` | RAG health checks |
+| `npm run rag:reembed` | Re-embed job over chunk rows (`src/lib/rag/ingest/reembed/cli.ts`) |
+| `npm run rag:embedding` | Embedding profile admin CLI (list, activate, record evidence) |
+| `npm run rag:backfill-hashes` | One-off hash backfill for legacy documents |
+| `cd rag-sidecar && docker build --target docling` | Docling parse image; host sizing start ~4 GB RAM, 2 CPUs, one parse worker |
 | `scripts/init-env.js` | Default environment template |
 
 ---
