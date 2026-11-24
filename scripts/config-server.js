@@ -215,7 +215,7 @@ app.post('/api/config', (req, res) => {
       return res.status(400).json({ error: 'Configuration contains values that cannot be stored', invalid: refused });
     }
 
-    for (const name of ['RAG_EVAL_SECRET', 'RAG_SIDECAR_SECRET', 'RAG_VOICE_TOKEN_SECRET']) {
+    for (const name of ['RAG_EVAL_SECRET', 'RAG_SIDECAR_SECRET', 'RAG_VOICE_TOKEN_SECRET', 'VOYAGE_API_KEY', 'DEEPINFRA_API_KEY']) {
       const value = fullValues[name];
       if (typeof value === 'string' && value.length > 0 && value.length < 32) {
         console.warn(`[Config] ${name} is ${value.length} characters; at least 32 are required or the endpoint answers 503`);
@@ -563,6 +563,22 @@ ${fullValues.LANGFUSE_BASE_URL !== undefined ? `LANGFUSE_BASE_URL=${fullValues.L
 ${fullValues.LANGFUSE_SAMPLE_RATE !== undefined ? `LANGFUSE_SAMPLE_RATE=${fullValues.LANGFUSE_SAMPLE_RATE}` : 'LANGFUSE_SAMPLE_RATE=0.1'}
 ${fullValues.LANGFUSE_CAPTURE_CONTENT !== undefined ? `LANGFUSE_CAPTURE_CONTENT=${fullValues.LANGFUSE_CAPTURE_CONTENT}` : 'LANGFUSE_CAPTURE_CONTENT=false'}
 ${fullValues.LANGFUSE_REVIEW_SAMPLE_RATE !== undefined ? `LANGFUSE_REVIEW_SAMPLE_RATE=${fullValues.LANGFUSE_REVIEW_SAMPLE_RATE}` : 'LANGFUSE_REVIEW_SAMPLE_RATE=0'}
+
+# Ingestion and embedding profiles
+${fullValues.RAG_INGEST_PIPELINE !== undefined ? `RAG_INGEST_PIPELINE=${fullValues.RAG_INGEST_PIPELINE}` : 'RAG_INGEST_PIPELINE=legacy'}
+${fullValues.RAG_PARSER !== undefined ? `RAG_PARSER=${fullValues.RAG_PARSER}` : 'RAG_PARSER=llamaparse'}
+${fullValues.RAG_PARSE_POLL_BUDGET_MS !== undefined ? `RAG_PARSE_POLL_BUDGET_MS=${fullValues.RAG_PARSE_POLL_BUDGET_MS}` : 'RAG_PARSE_POLL_BUDGET_MS=45000'}
+${fullValues.RAG_DOC_TYPE_LLM_DETECT !== undefined ? `RAG_DOC_TYPE_LLM_DETECT=${fullValues.RAG_DOC_TYPE_LLM_DETECT}` : 'RAG_DOC_TYPE_LLM_DETECT=false'}
+${fullValues.RAG_INVOICE_LLM_EXTRACT !== undefined ? `RAG_INVOICE_LLM_EXTRACT=${fullValues.RAG_INVOICE_LLM_EXTRACT}` : 'RAG_INVOICE_LLM_EXTRACT=false'}
+${fullValues.RAG_EXACT_ID_LOOKUP !== undefined ? `RAG_EXACT_ID_LOOKUP=${fullValues.RAG_EXACT_ID_LOOKUP}` : 'RAG_EXACT_ID_LOOKUP=false'}
+${fullValues.RAG_PDF_IMAGE_CHUNKS !== undefined ? `RAG_PDF_IMAGE_CHUNKS=${fullValues.RAG_PDF_IMAGE_CHUNKS}` : 'RAG_PDF_IMAGE_CHUNKS=false'}
+${fullValues.RAG_INJECTION_SCAN !== undefined ? `RAG_INJECTION_SCAN=${fullValues.RAG_INJECTION_SCAN}` : 'RAG_INJECTION_SCAN=off'}
+${fullValues.RAG_EMBEDDING_PROFILES !== undefined ? `RAG_EMBEDDING_PROFILES=${fullValues.RAG_EMBEDDING_PROFILES}` : 'RAG_EMBEDDING_PROFILES=off'}
+${fullValues.RAG_QWEN_EMBED_FALLBACK !== undefined ? `RAG_QWEN_EMBED_FALLBACK=${fullValues.RAG_QWEN_EMBED_FALLBACK}` : 'RAG_QWEN_EMBED_FALLBACK=openrouter'}
+${fullValues.VOYAGE_API_KEY !== undefined ? `VOYAGE_API_KEY=${fullValues.VOYAGE_API_KEY}` : 'VOYAGE_API_KEY='}
+${fullValues.VOYAGE_BASE_URL !== undefined ? `VOYAGE_BASE_URL=${fullValues.VOYAGE_BASE_URL}` : 'VOYAGE_BASE_URL=https://api.voyageai.com/v1'}
+${fullValues.DEEPINFRA_API_KEY !== undefined ? `DEEPINFRA_API_KEY=${fullValues.DEEPINFRA_API_KEY}` : 'DEEPINFRA_API_KEY='}
+${fullValues.DEEPINFRA_BASE_URL !== undefined ? `DEEPINFRA_BASE_URL=${fullValues.DEEPINFRA_BASE_URL}` : 'DEEPINFRA_BASE_URL=https://api.deepinfra.com/v1/openai'}
 
 # Temporal and Financial Intelligence (Unified RAG)
 ${fullValues.RAG_TEMPORAL_BOOST !== undefined ? `RAG_TEMPORAL_BOOST=${fullValues.RAG_TEMPORAL_BOOST}` : 'RAG_TEMPORAL_BOOST=true'}
@@ -1331,6 +1347,21 @@ LANGFUSE_BASE_URL=${getEnvValue('LANGFUSE_BASE_URL') || 'https://cloud.langfuse.
 LANGFUSE_SAMPLE_RATE=${getEnvValue('LANGFUSE_SAMPLE_RATE') || '0.1'}
 LANGFUSE_CAPTURE_CONTENT=${getEnvValue('LANGFUSE_CAPTURE_CONTENT') || 'false'}
 LANGFUSE_REVIEW_SAMPLE_RATE=${getEnvValue('LANGFUSE_REVIEW_SAMPLE_RATE') || '0'}
+# Ingestion and embedding profiles
+RAG_INGEST_PIPELINE=${getEnvValue('RAG_INGEST_PIPELINE') || 'legacy'}
+RAG_PARSER=${getEnvValue('RAG_PARSER') || 'llamaparse'}
+RAG_PARSE_POLL_BUDGET_MS=${getEnvValue('RAG_PARSE_POLL_BUDGET_MS') || '45000'}
+RAG_DOC_TYPE_LLM_DETECT=${getEnvValue('RAG_DOC_TYPE_LLM_DETECT') || 'false'}
+RAG_INVOICE_LLM_EXTRACT=${getEnvValue('RAG_INVOICE_LLM_EXTRACT') || 'false'}
+RAG_EXACT_ID_LOOKUP=${getEnvValue('RAG_EXACT_ID_LOOKUP') || 'false'}
+RAG_PDF_IMAGE_CHUNKS=${getEnvValue('RAG_PDF_IMAGE_CHUNKS') || 'false'}
+RAG_INJECTION_SCAN=${getEnvValue('RAG_INJECTION_SCAN') || 'off'}
+RAG_EMBEDDING_PROFILES=${getEnvValue('RAG_EMBEDDING_PROFILES') || 'off'}
+RAG_QWEN_EMBED_FALLBACK=${getEnvValue('RAG_QWEN_EMBED_FALLBACK') || 'openrouter'}
+VOYAGE_API_KEY=${getEnvValue('VOYAGE_API_KEY') || ''}
+VOYAGE_BASE_URL=${getEnvValue('VOYAGE_BASE_URL') || 'https://api.voyageai.com/v1'}
+DEEPINFRA_API_KEY=${getEnvValue('DEEPINFRA_API_KEY') || ''}
+DEEPINFRA_BASE_URL=${getEnvValue('DEEPINFRA_BASE_URL') || 'https://api.deepinfra.com/v1/openai'}
 # LlamaCloud configuration
 LLAMACLOUD_PARSING_MODE=${getEnvValue('LLAMACLOUD_PARSING_MODE') || 'balanced'}
 LLAMACLOUD_CHUNK_STRATEGY=${getEnvValue('LLAMACLOUD_CHUNK_STRATEGY') || 'sentence'}
@@ -1667,6 +1698,21 @@ LANGFUSE_BASE_URL=${getEnvValue('LANGFUSE_BASE_URL') || 'https://cloud.langfuse.
 LANGFUSE_SAMPLE_RATE=${getEnvValue('LANGFUSE_SAMPLE_RATE') || '0.1'}
 LANGFUSE_CAPTURE_CONTENT=${getEnvValue('LANGFUSE_CAPTURE_CONTENT') || 'false'}
 LANGFUSE_REVIEW_SAMPLE_RATE=${getEnvValue('LANGFUSE_REVIEW_SAMPLE_RATE') || '0'}
+# Ingestion and embedding profiles
+RAG_INGEST_PIPELINE=${getEnvValue('RAG_INGEST_PIPELINE') || 'legacy'}
+RAG_PARSER=${getEnvValue('RAG_PARSER') || 'llamaparse'}
+RAG_PARSE_POLL_BUDGET_MS=${getEnvValue('RAG_PARSE_POLL_BUDGET_MS') || '45000'}
+RAG_DOC_TYPE_LLM_DETECT=${getEnvValue('RAG_DOC_TYPE_LLM_DETECT') || 'false'}
+RAG_INVOICE_LLM_EXTRACT=${getEnvValue('RAG_INVOICE_LLM_EXTRACT') || 'false'}
+RAG_EXACT_ID_LOOKUP=${getEnvValue('RAG_EXACT_ID_LOOKUP') || 'false'}
+RAG_PDF_IMAGE_CHUNKS=${getEnvValue('RAG_PDF_IMAGE_CHUNKS') || 'false'}
+RAG_INJECTION_SCAN=${getEnvValue('RAG_INJECTION_SCAN') || 'off'}
+RAG_EMBEDDING_PROFILES=${getEnvValue('RAG_EMBEDDING_PROFILES') || 'off'}
+RAG_QWEN_EMBED_FALLBACK=${getEnvValue('RAG_QWEN_EMBED_FALLBACK') || 'openrouter'}
+VOYAGE_API_KEY=${getEnvValue('VOYAGE_API_KEY') || ''}
+VOYAGE_BASE_URL=${getEnvValue('VOYAGE_BASE_URL') || 'https://api.voyageai.com/v1'}
+DEEPINFRA_API_KEY=${getEnvValue('DEEPINFRA_API_KEY') || ''}
+DEEPINFRA_BASE_URL=${getEnvValue('DEEPINFRA_BASE_URL') || 'https://api.deepinfra.com/v1/openai'}
 # LlamaCloud configuration
 LLAMACLOUD_PARSING_MODE=${getEnvValue('LLAMACLOUD_PARSING_MODE') || 'balanced'}
 LLAMACLOUD_CHUNK_STRATEGY=${getEnvValue('LLAMACLOUD_CHUNK_STRATEGY') || 'sentence'}

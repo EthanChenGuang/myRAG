@@ -369,6 +369,36 @@ LANGFUSE_CAPTURE_CONTENT=false
 LANGFUSE_REVIEW_SAMPLE_RATE=0
 
 # -----------------------------
+# INGESTION AND EMBEDDING PROFILES
+# -----------------------------
+# legacy keeps today's document writers; unified switches to the single ingest pipeline
+RAG_INGEST_PIPELINE=legacy
+# Document parser: llamaparse | docling
+RAG_PARSER=llamaparse
+# Time one request may wait for a sidecar parse job, in milliseconds (1000 to 55000)
+RAG_PARSE_POLL_BUDGET_MS=45000
+# Ask a model to detect the document type when rules are unsure: true | false
+RAG_DOC_TYPE_LLM_DETECT=false
+# Ask a model to extract invoice fields when rules find none: true | false
+RAG_INVOICE_LLM_EXTRACT=false
+# Look up exact identifiers (invoice numbers, contract ids) before vector search: true | false
+RAG_EXACT_ID_LOOKUP=false
+# Create image chunks from PDF pages: true | false
+RAG_PDF_IMAGE_CHUNKS=false
+# Prompt injection scan on ingested text: off | quarantine
+RAG_INJECTION_SCAN=off
+# Embedding profile registry: off | on (off keeps the single configured embedding model)
+RAG_EMBEDDING_PROFILES=off
+# Fallback host when the Qwen embedding provider is unavailable: openrouter | none
+RAG_QWEN_EMBED_FALLBACK=openrouter
+# Voyage embeddings
+VOYAGE_API_KEY=
+VOYAGE_BASE_URL=https://api.voyageai.com/v1
+# DeepInfra embeddings (OpenAI-compatible)
+DEEPINFRA_API_KEY=
+DEEPINFRA_BASE_URL=https://api.deepinfra.com/v1/openai
+
+# -----------------------------
 # RAG CONFIGURATION (Unified Optimized System)
 # -----------------------------
 # Unified RAG Settings - All features can be toggled individually

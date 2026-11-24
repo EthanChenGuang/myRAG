@@ -6504,6 +6504,185 @@
                                     </div>
                                 </div>
 
+                                <!-- Ingestion and embedding profiles -->
+                                <div class="card bg-base-200 shadow-md mt-6">
+                                    <div class="card-body">
+                                        <h3 class="text-lg font-semibold mb-2">Ingestion and embedding profiles</h3>
+                                        <p class="text-base-content/70 mb-4">Selects the document ingestion pipeline, parser and embedding provider keys. Leave the defaults to keep the current behaviour; API keys stay on the server.</p>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">Ingest pipeline</span>
+                                            </label>
+                                            <select id="RAG_INGEST_PIPELINE" class="select select-bordered w-full">
+                                                <option value="legacy">legacy</option>
+                                                <option value="unified">unified</option>
+                                            </select>
+                                            <label class="label">
+                                                <span class="label-text-alt">legacy keeps the current document writers; unified uses the single ingest pipeline.</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">Document parser</span>
+                                            </label>
+                                            <select id="RAG_PARSER" class="select select-bordered w-full">
+                                                <option value="llamaparse">llamaparse</option>
+                                                <option value="docling">docling</option>
+                                            </select>
+                                            <label class="label">
+                                                <span class="label-text-alt">llamaparse is the current parser; docling runs in the sidecar.</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">Parse wait budget (ms)</span>
+                                            </label>
+                                            <input type="number" min="1000" max="55000" step="1000" placeholder="45000" id="RAG_PARSE_POLL_BUDGET_MS"
+                                                class="input input-bordered w-full">
+                                            <label class="label">
+                                                <span class="label-text-alt">How long one request waits for a sidecar parse job, 1000 to 55000.</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">Model-assisted document type detection</span>
+                                            </label>
+                                            <select id="RAG_DOC_TYPE_LLM_DETECT" class="select select-bordered w-full">
+                                                <option value="false">false</option>
+                                                <option value="true">true</option>
+                                            </select>
+                                            <label class="label">
+                                                <span class="label-text-alt">false uses rules only.</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">Model-assisted invoice extraction</span>
+                                            </label>
+                                            <select id="RAG_INVOICE_LLM_EXTRACT" class="select select-bordered w-full">
+                                                <option value="false">false</option>
+                                                <option value="true">true</option>
+                                            </select>
+                                            <label class="label">
+                                                <span class="label-text-alt">false uses rules only.</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">Exact identifier lookup</span>
+                                            </label>
+                                            <select id="RAG_EXACT_ID_LOOKUP" class="select select-bordered w-full">
+                                                <option value="false">false</option>
+                                                <option value="true">true</option>
+                                            </select>
+                                            <label class="label">
+                                                <span class="label-text-alt">false keeps vector and keyword retrieval only.</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">PDF image chunks</span>
+                                            </label>
+                                            <select id="RAG_PDF_IMAGE_CHUNKS" class="select select-bordered w-full">
+                                                <option value="false">false</option>
+                                                <option value="true">true</option>
+                                            </select>
+                                            <label class="label">
+                                                <span class="label-text-alt">false keeps text chunks only.</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">Prompt injection scan</span>
+                                            </label>
+                                            <select id="RAG_INJECTION_SCAN" class="select select-bordered w-full">
+                                                <option value="off">off</option>
+                                                <option value="quarantine">quarantine</option>
+                                            </select>
+                                            <label class="label">
+                                                <span class="label-text-alt">quarantine holds suspicious chunks back until an admin releases them.</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">Embedding profile registry</span>
+                                            </label>
+                                            <select id="RAG_EMBEDDING_PROFILES" class="select select-bordered w-full">
+                                                <option value="off">off</option>
+                                                <option value="on">on</option>
+                                            </select>
+                                            <label class="label">
+                                                <span class="label-text-alt">off keeps the single configured embedding model.</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">Qwen embedding fallback host</span>
+                                            </label>
+                                            <select id="RAG_QWEN_EMBED_FALLBACK" class="select select-bordered w-full">
+                                                <option value="openrouter">openrouter</option>
+                                                <option value="none">none</option>
+                                            </select>
+                                            <label class="label">
+                                                <span class="label-text-alt">Used when the DeepInfra host is unavailable.</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">Voyage API key</span>
+                                            </label>
+                                            <div class="flex gap-2">
+                                                <input type="password" id="VOYAGE_API_KEY"
+                                                    placeholder=""
+                                                    class="input input-bordered flex-1 w-full">
+                                                <button class="btn btn-square btn-outline"
+                                                    data-for="VOYAGE_API_KEY">👁️</button>
+                                            </div>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">Voyage base URL</span>
+                                            </label>
+                                            <input type="text" placeholder="https://api.voyageai.com/v1" id="VOYAGE_BASE_URL"
+                                                class="input input-bordered w-full">
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">DeepInfra API key</span>
+                                            </label>
+                                            <div class="flex gap-2">
+                                                <input type="password" id="DEEPINFRA_API_KEY"
+                                                    placeholder=""
+                                                    class="input input-bordered flex-1 w-full">
+                                                <button class="btn btn-square btn-outline"
+                                                    data-for="DEEPINFRA_API_KEY">👁️</button>
+                                            </div>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">DeepInfra base URL</span>
+                                            </label>
+                                            <input type="text" placeholder="https://api.deepinfra.com/v1/openai" id="DEEPINFRA_BASE_URL"
+                                                class="input input-bordered w-full">
+                                        </div>
+
+                                    </div>
+                                </div>
+
                                 <!-- Langfuse tracing -->
                                 <div class="card bg-base-200 shadow-md mt-6">
                                     <div class="card-body">
@@ -9330,7 +9509,7 @@
                     this.showSaveIndicator();
                     console.log('Config saved successfully');
 
-                    const shortSecrets = ['RAG_EVAL_SECRET', 'RAG_SIDECAR_SECRET', 'RAG_VOICE_TOKEN_SECRET'].filter((name) => {
+                    const shortSecrets = ['RAG_EVAL_SECRET', 'RAG_SIDECAR_SECRET', 'RAG_VOICE_TOKEN_SECRET', 'VOYAGE_API_KEY', 'DEEPINFRA_API_KEY'].filter((name) => {
                         const value = this.config[name];
                         return typeof value === 'string' && value.length > 0 && value.length < 32;
                     });
