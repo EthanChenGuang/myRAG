@@ -1,4 +1,5 @@
-import { PARSE_ARTIFACT, isArtifactName, loadArtifact, originalName, versionPrefix } from './artifacts';
+import { ParseResultSchema } from '@/lib/rag-eval/contracts.generated';
+import { PARSE_ARTIFACT, PARSE_CHUNKS_ARTIFACT, isArtifactName, loadArtifact, originalName, versionPrefix } from './artifacts';
 import { ObjectStoreError } from './object-store';
 import { IngestWriterError, createIngestWriter } from './writer';
 import { chunkStage } from './stages/chunk';
@@ -57,6 +58,8 @@ export const REGISTERED_STAGES: readonly StageSpec[] = [
   writeStage,
   publishStage,
 ];
+
+type ParseResultChunks = NonNullable<StageContext['work']['parseChunks']>;
 
 const CLEANUP_TIMEOUT_MS = 5000;
 
@@ -274,6 +277,18 @@ async function rerun(stage: StageSpec, ctx: StageContext): Promise<string | null
   return outcome.kind === 'fail' ? outcome.reason : 'rehydrate_failed';
 }
 
+/** The parser's own chunks stored next to parse.md (Docling), so a resumed run chunks like an uninterrupted one; null when there are none or they do not validate. */
+async function loadParseChunks(ctx: StageContext): Promise<ParseResultChunks | null> {
+  const stored = await loadArtifact(ctx, PARSE_CHUNKS_ARTIFACT);
+  if (!stored) return null;
+  try {
+    const parsed = ParseResultSchema.shape.chunks.safeParse(JSON.parse(new TextDecoder('utf-8').decode(stored.bytes)));
+    return parsed.success && parsed.data.length > 0 ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Rebuilds what the stages after ctx.state.lastCompleted read from memory, from the stored artifacts and no upload.
  * Parse output comes from parse.md; without it the stored original is parsed again, and without that the run fails
@@ -307,6 +322,7 @@ export async function rehydrateFromStore(ctx: StageContext): Promise<RehydrateRe
     if (parsed) {
       ctx.work.parseText = new TextDecoder('utf-8').decode(parsed.bytes);
       ctx.work.parserVersion = ctx.work.parserVersion ?? 'stored';
+      ctx.work.parseChunks = await loadParseChunks(ctx);
     } else {
       if (!(await loadOriginal(originalFile))) return { failed: 'original_unavailable' };
       const failure = await rerun(parseStage, ctx);

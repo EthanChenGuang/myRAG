@@ -4,11 +4,13 @@ import { assertObjectKey, getObjectStore, type StoredObject } from './object-sto
 export const PARSE_ARTIFACT = 'parse.md';
 /** The Docling JSON next to the Markdown when Docling ran; the Docling plan fills it. */
 export const DOCLING_ARTIFACT = 'docling.json';
+/** The parser's own chunks (Docling), kept so a resumed run chunks the same way as an uninterrupted one. */
+export const PARSE_CHUNKS_ARTIFACT = 'chunks.json';
 
 const TENANT_KEY = /^[a-z]:[a-z0-9-]{1,64}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const EXTENSION = /^[a-z0-9]{1,8}$/;
-const ARTIFACT_NAME = /^[a-z0-9]{1,16}\.[a-z0-9]{1,8}$/;
+const ARTIFACT_NAME = /^[a-z0-9][a-z0-9-]{0,31}\.[a-z0-9]{1,8}$/;
 const CONTENT_TYPE = /^[a-z0-9][a-z0-9!#$&^_.+-]*\/[a-z0-9][a-z0-9!#$&^_.+-]*$/;
 const MAX_VERSION = 1_000_000_000;
 
@@ -46,7 +48,7 @@ export function safeContentType(value: string | null | undefined): string {
   return CONTENT_TYPE.test(type) ? type : 'application/octet-stream';
 }
 
-/** True for a fixed ASCII basename such as original.pdf or parse.md. */
+/** True for a fixed ASCII basename such as original.pdf, parse.md or picture-1.png. */
 export function isArtifactName(name: string): boolean {
   return ARTIFACT_NAME.test(name);
 }

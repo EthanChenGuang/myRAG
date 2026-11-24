@@ -560,7 +560,7 @@ describe('resume from the object store', () => {
       expect({ lastCompleted, chunk, enrich, extract }).toEqual({ lastCompleted, chunk: 1, enrich: 1, extract: 1 });
       expect(parse, lastCompleted).toBe(0);
       expect(callsOf(calls, 'rag_write_chunks')).toHaveLength(1);
-      expect(store.calls.slice(seeded).map((call) => `${call.op}:${call.key}`)).toEqual([`get:${PARSE_PATH}`]);
+      expect(store.calls.slice(seeded).map((call) => `${call.op}:${call.key}`)).toEqual([`get:${PARSE_PATH}`, `get:${PARSE_PATH.replace('parse.md', 'chunks.json')}`]);
       spies.forEach((spy) => spy.mockRestore());
       uninstallIngestDeps();
     }
