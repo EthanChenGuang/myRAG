@@ -55,6 +55,7 @@ for (const mode of MODES) {
     });
 
     test('expired lease reclaim with exhausted retries dead-letters with lease expired error', async () => {
+      const deadLettersBefore = (await db.query<{ n: string }>(`SELECT rag_count_ingestion_dead_letters(NULL)::text AS n`)).rows[0]?.n;
       const jobId = crypto.randomUUID();
       await db.query(
         `INSERT INTO ingestion_jobs (id, tenant_key, kind, source_key, status, stage, locked_by, lease_until, retries, max_retries)
@@ -79,7 +80,7 @@ for (const mode of MODES) {
       assert.equal(row?.error, 'lease expired');
       assert.ok(row?.dead_letter_at);
       const count = (await db.query<{ n: string }>(`SELECT rag_count_ingestion_dead_letters(NULL)::text AS n`)).rows[0]?.n;
-      assert.equal(count, '1');
+      assert.equal(Number(count) - Number(deadLettersBefore), 1);
     });
 
     test('rag_retry_ingestion_job clears dead letter state', async () => {
