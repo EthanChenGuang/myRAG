@@ -48,10 +48,6 @@ async function asRole<T>(db: PGlite, role: Role, run: () => Promise<T>): Promise
   }
 }
 
-async function applyClaimMigration(db: PGlite): Promise<void> {
-  await db.exec(fs.readFileSync(path.join(REPO_ROOT, MIGRATION_0352), 'utf8'));
-}
-
 interface EnqueueArgs {
   tenant: string;
   sourceKey: string;
@@ -122,7 +118,6 @@ for (const mode of MODES) {
 
     before(async () => {
       fixture = await createFixtureDatabase({ deploymentMode: mode, corpusDir: REAL_CORPUS, supabaseGrants: true, migrations: true });
-      await applyClaimMigration(fixture.db);
     });
 
     after(async () => {
