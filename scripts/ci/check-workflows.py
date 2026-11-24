@@ -201,6 +201,7 @@ def check_pr(errors: list[str]) -> None:
                 errors.append("pr-smoke: the degrade step must assert passed false and no mismatches")
         if body.find("--degrade drop_top_candidate") > body.find("--max-results 1"):
             errors.append("pr-smoke: the degrade step must run before the max_results control")
+    check_eval_smoke(jobs.get("eval-smoke"), errors)
     # every job that runs eval pytest or the harness must sync eval with all extras
     for jname, job in jobs.items():
         body = step_text(job)
@@ -286,6 +287,28 @@ def check_pr(errors: list[str]) -> None:
         for needle in ("docker build -t rag-sidecar:ci rag-sidecar", "/health", "/ready", "/v1/info", "RAG_SIDECAR_SECRET"):
             if needle not in body:
                 errors.append(f"pr-smoke: job docker-build is missing '{needle}'")
+
+
+def check_eval_smoke(job: dict | None, errors: list[str]) -> None:
+    if job is None:
+        return
+    steps = all_steps(job)
+    runs = [str(step.get("run", "")) for step in steps]
+    plain = next((i for i, run in enumerate(runs) if "npm run test-rag -- --out eval/out/smoke" in run), None)
+    ingest = next((i for i, run in enumerate(runs) if "--fixture-mode ingest" in run), None)
+    if ingest is None:
+        errors.append("pr-smoke: job eval-smoke must run 'npm run test-rag -- --fixture-mode ingest --out eval/out/smoke-ingest'")
+        return
+    body = runs[ingest]
+    if "npm run test-rag -- --fixture-mode ingest --out eval/out/smoke-ingest" not in body:
+        errors.append("pr-smoke: the ingest smoke step must run 'npm run test-rag -- --fixture-mode ingest --out eval/out/smoke-ingest'")
+    if "--no-gate" in body or "--baseline" in body:
+        errors.append("pr-smoke: the ingest smoke step must gate against the committed ingest baseline (no --no-gate, no --baseline)")
+    if plain is None or plain > ingest:
+        errors.append("pr-smoke: the ingest smoke step must run after the prechunked smoke step")
+    uploads = [step for step in steps if str(step.get("uses", "")).startswith("actions/upload-artifact@")]
+    if not any("eval/out/smoke-ingest" in str((step.get("with") or {}).get("path", "")) for step in uploads):
+        errors.append("pr-smoke: job eval-smoke must upload eval/out/smoke-ingest")
 
 
 def check_online_judge(data: dict, errors: list[str]) -> None:

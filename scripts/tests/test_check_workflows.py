@@ -85,6 +85,57 @@ class DbTestsStepTest(unittest.TestCase):
         self.assertTrue(any("tests/rag-db/" in e for e in errors), errors)
 
 
+class EvalSmokeJobTest(unittest.TestCase):
+    def job(self) -> dict:
+        return check_workflows.load(check_workflows.PR)[0]["jobs"]["eval-smoke"]
+
+    def errors_for(self, job: dict | None) -> list[str]:
+        errors: list[str] = []
+        check_workflows.check_eval_smoke(job, errors)
+        return errors
+
+    def ingest_step(self, job: dict) -> dict:
+        return next(step for step in job["steps"] if "--fixture-mode ingest" in str(step.get("run", "")))
+
+    def test_repository_workflow_gates_the_ingest_mode(self):
+        self.assertEqual(self.errors_for(self.job()), [])
+
+    def test_missing_ingest_step_is_reported(self):
+        job = self.job()
+        job["steps"] = [step for step in job["steps"] if "--fixture-mode ingest" not in str(step.get("run", ""))]
+        self.assertTrue(any("must run" in e and "--fixture-mode ingest" in e for e in self.errors_for(job)))
+
+    def test_an_ungated_ingest_step_is_reported(self):
+        job = self.job()
+        step = self.ingest_step(job)
+        step["run"] += " --no-gate"
+        self.assertTrue(any("--no-gate" in e for e in self.errors_for(job)))
+
+    def test_a_foreign_baseline_is_reported(self):
+        job = self.job()
+        step = self.ingest_step(job)
+        step["run"] += " --baseline eval/baselines/fixture-baseline.json"
+        self.assertTrue(any("--baseline" in e for e in self.errors_for(job)))
+
+    def test_ingest_step_before_the_prechunked_step_is_reported(self):
+        job = self.job()
+        steps = job["steps"]
+        ingest = self.ingest_step(job)
+        steps.remove(ingest)
+        steps.insert(0, ingest)
+        self.assertTrue(any("after the prechunked" in e for e in self.errors_for(job)))
+
+    def test_the_ingest_output_must_be_uploaded(self):
+        job = self.job()
+        for step in job["steps"]:
+            if str(step.get("uses", "")).startswith("actions/upload-artifact@"):
+                step["with"]["path"] = "eval/out/smoke"
+        self.assertTrue(any("must upload eval/out/smoke-ingest" in e for e in self.errors_for(job)))
+
+    def test_a_workflow_without_the_job_has_nothing_to_check(self):
+        self.assertEqual(self.errors_for(None), [])
+
+
 class RealDoclingJobTest(unittest.TestCase):
     def nightly(self) -> dict:
         return check_workflows.load(check_workflows.NIGHTLY)[0]

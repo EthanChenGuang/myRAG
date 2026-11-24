@@ -6,6 +6,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { pg_trgm } from '@electric-sql/pglite/contrib/pg_trgm';
 import { vector } from '@electric-sql/pglite-pgvector';
 import { loadCorpus } from './corpus.mts';
+import type { FakeEdge } from './fake-edge.mts';
 import { applyMigrations } from './migrations.mts';
 import { embedText } from './fixture-embedder.mts';
 
@@ -14,6 +15,9 @@ export const FIXTURE_USER_ID = '00000000-0000-4000-8000-0000000000f1';
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
 export type DeploymentMode = 'single-tenant' | 'multi-tenant';
+
+/** prechunked inserts the corpus as pre-cut rows (the Phase 1 and 2 baseline); ingest sends every document through ingest(). */
+export type FixtureMode = 'prechunked' | 'ingest';
 
 const SQL_FILES: Record<DeploymentMode, string> = {
   'single-tenant': 'supabase/single-tenant-setup.sql',
@@ -25,6 +29,8 @@ export interface FixtureDatabase {
   fixtureUserId: string;
   corpusSha256: string;
   sqlSha256: Record<string, string>;
+  /** Set by the ingest mode, which fills the database through a fake edge and leaves it running; the caller closes it. */
+  edge?: FakeEdge;
 }
 
 const SUPABASE_SHIM_SQL = `
@@ -48,21 +54,26 @@ function vectorLiteral(values: number[]): string {
   return `[${values.join(',')}]`;
 }
 
-export async function createFixtureDatabase(options: {
+export interface EmptyFixtureDatabase {
+  db: PGlite;
+  fixtureUserId: string;
+  sqlSha256: Record<string, string>;
+}
+
+/** The schema, the migrations and the fixture user, with no documents. */
+export async function createEmptyFixtureDatabase(options: {
   deploymentMode: DeploymentMode;
-  corpusDir: string;
   supabaseGrants?: boolean;
   migrations?: boolean;
   setupSqlPath?: string;
-}): Promise<FixtureDatabase> {
-  const { deploymentMode, corpusDir } = options;
+}): Promise<EmptyFixtureDatabase> {
+  const { deploymentMode } = options;
   if (deploymentMode !== 'single-tenant' && deploymentMode !== 'multi-tenant') {
     throw new Error(`[Fixture DB] unsupported deployment mode: ${String(deploymentMode)}`);
   }
 
   const sqlRelpath = options.setupSqlPath ?? SQL_FILES[deploymentMode];
   const sqlBytes = fs.readFileSync(path.join(REPO_ROOT, sqlRelpath));
-  const corpus = loadCorpus(corpusDir);
 
   const db = new PGlite({ extensions: { vector, pg_trgm } });
   try {
@@ -72,11 +83,52 @@ export async function createFixtureDatabase(options: {
     await db.exec(sqlBytes.toString('utf8'));
     if (options.migrations !== false) await applyMigrations(db, deploymentMode);
 
-    const multiTenant = deploymentMode === 'multi-tenant';
-    if (multiTenant) {
+    if (deploymentMode === 'multi-tenant') {
       await db.query('INSERT INTO auth.users (id, email) VALUES ($1, $2)', [FIXTURE_USER_ID, 'fixture-user@example.invalid']);
     }
+  } catch (error) {
+    await db.close().catch(() => undefined);
+    throw error;
+  }
 
+  return { db, fixtureUserId: FIXTURE_USER_ID, sqlSha256: { [sqlRelpath]: crypto.createHash('sha256').update(sqlBytes).digest('hex') } };
+}
+
+export async function createFixtureDatabase(options: {
+  deploymentMode: DeploymentMode;
+  corpusDir: string;
+  fixtureMode?: FixtureMode;
+  /** Variables the run reads from the app environment; the ingest mode sets them before it imports the app, which is earlier than the caller can. */
+  processEnv?: Record<string, string>;
+  supabaseGrants?: boolean;
+  migrations?: boolean;
+  setupSqlPath?: string;
+}): Promise<FixtureDatabase> {
+  const { deploymentMode, corpusDir } = options;
+  if (deploymentMode !== 'single-tenant' && deploymentMode !== 'multi-tenant') {
+    throw new Error(`[Fixture DB] unsupported deployment mode: ${String(deploymentMode)}`);
+  }
+  const fixtureMode = options.fixtureMode ?? 'prechunked';
+  if (fixtureMode !== 'prechunked' && fixtureMode !== 'ingest') {
+    throw new Error(`[Fixture DB] unsupported fixture mode: ${String(fixtureMode)}`);
+  }
+  if (fixtureMode === 'ingest') {
+    // Loaded on demand: the ingest code reads its environment at import time, which prechunked runs must not disturb.
+    const { buildIngestFixtureDatabase } = await import('./ingest-mode.mts');
+    return buildIngestFixtureDatabase({
+      deploymentMode,
+      corpusDir,
+      processEnv: options.processEnv,
+      supabaseGrants: options.supabaseGrants,
+      migrations: options.migrations,
+      setupSqlPath: options.setupSqlPath,
+    });
+  }
+
+  const corpus = loadCorpus(corpusDir);
+  const { db, sqlSha256 } = await createEmptyFixtureDatabase(options);
+  try {
+    const multiTenant = deploymentMode === 'multi-tenant';
     for (const doc of corpus.documents) {
       if (multiTenant) {
         await db.query(
@@ -121,10 +173,5 @@ export async function createFixtureDatabase(options: {
     throw error;
   }
 
-  return {
-    db,
-    fixtureUserId: FIXTURE_USER_ID,
-    corpusSha256: corpus.corpusSha256,
-    sqlSha256: { [sqlRelpath]: crypto.createHash('sha256').update(sqlBytes).digest('hex') },
-  };
+  return { db, fixtureUserId: FIXTURE_USER_ID, corpusSha256: corpus.corpusSha256, sqlSha256 };
 }
