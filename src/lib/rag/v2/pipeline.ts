@@ -110,6 +110,8 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
       signal,
       collector,
       stageOverrides: input.stageOverrides,
+      variants: query.variants,
+      dedupeCounts: search.dedupeCounts,
     });
     refusal = rank.decision;
 
@@ -123,6 +125,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
       signal,
       collector,
       stageOverrides: input.stageOverrides,
+      rerank: rank.rerank,
     });
     assembly = context.assembly;
     candidates = context.candidates;
@@ -141,6 +144,9 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
         parent_id: row.hit.parentId,
         legs: Object.fromEntries(Object.entries(row.ranks).map(([key, value]) => [key, value])),
         language: row.hit.language,
+        ...(rank.rerank.scoreByChunk.has(row.hit.chunkId)
+          ? { rerank_score: rank.rerank.scoreByChunk.get(row.hit.chunkId) }
+          : {}),
       }));
     }
   } catch (error) {

@@ -330,10 +330,10 @@ describe('v2 rerank stage in the rank group', () => {
 
   it('gives local_bm25 the document-language query variant per candidate', async () => {
     const { env } = setup({ RAG_RERANKER: 'local_bm25', RAG_REFUSAL_THRESHOLD: 'false' });
-    const hits = fusedHits(2, (index) =>
-      index === 0
-        ? { language: 'en', content: 'unrelated shipping schedule' }
-        : { language: 'it', content: 'finestra rimborso politica trenta giorni' },
+    const hits = fusedHits(3, (index) =>
+      index === 1
+        ? { language: 'it', content: 'finestra rimborso politica trenta giorni' }
+        : { language: 'en', content: index === 0 ? 'unrelated shipping schedule' : 'weather report for tomorrow' },
     );
     const variants: QueryVariant[] = [
       { text: 'refund policy', language: 'en', kind: 'original' },
@@ -343,14 +343,14 @@ describe('v2 rerank stage in the rank group', () => {
     const seen = recordingReranker(reverseScores, { id: 'local_bm25', model: 'bm25-v2', semantics: 'relative' });
     useFactory(seen.reranker);
     await rankRun(env, { hits, variants }).promise;
-    expect(seen.calls[0]?.opts.queryByDoc).toEqual(['refund policy', 'rimborso politica']);
+    expect(seen.calls[0]?.opts.queryByDoc).toEqual(['refund policy', 'rimborso politica', 'refund policy']);
 
     resetRerankerFactoryForTests();
     const real = await rankRun(env, { hits, variants }).promise;
     expect(ids(real.survivors)[0]).toBe('c1');
 
     const withoutVariant = await rankRun(env, { hits }).promise;
-    expect(ids(withoutVariant.survivors)).toEqual(['c0', 'c1']);
+    expect(ids(withoutVariant.survivors)).toEqual(['c0', 'c1', 'c2']);
   });
 
   it.each([

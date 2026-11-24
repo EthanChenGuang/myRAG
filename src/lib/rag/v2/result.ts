@@ -8,6 +8,7 @@ import { assembleDisabledStatus, degradedReason, deriveStatus, failure } from '.
 import { evalRetrievalOverrides } from './overrides';
 import { loadThresholds } from '../refusal/thresholds';
 import type { RefusalRecord } from '../refusal/types';
+import { describeReranker } from '../rerank/select';
 import { RERANK_TEXT_VERSION } from '../rerank/types';
 import type { TraceCollector } from '../trace/collector';
 import type { Candidate, Profile, RetrievalResult, RunRetrievalInput } from '../types';
@@ -95,7 +96,7 @@ export async function buildV2Result(ctx: BuildV2ResultInput): Promise<RetrievalR
     lexicalVersion: LEXICAL_VERSION,
     rerankTextVersion: RERANK_TEXT_VERSION,
     params: effectiveRetrievalParams(profile, config, evalRetrievalOverrides(profile, input.stageOverrides?.retrievalOverrides)),
-    reranker: { id: config.v2.reranker, model: config.v2.reranker === 'none' ? 'none' : config.v2.reranker },
+    reranker: describeReranker(config, profile, queryLanguage ?? '', input.stageOverrides?.retrievalOverrides),
     thresholdsConfigHash,
     activeChunkingProfiles: chunking,
     switches: {

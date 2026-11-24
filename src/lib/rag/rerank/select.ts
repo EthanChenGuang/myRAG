@@ -94,6 +94,19 @@ function defaultFactory(provider: RerankerKind, model: string, env: RagEnvInput,
   return null;
 }
 
+/** The provider and model a request resolves to, for the retrieval config hash; builds no adapter and reads no key. */
+export function describeReranker(
+  config: RagConfig,
+  profile: Profile,
+  queryLanguage: string,
+  overrides?: RetrievalOverrides,
+): { id: RerankerKind; model: string } {
+  const provider = effectiveProvider(profile, config, overrides);
+  const tier = resolveTier(profile, config, overrides);
+  const model = resolveModel(provider, tier, queryLanguage, config, profile, overrides);
+  return { id: provider, model: model ?? 'none' };
+}
+
 export function setRerankerFactoryForTests(factory: RerankerFactory): void {
   customFactory = factory;
 }
