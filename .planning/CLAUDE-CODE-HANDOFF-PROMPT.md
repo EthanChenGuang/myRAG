@@ -71,7 +71,7 @@ Full registry: `.planning/paused/exec-ledger.md` rows marked **merged**.
 | **03.1-25** | `exec/03.1-25` | `7c5f7f8` | `.planning/paused/patches/03.1-25.patch` | `git worktree add wt/03.1-25 origin/exec/03.1-25`; or `git checkout -b exec/03.1-25 origin/exec/03.1-25`; continue PLAN 03.1-25; spawn one executor |
 | **04-18** | `exec/04-18` | `258a14f` | `.planning/paused/patches/04-18.patch` | worktree `wt/04-18` from `origin/exec/04-18`; selective-filter harness + tests |
 | **04-20** | `exec/04-20` | **`081224a`** (COMPLETE) | `.planning/paused/patches/04-20.patch` (superseded) | **Merge first on resume:** SUMMARY on branch; feats `11c0e0f`, docs `081224a` |
-| **03-48-setup-idempotent** | `exec/03-48-setup-idempotent` | `d1c5821` | `.planning/paused/patches/03-48-setup-idempotent.patch` | setup SQL idempotency (42710); schema-equality test changes |
+| **03-48-setup-idempotent** | `exec/03-48-setup-idempotent` | **`90635ae`** (COMPLETE) | patch superseded | **Merge on resume**; idempotency re-run tests pass; full `schema-equality` may still show unrelated relex RPC fails |
 
 **Apply patch (if worktree dirty or missing):** from repo root, `git apply --check .planning/paused/patches/<plan>.patch` then `git apply` on the correct branch (patches were captured pre-WIP-commit; prefer checking out WIP commit).
 

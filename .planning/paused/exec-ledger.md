@@ -109,7 +109,7 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | 04-45 | [bc-32843230](bc-32843230-3c15-53cb-be49-93f84da0a3bb) **merged** | exec/04-45 — vitest 13 |
 | 03-48-sec-rpc | [bc-049b7ab0](bc-049b7ab0-c778-50b5-bce6-77842e48a55e) **merged** | exec/03-48-sec-rpc — PGlite 2/2 |
 | 04-20 | [bc-36e7beb3](bc-36e7beb3-7655-51e7-964a-e1082fa083c3) **COMPLETE** (post-PAUSE; not merged) | `origin/exec/04-20` @ `081224a` |
-| 03-48-setup-idempotent | [bc-b37c0b7a](bc-b37c0b7a-eb5e-51b0-83b2-b0e870bb6318) RUNNING | exec/03-48-setup-idempotent |
+| 03-48-setup-idempotent | [bc-b37c0b7a](bc-b37c0b7a-eb5e-51b0-83b2-b0e870bb6318) **COMPLETE** (post-PAUSE; not merged) | `origin/exec/03-48-setup-idempotent` @ `90635ae` |
 
 ## Remaining plan inventory (file-overlap basis)
 
@@ -132,7 +132,7 @@ All four executors **stopped**; WIP on `origin/exec/*` + patches in `.planning/p
 | Plan | bcId | Cloud | Worktree | WIP signal |
 |------|------|-------|----------|------------|
 | 03.1-23 | [bc-ab1e9b2d](bc-ab1e9b2d-301d-50ad-85d3-54b3af5e3261) | **merged** | — | pytest 67 |
-| 03-48-setup-idempotent | [bc-b37c0b7a](bc-b37c0b7a-eb5e-51b0-83b2-b0e870bb6318) | **STOPPED** | `wt/03-48-setup-idempotent` | WIP `d1c5821` on `origin/exec/03-48-setup-idempotent` |
+| 03-48-setup-idempotent | [bc-b37c0b7a](bc-b37c0b7a-eb5e-51b0-83b2-b0e870bb6318) | **COMPLETE** | `wt/03-48-setup-idempotent` | **merge-ready** `90635ae`; idempotency tests pass; note residual `schema-equality` relex RPC failures on merge |
 | 03.1-25 | [bc-1f542e8a](bc-1f542e8a-f80a-58a7-99bb-5c47f655d0ce) | **STOPPED** | `wt/03.1-25` | WIP `7c5f7f8` on `origin/exec/03.1-25` |
 | 04-18 | [bc-78743196](bc-78743196-9471-5cda-8414-1d4c80c9d85f) | **STOPPED** | `wt/04-18` | WIP `258a14f` on `origin/exec/04-18` |
 | 04-20 | [bc-36e7beb3](bc-36e7beb3-7655-51e7-964a-e1082fa083c3) | **COMPLETE** | `wt/04-20` | **merge-ready** `081224a` (`11c0e0f` feat + SUMMARY); supersedes pause WIP `b5e47fe` — **do not merge until resume** |
@@ -141,7 +141,7 @@ All four executors **stopped**; WIP on `origin/exec/*` + patches in `.planning/p
 
 | Plan | Worktree ready | Notes |
 |------|----------------|-------|
-| **03-48-setup-idempotent** | `wt/03-48-setup-idempotent` | RUNNING — see Wave E |
+| **03-48-setup-idempotent** | `wt/03-48-setup-idempotent` | **COMPLETE** — merge on resume |
 | **03-48-sec-rpc-2** | (create on spawn) | **next free slot**; [03-48-FOLLOWUP-SECURITY-RPC-2-PLAN.md](../phases/03-unified-ingestion-embedding-profiles/03-48-FOLLOWUP-SECURITY-RPC-2-PLAN.md) — full DEFINER inventory (live 23); `tests/rag/search-rpc-grants.test.ts` must pass |
 
 **03-48 follow-ups (one executor per plan when a slot frees — do not duplicate running work):**

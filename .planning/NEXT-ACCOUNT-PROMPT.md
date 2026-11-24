@@ -85,7 +85,7 @@ Full registry: `.planning/paused/exec-ledger.md` (rows marked **merged**).
 |------|----------------|
 | **03-48 Task 1 live** | Guang/box; live at **0351**; trunk has **0352–0356**, **0401–0409+** — promote on box only |
 | **23 anon EXECUTE on SECURITY DEFINER RPCs** | **partial** — `0409` closes 4 search RPCs; **`03-48-sec-rpc-2` queued** for remaining ~19 + vitest inventory |
-| **`multi-tenant-setup.sql` 42710** | **03-48-setup-idempotent** RUNNING |
+| **`multi-tenant-setup.sql` 42710** | **03-48-setup-idempotent** COMPLETE on `exec/03-48-setup-idempotent` @ `90635ae` — merge on resume |
 | **03-48 SUMMARY Task 1/2** | Task 2 partial: **Docling T2.2 CI Docker only** on cloud VM; **DeepInfra T2.4b 402**; **Voyage billing** for reembed |
 | **03-48 Task 3** | Re-embed, profiles, Nango, Config UI — pending keys/billing/deploy |
 | **`schema-equality.test.mts`** | 4 fails until setup fold (03.1-52 / 04-42) |
