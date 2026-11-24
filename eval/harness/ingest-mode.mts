@@ -6,9 +6,20 @@ import { startFakeEdge, type FakeEdge } from './fake-edge.mts';
 import { createEmptyFixtureDatabase, type DeploymentMode, type FixtureDatabase } from './pglite-supabase.mts';
 import { applyFixtureProcessEnv } from './process-env.mts';
 
+const MANIFEST_PATH = path.join('eval/fixtures/ingest/manifest.json');
+
+interface ManifestFixture {
+  id: string;
+  doc_type: string;
+  mime: string;
+  path: string;
+  file_sha256: string;
+  expected?: { injection?: { expected_status?: string } };
+}
+
 /** Repo-relative golden files the ingest mode scores; ingest-only items are added here. */
 export function ingestModeGoldenPaths(): string[] {
-  return ['eval/fixtures/golden.jsonl'];
+  return ['eval/fixtures/golden.jsonl', 'eval/fixtures/ingest/golden-ingest.jsonl'];
 }
 
 /** One golden file to score: a single path is returned as it is, several are concatenated in order into `outPath`. */
@@ -30,10 +41,16 @@ function ingestCorpusSha256(corpusSha256: string): string {
   return crypto.createHash('sha256').update('fixture-mode:ingest').update(Buffer.from([0])).update(corpusSha256).digest('hex');
 }
 
+function loadTypedManifest(): ManifestFixture[] {
+  const manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf8')) as { fixtures: ManifestFixture[] };
+  return manifest.fixtures;
+}
+
 /**
  * The fixture database filled by the real ingest(): every corpus document, with the chunk markers and the fixture-meta line already
- * removed by the corpus loader, goes through the stages as a picked-general config upload of the fixture tenant. The fake edge it
- * ingests through stays up and is handed to the caller together with the database; the app environment points at it.
+ * removed by the corpus loader, goes through the stages as a picked-general config upload of the fixture tenant. Typed fixtures from
+ * eval/fixtures/ingest/manifest.json follow, each with its picked doc_type. The fake edge it ingests through stays up and is handed to
+ * the caller together with the database; the app environment points at it.
  */
 export async function buildIngestFixtureDatabase(options: {
   deploymentMode: DeploymentMode;
@@ -48,16 +65,28 @@ export async function buildIngestFixtureDatabase(options: {
   const empty = await createEmptyFixtureDatabase(options);
   let edge: FakeEdge | undefined;
   let uninstall: (() => Promise<void>) | undefined;
+  let sidecarUploads: FixtureDatabase['ingestSidecarUploads'];
+  let llamaAttempts = 0;
+  const harnessEnv: Record<string, string> = {
+    RAG_INGEST_PIPELINE: 'unified',
+    RAG_PARSER: 'llamaparse',
+    RAG_INJECTION_SCAN: 'quarantine',
+    RAG_PDF_IMAGE_CHUNKS: 'true',
+    RAG_EXACT_ID_LOOKUP: 'true',
+    LLAMA_CLOUD_API_KEY: '',
+    ...options.processEnv,
+  };
   try {
     edge = await startFakeEdge({ db: empty.db });
-    applyFixtureProcessEnv({ edgeUrl: edge.url, deploymentMode, extra: options.processEnv });
+    applyFixtureProcessEnv({ edgeUrl: edge.url, deploymentMode, extra: harnessEnv });
 
     const { fixtureAdminClient, installIngestFakes } = await import('./ingest-fakes.mts');
     const { ingest } = await import('@/lib/rag/ingest');
     const { buildSourceKey } = await import('@/lib/rag/ingest/identity');
     const { mintScope } = await import('@/lib/rag/tenant/scope');
 
-    const fakes = await installIngestFakes({ db: fixtureAdminClient(edge.url) });
+    const { INGEST_MODE_FEATURE_ENV } = await import('./ingest-fakes.mts');
+    const fakes = await installIngestFakes({ db: fixtureAdminClient(edge.url), env: INGEST_MODE_FEATURE_ENV });
     uninstall = fakes.uninstall;
 
     const scope = deploymentMode === 'multi-tenant' ? mintScope('personal', empty.fixtureUserId, null) : mintScope('single', null, null);
@@ -76,6 +105,35 @@ export async function buildIngestFixtureDatabase(options: {
         throw new Error(`[Ingest Mode] ${doc.relpath} ended ${result.status} (${result.reason ?? 'no reason'}; warnings: ${result.warnings.join(', ') || 'none'})`);
       }
     }
+
+    for (const entry of loadTypedManifest()) {
+      const filePath = path.join('eval/fixtures/ingest', entry.path);
+      const bytes = fs.readFileSync(filePath);
+      const filename = path.basename(entry.path);
+      const expected = entry.expected?.injection?.expected_status === 'quarantined' ? 'quarantined' : 'ready';
+      const result = await ingest({
+        scope,
+        source: 'config_upload',
+        sourceKey: buildSourceKey('config_upload', { filename }),
+        file: new Uint8Array(bytes),
+        filename,
+        mimeType: entry.mime,
+        docType: entry.doc_type as import('@/lib/rag/ingest/profiles/load').DocType,
+        signal: new AbortController().signal,
+      });
+      if (result.status !== expected) {
+        throw new Error(
+          `[Ingest Mode] typed fixture ${entry.id} ended ${result.status} (expected ${expected}; ${result.reason ?? 'no reason'}; warnings: ${result.warnings.join(', ') || 'none'})`,
+        );
+      }
+    }
+
+    sidecarUploads = fakes.sidecar.uploads.map((upload) => ({
+      fileSha256: upload.fileSha256,
+      request: upload.request,
+    }));
+    llamaAttempts = fakes.llamaParseAttempts();
+
     if (edge.errors.length > 0) {
       const sample = edge.errors
         .slice(0, 3)
@@ -91,5 +149,11 @@ export async function buildIngestFixtureDatabase(options: {
     await uninstall?.();
   }
 
-  return { ...empty, corpusSha256: ingestCorpusSha256(corpus.corpusSha256), edge };
+  return {
+    ...empty,
+    corpusSha256: ingestCorpusSha256(corpus.corpusSha256),
+    edge,
+    ingestSidecarUploads: sidecarUploads,
+    ingestLlamaParseAttempts: llamaAttempts,
+  };
 }

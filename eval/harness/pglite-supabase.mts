@@ -31,6 +31,10 @@ export interface FixtureDatabase {
   sqlSha256: Record<string, string>;
   /** Set by the ingest mode, which fills the database through a fake edge and leaves it running; the caller closes it. */
   edge?: FakeEdge;
+  /** Parse-job uploads the ingest-mode builder saw while ingesting eval/fixtures/ingest/manifest.json fixtures. */
+  ingestSidecarUploads?: Array<{ fileSha256: string; request: Record<string, unknown> }>;
+  /** LlamaParse parse attempts during the ingest-mode build (expected zero). */
+  ingestLlamaParseAttempts?: number;
 }
 
 const SUPABASE_SHIM_SQL = `
