@@ -103,8 +103,9 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | 03.1-23 | [bc-ab1e9b2d](bc-ab1e9b2d-301d-50ad-85d3-54b3af5e3261) **merged** | exec/03.1-23 |
 | 04-44 | [bc-e6e2bd84](bc-e6e2bd84-1486-5c1d-b545-6f44a20de765) **merged** | exec/04-44 — params-hash 15 |
 | 03.1-25 | [bc-1f542e8a](bc-1f542e8a-f80a-58a7-99bb-5c47f655d0ce) RUNNING | exec/03.1-25 |
-| 04-19 | [bc-eafdad13](bc-eafdad13-4e57-5750-a00f-8bc029517ee2) RUNNING | exec/04-19 |
+| 04-19 | [bc-eafdad13](bc-eafdad13-4e57-5750-a00f-8bc029517ee2) **merged** | exec/04-19 — tracer 6 + vitest 18 |
 | 04-45 | [bc-32843230](bc-32843230-3c15-53cb-be49-93f84da0a3bb) **merged** | exec/04-45 — vitest 13 |
+| 03-48-sec-rpc | [bc-049b7ab0](bc-049b7ab0-c778-50b5-bce6-77842e48a55e) RUNNING | exec/03-48-sec-rpc |
 
 ## Remaining plan inventory (file-overlap basis)
 
@@ -126,7 +127,7 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | 03-48-sec-rpc | [bc-049b7ab0](bc-049b7ab0-c778-50b5-bce6-77842e48a55e) | **RUNNING** | `wt/03-48-sec-rpc` | RPC REVOKE migration |
 | 03.1-25 | [bc-1f542e8a](bc-1f542e8a-f80a-58a7-99bb-5c47f655d0ce) | **RUNNING** | `wt/03.1-25` | backfill inventory |
 | 04-18 | [bc-78743196](bc-78743196-9471-5cda-8414-1d4c80c9d85f) | **RUNNING** | `wt/04-18` | selective-filter harness untracked; ff’d to trunk |
-| 04-19 | [bc-eafdad13](bc-eafdad13-4e57-5750-a00f-8bc029517ee2) | **RUNNING** | `wt/04-19` | at trunk; pipeline work starting |
+| 04-20 | [bc-36e7beb3](bc-36e7beb3-7655-51e7-964a-e1082fa083c3) | **RUNNING** | `wt/04-20` | query/rank refusal stages |
 
 **Overflow queue (spawn next free slot, same turn as merge):**
 

@@ -132,8 +132,8 @@ Requirements and threat references per plan are in `04-PLAN-INDEX.md`. Kind: tra
 | 04-44-02 | 3 | tdd | `npx vitest run tests/rag/v2/params-hash.test.ts` | ✅ (same) |
 | 04-45-01 | 3 | tdd | `npx vitest run tests/rag/rerank/text.test.ts` | ✅ trunk |
 | 04-45-02 | 3 | tdd | `npx vitest run tests/rag/rerank/select.test.ts` | ✅ 13 total |
-| 04-19-01 | 4 | tracer | `node --import tsx --test tests/rag-db/v2-tracer.test.mts && node --import tsx --test tests/rag-legacy-differential.test.mts` | ⬜ pending |
-| 04-19-02 | 4 | tdd | `npx vitest run tests/rag/v2/search-stages.test.ts tests/rag/status.test.ts` | ⬜ pending |
+| 04-19-01 | 4 | tracer | `node --import tsx --test tests/rag-db/v2-tracer.test.mts && node --import tsx --test tests/rag-legacy-differential.test.mts` | ✅ trunk 6 |
+| 04-19-02 | 4 | tdd | `npx vitest run tests/rag/v2/search-stages.test.ts tests/rag/status.test.ts` | ✅ 18 |
 | 04-20-01 | 5 | tdd | `npx vitest run tests/rag/v2/refusal-routing.test.ts tests/rag/v2/search-stages.test.ts` | ⬜ pending |
 | 04-20-02 | 5 | tdd | `npx vitest run tests/rag/v2/refusal-routing.test.ts tests/rag/status.test.ts` | ⬜ pending |
 | 04-20-03 | 5 | tdd | `npx vitest run tests/chat-strict.test.ts tests/chat-websearch.test.ts tests/rag/characterize-chat.test.ts` | ⬜ pending |
