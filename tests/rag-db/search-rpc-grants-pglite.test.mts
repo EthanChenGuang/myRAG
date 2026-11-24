@@ -114,10 +114,11 @@ async function definerInventory(db: PGlite): Promise<DefinerRow[]> {
   return result.rows;
 }
 
-function assertFullInventory(rows: DefinerRow[]): void {
+function assertFullInventory(rows: DefinerRow[], mode: MigrationMode): void {
   assert.ok(rows.length > 60, `expected the full SECURITY DEFINER inventory, saw ${rows.length} functions`);
   const names = new Set(rows.map((row) => row.proname));
-  for (const name of [...LOCKED, 'rag_begin_document_version', 'rag_write_chunks', 'rag_publish_document_version']) {
+  const expected = mode === 'multi-tenant' ? [...LOCKED] : [];
+  for (const name of [...expected, 'rag_begin_document_version', 'rag_write_chunks', 'rag_publish_document_version']) {
     assert.ok(names.has(name), `${name} missing from the inventory`);
   }
   const problems: string[] = [];
@@ -141,7 +142,7 @@ for (const mode of ['multi-tenant', 'single-tenant'] as MigrationMode[]) {
     test('a fresh install (folded setup file, then every migration, with hosted Supabase default function grants) leaves no SECURITY DEFINER function open to anon or PUBLIC', async () => {
       const fixture = await createEmptyFixtureDatabase({ deploymentMode: mode, supabaseFunctionDefaults: true });
       try {
-        assertFullInventory(await definerInventory(fixture.db));
+        assertFullInventory(await definerInventory(fixture.db), mode);
       } finally {
         await fixture.db.close();
       }
@@ -159,10 +160,10 @@ for (const mode of ['multi-tenant', 'single-tenant'] as MigrationMode[]) {
         assert.ok(open.some((row) => row.anon && row.public_exec), 'the simulated upgrade state is not open');
 
         await applyMigrationFiles(fixture.db, files.filter((file) => file === REVOKE_MIGRATION || file === GRANTS_MIGRATION));
-        assertFullInventory(await definerInventory(fixture.db));
+        assertFullInventory(await definerInventory(fixture.db), mode);
 
         await applyMigrationFiles(fixture.db, files.filter((file) => file === REVOKE_MIGRATION || file === GRANTS_MIGRATION));
-        assertFullInventory(await definerInventory(fixture.db));
+        assertFullInventory(await definerInventory(fixture.db), mode);
       } finally {
         await fixture.db.close();
       }
