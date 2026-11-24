@@ -153,9 +153,11 @@ for (const mode of MODES) {
 
     test('adds parent columns without rewriting document_chunks', async () => {
       const empty = await createEmptyFixtureDatabase({ deploymentMode: mode, supabaseGrants: true, migrations: false });
-      const files = migrationFiles(mode).filter(
-        (file) => !file.includes('0404_document_parents') && !file.includes('0405_document_parents'),
-      );
+      const migrationNumber = (file: string): number => {
+        const match = file.match(/(\d{4})_/);
+        return match ? parseInt(match[1], 10) : 0;
+      };
+      const files = migrationFiles(mode).filter((file) => migrationNumber(file) < 404);
       await applyMigrationFiles(empty.db, files);
       const beforeNode = await relfilenode(empty.db);
       const bump = migrationFiles(mode).filter(
