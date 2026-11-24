@@ -20,3 +20,9 @@ After each wave/merge, or when context feels ~60% full:
 - **Never** more than one executor on the same plan id.
 - **Before every spawn:** read `.planning/paused/exec-ledger.md` (plan → agent → status).
 - **Retry** only after the previous agent for that plan is confirmed stopped; log duplicates in the ledger.
+
+## 3. Autonomy
+
+- Do everything you can **without asking Guang**. Guang pre-authorizes approvals the work needs (package installs, plan approvals, GSD checkpoints you can run).
+- Only when a **human login** is required (dashboard OAuth, missing secret only the user holds), stop **that item**, give Guang the **exact login link**, and keep working on everything else.
+- Hard limits unchanged: no secrets or real customer data in commits; push only to the active integration branch; no PR unless asked.
