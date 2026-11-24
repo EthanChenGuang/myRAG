@@ -56,17 +56,23 @@ def default_spawner(argv: list[str], cwd: Path) -> subprocess.CompletedProcess[s
     return subprocess.run(argv, cwd=cwd, capture_output=True, text=True, check=False, env=os.environ.copy())
 
 
-def dev_only_golden(path: Path, dest: Path | None = None) -> Path:
-    """Write the dev-split items of a golden file (rule split and split field both dev); the test split never passes."""
-    items = [item for item in load_golden(Path(path)) if assign_split(item.id) == "dev" and item.split == "dev"]
+def golden_for_splits(path: Path, dest: Path | None = None, splits: tuple[str, ...] = ("dev",)) -> Path:
+    """Write the items whose rule split and split field agree and are in `splits`; mismatched items never pass."""
+    wanted = set(splits)
+    items = [item for item in load_golden(Path(path)) if assign_split(item.id) == item.split and item.split in wanted]
     if dest is None:
-        handle, name = tempfile.mkstemp(prefix="golden-dev-", suffix=".jsonl")
+        handle, name = tempfile.mkstemp(prefix="golden-" + "-".join(splits) + "-", suffix=".jsonl")
         os.close(handle)
         target = Path(name)
     else:
         target = Path(dest)
     write_golden(target, items)
     return target
+
+
+def dev_only_golden(path: Path, dest: Path | None = None) -> Path:
+    """Write the dev-split items of a golden file (rule split and split field both dev); the test split never passes."""
+    return golden_for_splits(path, dest, ("dev",))
 
 
 def _read_run_config(path: Path) -> dict[str, Any]:
@@ -102,12 +108,13 @@ def run_harness(
     fixture_mode: str | None = None,
     spawner: Spawner | None = None,
     repo_root: Path = REPO_ROOT,
+    splits: tuple[str, ...] = ("dev",),
 ) -> HarnessRun:
     out_dir = Path(out)
     inputs = out_dir / INPUTS_DIR
     inputs.mkdir(parents=True, exist_ok=True)
 
-    golden_path = dev_only_golden(Path(golden), inputs / "golden.dev.jsonl")
+    golden_path = golden_for_splits(Path(golden), inputs / f"golden.{'-'.join(splits)}.jsonl", splits)
     base = _read_run_config(Path(run_config))
     notes: list[str] = []
     if base_url and base.get("env"):
