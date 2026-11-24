@@ -49,6 +49,34 @@ from rag_sidecar.contracts.profiles import (
     ProfileMetricBlocks,
 )
 from rag_sidecar.contracts.review import ReviewQueueItem
+from rag_sidecar.contracts.parse_eval import (
+    BackfillDryRunReport,
+    BackfillManifestEntry,
+    ParseGateReport,
+    ParserEvalReport,
+    ParserExpected,
+)
+from rag_sidecar.contracts.queue import (
+    AdvanceRequest,
+    AdvanceResponse,
+    DetectVlmRequest,
+    DetectVlmResponse,
+    IngestionJob,
+    JobKind,
+    JobSettingsSnapshot,
+    JobStatus,
+    ParseExternalRequest,
+    ParseExternalResponse,
+)
+from rag_sidecar.contracts.routing import (
+    PageRange,
+    PageSignals,
+    PageStructureVerdict,
+    ParseAttempt,
+    ParseRoutingConfig,
+    PreflightResult,
+    QualityCheckResult,
+)
 from rag_sidecar.contracts.sidecar import SidecarError, SidecarHealth, SidecarInfo, SidecarReady
 from rag_sidecar.contracts.report import (
     EvalReport,
@@ -144,4 +172,26 @@ __all__ = [
     "TraceQueryContext",
     "TraceQueryTransform",
     "TraceUsedDocument",
+    "PreflightResult",
+    "PageSignals",
+    "PageRange",
+    "PageStructureVerdict",
+    "ParseRoutingConfig",
+    "ParseAttempt",
+    "QualityCheckResult",
+    "JobStatus",
+    "JobKind",
+    "JobSettingsSnapshot",
+    "IngestionJob",
+    "DetectVlmRequest",
+    "DetectVlmResponse",
+    "ParseExternalRequest",
+    "ParseExternalResponse",
+    "AdvanceRequest",
+    "AdvanceResponse",
+    "BackfillManifestEntry",
+    "BackfillDryRunReport",
+    "ParserExpected",
+    "ParserEvalReport",
+    "ParseGateReport",
 ]

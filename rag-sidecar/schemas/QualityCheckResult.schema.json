@@ -1,0 +1,68 @@
+{
+  "$defs": {
+    "PageCheck": {
+      "additionalProperties": false,
+      "properties": {
+        "failed": {
+          "items": {
+            "enum": [
+              "empty_text",
+              "low_chars",
+              "garbled",
+              "language_mismatch",
+              "missing_table",
+              "partial_conversion",
+              "table_boundary"
+            ],
+            "type": "string"
+          },
+          "title": "Failed",
+          "type": "array"
+        },
+        "page": {
+          "minimum": 1,
+          "title": "Page",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "page",
+        "failed"
+      ],
+      "title": "PageCheck",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "pages": {
+      "items": {
+        "$ref": "#/$defs/PageCheck"
+      },
+      "title": "Pages",
+      "type": "array"
+    },
+    "partial": {
+      "title": "Partial",
+      "type": "boolean"
+    },
+    "passed": {
+      "title": "Passed",
+      "type": "boolean"
+    },
+    "score": {
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Score",
+      "type": "number"
+    }
+  },
+  "required": [
+    "passed",
+    "pages",
+    "score",
+    "partial"
+  ],
+  "title": "QualityCheckResult",
+  "type": "object"
+}

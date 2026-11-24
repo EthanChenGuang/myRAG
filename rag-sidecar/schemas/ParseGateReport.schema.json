@@ -1,0 +1,98 @@
+{
+  "$defs": {
+    "ModeProjection": {
+      "additionalProperties": false,
+      "properties": {
+        "premium_page_share": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Premium Page Share",
+          "type": "number"
+        },
+        "projected_cost_per_1000_pages_usd": {
+          "minimum": 0,
+          "title": "Projected Cost Per 1000 Pages Usd",
+          "type": "number"
+        }
+      },
+      "required": [
+        "premium_page_share",
+        "projected_cost_per_1000_pages_usd"
+      ],
+      "title": "ModeProjection",
+      "type": "object"
+    },
+    "PairedMetricDelta": {
+      "additionalProperties": false,
+      "properties": {
+        "delta": {
+          "title": "Delta",
+          "type": "number"
+        },
+        "metric": {
+          "title": "Metric",
+          "type": "string"
+        },
+        "within_noise_band": {
+          "title": "Within Noise Band",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "metric",
+        "delta",
+        "within_noise_band"
+      ],
+      "title": "PairedMetricDelta",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "correct_refusal": {
+      "items": {
+        "$ref": "#/$defs/PairedMetricDelta"
+      },
+      "title": "Correct Refusal",
+      "type": "array"
+    },
+    "fixed": {
+      "$ref": "#/$defs/ModeProjection"
+    },
+    "noise_band_floor": {
+      "minimum": 0,
+      "title": "Noise Band Floor",
+      "type": "number"
+    },
+    "noise_band_k": {
+      "minimum": 0,
+      "title": "Noise Band K",
+      "type": "number"
+    },
+    "passed": {
+      "title": "Passed",
+      "type": "boolean"
+    },
+    "recall_at_k": {
+      "items": {
+        "$ref": "#/$defs/PairedMetricDelta"
+      },
+      "title": "Recall At K",
+      "type": "array"
+    },
+    "tiered": {
+      "$ref": "#/$defs/ModeProjection"
+    }
+  },
+  "required": [
+    "recall_at_k",
+    "correct_refusal",
+    "noise_band_k",
+    "noise_band_floor",
+    "fixed",
+    "tiered",
+    "passed"
+  ],
+  "title": "ParseGateReport",
+  "type": "object"
+}

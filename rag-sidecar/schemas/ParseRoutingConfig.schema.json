@@ -1,0 +1,521 @@
+{
+  "$defs": {
+    "CostEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "as_of": {
+          "minLength": 1,
+          "title": "As Of",
+          "type": "string"
+        },
+        "s_per_page": {
+          "minimum": 0,
+          "title": "S Per Page",
+          "type": "number"
+        },
+        "source": {
+          "minLength": 1,
+          "title": "Source",
+          "type": "string"
+        },
+        "usd_per_page": {
+          "minimum": 0,
+          "title": "Usd Per Page",
+          "type": "number"
+        }
+      },
+      "required": [
+        "usd_per_page",
+        "s_per_page",
+        "source",
+        "as_of"
+      ],
+      "title": "CostEntry",
+      "type": "object"
+    },
+    "EscalationConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "max_per_page": {
+          "minimum": 0,
+          "title": "Max Per Page",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "max_per_page"
+      ],
+      "title": "EscalationConfig",
+      "type": "object"
+    },
+    "L1Config": {
+      "additionalProperties": false,
+      "properties": {
+        "garbled_ratio": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Garbled Ratio",
+          "type": "number"
+        },
+        "min_ruling_paths": {
+          "minimum": 0,
+          "title": "Min Ruling Paths",
+          "type": "integer"
+        },
+        "thin_path_pt": {
+          "exclusiveMinimum": 0,
+          "title": "Thin Path Pt",
+          "type": "number"
+        }
+      },
+      "required": [
+        "garbled_ratio",
+        "min_ruling_paths",
+        "thin_path_pt"
+      ],
+      "title": "L1Config",
+      "type": "object"
+    },
+    "L2Config": {
+      "additionalProperties": false,
+      "properties": {
+        "uncertain_batch_pages": {
+          "maximum": 64,
+          "minimum": 1,
+          "title": "Uncertain Batch Pages",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "uncertain_batch_pages"
+      ],
+      "title": "L2Config",
+      "type": "object"
+    },
+    "L3Config": {
+      "additionalProperties": false,
+      "properties": {
+        "max_pages_per_doc": {
+          "minimum": 0,
+          "title": "Max Pages Per Doc",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "max_pages_per_doc"
+      ],
+      "title": "L3Config",
+      "type": "object"
+    },
+    "LayerCostMap": {
+      "additionalProperties": false,
+      "properties": {
+        "L1": {
+          "$ref": "#/$defs/CostEntry"
+        },
+        "L2": {
+          "$ref": "#/$defs/CostEntry"
+        },
+        "L3": {
+          "$ref": "#/$defs/CostEntry"
+        }
+      },
+      "required": [
+        "L1",
+        "L2",
+        "L3"
+      ],
+      "title": "LayerCostMap",
+      "type": "object"
+    },
+    "PresetOptions": {
+      "additionalProperties": false,
+      "properties": {
+        "force_full_page_ocr": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Force Full Page Ocr"
+        },
+        "heading_hierarchy": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Heading Hierarchy"
+        },
+        "ocr": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ocr"
+        },
+        "pdf_backend": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pdf Backend"
+        },
+        "table_mode": {
+          "anyOf": [
+            {
+              "enum": [
+                "off",
+                "fast",
+                "accurate"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Table Mode"
+        }
+      },
+      "title": "PresetOptions",
+      "type": "object"
+    },
+    "QualityConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "score_weights": {
+          "$ref": "#/$defs/QualityScoreWeights"
+        },
+        "thresholds": {
+          "$ref": "#/$defs/QualityThresholds"
+        }
+      },
+      "required": [
+        "thresholds",
+        "score_weights"
+      ],
+      "title": "QualityConfig",
+      "type": "object"
+    },
+    "QualityScoreWeights": {
+      "additionalProperties": false,
+      "properties": {
+        "garbled": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Garbled",
+          "type": "number"
+        },
+        "language": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Language",
+          "type": "number"
+        },
+        "low_chars": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Low Chars",
+          "type": "number"
+        },
+        "missing_table": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Missing Table",
+          "type": "number"
+        }
+      },
+      "required": [
+        "garbled",
+        "low_chars",
+        "missing_table",
+        "language"
+      ],
+      "title": "QualityScoreWeights",
+      "type": "object"
+    },
+    "QualityThresholds": {
+      "additionalProperties": false,
+      "properties": {
+        "language_min_chars": {
+          "minimum": 0,
+          "title": "Language Min Chars",
+          "type": "integer"
+        },
+        "low_char_ratio": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Low Char Ratio",
+          "type": "number"
+        },
+        "scanned_min_chars": {
+          "minimum": 0,
+          "title": "Scanned Min Chars",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "low_char_ratio",
+        "scanned_min_chars",
+        "language_min_chars"
+      ],
+      "title": "QualityThresholds",
+      "type": "object"
+    },
+    "RangeRules": {
+      "additionalProperties": false,
+      "properties": {
+        "higher_preset_share": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Higher Preset Share",
+          "type": "number"
+        },
+        "lift_min_run": {
+          "minimum": 1,
+          "title": "Lift Min Run",
+          "type": "integer"
+        },
+        "max_pages_per_conversion": {
+          "minimum": 1,
+          "title": "Max Pages Per Conversion",
+          "type": "integer"
+        },
+        "max_ranges": {
+          "minimum": 1,
+          "title": "Max Ranges",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "lift_min_run",
+        "max_ranges",
+        "higher_preset_share",
+        "max_pages_per_conversion"
+      ],
+      "title": "RangeRules",
+      "type": "object"
+    },
+    "RoutingCosts": {
+      "additionalProperties": false,
+      "properties": {
+        "layer": {
+          "$ref": "#/$defs/LayerCostMap"
+        },
+        "tier": {
+          "$ref": "#/$defs/TierCostMap"
+        }
+      },
+      "required": [
+        "tier",
+        "layer"
+      ],
+      "title": "RoutingCosts",
+      "type": "object"
+    },
+    "RoutingPresets": {
+      "additionalProperties": false,
+      "properties": {
+        "fast": {
+          "$ref": "#/$defs/PresetOptions"
+        },
+        "native": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PresetOptions"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "premium": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PresetOptions"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "structured_full": {
+          "$ref": "#/$defs/PresetOptions"
+        },
+        "structured_layout": {
+          "$ref": "#/$defs/PresetOptions"
+        },
+        "structured_ocr": {
+          "$ref": "#/$defs/PresetOptions"
+        }
+      },
+      "required": [
+        "fast",
+        "structured_layout",
+        "structured_full",
+        "structured_ocr"
+      ],
+      "title": "RoutingPresets",
+      "type": "object"
+    },
+    "RoutingTimeouts": {
+      "additionalProperties": false,
+      "properties": {
+        "advance_ms": {
+          "maximum": 40000,
+          "minimum": 1,
+          "title": "Advance Ms",
+          "type": "integer"
+        },
+        "parse_slice_ms": {
+          "minimum": 1,
+          "title": "Parse Slice Ms",
+          "type": "integer"
+        },
+        "preflight_ms": {
+          "minimum": 1,
+          "title": "Preflight Ms",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "preflight_ms",
+        "parse_slice_ms",
+        "advance_ms"
+      ],
+      "title": "RoutingTimeouts",
+      "type": "object"
+    },
+    "TierCostMap": {
+      "additionalProperties": false,
+      "properties": {
+        "fast": {
+          "$ref": "#/$defs/CostEntry"
+        },
+        "native": {
+          "$ref": "#/$defs/CostEntry"
+        },
+        "premium": {
+          "$ref": "#/$defs/CostEntry"
+        },
+        "structured": {
+          "$ref": "#/$defs/CostEntry"
+        }
+      },
+      "required": [
+        "native",
+        "fast",
+        "structured",
+        "premium"
+      ],
+      "title": "TierCostMap",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "costs": {
+      "$ref": "#/$defs/RoutingCosts"
+    },
+    "escalation": {
+      "$ref": "#/$defs/EscalationConfig"
+    },
+    "l1": {
+      "$ref": "#/$defs/L1Config"
+    },
+    "l2": {
+      "$ref": "#/$defs/L2Config"
+    },
+    "l3": {
+      "$ref": "#/$defs/L3Config"
+    },
+    "ladder": {
+      "additionalProperties": {
+        "items": {
+          "enum": [
+            "native",
+            "fast",
+            "structured",
+            "premium"
+          ],
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "title": "Ladder",
+      "type": "object"
+    },
+    "office_formats": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Office Formats",
+      "type": "object"
+    },
+    "presets": {
+      "$ref": "#/$defs/RoutingPresets"
+    },
+    "quality": {
+      "$ref": "#/$defs/QualityConfig"
+    },
+    "ranges": {
+      "$ref": "#/$defs/RangeRules"
+    },
+    "thresholds_ref": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Thresholds Ref"
+    },
+    "timeouts": {
+      "$ref": "#/$defs/RoutingTimeouts"
+    },
+    "version": {
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "version",
+    "presets",
+    "l1",
+    "l2",
+    "l3",
+    "ranges",
+    "quality",
+    "ladder",
+    "costs",
+    "escalation",
+    "timeouts"
+  ],
+  "title": "ParseRoutingConfig",
+  "type": "object"
+}

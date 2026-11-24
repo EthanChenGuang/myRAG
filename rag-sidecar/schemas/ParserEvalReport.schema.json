@@ -1,0 +1,113 @@
+{
+  "$defs": {
+    "PageTierAccuracy": {
+      "additionalProperties": false,
+      "properties": {
+        "layer_combo": {
+          "enum": [
+            "L1",
+            "L1+L2",
+            "L1+L2+L3"
+          ],
+          "title": "Layer Combo",
+          "type": "string"
+        },
+        "pages_below_expected_tier": {
+          "minimum": 0,
+          "title": "Pages Below Expected Tier",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "layer_combo",
+        "pages_below_expected_tier"
+      ],
+      "title": "PageTierAccuracy",
+      "type": "object"
+    },
+    "TierParseMetrics": {
+      "additionalProperties": false,
+      "properties": {
+        "cost_per_page": {
+          "minimum": 0,
+          "title": "Cost Per Page",
+          "type": "number"
+        },
+        "headings_f1": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Headings F1",
+          "type": "number"
+        },
+        "reading_order": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Reading Order",
+          "type": "number"
+        },
+        "recall_at_k": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Recall At K",
+          "type": "number"
+        },
+        "s_per_page": {
+          "minimum": 0,
+          "title": "S Per Page",
+          "type": "number"
+        },
+        "table_cell_f1": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Table Cell F1",
+          "type": "number"
+        },
+        "text_similarity": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Text Similarity",
+          "type": "number"
+        }
+      },
+      "required": [
+        "text_similarity",
+        "table_cell_f1",
+        "reading_order",
+        "headings_f1",
+        "s_per_page",
+        "cost_per_page",
+        "recall_at_k"
+      ],
+      "title": "TierParseMetrics",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "by_tier": {
+      "additionalProperties": {
+        "$ref": "#/$defs/TierParseMetrics"
+      },
+      "title": "By Tier",
+      "type": "object"
+    },
+    "fixture_id": {
+      "title": "Fixture Id",
+      "type": "string"
+    },
+    "page_tier_accuracy": {
+      "items": {
+        "$ref": "#/$defs/PageTierAccuracy"
+      },
+      "title": "Page Tier Accuracy",
+      "type": "array"
+    }
+  },
+  "required": [
+    "fixture_id",
+    "by_tier",
+    "page_tier_accuracy"
+  ],
+  "title": "ParserEvalReport",
+  "type": "object"
+}

@@ -410,6 +410,8 @@ Use these entry points:
 - `/gsd-execute-phase` for planned phase work
 
 Do not make direct repo edits outside a GSD workflow unless the user explicitly asks to bypass it.
+
+**Orchestrator:** follow `.cursor/rules/orchestration.mdc` (context hygiene + one executor per plan, ledger in `.planning/paused/exec-ledger.md`).
 <!-- GSD:workflow-end -->
 
 <!-- GSD:profile-start -->

@@ -14,6 +14,8 @@
 
 ## Verification
 
+**03-46 verifier (read-only, 2026-11-24):** `03-46-VERIFICATION.md` — **status `human_needed`** (4/5 truths). PLAN checks **PASS:** `pytest tests/test_profile_compare.py` (5/5), `activation-evidence.test.mts` (4/4). **Not run:** full `run-profile-compare.mts` harness (Task 2 e2e); no pytest drives the harness script despite PLAN Task 2 wording.
+
 - `npm run gen:schemas` && `uv run --directory eval pytest -q tests/test_profile_compare.py tests/test_gate.py` && `npx vitest run tests/schema-parity.test.ts`
 - `npx tsx eval/harness/run-profile-compare.mts --target voyage-4-large-2048 --out eval/out/compare`
 - `node --import tsx --test tests/rag-db/activation-evidence.test.mts tests/rag-db/activation-gate.test.mts tests/rag-db/embedding-cli.test.mts`

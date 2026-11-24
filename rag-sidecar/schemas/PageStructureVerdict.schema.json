@@ -1,0 +1,50 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "complexity": {
+      "enum": [
+        "simple",
+        "complex"
+      ],
+      "title": "Complexity",
+      "type": "string"
+    },
+    "confidence": {
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Confidence",
+      "type": "number"
+    },
+    "has_chart": {
+      "title": "Has Chart",
+      "type": "boolean"
+    },
+    "has_formula": {
+      "title": "Has Formula",
+      "type": "boolean"
+    },
+    "has_multi_column": {
+      "title": "Has Multi Column",
+      "type": "boolean"
+    },
+    "has_table": {
+      "title": "Has Table",
+      "type": "boolean"
+    },
+    "is_scanned": {
+      "title": "Is Scanned",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "has_table",
+    "has_multi_column",
+    "is_scanned",
+    "has_formula",
+    "has_chart",
+    "complexity",
+    "confidence"
+  ],
+  "title": "PageStructureVerdict",
+  "type": "object"
+}
