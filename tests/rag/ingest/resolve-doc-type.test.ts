@@ -2,7 +2,11 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import type { DocTypeDetection } from '@/lib/rag-eval/contracts.generated';
 import type { RpcClient, RpcRequest, RpcResponse } from '@/lib/rag/backend/supabase-rpc';
 import { loadIngestConfig, resetIngestConfigForTests } from '@/lib/rag/ingest/config';
-import type { DocType } from '@/lib/rag/ingest/profiles/load';
+import { ingest } from '@/lib/rag/ingest';
+import { getProcessingProfile, type DocType } from '@/lib/rag/ingest/profiles/load';
+import { enrichStage } from '@/lib/rag/ingest/stages/enrich';
+import { emptyIngestState, type StageContext } from '@/lib/rag/ingest/types';
+import type { IngestWriter } from '@/lib/rag/ingest/writer';
 import {
   DocTypeDefaultsError,
   deleteDocTypeDefault,
@@ -14,6 +18,7 @@ import {
   type ResolveDocTypeInput,
 } from '@/lib/rag/ingest/profiles/resolve-doc-type';
 import { mintScope } from '@/lib/rag/tenant/scope';
+import { callsOf, fakeIngestDb, installIngestDeps, uninstallIngestDeps, type RecordedRpc } from '../../helpers/ingest-fakes';
 
 // Detection itself is tested in detect-doc-type.test.ts; here a canned answer shows what the resolver does with it.
 const detector = vi.hoisted(() => ({ canned: null as DocTypeDetection | null }));
@@ -75,6 +80,7 @@ beforeEach(() => {
 
 afterEach(() => {
   detector.canned = null;
+  uninstallIngestDeps();
   resetIngestConfigForTests();
   vi.restoreAllMocks();
 });
@@ -314,6 +320,166 @@ describe('defaults table access (admin only by grant; callers gate with the admi
     expect(calls[0]).toEqual({
       fn: 'rag_delete_doc_type_default',
       args: { p_tenant_key: KEY_A, p_source_kind: 'nango', p_source_ref: 'conn-1' },
+    });
+  });
+});
+
+describe('identify resolves the type and the profile', () => {
+  const single = mintScope('single', null, null);
+  const INVOICE_TEXT = 'Fattura n. FT-2025/0042\nPartita IVA IT99999999990\nTotale documento 122,00\n';
+  const NOTES_TEXT = '# Notes\n\nWe met on Tuesday and talked about the garden and the plans for the summer.\n';
+
+  interface IngestFixtureOptions {
+    defaults?: DefaultsRow[];
+    defaultsFailure?: { code: string; message: string };
+    env?: Record<string, string>;
+  }
+
+  function ingestFixture(options: IngestFixtureOptions = {}) {
+    const base = fakeIngestDb();
+    const db: RpcClient = {
+      rpc(fn, args) {
+        if (fn !== 'rag_get_doc_type_defaults') return base.db.rpc(fn, args);
+        base.calls.push({ fn, args: (args ?? {}) as Record<string, unknown> });
+        const response: RpcResponse = options.defaultsFailure
+          ? { data: null, error: options.defaultsFailure }
+          : { data: options.defaults ?? [], error: null };
+        const request: RpcRequest = {
+          abortSignal: () => request,
+          then: (onFulfilled, onRejected) => Promise.resolve(response).then(onFulfilled, onRejected),
+        };
+        return request;
+      },
+    };
+    installIngestDeps({ db, env: options.env ?? {} });
+    return base.calls;
+  }
+
+  const upload = (overrides: Partial<Parameters<typeof ingest>[0]> = {}) =>
+    ingest({
+      scope: single,
+      source: 'config_upload',
+      sourceKey: 'root/notes.md',
+      text: NOTES_TEXT,
+      filename: 'notes.md',
+      mimeType: 'text/markdown',
+      signal: new AbortController().signal,
+      ...overrides,
+    } as Parameters<typeof ingest>[0]);
+
+  const beginArgs = (calls: RecordedRpc[]) => callsOf(calls, 'rag_begin_document_version')[0]?.args;
+
+  test('a picked type uses its profile, stores origin picked and reads no defaults', async () => {
+    const calls = ingestFixture({ defaults: [{ tenant_key: 's:default', source_kind: 'tenant', source_ref: null, doc_type: 'financial_report' }] });
+    const result = await upload({ docType: 'contract_legal' });
+    expect(result.status).toBe('ready');
+    expect(beginArgs(calls)).toMatchObject({
+      p_doc_type: 'contract_legal',
+      p_doc_type_origin: 'picked',
+      p_profile_id: getProcessingProfile('contract_legal').id,
+      p_profile_version: getProcessingProfile('contract_legal').version,
+    });
+    expect(callsOf(calls, 'rag_get_doc_type_defaults')).toHaveLength(0);
+  });
+
+  test('auto with an invoice filename stores the detected type, origin auto and metadata.doc_type_detection', async () => {
+    const calls = ingestFixture();
+    const result = await upload({ docType: 'auto', filename: 'fattura_2025_0042.pdf', sourceKey: 'root/fattura_2025_0042.pdf', mimeType: 'application/pdf', text: INVOICE_TEXT });
+    expect(result.status).toBe('ready');
+    expect(beginArgs(calls)).toMatchObject({
+      p_doc_type: 'invoice_receipt',
+      p_doc_type_origin: 'auto',
+      p_profile_id: getProcessingProfile('invoice_receipt').id,
+    });
+    const stored = callsOf(calls, 'rag_set_document_fields')
+      .map((call) => call.args.p_fields as Record<string, unknown>)
+      .find((fields) => (fields.metadata as Record<string, unknown> | undefined)?.doc_type_detection !== undefined);
+    expect(stored).toMatchObject({ doc_type: 'invoice_receipt', doc_type_origin: 'auto' });
+    const detection = (stored?.metadata as { doc_type_detection: DocTypeDetection }).doc_type_detection;
+    expect(detection).toMatchObject({ doc_type: 'invoice_receipt', method: 'rules' });
+    expect(detection.confidence).toBeGreaterThanOrEqual(0.6);
+    expect(detection.signals).toContain('filename:keyword:fattura');
+    expect(JSON.stringify(detection)).not.toContain('FT-2025');
+  });
+
+  test('no picked type and a tenant default of financial_report stores origin tenant_default', async () => {
+    const calls = ingestFixture({ defaults: [{ tenant_key: 's:default', source_kind: 'tenant', source_ref: null, doc_type: 'financial_report' }] });
+    const result = await upload();
+    expect(result.status).toBe('ready');
+    expect(beginArgs(calls)).toMatchObject({ p_doc_type: 'financial_report', p_doc_type_origin: 'tenant_default' });
+    expect(callsOf(calls, 'rag_get_doc_type_defaults')[0]?.args).toEqual({
+      p_tenant_key: 's:default',
+      p_source: 'config_upload',
+      p_connection_id: null,
+      p_folder_id: null,
+    });
+    const detectionWrites = callsOf(calls, 'rag_set_document_fields').filter((call) => JSON.stringify(call.args).includes('doc_type_detection'));
+    expect(detectionWrites).toHaveLength(0);
+  });
+
+  test('a Nango upload passes its connection and folder ids and takes the folder default', async () => {
+    const calls = ingestFixture({
+      defaults: [
+        { tenant_key: 's:default', source_kind: 'nango', source_ref: 'folder-7', doc_type: 'contract_legal' },
+        { tenant_key: 's:default', source_kind: 'tenant', source_ref: null, doc_type: 'financial_report' },
+      ],
+    });
+    const result = await upload({ source: 'nango', sourceKey: 'file-1', options: { nangoConnectionId: 'conn-3', nangoFolderId: 'folder-7' } });
+    expect(result.status).toBe('ready');
+    expect(callsOf(calls, 'rag_get_doc_type_defaults')[0]?.args).toEqual({
+      p_tenant_key: 's:default',
+      p_source: 'nango',
+      p_connection_id: 'conn-3',
+      p_folder_id: 'folder-7',
+    });
+    expect(beginArgs(calls)).toMatchObject({ p_doc_type: 'contract_legal', p_doc_type_origin: 'source_default' });
+  });
+
+  test('a default of auto runs detection with the switches from the ingest env', async () => {
+    const calls = ingestFixture({ defaults: [{ tenant_key: 's:default', source_kind: 'tenant', source_ref: null, doc_type: 'auto' }], env: { RAG_DOC_TYPE_LLM_DETECT: 'false' } });
+    const result = await upload();
+    expect(result.status).toBe('ready');
+    expect(beginArgs(calls)).toMatchObject({ p_doc_type: 'general', p_doc_type_origin: 'auto' });
+  });
+
+  test('a defaults table that cannot be read leaves the type general and says so in the warnings', async () => {
+    const calls = ingestFixture({ defaultsFailure: { code: '42883', message: 'function rag_get_doc_type_defaults does not exist' } });
+    const result = await upload();
+    expect(result.status).toBe('ready');
+    expect(result.warnings).toContain('doc_type_defaults_unavailable');
+    expect(beginArgs(calls)).toMatchObject({ p_doc_type: 'general', p_doc_type_origin: 'fallback' });
+  });
+
+  test('the identify span records the doc type and its origin', async () => {
+    ingestFixture({ defaults: [{ tenant_key: 's:default', source_kind: 'tenant', source_ref: null, doc_type: 'financial_report' }] });
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    await upload();
+    const line = log.mock.calls.map((call) => call.map(String).join(' ')).find((entry) => entry.includes('[Ingest Trace]'));
+    expect(line).toBeDefined();
+    const payload = JSON.parse((line as string).slice((line as string).indexOf('{'))) as { stages: Array<Record<string, unknown>> };
+    expect(payload.stages.find((stage) => stage.name === 'identify')).toMatchObject({ doc_type: 'financial_report', doc_type_origin: 'tenant_default' });
+  });
+
+  test('enrich writes the final type, origin, profile and detection of an auto-detected document once', async () => {
+    const setFields = vi.fn(async () => undefined);
+    const detection: DocTypeDetection = { doc_type: 'invoice_receipt', confidence: 0.75, signals: ['text:invoice_number'], method: 'rules' };
+    const state = emptyIngestState();
+    state.docTypeDetection = { signals: detection.signals, refined: 'invoice_receipt', reparsed: true, detection };
+    const profile = getProcessingProfile('invoice_receipt');
+    const ctx = {
+      document: { id: 'doc-1', version: 1, resumed: false },
+      identity: { tenantKey: 's:default', filename: 'a.pdf', fileSha256: 'x', docType: 'invoice_receipt', docTypeOrigin: 'auto', profile, bytes: null },
+      state,
+      work: { parseText: 'Invoice 1', parserVersion: null, chunks: [], chunksWritten: 0 },
+      writer: { setFields } as unknown as IngestWriter,
+    } as unknown as StageContext;
+    await enrichStage.run(ctx);
+    expect(setFields).toHaveBeenCalledWith('doc-1', {
+      doc_type: 'invoice_receipt',
+      doc_type_origin: 'auto',
+      processing_profile_id: profile.id,
+      processing_profile_version: profile.version,
+      metadata: { doc_type_detection: detection },
     });
   });
 });
