@@ -11,6 +11,10 @@ export { evalScope } from './tenant/eval';
 export type { EvalScopeInput, EvalScopeOutcome } from './tenant/eval';
 export type { TenantScope } from './tenant/scope';
 export { RetrievalBackendError } from './backend/supabase-rpc';
+export { getRetrievalBackend, resetRetrievalBackendForTests, setRetrievalBackendForTests } from './backend/registry';
+export { createPgvectorBackend } from './backend/pgvector';
+export { getV2StartupVerdict, resetV2StartupForTests, verifyV2Startup } from './v2/startup';
+export type { V2StartupVerdict, V2StartupStatus } from './v2/startup';
 export { embedText, embedBatch } from './embeddings/openai';
 export {
   getActiveProfile,
