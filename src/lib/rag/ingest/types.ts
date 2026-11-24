@@ -1,3 +1,4 @@
+import type { ParseResult } from '@/lib/rag-eval/contracts.generated';
 import type { TenantScope } from '../tenant/scope';
 import type { TraceCollector } from '../trace/collector';
 import type { IngestConfig } from './config';
@@ -133,6 +134,8 @@ export interface IngestDocumentRef {
 /** Working data of one run. Not persisted; plan 03-13b moves what a resume needs into the object store. */
 export interface IngestWork {
   parseText: string | null;
+  /** Docling's own chunks from the parse result; the chunk stage uses them when the profile allows. */
+  parseChunks?: ParseResult['chunks'] | null;
   parserVersion: string | null;
   chunks: ChunkDraft[];
   chunksWritten: number;
