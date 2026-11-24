@@ -1657,17 +1657,21 @@ requires-dist = [
     { name = "fastapi", specifier = "==0.165.0" },
     { name = "httpx", specifier = "==0.28.1" },
     { name = "huggingface-hub", marker = "extra == 'chunking'", specifier = "==1.33.0" },
+    { name = "pdfplumber", marker = "extra == 'docling'", specifier = "==0.11.11" },
+    { name = "pdfplumber", marker = "extra == 'preflight'", specifier = "==0.11.11" },
     { name = "pydantic", specifier = ">=2.14.4" },
     { name = "pypdfium2", marker = "extra == 'docling'", specifier = "==5.15.2" },
+    { name = "pypdfium2", marker = "extra == 'preflight'", specifier = "==5.15.2" },
     { name = "python-multipart", specifier = "==0.0.34" },
     { name = "python-stdnum", specifier = "==2.2" },
+    { name = "ray", extras = ["data"], marker = "extra == 'ray'", specifier = "==2.60.1" },
     { name = "tiktoken", marker = "extra == 'chunking'", specifier = "==0.14.0" },
     { name = "tiktoken", marker = "extra == 'docling'", specifier = "==0.14.0" },
     { name = "torch", marker = "extra == 'docling'", specifier = "==2.15.0", index = "https://download.pytorch.org/whl/cpu" },
     { name = "torchvision", marker = "extra == 'docling'", specifier = "==0.29.2", index = "https://download.pytorch.org/whl/cpu" },
     { name = "uvicorn", specifier = "==0.54.0" },
 ]
-provides-extras = ["chunking", "docling"]
+provides-extras = ["chunking", "preflight", "docling", "ray"]
 
 [package.metadata.requires-dev]
 dev = [{ name = "pytest", specifier = "==9.2.0" }]
