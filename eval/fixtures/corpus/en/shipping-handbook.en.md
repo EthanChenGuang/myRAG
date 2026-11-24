@@ -1,3 +1,4 @@
+<!-- fixture-meta {"doc_type":"general"} -->
 ## Carrier cut-off times
 
 Lumen Valley Instruments ships from one warehouse. Orders paid before 14:00 on a business day leave the warehouse the same day with the standard carrier. Orders paid after 14:00 leave on the next business day. The express carrier has an earlier cut-off of 12:00 for same-day dispatch. Orders placed on a Saturday or Sunday leave on Monday.

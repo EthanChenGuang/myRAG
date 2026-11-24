@@ -11,6 +11,8 @@ import {
   embedQueryForEvalProfile,
   type QueryEmbedding,
 } from '../embeddings/query-embedding';
+import { assembleVoiceResults, type VoiceResults } from '../context/voice';
+import { validResultCount } from '../config';
 import { failure, requireValue, runStage, stageSpec, StageError } from '../pipeline';
 import { assertTenantScope } from '../tenant/scope';
 import type { TraceCollector } from '../trace/collector';
@@ -21,9 +23,11 @@ import { runContextStages } from './stages/context';
 import { runQueryStages } from './stages/query';
 import { runRankStages } from './stages/rank';
 import { runSearchStages } from './stages/search';
-import { buildV2Result } from './result';
+import { buildV2Result, fusedHitsToVoiceChunks } from './result';
 
-export const V2_PROFILES = ['chat', 'embed', 'eval'] as const;
+export const V2_PROFILES = ['chat', 'embed', 'eval', 'voice'] as const;
+
+const VOICE_DEFAULT_MATCH_COUNT = 5;
 
 function evalEmbeddingProfileId(input: RunRetrievalInput): string | undefined {
   return input.profile === 'eval' ? input.options?.embeddingProfile : undefined;
@@ -71,6 +75,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
   let refusal = null;
   let queryLanguage: RetrievalResult['queryLanguage'] = null;
   let preRefusalCandidates: Candidate[] | undefined;
+  let voice: VoiceResults | null = null;
 
   try {
     const query = await runQueryStages({
@@ -133,20 +138,33 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
     });
     refusal = rank.decision;
 
-    const context = await runContextStages({
-      input,
-      config,
-      profile,
-      params,
-      fusedHits: rank.survivors,
-      referenced: query.referenced,
-      signal,
-      collector,
-      stageOverrides: input.stageOverrides,
-      rerank: rank.rerank,
-    });
-    assembly = context.assembly;
-    candidates = context.candidates;
+    if (profile === 'voice') {
+      const matchCount = validResultCount(input.options?.maxResults) ?? VOICE_DEFAULT_MATCH_COUNT;
+      const chunks = fusedHitsToVoiceChunks(rank.survivors, rank.rerank.scoreByChunk);
+      const assembled = await runStage(
+        spec('assemble', 'skip'),
+        signal,
+        () => assembleVoiceResults({ query: input.query, chunks, matchCount }),
+        collector,
+        { candidatesIn: chunks.length, candidatesOut: (value) => value.results.length },
+      );
+      voice = assembled.skipped ? { results: [], source_images: [] } : assembled.value;
+    } else {
+      const context = await runContextStages({
+        input,
+        config,
+        profile,
+        params,
+        fusedHits: rank.survivors,
+        referenced: query.referenced,
+        signal,
+        collector,
+        stageOverrides: input.stageOverrides,
+        rerank: rank.rerank,
+      });
+      assembly = context.assembly;
+      candidates = context.candidates;
+    }
     if (profile === 'eval' && rank.decision.decision === 'refuse') {
       preRefusalCandidates = rank.preRefusalHits.map((row, index) => ({
         chunk_id: row.hit.chunkId,
@@ -196,6 +214,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
     refusal,
     queryLanguage,
     preRefusalCandidates,
+    voice,
   });
 }
 
