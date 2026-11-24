@@ -104,6 +104,8 @@ The setup files are for new databases and are not safe to re-run. For a database
 - `patches/2026-11-security-review-single-tenant.sql`
 - `patches/2026-11-security-review-multi-tenant.sql`
 
+The multi-tenant patch also rewrites the `organizations` and `organization_members` policies on the SECURITY DEFINER helpers `is_org_owner`, `is_org_admin` and `is_org_member`. Before it, the two SELECT policies referenced each other and every user-client query on those tables failed with Postgres error 42P17 (infinite recursion).
+
 ## Single-Tenant Access Model
 
 Everyone can read the shared knowledge base. Writes are limited to the document's owner (`documents.user_id`) and to users in `admin_users`; documents stored before ownership was recorded have no owner and are admin-only. When `admin_settings.read_only_doc_dashboard` is on, only admins may change the knowledge base.

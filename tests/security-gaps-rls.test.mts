@@ -19,6 +19,8 @@ const DOC_LEGACY = '00000000-0000-4000-8000-00000000f002';
 const CHUNK_OWNED = '00000000-0000-4000-8000-00000000f101';
 const CHUNK_LEGACY = '00000000-0000-4000-8000-00000000f102';
 const ORG = '00000000-0000-4000-8000-00000000e001';
+const ORG_B = '00000000-0000-4000-8000-00000000e002';
+const STRANGER = '00000000-0000-4000-8000-0000000000e1';
 const CHAT_OTHER = '00000000-0000-4000-8000-00000000e101';
 const CHAT_OWNER = '00000000-0000-4000-8000-00000000e102';
 const ZERO_VECTOR = `[${new Array(1536).fill(0).join(',')}]`;
@@ -294,10 +296,42 @@ GRANT EXECUTE ON FUNCTION get_workspace_context(text, uuid), get_user_org_ids(uu
 GRANT EXECUTE ON FUNCTION is_admin(uuid), create_organization_safe(text, text, uuid, boolean) TO PUBLIC;
 `;
 
+const MULTI_RECURSIVE_ORG_POLICIES_OLD_STATE = `
+DROP POLICY "Users can view their organizations" ON organizations;
+DROP POLICY "Users can update organizations" ON organizations;
+DROP POLICY "Users can view org members" ON organization_members;
+DROP POLICY "Admins can add members" ON organization_members;
+DROP POLICY "Admins can remove members" ON organization_members;
+DROP FUNCTION IF EXISTS is_org_owner(uuid);
+DROP FUNCTION IF EXISTS is_org_admin(uuid);
+CREATE POLICY "Users can view their organizations" ON organizations
+  FOR SELECT USING (
+    (is_personal = true AND owner_id = auth.uid())
+    OR
+    (is_personal = false AND id IN (SELECT organization_id FROM organization_members WHERE user_id = auth.uid()))
+  );
+CREATE POLICY "Users can update organizations" ON organizations
+  FOR UPDATE USING (
+    (is_personal = true AND owner_id = auth.uid())
+    OR
+    (is_personal = false AND id IN (SELECT organization_id FROM organization_members WHERE user_id = auth.uid() AND role IN ('owner', 'admin')))
+  );
+CREATE POLICY "Users can view org members" ON organization_members
+  FOR SELECT USING (organization_id IN (SELECT id FROM organizations WHERE owner_id = auth.uid()) OR user_id = auth.uid());
+CREATE POLICY "Admins can add members" ON organization_members
+  FOR INSERT WITH CHECK (organization_id IN (SELECT id FROM organizations WHERE owner_id = auth.uid()));
+CREATE POLICY "Admins can remove members" ON organization_members
+  FOR DELETE USING (organization_id IN (SELECT id FROM organizations WHERE owner_id = auth.uid()));
+`;
+
 async function seedMulti(db: PGlite): Promise<void> {
-  await insertUsers(db, [OWNER, OTHER, ADMIN, MEMBER]);
+  await insertUsers(db, [OWNER, OTHER, ADMIN, MEMBER, STRANGER]);
   await db.query("INSERT INTO organizations (id, name, slug, owner_id, is_personal) VALUES ($1, 'Org', 'org-sec', $2, false)", [ORG, OWNER]);
   await db.query("INSERT INTO organization_members (organization_id, user_id, role) VALUES ($1, $2, 'owner'), ($1, $3, 'admin'), ($1, $4, 'member')", [ORG, OWNER, ADMIN, MEMBER]);
+  await db.query("INSERT INTO organizations (id, name, slug, owner_id, is_personal) VALUES ($1, 'Org B', 'org-b-sec', $2, false)", [ORG_B, OTHER]);
+  await db.query("INSERT INTO organization_members (organization_id, user_id, role) VALUES ($1, $2, 'owner')", [ORG_B, OTHER]);
+  await db.query("INSERT INTO team_invitations (organization_id, email, token, expires_at) VALUES ($1, 'invitee@example.invalid', 'tok-a', now() + interval '1 day'), ($2, 'invitee-b@example.invalid', 'tok-b', now() + interval '1 day')", [ORG, ORG_B]);
+  await db.query("INSERT INTO organization_domains (domain, organization_id) VALUES ('a.example.invalid', $1), ('b.example.invalid', $2)", [ORG, ORG_B]);
   await db.query("INSERT INTO chats (id, user_id, title, messages) VALUES ($1, $2, 't', '[]'::jsonb), ($3, $4, 't', '[]'::jsonb)", [CHAT_OWNER, OWNER, CHAT_OTHER, OTHER]);
 }
 
@@ -351,9 +385,9 @@ function multiTenantSuite(label: string, build: () => Promise<FixtureDatabase>):
         );
       await asRole(db, 'authenticated', ADMIN, async () => {
         const read = await throughRls('SELECT role FROM organization_members WHERE organization_id = $1 AND user_id = $2', [ORG, OWNER]);
-        assert.ok(read === 0 || read === 'policy-error', `owner row visible to an organization admin: ${String(read)}`);
+        assert.equal(read, 0, `owner row visible to an organization admin: ${String(read)}`);
         const write = await throughRls("UPDATE organization_members SET role = 'viewer' WHERE organization_id = $1 AND user_id = $2 RETURNING user_id", [ORG, MEMBER]);
-        assert.ok(write === 0 || write === 'policy-error', `role updated through RLS: ${String(write)}`);
+        assert.equal(write, 0, `role updated through RLS: ${String(write)}`);
       });
       await asRole(db, 'service_role', null, async () => {
         assert.equal((await db.query<{ role: string }>('SELECT role FROM organization_members WHERE organization_id = $1 AND user_id = $2', [ORG, OWNER])).rows[0].role, 'owner');
@@ -410,6 +444,118 @@ function multiTenantSuite(label: string, build: () => Promise<FixtureDatabase>):
       });
     });
 
+    test('organization_members and organizations can be queried as a user without a recursion error; each caller sees only their own orgs and members', async () => {
+      const memberRows = async () =>
+        (await db.query<{ organization_id: string; user_id: string }>('SELECT organization_id, user_id FROM organization_members')).rows;
+      const orgIds = async () => (await db.query<{ id: string }>('SELECT id FROM organizations')).rows.map((row) => row.id);
+
+      await asRole(db, 'authenticated', OWNER, async () => {
+        const rows = await memberRows();
+        assert.equal(rows.length, 3);
+        assert.ok(rows.every((row) => row.organization_id === ORG));
+        assert.deepEqual(await orgIds(), [ORG]);
+      });
+      await asRole(db, 'authenticated', ADMIN, async () => {
+        const rows = await memberRows();
+        assert.deepEqual(rows.map((row) => row.user_id), [ADMIN]);
+        assert.deepEqual(await orgIds(), [ORG]);
+      });
+      await asRole(db, 'authenticated', MEMBER, async () => {
+        const rows = await memberRows();
+        assert.deepEqual(rows.map((row) => row.user_id), [MEMBER]);
+        assert.deepEqual(await orgIds(), [ORG]);
+      });
+      await asRole(db, 'authenticated', OTHER, async () => {
+        const rows = await memberRows();
+        assert.ok(rows.length >= 1);
+        assert.ok(rows.every((row) => row.organization_id !== ORG && row.user_id === OTHER));
+        assert.ok(!(await orgIds()).includes(ORG));
+        assert.ok((await orgIds()).includes(ORG_B));
+      });
+      await asRole(db, 'authenticated', STRANGER, async () => {
+        assert.equal((await memberRows()).length, 0);
+        assert.equal((await orgIds()).length, 0);
+        assert.equal((await db.query('SELECT 1 FROM organization_members WHERE organization_id = $1', [ORG])).rows.length, 0);
+      });
+      await asRole(db, 'anon', null, async () => {
+        assert.equal((await memberRows()).length, 0);
+        assert.equal((await orgIds()).length, 0);
+      });
+    });
+
+    test('tables whose policies read organizations or organization_members no longer error and stay tenant scoped', async () => {
+      await asRole(db, 'authenticated', MEMBER, async () => {
+        assert.deepEqual((await db.query<{ organization_id: string }>('SELECT organization_id FROM team_invitations')).rows.map((row) => row.organization_id), [ORG]);
+        assert.deepEqual((await db.query<{ organization_id: string }>('SELECT organization_id FROM organization_domains')).rows.map((row) => row.organization_id), [ORG]);
+        assert.equal((await db.query('SELECT 1 FROM tenant_usage')).rows.length, 0);
+        assert.equal((await db.query('SELECT 1 FROM api_usage_logs')).rows.length, 0);
+      });
+      await asRole(db, 'authenticated', STRANGER, async () => {
+        assert.equal((await db.query('SELECT 1 FROM team_invitations')).rows.length, 0);
+        assert.equal((await db.query('SELECT 1 FROM organization_domains')).rows.length, 0);
+      });
+    });
+
+    test('organization write rules are unchanged: members insert and delete only as the owner, organizations update only by owner or admin', async () => {
+      await asRole(db, 'authenticated', MEMBER, async () => {
+        await rejection(db.query("INSERT INTO organization_members (organization_id, user_id, role) VALUES ($1, $2, 'member')", [ORG, STRANGER]), /row-level security/i);
+        assert.equal((await db.query('DELETE FROM organization_members WHERE organization_id = $1 AND user_id = $2 RETURNING user_id', [ORG, ADMIN])).rows.length, 0);
+        assert.equal((await db.query("UPDATE organizations SET name = 'x' WHERE id = $1 RETURNING id", [ORG])).rows.length, 0);
+      });
+      await asRole(db, 'authenticated', ADMIN, async () => {
+        await rejection(db.query("INSERT INTO organization_members (organization_id, user_id, role) VALUES ($1, $2, 'member')", [ORG, STRANGER]), /row-level security/i);
+        assert.equal((await db.query("UPDATE organizations SET name = 'Org renamed' WHERE id = $1 RETURNING id", [ORG])).rows.length, 1);
+        assert.equal((await db.query("UPDATE organizations SET name = 'x' WHERE id = $1 RETURNING id", [ORG_B])).rows.length, 0);
+      });
+      await asRole(db, 'authenticated', STRANGER, async () => {
+        await rejection(db.query("INSERT INTO organization_members (organization_id, user_id, role) VALUES ($1, $2, 'owner')", [ORG, STRANGER]), /row-level security/i);
+        assert.equal((await db.query("UPDATE organizations SET name = 'x' WHERE id = $1 RETURNING id", [ORG])).rows.length, 0);
+      });
+      await asRole(db, 'authenticated', OWNER, async () => {
+        await rejection(db.query("INSERT INTO organization_members (organization_id, user_id, role) VALUES ($1, $2, 'member')", [ORG_B, STRANGER]), /row-level security/i);
+        const added = await db.query("INSERT INTO organization_members (organization_id, user_id, role) VALUES ($1, $2, 'viewer') RETURNING user_id", [ORG, STRANGER]);
+        assert.equal(added.rows.length, 1);
+        assert.equal((await db.query('SELECT 1 FROM organization_members WHERE organization_id = $1 AND user_id = $2', [ORG, STRANGER])).rows.length, 1);
+        assert.equal((await db.query('DELETE FROM organization_members WHERE organization_id = $1 AND user_id = $2 RETURNING user_id', [ORG, STRANGER])).rows.length, 1);
+        assert.equal((await db.query('DELETE FROM organization_members WHERE organization_id = $1 RETURNING user_id', [ORG_B])).rows.length, 0);
+      });
+      await asRole(db, 'authenticated', STRANGER, async () => {
+        assert.equal((await db.query('SELECT 1 FROM organization_members WHERE organization_id = $1', [ORG])).rows.length, 0);
+      });
+    });
+
+    test('is_org_owner and is_org_admin answer only for the calling user', async () => {
+      const ask = async (fn: string, org: string) => (await db.query<{ ok: boolean }>(`SELECT ${fn}($1) AS ok`, [org])).rows[0].ok;
+      await asRole(db, 'authenticated', OWNER, async () => {
+        assert.equal(await ask('is_org_owner', ORG), true);
+        assert.equal(await ask('is_org_admin', ORG), true);
+        assert.equal(await ask('is_org_owner', ORG_B), false);
+      });
+      await asRole(db, 'authenticated', ADMIN, async () => {
+        assert.equal(await ask('is_org_owner', ORG), false);
+        assert.equal(await ask('is_org_admin', ORG), true);
+      });
+      await asRole(db, 'authenticated', MEMBER, async () => {
+        assert.equal(await ask('is_org_admin', ORG), false);
+      });
+      await asRole(db, 'anon', null, async () => {
+        assert.equal(await ask('is_org_owner', ORG), false);
+        assert.equal(await ask('is_org_admin', ORG), false);
+      });
+      const result = await db.query<{ proname: string; public_exec: boolean; secdef: boolean; config: string[] | null }>(
+        `SELECT p.proname, p.prosecdef AS secdef, p.proconfig AS config,
+                COALESCE((SELECT bool_or(a.grantee = 0) FROM aclexplode(p.proacl) a WHERE a.privilege_type = 'EXECUTE'), true) AS public_exec
+           FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+          WHERE n.nspname = 'public' AND p.proname IN ('is_org_owner', 'is_org_admin')`,
+      );
+      assert.equal(result.rows.length, 2);
+      for (const row of result.rows) {
+        assert.equal(row.secdef, true);
+        assert.equal(row.public_exec, false);
+        assert.ok(row.config?.some((entry) => entry.startsWith('search_path=')), `${row.proname} has no fixed search_path`);
+      }
+    });
+
     test('the memberships RLS policies still evaluate for a member through the bound is_org_member', async () => {
       await db.query(
         "INSERT INTO documents (id, filename, content, user_id, organization_id) VALUES ($1, 'org.md', 'org', $2, $3)",
@@ -431,9 +577,26 @@ multiTenantSuite('fresh setup file', () => createFixtureDatabase({ deploymentMod
 multiTenantSuite('existing database after the patch, applied twice', async () => {
   const fixture = await createFixtureDatabase({ deploymentMode: 'multi-tenant', corpusDir: CORPUS_DIR, supabaseGrants: true });
   await fixture.db.exec(MULTI_OLD_STATE);
+  await fixture.db.exec(MULTI_RECURSIVE_ORG_POLICIES_OLD_STATE);
   await fixture.db.exec(read('supabase/patches/2026-11-security-review-multi-tenant.sql'));
   await fixture.db.exec(read('supabase/patches/2026-11-security-review-multi-tenant.sql'));
   return fixture;
+});
+
+describe('the old organizations / organization_members policies recursed (guards the fix test)', () => {
+  test('before the fix a user-client query on organization_members fails with infinite recursion', async () => {
+    const fixture = await createFixtureDatabase({ deploymentMode: 'multi-tenant', corpusDir: CORPUS_DIR, supabaseGrants: true });
+    try {
+      await fixture.db.exec(MULTI_RECURSIVE_ORG_POLICIES_OLD_STATE);
+      await seedMulti(fixture.db);
+      await asRole(fixture.db, 'authenticated', OWNER, async () => {
+        await rejection(fixture.db.query('SELECT 1 FROM organization_members'), /infinite recursion/i);
+        await rejection(fixture.db.query('SELECT 1 FROM organizations'), /infinite recursion/i);
+      });
+    } finally {
+      await fixture.db.close();
+    }
+  });
 });
 
 function dedupeBlock(file: string): string {

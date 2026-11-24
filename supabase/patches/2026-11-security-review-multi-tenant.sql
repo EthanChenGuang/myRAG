@@ -5,6 +5,8 @@
 --   hardening of SECURITY DEFINER functions that trusted a caller-supplied id:
 --     get_workspace_context, get_user_org_ids, get_admin_organization_id (service_role only),
 --     is_org_member, create_organization_safe, is_subscribed, get_nango_stats (bound to the caller), is_admin (not anon)
+--   organizations / organization_members policies rewritten on SECURITY DEFINER helpers (is_org_owner, is_org_admin,
+--     is_org_member): the two SELECT policies referenced each other and every user-client query failed with 42P17
 -- For databases created from an earlier multi-tenant-setup.sql. Idempotent: safe to run more than once.
 -- Run in the Supabase SQL editor as the postgres role BEFORE deploying the matching application code.
 
@@ -259,5 +261,85 @@ $$;
 
 REVOKE EXECUTE ON FUNCTION is_subscribed(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION is_subscribed(uuid) TO authenticated, service_role;
+
+-- Policy helpers: SECURITY DEFINER, fixed search_path, keyed on auth.uid(). They read organizations and
+-- organization_members without re-entering RLS, which breaks the policy cycle between the two tables.
+CREATE OR REPLACE FUNCTION is_org_owner(org_id UUID)
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT COALESCE(
+    EXISTS (SELECT 1 FROM organizations o WHERE o.id = org_id AND o.owner_id = auth.uid()),
+    false
+  );
+$$;
+
+COMMENT ON FUNCTION is_org_owner IS 'True when the calling user owns the organization. Used by RLS policies without re-entering RLS.';
+
+REVOKE EXECUTE ON FUNCTION is_org_owner(UUID) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION is_org_owner(UUID) TO authenticated, anon, service_role;
+
+CREATE OR REPLACE FUNCTION is_org_admin(org_id UUID)
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT COALESCE(
+    EXISTS (
+      SELECT 1 FROM organization_members om
+      WHERE om.organization_id = org_id
+        AND om.user_id = auth.uid()
+        AND om.role IN ('owner', 'admin')
+    ),
+    false
+  );
+$$;
+
+COMMENT ON FUNCTION is_org_admin IS 'True when the calling user is an owner or admin member of the organization. Used by RLS policies without re-entering RLS.';
+
+REVOKE EXECUTE ON FUNCTION is_org_admin(UUID) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION is_org_admin(UUID) TO authenticated, anon, service_role;
+
+DROP POLICY IF EXISTS "Users can view their organizations" ON organizations;
+DROP POLICY IF EXISTS "Users can update organizations" ON organizations;
+DROP POLICY IF EXISTS "Users can view org members" ON organization_members;
+DROP POLICY IF EXISTS "Admins can add members" ON organization_members;
+DROP POLICY IF EXISTS "Admins can remove members" ON organization_members;
+
+CREATE POLICY "Users can view their organizations" ON organizations
+  FOR SELECT USING (
+    (is_personal = true AND owner_id = auth.uid())
+    OR
+    (is_personal = false AND is_org_member(id, auth.uid()))
+  );
+
+CREATE POLICY "Users can update organizations" ON organizations
+  FOR UPDATE USING (
+    (is_personal = true AND owner_id = auth.uid())
+    OR
+    (is_personal = false AND is_org_admin(id))
+  );
+
+CREATE POLICY "Users can view org members" ON organization_members
+  FOR SELECT USING (
+    is_org_owner(organization_id)
+    OR
+    user_id = auth.uid()
+  );
+
+CREATE POLICY "Admins can add members" ON organization_members
+  FOR INSERT WITH CHECK (
+    is_org_owner(organization_id)
+  );
+
+CREATE POLICY "Admins can remove members" ON organization_members
+  FOR DELETE USING (
+    is_org_owner(organization_id)
+  );
 
 COMMIT;

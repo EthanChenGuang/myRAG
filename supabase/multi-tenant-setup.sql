@@ -582,6 +582,50 @@ COMMENT ON FUNCTION is_org_member IS 'Helper function to check organization memb
 REVOKE EXECUTE ON FUNCTION is_org_member(UUID, UUID) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION is_org_member(UUID, UUID) TO authenticated, anon, service_role;
 
+-- Policy helpers on organizations / organization_members. SECURITY DEFINER with a fixed search_path, keyed on
+-- auth.uid() and never on a caller-supplied id. They read the tables without re-entering RLS, which breaks the
+-- organizations <-> organization_members policy cycle (Postgres 42P17 infinite recursion).
+CREATE OR REPLACE FUNCTION is_org_owner(org_id UUID)
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT COALESCE(
+    EXISTS (SELECT 1 FROM organizations o WHERE o.id = org_id AND o.owner_id = auth.uid()),
+    false
+  );
+$$;
+
+COMMENT ON FUNCTION is_org_owner IS 'True when the calling user owns the organization. Used by RLS policies without re-entering RLS.';
+
+REVOKE EXECUTE ON FUNCTION is_org_owner(UUID) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION is_org_owner(UUID) TO authenticated, anon, service_role;
+
+CREATE OR REPLACE FUNCTION is_org_admin(org_id UUID)
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT COALESCE(
+    EXISTS (
+      SELECT 1 FROM organization_members om
+      WHERE om.organization_id = org_id
+        AND om.user_id = auth.uid()
+        AND om.role IN ('owner', 'admin')
+    ),
+    false
+  );
+$$;
+
+COMMENT ON FUNCTION is_org_admin IS 'True when the calling user is an owner or admin member of the organization. Used by RLS policies without re-entering RLS.';
+
+REVOKE EXECUTE ON FUNCTION is_org_admin(UUID) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION is_org_admin(UUID) TO authenticated, anon, service_role;
+
 -- Safe organization creation (creates org AND adds owner as member atomically)
 CREATE OR REPLACE FUNCTION create_organization_safe(
   p_name TEXT,
@@ -1480,10 +1524,7 @@ CREATE POLICY "Users can view their organizations" ON organizations
     (is_personal = true AND owner_id = auth.uid())
     OR
     -- Collaborative projects: all members can see
-    (is_personal = false AND id IN (
-      SELECT organization_id FROM organization_members
-      WHERE user_id = auth.uid()
-    ))
+    (is_personal = false AND is_org_member(id, auth.uid()))
   );
 
 CREATE POLICY "Users can create organizations" ON organizations
@@ -1499,11 +1540,7 @@ CREATE POLICY "Users can update organizations" ON organizations
     (is_personal = true AND owner_id = auth.uid())
     OR
     -- Team orgs: owner or admin
-    (is_personal = false AND id IN (
-      SELECT organization_id FROM organization_members
-      WHERE user_id = auth.uid()
-      AND role IN ('owner', 'admin')
-    ))
+    (is_personal = false AND is_org_admin(id))
   );
 
 CREATE POLICY "Users can delete organizations" ON organizations
@@ -1517,28 +1554,20 @@ CREATE POLICY "Users can delete organizations" ON organizations
 
 CREATE POLICY "Users can view org members" ON organization_members
   FOR SELECT USING (
-    organization_id IN (
-      SELECT id FROM organizations WHERE owner_id = auth.uid()
-    )
+    is_org_owner(organization_id)
     OR
     user_id = auth.uid()
   );
 
 CREATE POLICY "Admins can add members" ON organization_members
   FOR INSERT WITH CHECK (
-    organization_id IN (
-      SELECT id FROM organizations
-      WHERE owner_id = auth.uid()
-    )
+    is_org_owner(organization_id)
   );
 
 
 CREATE POLICY "Admins can remove members" ON organization_members
   FOR DELETE USING (
-    organization_id IN (
-      SELECT id FROM organizations
-      WHERE owner_id = auth.uid()
-    )
+    is_org_owner(organization_id)
   );
 
 ------------------------------------------
