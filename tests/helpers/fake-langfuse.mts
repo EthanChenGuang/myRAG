@@ -38,6 +38,7 @@ export interface FakeLangfuse {
   release(): void;
   reset(): void;
   traceRequestCount(): number;
+  abandonedTraceRequests(): number;
   close(): Promise<void>;
 }
 
@@ -127,6 +128,7 @@ export async function startFakeLangfuse(options: FakeLangfuseOptions = {}): Prom
   let mode: TraceMode = 'ok';
   let traceRequests = 0;
   let completedTraces = 0;
+  let abandonedTraces = 0;
 
   const server = http.createServer((req, res) => {
     void handle(req, res).catch((error: unknown) => {
@@ -159,6 +161,9 @@ export async function startFakeLangfuse(options: FakeLangfuseOptions = {}): Prom
       spans.push(...decodeSpans(JSON.parse(body.toString('utf8')) as OtlpBody));
       if (mode === 'hang') {
         held.push(res);
+        res.once('close', () => {
+          if (!res.writableEnded && held.includes(res)) abandonedTraces += 1;
+        });
         return;
       }
       if (mode === 'error500') {
@@ -220,6 +225,7 @@ export async function startFakeLangfuse(options: FakeLangfuseOptions = {}): Prom
     errors,
     completedTraceRequests: () => completedTraces,
     traceRequestCount: () => traceRequests,
+    abandonedTraceRequests: () => abandonedTraces,
     setTraceMode(next) {
       mode = next;
     },
@@ -231,6 +237,7 @@ export async function startFakeLangfuse(options: FakeLangfuseOptions = {}): Prom
       errors.length = 0;
       traceRequests = 0;
       completedTraces = 0;
+      abandonedTraces = 0;
       mode = 'ok';
       for (const res of held.splice(0)) res.destroy();
     },

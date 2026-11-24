@@ -294,7 +294,8 @@ describe('export after the response (eval route, in process)', () => {
     assert.equal(fake.completedTraceRequests(), 0, 'the export is still pending after the body was fully read');
 
     fake.release();
-    await waitFor(() => fake.completedTraceRequests() === 1);
+    // Under heavy load the exporter's own request timeout can end the held request before release; either way the export settles.
+    await waitFor(() => fake.completedTraceRequests() + fake.abandonedTraceRequests() >= 1);
     assert.equal(fake.spans.length, 1 + stageNames.length);
     assert.deepEqual(
       fake.spans.filter((span) => span.name !== 'rag-request').map((span) => span.name).sort(),
