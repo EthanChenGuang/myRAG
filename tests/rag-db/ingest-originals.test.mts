@@ -1,4 +1,4 @@
-import { after, afterEach, before, describe, mock, test } from 'node:test';
+import { after, afterEach, before, beforeEach, describe, mock, test } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import path from 'node:path';
@@ -8,6 +8,7 @@ import { createFixtureDatabase, type DeploymentMode } from '../../eval/harness/p
 import { applyMigrationFiles } from '../../eval/harness/migrations.mts';
 import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from '../../eval/harness/fake-edge.mts';
 import { TWO_TENANT_IDS, createTwoTenantDatabase, type TwoTenantDatabase } from '../../eval/harness/two-tenant.mts';
+import type { RpcClient, RpcResponse } from '@/lib/rag/backend/supabase-rpc';
 import type { FakeObjectStore } from '../helpers/fake-object-store';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -144,7 +145,27 @@ const MARKDOWN = [
   '',
 ].join('\n');
 
-describe('ingest stores the original and the parse output', () => {
+const POLICY_TEXT = [
+  '# Receiving Policy',
+  '',
+  'See https://docs.example.com/receiving-guide for the full rules, effective 2025-03-14 for every warehouse crew.',
+  '',
+  '## Night Shift',
+  '',
+  'The night crew scans every pallet at the dock on 14 March 2025 and stages it beside bay four for the morning team.',
+  '',
+  '## Outbound',
+  '',
+  'Outbound pallets leave through the shipping cage after the supervisor signs the manifest, see https://docs.example.com/outbound for details.',
+  '',
+].join('\n');
+
+const BIG_TEXT = Array.from(
+  { length: 80 },
+  (_, index) => `## Bay ${index + 1}\n\nPallet group ${index + 1} rolls through bay ${index + 1}, where the crew ${'scans every carton and notes the count for the supervisor '.repeat(3)}\n`,
+).join('\n');
+
+describe('ingest stores the original and the parse output, and resume rebuilds its inputs from them', () => {
   let fixture: TwoTenantDatabase;
   let edge: FakeEdge;
   let store: FakeObjectStore;
@@ -317,5 +338,241 @@ describe('ingest stores the original and the parse output', () => {
     const crlf = await uploadText(TWO_TENANT_IDS.userA, `${MARKDOWN}\nA closing note for the duplicate test.\n`.replace(/\n/g, '\r\n'), 'dup-crlf.md');
     assert.equal(crlf.status, 'skipped_duplicate');
     assert.deepEqual(store.keys(), keysAfterFirst, 'content hash duplicate: what it stored is removed again');
+  });
+
+  beforeEach(() => install());
+
+  const upload = async (userId: string, text: string, filename: string) =>
+    ingestModule.ingest({
+      scope: await scopeOf(userId),
+      source: 'config_upload',
+      sourceKey: `root/${filename}`,
+      text,
+      filename,
+      mimeType: 'text/markdown',
+      signal: new AbortController().signal,
+    });
+
+  const JUMP_MS = 60_000;
+
+  /** The clock jumps past the request deadline once the named stage has saved its state, so the next stage yields. */
+  const interruptAfter = (stage: string) => {
+    const real = supabaseModule.getSupabaseAdmin() as unknown as RpcClient;
+    let clock = 1_000_000;
+    let armed = true;
+    const db: RpcClient = {
+      rpc(fn, args) {
+        const state = args.p_state as { lastCompleted?: string } | undefined;
+        if (armed && fn === 'rag_save_ingest_state' && state?.lastCompleted === stage) {
+          clock += JUMP_MS;
+          armed = false;
+        }
+        return real.rpc(fn, args);
+      },
+    };
+    depsModule.setIngestDepsForTests({ db: () => db, now: () => clock });
+  };
+
+  /** A process that dies right after its first chunk batch is written: every later call, cleanup included, fails. */
+  const dieAfterFirstBatch = () => {
+    const real = supabaseModule.getSupabaseAdmin() as unknown as RpcClient;
+    let dead = false;
+    let batches = 0;
+    const refuse = () => {
+      const response: RpcResponse = { data: null, error: { code: '57014', message: 'killed' } };
+      const request = {
+        abortSignal: () => request,
+        then: (onFulfilled: Parameters<Promise<RpcResponse>['then']>[0], onRejected: Parameters<Promise<RpcResponse>['then']>[1]) => Promise.resolve(response).then(onFulfilled, onRejected),
+      };
+      return request as unknown as ReturnType<RpcClient['rpc']>;
+    };
+    const db: RpcClient = {
+      rpc(fn, args) {
+        if (dead) return refuse();
+        const request = real.rpc(fn, args);
+        if (fn !== 'rag_write_chunks') return request;
+        batches += 1;
+        const wrapped = {
+          abortSignal(signal: AbortSignal) {
+            request.abortSignal(signal);
+            return wrapped;
+          },
+          then: (onFulfilled: Parameters<Promise<RpcResponse>['then']>[0], onRejected: Parameters<Promise<RpcResponse>['then']>[1]) =>
+            request
+              .then((response) => {
+                dead = true;
+                return response;
+              })
+              .then(onFulfilled, onRejected),
+        };
+        return wrapped as unknown as ReturnType<RpcClient['rpc']>;
+      },
+    };
+    depsModule.setIngestDepsForTests({ db: () => db });
+    return () => batches;
+  };
+
+  const shape = (documentId: string) =>
+    rowsOf(
+      fixture.db,
+      'SELECT chunk_index, content, content_hash, lexical_text, section_path, language, chunk_kind, metadata, embedding IS NOT NULL AS embedded FROM document_chunks WHERE document_id = $1 ORDER BY chunk_index',
+      [documentId],
+    );
+
+  const idsFollowTheRule = async (documentId: string) =>
+    (
+      await rowsOf(
+        fixture.db,
+        `SELECT count(*)::int AS total,
+           count(*) FILTER (WHERE id = substr(encode(sha256(convert_to(document_id::text || ':' || chunk_index::text, 'UTF8')), 'hex'), 1, 32)::uuid)::int AS ruled
+         FROM document_chunks WHERE document_id = $1`,
+        [documentId],
+      )
+    )[0] as { total: number; ruled: number };
+
+  const state = async (documentId: string) =>
+    (await rowsOf(fixture.db, 'SELECT status, processing_state FROM documents WHERE id = $1', [documentId]))[0] as { status: string; processing_state: Record<string, unknown> };
+
+  test('a run stopped by the deadline right after parse resumes with no file bytes and ends as an uninterrupted run does', async () => {
+    interruptAfter('parse');
+    const interrupted = await upload(TWO_TENANT_IDS.userA, POLICY_TEXT, 'policy.md');
+    assert.equal(interrupted.status, 'processing');
+    assert.equal(interrupted.reason, 'deadline');
+    assert.ok(interrupted.documentId);
+    assert.equal((await state(interrupted.documentId)).processing_state.lastCompleted, 'parse');
+    assert.equal((await shape(interrupted.documentId)).length, 0);
+
+    depsModule.resetIngestDepsForTests();
+    const resumed = await ingestModule.resumeIngest(await scopeOf(TWO_TENANT_IDS.userA), interrupted.documentId);
+    assert.equal(resumed.status, 'ready');
+    assert.equal(resumed.documentId, interrupted.documentId);
+
+    const twin = await upload(TWO_TENANT_IDS.userB, POLICY_TEXT, 'policy.md');
+    assert.equal(twin.status, 'ready');
+    assert.ok(twin.documentId);
+    const resumedChunks = await shape(interrupted.documentId);
+    assert.ok(resumedChunks.length >= 3);
+    assert.deepEqual(resumedChunks, await shape(twin.documentId), 'chunk text, hashes, lexical text, path, language and metadata match the uninterrupted run');
+    const ids = await idsFollowTheRule(interrupted.documentId);
+    assert.deepEqual(ids, { total: resumedChunks.length, ruled: resumedChunks.length });
+  });
+
+  test('a run stopped before embed resumes with the same chunk metadata as an uninterrupted run, URL keys included', async () => {
+    interruptAfter('images');
+    const interrupted = await upload(TWO_TENANT_IDS.userA, POLICY_TEXT, 'policy-late.md');
+    assert.equal(interrupted.status, 'processing');
+    assert.ok(interrupted.documentId);
+
+    depsModule.resetIngestDepsForTests();
+    const resumed = await ingestModule.resumeIngest(await scopeOf(TWO_TENANT_IDS.userA), interrupted.documentId);
+    assert.equal(resumed.status, 'ready');
+    const twin = await upload(TWO_TENANT_IDS.userB, POLICY_TEXT, 'policy-late.md');
+    assert.ok(twin.documentId);
+
+    const resumedChunks = await shape(interrupted.documentId);
+    const twinChunks = await shape(twin.documentId);
+    assert.deepEqual(resumedChunks, twinChunks);
+    assert.ok(resumedChunks.some((chunk) => (chunk.metadata as Row).has_urls === true), 'the URL metadata of enrich is rebuilt');
+    assert.deepEqual(await idsFollowTheRule(interrupted.documentId), { total: resumedChunks.length, ruled: resumedChunks.length });
+  });
+
+  test('a process that dies after the first embed batch leaves a resumable document, and the resume ends with one set of chunks', async () => {
+    const batches = dieAfterFirstBatch();
+    const died = await upload(TWO_TENANT_IDS.userA, BIG_TEXT, 'bays.md');
+    assert.equal(died.status, 'failed');
+    assert.ok(died.documentId);
+    assert.equal(batches(), 1);
+    const partial = await shape(died.documentId);
+    assert.ok(partial.length > 0, 'the first batch is in the database');
+    assert.equal((await state(died.documentId)).status, 'processing', 'the cleanup never ran, so the document is still resumable');
+
+    depsModule.resetIngestDepsForTests();
+    const resumed = await ingestModule.resumeIngest(await scopeOf(TWO_TENANT_IDS.userA), died.documentId);
+    assert.equal(resumed.status, 'ready');
+
+    const twin = await upload(TWO_TENANT_IDS.userB, BIG_TEXT, 'bays.md');
+    assert.ok(twin.documentId);
+    const resumedChunks = await shape(died.documentId);
+    assert.ok(resumedChunks.length > partial.length, 'more than one batch was needed');
+    assert.equal(new Set(resumedChunks.map((chunk) => chunk.chunk_index)).size, resumedChunks.length, 'no duplicate chunk');
+    assert.deepEqual(resumedChunks.map((chunk) => chunk.chunk_index), resumedChunks.map((_, index) => index));
+    assert.ok(resumedChunks.every((chunk) => chunk.embedded === true));
+    assert.deepEqual(resumedChunks, await shape(twin.documentId));
+    assert.deepEqual(await idsFollowTheRule(died.documentId), { total: resumedChunks.length, ruled: resumedChunks.length });
+  });
+
+  test('without parse.md the resume parses the stored original again and stores parse.md anew', async () => {
+    interruptAfter('images');
+    const interrupted = await upload(TWO_TENANT_IDS.userA, POLICY_TEXT, 'policy-reparse.md');
+    assert.ok(interrupted.documentId);
+    const parseKey = store.keys().find((key) => key.endsWith('/parse.md')) as string;
+    assert.ok(parseKey);
+    store.objects.delete(parseKey);
+
+    depsModule.resetIngestDepsForTests();
+    const resumed = await ingestModule.resumeIngest(await scopeOf(TWO_TENANT_IDS.userA), interrupted.documentId);
+
+    assert.equal(resumed.status, 'ready');
+    assert.ok(store.keys().includes(parseKey), 'parse.md is stored again');
+    const twin = await upload(TWO_TENANT_IDS.userB, POLICY_TEXT, 'policy-reparse.md');
+    assert.ok(twin.documentId);
+    assert.deepEqual(await shape(interrupted.documentId), await shape(twin.documentId));
+  });
+
+  test('without parse.md and without the original the resume fails as original_unavailable and writes no chunks', async () => {
+    interruptAfter('images');
+    const interrupted = await upload(TWO_TENANT_IDS.userA, POLICY_TEXT, 'policy-lost.md');
+    assert.ok(interrupted.documentId);
+    store.objects.clear();
+
+    depsModule.resetIngestDepsForTests();
+    const resumed = await ingestModule.resumeIngest(await scopeOf(TWO_TENANT_IDS.userA), interrupted.documentId);
+
+    assert.equal(resumed.status, 'failed');
+    assert.equal(resumed.reason, 'original_unavailable');
+    assert.equal((await shape(interrupted.documentId)).length, 0);
+    assert.equal((await state(interrupted.documentId)).status, 'failed');
+  });
+
+  test('a run stopped before the original was stored cannot resume without the file: it reports resume_input_unavailable and touches nothing', async () => {
+    interruptAfter('file_hash_dedup');
+    const interrupted = await upload(TWO_TENANT_IDS.userA, POLICY_TEXT, 'policy-early.md');
+    assert.equal(interrupted.status, 'processing');
+    assert.ok(interrupted.documentId);
+    assert.deepEqual(store.calls, []);
+
+    depsModule.resetIngestDepsForTests();
+    const resumed = await ingestModule.resumeIngest(await scopeOf(TWO_TENANT_IDS.userA), interrupted.documentId);
+
+    assert.equal(resumed.status, 'processing');
+    assert.equal(resumed.reason, 'resume_input_unavailable');
+    assert.deepEqual(store.calls, []);
+    assert.equal((await state(interrupted.documentId)).status, 'processing');
+  });
+
+  test("another tenant cannot resume the document, and a path outside the tenant's prefix is never read", async () => {
+    interruptAfter('images');
+    const interrupted = await upload(TWO_TENANT_IDS.userA, POLICY_TEXT, 'policy-foreign.md');
+    assert.ok(interrupted.documentId);
+    const callsBefore = store.calls.length;
+
+    depsModule.resetIngestDepsForTests();
+    const foreign = await ingestModule.resumeIngest(await scopeOf(TWO_TENANT_IDS.userB), interrupted.documentId);
+    assert.equal(foreign.status, 'failed');
+    assert.equal(foreign.reason, 'document_not_found');
+    assert.equal(store.calls.length, callsBefore, 'no store call for a document of another tenant');
+
+    const row = (await rowsOf(fixture.db, 'SELECT lineage_id FROM documents WHERE id = $1', [interrupted.documentId]))[0] as Row;
+    const foreignKey = `u:${TWO_TENANT_IDS.userB}/${String(row.lineage_id)}/1/original.md`;
+    await store.put(foreignKey, new TextEncoder().encode('# Not yours\n\nText that belongs to another tenant entirely.\n'), { contentType: 'text/markdown' });
+    await fixture.db.query('UPDATE documents SET original_path = $2 WHERE id = $1', [interrupted.documentId, foreignKey]);
+    const parseKey = store.keys().find((key) => key.endsWith('/parse.md') && key.startsWith(`u:${TWO_TENANT_IDS.userA}/`)) as string;
+    store.objects.delete(parseKey);
+    const callsMark = store.calls.length;
+
+    const tampered = await ingestModule.resumeIngest(await scopeOf(TWO_TENANT_IDS.userA), interrupted.documentId);
+    assert.equal(tampered.status, 'failed');
+    assert.equal(tampered.reason, 'original_unavailable');
+    assert.equal(store.calls.slice(callsMark).filter((call) => call.key.startsWith(`u:${TWO_TENANT_IDS.userB}/`)).length, 0, "the other tenant's object was not read");
   });
 });

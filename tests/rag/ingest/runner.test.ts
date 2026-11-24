@@ -427,3 +427,99 @@ describe('registered stages and their switched-off behaviour', () => {
     expect(enabled.warnings).toContain('image_chunks_unavailable');
   });
 });
+
+describe('resume from the object store', () => {
+  const ORIGINAL_PATH = `s:default/${FAKE_LINEAGE_ID}/1/original.md`;
+  const PARSE_PATH = `s:default/${FAKE_LINEAGE_ID}/1/parse.md`;
+  const STAGES_BETWEEN: StageName[] = ['parse', 'content_hash_dedup', 'scan_injection', 'chunk', 'enrich', 'extract', 'images'];
+
+  const documentRow = (lastCompleted: StageName) => ({
+    status: 'processing',
+    version: 1,
+    processing_status: 'processing',
+    processing_state: { lastCompleted },
+    filename: 'handbook.md',
+    doc_type: 'general',
+    parser_used: 'text',
+    created_at: '2026-01-01T00:00:00.000Z',
+  });
+  const origin = { lineage_id: FAKE_LINEAGE_ID, original_path: ORIGINAL_PATH, source: 'config_upload', source_key: 'root/handbook.md' };
+  const bytes = (text: string) => new TextEncoder().encode(text);
+
+  test('every stop between parse and embed resumes with chunk, enrich and extract each run exactly once and nothing is parsed again', async () => {
+    const { chunkStage } = await import('@/lib/rag/ingest/stages/chunk');
+    const { enrichStage } = await import('@/lib/rag/ingest/stages/enrich');
+    const { extractStage } = await import('@/lib/rag/ingest/stages/extract');
+    const { parseStage } = await import('@/lib/rag/ingest/stages/parse');
+
+    for (const lastCompleted of STAGES_BETWEEN) {
+      const { db, calls } = fakeIngestDb({ document: documentRow(lastCompleted), origin });
+      const store = installIngestDeps({ db });
+      await store.put(PARSE_PATH, bytes(MARKDOWN), { contentType: 'text/markdown' });
+      const spies = [chunkStage, enrichStage, extractStage, parseStage].map((stage) => vi.spyOn(stage, 'run'));
+
+      const { resumeIngest } = await import('@/lib/rag/ingest');
+      const result = await resumeIngest(scope, FAKE_DOCUMENT_ID);
+
+      expect(result.status, lastCompleted).toBe('ready');
+      const [chunk, enrich, extract, parse] = spies.map((spy) => spy.mock.calls.length);
+      expect({ lastCompleted, chunk, enrich, extract }).toEqual({ lastCompleted, chunk: 1, enrich: 1, extract: 1 });
+      expect(parse, lastCompleted).toBe(0);
+      expect(callsOf(calls, 'rag_write_chunks')).toHaveLength(1);
+      expect(store.calls.map((call) => `${call.op}:${call.key}`)).toEqual([`get:${PARSE_PATH}`]);
+      spies.forEach((spy) => spy.mockRestore());
+      uninstallIngestDeps();
+    }
+  });
+
+  test('without parse.md the stored original is parsed again and parse.md is stored anew', async () => {
+    const { db } = fakeIngestDb({ document: documentRow('chunk'), origin });
+    const store = installIngestDeps({ db });
+    await store.put(ORIGINAL_PATH, bytes(MARKDOWN), { contentType: 'text/markdown' });
+
+    const { resumeIngest } = await import('@/lib/rag/ingest');
+    const result = await resumeIngest(scope, FAKE_DOCUMENT_ID);
+
+    expect(result.status).toBe('ready');
+    expect(store.keys()).toEqual([ORIGINAL_PATH, PARSE_PATH]);
+    expect(new TextDecoder().decode(store.objects.get(PARSE_PATH)?.bytes)).toBe(MARKDOWN);
+  });
+
+  test('with neither parse.md nor the original the resume fails as original_unavailable and marks the version failed', async () => {
+    const { db, calls } = fakeIngestDb({ document: documentRow('chunk'), origin });
+    installIngestDeps({ db });
+
+    const { resumeIngest } = await import('@/lib/rag/ingest');
+    const result = await resumeIngest(scope, FAKE_DOCUMENT_ID);
+
+    expect(result).toMatchObject({ status: 'failed', documentId: FAKE_DOCUMENT_ID, reason: 'original_unavailable' });
+    expect(callsOf(calls, 'rag_mark_document_failed').map((call) => call.args.p_reason)).toEqual(['original_unavailable']);
+    expect(callsOf(calls, 'rag_write_chunks')).toHaveLength(0);
+  });
+
+  test('a stored original_path outside the tenant prefix is refused and never read', async () => {
+    const foreign = `u:00000000-0000-4000-8000-0000000000b1/${FAKE_LINEAGE_ID}/1/original.md`;
+    const { db } = fakeIngestDb({ document: documentRow('chunk'), origin: { ...origin, original_path: foreign } });
+    const store = installIngestDeps({ db });
+    await store.put(foreign, bytes(MARKDOWN), { contentType: 'text/markdown' });
+    const before = store.calls.length;
+
+    const { resumeIngest } = await import('@/lib/rag/ingest');
+    const result = await resumeIngest(scope, FAKE_DOCUMENT_ID);
+
+    expect(result).toMatchObject({ status: 'failed', reason: 'original_unavailable' });
+    expect(store.calls.slice(before).filter((call) => call.key === foreign)).toEqual([]);
+  });
+
+  test('a document that stopped before store_original has nothing to rebuild from and stays processing', async () => {
+    const { db, calls } = fakeIngestDb({ document: documentRow('file_hash_dedup'), origin: { ...origin, original_path: null as unknown as string } });
+    const store = installIngestDeps({ db });
+
+    const { resumeIngest } = await import('@/lib/rag/ingest');
+    const result = await resumeIngest(scope, FAKE_DOCUMENT_ID);
+
+    expect(result).toMatchObject({ status: 'processing', reason: 'resume_input_unavailable' });
+    expect(store.calls).toEqual([]);
+    expect(callsOf(calls, 'rag_write_chunks')).toHaveLength(0);
+  });
+});
