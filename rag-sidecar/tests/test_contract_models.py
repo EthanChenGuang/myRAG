@@ -469,3 +469,23 @@ class TestRegistry:
     def test_model_registered_in_serialization_mode(self, name):
         registered = {model.__name__: mode for model, mode in CONTRACTS}
         assert registered.get(name) == "serialization"
+
+
+def test_run_options_accept_known_stage_overrides():
+    options = RagRunOptions(disabled_stages=["assemble", "legacy_rank"], stage_timeouts_ms={"search": 4000})
+    assert options.disabled_stages == ["assemble", "legacy_rank"]
+    assert options.stage_timeouts_ms is not None and options.stage_timeouts_ms.search == 4000
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"disabled_stages": ["rerank"]},
+        {"stage_timeouts_ms": {"rerank": 100}},
+        {"stage_timeouts_ms": {"search": 0}},
+        {"stage_timeouts_ms": {"search": 60001}},
+    ],
+)
+def test_run_options_reject_unknown_stages_and_bad_timeouts(payload):
+    with pytest.raises(ValidationError):
+        RagRunOptions(**payload)

@@ -175,6 +175,7 @@ class EnvironmentConfig {
       RAG_EMBED_TENANT: process.env.RAG_EMBED_TENANT || '',
       RAG_VOICE_TOKEN_SECRET: process.env.RAG_VOICE_TOKEN_SECRET || '',
       RAG_VOICE_TOKEN_TTL_SECONDS: process.env.RAG_VOICE_TOKEN_TTL_SECONDS || '3600',
+      VOICE_MAX_ACTIVE_ROOMS: process.env.VOICE_MAX_ACTIVE_ROOMS || '4',
       LANGFUSE_ENABLED: process.env.LANGFUSE_ENABLED || 'false',
       LANGFUSE_PUBLIC_KEY: process.env.LANGFUSE_PUBLIC_KEY || '',
       LANGFUSE_SECRET_KEY: process.env.LANGFUSE_SECRET_KEY || '',

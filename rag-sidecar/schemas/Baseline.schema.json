@@ -128,6 +128,33 @@
           "default": null,
           "title": "Degrade"
         },
+        "disabled_stages": {
+          "anyOf": [
+            {
+              "items": {
+                "enum": [
+                  "refs",
+                  "analyze",
+                  "embed",
+                  "search",
+                  "legacy_rank",
+                  "post_filter",
+                  "assemble",
+                  "voice_keyword_fallback",
+                  "local_rerank"
+                ],
+                "type": "string"
+              },
+              "maxItems": 9,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Disabled Stages"
+        },
         "generator_model": {
           "anyOf": [
             {
@@ -166,6 +193,17 @@
           "default": null,
           "title": "Organization Id"
         },
+        "stage_timeouts_ms": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StageTimeoutsMs"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "user_id": {
           "anyOf": [
             {
@@ -180,6 +218,139 @@
         }
       },
       "title": "RagRunOptions",
+      "type": "object"
+    },
+    "StageTimeoutsMs": {
+      "additionalProperties": false,
+      "properties": {
+        "analyze": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Analyze"
+        },
+        "assemble": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Assemble"
+        },
+        "embed": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Embed"
+        },
+        "legacy_rank": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Legacy Rank"
+        },
+        "local_rerank": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Local Rerank"
+        },
+        "post_filter": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Post Filter"
+        },
+        "refs": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Refs"
+        },
+        "search": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Search"
+        },
+        "voice_keyword_fallback": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Voice Keyword Fallback"
+        }
+      },
+      "title": "StageTimeoutsMs",
       "type": "object"
     }
   },

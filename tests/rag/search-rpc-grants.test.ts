@@ -63,3 +63,19 @@ describe('SECURITY DEFINER search functions that trust caller-supplied tenant id
     }
   });
 });
+
+describe('upgrade patch for existing multi-tenant databases', () => {
+  const PATCH = fs.readFileSync(path.resolve(__dirname, '../../supabase/patches/2026-11-search-rpc-revoke-multi-tenant.sql'), 'utf8');
+  const patchAcl = (name: string) =>
+    statements(PATCH).filter((statement) => /^(GRANT|REVOKE)\b/i.test(statement) && new RegExp(`FUNCTION (public\\.)?${name}\\b`, 'i').test(statement));
+
+  test.each(TENANT_ID_RPCS)('%s has the same REVOKE and GRANT as multi-tenant-setup.sql', (name) => {
+    expect(patchAcl(name)).toEqual(aclFor(name));
+  });
+
+  test('the patch is documented as a post-deploy step in supabase/README.md', () => {
+    const readme = fs.readFileSync(path.resolve(__dirname, '../../supabase/README.md'), 'utf8');
+    expect(readme).toContain('2026-11-search-rpc-revoke-multi-tenant.sql');
+    expect(PATCH).toMatch(/AFTER the Phase 2 application is deployed/);
+  });
+});

@@ -515,6 +515,11 @@
       "name": "RAG_VOICE_TOKEN_TTL_SECONDS",
       "status": "managed",
       "knownGaps": []
+    },
+    {
+      "name": "VOICE_MAX_ACTIVE_ROOMS",
+      "status": "managed",
+      "knownGaps": []
     }
   ]
 }

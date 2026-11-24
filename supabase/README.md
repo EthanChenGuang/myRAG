@@ -104,7 +104,11 @@ The setup files are for new databases and are not safe to re-run. For a database
 - `patches/2026-11-security-review-single-tenant.sql`
 - `patches/2026-11-security-review-multi-tenant.sql`
 
-The multi-tenant patch also rewrites the `organizations` and `organization_members` policies on the SECURITY DEFINER helpers `is_org_owner`, `is_org_admin` and `is_org_member`. Before it, the two SELECT policies referenced each other and every user-client query on those tables failed with Postgres error 42P17 (infinite recursion).
+Multi-tenant databases need one more patch, and it runs in the opposite order: apply `patches/2026-11-search-rpc-revoke-multi-tenant.sql` only after the new application version is deployed and live. It revokes `match_documents_by_workspace`, `match_document_chunks_by_org`, `get_documents_by_type_slug` and `get_documents_by_type_slug_workspace` from `PUBLIC`, `anon` and `authenticated` (the application now searches on the service-role client), so a still-running older application would stop finding documents. Until it is applied, the anon key can call those functions with any tenant id. Rolling the application back means re-granting those four functions to `anon` and `authenticated` first.
+
+Order for a multi-tenant upgrade: 1. `2026-11-security-review-multi-tenant.sql`, 2. deploy the application (and the voice agent, see README_VOICE_INTEGRATION.md), 3. `2026-11-search-rpc-revoke-multi-tenant.sql`.
+
+The multi-tenant security-review patch also rewrites the `organizations` and `organization_members` policies on the SECURITY DEFINER helpers `is_org_owner`, `is_org_admin` and `is_org_member`. Before it, the two SELECT policies referenced each other and every user-client query on those tables failed with Postgres error 42P17 (infinite recursion).
 
 ## Single-Tenant Access Model
 

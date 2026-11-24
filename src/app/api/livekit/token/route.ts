@@ -6,11 +6,16 @@ import { defaultVoiceTtlSeconds, mintVoiceToken, repairOwnerMembership, resolveT
 
 const VOICE_ROOM_PREFIX = 'myrag-voice-';
 const USER_IDENTITY_PREFIX = 'user-';
-const MAX_ACTIVE_VOICE_ROOMS = 4;
+const DEFAULT_MAX_ACTIVE_VOICE_ROOMS = 4;
 const JOIN_TOKEN_TTL_SECONDS = 600;
 const ROOM_EMPTY_TIMEOUT_SECONDS = 60;
 const ROOM_DEPARTURE_TIMEOUT_SECONDS = 20;
 const ROOM_MAX_PARTICIPANTS = 2;
+
+function maxActiveVoiceRooms(): number {
+    const parsed = Number.parseInt(env.VOICE_MAX_ACTIVE_ROOMS ?? '', 10);
+    return Number.isFinite(parsed) && parsed >= 1 ? parsed : DEFAULT_MAX_ACTIVE_VOICE_ROOMS;
+}
 
 async function sessionUserId(): Promise<string | null> {
     try {
@@ -81,7 +86,7 @@ export async function GET(req: NextRequest) {
         try {
             const rooms = await roomService.listRooms();
             const active = rooms.filter((room) => room.name.startsWith(VOICE_ROOM_PREFIX)).length;
-            if (active >= MAX_ACTIVE_VOICE_ROOMS) {
+            if (active >= maxActiveVoiceRooms()) {
                 return NextResponse.json({ error: 'voice_busy' }, { status: 409 });
             }
             await roomService.createRoom({

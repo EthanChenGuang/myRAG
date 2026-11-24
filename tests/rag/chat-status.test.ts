@@ -161,15 +161,16 @@ describe('chat route status mapping', () => {
     expect(h.capture.streamText).not.toHaveBeenCalled();
   });
 
-  it('status error in strict mode with web search off streams the refusal, not an error part, and records the error status', async () => {
+  it('status error in strict mode with web search off streams the localized error part, not the refusal, and records the error status', async () => {
     h.retrieval.mockRejectedValue(new Error('vector backend down'));
     const response = await post(await loadRoute(), { settings: { webSearch: false, language: 'zh' } });
     const body = await readSse(response);
 
     expect(response.status).toBe(200);
-    expect(body).not.toContain('"type":"error"');
-    expect(body).not.toContain('知识库暂时无法访问');
-    expect(body).toContain('text-delta');
+    expect(body).toContain('"type":"error"');
+    expect(body).toContain('知识库暂时无法访问');
+    expect(body).not.toContain('Information Not Available');
+    expect(body).not.toContain('text-delta');
     expect(h.capture.streamText).not.toHaveBeenCalled();
     expect(h.traced).toHaveLength(1);
     expect(h.traced[0].status).toBe('error');
@@ -223,23 +224,26 @@ describe('chat route status mapping', () => {
     expect(JSON.stringify(h.capture.calls[0].messages)).toContain('RELEVANT INFORMATION FROM DOCUMENTS');
   });
 
-  it('a disabled assemble stage never lets strict mode answer from general knowledge with an empty context', async () => {
+  it('a disabled assemble stage in strict mode streams the unavailable error part, never an empty-context answer or the refusal', async () => {
     seedDocuments(['1']);
     h.retrieval.mockResolvedValue(retrievalWith([row('1')]));
     const body = await readSse(await post(await loadRoute({ ragEnv: () => ({ RAG_DISABLED_STAGES: 'assemble' }) }), { settings: { webSearch: false } }));
 
-    expect(body).toContain('text-delta');
+    expect(body).toContain('"type":"error"');
+    expect(body).toContain('The knowledge base is temporarily unavailable');
+    expect(body).not.toContain('Information Not Available');
     expect(h.capture.streamText).not.toHaveBeenCalled();
   });
 
-  it('degraded without used documents in strict mode with web search off streams the refusal and records the degraded status', async () => {
+  it('degraded without used documents in strict mode with web search off streams the localized error part and records the degraded status', async () => {
     seedDocuments(['1']);
     h.retrieval.mockResolvedValue(retrievalWith([row('1')]));
     const body = await readSse(await post(await loadRoute({ adminClient: flakyAdmin(10) }), { settings: { webSearch: false, language: 'it' } }));
 
-    expect(body).not.toContain('"type":"error"');
-    expect(body).not.toContain('La base di conoscenza non è al momento disponibile');
-    expect(body).toContain('text-delta');
+    expect(body).toContain('"type":"error"');
+    expect(body).toContain('La base di conoscenza non è al momento disponibile');
+    expect(body).not.toContain('Information Not Available');
+    expect(body).not.toContain('text-delta');
     expect(h.capture.streamText).not.toHaveBeenCalled();
     expect(h.traced).toHaveLength(1);
     expect(h.traced[0].status).toBe('degraded');
