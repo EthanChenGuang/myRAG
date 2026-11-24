@@ -128,13 +128,17 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | Plan | Worktree / branch | Status |
 |------|-------------------|--------|
 | 03.1-19 | `wt/03.1-19` / `exec/03.1-19` | **merged** |
-| 04-21 | `wt/04-21` / `exec/04-21` | **RUNNING** (gsd-executor) |
+| 04-21 | `wt/04-21` / `exec/04-21` | **merged** (additive contract: RetrievalOverrides.rerank_model, RunManifest.run_config) |
 | 04-22 | `wt/04-22` / `exec/04-22` | **merged** |
 | 03.1-24 | `wt/03.1-24` / `exec/03.1-24` | **merged** |
 | 03.1-26 | `wt/03.1-26` / `exec/03.1-26` | **merged** |
 | 03.1-25-fix | `wt/fix-backfill-tenant` | **merged** — review F HIGH-1, MED-1, MED-4, LOW-5/6/7 |
 | 03-48-sec-rpc-3 | `wt/fix-definer-search-path` | **merged** — review F MED-3 (0411 search_path), LOW-3 |
 | 04-32 | `wt/04-32` / `exec/04-32` | **RUNNING** (gsd-executor, base `157641d`) |
+| 04-23 | `wt/04-23` / `exec/04-23` | **RUNNING** (gsd-executor) |
+| 04-24 | `wt/04-24` / `exec/04-24` | **RUNNING** (gsd-executor) |
+| 04-25 | `wt/04-25` / `exec/04-25` | **RUNNING** (gsd-executor) |
+| 04-26 | `wt/04-26` / `exec/04-26` | **RUNNING** (gsd-executor) |
 | 03.1-36 | — | **UI-SPEC in progress** (gsd-ui-researcher, Opus); executor after spec check |
 | fix-relex-rpc | `wt/fix-relex-rpc` | **RUNNING** (gsd-debugger, Opus) — pre-existing `rag_relex_candidates rpc_failed` in PGlite fixtures |
 | 04-31 | `wt/04-31` / `exec/04-31` | **merged** (0408) |

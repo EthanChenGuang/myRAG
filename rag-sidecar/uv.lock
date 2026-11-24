@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = "==3.12.*"
 resolution-markers = [
     "sys_platform == 'win32'",
@@ -9,19 +9,19 @@ resolution-markers = [
 ]
 
 [options]
-exclude-newer = "2026-11-17T00:00:00Z"
+exclude-newer = "2026-11-25T00:00:00Z"
 
 [options.exclude-newer-package]
-annotated-doc = "2026-11-25T00:00:00Z"
-certifi = "2026-11-25T00:00:00Z"
+torchvision = false
+torch = false
 fastapi = "2026-11-25T00:00:00Z"
 pdfminer-six = "2026-11-25T00:00:00Z"
-pdfplumber = "2026-11-25T00:00:00Z"
-pydantic = "2026-11-25T00:00:00Z"
-pydantic-core = "2026-11-25T00:00:00Z"
 ray = "2026-11-25T00:00:00Z"
-torch = false
-torchvision = false
+certifi = "2026-11-25T00:00:00Z"
+pydantic-core = "2026-11-25T00:00:00Z"
+pydantic = "2026-11-25T00:00:00Z"
+annotated-doc = "2026-11-25T00:00:00Z"
+pdfplumber = "2026-11-25T00:00:00Z"
 
 [manifest]
 constraints = [
