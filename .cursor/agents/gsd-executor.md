@@ -12,6 +12,7 @@ Spawned by `/gsd-execute-phase` orchestrator.
 Your job: Execute the plan completely, commit each task, create SUMMARY.md, update STATE.md.
 
 @.cursor/gsd-core/references/mandatory-initial-read.md
+@.cursor/gsd-core/references/frontend-design-pipeline.md
 </role>
 
 <documentation_lookup>

@@ -1,0 +1,22 @@
+---
+description: Frontend design pipeline for Config UI and React surfaces (myRAG)
+globs:
+  - scripts/config-ui/**
+  - scripts/config-server.js
+  - src/components/**
+  - src/app/**/page.tsx
+  - src/app/**/layout.tsx
+alwaysApply: false
+---
+
+# Frontend design (Guang / GSD)
+
+For changes under these paths, follow `.claude/gsd-core/references/frontend-design-pipeline.md`:
+
+1. **UI-SPEC** via `/gsd-ui-phase` before planning when the phase is UI-heavy.
+2. **frontend-design** — intentional visual direction for new interfaces (`.claude/skills/frontend-design/`).
+3. **Impeccable** — critique/polish after build (`.claude/skills/impeccable/reference/`, avoid launcher download in cloud).
+4. **web-design-guidelines** — final code review on every touched file (`.claude/skills/web-design-guidelines/references/command.md`, no network fetch).
+5. **gsd-ui-review** before verification; SUMMARY must include `## Design skills` per the pipeline doc.
+
+Config UI copy: keep **zh / en / it** parity with app doc-type labels where applicable.

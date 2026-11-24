@@ -28,6 +28,7 @@
     "node_repair_budget": 2,
     "ui_phase": true,
     "ui_safety_gate": true,
+    "ui_review": true,
     "ai_integration_phase": true,
     "api_coverage_gate": true,
     "human_verify_mode": "end-of-phase",
@@ -85,7 +86,28 @@
   },
   "project_code": null,
   "phase_naming": "sequential",
-  "agent_skills": {},
+  "agent_skills": {
+    "gsd-ui-researcher": [
+      ".cursor/skills/frontend-design",
+      ".claude/skills/frontend-design"
+    ],
+    "gsd-executor": [
+      ".cursor/skills/frontend-design",
+      ".claude/skills/frontend-design",
+      ".cursor/skills/impeccable",
+      ".claude/skills/impeccable"
+    ],
+    "gsd-ui-auditor": [
+      ".cursor/skills/impeccable",
+      ".claude/skills/impeccable",
+      ".cursor/skills/web-design-guidelines",
+      ".claude/skills/web-design-guidelines"
+    ],
+    "gsd-verifier": [
+      ".cursor/skills/web-design-guidelines",
+      ".claude/skills/web-design-guidelines"
+    ]
+  },
   "claude_md_path": "./.claude/CLAUDE.md",
   "plan_review": {
     "source_grounding": true,
@@ -96,7 +118,17 @@
   "planner": {
     "stall_detection_enabled": false
   },
+  "model_fallback_policy": {
+    "forbidden_models": ["grok", "cursor-grok"],
+    "execution": { "primary": "sonnet", "fallback": "composer-2.5" },
+    "review_verification": { "primary": "opus", "fallback_gpt": "gpt-5.6-sol-high", "fallback_composer": "composer-2.5" },
+    "research_writeup": { "primary": "opus", "fallback_gpt": "gpt-5.6-sol-high", "fallback_composer": "composer-2.5" },
+    "planning": { "primary": "opus", "fallback_gpt": "gpt-5.6-sol-medium", "fallback_composer": "composer-2.5" },
+    "plan_check": { "primary": "opus", "fallback_gpt": "gpt-5.6-sol-high", "fallback_composer": "composer-2.5", "prefer_different_from_planner": true },
+    "review_separate_pass": true
+  },
   "model_overrides": {
+    "gsd-executor": "sonnet",
     "gsd-planner": "opus",
     "gsd-plan-checker": "opus",
     "gsd-phase-researcher": "opus",

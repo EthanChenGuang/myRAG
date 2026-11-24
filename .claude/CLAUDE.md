@@ -379,7 +379,23 @@ myRAG 是一个基于 Next.js + Supabase 的 AI 聊天产品，核心是从用�
 |-------|-------------|------|
 | brainstorming | "You MUST use this before any creative work - creating features, building components, adding functionality, or modifying behavior. Explores user intent, requirements and design before implementation." | `.claude/skills/brainstorming/SKILL.md` |
 | myrag-expert | Instant deep expertise on the myRAG codebase. Use when discussing architecture, diagnosing issues, planning features, debugging, or answering any question about the codebase. Eliminates need to re-analyze files each session. | `.claude/skills/myRAG-expert/SKILL.md` |
+| frontend-design | Distinctive UI direction for new interfaces (Anthropics skill, pinned in repo). | `.claude/skills/frontend-design/SKILL.md` |
+| impeccable | Critique and polish built UI before ship (pbakaus/impeccable, pinned). | `.claude/skills/impeccable/SKILL.md` |
+| web-design-guidelines | Final code review against Vercel Web Interface Guidelines on changed UI files. | `.claude/skills/web-design-guidelines/SKILL.md` |
 <!-- GSD:skills-end -->
+
+## Frontend design pipeline (GSD + skills)
+
+For UI surface work (`scripts/config-ui/`, `src/components/`, `src/app/`), follow **in order**:
+
+1. `/gsd-ui-phase` → UI-SPEC.md (`gsd-ui-researcher` + **frontend-design**)
+2. Implement with **frontend-design** direction on new interfaces
+3. **Impeccable** critique/polish on built pages (`reference/*.md`; avoid launcher network download unless `IMPECCABLE_BIN` is set)
+4. **web-design-guidelines** on every touched file — fix all findings
+5. `/gsd-ui-review` (`gsd-ui-auditor`)
+6. `/gsd-verify-work` — verifier runs `node scripts/ci/check-frontend-design-summary.mjs` (BLOCKER on UI phases)
+
+Authoritative contract: `.claude/gsd-core/references/frontend-design-pipeline.md` and `frontend-design-verifier-gate.md`. Shared toggles: `.planning/config.json` → `workflow.ui_phase`, `ui_safety_gate`, `ui_review` (enabled). Skill pins: `.cursor/skills/FRONTEND-SKILLS.md` (same SHAs under `.claude/skills/`).
 
 <!-- GSD:workflow-start source:GSD defaults -->
 

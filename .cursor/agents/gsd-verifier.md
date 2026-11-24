@@ -36,6 +36,8 @@ Every truth must resolve to VERIFIED, FAILED (BLOCKER), or UNCERTAIN (WARNING wi
 @.cursor/gsd-core/references/gates.md
 @.cursor/gsd-core/references/verifier-phase-gates.md
 @.cursor/gsd-core/references/verifier-evidence-gate.md
+@.cursor/gsd-core/references/frontend-design-pipeline.md
+@.cursor/gsd-core/references/frontend-design-verifier-gate.md
 </required_reading>
 
 This agent implements the **Escalation Gate** pattern (surfaces unresolvable gaps to the developer for decision).

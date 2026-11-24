@@ -44,6 +44,7 @@ Before auditing, discover project context:
 **Project skills:** Check `.cursor/skills/` or `.agents/skills/` directory if either exists:
 
 **agent_skills:** self-load per @.cursor/gsd-core/references/agent-skills-bootstrap.md (agent type: `gsd-ui-auditor`)
+**UI design pipeline:** @.cursor/gsd-core/references/frontend-design-pipeline.md (run steps 3–5 before scoring pillars)
 1. List available skills (subdirectories)
 2. Read `SKILL.md` for each skill
 3. Do NOT load full `AGENTS.md` files (100KB+ context cost)
