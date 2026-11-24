@@ -48,7 +48,7 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | 03-44 | bc-cdb95a3d, bc-9cd7df41 | **duplicate** | — |
 | 03-45 | orchestrator | merged | trunk |
 | 03-46 | bc-a7d242c2… | merged | exec/03-46 |
-| 03-46 | bc-88f166a9 | **stale** | — |
+| 03-46 | [bc-88f166a9](bc-88f166a9-cbf1-5906-851a-88b7b561593a) | **superseded** (finished after merge; `origin/exec/03-46` = `de688e9`, trunk `883927b`) | no executor |
 | 03-47 | bc-6d671721… | **running** | exec/03-47 |
 | 03.1-01 | bc-287a3b2b… | **running** | exec/03.1-01 |
 | 03.1-02 | bc-167b7120… | **running** | exec/03.1-02 |
