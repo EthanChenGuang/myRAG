@@ -2,7 +2,7 @@ import { EmbeddingProfileMismatch } from '../../embeddings/mrl';
 import { ProfileUnavailableError, type EmbeddingProfile } from '../../embeddings/active-profile';
 import { canonicalModelId, getEmbeddingProvider } from '../../embeddings/registry';
 import { resolveEmbeddingTargets, type EmbeddingTarget } from '../embedding-targets';
-import { buildEmbeddingText, EMBEDDING_TEXT_VERSION } from '../text/embedding-text';
+import { buildEmbeddingText, EMBEDDING_TEXT_VERSION, templateHeaderFor } from '../text/embedding-text';
 import {
   IngestStageError,
   requireDocument,
@@ -137,11 +137,12 @@ async function runEmbed(ctx: StageContext): Promise<StageOutcome> {
   const batches = batchByBytes(writes, vectorBytes);
   const failed = new Map<string, TargetFailure>();
   const gaps: Array<{ profileId: string; chunkIndex: number }> = [];
+  const templateHeader = templateHeaderFor(ctx.identity?.profile.embedding_text_template, ctx.work.templateRow);
   let written = 0;
 
   for (const [position, batch] of batches.entries()) {
     ctx.signal.throwIfAborted();
-    const texts = batch.map((write) => buildEmbeddingText({ section_path: write.section_path, content: write.content }));
+    const texts = batch.map((write) => buildEmbeddingText({ section_path: write.section_path, content: write.content, template_header: templateHeader }));
     const outcomes = await Promise.all(
       targets.map(async (target) => {
         const earlier = failed.get(target.profile.id);

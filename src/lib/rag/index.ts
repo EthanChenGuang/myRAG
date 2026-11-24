@@ -106,3 +106,5 @@ export type {
   ResumeIngestOptions,
 } from './ingest';
 export { loadIngestConfig } from './ingest/config';
+export { findInvoices } from './retrieval/invoices';
+export type { FindInvoicesDeps, InvoiceFilters, InvoiceHit } from './retrieval/invoices';

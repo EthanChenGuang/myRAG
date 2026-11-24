@@ -12,7 +12,7 @@
       "pages": [
         1
       ],
-      "table_header": null,
+      "table_header": "| Descrizione          |   Quantità | Prezzo unitario   | Importo   | Aliquota IVA   |\n|----------------------|------------|-------------------|-----------|----------------|",
       "text": "Numero fattura: FT-2025-00419\nData: 15/03/2025\nData scadenza: 14/04/2025\nCedente/Prestatore: Esempio Fornitore S.r.l.\nP.IVA: 99999999990\nCessionario/Committente: Esempio Cliente S.p.A.\nP.IVA: 00000010017\n| Descrizione          |   Quantità | Prezzo unitario   | Importo   | Aliquota IVA   |\n|----------------------|------------|-------------------|-----------|----------------|\n| Sonda termica        |          8 | 100,00            | 800,00    | 22%            |\n| Cavo di ricambio 5 m |          4 | 50,00             | 200,00    | 22%            |\nImponibile: € 1.000,00\nIVA 22 %: € 220,00\nTotale documento: € 1.220,00"
     }
   ],

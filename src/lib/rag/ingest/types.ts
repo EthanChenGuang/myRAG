@@ -107,7 +107,7 @@ export function emptyIngestState(): IngestState {
   };
 }
 
-export type ChunkKind = 'text' | 'table';
+export type ChunkKind = 'text' | 'table' | 'invoice_header';
 
 /** A chunk as the chunker produces it: plain content, never prefixed with its path or document name. */
 export interface ChunkDraft {
@@ -157,6 +157,8 @@ export interface IngestWork {
   /** Docling's own chunks from the parse result; the chunk stage uses them when the profile allows. */
   parseChunks?: ParseResult['chunks'] | null;
   parserVersion: string | null;
+  /** Promoted document columns of this run (the invoice fields); the profile's embedding header template renders from them. */
+  templateRow?: Record<string, string | null> | null;
   chunks: ChunkDraft[];
   chunksWritten: number;
 }

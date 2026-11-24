@@ -45,9 +45,9 @@ function stageContext(docType: Parameters<typeof getProcessingProfile>[0], work:
 }
 
 describe('chunker dispatch', () => {
-  it('registers markdown_sections, table_aware and legal_clauses and leaves invoice and image_caption to later plans', () => {
-    expect(Object.keys(CHUNKERS).sort()).toEqual(['legal_clauses', 'markdown_sections', 'table_aware']);
-    expect(() => chunkDocument(config('invoice_receipt'), { markdown: MARKDOWN })).toThrow(ChunkerUnavailableError);
+  it('registers markdown_sections, table_aware, legal_clauses and invoice and leaves image_caption to a later plan', () => {
+    expect(Object.keys(CHUNKERS).sort()).toEqual(['invoice', 'legal_clauses', 'markdown_sections', 'table_aware']);
+    expect(chunkDocument(config('invoice_receipt'), { markdown: MARKDOWN }).chunks.length).toBeGreaterThan(0);
     expect(() => chunkDocument({ ...config('general'), kind: 'image_caption' }, { markdown: MARKDOWN })).toThrow(ChunkerUnavailableError);
   });
 
@@ -113,7 +113,8 @@ describe('chunk stage', () => {
   });
 
   it('fails with chunker_unavailable for a kind no plan has added yet and writes no chunks', async () => {
-    const ctx = stageContext('invoice_receipt', { parseText: MARKDOWN });
+    const ctx = stageContext('general', { parseText: MARKDOWN });
+    ctx.identity!.profile = { ...ctx.identity!.profile, chunker: { ...ctx.identity!.profile.chunker, kind: 'image_caption' } };
     expect(await chunkStage.run(ctx)).toEqual({ kind: 'fail', reason: 'chunker_unavailable' });
     expect(ctx.work.chunks).toEqual([]);
     expect(ctx.warnings).toEqual([]);

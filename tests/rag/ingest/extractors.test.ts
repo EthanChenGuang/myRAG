@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { ingest } from '@/lib/rag/ingest';
 import { EXTRACTORS, pickDocDate, runChunkExtractors } from '@/lib/rag/ingest/extractors';
+import { setInvoiceClientForTests } from '@/lib/rag/ingest/invoice-client';
 import { mintScope } from '@/lib/rag/tenant/scope';
 import { extractEnhancedMetadata } from '@/lib/temporal-metadata-extractor';
 import { callsOf, fakeIngestDb, installIngestDeps, uninstallIngestDeps, type RecordedRpc } from '../../helpers/ingest-fakes';
@@ -54,8 +55,9 @@ function pick(record: Record<string, unknown>, keys: readonly string[]): Record<
 }
 
 describe('chunk extractors', () => {
-  test('the registry holds dates and financial only; the invoice extractor belongs to a later plan', () => {
-    expect(Object.keys(EXTRACTORS).sort()).toEqual(['dates', 'financial']);
+  test('the registry holds dates, financial and the document-level invoice extractor', () => {
+    expect(Object.keys(EXTRACTORS).sort()).toEqual(['dates', 'financial', 'invoice']);
+    expect(EXTRACTORS.invoice).toMatchObject({ level: 'document' });
   });
 
   test('dates and financial write exactly the keys storeDocument computes for every fixture corpus chunk text', () => {
@@ -148,6 +150,19 @@ describe('chunk extractors', () => {
   });
 });
 
+/** A sidecar that answers every invoice request with the given body; counts the requests. */
+function fakeSidecarAnswering(body: unknown): { calls: number } {
+  const state = { calls: 0 };
+  setInvoiceClientForTests({
+    fetch: (async () => {
+      state.calls += 1;
+      return new Response(JSON.stringify(body), { status: 200 });
+    }) as typeof fetch,
+    config: () => ({ baseUrl: 'http://sidecar.test', secret: 'test-secret-placeholder-0000000000000000' }),
+  });
+  return state;
+}
+
 describe('extract stage', () => {
   beforeEach(() => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
@@ -156,6 +171,7 @@ describe('extract stage', () => {
 
   afterEach(() => {
     uninstallIngestDeps();
+    setInvoiceClientForTests(null);
     vi.restoreAllMocks();
   });
 
@@ -259,8 +275,9 @@ describe('extract stage', () => {
     expect(docDateWrites(second.calls)).toEqual([]);
   });
 
-  test('no extractor_unavailable warning remains for dates or financial; the invoice extractor stays pending', async () => {
-    const { db } = fakeIngestDb();
+  test('no profile extractor is unavailable any more: invoice_receipt reaches extract and calls the sidecar once', async () => {
+    const sidecar = fakeSidecarAnswering({ confidence: 0, errors: ['no_invoice_labels'] });
+    const { db, calls } = fakeIngestDb();
     installIngestDeps({ db });
 
     const general = await upload(REPORT);
@@ -270,8 +287,13 @@ describe('extract stage', () => {
     expect(general.warnings).not.toContain('extractor_unavailable:dates');
     expect(financial.warnings).not.toContain('extractor_unavailable:dates');
     expect(financial.warnings).not.toContain('extractor_unavailable:financial');
-    // Until 03-29 registers the invoice chunker, invoice_receipt stops at chunk (03-19 decision 4),
-    // so extract never runs; 03-29 restores the extractor_unavailable:invoice assertion here.
-    expect(invoice).toMatchObject({ status: 'failed', reason: 'chunker_unavailable' });
+    expect(invoice.status).toBe('ready');
+    expect(invoice.warnings.filter((warning) => warning.startsWith('extractor_unavailable'))).toEqual([]);
+    expect(sidecar.calls).toBe(1);
+    expect(
+      callsOf(calls, 'rag_set_document_fields')
+        .map((call) => (call.args.p_fields as { metadata?: Record<string, unknown> }).metadata?.invoice_extraction)
+        .filter((value) => value !== undefined),
+    ).toEqual([{ status: 'failed', errors: ['no_invoice_labels'] }]);
   });
 });

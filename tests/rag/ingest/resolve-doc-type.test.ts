@@ -4,7 +4,6 @@ import type { RpcClient, RpcRequest, RpcResponse } from '@/lib/rag/backend/supab
 import { loadIngestConfig, resetIngestConfigForTests } from '@/lib/rag/ingest/config';
 import { ingest } from '@/lib/rag/ingest';
 import { getProcessingProfile, type DocType } from '@/lib/rag/ingest/profiles/load';
-import { CHUNKERS } from '@/lib/rag/ingest/chunkers';
 import { enrichStage } from '@/lib/rag/ingest/stages/enrich';
 import { emptyIngestState, type StageContext } from '@/lib/rag/ingest/types';
 import type { IngestWriter } from '@/lib/rag/ingest/writer';
@@ -385,14 +384,7 @@ describe('identify resolves the type and the profile', () => {
 
   test('auto with an invoice filename stores the detected type, origin auto and metadata.doc_type_detection', async () => {
     const calls = ingestFixture();
-    // 03-19 leaves the invoice chunker unregistered until 03-29; stand in so the run reaches enrich.
-    CHUNKERS.invoice = CHUNKERS.markdown_sections;
-    let result: Awaited<ReturnType<typeof upload>>;
-    try {
-      result = await upload({ docType: 'auto', filename: 'fattura_2025_0042.pdf', sourceKey: 'root/fattura_2025_0042.pdf', mimeType: 'application/pdf', text: INVOICE_TEXT });
-    } finally {
-      delete CHUNKERS.invoice;
-    }
+    const result = await upload({ docType: 'auto', filename: 'fattura_2025_0042.pdf', sourceKey: 'root/fattura_2025_0042.pdf', mimeType: 'application/pdf', text: INVOICE_TEXT });
     expect(result.status).toBe('ready');
     expect(beginArgs(calls)).toMatchObject({
       p_doc_type: 'invoice_receipt',

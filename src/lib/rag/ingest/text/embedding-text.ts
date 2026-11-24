@@ -43,3 +43,16 @@ export function renderTemplateHeader(template: string, row: TemplateRow): string
   }
   return segments.join(' | ');
 }
+
+/**
+ * The header line of a profile's embedding_text_template, rendered from the document columns stored for this version. Empty when the
+ * profile has no header, no columns were stored (an extraction that failed), or the template names a placeholder the row lacks.
+ */
+export function templateHeaderFor(template: { header: string | null } | null | undefined, row: TemplateRow | null | undefined): string {
+  if (!template?.header || !row) return '';
+  try {
+    return renderTemplateHeader(template.header, row);
+  } catch {
+    return '';
+  }
+}

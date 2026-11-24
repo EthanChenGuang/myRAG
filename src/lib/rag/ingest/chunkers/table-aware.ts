@@ -5,14 +5,14 @@ import { chunkSection, splitSections, type MarkdownChunkOptions } from './markdo
 import { splitTableBlocks, type TableBlock } from './markdown-tables';
 
 /** A piece of a section that is packed into chunks as a whole. */
-interface Segment {
+export interface Segment {
   text: string;
   table: boolean;
   /** A piece of a table that had to be split; it keeps its own chunk so it starts with the header. */
   solo: boolean;
 }
 
-function tableSegments(
+export function tableSegments(
   block: TableBlock,
   fits: (_content: string) => boolean,
   repeatHeader: boolean,
@@ -44,6 +44,57 @@ function tableSegments(
   return pieces.map((text) => ({ text, table: true, solo: true }));
 }
 
+/** Chunks the body lines of one section: tables by rows under their header, text as markdown_sections does. */
+export function chunkTableSection(
+  path: string[],
+  lines: readonly string[],
+  options: MarkdownChunkOptions,
+  warnings: Set<string>,
+): ChunkDraft[] {
+  const chunks: ChunkDraft[] = [];
+  const fits = (content: string): boolean =>
+    countTokens(buildEmbeddingText({ section_path: path, content })) <= options.maxTokens;
+
+  const segments: Segment[] = [];
+  for (const block of splitTableBlocks(lines)) {
+    if (block.kind === 'table') {
+      segments.push(...tableSegments(block, fits, options.repeatTableHeader, warnings));
+      continue;
+    }
+    for (const draft of chunkSection(path, block.lines, options)) {
+      segments.push({ text: draft.content, table: false, solo: false });
+    }
+  }
+
+  let current: Segment[] = [];
+  const flush = (): void => {
+    const content = current.map((segment) => segment.text).join('\n\n').trim();
+    if (content !== '') {
+      chunks.push({
+        content,
+        section_path: path.slice(),
+        chunk_kind: current.every((segment) => segment.table) ? 'table' : 'text',
+        page_start: null,
+        page_end: null,
+        metadata: {},
+      });
+    }
+    current = [];
+  };
+  for (const segment of segments) {
+    const last = current[current.length - 1];
+    const mergeable = last !== undefined && !last.solo && !segment.solo && (last.table || segment.table);
+    if (mergeable && fits([...current, segment].map((part) => part.text).join('\n\n'))) {
+      current.push(segment);
+      continue;
+    }
+    flush();
+    current = [segment];
+  }
+  flush();
+  return chunks;
+}
+
 /**
  * Chunks Markdown so that a table row is never cut. A table that fits the budget stays whole and may share a
  * chunk with the paragraphs around it; a larger table is split by rows and every piece starts with the header
@@ -53,49 +104,6 @@ function tableSegments(
 export function chunkTableAware(markdown: string, options: MarkdownChunkOptions): ChunkResult {
   const chunks: ChunkDraft[] = [];
   const warnings = new Set<string>();
-
-  for (const section of splitSections(markdown)) {
-    const path = section.path;
-    const fits = (content: string): boolean =>
-      countTokens(buildEmbeddingText({ section_path: path, content })) <= options.maxTokens;
-
-    const segments: Segment[] = [];
-    for (const block of splitTableBlocks(section.lines)) {
-      if (block.kind === 'table') {
-        segments.push(...tableSegments(block, fits, options.repeatTableHeader, warnings));
-        continue;
-      }
-      for (const draft of chunkSection(path, block.lines, options)) {
-        segments.push({ text: draft.content, table: false, solo: false });
-      }
-    }
-
-    let current: Segment[] = [];
-    const flush = (): void => {
-      const content = current.map((segment) => segment.text).join('\n\n').trim();
-      if (content !== '') {
-        chunks.push({
-          content,
-          section_path: path.slice(),
-          chunk_kind: current.every((segment) => segment.table) ? 'table' : 'text',
-          page_start: null,
-          page_end: null,
-          metadata: {},
-        });
-      }
-      current = [];
-    };
-    for (const segment of segments) {
-      const last = current[current.length - 1];
-      const mergeable = last !== undefined && !last.solo && !segment.solo && (last.table || segment.table);
-      if (mergeable && fits([...current, segment].map((part) => part.text).join('\n\n'))) {
-        current.push(segment);
-        continue;
-      }
-      flush();
-      current = [segment];
-    }
-    flush();
-  }
+  for (const section of splitSections(markdown)) chunks.push(...chunkTableSection(section.path, section.lines, options, warnings));
   return { chunks, warnings: [...warnings] };
 }

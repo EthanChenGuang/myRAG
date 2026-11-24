@@ -77,7 +77,7 @@ def _majority_language(texts: list[str]) -> str | None:
 
 def _table_header(text: str) -> str | None:
     lines = text.splitlines()
-    for index in range(1, min(len(lines), 6)):
+    for index in range(1, len(lines)):
         if lines[index - 1].startswith("|") and _SEPARATOR_ROW.match(lines[index]):
             return "\n".join(lines[index - 1 : index + 1])
     return None

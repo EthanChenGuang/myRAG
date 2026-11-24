@@ -3,6 +3,7 @@ import { ingest } from '@/lib/rag/ingest';
 import { loadIngestConfig } from '@/lib/rag/ingest/config';
 import { getIngestDeps } from '@/lib/rag/ingest/deps';
 import { contentHash } from '@/lib/rag/ingest/hash';
+import { setInvoiceClientForTests } from '@/lib/rag/ingest/invoice-client';
 import { INGEST_STAGES, runIngestStages } from '@/lib/rag/ingest/runner';
 import { identifyStage } from '@/lib/rag/ingest/stages/identify';
 import { scanInjectionStage } from '@/lib/rag/ingest/stages/scan-injection';
@@ -375,9 +376,17 @@ describe('registered stages and their switched-off behaviour', () => {
     expect(languageWrites.map((fields) => fields.language)).toEqual(['en']);
   });
 
-  test('extract records extractor_unavailable only for profile extractors without an implementation and leaves urls to enrich', async () => {
+  test('every extractor a profile lists has an implementation: invoice_receipt reaches extract and calls the sidecar, and urls is left to enrich', async () => {
     const { db } = fakeIngestDb();
     installIngestDeps({ db });
+    let sidecarCalls = 0;
+    setInvoiceClientForTests({
+      fetch: (async () => {
+        sidecarCalls += 1;
+        return new Response(JSON.stringify({ confidence: 0, errors: ['no_invoice_labels'] }), { status: 200 });
+      }) as typeof fetch,
+      config: () => ({ baseUrl: 'http://sidecar.test', secret: 'test-secret-placeholder-0000000000000000' }),
+    });
 
     const general = await upload();
     const financial = await upload({ docType: 'financial_report', sourceKey: 'root/report.md' });
@@ -385,9 +394,10 @@ describe('registered stages and their switched-off behaviour', () => {
 
     expect(general.warnings.filter((warning) => warning.startsWith('extractor_unavailable'))).toEqual([]);
     expect(financial.warnings.filter((warning) => warning.startsWith('extractor_unavailable'))).toEqual([]);
-    // Until 03-29 registers the invoice chunker, invoice_receipt stops at chunk (03-19 decision 4),
-    // so extract never runs; 03-29 restores the extractor_unavailable:invoice assertion here.
-    expect(invoice).toMatchObject({ status: 'failed', reason: 'chunker_unavailable' });
+    expect(invoice.status).toBe('ready');
+    expect(invoice.warnings.filter((warning) => warning.startsWith('extractor_unavailable'))).toEqual([]);
+    expect(sidecarCalls).toBe(1);
+    setInvoiceClientForTests(null);
   });
 
   test('store_original keeps the original in the object store and records its key in original_path', async () => {
