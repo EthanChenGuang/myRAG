@@ -475,6 +475,7 @@ def test_sweep_cli_rejects_a_grid_value_outside_the_params_contract(tmp_path: Pa
     assert "pool" in capsys.readouterr().err
 
 
+@pytest.mark.harness_integration
 @pytest.mark.skipif(
     shutil.which("npx") is None or not (REPO_ROOT / "node_modules" / ".bin" / "tsx").exists(),
     reason="needs node and the repository node_modules",
