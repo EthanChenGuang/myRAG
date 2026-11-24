@@ -1,0 +1,246 @@
+{
+  "fixture_id": "table-en",
+  "headings": [
+    {
+      "level": 1,
+      "page": 1,
+      "text": "Quarterly parts list"
+    },
+    {
+      "level": 2,
+      "page": 2,
+      "text": "Inventory"
+    }
+  ],
+  "language": "en",
+  "pages": [
+    {
+      "page": 1,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 2,
+      "preset": "structured_full",
+      "signals": [
+        "tables"
+      ],
+      "tier": "structured"
+    }
+  ],
+  "reading_order": [
+    {
+      "order": 0,
+      "page": 1,
+      "text": "Quarterly parts list"
+    },
+    {
+      "order": 1,
+      "page": 1,
+      "text": "The table on page two exercises structured_full tier scoring."
+    },
+    {
+      "order": 2,
+      "page": 2,
+      "text": "Inventory"
+    }
+  ],
+  "table_cells": [
+    {
+      "col": 0,
+      "row": 0,
+      "text": "Item"
+    },
+    {
+      "col": 1,
+      "row": 0,
+      "text": "Qty"
+    },
+    {
+      "col": 2,
+      "row": 0,
+      "text": "Unit"
+    },
+    {
+      "col": 0,
+      "row": 1,
+      "text": "Row-01"
+    },
+    {
+      "col": 1,
+      "row": 1,
+      "text": "1"
+    },
+    {
+      "col": 2,
+      "row": 1,
+      "text": "2.50"
+    },
+    {
+      "col": 0,
+      "row": 2,
+      "text": "Row-02"
+    },
+    {
+      "col": 1,
+      "row": 2,
+      "text": "2"
+    },
+    {
+      "col": 2,
+      "row": 2,
+      "text": "4.50"
+    },
+    {
+      "col": 0,
+      "row": 3,
+      "text": "Row-03"
+    },
+    {
+      "col": 1,
+      "row": 3,
+      "text": "3"
+    },
+    {
+      "col": 2,
+      "row": 3,
+      "text": "6.50"
+    },
+    {
+      "col": 0,
+      "row": 4,
+      "text": "Row-04"
+    },
+    {
+      "col": 1,
+      "row": 4,
+      "text": "4"
+    },
+    {
+      "col": 2,
+      "row": 4,
+      "text": "8.50"
+    },
+    {
+      "col": 0,
+      "row": 5,
+      "text": "Row-05"
+    },
+    {
+      "col": 1,
+      "row": 5,
+      "text": "5"
+    },
+    {
+      "col": 2,
+      "row": 5,
+      "text": "10.50"
+    },
+    {
+      "col": 0,
+      "row": 6,
+      "text": "Row-06"
+    },
+    {
+      "col": 1,
+      "row": 6,
+      "text": "6"
+    },
+    {
+      "col": 2,
+      "row": 6,
+      "text": "12.50"
+    },
+    {
+      "col": 0,
+      "row": 7,
+      "text": "Row-07"
+    },
+    {
+      "col": 1,
+      "row": 7,
+      "text": "7"
+    },
+    {
+      "col": 2,
+      "row": 7,
+      "text": "14.50"
+    },
+    {
+      "col": 0,
+      "row": 8,
+      "text": "Row-08"
+    },
+    {
+      "col": 1,
+      "row": 8,
+      "text": "8"
+    },
+    {
+      "col": 2,
+      "row": 8,
+      "text": "16.50"
+    },
+    {
+      "col": 0,
+      "row": 9,
+      "text": "Row-09"
+    },
+    {
+      "col": 1,
+      "row": 9,
+      "text": "9"
+    },
+    {
+      "col": 2,
+      "row": 9,
+      "text": "18.50"
+    },
+    {
+      "col": 0,
+      "row": 10,
+      "text": "Row-10"
+    },
+    {
+      "col": 1,
+      "row": 10,
+      "text": "10"
+    },
+    {
+      "col": 2,
+      "row": 10,
+      "text": "20.50"
+    },
+    {
+      "col": 0,
+      "row": 11,
+      "text": "Row-11"
+    },
+    {
+      "col": 1,
+      "row": 11,
+      "text": "11"
+    },
+    {
+      "col": 2,
+      "row": 11,
+      "text": "22.50"
+    },
+    {
+      "col": 0,
+      "row": 12,
+      "text": "Row-12"
+    },
+    {
+      "col": 1,
+      "row": 12,
+      "text": "12"
+    },
+    {
+      "col": 2,
+      "row": 12,
+      "text": "24.50"
+    }
+  ]
+}

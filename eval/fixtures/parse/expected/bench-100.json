@@ -1,0 +1,676 @@
+{
+  "fixture_id": "bench-100",
+  "headings": [],
+  "language": "en",
+  "pages": [
+    {
+      "page": 1,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 2,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 3,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 4,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 5,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 6,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 7,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 8,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 9,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 10,
+      "preset": "structured_full",
+      "signals": [
+        "tables"
+      ],
+      "tier": "structured"
+    },
+    {
+      "page": 11,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 12,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 13,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 14,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 15,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 16,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 17,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 18,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 19,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 20,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 21,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 22,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 23,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 24,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 25,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 26,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 27,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 28,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 29,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 30,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 31,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 32,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 33,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 34,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 35,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 36,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 37,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 38,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 39,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 40,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 41,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 42,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 43,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 44,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 45,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 46,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 47,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 48,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 49,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 50,
+      "preset": "structured_full",
+      "signals": [
+        "tables"
+      ],
+      "tier": "structured"
+    },
+    {
+      "page": 51,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 52,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 53,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 54,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 55,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 56,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 57,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 58,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 59,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 60,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 61,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 62,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 63,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 64,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 65,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 66,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 67,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 68,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 69,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 70,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 71,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 72,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 73,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 74,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 75,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 76,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 77,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 78,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 79,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 80,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 81,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 82,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 83,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 84,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 85,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 86,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 87,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 88,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 89,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 90,
+      "preset": "structured_full",
+      "signals": [
+        "tables"
+      ],
+      "tier": "structured"
+    },
+    {
+      "page": 91,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 92,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 93,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 94,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 95,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 96,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 97,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 98,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 99,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 100,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    }
+  ],
+  "reading_order": [],
+  "table_cells": [
+    {
+      "col": 0,
+      "row": 0,
+      "text": "Metric"
+    },
+    {
+      "col": 1,
+      "row": 0,
+      "text": "Value"
+    },
+    {
+      "col": 0,
+      "row": 1,
+      "text": "Page"
+    },
+    {
+      "col": 1,
+      "row": 1,
+      "text": "42"
+    },
+    {
+      "col": 0,
+      "row": 0,
+      "text": "Metric"
+    },
+    {
+      "col": 1,
+      "row": 0,
+      "text": "Value"
+    },
+    {
+      "col": 0,
+      "row": 1,
+      "text": "Page"
+    },
+    {
+      "col": 1,
+      "row": 1,
+      "text": "42"
+    },
+    {
+      "col": 0,
+      "row": 0,
+      "text": "Metric"
+    },
+    {
+      "col": 1,
+      "row": 0,
+      "text": "Value"
+    },
+    {
+      "col": 0,
+      "row": 1,
+      "text": "Page"
+    },
+    {
+      "col": 1,
+      "row": 1,
+      "text": "42"
+    }
+  ]
+}

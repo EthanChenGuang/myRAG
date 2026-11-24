@@ -1,0 +1,194 @@
+%PDF-1.4
+%“Œ‹ž ReportLab Generated PDF document (opensource)
+1 0 obj
+<<
+/F1 2 0 R /F2 3 0 R
+>>
+endobj
+2 0 obj
+<<
+/BaseFont /Helvetica /Encoding /WinAnsiEncoding /Name /F1 /Subtype /Type1 /Type /Font
+>>
+endobj
+3 0 obj
+<<
+/BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding /Name /F2 /Subtype /Type1 /Type /Font
+>>
+endobj
+4 0 obj
+<<
+/Contents 8 0 R /MediaBox [ 0 0 595.28 841.89 ] /Parent 7 0 R /Resources <<
+/Font 1 0 R /ProcSet [ /PDF /Text /ImageB /ImageC /ImageI ]
+>> /Rotate 0 /Trans <<
+
+>> 
+  /Type /Page
+>>
+endobj
+5 0 obj
+<<
+/PageMode /UseNone /Pages 7 0 R /Type /Catalog
+>>
+endobj
+6 0 obj
+<<
+/Author (anonymous) /CreationDate (D:20000101000000+00'00') /Creator (anonymous) /Keywords () /ModDate (D:20000101000000+00'00') /Producer (ReportLab PDF Library - \(opensource\)) 
+  /Subject (unspecified) /Title (invoice-en) /Trapped /False
+>>
+endobj
+7 0 obj
+<<
+/Count 1 /Kids [ 4 0 R ] /Type /Pages
+>>
+endobj
+8 0 obj
+<<
+/Length 2406
+>>
+stream
+1 0 0 1 0 0 cm  BT /F1 12 Tf 14.4 TL ET
+q
+1 0 0 1 56.7 745.89 cm
+q
+0 0 0 rg
+BT 1 0 0 1 0 6 Tm /F2 20 Tf 26 TL (Invoice) Tj T* ET
+Q
+Q
+q
+1 0 0 1 56.7 726.39 cm
+q
+0 0 0 rg
+BT 1 0 0 1 0 5 Tm /F1 10.5 Tf 15.5 TL (Invoice No.: INV-2025-00418) Tj T* ET
+Q
+Q
+q
+1 0 0 1 56.7 704.89 cm
+q
+0 0 0 rg
+BT 1 0 0 1 0 5 Tm /F1 10.5 Tf 15.5 TL (Invoice date: 2025-03-15) Tj T* ET
+Q
+Q
+q
+1 0 0 1 56.7 683.39 cm
+q
+0 0 0 rg
+BT 1 0 0 1 0 5 Tm /F1 10.5 Tf 15.5 TL (Due date: 2025-04-14) Tj T* ET
+Q
+Q
+q
+1 0 0 1 56.7 661.89 cm
+q
+0 0 0 rg
+BT 1 0 0 1 0 5 Tm /F1 10.5 Tf 15.5 TL (Supplier: Example Supplier Ltd) Tj T* ET
+Q
+Q
+q
+1 0 0 1 56.7 640.39 cm
+q
+0 0 0 rg
+BT 1 0 0 1 0 5 Tm /F1 10.5 Tf 15.5 TL (VAT No.: BE0000000097) Tj T* ET
+Q
+Q
+q
+1 0 0 1 56.7 618.89 cm
+q
+0 0 0 rg
+BT 1 0 0 1 0 5 Tm /F1 10.5 Tf 15.5 TL (Bill to: Example Buyer GmbH) Tj T* ET
+Q
+Q
+q
+1 0 0 1 56.7 597.39 cm
+q
+0 0 0 rg
+BT 1 0 0 1 0 5 Tm /F1 10.5 Tf 15.5 TL (VAT No.: FR00000000093) Tj T* ET
+Q
+Q
+q
+1 0 0 1 56.7 535.19 cm
+q
+.901961 .901961 .901961 rg
+n 0 52.2 481.88 -17.4 re f*
+0 0 0 rg
+BT /F2 9.5 Tf 11.4 TL ET
+BT 1 0 0 1 6 39.7 Tm (Description) Tj T* ET
+BT 1 0 0 1 163.7062 39.7 Tm (Qty) Tj T* ET
+BT 1 0 0 1 225.0364 39.7 Tm (Unit price) Tj T* ET
+BT 1 0 0 1 338.9353 39.7 Tm (Amount) Tj T* ET
+BT 1 0 0 1 417.7884 39.7 Tm (VAT %) Tj T* ET
+BT /F1 9.5 Tf 11.4 TL ET
+BT 1 0 0 1 6 22.3 Tm (Thermal probe) Tj T* ET
+BT 1 0 0 1 163.7062 22.3 Tm (8) Tj T* ET
+BT 1 0 0 1 225.0364 22.3 Tm (100.00) Tj T* ET
+BT 1 0 0 1 338.9353 22.3 Tm (800.00) Tj T* ET
+BT 1 0 0 1 417.7884 22.3 Tm (20%) Tj T* ET
+BT 1 0 0 1 6 4.9 Tm (Probe cable 5 m) Tj T* ET
+BT 1 0 0 1 163.7062 4.9 Tm (4) Tj T* ET
+BT 1 0 0 1 225.0364 4.9 Tm (50.00) Tj T* ET
+BT 1 0 0 1 338.9353 4.9 Tm (200.00) Tj T* ET
+BT 1 0 0 1 417.7884 4.9 Tm (20%) Tj T* ET
+q
+1 J
+1 j
+.501961 .501961 .501961 RG
+.5 w
+n 0 52.2 m 481.88 52.2 l S
+n 0 0 m 481.88 0 l S
+n 0 0 m 0 52.2 l S
+n 481.88 0 m 481.88 52.2 l S
+n 0 34.8 m 481.88 34.8 l S
+n 0 17.4 m 481.88 17.4 l S
+n 157.7062 0 m 157.7062 52.2 l S
+n 219.0364 0 m 219.0364 52.2 l S
+n 332.9353 0 m 332.9353 52.2 l S
+n 411.7884 0 m 411.7884 52.2 l S
+Q
+Q
+Q
+q
+1 0 0 1 56.7 509.69 cm
+q
+0 0 0 rg
+BT 1 0 0 1 0 5 Tm /F1 10.5 Tf 15.5 TL (Subtotal: EUR 1,000.00) Tj T* ET
+Q
+Q
+q
+1 0 0 1 56.7 488.19 cm
+q
+0 0 0 rg
+BT 1 0 0 1 0 5 Tm /F1 10.5 Tf 15.5 TL (VAT 20 %: EUR 200.00) Tj T* ET
+Q
+Q
+q
+1 0 0 1 56.7 466.69 cm
+q
+0 0 0 rg
+BT 1 0 0 1 0 5 Tm /F1 10.5 Tf 15.5 TL (Total: EUR 1,200.00) Tj T* ET
+Q
+Q
+ 
+endstream
+endobj
+xref
+0 9
+0000000000 65535 f 
+0000000061 00000 n 
+0000000102 00000 n 
+0000000209 00000 n 
+0000000321 00000 n 
+0000000520 00000 n 
+0000000588 00000 n 
+0000000851 00000 n 
+0000000910 00000 n 
+trailer
+<<
+/ID 
+[<18d68523d856c33acf0c009a1326fac8><18d68523d856c33acf0c009a1326fac8>]
+% ReportLab generated PDF document -- digest (opensource)
+
+/Info 6 0 R
+/Root 5 0 R
+/Size 9
+>>
+startxref
+3367
+%%EOF
