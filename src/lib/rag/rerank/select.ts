@@ -15,12 +15,9 @@ export interface ResolveRerankerResult {
   reason?: ResolveRerankerReason;
 }
 
-type RerankerFactory = (
-  provider: RerankerKind,
-  model: string,
-  env: RagEnvInput,
-  fetch: typeof fetch,
-) => Reranker | null;
+type FetchFn = typeof globalThis.fetch;
+
+type RerankerFactory = (provider: RerankerKind, model: string, env: RagEnvInput, fetchImpl: FetchFn) => Reranker | null;
 
 let customFactory: RerankerFactory | null = null;
 const warnedMissingKeys = new Set<string>();
@@ -70,12 +67,7 @@ function resolveModel(
   return null;
 }
 
-function defaultFactory(
-  provider: RerankerKind,
-  model: string,
-  env: RagEnvInput,
-  fetch: typeof fetch,
-): Reranker | null {
+function defaultFactory(provider: RerankerKind, model: string, env: RagEnvInput, fetchImpl: FetchFn): Reranker | null {
   if (provider === 'local_bm25') {
     return createLocalBm25Reranker();
   }
@@ -83,7 +75,7 @@ function defaultFactory(
     const apiKey = (env.COHERE_API_KEY ?? '').trim();
     if (!apiKey) return null;
     return createCohereReranker({
-      fetch,
+      fetch: fetchImpl,
       apiKey,
       baseUrl: env.COHERE_BASE_URL ?? '',
       model,
@@ -93,7 +85,7 @@ function defaultFactory(
     const apiKey = (env.VOYAGE_API_KEY ?? '').trim();
     if (!apiKey) return null;
     return createVoyageReranker({
-      fetch,
+      fetch: fetchImpl,
       apiKey,
       baseUrl: env.VOYAGE_BASE_URL ?? '',
       model,
@@ -117,7 +109,7 @@ export function resolveReranker(
   queryLanguage: string,
   overrides: RetrievalOverrides | undefined,
   env: RagEnvInput,
-  fetch: typeof fetch,
+  fetchImpl: FetchFn,
 ): ResolveRerankerResult {
   const provider = effectiveProvider(profile, config, overrides);
   const tier = resolveTier(profile, config, overrides);
@@ -141,6 +133,6 @@ export function resolveReranker(
   }
 
   const factory = customFactory ?? defaultFactory;
-  const reranker = factory(provider, model, env, fetch);
+  const reranker = factory(provider, model, env, fetchImpl);
   return { reranker, provider, model, tier };
 }
