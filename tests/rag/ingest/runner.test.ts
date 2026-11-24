@@ -18,6 +18,7 @@ import { lexicalText } from '@/lib/rag/lexical/tokenize';
 import { mintScope } from '@/lib/rag/tenant/scope';
 import {
   FAKE_DOCUMENT_ID,
+  FAKE_LINEAGE_ID,
   callsOf,
   fakeIngestDb,
   installIngestDeps,
@@ -120,7 +121,7 @@ function allRecordingStages(order: string[], overrides: Partial<Record<StageName
       return recordingStage(name, order, {
         ...overrides[name],
         run: async (ctx) => {
-          ctx.document = { id: FAKE_DOCUMENT_ID, version: 1, resumed: false };
+          ctx.document = { id: FAKE_DOCUMENT_ID, version: 1, lineageId: FAKE_LINEAGE_ID, resumed: false };
           await overrides[name]?.run?.(ctx);
         },
       });
@@ -240,7 +241,7 @@ describe('runner: ordered stages, deadline, state and resume', () => {
     installIngestDeps({ db });
     const order: string[] = [];
     const ctx = makeCtx();
-    ctx.document = { id: FAKE_DOCUMENT_ID, version: 1, resumed: true };
+    ctx.document = { id: FAKE_DOCUMENT_ID, version: 1, lineageId: FAKE_LINEAGE_ID, resumed: true };
     ctx.state.lastCompleted = 'chunk';
 
     const result = await runIngestStages(ctx, allRecordingStages(order));
@@ -264,7 +265,7 @@ describe('runner: ordered stages, deadline, state and resume', () => {
       installIngestDeps({ db });
       const ctx = makeCtx();
       await identifyStage.run(ctx);
-      ctx.document = { id: FAKE_DOCUMENT_ID, version: 1, resumed: true };
+      ctx.document = { id: FAKE_DOCUMENT_ID, version: 1, lineageId: FAKE_LINEAGE_ID, resumed: true };
       ctx.parserUsed = 'text';
       ctx.work.parseText = MARKDOWN;
       ctx.work.chunks = drafts.map((draft) => ({ ...draft, metadata: { ...draft.metadata } }));

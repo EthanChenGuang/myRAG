@@ -24,8 +24,12 @@ describe('rag-originals bucket migration', () => {
       try {
         const buckets = await rowsOf(fixture.db, "SELECT id, name, public, file_size_limit::bigint::text AS file_size_limit FROM storage.buckets WHERE id = 'rag-originals'");
         assert.deepEqual(buckets, [{ id: 'rag-originals', name: 'rag-originals', public: false, file_size_limit: '20971520' }]);
-        const policies = await rowsOf(fixture.db, "SELECT policyname FROM pg_policies WHERE schemaname = 'storage'");
-        assert.deepEqual(policies, [], 'no policy on storage.objects: only the service key reaches the bucket');
+        const reaching = await rowsOf(
+          fixture.db,
+          `SELECT policyname FROM pg_policies WHERE schemaname = 'storage' AND tablename = 'objects'
+             AND (COALESCE(qual, '') || COALESCE(with_check, '') LIKE '%rag-originals%' OR COALESCE(qual, '') || COALESCE(with_check, '') NOT LIKE '%bucket_id%')`,
+        );
+        assert.deepEqual(reaching, [], 'no policy on storage.objects names the bucket or covers every bucket: only the service key reaches it');
       } finally {
         await fixture.db.close();
       }
@@ -46,7 +50,7 @@ describe('rag-originals bucket migration', () => {
   }
 });
 
-describe('rag_get_ingest_document carries what a rehydrator needs, for its own tenant only', () => {
+describe('rag_get_ingest_origin returns what a rehydrator needs, for its own tenant only', () => {
   let fixture: TwoTenantDatabase;
   let documentA: string;
   let lineageA: string;
@@ -76,27 +80,20 @@ describe('rag_get_ingest_document carries what a rehydrator needs, for its own t
     await fixture?.db.close();
   });
 
-  test('the owner reads lineage id, original path, source and source key next to the existing columns', async () => {
-    const [row] = await rowsOf(fixture.db, 'SELECT * FROM rag_get_ingest_document(p_document_id => $1, p_tenant_key => $2)', [documentA, tenantA]);
-    assert.ok(row, 'the owner finds the document');
-    assert.equal(row.lineage_id, lineageA);
-    assert.equal(row.original_path, ORIGINAL_PATH(lineageA));
-    assert.equal(row.source, 'nango');
-    assert.equal(row.source_key, 'drive/folder/handbook.md');
-    assert.equal(row.filename, '合同.md');
-    assert.equal(row.status, 'processing');
-    assert.equal(row.version, 1);
-    for (const column of ['processing_status', 'processing_state', 'doc_type', 'parser_used', 'created_at']) {
-      assert.ok(column in row, `${column} is still returned`);
-    }
+  test('the owner reads lineage id, original path, source and source key', async () => {
+    const rows = await rowsOf(fixture.db, 'SELECT * FROM rag_get_ingest_origin(p_document_id => $1, p_tenant_key => $2)', [documentA, tenantA]);
+    assert.deepEqual(rows, [{ lineage_id: lineageA, original_path: ORIGINAL_PATH(lineageA), source: 'nango', source_key: 'drive/folder/handbook.md' }]);
+    const [document] = await rowsOf(fixture.db, 'SELECT * FROM rag_get_ingest_document(p_document_id => $1, p_tenant_key => $2)', [documentA, tenantA]);
+    assert.equal(document?.filename, '合同.md');
+    assert.equal('original_path' in (document ?? {}), false, 'the 0310 function keeps its result columns, so 0310 can be applied again');
   });
 
   test('another tenant gets no row for the same id, so neither the path nor the lineage leaks', async () => {
-    const foreign = await rowsOf(fixture.db, 'SELECT * FROM rag_get_ingest_document(p_document_id => $1, p_tenant_key => $2)', [documentA, tenantB]);
+    const foreign = await rowsOf(fixture.db, 'SELECT * FROM rag_get_ingest_origin(p_document_id => $1, p_tenant_key => $2)', [documentA, tenantB]);
     assert.deepEqual(foreign, []);
-    const org = await rowsOf(fixture.db, 'SELECT * FROM rag_get_ingest_document(p_document_id => $1, p_tenant_key => $2)', [documentA, `o:${TWO_TENANT_IDS.orgO}`]);
+    const org = await rowsOf(fixture.db, 'SELECT * FROM rag_get_ingest_origin(p_document_id => $1, p_tenant_key => $2)', [documentA, `o:${TWO_TENANT_IDS.orgO}`]);
     assert.deepEqual(org, []);
-    const unknown = await rowsOf(fixture.db, 'SELECT * FROM rag_get_ingest_document(p_document_id => $1, p_tenant_key => $2)', [
+    const unknown = await rowsOf(fixture.db, 'SELECT * FROM rag_get_ingest_origin(p_document_id => $1, p_tenant_key => $2)', [
       '00000000-0000-4000-8000-0000000000aa',
       tenantA,
     ]);
@@ -106,7 +103,7 @@ describe('rag_get_ingest_document carries what a rehydrator needs, for its own t
   test('the function is still executable by service_role only', async () => {
     const privileges = await rowsOf(
       fixture.db,
-      `SELECT r AS role, has_function_privilege(r, 'rag_get_ingest_document(uuid, text)', 'EXECUTE') AS can_execute
+      `SELECT r AS role, has_function_privilege(r, 'rag_get_ingest_origin(uuid, text)', 'EXECUTE') AS can_execute
        FROM unnest(ARRAY['anon', 'authenticated', 'service_role']) AS r ORDER BY r`,
     );
     assert.deepEqual(privileges, [
@@ -123,9 +120,9 @@ describe('rag_get_ingest_document carries what a rehydrator needs, for its own t
   });
 
   test('applying the migration a second time changes nothing the function returns', async () => {
-    const before = await rowsOf(fixture.db, 'SELECT * FROM rag_get_ingest_document(p_document_id => $1, p_tenant_key => $2)', [documentA, tenantA]);
+    const before = await rowsOf(fixture.db, 'SELECT * FROM rag_get_ingest_origin(p_document_id => $1, p_tenant_key => $2)', [documentA, tenantA]);
     await applyMigrationFiles(fixture.db, [MIGRATION]);
-    const after = await rowsOf(fixture.db, 'SELECT * FROM rag_get_ingest_document(p_document_id => $1, p_tenant_key => $2)', [documentA, tenantA]);
+    const after = await rowsOf(fixture.db, 'SELECT * FROM rag_get_ingest_origin(p_document_id => $1, p_tenant_key => $2)', [documentA, tenantA]);
     assert.deepEqual(after, before);
   });
 });

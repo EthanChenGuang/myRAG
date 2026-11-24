@@ -118,12 +118,22 @@ export interface IngestDocumentRow {
   createdAt: string;
 }
 
+export interface IngestOriginRow {
+  lineageId: string | null;
+  /** The object key of the stored original (documents.original_path), without the bucket name. */
+  originalPath: string | null;
+  source: string | null;
+  sourceKey: string | null;
+}
+
 export interface IngestWriter {
   begin(args: BeginArgs): Promise<BeginResult>;
   findContentDuplicate(contentHash: string, documentId: string | null): Promise<string | null>;
   setFields(documentId: string, fields: DocumentFields): Promise<void>;
   saveState(documentId: string, processingStatus: string, state: Record<string, unknown>): Promise<void>;
   getDocument(documentId: string): Promise<IngestDocumentRow | null>;
+  /** Where the version came from and where its original is stored; null for another tenant's or an unknown id. */
+  getOrigin(documentId: string): Promise<IngestOriginRow | null>;
   writeChunks(documentId: string, chunks: ChunkWrite[], options: WriteChunksOptions): Promise<WriteChunksResult>;
   publish(documentId: string): Promise<PublishResult>;
   markFailed(documentId: string, reason: string): Promise<void>;
@@ -263,6 +273,21 @@ export function createIngestWriter(input: CreateIngestWriterInput): IngestWriter
         docType: text(row, 'doc_type') ?? '',
         parserUsed: text(row, 'parser_used'),
         createdAt: text(row, 'created_at') ?? '',
+      };
+    },
+
+    async getOrigin(documentId) {
+      const rows = await call('rag_get_ingest_origin', {
+        p_document_id: documentId,
+        p_tenant_key: identity().tenantKey,
+      });
+      const row = rows[0];
+      if (!row) return null;
+      return {
+        lineageId: text(row, 'lineage_id'),
+        originalPath: text(row, 'original_path'),
+        source: text(row, 'source'),
+        sourceKey: text(row, 'source_key'),
       };
     },
 

@@ -6,14 +6,16 @@ import { INGEST_STAGES, REGISTERED_STAGES, nextStageAfter, runIngestStages } fro
 import { createIngestTrace, finishIngestTrace } from './trace';
 import {
   DEFAULT_INGEST_DEADLINE_MS,
+  INGEST_SOURCES,
   emptyIngestState,
   type DocTypeOrigin,
   type IngestResult,
+  type IngestSource,
   type IngestState,
   type StageContext,
   type StageName,
 } from './types';
-import { IngestWriterError, createIngestWriter, type IngestDocumentRow, type IngestWriter } from './writer';
+import { IngestWriterError, createIngestWriter, type IngestDocumentRow, type IngestOriginRow, type IngestWriter } from './writer';
 
 export interface IngestStatusView {
   status: string;
@@ -130,11 +132,16 @@ function profileOf(docType: string, warnings: string[]): { docType: DocType; pro
   }
 }
 
+function sourceOf(value: string | null): IngestSource {
+  return INGEST_SOURCES.find((source) => source === value) ?? 'config_upload';
+}
+
 /** A resumed run carries no upload: stages after file_hash_dedup read the document row and the rebuilt work, never the input. */
 function resumeContext(
   scope: TenantScope,
   documentId: string,
   row: IngestDocumentRow,
+  origin: IngestOriginRow | null,
   state: IngestState,
   writer: IngestWriter,
   signal: AbortSignal,
@@ -144,7 +151,7 @@ function resumeContext(
   const warnings: string[] = [];
   const { docType, profile } = profileOf(row.docType, warnings);
   return {
-    input: { scope, source: 'config_upload', sourceKey: '', filename: row.filename, mimeType: '', text: '', signal },
+    input: { scope, source: sourceOf(origin?.source ?? null), sourceKey: origin?.sourceKey ?? '', filename: row.filename, mimeType: '', text: '', signal },
     deps,
     writer,
     config: loadIngestConfig(deps.ingestEnv()),
@@ -161,7 +168,7 @@ function resumeContext(
       profile,
       bytes: null,
     },
-    document: { id: documentId, version: row.version, resumed: true },
+    document: { id: documentId, version: row.version, lineageId: origin?.lineageId ?? '', resumed: true },
     parserUsed: row.parserUsed,
     work: { parseText: null, parserVersion: null, chunks: [], chunksWritten: 0 },
   };
@@ -215,7 +222,17 @@ export async function resumeIngest(scope: TenantScope, documentId: string, optio
   });
   if (nextStageAfter(state.lastCompleted) === null || state.lastCompleted === null) return processing('resume_state_missing');
 
-  const ctx = resumeContext(scope, documentId, row, state, writer, signal, options.deadlineMs ?? DEFAULT_INGEST_DEADLINE_MS);
+  let origin: IngestOriginRow | null;
+  try {
+    origin = await writer.getOrigin(documentId);
+  } catch (error) {
+    console.error('[Ingest] resume lookup failed', {
+      error: error instanceof Error ? error.name : 'unknown',
+      ...(error instanceof IngestWriterError ? { rpc: error.rpc, code: error.code } : {}),
+    });
+    return failed('resume_lookup_failed');
+  }
+  const ctx = resumeContext(scope, documentId, row, origin, state, writer, signal, options.deadlineMs ?? DEFAULT_INGEST_DEADLINE_MS);
   const rehydrate = ctx.deps.rehydrate;
   if (!rehydrate) return processing('resume_input_unavailable');
   try {

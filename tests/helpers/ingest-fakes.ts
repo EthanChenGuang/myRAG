@@ -24,9 +24,18 @@ export interface FakeIngestDocumentRow {
   created_at: string;
 }
 
+export interface FakeIngestOriginRow {
+  lineage_id: string | null;
+  original_path: string | null;
+  source: string | null;
+  source_key: string | null;
+}
+
 export interface FakeIngestDbOptions {
   /** Row answered by rag_get_ingest_document; null answers no row, as another tenant's id does. */
   document?: FakeIngestDocumentRow | null;
+  /** Row answered by rag_get_ingest_origin; absent answers no row. */
+  origin?: FakeIngestOriginRow | null;
   documentId?: string;
   failures?: Record<string, { code: string; message: string }>;
   /** Runs after a call is recorded and before it is answered. */
@@ -46,6 +55,8 @@ function answer(fn: string, args: Record<string, unknown>, options: FakeIngestDb
       return [{ document_id: args.p_document_id, processing_status: args.p_processing_status }];
     case 'rag_get_ingest_document':
       return options.document ? [options.document as unknown as Row] : [];
+    case 'rag_get_ingest_origin':
+      return options.origin ? [options.origin as unknown as Row] : [];
     case 'rag_write_chunks':
       return [{ chunks_written: (args.p_chunks as unknown[]).length, chunks_deleted: 0 }];
     case 'rag_publish_document_version':

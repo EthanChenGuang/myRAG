@@ -121,6 +121,8 @@ export interface IngestIdentity {
 export interface IngestDocumentRef {
   id: string;
   version: number;
+  /** The identity's lineage: the middle part of every object key of this version. */
+  lineageId: string;
   resumed: boolean;
 }
 

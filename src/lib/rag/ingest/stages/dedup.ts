@@ -33,7 +33,7 @@ async function runFileHashDedup(ctx: StageContext): Promise<StageOutcome> {
       },
     };
   }
-  ctx.document = { id: begun.documentId, version: begun.version, resumed: begun.outcome === 'resumed' };
+  ctx.document = { id: begun.documentId, version: begun.version, lineageId: begun.lineageId, resumed: begun.outcome === 'resumed' };
   return { kind: 'next' };
 }
 
