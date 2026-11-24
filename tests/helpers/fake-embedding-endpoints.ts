@@ -18,6 +18,7 @@ export interface FakeEmbeddingEndpoints {
   callsFor(host: FakeEmbeddingHost): FakeEmbeddingCall[];
   /** The next requests to this host answer with these HTTP statuses (one per request, in order). */
   failNext(host: FakeEmbeddingHost, ...statuses: number[]): void;
+  clearFailures(): void;
   /** Every request to this host waits this long before answering. */
   setDelay(host: FakeEmbeddingHost, ms: number): void;
   /** Component count the Qwen endpoints return (default 4096, the model's native size). */
@@ -131,6 +132,9 @@ export async function startFakeEmbeddingEndpoints(): Promise<FakeEmbeddingEndpoi
     callsFor: (host) => calls.filter((call) => call.host === host),
     failNext: (host, ...statuses) => {
       failures[host].push(...statuses);
+    },
+    clearFailures: () => {
+      for (const queue of Object.values(failures)) queue.length = 0;
     },
     setDelay: (host, ms) => {
       delays[host] = ms;

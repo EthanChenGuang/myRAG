@@ -23,6 +23,7 @@ afterAll(async () => {
 
 afterEach(() => {
   fake.calls.length = 0;
+  fake.clearFailures();
   fake.setDelay('voyage', 0);
   fake.setDelay('deepinfra', 0);
   fake.setDelay('openrouter', 0);
@@ -263,25 +264,25 @@ describe('Qwen3 provider', () => {
     expect(fake.calls).toHaveLength(0);
   });
 
-  it('keeps both keys out of the errors thrown when both hosts fail', async () => {
-    fake.failNext('deepinfra', 401, 401, 401);
-    fake.failNext('openrouter', 500);
-    let first: unknown;
-    try {
-      await qwen().embedQuery('q', { dims: 1024, signal: signal() });
-    } catch (error) {
-      first = error;
-    }
+  it('keeps both keys out of the errors thrown when the hosts fail', async () => {
     fake.failNext('deepinfra', 503, 503, 503);
     fake.failNext('openrouter', 500);
-    let second: unknown;
+    let bothDown: unknown;
     try {
       await qwen().embedQuery('q', { dims: 1024, signal: signal() });
     } catch (error) {
-      second = error;
+      bothDown = error;
     }
-    for (const caught of [first, second]) {
-      expect(caught).toBeInstanceOf(Error);
+    fake.failNext('deepinfra', 401);
+    let rejected: unknown;
+    try {
+      await qwen().embedQuery('q', { dims: 1024, signal: signal() });
+    } catch (error) {
+      rejected = error;
+    }
+    expect(bothDown).toMatchObject({ name: 'EmbeddingProviderError', host: 'openrouter', status: 500 });
+    expect(rejected).toMatchObject({ name: 'EmbeddingProviderError', host: 'deepinfra', status: 401 });
+    for (const caught of [bothDown, rejected]) {
       const dump = JSON.stringify(caught, Object.getOwnPropertyNames(caught));
       expect(dump).not.toContain(DEEPINFRA_KEY);
       expect(dump).not.toContain(OPENROUTER_KEY);

@@ -1,4 +1,5 @@
 import { createOpenAiProvider } from './openai-provider';
+import { createQwenProvider } from './qwen';
 import type {
   EmbeddingProvider,
   EmbeddingProviderId,
@@ -7,6 +8,7 @@ import type {
   ProfileShapeResult,
 } from './types';
 import { OPENAI_NATIVE_DIMS, QWEN_SUPPORTED_DIMS, VOYAGE_SUPPORTED_DIMS, canonicalModelId } from './types';
+import { createVoyageProvider } from './voyage';
 
 export { canonicalModelId };
 
@@ -23,7 +25,7 @@ let defaults: Partial<Record<EmbeddingProviderId, EmbeddingProvider>> | null = n
 let overrides: Partial<Record<EmbeddingProviderId, EmbeddingProvider>> = {};
 
 function defaultProviders(): Partial<Record<EmbeddingProviderId, EmbeddingProvider>> {
-  if (!defaults) defaults = { openai: createOpenAiProvider() };
+  if (!defaults) defaults = { openai: createOpenAiProvider(), voyage: createVoyageProvider(), qwen3: createQwenProvider() };
   return defaults;
 }
 

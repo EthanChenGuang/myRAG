@@ -87,6 +87,7 @@ export function statusOf(error: unknown): number | undefined {
 
 export function toProviderError(error: unknown, host: string, signal: AbortSignal): unknown {
   if (error instanceof EmbeddingProviderError) return error;
+  if (signal.aborted) return signal.reason instanceof Error ? signal.reason : error;
   if (isAbortError(error, signal)) return error;
   if (error instanceof Error && error.name === 'EmbeddingProfileMismatch') return error;
   return new EmbeddingProviderError(host, statusOf(error));
