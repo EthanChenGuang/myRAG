@@ -5,21 +5,26 @@ import json
 import math
 from bisect import bisect_left
 from dataclasses import dataclass
-from typing import Literal, Sequence
+from pathlib import Path
+from typing import Any, Callable, Literal, Sequence
 
 from pydantic import BaseModel, ConfigDict
 
 from rag_sidecar.contracts.eval_run import RagTrace
+from rag_sidecar.contracts.golden import GoldenItem
 from rag_sidecar.contracts.retrieval import (
     FilterLanguage,
     Pairing,
     RefusalCalibrationConfig,
     RefusalCell,
     RefusalMetricBlock,
+    RefusalThresholds,
     compute_config_hash,
 )
 
 from rag_eval.bounds import binom_cdf, upper_bound
+from rag_eval.harness_runner import HarnessRun
+from rag_eval.paths import REPO_ROOT
 
 NEVER_REFUSE = float("-inf")
 LANGUAGES = ("zh", "en", "it")
@@ -362,3 +367,100 @@ def calibrate_cells(
             )
         )
     return records
+
+
+Runner = Callable[..., HarnessRun]
+
+RESULT_NAME = "refusal-calibration-result.json"
+REPORT_NAME = "report.md"
+THRESHOLDS_PATH = REPO_ROOT / "eval" / "config" / "refusal-thresholds.json"
+CALIBRATION_PATH = REPO_ROOT / "eval" / "config" / "refusal-calibration.json"
+NOISE_PATH = REPO_ROOT / "eval" / "config" / "noise.json"
+DEFAULT_GOLDEN = REPO_ROOT / "eval" / "fixtures" / "golden.jsonl"
+
+
+class CrossComparison(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    provider: str
+    model: str
+    query_language: str
+    same_key: str | None = None
+    cross_key: str | None = None
+    comparable: bool = False
+    basis: Literal["holdout", "dev"] | None = None
+    same_false_refusal: float | None = None
+    cross_false_refusal: float | None = None
+    gap: float | None = None
+    noise_band: float = 0.0
+    exceeds_noise_band: bool | None = None
+    note: str = ""
+
+
+class CalibrationResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal[1] = 1
+    source: Literal["fixture", "live"] = "fixture"
+    dev_only_fit: bool = True
+    run_config_name: str = ""
+    reranker: str = ""
+    golden_sha256: str = ""
+    run_config_sha256: str = ""
+    target_false_refusal: float = 0.05
+    pass_rule: str = ""
+    noise_floor: float = 0.0
+    tokenizer_version: int | None = None
+    rerank_text_version: int | None = None
+    cells: list[CellRecord] = []
+    excluded: dict[str, int] = {}
+    stale_cells: list[str] = []
+    cross_vs_same: list[CrossComparison] = []
+    thresholds_written: bool = False
+    thresholds_path: str | None = None
+    notes: list[str] = []
+
+
+def collect_rows(traces: Sequence[RagTrace], golden: Sequence[GoldenItem], reranker: RerankerIdentity) -> tuple[list[CalibrationRow], dict[str, int]]:
+    return [], {}
+
+
+def reranker_identity(run_config: dict[str, Any]) -> RerankerIdentity:
+    return RerankerIdentity("", "")
+
+
+def calibration_run_config(base: dict[str, Any]) -> dict[str, Any]:
+    return dict(base)
+
+
+def compare_cross_same(records: Sequence[CellRecord], noise_floor: float) -> list[CrossComparison]:
+    return []
+
+
+def merge_thresholds(existing: RefusalThresholds, new_cells: Sequence[RefusalCell], *, tokenizer_version: int | None, rerank_text_version: int | None) -> RefusalThresholds:
+    return existing
+
+
+def render_report(result: CalibrationResult) -> str:
+    return ""
+
+
+def _default_runner(**kwargs: Any) -> HarnessRun:
+    raise NotImplementedError
+
+
+def run_refusal_calibration(
+    run_config: Path,
+    out: Path,
+    *,
+    base_url: str | None = None,
+    write: bool = False,
+    runner: Runner | None = None,
+    golden: Path | None = None,
+    fixture_mode: str | None = None,
+    thresholds_path: Path | None = None,
+    calibration_path: Path | None = None,
+    noise_path: Path | None = None,
+    now: str | None = None,
+) -> CalibrationResult:
+    return CalibrationResult()
