@@ -151,11 +151,27 @@ async def _advance_until_done(deps: WorkerDeps, job: IngestionJob, cache_id: str
     return await _fail(deps, job, "advance_stalled", retryable=True)
 
 
+def _resume_parse_cache(job: IngestionJob) -> str | None:
+    """When a reclaimed job still holds the parse cache pointer, skip parsing and resume advance."""
+    state = job.stage_state if isinstance(job.stage_state, dict) else {}
+    cache_id = state.get("parse_cache_id")
+    if not isinstance(cache_id, str) or not cache_id:
+        return None
+    past_parse_stages = {"chunking", "embedding"}
+    if job.status in past_parse_stages or (job.stage or "") in past_parse_stages:
+        return cache_id
+    return None
+
+
 async def process_job(job: IngestionJob, deps: WorkerDeps) -> JobOutcome:
     """Runs one claimed job. The returned outcome says how it ended; nothing document-related is logged."""
     try:
         if job.settings.routing != "fixed":
             return await _fail(deps, job, "routing_not_supported", retryable=False)
+        resume_cache = _resume_parse_cache(job)
+        if resume_cache:
+            attempt_no = job.attempts[-1].attempt_no if job.attempts else 1
+            return await _advance_until_done(deps, job, resume_cache, attempt_no)
         cache_id, attempt_no, elapsed_ms = await _parse(deps, job)
         attempt_no = await _record_fixed_chain_attempt(deps, job, elapsed_ms) or attempt_no
         return await _advance_until_done(deps, job, cache_id, attempt_no)
