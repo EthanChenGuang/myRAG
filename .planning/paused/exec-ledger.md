@@ -138,7 +138,8 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | 04-23 | `wt/04-23` / `exec/04-23` | **RUNNING** (gsd-executor) |
 | 04-24 | `wt/04-24` / `exec/04-24` | **RUNNING** (gsd-executor) |
 | 04-25 | `wt/04-25` / `exec/04-25` | **RUNNING** (gsd-executor) |
-| 04-26 | `wt/04-26` / `exec/04-26` | **RUNNING** (gsd-executor) |
+| 04-26 | `wt/04-26` / `exec/04-26` | **merged** |
+| review-g-fix | `wt/fix-review-g` | **RUNNING** — review G BLOCKER-1 (ledger single-row RPC shape), HIGH-1 (cloud switch fail-open), MED-1/2/7, LOW-2/3/4/5 |
 | 03.1-36 | — | **UI-SPEC in progress** (gsd-ui-researcher, Opus); executor after spec check |
 | fix-relex-rpc | `wt/fix-relex-rpc` | **RUNNING** (gsd-debugger, Opus) — pre-existing `rag_relex_candidates rpc_failed` in PGlite fixtures |
 | 04-31 | `wt/04-31` / `exec/04-31` | **merged** (0408) |
@@ -180,6 +181,8 @@ All four executors **stopped**; WIP on `origin/exec/*` + patches in `.planning/p
 **Recently merged (no follow-up merge needed):** [03.1-04 Task 3](bc-4969184f-7107-55b3-a450-d63435dcb0a0), [03.1-07](bc-4a221b6f-f6a6-507b-8da0-d497c6662c2a), [04-05](bc-91985997-25a1-5b37-a987-32cb579c4746) → trunk `7d98d53`…`a06efce`.
 
 **04-05 smoke (orchestrator):** `npm run test-rag -- --out eval/out/p4-05` → `gate.json` `passed: true`, `paired.all_zero: true` (uv on VM).
+
+**Deferred (round G):** MED-3 `document_parents.is_current` never flipped (04-32/33); MED-5 active profile hides image/invoice-header chunks (04-32/33); MED-6 + LOW-1 budget reservation edge cases and USD refund (03.1-34); MED-4 deployment-wide tier overrides editable by any admin (product decision, see 03.1-36 Q4).
 
 **Deferred (round F):** 03.1-24 `readBudgetView` should use `readMonthlyUsage` from 03.1-19; 03.1-19 batch USD refund (03.1-34); 04-31 image-caption chunks not in profile children (04-32/33); 04-33 names migration 0409 (taken) — needs next free number; `parse_tier_overrides` has no tenant column (admin-wide, cost only).
 
