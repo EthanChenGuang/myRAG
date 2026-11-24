@@ -24,6 +24,7 @@ export interface SearchStagesInput {
   collector: TraceCollector;
   stageOverrides?: StageOverrides;
   variants?: QueryVariant[];
+  filters?: RetrievalFilters;
 }
 
 export interface SearchStagesOutput {
@@ -75,7 +76,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
   const variants = ctx.variants ?? [{ text: input.query, language: null, kind: 'original' as const }];
   const spec = (name: StageName, onFail: StageSpec['onFail']) => stageSpec(config, profile, name, onFail, stageOverrides);
   const pool = params.candidate_pool_size;
-  const filters = buildFilters(input);
+  const filters = ctx.filters ?? buildFilters(input);
   const backend = getRetrievalBackend();
   const lexicalEnabled = config.v2.lexicalSearch;
   const verdict = getV2StartupVerdict();
