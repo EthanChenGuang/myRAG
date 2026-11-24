@@ -141,18 +141,18 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | 04-30 | `wt/04-30` / `exec/04-30` | **merged** |
 | 04-37 | `wt/04-37` / `exec/04-37` | **PARTIAL — held**: prechunked half done; ingest baseline re-record blocked by ingest-tier regression (bisect running) |
 | bisect-ingest | `wt/bisect-ingest` | **merged** → trunk `778f460b` (PR #10); recall@10 restore |
-| merge-train | `claude/ecstatic-hamilton-86gtwv` | **RUNNING** (Cursor) — queue #9→#22; baseline gate 17P/1F/1S (typecheck:new); tmux `merge-train`; runner `scripts/ci/run-merge-train.sh` |
-| 03.1-27 | `wt/03.1-27` / `exec/03.1-27` | **RUNNING** (gsd-executor, base `41861a7`) |
-| 03.1-28 | `wt/03.1-28` / `exec/03.1-28` | **RUNNING** (gsd-executor, base `41861a7`) |
-| 03.1-33 | `wt/03.1-33` / `exec/03.1-33` | **RUNNING** (gsd-executor, base `41861a7`) |
-| 03.1-34 | `wt/03.1-34` / `exec/03.1-34` | **RUNNING** (gsd-executor, base `41861a7`) |
-| 03.1-35 | `wt/03.1-35` / `exec/03.1-35` | **RUNNING** (gsd-executor, base `41861a7`) |
-| 03.1-55 | `wt/03.1-55` / `exec/03.1-55` | **RUNNING** (gsd-executor, base `41861a7`) |
-| 04-28 | `wt/04-28` / `exec/04-28` | **RUNNING** (gsd-executor, base `41861a7`) |
+| merge-train | `claude/ecstatic-hamilton-86gtwv` | **PAUSED** (2026-11-24) — tmux stopped; see `.continue-here.md` in 03.1 phase dir |
+| 03.1-27 | `exec/03.1-27` | **merged** trunk `cfeffab4` (PR #9) |
+| 03.1-28 | `exec/03.1-28` | **merged** trunk `ea1fd7c0` (PR #4) |
+| 03.1-33 | `exec/03.1-33` | **merged** trunk `56b0349d` (PR #5) |
+| 03.1-34 | `exec/03.1-34` | **queue** — merge conflict HANDOFF (PR #6) |
+| 03.1-35 | `exec/03.1-35` | **queue** — merge conflict HANDOFF (PR #12) |
+| 03.1-55 | `exec/03.1-55` | **queue** — merge conflict HANDOFF (PR #7); blocks wave‑6 + #22 |
+| 04-28 | `exec/04-28` | **queue** — gate skip rag-db (PR #11) |
 | 04-29, 04-33 | — | queued (04-33: migration 0413; image-chunk decision) |
 | 04-26 | `wt/04-26` / `exec/04-26` | **merged** |
 | review-g-fix | `wt/fix-review-g` | **merged** — review G BLOCKER-1 (ledger single-row RPC shape), HIGH-1 (cloud switch fail-open), MED-1/2/7, LOW-2/3/4/5 |
-| 03.1-36 | `wt/03.1-36` | **RUNNING** (gsd-executor; UI-SPEC approved 2nd pass) |
+| 03.1-36 | `exec/03.1-36` | **queue** — merge conflict HANDOFF (PR #8) |
 | fix-relex-rpc | `wt/fix-relex-rpc` | **merged** — pre-existing `rag_relex_candidates rpc_failed` in PGlite fixtures |
 | 04-31 | `wt/04-31` / `exec/04-31` | **merged** (0408) |
 | 03.1-21 | `wt/03.1-21` / `exec/03.1-21` | **merged** |

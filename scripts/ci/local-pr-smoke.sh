@@ -54,7 +54,10 @@ run_job eval-smoke bash -c 'npm run test-rag -- --out eval/out/smoke && npm run 
 
 run_job gate-negative-control bash -c 'set +e; npm run test-rag -- --degrade drop_top_candidate --out eval/out/negative-degrade; code=$?; set -e; test "$code" -eq 10; jq -e ".passed == false and (.mismatches | length == 0)" eval/out/negative-degrade/gate.json; jq -e "[.offenders[] | select(.slice == \"overall\" and .metric == \"mrr\") | (.threshold - .observed)] | (length == 1 and .[0] >= 0.05)" eval/out/negative-degrade/gate.json; set +e; npm run test-rag -- --max-results 1 --out eval/out/negative; code=$?; set -e; test "$code" -eq 10; jq -e ".passed == false and (.offenders | length > 0) and (.mismatches | length == 0)" eval/out/negative/gate.json'
 
-if command -v docker >/dev/null 2>&1; then
+if [[ "${LOCAL_GATE_SKIP_DOCKER:-}" == 1 ]]; then
+  STATUS[docker-build]=SKIP
+  DETAIL[docker-build]="skipped (LOCAL_GATE_SKIP_DOCKER=1)"
+elif command -v docker >/dev/null 2>&1; then
   run_job docker-build bash -c 'docker build -t rag-sidecar:ci rag-sidecar'
 else
   STATUS[docker-build]=SKIP
