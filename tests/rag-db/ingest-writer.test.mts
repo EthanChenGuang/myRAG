@@ -156,7 +156,7 @@ function setFields(ctx: Ctx, id: string | null, tenantKey: string, fields: unkno
 for (const mode of MODES) {
   describe(`ingest writer: begin, lookup, fields and state (${mode})`, () => {
     let ctx: Ctx;
-    const it = (name: string, run: (t: TestContext) => Promise<unknown>) => test(`${name} [${mode}]`, run);
+    const it = (name: string, run: (t: TestContext) => Promise<void>) => test(`${name} [${mode}]`, run);
     before(async () => {
       ctx = await createCtx(mode);
     });
@@ -586,7 +586,7 @@ async function publishedVersion(ctx: Ctx, sourceKey: string, count: number, opti
 for (const mode of MODES) {
   describe(`ingest writer: chunk writes and version publish (${mode})`, () => {
     let ctx: Ctx;
-    const it = (name: string, run: (t: TestContext) => Promise<unknown>) => test(`${name} [${mode}]`, run);
+    const it = (name: string, run: (t: TestContext) => Promise<void>) => test(`${name} [${mode}]`, run);
     before(async () => {
       ctx = await createCtx(mode);
     });
