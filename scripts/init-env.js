@@ -344,6 +344,33 @@ RAG_PIPELINE=legacy
 RAG_DISABLED_STAGES=
 # Per-stage time budgets as stage=ms,stage=ms (empty uses the built-in budgets)
 RAG_STAGE_TIMEOUTS=
+
+# -----------------------------
+# RETRIEVAL V2 (Phase 4 switches — off by default)
+# -----------------------------
+# Lexical hybrid search leg
+RAG_LEXICAL_SEARCH=false
+# Reranker: none | cohere | voyage | local_bm25
+RAG_RERANKER=none
+RAG_RERANK_TIER_CHAT=quality
+RAG_RERANK_TIER_VOICE=fast
+# Per-language Voyage rerank model, e.g. zh=rerank-2.5
+RAG_RERANK_VOYAGE_MODEL_BY_LANG=
+COHERE_API_KEY=
+COHERE_BASE_URL=
+# Refusal and context assembly
+RAG_REFUSAL_THRESHOLD=false
+RAG_CONTEXT_EDGE_ORDER=false
+RAG_CONTEXT_COMPRESSION=false
+RAG_CONTEXT_TOKEN_BUDGET=6000
+# Parent chunks and pgvector scan
+RAG_PARENT_CHILD=false
+RAG_HNSW_ITERATIVE_SCAN=off
+RAG_EXACT_SCAN_CUTOFF=0
+# Query translation before lexical tokenization
+RAG_LEXICAL_TRANSLATION=false
+# Emergency override for pool/cap/topk (operator only)
+RAG_RETRIEVAL_PARAMS_OVERRIDE=
 # Tenant for embedded chat: s:default | o:<uuid> | u:<uuid> (empty means s:default in single-tenant, fails closed in multi-tenant)
 RAG_EMBED_TENANT=
 # Signing secret for voice retrieval tokens (at least 32 characters)

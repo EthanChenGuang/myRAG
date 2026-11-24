@@ -2,6 +2,16 @@
   "schemaVersion": 1,
   "vars": [
     {
+      "name": "COHERE_API_KEY",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "COHERE_BASE_URL",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "DEEPINFRA_API_KEY",
       "status": "managed",
       "knownGaps": []
@@ -230,6 +240,21 @@
       ]
     },
     {
+      "name": "RAG_CONTEXT_COMPRESSION",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_CONTEXT_EDGE_ORDER",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_CONTEXT_TOKEN_BUDGET",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "RAG_DISABLED_STAGES",
       "status": "managed",
       "knownGaps": []
@@ -243,6 +268,11 @@
       ]
     },
     {
+      "name": "RAG_DOC_TYPE_LLM_DETECT",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "RAG_DOCUMENT_COMPLETENESS_THRESHOLD",
       "status": "legacy",
       "knownGaps": [
@@ -253,22 +283,17 @@
       ]
     },
     {
-      "name": "RAG_DOC_TYPE_LLM_DETECT",
-      "status": "managed",
-      "knownGaps": []
-    },
-    {
       "name": "RAG_EMBED_BATCH_MODE",
       "status": "managed",
       "knownGaps": []
     },
     {
-      "name": "RAG_EMBEDDING_PROFILES",
+      "name": "RAG_EMBED_TENANT",
       "status": "managed",
       "knownGaps": []
     },
     {
-      "name": "RAG_EMBED_TENANT",
+      "name": "RAG_EMBEDDING_PROFILES",
       "status": "managed",
       "knownGaps": []
     },
@@ -309,11 +334,6 @@
       "knownGaps": []
     },
     {
-      "name": "RAG_EVAL_SECRET",
-      "status": "managed",
-      "knownGaps": []
-    },
-    {
       "name": "RAG_EVAL_RETRIEVAL_MIN_SIMILARITY",
       "status": "legacy",
       "knownGaps": [
@@ -324,7 +344,17 @@
       ]
     },
     {
+      "name": "RAG_EVAL_SECRET",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "RAG_EXACT_ID_LOOKUP",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_EXACT_SCAN_CUTOFF",
       "status": "managed",
       "knownGaps": []
     },
@@ -379,6 +409,11 @@
       ]
     },
     {
+      "name": "RAG_HNSW_ITERATIVE_SCAN",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "RAG_INGEST_ASYNC",
       "status": "managed",
       "knownGaps": []
@@ -407,6 +442,16 @@
     },
     {
       "name": "RAG_INVOICE_LLM_EXTRACT",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_LEXICAL_SEARCH",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_LEXICAL_TRANSLATION",
       "status": "managed",
       "knownGaps": []
     },
@@ -471,12 +516,7 @@
       ]
     },
     {
-      "name": "RAG_PARSER",
-      "status": "managed",
-      "knownGaps": []
-    },
-    {
-      "name": "RAG_PARSER_ALLOW_CLOUD",
+      "name": "RAG_PARENT_CHILD",
       "status": "managed",
       "knownGaps": []
     },
@@ -521,6 +561,16 @@
       "knownGaps": []
     },
     {
+      "name": "RAG_PARSER",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_PARSER_ALLOW_CLOUD",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "RAG_PDF_IMAGE_CHUNKS",
       "status": "managed",
       "knownGaps": []
@@ -561,6 +611,31 @@
       "knownGaps": []
     },
     {
+      "name": "RAG_REFUSAL_THRESHOLD",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_RERANK_TIER_CHAT",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_RERANK_TIER_VOICE",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_RERANK_VOYAGE_MODEL_BY_LANG",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_RERANKER",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "RAG_RERANKING",
       "status": "legacy",
       "knownGaps": [
@@ -574,6 +649,11 @@
         "config-ui",
         "env-ts"
       ]
+    },
+    {
+      "name": "RAG_RETRIEVAL_PARAMS_OVERRIDE",
+      "status": "managed",
+      "knownGaps": []
     },
     {
       "name": "RAG_SEMANTIC_CLASSIFICATION",

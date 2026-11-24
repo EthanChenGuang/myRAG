@@ -388,6 +388,20 @@ test('warns on cloud-off with legacy when Llama key is set, without printing the
   }
 });
 
+test('fails when COHERE_BASE_URL is missing from the config UI', () => {
+  const root = copyRealTree();
+  try {
+    const file = path.join(root, 'scripts/config-ui/index.html');
+    const text = fs.readFileSync(file, 'utf8').replace(/COHERE_BASE_URL/g, 'REMOVED_COHERE_BASE_URL');
+    fs.writeFileSync(file, text);
+    const { code, out } = run(root);
+    assert.equal(code, 1);
+    assert.match(out, /COHERE_BASE_URL \[config-ui\]/);
+  } finally {
+    cleanup(root);
+  }
+});
+
 test('does not treat VOYAGER_* or a VOYAGE name without the underscore as a provider variable', () => {
   const root = syntheticTree({
     files: { 'scripts/init-env.js': 'VOYAGER_X=1\nVOYAGEX=2\nXVOYAGE_KEY=3\nDEEPINFRAX=4\n' },
