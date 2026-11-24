@@ -196,8 +196,18 @@ def _synthetic_preflight(page_count: int, ranges: list[tuple[int, int, str]], re
         )
         for page in range(1, page_count + 1)
     ]
+    tier_of = {"fast": "fast", "premium": "premium"}
     page_ranges = [
-        PageRange(start=s, end=e, tier="fast" if preset == "fast" else "structured", preset=preset, parser="docling", layer="L1", signals=[], status="pending")
+        PageRange(
+            start=s,
+            end=e,
+            tier=tier_of.get(preset, "structured"),
+            preset=preset,
+            parser="llamaparse" if preset == "premium" else "docling",
+            layer="L1",
+            signals=[],
+            status="pending",
+        )
         for s, e, preset in ranges
     ]
     result = PreflightResult(
@@ -912,3 +922,141 @@ def test_release_does_not_read_a_false_one_column_row_as_released():
     client = _ledger_answering({"rag_release_ingestion_job": False})
 
     assert asyncio.run(client.release(_JOB_ID, _WORKER)) is False
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Premium ranges: a sub-PDF to parse-external premium (D-18, D-53)
+# ---------------------------------------------------------------------------------------------------------------------
+
+
+def _premium_env(tmp_path: Path, **deps: Any) -> Env:
+    converter = SyntheticConverter()
+    env = Env(
+        tmp_path,
+        _job(sha="b" * 64),
+        PDF["mixed-routing"].read_bytes(),
+        converter=converter,
+        preflight=_synthetic_preflight(10, [(1, 6, "fast"), (7, 8, "premium"), (9, 10, "fast")]),
+        **deps,
+    )
+    env.synthetic = converter  # type: ignore[attr-defined]
+    return env
+
+
+def _premium_done() -> dict:
+    return {
+        "worker_id": _WORKER,
+        "status": "done",
+        "cache_id": _CACHE_ID,
+        "pages": [
+            {"page": 7, "text": "Premium page 7 text.", "has_table": False},
+            {"page": 8, "text": "Premium page 8 text.", "has_table": False},
+        ],
+    }
+
+
+def _premium_calls(env: Env) -> list[dict[str, Any]]:
+    return [call[2] for call in env.app.calls if call[0] == "parse_external"]
+
+
+def test_a_premium_range_goes_to_parse_external_premium_with_a_sub_pdf_and_is_merged_in_page_order(tmp_path):
+    import pypdfium2 as pdfium
+
+    env = _premium_env(tmp_path)
+    env.app.script("parse_external", [AppScript(response=_premium_done())])
+
+    outcome = env.run()
+
+    assert outcome == JobOutcome(status="ready")
+    (call,) = _premium_calls(env)
+    assert call["mode"] == "premium" and call["pages"] == {"start": 7, "end": 8}
+    assert call["subpdf_ref"].startswith(f"{_TENANT}/_parse-cache/{'b' * 64}/") and call["subpdf_ref"].endswith("/premium-7-8.pdf")
+    assert json.loads(call["cursor"]) == {"original_pages": [7, 8], "reserve_pages": 2}
+    assert len(call["options_hash"]) == 64
+    sent = env.storage.objects[(_BUCKET, call["subpdf_ref"])]
+    assert len(pdfium.PdfDocument(sent)) == 2, "only the premium pages leave the deployment"
+    assert [(a.tier, a.preset, a.parser) for a in env.job.attempts] == [
+        ("fast", "fast", "docling"),
+        ("premium", "premium", "llamaparse"),
+        ("fast", "fast", "docling"),
+    ]
+    premium = env.job.attempts[1]
+    assert premium.est_cost_usd == pytest.approx(2 * env.cfg.costs.tier.premium.usd_per_page)
+    assert premium.check is not None and premium.refused is False
+    assert [(r.start, r.end, r.parser, r.tier, r.status) for r in env.job.page_ranges] == [
+        (1, 6, "docling", "fast", "ok"),
+        (7, 8, "llamaparse", "premium", "ok"),
+        (9, 10, "docling", "fast", "ok"),
+    ]
+    assert env.job.tier == "premium"
+    merged = _merged_entries(env)[0]
+    result = ParseResult.model_validate_json(_object(env, merged.object_prefix, "result.json"))
+    assert result.page_count == 10
+    assert result.markdown.index("Synthetic page 6 text.") < result.markdown.index("Premium page 7 text.") < result.markdown.index("Premium page 8 text.") < result.markdown.index("Synthetic page 9 text.")
+    assert [(preset, start, end) for preset, start, end, _p in env.synthetic.calls] == [("fast", 1, 6), ("fast", 9, 10)]  # type: ignore[attr-defined]
+
+
+def test_a_premium_job_that_is_still_polling_is_asked_again_with_its_continuation(tmp_path):
+    env = _premium_env(tmp_path)
+    pending = {"worker_id": _WORKER, "status": "pending", "continuation": "cont-1", "retry_after_ms": 2000}
+    env.app.script("parse_external", [AppScript(response=pending), AppScript(response=_premium_done())])
+    sleeps: list[float] = []
+
+    class Recording(Sleeps):
+        async def __call__(self, seconds: float) -> None:
+            sleeps.append(seconds)
+
+    env.deps = WorkerDeps(**{**env.deps.__dict__, "sleep": Recording()})
+
+    outcome = env.run()
+
+    assert outcome == JobOutcome(status="ready")
+    first, second = _premium_calls(env)
+    assert first["continuation"] is None and second["continuation"] == "cont-1"
+    assert second["subpdf_ref"] == first["subpdf_ref"]
+    assert sleeps == [2.0]
+    assert len([a for a in env.job.attempts if a.tier == "premium"]) == 1
+
+
+def test_a_premium_range_blocked_by_the_budget_is_parsed_structured_and_marked_for_review(tmp_path):
+    env = _premium_env(tmp_path)
+    env.app.script("parse_external", [AppScript(response={"worker_id": _WORKER, "status": "refused", "reason": "budget_exhausted"})])
+
+    outcome = env.run()
+
+    assert outcome == JobOutcome(status="ready")
+    assert [(a.tier, a.preset, a.refused) for a in env.job.attempts] == [
+        ("fast", "fast", False),
+        ("premium", "premium", True),
+        ("structured", "structured_full", False),
+        ("fast", "fast", False),
+    ]
+    assert env.job.attempts[1].est_cost_usd == 0
+    assert env.job.needs_review_reason == "budget_exhausted"
+    assert [(r.start, r.end, r.parser, r.status) for r in env.job.page_ranges] == [
+        (1, 6, "docling", "ok"),
+        (7, 8, "docling", "needs_review"),
+        (9, 10, "docling", "ok"),
+    ]
+    assert ("structured_full", 7, 8) in [(preset, start, end) for preset, start, end, _p in env.synthetic.calls]  # type: ignore[attr-defined]
+
+
+def test_a_premium_range_kept_off_by_the_cloud_switch_stays_on_the_lower_tier_with_a_routing_note(tmp_path):
+    env = _premium_env(tmp_path)
+    env.app.script("parse_external", [AppScript(response={"worker_id": _WORKER, "status": "refused", "reason": "cloud_not_allowed"})])
+
+    outcome = env.run()
+
+    assert outcome == JobOutcome(status="ready")
+    assert env.job.needs_review_reason is None
+    assert env.job.routing_note == "premium_blocked:cloud_not_allowed"
+    assert [(r.start, r.end, r.status) for r in env.job.page_ranges] == [(1, 6, "ok"), (7, 8, "ok"), (9, 10, "ok")]
+
+
+def test_a_failed_premium_call_fails_the_job_with_the_apps_error_class(tmp_path):
+    env = _premium_env(tmp_path)
+    env.app.script("parse_external", [AppScript(response={"worker_id": _WORKER, "status": "failed", "error_class": "parse_retryable"})])
+
+    outcome = env.run()
+
+    assert outcome.status == "queued" and outcome.error_class == "parse_retryable"
