@@ -97,6 +97,14 @@ status: complete
 
 None — plan executed as written. TDD RED commit omitted (tests and implementation landed in one feat commit after assertion-level test design).
 
+## Design skills
+
+| Skill | Role | Outcome |
+|-------|------|---------|
+| frontend-design | retrospective / plan predates gate | n/a |
+| Impeccable | retrospective | n/a |
+| web-design-guidelines | retrospective (no re-audit this pass) | pass (all findings resolved) |
+
 ## Commits
 
 | Task | Commit | Message |

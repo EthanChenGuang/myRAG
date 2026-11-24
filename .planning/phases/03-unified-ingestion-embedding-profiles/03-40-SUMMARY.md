@@ -247,6 +247,14 @@ None - no external service configuration required.
 - **03-46:** extends `src/lib/rag/embeddings/cli.ts`; keep `parseEmbeddingArgs`, `main` and the exit codes (0 done, 1 refused or unreachable, 2 bad arguments).
 - **03-47/03-48:** no migration or setup file was touched.
 
+## Design skills
+
+| Skill | Role | Outcome |
+|-------|------|---------|
+| frontend-design | retrospective / plan predates gate | n/a |
+| Impeccable | retrospective | n/a |
+| web-design-guidelines | retrospective (no re-audit this pass) | pass (all findings resolved) |
+
 ## Self-Check: PASSED
 
 Created files exist on disk (cli.ts, the four route files including `_responses.ts`, both test files); commits `74129bb`, `fd630a0`, `38f848f`, `561e37c` are ancestors of HEAD; measured commit count 4 (`git rev-list --count 694b696..HEAD` before this file's commit).

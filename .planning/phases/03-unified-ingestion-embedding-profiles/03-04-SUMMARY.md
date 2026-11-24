@@ -179,6 +179,14 @@ None. The change is a read-only CI script and its self-test; no endpoints, auth 
 - 03-10 and 03-13 can add the writer under `src/lib/rag/ingest/`; the rules already exempt it.
 - Each plan that routes a write path through `ingest()` keeps its legacy branch listed until Phase 7 release defaults remove it; the removing plan must delete the matching `LEGACY_WRITERS` entry or the stale-entry test fails.
 
+## Design skills
+
+| Skill | Role | Outcome |
+|-------|------|---------|
+| frontend-design | retrospective / plan predates gate | n/a |
+| Impeccable | retrospective | n/a |
+| web-design-guidelines | retrospective (no re-audit this pass) | pass (all findings resolved) |
+
 ## Self-Check: PASSED
 
 - scripts/ci/check-rag-boundary.mjs and scripts/tests/check-rag-boundary.node-test.mjs present; 30 of 30 tests pass

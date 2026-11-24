@@ -200,5 +200,13 @@ None.
 - 03-47: fold both 0316 stems into the setup files (replaced policies, `get_document_chunks` body and grants, audit table, functions), keep schema-equality green.
 - 03-43: the Config UI panel calls the three routes with the admin session; the list items carry `detected_by` and the delete may answer 200 with `artifacts_failed`.
 
+## Design skills
+
+| Skill | Role | Outcome |
+|-------|------|---------|
+| frontend-design | retrospective / plan predates gate | n/a |
+| Impeccable | retrospective | n/a |
+| web-design-guidelines | retrospective (no re-audit this pass) | pass (all findings resolved) |
+
 ## Self-Check: PASSED
 Created files exist; commits `040e8da`, `e366124`, `e2a4c6d`, `d205191`, `1a10dfd`, `f48e540` are ancestors of HEAD; measured count 6.

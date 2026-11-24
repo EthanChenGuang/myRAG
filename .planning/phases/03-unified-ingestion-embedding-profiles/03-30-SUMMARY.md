@@ -142,5 +142,13 @@ T-03-86 mitigated (session, resolveTenantScope, tenant_key and ownership predica
 ## Known Stubs
 None.
 
+## Design skills
+
+| Skill | Role | Outcome |
+|-------|------|---------|
+| frontend-design | retrospective / plan predates gate | n/a |
+| Impeccable | retrospective | n/a |
+| web-design-guidelines | retrospective (no re-audit this pass) | pass (all findings resolved) |
+
 ## Self-Check: PASSED
 Created files exist; commits `a73d422`, `5fca7db`, `e11db92`, `55f537f`, `1761901` are ancestors of HEAD; measured count 5.

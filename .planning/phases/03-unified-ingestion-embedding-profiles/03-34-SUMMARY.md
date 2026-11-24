@@ -205,6 +205,14 @@ None - no migration, environment variable or package change. The two routes are 
 - A UI that wants non-admins to resume single-tenant uploads needs the unified writer to record `user_id` in single-tenant mode first.
 - 03-48 live checks: the resume route against a real sidecar job is covered by the fake only.
 
+## Design skills
+
+| Skill | Role | Outcome |
+|-------|------|---------|
+| frontend-design | retrospective / plan predates gate | n/a |
+| Impeccable | retrospective | n/a |
+| web-design-guidelines | retrospective (no re-audit this pass) | pass (all findings resolved) |
+
 ## Self-Check: PASSED
 
 All created files exist on disk; commits `602390e`, `38fe58f` and `7220fc3` are ancestors of HEAD; the ledger count is 3.

@@ -180,6 +180,14 @@ None - no external service configuration required. `.env.local` is not tracked; 
 - Later plans can read `env.RAG_INGEST_PIPELINE`, `env.RAG_PARSER`, `env.RAG_PARSE_POLL_BUDGET_MS`, the four flag names, `env.RAG_INJECTION_SCAN`, `env.RAG_EMBEDDING_PROFILES`, `env.RAG_QWEN_EMBED_FALLBACK` and the Voyage and DeepInfra names from `@/lib/env`, and pass a snapshot to `loadIngestConfig` (for example through an `IngestDeps.ingestEnv()` thunk in 03-13) without touching config files again.
 - `config-server.js` is edited again in 03-31 and 03-43 (sequential waves).
 
+## Design skills
+
+| Skill | Role | Outcome |
+|-------|------|---------|
+| frontend-design | retrospective / plan predates gate | n/a |
+| Impeccable | retrospective | n/a |
+| web-design-guidelines | retrospective (no re-audit this pass) | pass (all findings resolved) |
+
 ## Verification
 
 - `node --test scripts/check-config.test.mjs`: 19 pass, 0 fail

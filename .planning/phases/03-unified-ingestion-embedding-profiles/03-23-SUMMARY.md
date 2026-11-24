@@ -221,6 +221,14 @@ None - no new environment variable (the config sync rule has nothing to mirror).
 - Observed for later plans, outside this plan's files: `GET /api/scrapers/status` still answers without a session in single-tenant mode (03-30 owns that file).
 - 03-27's parser chain parses the PDF bytes the pdf output format sends; this plan only sends them.
 
+## Design skills
+
+| Skill | Role | Outcome |
+|-------|------|---------|
+| frontend-design | retrospective / plan predates gate | n/a |
+| Impeccable | retrospective | n/a |
+| web-design-guidelines | retrospective (no re-audit this pass) | pass (all findings resolved) |
+
 ## Self-Check: PASSED
 
 Created files exist on disk; commits `96e8e43`, `3988bab`, `e41f528`, `f1e4b1a`, `66a3836` and `b73af1d` are ancestors of HEAD; the measured count from the ledger is 6. Gates: tsc 0 errors, `typecheck:new` clean, vitest 1900/1900, node --test 144/145 (one load-dependent timeout, passes alone), boundary ok, check-workflows ok, check-config ok.

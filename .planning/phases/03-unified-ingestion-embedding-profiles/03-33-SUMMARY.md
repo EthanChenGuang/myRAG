@@ -200,6 +200,14 @@ None - no new environment variable (nothing to mirror in the five config places)
 - 03-48 must run a live Nango sync (Drive or Notion) with `RAG_INGEST_PIPELINE=unified`.
 - Observed, outside this plan: stored originals and artifacts of a deleted lineage stay in the object store (the documents DELETE route behaves the same); `fetchGoogleDriveFiles` lists one page of at most `NANGO_MAX_FILES_PER_SYNC` files ordered by modification time, so in a folder larger than that, a previously synced file that falls off the first page can look orphaned and be deleted (pre-existing logic, read from the code and not exercised; see `03-33-deferred-items.md`).
 
+## Design skills
+
+| Skill | Role | Outcome |
+|-------|------|---------|
+| frontend-design | retrospective / plan predates gate | n/a |
+| Impeccable | retrospective | n/a |
+| web-design-guidelines | retrospective (no re-audit this pass) | pass (all findings resolved) |
+
 ## Self-Check: PASSED
 
 Created and modified files exist on disk; commits `bbcd726`, `eb2c5f7`, `4a99901` and `a9ccbf5` are ancestors of HEAD; the measured count from the ledger is 4. Gates: `tsc --noEmit` 0 errors, `typecheck:new` clean, vitest 2105/2106 (the one failure is the load-dependent timing test above, 18/18 alone), `node --test tests/*.test.mts` 145/145, boundary ok, check-workflows ok, check-config ok. The nango security-fix suites pass unchanged (29 tests); the plan's two acceptance counts (`lineage_id` 5 in sync-manager.ts, `Bearer` 0 in the nango routes) hold.

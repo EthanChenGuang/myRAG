@@ -206,6 +206,14 @@ None.
 - 03-38: `MAX_IMAGES` (30) and `isAllowedImageUrl` are exported from `parsers/llamaparse-v2.ts`; LlamaParse pictures are already fetched and stored by the parse stage.
 - 03-48: live item 1 also confirms the LlamaParse v2 shapes.
 
+## Design skills
+
+| Skill | Role | Outcome |
+|-------|------|---------|
+| frontend-design | retrospective / plan predates gate | n/a |
+| Impeccable | retrospective | n/a |
+| web-design-guidelines | retrospective (no re-audit this pass) | pass (all findings resolved) |
+
 ## Self-Check: PASSED
 All ten created files exist, commits `9ffb8c0`, `b3ba106`, `0280070`, `a2ac95d`, `f893924` and `af1ccb3` are ancestors of HEAD, and the measured count from the ledger is 6.
 

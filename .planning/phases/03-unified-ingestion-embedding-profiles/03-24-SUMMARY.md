@@ -207,6 +207,14 @@ None. No new environment variable, migration or package.
 - 03-23, 03-31 and 03-33 can use `options.documentMetadata` and the `loadIngestConfig` export.
 - The legacy branch stays listed in `LEGACY_WRITERS` for Phase 7.
 
+## Design skills
+
+| Skill | Role | Outcome |
+|-------|------|---------|
+| frontend-design | retrospective / plan predates gate | n/a |
+| Impeccable | retrospective | n/a |
+| web-design-guidelines | retrospective (no re-audit this pass) | pass (all findings resolved) |
+
 ## Self-Check: PASSED
 All created files exist; commits `e3aebb7`, `94e40fe`, `c722fda` are ancestors of HEAD; the ledger count is 3.
 

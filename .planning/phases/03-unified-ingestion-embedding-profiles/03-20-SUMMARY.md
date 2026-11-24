@@ -285,6 +285,14 @@ None. This plan adds no environment variable, migration or package.
 - Phase 5.1 (SEC-03) imports `scanText` at retrieval time; its signature takes a string only.
 - Decision needed before 03-30 and 03-37 are finalised: whether owners see their own quarantined documents in the list, and the RLS follow-up above.
 
+## Design skills
+
+| Skill | Role | Outcome |
+|-------|------|---------|
+| frontend-design | retrospective / plan predates gate | n/a |
+| Impeccable | retrospective | n/a |
+| web-design-guidelines | retrospective (no re-audit this pass) | pass (all findings resolved) |
+
 ## Self-Check: PASSED
 
 All five created files exist on disk. Commits `aa1f2c1`, `d7a0597`, `6eb8f5a`, `9692920`, `6c1f57f`, `5250e2d` and `2bbb8dd` are ancestors of HEAD and the measured count from the ledger is 7.

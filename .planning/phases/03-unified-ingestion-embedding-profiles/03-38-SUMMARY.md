@@ -56,6 +56,14 @@ Restored from `.planning/paused/p3c/03-38-commits/` onto base `694b696`:
 5. `73668bb` — test tenant isolation for `rag/` picture keys
 6. `f713bfc` — fix resume reuses stored picture captions
 
+## Design skills
+
+| Skill | Role | Outcome |
+|-------|------|---------|
+| frontend-design | retrospective / plan predates gate | n/a |
+| Impeccable | retrospective | n/a |
+| web-design-guidelines | retrospective (no re-audit this pass) | pass (all findings resolved) |
+
 ## Verification (worktree)
 
 - `npx vitest run tests/rag/ingest/pdf-images.test.ts tests/rag/ingest/pdf-images-source-images.test.ts` — 33 passed, 0 failed

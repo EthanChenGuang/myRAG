@@ -289,6 +289,14 @@ None.
 - 03-38 can reuse `captionImage`, `captionArtifact` naming (`caption-<n>.txt`), the images slice (`nextIndex`, `captioned`), `quarantineDocument` and `ctx.work.pictures`; the non-caption branch of the images stage is still the 03-13b switch behaviour, and rehydrate runs the images stage again only for caption-only documents.
 - 03-37 and 03-43 see image documents as ordinary documents with `status` from the column.
 
+## Design skills
+
+| Skill | Role | Outcome |
+|-------|------|---------|
+| frontend-design | retrospective / plan predates gate | n/a |
+| Impeccable | retrospective | n/a |
+| web-design-guidelines | retrospective (no re-audit this pass) | pass (all findings resolved) |
+
 ## Self-Check: PASSED
 
 All seven created files exist on disk. Commits `56ef0c7`, `3189c5f`, `0af7427`, `fae78b8`, `903d067` and `328af4c` are ancestors of HEAD; the measured count from the ledger base `14f30e5` is 6.

@@ -63,6 +63,14 @@ Restored from `.planning/paused/p3c/03-39-commits/` plus Task 3 on orchestrator 
 4. `9cc1efb` — feat changeDocumentType and SQL
 5. `82e9121` — feat admin documents/{id}/doc-type POST (orchestrator; gsd-executor unavailable)
 
+## Design skills
+
+| Skill | Role | Outcome |
+|-------|------|---------|
+| frontend-design | retrospective / plan predates gate | n/a |
+| Impeccable | retrospective | n/a |
+| web-design-guidelines | retrospective (no re-audit this pass) | pass (all findings resolved) |
+
 ## Verification (worktree)
 
 - `npx vitest run tests/rag/doc-type-routes.test.ts` — 40 passed

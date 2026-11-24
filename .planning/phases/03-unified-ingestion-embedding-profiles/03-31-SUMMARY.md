@@ -211,6 +211,14 @@ None. No new environment variable, migration or package; the config sync rule ha
 - 03-32 reads `upload_source` on `/api/upload`; the proxy now sends it. 03-39 and the picker plans can send `doc_type` through the proxy.
 - Phase 7: remove the legacy branch (still listed in `LEGACY_WRITERS`), and decide the `text` question for `page.tsx` (deviation 4) and the multi-tenant 503 (deviation 1).
 
+## Design skills
+
+| Skill | Role | Outcome |
+|-------|------|---------|
+| frontend-design | retrospective / plan predates gate | n/a |
+| Impeccable | retrospective | n/a |
+| web-design-guidelines | retrospective (no re-audit this pass) | pass (all findings resolved) |
+
 ## Self-Check: PASSED
 
 Created files exist on disk (both test files); commits `087457f`, `f994f4a` and `f048df6` are ancestors of HEAD; the measured count from the ledger is 3.

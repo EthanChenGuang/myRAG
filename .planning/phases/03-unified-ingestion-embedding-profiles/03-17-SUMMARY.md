@@ -190,6 +190,14 @@ None. `docling.json` is a named constant only; plan 03-27 stores it.
 - 03-32/03-38: the `images` stage output is not rebuilt by rehydrate (non-deterministic); keep it in `processing_state.images`.
 - Type-change plan: `loadArtifact(ctx, PARSE_ARTIFACT)` is the parse-output read.
 
+## Design skills
+
+| Skill | Role | Outcome |
+|-------|------|---------|
+| frontend-design | retrospective / plan predates gate | n/a |
+| Impeccable | retrospective | n/a |
+| web-design-guidelines | retrospective (no re-audit this pass) | pass (all findings resolved) |
+
 ## Self-Check: PASSED
 Created files exist on disk; commits `825b040`, `8017519`, `b1ea9b1`, `44f89c3`, `24b7b84`, `532061a` are ancestors of HEAD; the ledger count is 6.
 
