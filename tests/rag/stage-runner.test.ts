@@ -51,6 +51,42 @@ describe('runStage', () => {
     expect(outcome).toEqual({ skipped: false, value: [1, 2, 3] });
     const [record] = trace.stages();
     expect(record).toMatchObject({ name: 'search', status: 'ok', candidates_in: 0, candidates_out: 3, rules: [] });
+    expect(record).not.toHaveProperty('counts');
+  });
+
+  test('counts on the ok path records finite numbers and drops invalid entries', async () => {
+    const trace = collector();
+    await runStage(spec(), new AbortController().signal, async () => 'done', trace, {
+      counts: () => ({
+        deduped: 3,
+        capped_from: 120,
+        bad: Number.NaN,
+        also_bad: Infinity,
+        not_a_number: 'x' as unknown as number,
+      }),
+    });
+    const [record] = trace.stages();
+    expect(record.counts).toEqual({ deduped: 3, capped_from: 120 });
+  });
+
+  test('skipped, disabled and failed stages never carry counts', async () => {
+    const disabled = collector();
+    await runStage(spec({ enabled: false, onFail: 'skip' }), new AbortController().signal, async () => 1, disabled, {
+      counts: () => ({ deduped: 1 }),
+    });
+    expect(disabled.stages()[0]).not.toHaveProperty('counts');
+
+    const skipped = collector();
+    await runStage(spec({ onFail: 'skip' }), new AbortController().signal, async () => {
+      throw new Error('nope');
+    }, skipped, { counts: () => ({ deduped: 1 }) });
+    expect(skipped.stages()[0]).not.toHaveProperty('counts');
+
+    const failed = collector();
+    await runStage(spec({ name: 'embed' }), new AbortController().signal, async () => {
+      throw new Error('nope');
+    }, failed, { counts: () => ({ deduped: 1 }) }).catch(() => undefined);
+    expect(failed.stages()[0]).not.toHaveProperty('counts');
   });
 
   test('a disabled stage is recorded as disabled without running', async () => {
