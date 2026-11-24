@@ -71,5 +71,6 @@ export function createOpenAiProvider(options: OpenAiProviderOptions = {}): Embed
     normalize: true,
     embedDocuments: (texts, opts) => embed(texts, opts),
     embedQuery: (text, opts) => embed([text], opts),
+    embedQueries: (texts, opts) => embed(texts, opts),
   };
 }

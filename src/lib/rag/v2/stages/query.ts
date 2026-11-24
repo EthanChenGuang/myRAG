@@ -3,6 +3,8 @@ import type { RagConfig, StageName } from '../../config';
 import { legacyAnalyze } from '../../legacy/enhanced-retrieval';
 import { buildRetrievalFilters } from '../../query/filters';
 import { queryLanguage } from '../../query/language';
+import { getTranslator, NONE_TRANSLATOR_NAME } from '../../query/translate';
+import { buildQueryVariants } from '../../query/variants';
 import { timeframeToDateRange } from '../../query/timeframe';
 import { defaultQueryContext, type TemporalQueryContext } from '../../query/temporal-query-detector';
 import { runRefsStage, runStage, stageSpec, type StageSpec } from '../../pipeline';
@@ -56,6 +58,15 @@ export async function runQueryStages(ctx: QueryStagesInput): Promise<QueryStages
   const queryContext = analysis.skipped ? defaultQueryContext() : analysis.value;
   const language = queryLanguage(input.query);
 
+  const translator = getTranslator();
+  const translation = await runStage(
+    spec('translate', 'skip'),
+    signal,
+    (stageSignal) => translator.translate(input.query, { signal: stageSignal, sourceLanguage: language }),
+    collector,
+    { detail: () => (translator.name === NONE_TRANSLATOR_NAME ? 'translator_none' : undefined) },
+  );
+
   const filters = buildRetrievalFilters({
     explicit: input.retrievalFilters,
     referencedDocumentIds: referencedDocumentIds(referenced),
@@ -66,6 +77,6 @@ export async function runQueryStages(ctx: QueryStagesInput): Promise<QueryStages
     queryContext,
     queryLanguage: language,
     filters,
-    variants: input.queryVariants ?? [{ text: input.query, language, kind: 'original' }],
+    variants: buildQueryVariants(input.query, language, translation.skipped ? [] : translation.value, input.queryVariants ?? []),
   };
 }

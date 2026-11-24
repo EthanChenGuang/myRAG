@@ -22,6 +22,8 @@ export interface EmbeddingProvider {
   normalize: boolean;
   embedDocuments(texts: string[], opts: EmbedOptions): Promise<EmbedOutput>;
   embedQuery(text: string, opts: EmbedOptions): Promise<EmbedOutput>;
+  /** Several queries in one request, embedded exactly as embedQuery would embed each. Absent when the provider has no such call. */
+  embedQueries?(texts: string[], opts: EmbedOptions): Promise<EmbedOutput>;
 }
 
 export interface ProfileShape {

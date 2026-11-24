@@ -66,6 +66,12 @@ const defaults: RagDeps = {
     if (!vector) throw new EmbeddingProfileMismatch('dims', 0, profile.dims);
     return { vector, model: output.model };
   },
+  profileBatchEmbedder: async (texts, { signal, profile }) => {
+    const provider = getEmbeddingProvider(profile.provider);
+    if (!provider.embedQueries) return null;
+    const output = await provider.embedQueries(texts, { dims: profile.dims, signal });
+    return output.vectors.map((vector) => ({ vector, model: output.model }));
+  },
   now: () => Date.now(),
   randomId: () => randomUUID(),
   ragEnv: () => readRagEnvInput(),

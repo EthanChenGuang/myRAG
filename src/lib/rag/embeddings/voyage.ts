@@ -127,5 +127,6 @@ export function createVoyageProvider(options: VoyageProviderOptions = {}): Embed
     normalize: true,
     embedDocuments: (texts, opts) => embed(texts, 'document', opts),
     embedQuery: (text, opts) => embed([text], 'query', opts),
+    embedQueries: (texts, opts) => embed(texts, 'query', opts),
   };
 }
