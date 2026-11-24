@@ -133,7 +133,7 @@ export async function getEmbeddingProfileCompleteness(
       const tenants = await writer.count(profile.id, null);
       const chunks = tenants.reduce((sum, tenant) => sum + tenant.chunks, 0);
       const missing = tenants.reduce((sum, tenant) => sum + tenant.chunksMissing, 0);
-      out[profile.id] = { state: 'measured', chunks, missing, percent: chunks === 0 ? 100 : ((chunks - missing) / chunks) * 100 };
+      out[profile.id] = { state: 'measured', chunks, missing, percent: chunks === 0 ? 100 : ((chunks - missing) * 100) / chunks };
     } catch {
       out[profile.id] = { state: 'unavailable' };
     }
