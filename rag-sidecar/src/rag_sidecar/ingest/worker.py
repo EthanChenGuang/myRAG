@@ -28,6 +28,13 @@ SHUTDOWN_WAIT_SECONDS = 10.0
 CLAIM_STALE_SECONDS = 60.0
 POLL_JITTER = 0.25
 
+
+class RealClock:
+    """Production clock for worker readiness timestamps."""
+
+    def now(self) -> datetime:
+        return datetime.now(tz=timezone.utc)
+
 _RETRYABLE = frozenset({"network", "server_5xx", "timeout", "pool_crashed", "callback_transient", "ledger_error"})
 _PERMANENT = frozenset(
     {"encrypted_pdf", "unsupported_type", "file_missing", "recorded_miss", "no_parser_available", "refused"}
