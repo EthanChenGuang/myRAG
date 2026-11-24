@@ -72,6 +72,7 @@ CREATE INDEX IF NOT EXISTS idx_document_chunks_lexical_version ON document_chunk
 REVOKE ALL ON FUNCTION public.rag_lexical_tsvector(text) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.rag_lexical_tsquery(text[]) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.rag_chunks_lexical_tsv() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_chunks_lexical_tsv() TO service_role;
 GRANT EXECUTE ON FUNCTION public.rag_lexical_tsvector(text) TO service_role;
 GRANT EXECUTE ON FUNCTION public.rag_lexical_tsquery(text[]) TO service_role;
 
