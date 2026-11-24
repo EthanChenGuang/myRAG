@@ -11,7 +11,7 @@ CREATE OR REPLACE FUNCTION public.rag_soft_delete_document(
 RETURNS TABLE (outcome text, lineage_id uuid, job_id uuid)
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = pg_catalog, public
+SET search_path = ''
 AS $$
 #variable_conflict use_column
 DECLARE
@@ -21,7 +21,7 @@ DECLARE
   v_doc_id uuid;
   v_job_id uuid;
 BEGIN
-  PERFORM rag_ingest_assert_tenant_key(p_tenant_key);
+  PERFORM public.rag_ingest_assert_tenant_key(p_tenant_key);
 
   IF p_lineage_id IS NULL THEN
     RAISE EXCEPTION 'invalid_argument' USING ERRCODE = '22023';
@@ -33,7 +33,7 @@ BEGIN
   END IF;
 
   SELECT count(*) INTO v_count
-    FROM documents d
+    FROM public.documents d
    WHERE d.lineage_id = p_lineage_id
      AND d.tenant_key = p_tenant_key
      AND d.source = p_source;
@@ -42,7 +42,7 @@ BEGIN
   END IF;
 
   SELECT EXISTS (
-    SELECT 1 FROM documents d
+    SELECT 1 FROM public.documents d
      WHERE d.lineage_id = p_lineage_id
        AND d.tenant_key = p_tenant_key
        AND d.source = p_source
@@ -55,31 +55,31 @@ BEGIN
   END IF;
 
   SELECT d.id, d.source_key INTO v_doc_id, v_source_key
-    FROM documents d
+    FROM public.documents d
    WHERE d.lineage_id = p_lineage_id
      AND d.tenant_key = p_tenant_key
      AND d.source = p_source
    ORDER BY d.is_current DESC, d.version DESC NULLS LAST
    LIMIT 1;
 
-  UPDATE documents d
+  UPDATE public.documents d
      SET is_current = false,
          status = 'deleted'
    WHERE d.lineage_id = p_lineage_id
      AND d.tenant_key = p_tenant_key
      AND d.source = p_source;
 
-  UPDATE document_chunks c
+  UPDATE public.document_chunks c
      SET is_current = false,
          status = 'deleted',
          embedding = NULL
-    FROM documents d
+    FROM public.documents d
    WHERE c.document_id = d.id
      AND d.lineage_id = p_lineage_id
      AND d.tenant_key = p_tenant_key
      AND d.source = p_source;
 
-  INSERT INTO ingestion_jobs (
+  INSERT INTO public.ingestion_jobs (
     tenant_key, kind, status, source, source_key, lineage_id, document_id
   ) VALUES (
     p_tenant_key, 'delete', 'ready', p_source, COALESCE(v_source_key, p_lineage_id::text), p_lineage_id, v_doc_id
