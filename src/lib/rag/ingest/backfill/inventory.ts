@@ -88,12 +88,13 @@ async function existingHashes(
   for (let i = 0; i < hashes.length; i += EXISTING_HASH_CHUNK) {
     signal.throwIfAborted();
     const slice = hashes.slice(i, i + EXISTING_HASH_CHUNK);
-    const { data, error } = await rpc.rpc('rag_existing_file_hashes', {
+    const response = await rpc.rpc('rag_existing_file_hashes', {
       p_tenant_key: tenantKey,
       p_hashes: slice,
     });
-    if (error) throw new Error('[Backfill] existing hash lookup failed');
-    for (const row of (data as Array<{ file_sha256?: string; tenant_key?: string }>) ?? []) {
+    if (response.error) throw new Error('[Backfill] existing hash lookup failed');
+    const rows = Array.isArray(response.data) ? response.data : [];
+    for (const row of rows as Array<{ file_sha256?: string; tenant_key?: string }>) {
       if (typeof row?.file_sha256 === 'string' && row.tenant_key === tenantKey) found.add(row.file_sha256);
     }
   }
@@ -108,11 +109,11 @@ async function enqueueSkipped(
 ): Promise<void> {
   if (jobs.length === 0) return;
   signal.throwIfAborted();
-  const { error } = await rpc.rpc('rag_enqueue_backfill_jobs', {
+  const response = await rpc.rpc('rag_enqueue_backfill_jobs', {
     p_batch_id: batchId,
     p_jobs: jobs,
   });
-  if (error) throw new Error('[Backfill] skipped_duplicate enqueue failed');
+  if (response.error) throw new Error('[Backfill] skipped_duplicate enqueue failed');
 }
 
 export async function inventory(

@@ -1,3 +1,4 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { mintScope, type TenantScope } from './scope';
 
 type DeploymentMode = 'single-tenant' | 'multi-tenant';
@@ -23,19 +24,7 @@ export type BackfillScopeResult =
   | { ok: true; scope: TenantScope }
   | { ok: false; reason: 'invalid_tenant' | 'unknown_tenant' | 'unavailable' };
 
-export interface BackfillScopeAdmin {
-  from: (table: string) => {
-    select: (columns?: string) => unknown;
-    eq: (column: string, value: string) => unknown;
-    abortSignal: (signal: AbortSignal) => unknown;
-    maybeSingle: () => Promise<{ data: unknown; error: unknown }>;
-  };
-  auth: {
-    admin: {
-      getUserById: (id: string) => Promise<{ data: { user: { id: string } | null } | null; error: unknown }>;
-    };
-  };
-}
+export type BackfillScopeAdmin = Pick<SupabaseClient, 'from' | 'auth'>;
 
 export interface BackfillScopeDeps {
   deploymentMode?: DeploymentMode;
@@ -43,7 +32,7 @@ export interface BackfillScopeDeps {
   signal: AbortSignal;
 }
 
-function refuse(reason: BackfillScopeResult extends { ok: false } ? BackfillScopeResult['reason'] : never): BackfillScopeResult {
+function refuse(reason: 'invalid_tenant' | 'unknown_tenant' | 'unavailable'): BackfillScopeResult {
   console.warn('[Backfill] tenant scope refused', { reason });
   return { ok: false, reason };
 }
@@ -88,11 +77,10 @@ export async function backfillScope(tenantKey: string, deps?: BackfillScopeDeps)
 
   if (parsed.kind === 'single') return { ok: true, scope: mintScope('single', null, null) };
 
-  let admin = deps?.admin;
-  if (admin === undefined) {
-    const { getRagDeps } = await import('../deps');
-    admin = getRagDeps().adminClient();
-  }
+  const admin =
+    deps?.admin === undefined
+      ? ((await import('../deps')).getRagDeps().adminClient() as BackfillScopeAdmin | null)
+      : deps.admin;
   if (!admin) return refuse('unavailable');
 
   try {
