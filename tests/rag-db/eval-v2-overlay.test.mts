@@ -33,7 +33,11 @@ function goldenItem(): GoldenItem {
   const line = fs
     .readFileSync(GOLDEN_PATH, 'utf8')
     .split('\n')
-    .find((entry) => entry.includes(`"id": "${TRACER_ITEM_ID}"`));
+    .find((entry) => {
+      const trimmed = entry.trim();
+      if (!trimmed) return false;
+      return (JSON.parse(trimmed) as { id: string }).id === TRACER_ITEM_ID;
+    });
   assert.ok(line, 'tracer golden item exists');
   return GoldenItemSchema.parse(JSON.parse(line));
 }

@@ -180,15 +180,16 @@ export async function createFixtureDatabase(options: {
     for (const doc of corpus.documents) {
       if (multiTenant) {
         await db.query(
-          'INSERT INTO documents (id, filename, content, metadata, user_id, created_at) VALUES ($1, $2, $3, $4::jsonb, $5, $6)',
-          [doc.id, doc.filename, doc.content, JSON.stringify({ relpath: doc.relpath, language: doc.language }), FIXTURE_USER_ID, doc.createdAt],
+          'INSERT INTO documents (id, filename, content, metadata, user_id, doc_type, created_at) VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7)',
+          [doc.id, doc.filename, doc.content, JSON.stringify({ relpath: doc.relpath, language: doc.language }), FIXTURE_USER_ID, doc.docType, doc.createdAt],
         );
       } else {
-        await db.query('INSERT INTO documents (id, filename, content, metadata, created_at) VALUES ($1, $2, $3, $4::jsonb, $5)', [
+        await db.query('INSERT INTO documents (id, filename, content, metadata, doc_type, created_at) VALUES ($1, $2, $3, $4::jsonb, $5, $6)', [
           doc.id,
           doc.filename,
           doc.content,
           JSON.stringify({ relpath: doc.relpath, language: doc.language }),
+          doc.docType,
           doc.createdAt,
         ]);
       }
@@ -205,13 +206,13 @@ export async function createFixtureDatabase(options: {
         const embedding = vectorLiteral(embedText(chunk.text));
         if (multiTenant) {
           await db.query(
-            'INSERT INTO document_chunks (id, document_id, content, embedding, chunk_index, metadata, created_at) VALUES ($1, $2, $3, $4::vector, $5, $6::jsonb, $7)',
-            [chunk.id, doc.id, chunk.stored, embedding, chunk.index, JSON.stringify(metadata), doc.createdAt],
+            'INSERT INTO document_chunks (id, document_id, content, embedding, chunk_index, metadata, doc_type, created_at) VALUES ($1, $2, $3, $4::vector, $5, $6::jsonb, $7, $8)',
+            [chunk.id, doc.id, chunk.stored, embedding, chunk.index, JSON.stringify(metadata), doc.docType, doc.createdAt],
           );
         } else {
           await db.query(
-            'INSERT INTO document_chunks (id, document_id, content, embedding, metadata, created_at) VALUES ($1, $2, $3, $4::vector, $5::jsonb, $6)',
-            [chunk.id, doc.id, chunk.stored, embedding, JSON.stringify(metadata), doc.createdAt],
+            'INSERT INTO document_chunks (id, document_id, content, embedding, metadata, doc_type, created_at) VALUES ($1, $2, $3, $4::vector, $5::jsonb, $6, $7)',
+            [chunk.id, doc.id, chunk.stored, embedding, JSON.stringify(metadata), doc.docType, doc.createdAt],
           );
         }
       }

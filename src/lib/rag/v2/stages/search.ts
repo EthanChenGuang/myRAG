@@ -1,12 +1,17 @@
+import type { RpcClient } from '../../backend/supabase-rpc';
 import { getRetrievalBackend } from '../../backend/registry';
-import type { RankedHit, RetrievalFilterInput, RetrievalFilters } from '../../backend/types';
+import type { BackendLegs, RankedHit, RetrievalFilterInput, RetrievalFilters } from '../../backend/types';
+import type { AssemblyDocumentRow } from '../../context/assemble';
+import { fetchAssemblyRows } from '../../context/fetch-rows';
 import type { RagConfig, StageName } from '../../config';
+import { getRagDeps, type RagDeps } from '../../deps';
 import { dedupeAndCap, type DedupeCounts, type DedupeResult } from '../../fusion/dedupe';
 import { rrf, type FusedHit, type RankedList } from '../../fusion/rrf';
 import { LEGACY_PROFILE } from '../../embeddings/active-profile';
 import type { QueryEmbedding } from '../../embeddings/query-embedding';
 import { queryLexicalTokens } from '../../lexical/tokenize';
 import { requireValue, runStage, stageSpec, type StageSpec } from '../../pipeline';
+import { exactIdStage, type ExactIdRow } from '../../retrieval/exact-id';
 import type { TenantScope } from '../../tenant/scope';
 import type { TraceCollector } from '../../trace/collector';
 import type { Profile, QueryVariant, RunRetrievalInput, StageOverrides } from '../../types';
@@ -45,6 +50,98 @@ function lexicalLanguagesFor(variant: QueryVariant): string[] | null {
 
 function profileId(embedding: QueryEmbedding): string {
   return embedding.profile?.id ?? LEGACY_PROFILE.id;
+}
+
+function requireAdminSearchClient(deps: RagDeps): RpcClient {
+  const admin = deps.adminClient();
+  if (!admin) throw new Error('[RAG Search] admin client unavailable');
+  return admin as unknown as RpcClient;
+}
+
+function legHitsByChunkId(legsByVariant: BackendLegs[]): Map<string, RankedHit> {
+  const map = new Map<string, RankedHit>();
+  for (const legs of legsByVariant) {
+    for (const hit of [...legs.dense, ...legs.lexical]) {
+      if (!map.has(hit.chunkId)) map.set(hit.chunkId, hit);
+    }
+  }
+  return map;
+}
+
+function hitFromExactRow(
+  row: ExactIdRow,
+  rank: number,
+  doc: AssemblyDocumentRow | undefined,
+  chunkMeta: Record<string, unknown> | null | undefined,
+): RankedHit {
+  const metadata = (chunkMeta ?? row.metadata ?? {}) as Record<string, unknown>;
+  return {
+    rank,
+    chunkId: row.chunk_id,
+    documentId: row.document_id,
+    parentId: null,
+    content: row.content,
+    metadata,
+    chunkIndex: null,
+    sectionPath: [],
+    chunkKind: typeof metadata.chunk_kind === 'string' ? metadata.chunk_kind : null,
+    similarity: 1,
+    lexicalScore: null,
+    docType: null,
+    language: null,
+    document: {
+      filename: doc?.filename ?? '',
+      createdAt: doc?.created_at ?? null,
+      metadata: (doc?.metadata ?? {}) as Record<string, unknown>,
+      contentPreview: typeof doc?.content === 'string' ? doc.content.slice(0, 200) : '',
+    },
+  };
+}
+
+async function exactIdRankedList(
+  rows: ExactIdRow[],
+  legsByVariant: BackendLegs[],
+  params: RetrievalParams,
+  signal: AbortSignal,
+): Promise<RankedList | null> {
+  if (rows.length === 0) return null;
+  const known = legHitsByChunkId(legsByVariant);
+  const missing: ExactIdRow[] = [];
+  const hits: RankedHit[] = [];
+  for (let index = 0; index < rows.length; index++) {
+    const row = rows[index]!;
+    const rank = index + 1;
+    const existing = known.get(row.chunk_id);
+    if (existing) {
+      hits.push({ ...existing, rank });
+      continue;
+    }
+    missing.push(row);
+    hits.push(hitFromExactRow(row, rank, undefined, row.metadata));
+  }
+  if (missing.length > 0) {
+    const adminClient = getRagDeps().adminClient();
+    if (!adminClient) throw new Error('[RAG Search] admin client unavailable');
+    const assembly = await fetchAssemblyRows(
+      missing.map((row) => ({
+        chunk_id: row.chunk_id,
+        document_id: row.document_id,
+        content: row.content,
+        similarity: 1,
+        metadata: row.metadata,
+      })),
+      { adminClient, signal },
+    );
+    for (let index = 0; index < rows.length; index++) {
+      const row = rows[index]!;
+      if (known.has(row.chunk_id)) continue;
+      const hitIndex = hits.findIndex((entry) => entry.chunkId === row.chunk_id);
+      if (hitIndex < 0) continue;
+      hits[hitIndex] = hitFromExactRow(row, index + 1, assembly.documents.get(row.document_id), assembly.chunkMetadata.get(row.chunk_id));
+    }
+  }
+  const weight = params.leg_weights?.exact_id ?? 1;
+  return { id: 'exact_id', weight, hits };
 }
 
 function listsFromLegs(
@@ -148,12 +245,32 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
     ).legsByVariant;
   }
 
+  let exactList: RankedList | null = null;
+  if (config.exactIdLookup) {
+    const exact = await runStage(
+      spec('exact_id_lookup', 'skip'),
+      signal,
+      (stageSignal) =>
+        exactIdStage(input.query, scope, { client: requireAdminSearchClient(getRagDeps()), signal: stageSignal, limit: pool }),
+      collector,
+      {
+        candidatesIn: searchValue.reduce((total, legs) => total + legs.dense.length + legs.lexical.length, 0),
+        candidatesOut: (value) => value.rows.length,
+        detail: (value) => `tokens=${value.tokenCount}`,
+      },
+    );
+    if (!exact.skipped && exact.value.rows.length > 0) {
+      exactList = await exactIdRankedList(exact.value.rows, searchValue, params, signal);
+    }
+  }
+
   const fused = requireValue(
     await runStage(
       spec('fuse', 'throw'),
       signal,
       () => {
         const lists = searchValue.flatMap((legs, index) => listsFromLegs(index, legs.dense, legs.lexical, params));
+        if (exactList) lists.push(exactList);
         return rrf(lists, params.rrf_k);
       },
       collector,
