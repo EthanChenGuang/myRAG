@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, Any
 from docling_core.types.doc import DoclingDocument
 
 from rag_sidecar.contracts.ingest import ParseJobRequest, ParseResult, ProcessingProfile, ProcessingProfileSet
-from rag_sidecar.contracts.queue import IngestionJob
+from rag_sidecar.contracts.queue import IngestionJob, ParseExternalRequest
 from rag_sidecar.contracts.routing import PageRange, ParseRoutingConfig, PreflightResult, QualityCheckResult
 from rag_sidecar.ingest import quality
 from rag_sidecar.ingest.cache_keys import merged_options_hash, options_hash
@@ -63,6 +63,8 @@ _PERMANENT_ERRORS = frozenset(
         "profile_unavailable",
         "merge_invariant",
         "worker_not_configured",
+        "unsupported_mode",
+        "original_unavailable",
     }
 )
 _profiles: dict[str, ProcessingProfile] | None = None
@@ -169,7 +171,7 @@ def load_profile(profile_id: str) -> ProcessingProfile:
     return profile
 
 
-def _parse_request(job: IngestionJob, profile: ProcessingProfile, input_format: str) -> ParseJobRequest:
+def _parse_request(job: IngestionJob, profile: ProcessingProfile, input_format: str | None) -> ParseJobRequest:
     return ParseJobRequest(
         profile_id=profile.id,
         profile_version=profile.version,
@@ -211,21 +213,24 @@ class _Run:
     job: IngestionJob
     deps: WorkerDeps
     cfg: ParseRoutingConfig
-    converter: Any
-    work: Path
-    path: Path
-    sha: str
-    bucket: str
-    languages: list[str]
-    docling_version: str
+    converter: Any = None
+    work: Path = Path(".")
+    path: Path = Path(".")
+    sha: str = ""
+    bucket: str = ""
+    languages: list[str] = field(default_factory=list)
+    docling_version: str = ""
     last_attempt_no: int = 0
     est_cost: float = 0.0
     check_ms: int = 0
     reusable: dict[tuple[int, int], tuple[DoclingDocument, dict[str, Any]]] = field(default_factory=dict)
 
-    def previous_attempt(self, start: int, end: int, preset: str) -> Any:
+    def previous_attempt(self, start: int, end: int | None, preset: str, reason: str = "initial") -> Any:
+        """The attempt an earlier run of this job recorded for the same pages, so a reclaimed job does not record it twice."""
         for attempt in self.job.attempts:
-            if (attempt.pages.start, attempt.pages.end, attempt.preset, attempt.reason) == (start, end, preset, "initial"):
+            if (attempt.pages.start, attempt.preset, attempt.reason) != (start, preset, reason):
+                continue
+            if end is None or attempt.pages.end == end:
                 return attempt
         return None
 
@@ -545,7 +550,15 @@ def _content_type(name: str) -> str:
     return "application/octet-stream"
 
 
-async def _merged_entry(run: _Run, result: PreflightResult, outcomes: list[_RangeResult], profile: ProcessingProfile) -> str:
+async def _merged_entry(
+    run: _Run,
+    outcomes: list[_RangeResult],
+    profile: ProcessingProfile,
+    *,
+    page_count: int,
+    text_layer_share: float | None,
+    input_format: str | None,
+) -> str:
     """The merged document of all ranges, chunked once; cached under parser ``merged`` with a hash over the ordered range entries."""
     merged_hash = merged_options_hash([(item.parser, item.version, item.opts_hash) for item in outcomes])
     version = f"{MERGED_VERSION}/{run.docling_version}/mt{profile.chunker.max_tokens}-rh{int(profile.chunker.repeat_table_header)}"
@@ -555,16 +568,15 @@ async def _merged_entry(run: _Run, result: PreflightResult, outcomes: list[_Rang
 
     docs = [await item.get_doc() for item in outcomes]
     try:
-        document = docs[0] if len(docs) == 1 else merge(docs, result.page_count)
+        document = docs[0] if len(docs) == 1 else merge(docs, page_count)
     except MergeInvariantError as exc:
         raise TieredFailure("merge_invariant", retryable=False) from exc
 
-    request = _parse_request(run.job, profile, "pdf")
+    request = _parse_request(run.job, profile, input_format)
     out_dir = run.work / "merged"
     out_dir.mkdir(parents=True, exist_ok=True)
-    layer_share = sum(1 for row in result.pages if row.text_layer) / max(1, len(result.pages))
     parsed: ParseResult = await _blocking(
-        run.deps, run.cfg, run.job.priority, _chunk_job, document, request, out_dir, run.docling_version, layer_share
+        run.deps, run.cfg, run.job.priority, _chunk_job, document, request, out_dir, run.docling_version, text_layer_share
     )
     objects: list[tuple[str, bytes, str]] = [(RESULT_OBJECT, parsed.model_dump_json().encode("utf-8"), "application/json")]
     for name in parsed.artifacts:
@@ -580,11 +592,6 @@ async def _merged_entry(run: _Run, result: PreflightResult, outcomes: list[_Rang
     return str(entry.id)
 
 
-# -------------------------------------------------------------------------------------------------------------------------
-# PDF flow
-# -------------------------------------------------------------------------------------------------------------------------
-
-
 def _final_ranges(outcomes: list[_RangeResult]) -> list[dict[str, Any]]:
     return [
         item.page_range.model_copy(
@@ -594,9 +601,47 @@ def _final_ranges(outcomes: list[_RangeResult]) -> list[dict[str, Any]]:
     ]
 
 
+async def _hand_over(
+    run: _Run,
+    outcomes: list[_RangeResult],
+    *,
+    parse_ms: int,
+    page_count: int,
+    text_layer_share: float | None,
+    input_format: str | None,
+) -> str | None:
+    """Records the final ranges and the check, then returns the merged cache id; a dry run stops here and returns None (D-33)."""
+    fields: dict[str, Any] = {
+        "page_ranges": _final_ranges(outcomes),
+        "tier": max((item.page_range.tier for item in outcomes), key=lambda tier: _TIER_RANK[tier]),
+        "parser_used": DOCLING_PARSER,
+        "parser_version": run.docling_version,
+        "est_cost_usd": run.est_cost,
+    }
+    if any(not item.passed for item in outcomes):
+        fields["needs_review_reason"] = "quality_check_failed"
+    await _advance(run, "parse", timing_ms=max(0, parse_ms - run.check_ms))
+    await _advance(run, "check", timing_ms=run.check_ms, fields=fields)
+    if run.job.kind == "dry_run":
+        return None
+    return await _merged_entry(
+        run,
+        outcomes,
+        load_profile(run.job.settings.profile_id),
+        page_count=page_count,
+        text_layer_share=text_layer_share,
+        input_format=input_format,
+    )
+
+
+# -------------------------------------------------------------------------------------------------------------------------
+# PDF flow
+# -------------------------------------------------------------------------------------------------------------------------
+
+
 async def _run_pdf(run: _Run) -> str | None:
-    """Preflight, range parsing and the check; returns the merged cache id, or None for a dry run, which stops after checking."""
-    job, deps = run.job, run.deps
+    """Preflight, range parsing and the check; returns the merged cache id, or None for a dry run."""
+    deps = run.deps
     result = await _run_preflight(run)
     if deps.page_cap is not None and result.page_count > deps.page_cap:
         raise TieredFailure("page_cap", retryable=False)
@@ -624,30 +669,230 @@ async def _run_pdf(run: _Run) -> str | None:
         outcomes.append(await _parse_docling_range(run, result, page_range, outcomes[-1] if outcomes else None))
         parse_ms += int((time.perf_counter() - range_started) * 1000)
 
+    layer_share = sum(1 for row in result.pages if row.text_layer) / max(1, len(result.pages))
+    return await _hand_over(
+        run, outcomes, parse_ms=parse_ms, page_count=result.page_count, text_layer_share=layer_share, input_format="pdf"
+    )
+
+
+# -------------------------------------------------------------------------------------------------------------------------
+# Other types: native in the app, office files in the worker
+# -------------------------------------------------------------------------------------------------------------------------
+
+_TEXT_EXTENSIONS = frozenset({"txt", "md", "markdown", "csv"})
+_IMAGE_EXTENSIONS = frozenset({"png", "jpg", "jpeg", "gif", "webp", "bmp", "tif", "tiff"})
+_MIME_EXTENSIONS = {
+    "application/pdf": "pdf",
+    "text/plain": "txt",
+    "text/markdown": "md",
+    "text/csv": "csv",
+    "text/html": "html",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+}
+_MAX_NATIVE_POLLS = 400
+
+
+def _kind_of_extension(ext: str, cfg: ParseRoutingConfig) -> str | None:
+    if ext == "pdf":
+        return "pdf"
+    if ext in _TEXT_EXTENSIONS:
+        return "native_text"
+    if ext in _IMAGE_EXTENSIONS:
+        return "image"
+    office = cfg.office_formats.get(ext)
+    if office == "native":
+        return "office_native"
+    if office == "structured":
+        return "office_structured"
+    return None
+
+
+def classify_input(job: IngestionJob, cfg: ParseRoutingConfig) -> tuple[str, str] | None:
+    """The parse path of a file and its extension: pdf, native_text, image, office_native or office_structured (D-12)."""
+    name = (job.filename or "").lower()
+    ext = name.rsplit(".", 1)[-1] if "." in name else ""
+    ext = "html" if ext == "htm" else ext
+    mime = (job.mime_type or "").split(";")[0].strip().lower()
+    kind = _kind_of_extension(ext, cfg)
+    if kind is None and mime:
+        ext = "image" if mime.startswith("image/") else _MIME_EXTENSIONS.get(mime, "")
+        kind = "image" if ext == "image" else _kind_of_extension(ext, cfg)
+    return None if kind is None else (kind, ext)
+
+
+async def _native_parse(run: _Run) -> tuple[str, list[Any] | None]:
+    """Asks the app to parse a text or image file (parse-external native) and returns its cache id and page texts."""
+    deps, job = run.deps, run.job
+    fmt = job.mime_type or "application/octet-stream"
+    opts = options_hash({"preset": "native", "pages": "all", "input_format": fmt})
+    continuation: str | None = None
+    for _ in range(_MAX_NATIVE_POLLS):
+        response = await deps.app.parse_external(
+            job.id,
+            ParseExternalRequest(worker_id=deps.worker_id, attempt_no=1, mode="native", options_hash=opts, continuation=continuation),
+        )
+        if response.status == "pending":
+            continuation = response.continuation
+            await deps.sleep((response.retry_after_ms or 0) / 1000)
+            continue
+        if response.status == "refused":
+            raise TieredFailure(response.reason or "refused", retryable=False)
+        if response.status == "failed":
+            raise TieredFailure(response.error_class or "parse_failed")
+        assert response.cache_id is not None
+        return response.cache_id, response.pages
+    raise TieredFailure("parse_timeout", retryable=True)
+
+
+def _bare_run(job: IngestionJob, deps: WorkerDeps, cfg: ParseRoutingConfig) -> _Run:
+    return _Run(job=job, deps=deps, cfg=cfg, languages=list(job.settings.ocr_languages))
+
+
+async def _run_native_app(job: IngestionJob, deps: WorkerDeps, cfg: ParseRoutingConfig, kind: str) -> JobOutcome:
+    """txt, md and csv, and images: the app parses them (native mode); the worker records the attempt and the check."""
+    from rag_sidecar.ingest.process_job import JobOutcome, _advance_until_done
+
+    run = _bare_run(job, deps, cfg)
+    image = kind == "image"
+    parser, version = ("text", "image") if image else ("plain_text", "native")
+    page_range = PageRange(start=1, end=1, tier="native", preset="native", parser=parser, layer="L1", signals=[], status="pending")
+    await _advance(
+        run,
+        "parse",
+        fields={
+            "doc_class": "image" if image else "native",
+            "page_ranges": [page_range.model_dump(mode="json")],
+            "tier_page_counts": {"native": 1, "fast": 0, "structured": 0, "premium": 0},
+            "pages": 1,
+        },
+    )
+    dry = job.kind == "dry_run"
+    started = deps.clock()
+    cache_id: str | None = None
+    check: QualityCheckResult | None = None
+    if not dry:
+        cache_id, pages = await _native_parse(run)
+        if pages:
+            check_started = time.perf_counter()
+            check = quality.check_text_pages(
+                [quality.TextPage(page=item.page, text=item.text, has_table=item.has_table) for item in pages],
+                [],
+                run.languages,
+                cfg,
+            )
+            run.check_ms = int((time.perf_counter() - check_started) * 1000)
+    if run.previous_attempt(1, 1, "native", "native") is None:
+        await _record_attempt(
+            run,
+            page_range,
+            parser=parser,
+            version=version,
+            ms=int((deps.clock() - started) * 1000),
+            cost=0.0 if dry else _tier_cost(cfg, "native", 1),
+            cache_hit=False,
+            check=check,
+            reason="native",
+        )
+    passed = check is None or check.passed
     fields: dict[str, Any] = {
-        "page_ranges": _final_ranges(outcomes),
-        "tier": max((item.page_range.tier for item in outcomes), key=lambda tier: _TIER_RANK[tier]),
-        "parser_used": DOCLING_PARSER,
-        "parser_version": run.docling_version,
+        "page_ranges": [page_range.model_copy(update={"status": "ok" if passed else "needs_review", "cache_id": cache_id}).model_dump(mode="json")],
+        "tier": "native",
+        "parser_used": parser,
+        "parser_version": version,
         "est_cost_usd": run.est_cost,
     }
-    if any(not item.passed for item in outcomes):
+    if not passed:
         fields["needs_review_reason"] = "quality_check_failed"
-    await _advance(run, "parse", timing_ms=max(0, parse_ms - run.check_ms))
     await _advance(run, "check", timing_ms=run.check_ms, fields=fields)
+    if dry or cache_id is None:
+        await _advance(run, "ready", stage_state={"dry_run": True, "ended_at": "check"})
+        return JobOutcome(status="ready")
+    return await _advance_until_done(deps, job, cache_id, run.last_attempt_no or (job.attempts[-1].attempt_no if job.attempts else 1))
 
-    if job.kind == "dry_run":
-        return None
-    return await _merged_entry(run, result, outcomes, load_profile(job.settings.profile_id))
+
+def _office_convert(path: Path, preset: str, ocr_languages: list[str]) -> DoclingDocument:
+    return docling_adapter.convert_whole(path, preset, list(ocr_languages))
 
 
-async def _prepare(job: IngestionJob, deps: WorkerDeps, work: Path) -> _Run:
+async def _run_office(job: IngestionJob, deps: WorkerDeps, cfg: ParseRoutingConfig, kind: str, ext: str, work: Path) -> JobOutcome:
+    """docx and html as one native range, pptx and xlsx as one structured range, converted in the worker with Docling (D-12)."""
+    from rag_sidecar.ingest.process_job import JobOutcome, _advance_until_done
+
+    run = await _prepare(job, deps, work, cfg=cfg, need_converter=False)
+    structured = kind == "office_structured"
+    tier, preset, convert_preset = ("structured", "structured_layout", "structured_layout") if structured else ("native", "native", "fast")
+    opts_hash = options_hash({"preset": preset, "pages": "all", "input_format": job.mime_type or ext})
+    version = run.docling_version
+    await _advance(run, "parse", fields={"doc_class": "layout" if structured else "native"})
+
+    prior = run.previous_attempt(1, None, preset)
+    hit = await _lookup(run, DOCLING_PARSER, version, opts_hash)
+    started = deps.clock()
+    parse_started = time.perf_counter()
+    was_cached = hit is not None
+    if hit is not None and prior is not None and prior.check is not None:
+        doc: DoclingDocument | None = None
+        page_count = prior.pages.end
+        passed = prior.check.passed
+        loader = _entry_loader(run, hit)
+    else:
+        convert = deps.office_converter or _office_convert
+        if hit is None:
+            doc = await _blocking(deps, cfg, job.priority, convert, run.path, convert_preset, run.languages)
+            hit = await _put_range_entry(run, DOCLING_PARSER, version, opts_hash, doc)
+        else:
+            doc = await _entry_loader(run, hit)()
+        page_count = max(1, max(doc.pages, default=0))
+        check_started = time.perf_counter()
+        check = quality.check(doc, [], run.languages, cfg, first_page=1)
+        run.check_ms = int((time.perf_counter() - check_started) * 1000)
+        passed = check.passed
+        loader = None
+        if prior is None:
+            page_range = PageRange(start=1, end=page_count, tier=tier, preset=preset, parser=DOCLING_PARSER, layer="L1", signals=[], status="pending")  # type: ignore[arg-type]
+            await _record_attempt(
+                run,
+                page_range,
+                parser=DOCLING_PARSER,
+                version=version,
+                ms=int((deps.clock() - started) * 1000),
+                cost=0.0 if was_cached else _tier_cost(cfg, tier, page_count),
+                cache_hit=was_cached,
+                check=check,
+            )
+    parse_ms = int((time.perf_counter() - parse_started) * 1000)
+    page_range = PageRange(start=1, end=page_count, tier=tier, preset=preset, parser=DOCLING_PARSER, layer="L1", signals=[], status="pending")  # type: ignore[arg-type]
+    await _advance(
+        run,
+        "parse",
+        fields={
+            "page_ranges": [page_range.model_dump(mode="json")],
+            "tier_page_counts": {name: (page_count if name == tier else 0) for name in ("native", "fast", "structured", "premium")},
+            "pages": page_count,
+        },
+    )
+    outcome = _RangeResult(page_range, DOCLING_PARSER, version, opts_hash, str(hit.id), passed, doc=doc, loader=loader)
+    input_format = ext if ext in ("docx", "html") else None
+    cache_id = await _hand_over(run, [outcome], parse_ms=parse_ms, page_count=page_count, text_layer_share=None, input_format=input_format)
+    if cache_id is None:
+        await _advance(run, "ready", stage_state={"dry_run": True, "ended_at": "check"})
+        return JobOutcome(status="ready")
+    return await _advance_until_done(deps, job, cache_id, run.last_attempt_no or (job.attempts[-1].attempt_no if job.attempts else 1))
+
+
+# -------------------------------------------------------------------------------------------------------------------------
+# Entry
+# -------------------------------------------------------------------------------------------------------------------------
+
+
+async def _prepare(job: IngestionJob, deps: WorkerDeps, work: Path, *, cfg: ParseRoutingConfig, need_converter: bool) -> _Run:
     if deps.storage is None:
         raise TieredFailure("worker_not_configured")
     if job.original_ref is None or not job.file_sha256:
         raise TieredFailure("file_missing")
-    cfg = deps.routing_cfg or load_routing_config()
-    converter = _converter_of(deps)
+    converter = _converter_of(deps) if need_converter else None
     path = await deps.storage.download(job.original_ref, dest_dir=work)
     return _Run(
         job=job,
@@ -670,12 +915,21 @@ def _new_work_dir(deps: WorkerDeps) -> Path:
 
 
 async def run_tiered(job: IngestionJob, deps: WorkerDeps) -> JobOutcome:
-    """Parses a PDF job under tiered routing and hands the merged entry to advance; a dry run stops after checking (D-33)."""
+    """Parses a job under tiered routing by file type and hands the cached result to advance; a dry run stops after checking (D-33)."""
     from rag_sidecar.ingest.process_job import JobOutcome, _advance_until_done, _fail
 
+    cfg = deps.routing_cfg or load_routing_config()
+    classified = classify_input(job, cfg)
+    if classified is None:
+        return await _fail(deps, job, "unsupported_type", retryable=False)
+    kind, ext = classified
     work = _new_work_dir(deps)
     try:
-        run = await _prepare(job, deps, work)
+        if kind in ("native_text", "image"):
+            return await _run_native_app(job, deps, cfg, kind)
+        if kind in ("office_native", "office_structured"):
+            return await _run_office(job, deps, cfg, kind, ext, work)
+        run = await _prepare(job, deps, work, cfg=cfg, need_converter=True)
         cache_id = await _run_pdf(run)
         if cache_id is None:
             await _advance(run, "ready", stage_state={"dry_run": True, "ended_at": "check"})

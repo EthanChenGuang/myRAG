@@ -1,7 +1,8 @@
 """The single per-job function used by the worker and Ray (D-06, D-10).
 
 Under fixed routing the worker never parses: it asks the app to run the unchanged Phase 3 chain (F-9), records the
-single attempt, and drives the post-parse stages with advance until the ledger row is terminal.
+single attempt, and drives the post-parse stages with advance until the ledger row is terminal. Under tiered routing the job
+goes to ``tiered.run_tiered`` (preflight, page ranges, cache, check, merge, dry runs), which ends in the same advance loop.
 """
 
 from __future__ import annotations
@@ -178,12 +179,16 @@ def _resume_parse_cache(job: IngestionJob) -> str | None:
 async def process_job(job: IngestionJob, deps: WorkerDeps) -> JobOutcome:
     """Runs one claimed job. The returned outcome says how it ended; nothing document-related is logged."""
     try:
-        if job.settings.routing != "fixed":
+        if job.settings.routing not in ("fixed", "tiered"):
             return await _fail(deps, job, "routing_not_supported", retryable=False)
         resume_cache = _resume_parse_cache(job)
         if resume_cache:
             attempt_no = job.attempts[-1].attempt_no if job.attempts else 1
             return await _advance_until_done(deps, job, resume_cache, attempt_no)
+        if job.settings.routing == "tiered":
+            from rag_sidecar.ingest.tiered import run_tiered
+
+            return await run_tiered(job, deps)
         cache_id, attempt_no, elapsed_ms = await _parse(deps, job)
         attempt_no = await _record_fixed_chain_attempt(deps, job, elapsed_ms) or attempt_no
         return await _advance_until_done(deps, job, cache_id, attempt_no)

@@ -258,12 +258,12 @@ def test_a_lost_lease_stops_the_job_without_touching_the_ledger():
     assert ledger.call_counts.get("fail") is None
 
 
-def test_tiered_routing_is_not_handled_by_this_job_function_yet():
+def test_a_tiered_pdf_job_on_a_worker_without_storage_fails_at_once_and_calls_nothing():
     ledger = FakeLedger()
     job = _claimed(ledger, routing="tiered")
     app = FakeApp()
     outcome = asyncio.run(process_job(job, _deps(ledger, app)))
-    assert outcome == JobOutcome(status="failed", error_class="routing_not_supported")
+    assert outcome == JobOutcome(status="failed", error_class="worker_not_configured")
     assert app.calls == []
 
 
