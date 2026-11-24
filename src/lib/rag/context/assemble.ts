@@ -56,7 +56,7 @@ export interface AssembleOutput<C extends AssemblyCandidate = AssemblyCandidate>
 
 export const NO_CONTEXT_TEXT = 'No relevant context found.';
 
-const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg'];
+export const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg'];
 
 export function normalizeQueryText(input: unknown): string {
   if (typeof input === 'string') {
