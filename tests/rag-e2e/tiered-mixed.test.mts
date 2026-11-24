@@ -26,6 +26,9 @@ describe('tiered routing: mixed pages and the spec example through both services
 
   before(async () => {
     harness = await startQueuedHarness({ env: { RAG_PARSE_ROUTING: 'tiered' } });
+    // The worker reads the original and writes its cache objects over HTTP, so the app must use the same storage: the default
+    // Supabase object store, pointed at the fake edge by the process environment, instead of the in-memory fake.
+    (await import('@/lib/rag/ingest/object-store')).resetObjectStoreForTests();
     enqueue = (await import('@/lib/rag/ingest/enqueue')).enqueueIngest;
   });
 
@@ -52,7 +55,7 @@ describe('tiered routing: mixed pages and the spec example through both services
 
   async function work(jobId: string) {
     const worker = await harness.runWorker(jobId, { RAG_INGEST_CONVERTER: 'recorded', RAG_INGEST_RECORDED_DIR: RECORDED_DIR });
-    assert.equal(worker.exitCode, 0, `worker stdout: ${worker.stdout.slice(-1000)} stderr: ${worker.stderr.slice(-3000)}`);
+    assert.equal(worker.exitCode, 0, `worker stdout: ${worker.stdout.slice(-1000)} stderr: ${worker.stderr.slice(-3000)} edge: ${JSON.stringify(harness.edge.errors.slice(-3))}`);
     const summary = JSON.parse(worker.stdout.trim().split('\n').at(-1) ?? '{}') as Row;
     assert.equal(summary.status, 'ready');
     return worker;
@@ -121,6 +124,27 @@ describe('tiered routing: mixed pages and the spec example through both services
       for (let page = Number(chunk.page_start); page <= Number(chunk.page_end); page += 1) covered.add(page);
     }
     assert.deepEqual([...covered].sort((a, b) => a - b), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+  });
+
+  test('the table pages keep their header row on every table chunk and the open headings continue across the range boundary', async () => {
+    const chunks = await harness.rows(
+      'SELECT page_start, chunk_kind, section_path, content FROM document_chunks WHERE document_id = $1 ORDER BY chunk_index',
+      [mixed.documentId],
+    );
+    const tables = chunks.filter((chunk) => chunk.chunk_kind === 'table');
+    assert.deepEqual(
+      tables.map((chunk) => Number(chunk.page_start)),
+      [7, 8],
+      'one table chunk per table page, from the structured_full range',
+    );
+    for (const chunk of tables) {
+      const [header, separator] = String(chunk.content).split('\n');
+      assert.equal(header, '| Lane   |   Value | Status   |');
+      assert.match(String(separator), /^\|[-| ]+\|$/);
+    }
+    const byPage = new Map(chunks.map((chunk) => [Number(chunk.page_start), chunk.section_path as string[]]));
+    assert.equal(byPage.get(7)?.[0], 'Section 1', 'the first chunk of the structured range inherits the open heading of the fast range');
+    assert.deepEqual(byPage.get(10), ['Embedded scan slip', 'Closing note'], 'page 10 continues the heading opened on the scanned page');
   });
 
   test('no premium request was made for these fixtures with the default bounds', () => {
