@@ -99,7 +99,8 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | 04-18 | [bc-78743196](bc-78743196-9471-5cda-8414-1d4c80c9d85f) RUNNING | exec/04-18 |
 | 03.1-20 | [bc-7530e5d1](bc-7530e5d1-02b0-5c59-bf06-0bd96367216e) **merged** | exec/03.1-20 — PGlite 13 |
 | 03.1-23 | [bc-ab1e9b2d](bc-ab1e9b2d-301d-50ad-85d3-54b3af5e3261) RUNNING | exec/03.1-23 |
-| 04-44 | [bc-e6e2bd84](bc-e6e2bd84-1486-5c1d-b545-6f44a20de765) RUNNING | exec/04-44 |
+| 04-44 | [bc-e6e2bd84](bc-e6e2bd84-1486-5c1d-b545-6f44a20de765) **merged** | exec/04-44 — params-hash 15 |
+| 03.1-25 | [bc-1f542e8a](bc-1f542e8a-f80a-58a7-99bb-5c47f655d0ce) RUNNING | exec/03.1-25 |
 
 ## Remaining plan inventory (file-overlap basis)
 
@@ -118,8 +119,8 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | Plan | bcId | Worktree | Notes |
 |------|------|----------|-------|
 | 03.1-23 | [bc-ab1e9b2d](bc-ab1e9b2d-301d-50ad-85d3-54b3af5e3261) RUNNING | `wt/03.1-23` | Docling presets + converters |
-| 03.1-25 | SPAWN | `wt/03.1-25` | backfill sources + inventory |
-| 04-44 | [bc-e6e2bd84](bc-e6e2bd84-1486-5c1d-b545-6f44a20de765) RUNNING | `wt/04-44` | v2 params, profiles, config hash |
+| 03.1-25 | [bc-1f542e8a](bc-1f542e8a-f80a-58a7-99bb-5c47f655d0ce) RUNNING | `wt/03.1-25` | backfill sources + inventory |
+| 04-19 | SPAWN | `wt/04-19` | v2 search pipeline (unblocked by 04-44) |
 | 04-18 | [bc-78743196](bc-78743196-9471-5cda-8414-1d4c80c9d85f) RUNNING | `wt/04-18` | selective-filter harness |
 
 **03-48 follow-ups (one executor per plan when a slot frees — do not duplicate running work):**
