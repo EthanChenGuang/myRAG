@@ -323,7 +323,7 @@ for (const mode of MODES) {
     it('rag_set_document_fields rejects keys outside the whitelist and a status it does not own', async () => {
       const row = await begin(ctx, { sourceKey: uniqueKey('fields-reject') });
       const id = row.document_id;
-      for (const key of ['tenant_key', 'is_current', 'version', 'lineage_id', 'superseded_by', 'content', 'id', 'organization_id', 'user_id', 'not_a_column']) {
+      for (const key of ['tenant_key', 'is_current', 'version', 'lineage_id', 'superseded_by', 'id', 'organization_id', 'user_id', 'not_a_column']) {
         const message = await setFields(ctx, id, ctx.a.key, { [key]: key === 'is_current' ? true : 'x' });
         assert.match(message ?? '', /invalid_field/, key);
       }
@@ -334,6 +334,36 @@ for (const mode of MODES) {
       assert.equal(doc.language, null, 'a rejected call changes nothing');
       assert.equal(doc.status, 'processing');
       assert.equal(doc.is_current, false);
+    });
+
+    it('rag_set_document_fields stores the parsed text in content and leaves it alone when the key is absent', async () => {
+      const row = await begin(ctx, { sourceKey: uniqueKey('content') });
+      const id = row.document_id;
+      const parsed = 'First line of the parsed text.\n\nSecond paragraph with a tab\tand a quote " and a backslash \\.';
+      const failure = await setFields(ctx, id, ctx.a.key, { content: parsed });
+      assert.equal(failure, null, 'content is an allowed field');
+      assert.equal((await docRow(ctx, id)).content, parsed);
+      assert.equal(await setFields(ctx, id, ctx.a.key, { language: 'en' }), null);
+      assert.equal((await docRow(ctx, id)).content, parsed, 'a call without content keeps it');
+    });
+
+    it('rag_set_document_fields refuses a content that is not text and changes nothing', async () => {
+      const row = await begin(ctx, { sourceKey: uniqueKey('content-type') });
+      const id = row.document_id;
+      assert.equal(await setFields(ctx, id, ctx.a.key, { content: 'kept' }), null);
+      for (const value of [42, true, { a: 1 }, ['x'], null]) {
+        const message = await setFields(ctx, id, ctx.a.key, { content: value });
+        assert.match(message ?? '', /invalid_field/, JSON.stringify(value));
+      }
+      assert.equal((await docRow(ctx, id)).content, 'kept');
+    });
+
+    it('rag_set_document_fields cannot set content on another tenant\'s document', async () => {
+      const row = await begin(ctx, { sourceKey: uniqueKey('content-tenant') });
+      const id = row.document_id;
+      const message = await setFields(ctx, id, wrongTenantKey(ctx), { content: 'leaked' });
+      assert.match(message ?? '', /tenant_mismatch/);
+      assert.equal((await docRow(ctx, id)).content, '', 'the row is untouched');
     });
 
     it('rag_save_ingest_state and rag_get_ingest_document round-trip the processing state for the tenant only', async () => {
