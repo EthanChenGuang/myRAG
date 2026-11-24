@@ -90,6 +90,7 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | 03.1-14 | [bc-6ed38246](bc-6ed38246-5368-58ee-9409-cafed132af21) RUNNING | exec/03.1-14 |
 | 03.1-13 | [bc-e72d1c49](bc-e72d1c49-cec3-59a1-ad07-7c158b89a381) **merged** | exec/03.1-13 |
 | 03.1-15 | [bc-7064801d](bc-7064801d-6459-56da-b3bf-9ee5be726931) **merged** | exec/03.1-15 — pytest 31 |
+| 03.1-16 | [bc-572eafe6](bc-572eafe6-375e-5fac-b690-23e40f4403cd) RUNNING | exec/03.1-16 — L1 pdfplumber |
 
 ## Remaining plan inventory (file-overlap basis)
 
