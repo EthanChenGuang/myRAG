@@ -58,3 +58,8 @@ After all: code review gate -> regression gate -> verifier -> update roadmap.
 - OLD BUG: legacy generic-provider multi-folder branch writes nango sync status `'synced'`, rejected by the CHECK; `document_id`/`last_synced_at` never saved. Fix legacy to `'completed'`.
 - OLD BUG (data loss risk): `fetchGoogleDriveFiles` reads only one page (≤ NANGO_MAX_FILES_PER_SYNC); in a larger folder a synced file off page 1 looks orphaned and is deleted. Orphan delete must skip when the listing is truncated.
 - Orphan deletes and documents DELETE leave stored originals/artifacts in the object store (same as 03-37 item).
+
+## Phase 3 wave 7 follow-ups (03-34)
+- Reaper uses `rag_mark_document_failed`, which does not require `status='processing'`; a row quarantined between read and mark could be marked failed. Review pass: conditional SQL (new migration) with a failing test.
+- Single-tenant resume is admin-only until the unified writer records an owner in single-tenant mode.
+- Live: resume route against a real sidecar job (03-48 checklist).
