@@ -107,7 +107,7 @@ export function emptyIngestState(): IngestState {
   };
 }
 
-export type ChunkKind = 'text' | 'table' | 'invoice_header';
+export type ChunkKind = 'text' | 'table' | 'image' | 'invoice_header';
 
 /** A chunk as the chunker produces it: plain content, never prefixed with its path or document name. */
 export interface ChunkDraft {
@@ -126,6 +126,8 @@ export interface ChunkDraft {
 export interface ChunkResult {
   chunks: ChunkDraft[];
   warnings: string[];
+  /** The document is one image whose caption the images stage turns into its single chunk; no text chunk is expected. */
+  captionOnly?: boolean;
 }
 
 export interface IngestIdentity {

@@ -87,6 +87,10 @@ export function getProcessingProfile(docType: DocType): ProcessingProfile {
   return current().byType.get(docType) ?? fail(`unknown doc type ${String(docType)}`);
 }
 
+export function profileFor(_source: string, docType: DocType): ProcessingProfile {
+  return getProcessingProfile(docType);
+}
+
 export function getClausePatterns(docType: DocType): readonly RegExp[] {
   return current().clausePatterns.get(docType) ?? fail(`unknown doc type ${String(docType)}`);
 }
