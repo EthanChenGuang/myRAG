@@ -129,6 +129,11 @@
       "valid": false
     },
     {
+      "scheme": "cn_uscc",
+      "value": "91000000-MA0000000-N",
+      "valid": true
+    },
+    {
       "scheme": "eu_vat",
       "value": "IT99999999990",
       "valid": true
@@ -191,11 +196,6 @@
     {
       "scheme": "eu_vat",
       "value": "it 99999999990",
-      "valid": true
-    },
-    {
-      "scheme": "cn_uscc",
-      "value": "91000000-MA0000000-N",
       "valid": true
     },
     {
