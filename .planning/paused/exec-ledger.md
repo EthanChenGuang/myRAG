@@ -67,6 +67,13 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 
 **Wave 1 (4):** 04-01–04 **parallel**; **04-05 → 04-06 → 04-07** one executor tree (PGlite migration order).
 
+## Wave B (spawned)
+
+| Plan | bcId | Worktree |
+|------|------|----------|
+| 03.1-04 | [bc-4969184f](bc-4969184f-7107-55b3-a450-d63435dcb0a0) RUNNING | wt/03.1-04 |
+| 04-04 | [bc-66bbcf6a](bc-66bbcf6a-fea9-522c-9d57-3ef3695ca16a) RUNNING | wt/04-04 |
+
 **Concurrent spawn (2026-11-24 ~13:05 Europe/Rome):** 5 `Task` calls in one turn — **4 succeeded** (gsd-executor ×4), **1 failed** (gsd-verifier + `claude-opus-5-5-medium`: *user exceeded selected model’s available usage*). No platform limit on concurrent subagents observed.
 
 ## DUPLICATE EXECUTION (2026-11-24)
