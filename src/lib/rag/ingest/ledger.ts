@@ -212,6 +212,27 @@ export async function advanceJob(args: AdvanceJobArgs, options: LedgerCallOption
   return parseJobRow('rag_advance_ingestion_job', row);
 }
 
+/** Progressive mode (D-30): flags the published fast version provisional and puts the job back at parse for the routed run. */
+export async function markProvisional(jobId: string, worker: string, options: LedgerCallOptions): Promise<IngestionJob> {
+  const row = await callOne('rag_mark_provisional', { p_job_id: jobId, p_worker: worker }, options);
+  return parseJobRow('rag_mark_provisional', row);
+}
+
+/** Progressive mode: points the job at the processing version of its lineage that the routed run writes. */
+export async function beginProgressiveFinal(jobId: string, worker: string, documentId: string, options: LedgerCallOptions): Promise<IngestionJob> {
+  const row = await callOne('rag_begin_progressive_final', { p_job_id: jobId, p_worker: worker, p_document_id: documentId }, options);
+  return parseJobRow('rag_begin_progressive_final', row);
+}
+
+/** Progressive mode (A-9): the routed text equals the provisional text; clears the flags of the current version in place. */
+export async function clearProvisional(jobId: string, options: LedgerCallOptions): Promise<{ documentId: string; version: number }> {
+  const row = await callOne('rag_clear_provisional', { p_job_id: jobId }, options);
+  const documentId = row.document_id;
+  const version = row.version;
+  if (typeof documentId !== 'string' || typeof version !== 'number') throw new IngestLedgerError('rag_clear_provisional', 'bad_response');
+  return { documentId, version };
+}
+
 export async function recordAttempt(
   jobId: string,
   worker: string,

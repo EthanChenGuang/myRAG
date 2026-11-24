@@ -4,7 +4,7 @@ import { z } from 'zod/v3';
 export const ActivationEvidenceSchema = z.object({ "backfill_run_id": z.string(), "baseline_profile": z.string(), "gate_passed": z.boolean(), "pre_migration": z.object({ "n": z.number().int().gte(0), "passed": z.boolean() }).strict(), "recorded_at": z.string(), "target_profile": z.string() }).strict()
 export type ActivationEvidence = z.infer<typeof ActivationEvidenceSchema>
 
-export const AdvanceRequestSchema = z.object({ "attempt_no": z.number().int().gte(1), "cursor": z.union([z.string(), z.null()]).default(null), "deadline_ms": z.number().int().gte(1).lte(40000), "parse_cache_id": z.union([z.string(), z.null()]).default(null), "phase": z.enum(["begin","post_parse"]), "worker_id": z.string().min(1).max(128) }).strict()
+export const AdvanceRequestSchema = z.object({ "attempt_no": z.number().int().gte(1), "cursor": z.union([z.string(), z.null()]).default(null), "deadline_ms": z.number().int().gte(1).lte(40000), "parse_cache_id": z.union([z.string(), z.null()]).default(null), "phase": z.enum(["begin","post_parse"]), "provisional": z.boolean().default(false), "worker_id": z.string().min(1).max(128) }).strict()
 export type AdvanceRequest = z.infer<typeof AdvanceRequestSchema>
 
 export const AdvanceResponseSchema = z.object({ "done": z.boolean(), "reason": z.union([z.string(), z.null()]).default(null), "stage": z.string(), "status": z.union([z.enum(["queued","preflight","parsing","checking","chunking","embedding","ready","failed","quarantined","needs_review","skipped_duplicate"]), z.null()]).default(null), "wait_ms": z.union([z.number().int().gte(0), z.null()]).default(null), "worker_id": z.string().min(1).max(128) }).strict()

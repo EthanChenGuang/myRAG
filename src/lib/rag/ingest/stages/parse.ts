@@ -37,7 +37,7 @@ export interface Parsed {
   warnings: string[];
 }
 
-const stripBom = (text: string): string => (text.charCodeAt(0) === 0xfeff ? text.slice(1) : text);
+export const stripBom = (text: string): string => (text.charCodeAt(0) === 0xfeff ? text.slice(1) : text);
 
 function warn(ctx: StageContext, code: string): void {
   if (!ctx.warnings.includes(code)) ctx.warnings.push(code);
