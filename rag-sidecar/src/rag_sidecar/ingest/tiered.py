@@ -1,9 +1,10 @@
-"""Tiered routing in the worker: preflight, range parsing with cache, quality check, attempts, merge (D-12, D-15, D-53, D-56).
+"""Tiered routing in the worker: preflight, range parsing with cache, quality check, escalation, merge (D-12, D-15, D-53, D-56).
 
 Under tiered routing a PDF is probed (L1 and L2) in the pool, split into page ranges by the page tiers, and every range is parsed
 at its own preset: fast and structured ranges by Docling in the priority pool. Each range is one parse-cache entry; the ranges
-are checked, merged in page order into one Docling document, chunked once and cached as the ``merged`` entry that ``advance``
-reads. Nothing here writes a document row or a chunk (D-06).
+are checked, and each run of failing pages climbs the ladder one step at a time (``escalation``), re-parsing only those pages.
+The kept result of every page is merged in page order into one Docling document, chunked once and cached as the ``merged``
+entry that ``advance`` reads. Nothing here writes a document row or a chunk (D-06).
 """
 
 from __future__ import annotations
@@ -23,9 +24,16 @@ from docling_core.types.doc import DoclingDocument, Size
 
 from rag_sidecar.contracts.ingest import ParseJobRequest, ParseResult, ProcessingProfile, ProcessingProfileSet
 from rag_sidecar.contracts.queue import IngestionJob, ParseAttemptPages, ParseExternalRequest
-from rag_sidecar.contracts.routing import PageRange, ParseRoutingConfig, PreflightResult, QualityCheckResult
-from rag_sidecar.ingest import quality
+from rag_sidecar.contracts.routing import (
+    PageRange,
+    ParseRoutingConfig,
+    PreflightResult,
+    QualityCheckResult,
+    QualityScoreWeights,
+)
+from rag_sidecar.ingest import escalation, quality
 from rag_sidecar.ingest.cache_keys import merged_options_hash, options_hash
+from rag_sidecar.ingest.escalation import EscalationUnit, PageAttempt
 from rag_sidecar.ingest.merge import MergeInvariantError, join_page_parts, merge, premium_part, slice_pages
 from rag_sidecar.ingest.pool import UPLOAD_PRIORITY, PoolCrashed
 from rag_sidecar.parse import docling_adapter
@@ -50,7 +58,8 @@ RESULT_OBJECT = "result.json"
 
 _STAGE_STATUS = {"preflight": "preflight", "parse": "parsing", "check": "checking", "ready": "ready"}
 _TIER_RANK = {"native": 0, "fast": 1, "structured": 2, "premium": 3}
-_BUDGET_REFUSALS = frozenset({"budget_exhausted", "over_page_cap", "batch_budget_exhausted"})
+_DEFAULT_LADDER = ["fast", "structured", "premium"]
+_PRESET_RANK = {"native": 0, "fast": 1, "structured_layout": 2, "structured_full": 3, "structured_ocr": 4, "premium": 5}
 _MAX_PREMIUM_POLLS = 400
 _PROFILES_PATH = Path(__file__).resolve().parents[4] / "config" / "rag" / "processing-profiles.json"
 _PERMANENT_ERRORS = frozenset(
@@ -121,7 +130,7 @@ def _guarded(target: Callable[..., Any], *params: Any) -> tuple[Any, ...]:
     """Runs one job in a pool worker; classified errors travel as values so a pool does not turn them into a crash."""
     try:
         return ("ok", target(*params))
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         error_class = _error_class_of(exc)
         if error_class is None:
             raise
@@ -208,6 +217,8 @@ class _RangeResult:
     loader: Callable[[], Awaitable[DoclingDocument]] | None = None
     key_parser: str = ""
     blocked: str | None = None
+    check: QualityCheckResult | None = None
+    reason: str = "initial"
 
     async def get_doc(self) -> DoclingDocument:
         if self.doc is None:
@@ -506,15 +517,35 @@ async def _cache_reusable(run: _Run) -> None:
             await _put_range_entry(run, DOCLING_PARSER, run.docling_version, opts_hash, doc)
 
 
-async def _parse_docling_range(run: _Run, result: PreflightResult, page_range: PageRange, previous: _RangeResult | None) -> _RangeResult:
+def _table_before(previous: _RangeResult | None, start: int) -> Callable[[], Awaitable[bool]]:
+    """Whether the range just before ``start`` ends in a table (D-52); read only when the range is checked."""
+
+    async def probe() -> bool:
+        if previous is None or previous.page_range.end + 1 != start:
+            return False
+        return quality.page_has_table(await previous.get_doc(), previous.page_range.end)
+
+    return probe
+
+
+async def _parse_docling_range(
+    run: _Run,
+    result: PreflightResult,
+    page_range: PageRange,
+    table_before: Callable[[], Awaitable[bool]],
+    reason: str = "initial",
+) -> _RangeResult:
     preset, start, end = page_range.preset, page_range.start, page_range.end
     opts_hash = range_options_hash(preset, start, end, run.languages, run.cfg)
     version = run.docling_version
-    prior = run.previous_attempt(start, end, preset)
+    prior = run.previous_attempt(start, end, preset, reason)
     hit = await _lookup(run, DOCLING_PARSER, version, opts_hash)
 
     if hit is not None and prior is not None and prior.check is not None:
-        return _RangeResult(page_range, DOCLING_PARSER, version, opts_hash, str(hit.id), prior.check.passed, loader=_entry_loader(run, hit))
+        return _RangeResult(
+            page_range, DOCLING_PARSER, version, opts_hash, str(hit.id), prior.check.passed,
+            loader=_entry_loader(run, hit), check=prior.check, reason=reason,
+        )
 
     started = run.deps.clock()
     was_cached = hit is not None
@@ -523,9 +554,7 @@ async def _parse_docling_range(run: _Run, result: PreflightResult, page_range: P
         hit = await _put_range_entry(run, DOCLING_PARSER, version, opts_hash, doc)
     else:
         doc = await _entry_loader(run, hit)()
-    boundary = False
-    if previous is not None and previous.page_range.end + 1 == start:
-        boundary = quality.page_has_table(await previous.get_doc(), previous.page_range.end)
+    boundary = await table_before()
     check_started = time.perf_counter()
     check = quality.check(
         doc,
@@ -546,8 +575,9 @@ async def _parse_docling_range(run: _Run, result: PreflightResult, page_range: P
             cost=0.0 if was_cached else _tier_cost(run.cfg, page_range.tier, end - start + 1),
             cache_hit=was_cached,
             check=check,
+            reason=reason,
         )
-    return _RangeResult(page_range, DOCLING_PARSER, version, opts_hash, str(hit.id), check.passed, doc=doc)
+    return _RangeResult(page_range, DOCLING_PARSER, version, opts_hash, str(hit.id), check.passed, doc=doc, check=check, reason=reason)
 
 
 # -------------------------------------------------------------------------------------------------------------------------
@@ -618,34 +648,49 @@ async def _premium_request(run: _Run, page_range: PageRange, pages: list[int], o
     raise TieredFailure("parse_timeout", retryable=True)
 
 
-async def _parse_premium_range(run: _Run, result: PreflightResult, page_range: PageRange, previous: _RangeResult | None) -> _RangeResult:
-    """A premium range becomes a Docling part with the original page numbers; a blocked range is parsed structured instead (D-16)."""
+def _premium_options_hash(start: int, end: int) -> str:
+    return options_hash({"preset": "premium", "pages": [start, end], "input_format": "application/pdf"})
+
+
+async def _premium_attempt(
+    run: _Run,
+    result: PreflightResult,
+    page_range: PageRange,
+    *,
+    reason: str,
+    refusal: str | None = None,
+) -> _RangeResult | str:
+    """One premium parse of a page range through parse-external, or the refusal that kept it local.
+
+    ``refusal`` is the worker's own refusal from the job snapshot (D-18: the worker does not propose premium when the snapshot
+    forbids it); no request is made then. A refusal is recorded as a refused attempt.
+    """
     start, end = page_range.start, page_range.end
     pages = list(range(start, end + 1))
-    opts_hash = options_hash({"preset": "premium", "pages": [start, end], "input_format": "application/pdf"})
-    prior = run.previous_attempt(start, end, "premium")
+    opts_hash = _premium_options_hash(start, end)
+    prior = run.previous_attempt(start, end, "premium", reason)
     hit = await _lookup(run, PREMIUM_PART_PARSER, PREMIUM_PART_VERSION, opts_hash)
     if hit is not None and prior is not None and not prior.refused and prior.check is not None:
         return _RangeResult(
             page_range, PREMIUM_PARSER, PREMIUM_PART_VERSION, opts_hash, str(hit.id), prior.check.passed,
-            key_parser=PREMIUM_PART_PARSER, loader=_entry_loader(run, hit),
+            key_parser=PREMIUM_PART_PARSER, loader=_entry_loader(run, hit), check=prior.check, reason=reason,
         )
 
     started = run.deps.clock()
     was_cached = hit is not None
     if hit is None:
-        try:
-            text_pages = await _premium_request(run, page_range, pages, opts_hash)
-        except _PremiumRefused as refusal:
+        if refusal is None:
+            try:
+                text_pages = await _premium_request(run, page_range, pages, opts_hash)
+            except _PremiumRefused as refused:
+                refusal = refused.reason
+        if refusal is not None:
             if prior is None or not prior.refused:
                 await _record_attempt(
                     run, page_range, parser=PREMIUM_PARSER, version=PREMIUM_PART_VERSION,
-                    ms=int((run.deps.clock() - started) * 1000), cost=0.0, cache_hit=False, check=None, refused=True,
+                    ms=int((run.deps.clock() - started) * 1000), cost=0.0, cache_hit=False, check=None, reason=reason, refused=True,
                 )
-            lower = page_range.model_copy(update={"tier": "structured", "preset": "structured_full", "parser": DOCLING_PARSER})
-            outcome = await _parse_docling_range(run, result, lower, previous)
-            outcome.blocked = refusal.reason
-            return outcome
+            return refusal
         sizes = await asyncio.to_thread(_page_sizes, run.path, pages)
         doc = premium_part([(item.page, item.text) for item in sorted(text_pages, key=lambda item: item.page)], sizes)
         hit = await _put_range_entry(run, PREMIUM_PART_PARSER, PREMIUM_PART_VERSION, opts_hash, doc, doc_parser=PREMIUM_PARSER)
@@ -660,12 +705,165 @@ async def _parse_premium_range(run: _Run, result: PreflightResult, page_range: P
             run, page_range, parser=PREMIUM_PARSER, version=PREMIUM_PART_VERSION,
             ms=int((run.deps.clock() - started) * 1000),
             cost=0.0 if was_cached else _tier_cost(run.cfg, "premium", len(pages)),
-            cache_hit=was_cached, check=check,
+            cache_hit=was_cached, check=check, reason=reason,
         )
     return _RangeResult(
         page_range, PREMIUM_PARSER, PREMIUM_PART_VERSION, opts_hash, str(hit.id), check.passed,
-        doc=doc, key_parser=PREMIUM_PART_PARSER,
+        doc=doc, key_parser=PREMIUM_PART_PARSER, check=check, reason=reason,
     )
+
+
+async def _parse_premium_range(
+    run: _Run,
+    result: PreflightResult,
+    page_range: PageRange,
+    table_before: Callable[[], Awaitable[bool]],
+    refusal: str | None,
+) -> _RangeResult:
+    """A premium range becomes a Docling part with the original page numbers; a blocked range is parsed structured instead (D-16)."""
+    outcome = await _premium_attempt(run, result, page_range, reason="initial", refusal=refusal)
+    if not isinstance(outcome, str):
+        return outcome
+    lower = page_range.model_copy(update={"tier": "structured", "preset": "structured_full", "parser": DOCLING_PARSER})
+    lowered = await _parse_docling_range(run, result, lower, table_before)
+    lowered.blocked = outcome
+    return lowered
+
+
+def _snapshot_refusal(run: _Run, ranges: list[PageRange]) -> str | None:
+    """The refusal the job snapshot already implies for the document's premium pages: cloud off, or more pages than the cap."""
+    premium_pages = sum(item.end - item.start + 1 for item in ranges if item.preset == "premium")
+    if premium_pages == 0:
+        return None
+    settings = run.job.settings
+    if not settings.cloud_allowed:
+        return escalation.CLOUD_NOT_ALLOWED
+    if premium_pages > settings.premium_max_pages_per_doc:
+        return escalation.OVER_PAGE_CAP
+    return None
+
+
+# -------------------------------------------------------------------------------------------------------------------------
+# Escalation (D-15, D-16, D-52)
+# -------------------------------------------------------------------------------------------------------------------------
+
+
+@dataclass
+class _History:
+    """Every attempt each page has seen, in order, and the result behind each attempt number."""
+
+    weights: QualityScoreWeights
+    pages: dict[int, list[PageAttempt]] = field(default_factory=dict)
+    results: dict[int, _RangeResult] = field(default_factory=dict)
+    seq: int = 0
+
+    def add(self, outcome: _RangeResult) -> None:
+        if outcome.blocked is not None:
+            self.refuse(outcome.page_range.start, outcome.page_range.end, outcome.blocked, outcome.reason)
+        self.seq += 1
+        self.results[self.seq] = outcome
+        rows = {row.page: tuple(row.failed) for row in outcome.check.pages} if outcome.check is not None else {}
+        missing: tuple[str, ...] = ("partial_conversion",) if outcome.check is not None else ()
+        for page in range(outcome.page_range.start, outcome.page_range.end + 1):
+            failed = rows.get(page, missing)
+            self.pages.setdefault(page, []).append(
+                PageAttempt(
+                    seq=self.seq,
+                    tier=outcome.page_range.tier,
+                    preset=outcome.page_range.preset,
+                    reason=outcome.reason,
+                    failed=failed,
+                    score=escalation.page_score(failed, self.weights),
+                )
+            )
+
+    def refuse(self, start: int, end: int, refusal: str, reason: str) -> None:
+        self.seq += 1
+        for page in range(start, end + 1):
+            self.pages.setdefault(page, []).append(PageAttempt(seq=self.seq, tier="premium", preset="premium", reason=reason, refused=refusal))
+
+    def kept(self, page: int) -> PageAttempt | None:
+        return escalation.choose_kept({page: self.pages.get(page, [])}).get(page)
+
+    def table_before(self, start: int) -> Callable[[], Awaitable[bool]]:
+        async def probe() -> bool:
+            kept = self.kept(start - 1)
+            if kept is None:
+                return False
+            return quality.page_has_table(await self.results[kept.seq].get_doc(), start - 1)
+
+        return probe
+
+    def flag(self, page: int, seq: int, condition: str) -> None:
+        attempts = self.pages[page]
+        for index, attempt in enumerate(attempts):
+            if attempt.seq == seq and condition not in attempt.failed:
+                failed = (*attempt.failed, condition)
+                attempts[index] = PageAttempt(
+                    seq=attempt.seq, tier=attempt.tier, preset=attempt.preset, reason=attempt.reason, failed=failed,
+                    score=escalation.page_score(failed, self.weights), refused=attempt.refused,
+                )
+
+
+async def _table_continues(run: _Run, result: PreflightResult, history: _History, outcome: _RangeResult) -> None:
+    """D-52 repeats until the table ends: after a pulled page, the next page with numeric rows and no table is pulled too."""
+    end = outcome.page_range.end
+    page = end + 1
+    rows = {row.page: row for row in result.pages}
+    if page not in history.pages or page not in rows or rows[page].aligned_number_rows <= 0:
+        return
+    if any(attempt.reason == escalation.TABLE_BOUNDARY for attempt in history.pages[page]):
+        return
+    kept = history.kept(page)
+    if kept is None or not kept.passed or _PRESET_RANK[kept.preset] >= _PRESET_RANK[outcome.page_range.preset]:
+        return
+    if not quality.page_has_table(await outcome.get_doc(), end):
+        return
+    if quality.page_has_table(await history.results[kept.seq].get_doc(), page):
+        return
+    history.flag(page, kept.seq, escalation.TABLE_BOUNDARY)
+
+
+async def _run_unit(run: _Run, result: PreflightResult, history: _History, unit: EscalationUnit) -> None:
+    source = history.results[unit.source_seq].page_range
+    premium = unit.preset == "premium"
+    page_range = PageRange(
+        start=unit.start,
+        end=unit.end,
+        tier=unit.tier,  # type: ignore[arg-type]
+        preset=unit.preset,  # type: ignore[arg-type]
+        parser=PREMIUM_PARSER if premium else DOCLING_PARSER,
+        layer=source.layer,
+        signals=list(source.signals),
+        status="pending",
+    )
+    if premium:
+        outcome = await _premium_attempt(run, result, page_range, reason=unit.reason)
+        if isinstance(outcome, str):
+            history.refuse(unit.start, unit.end, outcome, unit.reason)
+            return
+    else:
+        outcome = await _parse_docling_range(run, result, page_range, history.table_before(unit.start), reason=unit.reason)
+    history.add(outcome)
+    if unit.reason == escalation.TABLE_BOUNDARY:
+        await _table_continues(run, result, history, outcome)
+
+
+async def _escalate(run: _Run, result: PreflightResult, history: _History, timed_out: Callable[[], bool]) -> dict[int, str]:
+    """Re-parses failing pages one ladder step at a time until nothing is left to try; returns the blocked pages (D-15)."""
+    ladder = run.cfg.ladder.get("pdf", _DEFAULT_LADDER)
+    max_per_page = run.cfg.escalation.max_per_page
+    blocked: dict[int, str] = {}
+    for _round in range(max_per_page + result.page_count + 2):
+        plan = escalation.plan_escalations(history.pages, run.job.settings, ladder, max_per_page=max_per_page)
+        blocked = dict(plan.blocked)
+        if not plan.units:
+            break
+        for unit in plan.units:
+            if timed_out():
+                raise TieredFailure("parse_timeout", retryable=True)
+            await _run_unit(run, result, history, unit)
+    return blocked
 
 
 # -------------------------------------------------------------------------------------------------------------------------
@@ -681,23 +879,45 @@ def _content_type(name: str) -> str:
     return "application/octet-stream"
 
 
+@dataclass(frozen=True)
+class _Part:
+    """Pages start..end of one result: the whole range, or the slice of it a page's kept result comes from."""
+
+    result: _RangeResult
+    start: int
+    end: int
+
+    @property
+    def whole(self) -> bool:
+        return (self.start, self.end) == (self.result.page_range.start, self.result.page_range.end)
+
+    def cache_entry(self) -> tuple[str, str, str]:
+        item = self.result
+        opts_hash = item.opts_hash if self.whole else f"{item.opts_hash}#{self.start}-{self.end}"
+        return (item.key_parser or item.parser, item.version, opts_hash)
+
+    async def get_doc(self) -> DoclingDocument:
+        doc = await self.result.get_doc()
+        return doc if self.whole else slice_pages(doc, range(self.start, self.end + 1))
+
+
 async def _merged_entry(
     run: _Run,
-    outcomes: list[_RangeResult],
+    parts: list[_Part],
     profile: ProcessingProfile,
     *,
     page_count: int,
     text_layer_share: float | None,
     input_format: str | None,
 ) -> str:
-    """The merged document of all ranges, chunked once; cached under parser ``merged`` with a hash over the ordered range entries."""
-    merged_hash = merged_options_hash([(item.key_parser or item.parser, item.version, item.opts_hash) for item in outcomes])
+    """The merged document of the kept parts, chunked once; cached under parser ``merged`` with a hash over the ordered parts."""
+    merged_hash = merged_options_hash([part.cache_entry() for part in parts])
     version = f"{MERGED_VERSION}/{run.docling_version}/mt{profile.chunker.max_tokens}-rh{int(profile.chunker.repeat_table_header)}"
     hit = await _lookup(run, MERGED_PARSER, version, merged_hash)
     if hit is not None:
         return str(hit.id)
 
-    docs = [await item.get_doc() for item in outcomes]
+    docs = [await part.get_doc() for part in parts]
     try:
         document = docs[0] if len(docs) == 1 else merge(docs, page_count)
     except MergeInvariantError as exc:
@@ -723,23 +943,63 @@ async def _merged_entry(
     return str(entry.id)
 
 
-def _final_ranges(outcomes: list[_RangeResult]) -> list[dict[str, Any]]:
-    return [
-        item.page_range.model_copy(
+def _kept_parts(history: _History, kept: dict[int, PageAttempt], page_count: int) -> list[_Part]:
+    """Consecutive pages kept from the same attempt form one part (D-15, D-56)."""
+    parts: list[_Part] = []
+    for page in range(1, page_count + 1):
+        result = history.results[kept[page].seq]
+        last = parts[-1] if parts else None
+        if last is not None and last.result is result and last.end + 1 == page:
+            parts[-1] = _Part(result, last.start, page)
+        else:
+            parts.append(_Part(result, page, page))
+    return parts
+
+
+def _page_status(page: int, kept: PageAttempt, review: escalation.ReviewOutcome) -> str:
+    if page in review.needs_review:
+        return "needs_review"
+    if kept.reason in (escalation.ESCALATION, escalation.TABLE_BOUNDARY):
+        return "escalated"
+    return "ok"
+
+
+def _final_ranges(
+    result: PreflightResult, history: _History, kept: dict[int, PageAttempt], review: escalation.ReviewOutcome
+) -> list[dict[str, Any]]:
+    """The final per-page state, run-length encoded (D-55): the kept result's tier, preset, parser and cache entry, and a status."""
+    origin = {page: item for item in result.ranges for page in range(item.start, item.end + 1)}
+    rows: list[dict[str, Any]] = []
+    for page in range(1, result.page_count + 1):
+        attempt = kept[page]
+        outcome = history.results[attempt.seq]
+        row = origin[page].model_copy(
             update={
-                "status": "ok" if item.passed and item.blocked not in _BUDGET_REFUSALS else "needs_review",
-                "cache_id": item.cache_id,
-                "parser": item.parser,
+                "start": page,
+                "end": page,
+                "tier": outcome.page_range.tier,
+                "preset": outcome.page_range.preset,
+                "parser": outcome.parser,
+                "status": _page_status(page, attempt, review),
+                "cache_id": outcome.cache_id,
             }
         ).model_dump(mode="json")
-        for item in outcomes
-    ]
+        previous = rows[-1] if rows else None
+        if previous is not None and {k: v for k, v in previous.items() if k not in ("start", "end")} == {
+            k: v for k, v in row.items() if k not in ("start", "end")
+        }:
+            previous["end"] = page
+        else:
+            rows.append(row)
+    return rows
 
 
 async def _hand_over(
     run: _Run,
-    outcomes: list[_RangeResult],
+    parts: list[_Part],
     *,
+    page_ranges: list[dict[str, Any]],
+    review_fields: dict[str, Any],
     parse_ms: int,
     page_count: int,
     text_layer_share: float | None,
@@ -747,27 +1007,20 @@ async def _hand_over(
 ) -> str | None:
     """Records the final ranges and the check, then returns the merged cache id; a dry run stops here and returns None (D-33)."""
     fields: dict[str, Any] = {
-        "page_ranges": _final_ranges(outcomes),
-        "tier": max((item.page_range.tier for item in outcomes), key=lambda tier: _TIER_RANK[tier]),
+        "page_ranges": page_ranges,
+        "tier": max((part.result.page_range.tier for part in parts), key=lambda tier: _TIER_RANK[tier]),
         "parser_used": DOCLING_PARSER,
         "parser_version": run.docling_version,
         "est_cost_usd": run.est_cost,
+        **review_fields,
     }
-    blocked = [item.blocked for item in outcomes if item.blocked is not None]
-    budget_blocked = [reason for reason in blocked if reason in _BUDGET_REFUSALS]
-    if budget_blocked:
-        fields["needs_review_reason"] = budget_blocked[0]
-    elif any(not item.passed for item in outcomes):
-        fields["needs_review_reason"] = "quality_check_failed"
-    if blocked and not budget_blocked:
-        fields["routing_note"] = f"premium_blocked:{blocked[0]}"
     await _advance(run, "parse", timing_ms=max(0, parse_ms - run.check_ms))
     await _advance(run, "check", timing_ms=run.check_ms, fields=fields)
     if run.job.kind == "dry_run":
         return None
     return await _merged_entry(
         run,
-        outcomes,
+        parts,
         load_profile(run.job.settings.profile_id),
         page_count=page_count,
         text_layer_share=text_layer_share,
@@ -781,7 +1034,7 @@ async def _hand_over(
 
 
 async def _run_pdf(run: _Run) -> str | None:
-    """Preflight, range parsing and the check; returns the merged cache id, or None for a dry run."""
+    """Preflight, range parsing, the check and escalation; returns the merged cache id, or None for a dry run."""
     deps = run.deps
     result = await _run_preflight(run)
     if deps.page_cap is not None and result.page_count > deps.page_cap:
@@ -800,20 +1053,48 @@ async def _run_pdf(run: _Run) -> str | None:
     )
     await _cache_reusable(run)
 
-    outcomes: list[_RangeResult] = []
     parse_started = deps.clock() if deps.document_timeout_s is not None else 0.0
-    parse_ms = 0
+
+    def timed_out() -> bool:
+        return deps.document_timeout_s is not None and deps.clock() - parse_started > deps.document_timeout_s
+
+    refusal = _snapshot_refusal(run, list(result.ranges))
+    outcomes: list[_RangeResult] = []
+    parse_clock = time.perf_counter()
     for page_range in result.ranges:
-        if deps.document_timeout_s is not None and deps.clock() - parse_started > deps.document_timeout_s:
+        if timed_out():
             raise TieredFailure("parse_timeout", retryable=True)
-        range_started = time.perf_counter()
-        parse_range = _parse_premium_range if page_range.preset == "premium" else _parse_docling_range
-        outcomes.append(await parse_range(run, result, page_range, outcomes[-1] if outcomes else None))
-        parse_ms += int((time.perf_counter() - range_started) * 1000)
+        previous = outcomes[-1] if outcomes else None
+        table_before = _table_before(previous, page_range.start)
+        if page_range.preset == "premium":
+            outcomes.append(await _parse_premium_range(run, result, page_range, table_before, refusal))
+        else:
+            outcomes.append(await _parse_docling_range(run, result, page_range, table_before))
+
+    history = _History(run.cfg.quality.score_weights)
+    for outcome in outcomes:
+        history.add(outcome)
+    blocked = await _escalate(run, result, history, timed_out)
+    parse_ms = int((time.perf_counter() - parse_clock) * 1000)
+
+    kept = escalation.choose_kept(history.pages)
+    review = escalation.review(history.pages, blocked)
+    review_fields: dict[str, Any] = {}
+    if review.reason is not None:
+        review_fields["needs_review_reason"] = review.reason
+    if review.routing_note is not None:
+        review_fields["routing_note"] = review.routing_note
 
     layer_share = sum(1 for row in result.pages if row.text_layer) / max(1, len(result.pages))
     return await _hand_over(
-        run, outcomes, parse_ms=parse_ms, page_count=result.page_count, text_layer_share=layer_share, input_format="pdf"
+        run,
+        _kept_parts(history, kept, result.page_count),
+        page_ranges=_final_ranges(result, history, kept, review),
+        review_fields=review_fields,
+        parse_ms=parse_ms,
+        page_count=result.page_count,
+        text_layer_share=layer_share,
+        input_format="pdf",
     )
 
 
@@ -1017,7 +1298,17 @@ async def _run_office(job: IngestionJob, deps: WorkerDeps, cfg: ParseRoutingConf
     )
     outcome = _RangeResult(page_range, DOCLING_PARSER, version, opts_hash, str(hit.id), passed, doc=doc, loader=loader)
     input_format = ext if ext in ("docx", "html") else None
-    cache_id = await _hand_over(run, [outcome], parse_ms=parse_ms, page_count=page_count, text_layer_share=None, input_format=input_format)
+    final = page_range.model_copy(update={"status": "ok" if passed else "needs_review", "cache_id": outcome.cache_id, "parser": DOCLING_PARSER})
+    cache_id = await _hand_over(
+        run,
+        [_Part(outcome, 1, page_count)],
+        page_ranges=[final.model_dump(mode="json")],
+        review_fields={} if passed else {"needs_review_reason": escalation.QUALITY_CHECK_FAILED},
+        parse_ms=parse_ms,
+        page_count=page_count,
+        text_layer_share=None,
+        input_format=input_format,
+    )
     if cache_id is None:
         await _advance(run, "ready", stage_state={"dry_run": True, "ended_at": "check"})
         return JobOutcome(status="ready")

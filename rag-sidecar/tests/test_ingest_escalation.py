@@ -402,68 +402,83 @@ def test_units_are_value_objects():
 # Task 2: the escalation loop in the tiered flow
 # =====================================================================================================================
 
-import asyncio  # noqa: E402
-from pathlib import Path  # noqa: E402
+import asyncio
+import importlib
+from pathlib import Path
+from typing import Any
 
-import pytest  # noqa: E402
+import pytest
 
-pytest.importorskip("docling_core.transforms.chunker.hybrid_chunker")
-pytest.importorskip("pypdfium2")
-pytest.importorskip("pdfplumber")
 
-from ingest_fakes import AppScript  # noqa: E402
-from rag_sidecar.contracts.ingest import ParseResult  # noqa: E402
-from rag_sidecar.contracts.routing import PageRange  # noqa: E402
-from rag_sidecar.ingest import converters, quality, tiered  # noqa: E402
-from rag_sidecar.ingest.merge import join_page_parts, premium_part  # noqa: E402
-from rag_sidecar.ingest.process_job import JobOutcome  # noqa: E402
-from rag_sidecar.parse import docling_adapter  # noqa: E402
-from rag_sidecar.preflight.config import load_routing_config  # noqa: E402
-from rag_sidecar.preflight.run import PreflightOutput, run_preflight  # noqa: E402
-from test_ingest_tiered import (  # noqa: E402
-    _PAGE,
-    _WORKER,
-    PDF,
-    RECORDED,
-    SHA,
-    Env,
-    SyntheticConverter,
-    _job,
-    _merged_entries,
-    _object,
-    _premium_calls,
-    _synthetic_preflight,
-)
-from docling_core.types.doc import DoclingDocument  # noqa: E402
+def _available(*modules: str) -> bool:
+    try:
+        for module in modules:
+            importlib.import_module(module)
+    except ImportError:
+        return False
+    return True
+
+
+_FLOW = _available("docling_core.transforms.chunker.hybrid_chunker", "tiktoken", "pypdfium2", "pdfplumber")
+flow = pytest.mark.skipif(not _FLOW, reason="the tiered flow needs the chunking and preflight extras")
+
+if _FLOW:
+    from docling_core.types.doc import DoclingDocument
+    from ingest_fakes import AppScript
+    from test_ingest_tiered import (
+        _PAGE,
+        _WORKER,
+        PDF,
+        RECORDED,
+        SHA,
+        Env,
+        SyntheticConverter,
+        _job,
+        _merged_entries,
+        _object,
+        _premium_calls,
+        _synthetic_preflight,
+    )
+
+    from rag_sidecar.contracts.ingest import ParseResult
+    from rag_sidecar.contracts.routing import PageRange
+    from rag_sidecar.ingest import converters, quality, tiered
+    from rag_sidecar.ingest.merge import join_page_parts, premium_part
+    from rag_sidecar.ingest.process_job import JobOutcome
+    from rag_sidecar.parse import docling_adapter
+    from rag_sidecar.preflight.config import load_routing_config
+    from rag_sidecar.preflight.run import PreflightOutput, run_preflight
 
 
 class BlankPages:
-    """Delegates to a converter but returns an empty page for the given (preset, page) pairs: a parser that read nothing."""
+    """Delegates to a converter but returns an empty page (or the given plain text) for chosen (preset, page) pairs."""
 
-    def __init__(self, inner, blank: set[tuple[str, int]]) -> None:
+    def __init__(self, inner, blank: set[tuple[str, int]], texts: dict[tuple[str, int], str] | None = None) -> None:
         self.inner = inner
-        self.blank = blank
+        self.texts = {key: "" for key in blank} | (texts or {})
         self.calls: list[tuple[str, int, int]] = []
 
     def convert(self, path, file_sha256, preset, start, end, priority):
         self.calls.append((preset, start, end))
         parts = []
         for page in range(start, end + 1):
-            if (preset, page) in self.blank:
+            if (preset, page) in self.texts:
                 converters._increment_conversion_counter()
-                parts.append(premium_part([(page, "")], {page: _PAGE}))
+                parts.append(premium_part([(page, self.texts[(preset, page)])], {page: _PAGE}))
             else:
                 parts.append(self.inner.convert(path, file_sha256, preset, page, page, priority)[0])
         return join_page_parts(parts), {"preset": preset, "start": start, "end": end}
 
 
-def _forced_preflight(fixture: str, ranges: list[tuple[int, int, str]]):
+def _forced_preflight(fixture: str, ranges: list[tuple[int, int, str]], rows: dict[int, dict[str, Any]] | None = None):
     """The real probe of a fixture (its page signals), with the ranges forced so a test can put a page on the wrong preset."""
     cfg = load_routing_config()
     probed = run_preflight(PDF[fixture], None, cfg, converters.RecordedRangeConverter(RECORDED), file_sha=SHA[fixture]).result
     tier_of = {"fast": "fast", "premium": "premium"}
+    rows = rows or {}
     forced = probed.model_copy(
         update={
+            "pages": [row.model_copy(update=rows.get(row.page, {})) for row in probed.pages],
             "ranges": [
                 PageRange(
                     start=start, end=end, tier=tier_of.get(preset, "structured"), preset=preset,
@@ -513,6 +528,7 @@ def _scanned_page_in_a_fast_range(tmp_path: Path, **settings) -> Env:
     return env
 
 
+@flow
 def test_a_scanned_page_in_a_fast_range_is_re_parsed_at_structured_ocr_and_only_that_page_is_converted_again(tmp_path):
     env = _scanned_page_in_a_fast_range(tmp_path)
     converters.reset_conversion_counter()
@@ -547,6 +563,7 @@ def test_a_scanned_page_in_a_fast_range_is_re_parsed_at_structured_ocr_and_only_
     assert advance[0]["parse_cache_id"] == _merged_entries(env)[0].id
 
 
+@flow
 def test_an_escalation_is_its_own_cache_entry_and_the_passing_ranges_are_not_written_again(tmp_path):
     env = _scanned_page_in_a_fast_range(tmp_path)
 
@@ -560,6 +577,7 @@ def test_an_escalation_is_its_own_cache_entry_and_the_passing_ranges_are_not_wri
     assert len(docling) == 4
 
 
+@flow
 def test_a_finished_escalated_job_run_again_converts_nothing_and_records_no_attempt_twice(tmp_path):
     env = _scanned_page_in_a_fast_range(tmp_path)
     env.run()
@@ -576,6 +594,7 @@ def test_a_finished_escalated_job_run_again_converts_nothing_and_records_no_atte
     assert [call[2]["parse_cache_id"] for call in env.app.calls if call[0] == "advance"] == [merged_id, merged_id]
 
 
+@flow
 def test_escalation_off_leaves_the_failing_page_on_its_tier_and_marks_it_for_review(tmp_path):
     env = _scanned_page_in_a_fast_range(tmp_path, escalation=False)
 
@@ -588,6 +607,7 @@ def test_escalation_off_leaves_the_failing_page_on_its_tier_and_marks_it_for_rev
     assert _ranges(env) == [(1, 6, "fast", "ok"), (7, 8, "structured_full", "ok"), (9, 9, "fast", "needs_review"), (10, 10, "fast", "ok")]
 
 
+@flow
 def test_a_page_that_fails_twice_stops_at_max_tier_and_keeps_its_best_result(tmp_path):
     converter = BlankPages(converters.RecordedRangeConverter(RECORDED), {("fast", 9), ("structured_ocr", 9)})
     preflight = _forced_preflight("mixed-routing", [(1, 6, "fast"), (7, 8, "structured_full"), (9, 10, "fast")])
@@ -603,24 +623,55 @@ def test_a_page_that_fails_twice_stops_at_max_tier_and_keeps_its_best_result(tmp
     assert _premium_calls(env) == []
 
 
+_PLAIN_ROWS = "Margin 13 14 15 Notes steady up up"
+
+
+def _boundary_env(tmp_path: Path, rows: dict[int, dict[str, Any]], texts: dict[tuple[str, int], str], **settings) -> Env:
+    """cross-boundary with the table range cut after page 4: page 5 starts a fast range with numeric rows and no table."""
+    converter = BlankPages(converters.RecordedRangeConverter(RECORDED), set(), texts)
+    preflight = _forced_preflight("cross-boundary", [(1, 3, "fast"), (4, 4, "structured_full"), (5, 6, "fast")], rows)
+    return _fixture_job_env(tmp_path, "cross-boundary", converter, preflight, **settings)
+
+
+@flow
 def test_a_table_cut_by_a_range_boundary_pulls_the_next_page_into_the_table_preset_without_an_escalation(tmp_path):
-    env = _fixture_job_env(
-        tmp_path, "cross-boundary", converters.RecordedRangeConverter(RECORDED),
-        _forced_preflight("cross-boundary", [(1, 3, "fast"), (4, 5, "structured_full"), (6, 6, "fast")]),
-    )
-    probe = BlankPages(converters.RecordedRangeConverter(RECORDED), set())
-    fast6, _ = probe.convert(PDF["cross-boundary"], SHA["cross-boundary"], "fast", 6, 6, 100)
-    if quality.page_has_table(fast6, 6):
-        pytest.skip("the recorded fast page 6 already has the table; the boundary rule has nothing to do")
+    env = _boundary_env(tmp_path, {5: {"ruled_tables": 0, "signals": [], "aligned_number_rows": 2}}, {("fast", 5): _PLAIN_ROWS})
 
     outcome = env.run()
 
     assert outcome == JobOutcome(status="ready")
-    assert ("table_boundary", "structured_full", 6, 6) in _attempts(env)
+    assert _attempts(env) == [
+        ("initial", "fast", 1, 3),
+        ("initial", "structured_full", 4, 4),
+        ("initial", "fast", 5, 6),
+        ("table_boundary", "structured_full", 5, 5),
+    ]
     assert env.job.escalations == 0
-    initial6 = next(a for a in env.job.attempts if (a.reason, a.pages.start) == ("initial", 6))
-    assert initial6.check is not None and ["table_boundary"] in [p.failed for p in initial6.check.pages]
-    assert _ranges(env)[-1] == (6, 6, "structured_full", "escalated")
+    initial = env.job.attempts[2]
+    assert initial.check is not None and {p.page: p.failed for p in initial.check.pages}[5] == ["table_boundary"]
+    pulled = env.job.attempts[3]
+    assert pulled.tier == "structured" and pulled.check is not None and pulled.check.passed
+    assert _ranges(env) == [(1, 3, "fast", "ok"), (4, 4, "structured_full", "ok"), (5, 5, "structured_full", "escalated"), (6, 6, "fast", "ok")]
+    assert env.job.needs_review_reason is None
+    merged = _merged_doc(env)
+    assert quality.page_has_table(merged, 5)
+
+
+@flow
+def test_the_boundary_rule_repeats_while_the_next_page_has_numeric_rows_and_no_table(tmp_path):
+    rows = {
+        5: {"ruled_tables": 0, "signals": [], "aligned_number_rows": 2},
+        6: {"aligned_number_rows": 2},
+    }
+    env = _boundary_env(tmp_path, rows, {("fast", 5): _PLAIN_ROWS}, max_tier="structured")
+
+    outcome = env.run()
+
+    assert outcome == JobOutcome(status="ready")
+    assert _attempts(env)[3:] == [("table_boundary", "structured_full", 5, 5), ("table_boundary", "structured_full", 6, 6)]
+    assert env.job.escalations == 0
+    assert env.job.needs_review_reason == "max_tier", "page 6 still has no table and may not climb above structured"
+    assert _ranges(env)[-1] == (6, 6, "fast", "needs_review")
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -652,6 +703,7 @@ def _premium_page_two() -> dict:
     return {"worker_id": _WORKER, "status": "done", "cache_id": "00000000-0000-4000-8000-0000000000c1", "pages": [{"page": 2, "text": _TABLE_MD, "has_table": True}]}
 
 
+@flow
 def test_a_failing_structured_page_climbs_to_premium_through_parse_external(tmp_path):
     env = _structured_table_env(tmp_path)
     env.app.script("parse_external", [AppScript(response=_premium_page_two())])
@@ -678,6 +730,7 @@ def test_a_failing_structured_page_climbs_to_premium_through_parse_external(tmp_
     assert result.markdown.index("Synthetic page 1 text.") < result.markdown.index("Lane") < result.markdown.index("Synthetic page 3 text.")
 
 
+@flow
 def test_a_premium_escalation_refused_by_the_budget_is_recorded_and_marks_the_page_for_review(tmp_path):
     env = _structured_table_env(tmp_path)
     env.app.script("parse_external", [AppScript(response={"worker_id": _WORKER, "status": "refused", "reason": "budget_exhausted"})])
@@ -692,6 +745,7 @@ def test_a_premium_escalation_refused_by_the_budget_is_recorded_and_marks_the_pa
     assert [(r.start, r.end, r.status) for r in env.job.page_ranges] == [(1, 1, "ok"), (2, 2, "needs_review"), (3, 3, "ok")]
 
 
+@flow
 def test_with_the_cloud_off_in_the_snapshot_no_premium_step_is_requested(tmp_path):
     env = _structured_table_env(tmp_path, cloud_allowed=False)
 
@@ -703,6 +757,7 @@ def test_with_the_cloud_off_in_the_snapshot_no_premium_step_is_requested(tmp_pat
     assert env.job.needs_review_reason == "cloud_not_allowed"
 
 
+@flow
 def test_an_initial_premium_range_is_not_requested_when_the_snapshot_forbids_the_cloud(tmp_path):
     converter = SyntheticConverter()
     env = Env(
@@ -720,6 +775,7 @@ def test_an_initial_premium_range_is_not_requested_when_the_snapshot_forbids_the
     assert env.job.routing_note == "premium_blocked:cloud_not_allowed"
 
 
+@flow
 def test_premium_pages_over_the_page_cap_are_not_requested_and_end_needs_review(tmp_path):
     converter = SyntheticConverter()
     env = Env(
@@ -737,6 +793,7 @@ def test_premium_pages_over_the_page_cap_are_not_requested_and_end_needs_review(
     assert [(r.start, r.end, r.status) for r in env.job.page_ranges] == [(1, 2, "needs_review"), (3, 6, "ok"), (7, 8, "needs_review"), (9, 10, "ok")]
 
 
+@flow
 def test_the_escalation_counter_of_the_fake_ledger_follows_the_sql_function():
     from ingest_fakes import FakeLedger
 
