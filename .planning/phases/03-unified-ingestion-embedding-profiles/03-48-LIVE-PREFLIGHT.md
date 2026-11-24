@@ -52,7 +52,7 @@ See **`03-48-SUMMARY.md`** (box agent, project `ppvywaxrycaxrtrrditl`). Integrat
 | Task | Blocker |
 |------|---------|
 | 1 Supabase inventory, migrate, live parity, bucket, halfvec HNSW | `DATABASE_URL` + backup + direct session |
-| 2 LlamaParse, Docling OCR, Voyage, Qwen hosts | API keys + Docker sidecar image |
+| 2 LlamaParse, Docling OCR, Voyage, Qwen hosts | T2.1/T2.3/T2.4a **PASS** on box (2026-11-24); **T2.2 Docling** = CI Docker only (cloud VM has no daemon); T2.4b blocked 402 |
 | 3 Re-embed, profile compare, Nango sync, Config UI panels | Tasks 1–2 + running app with auth |
 
 Do not commit `03-48-SUMMARY.md` until all three checkpoint verdicts are recorded (no key material).
