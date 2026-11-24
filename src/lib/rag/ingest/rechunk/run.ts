@@ -739,24 +739,29 @@ export async function dryRunRechunk(input: DryRunRechunkInput): Promise<DryRunRe
   };
 
   let after: string | null = null;
-  for (;;) {
-    signal.throwIfAborted();
-    const page = await listDocuments(input.db, signal, profile, tenantKey, after, batchSize);
-    if (page.length === 0) break;
-    for (const doc of page) {
-      const prepared = await prepare(doc, profile, signal, warnings);
-      const entry = entryOf(doc.tenantKey);
-      if (prepared.kind === 'gap') {
-        entry.gapDocuments += 1;
-        gaps.push({ documentId: doc.id, tenantKey: doc.tenantKey, reason: prepared.reason, detail: prepared.detail });
-      } else {
-        entry.eligibleDocuments += 1;
-        entry.parents += prepared.built.parents.length;
-        entry.children += prepared.built.children.length;
-        entry.tokens += prepared.tokens;
+  try {
+    for (;;) {
+      signal.throwIfAborted();
+      const page = await listDocuments(input.db, signal, profile, tenantKey, after, batchSize);
+      if (page.length === 0) break;
+      for (const doc of page) {
+        const prepared = await prepare(doc, profile, signal, warnings);
+        const entry = entryOf(doc.tenantKey);
+        if (prepared.kind === 'gap') {
+          entry.gapDocuments += 1;
+          gaps.push({ documentId: doc.id, tenantKey: doc.tenantKey, reason: prepared.reason, detail: prepared.detail });
+        } else {
+          entry.eligibleDocuments += 1;
+          entry.parents += prepared.built.parents.length;
+          entry.children += prepared.built.children.length;
+          entry.tokens += prepared.tokens;
+        }
+        after = doc.id;
       }
-      after = doc.id;
     }
+  } catch (error) {
+    if (error instanceof RunFailure) throw new RechunkInputError(error.reason);
+    throw error;
   }
 
   const rows = [...tenants.values()].sort((a, b) => (a.tenantKey < b.tenantKey ? -1 : a.tenantKey > b.tenantKey ? 1 : 0));
