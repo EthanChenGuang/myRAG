@@ -282,11 +282,11 @@ describe('ingest tracer: one Markdown upload from ingest() to retrieval', () => 
     assert.equal(tombstones[0]?.chunks, 0);
   });
 
-  test('a PDF the tracer parser cannot read fails with parser_unavailable and its version is marked failed', async () => {
+  test('a PDF the tracer parser cannot read fails with no_parser_available and its version is marked failed', async () => {
     const pdf = new Uint8Array(Buffer.from('%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\ntrailer\n%%EOF\n', 'utf8'));
     const result = await uploadFile(TWO_TENANT_IDS.userA, pdf, 'scan-one.pdf', 'application/pdf');
     assert.equal(result.status, 'failed');
-    assert.equal(result.reason, 'parser_unavailable');
+    assert.equal(result.reason, 'no_parser_available');
     assert.ok(result.documentId, 'the version row exists');
 
     const version = await rows(
@@ -296,7 +296,7 @@ describe('ingest tracer: one Markdown upload from ingest() to retrieval', () => 
     assert.equal(version[0]?.status, 'failed');
     assert.equal(version[0]?.is_current, false);
     assert.equal(version[0]?.chunks, 0);
-    assert.equal((version[0]?.processing_state as Row).failure_reason, 'parser_unavailable');
+    assert.equal((version[0]?.processing_state as Row).failure_reason, 'no_parser_available');
   });
 
   test('a failed rag_write_chunks surfaces as IngestWriterError and no log line or message carries document text', async () => {

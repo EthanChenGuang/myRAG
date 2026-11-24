@@ -1,4 +1,9 @@
-import { PARSE_ARTIFACT, saveArtifact } from '../artifacts';
+import type { ParseResult } from '@/lib/rag-eval/contracts.generated';
+import { DOCLING_ARTIFACT, PARSE_ARTIFACT, PARSE_CHUNKS_ARTIFACT, isArtifactName, saveArtifact } from '../artifacts';
+import { buildParserChain, parseWithFallback, type ChainOutcome } from '../parsers/chain';
+import type { ParseArtifact, PendingJob } from '../parsers/shared';
+import { getProcessingProfile } from '../profiles/load';
+import { refineDocTypeAfterParse } from '../profiles/resolve-doc-type';
 import {
   IngestStageError,
   requireDocument,
@@ -8,48 +13,167 @@ import {
   type StageSpec,
 } from '../types';
 
-const TEXT_EXTENSIONS = new Set(['md', 'markdown', 'txt', 'csv']);
-const TEXT_MIME_TYPES = new Set(['text/markdown', 'text/plain', 'text/csv']);
+/** Time kept after the last poll for saving the state, the artifacts and the parse output. */
+const POLL_RESERVE_MS = 3000;
+/** Less than this left before the deadline: the run yields instead of starting a parser. */
+const MIN_PARSE_MS = 2000;
 
-function extensionOf(filename: string): string {
-  const dot = filename.lastIndexOf('.');
-  return dot < 0 ? '' : filename.slice(dot + 1).toLowerCase();
+interface Parsed {
+  result: ParseResult;
+  artifacts: ParseArtifact[];
+  warnings: string[];
 }
 
-function isTextLike(filename: string, mimeType: string): boolean {
-  const extension = extensionOf(filename);
-  if (extension !== '') return TEXT_EXTENSIONS.has(extension);
-  return TEXT_MIME_TYPES.has((mimeType ?? '').split(';')[0]?.trim().toLowerCase() ?? '');
+const stripBom = (text: string): string => (text.charCodeAt(0) === 0xfeff ? text.slice(1) : text);
+
+function warn(ctx: StageContext, code: string): void {
+  if (!ctx.warnings.includes(code)) ctx.warnings.push(code);
 }
 
-/** The Markdown every later stage chunks from, kept next to the original; a resume and a type change start from it. */
-async function storeParseOutput(ctx: StageContext, markdown: string): Promise<void> {
+/** A storage failure fails the run with one stable reason; an abort is passed on. */
+async function stored(ctx: StageContext, write: () => Promise<unknown>): Promise<void> {
   try {
-    await saveArtifact(ctx, PARSE_ARTIFACT, new TextEncoder().encode(markdown), 'text/markdown');
+    await write();
   } catch (error) {
     if (ctx.signal.aborted) throw error;
     throw new IngestStageError('parse', 'store_parse_output_failed');
   }
 }
 
-async function run(ctx: StageContext): Promise<StageOutcome> {
+function textResult(markdown: string): ParseResult {
+  return {
+    markdown,
+    chunks: [],
+    pictures: [],
+    page_count: 0,
+    language: null,
+    parser: 'text',
+    parser_version: 'native',
+    partial: false,
+    text_layer_page_share: null,
+    warnings: [],
+  };
+}
+
+/** The job a previous call saved in processing_state, when it has the shape this code wrote. */
+function savedJob(ctx: StageContext): PendingJob | null {
+  const job = ctx.state.parseJob;
+  if (!job || (job.parser !== 'llamaparse' && job.parser !== 'docling')) return null;
+  if (typeof job.jobId !== 'string' || typeof job.submittedAt !== 'string' || !Number.isInteger(job.attempt)) return null;
+  return { parser: job.parser, jobId: job.jobId, submittedAt: job.submittedAt, attempt: job.attempt };
+}
+
+async function runChain(ctx: StageContext, bytes: Uint8Array, resume: PendingJob | null): Promise<ChainOutcome> {
   const identity = requireIdentity(ctx, 'parse');
   const document = requireDocument(ctx, 'parse');
+  const now = ctx.deps.now;
+  const chain = buildParserChain(identity.profile, ctx.config, { filename: identity.filename, mimeType: ctx.input.mimeType });
+  const outcome = await parseWithFallback(chain, {
+    scope: ctx.input.scope,
+    filename: identity.filename,
+    mimeType: ctx.input.mimeType,
+    bytes,
+    profile: identity.profile,
+    signal: ctx.signal,
+    now,
+    deadline: ctx.deadline,
+    pollUntil: Math.min(now() + ctx.config.parsePollBudgetMs, ctx.deadline - POLL_RESERVE_MS),
+    resume,
+    // The job id is saved before the first poll, so a request that ends mid-wait can resume the same job.
+    onSubmitted: async (job) => {
+      ctx.state.parseJob = { ...job };
+      await ctx.writer.saveState(document.id, 'processing', { ...ctx.state });
+    },
+  });
+  for (const fallback of outcome.fallbacks) warn(ctx, `parser_fallback:${fallback.parser}:${fallback.reason}`);
+  return outcome;
+}
 
-  let text: string;
-  if (ctx.input.text !== undefined) {
-    text = ctx.input.text;
-  } else if (identity.bytes !== null && isTextLike(identity.filename, ctx.input.mimeType)) {
-    text = new TextDecoder('utf-8').decode(identity.bytes);
-  } else {
-    return { kind: 'fail', reason: 'parser_unavailable' };
+/** A type refined after parse is written at once, so a resume rebuilds the same profile and chunks as an uninterrupted run. */
+async function persistRefinedType(ctx: StageContext): Promise<void> {
+  const identity = requireIdentity(ctx, 'parse');
+  const document = requireDocument(ctx, 'parse');
+  await ctx.writer.setFields(document.id, {
+    doc_type: identity.docType,
+    doc_type_origin: identity.docTypeOrigin,
+    processing_profile_id: identity.profile.id,
+    processing_profile_version: identity.profile.version,
+  });
+}
+
+/** Keeps the result: the work every later stage reads, the parser fields, the artifacts and parse.md. */
+async function applyResult(ctx: StageContext, parsed: Parsed): Promise<void> {
+  const document = requireDocument(ctx, 'parse');
+  const { result } = parsed;
+  ctx.state.parseJob = null;
+  ctx.work.parseText = stripBom(result.markdown);
+  ctx.work.parseChunks = result.chunks.length > 0 ? result.chunks : null;
+  ctx.work.parserVersion = result.parser_version;
+  ctx.parserUsed = result.parser;
+  for (const code of [...(result.warnings ?? []), ...parsed.warnings]) warn(ctx, code);
+  if (result.partial) warn(ctx, 'parse_partial');
+  await ctx.writer.setFields(document.id, { parser_used: result.parser, parser_version: result.parser_version });
+
+  for (const artifact of parsed.artifacts) {
+    // docling.json is the one name the type-change plan reads back by constant.
+    const name = artifact.name === DOCLING_ARTIFACT ? DOCLING_ARTIFACT : artifact.name;
+    if (!isArtifactName(name)) {
+      warn(ctx, 'artifact_name_unsupported');
+      continue;
+    }
+    await stored(ctx, () => saveArtifact(ctx, name, artifact.bytes, artifact.contentType));
+  }
+  if (ctx.work.parseChunks) {
+    const bytes = new TextEncoder().encode(JSON.stringify(ctx.work.parseChunks));
+    await stored(ctx, () => saveArtifact(ctx, PARSE_CHUNKS_ARTIFACT, bytes, 'application/json'));
+  }
+  await stored(ctx, () => saveArtifact(ctx, PARSE_ARTIFACT, new TextEncoder().encode(ctx.work.parseText ?? ''), 'text/markdown'));
+}
+
+async function run(ctx: StageContext): Promise<StageOutcome> {
+  const identity = requireIdentity(ctx, 'parse');
+  requireDocument(ctx, 'parse');
+
+  // A resume rebuilds the profile of a type that was refined after parse.
+  const refinedType = ctx.state.docTypeDetection?.refined ?? null;
+  if (refinedType !== null && identity.docTypeOrigin === 'auto' && refinedType !== identity.docType) {
+    identity.docType = refinedType;
+    identity.profile = getProcessingProfile(refinedType);
   }
 
-  ctx.work.parseText = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
-  ctx.work.parserVersion = 'native';
-  ctx.parserUsed = 'text';
-  await ctx.writer.setFields(document.id, { parser_used: 'text', parser_version: 'native' });
-  await storeParseOutput(ctx, ctx.work.parseText);
+  let parsed: Parsed;
+  const bytes = identity.bytes;
+  if (ctx.input.text !== undefined) {
+    parsed = { result: textResult(stripBom(ctx.input.text)), artifacts: [], warnings: [] };
+  } else {
+    if (bytes === null) return { kind: 'fail', reason: 'no_parser_available' };
+    if (ctx.deadline - ctx.deps.now() < MIN_PARSE_MS) return { kind: 'yield', reason: 'deadline' };
+    const first = await runChain(ctx, bytes, savedJob(ctx));
+    if (first.kind === 'failed') {
+      ctx.state.parseJob = null;
+      return { kind: 'fail', reason: first.reason };
+    }
+    if (first.kind === 'pending') return { kind: 'yield', reason: 'parse_pending' };
+    parsed = first;
+  }
+
+  const refined = await refineDocTypeAfterParse(ctx, {
+    text: parsed.result.markdown,
+    textLayerPageShare: parsed.result.text_layer_page_share ?? null,
+  });
+  if (refined.changed) await persistRefinedType(ctx);
+
+  // At most one re-parse, and only when a parser ran: plain text has no options to change.
+  if (refined.parserOptionsDiffer && parsed.result.parser !== 'text' && bytes !== null) {
+    if (ctx.state.docTypeDetection) ctx.state.docTypeDetection.reparsed = true;
+    ctx.state.parseJob = null;
+    const second = await runChain(ctx, bytes, null);
+    if (second.kind === 'pending') return { kind: 'yield', reason: 'parse_pending' };
+    if (second.kind === 'done') parsed = second;
+    else warn(ctx, 'reparse_failed');
+  }
+
+  await applyResult(ctx, parsed);
   return { kind: 'next' };
 }
 
