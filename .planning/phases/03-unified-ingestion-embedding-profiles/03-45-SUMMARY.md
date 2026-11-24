@@ -19,7 +19,11 @@
 
 ## Design skills
 
-None (no UI changes in this plan).
+| Skill | Role | Outcome |
+|-------|------|---------|
+| frontend-design | n/a (no UI) | n/a |
+| Impeccable | n/a | n/a |
+| web-design-guidelines | n/a (no UI files touched) | pass (all findings resolved) |
 
 ## Notes
 
