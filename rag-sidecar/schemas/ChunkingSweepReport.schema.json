@@ -1,0 +1,253 @@
+{
+  "$defs": {
+    "ChunkingGateRegression": {
+      "additionalProperties": false,
+      "properties": {
+        "band": {
+          "title": "Band",
+          "type": "number"
+        },
+        "diff": {
+          "title": "Diff",
+          "type": "number"
+        },
+        "metric": {
+          "title": "Metric",
+          "type": "string"
+        },
+        "slice": {
+          "title": "Slice",
+          "type": "string"
+        }
+      },
+      "required": [
+        "slice",
+        "metric",
+        "diff",
+        "band"
+      ],
+      "title": "ChunkingGateRegression",
+      "type": "object"
+    },
+    "ChunkingMetricValue": {
+      "additionalProperties": false,
+      "properties": {
+        "n": {
+          "minimum": 0,
+          "title": "N",
+          "type": "integer"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Value"
+        }
+      },
+      "required": [
+        "value",
+        "n"
+      ],
+      "title": "ChunkingMetricValue",
+      "type": "object"
+    },
+    "ChunkingProfileGate": {
+      "additionalProperties": false,
+      "properties": {
+        "baseline_profile_id": {
+          "title": "Baseline Profile Id",
+          "type": "string"
+        },
+        "passed": {
+          "title": "Passed",
+          "type": "boolean"
+        },
+        "regressions": {
+          "items": {
+            "$ref": "#/$defs/ChunkingGateRegression"
+          },
+          "title": "Regressions",
+          "type": "array"
+        }
+      },
+      "required": [
+        "baseline_profile_id",
+        "passed"
+      ],
+      "title": "ChunkingProfileGate",
+      "type": "object"
+    },
+    "ChunkingProfileMetrics": {
+      "additionalProperties": false,
+      "properties": {
+        "by_doc_type": {
+          "additionalProperties": {
+            "$ref": "#/$defs/ChunkingSliceMetrics"
+          },
+          "title": "By Doc Type",
+          "type": "object"
+        },
+        "by_language": {
+          "additionalProperties": {
+            "$ref": "#/$defs/ChunkingSliceMetrics"
+          },
+          "title": "By Language",
+          "type": "object"
+        },
+        "by_question_kind": {
+          "additionalProperties": {
+            "$ref": "#/$defs/ChunkingSliceMetrics"
+          },
+          "title": "By Question Kind",
+          "type": "object"
+        },
+        "overall": {
+          "$ref": "#/$defs/ChunkingSliceMetrics"
+        }
+      },
+      "required": [
+        "overall"
+      ],
+      "title": "ChunkingProfileMetrics",
+      "type": "object"
+    },
+    "ChunkingSliceMetrics": {
+      "additionalProperties": false,
+      "properties": {
+        "context_tokens": {
+          "$ref": "#/$defs/ChunkingMetricValue"
+        },
+        "correct_refusal_rate": {
+          "$ref": "#/$defs/ChunkingMetricValue"
+        },
+        "false_refusal_rate": {
+          "$ref": "#/$defs/ChunkingMetricValue"
+        },
+        "judge_correctness": {
+          "$ref": "#/$defs/ChunkingMetricValue"
+        },
+        "judge_skipped": {
+          "default": false,
+          "title": "Judge Skipped",
+          "type": "boolean"
+        },
+        "latency_p50_ms": {
+          "$ref": "#/$defs/ChunkingMetricValue"
+        },
+        "latency_p95_ms": {
+          "$ref": "#/$defs/ChunkingMetricValue"
+        },
+        "mrr": {
+          "$ref": "#/$defs/ChunkingMetricValue"
+        },
+        "recall_at_k": {
+          "$ref": "#/$defs/ChunkingMetricValue"
+        }
+      },
+      "required": [
+        "recall_at_k",
+        "mrr",
+        "correct_refusal_rate",
+        "false_refusal_rate",
+        "judge_correctness",
+        "context_tokens",
+        "latency_p50_ms",
+        "latency_p95_ms"
+      ],
+      "title": "ChunkingSliceMetrics",
+      "type": "object"
+    },
+    "ChunkingSweepProfileEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "gate": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ChunkingProfileGate"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "metrics": {
+          "$ref": "#/$defs/ChunkingProfileMetrics"
+        },
+        "profile_id": {
+          "title": "Profile Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile_id",
+        "metrics"
+      ],
+      "title": "ChunkingSweepProfileEntry",
+      "type": "object"
+    },
+    "ConfigProvenance": {
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "enum": [
+            "defaults",
+            "sweep",
+            "calibration",
+            "fixture",
+            "live"
+          ],
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "title": "ConfigProvenance",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "config_hash": {
+      "anyOf": [
+        {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Config Hash"
+    },
+    "profiles": {
+      "items": {
+        "$ref": "#/$defs/ChunkingSweepProfileEntry"
+      },
+      "title": "Profiles",
+      "type": "array"
+    },
+    "provenance": {
+      "$ref": "#/$defs/ConfigProvenance"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "provenance"
+  ],
+  "title": "ChunkingSweepReport",
+  "type": "object"
+}

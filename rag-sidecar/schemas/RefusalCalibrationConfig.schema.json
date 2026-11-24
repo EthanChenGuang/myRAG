@@ -1,0 +1,108 @@
+{
+  "$defs": {
+    "ConfigProvenance": {
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "enum": [
+            "defaults",
+            "sweep",
+            "calibration",
+            "fixture",
+            "live"
+          ],
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "title": "ConfigProvenance",
+      "type": "object"
+    },
+    "CountMinimums": {
+      "additionalProperties": false,
+      "properties": {
+        "answerable": {
+          "minimum": 0,
+          "title": "Answerable",
+          "type": "integer"
+        },
+        "no_answer": {
+          "minimum": 0,
+          "title": "No Answer",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "no_answer",
+        "answerable"
+      ],
+      "title": "CountMinimums",
+      "type": "object"
+    },
+    "EnvironmentMinimums": {
+      "additionalProperties": false,
+      "properties": {
+        "fixture": {
+          "$ref": "#/$defs/CountMinimums"
+        },
+        "live": {
+          "$ref": "#/$defs/CountMinimums"
+        }
+      },
+      "required": [
+        "fixture",
+        "live"
+      ],
+      "title": "EnvironmentMinimums",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "config_hash": {
+      "anyOf": [
+        {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Config Hash"
+    },
+    "dev_minimums": {
+      "$ref": "#/$defs/EnvironmentMinimums"
+    },
+    "holdout_minimums": {
+      "$ref": "#/$defs/EnvironmentMinimums"
+    },
+    "pass_rule": {
+      "default": "false_refusal_test <= target + max(noise_floor, 1 / n_test_answerable)",
+      "title": "Pass Rule",
+      "type": "string"
+    },
+    "provenance": {
+      "$ref": "#/$defs/ConfigProvenance"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "target_false_refusal": {
+      "default": 0.05,
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Target False Refusal",
+      "type": "number"
+    }
+  },
+  "title": "RefusalCalibrationConfig",
+  "type": "object"
+}

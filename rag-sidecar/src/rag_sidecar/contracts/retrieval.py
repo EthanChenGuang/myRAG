@@ -9,8 +9,9 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
 
-from rag_sidecar.contracts.golden import Language
 from rag_sidecar.contracts.ingest import DocType
+
+FilterLanguage = Literal["zh", "en", "it"]
 
 Pairing = Literal["same", "cross"]
 RefusalCellStatus = Literal["calibrated", "uncalibrated", "insufficient_data", "failed_holdout"]
@@ -118,7 +119,7 @@ class RetrievalFilters(_Contract):
     sources: list[str] | None = None
     document_ids: list[UUID] | None = None
     doc_types: list[DocType] | None = None
-    languages: list[Language] | None = None
+    languages: list[FilterLanguage] | None = None
     invoice: InvoiceFilter | None = None
     current_only: Literal[True] = True
 
@@ -155,7 +156,7 @@ class RefusalCell(_Contract):
     key: str = Field(min_length=1)
     provider: str = Field(min_length=1)
     model: str = Field(min_length=1)
-    query_language: Language
+    query_language: FilterLanguage
     pairing: Pairing
     threshold: float | None = None
     status: RefusalCellStatus

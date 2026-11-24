@@ -1,0 +1,216 @@
+{
+  "$defs": {
+    "ConfigProvenance": {
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "enum": [
+            "defaults",
+            "sweep",
+            "calibration",
+            "fixture",
+            "live"
+          ],
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "title": "ConfigProvenance",
+      "type": "object"
+    },
+    "RefusalCell": {
+      "additionalProperties": false,
+      "properties": {
+        "config_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Config Hash",
+          "type": "string"
+        },
+        "dev": {
+          "$ref": "#/$defs/RefusalMetricBlock"
+        },
+        "holdout": {
+          "$ref": "#/$defs/RefusalMetricBlock"
+        },
+        "holdout_evaluations": {
+          "minimum": 0,
+          "title": "Holdout Evaluations",
+          "type": "integer"
+        },
+        "key": {
+          "minLength": 1,
+          "title": "Key",
+          "type": "string"
+        },
+        "model": {
+          "minLength": 1,
+          "title": "Model",
+          "type": "string"
+        },
+        "pairing": {
+          "enum": [
+            "same",
+            "cross"
+          ],
+          "title": "Pairing",
+          "type": "string"
+        },
+        "provider": {
+          "minLength": 1,
+          "title": "Provider",
+          "type": "string"
+        },
+        "query_language": {
+          "enum": [
+            "zh",
+            "en",
+            "it"
+          ],
+          "title": "Query Language",
+          "type": "string"
+        },
+        "recorded_at": {
+          "title": "Recorded At",
+          "type": "string"
+        },
+        "rerank_text_version": {
+          "minimum": 0,
+          "title": "Rerank Text Version",
+          "type": "integer"
+        },
+        "source": {
+          "enum": [
+            "fixture",
+            "live"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "calibrated",
+            "uncalibrated",
+            "insufficient_data",
+            "failed_holdout"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "threshold": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Threshold"
+        },
+        "tokenizer_version": {
+          "minimum": 0,
+          "title": "Tokenizer Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "key",
+        "provider",
+        "model",
+        "query_language",
+        "pairing",
+        "status",
+        "tokenizer_version",
+        "rerank_text_version",
+        "config_hash",
+        "source",
+        "recorded_at",
+        "holdout_evaluations",
+        "dev",
+        "holdout"
+      ],
+      "title": "RefusalCell",
+      "type": "object"
+    },
+    "RefusalMetricBlock": {
+      "additionalProperties": false,
+      "properties": {
+        "answerable_count": {
+          "minimum": 0,
+          "title": "Answerable Count",
+          "type": "integer"
+        },
+        "correct_refusal_rate": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Correct Refusal Rate",
+          "type": "number"
+        },
+        "false_refusal_rate": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "False Refusal Rate",
+          "type": "number"
+        },
+        "false_refusal_rate_upper_bound": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "False Refusal Rate Upper Bound",
+          "type": "number"
+        },
+        "no_answer_count": {
+          "minimum": 0,
+          "title": "No Answer Count",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "no_answer_count",
+        "answerable_count",
+        "false_refusal_rate",
+        "false_refusal_rate_upper_bound",
+        "correct_refusal_rate"
+      ],
+      "title": "RefusalMetricBlock",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "cells": {
+      "items": {
+        "$ref": "#/$defs/RefusalCell"
+      },
+      "title": "Cells",
+      "type": "array"
+    },
+    "config_hash": {
+      "anyOf": [
+        {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Config Hash"
+    },
+    "provenance": {
+      "$ref": "#/$defs/ConfigProvenance"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    }
+  },
+  "title": "RefusalThresholds",
+  "type": "object"
+}
