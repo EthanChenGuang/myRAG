@@ -153,10 +153,14 @@ for (const mode of MODES) {
 
     test('adds parent columns without rewriting document_chunks', async () => {
       const empty = await createEmptyFixtureDatabase({ deploymentMode: mode, supabaseGrants: true, migrations: false });
-      const files = migrationFiles(mode).filter((file) => !file.includes('0404_document_parents'));
+      const files = migrationFiles(mode).filter(
+        (file) => !file.includes('0404_document_parents') && !file.includes('0405_document_parents'),
+      );
       await applyMigrationFiles(empty.db, files);
       const beforeNode = await relfilenode(empty.db);
-      const bump = migrationFiles(mode).filter((file) => file.includes('0404_document_parents'));
+      const bump = migrationFiles(mode).filter(
+        (file) => file.includes('0404_document_parents') || file.includes('0405_document_parents'),
+      );
       await applyMigrationFiles(empty.db, bump);
       const afterNode = await relfilenode(empty.db);
       assert.equal(beforeNode, afterNode, 'document_chunks heap relfilenode must stay the same');
@@ -176,6 +180,10 @@ for (const mode of MODES) {
       const chunkId = '00000000-0000-4000-8000-00000000c001';
       const docId = '00000000-0000-4000-8000-00000000d001';
       if (mode === 'multi-tenant') {
+        await db.query('INSERT INTO auth.users (id, email) VALUES ($1, $2) ON CONFLICT DO NOTHING', [
+          TWO_TENANT_IDS.userA,
+          'variant-a@example.invalid',
+        ]);
         await db.query(
           'INSERT INTO documents (id, filename, content, metadata, user_id) VALUES ($1, $2, $3, $4::jsonb, $5)',
           [docId, 'variant-doc.md', 'body', '{}', TWO_TENANT_IDS.userA],
@@ -213,35 +221,46 @@ for (const mode of MODES) {
     });
 
     test('legacy retrieval RPCs never return a variant chunk', async () => {
-      const two = await createTwoTenantDatabase();
-      const { db } = two;
       const variantId = '00000000-0000-4000-8000-00000000c0aa';
       const query = embedText('Two tenant isolation canary phrase: alpha personal notes');
+      const legacyProfile = 'openai-3-small-1536';
+
+      if (mode === 'multi-tenant') {
+        const two = await createTwoTenantDatabase();
+        const { db } = two;
+        await db.query(
+          `INSERT INTO document_chunks (id, document_id, content, embedding, chunk_index, metadata, chunking_profile_id, status)
+           VALUES ($1, $2, $3, $4::vector, 99, '{}'::jsonb, 'p256', 'ready')`,
+          [
+            variantId,
+            TWO_TENANT_IDS.docA,
+            'Document: tenant-a-personal.md. Chunk 99. Content: variant sidecar',
+            vectorLiteral(query),
+          ],
+        );
+        const hits = await db.query<{ id: string }>(
+          'SELECT id FROM match_chunks_by_profile($1, $2, 1536, $3::halfvec, 100, -1::float8) WHERE id = $4',
+          [KEY_A, legacyProfile, vectorLiteral(query), variantId],
+        );
+        assert.equal(hits.rows.length, 0);
+        await db.close();
+        return;
+      }
+
+      const { db } = fixture;
+      const anchor = await db.query<{ document_id: string }>('SELECT document_id FROM document_chunks LIMIT 1');
+      const documentId = anchor.rows[0]?.document_id;
+      assert.ok(documentId);
       await db.query(
         `INSERT INTO document_chunks (id, document_id, content, embedding, chunk_index, metadata, chunking_profile_id, status)
          VALUES ($1, $2, $3, $4::vector, 99, '{}'::jsonb, 'p256', 'ready')`,
-        [
-          variantId,
-          TWO_TENANT_IDS.docA,
-          'Document: tenant-a-personal.md. Chunk 99. Content: variant sidecar',
-          vectorLiteral(query),
-        ],
+        [variantId, documentId, 'variant sidecar chunk for legacy rpc test', vectorLiteral(query)],
       );
-
-      if (mode === 'multi-tenant') {
-        const hits = await db.query<{ chunk_id: string }>(
-          'SELECT dc.id AS chunk_id FROM match_documents_by_workspace($1::vector, 100, -1, NULL::uuid, $2::uuid) m JOIN document_chunks dc ON dc.document_id = m.document_id WHERE dc.id = $3',
-          [vectorLiteral(query), TWO_TENANT_IDS.userA, variantId],
-        );
-        assert.equal(hits.rows.length, 0);
-      } else {
-        const hits = await db.query<{ chunk_id: string }>(
-          'SELECT chunk_id FROM match_document_chunks($1::vector, -1, 100) WHERE chunk_id = $2',
-          [vectorLiteral(query), variantId],
-        );
-        assert.equal(hits.rows.length, 0);
-      }
-      await db.close();
+      const hits = await db.query<{ chunk_id: string }>(
+        'SELECT chunk_id FROM match_document_chunks($1::vector, -1, 100) WHERE chunk_id = $2',
+        [vectorLiteral(query), variantId],
+      );
+      assert.equal(hits.rows.length, 0);
     });
   });
 }
@@ -259,8 +278,8 @@ describe('document_parents RLS (multi-tenant)', () => {
 
   test('tenant A sees only A parents; B cannot read or write parents', async () => {
     const { db } = two;
-    const parentA = '00000000-0000-4000-8000-00000000p0a1';
-    const parentB = '00000000-0000-4000-8000-00000000p0b1';
+    const parentA = '00000000-0000-4000-8000-00000000a0a1';
+    const parentB = '00000000-0000-4000-8000-00000000b0b1';
     await db.query(
       `INSERT INTO document_parents (id, document_id, tenant_key, version, is_current, chunking_profile_id, section_path, content, token_count, parent_index, organization_id)
        VALUES ($1, $2, $3, 1, true, 'legacy', '{}', 'parent A', 10, 0, NULL),
@@ -308,9 +327,9 @@ describe('rag_fetch_parents (multi-tenant)', () => {
 
   test('returns only current parents of the requested tenant', async () => {
     const { db } = two;
-    const currentA = '00000000-0000-4000-8000-00000000p1a1';
-    const oldA = '00000000-0000-4000-8000-00000000p1a2';
-    const parentB = '00000000-0000-4000-8000-00000000p1b1';
+    const currentA = '00000000-0000-4000-8000-00000000a1a1';
+    const oldA = '00000000-0000-4000-8000-00000000a1a2';
+    const parentB = '00000000-0000-4000-8000-00000000b1b1';
     await db.query(
       `INSERT INTO document_parents (id, document_id, tenant_key, version, is_current, chunking_profile_id, section_path, content, token_count, parent_index)
        VALUES ($1, $2, $3, 1, true, 'legacy', '{}', 'current parent', 12, 0),
@@ -336,11 +355,14 @@ describe('rag_fetch_parents (multi-tenant)', () => {
     assert.deepEqual(priv, { anon: false, authenticated: false, service: true });
   });
 
-  test('deleting a document cascades parents and nulls child parent_id', async () => {
+  test('deleting a document cascades its parents; deleting a parent nulls child parent_id', async () => {
     const { db } = two;
     const docId = '00000000-0000-4000-8000-00000000d0c1';
-    const parentId = '00000000-0000-4000-8000-00000000p0c1';
+    const parentId = '00000000-0000-4000-8000-00000000a0c1';
     const childId = '00000000-0000-4000-8000-00000000c0c1';
+    const soloDocId = '00000000-0000-4000-8000-00000000d0c2';
+    const soloParentId = '00000000-0000-4000-8000-00000000a0c2';
+    const soloChildId = '00000000-0000-4000-8000-00000000c0c2';
     await db.query(
       'INSERT INTO documents (id, filename, content, metadata, user_id) VALUES ($1, $2, $3, $4::jsonb, $5)',
       [docId, 'cascade.md', 'body', '{}', TWO_TENANT_IDS.userA],
@@ -358,7 +380,23 @@ describe('rag_fetch_parents (multi-tenant)', () => {
     await db.query('DELETE FROM documents WHERE id = $1', [docId]);
     const parents = await db.query('SELECT 1 FROM document_parents WHERE id = $1', [parentId]);
     assert.equal(parents.rows.length, 0);
-    const child = await db.query<{ parent_id: string | null }>('SELECT parent_id FROM document_chunks WHERE id = $1', [childId]);
+
+    await db.query(
+      'INSERT INTO documents (id, filename, content, metadata, user_id) VALUES ($1, $2, $3, $4::jsonb, $5)',
+      [soloDocId, 'parent-null.md', 'body', '{}', TWO_TENANT_IDS.userA],
+    );
+    await db.query(
+      `INSERT INTO document_parents (id, document_id, tenant_key, version, is_current, chunking_profile_id, section_path, content, token_count, parent_index)
+       VALUES ($1, $2, $3, 1, true, 'legacy', '{}', 'solo parent', 3, 0)`,
+      [soloParentId, soloDocId, KEY_A],
+    );
+    await db.query(
+      `INSERT INTO document_chunks (id, document_id, content, embedding, chunk_index, metadata, parent_id, chunking_profile_id, status)
+       VALUES ($1, $2, $3, $4::vector, 0, '{}'::jsonb, $5, 'legacy', 'ready')`,
+      [soloChildId, soloDocId, 'solo child', vectorLiteral(embedText('solo child')), soloParentId],
+    );
+    await db.query('DELETE FROM document_parents WHERE id = $1', [soloParentId]);
+    const child = await db.query<{ parent_id: string | null }>('SELECT parent_id FROM document_chunks WHERE id = $1', [soloChildId]);
     assert.equal(child.rows[0]?.parent_id, null);
   });
 });
