@@ -6,6 +6,7 @@ import { createInterface } from 'node:readline';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { BackfillManifestEntrySchema, type BackfillManifestEntry } from '@/lib/rag-eval/contracts.generated';
+import { isTenantScope, scopeKey, type TenantScope } from '@/lib/rag/tenant/scope';
 import { ORIGINALS_BUCKET, ORIGINALS_MAX_BYTES } from '../object-store';
 
 export type SourceKind = 'folder' | 'bucket' | 'manifest';
@@ -51,6 +52,10 @@ export interface ListSourceInput {
   ref: string;
   signal?: AbortSignal;
   deps?: BackfillSourceDeps;
+  /** Bucket sources only: the exact bucket names the operator allows. Absent or empty refuses every bucket. */
+  allowedBuckets?: readonly string[];
+  /** Bucket sources only: the scope from backfillScope. A user or organization scope confines listing to that tenant's prefix. */
+  scope?: TenantScope;
 }
 
 export class SourceRejection extends Error {
@@ -67,8 +72,8 @@ const FETCH_TIMEOUT_MS = 30_000;
 const MAX_REDIRECTS = 5;
 const BUCKET_PAGE = 1_000;
 const BUCKET_NAME_RE = /^[a-z0-9][a-z0-9._-]{1,62}$/;
-/** Buckets that hold other tenants' files; a backfill must never read them as a source. */
-const INTERNAL_BUCKETS = new Set([ORIGINALS_BUCKET, 'chat-images']);
+/** Every bucket the application itself writes to; each holds files of all tenants, so none can be a backfill source. */
+const APP_BUCKETS = new Set([ORIGINALS_BUCKET, 'chat-images', 'chat-attachments', 'chat-videos', '3d-models', 'backgrounds']);
 
 const BLOCKED_V4: Array<[string, number]> = [
   ['0.0.0.0', 8],
@@ -278,15 +283,36 @@ async function* listFolder(ref: string, deps: BackfillSourceDeps, signal: AbortS
   }
 }
 
-async function* listBucket(ref: string, deps: BackfillSourceDeps, signal: AbortSignal): AsyncGenerator<SourceItem> {
+/** The object-key prefix a tenant's files must live under in an operator bucket; single-tenant has one tenant and no prefix. */
+function tenantPrefix(scope: TenantScope): string {
+  scopeKey(scope);
+  if (scope.kind === 'single') return '';
+  if (scope.kind === 'org') return `o/${scope.organizationId as string}`;
+  return `u/${scope.userId as string}`;
+}
+
+function validBucketEntryName(name: string): boolean {
+  return name !== '' && name !== '.' && name !== '..' && !name.includes('/') && !name.includes('\\');
+}
+
+async function* listBucket(
+  ref: string,
+  allowedBuckets: readonly string[] | undefined,
+  scope: TenantScope | undefined,
+  deps: BackfillSourceDeps,
+  signal: AbortSignal,
+): AsyncGenerator<SourceItem> {
   const reject = makeReject(deps);
   const bucket = ref.trim();
   if (!BUCKET_NAME_RE.test(bucket)) throw new SourceRejection('bucket_ref_invalid');
-  if (INTERNAL_BUCKETS.has(bucket)) throw new SourceRejection('bucket_internal');
+  if (APP_BUCKETS.has(bucket)) throw new SourceRejection('bucket_internal');
+  if (!Array.isArray(allowedBuckets) || !allowedBuckets.includes(bucket)) throw new SourceRejection('bucket_not_allowed');
+  if (!isTenantScope(scope)) throw new SourceRejection('bucket_scope_required');
   if (!deps.storage) throw new SourceRejection('bucket_storage_unavailable');
+  const base = tenantPrefix(scope);
   const api = deps.storage.from(bucket);
   const visited = new Set<string>();
-  const pending: string[] = [''];
+  const pending: string[] = [base];
   while (pending.length > 0) {
     const prefix = pending.pop() as string;
     if (visited.has(prefix)) continue;
@@ -298,7 +324,15 @@ async function* listBucket(ref: string, deps: BackfillSourceDeps, signal: AbortS
       const rows = data ?? [];
       for (const row of rows) {
         if (!row?.name) continue;
+        if (!validBucketEntryName(row.name)) {
+          reject('outside_prefix');
+          continue;
+        }
         const full = prefix === '' ? row.name : `${prefix}/${row.name}`;
+        if (base !== '' && !full.startsWith(`${base}/`)) {
+          reject('outside_prefix');
+          continue;
+        }
         if (row.id === null || row.id === undefined) {
           pending.push(full);
           continue;
@@ -448,6 +482,6 @@ export async function* listSource(input: ListSourceInput): AsyncGenerator<Source
   const signal = input.signal ?? new AbortController().signal;
   const deps = input.deps ?? {};
   if (input.kind === 'folder') yield* listFolder(input.ref, deps, signal);
-  else if (input.kind === 'bucket') yield* listBucket(input.ref, deps, signal);
+  else if (input.kind === 'bucket') yield* listBucket(input.ref, input.allowedBuckets, input.scope, deps, signal);
   else yield* listManifest(input.ref, deps, signal);
 }
