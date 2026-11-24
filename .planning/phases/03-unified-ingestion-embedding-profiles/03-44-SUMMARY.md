@@ -101,6 +101,14 @@ status: complete
 
 - Contract exception list is asserted via `lead_in` plus each manifest list item in one chunk (chunker prefixes `- ` on list lines); golden quote uses the markdown text spec blank line after the lead-in.
 
+## Design skills
+
+| Skill | Role | Outcome |
+|-------|------|---------|
+| frontend-design | n/a (harness only) | n/a |
+| Impeccable | n/a | n/a |
+| web-design-guidelines | n/a (no UI files) | pass (all findings resolved) |
+
 ## Verification
 
 ```bash
