@@ -47,3 +47,8 @@ After all: code review gate -> regression gate -> verifier -> update roadmap.
 - Operator: apply migration 0313 (dual-write writer) before enabling RAG_EMBEDDING_PROFILES or a backfill; fill score_calibration before activating a non-legacy profile; restart after fixing a startup MISMATCH.
 - 03-30: lineage DELETE does not remove stored originals / parse.md / docling.json in the private `rag-originals` bucket (orphaned objects). No plan owns it — gap fix using `removeArtifacts`, with a two-tenant test. Images DELETE removes only the named document, not the lineage. Dashboard (`document-dashboard.tsx`) does not know `quarantined` (03-43). Response gained `version` (1 for legacy rows).
 - Still open after 03-30 (03-37 or gap plan): table SELECT RLS on documents/document_chunks (ST `USING (true)`), `get_document_chunks(doc_id)` unrevoked.
+
+## Phase 3 wave 7 follow-ups (03-31)
+- process-document multi-tenant: a throwing session lookup answers 500 (outer catch), not 503; nothing is parsed or written. Legacy kept unchanged per plan. Add a try/catch returning 503 in the Phase 3 review fix pass.
+- Unified upload response has no `text`; `src/app/page.tsx` `fileType === 'document'` branch requires it. Not reached today (temporary uploads stay legacy). Must be handled before Phase 7 makes unified the default.
+- Live check: Config UI upload as signed-in admin (admin_session + Supabase session), confirm `documents.source = 'config_upload'`.
