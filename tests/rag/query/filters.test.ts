@@ -63,6 +63,14 @@ describe('buildRetrievalFilters', () => {
     });
   });
 
+  it('matches nothing when the explicit and the referenced document ids share none (filters only narrow)', () => {
+    const filters = buildRetrievalFilters({
+      explicit: { documentIds: [ID_A] },
+      referencedDocumentIds: [ID_C],
+    });
+    expect(filters.documentIds).toEqual(['00000000-0000-0000-0000-000000000000']);
+  });
+
   it('uses referenced ids when explicit has none', () => {
     const filters = buildRetrievalFilters({
       explicit: undefined,
