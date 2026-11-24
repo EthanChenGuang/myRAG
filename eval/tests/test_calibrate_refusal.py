@@ -405,7 +405,7 @@ def test_collect_rows_builds_rows_and_counts_exclusions_by_reason(tmp_path):
     missing = items[0].id
     traces[0] = _calibration_trace([], item_id=missing)
     traces.append(_calibration_trace([(0.5, "zh")], item_id="unknown-item-000"))
-    traces.append(_calibration_trace([(0.5, "zh")], item_id=items[1].id, versions=None))
+    traces[1] = _calibration_trace([(0.5, "zh")], item_id=items[1].id, versions=None)
     rows, excluded = collect_rows(traces, items, RERANKER)
     assert excluded == {"no_rerank_score": 1, "unknown_item": 1, "no_retrieval_versions": 1}
     assert len(rows) == len(items) - 2
@@ -616,7 +616,7 @@ def test_report_has_the_cell_table_with_bounds_and_the_xlg_03_section(tmp_path):
     result = _calibrate(tmp_path, _Runner(scores), golden)
     report = (tmp_path / "out" / "report.md").read_text(encoding="utf-8")
     assert report == render_report(result)
-    assert KEY_ZH_SAME in report
+    assert KEY_ZH_SAME.replace("|", "\\|") in report
     assert "calibrated" in report
     assert "0.525" in report
     assert f"{upper_bound(1, 4):.3f}" in report
