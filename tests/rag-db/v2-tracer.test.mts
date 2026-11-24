@@ -39,7 +39,7 @@ before(async () => {
   prepared = await prepareInProcessEval({
     corpusDir: CORPUS_DIR,
     deploymentMode: 'single-tenant',
-    envOverrides: { RAG_PIPELINE: 'v2', RAG_LEXICAL_SEARCH: 'true' },
+    envOverrides: { RAG_PIPELINE: 'v2', RAG_LEXICAL_SEARCH: 'true', RAG_REFUSAL_THRESHOLD: 'false' },
   });
   const { resetRetrievalBackendForTests } = await import('../../src/lib/rag/backend/registry.ts');
   const { verifyV2Startup, resetV2StartupForTests } = await import('../../src/lib/rag/v2/startup.ts');

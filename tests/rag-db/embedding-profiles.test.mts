@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { PGlite } from '@electric-sql/pglite';
 import { createFixtureDatabase, type DeploymentMode, type FixtureDatabase } from '../../eval/harness/pglite-supabase.mts';
+import { assertNoUnexpectedClientRagFunctions } from '../helpers/rag-client-function-exposure';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const REAL_CORPUS = path.join(REPO_ROOT, 'eval/fixtures/corpus');
@@ -345,12 +346,7 @@ for (const mode of MODES) {
         "SELECT proname FROM pg_proc WHERE pronamespace = 'public'::regnamespace AND proname IN ('rag_list_embedding_profiles', 'rag_set_embedding_profile_status', 'rag_chunk_embeddings_guard')",
       );
       assert.equal(defined.rows.length, 3, 'expected the three Phase 3 profile functions');
-      const exposed = await db.query<{ proname: string }>(
-        `SELECT p.proname FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace
-           AND (p.proname LIKE 'rag\\_%' OR p.proname = 'match_chunks_by_profile')
-           AND (has_function_privilege('anon', p.oid, 'EXECUTE') OR has_function_privilege('authenticated', p.oid, 'EXECUTE'))`,
-      );
-      assert.deepEqual(exposed.rows, []);
+      await assertNoUnexpectedClientRagFunctions(db);
       const service = await db.query<{ proname: string }>(
         `SELECT p.proname FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace
            AND p.proname IN ('rag_list_embedding_profiles', 'rag_set_embedding_profile_status') AND NOT has_function_privilege('service_role', p.oid, 'EXECUTE')`,

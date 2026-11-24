@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import type { PGlite } from '@electric-sql/pglite';
 import { createEmptyFixtureDatabase, createFixtureDatabase, type DeploymentMode, type FixtureDatabase } from '../../eval/harness/pglite-supabase.mts';
 import { applyMigrationFiles, applyMigrations, migrationFiles } from '../../eval/harness/migrations.mts';
+import { assertNoUnexpectedClientRagFunctions } from '../helpers/rag-client-function-exposure';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const REAL_CORPUS = path.join(REPO_ROOT, 'eval/fixtures/corpus');
@@ -61,7 +62,12 @@ export async function catalogDump(db: PGlite): Promise<CatalogDump> {
     ),
     grants: await rows(
       db,
-      `SELECT p.oid::regprocedure::text AS signature, p.proacl::text AS acl
+      `SELECT p.oid::regprocedure::text AS signature,
+              COALESCE(
+                (SELECT string_agg(grantee::regrole::text || '=' || privilege_type, ',' ORDER BY grantee::regrole::text, privilege_type)
+                   FROM aclexplode(p.proacl) a WHERE privilege_type = 'EXECUTE'),
+                ''
+              ) AS acl
        FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace AND p.prokind IN ('f', 'p') AND ${OUTSIDE_EXTENSIONS('p')}`,
     ),
     triggers: await rows(
@@ -107,13 +113,7 @@ async function build(
 }
 
 async function assertRagFunctionsNotCallableByClients(db: PGlite): Promise<void> {
-  const exposed = await db.query<{ signature: string }>(
-    `SELECT p.oid::regprocedure::text AS signature FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
-     WHERE n.nspname = 'public'
-       AND (p.proname LIKE 'rag\_%' OR p.proname = 'match_chunks_by_profile')
-       AND (has_function_privilege('anon', p.oid, 'EXECUTE') OR has_function_privilege('authenticated', p.oid, 'EXECUTE'))`,
-  );
-  assert.deepEqual(exposed.rows, [], 'rag_* and match_chunks_by_profile must not be executable by anon or authenticated');
+  await assertNoUnexpectedClientRagFunctions(db);
 }
 
 for (const mode of MODES) {
