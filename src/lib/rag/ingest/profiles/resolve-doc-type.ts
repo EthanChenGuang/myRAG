@@ -255,13 +255,15 @@ export async function deleteDocTypeDefault(
   return rows[0]?.deleted === true;
 }
 
-interface Choice {
+interface DefaultChoice {
   value: DocTypeChoice;
-  origin: 'picked' | 'source_default' | 'tenant_default';
+  origin: 'source_default' | 'tenant_default';
 }
 
+type Choice = DefaultChoice | { value: DocTypeChoice; origin: 'picked' };
+
 /** Steps 2 to 5 of the order: Nango folder, Nango connection, source, tenant. */
-function chooseDefault(rows: readonly DocTypeDefaultRow[], input: ResolveDocTypeInput): Choice | null {
+function chooseDefault(rows: readonly DocTypeDefaultRow[], input: ResolveDocTypeInput): DefaultChoice | null {
   const nango = input.source === 'nango';
   const folderId = present(input.nangoFolderId);
   const connectionId = present(input.nangoConnectionId);
@@ -276,6 +278,27 @@ function chooseDefault(rows: readonly DocTypeDefaultRow[], input: ResolveDocType
   const tenant = find('tenant', null);
   if (tenant) return { value: tenant.docType, origin: 'tenant_default' };
   return null;
+}
+
+export interface PickerDefault {
+  docType: DocTypeChoice;
+  origin: 'source_default' | 'tenant_default' | 'fallback';
+}
+
+/**
+ * The default the upload picker pre-selects: steps 2 to 6 of the D-15 order for the caller's tenant, with an auto default returned as auto
+ * (no detection runs here). Throws DocTypeDefaultsError when the defaults cannot be read; the picker route reports that, it does not guess.
+ */
+export async function resolvePickerDefault(scope: TenantScope, selector: DocTypeDefaultsSelector, deps: DocTypeDefaultsDeps): Promise<PickerDefault> {
+  const rows = await loadDefaults(scope, selector, deps, []);
+  const choice = chooseDefault(rows, {
+    source: selector.source,
+    nangoConnectionId: selector.nangoConnectionId,
+    nangoFolderId: selector.nangoFolderId,
+    filename: '',
+    mimeType: '',
+  });
+  return choice === null ? { docType: 'general', origin: 'fallback' } : { docType: choice.value, origin: choice.origin };
 }
 
 /** Rules first; the optional classifier runs only when the switch is on, the rules are below the floor and there is text. */
@@ -356,7 +379,8 @@ function stable(value: unknown): string {
   return JSON.stringify(value) ?? 'null';
 }
 
-function sameParserOptions(a: ProcessingProfile, b: ProcessingProfile): boolean {
+/** True when two profiles ask a parser for the same output, so a stored parse of one is valid for the other. */
+export function sameParserOptions(a: ProcessingProfile, b: ProcessingProfile): boolean {
   return stable(a.parser) === stable(b.parser);
 }
 
