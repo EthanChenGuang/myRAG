@@ -4,8 +4,8 @@ milestone: v5.0
 current_phase: 02
 current_phase_name: Unified Retrieval Pipeline & Tenant Scope
 status: executing
-stopped_at: Phase 02 plans 36/36 merged; gates pending
-last_updated: "2026-11-23T14:27:14.194Z"
+stopped_at: Phase 03 plans 45/50 merged; wave 9-10 remaining
+last_updated: "2026-11-24T10:10:00.000Z"
 last_activity: 2026-11-23
 last_activity_desc: Phase 02 plans 11, 12, 16, 17, 18, 22 merged
 state_head: 3facf75a846e7a13be2716bdf7768179dca6018b
@@ -28,11 +28,11 @@ See: .planning/PROJECT.md (updated 2026-11-22)
 ## Current Position
 
 Phase: 03 (Unified Ingestion & Embedding Profiles) — EXECUTING
-Plan: 40 of 50 merged (03-01..03-37, 03-13b, 03-41, 03-41a); PAUSED — 03-40 complete unmerged, 03-38/03-39 in progress (patches in .planning/paused/p3c/)
+Plan: 45 of 50 merged (03-01..03-42, 03-13b, 03-41, 03-41a); remaining 03-43..03-47 + Guang live 03-48
 Status: Phase 2 complete (human_needed live checks). All remaining phases planned and plan-checked PASS: 3.1 (55), 4 (45), 5 (26), 5.1 (25), 6 (46), 7 (34).
-Last activity: 2026-11-24 — wave 7 (03-31..03-37, 03-41) merged; gates green (tsc 0, vitest 2352, node 145, rag-db 372+3 skip, eval 367, test-rag prechunked and ingest PASS); langfuse held-export test race fixed
+Last activity: 2026-11-24 — merged 03-40, 03-38, 03-39, 03-42; gates vitest 2459, node 145, test-rag both modes PASS; Sonnet executor quota → orchestrator/Composer for 03-39 task 3 and 03-42
 
-Progress: [█████████░] 94%
+Progress: [█████████░] 90%
 
 ## Performance Metrics
 
