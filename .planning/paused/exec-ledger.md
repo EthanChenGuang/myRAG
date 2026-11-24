@@ -70,7 +70,7 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | 04-08 | [bc-b8d286f0](bc-b8d286f0-f82f-5d7d-b33e-a945526384a1) **merged** | exec/04-08 — vitest 56 pass on trunk |
 | 03.1-11 | [bc-b18bbe3f](bc-b18bbe3f-b7f9-57e3-8d19-200f419a1891) **merged** | exec/03.1-11 — routing JSON + loaders |
 | 04-09 | [bc-d7fa6093](bc-d7fa6093-307f-5298-8249-06913c219f67) **merged** | exec/04-09 — vitest 12 pass |
-| 04-10 | [bc-ea9f7b6f](bc-ea9f7b6f-dc74-5d17-9573-573c0d79ab57) RUNNING | exec/04-10 |
+| 04-10 | [bc-ea9f7b6f](bc-ea9f7b6f-dc74-5d17-9573-573c0d79ab57) **merged** | exec/04-10 — vitest 50 + fixture-edge |
 | 04-02 | [bc-5a4f4e08](bc-5a4f4e08-1575-5ed0-a16f-35d23901bcfd) RUNNING | exec/04-02 |
 | 03.1-12 | [bc-6699e991](bc-6699e991-7801-5751-be34-7d73844505c5) RUNNING | exec/03.1-12 |
 | 04-07 | [bc-b39f21bf](bc-b39f21bf-71db-54ba-81d3-327871eb3a63) **merged** | exec/04-07 |
@@ -93,7 +93,7 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | Plan | bcId | Worktree | Notes |
 |------|------|----------|-------|
 | 04-11 | [bc-ff29f720](bc-ff29f720-c984-5a3b-82e5-ff26dea712ca) RUNNING | `wt/04-11` | Refill after 04-07 merge |
-| 04-10 | [bc-ea9f7b6f](bc-ea9f7b6f-dc74-5d17-9573-573c0d79ab57) RUNNING | `wt/04-10` | |
+| 04-12 | [bc-7e4cdf1c](bc-7e4cdf1c-68e8-51f1-92c1-f1c5b1bb0abc) RUNNING | `wt/04-12` | Refill after 04-10 merge |
 | 04-02 | [bc-5a4f4e08](bc-5a4f4e08-1575-5ed0-a16f-35d23901bcfd) RUNNING | `wt/04-02` | After 03.1-03 merge |
 | 03.1-12 | [bc-6699e991](bc-6699e991-7801-5751-be34-7d73844505c5) RUNNING | `wt/03.1-12` | Refill 2→4 |
 
