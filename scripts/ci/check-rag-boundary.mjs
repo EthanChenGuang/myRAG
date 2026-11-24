@@ -32,12 +32,73 @@ export const RETIRED_MODULES = [
 export const VECTOR_OR_RERANK_PACKAGES = ['weaviate-client', '@qdrant/js-client-rest', 'cohere-ai', 'voyageai'];
 export const AI_SDK_BANNED_EXPORTS = ['embed', 'embedMany', 'rerank'];
 
+export const WRITER_RPCS = [
+  'rag_begin_document_version',
+  'rag_write_chunks',
+  'rag_publish_document_version',
+  'rag_set_document_fields',
+  'rag_save_ingest_state',
+];
+
+const LEGACY_REMOVED_BY = 'Phase 7 release defaults (RAG_INGEST_PIPELINE removal)';
+
+export const LEGACY_WRITERS = [
+  {
+    path: 'src/app/api/process-document/route.ts',
+    rules: ['chunk-writer', 'document-insert'],
+    reason: 'legacy branch: own LlamaParse upload, character chunker and direct document and chunk inserts',
+    removedBy: LEGACY_REMOVED_BY,
+  },
+  {
+    path: 'src/app/api/ai-to-rag/route.ts',
+    rules: ['chunk-writer', 'document-insert'],
+    reason: 'legacy branch: own document and chunk inserts for saved AI answers',
+    removedBy: LEGACY_REMOVED_BY,
+  },
+  {
+    path: 'src/lib/supabase.ts',
+    rules: ['chunk-writer', 'document-insert'],
+    reason: 'storeDocument, called by document-processor.ts and the Nango and scraper adapters under the legacy pipeline',
+    removedBy: LEGACY_REMOVED_BY,
+  },
+];
+
+export function legacyWriterProblems(list, knownRules = null) {
+  const known = knownRules ?? new Set(RULES.map((r) => r.id));
+  const problems = [];
+  for (const [i, entry] of list.entries()) {
+    const label = entry?.path || `entry ${i}`;
+    if (typeof entry?.path !== 'string' || entry.path.trim() === '') problems.push(`${label}: path is required`);
+    if (!Array.isArray(entry?.rules) || entry.rules.length === 0) problems.push(`${label}: rules must list at least one rule id`);
+    else for (const id of entry.rules) if (!known.has(id)) problems.push(`${label}: unknown rule ${id}`);
+    if (typeof entry?.reason !== 'string' || entry.reason.trim() === '') problems.push(`${label}: reason is required`);
+    if (typeof entry?.removedBy !== 'string' || entry.removedBy.trim() === '') {
+      problems.push(`${label}: removedBy must name the plan that removes this legacy writer`);
+    }
+  }
+  return problems;
+}
+
 const RAG_DIR = 'src/lib/rag/';
 const TENANT_DIR = 'src/lib/rag/tenant/';
+const INGEST_DIR = 'src/lib/rag/ingest/';
+const PROFILES_DIR = 'src/lib/rag/ingest/profiles/';
 
 const outsideRag = (rel) => !rel.startsWith(RAG_DIR);
 const outsideTenant = (rel) => !rel.startsWith(TENANT_DIR);
 const inVoiceAgent = (rel) => rel.startsWith('voice-agent/src/');
+const isLegacyWriter = (rel, ruleId) => LEGACY_WRITERS.some((w) => w.path === rel && w.rules.includes(ruleId));
+const writerRuleApplies = (ruleId) => (rel) => !rel.startsWith(INGEST_DIR) && !isLegacyWriter(rel, ruleId);
+const docTypeRuleApplies = (rel) => rel.startsWith('src/') && !rel.startsWith(PROFILES_DIR);
+
+const fromTable = (table) => String.raw`\.from\s*(?:<[^>()]*>)?\s*\(\s*(['"\`])${table}\1[^()]*\)\s*`;
+const CHUNK_WRITE_RE = new RegExp(`${fromTable('document_chunks')}\\.\\s*(?:insert|update|upsert)\\s*\\(`, 'g');
+const DOCUMENT_INSERT_RE = new RegExp(`${fromTable('documents')}\\.\\s*(?:insert|upsert)\\s*\\(`, 'g');
+const WRITER_RPC_RE = new RegExp(String.raw`\.rpc\s*\(\s*(['"\`])(?:${WRITER_RPCS.join('|')})`, 'g');
+const DOC_TYPE_NAME = String.raw`(?:doc_type|docType)\b`;
+const DOC_TYPE_COMPARE_RE = new RegExp(String.raw`\b${DOC_TYPE_NAME}\s*[!=]==?`, 'g');
+const DOC_TYPE_COMPARE_REVERSED_RE = new RegExp(String.raw`[!=]==?\s*[\w$.]*\b${DOC_TYPE_NAME}`, 'g');
+const DOC_TYPE_SWITCH_RE = new RegExp(String.raw`\bswitch\s*\(\s*[\w$.]*\b${DOC_TYPE_NAME}`, 'g');
 
 const IMPORT_FROM_RE =
   /\b(?:import|export)\s+(?:type\s+)?((?:[\w$]+\s*,?\s*)?(?:\*(?:\s*as\s+[\w$]+)?|\{[^}]*\})?)\s*from\s*(['"])([^'"\n]+)\2/g;
@@ -187,6 +248,34 @@ export const RULES = [
       out.push(...regexMatches(requireRe, text).map((m) => ({ index: m.index, message: 'mintScope via require' })));
       return out;
     },
+  },
+  {
+    id: 'chunk-writer',
+    description: 'document_chunks written (insert, update, upsert) outside src/lib/rag/ingest/',
+    appliesTo: writerRuleApplies('chunk-writer'),
+    find: (text) => regexMatches(CHUNK_WRITE_RE, text),
+  },
+  {
+    id: 'document-insert',
+    description: 'documents row inserted outside src/lib/rag/ingest/',
+    appliesTo: writerRuleApplies('document-insert'),
+    find: (text) => regexMatches(DOCUMENT_INSERT_RE, text),
+  },
+  {
+    id: 'writer-rpc',
+    description: 'ingest writer RPC called outside src/lib/rag/ingest/',
+    appliesTo: writerRuleApplies('writer-rpc'),
+    find: (text) => regexMatches(WRITER_RPC_RE, text),
+  },
+  {
+    id: 'doc-type-branching',
+    description: 'document type compared or switched on outside src/lib/rag/ingest/profiles/ (profiles are data, D-13)',
+    appliesTo: docTypeRuleApplies,
+    find: (text) => [
+      ...regexMatches(DOC_TYPE_COMPARE_RE, text),
+      ...regexMatches(DOC_TYPE_COMPARE_REVERSED_RE, text),
+      ...regexMatches(DOC_TYPE_SWITCH_RE, text),
+    ],
   },
 ];
 
