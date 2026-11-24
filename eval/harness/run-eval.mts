@@ -176,6 +176,9 @@ export async function prepareInProcessEval(options: {
     throw error;
   }
   const startedEdge = edge;
+  // The caller closes what it passed in (the ingest fixture's database, and its edge when it brought one); close() releases the rest.
+  const ownsDb = !ingestFixture;
+  const ownsEdge = !ingestFixture?.edge;
 
   const retrievalEnv =
     fixtureMode === 'ingest' ? { ...ingestModeRetrievalEnv(), ...envOverrides } : envOverrides;
@@ -213,10 +216,8 @@ export async function prepareInProcessEval(options: {
     sqlSha256: fixture.sqlSha256,
     close: async () => {
       translatorModule?.resetTranslatorForTests();
-      if (!ingestFixture) {
-        await startedEdge.close();
-        await fixture.db.close().catch(() => undefined);
-      }
+      if (ownsEdge) await startedEdge.close();
+      if (ownsDb) await fixture.db.close().catch(() => undefined);
     },
   };
 }
