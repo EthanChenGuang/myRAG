@@ -87,10 +87,13 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | 04-12 | [bc-7e4cdf1c](bc-7e4cdf1c-68e8-51f1-92c1-f1c5b1bb0abc) **merged** | exec/04-12 |
 | 04-16 | [bc-d3b679cb](bc-d3b679cb-baac-50ce-8ff9-c0829a4fb24f) **merged** | exec/04-16 — relex 9+8 tests |
 | 04-14 | [bc-136b100d](bc-136b100d-6b2f-51bc-b0da-cf8849a609c2) **merged** | exec/04-14 |
-| 03.1-14 | [bc-6ed38246](bc-6ed38246-5368-58ee-9409-cafed132af21) RUNNING | exec/03.1-14 |
+| 03.1-14 | [bc-6ed38246](bc-6ed38246-5368-58ee-9409-cafed132af21) **merged** | exec/03.1-14 — vitest 34, pytest 50 |
 | 03.1-13 | [bc-e72d1c49](bc-e72d1c49-cec3-59a1-ad07-7c158b89a381) **merged** | exec/03.1-13 |
 | 03.1-15 | [bc-7064801d](bc-7064801d-6459-56da-b3bf-9ee5be726931) **merged** | exec/03.1-15 — pytest 31 |
 | 03.1-16 | [bc-572eafe6](bc-572eafe6-375e-5fac-b690-23e40f4403cd) RUNNING | exec/03.1-16 — L1 pdfplumber |
+| 03.1-17 | [bc-d27c0a4b](bc-d27c0a4b-accb-54b2-a27a-29c7aa443e15) RUNNING | exec/03.1-17 — ingest clients |
+| 04-16 | [bc-d3b679cb](bc-d3b679cb-baac-50ce-8ff9-c0829a4fb24f) **merged** | exec/04-16 |
+| 03.1-18 | [bc-34cb4e3b](bc-34cb4e3b-b843-5ba6-94da-c58cb5093dc2) RUNNING | exec/03.1-18 |
 
 ## Remaining plan inventory (file-overlap basis)
 
@@ -108,8 +111,8 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 
 | Plan | bcId | Worktree | Notes |
 |------|------|----------|-------|
-| 03.1-14 | [bc-6ed38246](bc-6ed38246-5368-58ee-9409-cafed132af21) RUNNING | `wt/03.1-14` | Refill after 04-14 |
-| 03.1-17 | SPAWN | `wt/03.1-17` | Refill after 04-16 (04-17 blocked on 04-15) |
+| 03.1-18 | [bc-34cb4e3b](bc-34cb4e3b-b843-5ba6-94da-c58cb5093dc2) RUNNING | `wt/03.1-18` | ingest ledger TS |
+| 03.1-17 | [bc-d27c0a4b](bc-d27c0a4b-accb-54b2-a27a-29c7aa443e15) RUNNING | `wt/03.1-17` | ingest HTTP clients |
 | 04-15 | [bc-2f4f0524](bc-2f4f0524-6984-5e57-a50a-249d0a960a27) RUNNING | `wt/04-15` | hybrid_search RPC |
 | 03.1-16 | [bc-572eafe6](bc-572eafe6-375e-5fac-b690-23e40f4403cd) RUNNING | `wt/03.1-16` | L1 preflight |
 
