@@ -21,6 +21,7 @@ interface Env {
   admin: ReturnType<typeof createPgliteAdmin>;
   mode: DeploymentMode;
   session: { id: string } | null;
+  sessionThrows?: boolean;
 }
 
 let env: Env | null = null;
@@ -39,13 +40,14 @@ interface DocSeed {
   sourceProvider?: string | null;
   sourceFileId?: string | null;
   content?: string;
+  source?: string;
 }
 
 async function addDoc(db: PGlite, doc: DocSeed): Promise<void> {
   const lineage = doc.lineage ?? doc.id;
   await db.query(
     `INSERT INTO documents (id, filename, content, metadata, user_id, organization_id, created_at, lineage_id, version, is_current, status, source, source_key, source_provider, source_file_id)
-     VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, $10, $11, 'config_upload', $12, $13, $14)`,
+     VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, $10, $11, $15, $12, $13, $14)`,
     [
       doc.id,
       doc.filename ?? `file-${doc.id.slice(-4)}.pdf`,
@@ -61,6 +63,7 @@ async function addDoc(db: PGlite, doc: DocSeed): Promise<void> {
       `key:${lineage}`,
       doc.sourceProvider ?? null,
       doc.sourceFileId ?? null,
+      doc.source ?? 'config_upload',
     ],
   );
 }
@@ -131,7 +134,12 @@ async function loadRoutes() {
   }));
   vi.doMock('@/lib/supabase/server', () => ({
     createClient: async () => ({
-      auth: { getUser: async () => ({ data: { user: current.session } }) },
+      auth: {
+        getUser: async () => {
+          if (current.sessionThrows) throw new Error('auth down');
+          return { data: { user: current.session } };
+        },
+      },
       from: (table: string) => current.admin.from(table),
     }),
   }));
@@ -633,9 +641,37 @@ describe('document readers and deleters are version aware', () => {
       expect((await scrapers.GET(status(PAGE))).status).toBe(401);
     });
 
+    it("a page the unified pipeline scraped (source 'scraper', origin firecrawl) is found for its owner and never for tenant B", async () => {
+      const e = await open('multi-tenant');
+      const url = 'https://example.com/unified';
+      await addDoc(e.db, { id: id(71), source: 'scraper', sourceProvider: 'firecrawl', sourceFileId: url, filename: 'unified' });
+      await addChunk(e.db, 'multi-tenant', { id: id(171), doc: id(71) });
+      const { scrapers } = await loadRoutes();
+      e.session = { id: USER_A };
+      const asA = (await (await scrapers.GET(status(url))).json()) as { scraped: boolean; document: Row };
+      expect(asA.scraped).toBe(true);
+      expect(asA.document).toMatchObject({ id: id(71), chunk_count: 1 });
+      e.session = { id: USER_B };
+      expect(await (await scrapers.GET(status(url))).json()).toEqual({ scraped: false, url });
+    });
+
+    it('single-tenant: a session is required (401 without one, 503 when the lookup fails) and nothing is read before it', async () => {
+      const e = await open('single-tenant');
+      await seedScrapes(e.db, 'single-tenant');
+      const { scrapers } = await loadRoutes();
+      e.session = null;
+      const anonymous = await scrapers.GET(status(PAGE));
+      expect(anonymous.status).toBe(401);
+      expect(JSON.stringify(await anonymous.json())).not.toContain(PAGE);
+      e.sessionThrows = true;
+      expect((await scrapers.GET(status(PAGE))).status).toBe(503);
+      expect(e.admin.queries.filter((query) => /\bdocuments\b/.test(query.sql))).toEqual([]);
+    });
+
     it('single-tenant: a quarantined scrape is not reported either', async () => {
       const e = await open('single-tenant');
       await seedScrapes(e.db, 'single-tenant');
+      e.session = { id: USER_A };
       const { scrapers } = await loadRoutes();
       const held = (await (await scrapers.GET(status(QUARANTINED_PAGE))).json()) as Row;
       expect(held).toEqual({ scraped: false, url: QUARANTINED_PAGE });
