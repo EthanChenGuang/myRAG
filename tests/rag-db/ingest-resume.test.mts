@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from '../../eval/harness/fake-edge.mts';
 import { TWO_TENANT_IDS, createTwoTenantDatabase, type TwoTenantDatabase } from '../../eval/harness/two-tenant.mts';
 import type { RpcClient } from '@/lib/rag/backend/supabase-rpc';
-import type { StageContext } from '@/lib/rag/ingest/types';
 
 type Row = Record<string, unknown>;
 
@@ -33,8 +32,6 @@ describe('ingest resume against the two-tenant database', () => {
   let fakeStoreModule: typeof import('../helpers/fake-object-store');
   let resolver: typeof import('@/lib/rag/tenant/resolve-chat');
   let supabaseModule: typeof import('@/lib/supabase');
-  let chunkModule: typeof import('@/lib/rag/ingest/stages/chunk');
-  let enrichModule: typeof import('@/lib/rag/ingest/stages/enrich');
 
   before(async () => {
     fixture = await createTwoTenantDatabase();
@@ -48,8 +45,6 @@ describe('ingest resume against the two-tenant database', () => {
     fakeStoreModule = await import('../helpers/fake-object-store');
     resolver = await import('@/lib/rag/tenant/resolve-chat');
     supabaseModule = await import('@/lib/supabase');
-    chunkModule = await import('@/lib/rag/ingest/stages/chunk');
-    enrichModule = await import('@/lib/rag/ingest/stages/enrich');
   });
 
   after(async () => {
@@ -152,19 +147,8 @@ describe('ingest resume against the two-tenant database', () => {
     const [untouched] = await rows('SELECT status, processing_status FROM documents WHERE id = $1', [documentId]);
     assert.equal(untouched?.status, 'processing');
 
-    const withoutInputs = await ingestModule.resumeIngest(scopeA, documentId);
-    assert.equal(withoutInputs.status, 'processing');
-    assert.equal(withoutInputs.reason, 'resume_input_unavailable');
-    assert.equal((await chunkRows(documentId)).length, 0);
+    assert.equal((await chunkRows(documentId)).length, 0, 'the foreign resume wrote nothing');
 
-    depsModule.setIngestDepsForTests({
-      rehydrate: async (ctx: StageContext) => {
-        ctx.work.parseText = MARKDOWN;
-        await chunkModule.chunkStage.run(ctx);
-        await enrichModule.enrichStage.run(ctx);
-        return true;
-      },
-    });
     const resumed = await ingestModule.resumeIngest(scopeA, documentId);
 
     assert.equal(resumed.status, 'ready');

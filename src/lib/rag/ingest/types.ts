@@ -123,8 +123,13 @@ export interface IngestDocumentRef {
   version: number;
   /** The identity's lineage: the middle part of every object key of this version. */
   lineageId: string;
+  /** documents.original_path of a resumed run: the object key of the stored original. */
+  originalPath?: string | null;
   resumed: boolean;
 }
+
+/** What rebuilding the stage inputs of a resumed run can answer: done, not possible (the run stays processing), or failed with a reason. */
+export type RehydrateResult = boolean | { failed: string };
 
 /** Working data of one run. Not persisted; plan 03-13b moves what a resume needs into the object store. */
 export interface IngestWork {

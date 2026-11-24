@@ -46,8 +46,13 @@ export function safeContentType(value: string | null | undefined): string {
   return CONTENT_TYPE.test(type) ? type : 'application/octet-stream';
 }
 
+/** True for a fixed ASCII basename such as original.pdf or parse.md. */
+export function isArtifactName(name: string): boolean {
+  return ARTIFACT_NAME.test(name);
+}
+
 function artifactKey(ctx: ArtifactContext, name: string): string {
-  if (!ARTIFACT_NAME.test(name)) throw new Error('[Ingest] artifact name is not a fixed ASCII basename');
+  if (!isArtifactName(name)) throw new Error('[Ingest] artifact name is not a fixed ASCII basename');
   if (!ctx.identity || !ctx.document) throw new Error('[Ingest] artifact needs the tenant key and the document version');
   const key = `${versionPrefix(ctx.identity.tenantKey, ctx.document.lineageId, ctx.document.version)}${name}`;
   assertObjectKey(key);

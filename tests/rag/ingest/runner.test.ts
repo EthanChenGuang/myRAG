@@ -456,6 +456,7 @@ describe('resume from the object store', () => {
       const { db, calls } = fakeIngestDb({ document: documentRow(lastCompleted), origin });
       const store = installIngestDeps({ db });
       await store.put(PARSE_PATH, bytes(MARKDOWN), { contentType: 'text/markdown' });
+      const seeded = store.calls.length;
       const spies = [chunkStage, enrichStage, extractStage, parseStage].map((stage) => vi.spyOn(stage, 'run'));
 
       const { resumeIngest } = await import('@/lib/rag/ingest');
@@ -466,7 +467,7 @@ describe('resume from the object store', () => {
       expect({ lastCompleted, chunk, enrich, extract }).toEqual({ lastCompleted, chunk: 1, enrich: 1, extract: 1 });
       expect(parse, lastCompleted).toBe(0);
       expect(callsOf(calls, 'rag_write_chunks')).toHaveLength(1);
-      expect(store.calls.map((call) => `${call.op}:${call.key}`)).toEqual([`get:${PARSE_PATH}`]);
+      expect(store.calls.slice(seeded).map((call) => `${call.op}:${call.key}`)).toEqual([`get:${PARSE_PATH}`]);
       spies.forEach((spy) => spy.mockRestore());
       uninstallIngestDeps();
     }

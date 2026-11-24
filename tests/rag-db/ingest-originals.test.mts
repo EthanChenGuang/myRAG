@@ -342,12 +342,13 @@ describe('ingest stores the original and the parse output, and resume rebuilds i
 
   beforeEach(() => install());
 
+  /** The text gets a line naming the file, so two tests never upload the same bytes into one tenant (that would be a duplicate). */
   const upload = async (userId: string, text: string, filename: string) =>
     ingestModule.ingest({
       scope: await scopeOf(userId),
       source: 'config_upload',
       sourceKey: `root/${filename}`,
-      text,
+      text: `${text}\nThis copy belongs to ${filename}.\n`,
       filename,
       mimeType: 'text/markdown',
       signal: new AbortController().signal,

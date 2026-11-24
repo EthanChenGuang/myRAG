@@ -4,7 +4,7 @@ import { getSupabaseAdmin } from '@/lib/supabase';
 import { embedBatch } from '../embeddings/openai';
 import type { RpcClient } from '../backend/supabase-rpc';
 import type { IngestEnvInput } from './config';
-import type { StageContext } from './types';
+import type { RehydrateResult, StageContext } from './types';
 
 export interface IngestDeps {
   /** The admin client: the writer RPCs are executable by service_role only. */
@@ -14,10 +14,10 @@ export interface IngestDeps {
   randomId: () => string;
   ingestEnv: () => IngestEnvInput;
   /**
-   * Rebuilds the in-memory work of a resumed run (original, parse output, chunks) for the stages after
-   * lastCompleted; false when it cannot. Plan 03-17 supplies it with the object store.
+   * Rebuilds the in-memory work of a resumed run for the stages after lastCompleted. Unset, resume uses
+   * rehydrateFromStore (the stored original and parse output); tests install a stand-in.
    */
-  rehydrate?: (ctx: StageContext) => Promise<boolean>;
+  rehydrate?: (ctx: StageContext) => Promise<RehydrateResult>;
 }
 
 const defaults: IngestDeps = {
