@@ -1,7 +1,7 @@
 // Browser-compatible document processing script
 // Converted from TypeScript for config UI integration
 
-class DocumentProcessor {
+class LegacyDocumentProcessor {
   constructor() {
     this.processingQueue = [];
     this.currentProcessing = null;
@@ -231,7 +231,143 @@ class DocumentProcessor {
   }
 }
 
-// Export for use in config UI
-window.DocumentProcessor = DocumentProcessor;
+const INGEST_POLL_TERMINAL = new Set(['ready', 'failed', 'needs_review', 'quarantined', 'skipped_duplicate']);
+const INGEST_POLL_MAX_MS = 30 * 60 * 1000;
 
-console.log('Document processor script loaded'); 
+function sleepMs(ms, signal) {
+  return new Promise((resolve, reject) => {
+    if (signal && signal.aborted) {
+      reject(new DOMException('Aborted', 'AbortError'));
+      return;
+    }
+    const timer = setTimeout(resolve, ms);
+    if (signal) {
+      signal.addEventListener(
+        'abort',
+        () => {
+          clearTimeout(timer);
+          reject(new DOMException('Aborted', 'AbortError'));
+        },
+        { once: true },
+      );
+    }
+  });
+}
+
+async function pollQueuedUpload({
+  jobId,
+  organizationId,
+  onUpdate,
+  signal,
+  fetcher,
+  now = () => Date.now(),
+  wait = sleepMs,
+}) {
+  const ragFetchFn =
+    fetcher ||
+    (typeof window !== 'undefined' && typeof window.ragFetch === 'function' ? window.ragFetch.bind(window) : null);
+  if (!ragFetchFn) throw new Error('pollQueuedUpload requires a fetcher');
+
+  const start = now();
+  let backoffStep = 0;
+  let consecutiveFailures = 0;
+  let pausedHidden = false;
+
+  const onVisibility = () => {
+    if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+      pausedHidden = false;
+    } else if (typeof document !== 'undefined' && document.hidden) {
+      pausedHidden = true;
+    }
+  };
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', onVisibility);
+    pausedHidden = document.hidden;
+  }
+
+  const buildPath = () => {
+    const qs = organizationId ? `?organizationId=${encodeURIComponent(organizationId)}` : '';
+    return `admin/ingest-jobs/${encodeURIComponent(jobId)}${qs}`;
+  };
+
+  try {
+    while (true) {
+      if (signal && signal.aborted) break;
+      if (now() - start >= INGEST_POLL_MAX_MS) {
+        onUpdate({ kind: 'stopped', messageKey: 'monitor.stopped' });
+        break;
+      }
+
+      if (!pausedHidden) {
+        let result;
+        try {
+          result = await ragFetchFn(buildPath(), { method: 'GET', signal });
+        } catch (err) {
+          consecutiveFailures += 1;
+          if (consecutiveFailures >= 5) {
+            onUpdate({ kind: 'stopped', messageKey: 'monitor.stopped' });
+            break;
+          }
+          onUpdate({ kind: 'retrying', messageKey: 'monitor.retrying' });
+        }
+
+        if (result) {
+          if (result.ok && result.body && result.body.job) {
+            consecutiveFailures = 0;
+            const job = result.body.job;
+            onUpdate({ kind: 'job', job });
+            if (INGEST_POLL_TERMINAL.has(job.status)) break;
+          } else if (result.status === 401 || result.status === 403) {
+            onUpdate({ kind: 'auth', status: result.status, body: result.body });
+            break;
+          } else if (result.status === 404) {
+            onUpdate({ kind: 'not_found', messageKey: 'monitor.notFound' });
+            break;
+          } else if (result.status === 503 || !result.ok) {
+            consecutiveFailures += 1;
+            if (consecutiveFailures >= 5) {
+              onUpdate({ kind: 'stopped', messageKey: 'monitor.stopped' });
+              break;
+            }
+            onUpdate({ kind: 'retrying', messageKey: 'monitor.retrying' });
+          }
+        }
+      }
+
+      const elapsed = now() - start;
+      const delayFn =
+        typeof globalThis !== 'undefined' && typeof globalThis.nextIngestPollDelay === 'function'
+          ? globalThis.nextIngestPollDelay
+          : null;
+      const delay = delayFn
+        ? delayFn(elapsed, elapsed < 60_000 ? 0 : backoffStep)
+        : elapsed < 60_000
+          ? 2000
+          : [5000, 10_000, 20_000, 30_000][Math.min(backoffStep, 3)] || 30_000;
+      if (elapsed >= 60_000) backoffStep += 1;
+      try {
+        await wait(delay, signal);
+      } catch {
+        break;
+      }
+    }
+  } finally {
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', onVisibility);
+    }
+  }
+}
+
+if (typeof window !== 'undefined') {
+  window.LegacyDocumentProcessor = LegacyDocumentProcessor;
+  window.pollQueuedUpload = pollQueuedUpload;
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    LegacyDocumentProcessor,
+    pollQueuedUpload,
+  };
+}
+
+console.log('Document processor script loaded');
