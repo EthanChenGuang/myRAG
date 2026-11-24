@@ -18,3 +18,18 @@ The invalid sample is `{ source_key, path, url: 'http://...' }` (both locations,
 (03.1-02 summary: cross-field rules live in Pydantic). Either the test case must use an enum or range violation, or the Pydantic
 model needs a schema-visible constraint (`oneOf`). 03.1-25's `listSource` enforces both rules itself after the Zod parse
 (`manifest_location`, `manifest_https`) and tests them, so the backfill is safe either way.
+
+## 3. (03.1-42) L3 is not run by the queue worker
+
+`run_tiered` calls `run_preflight` without a `vlm_app`, so a job whose snapshot has `vlm_detect` on never reaches the detect-vlm
+route (03.1-41's note asked 03.1-40 to build `LoopVlmApp`; it was not done, and a `LoopVlmApp` cannot cross into a process pool).
+The SC2 e2e (`tests/rag-e2e/escalation-and-cloud-off.test.mts`) mounts detect-vlm with a counting vision stub and proves zero
+calls with the cloud off, but with L3 never wired the vision side of that proof is guarded only by l3_refine's own snapshot check.
+Wiring belongs to a later plan (thread-side bridge or a detect step outside the pool).
+
+## 4. (03.1-42) Recorded fast pages of the scanned fixtures are invalid Docling JSON
+
+`eval/fixtures/parse/recorded/<sha>/fast/page-N.json` for scan-en, scan-it, scan-zh and mixed-routing page 9 have `texts: []` but
+`body.children` still points at `#/texts/0..3`, so `DoclingDocument.load_from_json` raises (the `vlm/` recordings fail validation
+too). `RecordedRangeConverter` would crash on these pages under the fast preset; preflight never routes them there, so no current
+test hits it. The 03.1-42 tests use their own empty pages instead. Fix belongs to the recording script (03.1-13).
