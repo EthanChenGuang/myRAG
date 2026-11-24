@@ -1,5 +1,6 @@
 import { BlockList, isIP } from 'node:net';
 import { createReadStream } from 'node:fs';
+import type { Stats } from 'node:fs';
 import { lstat, readdir, realpath, stat } from 'node:fs/promises';
 import { lookup as dnsLookup } from 'node:dns/promises';
 import { createInterface } from 'node:readline';
@@ -56,6 +57,8 @@ export interface ListSourceInput {
   allowedBuckets?: readonly string[];
   /** Bucket sources only: the scope from backfillScope. A user or organization scope confines listing to that tenant's prefix. */
   scope?: TenantScope;
+  /** Manifest sources only: the directory every manifest path must resolve under. The manifest's own location grants nothing. */
+  root?: string;
 }
 
 export class SourceRejection extends Error {
@@ -224,6 +227,11 @@ function inside(root: string, candidate: string): boolean {
   return candidate === root || candidate.startsWith(root.endsWith(path.sep) ? root : `${root}${path.sep}`);
 }
 
+/** True when any component of a path relative to a root starts with a dot (.env, .git, .ssh, ...). */
+function hasHiddenSegment(relative: string): boolean {
+  return relative.split(/[\\/]+/).some((segment) => segment.startsWith('.'));
+}
+
 function makeReject(deps: BackfillSourceDeps): (reason: string) => void {
   const counts = new Map<string, number>();
   return (reason) => {
@@ -240,11 +248,27 @@ async function* listFolder(ref: string, deps: BackfillSourceDeps, signal: AbortS
   while (pending.length > 0) {
     signal.throwIfAborted();
     const dir = pending.pop() as string;
-    const names = (await readdir(dir)).sort();
+    let names: string[];
+    try {
+      names = (await readdir(dir)).sort();
+    } catch {
+      reject('path_unreadable');
+      continue;
+    }
     const subdirs: string[] = [];
     for (const name of names) {
       const joined = path.join(dir, name);
-      const link = await lstat(joined);
+      if (name.startsWith('.')) {
+        reject('hidden_path');
+        continue;
+      }
+      let link: Stats;
+      try {
+        link = await lstat(joined);
+      } catch {
+        reject('path_unreadable');
+        continue;
+      }
       if (link.isDirectory()) {
         subdirs.push(joined);
         continue;
@@ -261,7 +285,17 @@ async function* listFolder(ref: string, deps: BackfillSourceDeps, signal: AbortS
         reject('outside_root');
         continue;
       }
-      const info = await stat(canonical);
+      if (hasHiddenSegment(path.relative(root, canonical))) {
+        reject('hidden_path');
+        continue;
+      }
+      let info: Stats;
+      try {
+        info = await stat(canonical);
+      } catch {
+        reject('path_unreadable');
+        continue;
+      }
       if (!info.isFile()) continue;
       if (info.size > ORIGINALS_MAX_BYTES) {
         reject('too_large');
@@ -275,6 +309,7 @@ async function* listFolder(ref: string, deps: BackfillSourceDeps, signal: AbortS
         async open() {
           const again = await realpath(joined);
           if (!inside(root, again)) throw new SourceRejection('outside_root');
+          if (hasHiddenSegment(path.relative(root, again))) throw new SourceRejection('hidden_path');
           return createReadStream(again);
         },
       };
@@ -381,11 +416,17 @@ function parseManifestLine(line: string): { ok: true; entry: BackfillManifestEnt
   return { ok: true, entry };
 }
 
-async function* listManifest(ref: string, deps: BackfillSourceDeps, signal: AbortSignal): AsyncGenerator<SourceItem> {
+async function* listManifest(ref: string, explicitRoot: string | undefined, deps: BackfillSourceDeps, signal: AbortSignal): AsyncGenerator<SourceItem> {
   const reject = makeReject(deps);
+  if (typeof explicitRoot !== 'string' || explicitRoot.trim() === '') throw new SourceRejection('manifest_root_required');
+  let root: string;
+  try {
+    root = await realpath(path.resolve(explicitRoot));
+    if (!(await stat(root)).isDirectory()) throw new Error('not a directory');
+  } catch {
+    throw new SourceRejection('manifest_root_required');
+  }
   const manifestPath = await realpath(path.resolve(ref));
-  const manifestDir = path.dirname(manifestPath);
-  const root = await realpath(manifestDir);
   const stream = createReadStream(manifestPath);
   const lines = createInterface({ input: stream, crlfDelay: Infinity });
   const seenKeys = new Set<string>();
@@ -408,11 +449,19 @@ async function* listManifest(ref: string, deps: BackfillSourceDeps, signal: Abor
       const docType = entry.doc_type ?? undefined;
 
       if (entry.path !== null && entry.path.trim() !== '') {
+        if (path.isAbsolute(entry.path) || path.win32.isAbsolute(entry.path)) {
+          reject('path_absolute');
+          continue;
+        }
         if (entry.path.split(/[\\/]+/).includes('..')) {
           reject('outside_root');
           continue;
         }
-        const resolved = path.isAbsolute(entry.path) ? path.resolve(entry.path) : path.resolve(manifestDir, entry.path);
+        if (hasHiddenSegment(entry.path)) {
+          reject('hidden_path');
+          continue;
+        }
+        const resolved = path.resolve(root, entry.path);
         let canonical: string;
         let size: number;
         try {
@@ -431,6 +480,10 @@ async function* listManifest(ref: string, deps: BackfillSourceDeps, signal: Abor
           reject('outside_root');
           continue;
         }
+        if (hasHiddenSegment(path.relative(root, canonical))) {
+          reject('hidden_path');
+          continue;
+        }
         if (size > ORIGINALS_MAX_BYTES) {
           reject('too_large');
           continue;
@@ -443,6 +496,7 @@ async function* listManifest(ref: string, deps: BackfillSourceDeps, signal: Abor
           async open() {
             const again = await realpath(resolved);
             if (!inside(root, again)) throw new SourceRejection('outside_root');
+            if (hasHiddenSegment(path.relative(root, again))) throw new SourceRejection('hidden_path');
             return createReadStream(again);
           },
         };
@@ -483,5 +537,5 @@ export async function* listSource(input: ListSourceInput): AsyncGenerator<Source
   const deps = input.deps ?? {};
   if (input.kind === 'folder') yield* listFolder(input.ref, deps, signal);
   else if (input.kind === 'bucket') yield* listBucket(input.ref, input.allowedBuckets, input.scope, deps, signal);
-  else yield* listManifest(input.ref, deps, signal);
+  else yield* listManifest(input.ref, input.root, deps, signal);
 }

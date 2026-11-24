@@ -214,7 +214,7 @@ describe('listSource folder', () => {
     await mkdir(path.join(root, 'nested', 'deeper'), { recursive: true });
     await mkdir(outside);
     await writeFile(path.join(root, 'a.txt'), 'alpha');
-    await writeFile(path.join(root, '..dots.txt'), 'dots');
+    await writeFile(path.join(root, 'a..b.txt'), 'dots');
     await writeFile(path.join(root, 'nested', 'b.txt'), 'bravo');
     await writeFile(path.join(root, 'nested', 'deeper', 'c.txt'), 'charlie');
     await writeFile(path.join(outside, 'secret.txt'), 'secret');
@@ -228,7 +228,7 @@ describe('listSource folder', () => {
 
   test('lists every file recursively in a stable sorted order, keys relative to the root', async () => {
     const { items, reasons } = await drain({ kind: 'folder', ref: root });
-    expect(items.map((i) => i.sourceKey)).toEqual(['..dots.txt', 'a.txt', 'nested/b.txt', 'nested/deeper/c.txt']);
+    expect(items.map((i) => i.sourceKey)).toEqual(['a..b.txt', 'a.txt', 'nested/b.txt', 'nested/deeper/c.txt']);
     expect(items.map((i) => i.ext)).toEqual(['txt', 'txt', 'txt', 'txt']);
     expect(items.map((i) => i.size)).toEqual([4, 5, 5, 7]);
     expect(reasons).toEqual([]);
@@ -242,7 +242,7 @@ describe('listSource folder', () => {
     await symlink(outside, path.join(root, 'dirlink'));
     await symlink(path.join(outside, 'dir', 'inner.txt'), path.join(root, 'second.link'));
     const { items, reasons } = await drain({ kind: 'folder', ref: root });
-    expect(items.map((i) => i.sourceKey)).toEqual(['..dots.txt', 'a.txt', 'nested/b.txt', 'nested/deeper/c.txt']);
+    expect(items.map((i) => i.sourceKey)).toEqual(['a..b.txt', 'a.txt', 'nested/b.txt', 'nested/deeper/c.txt']);
     expect(reasons).toEqual(['outside_root', 'outside_root', 'outside_root']);
   });
 
@@ -347,7 +347,7 @@ describe('listSource manifest', () => {
       { source_key: 'three', path: 'second.txt' },
     ]);
     const { deps, urls, inits } = netDeps();
-    const { items, reasons } = await drain({ kind: 'manifest', ref, deps });
+    const { items, reasons } = await drain({ kind: 'manifest', ref, root: dir, deps });
     expect(items.map((i) => i.sourceKey)).toEqual(['one', 'two', 'three']);
     expect(items.map((i) => i.docType)).toEqual(['contract_legal', undefined, undefined]);
     expect(items.map((i) => i.ext)).toEqual(['pdf', 'pdf', 'txt']);
@@ -376,7 +376,7 @@ describe('listSource manifest', () => {
       { source_key: 'good-2', path: 'second.txt' },
     ]);
     const { deps, urls } = netDeps();
-    const { items, reasons } = await drain({ kind: 'manifest', ref, deps });
+    const { items, reasons } = await drain({ kind: 'manifest', ref, root: dir, deps });
     expect(items.map((i) => i.sourceKey)).toEqual(['good-1', 'good-2']);
     expect(reasons).toEqual([
       'manifest_location',
@@ -395,7 +395,7 @@ describe('listSource manifest', () => {
     expect(urls).toEqual([]);
   });
 
-  test('paths are confined to the manifest directory: ../ segments, absolute paths, outside symlinks and missing files are refused', async () => {
+  test('paths are confined to the explicit root: ../ segments, absolute paths, outside symlinks and missing files are refused', async () => {
     await symlink(outsideFile, path.join(dir, 'link.pdf'));
     await mkdir(path.join(dir, 'sub'));
     await writeFile(path.join(dir, 'sub', 'in.txt'), 'in');
@@ -408,9 +408,9 @@ describe('listSource manifest', () => {
       { source_key: 'directory', path: 'sub' },
       { source_key: 'fine', path: 'sub/in.txt' },
     ]);
-    const { items, reasons } = await drain({ kind: 'manifest', ref, deps: netDeps().deps });
+    const { items, reasons } = await drain({ kind: 'manifest', ref, root: dir, deps: netDeps().deps });
     expect(items.map((i) => i.sourceKey)).toEqual(['fine']);
-    expect(reasons).toEqual(['outside_root', 'outside_root', 'outside_root', 'outside_root', 'path_unreadable', 'path_unreadable']);
+    expect(reasons).toEqual(['outside_root', 'outside_root', 'path_absolute', 'outside_root', 'path_unreadable', 'path_unreadable']);
   });
 
   test('a url on a private address is refused before any request: literals, localhost, mapped IPv6 and DNS answers', async () => {
@@ -438,7 +438,7 @@ describe('listSource manifest', () => {
         'six.example.com': [{ address: 'fd00::1', family: 6 }],
       },
     });
-    const { items, reasons } = await drain({ kind: 'manifest', ref, deps });
+    const { items, reasons } = await drain({ kind: 'manifest', ref, root: dir, deps });
     expect(items.map((i) => i.sourceKey)).toEqual(['public']);
     expect(reasons).toEqual([
       'private_url',
@@ -481,7 +481,7 @@ describe('listSource manifest', () => {
         return new Response('final-bytes', { status: 200 });
       },
     };
-    const { items, reasons } = await drain({ kind: 'manifest', ref, deps });
+    const { items, reasons } = await drain({ kind: 'manifest', ref, root: dir, deps });
     expect(items.map((i) => i.sourceKey)).toEqual(['relative-ok']);
     expect(await readAll(await (items[0] as SourceItem).open())).toBe('final-bytes');
     expect(reasons).toEqual(['private_url', 'private_url', 'manifest_https', 'manifest_redirect', 'manifest_redirect']);
@@ -525,7 +525,7 @@ describe('listSource manifest', () => {
       },
     };
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    const { items, reasons } = await drain({ kind: 'manifest', ref, deps });
+    const { items, reasons } = await drain({ kind: 'manifest', ref, root: dir, deps });
     expect(items.map((i) => i.sourceKey)).toEqual(['exact']);
     expect(items[0]?.size).toBe(ORIGINALS_MAX_BYTES);
     expect(reasons).toEqual(['too_large', 'too_large', 'manifest_fetch_failed', 'manifest_fetch_failed']);
