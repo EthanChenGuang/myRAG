@@ -49,15 +49,15 @@ Orchestrator applies this **fallback chain** per role. **Never use Grok** for an
 
 ## Done this session
 
-- Merged: **03-40**, **03-38**, **03-39**, **03-42**
-- In progress: **03-45** (eval `embedding_profile`, harness flag)
-- Config: `model_overrides` + `model_fallback_policy` (see `config.json`)
-- Fixed: `legacy-post-filter-sentinel` SHA after 03-38; admin doc-type route; `tsconfig` excludes `wt/`
+- Merged on trunk: **03-43**–**03-46**, **03-45**; verifier **03-46** (`human_needed` 4/5)
+- **Wave A (5 RUNNING):** [03-47](bc-6d671721-c089-50a8-9012-53f242a64a1e), **03.1-01**, **03.1-02**, **04-01**, **04-03** — see `.planning/paused/exec-ledger.md`
+- Rules: `.cursor/rules/orchestration.mdc` (+ Claude pointer)
 
 ## Next step
 
-1. Finish **03-45**, gates, SUMMARY, commit.
-2. **03-43**, **03-44**, **03-46**, **03-47**; skip **03-48** (Guang live).
+1. Merge **03-47** when [Execute plan 03-47 only](bc-6d671721-c089-50a8-9012-53f242a64a1e) finishes (gates + SUMMARY); skip **03-48** (Guang live).
+2. Phase 3 step 4: verification + design-skills SUMMARY gate; step 5: STATE/ROADMAP; step 6: 3.1 wave 1 merges then Phase 4.
+3. Spawn wave B only per ledger (no duplicate plan ids).
 3. Review + verification (`followups-notes.md`, D-08).
 4. REQUIREMENTS/ROADMAP/STATE; Phase 3.1 then Phase 4.
 

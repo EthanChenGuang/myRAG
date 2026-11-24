@@ -304,6 +304,16 @@
       "knownGaps": []
     },
     {
+      "name": "RAG_EVAL_RETRIEVAL_MIN_SIMILARITY",
+      "status": "legacy",
+      "knownGaps": [
+        "init-env",
+        "env-ts",
+        "config-server",
+        "config-ui"
+      ]
+    },
+    {
       "name": "RAG_EXACT_ID_LOOKUP",
       "status": "managed",
       "knownGaps": []
