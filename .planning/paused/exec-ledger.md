@@ -19,7 +19,7 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | E0 | **03-47** | `wt/03-47` → `exec/03-47` | [bc-6d671721](bc-6d671721-c089-50a8-9012-53f242a64a1e) **RUNNING** | setup SQL + AGENTS — blocks other setup folds |
 | E1 | **03.1-01** | `wt/03.1-01` → `exec/03.1-01` | [bc-287a3b2b](bc-287a3b2b-c427-5a49-900b-3e5a9e4a7afc) **RUNNING** | `0351_ingestion_schema.sql` only — **no** overlap with 03-47 |
 | E2 | **03.1-02** | `wt/03.1-02` → `exec/03.1-02` | [bc-167b7120](bc-167b7120-83b6-508c-be23-d2b2d109ed27) **RUNNING** | contracts only — disjoint from E0/E1 |
-| E3 | **04-01** | `wt/04-01` → `exec/04-01` | [bc-6e56c3c5](bc-6e56c3c5-3dbf-54db-9560-74ce13710279) **RUNNING** | `src/lib/rag/*` type files — disjoint from Phase 3 close |
+| E3 | **04-01** | `wt/04-01` → `exec/04-01` | bc-6e56c3c5… **merged** | `src/lib/rag/*` type files |
 | E4 | **04-03** | `wt/04-03` → `exec/04-03` | [bc-61b56d0b](bc-61b56d0b-2381-5356-8d68-b8224a022d56) **RUNNING** | tokenizer — disjoint; **not** 04-02 yet (config overlap with 03.1-03) |
 
 **Serialized (why):**
@@ -51,8 +51,8 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | 03-46 | [bc-88f166a9](bc-88f166a9-cbf1-5906-851a-88b7b561593a) | **superseded** (finished after merge; `origin/exec/03-46` = `de688e9`, trunk `883927b`) | no executor |
 | 03-47 | bc-6d671721… | **running** | exec/03-47 |
 | 03.1-01 | bc-287a3b2b… | **running** | exec/03.1-01 |
-| 03.1-02 | bc-167b7120… | **running** | exec/03.1-02 |
-| 04-01 | bc-6e56c3c5… | **running** | exec/04-01 |
+| 03.1-02 | bc-167b7120… | **merged** | exec/03.1-02 |
+| 04-01 | bc-6e56c3c5… | **merged** | exec/04-01 |
 | 04-03 | bc-61b56d0b… | **running** | exec/04-03 |
 
 ## Remaining plan inventory (file-overlap basis)
