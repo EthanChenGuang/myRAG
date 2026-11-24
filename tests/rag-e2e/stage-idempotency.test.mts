@@ -75,18 +75,20 @@ describe('stage idempotency: a slice is bounded, a replay changes nothing and a 
 
     const requests: Array<ReturnType<typeof advanceBody>> = [];
     const stages: string[] = [];
-    let cursor: string | null = null;
-    let last: Awaited<ReturnType<QueuedHarness['callback']>> | null = null;
-    for (let call = 0; call < 40; call += 1) {
-      const body = advanceBody(cacheId, cursor, 1);
-      requests.push(body);
-      await harness.heartbeat(jobId, WORKER);
-      last = await harness.callback(jobId, 'advance', body);
-      assert.equal(last.status, 200, JSON.stringify(last.body));
-      stages.push(String(last.body.stage));
-      if (last.body.done === true) break;
-      cursor = String(last.body.stage);
-    }
+    const last = await harness.withHeartbeat(jobId, WORKER, async () => {
+      let cursor: string | null = null;
+      let reply: Awaited<ReturnType<QueuedHarness['callback']>> | null = null;
+      for (let call = 0; call < 40; call += 1) {
+        const body = advanceBody(cacheId, cursor, 1);
+        requests.push(body);
+        reply = await harness.callback(jobId, 'advance', body);
+        assert.equal(reply.status, 200, JSON.stringify(reply.body));
+        stages.push(String(reply.body.stage));
+        if (reply.body.done === true) break;
+        cursor = String(reply.body.stage);
+      }
+      return reply;
+    });
     assert.ok(last);
     assert.equal(last.body.done, true);
     assert.equal(last.body.status, 'ready', JSON.stringify(last.body));
@@ -152,7 +154,6 @@ describe('stage idempotency: a slice is bounded, a replay changes nothing and a 
       let cursor: string | null = null;
       let rewound = false;
       for (let call = 0; call < 40; call += 1) {
-        await harness.heartbeat(jobId, WORKER);
         const reply = await harness.callback(jobId, 'advance', advanceBody(cacheId, cursor, 1));
         assert.equal(reply.status, 200, JSON.stringify(reply.body));
         if (reply.body.done === true) break;

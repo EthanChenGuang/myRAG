@@ -38,6 +38,8 @@ export interface QueuedHarness {
   claim(jobId: string, worker: string): Promise<void>;
   /** Extends the lease like the worker's heartbeat does, so a slow run under load keeps its job. */
   heartbeat(jobId: string, worker: string): Promise<void>;
+  /** Runs `work` while a background heartbeat keeps the lease of the job alive, as the worker's per-job heartbeat task does. */
+  withHeartbeat<T>(jobId: string, worker: string, work: () => Promise<T>): Promise<T>;
   /** Posts to an internal callback route with the right secret unless `headers` says otherwise (a header set to null is left out). */
   callback(jobId: string, action: 'parse-external' | 'advance', body: unknown, headers?: Record<string, string | null>): Promise<CallbackReply>;
   runWorker(jobId: string, extraEnv?: Record<string, string>): Promise<SpawnSidecarResult>;
@@ -139,6 +141,16 @@ export async function startQueuedHarness(options: QueuedHarnessOptions = {}): Pr
       },
       async heartbeat(jobId, worker) {
         await db.query('SELECT rag_heartbeat_ingestion_job($1, $2)', [jobId, worker]);
+      },
+      async withHeartbeat(jobId, worker, work) {
+        const beat = setInterval(() => {
+          db.query('SELECT rag_heartbeat_ingestion_job($1, $2)', [jobId, worker]).catch(() => undefined);
+        }, 4000);
+        try {
+          return await work();
+        } finally {
+          clearInterval(beat);
+        }
       },
       async callback(jobId, action, body, headers = {}) {
         const merged: Record<string, string | null> = { 'content-type': 'application/json', 'x-sidecar-secret': SIDECAR_SECRET, ...headers };
