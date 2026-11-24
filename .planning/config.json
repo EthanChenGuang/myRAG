@@ -108,6 +108,9 @@
     "gsd-assumptions-analyzer": "opus",
     "gsd-ai-researcher": "opus",
     "gsd-domain-researcher": "opus",
-    "gsd-ui-researcher": "opus"
+    "gsd-ui-researcher": "opus",
+    "gsd-code-reviewer": "opus",
+    "gsd-verifier": "opus",
+    "gsd-integration-checker": "opus"
   }
 }
