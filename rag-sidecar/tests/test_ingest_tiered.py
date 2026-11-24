@@ -1060,3 +1060,13 @@ def test_a_failed_premium_call_fails_the_job_with_the_apps_error_class(tmp_path)
     outcome = env.run()
 
     assert outcome.status == "queued" and outcome.error_class == "parse_retryable"
+
+
+def test_a_dry_run_under_fixed_routing_is_refused_before_anything_is_parsed_or_published(tmp_path):
+    job = _job(sha="c" * 64, kind="dry_run", routing="fixed")
+    env = Env(tmp_path, job, b"%PDF-1.4")
+
+    outcome = _process(env)
+
+    assert outcome == JobOutcome(status="failed", error_class="dry_run_requires_tiered")
+    assert env.app.calls == []

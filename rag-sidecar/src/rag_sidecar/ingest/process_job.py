@@ -181,6 +181,9 @@ async def process_job(job: IngestionJob, deps: WorkerDeps) -> JobOutcome:
     try:
         if job.settings.routing not in ("fixed", "tiered"):
             return await _fail(deps, job, "routing_not_supported", retryable=False)
+        if job.kind == "dry_run" and job.settings.routing != "tiered":
+            # A dry run ends after checking and has no document row for the chain and advance to write to (D-33).
+            return await _fail(deps, job, "dry_run_requires_tiered", retryable=False)
         resume_cache = _resume_parse_cache(job)
         if resume_cache:
             attempt_no = job.attempts[-1].attempt_no if job.attempts else 1
