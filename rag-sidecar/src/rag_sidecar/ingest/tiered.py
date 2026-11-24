@@ -24,7 +24,7 @@ from docling_core.types.doc import DoclingDocument, Size
 from rag_sidecar.contracts.ingest import ParseJobRequest, ParseResult, ProcessingProfile, ProcessingProfileSet
 from rag_sidecar.contracts.queue import IngestionJob, ParseAttemptPages, ParseExternalRequest
 from rag_sidecar.contracts.routing import PageRange, ParseRoutingConfig, PreflightResult, QualityCheckResult
-from rag_sidecar.ingest import quality
+from rag_sidecar.ingest import progressive, quality
 from rag_sidecar.ingest.cache_keys import merged_options_hash, options_hash
 from rag_sidecar.ingest.merge import MergeInvariantError, join_page_parts, merge, premium_part, slice_pages
 from rag_sidecar.ingest.pool import UPLOAD_PRIORITY, PoolCrashed
@@ -506,11 +506,13 @@ async def _cache_reusable(run: _Run) -> None:
             await _put_range_entry(run, DOCLING_PARSER, run.docling_version, opts_hash, doc)
 
 
-async def _parse_docling_range(run: _Run, result: PreflightResult, page_range: PageRange, previous: _RangeResult | None) -> _RangeResult:
+async def _parse_docling_range(
+    run: _Run, result: PreflightResult, page_range: PageRange, previous: _RangeResult | None, *, reason: str = "initial"
+) -> _RangeResult:
     preset, start, end = page_range.preset, page_range.start, page_range.end
     opts_hash = range_options_hash(preset, start, end, run.languages, run.cfg)
     version = run.docling_version
-    prior = run.previous_attempt(start, end, preset)
+    prior = run.previous_attempt(start, end, preset, reason)
     hit = await _lookup(run, DOCLING_PARSER, version, opts_hash)
 
     if hit is not None and prior is not None and prior.check is not None:
@@ -546,6 +548,7 @@ async def _parse_docling_range(run: _Run, result: PreflightResult, page_range: P
             cost=0.0 if was_cached else _tier_cost(run.cfg, page_range.tier, end - start + 1),
             cache_hit=was_cached,
             check=check,
+            reason=reason,
         )
     return _RangeResult(page_range, DOCLING_PARSER, version, opts_hash, str(hit.id), check.passed, doc=doc)
 
@@ -780,6 +783,10 @@ async def _hand_over(
 # -------------------------------------------------------------------------------------------------------------------------
 
 
+def text_layer_share(result: PreflightResult) -> float:
+    return sum(1 for row in result.pages if row.text_layer) / max(1, len(result.pages))
+
+
 async def _run_pdf(run: _Run) -> str | None:
     """Preflight, range parsing and the check; returns the merged cache id, or None for a dry run."""
     deps = run.deps
@@ -799,6 +806,8 @@ async def _run_pdf(run: _Run) -> str | None:
         },
     )
     await _cache_reusable(run)
+    if run.job.provisional_published_at is None and progressive.eligible(result, run.job.settings, progressive.job_kind(run.job)):
+        await progressive.publish_provisional(run, result)
 
     outcomes: list[_RangeResult] = []
     parse_started = deps.clock() if deps.document_timeout_s is not None else 0.0
@@ -811,7 +820,7 @@ async def _run_pdf(run: _Run) -> str | None:
         outcomes.append(await parse_range(run, result, page_range, outcomes[-1] if outcomes else None))
         parse_ms += int((time.perf_counter() - range_started) * 1000)
 
-    layer_share = sum(1 for row in result.pages if row.text_layer) / max(1, len(result.pages))
+    layer_share = text_layer_share(result)
     return await _hand_over(
         run, outcomes, parse_ms=parse_ms, page_count=result.page_count, text_layer_share=layer_share, input_format="pdf"
     )
@@ -1078,6 +1087,8 @@ async def run_tiered(job: IngestionJob, deps: WorkerDeps) -> JobOutcome:
             return JobOutcome(status="ready")
         attempt_no = run.last_attempt_no or (job.attempts[-1].attempt_no if job.attempts else 1)
         return await _advance_until_done(deps, job, cache_id, attempt_no)
+    except progressive.ProgressiveEnded as ended:
+        return ended.outcome
     except TieredFailure as failure:
         return await _fail(deps, job, failure.error_class, retryable=failure.retryable)
     finally:

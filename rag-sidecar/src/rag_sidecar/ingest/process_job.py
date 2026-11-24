@@ -139,7 +139,10 @@ async def _record_fixed_chain_attempt(deps: WorkerDeps, job: IngestionJob, elaps
     )
 
 
-async def _advance_until_done(deps: WorkerDeps, job: IngestionJob, cache_id: str, attempt_no: int) -> JobOutcome:
+async def _advance_until_done(
+    deps: WorkerDeps, job: IngestionJob, cache_id: str, attempt_no: int, *, provisional: bool = False
+) -> JobOutcome:
+    """Drives advance until done. A provisional run (D-30) ends with stage ``provisional`` and the job stays open for the routed run."""
     cursor: str | None = None
     for _ in range(MAX_ADVANCE_CALLS):
         response: AdvanceResponse = await deps.app.advance(
@@ -151,6 +154,7 @@ async def _advance_until_done(deps: WorkerDeps, job: IngestionJob, cache_id: str
                 parse_cache_id=cache_id,
                 deadline_ms=ADVANCE_DEADLINE_MS,
                 cursor=cursor,
+                provisional=provisional,
             ),
         )
         if response.done:
