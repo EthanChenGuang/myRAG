@@ -1,4 +1,6 @@
+import { PARSE_ARTIFACT, saveArtifact } from '../artifacts';
 import {
+  IngestStageError,
   requireDocument,
   requireIdentity,
   type StageContext,
@@ -20,6 +22,16 @@ function isTextLike(filename: string, mimeType: string): boolean {
   return TEXT_MIME_TYPES.has((mimeType ?? '').split(';')[0]?.trim().toLowerCase() ?? '');
 }
 
+/** The Markdown every later stage chunks from, kept next to the original; a resume and a type change start from it. */
+async function storeParseOutput(ctx: StageContext, markdown: string): Promise<void> {
+  try {
+    await saveArtifact(ctx, PARSE_ARTIFACT, new TextEncoder().encode(markdown), 'text/markdown');
+  } catch (error) {
+    if (ctx.signal.aborted) throw error;
+    throw new IngestStageError('parse', 'store_parse_output_failed');
+  }
+}
+
 async function run(ctx: StageContext): Promise<StageOutcome> {
   const identity = requireIdentity(ctx, 'parse');
   const document = requireDocument(ctx, 'parse');
@@ -37,6 +49,7 @@ async function run(ctx: StageContext): Promise<StageOutcome> {
   ctx.work.parserVersion = 'native';
   ctx.parserUsed = 'text';
   await ctx.writer.setFields(document.id, { parser_used: 'text', parser_version: 'native' });
+  await storeParseOutput(ctx, ctx.work.parseText);
   return { kind: 'next' };
 }
 

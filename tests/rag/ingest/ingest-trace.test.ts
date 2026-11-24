@@ -127,7 +127,8 @@ describe('ingestion trace', () => {
     }
     const byName = (name: string) => payload.stages.find((stage) => stage.name === name) as Record<string, unknown>;
     expect(byName('file_hash_dedup')).toMatchObject({ status: 'ok', outcome: 'unique' });
-    expect(byName('store_original')).toMatchObject({ status: 'disabled', fallback_reason: 'no_object_store' });
+    expect(byName('store_original')).toMatchObject({ status: 'ok' });
+    expect(byName('store_original').fallback_reason ?? null).toBeNull();
     expect(byName('parse')).toMatchObject({ parser_used: 'text' });
     expect(byName('chunk')).toMatchObject({ doc_type: 'general', doc_type_origin: 'fallback' });
     expect(byName('chunk').chunk_count).toBeGreaterThanOrEqual(2);
@@ -321,7 +322,7 @@ describe('status and resume', () => {
     const result = await resumeIngest(single, FAKE_DOCUMENT_ID);
 
     expect(result).toMatchObject({ status: 'processing', documentId: FAKE_DOCUMENT_ID, reason: 'resume_input_unavailable' });
-    expect(calls.map((call) => call.fn)).toEqual(['rag_get_ingest_document']);
+    expect(calls.map((call) => call.fn)).toEqual(['rag_get_ingest_document', 'rag_get_ingest_origin']);
   });
 
   test('resumeIngest for an id the tenant does not own fails as not found without any write', async () => {

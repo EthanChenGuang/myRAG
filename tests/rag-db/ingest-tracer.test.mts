@@ -1,4 +1,4 @@
-import { after, afterEach, before, describe, mock, test } from 'node:test';
+import { after, afterEach, before, beforeEach, describe, mock, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from '../../eval/harness/fake-edge.mts';
 import { TWO_TENANT_IDS, createTwoTenantDatabase, type TwoTenantDatabase } from '../../eval/harness/two-tenant.mts';
@@ -35,6 +35,8 @@ describe('ingest tracer: one Markdown upload from ingest() to retrieval', () => 
   let runnerModule: typeof import('@/lib/rag/ingest/runner');
   let writerModule: typeof import('@/lib/rag/ingest/writer');
   let depsModule: typeof import('@/lib/rag/ingest/deps');
+  let objectStoreModule: typeof import('@/lib/rag/ingest/object-store');
+  let fakeStoreModule: typeof import('../helpers/fake-object-store');
   let resolver: typeof import('@/lib/rag/tenant/resolve-chat');
   let supabaseModule: typeof import('@/lib/supabase');
 
@@ -49,6 +51,8 @@ describe('ingest tracer: one Markdown upload from ingest() to retrieval', () => 
     runnerModule = await import('@/lib/rag/ingest/runner');
     writerModule = await import('@/lib/rag/ingest/writer');
     depsModule = await import('@/lib/rag/ingest/deps');
+    objectStoreModule = await import('@/lib/rag/ingest/object-store');
+    fakeStoreModule = await import('../helpers/fake-object-store');
     resolver = await import('@/lib/rag/tenant/resolve-chat');
     supabaseModule = await import('@/lib/supabase');
   });
@@ -58,7 +62,12 @@ describe('ingest tracer: one Markdown upload from ingest() to retrieval', () => 
     await fixture?.db.close();
   });
 
+  beforeEach(() => {
+    objectStoreModule.setObjectStoreForTests(fakeStoreModule.createFakeObjectStore());
+  });
+
   afterEach(() => {
+    objectStoreModule.resetObjectStoreForTests();
     depsModule.resetIngestDepsForTests();
     mock.restoreAll();
   });

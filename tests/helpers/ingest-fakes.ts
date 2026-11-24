@@ -2,6 +2,8 @@ import type { RpcClient, RpcRequest, RpcResponse } from '@/lib/rag/backend/supab
 import type { IngestEnvInput } from '@/lib/rag/ingest/config';
 import { resetIngestConfigForTests } from '@/lib/rag/ingest/config';
 import { resetIngestDepsForTests, setIngestDepsForTests } from '@/lib/rag/ingest/deps';
+import { resetObjectStoreForTests } from '@/lib/rag/ingest/object-store';
+import { installFakeObjectStore, type FakeObjectStore } from './fake-object-store';
 
 type Row = Record<string, unknown>;
 
@@ -97,7 +99,8 @@ export interface InstallIngestDepsInput {
 
 export const unitVector = (): number[] => Array.from({ length: 1536 }, (_, index) => (index === 0 ? 1 : 0));
 
-export function installIngestDeps(input: InstallIngestDepsInput): void {
+/** Installs the deps and an in-memory object store; returns the store so a test can look at what was kept. */
+export function installIngestDeps(input: InstallIngestDepsInput): FakeObjectStore {
   resetIngestConfigForTests();
   setIngestDepsForTests({
     db: () => input.db,
@@ -105,10 +108,12 @@ export function installIngestDeps(input: InstallIngestDepsInput): void {
     ingestEnv: () => input.env ?? {},
     ...(input.now ? { now: input.now } : {}),
   });
+  return installFakeObjectStore();
 }
 
 export function uninstallIngestDeps(): void {
   resetIngestDepsForTests();
+  resetObjectStoreForTests();
   resetIngestConfigForTests();
 }
 

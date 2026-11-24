@@ -1,4 +1,4 @@
-import { after, afterEach, before, describe, mock, test } from 'node:test';
+import { after, afterEach, before, beforeEach, describe, mock, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from '../../eval/harness/fake-edge.mts';
 import { TWO_TENANT_IDS, createTwoTenantDatabase, type TwoTenantDatabase } from '../../eval/harness/two-tenant.mts';
@@ -29,6 +29,8 @@ describe('ingest resume against the two-tenant database', () => {
   let edge: FakeEdge;
   let ingestModule: typeof import('@/lib/rag/ingest');
   let depsModule: typeof import('@/lib/rag/ingest/deps');
+  let objectStoreModule: typeof import('@/lib/rag/ingest/object-store');
+  let fakeStoreModule: typeof import('../helpers/fake-object-store');
   let resolver: typeof import('@/lib/rag/tenant/resolve-chat');
   let supabaseModule: typeof import('@/lib/supabase');
   let chunkModule: typeof import('@/lib/rag/ingest/stages/chunk');
@@ -42,6 +44,8 @@ describe('ingest resume against the two-tenant database', () => {
     process.env.MYRAG_DEPLOYMENT_MODE = 'multi-tenant';
     ingestModule = await import('@/lib/rag/ingest');
     depsModule = await import('@/lib/rag/ingest/deps');
+    objectStoreModule = await import('@/lib/rag/ingest/object-store');
+    fakeStoreModule = await import('../helpers/fake-object-store');
     resolver = await import('@/lib/rag/tenant/resolve-chat');
     supabaseModule = await import('@/lib/supabase');
     chunkModule = await import('@/lib/rag/ingest/stages/chunk');
@@ -53,7 +57,12 @@ describe('ingest resume against the two-tenant database', () => {
     await fixture?.db.close();
   });
 
+  beforeEach(() => {
+    objectStoreModule.setObjectStoreForTests(fakeStoreModule.createFakeObjectStore());
+  });
+
   afterEach(() => {
+    objectStoreModule.resetObjectStoreForTests();
     depsModule.resetIngestDepsForTests();
     mock.restoreAll();
   });

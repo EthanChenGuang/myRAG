@@ -1,3 +1,4 @@
+import { ObjectStoreError } from './object-store';
 import { IngestWriterError, createIngestWriter } from './writer';
 import { chunkStage } from './stages/chunk';
 import { contentHashDedupStage, fileHashDedupStage } from './stages/dedup';
@@ -79,6 +80,10 @@ function logFailure(stage: StageName, reason: string, error: unknown): void {
     data.rpc = error.rpc;
     data.code = error.code;
     if (error.reason) data.writer_reason = error.reason;
+  } else if (error instanceof ObjectStoreError) {
+    data.error = error.name;
+    data.op = error.op;
+    data.status = error.status;
   } else if (error instanceof Error) {
     data.error = error.name;
   }

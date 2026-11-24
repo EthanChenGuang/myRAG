@@ -375,13 +375,19 @@ describe('registered stages and their switched-off behaviour', () => {
     expect(financial.warnings).toEqual(expect.arrayContaining(['extractor_unavailable:dates', 'extractor_unavailable:financial']));
   });
 
-  test('store_original records no_object_store and writes nothing to a store', async () => {
-    const { db } = fakeIngestDb();
-    installIngestDeps({ db });
+  test('store_original keeps the original in the object store and records its key in original_path', async () => {
+    const { db, calls } = fakeIngestDb();
+    const store = installIngestDeps({ db });
 
     const result = await upload();
 
-    expect(result.warnings).toContain('no_object_store');
+    expect(result.status).toBe('ready');
+    expect(result.warnings).not.toContain('no_object_store');
+    expect(store.keys()).toHaveLength(2);
+    const stored = store.keys().find((key) => key.endsWith('/original.md')) as string;
+    expect(stored).toBe(`s:default/${FAKE_LINEAGE_ID}/1/original.md`);
+    const fields = callsOf(calls, 'rag_set_document_fields').map((call) => call.args.p_fields as Record<string, unknown>);
+    expect(fields).toContainEqual({ original_path: stored });
   });
 
   test('scan_injection passes when RAG_INJECTION_SCAN is off', async () => {
