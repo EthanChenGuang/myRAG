@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { PGlite } from '@electric-sql/pglite';
@@ -128,6 +129,81 @@ const VECTOR_TEXT_RE = /^\[[-+0-9eE.,\s]*\]$/;
 const MAX_BODY_BYTES = 5 * 1024 * 1024;
 const MAX_LIMIT = 1000;
 const OBJECT_ACCEPT = 'application/vnd.pgrst.object+json';
+/** Matches `OBJECT_KEY_PATTERN` in src/lib/rag/ingest/object-store.ts (duplicated to avoid loading app env). */
+const OBJECT_KEY_PATTERN = /^[A-Za-z0-9_/!.*'() &$=@;:+,?-]*$/;
+const DEFAULT_JWT_SERVICE_KEY =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIn0.fixture-default-signature-placeholder';
+const DEFAULT_ANON_KEY = 'fixture-anon-key-placeholder';
+const STORAGE_OBJECT_PATH = /^\/storage\/v1\/object\/([^/]+)\/(.+)$/;
+const STORAGE_LIST_PATH = /^\/storage\/v1\/object\/list\/([^/]+)$/;
+
+function defaultServiceKeys(): string[] {
+  return [DEFAULT_JWT_SERVICE_KEY, `sb_secret_${randomBytes(12).toString('hex')}`];
+}
+
+function isJwtShapedServiceKey(key: string): boolean {
+  return key.startsWith('eyJ') && key.split('.').length === 3;
+}
+
+function assertStorageObjectKey(key: string): void {
+  if (key === '' || key.includes('..') || !OBJECT_KEY_PATTERN.test(key) || key.startsWith('/')) {
+    throw new Rejection(400, 'invalid object key');
+  }
+  for (const segment of key.split('/')) {
+    if (segment === '' || segment === '.' || segment === '..') throw new Rejection(400, 'invalid object key');
+  }
+}
+
+function storageMapKey(bucket: string, objectKey: string): string {
+  return `${bucket}\0${objectKey}`;
+}
+
+function resolveStorageServiceKey(
+  req: http.IncomingMessage,
+  serviceKeys: string[],
+  anonKey: string,
+): string {
+  const apiKeyRaw = req.headers.apikey;
+  const apiKey = typeof apiKeyRaw === 'string' ? apiKeyRaw : undefined;
+  const authRaw = req.headers.authorization;
+  const bearerMatch = typeof authRaw === 'string' ? /^Bearer\s+(.+)$/i.exec(authRaw) : null;
+  const bearer = bearerMatch?.[1];
+
+  if (!apiKey && bearer?.startsWith('sb_secret_')) {
+    throw new Rejection(401, 'invalid api key');
+  }
+
+  const candidates = new Set<string>();
+  if (apiKey) candidates.add(apiKey);
+  if (bearer && isJwtShapedServiceKey(bearer)) candidates.add(bearer);
+
+  if (candidates.size === 0) throw new Rejection(401, 'missing api key');
+
+  for (const candidate of candidates) {
+    if (candidate === anonKey) throw new Rejection(401, 'anon key cannot access storage');
+    if (serviceKeys.includes(candidate)) return candidate;
+  }
+
+  throw new Rejection(401, 'invalid api key');
+}
+
+function readBodyBuffer(req: http.IncomingMessage): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    req.on('data', (chunk: Buffer) => {
+      size += chunk.length;
+      if (size > MAX_BODY_BYTES) {
+        reject(new Rejection(413, 'request body too large'));
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', reject);
+  });
+}
 
 class Rejection extends Error {
   constructor(
@@ -437,12 +513,29 @@ export interface FakeEdgeOptions {
   db: PGlite;
   /** Opt in to filename eq / ilike filters on documents (the chat route resolves @mentions that way). Off by default. */
   documentFilenameFilter?: boolean;
+  /** Service-role keys accepted on Storage routes (default: one JWT-shaped and one sb_secret_ placeholder). */
+  serviceKeys?: string[];
+  /** Anon key rejected on Storage routes. */
+  anonKey?: string;
 }
 
 export async function startFakeEdge(options: FakeEdgeOptions): Promise<FakeEdge> {
   const errors: FakeEdgeError[] = [];
   const calls: FakeEdgeCall[] = [];
   const handlers = createHandlers(options.db, calls, { documentFilenameFilter: options.documentFilenameFilter === true });
+  const serviceKeys = options.serviceKeys ?? defaultServiceKeys();
+  const anonKey = options.anonKey ?? DEFAULT_ANON_KEY;
+  const storageObjects = new Map<string, Buffer>();
+
+  const sendBytes = (res: http.ServerResponse, status: number, body: Buffer, extraHeaders?: Record<string, string>) => {
+    const headers: Record<string, string> = {
+      'content-type': 'application/octet-stream',
+      'content-length': String(body.length),
+      ...extraHeaders,
+    };
+    res.writeHead(status, headers);
+    res.end(body);
+  };
 
   let queue: Promise<void> = Promise.resolve();
   const enqueue = (task: () => Promise<void>): Promise<void> => {
@@ -465,11 +558,66 @@ export async function startFakeEdge(options: FakeEdgeOptions): Promise<FakeEdge>
     const requestUrl = req.url ?? '/';
     try {
       const url = new URL(requestUrl, 'http://127.0.0.1');
-      const pathname = url.pathname;
+      const pathname = (requestUrl.split('?')[0] ?? url.pathname).replace(/\/+/g, '/');
       const rpcMatch = /^\/rest\/v1\/rpc\/([A-Za-z0-9_]+)$/.exec(pathname);
       const tableMatch = /^\/rest\/v1\/([A-Za-z0-9_]+)$/.exec(pathname);
+      const storageListMatch = STORAGE_LIST_PATH.exec(pathname);
+      const storageObjectMatch = STORAGE_OBJECT_PATH.exec(pathname);
 
-      if (pathname === '/v1/embeddings') {
+      if (pathname.startsWith('/storage/v1/')) {
+        resolveStorageServiceKey(req, serviceKeys, anonKey);
+      }
+
+      if (storageListMatch) {
+        if (method !== 'POST') throw new Rejection(405, `unsupported method ${method} for ${pathname}`);
+        const bucket = decodeURIComponent(storageListMatch[1]);
+        const body = parseJsonObject(await readBody(req));
+        const prefix = typeof body.prefix === 'string' ? body.prefix : '';
+        const limit = typeof body.limit === 'number' && Number.isFinite(body.limit) ? Math.min(body.limit, MAX_LIMIT) : MAX_LIMIT;
+        calls.push({ method: 'POST', path: `/storage/v1/object/list/${bucket}` });
+        const names: string[] = [];
+        for (const mapKey of storageObjects.keys()) {
+          const [b, ...rest] = mapKey.split('\0');
+          const name = rest.join('\0');
+          if (b !== bucket) continue;
+          if (prefix && !name.startsWith(prefix)) continue;
+          names.push(name);
+        }
+        names.sort();
+        send(res, 200, names.slice(0, limit).map((name) => ({ name })));
+      } else if (storageObjectMatch) {
+        const bucket = decodeURIComponent(storageObjectMatch[1]);
+        const objectKey = storageObjectMatch[2]
+          .split('/')
+          .map((part) => decodeURIComponent(part))
+          .join('/');
+        assertStorageObjectKey(objectKey);
+        const mapKey = storageMapKey(bucket, objectKey);
+        const storagePath = `/storage/v1/object/${bucket}/${objectKey}`;
+        calls.push({ method, path: storagePath });
+
+        if (method === 'GET') {
+          const found = storageObjects.get(mapKey);
+          if (!found) throw new Rejection(404, 'object not found');
+          sendBytes(res, 200, found);
+        } else if (method === 'HEAD') {
+          const found = storageObjects.get(mapKey);
+          if (!found) throw new Rejection(404, 'object not found');
+          res.writeHead(200, { 'content-length': String(found.length), 'content-type': 'application/octet-stream' });
+          res.end();
+        } else if (method === 'DELETE') {
+          storageObjects.delete(mapKey);
+          send(res, 200, { message: 'deleted' });
+        } else if (method === 'POST' || method === 'PUT') {
+          const bytes = await readBodyBuffer(req);
+          storageObjects.set(mapKey, bytes);
+          send(res, 200, { Key: objectKey });
+        } else {
+          throw new Rejection(405, `unsupported method ${method} for ${pathname}`);
+        }
+      } else if (pathname.startsWith('/storage/v1/')) {
+        throw new Rejection(404, `unsupported path: ${pathname}`);
+      } else if (pathname === '/v1/embeddings') {
         if (method !== 'POST') throw new Rejection(405, `unsupported method ${method} for ${pathname}`);
         const { payload } = handlers.embeddings(parseJsonObject(await readBody(req)));
         send(res, 200, payload);
