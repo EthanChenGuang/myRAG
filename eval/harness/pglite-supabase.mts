@@ -6,6 +6,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { pg_trgm } from '@electric-sql/pglite/contrib/pg_trgm';
 import { vector } from '@electric-sql/pglite-pgvector';
 import { loadCorpus } from './corpus.mts';
+import { applyMigrations } from './migrations.mts';
 import { embedText } from './fixture-embedder.mts';
 
 export const FIXTURE_USER_ID = '00000000-0000-4000-8000-0000000000f1';
@@ -51,6 +52,7 @@ export async function createFixtureDatabase(options: {
   deploymentMode: DeploymentMode;
   corpusDir: string;
   supabaseGrants?: boolean;
+  migrations?: boolean;
 }): Promise<FixtureDatabase> {
   const { deploymentMode, corpusDir } = options;
   if (deploymentMode !== 'single-tenant' && deploymentMode !== 'multi-tenant') {
@@ -67,6 +69,7 @@ export async function createFixtureDatabase(options: {
     await db.exec(SUPABASE_SHIM_SQL);
     if (options.supabaseGrants) await db.exec(SUPABASE_GRANTS_SQL);
     await db.exec(sqlBytes.toString('utf8'));
+    if (options.migrations !== false) await applyMigrations(db, deploymentMode);
 
     const multiTenant = deploymentMode === 'multi-tenant';
     if (multiTenant) {

@@ -155,13 +155,13 @@ for (const mode of MODES) {
       });
     });
 
-    test('rows inserted by the fixture loader after the migrations carry the same defaults', async () => {
+    test('rows inserted by the fixture loader after the migrations carry the column defaults', async () => {
       await withFixture(mode, { migrations: true }, async ({ db }) => {
         await assertHasColumns(db, 'documents', DOCUMENT_COLUMNS);
         const result = await db.query<{ total: number; expected: number }>(
           `SELECT count(*)::int AS total,
              count(*) FILTER (WHERE version = 1 AND is_current AND status = 'ready' AND doc_type = 'general' AND doc_type_origin = 'fallback'
-               AND lineage_id = id AND parser_used = 'llamaparse' AND parser_version = 'legacy')::int AS expected
+               AND source = 'config_upload' AND processing_state = '{}'::jsonb)::int AS expected
            FROM documents`,
         );
         const row = result.rows[0] as { total: number; expected: number };
