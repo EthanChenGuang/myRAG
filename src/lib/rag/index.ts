@@ -122,5 +122,12 @@ export type {
   QuarantineItem,
   ReleaseQuarantinedResult,
 } from './ingest/quarantine-admin';
+export { docTypePickerEnabled, resolvePickerDefault, listDocTypeDefaults, setDocTypeDefault, DocTypeDefaultsError, DOC_TYPE_DEFAULT_SOURCE_KINDS, DOC_TYPE_IDS, DOC_TYPE_CHOICES } from './ingest/profiles/doc-type-defaults';
+export type { DocTypeChoice, DocTypeDefaultRow, DocTypeDefaultSourceKind, PickerDefault, SetDocTypeDefaultInput } from './ingest/profiles/doc-type-defaults';
 export { getEmbeddingProfileCompleteness } from './embeddings/profile-ops';
 export type { ProfileCompleteness } from './embeddings/profile-ops';
+export { INGEST_SOURCES } from './ingest/types';
+export { changeDocumentType } from './ingest/change-doc-type';
+export type { ChangeDocumentTypeFailure, ChangeDocumentTypeInput, ChangeDocumentTypeResult } from './ingest/change-doc-type';
+export { scopeForAdminDocument, AdminDocumentScopeError } from './tenant/ingest-scope';
+export type { AdminDocumentScopeInput } from './tenant/ingest-scope';

@@ -48,6 +48,18 @@ export interface IngestOptions {
   [key: string]: unknown;
 }
 
+/**
+ * Set by changeDocumentType alone (the admin type change): the run starts a new version of a file whose bytes did not change, so the
+ * file-hash and content-hash skips do not apply, and it may start from the stored parse output of an earlier version of the same lineage.
+ * A user upload never sets it. It is kept in the saved state, so a resumed run knows it too.
+ */
+export interface TypeChangeState {
+  /** The version whose parse.md (and chunks.json, docling.json) this run starts from; null: parse the stored original. */
+  reuseParseOfVersion: number | null;
+  /** parser_used and parser_version of that version, kept on the new row when its parse output is reused. */
+  reusedParser: { parser: 'docling' | 'llamaparse' | 'text'; version: string } | null;
+}
+
 interface IngestInputBase {
   scope: TenantScope;
   source: IngestSource;
@@ -61,6 +73,8 @@ interface IngestInputBase {
   trace?: TraceCollector;
   /** Request budget in milliseconds from the start of the call. Defaults to DEFAULT_INGEST_DEADLINE_MS. */
   deadlineMs?: number;
+  /** Admin type change only; see TypeChangeState. */
+  typeChange?: TypeChangeState;
 }
 
 export type IngestInput = IngestInputBase &
@@ -104,6 +118,8 @@ export interface IngestState {
   } | null;
   embeddingTargets: string[];
   embeddingGaps: Array<{ profileId: string; chunkIndex: number }>;
+  /** Present on an admin type change only; absent on every other run. */
+  typeChange?: TypeChangeState;
 }
 
 export function emptyIngestState(): IngestState {

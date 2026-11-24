@@ -1,5 +1,16 @@
 import type { ParseResult } from '@/lib/rag-eval/contracts.generated';
-import { DOCLING_ARTIFACT, PARSE_ARTIFACT, PARSE_CHUNKS_ARTIFACT, PICTURES_ARTIFACT, isArtifactName, originalName, saveArtifact } from '../artifacts';
+import { ParseResultSchema } from '@/lib/rag-eval/contracts.generated';
+import {
+  DOCLING_ARTIFACT,
+  PARSE_ARTIFACT,
+  PARSE_CHUNKS_ARTIFACT,
+  PICTURES_ARTIFACT,
+  isArtifactName,
+  loadArtifact,
+  originalName,
+  saveArtifact,
+  type ArtifactContext,
+} from '../artifacts';
 import { imageContextOf, validImageUrl } from '../image-options';
 import { buildParserChain, parseWithFallback, type ChainOutcome } from '../parsers/chain';
 import type { ParseArtifact, PendingJob } from '../parsers/shared';
@@ -93,6 +104,55 @@ function wholeImage(ctx: StageContext, bytes: Uint8Array | null): { parsed: Pars
     mimeType,
   };
   return { parsed: { result: imageResult(originalName(identity.filename)), artifacts: [], warnings: [] } };
+}
+
+/**
+ * The parse output an earlier version of this lineage stored (the admin type change with equal parser options, D-18): parse.md, the
+ * parser's own chunks and the Docling JSON are read back from that version's prefix, and no parser runs. Null when parse.md is not
+ * there or the parser that made it was not recorded; the caller then parses the stored original instead.
+ */
+async function reuseStoredParse(ctx: StageContext, previousVersion: number): Promise<Parsed | null> {
+  const identity = requireIdentity(ctx, 'parse');
+  const document = requireDocument(ctx, 'parse');
+  const reused = ctx.state.typeChange?.reusedParser ?? null;
+  if (reused === null) return null;
+  const earlier: ArtifactContext = {
+    identity,
+    document: { lineageId: document.lineageId, version: previousVersion },
+    signal: ctx.signal,
+    state: { artifacts: {} },
+  };
+  const markdown = await loadArtifact(earlier, PARSE_ARTIFACT);
+  if (!markdown) return null;
+
+  let chunks: ParseResult['chunks'] = [];
+  const storedChunks = await loadArtifact(earlier, PARSE_CHUNKS_ARTIFACT);
+  if (storedChunks) {
+    try {
+      const checked = ParseResultSchema.shape.chunks.safeParse(JSON.parse(new TextDecoder('utf-8').decode(storedChunks.bytes)));
+      if (checked.success) chunks = checked.data;
+    } catch {
+      chunks = [];
+    }
+  }
+  const docling = await loadArtifact(earlier, DOCLING_ARTIFACT);
+  const result: ParseResult = {
+    markdown: new TextDecoder('utf-8').decode(markdown.bytes),
+    chunks,
+    pictures: [],
+    page_count: 0,
+    language: null,
+    parser: reused.parser,
+    parser_version: reused.version,
+    partial: false,
+    text_layer_page_share: null,
+    warnings: [],
+  };
+  return {
+    result,
+    artifacts: docling ? [{ name: DOCLING_ARTIFACT, bytes: docling.bytes, contentType: docling.contentType || 'application/json' }] : [],
+    warnings: ['parse_reused'],
+  };
 }
 
 /** The job a previous call saved in processing_state, when it has the shape this code wrote. */
@@ -197,14 +257,20 @@ async function run(ctx: StageContext): Promise<StageOutcome> {
     parsed = { result: textResult(stripBom(ctx.input.text)), artifacts: [], warnings: [] };
   } else {
     if (bytes === null) return { kind: 'fail', reason: 'no_parser_available' };
-    if (ctx.deadline - ctx.deps.now() < MIN_PARSE_MS) return { kind: 'yield', reason: 'deadline' };
-    const first = await runChain(ctx, bytes, savedJob(ctx));
-    if (first.kind === 'failed') {
-      ctx.state.parseJob = null;
-      return { kind: 'fail', reason: first.reason };
+    const previousVersion = ctx.state.typeChange?.reuseParseOfVersion ?? null;
+    const reused = previousVersion === null ? null : await reuseStoredParse(ctx, previousVersion);
+    if (reused !== null) {
+      parsed = reused;
+    } else {
+      if (ctx.deadline - ctx.deps.now() < MIN_PARSE_MS) return { kind: 'yield', reason: 'deadline' };
+      const first = await runChain(ctx, bytes, savedJob(ctx));
+      if (first.kind === 'failed') {
+        ctx.state.parseJob = null;
+        return { kind: 'fail', reason: first.reason };
+      }
+      if (first.kind === 'pending') return { kind: 'yield', reason: 'parse_pending' };
+      parsed = first;
     }
-    if (first.kind === 'pending') return { kind: 'yield', reason: 'parse_pending' };
-    parsed = first;
   }
 
   const refined = await refineDocTypeAfterParse(ctx, {

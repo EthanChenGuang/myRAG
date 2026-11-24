@@ -16,6 +16,7 @@ import {
   type RehydrateResult,
   type StageContext,
   type StageName,
+  type TypeChangeState,
 } from './types';
 import { IngestWriterError, createIngestWriter, type IngestDocumentRow, type IngestOriginRow, type IngestWriter } from './writer';
 
@@ -152,6 +153,22 @@ function objectOf<T>(value: unknown): T | null {
   return typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as T) : null;
 }
 
+const REUSED_PARSERS = ['docling', 'llamaparse', 'text'] as const;
+
+/** The type-change slice of a saved state; anything that does not have the shape this code wrote is dropped. */
+function typeChangeOf(value: unknown): TypeChangeState | null {
+  const slice = objectOf<Record<string, unknown>>(value);
+  if (!slice) return null;
+  const version = slice.reuseParseOfVersion;
+  if (version !== null && !(typeof version === 'number' && Number.isInteger(version) && version >= 1)) return null;
+  const parser = objectOf<Record<string, unknown>>(slice.reusedParser);
+  const reused =
+    parser && REUSED_PARSERS.some((name) => name === parser.parser) && typeof parser.version === 'string' && parser.version !== ''
+      ? { parser: parser.parser as (typeof REUSED_PARSERS)[number], version: parser.version }
+      : null;
+  return { reuseParseOfVersion: version, reusedParser: reused };
+}
+
 /** The persisted state of a row, with every slice checked for shape; anything unreadable falls back to its empty value. */
 function stateOf(row: IngestDocumentRow): IngestState {
   const raw = row.processingState;
@@ -165,6 +182,8 @@ function stateOf(row: IngestDocumentRow): IngestState {
   state.quarantine = objectOf<NonNullable<IngestState['quarantine']>>(raw.quarantine);
   state.invoice = objectOf<NonNullable<IngestState['invoice']>>(raw.invoice);
   state.images = objectOf<NonNullable<IngestState['images']>>(raw.images);
+  const typeChange = typeChangeOf(raw.typeChange);
+  if (typeChange) state.typeChange = typeChange;
   if (Array.isArray(raw.embeddingTargets)) state.embeddingTargets = raw.embeddingTargets.filter((id): id is string => typeof id === 'string');
   if (Array.isArray(raw.embeddingGaps)) state.embeddingGaps = raw.embeddingGaps as IngestState['embeddingGaps'];
   return state;
