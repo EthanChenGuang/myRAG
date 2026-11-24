@@ -1,4 +1,4 @@
-import { buildEmbeddingText, EMBEDDING_TEXT_VERSION } from '../text/embedding-text';
+import { buildEmbeddingText, EMBEDDING_TEXT_VERSION, templateHeaderFor } from '../text/embedding-text';
 import {
   IngestStageError,
   requireDocument,
@@ -55,11 +55,12 @@ async function runEmbed(ctx: StageContext): Promise<StageOutcome> {
   const document = requireDocument(ctx, 'embed');
   const writes = toWrites(ctx);
   const batches = batchByBytes(writes);
+  const templateHeader = templateHeaderFor(ctx.identity?.profile.embedding_text_template, ctx.work.templateRow);
   let written = 0;
 
   for (const [position, batch] of batches.entries()) {
     ctx.signal.throwIfAborted();
-    const texts = batch.map((write) => buildEmbeddingText({ section_path: write.section_path, content: write.content }));
+    const texts = batch.map((write) => buildEmbeddingText({ section_path: write.section_path, content: write.content, template_header: templateHeader }));
     const vectors = await ctx.deps.embedDocuments(texts, { signal: ctx.signal });
     ctx.signal.throwIfAborted();
     if (vectors.length !== batch.length || vectors.some((vector) => vector.length !== LEGACY_DIMENSIONS)) {

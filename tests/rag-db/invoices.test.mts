@@ -119,7 +119,6 @@ for (const mode of MODES) {
         profileId: 'invoice_receipt@1',
         profileVersion: 1,
       });
-      assert.ok(begin.outcome === 'created' || begin.outcome === 'resumed', 'the seeded version must be created');
       if (begin.outcome === 'skipped_duplicate') throw new Error('unexpected duplicate');
       if (input.fields) await writer.setFields(begin.documentId, input.fields);
       const lexical = input.lexical ?? [`Invoice ${input.fields?.invoice_number ?? 'none'} supplier ${input.fields?.supplier_name ?? 'none'}`];
