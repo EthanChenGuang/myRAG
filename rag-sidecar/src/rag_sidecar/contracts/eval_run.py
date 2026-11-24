@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -12,12 +12,41 @@ class ConversationTurn(_Contract):
     content: str = Field(min_length=1)
 
 
+StageName = Literal[
+    "refs",
+    "analyze",
+    "embed",
+    "search",
+    "legacy_rank",
+    "post_filter",
+    "assemble",
+    "voice_keyword_fallback",
+    "local_rerank",
+]
+
+_TimeoutMs = Annotated[int, Field(ge=1, le=60000)]
+
+
+class StageTimeoutsMs(_Contract):
+    refs: _TimeoutMs | None = None
+    analyze: _TimeoutMs | None = None
+    embed: _TimeoutMs | None = None
+    search: _TimeoutMs | None = None
+    legacy_rank: _TimeoutMs | None = None
+    post_filter: _TimeoutMs | None = None
+    assemble: _TimeoutMs | None = None
+    voice_keyword_fallback: _TimeoutMs | None = None
+    local_rerank: _TimeoutMs | None = None
+
+
 class RagRunOptions(_Contract):
     max_results: int | None = Field(default=None, ge=1, le=100)
     organization_id: str | None = None
     user_id: str | None = None
     generator_model: str | None = None
     degrade: Literal["drop_top_candidate"] | None = None
+    disabled_stages: list[StageName] | None = Field(default=None, max_length=9)
+    stage_timeouts_ms: StageTimeoutsMs | None = None
 
 
 class RagRunRequest(_Contract):

@@ -45,9 +45,11 @@
       },
       "request_options": {
         "degrade": null,
+        "disabled_stages": null,
         "generator_model": null,
         "max_results": 10,
         "organization_id": null,
+        "stage_timeouts_ms": null,
         "user_id": null
       },
       "run_config_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -368,9 +370,11 @@
       },
       "request_options": {
         "degrade": null,
+        "disabled_stages": null,
         "generator_model": null,
         "max_results": 10,
         "organization_id": null,
+        "stage_timeouts_ms": null,
         "user_id": null
       },
       "run_config_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -566,9 +570,11 @@
       "item_id": "en-general-001",
       "options": {
         "degrade": "drop_top_candidate",
+        "disabled_stages": null,
         "generator_model": "generator/model-b",
         "max_results": 10,
         "organization_id": null,
+        "stage_timeouts_ms": null,
         "user_id": null
       },
       "query": "How many leave days do employees get?",
@@ -710,9 +716,11 @@
       "item_count": 1,
       "request_options": {
         "degrade": null,
+        "disabled_stages": null,
         "generator_model": null,
         "max_results": 10,
         "organization_id": null,
+        "stage_timeouts_ms": null,
         "user_id": null
       },
       "run_config_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",

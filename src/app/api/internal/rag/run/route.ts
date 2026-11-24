@@ -7,13 +7,27 @@ import {
   finishTrace,
   runRetrieval,
   scopeKey,
+  type StageOverrides,
 } from '@/lib/rag';
-import { RagRunRequestSchema, RagTraceSchema } from '@/lib/rag-eval/contracts.generated';
+import { RagRunRequestSchema, RagTraceSchema, type RagRunRequest } from '@/lib/rag-eval/contracts.generated';
 import { checkEvalAccess } from '@/lib/rag-eval/auth';
 import { buildEffectiveConfig, configHash } from '@/lib/rag-eval/trace';
 import { generateEvalAnswer, isGPTGeneratorModel, resolveGeneratorModel } from '@/lib/rag-eval/answer';
 
 export const runtime = 'nodejs';
+
+function toStageOverrides(options: RagRunRequest['options']): StageOverrides | undefined {
+  const disabledStages = options?.disabled_stages ?? undefined;
+  const timeouts = Object.fromEntries(
+    Object.entries(options?.stage_timeouts_ms ?? {}).filter((entry): entry is [string, number] => typeof entry[1] === 'number'),
+  );
+  const hasTimeouts = Object.keys(timeouts).length > 0;
+  if (!disabledStages?.length && !hasTimeouts) return undefined;
+  return {
+    ...(disabledStages?.length ? { disabledStages } : {}),
+    ...(hasTimeouts ? { timeouts } : {}),
+  };
+}
 
 export async function POST(req: NextRequest) {
   const access = checkEvalAccess(req.headers, {
@@ -41,6 +55,7 @@ export async function POST(req: NextRequest) {
   }
   const { scope } = scoped;
 
+  const stageOverrides = toStageOverrides(options);
   const collector = createTraceCollector({ profile: 'eval', tenantKey: scopeKey(scope) });
 
   try {
@@ -60,6 +75,7 @@ export async function POST(req: NextRequest) {
       },
       signal: req.signal,
       trace: collector,
+      ...(stageOverrides ? { stageOverrides } : {}),
     });
 
     try {
