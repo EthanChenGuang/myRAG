@@ -729,6 +729,256 @@
     "source_images": []
   },
   {
+    "query": "Which aisles hold thermal probes according to the floor plan?",
+    "results": [
+      {
+        "chunk_id": "0d8510d1-e1a4-4fd8-aabf-67f86caa540a",
+        "document_id": "4dda7ba2-55f3-4e0f-8cfd-83f2ef597e40",
+        "content": "Document: warehouse-floorplan.png. Chunk 3 of 4. Content: ## Picking aisles\n\nThe image shows Aisle A holding thermal probes and spare cables, Aisle B holding reference thermometers and data loggers, and Aisle C holding packaging material and batteries. Each aisle has shelves on both sides with four levels, and the lithium batteries sit in a fenced cage at the north end of Aisle C.",
+        "similarity": 0.29321471528298326,
+        "metadata": {
+          "section": "Picking aisles",
+          "image_url": "https://example.com/fixtures/warehouse-floorplan.png",
+          "chunk_index": 2,
+          "total_chunks": 4,
+          "chunk_position": 3,
+          "document_title": "warehouse-floorplan.png",
+          "lexical_version": 2
+        },
+        "image_url": "https://example.com/fixtures/warehouse-floorplan.png"
+      },
+      {
+        "chunk_id": "21036617-67a3-48e7-b5f2-57b3ca50353d",
+        "document_id": "959e010a-5e5f-4725-a739-cb8cddeeda49",
+        "content": "Document: product-specs.en.md. Chunk 2 of 6. Content: ## XR-4420 thermal probe\n\nThe XR-4420 thermal probe (SKU LV-77-0193) is a handheld probe for lab benches. Measurement range is -40 to 400 degrees Celsius. Accuracy is plus or minus 0.5 degrees Celsius. Response time is 2 seconds. The probe cable is 3 metres long. Power comes from two AA batteries. The housing is rated IP54. The firmware build shipped with this model is FW-2.8.14.",
+        "similarity": 0.20030989942164346,
+        "metadata": {
+          "section": "XR-4420 thermal probe",
+          "chunk_index": 1,
+          "total_chunks": 6,
+          "chunk_position": 2,
+          "document_title": "product-specs.en.md",
+          "lexical_version": 2
+        },
+        "image_url": null
+      },
+      {
+        "chunk_id": "0cc1d8ec-b580-4978-bb22-dc63c5fb6c97",
+        "document_id": "959e010a-5e5f-4725-a739-cb8cddeeda49",
+        "content": "Document: product-specs.en.md. Chunk 1 of 6. Content: ## XR-4410 thermal probe\n\nThe XR-4410 thermal probe (SKU LV-77-0192) is a handheld probe for lab benches. Measurement range is -40 to 250 degrees Celsius. Accuracy is plus or minus 0.5 degrees Celsius. Response time is 2 seconds. The probe cable is 3 metres long. Power comes from two AA batteries. The housing is rated IP54. The firmware build shipped with this model is FW-2.8.14.",
+        "similarity": 0.19726603553874678,
+        "metadata": {
+          "section": "XR-4410 thermal probe",
+          "chunk_index": 0,
+          "total_chunks": 6,
+          "chunk_position": 1,
+          "document_title": "product-specs.en.md",
+          "lexical_version": 2
+        },
+        "image_url": null
+      },
+      {
+        "chunk_id": "0aa02763-f10b-4517-997a-e61d8f850df3",
+        "document_id": "b3cea6c0-8718-4ce2-a5cc-4907af5a33fb",
+        "content": "Document: shipping-handbook.en.md. Chunk 2 of 6. Content: ## Packaging rules\n\nEvery instrument is packed in a foam-lined box with a moisture sachet. Thermal probes with a cable longer than 3 metres are coiled and fixed with a paper band before boxing. Packages that weigh more than 20 kilograms are shipped on a pallet and are never sent as ordinary parcels. Batteries are packed separately from instruments and carry a lithium handling label when the model uses lithium cells.",
+        "similarity": 0.17472363183097506,
+        "metadata": {
+          "section": "Packaging rules",
+          "chunk_index": 1,
+          "total_chunks": 6,
+          "chunk_position": 2,
+          "document_title": "shipping-handbook.en.md",
+          "lexical_version": 2
+        },
+        "image_url": null
+      },
+      {
+        "chunk_id": "40fc5177-6cd8-40a1-80fb-c9d5d62b05c8",
+        "document_id": "4dda7ba2-55f3-4e0f-8cfd-83f2ef597e40",
+        "content": "Document: warehouse-floorplan.png. Chunk 1 of 4. Content: ## Overall layout\n\nThe image shows a floor plan of the Lumen Valley Instruments warehouse, drawn from above. The building is a long rectangle with the loading docks along the south wall and the main office in the north-east corner. Three aisles run from the south wall to the north wall, labelled Aisle A, Aisle B and Aisle C from west to east.",
+        "similarity": 0.16819007166235744,
+        "metadata": {
+          "section": "Overall layout",
+          "image_url": "https://example.com/fixtures/warehouse-floorplan.png",
+          "chunk_index": 0,
+          "total_chunks": 4,
+          "chunk_position": 1,
+          "document_title": "warehouse-floorplan.png",
+          "lexical_version": 2
+        },
+        "image_url": "https://example.com/fixtures/warehouse-floorplan.png"
+      }
+    ],
+    "source_images": [
+      {
+        "url": "https://example.com/fixtures/warehouse-floorplan.png",
+        "name": "Source Image",
+        "type": "image/jpeg"
+      },
+      {
+        "url": "https://example.com/fixtures/warehouse-floorplan.png",
+        "name": "Source Image",
+        "type": "image/jpeg"
+      }
+    ]
+  },
+  {
+    "query": "Where do pallets wait before moving into the aisles?",
+    "results": [
+      {
+        "chunk_id": "4a19a9ae-ac20-4be5-9a3e-a3e8f4001e99",
+        "document_id": "4dda7ba2-55f3-4e0f-8cfd-83f2ef597e40",
+        "content": "Document: warehouse-floorplan.png. Chunk 2 of 4. Content: ## Receiving zone\n\nThe image marks the receiving zone in blue along the south wall, next to dock doors 1 and 2. Pallets arrive here, are scanned and wait on a yellow floor line before they move into the aisles. A small desk with a scanner stands at the west end of the zone.",
+        "similarity": 0.32675568772421504,
+        "metadata": {
+          "section": "Receiving zone",
+          "image_url": "https://example.com/fixtures/warehouse-floorplan.png",
+          "chunk_index": 1,
+          "total_chunks": 4,
+          "chunk_position": 2,
+          "document_title": "warehouse-floorplan.png",
+          "lexical_version": 2
+        },
+        "image_url": "https://example.com/fixtures/warehouse-floorplan.png"
+      },
+      {
+        "chunk_id": "0aa02763-f10b-4517-997a-e61d8f850df3",
+        "document_id": "b3cea6c0-8718-4ce2-a5cc-4907af5a33fb",
+        "content": "Document: shipping-handbook.en.md. Chunk 2 of 6. Content: ## Packaging rules\n\nEvery instrument is packed in a foam-lined box with a moisture sachet. Thermal probes with a cable longer than 3 metres are coiled and fixed with a paper band before boxing. Packages that weigh more than 20 kilograms are shipped on a pallet and are never sent as ordinary parcels. Batteries are packed separately from instruments and carry a lithium handling label when the model uses lithium cells.",
+        "similarity": 0.1726641367669377,
+        "metadata": {
+          "section": "Packaging rules",
+          "chunk_index": 1,
+          "total_chunks": 6,
+          "chunk_position": 2,
+          "document_title": "shipping-handbook.en.md",
+          "lexical_version": 2
+        },
+        "image_url": null
+      },
+      {
+        "chunk_id": "0d8510d1-e1a4-4fd8-aabf-67f86caa540a",
+        "document_id": "4dda7ba2-55f3-4e0f-8cfd-83f2ef597e40",
+        "content": "Document: warehouse-floorplan.png. Chunk 3 of 4. Content: ## Picking aisles\n\nThe image shows Aisle A holding thermal probes and spare cables, Aisle B holding reference thermometers and data loggers, and Aisle C holding packaging material and batteries. Each aisle has shelves on both sides with four levels, and the lithium batteries sit in a fenced cage at the north end of Aisle C.",
+        "similarity": 0.1569368114879235,
+        "metadata": {
+          "section": "Picking aisles",
+          "image_url": "https://example.com/fixtures/warehouse-floorplan.png",
+          "chunk_index": 2,
+          "total_chunks": 4,
+          "chunk_position": 3,
+          "document_title": "warehouse-floorplan.png",
+          "lexical_version": 2
+        },
+        "image_url": "https://example.com/fixtures/warehouse-floorplan.png"
+      },
+      {
+        "chunk_id": "40fc5177-6cd8-40a1-80fb-c9d5d62b05c8",
+        "document_id": "4dda7ba2-55f3-4e0f-8cfd-83f2ef597e40",
+        "content": "Document: warehouse-floorplan.png. Chunk 1 of 4. Content: ## Overall layout\n\nThe image shows a floor plan of the Lumen Valley Instruments warehouse, drawn from above. The building is a long rectangle with the loading docks along the south wall and the main office in the north-east corner. Three aisles run from the south wall to the north wall, labelled Aisle A, Aisle B and Aisle C from west to east.",
+        "similarity": 0.13957900951409508,
+        "metadata": {
+          "section": "Overall layout",
+          "image_url": "https://example.com/fixtures/warehouse-floorplan.png",
+          "chunk_index": 0,
+          "total_chunks": 4,
+          "chunk_position": 1,
+          "document_title": "warehouse-floorplan.png",
+          "lexical_version": 2
+        },
+        "image_url": "https://example.com/fixtures/warehouse-floorplan.png"
+      },
+      {
+        "chunk_id": "f60c4db1-087b-4287-bd15-f1d52a701891",
+        "document_id": "4dda7ba2-55f3-4e0f-8cfd-83f2ef597e40",
+        "content": "Document: warehouse-floorplan.png. Chunk 4 of 4. Content: ## Packing and dispatch zone\n\nThe image places the packing and dispatch zone in green on the east side, beside dock door 3. Six packing tables stand in two rows. The express carrier collection point is the red rectangle by the door, and the standard carrier pallets are stacked on the grey area behind it.",
+        "similarity": 0.12507597358393396,
+        "metadata": {
+          "section": "Packing and dispatch zone",
+          "image_url": "https://example.com/fixtures/warehouse-floorplan.png",
+          "chunk_index": 3,
+          "total_chunks": 4,
+          "chunk_position": 4,
+          "document_title": "warehouse-floorplan.png",
+          "lexical_version": 2
+        },
+        "image_url": "https://example.com/fixtures/warehouse-floorplan.png"
+      }
+    ],
+    "source_images": [
+      {
+        "url": "https://example.com/fixtures/warehouse-floorplan.png",
+        "name": "Source Image",
+        "type": "image/jpeg"
+      },
+      {
+        "url": "https://example.com/fixtures/warehouse-floorplan.png",
+        "name": "Source Image",
+        "type": "image/jpeg"
+      },
+      {
+        "url": "https://example.com/fixtures/warehouse-floorplan.png",
+        "name": "Source Image",
+        "type": "image/jpeg"
+      },
+      {
+        "url": "https://example.com/fixtures/warehouse-floorplan.png",
+        "name": "Source Image",
+        "type": "image/jpeg"
+      }
+    ]
+  },
+  {
+    "query": "Where is the main office on the warehouse floor plan?",
+    "results": [],
+    "source_images": []
+  },
+  {
+    "query": "Where are lithium batteries stored in the warehouse layout?",
+    "results": [],
+    "source_images": []
+  },
+  {
+    "query": "Come è stato pagato il totale sulla ricevuta?",
+    "results": [],
+    "source_images": []
+  },
+  {
+    "query": "Quale ragione sociale compare in intestazione?",
+    "results": [],
+    "source_images": []
+  },
+  {
+    "query": "Quale codice compare per il termometro VS-21O?",
+    "results": [],
+    "source_images": []
+  },
+  {
+    "query": "Qual è l'aliquota IVA indicata?",
+    "results": [],
+    "source_images": []
+  },
+  {
+    "query": "合同约定的年度服务费合计是多少元？",
+    "results": [],
+    "source_images": []
+  },
+  {
+    "query": "巡检结束后乙方要在几个工作日内提交书面巡检报告？",
+    "results": [],
+    "source_images": []
+  },
+  {
+    "query": "设备维护合同的甲方名称是什么？",
+    "results": [],
+    "source_images": []
+  },
+  {
+    "query": "合同编号是多少？",
+    "results": [],
+    "source_images": []
+  },
+  {
     "query": "show me the warehouse floorplan image",
     "results": [],
     "source_images": []
