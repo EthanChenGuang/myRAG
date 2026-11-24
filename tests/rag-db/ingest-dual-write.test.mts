@@ -594,7 +594,8 @@ describe('ingest() writes every profile that must stay complete', () => {
 
   test('under the unified pipeline the legacy target refuses to write when the configured OpenAI model is not the legacy profile model', async () => {
     mock.method(console, 'error', () => undefined);
-    for (const env of [{ RAG_INGEST_PIPELINE: 'unified' }, { RAG_EMBEDDING_PROFILES: 'on' }]) {
+    const envs: Array<Record<string, string>> = [{ RAG_INGEST_PIPELINE: 'unified' }, { RAG_EMBEDDING_PROFILES: 'on' }];
+    for (const env of envs) {
       useEnv(env);
       activeModule.resetActiveProfileForTests();
       const openai = fakeProvider('voyage', 'text-embedding-3-large', 1536).provider;

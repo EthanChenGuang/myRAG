@@ -125,6 +125,7 @@ describe('resolveEmbeddingTargets', () => {
     rows = [row(LEGACY, 'retired'), row(VOYAGE, 'active', { previous_active_id: LEGACY })];
     expect(ids(await resolveEmbeddingTargets(writerWith([])))).toEqual([VOYAGE]);
 
+    resetActiveProfileForTests();
     rows = [row(LEGACY, 'backfilling'), row(VOYAGE, 'active', { previous_active_id: LEGACY })];
     const targets = await resolveEmbeddingTargets(writerWith([]));
     expect(ids(targets)).toEqual([VOYAGE, LEGACY]);

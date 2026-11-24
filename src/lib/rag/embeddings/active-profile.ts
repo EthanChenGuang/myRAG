@@ -243,6 +243,14 @@ export async function getBackfillingProfiles(): Promise<EmbeddingProfile[]> {
   return (await snapshot()).profiles.filter((profile) => profile.status === 'backfilling');
 }
 
+/** The profile the active one replaced, which a rollback restores. Null while the switch is off or when none is recorded. */
+export async function getPreviousActiveProfile(): Promise<EmbeddingProfile | null> {
+  if (!isEmbeddingProfilesEnabled()) return null;
+  const { profiles, active } = await snapshot();
+  if (active.previousActiveId === null) return null;
+  return profiles.find((profile) => profile.id === active.previousActiveId) ?? null;
+}
+
 /** Called after a gate operation: the pointer or the backfilling set may have changed. Never throws. */
 export async function refreshAfterOperation(): Promise<void> {
   try {
