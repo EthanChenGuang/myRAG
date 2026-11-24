@@ -29,6 +29,8 @@ export async function GET(request: NextRequest) {
       .from('documents')
       .select('id, filename, created_at, metadata, source, source_provider, source_file_id, organization_id, user_id')
       .eq('source_provider', 'firecrawl')
+      .eq('is_current', true)
+      .eq('status', 'ready')
       .in('source_file_id', candidateUrls)
       .order('created_at', { ascending: false })
       .limit(1);
@@ -74,7 +76,9 @@ export async function GET(request: NextRequest) {
     const { count, error: countError } = await supabaseAdmin
       .from('document_chunks')
       .select('*', { count: 'exact', head: true })
-      .eq('document_id', document.id);
+      .eq('document_id', document.id)
+      .eq('is_current', true)
+      .eq('status', 'ready');
 
     if (countError) {
       console.error('[Scraper Status API] Error counting chunks:', countError);

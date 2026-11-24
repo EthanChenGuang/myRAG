@@ -114,7 +114,7 @@ export async function GET(request: NextRequest): Promise<Response> {
     const { admin, predicate } = auth.value;
 
     const { data, error: docError } = await applyPredicate(
-      admin.from('documents').select('id, filename, created_at'),
+      admin.from('documents').select('id, filename, created_at').eq('is_current', true).eq('status', 'ready'),
       predicate
     ).order('created_at', { ascending: false });
     if (docError) {
@@ -130,6 +130,8 @@ export async function GET(request: NextRequest): Promise<Response> {
           .from('document_chunks')
           .select('metadata')
           .eq('document_id', doc.id)
+          .eq('is_current', true)
+          .eq('status', 'ready')
           .limit(1);
 
         if (chunkError || !chunks || chunks.length === 0) return null;
