@@ -19,14 +19,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from docling_core.types.doc import DoclingDocument
+from docling_core.types.doc import DoclingDocument, Size
 
 from rag_sidecar.contracts.ingest import ParseJobRequest, ParseResult, ProcessingProfile, ProcessingProfileSet
-from rag_sidecar.contracts.queue import IngestionJob, ParseExternalRequest
+from rag_sidecar.contracts.queue import IngestionJob, ParseAttemptPages, ParseExternalRequest
 from rag_sidecar.contracts.routing import PageRange, ParseRoutingConfig, PreflightResult, QualityCheckResult
 from rag_sidecar.ingest import quality
 from rag_sidecar.ingest.cache_keys import merged_options_hash, options_hash
-from rag_sidecar.ingest.merge import MergeInvariantError, join_page_parts, merge, slice_pages
+from rag_sidecar.ingest.merge import MergeInvariantError, join_page_parts, merge, premium_part, slice_pages
 from rag_sidecar.ingest.pool import UPLOAD_PRIORITY, PoolCrashed
 from rag_sidecar.parse import docling_adapter
 from rag_sidecar.parse.converter import ConversionError
@@ -41,12 +41,17 @@ PREFLIGHT_PARSER = "preflight"
 DOCLING_PARSER = "docling"
 MERGED_PARSER = "merged"
 MERGED_VERSION = "merged-v1"
+PREMIUM_PARSER = "llamaparse"
+PREMIUM_PART_PARSER = "llamaparse_part"
+PREMIUM_PART_VERSION = "premium-part-v1"
 PREFLIGHT_OBJECT = "preflight.json"
 DOCLING_OBJECT = "docling.json"
 RESULT_OBJECT = "result.json"
 
 _STAGE_STATUS = {"preflight": "preflight", "parse": "parsing", "check": "checking", "ready": "ready"}
 _TIER_RANK = {"native": 0, "fast": 1, "structured": 2, "premium": 3}
+_BUDGET_REFUSALS = frozenset({"budget_exhausted", "over_page_cap", "batch_budget_exhausted"})
+_MAX_PREMIUM_POLLS = 400
 _PROFILES_PATH = Path(__file__).resolve().parents[4] / "config" / "rag" / "processing-profiles.json"
 _PERMANENT_ERRORS = frozenset(
     {
@@ -65,6 +70,7 @@ _PERMANENT_ERRORS = frozenset(
         "worker_not_configured",
         "unsupported_mode",
         "original_unavailable",
+        "premium_pages_unavailable",
     }
 )
 _profiles: dict[str, ProcessingProfile] | None = None
@@ -200,6 +206,8 @@ class _RangeResult:
     passed: bool
     doc: DoclingDocument | None = None
     loader: Callable[[], Awaitable[DoclingDocument]] | None = None
+    key_parser: str = ""
+    blocked: str | None = None
 
     async def get_doc(self) -> DoclingDocument:
         if self.doc is None:
@@ -280,6 +288,7 @@ async def _record_attempt(
     cache_hit: bool,
     check: QualityCheckResult | None,
     reason: str = "initial",
+    refused: bool = False,
 ) -> None:
     attempt: dict[str, Any] = {
         "tier": page_range.tier,
@@ -291,7 +300,7 @@ async def _record_attempt(
         "ms": ms,
         "est_cost_usd": cost,
         "cache_hit": cache_hit,
-        "refused": False,
+        "refused": refused,
     }
     if check is not None:
         attempt["check"] = check.model_dump(mode="json")
@@ -357,14 +366,18 @@ def _entry_loader(run: _Run, entry: Any) -> Callable[[], Awaitable[DoclingDocume
     return load
 
 
-async def _put_range_entry(run: _Run, parser: str, version: str, opts_hash: str, doc: DoclingDocument) -> Any:
+async def _put_range_entry(
+    run: _Run, parser: str, version: str, opts_hash: str, doc: DoclingDocument, *, doc_parser: str | None = None
+) -> Any:
+    """``parser`` is the cache key; ``doc_parser`` is the parser the document's own metadata names (a premium part is llamaparse)."""
+    named = doc_parser or parser
     return await _put_entry(
         run,
         parser,
         version,
         opts_hash,
-        [(DOCLING_OBJECT, _docling_bytes(doc, parser, version), "application/json")],
-        {"parser": parser, "parser_version": version, "page_count": len(doc.pages)},
+        [(DOCLING_OBJECT, _docling_bytes(doc, named, version), "application/json")],
+        {"parser": named, "parser_version": version, "page_count": len(doc.pages)},
     )
 
 
@@ -538,6 +551,124 @@ async def _parse_docling_range(run: _Run, result: PreflightResult, page_range: P
 
 
 # -------------------------------------------------------------------------------------------------------------------------
+# Premium ranges
+# -------------------------------------------------------------------------------------------------------------------------
+
+
+class _PremiumRefused(Exception):
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
+def _page_sizes(path: Path, pages: list[int]) -> dict[int, Size]:
+    import pypdfium2 as pdfium
+
+    pdf = pdfium.PdfDocument(str(path))
+    try:
+        sizes: dict[int, Size] = {}
+        for page in pages:
+            width, height = pdf[page - 1].get_size()
+            sizes[page] = Size(width=width, height=height)
+        return sizes
+    finally:
+        pdf.close()
+
+
+async def _premium_request(run: _Run, page_range: PageRange, pages: list[int], opts_hash: str) -> list[Any]:
+    """Cuts the premium pages into a sub-PDF, stores it under the cache prefix and asks the app to parse it (guard, budget, polling)."""
+    from rag_sidecar.ingest.subpdf import cut_subpdf
+
+    deps, job = run.deps, run.job
+    start, end = page_range.start, page_range.end
+    name = f"premium-{start}-{end}.pdf"
+    sub_path = run.work / name
+    await _blocking(deps, run.cfg, job.priority, cut_subpdf, run.path, pages, sub_path)
+    prefix = await _entry_prefix(run, "premium_subpdf", "v1", opts_hash)
+    await deps.storage.put(run.bucket, prefix, name, sub_path.read_bytes())
+    reference = f"{prefix}{name}"
+    cursor = json.dumps({"original_pages": pages, "reserve_pages": len(pages)})
+    attempt_no = max(run.last_attempt_no, len(job.attempts)) + 1
+    continuation: str | None = None
+    for _ in range(_MAX_PREMIUM_POLLS):
+        response = await deps.app.parse_external(
+            job.id,
+            ParseExternalRequest(
+                worker_id=deps.worker_id,
+                attempt_no=attempt_no,
+                mode="premium",
+                pages=ParseAttemptPages(start=start, end=end),
+                subpdf_ref=reference,
+                options_hash=opts_hash,
+                continuation=continuation,
+                cursor=cursor,
+            ),
+        )
+        if response.status == "pending":
+            continuation = response.continuation
+            await deps.sleep((response.retry_after_ms or 0) / 1000)
+            continue
+        if response.status == "refused":
+            raise _PremiumRefused(response.reason or "refused")
+        if response.status == "failed":
+            raise TieredFailure(response.error_class or "parse_failed")
+        if not response.pages:
+            raise TieredFailure("premium_pages_unavailable")
+        return list(response.pages)
+    raise TieredFailure("parse_timeout", retryable=True)
+
+
+async def _parse_premium_range(run: _Run, result: PreflightResult, page_range: PageRange, previous: _RangeResult | None) -> _RangeResult:
+    """A premium range becomes a Docling part with the original page numbers; a blocked range is parsed structured instead (D-16)."""
+    start, end = page_range.start, page_range.end
+    pages = list(range(start, end + 1))
+    opts_hash = options_hash({"preset": "premium", "pages": [start, end], "input_format": "application/pdf"})
+    prior = run.previous_attempt(start, end, "premium")
+    hit = await _lookup(run, PREMIUM_PART_PARSER, PREMIUM_PART_VERSION, opts_hash)
+    if hit is not None and prior is not None and not prior.refused and prior.check is not None:
+        return _RangeResult(
+            page_range, PREMIUM_PARSER, PREMIUM_PART_VERSION, opts_hash, str(hit.id), prior.check.passed,
+            key_parser=PREMIUM_PART_PARSER, loader=_entry_loader(run, hit),
+        )
+
+    started = run.deps.clock()
+    was_cached = hit is not None
+    if hit is None:
+        try:
+            text_pages = await _premium_request(run, page_range, pages, opts_hash)
+        except _PremiumRefused as refusal:
+            if prior is None or not prior.refused:
+                await _record_attempt(
+                    run, page_range, parser=PREMIUM_PARSER, version=PREMIUM_PART_VERSION,
+                    ms=int((run.deps.clock() - started) * 1000), cost=0.0, cache_hit=False, check=None, refused=True,
+                )
+            lower = page_range.model_copy(update={"tier": "structured", "preset": "structured_full", "parser": DOCLING_PARSER})
+            outcome = await _parse_docling_range(run, result, lower, previous)
+            outcome.blocked = refusal.reason
+            return outcome
+        sizes = await asyncio.to_thread(_page_sizes, run.path, pages)
+        doc = premium_part([(item.page, item.text) for item in sorted(text_pages, key=lambda item: item.page)], sizes)
+        hit = await _put_range_entry(run, PREMIUM_PART_PARSER, PREMIUM_PART_VERSION, opts_hash, doc, doc_parser=PREMIUM_PARSER)
+    else:
+        doc = await _entry_loader(run, hit)()
+
+    check_started = time.perf_counter()
+    check = quality.check(doc, [row for row in result.pages if start <= row.page <= end], run.languages, run.cfg, first_page=start)
+    run.check_ms += int((time.perf_counter() - check_started) * 1000)
+    if prior is None or prior.refused:
+        await _record_attempt(
+            run, page_range, parser=PREMIUM_PARSER, version=PREMIUM_PART_VERSION,
+            ms=int((run.deps.clock() - started) * 1000),
+            cost=0.0 if was_cached else _tier_cost(run.cfg, "premium", len(pages)),
+            cache_hit=was_cached, check=check,
+        )
+    return _RangeResult(
+        page_range, PREMIUM_PARSER, PREMIUM_PART_VERSION, opts_hash, str(hit.id), check.passed,
+        doc=doc, key_parser=PREMIUM_PART_PARSER,
+    )
+
+
+# -------------------------------------------------------------------------------------------------------------------------
 # Merge and the merged entry
 # -------------------------------------------------------------------------------------------------------------------------
 
@@ -560,7 +691,7 @@ async def _merged_entry(
     input_format: str | None,
 ) -> str:
     """The merged document of all ranges, chunked once; cached under parser ``merged`` with a hash over the ordered range entries."""
-    merged_hash = merged_options_hash([(item.parser, item.version, item.opts_hash) for item in outcomes])
+    merged_hash = merged_options_hash([(item.key_parser or item.parser, item.version, item.opts_hash) for item in outcomes])
     version = f"{MERGED_VERSION}/{run.docling_version}/mt{profile.chunker.max_tokens}-rh{int(profile.chunker.repeat_table_header)}"
     hit = await _lookup(run, MERGED_PARSER, version, merged_hash)
     if hit is not None:
@@ -595,7 +726,11 @@ async def _merged_entry(
 def _final_ranges(outcomes: list[_RangeResult]) -> list[dict[str, Any]]:
     return [
         item.page_range.model_copy(
-            update={"status": "ok" if item.passed else "needs_review", "cache_id": item.cache_id, "parser": item.parser}
+            update={
+                "status": "ok" if item.passed and item.blocked not in _BUDGET_REFUSALS else "needs_review",
+                "cache_id": item.cache_id,
+                "parser": item.parser,
+            }
         ).model_dump(mode="json")
         for item in outcomes
     ]
@@ -618,8 +753,14 @@ async def _hand_over(
         "parser_version": run.docling_version,
         "est_cost_usd": run.est_cost,
     }
-    if any(not item.passed for item in outcomes):
+    blocked = [item.blocked for item in outcomes if item.blocked is not None]
+    budget_blocked = [reason for reason in blocked if reason in _BUDGET_REFUSALS]
+    if budget_blocked:
+        fields["needs_review_reason"] = budget_blocked[0]
+    elif any(not item.passed for item in outcomes):
         fields["needs_review_reason"] = "quality_check_failed"
+    if blocked and not budget_blocked:
+        fields["routing_note"] = f"premium_blocked:{blocked[0]}"
     await _advance(run, "parse", timing_ms=max(0, parse_ms - run.check_ms))
     await _advance(run, "check", timing_ms=run.check_ms, fields=fields)
     if run.job.kind == "dry_run":
@@ -666,7 +807,8 @@ async def _run_pdf(run: _Run) -> str | None:
         if deps.document_timeout_s is not None and deps.clock() - parse_started > deps.document_timeout_s:
             raise TieredFailure("parse_timeout", retryable=True)
         range_started = time.perf_counter()
-        outcomes.append(await _parse_docling_range(run, result, page_range, outcomes[-1] if outcomes else None))
+        parse_range = _parse_premium_range if page_range.preset == "premium" else _parse_docling_range
+        outcomes.append(await parse_range(run, result, page_range, outcomes[-1] if outcomes else None))
         parse_ms += int((time.perf_counter() - range_started) * 1000)
 
     layer_share = sum(1 for row in result.pages if row.text_layer) / max(1, len(result.pages))
