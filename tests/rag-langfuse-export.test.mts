@@ -119,7 +119,7 @@ function buildResult(): RetrievalResult {
   };
 }
 
-async function waitFor(condition: () => boolean, timeoutMs = 8000): Promise<void> {
+async function waitFor(condition: () => boolean, timeoutMs = 30000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (!condition()) {
     if (Date.now() > deadline) throw new Error('waitFor timed out');

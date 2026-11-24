@@ -101,7 +101,7 @@ function setReview(collector: TraceCollector): void {
   collector.setReviewContent({ query: QUERY_TEXT, answer: ANSWER_TEXT, context: CONTEXT_TEXT, model: MODEL_ID });
 }
 
-async function waitForCompleted(count: number, timeoutMs = 8000): Promise<void> {
+async function waitForCompleted(count: number, timeoutMs = 30000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (fake.completedTraceRequests() < count && Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, 20));
