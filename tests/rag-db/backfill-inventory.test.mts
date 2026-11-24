@@ -8,6 +8,7 @@ import { applyMigrationFiles, migrationFiles } from '../../eval/harness/migratio
 import { createTwoTenantDatabase, TWO_TENANT_IDS } from '../../eval/harness/two-tenant.mts';
 import type { RpcClient, RpcRequest, RpcResponse } from '@/lib/rag/backend/supabase-rpc';
 import { inventory } from '@/lib/rag/ingest/backfill/inventory';
+import { mintScope } from '@/lib/rag/tenant/scope';
 import type { SourceItem } from '@/lib/rag/ingest/backfill/sources';
 
 const TENANT_SINGLE = 's:default';
@@ -30,6 +31,10 @@ function sqlRpc(db: PGlite): RpcClient {
           if (fn === 'rag_existing_file_hashes') {
             const result = await db.query(`SELECT id, file_sha256, tenant_key, source_key FROM rag_existing_file_hashes($1, $2::text[])`, [args.p_tenant_key, args.p_hashes]);
             return { data: result.rows, error: null };
+          }
+          if (fn === 'rag_update_ingestion_batch') {
+            const result = await db.query(`SELECT * FROM rag_update_ingestion_batch($1::uuid)`, [args.p_batch_id]);
+            return { data: result.rows[0] ?? null, error: null };
           }
           if (fn === 'rag_enqueue_backfill_jobs') {
             const result = await db.query<{ n: number }>(`SELECT rag_enqueue_backfill_jobs($1::uuid, $2::jsonb) AS n`, [args.p_batch_id, JSON.stringify(args.p_jobs)]);
@@ -256,5 +261,27 @@ describe('backfill inventory against the real SQL (multi-tenant, two tenants and
     const rows = await skippedRows(db, batchId);
     assert.ok(rows.length > 0);
     assert.ok(rows.every((r) => r.tenant_key === TENANT_A));
+  });
+
+  test("a batch of tenant A run with tenant B's scope fails closed: nothing is written to A's batch and B's hashes are not probed", async () => {
+    const batchId = await createBatch(db, TENANT_A);
+    const scopeB = mintScope('personal', TWO_TENANT_IDS.userB, null);
+    const before = (await skippedRows(db, batchId)).length;
+    await assert.rejects(
+      inventory({ id: batchId, scope: scopeB } as never, from([item('shared.pdf', 'shared-contract'), item('x.pdf', 'shared-contract')]), {
+        rpc: sqlRpc(db),
+        signal: new AbortController().signal,
+      }),
+      (error: Error) => error.message === '[Backfill] batch tenant mismatch',
+    );
+    assert.equal((await skippedRows(db, batchId)).length, before);
+  });
+
+  test("a batch of tenant A with tenant A's scope still dedupes against A only (the shared file is new for A)", async () => {
+    const batchId = await createBatch(db, TENANT_A);
+    const scopeA = mintScope('personal', TWO_TENANT_IDS.userA, null);
+    const result = await inventory({ id: batchId, scope: scopeA } as never, from([item('shared.pdf', 'shared-contract')]), { rpc: sqlRpc(db), signal: new AbortController().signal });
+    assert.equal(result.totals.uniqueNew, 1);
+    assert.equal((await skippedRows(db, batchId)).length, 0);
   });
 });

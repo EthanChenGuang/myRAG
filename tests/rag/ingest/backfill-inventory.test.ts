@@ -961,3 +961,74 @@ describe('backfill inventory', () => {
     expect(ledger.calls).toEqual([]);
   });
 });
+
+describe('backfill inventory tenant binding', () => {
+  const SCOPE_A = mintScope('personal', USER_A, null);
+  const SCOPE_B = mintScope('personal', USER_B, null);
+
+  /** The batch row lives in SQL with its own tenant; the lookup and the enqueue are answered per that tenant only. */
+  function batchLedger(batchTenant: string | null, hashesByTenant: Record<string, string[]>) {
+    const opened: string[] = [];
+    const fake = fakeRpc({
+      rag_update_ingestion_batch: () => (batchTenant === null ? { data: null, error: { message: 'backfill_refused: batch_not_found' } } : { data: { id: BATCH, tenant_key: batchTenant }, error: null }),
+      rag_existing_file_hashes: (args) => {
+        const known = new Set(hashesByTenant[String(args.p_tenant_key)] ?? []);
+        return { data: (args.p_hashes as string[]).filter((h) => known.has(h)).map((h) => ({ file_sha256: h, tenant_key: args.p_tenant_key })), error: null };
+      },
+      rag_enqueue_backfill_jobs: () => ({ data: 1, error: null }),
+    });
+    const tracked = (key: string, text: string): SourceItem => {
+      const base = item(key, text);
+      return {
+        ...base,
+        async open(signal) {
+          opened.push(key);
+          return base.open(signal);
+        },
+      };
+    };
+    return { ...fake, opened, tracked };
+  }
+
+  test("a batch of tenant A run with tenant B's scope fails closed before any file is read, looked up or enqueued", async () => {
+    const ledger = batchLedger(TENANT_A, { [TENANT_B]: [sha('shared-contract')] });
+    await expect(
+      inventory({ id: BATCH, scope: SCOPE_B } as never, from([ledger.tracked('shared.pdf', 'shared-contract')]), { rpc: ledger.rpc, signal: new AbortController().signal }),
+    ).rejects.toThrow('[Backfill] batch tenant mismatch');
+    expect(ledger.opened).toEqual([]);
+    expect(ledger.calls.map((c) => c.fn)).not.toContain('rag_existing_file_hashes');
+    expect(ledger.calls.map((c) => c.fn)).not.toContain('rag_enqueue_backfill_jobs');
+  });
+
+  test('the duplicate lookup carries the tenant stored on the batch row, never a caller string', async () => {
+    const ledger = batchLedger(TENANT_A, { [TENANT_A]: [sha('mine')] });
+    const result = await inventory({ id: BATCH, scope: SCOPE_A } as never, from([ledger.tracked('mine.pdf', 'mine'), ledger.tracked('new.pdf', 'new')]), {
+      rpc: ledger.rpc,
+      signal: new AbortController().signal,
+    });
+    expect(result.totals).toMatchObject({ uniqueNew: 1, existingDuplicates: 1 });
+    const lookups = ledger.calls.filter((c) => c.fn === 'rag_existing_file_hashes');
+    expect(lookups.length).toBeGreaterThan(0);
+    expect(lookups.every((c) => c.args.p_tenant_key === TENANT_A)).toBe(true);
+    expect(ledger.calls[0]?.fn).toBe('rag_update_ingestion_batch');
+    expect(ledger.calls[0]?.args).toEqual({ p_batch_id: BATCH });
+  });
+
+  test('a missing batch, a failed batch lookup, an unminted scope and a case-variant tenant all fail closed', async () => {
+    const signal = new AbortController().signal;
+    const missing = batchLedger(null, {});
+    await expect(inventory({ id: BATCH, scope: SCOPE_A } as never, from([missing.tracked('a.pdf', 'a')]), { rpc: missing.rpc, signal })).rejects.toThrow('[Backfill] batch lookup failed');
+    expect(missing.opened).toEqual([]);
+
+    const variant = batchLedger(TENANT_A.toUpperCase(), { [TENANT_A]: [sha('a')] });
+    await expect(inventory({ id: BATCH, scope: SCOPE_A } as never, from([variant.tracked('a.pdf', 'a')]), { rpc: variant.rpc, signal })).rejects.toThrow('[Backfill] batch tenant mismatch');
+
+    const fine = batchLedger(TENANT_A, {});
+    await expect(
+      inventory({ id: BATCH, scope: { kind: 'personal', userId: USER_A, organizationId: null } } as never, from([fine.tracked('a.pdf', 'a')]), { rpc: fine.rpc, signal }),
+    ).rejects.toThrow('[Backfill] batch tenant mismatch');
+    expect(fine.opened).toEqual([]);
+    expect(fine.calls.filter((c) => c.fn !== 'rag_update_ingestion_batch')).toEqual([]);
+  });
+});
+
