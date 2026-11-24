@@ -40,8 +40,8 @@
         "header": null
       },
       "scan_injection": true,
-      "min_tier": null,
-      "max_tier": null,
+      "min_tier": "fast",
+      "max_tier": "premium",
       "parent_child": null
     },
     {
@@ -83,8 +83,8 @@
         "header": null
       },
       "scan_injection": true,
-      "min_tier": null,
-      "max_tier": null,
+      "min_tier": "structured",
+      "max_tier": "premium",
       "parent_child": null
     },
     {
@@ -136,8 +136,8 @@
         "header": null
       },
       "scan_injection": true,
-      "min_tier": null,
-      "max_tier": null,
+      "min_tier": "fast",
+      "max_tier": "premium",
       "parent_child": null
     },
     {
@@ -179,8 +179,8 @@
         "header": "Invoice {invoice_number} | {supplier_name} | {supplier_tax_id}"
       },
       "scan_injection": true,
-      "min_tier": null,
-      "max_tier": null,
+      "min_tier": "structured",
+      "max_tier": "premium",
       "parent_child": null
     },
     {
@@ -221,8 +221,8 @@
         "header": null
       },
       "scan_injection": true,
-      "min_tier": null,
-      "max_tier": null,
+      "min_tier": "fast",
+      "max_tier": "premium",
       "parent_child": null
     },
     {
@@ -263,8 +263,8 @@
         "header": null
       },
       "scan_injection": true,
-      "min_tier": null,
-      "max_tier": null,
+      "min_tier": "structured",
+      "max_tier": "premium",
       "parent_child": null
     }
   ]

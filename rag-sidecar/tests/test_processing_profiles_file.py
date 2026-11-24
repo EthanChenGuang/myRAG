@@ -66,12 +66,20 @@ def test_file_validates_against_the_pydantic_profile_set():
     assert _validation_errors(_raw()) == []
 
 
-def test_file_is_already_in_normal_form_so_no_reserved_field_is_implicit():
+def test_file_is_already_in_normal_form():
     raw = _raw()
     assert ProcessingProfileSet.model_validate(raw).model_dump(mode="json") == raw
-    for profile in raw["profiles"]:
-        for reserved in ("min_tier", "max_tier", "parent_child"):
-            assert reserved in profile and profile[reserved] is None, (profile["id"], reserved)
+
+
+def test_profiles_carry_d13_tier_bounds():
+    structured_min = {"financial_report", "invoice_receipt", "scanned_image"}
+    for profile in _raw()["profiles"]:
+        assert profile["max_tier"] == "premium", profile["id"]
+        if profile["doc_type"] in structured_min:
+            assert profile["min_tier"] == "structured", profile["id"]
+        else:
+            assert profile["min_tier"] == "fast", profile["id"]
+        assert profile["parent_child"] is None, profile["id"]
 
 
 @pytest.mark.parametrize("doc_type", sorted(SIX_TYPES))
