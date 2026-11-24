@@ -83,3 +83,13 @@ After all: code review gate -> regression gate -> verifier -> update roadmap.
 - Full parse text goes in one rag_set_document_fields call; watch PostgREST request size for multi-MB documents (live check).
 - Correct-refusal on the fixture no-answer slice is 0.333 in both modes (6 of 9 answered wrongly); Phase 5 abstention work should target it.
 - (03-40) CLI/route completeness does not count the legacy `embedding` column (no SQL function exposes it); the activation gate still counts it in the flip transaction. A profile flip refreshes only the local process cache (others within 30 s TTL). Live: real project activation + rollback.
+
+## From the 2026-11-25 session (Claude Code takeover)
+- 03.1-40: `rag-sidecar/Dockerfile` copies no `config/` directory, so `parse-routing.json` and `processing-profiles.json` are missing in the image; a deployed worker cannot run tiered jobs. Fix before 03.1-53/54 live work.
+- 03.1-40: `tests/rag-e2e/queued-callbacks-two-tenant.test.mts` still expects 400 for native mode (03.1-34 made native work) — 3 stale assertions.
+- 03.1-40: attempt cost key mismatch — contract `est_cost_usd`, SQL 0353 reads `est_cost`; worker writes the job total instead (open since 03.1-22).
+- 03.1-41: batch USD reserved for L3 has no refund (same as 03.1-19).
+- 04-41: `rag_exact_id_documents` has no filter arguments, so the exact-id leg stands down on filtered requests; adding filter args would restore recall.
+- Phase 3 verification (03-VERIFICATION.md): W1–W5 being fixed in exec/03-gaps; live: apply 0409/0410/0411 to the live DB (anon can still call match_document_chunks_by_org there).
+- `legacy-cloud-guard.test.ts` LOW-5 temp-dir check is not isolated: concurrent processes writing to os.tmpdir make it fail.
+- Timing tests (`lexical-tokenize` "under one second", `injection-scan`, `voice-budget`) fail under heavy local load.
