@@ -190,9 +190,9 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-23
-Stopped at: G1-G3 and S9b merged at 2ef532b (tsc 0, vitest 1139, node 88, eval 315, sidecar 184)
-Resume file: .planning/phases/02-unified-retrieval-pipeline-tenant-scope/.continue-here.md
+Last session: 2026-11-24
+Stopped at: Session resumed after account switch; restoring 03-13/14/15 from patches, relaunching Phase 5.1/6/7 planners
+Resume file: .planning/phases/03-unified-ingestion-embedding-profiles/.continue-here.md
 
 ## Pending Human Actions (session 2026-11-23b)
 
