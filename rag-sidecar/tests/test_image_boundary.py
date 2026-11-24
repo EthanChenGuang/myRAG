@@ -116,7 +116,8 @@ def test_docling_stage_bakes_models_into_fixed_directories():
 
     downloads = [line for line in lines if "docling-tools models download" in line]
     assert len(downloads) == 1
-    assert re.search(rf"(-o|--output-dir) {re.escape(artifacts)}\b", downloads[0]), downloads[0]
+    target = rf"""["']?({re.escape(artifacts)}|\$\{{?RAG_SIDECAR_DOCLING_ARTIFACTS\}}?)["']?(\s|$)"""
+    assert re.search(rf"(-o|--output-dir) {target}", downloads[0]), downloads[0]
     warm = [line for line in lines if "cl100k_base" in line]
     assert warm and warm[0].startswith("RUN ")
 
