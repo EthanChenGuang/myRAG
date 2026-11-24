@@ -232,6 +232,13 @@ class LedgerClient:
             return int(first)
         raise LedgerError("record_attempt returned unexpected payload")
 
+    async def purge_stale(self, *, retention_days: int, batch_size: int = 500) -> dict[str, Any]:
+        payload = await self._rpc(
+            "rag_purge_stale_ingestion_jobs",
+            {"p_retention_days": retention_days, "p_batch_size": batch_size},
+        )
+        return payload if isinstance(payload, dict) else {"archived": 0, "purged": 0}
+
     async def fail(self, job_id: str, worker: str, *, error_class: str, retryable: bool) -> IngestionJob:
         payload = await self._rpc(
             "rag_fail_ingestion_job",

@@ -52,9 +52,16 @@ def create_app(settings: SidecarSettings | None = None, converter: Converter | N
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-        yield
-        if runner is not None:
-            runner.close()
+        from rag_sidecar.ingest.maintenance import start_maintenance_from_env
+
+        maintenance = start_maintenance_from_env()
+        try:
+            yield
+        finally:
+            if maintenance is not None:
+                await maintenance.stop()
+            if runner is not None:
+                runner.close()
 
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
     app.state.parse_runner = runner
