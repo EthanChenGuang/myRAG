@@ -7,9 +7,12 @@ import {
   type AssemblyDocumentRow,
 } from '../../context/assemble';
 import { selectWithinBudget, type BudgetCandidate } from '../../context/budget';
+import { compressChunks, type CompressibleChunk } from '../../context/compress';
 import { edgeOrder } from '../../context/edge-order';
 import type { AssemblyRows } from '../../context/fetch-rows';
 import { mergeAdjacent, type AdjacentChunk } from '../../context/merge-adjacent';
+import { countTokens } from '../../ingest/text/tokens';
+import type { RerankSpan } from '../../rerank/types';
 import type { FusedHit } from '../../fusion/rrf';
 import type { RagConfig, StageName } from '../../config';
 import { runStage, stageSpec, type StageSpec } from '../../pipeline';
@@ -20,6 +23,8 @@ import type { RetrievalParams } from '@/lib/rag-eval/contracts.generated';
 
 export interface ContextRerankInput {
   ran: boolean;
+  spansByChunk?: Map<string, RerankSpan[]>;
+  prefixLengthByChunk?: Map<string, number>;
 }
 
 export interface ContextStagesInput {
@@ -96,6 +101,12 @@ interface AssembleStageValue {
   budgetTokens: number;
   usedTokens: number;
   groups: number;
+}
+
+interface CompressStageValue {
+  context: string;
+  compressed: number;
+  savedTokens: number;
 }
 
 export async function runContextStages(ctx: ContextStagesInput): Promise<ContextStagesOutput> {
@@ -205,5 +216,44 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
     return { assembly: null, candidates };
   }
 
-  return { assembly: assembled.value.output, candidates };
+  const base = assembled.value;
+  const compressSpec = spec('compress', 'skip');
+  const compressed = await runStage(
+    settings.compression ? compressSpec : { ...compressSpec, enabled: false },
+    signal,
+    (): CompressStageValue => {
+      const compressible: CompressibleChunk[] = base.selected.map((candidate) => ({
+        chunk_id: candidate.chunk_id,
+        content: candidate.content,
+        chunk_kind: hitById.get(candidate.chunk_id)?.chunkKind ?? null,
+        metadata: candidate.metadata,
+        language: candidate.language,
+      }));
+      const result = compressChunks(compressible, {
+        query: input.query,
+        spansByChunk: rerank?.spansByChunk,
+        prefixLengthByChunk: rerank?.prefixLengthByChunk,
+        enabled: true,
+      });
+      const contentById = new Map(result.map((chunk) => [chunk.chunk_id, chunk.content]));
+      let changed = 0;
+      let savedTokens = 0;
+      const rewritten = base.selected.map((candidate) => {
+        const next = contentById.get(candidate.chunk_id);
+        if (next === undefined || next === candidate.content) return candidate;
+        changed += 1;
+        savedTokens += Math.max(countTokens(candidate.content) - countTokens(next), 0);
+        return { ...candidate, content: next };
+      });
+      return { context: render(rewritten, base.groupOrder).context, compressed: changed, savedTokens };
+    },
+    collector,
+    {
+      candidatesIn: base.selected.length,
+      counts: (value) => ({ compressed: value.compressed, saved_tokens: value.savedTokens }),
+    },
+  );
+
+  const assembly = compressed.skipped ? base.output : { ...base.output, context: compressed.value.context };
+  return { assembly, candidates };
 }

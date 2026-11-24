@@ -262,7 +262,7 @@ function sentenceBlock(label: string, count: number): string {
 }
 
 describe('runContextStages compress (D-16)', () => {
-  const long = sentenceBlock('first', 40);
+  const long = sentenceBlock('First', 40);
   const specs: Spec[] = [
     { chunkId: 'a-1', documentId: 'doc-a', filename: 'alpha.pdf', chunkIndex: 1, content: long },
     { chunkId: 'b-1', documentId: 'doc-b', filename: 'beta.pdf', chunkIndex: 1, content: 'short body' },
@@ -288,7 +288,7 @@ describe('runContextStages compress (D-16)', () => {
   });
 
   it('replaces a candidate text with its provider spans only', async () => {
-    const needle = 'first sentence 7 explains the quarterly widget pricing policy in some detail.';
+    const needle = 'First sentence 7 explains the quarterly widget pricing policy in some detail.';
     const start = [...long].length - [...long.slice(long.indexOf(needle))].length;
     const spans: RerankSpan[] = [{ start, end: start + [...needle].length, score: 0.9 }];
     const { promise, collector } = run(
@@ -298,7 +298,7 @@ describe('runContextStages compress (D-16)', () => {
     );
     const { assembly } = await promise;
     expect(assembly!.context).toContain(needle);
-    expect(assembly!.context).not.toContain('first sentence 8 explains');
+    expect(assembly!.context).not.toContain('First sentence 8 explains');
     expect(assembly!.context).toContain('short body');
     const record = stageCounts(collector, 'compress');
     expect(record?.status).toBe('ok');
@@ -311,19 +311,19 @@ describe('runContextStages compress (D-16)', () => {
     const { assembly } = await promise;
     const rendered = assembly!.context;
     expect(countContextTokens(rendered)).toBeLessThan(countContextTokens(long));
-    const sentences = long.match(/first sentence \d+ explains the quarterly widget pricing policy in some detail\./g) ?? [];
+    const sentences = long.match(/First sentence \d+ explains the quarterly widget pricing policy in some detail\./g) ?? [];
     const present = sentences.filter((sentence) => rendered.includes(sentence));
     expect(present.length).toBeGreaterThan(0);
     expect(present.length).toBeLessThan(sentences.length);
-    const stripped = rendered.replace(/first sentence \d+ explains the quarterly widget pricing policy in some detail\./g, '');
-    expect(stripped).not.toContain('first sentence');
+    const stripped = rendered.replace(/First sentence \d+ explains the quarterly widget pricing policy in some detail\./g, '');
+    expect(stripped).not.toContain('First sentence');
   });
 
   it('keeps the same document group order after compression', async () => {
     const many: Spec[] = [
       { chunkId: 'a-1', documentId: 'doc-a', filename: 'alpha.pdf', chunkIndex: 1, content: long },
-      { chunkId: 'b-1', documentId: 'doc-b', filename: 'beta.pdf', chunkIndex: 1, content: sentenceBlock('second', 40) },
-      { chunkId: 'c-1', documentId: 'doc-c', filename: 'gamma.pdf', chunkIndex: 1, content: sentenceBlock('third', 40) },
+      { chunkId: 'b-1', documentId: 'doc-b', filename: 'beta.pdf', chunkIndex: 1, content: sentenceBlock('Second', 40) },
+      { chunkId: 'c-1', documentId: 'doc-c', filename: 'gamma.pdf', chunkIndex: 1, content: sentenceBlock('Third', 40) },
       { chunkId: 'd-1', documentId: 'doc-d', filename: 'delta.pdf', chunkIndex: 1, content: 'tiny' },
     ];
     const edge = { RAG_CONTEXT_EDGE_ORDER: 'true' };
