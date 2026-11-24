@@ -1,3 +1,5 @@
+import asyncio
+import contextlib
 import os
 import sys
 import time
@@ -6,9 +8,20 @@ import uuid
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
-from rag_sidecar.contracts import DoclingOptions, ParseJobRequest, ParseResult
+from rag_sidecar.contracts import (
+    DoclingOptions,
+    ParseJobAccepted,
+    ParseJobRequest,
+    ParseJobState,
+    ParseResult,
+    SidecarError,
+    SidecarInfo,
+    SidecarReady,
+)
+from rag_sidecar.main import CONTRACTS_SCHEMA_VERSION, create_app
 from rag_sidecar.parse import converter as converter_module
 from rag_sidecar.parse.converter import (
     PageCapExceeded,
@@ -18,6 +31,7 @@ from rag_sidecar.parse.converter import (
     stub_result,
 )
 from rag_sidecar.parse.jobs import JobRunner, QueueFull
+from rag_sidecar.parse.upload import MalformedUpload, UploadTooLarge, read_upload
 from rag_sidecar.settings import SidecarSettings, load_settings
 
 PDF_BYTES = b"%PDF-1.4 stub"
@@ -369,3 +383,354 @@ def test_default_converter_wraps_the_adapter_when_docling_is_importable(monkeypa
     assert result.page_count == 2
     assert calls == [(tmp_path / "in.pdf", tmp_path)]
     assert converter_module.default_converter() is not None
+
+
+SECRET = "k" * 48
+AUTH = {"x-sidecar-secret": SECRET}
+UNKNOWN_JOB = str(uuid.UUID(int=1))
+MIB = 1024 * 1024
+
+
+@pytest.fixture
+def make_client():
+    stack = contextlib.ExitStack()
+
+    def build(converter=None, secret=SECRET, **settings) -> TestClient:
+        app = create_app(SidecarSettings(secret=SecretStr(secret) if secret else None, **settings), converter=converter)
+        return stack.enter_context(TestClient(app))
+
+    yield build
+    stack.close()
+
+
+def post_job(client, *, request_json=None, file_bytes=PDF_BYTES, filename="report.pdf", headers=AUTH, parts=("file", "request")):
+    files = {"file": (filename, file_bytes, "application/pdf")} if "file" in parts else None
+    data = {"request": request_json if request_json is not None else make_request().model_dump_json()} if "request" in parts else None
+    return client.post("/v1/parse/jobs", files=files, data=data, headers=headers)
+
+
+def poll_state(client, job_id, wanted=("succeeded", "failed", "expired")):
+    def read():
+        body = client.get(f"/v1/parse/jobs/{job_id}", headers=AUTH).json()
+        return body if body.get("status") in wanted else None
+
+    return wait_until(read)
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("POST", "/v1/parse/jobs"),
+        ("GET", f"/v1/parse/jobs/{UNKNOWN_JOB}"),
+        ("DELETE", f"/v1/parse/jobs/{UNKNOWN_JOB}"),
+        ("GET", f"/v1/parse/jobs/{UNKNOWN_JOB}/artifacts/picture-1.png"),
+    ],
+)
+def test_routes_reject_a_missing_or_wrong_secret_with_401(make_client, method, path):
+    client = make_client(StubConverter())
+
+    missing = client.request(method, path)
+    wrong = client.request(method, path, headers={"x-sidecar-secret": "x" * 48})
+
+    assert missing.status_code == 401
+    assert wrong.status_code == 401
+    assert SidecarError.model_validate(missing.json()).error == "unauthorized"
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [("POST", "/v1/parse/jobs"), ("GET", f"/v1/parse/jobs/{UNKNOWN_JOB}"), ("DELETE", f"/v1/parse/jobs/{UNKNOWN_JOB}")],
+)
+def test_routes_answer_503_when_no_secret_is_configured(make_client, method, path):
+    response = make_client(StubConverter(), secret=None).request(method, path, headers=AUTH)
+
+    assert response.status_code == 503
+    assert SidecarError.model_validate(response.json()).error == "sidecar secret not configured"
+
+
+def test_post_returns_202_then_get_returns_state_and_delete_removes_the_job(make_client):
+    client = make_client(StubConverter())
+
+    created = post_job(client)
+    assert created.status_code == 202
+    job_id = ParseJobAccepted.model_validate(created.json()).job_id
+    assert set(created.json()) == {"job_id"}
+
+    body = poll_state(client, job_id)
+    state = ParseJobState.model_validate(body)
+    assert state.status == "succeeded"
+    assert state.result is not None and state.result.markdown == stub_result().markdown
+
+    assert client.delete(f"/v1/parse/jobs/{job_id}", headers=AUTH).status_code == 204
+    assert client.get(f"/v1/parse/jobs/{job_id}", headers=AUTH).status_code == 404
+    assert client.delete(f"/v1/parse/jobs/{job_id}", headers=AUTH).status_code == 404
+
+
+def test_get_reports_queued_or_running_before_the_job_finishes(make_client, gate):
+    client = make_client(StubConverter(gate_path=str(gate)))
+    job_id = post_job(client).json()["job_id"]
+
+    body = client.get(f"/v1/parse/jobs/{job_id}", headers=AUTH).json()
+
+    assert ParseJobState.model_validate(body).status in ("queued", "running")
+    gate.touch()
+    assert poll_state(client, job_id)["status"] == "succeeded"
+
+
+def test_get_unknown_or_malformed_job_id_is_404_with_a_sidecar_error(make_client):
+    client = make_client(StubConverter())
+
+    for job_id in (UNKNOWN_JOB, "not-a-uuid", "..%2F..%2Fetc"):
+        response = client.get(f"/v1/parse/jobs/{job_id}", headers=AUTH)
+        assert response.status_code == 404, job_id
+        assert SidecarError.model_validate(response.json()).error == "job_not_found"
+
+
+@pytest.mark.parametrize(
+    "variant",
+    ["bad_profile", "not_json", "unknown_field", "missing_request", "missing_file", "empty_file"],
+)
+def test_post_rejects_an_invalid_upload_with_422_and_a_sidecar_error(make_client, variant):
+    client = make_client(StubConverter())
+    options = {
+        "bad_profile": {"request_json": make_request().model_dump_json().replace("general@1", "General")},
+        "not_json": {"request_json": "{nope"},
+        "unknown_field": {"request_json": make_request().model_dump_json()[:-1] + ',"extra":1}'},
+        "missing_request": {"parts": ("file",)},
+        "missing_file": {"parts": ("request",)},
+        "empty_file": {"file_bytes": b""},
+    }[variant]
+
+    response = post_job(client, **options)
+
+    assert response.status_code == 422
+    assert SidecarError.model_validate(response.json()).error == "invalid_parse_request"
+    assert list(client.app.state.parse_runner.root.iterdir()) == []
+
+
+def test_post_with_a_non_multipart_body_is_422(make_client):
+    client = make_client(StubConverter())
+
+    response = client.post("/v1/parse/jobs", content=b"{}", headers={**AUTH, "content-type": "application/json"})
+
+    assert response.status_code == 422
+    assert SidecarError.model_validate(response.json()).error == "invalid_parse_request"
+
+
+def test_post_upload_over_the_limit_is_413_and_leaves_no_files(make_client):
+    client = make_client(StubConverter(), max_upload_mb=1)
+
+    response = post_job(client, file_bytes=b"x" * (MIB + 1))
+
+    assert response.status_code == 413
+    assert SidecarError.model_validate(response.json()).error == "upload_too_large"
+    assert list(client.app.state.parse_runner.root.iterdir()) == []
+
+
+def test_post_declared_size_far_above_the_limit_is_rejected_before_reading(make_client):
+    client = make_client(StubConverter(), max_upload_mb=1)
+
+    response = post_job(client, file_bytes=b"x" * (3 * MIB))
+
+    assert response.status_code == 413
+
+
+def test_post_upload_at_exactly_the_limit_is_accepted(make_client):
+    client = make_client(StubConverter(), max_upload_mb=1)
+
+    assert post_job(client, file_bytes=b"x" * MIB).status_code == 202
+
+
+def test_post_with_a_full_queue_is_429_with_retry_after(make_client, gate):
+    client = make_client(StubConverter(gate_path=str(gate)), parse_workers=1, parse_queue=0)
+    assert post_job(client).status_code == 202
+
+    response = post_job(client)
+
+    assert response.status_code == 429
+    assert int(response.headers["retry-after"]) >= 1
+    assert SidecarError.model_validate(response.json()).error == "parse_queue_full"
+
+
+def test_post_never_names_files_after_the_uploaded_filename(make_client):
+    client = make_client(StubConverter())
+    job_id = post_job(client, filename="../../evil name.pdf").json()["job_id"]
+    poll_state(client, job_id)
+
+    names = [path.name for path in client.app.state.parse_runner.root.rglob("*")]
+    assert names and all("evil" not in name for name in names)
+
+
+def test_get_artifact_returns_the_bytes_with_a_content_type(make_client):
+    client = make_client(StubConverter(artifacts={"picture-1.png": b"png-bytes", "docling.json": b"{}"}, unlisted={"x.png": b"no"}))
+    job_id = post_job(client).json()["job_id"]
+    poll_state(client, job_id)
+
+    picture = client.get(f"/v1/parse/jobs/{job_id}/artifacts/picture-1.png", headers=AUTH)
+    document = client.get(f"/v1/parse/jobs/{job_id}/artifacts/docling.json", headers=AUTH)
+
+    assert picture.status_code == 200 and picture.content == b"png-bytes"
+    assert picture.headers["content-type"] == "image/png"
+    assert document.headers["content-type"].startswith("application/json")
+    for name in ("x.png", "result.json", "missing.png", "PICTURE.png", ".hidden"):
+        response = client.get(f"/v1/parse/jobs/{job_id}/artifacts/{name}", headers=AUTH)
+        assert response.status_code == 404, name
+        assert SidecarError.model_validate(response.json()).error == "artifact_not_found"
+    assert client.get(f"/v1/parse/jobs/{UNKNOWN_JOB}/artifacts/picture-1.png", headers=AUTH).status_code == 404
+
+
+def test_failed_job_state_carries_the_error_class_and_no_message(make_client):
+    client = make_client(StubConverter(raises=ValueError, message="private page text"))
+    job_id = post_job(client).json()["job_id"]
+
+    body = poll_state(client, job_id)
+
+    assert ParseJobState.model_validate(body).error_class == "value_error"
+    assert "private" not in str(body)
+
+
+def test_poll_after_the_ttl_reads_expired_not_404(make_client):
+    client = make_client(StubConverter(), parse_ttl_seconds=1)
+    job_id = post_job(client).json()["job_id"]
+    poll_state(client, job_id, wanted=("succeeded",))
+
+    body = poll_state(client, job_id, wanted=("expired",))
+
+    assert ParseJobState.model_validate(body).status == "expired"
+
+
+def test_parse_routes_answer_503_docling_unavailable_without_a_converter(make_client):
+    client = make_client(None)
+
+    created = post_job(client)
+    polled = client.get(f"/v1/parse/jobs/{UNKNOWN_JOB}", headers=AUTH)
+    fetched = client.get(f"/v1/parse/jobs/{UNKNOWN_JOB}/artifacts/picture-1.png", headers=AUTH)
+    deleted = client.delete(f"/v1/parse/jobs/{UNKNOWN_JOB}", headers=AUTH)
+
+    for response in (created, polled, fetched, deleted):
+        assert response.status_code == 503
+        assert SidecarError.model_validate(response.json()).error == "docling_unavailable"
+
+
+def test_health_answers_while_a_slow_job_runs(make_client):
+    client = make_client(StubConverter(delay_seconds=2.0))
+    job_id = post_job(client).json().get("job_id")
+    wait_until(lambda: client.get(f"/v1/parse/jobs/{job_id}", headers=AUTH).json().get("status") == "running")
+
+    started = time.monotonic()
+    response = client.get("/health")
+    elapsed = time.monotonic() - started
+
+    assert response.status_code == 200
+    assert elapsed < 1.0
+    assert client.get(f"/v1/parse/jobs/{job_id}", headers=AUTH).json()["status"] == "running"
+
+
+def test_contracts_schema_version_is_incremented(make_client):
+    client = make_client(StubConverter())
+
+    info = SidecarInfo.model_validate(client.get("/v1/info", headers=AUTH).json())
+
+    assert CONTRACTS_SCHEMA_VERSION == 2
+    assert info.contracts_schema_version == 2
+
+
+def fake_docling(monkeypatch):
+    class FakeDoclingConverter:
+        def convert(self, input_path, request, out_dir):
+            return stub_result()
+
+    adapter = types.ModuleType("rag_sidecar.parse.docling_adapter")
+    adapter.DoclingConverter = FakeDoclingConverter
+    monkeypatch.setitem(sys.modules, "docling", types.ModuleType("docling"))
+    monkeypatch.setitem(sys.modules, "rag_sidecar.parse.docling_adapter", adapter)
+
+
+def test_ready_is_503_docling_artifacts_missing_when_docling_is_installed_without_its_models(make_client, monkeypatch, tmp_path):
+    fake_docling(monkeypatch)
+
+    unset = make_client(None).get("/ready")
+    absent = make_client(None, docling_artifacts=str(tmp_path / "missing")).get("/ready")
+
+    for response in (unset, absent):
+        assert response.status_code == 503
+        ready = SidecarReady.model_validate(response.json())
+        assert ready.status == "not_ready" and ready.reason == "docling_artifacts_missing"
+
+
+def test_ready_is_200_when_the_docling_artifacts_directory_exists(make_client, monkeypatch, tmp_path):
+    fake_docling(monkeypatch)
+
+    response = make_client(None, docling_artifacts=str(tmp_path)).get("/ready")
+
+    assert response.status_code == 200
+    assert SidecarReady.model_validate(response.json()).status == "ready"
+
+
+def test_ready_is_unchanged_without_docling_or_with_an_injected_converter(make_client, monkeypatch):
+    assert make_client(None).get("/ready").status_code == 200
+    fake_docling(monkeypatch)
+    assert make_client(StubConverter()).get("/ready").status_code == 200
+
+
+def multipart_stream(chunks):
+    async def generate():
+        for chunk in chunks:
+            yield chunk
+
+    return generate()
+
+
+def multipart_body(file_payload: bytes, request_payload: bytes = b"{}") -> bytes:
+    boundary = b"BOUNDARY"
+    return (
+        b"--BOUNDARY\r\nContent-Disposition: form-data; name=\"request\"\r\n\r\n" + request_payload + b"\r\n"
+        b"--BOUNDARY\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a.pdf\"\r\n"
+        b"Content-Type: application/pdf\r\n\r\n" + file_payload + b"\r\n--" + boundary + b"--\r\n"
+    )
+
+
+def test_upload_reader_writes_the_file_part_and_returns_the_request_part(tmp_path):
+    destination = tmp_path / "input.bin"
+    body = multipart_body(b"A" * 5000, b'{"k":1}')
+    chunks = [body[i : i + 700] for i in range(0, len(body), 700)]
+
+    parsed = asyncio.run(read_upload(multipart_stream(chunks), "multipart/form-data; boundary=BOUNDARY", destination, 10_000))
+
+    assert parsed.request_json == b'{"k":1}'
+    assert parsed.file_bytes == 5000
+    assert destination.read_bytes() == b"A" * 5000
+
+
+def test_upload_reader_stops_consuming_once_the_limit_is_passed(tmp_path):
+    destination = tmp_path / "input.bin"
+    consumed = 0
+
+    async def endless():
+        nonlocal consumed
+        yield b"--BOUNDARY\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a\"\r\n\r\n"
+        while True:
+            consumed += 1
+            yield b"B" * 4096
+            if consumed > 1000:
+                return
+
+    with pytest.raises(UploadTooLarge):
+        asyncio.run(read_upload(endless(), "multipart/form-data; boundary=BOUNDARY", destination, 20_000))
+
+    assert consumed < 20
+    assert destination.stat().st_size <= 20_000
+
+
+@pytest.mark.parametrize("content_type", ["application/json", "multipart/form-data", "multipart/form-data; boundary="])
+def test_upload_reader_rejects_a_body_that_is_not_multipart(tmp_path, content_type):
+    with pytest.raises(MalformedUpload):
+        asyncio.run(read_upload(multipart_stream([b"{}"]), content_type, tmp_path / "input.bin", 1000))
+
+
+def test_upload_reader_rejects_a_duplicate_file_part(tmp_path):
+    part = b'--BOUNDARY\r\nContent-Disposition: form-data; name="file"; filename="a"\r\n\r\nxx\r\n'
+    body = part + part + b"--BOUNDARY--\r\n"
+
+    with pytest.raises(MalformedUpload):
+        asyncio.run(read_upload(multipart_stream([body]), "multipart/form-data; boundary=BOUNDARY", tmp_path / "input.bin", 1000))

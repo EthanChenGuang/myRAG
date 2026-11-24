@@ -44,7 +44,7 @@ def test_correct_header_returns_sidecar_info():
     assert response.status_code == 200
     info = SidecarInfo.model_validate(response.json())
     assert info.service == "rag-sidecar"
-    assert info.contracts_schema_version == 1
+    assert info.contracts_schema_version == 2
     assert info.version
 
 

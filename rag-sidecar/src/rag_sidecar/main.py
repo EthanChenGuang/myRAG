@@ -3,12 +3,13 @@ from fastapi.responses import JSONResponse
 
 from rag_sidecar.auth import SharedSecretMiddleware
 from rag_sidecar.contracts import SidecarHealth, SidecarInfo, SidecarReady
+from rag_sidecar.parse.converter import Converter
 from rag_sidecar.settings import SidecarSettings, load_settings
 
 CONTRACTS_SCHEMA_VERSION = 1
 
 
-def create_app(settings: SidecarSettings | None = None) -> FastAPI:
+def create_app(settings: SidecarSettings | None = None, converter: Converter | None = None) -> FastAPI:
     resolved = settings if settings is not None else load_settings()
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     app.add_middleware(SharedSecretMiddleware, settings=resolved)
