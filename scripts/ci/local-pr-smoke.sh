@@ -6,6 +6,7 @@ cd "$ROOT"
 export DEEPEVAL_TELEMETRY_OPT_OUT=1
 export DEEPEVAL_UPDATE_WARNING_OPT_IN=0
 export RAGAS_DO_NOT_TRACK=true
+export COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 
 declare -A STATUS
 declare -A DETAIL
@@ -37,7 +38,7 @@ run_job ts-gen-zod node --test scripts/tests/gen-zod.node-test.mjs
 run_job ts-typecheck-new npm run typecheck:new
 run_job ts-next-typegen npx next typegen
 run_job ts-tsc npx tsc --noEmit -p tsconfig.json
-run_job ts-workflows bash -c 'uv run --directory eval python ../scripts/ci/check-workflows.py && uv run --directory eval python -m unittest discover -s ../scripts/tests -p test_check_workflows.py'
+run_job ts-workflows bash -c 'uv sync --directory eval --locked --all-extras && uv run --directory eval python ../scripts/ci/check-workflows.py && uv run --directory eval python -m unittest discover -s ../scripts/tests -p test_check_workflows.py'
 
 run_job sibling-types bash -c 'npm ci --ignore-scripts --prefix voice-agent && cd baileys-whatsapp && corepack enable && yarn install --immutable --mode=skip-build && cd .. && node scripts/ci/tsc-ratchet.mjs --cwd voice-agent --baseline scripts/ci/sibling-tsc-baseline.json --key voice-agent && node scripts/ci/tsc-ratchet.mjs --cwd baileys-whatsapp --baseline scripts/ci/sibling-tsc-baseline.json --key baileys-whatsapp'
 
