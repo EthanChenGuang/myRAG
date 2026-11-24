@@ -10,6 +10,12 @@ from rag_sidecar.contracts.ingest import (
     DocTypeChoice,
     DocTypeDetection,
     InjectionRuleSet,
+    InvoiceExtractRequest,
+    InvoiceFields,
+    ParseJobAccepted,
+    ParseJobRequest,
+    ParseJobState,
+    ParseResult,
     ProcessingProfile,
     ProcessingProfileSet,
 )
@@ -286,3 +292,305 @@ def test_profile_contracts_are_registered_for_export_with_samples():
 def test_exported_schema_carries_the_length_cap_so_zod_enforces_it_too():
     schema = json.dumps(InjectionRuleSet.model_json_schema(mode="validation"))
     assert '"maxLength": 200' in schema
+
+
+def _docling(**changes):
+    base = {
+        "ocr": True,
+        "force_full_page_ocr": False,
+        "table_mode": "accurate",
+        "heading_hierarchy": True,
+        "generate_picture_images": True,
+    }
+    base.update(changes)
+    return base
+
+
+def _parse_request(**changes):
+    base = {
+        "profile_id": "financial_report@1",
+        "profile_version": 1,
+        "docling": _docling(),
+        "ocr_languages": ["zh", "en", "it"],
+        "tokenizer": "cl100k_base",
+        "max_tokens": 512,
+        "repeat_table_header": True,
+    }
+    base.update(changes)
+    return base
+
+
+def _chunk(**changes):
+    base = {
+        "text": "Revenue grew in the second quarter.",
+        "contextualized_text": "Report > Results\nRevenue grew in the second quarter.",
+        "headings": ["Report", "Results"],
+        "pages": [1],
+        "is_table": False,
+        "table_header": None,
+    }
+    base.update(changes)
+    return base
+
+
+def _table_chunk():
+    return _chunk(
+        text="| Item | Amount |\n| --- | --- |\n| Fees | 10 |",
+        contextualized_text="Report > Tables\n| Item | Amount |\n| --- | --- |\n| Fees | 10 |",
+        headings=["Report", "Tables"],
+        pages=[2, 3],
+        is_table=True,
+        table_header="| Item | Amount |\n| --- | --- |",
+    )
+
+
+def _parse_result(**changes):
+    base = {
+        "markdown": "# Report\n\nRevenue grew in the second quarter.\n",
+        "chunks": [_chunk(), _table_chunk()],
+        "pictures": [{"page": 2, "bbox": [10.0, 20.0, 110.0, 220.0], "image_ref": "picture-1.png", "page_area_share": 0.12}],
+        "page_count": 3,
+        "language": "en",
+        "parser": "docling",
+        "parser_version": "0.0.0-test",
+        "warnings": [],
+        "partial": False,
+        "artifacts": ["docling.json", "picture-1.png"],
+        "text_layer_page_share": 1.0,
+    }
+    base.update(changes)
+    return base
+
+
+def _party(**changes):
+    base = {"name": "Synthetic Supplier Ltd", "tax_id": "91000000MA0000000N", "tax_id_scheme": "cn_uscc"}
+    base.update(changes)
+    return base
+
+
+def _invoice(**changes):
+    base = {
+        "invoice_number": "INV-2026-0001",
+        "issue_date": "2026-01-31",
+        "due_date": "2026-02-28",
+        "supplier": _party(),
+        "buyer": _party(name="Esempio Acquirente S.r.l.", tax_id="99999999990", tax_id_scheme="it_iva"),
+        "currency": "EUR",
+        "net_total": "100.00",
+        "tax_total": "22.00",
+        "gross_total": "122.00",
+        "line_items": [
+            {"description": "Consulting", "quantity": "2", "unit_price": "50.00", "amount": "100.00", "tax_rate": "22"}
+        ],
+        "confidence": 0.9,
+        "errors": [],
+    }
+    base.update(changes)
+    return base
+
+
+def test_parse_job_request_accepts_a_full_request_and_defaults_the_optional_fields():
+    parsed = ParseJobRequest.model_validate(_parse_request())
+    assert parsed.input_format is None and parsed.page_cap is None
+    assert parsed.tokenizer == "cl100k_base"
+    for input_format in ("pdf", "docx", "html", "image", "json_docling"):
+        assert ParseJobRequest.model_validate(_parse_request(input_format=input_format, page_cap=50)).page_cap == 50
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"tokenizer": "p50k_base"},
+        {"input_format": "xlsx"},
+        {"max_tokens": 63},
+        {"max_tokens": 4097},
+        {"page_cap": 0},
+        {"profile_version": 0},
+        {"profile_id": "bad id"},
+        {"ocr_languages": []},
+        {"ocr_languages": ["fr"]},
+        {"docling": _docling(table_mode="slow")},
+        {"rogue": 1},
+    ],
+)
+def test_parse_job_request_rejects_invalid_values(changes):
+    with pytest.raises(ValidationError):
+        ParseJobRequest.model_validate(_parse_request(**changes))
+
+
+def test_parse_job_accepted_is_only_a_safe_job_id():
+    assert ParseJobAccepted.model_validate({"job_id": "job_0123-abc"}).job_id == "job_0123-abc"
+    for bad in ("", "../etc", "a/b", "x" * 65):
+        with pytest.raises(ValidationError):
+            ParseJobAccepted.model_validate({"job_id": bad})
+    with pytest.raises(ValidationError):
+        ParseJobAccepted.model_validate({"job_id": "job-1", "rogue": 1})
+
+
+@pytest.mark.parametrize("status", ["queued", "running", "expired"])
+def test_parse_job_state_without_result_for_non_terminal_states(status):
+    state = ParseJobState.model_validate({"job_id": "job-1", "status": status})
+    assert state.result is None and state.error_class is None
+
+
+def test_parse_job_state_succeeded_carries_the_result_and_failed_carries_an_error_class():
+    done = ParseJobState.model_validate({"job_id": "job-1", "status": "succeeded", "result": _parse_result()})
+    assert done.result is not None and done.result.parser == "docling"
+    failed = ParseJobState.model_validate({"job_id": "job-1", "status": "failed", "error_class": "ocr_failed"})
+    assert failed.error_class == "ocr_failed"
+
+
+@pytest.mark.parametrize(
+    "state",
+    [
+        {"status": "succeeded"},
+        {"status": "succeeded", "result": _parse_result(), "error_class": "ocr_failed"},
+        {"status": "failed"},
+        {"status": "failed", "error_class": "ocr_failed", "result": _parse_result()},
+        {"status": "running", "result": _parse_result()},
+        {"status": "paused"},
+        {"status": "failed", "error_class": "Has Spaces"},
+    ],
+)
+def test_parse_job_state_rejects_inconsistent_states(state):
+    with pytest.raises(ValidationError):
+        ParseJobState.model_validate({"job_id": "job-1", **state})
+
+
+def test_parse_result_round_trips_with_a_table_chunk_that_keeps_its_header_rows():
+    parsed = ParseResult.model_validate(_parse_result())
+    table = parsed.chunks[1]
+    assert table.is_table and table.table_header == "| Item | Amount |\n| --- | --- |"
+    assert table.text.startswith(table.table_header)
+    dumped = parsed.model_dump(mode="json")
+    assert ParseResult.model_validate(dumped) == parsed
+    assert dumped["pictures"][0]["page_area_share"] == 0.12
+
+
+def test_parse_result_defaults_for_the_optional_fields():
+    minimal = _parse_result()
+    for key in ("warnings", "partial", "artifacts", "text_layer_page_share", "language"):
+        del minimal[key]
+    parsed = ParseResult.model_validate(minimal)
+    assert parsed.warnings == [] and parsed.partial is False and parsed.artifacts == []
+    assert parsed.text_layer_page_share is None and parsed.language is None
+    assert {"docling", "llamaparse", "text"} == {
+        ParseResult.model_validate(_parse_result(parser=parser)).parser for parser in ("docling", "llamaparse", "text")
+    }
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"parser": "tesseract"},
+        {"rogue": 1},
+        {"page_count": -1},
+        {"text_layer_page_share": -0.1},
+        {"text_layer_page_share": 1.1},
+        {"artifacts": ["../secret"]},
+        {"artifacts": ["a/b.png"]},
+        {"chunks": [_chunk(rogue=1)]},
+        {"chunks": [_chunk(pages=[0])]},
+        {"chunks": [_chunk(table_header="| a |\n| - |")]},
+        {"pictures": [{"page": 1, "bbox": [1.0, 2.0, 3.0], "image_ref": "p.png", "page_area_share": 0.1}]},
+        {"pictures": [{"page": 0, "bbox": [1.0, 2.0, 3.0, 4.0], "image_ref": "p.png", "page_area_share": 0.1}]},
+        {"pictures": [{"page": 1, "bbox": [1.0, 2.0, 3.0, 4.0], "image_ref": "../p.png", "page_area_share": 0.1}]},
+        {"pictures": [{"page": 1, "bbox": [1.0, 2.0, 3.0, 4.0], "image_ref": "p.png", "page_area_share": 1.5}]},
+    ],
+)
+def test_parse_result_rejects_invalid_values(changes):
+    with pytest.raises(ValidationError):
+        ParseResult.model_validate(_parse_result(**changes))
+
+
+def test_invoice_extract_request_takes_markdown_tables_and_an_optional_language_hint():
+    parsed = InvoiceExtractRequest.model_validate({"markdown": "Fattura n. 1", "tables": ["| a |\n| - |"]})
+    assert parsed.language_hint is None and parsed.tables == ["| a |\n| - |"]
+    assert InvoiceExtractRequest.model_validate({"markdown": "发票", "language_hint": "zh"}).tables == []
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        {"markdown": ""},
+        {"markdown": "x", "language_hint": "fr"},
+        {"markdown": "x", "tables": [1]},
+        {"markdown": "x", "rogue": 1},
+        {"tables": []},
+    ],
+)
+def test_invoice_extract_request_rejects_invalid_values(data):
+    with pytest.raises(ValidationError):
+        InvoiceExtractRequest.model_validate(data)
+
+
+def test_invoice_fields_round_trip_with_decimal_strings_and_both_tax_schemes():
+    parsed = InvoiceFields.model_validate(_invoice())
+    assert parsed.supplier.tax_id_scheme == "cn_uscc" and parsed.buyer.tax_id_scheme == "it_iva"
+    dumped = parsed.model_dump(mode="json")
+    assert dumped["issue_date"] == "2026-01-31" and dumped["gross_total"] == "122.00"
+    assert InvoiceFields.model_validate(dumped) == parsed
+
+
+def test_invoice_fields_allow_every_field_to_be_missing_but_the_confidence():
+    empty = InvoiceFields.model_validate({"confidence": 0.0})
+    assert empty.invoice_number is None and empty.issue_date is None and empty.currency is None
+    assert empty.supplier.tax_id_scheme == "unknown" and empty.buyer.name is None
+    assert empty.line_items == [] and empty.errors == []
+
+
+@pytest.mark.parametrize("amount", ["-12.5", "1200", "1200.0000", "0"])
+def test_invoice_amounts_accept_plain_decimal_strings(amount):
+    assert InvoiceFields.model_validate(_invoice(gross_total=amount)).gross_total == amount
+
+
+@pytest.mark.parametrize("amount", ["1,200.00", "12.34567", "1e3", " 5", "", 12.5, 12])
+def test_invoice_amounts_reject_everything_else(amount):
+    with pytest.raises(ValidationError):
+        InvoiceFields.model_validate(_invoice(gross_total=amount))
+    with pytest.raises(ValidationError):
+        InvoiceFields.model_validate(
+            _invoice(line_items=[{"description": "x", "quantity": "1", "unit_price": amount, "amount": "1", "tax_rate": None}])
+        )
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"currency": "eur"},
+        {"currency": "EURO"},
+        {"issue_date": "2026-02-30"},
+        {"issue_date": "31/01/2026"},
+        {"due_date": "2026-13-01"},
+        {"supplier": _party(tax_id_scheme="us_ein")},
+        {"confidence": 1.5},
+        {"confidence": -0.1},
+        {"rogue": 1},
+        {"line_items": [{"description": "x", "rogue": 1}]},
+    ],
+)
+def test_invoice_fields_reject_invalid_values(changes):
+    with pytest.raises(ValidationError):
+        InvoiceFields.model_validate(_invoice(**changes))
+
+
+def test_wire_contracts_are_registered_with_the_right_export_mode_and_synthetic_samples():
+    modes = {model.__name__: mode for model, mode in CONTRACTS}
+    expected = {
+        "ParseJobRequest": "validation",
+        "InvoiceExtractRequest": "validation",
+        "ParseJobAccepted": "serialization",
+        "ParseJobState": "serialization",
+        "ParseResult": "serialization",
+        "InvoiceFields": "serialization",
+    }
+    for name, mode in expected.items():
+        assert modes.get(name) == mode, name
+    built = build_samples()["samples"]
+    for name in expected:
+        assert name in built, name
+    result = ParseResult.model_validate(built["ParseResult"])
+    assert len(result.chunks) == 2 and [chunk.is_table for chunk in result.chunks] == [False, True]
+    assert result.chunks[1].table_header is not None and result.chunks[1].text.startswith(result.chunks[1].table_header)
+    invoice = InvoiceFields.model_validate(built["InvoiceFields"])
+    assert {invoice.supplier.tax_id, invoice.buyer.tax_id} == {"91000000MA0000000N", "99999999990"}

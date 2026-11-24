@@ -194,3 +194,91 @@ class DocTypeDetection(_Contract):
     confidence: float = Field(ge=0, le=1)
     signals: list[str]
     method: DetectionMethod
+
+
+class ParseJobRequest(_Contract):
+    profile_id: str
+    profile_version: int
+    docling: DoclingOptions
+    ocr_languages: list[str]
+    tokenizer: str = "cl100k_base"
+    max_tokens: int
+    repeat_table_header: bool
+    input_format: str | None = None
+    page_cap: int | None = None
+
+
+class ParseJobAccepted(_Contract):
+    job_id: str
+
+
+class ParseChunk(_Contract):
+    text: str
+    contextualized_text: str
+    headings: list[str]
+    pages: list[int]
+    is_table: bool
+    table_header: str | None = None
+
+
+class ParsePicture(_Contract):
+    page: int
+    bbox: list[float]
+    image_ref: str
+    page_area_share: float
+
+
+class ParseResult(_Contract):
+    markdown: str
+    chunks: list[ParseChunk]
+    pictures: list[ParsePicture]
+    page_count: int
+    language: str | None = None
+    parser: str
+    parser_version: str
+    warnings: list[str] = []
+    partial: bool = False
+    artifacts: list[str] = []
+    text_layer_page_share: float | None = None
+
+
+class ParseJobState(_Contract):
+    job_id: str
+    status: str
+    result: ParseResult | None = None
+    error_class: str | None = None
+
+
+class InvoiceExtractRequest(_Contract):
+    markdown: str
+    tables: list[str] = []
+    language_hint: str | None = None
+
+
+class InvoiceParty(_Contract):
+    name: str | None = None
+    tax_id: str | None = None
+    tax_id_scheme: str = "unknown"
+
+
+class InvoiceLineItem(_Contract):
+    description: str
+    quantity: str | None = None
+    unit_price: str | None = None
+    amount: str | None = None
+    tax_rate: str | None = None
+
+
+class InvoiceFields(_Contract):
+    invoice_number: str | None = None
+    issue_date: str | None = None
+    due_date: str | None = None
+    supplier: InvoiceParty = InvoiceParty()
+    buyer: InvoiceParty = InvoiceParty()
+    currency: str | None = None
+    net_total: str | None = None
+    tax_total: str | None = None
+    gross_total: str | None = None
+    line_items: list[InvoiceLineItem] = []
+    confidence: float
+    errors: list[str] = []
