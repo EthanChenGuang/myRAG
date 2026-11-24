@@ -535,6 +535,89 @@ describe('listSource manifest', () => {
   });
 });
 
+describe('listSource explicit root and hidden paths', () => {
+  let base = '';
+  let root = '';
+
+  beforeEach(async () => {
+    base = await mkdtemp(path.join(os.tmpdir(), 'backfill-root-'));
+    root = path.join(base, 'root');
+    await mkdir(path.join(root, '.git'), { recursive: true });
+    await mkdir(path.join(root, 'sub', '.cache'), { recursive: true });
+    await writeFile(path.join(root, 'ok.pdf'), '%PDF-1.4');
+    await writeFile(path.join(root, 'sub', 'in.txt'), 'in');
+    await writeFile(path.join(root, '.env.local'), 'SECRET=1');
+    await writeFile(path.join(root, '.git', 'config'), 'cfg');
+    await writeFile(path.join(root, 'sub', '.cache', 'x.txt'), 'x');
+    await writeFile(path.join(root, 'sub', '.hidden.txt'), 'h');
+    await writeFile(path.join(base, 'neighbor.txt'), 'next to the manifest, outside the root');
+  });
+
+  afterEach(async () => {
+    await rm(base, { recursive: true, force: true });
+  });
+
+  async function manifestAt(dir: string, lines: unknown[]): Promise<string> {
+    const file = path.join(dir, 'manifest.jsonl');
+    await writeFile(file, `${lines.map((l) => JSON.stringify(l)).join('\n')}\n`);
+    return file;
+  }
+
+  test('a manifest source needs an explicit root: none, empty and a missing directory are refused', async () => {
+    const ref = await manifestAt(base, [{ source_key: 'one', path: 'root/ok.pdf' }]);
+    await expect(drain({ kind: 'manifest', ref })).rejects.toMatchObject({ reason: 'manifest_root_required' });
+    await expect(drain({ kind: 'manifest', ref, root: '' })).rejects.toMatchObject({ reason: 'manifest_root_required' });
+    await expect(drain({ kind: 'manifest', ref, root: path.join(base, 'nope') })).rejects.toMatchObject({ reason: 'manifest_root_required' });
+  });
+
+  test('manifest paths resolve under the explicit root, not the manifest directory, and absolute paths are refused', async () => {
+    const ref = await manifestAt(base, [
+      { source_key: 'under-root', path: 'ok.pdf' },
+      { source_key: 'next-to-manifest', path: 'neighbor.txt' },
+      { source_key: 'up', path: '../neighbor.txt' },
+      { source_key: 'absolute-inside', path: path.join(root, 'ok.pdf') },
+      { source_key: 'absolute-outside', path: path.join(base, 'neighbor.txt') },
+    ]);
+    const { items, reasons } = await drain({ kind: 'manifest', ref, root });
+    expect(items.map((i) => i.sourceKey)).toEqual(['under-root']);
+    expect(reasons).toEqual(['path_unreadable', 'outside_root', 'path_absolute', 'path_absolute']);
+  });
+
+  test('manifest paths with a component starting with a dot are refused, also through a visible symlink and after open', async () => {
+    await symlink(path.join(root, '.env.local'), path.join(root, 'innocent.txt'));
+    const ref = await manifestAt(base, [
+      { source_key: 'env', path: '.env.local' },
+      { source_key: 'git', path: '.git/config' },
+      { source_key: 'nested-dir', path: 'sub/.cache/x.txt' },
+      { source_key: 'nested-file', path: 'sub/.hidden.txt' },
+      { source_key: 'dot-segment', path: './ok.pdf' },
+      { source_key: 'link', path: 'innocent.txt' },
+      { source_key: 'fine', path: 'sub/in.txt' },
+    ]);
+    const { items, reasons } = await drain({ kind: 'manifest', ref, root });
+    expect(items.map((i) => i.sourceKey)).toEqual(['fine']);
+    expect(reasons).toEqual(['hidden_path', 'hidden_path', 'hidden_path', 'hidden_path', 'hidden_path', 'hidden_path']);
+    await rm(path.join(root, 'sub', 'in.txt'));
+    await symlink(path.join(root, '.env.local'), path.join(root, 'sub', 'in.txt'));
+    await expect((items[0] as SourceItem).open()).rejects.toMatchObject({ reason: 'hidden_path' });
+  });
+
+  test('a manifest stored inside the root does not widen it: the root alone decides', async () => {
+    const ref = await manifestAt(root, [{ source_key: 'env', path: '.env.local' }, { source_key: 'ok', path: 'ok.pdf' }]);
+    const { items, reasons } = await drain({ kind: 'manifest', ref, root });
+    expect(items.map((i) => i.sourceKey)).toEqual(['ok']);
+    expect(reasons).toEqual(['hidden_path']);
+  });
+
+  test('a folder source skips dotfiles and dot directories (.env.local, .git/) and a symlink to one', async () => {
+    await symlink(path.join(root, '.env.local'), path.join(root, 'innocent.txt'));
+    const { items, reasons } = await drain({ kind: 'folder', ref: root });
+    expect(items.map((i) => i.sourceKey)).toEqual(['ok.pdf', 'sub/in.txt']);
+    expect(reasons.length).toBeGreaterThanOrEqual(4);
+    expect(new Set(reasons)).toEqual(new Set(['hidden_path']));
+  });
+});
+
 describe('listSource bucket', () => {
   const SCOPE_SINGLE = mintScope('single', null, null);
   const SCOPE_A = mintScope('personal', USER_A, null);
