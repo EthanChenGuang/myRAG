@@ -77,6 +77,11 @@ async function embedWithProfile(
  * mismatch fails every request without a provider call. An unreadable registry throws ProfileUnavailableError; it never falls back
  * to the legacy profile.
  */
+/** Eval-only: embed with an explicit profile, bypassing the active pointer and startup mismatch gate. */
+export async function embedQueryForEvalProfile(text: string, signal: AbortSignal, profile: EmbeddingProfile): Promise<QueryEmbedding> {
+  return embedWithProfile(text, signal, profile, getRagDeps());
+}
+
 export async function embedQuery(text: string, signal: AbortSignal): Promise<QueryEmbedding> {
   const deps = getRagDeps();
   if (!isEmbeddingProfilesEnabled()) return { vector: await deps.embedder(text, { signal }), profile: null };

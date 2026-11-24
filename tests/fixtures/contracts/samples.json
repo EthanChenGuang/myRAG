@@ -46,6 +46,7 @@
       "request_options": {
         "degrade": null,
         "disabled_stages": null,
+        "embedding_profile": null,
         "generator_model": null,
         "max_results": 10,
         "organization_id": null,
@@ -406,6 +407,7 @@
       "request_options": {
         "degrade": null,
         "disabled_stages": null,
+        "embedding_profile": null,
         "generator_model": null,
         "max_results": 10,
         "organization_id": null,
@@ -1082,6 +1084,7 @@
       "options": {
         "degrade": "drop_top_candidate",
         "disabled_stages": null,
+        "embedding_profile": null,
         "generator_model": "generator/model-b",
         "max_results": 10,
         "organization_id": null,
@@ -1215,6 +1218,7 @@
         "source_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "version": "1"
       },
+      "embedding_profile": null,
       "git_sha": null,
       "golden_filter": {
         "gate_split": "dev",
@@ -1228,6 +1232,7 @@
       "request_options": {
         "degrade": null,
         "disabled_stages": null,
+        "embedding_profile": null,
         "generator_model": null,
         "max_results": 10,
         "organization_id": null,

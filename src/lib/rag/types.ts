@@ -96,6 +96,8 @@ export interface RetrievalOptions {
   mediaKind?: 'image' | 'video';
   generalOverview?: boolean;
   degrade?: 'drop_top_candidate';
+  /** Eval profile only: embed and search a specific embedding profile (non-active allowed). */
+  embeddingProfile?: string;
 }
 
 export interface StageOverrides {

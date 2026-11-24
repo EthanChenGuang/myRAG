@@ -214,6 +214,53 @@ function createHandlers(db: PGlite, calls: FakeEdgeCall[], extras: { documentFil
     return value;
   }
 
+  function vendorEmbeddings(kind: 'voyage' | 'deepinfra' | 'openrouter', body: Record<string, unknown>): { payload: unknown } {
+    const { input, model, output_dimension: outputDimension, input_type: inputType } = body;
+    const inputs = typeof input === 'string' ? [input] : input;
+    if (!Array.isArray(inputs) || inputs.length === 0 || !inputs.every((x) => typeof x === 'string')) {
+      throw new Rejection(400, 'input must be a string or an array of strings');
+    }
+    const path =
+      kind === 'voyage'
+        ? '/voyage/v1/embeddings'
+        : kind === 'deepinfra'
+          ? '/deepinfra/v1/openai/embeddings'
+          : '/openrouter/api/v1/embeddings';
+    const voyageDims = kind === 'voyage' ? Number(outputDimension ?? 1024) : null;
+    const qwenDims =
+      kind === 'voyage'
+        ? null
+        : String(model).includes('Qwen') || String(model).includes('qwen')
+          ? 4096
+          : 1536;
+    const size = voyageDims ?? qwenDims ?? 1536;
+    calls.push({
+      method: 'POST',
+      path,
+      model: typeof model === 'string' ? model : undefined,
+    });
+    const data = inputs.map((text: string, index: number) => {
+      const vec = embedText(text, size);
+      return { object: 'embedding', index, embedding: vec };
+    });
+    const tokens = inputs.reduce((sum: number, text: string) => sum + Math.ceil(text.length / 4), 0);
+    const responseModel =
+      kind === 'voyage'
+        ? 'voyage-4-large'
+        : typeof model === 'string'
+          ? model
+          : 'fixture-qwen';
+    const payload: Record<string, unknown> = {
+      object: 'list',
+      data,
+      model: responseModel,
+      usage: { prompt_tokens: tokens, total_tokens: tokens },
+    };
+    if (kind === 'voyage' && inputType !== undefined) payload.input_type = inputType;
+    if (kind === 'voyage' && outputDimension !== undefined) payload.output_dimension = outputDimension;
+    return { payload };
+  }
+
   function embeddings(body: Record<string, unknown>): { payload: unknown } {
     const { input, model, encoding_format: encodingFormat, dimensions } = body;
     if (dimensions !== undefined && dimensions !== 1536) throw new Rejection(400, 'only 1536 dimensions are supported');
@@ -383,7 +430,7 @@ function createHandlers(db: PGlite, calls: FakeEdgeCall[], extras: { documentFil
     return { status: 200, payload: rows[0] };
   }
 
-  return { embeddings, rpc, read };
+  return { embeddings, vendorEmbeddings, rpc, read };
 }
 
 export interface FakeEdgeOptions {
@@ -425,6 +472,18 @@ export async function startFakeEdge(options: FakeEdgeOptions): Promise<FakeEdge>
       if (pathname === '/v1/embeddings') {
         if (method !== 'POST') throw new Rejection(405, `unsupported method ${method} for ${pathname}`);
         const { payload } = handlers.embeddings(parseJsonObject(await readBody(req)));
+        send(res, 200, payload);
+      } else if (pathname === '/voyage/v1/embeddings') {
+        if (method !== 'POST') throw new Rejection(405, `unsupported method ${method} for ${pathname}`);
+        const { payload } = handlers.vendorEmbeddings('voyage', parseJsonObject(await readBody(req)));
+        send(res, 200, payload);
+      } else if (pathname === '/deepinfra/v1/openai/embeddings') {
+        if (method !== 'POST') throw new Rejection(405, `unsupported method ${method} for ${pathname}`);
+        const { payload } = handlers.vendorEmbeddings('deepinfra', parseJsonObject(await readBody(req)));
+        send(res, 200, payload);
+      } else if (pathname === '/openrouter/api/v1/embeddings') {
+        if (method !== 'POST') throw new Rejection(405, `unsupported method ${method} for ${pathname}`);
+        const { payload } = handlers.vendorEmbeddings('openrouter', parseJsonObject(await readBody(req)));
         send(res, 200, payload);
       } else if (rpcMatch) {
         if (method !== 'POST') throw new Rejection(405, `unsupported method ${method} for ${pathname}`);
@@ -468,13 +527,20 @@ export async function startFakeEdge(options: FakeEdgeOptions): Promise<FakeEdge>
   };
 }
 
-export function fixtureProcessEnv(edgeUrl: string): Record<string, string> {
-  return {
+export function fixtureProcessEnv(edgeUrl: string, options?: { vendorEmbeddingRoutes?: boolean }): Record<string, string> {
+  const env: Record<string, string> = {
     NEXT_PUBLIC_SUPABASE_URL: edgeUrl,
     OPENAI_BASE_URL: `${edgeUrl}/v1`,
     OPENAI_API_KEY: 'sk-fixture-placeholder-key-0000000000',
     OPENROUTER_API_KEY: 'sk-or-abcdefghijklmnopqrstuvwxyzabcdef',
     NEXT_PUBLIC_SUPABASE_ANON_KEY: 'fixture-anon-key-placeholder',
     SUPABASE_SERVICE_ROLE_KEY: 'fixture-service-role-key-placeholder',
+    VOYAGE_API_KEY: 'voyage-fixture-placeholder-key-00000000',
+    DEEPINFRA_API_KEY: 'deepinfra-fixture-placeholder-key-00',
   };
+  if (options?.vendorEmbeddingRoutes) {
+    env.VOYAGE_BASE_URL = `${edgeUrl}/voyage/v1`;
+    env.DEEPINFRA_BASE_URL = `${edgeUrl}/deepinfra/v1/openai`;
+  }
+  return env;
 }

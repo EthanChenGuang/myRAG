@@ -2,7 +2,7 @@
   "corpus_sha256": "dd161ceaab5f54f750a7e201e7fb47bac6a1792871e41614b99340e2a0ba4c11",
   "deployment_mode": "single-tenant",
   "embedder_id": "fixture-ngram",
-  "embedder_source_sha256": "c02cb693ac0518b75b17548283efe9dae572801c23d0fe45a7665b22bc2a6647",
+  "embedder_source_sha256": "569156a98ef50469ce7ada4e6ee3c1c22182035c7ce6aa46b8d0bc5b200fc7ad",
   "embedder_version": 1,
   "gate_population": "all",
   "golden_filter": {

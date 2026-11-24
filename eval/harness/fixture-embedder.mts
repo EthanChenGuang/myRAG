@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 export const EMBEDDER_ID = 'fixture-ngram';
 export const EMBEDDER_VERSION = 1;
 
-const DIMENSIONS = 1536;
+const DEFAULT_DIMENSIONS = 1536;
 const WORD_WEIGHT = 1.0;
 const TRIGRAM_WEIGHT = 0.3;
 const HAN_UNIGRAM_WEIGHT = 0.5;
@@ -31,12 +31,13 @@ const HAN_RE = /^\p{Script=Han}+$/u;
 
 const hashCache = new Map<string, [number, number]>();
 
-function bucketAndSign(feature: string): [number, number] {
-  const cached = hashCache.get(feature);
+function bucketAndSign(feature: string, dimensions: number): [number, number] {
+  const cacheKey = `${dimensions}\0${feature}`;
+  const cached = hashCache.get(cacheKey);
   if (cached) return cached;
   const digest = crypto.createHash('sha256').update(feature).digest();
-  const result: [number, number] = [digest.readUInt32BE(0) % DIMENSIONS, (digest[4] & 1) === 0 ? 1 : -1];
-  hashCache.set(feature, result);
+  const result: [number, number] = [digest.readUInt32BE(0) % dimensions, (digest[4] & 1) === 0 ? 1 : -1];
+  hashCache.set(cacheKey, result);
   return result;
 }
 
@@ -71,10 +72,11 @@ function collectFeatures(text: string): Map<string, number> {
   return features;
 }
 
-export function embedText(text: string): number[] {
-  const vector = new Array<number>(DIMENSIONS).fill(0);
+export function embedText(text: string, dims: number = DEFAULT_DIMENSIONS): number[] {
+  if (!Number.isInteger(dims) || dims < 1) throw new Error(`embedText dims must be a positive integer, got ${dims}`);
+  const vector = new Array<number>(dims).fill(0);
   for (const [feature, weight] of collectFeatures(text)) {
-    const [bucket, sign] = bucketAndSign(feature);
+    const [bucket, sign] = bucketAndSign(feature, dims);
     vector[bucket] += sign * weight;
   }
   const norm = Math.sqrt(vector.reduce((sum, x) => sum + x * x, 0));

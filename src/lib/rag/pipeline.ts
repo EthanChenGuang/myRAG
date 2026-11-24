@@ -29,7 +29,8 @@ import {
 } from './context/overview';
 import { assembleVoiceResults, enrichVoiceCandidates, type VoiceResults } from './context/voice';
 import { getRagDeps, type RagDeps } from './deps';
-import { classifyProfileFailure, embedQuery, withStaleProfileRetry } from './embeddings/query-embedding';
+import { getEmbeddingProfileById } from './embeddings/active-profile';
+import { classifyProfileFailure, embedQuery, embedQueryForEvalProfile, withStaleProfileRetry } from './embeddings/query-embedding';
 import { legacyAnalyze, legacyRank, legacySearch, scaleThreshold, searchThresholdsFor } from './legacy/enhanced-retrieval';
 import { defaultQueryContext } from './query/temporal-query-detector';
 import { resolveDocumentRefs } from './refs/resolve';
@@ -469,6 +470,16 @@ async function runOverviewPipeline(
   return { ...failure(collector, status, reason, null), candidates, context: overview.context, usedDocuments: overview.usedDocuments };
 }
 
+function evalEmbeddingProfileId(input: RunRetrievalInput): string | undefined {
+  return input.profile === 'eval' ? input.options?.embeddingProfile : undefined;
+}
+
+async function embedForRetrieval(input: RunRetrievalInput, signal: AbortSignal) {
+  const profileId = evalEmbeddingProfileId(input);
+  if (profileId) return embedQueryForEvalProfile(input.query, signal, await getEmbeddingProfileById(profileId));
+  return embedQuery(input.query, signal);
+}
+
 export async function runRetrieval(input: RunRetrievalInput): Promise<RetrievalResult> {
   if (input.scope !== null) assertTenantScope(input.scope);
 
@@ -512,8 +523,9 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
     const analysed = analysis.skipped ? defaultQueryContext() : analysis.value;
     queryContext = analysed;
 
+    const evalProfileId = evalEmbeddingProfileId(input);
     const embedding = requireValue(
-      await runStage(spec('embed', 'throw'), signal, (stageSignal) => embedQuery(input.query, stageSignal), collector, {
+      await runStage(spec('embed', 'throw'), signal, (stageSignal) => embedForRetrieval(input, stageSignal), collector, {
         detail: (value) => value.profile?.id,
       }),
       'embed',
@@ -523,8 +535,8 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
       await runStage(
         spec('search', 'throw'),
         signal,
-        (stageSignal) =>
-          withStaleProfileRetry(input.query, embedding, stageSignal, (current) =>
+        (stageSignal) => {
+          const runSearch = (current: typeof embedding) =>
             legacySearch({
               query: input.query,
               embedding: current.vector,
@@ -535,8 +547,10 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
               scope,
               client: requireAdminSearchClient(deps),
               signal: stageSignal,
-            }),
-          ),
+              profileRequireActive: evalProfileId ? false : undefined,
+            });
+          return evalProfileId ? runSearch(embedding) : withStaleProfileRetry(input.query, embedding, stageSignal, runSearch);
+        },
         collector,
         { candidatesOut: (value) => value.results.length, detail: (value) => value.retrievalStrategy },
       ),

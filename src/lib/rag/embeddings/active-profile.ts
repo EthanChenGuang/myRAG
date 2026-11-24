@@ -1,5 +1,5 @@
 import { env } from '@/lib/env';
-import type { RpcClient } from '../backend/supabase-rpc';
+import { EmbeddingProfileMismatchError, type RpcClient } from '../backend/supabase-rpc';
 import { getRagDeps } from '../deps';
 import { getIngestDeps } from '../ingest/deps';
 import { loadIngestConfig } from '../ingest/config';
@@ -228,6 +228,16 @@ export async function listEmbeddingProfiles(): Promise<EmbeddingProfile[]> {
 export async function getActiveProfile(): Promise<EmbeddingProfile> {
   if (!isEmbeddingProfilesEnabled()) return LEGACY_PROFILE;
   return (await snapshot()).active;
+}
+
+/** Resolves a profile by id from the registry. Used by the eval route to measure a non-active profile. */
+export async function getEmbeddingProfileById(id: string): Promise<EmbeddingProfile> {
+  if (!isEmbeddingProfilesEnabled()) {
+    throw new EmbeddingProfileMismatchError('unknown_profile', { profile: id });
+  }
+  const found = (await snapshot()).profiles.find((profile) => profile.id === id);
+  if (!found) throw new EmbeddingProfileMismatchError('unknown_profile', { profile: id });
+  return found;
 }
 
 /** Drops the cache and reads the pointer again. */

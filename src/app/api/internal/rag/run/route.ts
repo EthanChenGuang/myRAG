@@ -72,6 +72,7 @@ export async function POST(req: NextRequest) {
         ragMode,
         webSearchEnabled: false,
         ...(options?.degrade ? { degrade: options.degrade } : {}),
+        ...(options?.embedding_profile ? { embeddingProfile: options.embedding_profile } : {}),
       },
       signal: req.signal,
       trace: collector,

@@ -219,6 +219,18 @@
           "default": null,
           "title": "Disabled Stages"
         },
+        "embedding_profile": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Embedding Profile"
+        },
         "generator_model": {
           "anyOf": [
             {

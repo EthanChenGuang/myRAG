@@ -22,6 +22,7 @@ export interface EvalRequestOptions {
   user_id?: string | null;
   generator_model?: string | null;
   degrade?: 'drop_top_candidate' | null;
+  embedding_profile?: string | null;
 }
 
 export type EvalGenerator = 'stub' | 'live';
@@ -58,6 +59,8 @@ export interface RunEvalOptions {
   includeAnswer?: boolean;
   generator?: EvalGenerator;
   includeDrafts?: boolean;
+  /** When set (in-process smoke only), backfill this profile via runReembed before traces are collected. */
+  embeddingProfileId?: string;
 }
 
 export interface RunEvalResult {
@@ -115,10 +118,15 @@ export async function prepareInProcessEval(options: {
   deploymentMode: DeploymentMode;
   fixtureMode?: FixtureMode;
   allowedScopes?: string[];
+  embeddingProfileId?: string;
 }): Promise<InProcessEval> {
-  const { corpusDir, deploymentMode, fixtureMode, allowedScopes = [] } = options;
+  const { corpusDir, deploymentMode, fixtureMode, allowedScopes = [], embeddingProfileId } = options;
   const secret = crypto.randomBytes(24).toString('hex');
-  const evalEnv = { RAG_EVAL_SECRET: secret, RAG_EVAL_ALLOWED_SCOPES: [`user:${FIXTURE_USER_ID}`, ...allowedScopes].join(',') };
+  const evalEnv = {
+    RAG_EVAL_SECRET: secret,
+    RAG_EVAL_ALLOWED_SCOPES: [`user:${FIXTURE_USER_ID}`, ...allowedScopes].join(','),
+    ...(embeddingProfileId ? { RAG_EMBEDDING_PROFILES: 'on' } : {}),
+  };
   const fixture = await createFixtureDatabase({ deploymentMode, corpusDir, fixtureMode, processEnv: evalEnv });
   let edge: FakeEdge | undefined;
   try {
@@ -131,7 +139,21 @@ export async function prepareInProcessEval(options: {
   }
   const startedEdge = edge;
 
-  applyFixtureProcessEnv({ edgeUrl: startedEdge.url, deploymentMode, extra: evalEnv });
+  applyFixtureProcessEnv({
+    edgeUrl: startedEdge.url,
+    deploymentMode,
+    extra: evalEnv,
+    vendorEmbeddingRoutes: !!embeddingProfileId,
+  });
+
+  if (embeddingProfileId) {
+    const { fixtureAdminClient } = await import('./ingest-fakes.mts');
+    const { runReembed } = await import('../../src/lib/rag/ingest/reembed/run.ts');
+    const report = await runReembed({ db: fixtureAdminClient(startedEdge.url), profileId: embeddingProfileId, batchSize: 32 });
+    if (report.status !== 'completed') {
+      throw new Error(`[Eval Harness] re-embed for profile ${embeddingProfileId} failed: ${report.reason ?? 'unknown'}`);
+    }
+  }
 
   const route = await import('../../src/app/api/internal/rag/run/route.ts');
 
@@ -223,7 +245,19 @@ function redirectConsole(logPath: string): () => void {
 }
 
 export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
-  const { goldenPath, corpusDir, outDir, deploymentMode, fixtureMode, tier = 'smoke', baseUrl, includeAnswer = false, generator, includeDrafts = false } = options;
+  const {
+    goldenPath,
+    corpusDir,
+    outDir,
+    deploymentMode,
+    fixtureMode,
+    tier = 'smoke',
+    baseUrl,
+    includeAnswer = false,
+    generator,
+    includeDrafts = false,
+    embeddingProfileId,
+  } = options;
   const requestOptions: EvalRequestOptions = { ...(options.requestOptions ?? {}) };
 
   let liveApiKey = '';
@@ -286,7 +320,13 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
         : requestOptions.user_id
           ? `user:${requestOptions.user_id}`
           : null;
-      const prepared = await prepareInProcessEval({ corpusDir, deploymentMode, fixtureMode, allowedScopes: requestedScope ? [requestedScope] : [] });
+      const prepared = await prepareInProcessEval({
+        corpusDir,
+        deploymentMode,
+        fixtureMode,
+        allowedScopes: requestedScope ? [requestedScope] : [],
+        embeddingProfileId,
+      });
       inProcess = prepared;
       if (includeAnswer) {
         answerModule = await import('../../src/lib/rag-eval/answer.ts');
@@ -367,10 +407,12 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     console.warn(`[Eval Harness] server deployment_mode ${effectiveDeploymentMode} overrides --deployment-mode ${deploymentMode}`);
   }
 
+  const embeddingProfile = requestOptions.embedding_profile ?? embeddingProfileId ?? null;
   const normalizedOptions = {
     max_results: requestOptions.max_results ?? null,
     organization_id: requestOptions.organization_id ?? null,
     user_id: requestOptions.user_id ?? null,
+    embedding_profile: embeddingProfile,
     ...(requestOptions.degrade ? { degrade: requestOptions.degrade } : {}),
     ...(includeAnswer ? { generator_model: requestOptions.generator_model ?? null } : {}),
   };
@@ -410,6 +452,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     golden_filter: goldenFilter,
     sql_sha256: manifestInputs.sqlSha256,
     request_options: normalizedOptions,
+    embedding_profile: embeddingProfile,
     effective_config_hash: effectiveConfigHash,
     run_config_hash: runConfigHash,
     item_count: items.length,

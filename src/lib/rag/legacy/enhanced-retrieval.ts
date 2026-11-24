@@ -76,6 +76,8 @@ export interface LegacySearchInput {
   scope: TenantScope;
   client: RpcClient;
   signal: AbortSignal;
+  /** When false, match_chunks_by_profile allows non-active profiles (eval comparison only). */
+  profileRequireActive?: boolean;
 }
 
 interface SearchEnv {
@@ -84,10 +86,17 @@ interface SearchEnv {
   signal: AbortSignal;
   profile: SearchProfile | null;
   thresholds: SearchThresholds;
+  profileRequireActive: boolean;
 }
 
 function search(env: SearchEnv, vector: number[], matchCount: number, threshold: number): Promise<RawChunk[]> {
-  return searchByEmbedding(env.scope, { vector, profile: env.profile }, matchCount, threshold, env);
+  return searchByEmbedding(
+    env.scope,
+    { vector, profile: env.profile },
+    matchCount,
+    threshold,
+    { client: env.client, signal: env.signal, requireActive: env.profileRequireActive },
+  );
 }
 
 export function legacyAnalyze(query: string): TemporalQueryContext {
@@ -110,6 +119,7 @@ export async function legacySearch(
     signal: input.signal,
     profile,
     thresholds: searchThresholdsFor(profile),
+    profileRequireActive: input.profileRequireActive !== false,
   };
 
   let results: Candidate[] = [];

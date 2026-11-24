@@ -36,6 +36,7 @@ async function main(): Promise<number> {
       degrade: { type: 'string' },
       'base-url': { type: 'string' },
       'no-gate': { type: 'boolean', default: false },
+      'embedding-profile': { type: 'string' },
       baseline: { type: 'string' },
       'include-drafts': { type: 'boolean', default: false },
       org: { type: 'string' },
@@ -65,12 +66,22 @@ async function main(): Promise<number> {
     }
   }
 
+  const embeddingProfileId = values['embedding-profile']?.trim();
+  if (embeddingProfileId !== undefined && embeddingProfileId === '') {
+    throw new Error('--embedding-profile must not be empty');
+  }
+  const baseUrl = values['base-url'];
+  if (baseUrl && embeddingProfileId) {
+    throw new Error('--embedding-profile is only supported for in-process fixture runs (omit --base-url)');
+  }
+
   const requestOptions: EvalRequestOptions = {};
   if (maxResults !== undefined) requestOptions.max_results = maxResults;
   if (values.degrade !== undefined) {
     if (values.degrade !== 'drop_top_candidate') throw new Error('--degrade must be drop_top_candidate');
     requestOptions.degrade = values.degrade;
   }
+  if (embeddingProfileId) requestOptions.embedding_profile = embeddingProfileId;
   for (const [flag, key] of [['org', 'organization_id'], ['user', 'user_id']] as const) {
     const value = values[flag]?.trim();
     if (value === undefined) continue;
@@ -78,8 +89,8 @@ async function main(): Promise<number> {
     requestOptions[key] = value.toLowerCase();
   }
 
-  const gate = !values['no-gate'];
-  const baseUrl = values['base-url'];
+  let gate = !values['no-gate'];
+  if (embeddingProfileId) gate = false;
   if (gate && baseUrl && values.baseline === undefined) {
     console.error('[Eval Harness] a --base-url run needs --baseline <live baseline> or --no-gate');
     return 2;
@@ -105,6 +116,7 @@ async function main(): Promise<number> {
     tier: baseUrl ? 'live' : 'smoke',
     baseUrl,
     includeDrafts: values['include-drafts'],
+    embeddingProfileId,
   });
 
   console.log(`[Eval Harness] wrote ${result.itemCount} trace(s) to ${result.tracesPath} (${result.skippedCount} golden item(s) not approved, skipped)`);

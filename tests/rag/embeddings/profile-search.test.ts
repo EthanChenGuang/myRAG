@@ -336,6 +336,51 @@ describe('thresholds from score_calibration', () => {
   });
 });
 
+describe('eval embedding_profile override', () => {
+  it('embeds the requested profile and searches with p_require_active false', async () => {
+    const voyage = profileRow('voyage-4-large-2048', {
+      status: 'available',
+      dims: 2048,
+      storage: 'halfvec',
+      provider: 'voyage',
+      model: 'voyage-4-large',
+    });
+    const rpc = fakeRpc((fn) =>
+      fn === 'rag_list_embedding_profiles'
+        ? { data: [profileRow('test-8'), voyage], error: null }
+        : { data: profileRows(3), error: null },
+    );
+    setEmbeddingProvidersForTests({
+      voyage: {
+        ...provider(),
+        supportedDims: [256, 512, 1024, 2048],
+        async embedQuery(_text, opts) {
+          return {
+            vectors: [Array.from({ length: opts.dims }, (_, index) => (index + 1) / opts.dims)],
+            model: 'voyage-4-large',
+            host: 'fake',
+            usage: { tokens: 1 },
+          };
+        },
+      },
+    });
+    install(rpc);
+
+    await runRetrieval({
+      scope: mintScope('single', null, null),
+      query: SEMANTIC,
+      profile: 'eval',
+      options: { maxResults: 10, fallbackToLowerThreshold: true, embeddingProfile: 'voyage-4-large-2048' },
+      signal: new AbortController().signal,
+    });
+
+    const searches = rpc.of('match_chunks_by_profile');
+    expect(searches.length).toBeGreaterThan(0);
+    expect(searches.every((call) => call.args.p_profile_id === 'voyage-4-large-2048')).toBe(true);
+    expect(searches.every((call) => call.args.p_require_active === false)).toBe(true);
+  });
+});
+
 describe('the switch off', () => {
   it('issues no registry read and no profile search, only the legacy RPC', async () => {
     setIngestDepsForTests({ ingestEnv: () => ({ RAG_EMBEDDING_PROFILES: 'off' }) });

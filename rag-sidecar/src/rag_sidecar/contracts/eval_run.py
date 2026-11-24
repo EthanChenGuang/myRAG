@@ -47,6 +47,7 @@ class RagRunOptions(_Contract):
     degrade: Literal["drop_top_candidate"] | None = None
     disabled_stages: list[StageName] | None = Field(default=None, max_length=9)
     stage_timeouts_ms: StageTimeoutsMs | None = None
+    embedding_profile: str | None = None
 
 
 class RagRunRequest(_Contract):
@@ -162,6 +163,7 @@ class RunManifest(_Contract):
     golden_filter: GoldenFilter
     sql_sha256: dict[str, str]
     request_options: RagRunOptions
+    embedding_profile: str | None = None
     effective_config_hash: str
     run_config_hash: str
     item_count: int = Field(ge=0)

@@ -175,10 +175,10 @@ export async function profileVectorSearch(
   profile: ProfileSearchTarget,
   matchCount: number,
   threshold: number,
-  opts: { client: RpcClient; signal: AbortSignal },
+  opts: { client: RpcClient; signal: AbortSignal; requireActive?: boolean },
 ): Promise<RawChunk[]> {
   assertTenantScope(scope);
-  const { client, signal } = opts;
+  const { client, signal, requireActive = true } = opts;
   const response = await client
     .rpc(PROFILE_RPC, {
       p_tenant_key: scopeKey(scope),
@@ -187,6 +187,7 @@ export async function profileVectorSearch(
       p_query: embedding,
       p_match_count: matchCount,
       p_min_similarity: threshold,
+      ...(requireActive === false ? { p_require_active: false } : {}),
     })
     .abortSignal(signal);
   signal.throwIfAborted();
@@ -220,7 +221,7 @@ export function searchByEmbedding(
   embedding: SearchableEmbedding,
   matchCount: number,
   threshold: number,
-  opts: { client: RpcClient; signal: AbortSignal },
+  opts: { client: RpcClient; signal: AbortSignal; requireActive?: boolean },
 ): Promise<RawChunk[]> {
   if (embedding.profile && embedding.profile.storage === 'halfvec') {
     return profileVectorSearch(scope, embedding.vector, embedding.profile, matchCount, threshold, opts);
