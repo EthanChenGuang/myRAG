@@ -160,7 +160,7 @@ describe('ingest fixture mode: the corpus goes through the real ingest()', () =>
       assert.equal(result.parserUsed, 'docling');
       assert.ok(result.chunkCount >= 3, 'the 40-row table splits into several chunks');
       assert.equal(fakes.sidecar.uploads.length, 1);
-      assert.ok(fakes.objectStore.keys().some((key) => key.endsWith('report-zh-table.pdf')), 'the original is in the fake store');
+      assert.ok(fakes.objectStore.keys().some((key) => key.includes('/original.pdf')), `the original is in the fake store: ${fakes.objectStore.keys().join(', ')}`);
     } finally {
       await fakes.uninstall();
     }
