@@ -1,6 +1,7 @@
 import type { ParseResult } from '@/lib/rag-eval/contracts.generated';
 import type { ProcessingProfile } from '../profiles/load';
 import type { ChunkDraft, ChunkResult } from '../types';
+import { chunkImageCaption } from './image-caption';
 import { chunkInvoice } from './invoice';
 import { chunkLegalClauses } from './legal-clauses';
 import { chunkMarkdownSections } from './markdown-sections';
@@ -36,11 +37,12 @@ const budget = (config: ChunkerConfig) => ({
   repeatTableHeader: config.repeat_table_header,
 });
 
-/** Chunkers by profile chunker kind; the plan for image_caption registers its own here. */
+/** Chunkers by profile chunker kind. */
 export const CHUNKERS: Partial<Record<ChunkerKind, Chunker>> = {
   markdown_sections: (markdown, config) => ({ chunks: chunkMarkdownSections(markdown, budget(config)), warnings: [] }),
   table_aware: (markdown, config) => chunkTableAware(markdown, budget(config)),
   invoice: (markdown, config) => chunkInvoice(markdown, budget(config)),
+  image_caption: () => chunkImageCaption(),
   legal_clauses: (markdown, config) =>
     chunkLegalClauses(markdown, {
       ...budget(config),
