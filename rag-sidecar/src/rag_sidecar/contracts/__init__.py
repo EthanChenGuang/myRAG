@@ -15,6 +15,28 @@ from rag_sidecar.contracts.golden import (
     GoldenSplitManifest,
     GoldSpan,
 )
+from rag_sidecar.contracts.ingest import (
+    ChunkerSettings,
+    DoclingOptions,
+    DocTypeDetection,
+    EmbeddingTextTemplate,
+    InjectionRule,
+    InjectionRuleSet,
+    InvoiceExtractRequest,
+    InvoiceFields,
+    InvoiceLineItem,
+    InvoiceParty,
+    ParentChild,
+    ParseChunk,
+    ParseJobAccepted,
+    ParseJobRequest,
+    ParseJobState,
+    ParsePicture,
+    ParseResult,
+    ParserSettings,
+    ProcessingProfile,
+    ProcessingProfileSet,
+)
 from rag_sidecar.contracts.judge import JudgeConfig, JudgeItemScore, JudgeReport, OnlineJudgeConfig
 from rag_sidecar.contracts.latency import LatencyBudgets, ProfileBudget, StageLatency
 from rag_sidecar.contracts.review import ReviewQueueItem
@@ -43,6 +65,26 @@ from rag_sidecar.contracts.eval_run import (
 )
 
 __all__ = [
+    "ChunkerSettings",
+    "DoclingOptions",
+    "DocTypeDetection",
+    "EmbeddingTextTemplate",
+    "InjectionRule",
+    "InjectionRuleSet",
+    "InvoiceExtractRequest",
+    "InvoiceFields",
+    "InvoiceLineItem",
+    "InvoiceParty",
+    "ParentChild",
+    "ParseChunk",
+    "ParseJobAccepted",
+    "ParseJobRequest",
+    "ParseJobState",
+    "ParsePicture",
+    "ParseResult",
+    "ParserSettings",
+    "ProcessingProfile",
+    "ProcessingProfileSet",
     "LatencyBudgets",
     "ProfileBudget",
     "StageLatency",

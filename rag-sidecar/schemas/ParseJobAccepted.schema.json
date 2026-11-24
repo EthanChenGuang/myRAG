@@ -1,0 +1,15 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "job_id": {
+      "pattern": "^[A-Za-z0-9_-]{1,64}$",
+      "title": "Job Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "job_id"
+  ],
+  "title": "ParseJobAccepted",
+  "type": "object"
+}

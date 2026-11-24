@@ -5,6 +5,8 @@ from rag_sidecar.contracts import (
     BaselineMetricStat,
     BaselineRun,
     ConversationTurn,
+    DoclingOptions,
+    DocTypeDetection,
     DraftedItemBatch,
     DraftedItemProposal,
     EvalReport,
@@ -14,6 +16,12 @@ from rag_sidecar.contracts import (
     GoldenItem,
     GoldenSplitManifest,
     GoldSpan,
+    InjectionRule,
+    InjectionRuleSet,
+    InvoiceExtractRequest,
+    InvoiceFields,
+    InvoiceLineItem,
+    InvoiceParty,
     ItemResult,
     JudgeConfig,
     JudgeItemScore,
@@ -24,6 +32,14 @@ from rag_sidecar.contracts import (
     OnlineJudgeConfig,
     PairedReport,
     PairedStat,
+    ParseChunk,
+    ParseJobAccepted,
+    ParseJobRequest,
+    ParseJobState,
+    ParsePicture,
+    ParseResult,
+    ProcessingProfile,
+    ProcessingProfileSet,
     ProfileBudget,
     RagRunOptions,
     RagRunRequest,
@@ -50,6 +66,135 @@ _HASH_A = "a" * 64
 _HASH_B = "b" * 64
 _HASH_C = "c" * 64
 _METRICS = ["recall_at_5", "recall_at_10", "mrr", "correct_refusal_rate", "false_refusal_rate"]
+
+
+_DOC_TYPES = [
+    "general",
+    "financial_report",
+    "contract_legal",
+    "invoice_receipt",
+    "product_technical",
+    "scanned_image",
+]
+_SAMPLE_CLAUSE_PATTERNS = [r"^Art\.?\s*\d+", r"^Article\s+\d+"]
+
+
+def _processing_profile(doc_type: str) -> ProcessingProfile:
+    legal = doc_type == "contract_legal"
+    scanned = doc_type == "scanned_image"
+    return ProcessingProfile.model_validate(
+        {
+            "id": f"{doc_type}@1",
+            "version": 1,
+            "doc_type": doc_type,
+            "parser": {
+                "preference": ["docling"] if scanned else ["configured"],
+                "docling": {
+                    "ocr": True,
+                    "force_full_page_ocr": scanned,
+                    "table_mode": "accurate" if doc_type == "financial_report" else "fast",
+                    "heading_hierarchy": True,
+                    "generate_picture_images": True,
+                },
+                "ocr_languages": ["zh", "en", "it"],
+            },
+            "chunker": {
+                "kind": "legal_clauses" if legal else "markdown_sections",
+                "max_tokens": 768 if legal else 512,
+                "overlap_tokens": 0 if legal else 64,
+                "repeat_table_header": doc_type == "financial_report",
+                "min_chunk_tokens": 32,
+                "clause_patterns": _SAMPLE_CLAUSE_PATTERNS if legal else [],
+                "lead_in_phrases": ["except as follows"] if legal else [],
+            },
+            "extractors": ["dates"],
+            "embedding_text_template": {"version": 1, "header": "Contract {title}" if legal else None},
+            "scan_injection": True,
+            "min_tier": "fast" if legal else None,
+            "max_tier": "premium" if legal else None,
+            "parent_child": {"parent_max_tokens": 2048, "child_max_tokens": 256} if legal else None,
+        }
+    )
+
+
+def _injection_rules() -> InjectionRuleSet:
+    return InjectionRuleSet(
+        rules=[
+            InjectionRule(
+                id="en-ignore-previous",
+                language="en",
+                pattern="ignore previous instructions",
+                kind="phrase",
+                severity="high",
+            ),
+            InjectionRule(
+                id="zh-ignore-previous",
+                language="zh",
+                pattern="忽略之前的指令",
+                kind="phrase",
+                severity="high",
+            ),
+            InjectionRule(
+                id="any-you-are-now",
+                language="any",
+                pattern=r"you\s+are\s+now\b",
+                kind="regex",
+                severity="low",
+            ),
+        ]
+    )
+
+
+def _parse_result() -> ParseResult:
+    table_header = "| Item | Amount |\n| --- | --- |"
+    return ParseResult(
+        markdown="# Report\n\n## Results\n\nRevenue grew in the second quarter.\n\n" + table_header + "\n| Fees | 10 |\n",
+        chunks=[
+            ParseChunk(
+                text="Revenue grew in the second quarter.",
+                contextualized_text="Report > Results\nRevenue grew in the second quarter.",
+                headings=["Report", "Results"],
+                pages=[1],
+                is_table=False,
+            ),
+            ParseChunk(
+                text=table_header + "\n| Fees | 10 |",
+                contextualized_text="Report > Tables\n" + table_header + "\n| Fees | 10 |",
+                headings=["Report", "Tables"],
+                pages=[2, 3],
+                is_table=True,
+                table_header=table_header,
+            ),
+        ],
+        pictures=[ParsePicture(page=2, bbox=[10.0, 20.0, 110.0, 220.0], image_ref="picture-1.png", page_area_share=0.12)],
+        page_count=3,
+        language="en",
+        parser="docling",
+        parser_version="0.0.0-sample",
+        warnings=["synthetic sample"],
+        partial=False,
+        artifacts=["docling.json", "picture-1.png"],
+        text_layer_page_share=1.0,
+    )
+
+
+def _invoice_fields() -> InvoiceFields:
+    return InvoiceFields(
+        invoice_number="INV-2026-0001",
+        issue_date="2026-01-31",
+        due_date="2026-02-28",
+        supplier=InvoiceParty(name="示例供应商有限公司", tax_id="91000000MA0000000N", tax_id_scheme="cn_uscc"),
+        buyer=InvoiceParty(name="Esempio Acquirente S.r.l.", tax_id="99999999990", tax_id_scheme="it_iva"),
+        currency="EUR",
+        net_total="100.00",
+        tax_total="22.00",
+        gross_total="122.00",
+        line_items=[
+            InvoiceLineItem(description="咨询服务", quantity="2", unit_price="50.00", amount="100.00", tax_rate="22")
+        ],
+        confidence=0.9,
+        errors=[],
+    )
 
 
 def _golden_filter() -> GoldenFilter:
@@ -321,6 +466,37 @@ def _run_manifest() -> RunManifest:
 def _models() -> dict[str, Any]:
     return {
         "ConversationTurn": ConversationTurn(role="user", content="Tell me about leave."),
+        "ProcessingProfileSet": ProcessingProfileSet(profiles=[_processing_profile(name) for name in _DOC_TYPES]),
+        "DocTypeDetection": DocTypeDetection(
+            doc_type="invoice_receipt", confidence=0.85, signals=["keyword:invoice", "pattern:invoice_number"], method="rules"
+        ),
+        "InjectionRuleSet": _injection_rules(),
+        "ParseJobRequest": ParseJobRequest(
+            profile_id="financial_report@1",
+            profile_version=1,
+            docling=DoclingOptions(
+                ocr=True,
+                force_full_page_ocr=False,
+                table_mode="accurate",
+                heading_hierarchy=True,
+                generate_picture_images=True,
+            ),
+            ocr_languages=["zh", "en", "it"],
+            tokenizer="cl100k_base",
+            max_tokens=512,
+            repeat_table_header=True,
+            input_format="pdf",
+            page_cap=200,
+        ),
+        "ParseJobAccepted": ParseJobAccepted(job_id="job-0123abcd"),
+        "ParseJobState": ParseJobState(job_id="job-0123abcd", status="succeeded", result=_parse_result()),
+        "ParseResult": _parse_result(),
+        "InvoiceExtractRequest": InvoiceExtractRequest(
+            markdown="发票号码：INV-2026-0001\n\n| 项目 | 金额 |\n| --- | --- |\n| 咨询服务 | 100.00 |\n",
+            tables=["| 项目 | 金额 |\n| --- | --- |\n| 咨询服务 | 100.00 |"],
+            language_hint="zh",
+        ),
+        "InvoiceFields": _invoice_fields(),
         "RagRunRequest": RagRunRequest(
             item_id="en-general-001",
             query="How many leave days do employees get?",
@@ -426,6 +602,20 @@ def build_samples() -> dict[str, dict[str, Any]]:
         "RagRunRequest:query_only": {
             "model": "RagRunRequest",
             "value": {"query": "How many leave days do employees get?"},
+        },
+        "ParseJobState:running_without_result": {
+            "model": "ParseJobState",
+            "value": ParseJobState(job_id="job-0123abcd", status="running").model_dump(mode="json"),
+        },
+        "ParseJobState:failed_with_error_class": {
+            "model": "ParseJobState",
+            "value": ParseJobState(job_id="job-0123abcd", status="failed", error_class="ocr_failed").model_dump(
+                mode="json"
+            ),
+        },
+        "InvoiceFields:nothing_extracted": {
+            "model": "InvoiceFields",
+            "value": InvoiceFields(confidence=0.0, errors=["no invoice number found"]).model_dump(mode="json"),
         },
     }
     return {"samples": samples, "variants": variants}

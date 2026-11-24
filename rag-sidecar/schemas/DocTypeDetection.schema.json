@@ -1,0 +1,46 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "confidence": {
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Confidence",
+      "type": "number"
+    },
+    "doc_type": {
+      "enum": [
+        "general",
+        "financial_report",
+        "contract_legal",
+        "invoice_receipt",
+        "product_technical",
+        "scanned_image"
+      ],
+      "title": "Doc Type",
+      "type": "string"
+    },
+    "method": {
+      "enum": [
+        "rules",
+        "llm"
+      ],
+      "title": "Method",
+      "type": "string"
+    },
+    "signals": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Signals",
+      "type": "array"
+    }
+  },
+  "required": [
+    "doc_type",
+    "confidence",
+    "signals",
+    "method"
+  ],
+  "title": "DocTypeDetection",
+  "type": "object"
+}
