@@ -140,6 +140,7 @@ before(async () => {
 
 after(async () => {
   await prepared?.close();
+  await fixture?.db.close().catch(() => undefined);
 });
 
 describe('v2 invoice filters through eval route (D-05)', () => {
