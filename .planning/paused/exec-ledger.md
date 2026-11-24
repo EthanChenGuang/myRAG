@@ -130,11 +130,14 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | 03.1-19 | `wt/03.1-19` / `exec/03.1-19` | **merged** |
 | 04-21 | `wt/04-21` / `exec/04-21` | **RUNNING** (gsd-executor) |
 | 04-22 | `wt/04-22` / `exec/04-22` | **merged** |
-| 03.1-24 | `wt/03.1-24` / `exec/03.1-24` | **RUNNING** (gsd-executor) |
+| 03.1-24 | `wt/03.1-24` / `exec/03.1-24` | **merged** |
 | 03.1-26 | `wt/03.1-26` / `exec/03.1-26` | **merged** |
-| 03.1-25-fix | `wt/fix-backfill-tenant` | **RUNNING** — review F HIGH-1, MED-1, MED-4, LOW-5/6/7 |
-| 03-48-sec-rpc-3 | `wt/fix-definer-search-path` | **RUNNING** — review F MED-3 (0411 search_path), LOW-3 |
-| 04-31 | `wt/04-31` / `exec/04-31` | **RUNNING** (gsd-executor) |
+| 03.1-25-fix | `wt/fix-backfill-tenant` | **merged** — review F HIGH-1, MED-1, MED-4, LOW-5/6/7 |
+| 03-48-sec-rpc-3 | `wt/fix-definer-search-path` | **merged** — review F MED-3 (0411 search_path), LOW-3 |
+| 04-32 | `wt/04-32` / `exec/04-32` | **RUNNING** (gsd-executor, base `157641d`) |
+| 03.1-36 | — | **UI-SPEC in progress** (gsd-ui-researcher, Opus); executor after spec check |
+| fix-relex-rpc | `wt/fix-relex-rpc` | **RUNNING** (gsd-debugger, Opus) — pre-existing `rag_relex_candidates rpc_failed` in PGlite fixtures |
+| 04-31 | `wt/04-31` / `exec/04-31` | **merged** (0408) |
 | 03.1-21 | `wt/03.1-21` / `exec/03.1-21` | **RUNNING** (gsd-executor, base `e3b4d12`) |
 | 03.1-22 | `wt/03.1-22` / `exec/03.1-22` | **RUNNING** (gsd-executor, base `e3b4d12`) |
 | 04-27 | `wt/04-27` / `exec/04-27` | **RUNNING** (gsd-executor, base `e3b4d12`) |
@@ -173,6 +176,8 @@ All four executors **stopped**; WIP on `origin/exec/*` + patches in `.planning/p
 **Recently merged (no follow-up merge needed):** [03.1-04 Task 3](bc-4969184f-7107-55b3-a450-d63435dcb0a0), [03.1-07](bc-4a221b6f-f6a6-507b-8da0-d497c6662c2a), [04-05](bc-91985997-25a1-5b37-a987-32cb579c4746) → trunk `7d98d53`…`a06efce`.
 
 **04-05 smoke (orchestrator):** `npm run test-rag -- --out eval/out/p4-05` → `gate.json` `passed: true`, `paired.all_zero: true` (uv on VM).
+
+**Deferred (round F):** 03.1-24 `readBudgetView` should use `readMonthlyUsage` from 03.1-19; 03.1-19 batch USD refund (03.1-34); 04-31 image-caption chunks not in profile children (04-32/33); 04-33 names migration 0409 (taken) — needs next free number; `parse_tier_overrides` has no tenant column (admin-wide, cost only).
 
 **Concurrent spawn (2026-11-24 ~13:05 Europe/Rome):** 5 `Task` calls in one turn — **4 succeeded** (gsd-executor ×4), **1 failed** (gsd-verifier + `claude-opus-5-5-medium`: *user exceeded selected model’s available usage*). No platform limit on concurrent subagents observed.
 
