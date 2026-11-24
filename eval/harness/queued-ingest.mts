@@ -18,6 +18,11 @@ export const QUEUED_IDS = {
 
 export const SIDECAR_SECRET = 'queued-harness-sidecar-secret-000000';
 
+export interface CallbackReply {
+  status: number;
+  body: Record<string, unknown>;
+}
+
 export interface QueuedHarness {
   db: PGlite;
   edge: FakeEdge;
@@ -29,6 +34,10 @@ export interface QueuedHarness {
   /** o:B, an organization of another user. */
   scopeB: TenantScope;
   rows(sql: string, params?: unknown[]): Promise<Array<Record<string, unknown>>>;
+  /** Claims one job for a worker id the way the one-shot runner does, so a test can play the worker itself. */
+  claim(jobId: string, worker: string): Promise<void>;
+  /** Posts to an internal callback route with the right secret unless `headers` says otherwise (a header set to null is left out). */
+  callback(jobId: string, action: 'parse-external' | 'advance', body: unknown, headers?: Record<string, string | null>): Promise<CallbackReply>;
   runWorker(jobId: string, extraEnv?: Record<string, string>): Promise<SpawnSidecarResult>;
   close(): Promise<void>;
 }
@@ -118,6 +127,28 @@ export async function startQueuedHarness(options: QueuedHarnessOptions = {}): Pr
       async rows(sql, params = []) {
         return (await db.query<Record<string, unknown>>(sql, params)).rows;
       },
+      async claim(jobId, worker) {
+        const rows = (await db.query<{ id: string | null }>('SELECT id FROM rag_claim_ingestion_job($1, $2)', [jobId, worker])).rows;
+        if (rows[0]?.id !== jobId) throw new Error(`[Queued Harness] job ${jobId} could not be claimed`);
+      },
+      async callback(jobId, action, body, headers = {}) {
+        const merged: Record<string, string | null> = { 'content-type': 'application/json', 'x-sidecar-secret': SIDECAR_SECRET, ...headers };
+        const outgoing: Record<string, string> = {};
+        for (const [name, value] of Object.entries(merged)) if (value !== null) outgoing[name] = value;
+        const response = await fetch(`${startedApp.url}/api/internal/rag/ingest/jobs/${jobId}/${action}`, {
+          method: 'POST',
+          headers: outgoing,
+          body: JSON.stringify(body),
+        });
+        const text = await response.text();
+        let parsed: Record<string, unknown> = {};
+        try {
+          parsed = JSON.parse(text) as Record<string, unknown>;
+        } catch {
+          parsed = { raw: text };
+        }
+        return { status: response.status, body: parsed };
+      },
       runWorker(jobId, extraEnv = {}) {
         return spawnSidecarModule(
           'rag_sidecar.ingest.run_once',
@@ -154,4 +185,41 @@ export async function startQueuedHarness(options: QueuedHarnessOptions = {}): Pr
     await db.close().catch(() => undefined);
     throw error;
   }
+}
+
+const UUID_IN_TEXT = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+
+export interface ChunkFingerprint {
+  doc: Record<string, unknown>;
+  chunks: Array<Record<string, unknown>>;
+}
+
+/**
+ * What two runs of the same upload must agree on: the chunk content and hashes, the section paths, the page numbers, the kind, the
+ * metadata (with every UUID masked) and the parser fields. Chunk ids, timestamps and the tenant are left out; `embeddings` adds the vectors.
+ */
+export async function chunkFingerprint(harness: QueuedHarness, documentId: string, options: { embeddings?: boolean } = {}): Promise<ChunkFingerprint> {
+  const [doc] = await harness.rows(
+    'SELECT parser_used, parser_version, doc_type, doc_type_origin, content_hash, status, is_current FROM documents WHERE id = $1',
+    [documentId],
+  );
+  const rows = await harness.rows(
+    `SELECT chunk_index, content, content_hash, section_path, page_start, page_end, chunk_kind, metadata${options.embeddings ? ', embedding::text AS embedding' : ''}
+       FROM document_chunks WHERE document_id = $1 ORDER BY chunk_index`,
+    [documentId],
+  );
+  return {
+    doc: doc ?? {},
+    chunks: rows.map((row) => ({
+      chunk_index: row.chunk_index,
+      content: row.content,
+      content_hash: row.content_hash,
+      section_path: row.section_path,
+      page_start: row.page_start,
+      page_end: row.page_end,
+      chunk_kind: row.chunk_kind,
+      metadata: JSON.parse(JSON.stringify(row.metadata ?? {}).replace(UUID_IN_TEXT, '<uuid>')) as unknown,
+      ...(options.embeddings ? { embedding: row.embedding } : {}),
+    })),
+  };
 }
