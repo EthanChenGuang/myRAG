@@ -147,3 +147,13 @@ def test_join_page_parts_does_not_change_its_inputs():
 
     assert sorted(first.pages) == [4] and sorted(second.pages) == [5]
     assert [prov.page_no for item in second.texts for prov in item.prov] == [5]
+
+
+def test_slice_pages_keeps_the_page_numbers_of_a_document_that_starts_after_page_one():
+    doc = premium_part([(4, "Four."), (5, "Five."), (6, "Six.")], {4: PAGE, 5: PAGE, 6: PAGE})
+
+    sliced = slice_pages(doc, {5, 6})
+
+    assert sorted(sliced.pages) == [5, 6]
+    pages_by_text = {item.text: [prov.page_no for prov in item.prov] for item, _level in sliced.iterate_items() if getattr(item, "text", "")}
+    assert pages_by_text == {"Five.": [5], "Six.": [6]}
