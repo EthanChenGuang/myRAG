@@ -1,5 +1,6 @@
 import type { RpcClient } from '../backend/supabase-rpc';
 import { assertTenantScope, scopeKey, type TenantScope } from '../tenant/scope';
+import { HASH_NORMALIZATION_VERSION } from './hash';
 import type { ChunkKind, DocTypeOrigin, IngestSource } from './types';
 
 type Row = Record<string, unknown>;
@@ -156,6 +157,48 @@ function reasonOf(message: string | undefined): string | null {
   return word !== undefined && KNOWN_REASONS.has(word) ? word : null;
 }
 
+async function callRpc(db: RpcClient, signal: AbortSignal, rpc: string, args: Record<string, unknown>): Promise<Row[]> {
+  signal.throwIfAborted();
+  const response = await db.rpc(rpc, args).abortSignal(signal);
+  signal.throwIfAborted();
+  if (response.error) throw new IngestWriterError(rpc, response.error.code ?? null, reasonOf(response.error.message));
+  return (response.data ?? []) as Row[];
+}
+
+const TENANT_KEY_RE = /^(?:s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
+
+/** True for the three tenant key shapes: `s:default`, `u:<uuid>` and `o:<uuid>`, in lower case. */
+export function isTenantKey(value: string): boolean {
+  return TENANT_KEY_RE.test(value);
+}
+
+export interface ContentHashBackfillWriter {
+  /**
+   * Stores the normalised content hash and its version on one legacy document. The tenant key is the one the
+   * document row itself carries; rag_set_document_fields refuses the call when the document is not in that tenant.
+   */
+  setContentHash(documentId: string, tenantKey: string, contentHash: string): Promise<void>;
+}
+
+/**
+ * The operator backfill has no request scope: it walks the rows of every tenant (or one named tenant) and
+ * writes each row under the tenant key stored on that row. It can set the hash fields and nothing else.
+ */
+export function createContentHashBackfillWriter(input: { db: RpcClient; signal: AbortSignal }): ContentHashBackfillWriter {
+  const { db, signal } = input;
+  return {
+    async setContentHash(documentId, tenantKey, contentHash) {
+      if (!isTenantKey(tenantKey)) throw new IngestWriterError('rag_set_document_fields', 'invalid_tenant_key');
+      const rows = await callRpc(db, signal, 'rag_set_document_fields', {
+        p_document_id: documentId,
+        p_tenant_key: tenantKey,
+        p_fields: { content_hash: contentHash, metadata: { content_hash_version: HASH_NORMALIZATION_VERSION } },
+      });
+      if (!rows[0]) throw new IngestWriterError('rag_set_document_fields', 'no_row');
+    },
+  };
+}
+
 /**
  * The only caller of the rag_* writer RPCs. The tenant key, user id and organization id come from the
  * scope on every call and from nowhere else; a single-tenant scope never sends a user id.
@@ -173,13 +216,7 @@ export function createIngestWriter(input: CreateIngestWriterInput): IngestWriter
     };
   }
 
-  async function call(rpc: string, args: Record<string, unknown>): Promise<Row[]> {
-    signal.throwIfAborted();
-    const response = await db.rpc(rpc, args).abortSignal(signal);
-    signal.throwIfAborted();
-    if (response.error) throw new IngestWriterError(rpc, response.error.code ?? null, reasonOf(response.error.message));
-    return (response.data ?? []) as Row[];
-  }
+  const call = (rpc: string, args: Record<string, unknown>): Promise<Row[]> => callRpc(db, signal, rpc, args);
 
   async function callOne(rpc: string, args: Record<string, unknown>): Promise<Row> {
     const rows = await call(rpc, args);

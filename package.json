@@ -12,6 +12,7 @@
     "configure-deployment": "node scripts/configure-deployment.js",
     "db:setup": "bash scripts/setup-database.sh",
     "reprocess-docs": "node scripts/reprocess-documents.js",
+    "rag:backfill-hashes": "tsx src/lib/rag/ingest/backfill-hashes.ts",
     "test": "vitest run",
     "test-rag": "tsx eval/harness/run-smoke.mts",
     "typecheck:new": "node scripts/typecheck-new.mjs",
