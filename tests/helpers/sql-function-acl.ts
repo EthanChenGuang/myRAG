@@ -146,7 +146,7 @@ function bareName(raw: string): string {
   return raw.replace(/"/g, '').replace(/^public\./i, '').toLowerCase();
 }
 
-function signatureKey(name: string, args: string[]): string {
+export function signatureKey(name: string, args: string[]): string {
   return `${name}(${args.join(',')})`;
 }
 
