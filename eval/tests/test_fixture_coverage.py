@@ -30,7 +30,10 @@ PER_LANGUAGE_CATEGORY = {
     "ambiguous": 2,
     "typo": 2,
     "cross_lingual": 8,
+    "selective_filter": 4,
 }
+# Tightest selective_filter in this corpus pins a single document (4–6 chunk rows of 71).
+FIXTURE_MAX_SELECTIVE_ROW_SHARE = 6 / 71
 RELATIVE_DATE_LATIN = ("today", "yesterday", "last week", "this month", "oggi", "ieri")
 RELATIVE_DATE_CJK = ("今天", "昨天", "上周", "本月")
 
@@ -52,16 +55,16 @@ def test_corpus_has_one_image_caption_document():
     assert [doc.filename for doc in documents if doc.image_url] == ["warehouse-floorplan.png"]
 
 
-def test_ninety_single_language_items_thirty_per_language(items):
+def test_single_language_items_thirty_four_per_language(items):
     single = [item for item in items if item.category != "cross_lingual"]
     counts = collections.Counter(item.language for item in single)
-    assert len(single) == 90
-    assert {language: counts[language] for language in LANGUAGES} == {"zh": 30, "en": 30, "it": 30}
+    assert len(single) == 102
+    assert {language: counts[language] for language in LANGUAGES} == {"zh": 34, "en": 34, "it": 34}
 
 
 def test_twenty_four_cross_lingual_items_four_per_pair(items):
     cross = [item for item in items if item.category == "cross_lingual"]
-    assert len(items) == 90 + len(cross)
+    assert len(items) == 102 + len(cross)
     assert len(cross) == PER_PAIR_MINIMUM * len(PAIRS)
     counts = collections.Counter((item.language, item.evidence_language) for item in cross)
     for pair in PAIRS:
@@ -175,6 +178,35 @@ def test_each_pair_mixes_number_sharing_and_purely_semantic_questions(items):
         semantic = [item.id for item in members if not _shares_a_number_or_identifier(item, documents)]
         assert len(sharing) >= 2, (pair, sharing)
         assert len(semantic) >= 2, (pair, semantic)
+
+
+DOC_ID_CHUNK_ROWS = {
+    "4dda7ba2-55f3-4e0f-8cfd-83f2ef597e40": 4,
+    "b0f11cff-e756-4458-a963-b53776c9da72": 5,
+    "1338762a-94bb-4894-b1a8-4ca497e3f3cc": 6,
+}
+
+
+def _selective_filter_items(items):
+    return [item for item in items if item.category == "selective_filter"]
+
+
+def test_selective_filter_filters_admit_rows_within_fixture_ceiling(items):
+    documents = load_corpus(CORPUS_DIR)
+    documents_by_relpath = {doc.relpath.rsplit("/", 1)[-1]: doc for doc in documents}
+    total = sum(len(doc.chunks) for doc in documents)
+    selective = _selective_filter_items(items)
+    assert len(selective) == 12
+    for item in selective:
+        assert item.retrieval_filters is not None, item.id
+        doc_ids = [str(doc_id) for doc_id in item.retrieval_filters.document_ids or []]
+        assert doc_ids, item.id
+        matched = sum(DOC_ID_CHUNK_ROWS[doc_id] for doc_id in doc_ids)
+        assert matched >= 1
+        assert matched / total <= FIXTURE_MAX_SELECTIVE_ROW_SHARE, item.id
+        for span in item.gold_evidence:
+            doc = documents_by_relpath[span.document]
+            assert any(chunk_matches_span(span.document, chunk.text, span) for chunk in doc.chunks), (item.id, span.quote)
 
 
 def test_each_pair_gates_on_a_dev_split_that_mixes_both_kinds_of_question(items):
