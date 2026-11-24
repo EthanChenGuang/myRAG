@@ -1,19 +1,23 @@
 import { assertTenantScope, scopeKey, type TenantScope } from '../tenant/scope';
 import { loadIngestConfig } from './config';
 import { getIngestDeps } from './deps';
+import { ObjectStoreError } from './object-store';
 import { getProcessingProfile, type DocType, type ProcessingProfile } from './profiles/load';
-import { INGEST_STAGES, REGISTERED_STAGES, nextStageAfter, runIngestStages } from './runner';
+import { INGEST_STAGES, REGISTERED_STAGES, nextStageAfter, rehydrateFromStore, runIngestStages } from './runner';
 import { createIngestTrace, finishIngestTrace } from './trace';
 import {
   DEFAULT_INGEST_DEADLINE_MS,
+  INGEST_SOURCES,
   emptyIngestState,
   type DocTypeOrigin,
   type IngestResult,
+  type IngestSource,
   type IngestState,
+  type RehydrateResult,
   type StageContext,
   type StageName,
 } from './types';
-import { IngestWriterError, createIngestWriter, type IngestDocumentRow, type IngestWriter } from './writer';
+import { IngestWriterError, createIngestWriter, type IngestDocumentRow, type IngestOriginRow, type IngestWriter } from './writer';
 
 export interface IngestStatusView {
   status: string;
@@ -130,11 +134,16 @@ function profileOf(docType: string, warnings: string[]): { docType: DocType; pro
   }
 }
 
+function sourceOf(value: string | null): IngestSource {
+  return INGEST_SOURCES.find((source) => source === value) ?? 'config_upload';
+}
+
 /** A resumed run carries no upload: stages after file_hash_dedup read the document row and the rebuilt work, never the input. */
 function resumeContext(
   scope: TenantScope,
   documentId: string,
   row: IngestDocumentRow,
+  origin: IngestOriginRow | null,
   state: IngestState,
   writer: IngestWriter,
   signal: AbortSignal,
@@ -144,7 +153,7 @@ function resumeContext(
   const warnings: string[] = [];
   const { docType, profile } = profileOf(row.docType, warnings);
   return {
-    input: { scope, source: 'config_upload', sourceKey: '', filename: row.filename, mimeType: '', text: '', signal },
+    input: { scope, source: sourceOf(origin?.source ?? null), sourceKey: origin?.sourceKey ?? '', filename: row.filename, mimeType: '', file: new Uint8Array(0), signal },
     deps,
     writer,
     config: loadIngestConfig(deps.ingestEnv()),
@@ -161,7 +170,7 @@ function resumeContext(
       profile,
       bytes: null,
     },
-    document: { id: documentId, version: row.version, resumed: true },
+    document: { id: documentId, version: row.version, lineageId: origin?.lineageId ?? '', originalPath: origin?.originalPath ?? null, resumed: true },
     parserUsed: row.parserUsed,
     work: { parseText: null, parserVersion: null, chunks: [], chunksWritten: 0 },
   };
@@ -170,8 +179,9 @@ function resumeContext(
 /**
  * Continues a document of the caller's tenant from the stage after lastCompleted. A ready, quarantined,
  * failed or deleted document returns its settled result without running a stage. A processing document
- * needs its stage inputs back first (deps.rehydrate, supplied by the object store in plan 03-17); without
- * them the call reports processing with resume_input_unavailable and writes nothing. Chunk ids derive from
+ * needs its stage inputs back first (deps.rehydrate, by default rehydrateFromStore, which reads the stored
+ * original and parse output); when they cannot be rebuilt the call reports processing with
+ * resume_input_unavailable and writes nothing, and when the original is gone it fails as original_unavailable. Chunk ids derive from
  * the document id and chunk index, so a repeated resume rewrites the same rows.
  */
 export async function resumeIngest(scope: TenantScope, documentId: string, options: ResumeIngestOptions = {}): Promise<IngestResult> {
@@ -215,14 +225,39 @@ export async function resumeIngest(scope: TenantScope, documentId: string, optio
   });
   if (nextStageAfter(state.lastCompleted) === null || state.lastCompleted === null) return processing('resume_state_missing');
 
-  const ctx = resumeContext(scope, documentId, row, state, writer, signal, options.deadlineMs ?? DEFAULT_INGEST_DEADLINE_MS);
-  const rehydrate = ctx.deps.rehydrate;
-  if (!rehydrate) return processing('resume_input_unavailable');
+  let origin: IngestOriginRow | null;
   try {
-    if (!(await rehydrate(ctx))) return processing('resume_input_unavailable');
+    origin = await writer.getOrigin(documentId);
   } catch (error) {
-    console.error('[Ingest] could not rebuild the stage inputs', { error: error instanceof Error ? error.name : 'unknown' });
+    console.error('[Ingest] resume lookup failed', {
+      error: error instanceof Error ? error.name : 'unknown',
+      ...(error instanceof IngestWriterError ? { rpc: error.rpc, code: error.code } : {}),
+    });
+    return failed('resume_lookup_failed');
+  }
+  const ctx = resumeContext(scope, documentId, row, origin, state, writer, signal, options.deadlineMs ?? DEFAULT_INGEST_DEADLINE_MS);
+  const rehydrate = ctx.deps.rehydrate ?? rehydrateFromStore;
+  let rebuilt: RehydrateResult;
+  try {
+    rebuilt = await rehydrate(ctx);
+  } catch (error) {
+    console.error('[Ingest] could not rebuild the stage inputs', {
+      error: error instanceof Error ? error.name : 'unknown',
+      ...(error instanceof ObjectStoreError ? { op: error.op, status: error.status } : {}),
+    });
     return processing('resume_input_unavailable');
+  }
+  if (rebuilt === false) return processing('resume_input_unavailable');
+  if (typeof rebuilt === 'object') {
+    try {
+      await writer.markFailed(documentId, rebuilt.failed);
+    } catch (error) {
+      console.error('[Ingest] could not mark the version failed', {
+        error: error instanceof Error ? error.name : 'unknown',
+        ...(error instanceof IngestWriterError ? { rpc: error.rpc, code: error.code } : {}),
+      });
+    }
+    return failed(rebuilt.failed, documentId, row.version);
   }
 
   const trace = createIngestTrace(scope);

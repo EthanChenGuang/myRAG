@@ -1,3 +1,5 @@
+import { PARSE_ARTIFACT, isArtifactName, loadArtifact, originalName, versionPrefix } from './artifacts';
+import { ObjectStoreError } from './object-store';
 import { IngestWriterError, createIngestWriter } from './writer';
 import { chunkStage } from './stages/chunk';
 import { contentHashDedupStage, fileHashDedupStage } from './stages/dedup';
@@ -14,6 +16,7 @@ import type { IngestSpan, IngestSpanDetail, IngestSpanEnd, IngestTrace } from '.
 import {
   IngestStageError,
   type IngestResult,
+  type RehydrateResult,
   type StageContext,
   type StageName,
   type StageSpec,
@@ -79,6 +82,10 @@ function logFailure(stage: StageName, reason: string, error: unknown): void {
     data.rpc = error.rpc;
     data.code = error.code;
     if (error.reason) data.writer_reason = error.reason;
+  } else if (error instanceof ObjectStoreError) {
+    data.error = error.name;
+    data.op = error.op;
+    data.status = error.status;
   } else if (error instanceof Error) {
     data.error = error.name;
   }
@@ -248,4 +255,72 @@ export async function runIngestStages(
     }
   }
   return failRun(ctx, 'publish', 'stage_list_incomplete');
+}
+
+const reached = (last: StageName, stage: StageName): boolean => INGEST_STAGES.indexOf(last) >= INGEST_STAGES.indexOf(stage);
+
+/** The name of the stored original, from documents.original_path when it lies under this version's prefix; null when it lies elsewhere. */
+function storedOriginalName(ctx: StageContext, prefix: string, filename: string): string | null {
+  const path = ctx.document?.originalPath ?? null;
+  if (path === null) return originalName(filename);
+  const name = path.startsWith(prefix) ? path.slice(prefix.length) : '';
+  return isArtifactName(name) ? name : null;
+}
+
+/** Runs a deterministic stage again on a resumed run; returns the reason when it did not simply continue. */
+async function rerun(stage: StageSpec, ctx: StageContext): Promise<string | null> {
+  const outcome = await stage.run(ctx);
+  if (outcome.kind === 'next') return null;
+  return outcome.kind === 'fail' ? outcome.reason : 'rehydrate_failed';
+}
+
+/**
+ * Rebuilds what the stages after ctx.state.lastCompleted read from memory, from the stored artifacts and no upload.
+ * Parse output comes from parse.md; without it the stored original is parsed again, and without that the run fails
+ * as original_unavailable. chunk, enrich and extract are deterministic, so each one that had already finished is
+ * run again on the parse output; stage outputs that are not deterministic live in processing_state. A run that
+ * stopped before store_original has no stored input, so nothing can be rebuilt (false).
+ */
+export async function rehydrateFromStore(ctx: StageContext): Promise<RehydrateResult> {
+  const last = ctx.state.lastCompleted;
+  const { identity, document } = ctx;
+  if (last === null || !identity || !document || !reached(last, 'store_original')) return false;
+
+  let originalFile: string | null;
+  try {
+    originalFile = storedOriginalName(ctx, versionPrefix(identity.tenantKey, document.lineageId, document.version), identity.filename);
+  } catch {
+    return false;
+  }
+  if (originalFile === null) return { failed: 'original_unavailable' };
+
+  async function loadOriginal(name: string): Promise<boolean> {
+    const stored = await loadArtifact(ctx, name);
+    if (!stored || !identity) return false;
+    identity.bytes = stored.bytes;
+    if (stored.contentType) ctx.input.mimeType = stored.contentType;
+    return true;
+  }
+
+  if (reached(last, 'parse')) {
+    const parsed = await loadArtifact(ctx, PARSE_ARTIFACT);
+    if (parsed) {
+      ctx.work.parseText = new TextDecoder('utf-8').decode(parsed.bytes);
+      ctx.work.parserVersion = ctx.work.parserVersion ?? 'stored';
+    } else {
+      if (!(await loadOriginal(originalFile))) return { failed: 'original_unavailable' };
+      const failure = await rerun(parseStage, ctx);
+      if (failure !== null) return { failed: failure };
+    }
+  } else if (!(await loadOriginal(originalFile))) {
+    return { failed: 'original_unavailable' };
+  }
+
+  const deterministic: StageSpec[] = [chunkStage, enrichStage, extractStage];
+  for (const stage of deterministic) {
+    if (!reached(last, stage.name)) break;
+    const failure = await rerun(stage, ctx);
+    if (failure !== null) return { failed: failure };
+  }
+  return true;
 }

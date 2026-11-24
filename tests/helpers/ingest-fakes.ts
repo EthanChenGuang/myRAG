@@ -2,6 +2,8 @@ import type { RpcClient, RpcRequest, RpcResponse } from '@/lib/rag/backend/supab
 import type { IngestEnvInput } from '@/lib/rag/ingest/config';
 import { resetIngestConfigForTests } from '@/lib/rag/ingest/config';
 import { resetIngestDepsForTests, setIngestDepsForTests } from '@/lib/rag/ingest/deps';
+import { resetObjectStoreForTests } from '@/lib/rag/ingest/object-store';
+import { installFakeObjectStore, type FakeObjectStore } from './fake-object-store';
 
 type Row = Record<string, unknown>;
 
@@ -24,9 +26,18 @@ export interface FakeIngestDocumentRow {
   created_at: string;
 }
 
+export interface FakeIngestOriginRow {
+  lineage_id: string | null;
+  original_path: string | null;
+  source: string | null;
+  source_key: string | null;
+}
+
 export interface FakeIngestDbOptions {
   /** Row answered by rag_get_ingest_document; null answers no row, as another tenant's id does. */
   document?: FakeIngestDocumentRow | null;
+  /** Row answered by rag_get_ingest_origin; absent answers no row. */
+  origin?: FakeIngestOriginRow | null;
   documentId?: string;
   failures?: Record<string, { code: string; message: string }>;
   /** Runs after a call is recorded and before it is answered. */
@@ -46,6 +57,8 @@ function answer(fn: string, args: Record<string, unknown>, options: FakeIngestDb
       return [{ document_id: args.p_document_id, processing_status: args.p_processing_status }];
     case 'rag_get_ingest_document':
       return options.document ? [options.document as unknown as Row] : [];
+    case 'rag_get_ingest_origin':
+      return options.origin ? [options.origin as unknown as Row] : [];
     case 'rag_write_chunks':
       return [{ chunks_written: (args.p_chunks as unknown[]).length, chunks_deleted: 0 }];
     case 'rag_publish_document_version':
@@ -88,7 +101,8 @@ export interface InstallIngestDepsInput {
 
 export const unitVector = (): number[] => Array.from({ length: 1536 }, (_, index) => (index === 0 ? 1 : 0));
 
-export function installIngestDeps(input: InstallIngestDepsInput): void {
+/** Installs the deps and an in-memory object store; returns the store so a test can look at what was kept. */
+export function installIngestDeps(input: InstallIngestDepsInput): FakeObjectStore {
   resetIngestConfigForTests();
   setIngestDepsForTests({
     db: () => input.db,
@@ -96,10 +110,12 @@ export function installIngestDeps(input: InstallIngestDepsInput): void {
     ingestEnv: () => input.env ?? {},
     ...(input.now ? { now: input.now } : {}),
   });
+  return installFakeObjectStore();
 }
 
 export function uninstallIngestDeps(): void {
   resetIngestDepsForTests();
+  resetObjectStoreForTests();
   resetIngestConfigForTests();
 }
 

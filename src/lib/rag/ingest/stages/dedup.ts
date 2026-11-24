@@ -1,3 +1,4 @@
+import { removeArtifacts } from '../artifacts';
 import { HASH_NORMALIZATION_VERSION, contentHash } from '../hash';
 import {
   requireDocument,
@@ -33,7 +34,7 @@ async function runFileHashDedup(ctx: StageContext): Promise<StageOutcome> {
       },
     };
   }
-  ctx.document = { id: begun.documentId, version: begun.version, resumed: begun.outcome === 'resumed' };
+  ctx.document = { id: begun.documentId, version: begun.version, lineageId: begun.lineageId, resumed: begun.outcome === 'resumed' };
   return { kind: 'next' };
 }
 
@@ -42,9 +43,11 @@ async function runContentHashDedup(ctx: StageContext): Promise<StageOutcome> {
   const hash = contentHash(ctx.work.parseText ?? '');
   const duplicateOf = await ctx.writer.findContentDuplicate(hash, document.id);
   if (duplicateOf !== null) {
+    await removeArtifacts(ctx);
     await ctx.writer.setFields(document.id, {
       content_hash: hash,
       status: 'deleted',
+      original_path: null,
       metadata: { duplicate_of: duplicateOf, content_hash_version: HASH_NORMALIZATION_VERSION },
     });
     return {
