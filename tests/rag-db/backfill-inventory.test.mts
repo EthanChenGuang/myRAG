@@ -15,6 +15,11 @@ const TENANT_SINGLE = 's:default';
 const TENANT_A = `u:${TWO_TENANT_IDS.userA}`;
 const TENANT_B = `u:${TWO_TENANT_IDS.userB}`;
 const TENANT_O = `o:${TWO_TENANT_IDS.orgO}`;
+const SCOPE_SINGLE = mintScope('single', null, null);
+const SCOPE_A = mintScope('personal', TWO_TENANT_IDS.userA, null);
+const SCOPE_B = mintScope('personal', TWO_TENANT_IDS.userB, null);
+const SCOPE_O = mintScope('org', null, TWO_TENANT_IDS.orgO);
+const SCOPES: Record<string, ReturnType<typeof mintScope>> = { [TENANT_SINGLE]: SCOPE_SINGLE, [TENANT_A]: SCOPE_A, [TENANT_B]: SCOPE_B, [TENANT_O]: SCOPE_O };
 
 const sha = (text: string): string => crypto.createHash('sha256').update(text).digest('hex');
 
@@ -136,7 +141,7 @@ describe('backfill inventory against the real SQL (single-tenant)', () => {
     const docId = await insertSingleDocument(db, sha('tenant-existing-only'));
     const batchId = await createBatch(db, TENANT_SINGLE);
     const signal = new AbortController().signal;
-    const run = () => inventory({ id: batchId, tenantKey: TENANT_SINGLE }, from(TWELVE.map(([key, text]) => item(key, text))), { rpc: sqlRpc(db), signal });
+    const run = () => inventory({ id: batchId, scope: SCOPE_SINGLE }, from(TWELVE.map(([key, text]) => item(key, text))), { rpc: sqlRpc(db), signal });
 
     const result = await run();
     assert.deepEqual(result.totals, { total: 12, uniqueNew: 9, inInventoryDuplicates: 2, existingDuplicates: 1, unreadable: 0 });
@@ -170,7 +175,7 @@ describe('backfill inventory against the real SQL (single-tenant)', () => {
       [draft, old],
     );
     const batchId = await createBatch(db, TENANT_SINGLE);
-    const result = await inventory({ id: batchId, tenantKey: TENANT_SINGLE }, from([item('d.pdf', 'only-a-draft'), item('o.pdf', 'only-an-old-version')]), {
+    const result = await inventory({ id: batchId, scope: SCOPE_SINGLE }, from([item('d.pdf', 'only-a-draft'), item('o.pdf', 'only-an-old-version')]), {
       rpc: sqlRpc(db),
       signal: new AbortController().signal,
     });
@@ -183,9 +188,9 @@ describe('backfill inventory against the real SQL (single-tenant)', () => {
     await expectSqlRefusal(db, `SELECT id FROM rag_create_ingestion_batch($1, 'folder', '/x', NULL, 1, 'worker')`, [TENANT_O]);
     await expectSqlRefusal(db, `SELECT id FROM rag_existing_file_hashes($1, ARRAY[$2]::text[])`, [TENANT_A, sha('x')]);
     const batchId = await createBatch(db, TENANT_SINGLE);
-    const result = await inventory({ id: batchId, tenantKey: TENANT_A }, from([item('a.pdf', 'a')]), { rpc: sqlRpc(db), signal: new AbortController().signal }).catch((error: Error) => error);
+    const result = await inventory({ id: batchId, scope: SCOPE_A }, from([item('a.pdf', 'a')]), { rpc: sqlRpc(db), signal: new AbortController().signal }).catch((error: Error) => error);
     assert.ok(result instanceof Error);
-    assert.equal(result.message, '[Backfill] existing hash lookup failed');
+    assert.equal(result.message, '[Backfill] batch tenant mismatch');
     assert.equal((await skippedRows(db, batchId)).length, 0);
   });
 });
@@ -206,7 +211,7 @@ describe('backfill inventory against the real SQL (multi-tenant, two tenants and
 
   async function inventoryFor(tenant: string, files: Array<[string, string]>) {
     const batchId = await createBatch(db, tenant);
-    const result = await inventory({ id: batchId, tenantKey: tenant }, from(files.map(([key, text]) => item(key, text))), { rpc: sqlRpc(db), signal: new AbortController().signal });
+    const result = await inventory({ id: batchId, scope: SCOPES[tenant] as ReturnType<typeof mintScope> }, from(files.map(([key, text]) => item(key, text))), { rpc: sqlRpc(db), signal: new AbortController().signal });
     return { batchId, result, rows: await skippedRows(db, batchId) };
   }
 
@@ -247,28 +252,16 @@ describe('backfill inventory against the real SQL (multi-tenant, two tenants and
     assert.deepEqual(rows.map((r) => r.source_key), ['file-10.pdf', 'file-11.pdf', 'file-9.pdf']);
     assert.ok(rows.every((r) => r.status === 'skipped_duplicate' && r.tenant_key === TENANT_A));
 
-    const again = await inventory({ id: batchId, tenantKey: TENANT_A }, from(TWELVE.map(([key, text]) => item(key, text))), { rpc: sqlRpc(db), signal: new AbortController().signal });
+    const again = await inventory({ id: batchId, scope: SCOPE_A }, from(TWELVE.map(([key, text]) => item(key, text))), { rpc: sqlRpc(db), signal: new AbortController().signal });
     assert.deepEqual(again.totals, result.totals);
     assert.equal((await skippedRows(db, batchId)).length, 3);
   });
 
-  test('skipped rows always take the batch tenant in SQL, whatever tenant key the caller passes', async () => {
-    const batchId = await createBatch(db, TENANT_A);
-    await inventory({ id: batchId, tenantKey: TENANT_B }, from([item('shared.pdf', 'shared-contract'), item('x.pdf', 'shared-contract')]), {
-      rpc: sqlRpc(db),
-      signal: new AbortController().signal,
-    });
-    const rows = await skippedRows(db, batchId);
-    assert.ok(rows.length > 0);
-    assert.ok(rows.every((r) => r.tenant_key === TENANT_A));
-  });
-
   test("a batch of tenant A run with tenant B's scope fails closed: nothing is written to A's batch and B's hashes are not probed", async () => {
     const batchId = await createBatch(db, TENANT_A);
-    const scopeB = mintScope('personal', TWO_TENANT_IDS.userB, null);
     const before = (await skippedRows(db, batchId)).length;
     await assert.rejects(
-      inventory({ id: batchId, scope: scopeB } as never, from([item('shared.pdf', 'shared-contract'), item('x.pdf', 'shared-contract')]), {
+      inventory({ id: batchId, scope: SCOPE_B }, from([item('shared.pdf', 'shared-contract'), item('x.pdf', 'shared-contract')]), {
         rpc: sqlRpc(db),
         signal: new AbortController().signal,
       }),
@@ -279,8 +272,7 @@ describe('backfill inventory against the real SQL (multi-tenant, two tenants and
 
   test("a batch of tenant A with tenant A's scope still dedupes against A only (the shared file is new for A)", async () => {
     const batchId = await createBatch(db, TENANT_A);
-    const scopeA = mintScope('personal', TWO_TENANT_IDS.userA, null);
-    const result = await inventory({ id: batchId, scope: scopeA } as never, from([item('shared.pdf', 'shared-contract')]), { rpc: sqlRpc(db), signal: new AbortController().signal });
+    const result = await inventory({ id: batchId, scope: SCOPE_A }, from([item('shared.pdf', 'shared-contract')]), { rpc: sqlRpc(db), signal: new AbortController().signal });
     assert.equal(result.totals.uniqueNew, 1);
     assert.equal((await skippedRows(db, batchId)).length, 0);
   });

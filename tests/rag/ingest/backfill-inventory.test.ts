@@ -734,13 +734,24 @@ async function* from<T>(values: T[]): AsyncGenerator<T> {
 }
 
 const BATCH = '20000000-0000-4000-8000-0000000000b1';
+const BATCH_B = '20000000-0000-4000-8000-0000000000b2';
 const TENANT_A = `u:${USER_A}`;
 const TENANT_B = `u:${USER_B}`;
+const SCOPE_A = mintScope('personal', USER_A, null);
+const SCOPE_B = mintScope('personal', USER_B, null);
+/** The batch rows of the fake SQL: each belongs to one tenant. */
+const batchRows = {
+  rag_update_ingestion_batch: (args: Record<string, unknown>): RpcResponse => ({
+    data: { id: args.p_batch_id, tenant_key: args.p_batch_id === BATCH_B ? TENANT_B : TENANT_A },
+    error: null,
+  }),
+};
 
 /** A fake of the tenant-scoped SQL: rag_existing_file_hashes answers from the hashes of the tenant it is asked about. */
 function tenantLedger(existing: Record<string, string[]>) {
   const skipped: Array<Record<string, unknown>> = [];
   const fake = fakeRpc({
+    ...batchRows,
     rag_existing_file_hashes: (args) => {
       const tenant = String(args.p_tenant_key);
       const known = new Set(existing[tenant] ?? []);
@@ -764,7 +775,7 @@ describe('backfill inventory', () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
 
     const result = await inventory(
-      { id: BATCH, tenantKey: TENANT_A },
+      { id: BATCH, scope: SCOPE_A },
       from(files.map(([key, text]) => item(key, text, key === 'file-3.pdf' ? { docType: 'contract_legal' } : {}))),
       { rpc: ledger.rpc, signal: new AbortController().signal },
     );
@@ -789,11 +800,11 @@ describe('backfill inventory', () => {
     const ledger = tenantLedger({ [TENANT_B]: [sha('shared-contract')], [`o:${ORG_O}`]: [sha('org-only')] });
     const signal = new AbortController().signal;
 
-    const forA = await inventory({ id: BATCH, tenantKey: TENANT_A }, from([item('shared.pdf', 'shared-contract'), item('org.pdf', 'org-only')]), { rpc: ledger.rpc, signal });
+    const forA = await inventory({ id: BATCH, scope: SCOPE_A }, from([item('shared.pdf', 'shared-contract'), item('org.pdf', 'org-only')]), { rpc: ledger.rpc, signal });
     expect(forA.totals).toMatchObject({ uniqueNew: 2, existingDuplicates: 0 });
     expect(ledger.skipped).toEqual([]);
 
-    const forB = await inventory({ id: BATCH, tenantKey: TENANT_B }, from([item('shared.pdf', 'shared-contract'), item('org.pdf', 'org-only')]), { rpc: ledger.rpc, signal });
+    const forB = await inventory({ id: BATCH_B, scope: SCOPE_B }, from([item('shared.pdf', 'shared-contract'), item('org.pdf', 'org-only')]), { rpc: ledger.rpc, signal });
     expect(forB.totals).toMatchObject({ uniqueNew: 1, existingDuplicates: 1 });
     expect(forB.entries.map((e) => e.sourceKey)).toEqual(['org.pdf']);
 
@@ -803,19 +814,20 @@ describe('backfill inventory', () => {
 
   test('a row of another tenant in a lookup answer is ignored (second line of defence behind the SQL filter)', async () => {
     const leaky = fakeRpc({
+      ...batchRows,
       rag_existing_file_hashes: (args) => ({
         data: (args.p_hashes as string[]).map((h) => ({ id: 'x', file_sha256: h, tenant_key: TENANT_B, source_key: 'y' })),
         error: null,
       }),
     });
-    const result = await inventory({ id: BATCH, tenantKey: TENANT_A }, from([item('a.pdf', 'aaa')]), { rpc: leaky.rpc, signal: new AbortController().signal });
+    const result = await inventory({ id: BATCH, scope: SCOPE_A }, from([item('a.pdf', 'aaa')]), { rpc: leaky.rpc, signal: new AbortController().signal });
     expect(result.totals).toMatchObject({ uniqueNew: 1, existingDuplicates: 0 });
   });
 
   test('the kept copy of identical files is the first in source order, and entries keep that order', async () => {
     const ledger = tenantLedger({});
     const result = await inventory(
-      { id: BATCH, tenantKey: TENANT_A },
+      { id: BATCH, scope: SCOPE_A },
       from([item('z-first.txt', 'same'), item('a-second.txt', 'same'), item('m-third.txt', 'other')]),
       { rpc: ledger.rpc, signal: new AbortController().signal },
     );
@@ -846,7 +858,7 @@ describe('backfill inventory', () => {
     const ledger = tenantLedger({});
     let result;
     try {
-      result = await inventory({ id: BATCH, tenantKey: TENANT_A }, from([big]), { rpc: ledger.rpc, signal: new AbortController().signal });
+      result = await inventory({ id: BATCH, scope: SCOPE_A }, from([big]), { rpc: ledger.rpc, signal: new AbortController().signal });
     } finally {
       hashEvents.recording = false;
     }
@@ -872,7 +884,7 @@ describe('backfill inventory', () => {
   test('looks existing hashes up in chunks of 1,000 and records skipped rows in chunks of 1,000', async () => {
     const texts = Array.from({ length: 2_500 }, (_, i) => `doc-${i}`);
     const ledger = tenantLedger({ [TENANT_A]: texts.map(sha) });
-    const result = await inventory({ id: BATCH, tenantKey: TENANT_A }, from(texts.map((t, i) => item(`f${i}.txt`, t))), {
+    const result = await inventory({ id: BATCH, scope: SCOPE_A }, from(texts.map((t, i) => item(`f${i}.txt`, t))), {
       rpc: ledger.rpc,
       signal: new AbortController().signal,
     });
@@ -903,7 +915,7 @@ describe('backfill inventory', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     const ledger = tenantLedger({});
-    const result = await inventory({ id: BATCH, tenantKey: TENANT_A }, from([item('ok.pdf', 'ok'), failing, midStream, item('ok2.pdf', 'ok2')]), {
+    const result = await inventory({ id: BATCH, scope: SCOPE_A }, from([item('ok.pdf', 'ok'), failing, midStream, item('ok2.pdf', 'ok2')]), {
       rpc: ledger.rpc,
       signal: new AbortController().signal,
     });
@@ -921,7 +933,7 @@ describe('backfill inventory', () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     const ledger = tenantLedger({});
     await inventory(
-      { id: BATCH, tenantKey: TENANT_A },
+      { id: BATCH, scope: SCOPE_A },
       from([item('confidential-contract.pdf', 'top secret clause'), item('copy-of-confidential-contract.pdf', 'top secret clause')]),
       { rpc: ledger.rpc, signal: new AbortController().signal },
     );
@@ -937,15 +949,15 @@ describe('backfill inventory', () => {
   });
 
   test('a failed lookup or enqueue rejects with a generic message; nothing is enqueued when the lookup fails', async () => {
-    const failingLookup = fakeRpc({ rag_existing_file_hashes: () => ({ data: null, error: { message: 'relation documents (tenant u:abc) exploded', code: 'XX000' } }) });
+    const failingLookup = fakeRpc({ ...batchRows, rag_existing_file_hashes: () => ({ data: null, error: { message: 'relation documents (tenant u:abc) exploded', code: 'XX000' } }) });
     await expect(
-      inventory({ id: BATCH, tenantKey: TENANT_A }, from([item('a.pdf', 'a'), item('b.pdf', 'a')]), { rpc: failingLookup.rpc, signal: new AbortController().signal }),
+      inventory({ id: BATCH, scope: SCOPE_A }, from([item('a.pdf', 'a'), item('b.pdf', 'a')]), { rpc: failingLookup.rpc, signal: new AbortController().signal }),
     ).rejects.toThrow('[Backfill] existing hash lookup failed');
     expect(failingLookup.calls.some((c) => c.fn === 'rag_enqueue_backfill_jobs')).toBe(false);
 
-    const failingEnqueue = fakeRpc({ rag_enqueue_backfill_jobs: () => ({ data: null, error: { message: 'boom' } }) });
+    const failingEnqueue = fakeRpc({ ...batchRows, rag_enqueue_backfill_jobs: () => ({ data: null, error: { message: 'boom' } }) });
     await expect(
-      inventory({ id: BATCH, tenantKey: TENANT_A }, from([item('a.pdf', 'a'), item('b.pdf', 'a')]), { rpc: failingEnqueue.rpc, signal: new AbortController().signal }),
+      inventory({ id: BATCH, scope: SCOPE_A }, from([item('a.pdf', 'a'), item('b.pdf', 'a')]), { rpc: failingEnqueue.rpc, signal: new AbortController().signal }),
     ).rejects.toThrow('[Backfill] skipped_duplicate enqueue failed');
   });
 
@@ -957,15 +969,12 @@ describe('backfill inventory', () => {
       controller.abort();
       yield item('b.pdf', 'b');
     }
-    await expect(inventory({ id: BATCH, tenantKey: TENANT_A }, aborting(), { rpc: ledger.rpc, signal: controller.signal })).rejects.toThrow();
-    expect(ledger.calls).toEqual([]);
+    await expect(inventory({ id: BATCH, scope: SCOPE_A }, aborting(), { rpc: ledger.rpc, signal: controller.signal })).rejects.toThrow();
+    expect(ledger.calls.map((c) => c.fn)).toEqual(['rag_update_ingestion_batch']);
   });
 });
 
 describe('backfill inventory tenant binding', () => {
-  const SCOPE_A = mintScope('personal', USER_A, null);
-  const SCOPE_B = mintScope('personal', USER_B, null);
-
   /** The batch row lives in SQL with its own tenant; the lookup and the enqueue are answered per that tenant only. */
   function batchLedger(batchTenant: string | null, hashesByTenant: Record<string, string[]>) {
     const opened: string[] = [];
@@ -993,7 +1002,7 @@ describe('backfill inventory tenant binding', () => {
   test("a batch of tenant A run with tenant B's scope fails closed before any file is read, looked up or enqueued", async () => {
     const ledger = batchLedger(TENANT_A, { [TENANT_B]: [sha('shared-contract')] });
     await expect(
-      inventory({ id: BATCH, scope: SCOPE_B } as never, from([ledger.tracked('shared.pdf', 'shared-contract')]), { rpc: ledger.rpc, signal: new AbortController().signal }),
+      inventory({ id: BATCH, scope: SCOPE_B }, from([ledger.tracked('shared.pdf', 'shared-contract')]), { rpc: ledger.rpc, signal: new AbortController().signal }),
     ).rejects.toThrow('[Backfill] batch tenant mismatch');
     expect(ledger.opened).toEqual([]);
     expect(ledger.calls.map((c) => c.fn)).not.toContain('rag_existing_file_hashes');
@@ -1002,7 +1011,7 @@ describe('backfill inventory tenant binding', () => {
 
   test('the duplicate lookup carries the tenant stored on the batch row, never a caller string', async () => {
     const ledger = batchLedger(TENANT_A, { [TENANT_A]: [sha('mine')] });
-    const result = await inventory({ id: BATCH, scope: SCOPE_A } as never, from([ledger.tracked('mine.pdf', 'mine'), ledger.tracked('new.pdf', 'new')]), {
+    const result = await inventory({ id: BATCH, scope: SCOPE_A }, from([ledger.tracked('mine.pdf', 'mine'), ledger.tracked('new.pdf', 'new')]), {
       rpc: ledger.rpc,
       signal: new AbortController().signal,
     });
@@ -1017,15 +1026,15 @@ describe('backfill inventory tenant binding', () => {
   test('a missing batch, a failed batch lookup, an unminted scope and a case-variant tenant all fail closed', async () => {
     const signal = new AbortController().signal;
     const missing = batchLedger(null, {});
-    await expect(inventory({ id: BATCH, scope: SCOPE_A } as never, from([missing.tracked('a.pdf', 'a')]), { rpc: missing.rpc, signal })).rejects.toThrow('[Backfill] batch lookup failed');
+    await expect(inventory({ id: BATCH, scope: SCOPE_A }, from([missing.tracked('a.pdf', 'a')]), { rpc: missing.rpc, signal })).rejects.toThrow('[Backfill] batch lookup failed');
     expect(missing.opened).toEqual([]);
 
     const variant = batchLedger(TENANT_A.toUpperCase(), { [TENANT_A]: [sha('a')] });
-    await expect(inventory({ id: BATCH, scope: SCOPE_A } as never, from([variant.tracked('a.pdf', 'a')]), { rpc: variant.rpc, signal })).rejects.toThrow('[Backfill] batch tenant mismatch');
+    await expect(inventory({ id: BATCH, scope: SCOPE_A }, from([variant.tracked('a.pdf', 'a')]), { rpc: variant.rpc, signal })).rejects.toThrow('[Backfill] batch tenant mismatch');
 
     const fine = batchLedger(TENANT_A, {});
     await expect(
-      inventory({ id: BATCH, scope: { kind: 'personal', userId: USER_A, organizationId: null } } as never, from([fine.tracked('a.pdf', 'a')]), { rpc: fine.rpc, signal }),
+      inventory({ id: BATCH, scope: { kind: 'personal', userId: USER_A, organizationId: null } as never }, from([fine.tracked('a.pdf', 'a')]), { rpc: fine.rpc, signal }),
     ).rejects.toThrow('[Backfill] batch tenant mismatch');
     expect(fine.opened).toEqual([]);
     expect(fine.calls.filter((c) => c.fn !== 'rag_update_ingestion_batch')).toEqual([]);
