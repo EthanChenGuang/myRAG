@@ -11,6 +11,10 @@ _RECALL_FIELDS = {5: "spans_hit_at_5", 10: "spans_hit_at_10"}
 CROSS_LINGUAL = "cross_lingual"
 
 
+def question_kind(category: str, tags: Iterable[str]) -> str:
+    return "other"
+
+
 def language_pair_key(language: str, evidence_language: str) -> str:
     return f"{language}->{evidence_language}"
 
