@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import * as scopeModule from '@/lib/rag/tenant/scope';
 import { mintScope } from '@/lib/rag/tenant/scope';
 import type { IngestInput, IngestResult } from '@/lib/rag';
 
@@ -585,7 +584,7 @@ describe.each(['scrape', 'crawl'] as const)('%s route', (kind) => {
       expect(response.status).toBe(200);
       expect(routeState.adapterCalls).toHaveLength(1);
       const args = routeState.adapterCalls[0].args;
-      expect(scopeKeyOf(args.scope)).toBe('s:default');
+      expect(await scopeKeyOf(args.scope)).toBe('s:default');
       expect(args.signal).toBeInstanceOf(AbortSignal);
       expect(args.userId).toBeUndefined();
     });
@@ -595,14 +594,14 @@ describe.each(['scrape', 'crawl'] as const)('%s route', (kind) => {
       routeState.members = [{ organization_id: ORG, user_id: USER }];
       const response = await post(kind, { organizationId: ORG });
       expect(response.status).toBe(200);
-      expect(scopeKeyOf(routeState.adapterCalls[0].args.scope)).toBe(`o:${ORG}`);
+      expect(await scopeKeyOf(routeState.adapterCalls[0].args.scope)).toBe(`o:${ORG}`);
     });
 
     it('multi-tenant: no organization gives the personal u:<session user> scope', async () => {
       routeState.mode = 'multi-tenant';
       const response = await post(kind);
       expect(response.status).toBe(200);
-      expect(scopeKeyOf(routeState.adapterCalls[0].args.scope)).toBe(`u:${USER}`);
+      expect(await scopeKeyOf(routeState.adapterCalls[0].args.scope)).toBe(`u:${USER}`);
     });
 
     it('multi-tenant: a non-member gets 403 and nothing is scraped', async () => {
@@ -639,8 +638,9 @@ describe.each(['scrape', 'crawl'] as const)('%s route', (kind) => {
   });
 });
 
-function scopeKeyOf(scope: unknown): string {
+async function scopeKeyOf(scope: unknown): Promise<string> {
   if (scope === undefined) return '(no scope)';
-  const { scopeKey } = scopeModule;
+  // Loaded after the route, so it is the module instance that minted the scope.
+  const { scopeKey } = await import('@/lib/rag/tenant/scope');
   return scopeKey(scope as Parameters<typeof scopeKey>[0]);
 }
