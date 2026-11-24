@@ -378,9 +378,9 @@ export async function createSelectiveFilterDatabase(): Promise<SelectiveFixtureD
     await db.exec(
       `CREATE INDEX idx_document_chunks_embedding ON document_chunks
          USING hnsw (embedding vector_cosine_ops)
-         WITH (m = 64, ef_construction = 200);
-       ANALYZE document_chunks`,
+         WITH (m = 64, ef_construction = 200)`,
     );
+    await db.exec('ANALYZE document_chunks');
   } catch (error) {
     await db.close().catch(() => undefined);
     throw error;
