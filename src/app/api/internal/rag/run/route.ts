@@ -2,11 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { env } from '@/lib/env';
 import { validateRequest } from '@/lib/api-middleware';
 import {
+  countTokens,
   createTraceCollector,
   evalScope,
   finishTrace,
+  LEXICAL_VERSION,
+  parseRetrievalFilters,
+  RERANK_TEXT_VERSION,
   runRetrieval,
   scopeKey,
+  type RetrievalFilterInput,
+  type RetrievalResult,
   type StageOverrides,
 } from '@/lib/rag';
 import { RagRunRequestSchema, RagTraceSchema, type RagRunRequest } from '@/lib/rag-eval/contracts.generated';
@@ -16,16 +22,97 @@ import { generateEvalAnswer, isGPTGeneratorModel, resolveGeneratorModel } from '
 
 export const runtime = 'nodejs';
 
+type RetrievalOverridesInput = NonNullable<RagRunRequest['options']>['retrieval_overrides'];
+type RetrievalFiltersInput = NonNullable<RagRunRequest['options']>['retrieval_filters'];
+type RetrievalOverrides = NonNullable<StageOverrides['retrievalOverrides']>;
+
+function toRetrievalOverrides(input: RetrievalOverridesInput | undefined): RetrievalOverrides | undefined {
+  if (!input) return undefined;
+  const out: RetrievalOverrides = {};
+  if (input.candidate_pool_size != null) out.candidatePoolSize = input.candidate_pool_size;
+  if (input.rerank_input_cap != null) out.rerankInputCap = input.rerank_input_cap;
+  if (input.final_top_k != null) out.finalTopK = input.final_top_k;
+  if (input.rrf_k != null) out.rrfK = input.rrf_k;
+  if (input.leg_weights != null) {
+    out.legWeights = { dense: input.leg_weights.dense, lexical: input.leg_weights.lexical, exactId: input.leg_weights.exact_id };
+  }
+  if (input.rerank_model != null) out.rerankModel = input.rerank_model;
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+function toFilterBody(input: NonNullable<RetrievalFiltersInput>): Record<string, unknown> {
+  const body: Record<string, unknown> = {};
+  if (input.date_range != null) body.dateRange = { from: input.date_range.from, to: input.date_range.to };
+  if (input.sources != null) body.sources = input.sources;
+  if (input.document_ids != null) body.documentIds = input.document_ids;
+  if (input.doc_types != null) body.docTypes = input.doc_types;
+  if (input.languages != null) body.languages = input.languages;
+  if (input.invoice != null) {
+    body.invoice = {
+      supplier: input.invoice.supplier,
+      amountMin: input.invoice.amount_min,
+      amountMax: input.invoice.amount_max,
+      currency: input.invoice.currency,
+    };
+  }
+  return body;
+}
+
 function toStageOverrides(options: RagRunRequest['options']): StageOverrides | undefined {
   const disabledStages = options?.disabled_stages ?? undefined;
   const timeouts = Object.fromEntries(
     Object.entries(options?.stage_timeouts_ms ?? {}).filter((entry): entry is [string, number] => typeof entry[1] === 'number'),
   );
   const hasTimeouts = Object.keys(timeouts).length > 0;
-  if (!disabledStages?.length && !hasTimeouts) return undefined;
+  const retrievalOverrides = toRetrievalOverrides(options?.retrieval_overrides);
+  if (!disabledStages?.length && !hasTimeouts && !retrievalOverrides) return undefined;
   return {
     ...(disabledStages?.length ? { disabledStages } : {}),
     ...(hasTimeouts ? { timeouts } : {}),
+    ...(retrievalOverrides ? { retrievalOverrides } : {}),
+  };
+}
+
+type RefusalReason = 'no_relevant_context' | 'below_threshold' | 'below_similarity_floor';
+
+function refusalReasonOf(result: RetrievalResult, refused: boolean): RefusalReason | null {
+  if (!refused) return null;
+  const record = result.refusal;
+  if (record?.decision === 'refuse') {
+    const reason: string = record.reason;
+    if (reason === 'below_threshold') return 'below_threshold';
+    if (reason === 'below_similarity_floor') return 'below_similarity_floor';
+    if (record.basis === 'rerank_threshold') return 'below_threshold';
+    if (record.basis === 'similarity_floor') return 'below_similarity_floor';
+  }
+  return 'no_relevant_context';
+}
+
+function stageCountsOf(stages: RetrievalResult['stages']): Record<string, Record<string, number>> {
+  const out: Record<string, Record<string, number>> = {};
+  for (const stage of stages) {
+    if (stage.counts && Object.keys(stage.counts).length > 0) out[stage.name] = { ...stage.counts };
+  }
+  return out;
+}
+
+function v2TraceFields(result: RetrievalResult) {
+  const record = result.refusal;
+  return {
+    retrieval_config_hash: result.retrievalConfigHash ?? null,
+    context_tokens: countTokens(result.context),
+    query_language: result.queryLanguage ?? null,
+    retrieval_versions: { lexical: LEXICAL_VERSION, rerank_text: RERANK_TEXT_VERSION },
+    refusal: record
+      ? {
+          decision: record.decision,
+          basis: record.basis,
+          reason: record.reason,
+          top_score: record.topScore,
+          threshold: record.threshold,
+          cell_key: record.cellKey,
+        }
+      : null,
   };
 }
 
@@ -55,6 +142,15 @@ export async function POST(req: NextRequest) {
   }
   const { scope } = scoped;
 
+  let retrievalFilters: RetrievalFilterInput | undefined;
+  if (options?.retrieval_filters) {
+    const filtersParsed = parseRetrievalFilters(toFilterBody(options.retrieval_filters));
+    if (!filtersParsed.ok) {
+      return NextResponse.json({ success: false, error: 'Invalid request data', details: filtersParsed.details }, { status: 400 });
+    }
+    retrievalFilters = filtersParsed.filters;
+  }
+
   const stageOverrides = toStageOverrides(options);
   const collector = createTraceCollector({ profile: 'eval', tenantKey: scopeKey(scope) });
 
@@ -77,6 +173,7 @@ export async function POST(req: NextRequest) {
       signal: req.signal,
       trace: collector,
       ...(stageOverrides ? { stageOverrides } : {}),
+      ...(retrievalFilters ? { retrievalFilters } : {}),
     });
 
     try {
@@ -96,7 +193,7 @@ export async function POST(req: NextRequest) {
       for (const chunk of result.kept) documentNames.set(chunk.document_id, chunk.document_name);
 
       let answer: string | null = null;
-      const refused = result.refusalCandidate;
+      const refused = result.refusalCandidate || result.refusal?.decision === 'refuse';
       if (generatorModel !== null && !refused) {
         const generationStart = collector.now();
         try {
@@ -113,6 +210,8 @@ export async function POST(req: NextRequest) {
 
       const retrievalStrategy = result.stages.find((stage) => stage.name === 'search')?.detail ?? 'unknown';
       const queryContext = result.queryContext;
+      const stageCounts = stageCountsOf(result.stages);
+      const v2Result = result.retrievalConfigHash !== undefined;
       const effectiveConfig = buildEffectiveConfig();
       effectiveConfig.generator_model = generatorModel;
       const trace = {
@@ -138,6 +237,10 @@ export async function POST(req: NextRequest) {
           match_reason: chunk.match_reason ?? null,
           has_image: !!chunk.metadata?.image_url,
           rank: index + 1,
+          ...(chunk.rerank_score !== undefined ? { rerank_score: chunk.rerank_score } : {}),
+          ...(chunk.fused_score !== undefined ? { fused_score: chunk.fused_score } : {}),
+          ...(chunk.legs !== undefined ? { legs: chunk.legs } : {}),
+          ...(chunk.language !== undefined ? { language: chunk.language } : {}),
         })),
         kept: result.kept,
         used_documents: result.usedDocuments.map((doc) => ({
@@ -148,7 +251,9 @@ export async function POST(req: NextRequest) {
         })),
         context: result.context,
         refused,
-        refusal_reason: refused ? ('no_relevant_context' as const) : null,
+        refusal_reason: refusalReasonOf(result, refused),
+        ...(v2Result ? v2TraceFields(result) : {}),
+        ...(Object.keys(stageCounts).length > 0 ? { stage_counts: stageCounts } : {}),
         answer,
         citations: [],
         stage_latency_ms: collector.toStageLatency(),

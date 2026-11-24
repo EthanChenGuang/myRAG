@@ -11,6 +11,7 @@ export function evalRetrievalOverrides(
     final_top_k: overrides.finalTopK ?? null,
     rrf_k: overrides.rrfK ?? null,
     rerank_input_cap: overrides.rerankInputCap ?? null,
+    rerank_model: overrides.rerankModel ?? null,
     leg_weights: overrides.legWeights
       ? {
           dense: overrides.legWeights.dense ?? 1,
