@@ -34,6 +34,31 @@ const RPC_ARGUMENTS: Record<string, { vector: string; allowed: string[] }> = {
   },
 };
 
+const GENERIC_RPC_NAME = /^(?:rag_[a-z0-9_]+|match_chunks_by_profile)$/;
+const VECTOR_ARGUMENT_TYPES = new Set(['vector', 'halfvec']);
+const JSON_ARGUMENT_TYPES = new Set(['json', 'jsonb']);
+const SQLSTATE_RE = /^[0-9A-Z]{5}$/;
+const SQLSTATE_STATUS: Record<string, number> = { '42501': 403, '23503': 409, '23505': 409, '42883': 404 };
+
+// Input arguments of the public function with this name (PostgREST resolves named arguments against the same list); one row per overload.
+const RPC_SIGNATURE_SQL = `
+SELECT COALESCE(jsonb_agg(jsonb_build_object('name', a.name, 'type', format_type(a.type, NULL)) ORDER BY a.ord) FILTER (WHERE a.name IS NOT NULL), '[]'::jsonb) AS args
+FROM pg_proc p
+JOIN pg_namespace n ON n.oid = p.pronamespace AND n.nspname = 'public'
+LEFT JOIN LATERAL (
+  SELECT t.ord, t.type, nm.name
+  FROM unnest(COALESCE(p.proallargtypes, p.proargtypes::oid[])) WITH ORDINALITY AS t(type, ord)
+  LEFT JOIN unnest(p.proargnames) WITH ORDINALITY AS nm(name, ord) ON nm.ord = t.ord
+  LEFT JOIN unnest(p.proargmodes::text[]) WITH ORDINALITY AS md(mode, ord) ON md.ord = t.ord
+  WHERE COALESCE(md.mode, 'i') IN ('i', 'b', 'v')
+) a ON true
+WHERE p.proname = $1 AND p.prokind = 'f'
+GROUP BY p.oid`;
+
+interface RpcSignature {
+  args: Map<string, string>;
+}
+
 const TABLE_COLUMNS: Record<string, string[]> = {
   documents: ['id', 'filename', 'content', 'metadata', 'created_at', 'source', 'source_provider', 'source_file_id', 'organization_id', 'user_id'],
   document_chunks: ['id', 'document_id', 'content', 'metadata', 'created_at', 'organization_id', 'chunk_index'],
@@ -70,9 +95,22 @@ class Rejection extends Error {
   constructor(
     readonly status: number,
     message: string,
+    readonly body?: unknown,
   ) {
     super(message);
   }
+}
+
+function databaseRejection(fn: string, error: unknown): Rejection {
+  const failure = error as { code?: unknown; detail?: unknown; hint?: unknown };
+  const message = error instanceof Error ? error.message : String(error);
+  if (typeof failure.code === 'string' && SQLSTATE_RE.test(failure.code)) {
+    const status = SQLSTATE_STATUS[failure.code] ?? 400;
+    const details = typeof failure.detail === 'string' ? failure.detail : null;
+    const hint = typeof failure.hint === 'string' ? failure.hint : null;
+    return new Rejection(status, message, { code: failure.code, message, details, hint });
+  }
+  return new Rejection(400, `rpc ${fn} failed: ${message}`);
 }
 
 function jsonReplacer(_key: string, value: unknown): unknown {
@@ -118,6 +156,26 @@ function toVectorText(value: unknown, argName: string): string {
 }
 
 function createHandlers(db: PGlite, calls: FakeEdgeCall[], extras: { documentFilenameFilter: boolean }) {
+  const signatures = new Map<string, RpcSignature>();
+
+  async function signatureOf(fn: string): Promise<RpcSignature | null> {
+    const cached = signatures.get(fn);
+    if (cached) return cached;
+    const result = await db.query<{ args: Array<{ name: string; type: string }> }>(RPC_SIGNATURE_SQL, [fn]);
+    if (result.rows.length === 0) return null;
+    if (result.rows.length > 1) throw new Rejection(400, `overloaded rpc function is not supported: ${fn}`);
+    const signature: RpcSignature = { args: new Map(result.rows[0].args.map((arg) => [arg.name, arg.type])) };
+    signatures.set(fn, signature);
+    return signature;
+  }
+
+  function bindArgument(name: string, type: string, value: unknown): unknown {
+    if (value === null) return null;
+    if (VECTOR_ARGUMENT_TYPES.has(type)) return toVectorText(value, name);
+    if (JSON_ARGUMENT_TYPES.has(type)) return JSON.stringify(value);
+    return value;
+  }
+
   function embeddings(body: Record<string, unknown>): { payload: unknown } {
     const { input, model, encoding_format: encodingFormat, dimensions } = body;
     if (dimensions !== undefined && dimensions !== 1536) throw new Rejection(400, 'only 1536 dimensions are supported');
@@ -145,7 +203,7 @@ function createHandlers(db: PGlite, calls: FakeEdgeCall[], extras: { documentFil
 
   async function rpc(fn: string, body: Record<string, unknown>): Promise<unknown[]> {
     const spec = RPC_ARGUMENTS[fn];
-    if (!spec) throw new Rejection(404, `unsupported rpc function: ${fn}`);
+    if (!spec) return genericRpc(fn, body);
     const names = Object.keys(body);
     const unknown = names.filter((name) => !spec.allowed.includes(name));
     if (unknown.length > 0) throw new Rejection(400, `unsupported rpc argument(s) for ${fn}: ${unknown.join(', ')}`);
@@ -156,6 +214,23 @@ function createHandlers(db: PGlite, calls: FakeEdgeCall[], extras: { documentFil
       return (await db.query(sql, values)).rows as unknown[];
     } catch (error) {
       throw new Rejection(400, `rpc ${fn} failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  async function genericRpc(fn: string, body: Record<string, unknown>): Promise<unknown[]> {
+    if (!GENERIC_RPC_NAME.test(fn)) throw new Rejection(404, `unsupported rpc function: ${fn}`);
+    const signature = await signatureOf(fn);
+    if (!signature) throw new Rejection(404, `unsupported rpc function: ${fn}`);
+    const names = Object.keys(body);
+    const unknown = names.filter((name) => !signature.args.has(name));
+    if (unknown.length > 0) throw new Rejection(400, `unsupported rpc argument(s) for ${fn}: ${unknown.join(', ')}`);
+    const values = names.map((name) => bindArgument(name, signature.args.get(name) as string, body[name]));
+    calls.push({ method: 'POST', path: `/rest/v1/rpc/${fn}` });
+    const sql = `SELECT * FROM ${fn}(${names.map((name, i) => `${name} => $${i + 1}`).join(', ')})`;
+    try {
+      return (await db.query(sql, values)).rows as unknown[];
+    } catch (error) {
+      throw databaseRejection(fn, error);
     }
   }
 
@@ -316,7 +391,8 @@ export async function startFakeEdge(options: FakeEdgeOptions): Promise<FakeEdge>
       const status = error instanceof Rejection ? error.status : 500;
       const message = error instanceof Error ? error.message : String(error);
       errors.push({ method, url: requestUrl, status, message });
-      if (!res.headersSent) send(res, status, { code: 'FAKE_EDGE_UNSUPPORTED', message });
+      const body = error instanceof Rejection && error.body !== undefined ? error.body : { code: 'FAKE_EDGE_UNSUPPORTED', message };
+      if (!res.headersSent) send(res, status, body);
       else res.end();
     }
   };
