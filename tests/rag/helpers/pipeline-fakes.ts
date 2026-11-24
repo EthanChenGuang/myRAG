@@ -1,8 +1,11 @@
+import { fakeRerankScores } from '../../../eval/harness/fake-reranker.mts';
 import type { RpcClient, RpcRequest, RpcResponse } from '@/lib/rag/backend/supabase-rpc';
 import type { RagDeps } from '@/lib/rag/deps';
 import { resetRagDepsForTests, setRagDepsForTests } from '@/lib/rag/deps';
 import { resetRagConfigForTests } from '@/lib/rag/config';
 import type { RagEnvInput } from '@/lib/rag/config';
+import { completeScores } from '@/lib/rag/rerank/scores';
+import type { Reranker, RerankProviderId } from '@/lib/rag/rerank/types';
 
 export const SEMANTIC_QUERY = 'tell me about the onboarding process';
 
@@ -78,6 +81,55 @@ export function fakeRpcClient(options: FakeRpcOptions = {}): { client: RpcClient
 export interface FakeEmbedderOptions {
   delayMs?: number;
   fail?: Error;
+}
+
+export interface FakeRerankerOptions {
+  delayMs?: number;
+  fail?: boolean | Error;
+  partial?: boolean;
+  model?: 'fake-quality-v1' | 'fake-fast-v1';
+}
+
+export function fakeReranker(options: FakeRerankerOptions = {}): { reranker: Reranker } {
+  const model = options.model ?? 'fake-quality-v1';
+  const provider: RerankProviderId = model === 'fake-fast-v1' ? 'voyage' : 'cohere';
+  const reranker: Reranker = {
+    id: provider,
+    model,
+    scoreSemantics: 'calibrated',
+    rerank(query, docs, opts) {
+      if (opts.signal.aborted) {
+        return Promise.reject(opts.signal.reason ?? new DOMException('Aborted', 'AbortError'));
+      }
+      const failError = options.fail === true ? new Error('fake reranker failure') : options.fail instanceof Error ? options.fail : null;
+      return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+          if (failError) {
+            reject(failError);
+            return;
+          }
+          try {
+            const raw = fakeRerankScores(query, docs, {});
+            let rows = raw.map((score, index) => ({ index, score }));
+            if (options.partial && rows.length > 0) rows = rows.slice(0, -1);
+            const scores = completeScores(docs.length, rows);
+            resolve({ scores });
+          } catch (error) {
+            reject(error);
+          }
+        }, options.delayMs ?? 0);
+        opts.signal.addEventListener(
+          'abort',
+          () => {
+            clearTimeout(timer);
+            reject(opts.signal.reason ?? new DOMException('Aborted', 'AbortError'));
+          },
+          { once: true },
+        );
+      });
+    },
+  };
+  return { reranker };
 }
 
 export function fakeEmbedder(options: FakeEmbedderOptions = {}): {

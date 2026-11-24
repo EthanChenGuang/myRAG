@@ -241,6 +241,88 @@ describe('fake edge (PostgREST shim plus /v1/embeddings)', () => {
     assert.equal(body.data[1].index, 1);
   });
 
+  const bearer = { authorization: 'Bearer fixture-placeholder-token' };
+
+  test('POST /v2/rerank serves Cohere-shaped fake scores for fake-quality-v1', async () => {
+    const e = await getEdge();
+    const res = await post(
+      e,
+      '/v2/rerank',
+      { model: 'fake-quality-v1', query: 'refund policy', documents: ['annual refund policy', 'shipping warehouse'] },
+      bearer,
+    );
+    assert.equal(res.status, 200);
+    const body = (await res.json()) as {
+      results: Array<{ index: number; relevance_score: number }>;
+      meta: { billed_units: { search_units: number } };
+    };
+    assert.equal(body.results.length, 2);
+    assert.ok(body.results.every((row) => row.relevance_score >= 0 && row.relevance_score <= 1));
+    assert.equal(body.meta.billed_units.search_units, 1);
+    assert.ok(body.results[0]!.relevance_score >= body.results[1]!.relevance_score);
+    assert.ok(e.calls.some((c) => c.path === '/v2/rerank' && c.model === 'fake-quality-v1'));
+  });
+
+  test('POST /v2/rerank includes relevant_spans when enabled', async () => {
+    const e = await getEdge();
+    const doc = 'Intro line. Refund policy details here. Footer.';
+    const res = await post(
+      e,
+      '/v2/rerank',
+      {
+        model: 'fake-quality-v1',
+        query: 'refund policy',
+        documents: [doc],
+        relevant_spans: { mode: 'enabled' },
+      },
+      bearer,
+    );
+    assert.equal(res.status, 200);
+    const body = (await res.json()) as { results: Array<{ relevant_spans?: Array<{ start: number; end: number }> }> };
+    const spans = body.results[0]?.relevant_spans;
+    assert.ok(spans && spans.length === 1);
+    assert.ok(spans[0]!.end > spans[0]!.start);
+  });
+
+  test('POST /v1/rerank serves Voyage-shaped fake scores for fake-fast-v1', async () => {
+    const e = await getEdge();
+    const res = await post(
+      e,
+      '/v1/rerank',
+      { model: 'fake-fast-v1', query: 'onboarding', documents: ['onboarding steps', 'unrelated text'] },
+      bearer,
+    );
+    assert.equal(res.status, 200);
+    const body = (await res.json()) as {
+      object: string;
+      data: Array<{ index: number; relevance_score: number }>;
+      model: string;
+      usage: { total_tokens: number };
+    };
+    assert.equal(body.object, 'list');
+    assert.equal(body.model, 'fake-fast-v1');
+    assert.equal(body.data.length, 2);
+    assert.ok(body.usage.total_tokens > 0);
+  });
+
+  test('real rerank model ids and missing bearer are rejected', async () => {
+    const isolated = await startFakeEdge({ db: (await createdFixture()).db });
+    try {
+      const cohere = await post(isolated, '/v2/rerank', {
+        model: 'rerank-v5.0-pro',
+        query: 'q',
+        documents: ['d'],
+      }, bearer);
+      assert.equal(cohere.status, 400);
+      const voyage = await post(isolated, '/v1/rerank', { model: 'rerank-3', query: 'q', documents: ['d'] }, bearer);
+      assert.equal(voyage.status, 400);
+      const noAuth = await post(isolated, '/v2/rerank', { model: 'fake-quality-v1', query: 'q', documents: ['d'] });
+      assert.equal(noAuth.status, 401);
+    } finally {
+      await isolated.close();
+    }
+  });
+
   test('rpc match_document_chunks accepts named arguments with an array or pgvector text', async () => {
     const e = await getEdge();
     const asArray = await post(e, '/rest/v1/rpc/match_document_chunks', rpcArgs(TRACER_QUESTION));
@@ -318,6 +400,9 @@ describe('fake edge (PostgREST shim plus /v1/embeddings)', () => {
       const env = fixtureProcessEnv('http://127.0.0.1:4567');
       assert.equal(env.NEXT_PUBLIC_SUPABASE_URL, 'http://127.0.0.1:4567');
       assert.equal(env.OPENAI_BASE_URL, 'http://127.0.0.1:4567/v1');
+      assert.equal(env.COHERE_BASE_URL, 'http://127.0.0.1:4567');
+      assert.equal(env.VOYAGE_BASE_URL, 'http://127.0.0.1:4567/v1');
+      assert.ok(env.COHERE_API_KEY && env.COHERE_API_KEY.length > 0);
       for (const k of keys) {
         assert.ok(env[k] && env[k].length > 0, `${k} missing`);
         assert.ok(!env[k].includes('LIVE_SECRET_SENTINEL'));
