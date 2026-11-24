@@ -246,7 +246,7 @@ describe('status and resume', () => {
     filename: 'handbook.md',
     doc_type: 'general',
     parser_used: 'text',
-    created_at: '2026-01-01T00:00:00.000Z',
+    created_at: new Date().toISOString(),
     ...overrides,
   });
 
