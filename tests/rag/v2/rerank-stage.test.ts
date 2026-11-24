@@ -1,4 +1,6 @@
+import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { loadRunConfig } from '../../../eval/harness/run-config.mts';
 import { resetRetrievalBackendForTests, setRetrievalBackendForTests } from '@/lib/rag/backend/registry';
 import type { BackendLegs, RankedHit, RetrievalBackend } from '@/lib/rag/backend/types';
 import { loadRagConfig, resetRagConfigForTests } from '@/lib/rag/config';
@@ -440,5 +442,14 @@ describe('v2 rerank stage in the rank group', () => {
     const fast = await hashFor('fake-fast-v1');
     resetRetrievalBackendForTests();
     expect(new Set([plain, quality, fast]).size).toBe(3);
+  });
+});
+
+describe('v2-recommended run config', () => {
+  it('still validates and selects Cohere against the fake quality model', () => {
+    const config = loadRunConfig(path.join(process.cwd(), 'eval/config/runs/v2-recommended.json'));
+    expect(config.name).toBe('v2-recommended');
+    expect(config.env).toMatchObject({ RAG_PIPELINE: 'v2', RAG_RERANKER: 'cohere', RAG_REFUSAL_THRESHOLD: 'true' });
+    expect(config.overrides?.rerank_model).toBe('fake-quality-v1');
   });
 });
