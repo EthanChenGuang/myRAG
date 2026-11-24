@@ -39,12 +39,12 @@ async function loadAdapter() {
   const identity = await vi.importActual<typeof import('@/lib/rag/ingest/identity')>('@/lib/rag/ingest/identity');
   vi.doMock('@/lib/scrapers/firecrawl-client', () => ({ scrapeUrl, crawlWebsite }));
   vi.doMock('@/lib/document-processor', () => ({ processDocument }));
-  vi.doMock('@/lib/rag/ingest/wake', () => ({ scheduleIngestWake }));
   vi.stubEnv('RAG_INGEST_PIPELINE', state.pipeline);
   vi.stubEnv('RAG_INGEST_ASYNC', state.asyncOn ? 'on' : 'off');
   vi.doMock('@/lib/rag', () => ({
     ingest,
     submitIngest,
+    scheduleIngestWake,
     buildSourceKey: identity.buildSourceKey,
     currentIngestConfig: () => {
       if (state.configThrows) throw new Error('config unavailable');
@@ -89,7 +89,6 @@ afterEach(() => {
   vi.doUnmock('@/lib/scrapers/firecrawl-client');
   vi.doUnmock('@/lib/document-processor');
   vi.doUnmock('@/lib/rag');
-  vi.doUnmock('@/lib/rag/ingest/wake');
 });
 
 describe('scraper adapter, unified async switch', () => {
