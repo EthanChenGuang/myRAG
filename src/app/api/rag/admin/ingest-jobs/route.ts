@@ -1,6 +1,6 @@
 import { z } from 'zod/v3';
 import { adminDenied, checkAdmin } from '@/lib/admin-route-auth';
-import { listJobs } from '@/lib/rag';
+import { listJobsPage } from '@/lib/rag';
 import type { TenantScope } from '@/lib/rag';
 import type { IngestionJob } from '@/lib/rag-eval/contracts.generated';
 import { OrganizationIdSchema, decodeCursor, encodeCursor, fail, invalid, isAfterCursor, jsonNoStore, ledgerFailure, projectJob, resolveWorkspace } from './_lib';
@@ -27,15 +27,21 @@ async function pageAfter(
   want: number,
   signal: AbortSignal,
 ): Promise<IngestionJob[] | 'cursor_too_far'> {
-  if (!cursor) return listJobs({ scope, ...filters, limit: want, offset: 0 }, { signal });
+  if (!cursor) {
+    const first = await listJobsPage({ scope, ...filters, limit: want, offset: 0 }, { signal });
+    if (first.skipped === 0) return first.jobs;
+  }
   const found: IngestionJob[] = [];
+  const seen = new Set<string>();
   for (let offset = 0; offset < MAX_SCAN; offset += PAGE) {
-    const rows = await listJobs({ scope, ...filters, limit: PAGE, offset }, { signal });
-    for (const row of rows) {
-      if (isAfterCursor(row, cursor)) found.push(row);
+    const page = await listJobsPage({ scope, ...filters, limit: PAGE, offset }, { signal });
+    for (const row of page.jobs) {
+      if (seen.has(row.id) || (cursor && !isAfterCursor(row, cursor))) continue;
+      seen.add(row.id);
+      found.push(row);
       if (found.length >= want) return found;
     }
-    if (rows.length < PAGE) return found;
+    if (page.fetched < PAGE) return found;
   }
   return 'cursor_too_far';
 }

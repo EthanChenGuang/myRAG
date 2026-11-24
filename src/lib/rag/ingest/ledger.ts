@@ -11,12 +11,15 @@ const LEASE_LOST = /^lease_lost\b/;
 export class IngestLedgerError extends Error {
   readonly rpc: string;
   readonly code: string | null;
+  /** The fixed token after `ingest_refused:` (for example job_not_found); never free text. */
+  readonly reason: string | null;
 
-  constructor(rpc: string, code: string | null) {
+  constructor(rpc: string, code: string | null, reason: string | null = null) {
     super(`[Ingest Ledger] ${rpc} failed${code ? ` (${code})` : ''}`);
     this.name = 'IngestLedgerError';
     this.rpc = rpc;
     this.code = code;
+    this.reason = reason;
   }
 }
 
@@ -52,6 +55,10 @@ function iso(value: unknown): string | null {
   if (value instanceof Date) return value.toISOString();
   if (typeof value === 'string') return value;
   return null;
+}
+
+function refusalReason(message: string | undefined): string | null {
+  return /^ingest_refused:\s*([a-z_]+)/.exec(message ?? '')?.[1] ?? null;
 }
 
 function ledgerCode(rpc: string, sqlCode: string | null | undefined, message: string | undefined): string | null {
@@ -112,7 +119,7 @@ async function callRpc(
   const response = await db.rpc(rpc, args).abortSignal(options.signal);
   options.signal.throwIfAborted();
   if (response.error) {
-    throw new IngestLedgerError(rpc, ledgerCode(rpc, response.error.code, response.error.message));
+    throw new IngestLedgerError(rpc, ledgerCode(rpc, response.error.code, response.error.message), refusalReason(response.error.message));
   }
   return normalizeRpcRows(rpc, response.data);
 }
@@ -287,17 +294,25 @@ export async function getJobInternal(jobId: string, options: LedgerCallOptions):
   return parseJobRow('rag_get_ingestion_job_internal', row);
 }
 
-export interface ListJobsArgs {
-  scope?: TenantScope | null;
+export interface ListJobsFilters {
   statuses?: string[] | null;
   kind?: string | null;
   limit?: number;
   offset?: number;
 }
 
-export async function listJobs(args: ListJobsArgs, options: LedgerCallOptions): Promise<IngestionJob[]> {
-  if (args.scope) assertTenantScope(args.scope);
-  const tenantKey = args.scope ? scopeKey(args.scope).toLowerCase() : null;
+export interface ListJobsArgs extends ListJobsFilters {
+  scope: TenantScope;
+}
+
+export interface JobsPage {
+  jobs: IngestionJob[];
+  /** Rows the database returned, valid or not: the offset of the next page moves by this, not by jobs.length. */
+  fetched: number;
+  skipped: number;
+}
+
+async function listPage(tenantKey: string | null, args: ListJobsFilters, options: LedgerCallOptions): Promise<JobsPage> {
   const rows = await callRpc(
     'rag_list_ingestion_jobs',
     {
@@ -309,5 +324,31 @@ export async function listJobs(args: ListJobsArgs, options: LedgerCallOptions): 
     },
     options,
   );
-  return rows.filter((row) => row?.id).map((row) => parseJobRow('rag_list_ingestion_jobs', row));
+  const jobs: IngestionJob[] = [];
+  let skipped = 0;
+  for (const row of rows) {
+    const parsed = IngestionJobSchema.safeParse(normalizeJobRow(row));
+    if (parsed.success) jobs.push(parsed.data);
+    else skipped += 1;
+  }
+  if (skipped > 0) console.warn('[Ingest] ledger list skipped rows that failed the job schema', { skipped });
+  return { jobs, fetched: rows.length, skipped };
+}
+
+/** One page of one tenant's jobs; a row that fails the job schema is skipped and counted, never echoed. */
+export async function listJobsPage(args: ListJobsArgs, options: LedgerCallOptions): Promise<JobsPage> {
+  assertTenantScope(args.scope);
+  return listPage(scopeKey(args.scope).toLowerCase(), args, options);
+}
+
+export async function listJobs(args: ListJobsArgs, options: LedgerCallOptions): Promise<IngestionJob[]> {
+  return (await listJobsPage(args, options)).jobs;
+}
+
+/**
+ * Every tenant's jobs. Internal to operator and worker code that has already proven it may see the whole deployment; it is not exported
+ * from the @/lib/rag index, so a route cannot list across tenants through the public API.
+ */
+export async function listJobsAllTenants(args: ListJobsFilters, options: LedgerCallOptions): Promise<IngestionJob[]> {
+  return (await listPage(null, args, options)).jobs;
 }

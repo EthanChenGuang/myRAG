@@ -62,9 +62,17 @@ export function projectJobDetail(job: IngestionJob) {
 
 export type Workspace = { ok: true; scope: TenantScope } | { ok: false; response: NextResponse };
 
-/** The workspace of the verified admin: the personal or default one, or an organization honoured only after the membership check. */
+/** The roles the SQL retry, delete and quarantine functions require (rag_admin_tenant_keys); reads of an organization need the same. */
+export const ADMIN_ORGANIZATION_ROLES = ['owner', 'admin'] as const;
+
+/** The workspace of the verified admin: the personal or default one, or an organization honoured only for its owner or admin. */
 export async function resolveWorkspace(adminUserId: string, organizationId: string | null | undefined, signal: AbortSignal): Promise<Workspace> {
-  const workspace = await resolveAdminWorkspaceScope({ adminUserId, requestedOrganizationId: organizationId ?? null, signal });
+  const workspace = await resolveAdminWorkspaceScope({
+    adminUserId,
+    requestedOrganizationId: organizationId ?? null,
+    requiredOrganizationRoles: ADMIN_ORGANIZATION_ROLES,
+    signal,
+  });
   if (workspace.ok) return { ok: true, scope: workspace.scope };
   return { ok: false, response: fail(workspace.status, workspace.status === 403 ? 'Forbidden' : 'Workspace verification unavailable') };
 }
@@ -72,6 +80,11 @@ export async function resolveWorkspace(adminUserId: string, organizationId: stri
 /** A refusal by the SQL function (job not visible to this admin, wrong status, current document) carries the code ingest_refused. */
 export function isRefusal(error: unknown): boolean {
   return error instanceof IngestLedgerError && error.code === 'ingest_refused';
+}
+
+/** The SQL did not find the job for this actor: it reads like an unknown id, not like a status conflict. */
+export function isJobNotFoundRefusal(error: unknown): boolean {
+  return isRefusal(error) && (error as IngestLedgerError).reason === 'job_not_found';
 }
 
 export function ledgerFailure(action: string, error: unknown): NextResponse {
@@ -100,10 +113,26 @@ export function decodeCursor(value: string): JobCursor | null {
   }
 }
 
-/** True when the job sorts after the cursor in the list order (created_at, id, both descending). */
+const TIMESTAMP = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d+))?(Z|[+-]\d{2}:?\d{2})$/i;
+
+/**
+ * Microseconds since the epoch, read from the timestamp string the database returned (not through a JS Date, which stops at
+ * milliseconds). Digits past the sixth are dropped, as the database stores no more.
+ */
+export function timestampMicros(value: string): bigint | null {
+  const match = TIMESTAMP.exec(value);
+  if (!match) return null;
+  const zone = match[3].toUpperCase() === 'Z' ? 'Z' : match[3].length === 5 ? `${match[3].slice(0, 3)}:${match[3].slice(3)}` : match[3];
+  const seconds = Date.parse(`${match[1]}${zone}`);
+  if (Number.isNaN(seconds)) return null;
+  return BigInt(seconds) * BigInt(1000) + BigInt((match[2] ?? '').slice(0, 6).padEnd(6, '0'));
+}
+
+/** True when the job sorts after the cursor in the list order (created_at, id, both descending), at the database's microsecond precision. */
 export function isAfterCursor(job: Pick<IngestionJob, 'created_at' | 'id'>, cursor: JobCursor): boolean {
-  const at = Date.parse(job.created_at);
-  const from = Date.parse(cursor.createdAt);
+  const at = timestampMicros(job.created_at);
+  const from = timestampMicros(cursor.createdAt);
+  if (at === null || from === null) return false;
   if (at !== from) return at < from;
   return job.id < cursor.id;
 }

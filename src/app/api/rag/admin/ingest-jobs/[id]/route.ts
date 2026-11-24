@@ -1,7 +1,7 @@
 import { z } from 'zod/v3';
 import { adminDenied, checkAdmin } from '@/lib/admin-route-auth';
 import { deleteJob, getJobForScope } from '@/lib/rag';
-import { JobIdSchema, OrganizationIdSchema, fail, invalid, isRefusal, jsonNoStore, ledgerFailure, notFound, projectJob, projectJobDetail, resolveWorkspace } from '../_lib';
+import { JobIdSchema, OrganizationIdSchema, fail, invalid, isJobNotFoundRefusal, isRefusal, jsonNoStore, ledgerFailure, notFound, projectJob, projectJobDetail, resolveWorkspace } from '../_lib';
 
 export const runtime = 'nodejs';
 
@@ -60,6 +60,7 @@ export async function DELETE(request: Request, context: RouteContext): Promise<R
     console.log('[RAG Admin] ingest job deleted', { action: 'delete_ingestion_job', jobId: deleted.id });
     return jsonNoStore({ success: true, job: { ...projectJob(deleted), deleted_at: deleted.deleted_at } });
   } catch (error) {
+    if (isJobNotFoundRefusal(error)) return notFound();
     if (isRefusal(error)) return fail(409, 'not_deletable');
     return ledgerFailure('delete', error);
   }

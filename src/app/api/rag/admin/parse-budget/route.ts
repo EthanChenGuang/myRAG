@@ -1,7 +1,7 @@
 import { z } from 'zod/v3';
 import { adminDenied, checkAdmin } from '@/lib/admin-route-auth';
 import { ParseAdminError, readBudgetView, resolveAdminWorkspaceScope } from '@/lib/rag';
-import { fail, invalid, jsonNoStore } from '../ingest-jobs/_lib';
+import { ADMIN_ORGANIZATION_ROLES, fail, invalid, jsonNoStore } from '../ingest-jobs/_lib';
 
 export const runtime = 'nodejs';
 
@@ -9,7 +9,7 @@ const QuerySchema = z.object({ organizationId: z.string().max(64).nullish() });
 
 /**
  * This UTC month's reserved, used and L3 pages of one workspace of the verified admin (the personal or default one, or an organization
- * named by `organizationId` after the membership check), with the configured monthly budget and the per-document cap. Another tenant's
+ * named by `organizationId` for its owner or admin), with the configured monthly budget and the per-document cap. Another tenant's
  * usage is never read.
  */
 export async function GET(request: Request): Promise<Response> {
@@ -22,6 +22,7 @@ export async function GET(request: Request): Promise<Response> {
   const workspace = await resolveAdminWorkspaceScope({
     adminUserId: admin.userId,
     requestedOrganizationId: parsed.data.organizationId ?? null,
+    requiredOrganizationRoles: ADMIN_ORGANIZATION_ROLES,
     signal: request.signal,
   });
   if (!workspace.ok) return fail(workspace.status, workspace.status === 403 ? 'Forbidden' : 'Workspace verification unavailable');
