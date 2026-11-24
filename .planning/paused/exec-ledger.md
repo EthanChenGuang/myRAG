@@ -134,19 +134,28 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | 03.1-26 | `wt/03.1-26` / `exec/03.1-26` | **merged** |
 | 03.1-25-fix | `wt/fix-backfill-tenant` | **merged** — review F HIGH-1, MED-1, MED-4, LOW-5/6/7 |
 | 03-48-sec-rpc-3 | `wt/fix-definer-search-path` | **merged** — review F MED-3 (0411 search_path), LOW-3 |
-| 04-32 | `wt/04-32` / `exec/04-32` | **RUNNING** (gsd-executor, base `157641d`) |
-| 04-23 | `wt/04-23` / `exec/04-23` | **RUNNING** (gsd-executor) |
-| 04-24 | `wt/04-24` / `exec/04-24` | **RUNNING** (gsd-executor) |
+| 04-32 | `wt/04-32` / `exec/04-32` | **merged** (0412) |
+| 04-23 | `wt/04-23` / `exec/04-23` | **merged** |
+| 04-24 | `wt/04-24` / `exec/04-24` | **merged** |
 | 04-25 | `wt/04-25` / `exec/04-25` | **merged** |
-| 04-30 | `wt/04-30` / `exec/04-30` | **RUNNING** (gsd-executor) |
-| 04-37 | `wt/04-37` / `exec/04-37` | **RUNNING** (gsd-executor) |
+| 04-30 | `wt/04-30` / `exec/04-30` | **merged** |
+| 04-37 | `wt/04-37` / `exec/04-37` | **PARTIAL — held**: prechunked half done; ingest baseline re-record blocked by ingest-tier regression (bisect running) |
+| bisect-ingest | `wt/bisect-ingest` | **RUNNING** (gsd-debugger, Opus) — ingest fixture eval regression (recall@10 0.64→0.52) |
+| 03.1-27 | `wt/03.1-27` / `exec/03.1-27` | **RUNNING** (gsd-executor, base `41861a7`) |
+| 03.1-28 | `wt/03.1-28` / `exec/03.1-28` | **RUNNING** (gsd-executor, base `41861a7`) |
+| 03.1-33 | `wt/03.1-33` / `exec/03.1-33` | **RUNNING** (gsd-executor, base `41861a7`) |
+| 03.1-34 | `wt/03.1-34` / `exec/03.1-34` | **RUNNING** (gsd-executor, base `41861a7`) |
+| 03.1-35 | `wt/03.1-35` / `exec/03.1-35` | **RUNNING** (gsd-executor, base `41861a7`) |
+| 03.1-55 | `wt/03.1-55` / `exec/03.1-55` | **RUNNING** (gsd-executor, base `41861a7`) |
+| 04-28 | `wt/04-28` / `exec/04-28` | **RUNNING** (gsd-executor, base `41861a7`) |
+| 04-29, 04-33 | — | queued (04-33: migration 0413; image-chunk decision) |
 | 04-26 | `wt/04-26` / `exec/04-26` | **merged** |
-| review-g-fix | `wt/fix-review-g` | **RUNNING** — review G BLOCKER-1 (ledger single-row RPC shape), HIGH-1 (cloud switch fail-open), MED-1/2/7, LOW-2/3/4/5 |
-| 03.1-36 | — | **UI-SPEC in progress** (gsd-ui-researcher, Opus); executor after spec check |
-| fix-relex-rpc | `wt/fix-relex-rpc` | **RUNNING** (gsd-debugger, Opus) — pre-existing `rag_relex_candidates rpc_failed` in PGlite fixtures |
+| review-g-fix | `wt/fix-review-g` | **merged** — review G BLOCKER-1 (ledger single-row RPC shape), HIGH-1 (cloud switch fail-open), MED-1/2/7, LOW-2/3/4/5 |
+| 03.1-36 | `wt/03.1-36` | **RUNNING** (gsd-executor; UI-SPEC approved 2nd pass) |
+| fix-relex-rpc | `wt/fix-relex-rpc` | **merged** — pre-existing `rag_relex_candidates rpc_failed` in PGlite fixtures |
 | 04-31 | `wt/04-31` / `exec/04-31` | **merged** (0408) |
 | 03.1-21 | `wt/03.1-21` / `exec/03.1-21` | **merged** |
-| 03.1-22 | `wt/03.1-22` / `exec/03.1-22` | **RUNNING** (gsd-executor, base `e3b4d12`) |
+| 03.1-22 | `wt/03.1-22` / `exec/03.1-22` | **merged** |
 | 04-27 | `wt/04-27` / `exec/04-27` | **merged** |
 
 ## Wave E — **PAUSE-96 STOPPED** (2026-11-24 ~13:48 Europe/Rome; Claude Code resumes)
