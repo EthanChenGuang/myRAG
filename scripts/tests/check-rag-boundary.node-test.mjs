@@ -6,7 +6,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { ALLOWLIST, RULES, checkBoundary } from '../ci/check-rag-boundary.mjs';
+import * as boundary from '../ci/check-rag-boundary.mjs';
+import { ALLOWLIST, RULES, checkBoundary, stripComments } from '../ci/check-rag-boundary.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SCRIPT = path.join(ROOT, 'scripts', 'ci', 'check-rag-boundary.mjs');
@@ -209,4 +210,162 @@ test('CLI exits 1 with file:line and rule on violations and 0 on a clean root', 
 
 test('the real tree has no boundary violations', () => {
   assert.deepEqual(checkBoundary(ROOT), []);
+});
+
+test('exports the Phase 3 rule ids alongside the Phase 2 rules', () => {
+  const ids = RULES.map((r) => r.id);
+  assert.equal(new Set(ids).size, ids.length);
+  for (const id of ['chunk-writer', 'document-insert', 'writer-rpc', 'doc-type-branching']) {
+    assert.ok(ids.includes(id), `missing rule ${id}`);
+  }
+});
+
+test('chunk-writer: insert, update and upsert on document_chunks fail outside src/lib/rag/ingest', () => {
+  const files = {
+    'src/app/api/x/route.ts': "await admin.from('document_chunks').insert(rows);\n",
+    'src/app/api/y/route.ts': 'await admin\n  .from("document_chunks")\n  .update({ status: \'ready\' })\n  .eq(\'id\', id);\n',
+    'src/lib/z.ts': 'await admin.from(`document_chunks`).upsert(rows);\n',
+  };
+  assert.deepEqual(rulesFor(files).sort(), [
+    'src/app/api/x/route.ts:chunk-writer',
+    'src/app/api/y/route.ts:chunk-writer',
+    'src/lib/z.ts:chunk-writer',
+  ]);
+});
+
+test('chunk-writer: reads and deletes pass, and so does the same write inside src/lib/rag/ingest', () => {
+  const write = "await admin.from('document_chunks').insert(rows);\n";
+  assert.deepEqual(rulesFor({ 'src/app/api/x/route.ts': "await admin.from('document_chunks').select('id');\n" }), []);
+  assert.deepEqual(rulesFor({ 'src/app/api/x/route.ts': "await admin.from('document_chunks').delete().eq('id', id);\n" }), []);
+  assert.deepEqual(rulesFor({ 'src/lib/rag/ingest/writer.ts': write }), []);
+  assert.deepEqual(rulesFor({ 'src/lib/rag/context/x.ts': write }), ['src/lib/rag/context/x.ts:chunk-writer']);
+  assert.deepEqual(rulesFor({ 'src/lib/a.ts': "// admin.from('document_chunks').insert(rows) is banned here\nexport const a = 1;\n" }), []);
+});
+
+test('document-insert: insert on documents fails, update passes, and the ingest module is exempt', () => {
+  assert.deepEqual(
+    rulesFor({ 'src/lib/foo.ts': "await admin.from('documents').insert({ id });\n" }),
+    ['src/lib/foo.ts:document-insert'],
+  );
+  assert.deepEqual(
+    rulesFor({ 'src/lib/bar.ts': 'await admin\n  .from("documents")\n  .insert([row]);\n' }),
+    ['src/lib/bar.ts:document-insert'],
+  );
+  assert.deepEqual(
+    rulesFor({ 'src/lib/baz.ts': "await admin.from('documents').upsert({ id });\n" }),
+    ['src/lib/baz.ts:document-insert'],
+  );
+  assert.deepEqual(rulesFor({ 'src/lib/foo.ts': "await admin.from('documents').update({ metadata }).eq('id', id);\n" }), []);
+  assert.deepEqual(rulesFor({ 'src/lib/foo.ts': "await admin.from('documents').select('id');\n" }), []);
+  assert.deepEqual(rulesFor({ 'src/lib/rag/ingest/writer.ts': "await admin.from('documents').insert({ id });\n" }), []);
+});
+
+test('writer-rpc: each ingest writer RPC fails outside src/lib/rag/ingest and passes inside', () => {
+  const names = [
+    'rag_begin_document_version',
+    'rag_write_chunks',
+    'rag_publish_document_version',
+    'rag_set_document_fields',
+    'rag_save_ingest_state',
+  ];
+  const outside = {};
+  names.forEach((name, i) => {
+    outside[`src/app/api/n${i}/route.ts`] = i % 2 ? `await db.rpc(\n  "${name}",\n  args,\n);\n` : `await db.rpc('${name}', args);\n`;
+  });
+  const out = rulesFor(outside).sort();
+  assert.equal(out.length, names.length);
+  assert.ok(out.every((entry) => entry.endsWith(':writer-rpc')));
+  assert.deepEqual(rulesFor({ 'src/lib/rag/ingest/writer.ts': "await db.rpc('rag_write_chunks', args);\n" }), []);
+  assert.deepEqual(rulesFor({ 'src/lib/a.ts': "await db.rpc('rag_unrelated_function', {});\n" }), []);
+});
+
+test('doc-type-branching: comparison and switch forms fail in src outside src/lib/rag/ingest/profiles', () => {
+  const files = {
+    'src/lib/rag/ingest/stages/extract.ts': "if (doc.doc_type === 'invoice_receipt') run();\n",
+    'src/lib/a.ts': "if (docType === 'contract_legal') run();\n",
+    'src/lib/b.ts': "if (row.doc_type !== 'general') run();\n",
+    'src/lib/c.ts': "if (docType !== 'general') run();\n",
+    'src/lib/d.ts': "switch (docType) {\n  case 'general':\n    break;\n}\n",
+    'src/lib/e.ts': "switch (doc.doc_type) {\n  default:\n    break;\n}\n",
+    'src/components/x.tsx': "export function X({ docType }) {\n  switch (docType) {\n    default:\n      return null;\n  }\n}\n",
+    'src/lib/f.ts': "if ('invoice_receipt' === doc.doc_type) run();\n",
+  };
+  const out = rulesFor(files).sort();
+  assert.equal(out.length, Object.keys(files).length);
+  assert.ok(out.every((entry) => entry.endsWith(':doc-type-branching')));
+});
+
+test('doc-type-branching: the profiles module, assignments, object keys and non-src paths pass', () => {
+  assert.deepEqual(
+    rulesFor({ 'src/lib/rag/ingest/profiles/resolve.ts': "if (doc.doc_type === 'invoice_receipt') run();\n" }),
+    [],
+  );
+  assert.deepEqual(
+    rulesFor({ 'src/lib/a.ts': "const docType = pick();\nconst row = { doc_type: 'general', docType };\nlet t = docType;\nt = other;\n" }),
+    [],
+  );
+  assert.deepEqual(rulesFor({ 'scripts/x.js': "if (doc.doc_type === 'invoice_receipt') run();\n" }), []);
+  assert.deepEqual(rulesFor({ 'src/lib/a.ts': "// docType === 'general' is handled by profiles\nexport const a = 1;\n" }), []);
+});
+
+test('mint-scope: scopeKey and assertTenantScope stay importable by ingest code, mintScope does not', () => {
+  assert.deepEqual(
+    rulesFor({ 'src/lib/rag/ingest/x.ts': "import { scopeKey, assertTenantScope } from '../tenant/scope';\n" }),
+    [],
+  );
+  assert.deepEqual(
+    rulesFor({ 'src/lib/rag/ingest/x.ts': "import { mintScope } from '../tenant/scope';\n" }),
+    ['src/lib/rag/ingest/x.ts:mint-scope'],
+  );
+});
+
+test('LEGACY_WRITERS: exported, and every entry names its rules, reason and removal owner', () => {
+  const list = boundary.LEGACY_WRITERS;
+  assert.ok(Array.isArray(list), 'LEGACY_WRITERS must be exported as an array');
+  assert.equal(typeof boundary.legacyWriterProblems, 'function');
+  assert.deepEqual(boundary.legacyWriterProblems(list), []);
+  const paths = list.map((e) => e.path);
+  for (const p of ['src/app/api/process-document/route.ts', 'src/app/api/ai-to-rag/route.ts', 'src/lib/supabase.ts']) {
+    assert.ok(paths.includes(p), `missing legacy writer ${p}`);
+  }
+  for (const entry of list) {
+    assert.ok(typeof entry.removedBy === 'string' && entry.removedBy.trim().length > 0, `${entry.path} has no removedBy`);
+  }
+});
+
+test('legacyWriterProblems: an entry without removedBy, reason, a known rule or a path is reported', () => {
+  assert.equal(typeof boundary.legacyWriterProblems, 'function');
+  const good = { path: 'src/a.ts', rules: ['chunk-writer'], reason: 'legacy', removedBy: 'a plan' };
+  assert.deepEqual(boundary.legacyWriterProblems([good]), []);
+  const missing = boundary.legacyWriterProblems([{ ...good, removedBy: undefined }]);
+  assert.equal(missing.length, 1);
+  assert.match(missing[0], /removedBy/);
+  assert.equal(boundary.legacyWriterProblems([{ ...good, removedBy: '   ' }]).length, 1);
+  assert.equal(boundary.legacyWriterProblems([{ ...good, reason: '' }]).length, 1);
+  assert.equal(boundary.legacyWriterProblems([{ ...good, rules: ['no-such-rule'] }]).length, 1);
+  assert.equal(boundary.legacyWriterProblems([{ ...good, rules: [] }]).length, 1);
+  assert.equal(boundary.legacyWriterProblems([{ ...good, path: '' }]).length, 1);
+});
+
+test('LEGACY_WRITERS: the exemption is per path and per rule', () => {
+  const list = boundary.LEGACY_WRITERS;
+  assert.ok(Array.isArray(list), 'LEGACY_WRITERS must be exported as an array');
+  const entry = list.find((e) => e.rules.includes('chunk-writer'));
+  assert.ok(entry, 'a legacy chunk writer entry is required');
+  const write = "await admin.from('document_chunks').insert(rows);\n";
+  assert.deepEqual(rulesFor({ [entry.path]: write }), []);
+  assert.deepEqual(rulesFor({ [entry.path]: "await db.rpc('rag_write_chunks', args);\n" }), [`${entry.path}:writer-rpc`]);
+  assert.deepEqual(rulesFor({ 'src/lib/not-listed.ts': write }), ['src/lib/not-listed.ts:chunk-writer']);
+});
+
+test('LEGACY_WRITERS: every entry still exempts a real violation on the tree, so removed writers must leave the list', () => {
+  const list = boundary.LEGACY_WRITERS;
+  assert.ok(Array.isArray(list), 'LEGACY_WRITERS must be exported as an array');
+  for (const entry of list) {
+    const file = path.join(ROOT, entry.path);
+    assert.ok(fs.existsSync(file), `${entry.path} no longer exists; remove its LEGACY_WRITERS entry`);
+    const text = stripComments(fs.readFileSync(file, 'utf8'));
+    const hits = entry.rules.flatMap((id) => RULES.find((r) => r.id === id).find(text));
+    assert.ok(hits.length > 0, `${entry.path} no longer violates ${entry.rules.join(', ')}; remove its LEGACY_WRITERS entry`);
+  }
 });
