@@ -23,6 +23,7 @@ describe('legacy content-hash backfill (D-09)', () => {
   let resolver: typeof import('@/lib/rag/tenant/resolve-chat');
   let supabaseModule: typeof import('@/lib/supabase');
   const inserted: string[] = [];
+  let corpusRows = 0;
 
   before(async () => {
     fixture = await createTwoTenantDatabase();
@@ -36,6 +37,9 @@ describe('legacy content-hash backfill (D-09)', () => {
     depsModule = await import('@/lib/rag/ingest/deps');
     resolver = await import('@/lib/rag/tenant/resolve-chat');
     supabaseModule = await import('@/lib/supabase');
+    const corpus = await fixture.db.query<Row>('SELECT count(*)::int AS n FROM documents WHERE content_hash IS NULL AND status = $1 AND id <> ALL($2::uuid[])', ['ready', BASE_IDS]);
+    corpusRows = Number(corpus.rows[0]?.n);
+    assert.ok(corpusRows > 0, 'the fixture carries corpus documents of other tenants besides the three canary documents');
   });
 
   after(async () => {
@@ -44,7 +48,7 @@ describe('legacy content-hash backfill (D-09)', () => {
   });
 
   beforeEach(async () => {
-    await fixture.db.query("UPDATE documents SET content_hash = NULL, metadata = metadata - 'content_hash_version' WHERE id = ANY($1::uuid[])", [BASE_IDS]);
+    await fixture.db.query("UPDATE documents SET content_hash = NULL, metadata = metadata - 'content_hash_version' WHERE source_key LIKE 'legacy:%'");
   });
 
   afterEach(async () => {
@@ -106,7 +110,7 @@ describe('legacy content-hash backfill (D-09)', () => {
     assert.deepEqual(report.tenants[TENANT_A], { scanned: 1, hashed: 1, skippedEmpty: 0, failed: 0 });
     assert.deepEqual(report.tenants[TENANT_B], { scanned: 1, hashed: 1, skippedEmpty: 0, failed: 0 });
     assert.deepEqual(report.tenants[TENANT_O], { scanned: 1, hashed: 1, skippedEmpty: 0, failed: 0 });
-    assert.deepEqual(report.totals, { scanned: 3, hashed: 3, skippedEmpty: 0, failed: 0 });
+    assert.deepEqual(report.totals, { scanned: 3 + corpusRows, hashed: 3 + corpusRows, skippedEmpty: 0, failed: 0 });
     assert.equal(report.dryRun, false);
 
     const again = await run();
@@ -126,10 +130,10 @@ describe('legacy content-hash backfill (D-09)', () => {
 
     assert.equal(report.dryRun, true);
     assert.deepEqual(report.tenants[TENANT_A], { scanned: 1, hashed: 1, skippedEmpty: 0, failed: 0 });
-    assert.deepEqual(report.totals, { scanned: 3, hashed: 3, skippedEmpty: 0, failed: 0 });
+    assert.deepEqual(report.totals, { scanned: 3 + corpusRows, hashed: 3 + corpusRows, skippedEmpty: 0, failed: 0 });
     assert.deepEqual(calls, [], 'no RPC was called');
-    const still = await rows('SELECT count(*)::int AS n FROM documents WHERE id = ANY($1::uuid[]) AND content_hash IS NULL', [BASE_IDS]);
-    assert.equal(still[0]?.n, 3, 'every row still has no hash');
+    const still = await rows("SELECT count(*)::int AS n FROM documents WHERE content_hash IS NULL AND status = 'ready'", []);
+    assert.equal(still[0]?.n, 3 + corpusRows, 'every row still has no hash');
   });
 
   test('--tenant limits the run to one tenant key', async () => {
@@ -159,7 +163,7 @@ describe('legacy content-hash backfill (D-09)', () => {
     ];
     const report = await run({ batchSize: 1 });
 
-    assert.equal(report.totals.hashed, 5);
+    assert.equal(report.totals.hashed, 5 + corpusRows);
     for (const id of [...BASE_IDS, ...extra]) assert.ok((await hashOf(id)).content_hash, `row ${id} was hashed`);
   });
 
@@ -198,6 +202,30 @@ describe('legacy content-hash backfill (D-09)', () => {
     const otherTenant = await upload(TWO_TENANT_IDS.userB);
     assert.equal(otherTenant.status, 'ready', 'a hash of tenant A never deduplicates tenant B');
     assert.notEqual(otherTenant.documentId, legacyId);
+  });
+
+  test('the backfill writer refuses a tenant key that is not the document tenant, and a malformed key, without writing', async () => {
+    const writerModule = await import('@/lib/rag/ingest/writer');
+    const writer = writerModule.createContentHashBackfillWriter({
+      db: supabaseModule.getSupabaseAdmin() as unknown as RpcClient,
+      signal: new AbortController().signal,
+    });
+
+    const crossTenant = await writer.setContentHash(TWO_TENANT_IDS.docA, TENANT_B, 'a'.repeat(64)).then(
+      () => null,
+      (error: unknown) => error,
+    );
+    assert.ok(crossTenant instanceof writerModule.IngestWriterError);
+    assert.equal(crossTenant.reason, 'tenant_mismatch');
+    assert.equal((await hashOf(TWO_TENANT_IDS.docA)).content_hash, null, 'the document of tenant A was not written');
+
+    const malformed = await writer.setContentHash(TWO_TENANT_IDS.docA, "u:x' OR true", 'b'.repeat(64)).then(
+      () => null,
+      (error: unknown) => error,
+    );
+    assert.ok(malformed instanceof writerModule.IngestWriterError);
+    assert.equal(malformed.code, 'invalid_tenant_key');
+    assert.equal((await hashOf(TWO_TENANT_IDS.docA)).content_hash, null);
   });
 
   test('the command line options are parsed and validated', () => {
@@ -242,7 +270,10 @@ describe('legacy content-hash backfill (D-09)', () => {
     assert.deepEqual(calls[6], ['order', 'id', { ascending: true }]);
     assert.deepEqual(calls[7], ['limit', 7]);
 
-    const failing = { from: () => ({ ...builder, abortSignal: () => Promise.resolve({ data: null, error: { code: '57014', message: 'canceling statement for "secret phrase"' } }) }) };
+    const failingBuilder: Record<string, unknown> = {};
+    for (const name of ['select', 'is', 'eq', 'gt', 'order', 'limit']) failingBuilder[name] = () => failingBuilder;
+    failingBuilder.abortSignal = () => Promise.resolve({ data: null, error: { code: '57014', message: 'canceling statement for "secret phrase"' } });
+    const failing = { from: () => failingBuilder };
     const failingList = backfill.createSupabaseLister(failing as unknown as Parameters<typeof backfill.createSupabaseLister>[0]);
     const thrown = await failingList({ tenantKey: null, afterId: null, limit: 5, signal: new AbortController().signal }).then(
       () => null,
