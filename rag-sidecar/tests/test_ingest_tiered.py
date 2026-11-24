@@ -577,3 +577,29 @@ def test_the_document_timeout_fails_between_ranges_with_a_retryable_error(tmp_pa
 
     assert outcome.status == "queued" and outcome.error_class == "parse_timeout"
     assert len(env.job.attempts) <= 1
+
+
+def test_cache_objects_are_written_with_upsert_so_a_resumed_job_can_write_them_again():
+    import httpx
+
+    from rag_sidecar.ingest.storage_client import StorageClient
+
+    seen: list[str | None] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.headers.get("x-upsert"))
+        return httpx.Response(200)
+
+    async def run() -> None:
+        client = StorageClient(
+            base_url="https://example.supabase.co",
+            service_key="sb_secret_placeholder_value_for_tests",
+            client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+        )
+        client.register_cache_prefix("tenant/_parse-cache/hash/parser/")
+        await client.put("rag-originals", "tenant/_parse-cache/hash/parser/", "docling.json", b"{}")
+        await client.aclose()
+
+    asyncio.run(run())
+
+    assert seen == ["true"]
