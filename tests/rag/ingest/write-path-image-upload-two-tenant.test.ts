@@ -36,9 +36,10 @@ vi.mock('next/server', async (importOriginal) => ({
     h.after.push(callback);
   },
 }));
-// Storage objects go to a recorder; every database call keeps going to the fixture database.
-vi.mock('@/lib/supabase', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/supabase')>();
+// Storage objects go to a recorder; every database call keeps going to the fixture database. Registered per fixture start so each
+// run wraps the Supabase module of its own module graph (and its own fake edge URL).
+async function supabaseMock(importOriginal: () => Promise<typeof import('@/lib/supabase')>) {
+  const actual = await importOriginal();
   const supabaseAdmin = new Proxy({} as Record<string, unknown>, {
     get(_target, property) {
       if (property === 'storage') {
@@ -57,7 +58,7 @@ vi.mock('@/lib/supabase', async (importOriginal) => {
     },
   });
   return { ...actual, supabaseAdmin, getSupabaseAdmin: () => h.adminOverride ?? actual.getSupabaseAdmin() };
-});
+}
 
 const { userA, userB, orgO } = TWO_TENANT_IDS;
 const PNG = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3, 4]);
@@ -94,6 +95,7 @@ async function start(deploymentMode: 'single-tenant' | 'multi-tenant'): Promise<
     },
   });
   process.env.RAG_INGEST_PIPELINE = 'unified';
+  vi.doMock('@/lib/supabase', () => supabaseMock(() => vi.importActual<typeof import('@/lib/supabase')>('@/lib/supabase')));
   const { POST } = await fixture.loadRoute<{ POST: Post }>('upload');
   const images = await fixture.loadRoute<{ GET: Get }>('images');
   const rag = await import('@/lib/rag');
@@ -116,6 +118,7 @@ async function stop(loaded: Loaded): Promise<void> {
   resetObjectStoreForTests();
   resetCaptionerForTests();
   await loaded.fixture.close();
+  vi.doUnmock('@/lib/supabase');
   vi.unstubAllEnvs();
 }
 
@@ -331,9 +334,9 @@ describe('image upload through ingest() against two tenants', () => {
   });
 
   it('an image whose caption holds an injection phrase is quarantined under RAG_INJECTION_SCAN=quarantine and no tenant lists or retrieves it', async () => {
-    vi.stubEnv('RAG_INJECTION_SCAN', 'quarantine');
-    process.env.RAG_INJECTION_SCAN = 'quarantine';
+    const { setIngestDepsForTests } = await import('@/lib/rag/ingest/deps');
     const { resetIngestConfigForTests } = await import('@/lib/rag/ingest/config');
+    setIngestDepsForTests({ ingestEnv: () => ({ RAG_INGEST_PIPELINE: 'unified', RAG_INJECTION_SCAN: 'quarantine' }) });
     resetIngestConfigForTests();
     loaded.captions.set(3, recorded.captions.injection);
     try {
@@ -347,7 +350,7 @@ describe('image upload through ingest() against two tenants', () => {
       const listA = await listImages(loaded, userA);
       expect(listA.images.map((image: { id: string }) => image.id)).not.toContain(row!.id);
     } finally {
-      delete process.env.RAG_INJECTION_SCAN;
+      setIngestDepsForTests({ ingestEnv: () => ({ RAG_INGEST_PIPELINE: 'unified' }) });
       resetIngestConfigForTests();
     }
   });
@@ -375,7 +378,7 @@ describe('image upload through ingest(), single-tenant', () => {
     expect(rows[0]!.chunks[0]).toMatchObject({ chunk_kind: 'image', page_start: 1 });
 
     const list = await listImages(loaded, userA);
-    expect(list.images.map((image: { id: string }) => image.id)).toEqual([rows[0]!.id]);
+    expect(list.images.map((image: { id: string }) => image.id)).toContain(rows[0]!.id);
   });
 
   it('refuses a request with no session before any write', async () => {

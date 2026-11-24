@@ -382,7 +382,6 @@ const ADMIN_A = '00000000-0000-4000-8000-0000000000a1';
 const ADMIN_B = '00000000-0000-4000-8000-0000000000a2';
 const USER_B = '00000000-0000-4000-8000-0000000000b1';
 const ORG_O = '00000000-0000-4000-8000-0000000000c1';
-const PUBLIC_BASE = 'https://project.example.test';
 
 type Mode = 'single-tenant' | 'multi-tenant';
 type Pipeline = 'legacy' | 'unified';

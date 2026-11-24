@@ -1,11 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { createClient } from '@/lib/supabase/server';
 import { processImageDocument } from '@/lib/document-processor';
 import { logger } from '@/lib/logger';
 import { isSingleTenant } from '@/lib/deployment-mode';
 import { checkSingleTenantKbWrite } from '@/lib/kb-write-access';
-import type { RagAdminDb } from '@/lib/rag';
+import type { RagAdminDb, TenantScope } from '@/lib/rag';
 
 /**
  * Dedicated file upload endpoint for MCP tool compatibility
@@ -26,6 +26,10 @@ const ALLOWED_TYPES = [
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 ];
 const BUCKET_NAME = 'chat-images';
+// The route's limit is 60 s (vercel.json); background ingestion runs inside it, so it gets what the request has left of 55 s.
+const INGEST_BUDGET_MS = 55_000;
+const MIN_INGEST_MS = 5_000;
+const INGEST_CONCURRENCY = 4;
 
 /**
  * Generate a unique filename with timestamp and random suffix
@@ -51,7 +55,77 @@ function getDownloadUrl(filePath: string): string {
   return `${baseUrl}/storage/v1/object/public/${BUCKET_NAME}/${filePath}?download`;
 }
 
+type UploadPipeline = 'legacy' | 'unified';
+
+/**
+ * Which write path an upload takes, read per request after the session check. A switch that cannot be read means the legacy path.
+ * The pipeline modules are loaded only here and in the unified branch, so the legacy path pulls in nothing new.
+ */
+async function uploadPipeline(): Promise<UploadPipeline> {
+  try {
+    const { currentIngestConfig } = await import('@/lib/rag');
+    return currentIngestConfig().pipeline === 'unified' ? 'unified' : 'legacy';
+  } catch {
+    logger.warn('Upload API', 'Ingest switch unavailable, using the legacy pipeline');
+    return 'legacy';
+  }
+}
+
+function refusal(status: 401 | 403 | 503): NextResponse {
+  const error = status === 403 ? 'Forbidden' : status === 401 ? 'Authentication required' : 'Workspace verification unavailable';
+  return NextResponse.json({ error }, { status });
+}
+
+/**
+ * The scope an image upload is ingested under, resolved in the request before anything is stored. The user is the session
+ * user the route already verified (no second lookup); an organization from the form counts only after the membership check.
+ * A Config UI upload (upload_source=config_upload) asks checkAdmin once: only an ok result for that same user gives the
+ * admin workspace scope; a 401, a 403 or another user gives the session scope, and a 503 refuses. The admin cookie never
+ * replaces the session, which was checked first, and never changes the storage prefix.
+ */
+async function resolveUploadScope(
+  request: NextRequest,
+  formData: FormData,
+  sessionUser: { id: string },
+): Promise<{ scope: TenantScope } | { response: NextResponse }> {
+  const { repairOwnerMembership, resolveAdminWorkspaceScope, resolveTenantScope } = await import('@/lib/rag');
+  const getUser = async () => sessionUser;
+  const organization = formData.get('organization_id');
+  const requestedOrganizationId = typeof organization === 'string' && organization !== '' ? organization : null;
+
+  if (formData.get('upload_source') === 'config_upload') {
+    const { checkAdmin } = await import('@/lib/admin-route-auth');
+    const admin = await checkAdmin(request);
+    if (!admin.ok && admin.status === 503) {
+      return { response: NextResponse.json({ error: 'Admin verification is unavailable' }, { status: 503 }) };
+    }
+    if (admin.ok && admin.userId.toLowerCase() === sessionUser.id.toLowerCase()) {
+      const workspace = await resolveAdminWorkspaceScope({
+        adminUserId: sessionUser.id,
+        requestedOrganizationId,
+        signal: request.signal,
+      });
+      return workspace.ok ? { scope: workspace.scope } : { response: refusal(workspace.status) };
+    }
+  }
+
+  await repairOwnerMembership({ requestedOrganizationId, getUser });
+  const tenant = await resolveTenantScope({ requestedOrganizationId, getUser, signal: request.signal });
+  if (!tenant.ok) return { response: refusal(tenant.status) };
+  if (!tenant.scope) return { response: refusal(401) };
+  return { scope: tenant.scope };
+}
+
+interface PendingImage {
+  name: string;
+  type: string;
+  bytes: Uint8Array;
+  filePath: string;
+  downloadUrl: string;
+}
+
 export async function POST(request: NextRequest) {
+  const startedAt = Date.now();
   try {
     logger.info('Upload API', 'File upload request received');
 
@@ -82,7 +156,8 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const files = formData.getAll('files') as File[];
 
-    if (formData.get('process_rag') === 'true' && isSingleTenant()) {
+    const processRag = formData.get('process_rag') === 'true';
+    if (processRag && isSingleTenant()) {
       const access = await checkSingleTenantKbWrite({
         admin: supabaseAdmin as unknown as RagAdminDb,
         userId: sessionUser.id,
@@ -92,6 +167,15 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: access.error }, { status: access.status });
       }
     }
+
+    // The unified pipeline resolves its scope here, before any storage write, from the session already verified above
+    let ingestScope: TenantScope | null = null;
+    if (processRag && (await uploadPipeline()) === 'unified') {
+      const resolved = await resolveUploadScope(request, formData, sessionUser);
+      if ('response' in resolved) return resolved.response;
+      ingestScope = resolved.scope;
+    }
+    const pendingImages: PendingImage[] = [];
 
     logger.info('Upload API', `Processing ${files.length} files`);
 
@@ -145,6 +229,9 @@ export async function POST(request: NextRequest) {
 
         // Generate download URL for MCP compatibility
         const downloadUrl = getDownloadUrl(filePath);
+        if (ingestScope && file.type.startsWith('image/')) {
+          pendingImages.push({ name: file.name, type: file.type, bytes: buffer, filePath, downloadUrl });
+        }
 
         uploadResults.push({
           originalName: file.name,
@@ -177,11 +264,19 @@ export async function POST(request: NextRequest) {
 
     // Trigger background RAG processing for images (RAG integration)
     // We don't await this to keep the upload response fast
-    const processRag = formData.get('process_rag') === 'true';
     const imageContext = formData.get('image_context') as string | undefined;
+
+    if (ingestScope && pendingImages.length > 0) {
+      await scheduleImageIngest(ingestScope, pendingImages, imageContext || undefined, startedAt);
+    }
 
     (async () => {
       try {
+        // The unified pipeline ingests in the background task scheduled above
+        if (ingestScope) {
+          return;
+        }
+
         // Only process for RAG if explicitly requested
         if (!processRag) {
           return;
@@ -234,6 +329,52 @@ export async function POST(request: NextRequest) {
       },
       { status: 500 }
     );
+  }
+}
+
+/**
+ * Runs the ingestion of the stored images after the response with after(), so the platform keeps the work alive until it is done
+ * (an un-awaited promise is dropped when the function freezes). The scope was resolved in the request; the callback holds it and
+ * the bytes and never reads the session or the form again. Each image gets what is left of the request budget and a document that
+ * runs out of time stays processing and resumable.
+ */
+async function scheduleImageIngest(scope: TenantScope, images: PendingImage[], imageContext: string | undefined, startedAt: number): Promise<void> {
+  const deadlineAt = startedAt + INGEST_BUDGET_MS;
+
+  const ingestOne = async (ingest: typeof import('@/lib/rag').ingest, image: PendingImage): Promise<void> => {
+    const budgetMs = Math.max(MIN_INGEST_MS, deadlineAt - Date.now());
+    try {
+      const result = await ingest({
+        scope,
+        source: 'image_upload',
+        sourceKey: image.filePath,
+        file: image.bytes,
+        filename: image.name,
+        mimeType: image.type,
+        signal: AbortSignal.timeout(budgetMs),
+        deadlineMs: budgetMs,
+        options: {
+          imageUrl: image.downloadUrl,
+          ...(imageContext ? { imageContext } : {}),
+          origin: { sourceFileId: image.filePath },
+          documentMetadata: { image_type: image.type },
+        },
+      });
+      console.log('[Ingest] image upload finished', { status: result.status, ...(result.reason ? { reason: result.reason } : {}) });
+    } catch (error) {
+      console.error('[Ingest] image upload failed', { error: error instanceof Error ? error.name : 'unknown' });
+    }
+  };
+
+  try {
+    const { ingest } = await import('@/lib/rag');
+    after(async () => {
+      for (let index = 0; index < images.length; index += INGEST_CONCURRENCY) {
+        await Promise.allSettled(images.slice(index, index + INGEST_CONCURRENCY).map((image) => ingestOne(ingest, image)));
+      }
+    });
+  } catch {
+    logger.error('Upload API', 'Could not schedule the background ingestion');
   }
 }
 
