@@ -293,6 +293,9 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     if (baseUrl && Object.keys(runConfig.env).length > 0) {
       throw new RunConfigError('[Eval Harness] a run-config env overlay applies to in-process runs only; omit --base-url or drop its env');
     }
+    if (retainInProcess && Object.keys(runConfig.env).length > 0) {
+      throw new RunConfigError('[Eval Harness] a run-config env overlay must be applied when the in-process session is prepared');
+    }
     if (runConfig.overrides) requestOptions.retrieval_overrides = runConfig.overrides;
   }
 

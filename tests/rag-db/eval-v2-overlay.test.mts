@@ -166,6 +166,19 @@ describe('run-config through runEval', () => {
   });
 });
 
+describe('run-config guards in runEval', () => {
+  test('an env overlay is refused for a retained in-process session and for --base-url', async () => {
+    const dir = makeTmpDir();
+    const goldenPath = path.join(dir, 'one.jsonl');
+    fs.writeFileSync(goldenPath, `${JSON.stringify(goldenItem())}\n`);
+    const runConfig = parseRunConfig({ name: 'guard', env: { RAG_PIPELINE: 'v2' } }, 'inline');
+    const common = { goldenPath, corpusDir: CORPUS_DIR, outDir: path.join(dir, 'out'), deploymentMode: 'single-tenant' as const, runConfig };
+
+    await assert.rejects(runEval({ ...common, retainInProcess: {} as never }), RunConfigError);
+    await assert.rejects(runEval({ ...common, baseUrl: 'http://localhost:9' }), RunConfigError);
+  });
+});
+
 describe('npm run test-rag --run-config', () => {
   function runSmoke(config: unknown, extra: string[] = []) {
     const dir = makeTmpDir();
