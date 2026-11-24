@@ -52,3 +52,9 @@ After all: code review gate -> regression gate -> verifier -> update roadmap.
 - process-document multi-tenant: a throwing session lookup answers 500 (outer catch), not 503; nothing is parsed or written. Legacy kept unchanged per plan. Add a try/catch returning 503 in the Phase 3 review fix pass.
 - Unified upload response has no `text`; `src/app/page.tsx` `fileType === 'document'` branch requires it. Not reached today (temporary uploads stay legacy). Must be handled before Phase 7 makes unified the default.
 - Live check: Config UI upload as signed-in admin (admin_session + Supabase session), confirm `documents.source = 'config_upload'`.
+- (03-35) Voice/media do not run exact_id_lookup; eval StageName contract lacks `exact_id_lookup` (cannot disable/time per eval request). EU VAT checksum only IT/DE/FR/AT/BE/NL.
+
+## Phase 3 wave 7 follow-ups (03-33) — fix in review pass, each with a failing test first
+- OLD BUG: legacy generic-provider multi-folder branch writes nango sync status `'synced'`, rejected by the CHECK; `document_id`/`last_synced_at` never saved. Fix legacy to `'completed'`.
+- OLD BUG (data loss risk): `fetchGoogleDriveFiles` reads only one page (≤ NANGO_MAX_FILES_PER_SYNC); in a larger folder a synced file off page 1 looks orphaned and is deleted. Orphan delete must skip when the listing is truncated.
+- Orphan deletes and documents DELETE leave stored originals/artifacts in the object store (same as 03-37 item).
