@@ -112,6 +112,32 @@ def merge(parts: Sequence[DoclingDocument], n_pages: int) -> DoclingDocument:
     return merged
 
 
+def join_page_parts(parts: Sequence[DoclingDocument]) -> DoclingDocument:
+    """Join non-overlapping parts without renumbering page_no (recorded assembly)."""
+    if not parts:
+        raise MergeInvariantError("merge_invariant:no_parts")
+    if len(parts) == 1:
+        return parts[0]
+    page_sets = [sorted(part.pages) for part in parts]
+    flat = sorted({page for pages in page_sets for page in pages})
+    if flat == list(range(1, flat[-1] + 1)):
+        return merge(parts, flat[-1])
+    merged = parts[0].model_copy(deep=True)
+    merged.pages = {key: value for part in parts for key, value in part.pages.items()}
+    merged.texts = []
+    merged.tables = []
+    merged.pictures = []
+    merged.key_value_items = []
+    merged.form_items = []
+    for part in parts:
+        merged.texts.extend(part.texts)
+        merged.tables.extend(part.tables)
+        merged.pictures.extend(part.pictures)
+        merged.key_value_items.extend(part.key_value_items)
+        merged.form_items.extend(part.form_items)
+    return merged
+
+
 def _parse_table_rows(lines: list[str]) -> TableData:
     rows: list[list[str]] = []
     for line in lines:
