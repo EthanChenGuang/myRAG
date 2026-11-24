@@ -6247,4 +6247,27 @@ $$;
 REVOKE ALL ON FUNCTION rag_set_document_fields(uuid, text, jsonb) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION rag_set_document_fields(uuid, text, jsonb) TO service_role;
 
+-- 03-48 follow-up 2 (D-08): SECURITY DEFINER EXECUTE lock-down. Hosted Supabase grants EXECUTE on new public functions to anon and authenticated,
+-- so a definer function that is not revoked here is callable through PostgREST. Matches supabase/migrations/0410_security_definer_rpc_grants.sql.
+REVOKE ALL ON FUNCTION get_user_role_in_org(uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION get_user_role_in_org(uuid) TO service_role;
+REVOKE ALL ON FUNCTION get_user_current_org() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION get_user_current_org() TO service_role;
+REVOKE ALL ON FUNCTION can_view_org_member(uuid, uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION can_view_org_member(uuid, uuid) TO service_role;
+REVOKE ALL ON FUNCTION delete_folder(uuid, boolean) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION delete_folder(uuid, boolean) TO authenticated, service_role;
+REVOKE ALL ON FUNCTION get_folder_stats(uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION get_folder_stats(uuid) TO service_role;
+REVOKE ALL ON FUNCTION move_chats_to_folder(uuid[], uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION move_chats_to_folder(uuid[], uuid) TO authenticated, service_role;
+REVOKE ALL ON FUNCTION share_chat(uuid, jsonb) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION share_chat(uuid, jsonb) TO service_role;
+REVOKE ALL ON FUNCTION unshare_chat(uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION unshare_chat(uuid) TO service_role;
+REVOKE ALL ON FUNCTION share_personal_organization(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION share_personal_organization(uuid) TO authenticated, service_role;
+REVOKE ALL ON FUNCTION check_admin_status() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION check_admin_status() TO authenticated, anon, service_role;
+
 COMMIT;

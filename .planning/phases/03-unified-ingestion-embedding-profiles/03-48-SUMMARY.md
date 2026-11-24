@@ -12,7 +12,9 @@
 - `rag-originals` bucket private (public=false, 20 MB, 0 policies): **PASS**. Tenant-prefix upload: **NOT RUN** (needs app with unified pipeline).
 - Parity (`npm run test-rag` legacy): **NOT RUN** (prod build of 19 Nov predates 03-47). halfvec HNSW: **NOT RUN** (`chunk_embeddings` 0 rows, needs Voyage/Qwen3 keys).
 - PostgREST and production app **200** after migration.
-- Findings: **SECURITY DEFINER** RPCs still **EXECUTE**-able by `anon` on live (23 functions), including `match_document_chunks_by_org` and `match_documents_by_workspace` — caller-supplied org/user ids without `auth.uid()` check; `match_document_chunks_by_org` also returns `organization_id IS NULL` chunks to any caller. Root cause: `CREATE OR REPLACE` in **0306** left prior grants. **Follow-up (03-48-sec-rpc):** `supabase/migrations/0409_search_rpc_revoke.sql` + `tests/rag-db/search-rpc-grants-pglite.test.mts` on integration branch; apply on live after promote. See D-08 (03-20, 03-37, patch `supabase/patches/2026-11-search-rpc-revoke-multi-tenant.sql`).
+- Findings: **SECURITY DEFINER** RPCs still **EXECUTE**-able by `anon` on live (23 functions), including `match_document_chunks_by_org` and `match_documents_by_workspace` — caller-supplied org/user ids without `auth.uid()` check; `match_document_chunks_by_org` also returns `organization_id IS NULL` chunks to any caller. Root cause: `CREATE OR REPLACE` in **0306** left prior grants, and hosted Supabase grants EXECUTE on every new public function to anon/authenticated. Closed in two phases (D-08; 03-20, 03-37; patch `supabase/patches/2026-11-search-rpc-revoke-multi-tenant.sql`):
+  - **Phase 1 — four search RPCs (`03-48-sec-rpc`):** `supabase/migrations/0409_search_rpc_revoke.sql` + `tests/rag-db/search-rpc-grants-pglite.test.mts`.
+  - **Phase 2 — full inventory (`03-48-sec-rpc-2`):** `supabase/migrations/0410_security_definer_rpc_grants.sql` revokes every remaining public SECURITY DEFINER function from PUBLIC/anon (and authenticated unless it is an allow-listed RPC or RLS helper) and is folded into both setup files; `tests/rag/search-rpc-grants.test.ts` replays setup and migrations, the PGlite test asserts `has_function_privilege` for the whole inventory. See `03-48-SEC-RPC-2-SUMMARY.md`. Apply `0409` then `0410` on live after promote, then `NOTIFY pgrst, 'reload schema'` (both files already issue it).
 - Supabase management SQL timed out until Postgres restart at **11:40 UTC** (12:40 Europe/Rome); healthy since.
 - **PostgREST `authenticator` role:** `statement_timeout` and `lock_timeout` each **8s** — profile activation and heavy DDL must fit within that window or use a **direct Postgres session** (not PostgREST).
 
@@ -32,6 +34,8 @@ Apply in repo order when promoting past Task 1 baseline:
 | `0404_document_parents.sql` | 04-07 |
 | `0405_document_parents_rls.*.sql` | 04-07 |
 | `0406_chunking_profiles.sql` | 04-07 |
+| `0409_search_rpc_revoke.sql` | 03-48-sec-rpc (now guarded for single-tenant) |
+| `0410_security_definer_rpc_grants.sql` | 03-48-sec-rpc-2 |
 
 Further numbered migrations (e.g. after **04-07** on trunk) must be re-listed at each live promotion.
 

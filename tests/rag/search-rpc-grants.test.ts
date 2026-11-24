@@ -1,6 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, test } from 'vitest';
+import { migrationFiles, type MigrationMode } from '../../eval/harness/migrations.mts';
+import { AUTHENTICATED_ALLOW_LIST } from '../helpers/security-definer-allow-list';
+import { aclViolation, simulateFunctionAcls } from '../helpers/sql-function-acl';
 
 const SQL = fs.readFileSync(path.resolve(__dirname, '../../supabase/multi-tenant-setup.sql'), 'utf8');
 const SINGLE = fs.readFileSync(path.resolve(__dirname, '../../supabase/single-tenant-setup.sql'), 'utf8');
@@ -39,17 +42,6 @@ describe('SECURITY DEFINER search functions that trust caller-supplied tenant id
     expect(acl.indexOf(revoke as string)).toBeLessThan(acl.indexOf(grants[0]));
   });
 
-  test('every SECURITY DEFINER function taking a tenant id argument and returning chunks or documents is in the locked list', () => {
-    const functions = SQL.split(/CREATE OR REPLACE FUNCTION/i).slice(1);
-    const exposed = functions
-      .filter((body) => /SECURITY DEFINER/i.test(body.split(/\$\$|\$function\$/)[0] ?? body))
-      .filter((body) => /\bp_(org_id|user_id)\b/.test(body.split(/RETURNS/i)[0] ?? ''))
-      .filter((body) => /RETURNS TABLE/i.test(body.slice(0, 900)))
-      .map((body) => /^\s*(?:public\.)?([a-z_]+)/i.exec(body)?.[1])
-      .filter((name): name is string => Boolean(name));
-    expect(exposed.sort()).toEqual([...TENANT_ID_RPCS].sort());
-  });
-
   test('no grant of these functions to anon or authenticated survives anywhere in the setup files', () => {
     for (const sql of [SQL, SINGLE]) {
       for (const statement of statements(sql)) {
@@ -77,5 +69,51 @@ describe('upgrade patch for existing multi-tenant databases', () => {
     const readme = fs.readFileSync(path.resolve(__dirname, '../../supabase/README.md'), 'utf8');
     expect(readme).toContain('2026-11-search-rpc-revoke-multi-tenant.sql');
     expect(PATCH).toMatch(/AFTER the Phase 2 application is deployed/);
+  });
+});
+
+const REPO_ROOT = path.resolve(__dirname, '../..');
+const readRepo = (relpath: string) => fs.readFileSync(path.join(REPO_ROOT, relpath), 'utf8');
+
+type Scenario = { label: string; files: string[]; strict: boolean };
+
+function scenarios(): Scenario[] {
+  const result: Scenario[] = [];
+  for (const mode of ['multi-tenant', 'single-tenant'] as MigrationMode[]) {
+    const setup = `supabase/${mode}-setup.sql`;
+    const migrations = migrationFiles(mode);
+    result.push({ label: `${mode}: folded setup file alone (fresh install)`, files: [setup], strict: true });
+    result.push({ label: `${mode}: folded setup file then every migration (fixture and re-apply path)`, files: [setup, ...migrations], strict: true });
+    result.push({ label: `${mode}: migrations only (an existing database that never re-runs the setup file)`, files: migrations, strict: false });
+  }
+  return result;
+}
+
+describe('every SECURITY DEFINER function is service_role only unless allow-listed', () => {
+  test.each(scenarios().map((scenario) => [scenario.label, scenario] as const))('%s', (_label, scenario) => {
+    const acls = simulateFunctionAcls(scenario.files.map(readRepo), { strictTargets: scenario.strict });
+    const definers = [...acls.values()].filter((acl) => acl.definer);
+    expect(definers.length).toBeGreaterThan(10);
+    const violations = definers
+      .map((acl) => aclViolation(acl, AUTHENTICATED_ALLOW_LIST[acl.name]))
+      .filter((violation): violation is string => violation !== null);
+    expect(violations).toEqual([]);
+  });
+
+  test('the allow-list names only functions that exist as SECURITY DEFINER in the SQL, each with a reason', () => {
+    const names = new Set<string>();
+    for (const scenario of scenarios()) {
+      for (const acl of simulateFunctionAcls(scenario.files.map(readRepo), { strictTargets: false }).values()) {
+        if (acl.definer) names.add(acl.name);
+      }
+    }
+    for (const [name, entry] of Object.entries(AUTHENTICATED_ALLOW_LIST)) {
+      expect(names.has(name), `${name} is allow-listed but no SQL defines it as SECURITY DEFINER`).toBe(true);
+      expect(entry.reason.length).toBeGreaterThan(20);
+    }
+  });
+
+  test('the four tenant search RPCs are never on the allow-list', () => {
+    for (const name of TENANT_ID_RPCS) expect(AUTHENTICATED_ALLOW_LIST[name]).toBeUndefined();
   });
 });
