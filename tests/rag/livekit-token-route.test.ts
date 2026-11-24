@@ -305,6 +305,33 @@ describe('GET /api/livekit/token', () => {
     expect(livekit.created).toHaveLength(0);
   });
 
+  test('VOICE_MAX_ACTIVE_ROOMS lowers the room limit', async () => {
+    session.user = { id: USER_A };
+    mutableEnv.VOICE_MAX_ACTIVE_ROOMS = '2';
+    livekit.listRooms = async () => [{ name: 'myrag-voice-aaaa' }, { name: 'myrag-voice-bbbb' }];
+    const res = await GET(request());
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: 'voice_busy' });
+    expect(livekit.created).toHaveLength(0);
+  });
+
+  test('VOICE_MAX_ACTIVE_ROOMS raises the room limit', async () => {
+    session.user = { id: USER_A };
+    mutableEnv.VOICE_MAX_ACTIVE_ROOMS = '6';
+    livekit.listRooms = async () => ['a', 'b', 'c', 'd', 'e'].map((suffix) => ({ name: `myrag-voice-${suffix}` }));
+    const res = await GET(request());
+    expect(res.status).toBe(200);
+    expect(livekit.created).toHaveLength(1);
+  });
+
+  test.each(['', 'abc', '0', '-3'])('an unusable VOICE_MAX_ACTIVE_ROOMS (%j) falls back to 4', async (value) => {
+    session.user = { id: USER_A };
+    mutableEnv.VOICE_MAX_ACTIVE_ROOMS = value;
+    livekit.listRooms = async () => ['a', 'b', 'c', 'd'].map((suffix) => ({ name: `myrag-voice-${suffix}` }));
+    const res = await GET(request());
+    expect(res.status).toBe(409);
+  });
+
   test('a room listing failure fails closed with 503 and no token', async () => {
     session.user = { id: USER_A };
     livekit.listRooms = async () => {

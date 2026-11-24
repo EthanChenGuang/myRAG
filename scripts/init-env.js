@@ -350,6 +350,8 @@ RAG_EMBED_TENANT=
 RAG_VOICE_TOKEN_SECRET=
 # Lifetime of a voice retrieval token in seconds
 RAG_VOICE_TOKEN_TTL_SECONDS=3600
+# Concurrent voice rooms the app allows (409 voice_busy beyond it); must equal VOICE_AGENT_MAX_SESSIONS on the voice agent
+VOICE_MAX_ACTIVE_ROOMS=4
 
 # -----------------------------
 # LANGFUSE TRACING
