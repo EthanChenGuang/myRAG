@@ -117,7 +117,7 @@ describe('voiceKeywordFallback', () => {
     });
 
     expect(calls[0].table).toBe('documents');
-    expect(opsOf(calls[0], 'eq')).toEqual([['user_id', USER_A]]);
+    expect(opsOf(calls[0], 'eq')).toEqual([['is_current', true], ['status', 'ready'], ['user_id', USER_A]]);
     expect(opsOf(calls[0], 'is')).toEqual([['organization_id', null]]);
 
     const chunkCalls = calls.slice(1);
@@ -140,7 +140,7 @@ describe('voiceKeywordFallback', () => {
     });
 
     expect(calls[0].table).toBe('documents');
-    expect(opsOf(calls[0], 'eq')).toEqual([['organization_id', ORG_O]]);
+    expect(opsOf(calls[0], 'eq')).toEqual([['is_current', true], ['status', 'ready'], ['organization_id', ORG_O]]);
     expect(opsOf(calls[0], 'is')).toEqual([]);
     for (const call of calls.slice(1)) expect(opsOf(call, 'in')).toEqual([['document_id', [DOC_1]]]);
   });

@@ -34,6 +34,8 @@ export async function fetchOverviewDocuments(
     .from('documents')
     .select('id, filename, created_at, content, metadata')
     .in('id', ids)
+    .eq('is_current', true)
+    .eq('status', 'ready')
     .abortSignal(options.signal);
   options.signal.throwIfAborted();
   if (result.error) throw new Error(`[RAG Overview] documents lookup failed: ${result.error.message}`);

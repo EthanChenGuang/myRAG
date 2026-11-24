@@ -115,6 +115,9 @@ function documentCalls(calls: Call[]): Call[] {
 
 const CREATED_AT = '2025-01-15T00:00:00.000Z';
 
+/** Rows the D-08 filter admits: current and ready. */
+const READY = { is_current: true, status: 'ready' };
+
 function seed(): Tables {
   return {
     documents: [
@@ -126,6 +129,7 @@ function seed(): Tables {
         user_id: USER_A,
         organization_id: null,
         metadata: { external_url: 'https://example.invalid/alpha' },
+        ...READY,
       },
       {
         id: DOC_B,
@@ -135,6 +139,7 @@ function seed(): Tables {
         user_id: USER_B,
         organization_id: null,
         metadata: {},
+        ...READY,
       },
       {
         id: DOC_O,
@@ -144,13 +149,14 @@ function seed(): Tables {
         user_id: USER_B,
         organization_id: ORG_O,
         metadata: {},
+        ...READY,
       },
     ],
     document_chunks: [
-      { id: 'chunk-a1', document_id: DOC_A, content: 'alpha chunk one' },
-      { id: 'chunk-a2', document_id: DOC_A, content: 'alpha chunk two' },
-      { id: 'chunk-b1', document_id: DOC_B, content: 'bravo chunk one' },
-      { id: 'chunk-o1', document_id: DOC_O, content: 'org chunk one' },
+      { id: 'chunk-a1', document_id: DOC_A, content: 'alpha chunk one', ...READY },
+      { id: 'chunk-a2', document_id: DOC_A, content: 'alpha chunk two', ...READY },
+      { id: 'chunk-b1', document_id: DOC_B, content: 'bravo chunk one', ...READY },
+      { id: 'chunk-o1', document_id: DOC_O, content: 'org chunk one', ...READY },
     ],
   };
 }
@@ -193,6 +199,7 @@ describe('resolveDocumentRefs', () => {
     expect(queries.length).toBeGreaterThanOrEqual(3);
     for (const call of queries) {
       expect(opsOf(call, 'eq')).toContainEqual(['user_id', USER_A]);
+      expect(opsOf(call, 'eq')).toEqual(expect.arrayContaining([['is_current', true], ['status', 'ready']]));
       expect(opsOf(call, 'is')).toContainEqual(['organization_id', null]);
     }
   });
@@ -234,10 +241,13 @@ describe('resolveDocumentRefs', () => {
 
     expect(result.usedDocuments.map((doc) => doc.id)).toEqual([DOC_B]);
     expect(calls.map((call) => [call.table, call.ops.map((entry) => entry.op)])).toEqual([
-      ['documents', ['select', 'ilike', 'limit']],
-      ['documents', ['select', 'eq', 'single']],
-      ['document_chunks', ['select', 'eq', 'limit']],
+      ['documents', ['select', 'ilike', 'limit', 'eq', 'eq']],
+      ['documents', ['select', 'eq', 'eq', 'eq', 'single']],
+      ['document_chunks', ['select', 'eq', 'eq', 'eq', 'limit']],
     ]);
+    for (const call of calls) {
+      expect(opsOf(call, 'eq')).toEqual(expect.arrayContaining([['is_current', true], ['status', 'ready']]));
+    }
     expect(opsOf(calls[0], 'ilike')).toEqual([['filename', '%bravo-secrets%']]);
     expect(opsOf(calls[2], 'limit')).toEqual([[30]]);
     for (const call of calls) {
@@ -265,7 +275,7 @@ describe('resolveDocumentRefs', () => {
 
     const chunkCalls = calls.filter((call) => call.table === 'document_chunks');
     expect(chunkCalls).toHaveLength(1);
-    expect(opsOf(chunkCalls[0], 'eq')).toEqual([['document_id', DOC_A]]);
+    expect(opsOf(chunkCalls[0], 'eq')).toEqual([['document_id', DOC_A], ['is_current', true], ['status', 'ready']]);
     expect(JSON.stringify(calls)).not.toContain(`"document_id","${DOC_B}"`);
 
     const tenantWarnings = warn.mock.calls.filter((args: unknown[]) => String(args[0]).startsWith('[RAG Tenant]'));
@@ -374,8 +384,8 @@ describe('refs stage in runRetrieval', () => {
 
   function pipelineTables(): Tables {
     const tables = seed();
-    tables.documents.push({ id: 'doc-1', filename: 'doc-1.md', created_at: CREATED_AT, content: null, metadata: null });
-    tables.document_chunks.push({ id: 'chunk-1', document_id: 'doc-1', content: 'fixture chunk body 1', metadata: null });
+    tables.documents.push({ id: 'doc-1', filename: 'doc-1.md', created_at: CREATED_AT, content: null, metadata: null, ...READY });
+    tables.document_chunks.push({ id: 'chunk-1', document_id: 'doc-1', content: 'fixture chunk body 1', metadata: null, ...READY });
     return tables;
   }
 

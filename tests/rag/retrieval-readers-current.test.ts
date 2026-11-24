@@ -212,7 +212,7 @@ describe('by-id reads for already filtered candidates stay unfiltered', () => {
     const { admin, calls } = recordingAdmin(() => ({ data: [], error: null }));
 
     await fetchAssemblyRows(
-      [{ chunk_id: 'c1', document_id: DOC_READY, content: 'x', similarity: 0.9, metadata: null, temporal_score: 0, financial_score: 0, final_score: 0.9, match_reason: 'similarity' }],
+      [{ chunk_id: 'c1', document_id: DOC_READY, content: 'x', similarity: 0.9, metadata: null }],
       { adminClient: admin, signal },
     );
 
