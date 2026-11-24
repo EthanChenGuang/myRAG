@@ -1,0 +1,49 @@
+{
+  "fixture_id": "scan-en",
+  "headings": [
+    {
+      "level": 1,
+      "page": 1,
+      "text": "Equipment Acceptance Notice"
+    },
+    {
+      "level": 2,
+      "page": 1,
+      "text": "Conclusion"
+    }
+  ],
+  "language": "en",
+  "pages": [
+    {
+      "page": 1,
+      "preset": "structured_ocr",
+      "signals": [
+        "scanned"
+      ],
+      "tier": "structured"
+    }
+  ],
+  "reading_order": [
+    {
+      "order": 0,
+      "page": 1,
+      "text": "Equipment Acceptance Notice"
+    },
+    {
+      "order": 1,
+      "page": 1,
+      "text": "This notice confirms that the second batch of inspection equipment was accepted "
+    },
+    {
+      "order": 2,
+      "page": 1,
+      "text": "Conclusion"
+    },
+    {
+      "order": 3,
+      "page": 1,
+      "text": "Acceptance reference AC-2025-0232. The equipment is released for use by the exam"
+    }
+  ],
+  "table_cells": []
+}

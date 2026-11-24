@@ -1,0 +1,49 @@
+{
+  "fixture_id": "scan-it",
+  "headings": [
+    {
+      "level": 1,
+      "page": 1,
+      "text": "Avviso di collaudo dell'attrezzatura"
+    },
+    {
+      "level": 2,
+      "page": 1,
+      "text": "Conclusione"
+    }
+  ],
+  "language": "it",
+  "pages": [
+    {
+      "page": 1,
+      "preset": "structured_ocr",
+      "signals": [
+        "scanned"
+      ],
+      "tier": "structured"
+    }
+  ],
+  "reading_order": [
+    {
+      "order": 0,
+      "page": 1,
+      "text": "Avviso di collaudo dell'attrezzatura"
+    },
+    {
+      "order": 1,
+      "page": 1,
+      "text": "Si comunica che la seconda fornitura di strumenti di controllo \u00e8 stata collaudat"
+    },
+    {
+      "order": 2,
+      "page": 1,
+      "text": "Conclusione"
+    },
+    {
+      "order": 3,
+      "page": 1,
+      "text": "Riferimento di collaudo AC-2025-0233. L'attrezzatura \u00e8 autorizzata all'uso da pa"
+    }
+  ],
+  "table_cells": []
+}

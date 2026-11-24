@@ -1,0 +1,155 @@
+{
+  "fixture_id": "invoice-en",
+  "headings": [
+    {
+      "level": 1,
+      "page": 1,
+      "text": "Invoice"
+    }
+  ],
+  "language": "en",
+  "pages": [
+    {
+      "page": 1,
+      "preset": "structured_full",
+      "signals": [
+        "tables"
+      ],
+      "tier": "structured"
+    }
+  ],
+  "reading_order": [
+    {
+      "order": 0,
+      "page": 1,
+      "text": "Invoice"
+    },
+    {
+      "order": 1,
+      "page": 1,
+      "text": "Invoice No.: INV-2025-00418"
+    },
+    {
+      "order": 2,
+      "page": 1,
+      "text": "Invoice date: 2025-03-15"
+    },
+    {
+      "order": 3,
+      "page": 1,
+      "text": "Due date: 2025-04-14"
+    },
+    {
+      "order": 4,
+      "page": 1,
+      "text": "Supplier: Example Supplier Ltd"
+    },
+    {
+      "order": 5,
+      "page": 1,
+      "text": "VAT No.: BE0000000097"
+    },
+    {
+      "order": 6,
+      "page": 1,
+      "text": "Bill to: Example Buyer GmbH"
+    },
+    {
+      "order": 7,
+      "page": 1,
+      "text": "VAT No.: FR00000000093"
+    },
+    {
+      "order": 8,
+      "page": 1,
+      "text": "Subtotal: EUR 1,000.00"
+    },
+    {
+      "order": 9,
+      "page": 1,
+      "text": "VAT 20 %: EUR 200.00"
+    },
+    {
+      "order": 10,
+      "page": 1,
+      "text": "Total: EUR 1,200.00"
+    }
+  ],
+  "table_cells": [
+    {
+      "col": 0,
+      "row": 0,
+      "text": "Description"
+    },
+    {
+      "col": 1,
+      "row": 0,
+      "text": "Qty"
+    },
+    {
+      "col": 2,
+      "row": 0,
+      "text": "Unit price"
+    },
+    {
+      "col": 3,
+      "row": 0,
+      "text": "Amount"
+    },
+    {
+      "col": 4,
+      "row": 0,
+      "text": "VAT %"
+    },
+    {
+      "col": 0,
+      "row": 1,
+      "text": "Thermal probe"
+    },
+    {
+      "col": 1,
+      "row": 1,
+      "text": "8"
+    },
+    {
+      "col": 2,
+      "row": 1,
+      "text": "100.00"
+    },
+    {
+      "col": 3,
+      "row": 1,
+      "text": "800.00"
+    },
+    {
+      "col": 4,
+      "row": 1,
+      "text": "20%"
+    },
+    {
+      "col": 0,
+      "row": 2,
+      "text": "Probe cable 5 m"
+    },
+    {
+      "col": 1,
+      "row": 2,
+      "text": "4"
+    },
+    {
+      "col": 2,
+      "row": 2,
+      "text": "50.00"
+    },
+    {
+      "col": 3,
+      "row": 2,
+      "text": "200.00"
+    },
+    {
+      "col": 4,
+      "row": 2,
+      "text": "20%"
+    }
+  ]
+}

@@ -1,0 +1,53 @@
+{
+  "fixture_id": "digital-text",
+  "headings": [
+    {
+      "level": 1,
+      "page": 1,
+      "text": "Example routing memo"
+    },
+    {
+      "level": 2,
+      "page": 2,
+      "text": "Scope"
+    }
+  ],
+  "language": "en",
+  "pages": [
+    {
+      "page": 1,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 2,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    }
+  ],
+  "reading_order": [
+    {
+      "order": 0,
+      "page": 1,
+      "text": "Example routing memo"
+    },
+    {
+      "order": 1,
+      "page": 1,
+      "text": "This one-page digital fixture checks the fast tier on plain English text with no"
+    },
+    {
+      "order": 2,
+      "page": 2,
+      "text": "Scope"
+    },
+    {
+      "order": 3,
+      "page": 2,
+      "text": "The routing harness scores recorded outputs against ParserExpected structure on "
+    }
+  ],
+  "table_cells": []
+}

@@ -1,0 +1,188 @@
+{
+  "fixture_id": "cross-boundary",
+  "headings": [
+    {
+      "level": 1,
+      "page": 1,
+      "text": "Continuity workbook"
+    }
+  ],
+  "language": "en",
+  "pages": [
+    {
+      "page": 1,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 2,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 3,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 4,
+      "preset": "structured_full",
+      "signals": [
+        "tables",
+        "table_continues"
+      ],
+      "tier": "structured"
+    },
+    {
+      "page": 5,
+      "preset": "structured_full",
+      "signals": [
+        "tables"
+      ],
+      "tier": "structured"
+    },
+    {
+      "page": 6,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    }
+  ],
+  "reading_order": [
+    {
+      "order": 0,
+      "page": 1,
+      "text": "Continuity workbook"
+    },
+    {
+      "order": 1,
+      "page": 1,
+      "text": "Text on pages one through three."
+    },
+    {
+      "order": 2,
+      "page": 2,
+      "text": "More explanatory text on page two."
+    },
+    {
+      "order": 3,
+      "page": 3,
+      "text": "Final lead-in before the split table."
+    },
+    {
+      "order": 4,
+      "page": 4,
+      "text": "The table below continues on the next page."
+    },
+    {
+      "order": 5,
+      "page": 6,
+      "text": "After-table summary on page six."
+    }
+  ],
+  "table_cells": [
+    {
+      "col": 0,
+      "row": 0,
+      "text": "Metric"
+    },
+    {
+      "col": 1,
+      "row": 0,
+      "text": "Q1"
+    },
+    {
+      "col": 2,
+      "row": 0,
+      "text": "Q2"
+    },
+    {
+      "col": 3,
+      "row": 0,
+      "text": "Q3"
+    },
+    {
+      "col": 0,
+      "row": 1,
+      "text": "Revenue"
+    },
+    {
+      "col": 1,
+      "row": 1,
+      "text": "120"
+    },
+    {
+      "col": 2,
+      "row": 1,
+      "text": "130"
+    },
+    {
+      "col": 3,
+      "row": 1,
+      "text": "140"
+    },
+    {
+      "col": 0,
+      "row": 2,
+      "text": "Margin"
+    },
+    {
+      "col": 1,
+      "row": 2,
+      "text": "12"
+    },
+    {
+      "col": 2,
+      "row": 2,
+      "text": "13"
+    },
+    {
+      "col": 3,
+      "row": 2,
+      "text": "14"
+    },
+    {
+      "col": 0,
+      "row": 0,
+      "text": "Margin"
+    },
+    {
+      "col": 1,
+      "row": 0,
+      "text": "13"
+    },
+    {
+      "col": 2,
+      "row": 0,
+      "text": "14"
+    },
+    {
+      "col": 3,
+      "row": 0,
+      "text": "15"
+    },
+    {
+      "col": 0,
+      "row": 1,
+      "text": "Notes"
+    },
+    {
+      "col": 1,
+      "row": 1,
+      "text": "steady"
+    },
+    {
+      "col": 2,
+      "row": 1,
+      "text": "up"
+    },
+    {
+      "col": 3,
+      "row": 1,
+      "text": "up"
+    }
+  ]
+}
