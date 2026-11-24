@@ -1,6 +1,8 @@
 # Executor ledger (one executor per plan)
 
-**Rule (Guang):** At most one **executor** subagent per plan id. Parallelism is across **different** plans with **disjoint** `files_modified`. Review/verify agents are separate roles and may run in parallel with executors.
+**Rule (Guang):** Keep **exactly 4 executors RUNNING** at all times; refill **in the same step as each merge** (batch `Task` spawns in one orchestrator message). At most one **executor** subagent per plan id. Parallelism is across **different** plans with **disjoint** `files_modified`. Review/verify agents are separate roles and may run in parallel with executors.
+
+**Parallelism failure mode (2026-11-24):** Orchestrator handled completion notifications **one per turn** → only the latest `Task` was visible while 3 others stayed `RUNNING`; worktrees were **not ff’d** and **no `origin/exec/*` pushes** → looked like a single agent. Fix: verify `cursor-cloud` RUNNING count; batch refill; ff/rebase all `wt/*`; require push after each task commit.
 
 ## Remaining plans (execution queue)
 
@@ -101,6 +103,7 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | 03.1-23 | [bc-ab1e9b2d](bc-ab1e9b2d-301d-50ad-85d3-54b3af5e3261) RUNNING | exec/03.1-23 |
 | 04-44 | [bc-e6e2bd84](bc-e6e2bd84-1486-5c1d-b545-6f44a20de765) **merged** | exec/04-44 — params-hash 15 |
 | 03.1-25 | [bc-1f542e8a](bc-1f542e8a-f80a-58a7-99bb-5c47f655d0ce) RUNNING | exec/03.1-25 |
+| 04-19 | [bc-eafdad13](bc-eafdad13-4e57-5750-a00f-8bc029517ee2) RUNNING | exec/04-19 |
 
 ## Remaining plan inventory (file-overlap basis)
 
@@ -114,14 +117,22 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 
 **Wave 1 (4):** 04-01–04 **parallel**; **04-05 → 04-06 → 04-07** one executor tree (PGlite migration order).
 
-## Wave E (active — target 3–4 executors)
+## Wave E (active — **exactly 4** executors; cloud-verified 2026-11-24 ~13:34 Europe/Rome)
 
-| Plan | bcId | Worktree | Notes |
-|------|------|----------|-------|
-| 03.1-23 | [bc-ab1e9b2d](bc-ab1e9b2d-301d-50ad-85d3-54b3af5e3261) RUNNING | `wt/03.1-23` | Docling presets + converters |
-| 03.1-25 | [bc-1f542e8a](bc-1f542e8a-f80a-58a7-99bb-5c47f655d0ce) RUNNING | `wt/03.1-25` | backfill sources + inventory |
-| 04-19 | SPAWN | `wt/04-19` | v2 search pipeline (unblocked by 04-44) |
-| 04-18 | [bc-78743196](bc-78743196-9471-5cda-8414-1d4c80c9d85f) RUNNING | `wt/04-18` | selective-filter harness |
+| Plan | bcId | Cloud | Worktree | WIP signal |
+|------|------|-------|----------|------------|
+| 03.1-23 | [bc-ab1e9b2d](bc-ab1e9b2d-301d-50ad-85d3-54b3af5e3261) | **RUNNING** | `wt/03.1-23` | 2 commits local; no `origin/exec` yet; ff blocked (diverged) |
+| 03.1-25 | [bc-1f542e8a](bc-1f542e8a-f80a-58a7-99bb-5c47f655d0ce) | **RUNNING** | `wt/03.1-25` | untracked backfill inventory files; ff’d to trunk |
+| 04-18 | [bc-78743196](bc-78743196-9471-5cda-8414-1d4c80c9d85f) | **RUNNING** | `wt/04-18` | selective-filter harness untracked; ff’d to trunk |
+| 04-19 | [bc-eafdad13](bc-eafdad13-4e57-5750-a00f-8bc029517ee2) | **RUNNING** | `wt/04-19` | at trunk; pipeline work starting |
+
+**Overflow queue (spawn next free slot, same turn as merge):**
+
+| Plan | Worktree ready | Notes |
+|------|----------------|-------|
+| **04-45** | `wt/04-45` | rerank text/select; disjoint |
+| **03-48-sec-rpc** | `wt/03-48-sec-rpc` | [03-48-FOLLOWUP-SECURITY-RPC-PLAN.md](../phases/03-unified-ingestion-embedding-profiles/03-48-FOLLOWUP-SECURITY-RPC-PLAN.md) |
+| **03-48-setup-idempotent** | (create on spawn) | setup 42710 fix |
 
 **03-48 follow-ups (one executor per plan when a slot frees — do not duplicate running work):**
 

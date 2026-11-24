@@ -16,11 +16,12 @@ After each wave/merge, or when context feels ~60% full:
 
 ## 2. Parallelism
 
-- Run **3–4 concurrent executors** when plans have **non-overlapping** `files_modified`.
+- Run **exactly 4 concurrent executors** whenever dependency-ready, file-disjoint plans exist (never more than one agent per plan id).
 - **Never** more than one executor on the same plan id.
-- **Before every spawn:** read `.planning/paused/exec-ledger.md` (plan → agent → status).
-- **Merge refill (same run):** After each merge to the integration branch, **in that same turn** spawn replacements until **4** concurrent executors (dependency-ready, file-disjoint). Update the ledger **before** each `Task`. Do not finish a turn with **&lt;3** executors running unless nothing else is runnable — record **why** in the ledger.
-- **Retry** only after the previous agent for that plan is confirmed stopped; log duplicates in the ledger.
+- **Before every spawn:** read `.planning/paused/exec-ledger.md` (plan → agent → status); confirm with `cursor-cloud` list (status `RUNNING`) when the UI count looks wrong.
+- **Merge refill (same turn):** On any merge to the integration branch, in **one assistant message** (batch): merge tests → ledger update → **all** missing `Task` spawns to restore **4** `RUNNING` → fast-forward every active `wt/*` worktree from trunk (rebase local WIP if ff fails). Do **not** end a turn with &lt;4 executors unless the ledger records **why** (fewer runnable plans).
+- **Visibility:** Executors must `git push -u origin exec/<plan>` after each task commit so parallel work is visible on GitHub; orchestrator reports all four bcIds in every status reply.
+- **Retry** only after the previous agent for that plan is confirmed stopped (`IDLE`); log duplicates in the ledger.
 
 ## 3. Autonomy
 

@@ -47,17 +47,24 @@ Orchestrator applies this **fallback chain** per role. **Never use Grok** for an
 
 `model_overrides` in `.planning/config.json` pins **primary** targets when quota exists; orchestrator implements the fallback table above when Task/spawn fails on quota.
 
+## Parallelism (mandatory)
+
+**Keep exactly 4 executors RUNNING at all times; refill in the same step as each merge** (one orchestrator message: merge + tests + ledger + batch `Task` until 4 `RUNNING` + ff all `wt/*`). Confirm count with `cursor-cloud` when UI shows fewer. See `.planning/paused/exec-ledger.md` Wave E.
+
+**Wave E now (4 RUNNING):** [03.1-23](bc-ab1e9b2d-301d-50ad-85d3-54b3af5e3261), [03.1-25](bc-1f542e8a-f80a-58a7-99bb-5c47f655d0ce), [04-18](bc-78743196-9471-5cda-8414-1d4c80c9d85f), [04-19](bc-eafdad13-4e57-5750-a00f-8bc029517ee2).
+
+**Overflow queue:** `04-45`, `03-48-sec-rpc` worktrees on trunk (spawn on next merge, same turn).
+
 ## Done this session
 
-- Merged on trunk: **03-43**–**03-46**, **03-45**; verifier **03-46** (`human_needed` 4/5)
-- **Wave A (5 RUNNING):** [03-47](bc-6d671721-c089-50a8-9012-53f242a64a1e), **03.1-01**, **03.1-02**, **04-01**, **04-03** — see `.planning/paused/exec-ledger.md`
-- Rules: `.cursor/rules/orchestration.mdc` (+ Claude pointer)
+- Trunk: Phase **3.1** wave 3 + Phase **4** through **04-44** merged; integration @ `450662e`
+- Rules: `.cursor/rules/orchestration.mdc` — **exactly 4** executors + same-turn batch refill
 
 ## Next step
 
-1. Merge **03-47** when [Execute plan 03-47 only](bc-6d671721-c089-50a8-9012-53f242a64a1e) finishes (gates + SUMMARY); skip **03-48** (Guang live).
-2. Phase 3 step 4: verification + design-skills SUMMARY gate; step 5: STATE/ROADMAP; step 6: 3.1 wave 1 merges then Phase 4.
-3. Spawn wave B only per ledger (no duplicate plan ids).
+1. On **any** executor completion: merge + gates on trunk → **batch-spawn** until 4 RUNNING (use overflow queue).
+2. **03-48** live DB: Guang/box only; integration agents use **03-48-sec-rpc** / **setup-idempotent** worktrees.
+3. No duplicate plan ids; push only `claude/ecstatic-hamilton-86gtwv`; no PR.
 3. Review + verification (`followups-notes.md`, D-08).
 4. REQUIREMENTS/ROADMAP/STATE; Phase 3.1 then Phase 4.
 
