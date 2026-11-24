@@ -287,7 +287,55 @@ Plans:
   6. Rewriting runs only when the router asks for it, with a small model and at most two variants; fixture items asking in English or Italian about Chinese documents retrieve the right chunks through translated-query fusion and are answered in the asker’s language.
   7. With the semantic cache on, cache hits have much lower p95 latency than misses, any document change in the tenant invalidates affected entries, and the cross-tenant canary suite includes the cache.
 **Live verification**: Run both frameworks with real LLM keys; measure p50/p95 latency of each transform and of the whole pre-retrieval stage for chat (starting budget about 2 s before first token) and voice (about 800 ms), and replace the starting budgets with the measured ones; compare LlamaIndex and LangChain on the real golden set.
-**Plans**: TBD
+**Plans**: 46 plans in 13 waves (06-01..06-46) — see `phases/06-query-layer-llamaindex-langchain/06-PLAN-INDEX.md`
+
+Plans:
+- [ ] 06-01-PLAN.md — W1: Pydantic query contracts (QueryPlan, transform outputs, RewriteGateResult) and query-params.json
+- [ ] 06-02-PLAN.md — W1: Phase 6 env switches in the five config locations, manifest and eval pin (MCP flag pinned)
+- [ ] 06-03-PLAN.md — W1: locked rewrite gate, lexicon, protected tokens, fixture table and p99 < 1 ms benchmark
+- [ ] 06-04-PLAN.md — W1: `rag_tenant_language_shares` server-role SQL (0601) with two-tenant tests
+- [ ] 06-05-PLAN.md — W2: generated JSON Schema and Zod for the query contracts
+- [ ] 06-06-PLAN.md — W2: deterministic R2 relative-date normalization
+- [ ] 06-07-PLAN.md — W2: shared post-checks, gate-anchored time budget and prompt renderer with the mandatory suffix
+- [ ] 06-08-PLAN.md — W2: `hybrid_search_chunks` `p_include_undated` (0602), single overload, default unchanged
+- [ ] 06-09-PLAN.md — W2: semantic-cache contracts and golden cache-pair fields
+- [ ] 06-10-PLAN.md — W3: config stages and switches, query-LLM client and deterministic fake
+- [ ] 06-11-PLAN.md — W3: generated schemas for cache, golden, retrieval-params and filter contracts
+- [ ] 06-12-PLAN.md — W3: `rag_semantic_cache` table, server-role functions and same-transaction triggers (0603)
+- [ ] 06-13-PLAN.md — W4: TRACER — eval route to v2 query stage, gate, native condense, QueryPlan, variant seam, trace; layer-off parity
+- [ ] 06-14-PLAN.md — W4: router (gate + classifier per A-1) and variant limits loader
+- [ ] 06-15-PLAN.md — W4: native multi-query, HyDE and sub-question transforms
+- [ ] 06-16-PLAN.md — W4: KB language-share client (per-tenant cache) and native translator
+- [ ] 06-17-PLAN.md — W4: cache interface, key hash and deterministic bypass rules
+- [ ] 06-18-PLAN.md — W4: CI boundary rules (LangChain fence, adapter reach, zod v4, query-LLM calls, cache RPCs)
+- [ ] 06-19-PLAN.md — W5: full layer orchestration: parallel group, deadline, soft status, small talk
+- [ ] 06-20-PLAN.md — W5: variants through the Phase 4 path with caps, dense-only HyDE, one batch and one RRF
+- [ ] 06-21-PLAN.md — W5: pgvector and RedisVL cache backends behind a fail-open wrapper; RedisVL invalidation emission
+- [ ] 06-22-PLAN.md — W5: package legitimacy checkpoint (not before 2026-12-04, `--save-exact --before`), installs, zod isolation CI, optional RedisVL extra (autonomous: false)
+- [ ] 06-23-PLAN.md — W6: real translator in the Phase 4 translate slot; en/it to zh cross-language retrieval
+- [ ] 06-24-PLAN.md — W6: relative-date filter end to end with undated documents kept
+- [ ] 06-25-PLAN.md — W6: sub-question coverage reservation; rerank and refusal on the standalone query
+- [ ] 06-26-PLAN.md — W6: scope-bound retrieval port and search-delegate hook
+- [ ] 06-27-PLAN.md — W6: chat and embed inputs (classification, history window, time zone, small talk)
+- [ ] 06-28-PLAN.md — W6: server-side voice profile within the voice budget
+- [ ] 06-29-PLAN.md — W6: eval overrides for layer, framework, transforms and cache; run configs
+- [ ] 06-30-PLAN.md — W6: RedisVL cache endpoints in the sidecar behind the shared secret
+- [ ] 06-31-PLAN.md — W7: voice-agent `VOICE_SERVER_QUERY_REWRITE` switch (default off)
+- [ ] 06-32-PLAN.md — W7: `semantic_cache` stage, config hash, vector reuse and hit short-circuit
+- [ ] 06-33-PLAN.md — W7: answer-language instruction appended in createEnhancedRAGPrompt
+- [ ] 06-34-PLAN.md — W7: report sections and report-only query and cache budgets
+- [ ] 06-35-PLAN.md — W7: LangChain adapter part 1 (condense, expand, HyDE port, fake chat model)
+- [ ] 06-38-PLAN.md — W7: golden additions (protected-code, elliptical and relative-time follow-ups, compound, cross-language, small talk) and re-baseline
+- [ ] 06-36-PLAN.md — W8: cache hits and post-groundedness stores in chat and embed (embed check-only by default)
+- [ ] 06-37-PLAN.md — W8: LangChain adapter part 2 (decompose, translate, EnsembleRetriever over the port, framework switch)
+- [ ] 06-39-PLAN.md — W8: golden cache paraphrase and near-miss pairs and re-baseline
+- [ ] 06-40-PLAN.md — W9: authenticated clear-cache admin route and the Config UI "Query layer" panel
+- [ ] 06-41-PLAN.md — W9: cache-pair run, threshold calibration and the near-miss wrong-hit gate
+- [ ] 06-42-PLAN.md — W9: two-tenant canary suite with cache and query-layer rows (both frameworks)
+- [ ] 06-43-PLAN.md — W10: framework comparison tool, fixture report and CI jobs
+- [ ] 06-44-PLAN.md — W11: phase comparison against Phase 4 (D-42 a to e)
+- [ ] 06-45-PLAN.md — W12: fold migrations into both setup files, full gates with defaults, AGENTS.md
+- [ ] 06-46-PLAN.md — W13: live verification checkpoints (autonomous: false)
 **UI hint**: yes
 
 ### Phase 7: External Backends & Release Defaults
@@ -319,5 +367,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 5.1 → 6 → 7. 
 | 4. Hybrid Retrieval, Reranking & Calibrated Refusal | 0/45 | Planned | - |
 | 5. Verified Citations & Groundedness | 0/26 | Planned (plan-check PASS after W1 fix) | - |
 | 5.1. Prompt Injection Defense (INSERTED) | 0/TBD | Context+research+patterns done; planning not started | - |
-| 6. Query Layer (LlamaIndex & LangChain) | 0/TBD | Planning in progress (46 draft plans) | - |
+| 6. Query Layer (LlamaIndex & LangChain) | 0/46 | Planned (plan-check pending) | - |
 | 7. External Backends & Release Defaults | 0/TBD | Planning in progress (24 draft plans) | - |
