@@ -10,6 +10,8 @@ import {
 } from './types';
 import { createIngestWriter } from './writer';
 
+export { getIngestStatus, resumeIngest } from './status';
+export type { IngestStatusView, ResumeIngestOptions } from './status';
 export type {
   IngestInput,
   IngestOptions,
