@@ -76,7 +76,7 @@ const STRIPPED_JOB_COLUMNS = new Set(['error']);
 function normalizeJobRow(row: Row): Row {
   const out: Row = { ...row };
   for (const key of STRIPPED_JOB_COLUMNS) delete out[key];
-  for (const key of ['created_at', 'updated_at', 'deleted_at', 'lease_until', 'run_after', 'provisional_published_at'] as const) {
+  for (const key of ['created_at', 'updated_at', 'deleted_at', 'lease_until', 'run_after', 'provisional_published_at', 'dead_letter_at'] as const) {
     const value = iso(out[key]);
     if (value !== null) out[key] = value;
   }
@@ -351,4 +351,54 @@ export async function listJobs(args: ListJobsArgs, options: LedgerCallOptions): 
  */
 export async function listJobsAllTenants(args: ListJobsFilters, options: LedgerCallOptions): Promise<IngestionJob[]> {
   return (await listPage(null, args, options)).jobs;
+}
+
+export interface PurgeStaleJobsResult {
+  archived: number;
+  purged: number;
+  retention_days: number;
+}
+
+function parseCount(data: unknown): number {
+  if (typeof data === 'number') return data;
+  if (typeof data === 'string' && data !== '') return Number(data);
+  if (Array.isArray(data) && data[0] != null) return Number(data[0]);
+  return Number(data ?? 0);
+}
+
+function parsePurgePayload(data: unknown): PurgeStaleJobsResult {
+  if (!data || typeof data !== 'object') throw new IngestLedgerError('rag_purge_stale_ingestion_jobs', 'invalid_row');
+  const row = data as Record<string, unknown>;
+  return {
+    archived: Number(row.archived ?? 0),
+    purged: Number(row.purged ?? 0),
+    retention_days: Number(row.retention_days ?? 0),
+  };
+}
+
+export async function countDeadLetterJobs(
+  tenantKey: string | null,
+  options: LedgerCallOptions,
+): Promise<number> {
+  const rows = await callRpc('rag_count_ingestion_dead_letters', { p_tenant_key: tenantKey }, options);
+  const first = rows[0];
+  if (first && typeof first === 'object') {
+    const scalar = Object.values(first)[0];
+    return parseCount(scalar);
+  }
+  return parseCount(first);
+}
+
+export async function purgeStaleIngestionJobs(
+  retentionDays: number,
+  batchSize: number,
+  options: LedgerCallOptions,
+): Promise<PurgeStaleJobsResult> {
+  const rows = await callRpc(
+    'rag_purge_stale_ingestion_jobs',
+    { p_retention_days: retentionDays, p_batch_size: batchSize },
+    options,
+  );
+  if (!rows[0]) throw new IngestLedgerError('rag_purge_stale_ingestion_jobs', 'no_row');
+  return parsePurgePayload(rows[0]);
 }

@@ -216,6 +216,23 @@ export function checkIngestionSwitches(env) {
     });
   }
 
+  const supabaseUrl = (env.NEXT_PUBLIC_SUPABASE_URL ?? '').trim();
+  if (supabaseUrl.startsWith('postgresql://') || supabaseUrl.startsWith('postgres://')) {
+    errors.push({
+      name: 'NEXT_PUBLIC_SUPABASE_URL',
+      location: 'ingestion',
+      message:
+        'Use the Supabase project HTTPS URL (PostgREST / API), not a direct Postgres connection string',
+    });
+  } else if (/^https:\/\/db\.[a-z0-9-]+\.supabase\.co/i.test(supabaseUrl) || /:5432\b/.test(supabaseUrl)) {
+    warnings.push({
+      name: 'NEXT_PUBLIC_SUPABASE_URL',
+      location: 'ingestion',
+      message:
+        'NEXT_PUBLIC_SUPABASE_URL should be the project API host (*.supabase.co), not db.* or port 5432',
+    });
+  }
+
   return { errors, warnings };
 }
 

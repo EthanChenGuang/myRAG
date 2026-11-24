@@ -93,6 +93,8 @@ def create_app(settings: SidecarSettings | None = None, converter: Converter | N
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         nonlocal ingest_worker, ingest_pool, preflight_pool, ingest_task, ledger_client, app_client
+        from rag_sidecar.ingest.maintenance import start_maintenance_from_env
+
         preflight_pool = PriorityPool(workers=resolved.parse_workers)
         preflight_pool.start()
         app.state.preflight_pool = preflight_pool
@@ -119,9 +121,12 @@ def create_app(settings: SidecarSettings | None = None, converter: Converter | N
             )
             ingest_task = asyncio.create_task(ingest_worker.run())
             app.state.ingest_worker = ingest_worker
+        maintenance = start_maintenance_from_env()
         try:
             yield
         finally:
+            if maintenance is not None:
+                await maintenance.stop()
             if ingest_worker is not None:
                 await ingest_worker.stop()
             if ingest_pool is not None:

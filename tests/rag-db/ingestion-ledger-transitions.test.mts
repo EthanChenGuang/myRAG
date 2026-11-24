@@ -10,27 +10,13 @@ import { createTwoTenantDatabase, TWO_TENANT_IDS } from '../../eval/harness/two-
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const CORPUS = path.join(REPO_ROOT, 'eval/fixtures/corpus');
-const M0352 = 'supabase/migrations/0352_ingestion_claim.sql';
-const M0353 = 'supabase/migrations/0353_ingestion_transitions.sql';
 const MODES: DeploymentMode[] = ['single-tenant', 'multi-tenant'];
 
 const ADMIN = '00000000-0000-4000-8000-0000000000c1';
 const TENANT_SINGLE = 's:default';
 
-function modeMigrationSuffix(mode: DeploymentMode): string {
-  return mode === 'single-tenant'
-    ? 'supabase/migrations/0353_ingestion_transitions.single-tenant.sql'
-    : 'supabase/migrations/0353_ingestion_transitions.multi-tenant.sql';
-}
-
 function tenantFor(mode: DeploymentMode): string {
   return mode === 'single-tenant' ? TENANT_SINGLE : `u:${TWO_TENANT_IDS.userA}`;
-}
-
-async function applyMigrations(db: PGlite, mode: DeploymentMode): Promise<void> {
-  await db.exec(fs.readFileSync(path.join(REPO_ROOT, M0352), 'utf8'));
-  await db.exec(fs.readFileSync(path.join(REPO_ROOT, modeMigrationSuffix(mode)), 'utf8'));
-  await db.exec(fs.readFileSync(path.join(REPO_ROOT, M0353), 'utf8'));
 }
 
 async function tryQuery(db: PGlite, sql: string, params: unknown[] = []): Promise<{ code: string | null; message: string } | null> {
@@ -81,7 +67,6 @@ for (const mode of MODES) {
       fixture = mode === 'multi-tenant'
         ? await createTwoTenantDatabase()
         : await createFixtureDatabase({ deploymentMode: mode, corpusDir: CORPUS, supabaseGrants: true, migrations: true });
-      await applyMigrations(fixture.db);
       if (mode === 'multi-tenant') {
         await fixture.db.query('INSERT INTO auth.users (id, email) VALUES ($1, $2)', [ADMIN, 'admin@example.invalid']);
         await fixture.db.query('INSERT INTO admin_users (id) VALUES ($1)', [ADMIN]);
