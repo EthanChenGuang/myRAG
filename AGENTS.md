@@ -68,6 +68,7 @@ myrag/
 - Vector search: 1536‑dim embeddings + HNSW indexes (`m=64`, `ef_construction=200`).
 - Watch console logs for `[Document Search]` to analyse retrieval behaviour.
 - Latency budgets (p50/p95, text chat and voice) live in `eval/config/latency-budgets.json`; eval reports show per-stage latency against them; report-only until live measurements ratify them.
+- All knowledge-base retrieval goes through `@/lib/rag` (resolve a `TenantScope` with `resolveTenantScope` / `resolveEmbedScope` / `resolveVoiceScope`, then `runRetrieval`); `scripts/ci/check-rag-boundary.mjs` fails on embedding, retrieval-RPC or reranker use elsewhere. Tenant checks have no off switch. Retrieval searches on the service-role client, so `SUPABASE_SERVICE_ROLE_KEY` must be set. Multi-tenant embed needs `RAG_EMBED_TENANT`; voice needs `RAG_VOICE_TOKEN_SECRET` (32+ chars).
 
 ### Image RAG
 - Images uploaded via Config UI are captioned by GPT-4o Vision and embedded.
@@ -117,6 +118,7 @@ Key files:
 - `voice-agent/src/voice_agent.ts` – Pipeline, query rewriting, greeting
 - `voice-agent/src/agent.ts` – LiveKit, VAD, audio mutex
 - `src/components/voice/voice-mode-overlay.tsx` – Frontend voice UI
+- Each voice session gets its own LiveKit room (`myrag-voice-<random>`), created by `/api/livekit/token` with the signed scope token in the room metadata; the agent watches for these rooms, serves only the identity named there and removes anyone else. Deploy the app and the agent together, and keep `VOICE_MAX_ACTIVE_ROOMS` (app) equal to `VOICE_AGENT_MAX_SESSIONS` (agent).
 
 Running voice agent:
 ```bash
@@ -138,6 +140,7 @@ Unified OAuth for Google Drive, Notion, Dropbox:
 - Intent & tool detection: `src/lib/mcp/query-classifier.ts`, patterns under `src/lib/mcp/query-patterns`.
 - Approval & execution pipeline: `src/app/api/chat/approve/route.ts` plus the Universal MCP router/client.
 - Cache and approval metadata live on the server—keep tool IDs, schemas, and approval prompts consistent.
+- In multi-tenant mode the operator's MCP account is admin-only; `chat/approve` executes exactly the approved parameters with per-caller state.
 
 ---
 
@@ -151,6 +154,7 @@ Unified OAuth for Google Drive, Notion, Dropbox:
 ## 12. Payments & Auth
 - Authentication uses Supabase (GitHub OAuth, email/password, magic links); respect multi-tenant RLS.
 - Stripe and Polar enable subscriptions and one-off sales—configure secrets only through environment scripts.
+- A Supabase session is required for image/video/3D generation, audio POST, title, extract-name, web-search, upload and temporary process-document. Single-tenant knowledge-base writes are owner-or-admin and honour `read_only_doc_dashboard`. The `admin_session` cookie is valid only with a matching live Supabase session.
 
 ---
 
@@ -162,7 +166,7 @@ Unified OAuth for Google Drive, Notion, Dropbox:
 
 ## 14. Behaviour to Preserve
 - Strict RAG now allows safe tool results: when `webSearch` is enabled, strict mode may use Exa-powered web search rather than legacy `:online` model suffixes.
-- When strict RAG has no useful context and web search is disabled, the chat API returns a structured "information not available" response instead of letting the model answer from general knowledge.
+- When strict RAG returns a verified `empty` retrieval status and web search is disabled, the chat API returns a structured "information not available" response instead of letting the model answer from general knowledge. A knowledge-base failure (`error`, or `degraded` with no documents) is never reported as "information not available": strict mode with web search off streams a localized "knowledge base temporarily unavailable" message; with web search on, or in balanced/flexible mode, the answer continues without knowledge-base context and the trace is flagged `degraded`.
 - Source extraction now preserves `webSearch` tool results, document sources, and `source_images` through streaming and final message persistence; keep sidebar toggle click handling intact.
 - Voice work recently focused on UI timing and audio reliability: the overlay keeps the three-dot state until text and word timings are ready, the agent dynamically resamples incoming audio for VAD/STT, and Resemble timestamp failures fall back to estimated timings.
 
