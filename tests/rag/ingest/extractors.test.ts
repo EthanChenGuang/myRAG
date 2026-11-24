@@ -270,6 +270,8 @@ describe('extract stage', () => {
     expect(general.warnings).not.toContain('extractor_unavailable:dates');
     expect(financial.warnings).not.toContain('extractor_unavailable:dates');
     expect(financial.warnings).not.toContain('extractor_unavailable:financial');
-    expect(invoice.warnings).toContain('extractor_unavailable:invoice');
+    // Until 03-29 registers the invoice chunker, invoice_receipt stops at chunk (03-19 decision 4),
+    // so extract never runs; 03-29 restores the extractor_unavailable:invoice assertion here.
+    expect(invoice).toMatchObject({ status: 'failed', reason: 'chunker_unavailable' });
   });
 });

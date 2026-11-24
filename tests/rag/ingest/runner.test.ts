@@ -372,7 +372,9 @@ describe('registered stages and their switched-off behaviour', () => {
 
     expect(general.warnings.filter((warning) => warning.startsWith('extractor_unavailable'))).toEqual([]);
     expect(financial.warnings.filter((warning) => warning.startsWith('extractor_unavailable'))).toEqual([]);
-    expect(invoice.warnings).toContain('extractor_unavailable:invoice');
+    // Until 03-29 registers the invoice chunker, invoice_receipt stops at chunk (03-19 decision 4),
+    // so extract never runs; 03-29 restores the extractor_unavailable:invoice assertion here.
+    expect(invoice).toMatchObject({ status: 'failed', reason: 'chunker_unavailable' });
   });
 
   test('store_original records no_object_store and writes nothing to a store', async () => {
