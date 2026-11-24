@@ -1,5 +1,8 @@
 from pathlib import Path
 
+from rag_sidecar.preflight.config import load_routing_config
+from rag_sidecar.preflight.l1 import EncryptedPdf, l1_signals
+
 MIN_TEXT_CHARS = 10
 
 
@@ -10,12 +13,33 @@ def text_layer_page_share(path: Path, max_pages: int | None = None) -> float | N
     more pages than max_pages (the conversion rejects it anyway, so its pages are not walked).
     """
     try:
-        import pypdfium2
+        import pypdfium2  # noqa: F401
     except ImportError:
         return None
     try:
-        document = pypdfium2.PdfDocument(str(path))
-    except (pypdfium2.PdfiumError, OSError, ValueError):
+        cfg = load_routing_config()
+        result = l1_signals(path, cfg)
+    except EncryptedPdf:
+        return None
+    except Exception:
+        try:
+            import pypdfium2 as pdfium
+        except ImportError:
+            return None
+        return _legacy_text_layer_share(path, max_pages, pdfium)
+
+    if len(result.pages) == 0:
+        return None
+    if max_pages is not None and len(result.pages) > max_pages:
+        return None
+    with_text = sum(1 for page in result.pages if page.text_layer)
+    return with_text / len(result.pages)
+
+
+def _legacy_text_layer_share(path: Path, max_pages: int | None, pdfium) -> float | None:
+    try:
+        document = pdfium.PdfDocument(str(path))
+    except (pdfium.PdfiumError, OSError, ValueError):
         return None
     try:
         count = len(document)
@@ -34,7 +58,7 @@ def text_layer_page_share(path: Path, max_pages: int | None = None) -> float | N
             finally:
                 page.close()
         return with_text / count
-    except (pypdfium2.PdfiumError, OSError, ValueError):
+    except (pdfium.PdfiumError, OSError, ValueError):
         return None
     finally:
         document.close()
