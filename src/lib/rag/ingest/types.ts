@@ -28,7 +28,16 @@ export type StageName =
 
 export type DocTypeOrigin = 'picked' | 'source_default' | 'tenant_default' | 'auto' | 'fallback';
 
+/** What the source says about the document it hands over; written to the document row right after the version begins. */
+export interface IngestOrigin {
+  sourceProvider?: string;
+  sourceFileId?: string;
+  sourceConnectionId?: string;
+  metadata?: Record<string, string>;
+}
+
 export interface IngestOptions {
+  origin?: IngestOrigin;
   /** Nango sync only: the connection and folder the file came from, which the admin doc-type defaults can name. */
   nangoConnectionId?: string;
   nangoFolderId?: string;

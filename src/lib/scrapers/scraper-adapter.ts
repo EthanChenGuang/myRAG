@@ -1,31 +1,85 @@
 import { scrapeUrl, crawlWebsite } from './firecrawl-client';
 import { processDocument } from '@/lib/document-processor';
 import type { ProcessDocumentMetadata } from '@/lib/document-processor';
+import { buildSourceKey, ingest } from '@/lib/rag';
+import type { IngestResult, TenantScope } from '@/lib/rag';
+import { scraperPipeline } from './ingest-switch';
 import { normalizeScrapedUrl } from './url-utils';
 
-interface ScrapeOptions {
-    url: string;
-    userId: string;
-    organizationId?: string | null;
-    outputFormat?: 'html' | 'pdf';
-}
+/**
+ * Who the page is stored for. The legacy pipeline takes the session user and optional organization; the unified
+ * pipeline takes the scope the route resolved on the server and the request signal.
+ */
+type ScraperIdentity =
+    | { userId: string; organizationId?: string | null; scope?: TenantScope; signal?: AbortSignal }
+    | { userId?: undefined; organizationId?: undefined; scope: TenantScope; signal: AbortSignal };
 
-interface CrawlOptions {
+type ScrapeOptions = ScraperIdentity & {
     url: string;
-    userId: string;
-    organizationId?: string | null;
+    outputFormat?: 'html' | 'pdf';
+};
+
+type CrawlOptions = ScraperIdentity & {
+    url: string;
     maxPages?: number;
     outputFormat?: 'html' | 'pdf';
+};
+
+type LegacyScrapeOptions = Extract<ScrapeOptions, { userId: string }>;
+type LegacyCrawlOptions = Extract<CrawlOptions, { userId: string }>;
+
+export interface IngestedPage {
+    documentId: string;
+    url: string;
+    title?: string;
+    status: IngestResult['status'];
+    version: number | null;
+}
+
+interface ScrapedPage {
+    url: string;
+    markdown?: string;
+    actions?: Record<string, unknown>;
+    metadata?: { title?: string };
+}
+
+type UnifiedIdentity = { scope: TenantScope; signal: AbortSignal };
+
+function requireUnifiedIdentity(options: ScraperIdentity): UnifiedIdentity {
+    if (!options.scope || !options.signal) {
+        throw new Error('[Scraper Adapter] the unified pipeline needs a tenant scope and a request signal');
+    }
+    return { scope: options.scope, signal: options.signal };
+}
+
+function requireLegacyUser<T extends { userId?: string }>(options: T): T & { userId: string } {
+    if (!options.userId) {
+        throw new Error('[Scraper Adapter] the legacy pipeline needs a user id');
+    }
+    return options as T & { userId: string };
 }
 
 /**
  * Scrape a single URL and process it through the document pipeline
  */
-export async function scrapeAndProcess({
+export async function scrapeAndProcess(options: ScrapeOptions): Promise<{
+    documentId: string;
+    url: string;
+    title?: string;
+    status?: IngestedPage['status'];
+    version?: number | null;
+}> {
+    if (scraperPipeline() === 'unified') {
+        return scrapeAndIngest(options, requireUnifiedIdentity(options));
+    }
+    return scrapeAndProcessLegacy(requireLegacyUser(options) as LegacyScrapeOptions);
+}
+
+async function scrapeAndProcessLegacy({
     url,
     userId,
     organizationId
-}: ScrapeOptions): Promise<{
+}: LegacyScrapeOptions): Promise<{
     documentId: string;
     url: string;
     title?: string;
@@ -79,12 +133,25 @@ export async function scrapeAndProcess({
 /**
  * Crawl multiple pages from a website and process them
  */
-export async function crawlAndProcess({
+export async function crawlAndProcess(options: CrawlOptions): Promise<{
+    totalPages: number;
+    successfulPages: number;
+    failedPages: number;
+    documents: Array<{ documentId: string; url: string; title?: string; status?: IngestedPage['status']; version?: number | null }>;
+    errors: Array<{ url: string; error: string }>;
+}> {
+    if (scraperPipeline() === 'unified') {
+        return crawlAndIngest(options, requireUnifiedIdentity(options));
+    }
+    return crawlAndProcessLegacy(requireLegacyUser(options) as LegacyCrawlOptions);
+}
+
+async function crawlAndProcessLegacy({
     url,
     userId,
     organizationId,
     maxPages = 10
-}: CrawlOptions): Promise<{
+}: LegacyCrawlOptions): Promise<{
     totalPages: number;
     successfulPages: number;
     failedPages: number;
@@ -155,6 +222,132 @@ export async function crawlAndProcess({
         documents,
         errors,
     };
+}
+
+/**
+ * Unified pipeline: Firecrawl Markdown (or the page as an inline PDF) goes to ingest(), whose identity is the
+ * canonical URL, so an unchanged page is skipped and a changed one becomes a new version of the same document.
+ */
+async function scrapeAndIngest(
+    { url, outputFormat }: ScrapeOptions,
+    { scope, signal }: UnifiedIdentity
+): Promise<IngestedPage> {
+    const normalizedUrl = normalizeScrapedUrl(url);
+    const output = outputFormat === 'pdf' ? 'pdf' : 'markdown';
+
+    console.log(`[Scraper Adapter] Scraping ${normalizedUrl} as ${output}...`);
+    const result = await scrapeUrl(normalizedUrl, { output });
+
+    return ingestPage({ ...result, url: normalizedUrl }, output, scope, signal);
+}
+
+async function crawlAndIngest(
+    { url, maxPages = 10, outputFormat }: CrawlOptions,
+    { scope, signal }: UnifiedIdentity
+): Promise<{
+    totalPages: number;
+    successfulPages: number;
+    failedPages: number;
+    documents: IngestedPage[];
+    errors: Array<{ url: string; error: string }>;
+}> {
+    const normalizedUrl = normalizeScrapedUrl(url);
+    const output = outputFormat === 'pdf' ? 'pdf' : 'markdown';
+
+    console.log(`[Scraper Adapter] Crawling ${normalizedUrl}, max ${maxPages} pages as ${output}...`);
+    const pages = await crawlWebsite(normalizedUrl, { maxPages, output });
+
+    const documents: IngestedPage[] = [];
+    const errors: Array<{ url: string; error: string }> = [];
+
+    for (const page of pages) {
+        signal.throwIfAborted();
+        try {
+            documents.push(await ingestPage(page, output, scope, signal));
+        } catch (error) {
+            console.error(`[Scraper Adapter] Failed to ingest ${page.url}:`, error);
+            errors.push({
+                url: page.url,
+                error: error instanceof Error ? error.message : 'Unknown error',
+            });
+        }
+    }
+
+    console.log(`[Scraper Adapter] Crawl complete: ${documents.length}/${pages.length} pages ingested`);
+
+    return {
+        totalPages: pages.length,
+        successfulPages: documents.length,
+        failedPages: errors.length,
+        documents,
+        errors,
+    };
+}
+
+async function ingestPage(
+    page: ScrapedPage,
+    output: 'markdown' | 'pdf',
+    scope: TenantScope,
+    signal: AbortSignal
+): Promise<IngestedPage> {
+    const canonicalUrl = normalizeScrapedUrl(page.url);
+    const title = page.metadata?.title;
+    const pageTitle = title?.trim();
+    const baseName = pageTitle ? sanitizeFilename(pageTitle) : sanitizeUrl(page.url);
+
+    const content =
+        output === 'pdf'
+            ? { file: inlinePdfBytes(page), filename: `${baseName}.pdf`, mimeType: 'application/pdf' }
+            : { text: markdownOf(page), filename: `${baseName}.md`, mimeType: 'text/markdown' };
+
+    const metadata: Record<string, string> = { external_url: canonicalUrl, scraped_url: canonicalUrl };
+    if (title) metadata.title = title;
+
+    const result = await ingest({
+        scope,
+        source: 'scraper',
+        sourceKey: buildSourceKey('scraper', { url: canonicalUrl }),
+        ...content,
+        options: {
+            origin: { sourceProvider: 'firecrawl', sourceFileId: canonicalUrl, metadata },
+        },
+        signal,
+    });
+
+    if (result.status === 'failed') {
+        throw new Error(`Ingest failed (${result.reason ?? 'unknown'})`);
+    }
+    const documentId = result.documentId ?? result.duplicateOf ?? null;
+    if (documentId === null) {
+        throw new Error(`Ingest returned no document (${result.status})`);
+    }
+
+    console.log(`[Scraper Adapter] Ingested ${page.url} as ${result.status}`);
+
+    return { documentId, url: page.url, title, status: result.status, version: result.version };
+}
+
+function markdownOf(page: ScrapedPage): string {
+    if (typeof page.markdown !== 'string' || page.markdown.trim() === '') {
+        throw new Error('No Markdown content returned from Firecrawl');
+    }
+    return page.markdown;
+}
+
+/**
+ * The PDF Firecrawl rendered, as bytes. Only inline content is accepted: the app never fetches a link a third
+ * party hands back, and anything that is not a PDF is refused.
+ */
+function inlinePdfBytes(page: ScrapedPage): Uint8Array {
+    const pdfs = page.actions?.pdfs;
+    const first = Array.isArray(pdfs) ? pdfs[0] : undefined;
+    if (typeof first === 'string') {
+        const bytes = Buffer.from(first.replace(/^data:application\/pdf;base64,/, '').trim(), 'base64');
+        if (bytes.subarray(0, 5).toString('latin1') === '%PDF-') {
+            return new Uint8Array(bytes);
+        }
+    }
+    throw new Error('Firecrawl did not return an inline PDF for this page');
 }
 
 /**

@@ -1,5 +1,6 @@
 import { removeArtifacts } from '../artifacts';
 import { HASH_NORMALIZATION_VERSION, contentHash } from '../hash';
+import { originFields } from '../origin';
 import {
   requireDocument,
   requireIdentity,
@@ -35,6 +36,8 @@ async function runFileHashDedup(ctx: StageContext): Promise<StageOutcome> {
     };
   }
   ctx.document = { id: begun.documentId, version: begun.version, lineageId: begun.lineageId, resumed: begun.outcome === 'resumed' };
+  const origin = originFields(ctx.input.options);
+  if (origin !== null) await ctx.writer.setFields(begun.documentId, origin);
   return { kind: 'next' };
 }
 
