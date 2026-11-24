@@ -35,11 +35,12 @@ function isStageName(value: string | null): value is StageName {
 
 /**
  * The stages of one slice. Every call must make progress however small the budget is: the first stage that will run is exempt from
- * the minimum time a stage asks for, so a 1 ms budget still moves the job one stage instead of yielding for ever.
+ * the deadline check (the runner yields when the time left is below minMsNeeded, and a spent budget is negative), so a 1 ms budget
+ * still moves the job one stage instead of yielding for ever.
  */
 function sliceStages(last: StageName | null): StageSpec[] {
   const firstToRun = last === null ? 0 : INGEST_STAGES.indexOf(last) + 1;
-  return REGISTERED_STAGES.map((stage, index) => (index === firstToRun ? { ...stage, minMsNeeded: 0 } : stage));
+  return REGISTERED_STAGES.map((stage, index) => (index === firstToRun ? { ...stage, minMsNeeded: Number.NEGATIVE_INFINITY } : stage));
 }
 
 function terminalStatusOf(result: IngestResult): 'ready' | 'quarantined' | 'skipped_duplicate' | null {

@@ -356,6 +356,9 @@ export async function rehydrateFromStore(ctx: StageContext): Promise<RehydrateRe
     if (failure !== null) return { failed: failure };
   }
 
+  // The vectors of a finished embed stage are already written; the write stage compares the count the state recorded with the rebuilt chunks.
+  if (reached(last, 'embed')) ctx.work.chunksWritten = ctx.state.chunkCount ?? 0;
+
   // The caption of a picture document is its only chunk, and the pictures of a PDF add chunks: both are read back from the stored
   // captions (and the public keys follow from the lineage), so no model is called again.
   if ((ctx.work.captionOnly || ctx.config.pdfImageChunks) && reached(last, 'images')) {
