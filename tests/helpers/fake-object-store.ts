@@ -8,6 +8,8 @@ export interface FakeObjectStore extends ObjectStore {
   readonly calls: Array<{ op: Operation; key: string }>;
   /** Makes every later call of the named operations fail as a storage outage does. */
   failOn(...operations: Operation[]): void;
+  /** Makes the calls the predicate accepts fail, for example only the puts of one artifact. */
+  failIf(predicate: (op: Operation, key: string) => boolean): void;
   heal(): void;
   keys(): string[];
 }
@@ -17,12 +19,13 @@ export function createFakeObjectStore(): FakeObjectStore {
   const objects = new Map<string, { bytes: Uint8Array; contentType: string }>();
   const calls: Array<{ op: Operation; key: string }> = [];
   let failing = new Set<Operation>();
+  let failingWhen: ((op: Operation, key: string) => boolean) | null = null;
 
   function enter(op: Operation, key: string, signal?: AbortSignal): void {
     signal?.throwIfAborted();
     calls.push({ op, key });
     if (!OBJECT_KEY_PATTERN.test(key) || key === '') throw new ObjectStoreError(op, 400);
-    if (failing.has(op)) throw new ObjectStoreError(op, 503);
+    if (failing.has(op) || failingWhen?.(op, key)) throw new ObjectStoreError(op, 503);
   }
 
   return {
@@ -31,8 +34,12 @@ export function createFakeObjectStore(): FakeObjectStore {
     failOn(...operations) {
       failing = new Set(operations);
     },
+    failIf(predicate) {
+      failingWhen = predicate;
+    },
     heal() {
       failing = new Set();
+      failingWhen = null;
     },
     keys() {
       return [...objects.keys()].sort();

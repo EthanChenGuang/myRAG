@@ -1,4 +1,4 @@
-import { after, before, describe, test } from 'node:test';
+import { after, afterEach, before, describe, mock, test } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import path from 'node:path';
@@ -6,7 +6,9 @@ import { fileURLToPath } from 'node:url';
 import type { PGlite } from '@electric-sql/pglite';
 import { createFixtureDatabase, type DeploymentMode } from '../../eval/harness/pglite-supabase.mts';
 import { applyMigrationFiles } from '../../eval/harness/migrations.mts';
+import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from '../../eval/harness/fake-edge.mts';
 import { TWO_TENANT_IDS, createTwoTenantDatabase, type TwoTenantDatabase } from '../../eval/harness/two-tenant.mts';
+import type { FakeObjectStore } from '../helpers/fake-object-store';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const REAL_CORPUS = path.join(REPO_ROOT, 'eval/fixtures/corpus');
@@ -124,5 +126,196 @@ describe('rag_get_ingest_origin returns what a rehydrator needs, for its own ten
     await applyMigrationFiles(fixture.db, [MIGRATION]);
     const after = await rowsOf(fixture.db, 'SELECT * FROM rag_get_ingest_origin(p_document_id => $1, p_tenant_key => $2)', [documentA, tenantA]);
     assert.deepEqual(after, before);
+  });
+});
+
+const MARKDOWN = [
+  '# Dock Rules',
+  '',
+  'Forklift batteries rotate every shift under the zebra quartz seventeen policy and the staff follow the rules.',
+  '',
+  '## Receiving Dock',
+  '',
+  'Pallets arriving at the receiving dock are scanned by the night crew and staged beside bay four for the team.',
+  '',
+  '## Shipping Cage',
+  '',
+  'Outbound pallets leave through the shipping cage after the supervisor signs the manifest for the carrier.',
+  '',
+].join('\n');
+
+describe('ingest stores the original and the parse output', () => {
+  let fixture: TwoTenantDatabase;
+  let edge: FakeEdge;
+  let store: FakeObjectStore;
+  let ingestModule: typeof import('@/lib/rag/ingest');
+  let depsModule: typeof import('@/lib/rag/ingest/deps');
+  let storeModule: typeof import('@/lib/rag/ingest/object-store');
+  let fakeStoreModule: typeof import('../helpers/fake-object-store');
+  let resolver: typeof import('@/lib/rag/tenant/resolve-chat');
+  let supabaseModule: typeof import('@/lib/supabase');
+
+  before(async () => {
+    fixture = await createTwoTenantDatabase();
+    edge = await startFakeEdge({ db: fixture.db });
+    Object.assign(process.env, fixtureProcessEnv(edge.url));
+    process.env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE = 'multi-tenant';
+    process.env.MYRAG_DEPLOYMENT_MODE = 'multi-tenant';
+    ingestModule = await import('@/lib/rag/ingest');
+    depsModule = await import('@/lib/rag/ingest/deps');
+    storeModule = await import('@/lib/rag/ingest/object-store');
+    fakeStoreModule = await import('../helpers/fake-object-store');
+    resolver = await import('@/lib/rag/tenant/resolve-chat');
+    supabaseModule = await import('@/lib/supabase');
+  });
+
+  after(async () => {
+    await edge?.close();
+    await fixture?.db.close();
+  });
+
+  const install = () => {
+    store = fakeStoreModule.createFakeObjectStore();
+    storeModule.setObjectStoreForTests(store);
+  };
+
+  afterEach(() => {
+    depsModule.resetIngestDepsForTests();
+    storeModule.resetObjectStoreForTests();
+    mock.restoreAll();
+  });
+
+  const scopeOf = async (userId: string) => {
+    const resolved = await resolver.resolveTenantScope({
+      requestedOrganizationId: null,
+      deploymentMode: 'multi-tenant',
+      getUser: async () => ({ id: userId }),
+      admin: supabaseModule.getSupabaseAdmin(),
+      signal: new AbortController().signal,
+    });
+    assert.ok(resolved.ok && resolved.scope, 'scope must resolve');
+    return resolved.scope;
+  };
+
+  const uploadText = async (userId: string, text: string, filename: string) =>
+    ingestModule.ingest({
+      scope: await scopeOf(userId),
+      source: 'config_upload',
+      sourceKey: `root/${filename}`,
+      text,
+      filename,
+      mimeType: 'text/markdown',
+      signal: new AbortController().signal,
+    });
+
+  const uploadFile = async (userId: string, file: Uint8Array, filename: string, mimeType: string) =>
+    ingestModule.ingest({
+      scope: await scopeOf(userId),
+      source: 'config_upload',
+      sourceKey: `root/${filename}`,
+      file,
+      filename,
+      mimeType,
+      signal: new AbortController().signal,
+    });
+
+  const documentRow = async (documentId: string) =>
+    (await rowsOf(fixture.db, 'SELECT filename, status, lineage_id, version, original_path, processing_state FROM documents WHERE id = $1', [documentId]))[0] as Row;
+
+  const chunkCount = async (documentId: string) =>
+    Number((await rowsOf(fixture.db, 'SELECT count(*)::int AS n FROM document_chunks WHERE document_id = $1', [documentId]))[0]?.n);
+
+  test('a Markdown text upload stores original.md and parse.md under the tenant, lineage and version and records original_path', async () => {
+    install();
+    const result = await uploadText(TWO_TENANT_IDS.userA, MARKDOWN, 'dock-rules.md');
+
+    assert.equal(result.status, 'ready');
+    assert.ok(result.documentId);
+    const row = await documentRow(result.documentId);
+    const prefix = `u:${TWO_TENANT_IDS.userA}/${String(row.lineage_id)}/1/`;
+    assert.equal(row.original_path, `${prefix}original.md`);
+    assert.deepEqual(store.keys(), [`${prefix}original.md`, `${prefix}parse.md`]);
+    assert.equal(new TextDecoder().decode(store.objects.get(`${prefix}original.md`)?.bytes), MARKDOWN);
+    assert.equal(new TextDecoder().decode(store.objects.get(`${prefix}parse.md`)?.bytes), MARKDOWN);
+    assert.equal(store.objects.get(`${prefix}original.md`)?.contentType, 'text/markdown');
+    const artifacts = (row.processing_state as { artifacts: Record<string, string> }).artifacts;
+    assert.deepEqual(artifacts, { 'original.md': `${prefix}original.md`, 'parse.md': `${prefix}parse.md` });
+  });
+
+  test('bytes named 合同.txt are stored as original.txt while the filename column keeps 合同.txt', async () => {
+    install();
+    const bytes = new TextEncoder().encode('合同条款：付款期限为三十天。\n\n第二条：交付地点为上海仓库，由乙方负责运输并承担费用。\n');
+    const result = await uploadFile(TWO_TENANT_IDS.userB, bytes, '合同.txt', 'text/plain');
+
+    assert.equal(result.status, 'ready');
+    assert.ok(result.documentId);
+    const row = await documentRow(result.documentId);
+    const prefix = `u:${TWO_TENANT_IDS.userB}/${String(row.lineage_id)}/1/`;
+    assert.equal(row.filename, '合同.txt');
+    assert.equal(row.original_path, `${prefix}original.txt`);
+    assert.deepEqual(store.keys(), [`${prefix}original.txt`, `${prefix}parse.md`]);
+    assert.deepEqual(Array.from(store.objects.get(`${prefix}original.txt`)?.bytes ?? []), Array.from(bytes));
+    assert.equal(store.objects.get(`${prefix}original.txt`)?.contentType, 'text/plain');
+  });
+
+  test("one tenant's upload never writes under another tenant's prefix", async () => {
+    install();
+    const a = await uploadText(TWO_TENANT_IDS.userA, `${MARKDOWN}\nA note only tenant A has written down.\n`, 'tenant-a.md');
+    const b = await uploadText(TWO_TENANT_IDS.userB, `${MARKDOWN}\nA note only tenant B has written down.\n`, 'tenant-b.md');
+    assert.equal(a.status, 'ready');
+    assert.equal(b.status, 'ready');
+    const keys = store.keys();
+    assert.equal(keys.length, 4);
+    assert.equal(keys.filter((key) => key.startsWith(`u:${TWO_TENANT_IDS.userA}/`)).length, 2);
+    assert.equal(keys.filter((key) => key.startsWith(`u:${TWO_TENANT_IDS.userB}/`)).length, 2);
+  });
+
+  test('a storage failure on the original fails the run with store_original_failed, writes no chunks, and a retry after the outage succeeds', async () => {
+    install();
+    store.failOn('put');
+    const text = `${MARKDOWN}\nA closing note for the outage test.\n`;
+    const failed = await uploadText(TWO_TENANT_IDS.userA, text, 'outage.md');
+
+    assert.equal(failed.status, 'failed');
+    assert.equal(failed.reason, 'store_original_failed');
+    assert.ok(failed.documentId);
+    assert.equal(await chunkCount(failed.documentId), 0);
+    assert.equal((await documentRow(failed.documentId)).status, 'failed');
+    assert.deepEqual(store.keys(), []);
+
+    store.heal();
+    const retried = await uploadText(TWO_TENANT_IDS.userA, text, 'outage.md');
+    assert.equal(retried.status, 'ready');
+    assert.ok(retried.documentId);
+    assert.ok((await chunkCount(retried.documentId)) > 0);
+    assert.equal(store.keys().length, 2);
+  });
+
+  test('a storage failure on the parse output fails the run with store_parse_output_failed and writes no chunks', async () => {
+    install();
+    store.failIf((op, key) => op === 'put' && key.endsWith('/parse.md'));
+    const failed = await uploadText(TWO_TENANT_IDS.userA, `${MARKDOWN}\nA closing note for the parse output test.\n`, 'parse-outage.md');
+
+    assert.equal(failed.status, 'failed');
+    assert.equal(failed.reason, 'store_parse_output_failed');
+    assert.ok(failed.documentId);
+    assert.equal(await chunkCount(failed.documentId), 0);
+  });
+
+  test('a skipped duplicate stores nothing: same bytes again, and the same content with other line endings', async () => {
+    install();
+    const first = await uploadText(TWO_TENANT_IDS.userA, `${MARKDOWN}\nA closing note for the duplicate test.\n`, 'dup.md');
+    assert.equal(first.status, 'ready');
+    const keysAfterFirst = store.keys();
+    assert.equal(keysAfterFirst.length, 2);
+    const putsAfterFirst = store.calls.filter((call) => call.op === 'put').length;
+
+    const sameBytes = await uploadText(TWO_TENANT_IDS.userA, `${MARKDOWN}\nA closing note for the duplicate test.\n`, 'dup.md');
+    assert.equal(sameBytes.status, 'skipped_duplicate');
+    assert.equal(store.calls.filter((call) => call.op === 'put').length, putsAfterFirst, 'file hash duplicate: no put');
+
+    const crlf = await uploadText(TWO_TENANT_IDS.userA, `${MARKDOWN}\nA closing note for the duplicate test.\n`.replace(/\n/g, '\r\n'), 'dup-crlf.md');
+    assert.equal(crlf.status, 'skipped_duplicate');
+    assert.deepEqual(store.keys(), keysAfterFirst, 'content hash duplicate: what it stored is removed again');
   });
 });
