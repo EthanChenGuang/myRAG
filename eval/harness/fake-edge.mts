@@ -45,7 +45,8 @@ const SQLSTATE_STATUS: Record<string, number> = { '42501': 403, '23503': 409, '2
 
 // Input arguments of the public function with this name (PostgREST resolves named arguments against the same list); one row per overload.
 const RPC_SIGNATURE_SQL = `
-SELECT COALESCE(jsonb_agg(jsonb_build_object('name', a.name, 'type', format_type(a.type, NULL)) ORDER BY a.ord) FILTER (WHERE a.name IS NOT NULL), '[]'::jsonb) AS args
+SELECT COALESCE(jsonb_agg(jsonb_build_object('name', a.name, 'type', format_type(a.type, NULL)) ORDER BY a.ord) FILTER (WHERE a.name IS NOT NULL), '[]'::jsonb) AS args,
+  (NOT p.proretset AND (SELECT t.typtype FROM pg_type t WHERE t.oid = p.prorettype) = 'c') AS single_composite
 FROM pg_proc p
 JOIN pg_namespace n ON n.oid = p.pronamespace AND n.nspname = 'public'
 LEFT JOIN LATERAL (
@@ -56,10 +57,12 @@ LEFT JOIN LATERAL (
   WHERE COALESCE(md.mode, 'i') IN ('i', 'b', 'v')
 ) a ON true
 WHERE p.proname = $1 AND p.prokind = 'f'
-GROUP BY p.oid`;
+GROUP BY p.oid, p.proretset, p.prorettype`;
 
 interface RpcSignature {
   args: Map<string, string>;
+  /** Non-SETOF composite: PostgREST answers one JSON object (or null), not an array. */
+  singleComposite: boolean;
 }
 
 const TABLE_COLUMNS: Record<string, string[]> = {
@@ -429,10 +432,13 @@ function createHandlers(
   async function signatureOf(fn: string): Promise<RpcSignature | null> {
     const cached = signatures.get(fn);
     if (cached) return cached;
-    const result = await db.query<{ args: Array<{ name: string; type: string }> }>(RPC_SIGNATURE_SQL, [fn]);
+    const result = await db.query<{ args: Array<{ name: string; type: string }>; single_composite: boolean }>(RPC_SIGNATURE_SQL, [fn]);
     if (result.rows.length === 0) return null;
     if (result.rows.length > 1) throw new Rejection(400, `overloaded rpc function is not supported: ${fn}`);
-    const signature: RpcSignature = { args: new Map(result.rows[0].args.map((arg) => [arg.name, arg.type])) };
+    const signature: RpcSignature = {
+      args: new Map(result.rows[0].args.map((arg) => [arg.name, arg.type])),
+      singleComposite: result.rows[0].single_composite === true,
+    };
     signatures.set(fn, signature);
     return signature;
   }
@@ -524,7 +530,7 @@ function createHandlers(
     })) as unknown[];
   }
 
-  async function rpc(fn: string, body: Record<string, unknown>, req?: http.IncomingMessage): Promise<unknown[]> {
+  async function rpc(fn: string, body: Record<string, unknown>, req?: http.IncomingMessage): Promise<unknown> {
     if (roleMappedRpcName(fn)) {
       if (!req) throw new Rejection(401, 'missing api key');
       const role = resolveRpcRole(req, extras.serviceKeys, extras.anonKey);
@@ -545,7 +551,7 @@ function createHandlers(
     }
   }
 
-  async function genericRpc(fn: string, body: Record<string, unknown>, role?: RpcRole): Promise<unknown[]> {
+  async function genericRpc(fn: string, body: Record<string, unknown>, role?: RpcRole): Promise<unknown> {
     if (!GENERIC_RPC_NAME.test(fn)) throw new Rejection(404, `unsupported rpc function: ${fn}`);
     const signature = await signatureOf(fn);
     if (!signature) throw new Rejection(404, `unsupported rpc function: ${fn}`);
@@ -556,7 +562,8 @@ function createHandlers(
     calls.push({ method: 'POST', path: `/rest/v1/rpc/${fn}` });
     const sql = `SELECT * FROM ${fn}(${names.map((name, i) => `${name} => $${i + 1}`).join(', ')})`;
     try {
-      return await queryRpcRows(fn, sql, values, role);
+      const rows = await queryRpcRows(fn, sql, values, role);
+      return signature.singleComposite ? (rows[0] ?? null) : rows;
     } catch (error) {
       throw databaseRejection(fn, error);
     }

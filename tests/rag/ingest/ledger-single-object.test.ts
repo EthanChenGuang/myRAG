@@ -144,7 +144,7 @@ describe('single-row ledger RPCs accept the PostgREST object answer', () => {
   });
 
   test('deleteJob', async () => {
-    const data = postgrestAnswer([jobRow({ status: 'deleted' })], false);
+    const data = postgrestAnswer([jobRow({ deleted_at: '2026-01-02T00:00:00.000Z' })], false);
     const job = await deleteJob(JOB_ID, USER_A, opts('rag_delete_ingestion_job', data));
     expect(job.id).toBe(JOB_ID);
   });

@@ -114,7 +114,18 @@ async function callRpc(
   if (response.error) {
     throw new IngestLedgerError(rpc, ledgerCode(rpc, response.error.code, response.error.message));
   }
-  return (response.data ?? []) as Row[];
+  return normalizeRpcRows(rpc, response.data);
+}
+
+/**
+ * PostgREST answers a SETOF function with an array and any other function with one JSON value: an object for a composite, a bare
+ * scalar for an int, null for no row. An all-null composite (no id) counts as no row.
+ */
+function normalizeRpcRows(rpc: string, data: unknown): Row[] {
+  if (data === null || data === undefined) return [];
+  if (Array.isArray(data)) return data.filter((row): row is Row => !!row && typeof row === 'object' && (row as Row).id !== null);
+  if (typeof data === 'object') return (data as Row).id === null ? [] : [data as Row];
+  return [{ [rpc]: data }];
 }
 
 async function callOne(rpc: string, args: Record<string, unknown>, options: LedgerCallOptions): Promise<Row> {
