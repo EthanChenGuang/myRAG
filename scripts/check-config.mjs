@@ -206,12 +206,13 @@ export function checkIngestionSwitches(env) {
     });
   }
 
-  if (allowCloud === 'false' && pipeline === 'legacy' && llamaKey !== '') {
+  const cloudRefused = !['', 'true', '1', 'yes', 'on'].includes(allowCloud);
+  if (cloudRefused && pipeline === 'legacy' && llamaKey !== '') {
     warnings.push({
       name: 'RAG_PARSER_ALLOW_CLOUD',
       location: 'ingestion',
       message:
-        'A-2: RAG_PARSER_ALLOW_CLOUD=false with legacy pipeline while LLAMA_CLOUD_API_KEY is set (key present; value not shown)',
+        'A-2: RAG_PARSER_ALLOW_CLOUD refuses cloud parsing with legacy pipeline while LLAMA_CLOUD_API_KEY is set (key present; value not shown)',
     });
   }
 

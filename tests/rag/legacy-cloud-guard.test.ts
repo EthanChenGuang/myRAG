@@ -1,3 +1,4 @@
+import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -142,6 +143,95 @@ describe('process-document route: cloud switch off', () => {
     const lines = [...vi.mocked(console.warn).mock.calls, ...vi.mocked(console.error).mock.calls, ...vi.mocked(console.log).mock.calls].map((call) => JSON.stringify(call));
     expect(lines.some((line) => line.includes('[Ingest] cloud parsing disabled'))).toBe(true);
     expect(lines.filter((line) => line.includes('[Ingest] cloud parsing disabled')).every((line) => !line.includes('confidential-name-placeholder'))).toBe(true);
+  });
+});
+
+describe('refused requests do not log the file name (LOW-4)', () => {
+  function allLogLines(): string[] {
+    return [...vi.mocked(console.warn).mock.calls, ...vi.mocked(console.error).mock.calls, ...vi.mocked(console.log).mock.calls].map((call) => JSON.stringify(call));
+  }
+
+  it.each([true, false])('route, temporary=%s: no log line carries the name of a refused file', async (temporary) => {
+    stubCloud('false');
+    state.session = { id: USER };
+    const POST = await loadPost('legacy');
+    const response = await POST(upload({ name: 'confidential-name-placeholder.pdf', temporary }));
+    expect(response.status).toBe(503);
+    expect(allLogLines().some((line) => line.includes('confidential-name-placeholder'))).toBe(false);
+  });
+
+  it('processDocument: no log line carries the name of a refused file', async () => {
+    stubCloud('false');
+    vi.resetModules();
+    vi.stubEnv('LLAMA_CLOUD_API_KEY', 'test-llama-key-placeholder');
+    vi.doMock('node-fetch', () => ({ default: fakeLlamaFetch() }));
+    vi.doMock('@/lib/supabase', () => ({ storeDocument: async () => 'doc-1' }));
+    try {
+      const { processDocument } = await import('@/lib/document-processor');
+      await expect(processDocument('confidential-name-placeholder.pdf', Buffer.from(BODY), { user_id: USER })).rejects.toThrow();
+      expect(allLogLines().some((line) => line.includes('confidential-name-placeholder'))).toBe(false);
+    } finally {
+      vi.doUnmock('node-fetch');
+      vi.doUnmock('@/lib/supabase');
+    }
+  });
+});
+
+describe('document-processor: provider file names cannot leave the temp directory (LOW-5)', () => {
+  const tempDir = path.join(os.tmpdir(), 'myrag');
+
+  async function runWithName(name: string): Promise<void> {
+    stubCloud('true');
+    vi.resetModules();
+    vi.stubEnv('LLAMA_CLOUD_API_KEY', 'test-llama-key-placeholder');
+    vi.doMock('node-fetch', () => ({
+      default: async () => {
+        throw new Error('network down');
+      },
+    }));
+    vi.doMock('@/lib/supabase', () => ({ storeDocument: async () => 'doc-1' }));
+    try {
+      const { processDocument } = await import('@/lib/document-processor');
+      await expect(processDocument(name, Buffer.from(BODY), { user_id: USER })).rejects.toThrow();
+    } finally {
+      vi.doUnmock('node-fetch');
+      vi.doUnmock('@/lib/supabase');
+    }
+  }
+
+  const probe = `probe-${crypto.randomUUID()}`;
+
+  it.each([`../${probe}-one.pdf`, `../../${probe}-two.pdf`, `sub/../../${probe}-three.pdf`, `..\\${probe}-four.pdf`])(
+    'a name like %s is written inside the temp directory, and removed after a failed parse',
+    async (name) => {
+      const escaped = [path.join(os.tmpdir(), path.basename(name.replace(/\\/g, '/'))), path.join(path.dirname(os.tmpdir()), path.basename(name.replace(/\\/g, '/')))];
+      fs.mkdirSync(tempDir, { recursive: true });
+      const before = new Set(fs.readdirSync(tempDir));
+      await runWithName(name);
+      for (const location of escaped) {
+        expect(fs.existsSync(location), location).toBe(false);
+        fs.rmSync(location, { force: true });
+      }
+      const leftover = fs.readdirSync(tempDir).filter((entry) => !before.has(entry));
+      expect(leftover).toEqual([]);
+    },
+  );
+
+  it('exports a temp path helper that stays in the directory and keeps only a safe extension', async () => {
+    vi.resetModules();
+    vi.doMock('@/lib/supabase', () => ({ storeDocument: async () => 'doc-1' }));
+    try {
+      const { tempPathFor } = await import('@/lib/document-processor');
+      for (const name of ['../../etc/passwd', '/abs/path/report.pdf', 'a/b/c.docx', '..', '', 'x.p$d%f', 'plain.pdf']) {
+        const resolved = tempPathFor(tempDir, name);
+        expect(path.dirname(resolved), name).toBe(tempDir);
+        expect(path.basename(resolved), name).toMatch(/^[0-9a-f-]{36}(\.[a-z0-9]{1,8})?$/);
+      }
+      expect(path.extname(tempPathFor(tempDir, 'sub/report.PDF'))).toBe('.pdf');
+      expect(tempPathFor(tempDir, 'a.pdf')).not.toBe(tempPathFor(tempDir, 'a.pdf'));
+    } finally {
+      vi.doUnmock('@/lib/supabase');
+    }
   });
 });
 

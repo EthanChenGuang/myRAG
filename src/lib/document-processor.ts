@@ -5,6 +5,7 @@ import { embedText, embedBatch, CloudRefused, assertCloudAllowed } from '@/lib/r
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { randomUUID } from 'crypto';
 import { promisify } from 'util';
 import type { ChunkWithEmbedding } from './types';
 import FormData from 'form-data';
@@ -384,12 +385,23 @@ interface ProcessDocumentMetadata {
   [key: string]: any;
 }
 
+/**
+ * A path inside tempDir for a provider-supplied file name: a random name plus the name's own extension when it is plain. The directory part
+ * of the name (`../`, `/`, `\\`) is never used, so a shared file cannot be written outside the temp directory.
+ */
+function tempPathFor(tempDir: string, filename: string): string {
+  const base = path.basename(String(filename).replace(/\\/g, '/'));
+  const ext = path.extname(base).toLowerCase();
+  return path.join(tempDir, `${randomUUID()}${/^\.[a-z0-9]{1,8}$/.test(ext) ? ext : ''}`);
+}
+
 async function processDocument(
   filename: string,
   buffer: Buffer,
   metadata: ProcessDocumentMetadata
 ): Promise<string> {
-  console.log(`Processing document: ${filename}`);
+  console.log('Processing document');
+  let tempFilePath: string | null = null;
 
   try {
     // Refuse before the bytes are written to disk; Markdown is parsed locally and needs no cloud.
@@ -398,7 +410,7 @@ async function processDocument(
     // Create a temporary file to store the buffer
     const tempDir = path.join(os.tmpdir(), 'myrag');
     await mkdir(tempDir, { recursive: true });
-    const tempFilePath = path.join(tempDir, filename);
+    tempFilePath = tempPathFor(tempDir, filename);
     await writeFile(tempFilePath, buffer);
 
     let chunks: string[];
@@ -416,8 +428,8 @@ async function processDocument(
       chunks = result.chunks;
     }
 
-    // Clean up temp file
     await unlink(tempFilePath);
+    tempFilePath = null;
 
     if (!chunks || chunks.length === 0) {
       throw new Error('No chunks returned from LlamaParse');
@@ -446,6 +458,8 @@ async function processDocument(
   } catch (error) {
     console.error('Error processing document:', error);
     throw error;
+  } finally {
+    if (tempFilePath) await unlink(tempFilePath).catch(() => undefined);
   }
 }
 
@@ -509,5 +523,5 @@ async function processImageDocument(
   }
 }
 
-export { processDocument, processImageDocument };
+export { processDocument, processImageDocument, tempPathFor };
 export type { ProcessDocumentMetadata };

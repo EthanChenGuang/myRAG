@@ -12,6 +12,8 @@ export interface ResolveAdminWorkspaceScopeInput {
   requestedOrganizationId?: string | null;
   deploymentMode?: 'single-tenant' | 'multi-tenant';
   admin?: MembershipDb | null;
+  /** When set, an organization is honoured only for a member holding one of these roles (admin reads need owner or admin, like the SQL writes). */
+  requiredOrganizationRoles?: readonly string[];
   signal: AbortSignal;
 }
 
@@ -58,7 +60,7 @@ export async function resolveAdminWorkspaceScope(input: ResolveAdminWorkspaceSco
 
   let member: boolean;
   try {
-    member = await isOrganizationMember(admin, organizationId, adminId, input.signal);
+    member = await isOrganizationMember(admin, organizationId, adminId, input.signal, input.requiredOrganizationRoles);
   } catch {
     return refuse(label, 503, 'membership_unavailable');
   }

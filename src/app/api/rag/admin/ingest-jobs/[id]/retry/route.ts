@@ -1,7 +1,7 @@
 import { z } from 'zod/v3';
 import { adminDenied, checkAdmin } from '@/lib/admin-route-auth';
 import { getJobForScope, retryJob } from '@/lib/rag';
-import { JobIdSchema, OrganizationIdSchema, fail, invalid, isRefusal, jsonNoStore, ledgerFailure, notFound, projectJob, resolveWorkspace } from '../../_lib';
+import { JobIdSchema, OrganizationIdSchema, fail, invalid, isJobNotFoundRefusal, isRefusal, jsonNoStore, ledgerFailure, notFound, projectJob, resolveWorkspace } from '../../_lib';
 
 export const runtime = 'nodejs';
 
@@ -36,6 +36,7 @@ export async function POST(request: Request, context: RouteContext): Promise<Res
     console.log('[RAG Admin] ingest job retried', { action: 'retry_ingestion_job', jobId: job.id });
     return jsonNoStore({ success: true, job: projectJob(job) });
   } catch (error) {
+    if (isJobNotFoundRefusal(error)) return notFound();
     if (isRefusal(error)) return fail(409, 'not_retryable');
     return ledgerFailure('retry', error);
   }

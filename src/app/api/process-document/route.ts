@@ -779,7 +779,7 @@ export async function POST(req: Request) {
     const isTemporary = formData.get('isTemporary') === 'true';
     const orgIdFromForm = formData.get('organization_id') as string | null;
 
-    console.log('[ProcessDocument] File:', file?.name);
+    console.log('[ProcessDocument] File received:', { present: Boolean(file) });
     console.log('[ProcessDocument] isTemporary:', isTemporary);
     console.log('[ProcessDocument] organization_id from form:', orgIdFromForm);
 
@@ -884,14 +884,13 @@ export async function POST(req: Request) {
       return await uploadThroughIngest({ req, formData, file, userId, orgIdFromForm, startedAt });
     }
 
-    console.log('Processing file:', file.name, isTemporary ? '(temporary)' : '(permanent)');
+    console.log('Processing file', isTemporary ? '(temporary)' : '(permanent)');
     const buffer = Buffer.from(await file.arrayBuffer());
     const extension = file.name.split('.').pop()?.toLowerCase();
     const fileSize = buffer.length;
     
     // Log file details
     console.log('File details:', {
-      name: file.name,
       type: file.type,
       size: `${(fileSize / 1024 / 1024).toFixed(2)} MB`,
       extension

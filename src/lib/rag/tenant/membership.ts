@@ -14,15 +14,15 @@ export async function isOrganizationMember(
   organizationId: string,
   userId: string,
   signal: AbortSignal,
+  roles?: readonly string[],
 ): Promise<boolean> {
   signal.throwIfAborted();
-  const { data, error } = await admin
+  const base = admin
     .from('organization_members')
     .select('organization_id')
     .eq('organization_id', organizationId)
-    .eq('user_id', userId)
-    .abortSignal(signal)
-    .maybeSingle();
+    .eq('user_id', userId);
+  const { data, error } = await (roles ? base.in('role', [...roles]) : base).abortSignal(signal).maybeSingle();
   signal.throwIfAborted();
   if (error) throw new MembershipQueryError();
   return data !== null && data !== undefined;

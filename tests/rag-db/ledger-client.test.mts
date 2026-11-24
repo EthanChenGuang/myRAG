@@ -56,6 +56,18 @@ function settingsSnapshot() {
   });
 }
 
+/** PostgREST answers a non-SETOF composite function with one JSON object (null for no row), not an array. */
+async function answersSingleObject(db: PGlite, fn: string): Promise<boolean> {
+  const result = await db.query<{ single: boolean }>(
+    `SELECT (NOT p.proretset AND t.typtype = 'c') AS single
+       FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace AND n.nspname = 'public'
+       JOIN pg_type t ON t.oid = p.prorettype
+      WHERE p.proname = $1`,
+    [fn],
+  );
+  return result.rows.length === 1 && result.rows[0].single === true;
+}
+
 function pgliteRpc(db: PGlite): RpcClient {
   return {
     rpc(fn, args) {
@@ -63,7 +75,10 @@ function pgliteRpc(db: PGlite): RpcClient {
       const sql = `SELECT * FROM ${fn}(${keys.map((key, index) => `${key} => $${index + 1}`).join(', ')})`;
       const run = db
         .query<Row>(sql, keys.map((key) => args[key]))
-        .then((result): RpcResponse => ({ data: result.rows, error: null }))
+        .then(async (result): Promise<RpcResponse> => {
+          const single = await answersSingleObject(db, fn);
+          return { data: single ? (result.rows[0] ?? null) : result.rows, error: null };
+        })
         .catch((error: unknown): RpcResponse => {
           const code = typeof (error as { code?: string }).code === 'string' ? (error as { code: string }).code : 'P0001';
           return { data: null, error: { code, message: error instanceof Error ? error.message : String(error) } };
