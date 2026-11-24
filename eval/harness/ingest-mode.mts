@@ -22,6 +22,15 @@ export function ingestModeGoldenPaths(): string[] {
   return ['eval/fixtures/golden.jsonl', 'eval/fixtures/ingest/golden-ingest.jsonl'];
 }
 
+/**
+ * Retrieval-time env for ingest-mode fixture eval. The ingest builder turns exact-id lookup on; the recorded ingest baseline
+ * assumes retrieval still runs it. Pinned smoke env sets it off, and live process.env must override frozen `@/lib/env` for
+ * v2 harness overlays, so this is applied again when the eval route is prepared.
+ */
+export function ingestModeRetrievalEnv(): Record<string, string> {
+  return { RAG_EXACT_ID_LOOKUP: 'true' };
+}
+
 /** One golden file to score: a single path is returned as it is, several are concatenated in order into `outPath`. */
 export function mergeGoldenFiles(paths: string[], outPath: string): string {
   const [first, ...rest] = paths;

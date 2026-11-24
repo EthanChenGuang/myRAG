@@ -731,7 +731,7 @@ describe('document readers and deleters are version aware', () => {
       const { item } = await loadRoutes();
       const patched = await item.PATCH(...patch(id(61), { external_url: 'https://example.com/a' }));
       expect([patched.status, await patched.json()]).toEqual([200, { success: true }]);
-      expect(await metadataOf(e.db, id(61))).toEqual({ name: 'Alpha', legacy_source: 'upload', external_url: 'https://example.com/a' });
+      expect(await metadataOf(e.db, id(61))).toEqual({ name: 'Alpha', external_url: 'https://example.com/a' });
       const deleted = await item.DELETE(...del(id(65)));
       expect([deleted.status, await deleted.json()]).toEqual([200, { success: true }]);
       expect(await ids(e.db, 'documents')).toEqual([id(61), id(62), id(63), id(64)].sort());
@@ -775,7 +775,7 @@ const LEGACY_LIST: Row[] = [
     created_at: '2025-01-12T00:00:00.000Z',
     organization_id: null,
     user_id: USER_A,
-    metadata: { external_url: 'https://example.com/n', legacy_source: 'upload' },
+    metadata: { external_url: 'https://example.com/n' },
     source: 'config_upload',
     source_provider: null,
     source_file_id: null,
@@ -789,7 +789,7 @@ const LEGACY_LIST: Row[] = [
     created_at: '2025-01-10T00:00:00.000Z',
     organization_id: null,
     user_id: USER_A,
-    metadata: { name: 'Alpha', legacy_source: 'upload' },
+    metadata: { name: 'Alpha' },
     source: 'config_upload',
     source_provider: null,
     source_file_id: null,

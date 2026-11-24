@@ -7,6 +7,7 @@ import type { PGlite } from '@electric-sql/pglite';
 import { embedText } from '../../eval/harness/fixture-embedder.mts';
 import { createFixtureDatabase, type DeploymentMode, type FixtureDatabase } from '../../eval/harness/pglite-supabase.mts';
 import { TWO_TENANT_IDS, createTwoTenantDatabase } from '../../eval/harness/two-tenant.mts';
+import { assertNoClientCallableRagFunctions } from '../helpers/rag-client-grants.ts';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const REAL_CORPUS = path.join(REPO_ROOT, 'eval/fixtures/corpus');
@@ -494,13 +495,7 @@ for (const mode of MODES) {
       }
       const begun = result.find((row) => row.proname === 'rag_begin_document_version');
       assert.match(String(begun?.def), /pg_advisory_xact_lock/);
-      const everyRag = await call(
-        ctx.db,
-        `SELECT p.proname FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
-         WHERE n.nspname = 'public' AND p.proname LIKE 'rag\\_%'
-           AND (has_function_privilege('anon', p.oid, 'EXECUTE') OR has_function_privilege('authenticated', p.oid, 'EXECUTE'))`,
-      );
-      assert.deepEqual(everyRag, []);
+      await assertNoClientCallableRagFunctions(ctx.db);
     });
 
     it('a call made as anon or authenticated is refused', async () => {
