@@ -90,14 +90,16 @@ function parseFlag(name: string, raw: string | undefined, warnings: string[]): b
   return false;
 }
 
+const CLOUD_ALLOWED_VALUES = new Set(['true', '1', 'yes', 'on']);
+const CLOUD_REFUSED_VALUES = new Set(['false', '0', 'no', 'off', 'disabled']);
+
+/** Unset or empty keeps the documented default (allowed); a recognised refusal or any unrecognised value refuses (D-08, D-18). */
 function parseCloudAllowed(raw: string | undefined, warnings: string[]): boolean {
   const value = (raw ?? '').trim().toLowerCase();
-  if (value === '' || value === 'true') return true;
-  if (value === 'false') return false;
-  if (value !== '') {
-    problem(warnings, `RAG_PARSER_ALLOW_CLOUD:${value}`, 'Unsupported RAG_PARSER_ALLOW_CLOUD value, using true', { value });
-  }
-  return true;
+  if (value === '' || CLOUD_ALLOWED_VALUES.has(value)) return true;
+  if (CLOUD_REFUSED_VALUES.has(value)) return false;
+  problem(warnings, `RAG_PARSER_ALLOW_CLOUD:${value}`, 'Unsupported RAG_PARSER_ALLOW_CLOUD value, refusing cloud parsing', { value });
+  return false;
 }
 
 function parseNonNegativeInt(
