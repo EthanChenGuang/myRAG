@@ -1269,3 +1269,143 @@ describe('re-embed job (src/lib/rag/ingest/reembed)', () => {
     assert.match(lines.join('\n'), /profile_is_active/);
   });
 });
+
+// ---------------------------------------------------------------------------------------------------------------------
+// scripts/rag/reprocess-documents.js: --reembed delegation and the refusals of its destructive legacy mode.
+// ---------------------------------------------------------------------------------------------------------------------
+
+describe('scripts/rag/reprocess-documents.js', () => {
+  let fixture: TwoTenantDatabase;
+  let edge: import('../../eval/harness/fake-edge.mts').FakeEdge;
+  let childEnv: Record<string, string>;
+
+  before(async () => {
+    const { fixtureProcessEnv, startFakeEdge } = await import('../../eval/harness/fake-edge.mts');
+    fixture = await createTwoTenantDatabase();
+    edge = await startFakeEdge({ db: fixture.db });
+    childEnv = fixtureProcessEnv(edge.url);
+  });
+
+  after(async () => {
+    await edge?.close();
+    await fixture?.db.close();
+  });
+
+  beforeEach(async () => {
+    await fixture.db.query('DELETE FROM embedding_backfill_gaps');
+    await fixture.db.query('DELETE FROM embedding_backfill_runs');
+    await fixture.db.query('DELETE FROM chunk_embeddings');
+    await fixture.db.query("UPDATE embedding_profiles SET status = 'available', activated_at = NULL, previous_active_id = NULL");
+    await fixture.db.query("UPDATE embedding_profiles SET status = 'active', activated_at = now() - interval '2 hours' WHERE id = $1", [LEGACY]);
+    await fixture.db.query('UPDATE documents SET version = 1');
+    edge.calls.length = 0;
+  });
+
+  interface ScriptResult {
+    code: number | null;
+    stdout: string;
+    stderr: string;
+  }
+
+  async function runScript(args: string[], env: Record<string, string | undefined> = {}): Promise<ScriptResult> {
+    const { spawn } = await import('node:child_process');
+    const merged: Record<string, string | undefined> = { ...process.env, ...childEnv, ...env };
+    for (const key of Object.keys(merged)) if (merged[key] === undefined) delete merged[key];
+    return new Promise((resolve, reject) => {
+      const child = spawn(process.execPath, ['scripts/rag/reprocess-documents.js', ...args], { env: merged as NodeJS.ProcessEnv, stdio: ['ignore', 'pipe', 'pipe'] });
+      let stdout = '';
+      let stderr = '';
+      child.stdout.on('data', (chunk: Buffer) => (stdout += chunk.toString('utf8')));
+      child.stderr.on('data', (chunk: Buffer) => (stderr += chunk.toString('utf8')));
+      const timer = setTimeout(() => {
+        child.kill('SIGKILL');
+        reject(new Error('the script did not finish in 60 s'));
+      }, 60_000);
+      child.on('error', reject);
+      child.on('close', (code) => {
+        clearTimeout(timer);
+        resolve({ code, stdout, stderr });
+      });
+    });
+  }
+
+  const chunkTotal = async (): Promise<number> => Number((await fixture.db.query<Row>('SELECT count(*)::int AS n FROM document_chunks')).rows[0]?.n);
+
+  test('--reembed --dry-run delegates to the TypeScript job, forwards its output and exit code and writes nothing', async () => {
+    const result = await runScript(['--reembed', '--profile', VOYAGE, '--dry-run', '--batch-size', '5']);
+    assert.equal(result.code, 0, result.stderr);
+    assert.match(result.stdout, /dry run, nothing written/);
+    assert.match(result.stdout, new RegExp(`${A.key}: chunks \\d+, tokens \\d+, estimated cost [0-9.]+ USD`));
+    assert.doesNotMatch(result.stdout, /Reprocessing configuration/, 'the legacy mode did not start');
+    const paths = edge.calls.map((call) => call.path);
+    assert.ok(paths.includes('/rest/v1/rpc/rag_reembed_count'), 'the TypeScript job ran against the database');
+    assert.ok(!paths.some((path) => /rag_reembed_(start|write|derive|finish|rollback)/.test(path)));
+    assert.equal(Number((await fixture.db.query<Row>('SELECT count(*)::int AS n FROM embedding_backfill_runs')).rows[0]?.n), 0);
+    assert.ok(!paths.includes('/v1/embeddings'), 'no embedding request was made');
+  });
+
+  test('--reembed forwards the exit code of the job when its arguments or request are wrong', async () => {
+    const unknown = await runScript(['--reembed', '--profile', 'no-such-profile', '--dry-run']);
+    assert.equal(unknown.code, 2);
+    assert.match(unknown.stderr, /unknown_profile/);
+    const missing = await runScript(['--reembed', '--dry-run']);
+    assert.equal(missing.code, 2);
+    assert.match(missing.stderr, /--profile is required/);
+    const refused = await runScript(['--reembed', '--profile', LEGACY]);
+    assert.equal(refused.code, 1);
+    assert.match(refused.stderr, /profile_is_active/);
+  });
+
+  test('the legacy mode refuses to run when any document has version above 1 and deletes nothing', async () => {
+    await fixture.db.query('UPDATE documents SET version = 2 WHERE id = $1', [TWO_TENANT_IDS.docA]);
+    const before = await chunkTotal();
+    const result = await runScript([]);
+    assert.equal(result.code, 3, `${result.stdout}\n${result.stderr}`);
+    assert.match(result.stderr, /version/i);
+    assert.match(result.stderr, /rag:reembed/);
+    assert.ok(edge.calls.some((call) => call.path === '/rest/v1/rpc/rag_reembed_legacy_guard'), 'the guard was asked');
+    assert.equal(await chunkTotal(), before);
+  });
+
+  test('the legacy mode refuses to run while another profile is backfilling or active, or holds vectors', async () => {
+    await fixture.db.query("UPDATE embedding_profiles SET status = 'backfilling' WHERE id = $1", [VOYAGE]);
+    const backfilling = await runScript([]);
+    assert.equal(backfilling.code, 3, `${backfilling.stdout}\n${backfilling.stderr}`);
+    assert.ok(backfilling.stderr.includes(VOYAGE));
+
+    await fixture.db.query("UPDATE embedding_profiles SET status = 'available' WHERE id = $1", [VOYAGE]);
+    const chunk = (await fixture.db.query<Row>('SELECT id FROM document_chunks LIMIT 1')).rows[0]?.id;
+    await fixture.db.query(
+      `INSERT INTO chunk_embeddings (chunk_id, profile_id, tenant_key, embedding, embedding_model, dims) SELECT $1, $2, tenant_key, $3::halfvec, 'voyage-4-large', 2048 FROM document_chunks WHERE id = $1`,
+      [chunk, VOYAGE, `[${vector(2048, 1).join(',')}]`],
+    );
+    const holding = await runScript([]);
+    assert.equal(holding.code, 3, `${holding.stdout}\n${holding.stderr}`);
+    assert.ok(holding.stderr.includes(VOYAGE));
+  });
+
+  test('the legacy mode refuses when the database cannot be asked', async () => {
+    const result = await runScript([], { NEXT_PUBLIC_SUPABASE_URL: 'http://127.0.0.1:9' });
+    assert.equal(result.code, 3, `${result.stdout}\n${result.stderr}`);
+    assert.match(result.stderr, /could not|cannot|unable/i);
+  });
+
+  test('on a database with neither versions nor other profiles the legacy mode passes both checks and goes on', async () => {
+    const result = await runScript([]);
+    assert.notEqual(result.code, 3, `${result.stdout}\n${result.stderr}`);
+    assert.doesNotMatch(result.stderr, /Refusing/);
+    assert.ok(edge.calls.some((call) => call.path === '/rest/v1/rpc/rag_reembed_legacy_guard'));
+    assert.match(result.stdout, /Starting document reprocessing/);
+  });
+
+  test('the legacy mode default embedding model is the one src/lib/env.ts defaults to', async () => {
+    const fs = await import('node:fs');
+    const script = fs.readFileSync('scripts/rag/reprocess-documents.js', 'utf8');
+    assert.equal(script.includes('text-embedding-ada-002'), false);
+    assert.match(fs.readFileSync('src/lib/env.ts', 'utf8'), /OPENAI_EMBEDDING_MODEL:[^\n]*'text-embedding-3-small'/);
+    const result = await runScript([], { OPENAI_EMBEDDING_MODEL: undefined });
+    assert.match(result.stdout, /Embedding model: text-embedding-3-small/);
+    const configured = await runScript([], { OPENAI_EMBEDDING_MODEL: 'text-embedding-3-large' });
+    assert.match(configured.stdout, /Embedding model: text-embedding-3-large/, 'a configured model still wins');
+  });
+});
