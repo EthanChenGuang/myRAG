@@ -27,10 +27,10 @@ See: .planning/PROJECT.md (updated 2026-11-22)
 
 ## Current Position
 
-Phase: 02 (Unified Retrieval Pipeline & Tenant Scope) — EXECUTING
-Plan: 36 of 36 complete; S1-S8, S9b and Phase 2 review fixes G1-G3 merged; S9a, S9c, S9d in progress; then verifier
-Status: Plans complete, running phase gates
-Last activity: 2026-11-23 — 02-08, 09, 10, 15 merged; tsc ratchet 58; 480 vitest tests pass; Phase 3 research + patterns committed
+Phase: 02 (Unified Retrieval Pipeline & Tenant Scope) — VERIFYING
+Plan: 36 of 36 complete; security batches S1-S9f, review fixes G1-G3 and verification gap fixes G4 merged
+Status: Re-verification running; Phase 3.1 plans (54) written, plan-check pass 1 running; Phase 5, 5.1, 6, 7 context capture running
+Last activity: 2026-11-24 — G4 merged; gates green (tsc 0, vitest 1333, node 136, eval 315, sidecar 189)
 
 Progress: [█████████░] 94%
 
@@ -204,3 +204,7 @@ Resume file: .planning/phases/02-unified-retrieval-pipeline-tenant-scope/.contin
 - Config UI on port 3333: operator must be signed in as admin on the main app in the same browser (same host).
 - Package legitimacy approval: Phase 3 (03-05: nine packages plus huggingface_hub) and Phase 3.1 (pdfplumber 0.11.11, ray[data] 2.60.1).
 - Phase 3.1 sidecar worker hosting decision (default assumption: always-on, >=4 GB RAM, 2 vCPU).
+
+- `VOICE_MAX_ACTIVE_ROOMS` (app) must equal `VOICE_AGENT_MAX_SESSIONS` (voice agent); deploy app and voice agent together (G4).
+- Multi-tenant DB: apply `supabase/patches/2026-11-search-rpc-revoke-multi-tenant.sql` after the Phase 2 app deploy (G4).
+- Phase 3.1 plan 04: approve pdfplumber 0.11.11 (+ pdfminer.six) and ray[data] 2.60.1; plans 53/54 are live checkpoints (worker host, migrations 0351-0359, Batch API job).
