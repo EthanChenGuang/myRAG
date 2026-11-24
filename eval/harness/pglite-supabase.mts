@@ -83,7 +83,7 @@ export async function createEmptyFixtureDatabase(options: {
   try {
     await db.waitReady;
     await db.exec(SUPABASE_SHIM_SQL);
-    if (options.supabaseGrants) await db.exec(SUPABASE_GRANTS_SQL);
+    if (options.supabaseGrants !== false) await db.exec(SUPABASE_GRANTS_SQL);
     await db.exec(sqlBytes.toString('utf8'));
     if (options.migrations !== false) await applyMigrations(db, deploymentMode);
 
