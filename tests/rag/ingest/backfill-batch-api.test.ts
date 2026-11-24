@@ -497,10 +497,23 @@ describe('Batch API client against the fake', () => {
     expect(out.vectors.size).toBe(10);
   });
 
+  test('the default clock waits on real timers and stops when the signal aborts', async () => {
+    const { deps } = await setup();
+    const real: BatchApiDeps = { ...deps, clock: undefined, pollIntervalMs: 5 };
+    const out = await embedViaBatchApi(real, { batchId: BATCH_ID, profile: PROFILE, chunks: chunks(2) });
+    expect(out.vectors.size).toBe(2);
+
+    const controller = new AbortController();
+    const slow: BatchApiDeps = { ...deps, clock: undefined, pollIntervalMs: 60_000, signal: controller.signal };
+    const pending = embedViaBatchApi(slow, { batchId: BATCH_ID, profile: PROFILE, chunks: chunks(2) });
+    setTimeout(() => controller.abort(new Error('stop')), 50);
+    await expect(pending).rejects.toThrow('stop');
+  });
+
   test('hands each batch its vectors before closing its row', async () => {
     const { deps, rpc } = await setup();
     const seen: string[] = [];
-    await embedViaBatchApi(deps, {
+    const out = await embedViaBatchApi(deps, {
       batchId: BATCH_ID,
       profile: PROFILE,
       chunks: chunks(3),
@@ -509,6 +522,8 @@ describe('Batch API client against the fake', () => {
       },
     });
     expect(seen).toEqual(['vectors:3:in_progress']);
+    expect(out.embedded).toBe(3);
+    expect(out.vectors.size).toBe(0);
     expect(rpc.rows[0]?.status).toBe('completed');
   });
 });
