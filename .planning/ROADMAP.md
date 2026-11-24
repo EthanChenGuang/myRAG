@@ -350,7 +350,42 @@ Plans:
   5. The regression runner evaluates backend, embedding profile and reranker combinations on the locked test split and writes a defaults decision record with its numbers (shown on fixtures). `AGENTS.md`, the `.env` templates and setup docs describe the sidecar, providers, switches, sync and eval workflow. A vendor data-flow inventory lists what content goes to Vectara, Cohere, Voyage, DeepInfra, Weaviate, Qdrant, Anthropic, LlamaCloud and any other external service the pipeline calls.
   6. Admin can open a queued case in the Config UI, write its expected answer and evidence spans and promote it into the private golden set with provenance `production`; the next eval run includes it, and the periodic failure report groups new failures by layer and category.
 **Live verification**: Provision Weaviate and Qdrant (cloud or self-hosted), host the drain worker within the 60 s function limit, and run the canary suite against them; run Test-connection for each real provider; run the full regression on the real locked test split with all real keys (the ADM-02 defaults decision is final only from this live run, not from fixtures); check voice latency end to end.
-**Plans**: TBD
+**Plans**: 33 plans in 13 waves — see `phases/07-external-backends-release-defaults/07-PLAN-INDEX.md`
+
+Plans:
+- [ ] 07-01-PLAN.md — Gate and install the two vector-store clients, and make the boundary check confine them to the adapter… (wave 1, autonomous: false)
+- [ ] 07-02-PLAN.md — Create the change-capture half of RET-05: the notification-only outbox, the sync-target switch table,… (wave 1)
+- [ ] 07-03-PLAN.md — Build the two pure pieces every external tenant check rests on: the lower-case tenant-key helper (A-5)… (wave 1)
+- [ ] 07-04-PLAN.md — Add the ten D-24 variables to the five config locations, the env manifest and the eval pin, and parse… (wave 1)
+- [ ] 07-05-PLAN.md — Define the Pydantic contracts the sync worker, the drain route and the backend fallback emit, and… (wave 1)
+- [ ] 07-06-PLAN.md — Prove the external-backend architecture end to end on its thinnest path first (the phase tracer), then… (wave 2)
+- [ ] 07-07-PLAN.md — Implement the Qdrant retrieval adapter, its sync store and collection setup, and run the unchanged Phase… (wave 3)
+- [ ] 07-08-PLAN.md — Implement the Weaviate retrieval adapter, its sync store and collection setup with one tenant per… (wave 3)
+- [ ] 07-09-PLAN.md — Expand the tracer's thin drain into the full sync engine: claim wrappers, a pure servable planner,… (wave 3)
+- [ ] 07-10-PLAN.md — Extend the Phase 3 D-40 embedding-profile activation gate so a profile cannot become active while an… (wave 3)
+- [ ] 07-11-PLAN.md — Build reconcile: detect and repair drift between Supabase's servable rows and each external store,… (wave 4)
+- [ ] 07-12-PLAN.md — Make the backend switch real: per-entry-point selection, index-ready checks, the pgvector fallback with… (wave 4)
+- [ ] 07-13-PLAN.md — Expose the sync engine to its three triggers: the authenticated drain route (scheduler), the… (wave 5)
+- [ ] 07-14-PLAN.md — Write the cross-tenant canary suite that runs on every backend and gates release (D-12, RET-08),… (wave 5)
+- [ ] 07-15-PLAN.md — Serve the index-compatibility warning and the sync-target switch to the Config UI through admin routes… (wave 6)
+- [ ] 07-16-PLAN.md — Run the canary and conformance suites against real Weaviate and Qdrant in CI as a release gate, and… (wave 6)
+- [ ] 07-17-PLAN.md — Define the closeout contracts in Pydantic and regenerate Zod: the defaults decision and its… (wave 7)
+- [ ] 07-18-PLAN.md — Give every managed variable the metadata the generated Config UI section needs, and make check-config… (wave 7)
+- [ ] 07-19-PLAN.md — Add the Test-connection route that checks each real provider with the app's loaded configuration (D-15). (wave 7)
+- [ ] 07-20-PLAN.md — Render every managed switch and provider in the Config UI from the manifest, with masked secrets,… (wave 8)
+- [ ] 07-21-PLAN.md — Ship the vendor data-flow inventory as data, generate its documentation, and make CI keep it complete… (wave 8)
+- [ ] 07-22-PLAN.md — Extend the review queue's single Python implementation to full promotion, append-only safety and… (wave 8)
+- [ ] 07-23-PLAN.md — Give the review panel the chunk text it needs for evidence spans, and nothing more (D-21). (wave 8)
+- [ ] 07-24-PLAN.md — Build the regression runner's statistics and protocol: pre-registration, the decision rule, multiplicity… (wave 8)
+- [ ] 07-25-PLAN.md — Connect the regression runner of plan 07-24 to the eval harness for external backends, then run the full… (wave 9)
+- [ ] 07-26-PLAN.md — Add the periodic failure report that lists new production failures by layer and category, and run it… (wave 8)
+- [ ] 07-27-PLAN.md — Write the documentation ADM-03 asks for: a RAG pipeline guide with generated switch tables, the `.env`… (wave 10)
+- [ ] 07-28-PLAN.md — Add the semantic-cache case to the cross-tenant canary suite on all three backends (D-12, CACHE-01). (wave 6)
+- [ ] 07-29-PLAN.md — Let admins work the review queue in the Config UI: open a queued case, see its question, answer,… (wave 9)
+- [ ] 07-30-PLAN.md — Make CI prove that the shipped defaults equal the latest defaults decision: today's defaults while the… (wave 10)
+- [ ] 07-31-PLAN.md — Close the automated part of Phase 7: fold the Phase 7 migrations into both setup files, prove every… (wave 11)
+- [ ] 07-32-PLAN.md — Collect the three human decisions and actions Phase 7 needs before the live checks: the Vercel plan… (wave 12, autonomous: false)
+- [ ] 07-33-PLAN.md — Run the Phase 7 live verification items as explicit checkpoints, then apply the shipped defaults from… (wave 13, autonomous: false)
 **UI hint**: yes
 
 ## Progress
@@ -368,4 +403,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 5.1 → 6 → 7. 
 | 5. Verified Citations & Groundedness | 0/26 | Planned (plan-check PASS after W1 fix) | - |
 | 5.1. Prompt Injection Defense (INSERTED) | 0/TBD | Context+research+patterns done; planning not started | - |
 | 6. Query Layer (LlamaIndex & LangChain) | 0/46 | Planned (plan-check pending) | - |
-| 7. External Backends & Release Defaults | 0/TBD | Planning in progress (24 draft plans) | - |
+| 7. External Backends & Release Defaults | 0/33 | Planned (33 plans, 13 waves; plan check not yet run) | - |
