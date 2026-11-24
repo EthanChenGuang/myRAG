@@ -3,8 +3,15 @@
     "chat": {
       "stages": {
         "assemble": 100,
+        "compress": 50,
+        "dedupe": 5,
         "embed": 200,
-        "search": 400
+        "expand_parents": 100,
+        "fuse": 5,
+        "refusal": 1,
+        "rerank": 600,
+        "search": 400,
+        "translate": 5
       },
       "total_p50_ms": 1000,
       "total_p95_ms": 2000
@@ -12,13 +19,30 @@
     "embed": {
       "stages": {
         "assemble": 100,
+        "compress": 50,
+        "dedupe": 5,
         "embed": 200,
-        "search": 400
+        "expand_parents": 100,
+        "fuse": 5,
+        "refusal": 1,
+        "rerank": 600,
+        "search": 400,
+        "translate": 5
       },
       "total_p50_ms": 1000,
       "total_p95_ms": 2000
     },
     "voice": {
+      "stages": {
+        "assemble": 50,
+        "dedupe": 5,
+        "embed": 200,
+        "fuse": 5,
+        "refusal": 1,
+        "rerank": 250,
+        "search": 300,
+        "translate": 5
+      },
       "total_p50_ms": 400,
       "total_p95_ms": 800
     }

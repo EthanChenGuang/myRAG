@@ -485,6 +485,7 @@ def _slice_metrics() -> SliceMetrics:
         mrr=_metric(),
         correct_refusal_rate=_metric(),
         false_refusal_rate=_metric(),
+        false_refusal_upper_95=0.25,
     )
 
 
@@ -632,10 +633,14 @@ def _eval_report() -> EvalReport:
         by_category={"general": _slice_metrics()},
         by_language_category={"en:general": _slice_metrics()},
         by_language_pair={"en->zh": _slice_metrics()},
+        by_doc_type={"general": _slice_metrics()},
+        by_question_kind={"fact_lookup": _slice_metrics()},
         by_split={"dev": _slice_metrics()},
         by_provenance={"synthetic_fixture": _slice_metrics()},
         by_provenance_category={"synthetic_fixture/general": _slice_metrics()},
         gate_population="all",
+        rerank_skipped_rate=MetricValue(value=0.25, n=4),
+        lexical_leg_hit_rate_at_10=MetricValue(value=0.75, n=4),
         items=[
             ItemResult(
                 item_id="en-general-001",
@@ -649,6 +654,10 @@ def _eval_report() -> EvalReport:
                 spans_hit_at_5=1,
                 spans_hit_at_10=1,
                 first_hit_rank=1,
+                doc_type="general",
+                question_kind="fact_lookup",
+                rerank_status="ok",
+                lexical_hit_at_10=True,
             )
         ],
         latency={

@@ -108,6 +108,18 @@
           "title": "Category",
           "type": "string"
         },
+        "doc_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Doc Type"
+        },
         "evidence_language": {
           "anyOf": [
             {
@@ -151,6 +163,18 @@
           "title": "Language",
           "type": "string"
         },
+        "lexical_hit_at_10": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Lexical Hit At 10"
+        },
         "provenance": {
           "enum": [
             "synthetic_fixture",
@@ -162,9 +186,38 @@
           "title": "Provenance",
           "type": "string"
         },
+        "question_kind": {
+          "anyOf": [
+            {
+              "enum": [
+                "fact_lookup",
+                "context_heavy",
+                "other"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Question Kind"
+        },
         "refused": {
           "title": "Refused",
           "type": "boolean"
+        },
+        "rerank_status": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rerank Status"
         },
         "span_count": {
           "minimum": 0,
@@ -603,6 +656,20 @@
         "false_refusal_rate": {
           "$ref": "#/$defs/MetricValue"
         },
+        "false_refusal_upper_95": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "False Refusal Upper 95"
+        },
         "mrr": {
           "$ref": "#/$defs/MetricValue"
         },
@@ -793,6 +860,13 @@
       "title": "By Category",
       "type": "object"
     },
+    "by_doc_type": {
+      "additionalProperties": {
+        "$ref": "#/$defs/SliceMetrics"
+      },
+      "title": "By Doc Type",
+      "type": "object"
+    },
     "by_language": {
       "additionalProperties": {
         "$ref": "#/$defs/SliceMetrics"
@@ -826,6 +900,13 @@
         "$ref": "#/$defs/SliceMetrics"
       },
       "title": "By Provenance Category",
+      "type": "object"
+    },
+    "by_question_kind": {
+      "additionalProperties": {
+        "$ref": "#/$defs/SliceMetrics"
+      },
+      "title": "By Question Kind",
       "type": "object"
     },
     "by_split": {
@@ -932,6 +1013,17 @@
       "default": null,
       "title": "Latency"
     },
+    "lexical_leg_hit_rate_at_10": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/MetricValue"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "notes": {
       "items": {
         "type": "string"
@@ -944,6 +1036,17 @@
     },
     "request_options": {
       "$ref": "#/$defs/RagRunOptions"
+    },
+    "rerank_skipped_rate": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/MetricValue"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "run_config_hash": {
       "title": "Run Config Hash",

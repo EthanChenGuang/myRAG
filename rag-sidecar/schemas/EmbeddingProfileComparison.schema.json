@@ -164,6 +164,20 @@
         "false_refusal_rate": {
           "$ref": "#/$defs/MetricValue"
         },
+        "false_refusal_upper_95": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "False Refusal Upper 95"
+        },
         "mrr": {
           "$ref": "#/$defs/MetricValue"
         },
