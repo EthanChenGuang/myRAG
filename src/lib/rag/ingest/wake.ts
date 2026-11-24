@@ -19,11 +19,11 @@ async function wakeSidecar(): Promise<void> {
       signal: controller.signal,
     });
     if (!response.ok) {
-      logger.debug('[RAG Ingest] sidecar wake answered', { status: response.status });
+      logger.debug('RAG Ingest', 'sidecar wake answered', { status: response.status });
     }
   } catch (error) {
     const name = error instanceof Error ? error.name : 'unknown';
-    logger.debug('[RAG Ingest] sidecar wake failed', { error: name });
+    logger.debug('RAG Ingest', 'sidecar wake failed', { error: name });
   } finally {
     clearTimeout(timer);
   }

@@ -81,7 +81,7 @@ describe('scheduleIngestWake', () => {
     await expect(task()).resolves.toBeUndefined();
     const logged = JSON.stringify(loggerDebug.mock.calls);
     expect(logged).not.toContain(SECRET);
-    expect(loggerDebug.mock.calls.some((call) => String(call[0]).includes('[RAG Ingest]'))).toBe(true);
+    expect(loggerDebug.mock.calls.some((call) => String(call[0]).includes('RAG Ingest'))).toBe(true);
   });
 
   it('swallows network errors without throwing', async () => {
