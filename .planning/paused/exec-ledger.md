@@ -62,7 +62,7 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | 03.1-07 | — | **merged** | exec/03.1-07 |
 | 04-05 | bc-91985997… | **merged** | exec/04-05 |
 | 04-06 | [bc-f05b8cec](bc-f05b8cec-070a-54b4-a156-96d6167bdbb7) **merged** | exec/04-06; smoke `eval/out/p4-06` PASS |
-| 03.1-08 | [bc-97f53a60](bc-97f53a60-1976-53e8-a0e4-10113dc0a4bb) RUNNING | wt/03.1-08 |
+| 03.1-08 | [bc-97f53a60](bc-97f53a60-1976-53e8-a0e4-10113dc0a4bb) **merged** | exec/03.1-08 — 28 PGlite tests pass on trunk |
 
 ## Remaining plan inventory (file-overlap basis)
 
