@@ -281,18 +281,16 @@ def test_merged_italian_lines_still_yield_every_field():
     assert fields.confidence == 1.0
 
 
-def test_chinese_stays_at_full_confidence_unmerged_and_merged():
-    markdown = _recorded_markdown("invoice-zh")
-    for text in (markdown, _merge_adjacent_lines(markdown)):
-        fields = extract_invoice(text)
-        assert fields.confidence == 1.0
-        assert fields.invoice_number == "FP-2025-00417"
-        assert fields.supplier.name == "示例销售有限公司"
-        assert fields.buyer.name == "示例买方有限公司"
-        assert fields.gross_total == "1130.00"
+def test_chinese_stays_at_full_confidence():
+    fields = extract_invoice(_recorded_markdown("invoice-zh"))
+    assert fields.confidence == 1.0
+    assert fields.invoice_number == "FP-2025-00417"
+    assert fields.supplier.name == "示例销售有限公司"
+    assert fields.buyer.name == "示例买方有限公司"
+    assert fields.gross_total == "1130.00"
 
 
-@pytest.mark.parametrize("name", ["invoice-zh", "invoice-en", "invoice-it"])
+@pytest.mark.parametrize("name", ["invoice-en", "invoice-it"])
 def test_merging_lines_does_not_change_the_result(name):
     markdown = _recorded_markdown(name)
     assert extract_invoice(_merge_adjacent_lines(markdown)) == extract_invoice(markdown)

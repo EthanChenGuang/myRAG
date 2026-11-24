@@ -14,6 +14,7 @@ from rag_sidecar.extract.tax_ids import TaxIdCheck, classify_tax_id
 logger = logging.getLogger(__name__)
 
 _MAX_LINE_CHARS = 400
+_MAX_MERGED_LINE_CHARS = 4000
 _MAX_INVOICE_NUMBER_CHARS = 64
 _MAX_LINE_ITEMS = 1000
 _TOTALS_TOLERANCE = Decimal("0.01")
@@ -36,6 +37,7 @@ class _LabelRule:
     language: str
     length: int
     pattern: re.Pattern[str]
+    inline: re.Pattern[str]
 
 
 def _compile_rules() -> list[_LabelRule]:
@@ -44,10 +46,10 @@ def _compile_rules() -> list[_LabelRule]:
         for language, labels in by_language.items():
             for label in labels:
                 boundary = _LATIN_BOUNDARY if label[-1].isascii() and label[-1].isalpha() else ""
-                pattern = re.compile(
-                    rf"{re.escape(label)}{boundary}{_QUALIFIER}[:：]\s*(?P<value>.*)", re.IGNORECASE
-                )
-                rules.append(_LabelRule(field, language, len(label), pattern))
+                head = rf"{re.escape(label)}{boundary}{_QUALIFIER}[:：]"
+                pattern = re.compile(rf"{head}\s*(?P<value>.*)", re.IGNORECASE)
+                inline = re.compile(rf"(?<!\S){head}", re.IGNORECASE)
+                rules.append(_LabelRule(field, language, len(label), pattern, inline))
     return rules
 
 
@@ -81,6 +83,34 @@ def _clean_line(raw: str) -> str:
 
 def _clean_value(value: str) -> str:
     return value.strip().strip("*_ ").strip()
+
+
+def _label_starts(line: str) -> list[int]:
+    spans = sorted(
+        ((match.start(), match.end()) for rule in _RULES for match in rule.inline.finditer(line)),
+        key=lambda span: (span[0], -span[1]),
+    )
+    starts: list[int] = []
+    covered = 0
+    for start, end in spans:
+        if start < covered:
+            continue
+        starts.append(start)
+        covered = end
+    return starts
+
+
+def _segments(raw: str) -> list[str]:
+    """Docling joins adjacent short Latin lines into one paragraph, so a line may carry several labelled fields."""
+    if len(raw) > _MAX_MERGED_LINE_CHARS:
+        return []
+    if len(raw) <= _MAX_LINE_CHARS and raw.count(":") + raw.count("：") < 2:
+        return [raw]
+    cuts = [start for start in _label_starts(raw) if start > 0]
+    if not cuts:
+        return [raw] if len(raw) <= _MAX_LINE_CHARS else []
+    bounds = [0, *cuts, len(raw)]
+    return [raw[a:b] for a, b in zip(bounds, bounds[1:], strict=False) if len(raw[a:b]) <= _MAX_LINE_CHARS]
 
 
 def _best_rule(line: str) -> tuple[_LabelRule, str] | None:
@@ -230,9 +260,13 @@ def _extract_fields(markdown: str, tables: list[str], language_hint: OcrLanguage
     votes: Counter[str] = Counter()
     current: str | None = None
 
-    for raw in markdown.splitlines():
-        if len(raw) > _MAX_LINE_CHARS or raw.lstrip().startswith("|"):
-            continue
+    lines = (
+        segment
+        for raw in markdown.splitlines()
+        if not raw.lstrip().startswith("|")
+        for segment in _segments(raw)
+    )
+    for raw in lines:
         line = _clean_line(raw)
         if not line:
             continue
