@@ -35,7 +35,7 @@ Mechanical steps run **without** live Supabase, vendor keys, or Docker. Full SUM
 | Step | Command / artifact | Result |
 |------|-------------------|--------|
 | Migration manifest (single-tenant) | `scripts/setup-database.sh --list-migrations single-tenant` | 0301–0319 + **0351** listed |
-| PGlite schema parity | `node --import tsx --test tests/rag-db/schema-equality.test.mts` (trunk, post-03-47) | pass (orchestrator run 2026-11-24) |
+| PGlite schema parity | `node --import tsx --test tests/rag-db/schema-equality.test.mts` | **4 fail** — setup SQL not yet folded for **0351** / **0352** (expected until setup fold plan lands) |
 | Phase 3 default gates | `03-47-SUMMARY.md` (`eval/out/p3-final*`) | recorded pass on executor |
 | Package pins for Docling/L1 path | trunk lock `3e83978` | pdfplumber / ray optional extra |
 
