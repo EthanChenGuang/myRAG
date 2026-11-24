@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+from rag_sidecar.contracts.eval_run import RunManifest
 from rag_sidecar.contracts.ingest import DocType
 from rag_sidecar.contracts.retrieval import (
     CHUNKING_VALIDATION_CASES,
@@ -46,6 +47,31 @@ def test_retrieval_overrides_accepts_single_fields_and_rejects_extra():
     assert RetrievalOverrides(candidate_pool_size=50).candidate_pool_size == 50
     with pytest.raises(ValidationError):
         RetrievalOverrides(candidate_pool_size=50, extra=1)
+
+
+def test_retrieval_overrides_carries_rerank_model():
+    assert RetrievalOverrides(rerank_model="fake-quality-v1").rerank_model == "fake-quality-v1"
+    assert RetrievalOverrides().rerank_model is None
+    with pytest.raises(ValidationError):
+        RetrievalOverrides(rerank_model="")
+
+
+def test_run_manifest_records_optional_run_config():
+    from rag_sidecar.contracts.samples import build_samples
+
+    base = dict(build_samples()["samples"]["RunManifest"])
+    assert base.get("run_config") is None
+    base["run_config"] = {
+        "name": "v2-all-off",
+        "env": {"RAG_PIPELINE": "v2"},
+        "overrides": {"final_top_k": 5, "rerank_model": "fake-quality-v1"},
+    }
+    manifest = RunManifest.model_validate(base)
+    assert manifest.run_config is not None
+    assert manifest.run_config.env == {"RAG_PIPELINE": "v2"}
+    base["run_config"]["extra"] = 1
+    with pytest.raises(ValidationError):
+        RunManifest.model_validate(base)
 
 
 def test_retrieval_filters_accepts_valid_shapes():
