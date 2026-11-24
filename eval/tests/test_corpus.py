@@ -3,6 +3,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from rag_eval.corpus import load_corpus, main
 from rag_eval.paths import REPO_ROOT
 
@@ -77,6 +79,7 @@ def test_cli_dump_prints_the_structure_as_json(tmp_path: Path, capsys):
             "relpath": "en/policy.en.md",
             "filename": "Policy Handbook.pdf",
             "language": "en",
+            "doc_type": "general",
             "chunks": [
                 {
                     "index": 0,
@@ -93,6 +96,24 @@ def test_cli_dump_prints_the_structure_as_json(tmp_path: Path, capsys):
             ],
         }
     ]
+
+
+def test_doc_type_defaults_to_general_when_missing(tmp_path: Path):
+    _write(tmp_path, "en/a.en.md", "## A\n\nBody.\n")
+    (doc,) = load_corpus(tmp_path)
+    assert doc.doc_type == "general"
+
+
+def test_invalid_doc_type_fails_loading(tmp_path: Path):
+    _write(tmp_path, "en/a.en.md", '<!-- fixture-meta {"doc_type": "invalid_kind"} -->\n## A\n')
+    with pytest.raises(ValueError, match="invalid doc_type"):
+        load_corpus(tmp_path)
+
+
+def test_doc_type_from_meta_is_returned(tmp_path: Path):
+    _write(tmp_path, "en/a.en.md", '<!-- fixture-meta {"doc_type": "product_technical"} -->\n## A\n')
+    (doc,) = load_corpus(tmp_path)
+    assert doc.doc_type == "product_technical"
 
 
 def test_cli_module_entry_point_dumps_the_committed_corpus():

@@ -71,3 +71,16 @@ def test_load_settings_reads_environment_once(monkeypatch):
 def test_load_settings_treats_empty_secret_as_unset(monkeypatch):
     monkeypatch.setenv("RAG_SIDECAR_SECRET", "")
     assert load_settings().secret is None
+
+
+def test_ready_is_503_when_ingest_worker_on_without_supabase_env():
+    settings = SidecarSettings(secret=SecretStr(SECRET_48), ingest_worker=True)
+    response = TestClient(create_app(settings)).get("/ready")
+    assert response.status_code == 503
+    assert SidecarReady.model_validate(response.json()).reason == "worker_env_missing"
+
+
+def test_default_settings_do_not_start_ingest_worker():
+    client = TestClient(create_app(SidecarSettings(secret=SecretStr(SECRET_48))))
+    assert getattr(client.app.state, "ingest_worker", None) is None
+    assert client.get("/ready").status_code == 200

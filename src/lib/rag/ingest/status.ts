@@ -1,6 +1,8 @@
 import { assertTenantScope, scopeKey, type TenantScope } from '../tenant/scope';
+import { isTerminal } from './callbacks/common';
 import { loadIngestConfig } from './config';
 import { getIngestDeps } from './deps';
+import { getJobForDocument } from './ledger';
 import { ObjectStoreError } from './object-store';
 import { getProcessingProfile, profileFor, type DocType, type ProcessingProfile } from './profiles/load';
 import { INGEST_STAGES, REGISTERED_STAGES, nextStageAfter, rehydrateFromStore, runIngestStages } from './runner';
@@ -62,6 +64,10 @@ export interface IngestStatusReport {
   warnings: string[];
   /** The short failure code of a failed version. */
   reason: string | null;
+  /** Present when a ledger row exists for this document. */
+  jobId?: string;
+  jobStatus?: string;
+  provisional?: boolean;
 }
 
 /** A version that has been processing for longer than this is failed by the next status read; there is no worker until Phase 3.1. */
@@ -121,15 +127,46 @@ export async function getIngestStatusReport(
     parserUsed: row.parserUsed,
     docType: row.docType,
   };
+  const signal = options.signal ?? AbortSignal.timeout(LOOKUP_TIMEOUT_MS);
+  let ledgerExtras: Pick<IngestStatusReport, 'jobId' | 'jobStatus' | 'provisional'> | undefined;
+  let ledgerBlocksReaper = false;
+  let ledgerFailureReason: string | null = null;
+  const job = await getJobForDocument(scope, documentId, { signal });
+  if (job) {
+    ledgerExtras = {
+      jobId: job.id,
+      jobStatus: job.status,
+      provisional: job.provisional_published_at != null,
+    };
+    if (!isTerminal(job)) ledgerBlocksReaper = true;
+    if (job.status === 'failed' && typeof job.error_class === 'string' && REASON_CODE.test(job.error_class)) {
+      ledgerFailureReason = job.error_class;
+    }
+  }
+
+  if (ledgerFailureReason) {
+    return {
+      view: { ...view, status: 'failed', processingStatus: 'failed' },
+      warnings: [],
+      reason: ledgerFailureReason,
+      ...ledgerExtras,
+    };
+  }
+
   const now = getIngestDeps().now();
-  if (isStale(row, now)) {
+  if (isStale(row, now) && !ledgerBlocksReaper) {
     try {
       await writer.markFailed(documentId, STALE_PROCESSING_REASON);
       console.warn('[Ingest] reaped stale processing version', {
         documentId,
         ageHours: Math.floor((now - Date.parse(row.createdAt)) / 3_600_000),
       });
-      return { view: { ...view, status: 'failed', processingStatus: 'failed' }, warnings: [], reason: STALE_PROCESSING_REASON };
+      return {
+        view: { ...view, status: 'failed', processingStatus: 'failed' },
+        warnings: [],
+        reason: STALE_PROCESSING_REASON,
+        ...ledgerExtras,
+      };
     } catch (error) {
       console.error('[Ingest] could not reap a stale processing version', {
         documentId,
@@ -138,7 +175,12 @@ export async function getIngestStatusReport(
       });
     }
   }
-  return { view, warnings: warningsOf(row), reason: row.status === 'failed' ? failureCodeOf(row.processingState) : null };
+  return {
+    view,
+    warnings: warningsOf(row),
+    reason: row.status === 'failed' ? failureCodeOf(row.processingState) : null,
+    ...ledgerExtras,
+  };
 }
 
 export async function getIngestStatus(
