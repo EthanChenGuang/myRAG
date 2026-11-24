@@ -6,7 +6,7 @@ import { startIngestAppServer, type IngestAppServer, type IngestRouteHandler } f
 import { createEmptyFixtureDatabase, type DeploymentMode } from './pglite-supabase.mts';
 import { applyFixtureProcessEnv } from './process-env.mts';
 import { spawnSidecarModule, type SpawnSidecarResult } from './sidecar-worker.mts';
-import { THREE_PAGES, startFakeLlamaParse, type FakeLlamaParse } from '../../tests/helpers/fake-llamaparse.ts';
+import { THREE_PAGES, startFakeLlamaParse, type FakeLlamaJobSpec, type FakeLlamaParse } from '../../tests/helpers/fake-llamaparse.ts';
 import type { IngestFakes } from './ingest-fakes.mts';
 import type { TenantScope } from '@/lib/rag/tenant/scope';
 
@@ -46,6 +46,10 @@ export interface QueuedHarnessOptions {
   deploymentMode?: DeploymentMode;
   /** Extra process environment applied before the app modules are imported. */
   env?: Record<string, string>;
+  /** Job specs of the fake LlamaParse, one per upload (the last repeats). Default: three plain pages. */
+  llamaSpecs?: FakeLlamaJobSpec[];
+  /** Sleep of the LlamaParse client between polls. Default: none. */
+  llamaSleep?: (ms: number) => Promise<void>;
 }
 
 /** A pdf-shaped byte string; the fake parsers answer by their own scripts, not by reading it. */
@@ -98,10 +102,10 @@ export async function startQueuedHarness(options: QueuedHarnessOptions = {}): Pr
     fakes = await installIngestFakes({ db: fixtureAdminClient(edge.url), env: { ...INGEST_MODE_ENV, RAG_INGEST_PIPELINE: 'unified' } });
 
     const { createLlamaParseParser, setLlamaParseParserForTests } = await import('@/lib/rag/ingest/parsers/llamaparse-v2');
-    setLlamaParseParserForTests(createLlamaParseParser({ baseUrl: llama.url, apiKey: llama.apiKey, tier: 'cost_effective', sleep: async () => undefined }));
+    setLlamaParseParserForTests(createLlamaParseParser({ baseUrl: llama.url, apiKey: llama.apiKey, tier: 'cost_effective', sleep: async (ms) => options.llamaSleep?.(ms) }));
     const { setTierBoundsDepsForTests } = await import('@/lib/rag/ingest/routing/tier-bounds');
     setTierBoundsDepsForTests({ admin: () => null });
-    llama.enqueue({ pages: THREE_PAGES });
+    llama.enqueue(...(options.llamaSpecs ?? [{ pages: THREE_PAGES }]));
 
     const parseExternal = (await import('@/app/api/internal/rag/ingest/jobs/[id]/parse-external/route')) as { POST: IngestRouteHandler };
     const advance = (await import('@/app/api/internal/rag/ingest/jobs/[id]/advance/route')) as { POST: IngestRouteHandler };
