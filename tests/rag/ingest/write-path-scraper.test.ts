@@ -261,6 +261,36 @@ describe('scraper adapter, unified pipeline', () => {
     expect(result.errors).toEqual([{ url: 'https://example.com/c', error: expect.stringMatching(/Markdown/) }]);
   });
 
+  it('gives ingest a deadline inside the scrape request budget', async () => {
+    scrapeUrl.mockResolvedValue({ markdown: 'Body', metadata: {} });
+    const { scrapeAndProcess } = await loadAdapter();
+    await scrapeAndProcess({ url: PAGE_URL, scope: SINGLE, signal: new AbortController().signal });
+    const deadline = ingestInput().deadlineMs as number;
+    expect(deadline).toBeGreaterThan(0);
+    expect(deadline).toBeLessThanOrEqual(55000);
+  });
+
+  it('stops ingesting crawled pages once the crawl budget is spent and lists them as failed', async () => {
+    crawlWebsite.mockResolvedValue([
+      { url: 'https://example.com/a', markdown: '# A', metadata: {} },
+      { url: 'https://example.com/b', markdown: '# B', metadata: {} },
+    ]);
+    let now = 1_000_000;
+    vi.spyOn(Date, 'now').mockImplementation(() => now);
+    ingest.mockImplementation(async () => {
+      now += 290_000;
+      return ready('doc-a');
+    });
+    const { crawlAndProcess } = await loadAdapter();
+
+    const result = await crawlAndProcess({ url: 'https://example.com/', scope: SINGLE, signal: new AbortController().signal });
+
+    expect(ingest).toHaveBeenCalledTimes(1);
+    expect((ingestInput().deadlineMs as number) <= 50000).toBe(true);
+    expect(result.successfulPages).toBe(1);
+    expect(result.errors).toEqual([{ url: 'https://example.com/b', error: expect.stringMatching(/budget/) }]);
+  });
+
   it('the pdf output format sends the PDF bytes to ingest as application/pdf', async () => {
     const pdf = Buffer.from('%PDF-1.7\nplaceholder body\n%%EOF');
     scrapeUrl.mockResolvedValue({ markdown: 'ignored', metadata: { title: 'Annual Report' }, actions: { pdfs: [pdf.toString('base64')] } });
