@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { GoldenItemSchema, RetrievalOverridesSchema, type GoldenItem } from '../../src/lib/rag-eval/contracts.generated.ts';
 import { configHash } from '../../src/lib/rag-eval/trace.ts';
@@ -162,5 +163,38 @@ describe('run-config through runEval', () => {
     };
     assert.notEqual(result.manifest.effective_config_hash, configHash(legacyEquivalent));
     assert.equal(result.manifest.effective_config_hash, configHash(trace.effective_config));
+  });
+});
+
+describe('npm run test-rag --run-config', () => {
+  function runSmoke(config: unknown, extra: string[] = []) {
+    const dir = makeTmpDir();
+    const file = path.join(dir, 'run.json');
+    fs.writeFileSync(file, JSON.stringify(config));
+    return spawnSync(process.execPath, ['--import', 'tsx', 'eval/harness/run-smoke.mts', '--run-config', file, '--no-gate', '--out', path.join(dir, 'out'), ...extra], {
+      cwd: REPO_ROOT,
+      encoding: 'utf8',
+    });
+  }
+
+  test('an overlay naming a key or secret exits 2 with the allow-list message before any request', () => {
+    for (const name of ['OPENROUTER_API_KEY', 'RAG_EVAL_SECRET']) {
+      const result = runSmoke({ name: 'bad', env: { RAG_PIPELINE: 'v2', [name]: 'placeholder' } });
+      assert.equal(result.status, 2);
+      assert.ok(result.stderr.includes(REJECT_MESSAGE), result.stderr);
+      assert.equal(result.stderr.includes('placeholder'), false);
+    }
+  });
+
+  test('an invalid override exits 2 before any request', () => {
+    const result = runSmoke({ name: 'bad', env: {}, overrides: { final_top_k: 0 } });
+    assert.equal(result.status, 2);
+    assert.ok(result.stderr.includes('run-config overrides are invalid'), result.stderr);
+  });
+
+  test('an env overlay cannot be combined with --base-url', () => {
+    const result = runSmoke({ name: 'v2', env: { RAG_PIPELINE: 'v2' } }, ['--base-url', 'http://localhost:9']);
+    assert.equal(result.status, 2);
+    assert.ok(result.stderr.includes('in-process runs only'), result.stderr);
   });
 });

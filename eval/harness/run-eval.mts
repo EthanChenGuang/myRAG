@@ -13,6 +13,7 @@ import { EMBEDDER_ID, EMBEDDER_VERSION, embedderSourceSha256 } from './fixture-e
 import { createFixtureDatabase, FIXTURE_USER_ID, type DeploymentMode, type FixtureMode } from './pglite-supabase.mts';
 import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from './fake-edge.mts';
 import { applyFixtureProcessEnv } from './process-env.mts';
+import { RunConfigError, type RunConfig } from './run-config.mts';
 
 export type EvalTier = 'smoke' | 'nightly' | 'live';
 
@@ -23,6 +24,8 @@ export interface EvalRequestOptions {
   generator_model?: string | null;
   degrade?: 'drop_top_candidate' | null;
   embedding_profile?: string | null;
+  retrieval_overrides?: NonNullable<RagRunRequest['options']>['retrieval_overrides'];
+  retrieval_filters?: NonNullable<RagRunRequest['options']>['retrieval_filters'];
   disabled_stages?: Array<
     'refs' | 'analyze' | 'embed' | 'search' | 'legacy_rank' | 'post_filter' | 'assemble' | 'voice_keyword_fallback' | 'local_rerank'
   >;
@@ -68,6 +71,8 @@ export interface RunEvalOptions {
   ingestFixture?: import('./pglite-supabase.mts').FixtureDatabase;
   /** Reuse a prepared in-process eval session (the harness keeps the edge open). */
   retainInProcess?: InProcessEval;
+  /** Named configuration: an env overlay (in-process only) and eval overrides sent with every request. */
+  runConfig?: RunConfig;
 }
 
 export interface RunEvalResult {
@@ -82,8 +87,10 @@ export interface RunEvalResult {
   manifest: RunManifest;
 }
 
-export function itemRequestOptions(base: EvalRequestOptions, _item: GoldenItem): EvalRequestOptions {
-  return { ...base };
+export function itemRequestOptions(base: EvalRequestOptions, item: GoldenItem): EvalRequestOptions {
+  const options: EvalRequestOptions = { ...base };
+  if (item.retrieval_filters) options.retrieval_filters = item.retrieval_filters;
+  return options;
 }
 
 const ROUTE_PATH = '/api/internal/rag/run';
@@ -279,8 +286,15 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     embeddingProfileId,
     ingestFixture,
     retainInProcess,
+    runConfig,
   } = options;
   const requestOptions: EvalRequestOptions = { ...(options.requestOptions ?? {}) };
+  if (runConfig) {
+    if (baseUrl && Object.keys(runConfig.env).length > 0) {
+      throw new RunConfigError('[Eval Harness] a run-config env overlay applies to in-process runs only; omit --base-url or drop its env');
+    }
+    if (runConfig.overrides) requestOptions.retrieval_overrides = runConfig.overrides;
+  }
 
   let liveApiKey = '';
   if (includeAnswer) {
@@ -352,6 +366,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
           allowedScopes: requestedScope ? [requestedScope] : [],
           embeddingProfileId,
           ingestFixture,
+          ...(runConfig && Object.keys(runConfig.env).length > 0 ? { envOverrides: runConfig.env } : {}),
         });
         inProcess = prepared;
       }
@@ -378,7 +393,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     }
 
     for (const item of items) {
-      const options: EvalRequestOptions = { ...requestOptions };
+      const options = itemRequestOptions(requestOptions, item);
       if (inProcess && deploymentMode === 'multi-tenant' && !options.user_id) {
         options.user_id = inProcess.fixtureUserId;
       }
@@ -443,6 +458,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     user_id: requestOptions.user_id ?? null,
     embedding_profile: embeddingProfile,
     ...(requestOptions.degrade ? { degrade: requestOptions.degrade } : {}),
+    ...(requestOptions.retrieval_overrides ? { retrieval_overrides: requestOptions.retrieval_overrides } : {}),
     ...(requestOptions.disabled_stages?.length ? { disabled_stages: requestOptions.disabled_stages } : {}),
     ...(includeAnswer ? { generator_model: requestOptions.generator_model ?? null } : {}),
   };
@@ -450,6 +466,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     ? null
     : { id: EMBEDDER_ID, version: String(EMBEDDER_VERSION), source_sha256: embedderSourceSha256() };
   const goldenSha256 = sha256File(goldenPath);
+  const runConfigRecord = runConfig ? { name: runConfig.name, env: runConfig.env, overrides: runConfig.overrides } : null;
   const effectiveConfigHash = configHash(firstEffectiveConfig);
   const runConfigHash = crypto
     .createHash('sha256')
@@ -463,6 +480,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
         sql_sha256: manifestInputs.sqlSha256,
         request_options: normalizedOptions,
         deployment_mode: effectiveDeploymentMode,
+        ...(runConfigRecord ? { run_config: runConfigRecord } : {}),
       }),
       'utf8',
     )
@@ -487,6 +505,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     run_config_hash: runConfigHash,
     item_count: items.length,
     edge_errors: edgeErrors,
+    ...(runConfigRecord ? { run_config: runConfigRecord } : {}),
   });
   const runPath = path.join(outDir, 'run.json');
   fs.writeFileSync(runPath, `${JSON.stringify(manifest, null, 2)}\n`);

@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { ingestModeGoldenPaths, mergeGoldenFiles } from './ingest-mode.mts';
 import { runEval, type EvalRequestOptions } from './run-eval.mts';
+import { loadRunConfig, RunConfigError } from './run-config.mts';
 import type { DeploymentMode, FixtureMode } from './pglite-supabase.mts';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -39,6 +40,7 @@ async function main(): Promise<number> {
       'embedding-profile': { type: 'string' },
       baseline: { type: 'string' },
       'include-drafts': { type: 'boolean', default: false },
+      'run-config': { type: 'string' },
       org: { type: 'string' },
       user: { type: 'string' },
     },
@@ -73,6 +75,13 @@ async function main(): Promise<number> {
   const baseUrl = values['base-url'];
   if (baseUrl && embeddingProfileId) {
     throw new Error('--embedding-profile is only supported for in-process fixture runs (omit --base-url)');
+  }
+
+  const runConfigFile = values['run-config']?.trim();
+  if (runConfigFile !== undefined && runConfigFile === '') throw new RunConfigError('[Eval Harness] --run-config must not be empty');
+  const runConfig = runConfigFile ? loadRunConfig(path.resolve(runConfigFile)) : undefined;
+  if (runConfig && baseUrl && Object.keys(runConfig.env).length > 0) {
+    throw new RunConfigError('[Eval Harness] a run-config env overlay applies to in-process runs only; omit --base-url or drop its env');
   }
 
   const requestOptions: EvalRequestOptions = {};
@@ -117,6 +126,7 @@ async function main(): Promise<number> {
     baseUrl,
     includeDrafts: values['include-drafts'],
     embeddingProfileId,
+    ...(runConfig ? { runConfig } : {}),
   });
 
   console.log(`[Eval Harness] wrote ${result.itemCount} trace(s) to ${result.tracesPath} (${result.skippedCount} golden item(s) not approved, skipped)`);
@@ -154,6 +164,11 @@ async function main(): Promise<number> {
 main().then(
   (code) => process.exit(code),
   (error: unknown) => {
+    if (error instanceof RunConfigError) {
+      console.error(error.message);
+      if (error.names.length > 0) console.error(`[Eval Harness] not allowed in run-config env: ${error.names.join(', ')}`);
+      process.exit(2);
+    }
     console.error(`[Eval Harness] FAILED: ${error instanceof Error ? error.message : String(error)}`);
     process.exit(3);
   },
