@@ -13,6 +13,7 @@ const MEMBER = '00000000-0000-4000-8000-0000000081c1';
 const ADMIN = '00000000-0000-4000-8000-0000000081d1';
 const ORG = '00000000-0000-4000-8000-0000000081e1';
 const QUARANTINED = '00000000-0000-4000-8000-0000000d0001';
+const OWN_READY = '00000000-0000-4000-8000-0000000d0004';
 const OTHERS_READY = '00000000-0000-4000-8000-0000000d0002';
 const ORG_QUARANTINED = '00000000-0000-4000-8000-0000000d0003';
 const CHUNK_OF = (doc: string): string => doc.replace('0d000', '0c000');
@@ -59,6 +60,7 @@ async function build(mode: DeploymentMode): Promise<PGlite> {
     await seedDocument(db, mode, ORG_QUARANTINED, 'quarantined', false, OTHER, ORG);
   }
   await seedDocument(db, mode, QUARANTINED, 'quarantined', false, UPLOADER, null);
+  await seedDocument(db, mode, OWN_READY, 'ready', true, UPLOADER, null);
   await seedDocument(db, mode, OTHERS_READY, 'ready', true, OTHER, null);
   return db;
 }
@@ -75,6 +77,7 @@ async function restore(db: PGlite): Promise<void> {
   );
   await db.query("UPDATE document_chunks SET status = 'quarantined', is_current = false WHERE document_id = $1", [QUARANTINED]);
   await db.query("DELETE FROM documents WHERE lineage_id = $1 AND id <> $1", [QUARANTINED]);
+  await db.query("UPDATE document_chunks SET status = 'ready', is_current = true, version = 1, tenant_key = NULL, document_id = $1, chunk_kind = 'text' WHERE id = $2", [OWN_READY, CHUNK_OF(OWN_READY)]);
 }
 
 const QUARANTINED_STATE = { status: 'quarantined', is_current: false, version: 1 };
@@ -104,7 +107,7 @@ for (const mode of ['single-tenant', 'multi-tenant'] as const) {
       { label: 'status', set: "status = 'ready'" },
       { label: 'is_current', set: 'is_current = true' },
       { label: 'status and is_current', set: "status = 'ready', is_current = true" },
-      { label: 'version', set: 'version = version + 1' },
+      { label: 'version', set: 'version = 7' },
       { label: 'lineage_id', set: 'lineage_id = gen_random_uuid()' },
       { label: 'superseded_by', set: 'superseded_by = gen_random_uuid()' },
     ];
@@ -126,32 +129,50 @@ for (const mode of ['single-tenant', 'multi-tenant'] as const) {
       }
     }
 
-    test('the uploader cannot release the chunks of a quarantined document', async () => {
+    test('nobody can release the chunks of a quarantined document through the table', async () => {
       const db = shared;
       try {
-        await attempt(db, 'authenticated', UPLOADER, "UPDATE document_chunks SET status = 'ready', is_current = true");
-        const row = await stateOf(db, 'document_chunks', CHUNK_OF(QUARANTINED));
-        assert.deepEqual({ status: row.status, is_current: row.is_current }, { status: 'quarantined', is_current: false });
-        if (mode === 'single-tenant') {
-          const refused = await attempt(db, 'authenticated', UPLOADER, "UPDATE document_chunks SET status = 'ready'");
-          assert.equal(refused.ok, false);
-          assert.match(refused.message, /ingest state/);
+        const chunk = CHUNK_OF(QUARANTINED);
+        for (const user of [UPLOADER, ...(mode === 'single-tenant' ? [ADMIN] : [])]) {
+          const result = await attempt(db, 'authenticated', user, "UPDATE document_chunks SET status = 'ready', is_current = true");
+          const row = await stateOf(db, 'document_chunks', chunk);
+          assert.deepEqual({ status: row.status, is_current: row.is_current }, { status: 'quarantined', is_current: false }, `user ${user} ok=${result.ok}`);
+          if (user === ADMIN) {
+            assert.equal(result.ok, false, 'a single-tenant admin has a chunk UPDATE policy; the trigger must refuse');
+            assert.match(result.message, /ingest state/);
+          }
         }
       } finally {
         await restore(db);
       }
     });
 
-    test('the uploader cannot change the tenant key or version of a chunk', async () => {
+    test('the uploader cannot change the state, tenant key or document of a chunk of their own ready document', async () => {
       const db = shared;
+      const chunk = CHUNK_OF(OWN_READY);
       try {
-        if (mode === 'single-tenant') {
-          const result = await attempt(db, 'authenticated', UPLOADER, "UPDATE document_chunks SET tenant_key = 'u:00000000-0000-4000-8000-0000000081b1'");
-          assert.equal(result.ok, false);
-          assert.match(result.message, /ingest state/);
+        const changes = [
+          "status = 'quarantined'",
+          'is_current = false',
+          'version = 9',
+          "tenant_key = 'u:00000000-0000-4000-8000-0000000081b1'",
+          `document_id = '${OTHERS_READY}'`,
+          "chunk_kind = 'image'",
+        ];
+        for (const change of changes) {
+          const result = await attempt(db, 'authenticated', UPLOADER, `UPDATE document_chunks SET ${change}`);
+          const row = await db.query<Row>('SELECT status, is_current, version, tenant_key, document_id, chunk_kind FROM document_chunks WHERE id = $1', [chunk]);
+          assert.equal(row.rows[0]?.status, 'ready', change);
+          assert.equal(row.rows[0]?.is_current, true, change);
+          assert.equal(row.rows[0]?.document_id, OWN_READY, change);
+          assert.notEqual(row.rows[0]?.tenant_key, 'u:00000000-0000-4000-8000-0000000081b1', change);
+          assert.notEqual(row.rows[0]?.chunk_kind, 'image', change);
+          assert.notEqual(row.rows[0]?.version, 9, change);
+          if (mode === 'single-tenant') {
+            assert.equal(result.ok, false, `${change} must be refused`);
+            assert.match(result.message, /ingest state/);
+          }
         }
-        const chunk = await db.query<Row>('SELECT tenant_key FROM document_chunks WHERE id = $1', [CHUNK_OF(QUARANTINED)]);
-        assert.notEqual(chunk.rows[0]?.tenant_key, 'u:00000000-0000-4000-8000-0000000081b1');
       } finally {
         await restore(db);
       }
