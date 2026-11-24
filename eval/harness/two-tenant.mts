@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createFixtureDatabase, type FixtureDatabase } from './pglite-supabase.mts';
+import { createFixtureDatabase, runFixtureRelex, type FixtureDatabase } from './pglite-supabase.mts';
 import { embedText } from './fixture-embedder.mts';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -66,10 +66,11 @@ function vectorLiteral(values: number[]): string {
   return `[${values.join(',')}]`;
 }
 
-export async function createTwoTenantDatabase(options: { corpusDir?: string } = {}): Promise<TwoTenantDatabase> {
+export async function createTwoTenantDatabase(options: { corpusDir?: string; relex?: boolean } = {}): Promise<TwoTenantDatabase> {
   const fixture = await createFixtureDatabase({
     deploymentMode: 'multi-tenant',
     corpusDir: options.corpusDir ?? DEFAULT_CORPUS_DIR,
+    ...(options.relex !== undefined ? { relex: options.relex } : {}),
   });
   const { db } = fixture;
   const ids = TWO_TENANT_IDS;
@@ -99,6 +100,9 @@ export async function createTwoTenantDatabase(options: { corpusDir?: string } = 
         'INSERT INTO document_chunks (id, document_id, content, embedding, chunk_index, metadata, organization_id, created_at) VALUES ($1, $2, $3, $4::vector, 0, $5::jsonb, $6, $7)',
         [doc.chunkId, doc.docId, stored, vectorLiteral(embedText(text)), JSON.stringify(doc.metadata), doc.organizationId, CREATED_AT],
       );
+    }
+    if (options.relex !== false) {
+      await runFixtureRelex(db);
     }
   } catch (error) {
     await db.close().catch(() => undefined);
