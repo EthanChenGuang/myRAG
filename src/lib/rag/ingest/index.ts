@@ -1,6 +1,7 @@
 import { loadIngestConfig } from './config';
 import { getIngestDeps } from './deps';
-import { runIngestStages } from './runner';
+import { REGISTERED_STAGES, runIngestStages } from './runner';
+import { createIngestTrace, finishIngestTrace } from './trace';
 import {
   DEFAULT_INGEST_DEADLINE_MS,
   emptyIngestState,
@@ -46,5 +47,8 @@ export async function ingest(input: IngestInput): Promise<IngestResult> {
     parserUsed: null,
     work: { parseText: null, parserVersion: null, chunks: [], chunksWritten: 0 },
   };
-  return runIngestStages(ctx);
+  const trace = createIngestTrace(input.scope, input.trace);
+  const result = await runIngestStages(ctx, REGISTERED_STAGES, { trace });
+  if (trace?.owned) finishIngestTrace(trace, result);
+  return result;
 }

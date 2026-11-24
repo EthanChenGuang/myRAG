@@ -10,6 +10,7 @@ import { parseStage } from './stages/parse';
 import { publishStage } from './stages/publish';
 import { scanInjectionStage } from './stages/scan-injection';
 import { storeOriginalStage } from './stages/store-original';
+import type { IngestSpan, IngestSpanDetail, IngestSpanEnd, IngestTrace } from './trace';
 import {
   IngestStageError,
   type IngestResult,
@@ -163,33 +164,87 @@ export function nextStageAfter(last: StageName | null): StageName | null {
   return INGEST_STAGES[last === null ? 0 : INGEST_STAGES.indexOf(last) + 1] ?? null;
 }
 
+export interface RunIngestOptions {
+  /** Receives one span per stage that starts, named as the stage. */
+  trace?: IngestTrace | null;
+}
+
+const DEDUP_STAGES: ReadonlySet<StageName> = new Set(['file_hash_dedup', 'content_hash_dedup']);
+
+function pagesOf(ctx: StageContext): number | null {
+  let pages = 0;
+  for (const chunk of ctx.work.chunks) pages = Math.max(pages, chunk.page_end ?? 0);
+  return pages > 0 ? pages : null;
+}
+
+function spanDetail(ctx: StageContext, extra: { fallbackReason?: string; outcome?: string }): IngestSpanDetail {
+  const chunkCount = ctx.work.chunksWritten > 0 ? ctx.work.chunksWritten : ctx.work.chunks.length;
+  return {
+    parser_used: ctx.parserUsed,
+    pages: pagesOf(ctx),
+    chunk_count: chunkCount > 0 ? chunkCount : null,
+    doc_type: ctx.identity?.docType ?? null,
+    doc_type_origin: ctx.identity?.docTypeOrigin ?? ctx.state.docTypeOrigin,
+    fallback_reason: extra.fallbackReason ?? null,
+    outcome: extra.outcome ?? null,
+  };
+}
+
 /**
  * Runs the stages in D-02 order, starting after ctx.state.lastCompleted so a resumed run does not repeat
  * finished work. Before each stage the request deadline is checked: a stage that does not fit ends the
  * run as processing with the document resumable. Once the document row exists, every finished stage
  * persists processing_status and the state. A stage that fails, throws or meets an abort marks the
- * version failed; the run ends at the first stage that returns a result.
+ * version failed; the run ends at the first stage that returns a result. Each stage that starts is one
+ * span on the trace.
  */
-export async function runIngestStages(ctx: StageContext, stages: readonly StageSpec[] = REGISTERED_STAGES): Promise<IngestResult> {
+export async function runIngestStages(
+  ctx: StageContext,
+  stages: readonly StageSpec[] = REGISTERED_STAGES,
+  options: RunIngestOptions = {},
+): Promise<IngestResult> {
   void _everyStageListed;
   assertOrder(stages);
   const resumeAfter = ctx.state.lastCompleted === null ? -1 : INGEST_STAGES.indexOf(ctx.state.lastCompleted);
   for (const stage of stages) {
     if (INGEST_STAGES.indexOf(stage.name) <= resumeAfter) continue;
+    const span: IngestSpan | undefined = options.trace?.start(stage.name);
+    const warningsBefore = ctx.warnings.length;
+    const close = (end: Omit<IngestSpanEnd, 'detail'>, extra: { fallbackReason?: string; outcome?: string } = {}): void =>
+      span?.end({ ...end, detail: spanDetail(ctx, { ...extra, fallbackReason: extra.fallbackReason ?? ctx.warnings[warningsBefore] }) });
     try {
       ctx.signal.throwIfAborted();
-      if (ctx.deadline - ctx.deps.now() < stage.minMsNeeded) return await yieldRun(ctx, stage.name, 'deadline');
+      if (ctx.deadline - ctx.deps.now() < stage.minMsNeeded) {
+        const result = await yieldRun(ctx, stage.name, 'deadline');
+        close({ status: 'timeout', reason: 'timeout' }, { fallbackReason: 'deadline', outcome: result.status === 'processing' ? 'yielded' : 'failed' });
+        return result;
+      }
       const outcome = await stage.run(ctx);
       if (outcome.kind === 'done') {
         await recordFinalState(ctx, stage.name, outcome.result);
+        close({ status: 'ok' }, { outcome: outcome.result.status });
         return outcome.result;
       }
-      if (outcome.kind === 'fail') return await failRun(ctx, stage.name, outcome.reason);
-      if (outcome.kind === 'yield') return await yieldRun(ctx, stage.name, outcome.reason);
+      if (outcome.kind === 'fail') {
+        const result = await failRun(ctx, stage.name, outcome.reason);
+        close({ status: 'error', reason: 'failed' }, { fallbackReason: outcome.reason, outcome: 'failed' });
+        return result;
+      }
+      if (outcome.kind === 'yield') {
+        const result = await yieldRun(ctx, stage.name, outcome.reason);
+        close({ status: 'skipped' }, { fallbackReason: outcome.reason, outcome: 'yielded' });
+        return result;
+      }
       ctx.state.lastCompleted = stage.name;
       await persistState(ctx, 'processing');
+      close(outcome.disabled ? { status: 'disabled', reason: 'disabled' } : { status: 'ok' }, {
+        ...(outcome.fallbackReason !== undefined ? { fallbackReason: outcome.fallbackReason } : {}),
+        ...(outcome.outcome !== undefined ? { outcome: outcome.outcome } : DEDUP_STAGES.has(stage.name) ? { outcome: 'unique' } : {}),
+      });
     } catch (error) {
-      return failRun(ctx, stage.name, failureReason(stage.name, error, ctx.signal), error);
+      const reason = failureReason(stage.name, error, ctx.signal);
+      close(ctx.signal.aborted ? { status: 'aborted', reason: 'aborted' } : { status: 'error', reason: 'failed' }, { fallbackReason: reason, outcome: 'failed' });
+      return failRun(ctx, stage.name, reason, error);
     }
   }
   return failRun(ctx, 'publish', 'stage_list_incomplete');
