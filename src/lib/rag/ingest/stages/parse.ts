@@ -1,5 +1,5 @@
 import type { ParseResult } from '@/lib/rag-eval/contracts.generated';
-import { DOCLING_ARTIFACT, PARSE_ARTIFACT, PARSE_CHUNKS_ARTIFACT, isArtifactName, originalName, saveArtifact } from '../artifacts';
+import { DOCLING_ARTIFACT, PARSE_ARTIFACT, PARSE_CHUNKS_ARTIFACT, PICTURES_ARTIFACT, isArtifactName, originalName, saveArtifact } from '../artifacts';
 import { imageContextOf, validImageUrl } from '../image-options';
 import { buildParserChain, parseWithFallback, type ChainOutcome } from '../parsers/chain';
 import type { ParseArtifact, PendingJob } from '../parsers/shared';
@@ -167,6 +167,11 @@ async function applyResult(ctx: StageContext, parsed: Parsed): Promise<void> {
   if (ctx.work.parseChunks) {
     const bytes = new TextEncoder().encode(JSON.stringify(ctx.work.parseChunks));
     await stored(ctx, () => saveArtifact(ctx, PARSE_CHUNKS_ARTIFACT, bytes, 'application/json'));
+  }
+  // Only with the picture switch on, so the stored set of a run with it off is what it was.
+  if (ctx.config.pdfImageChunks && result.parser !== 'text' && result.pictures.length > 0) {
+    const bytes = new TextEncoder().encode(JSON.stringify(result.pictures));
+    await stored(ctx, () => saveArtifact(ctx, PICTURES_ARTIFACT, bytes, 'application/json'));
   }
   await stored(ctx, () => saveArtifact(ctx, PARSE_ARTIFACT, new TextEncoder().encode(ctx.work.parseText ?? ''), 'text/markdown'));
 }

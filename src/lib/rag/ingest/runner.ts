@@ -1,5 +1,5 @@
 import { ParseResultSchema } from '@/lib/rag-eval/contracts.generated';
-import { PARSE_ARTIFACT, PARSE_CHUNKS_ARTIFACT, isArtifactName, loadArtifact, originalName, versionPrefix } from './artifacts';
+import { PARSE_ARTIFACT, PARSE_CHUNKS_ARTIFACT, PICTURES_ARTIFACT, isArtifactName, loadArtifact, originalName, versionPrefix } from './artifacts';
 import { ObjectStoreError } from './object-store';
 import { IngestWriterError, createIngestWriter } from './writer';
 import { chunkStage } from './stages/chunk';
@@ -289,6 +289,18 @@ async function loadParseChunks(ctx: StageContext): Promise<ParseResultChunks | n
   }
 }
 
+/** The pictures the parser found, stored next to parse.md when RAG_PDF_IMAGE_CHUNKS was on; null when there are none or they do not validate. */
+async function loadPictures(ctx: StageContext): Promise<StageContext['work']['pictures']> {
+  const stored = await loadArtifact(ctx, PICTURES_ARTIFACT);
+  if (!stored) return null;
+  try {
+    const parsed = ParseResultSchema.shape.pictures.safeParse(JSON.parse(new TextDecoder('utf-8').decode(stored.bytes)));
+    return parsed.success && parsed.data.length > 0 ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Rebuilds what the stages after ctx.state.lastCompleted read from memory, from the stored artifacts and no upload.
  * Parse output comes from parse.md; without it the stored original is parsed again, and without that the run fails
@@ -323,6 +335,7 @@ export async function rehydrateFromStore(ctx: StageContext): Promise<RehydrateRe
       ctx.work.parseText = new TextDecoder('utf-8').decode(parsed.bytes);
       ctx.work.parserVersion = ctx.work.parserVersion ?? 'stored';
       ctx.work.parseChunks = await loadParseChunks(ctx);
+      if (ctx.config.pdfImageChunks) ctx.work.pictures = await loadPictures(ctx);
     } else {
       if (!(await loadOriginal(originalFile))) return { failed: 'original_unavailable' };
       const failure = await rerun(parseStage, ctx);
@@ -339,8 +352,9 @@ export async function rehydrateFromStore(ctx: StageContext): Promise<RehydrateRe
     if (failure !== null) return { failed: failure };
   }
 
-  // The caption of a picture document is its only chunk; it is read back from the stored caption, so no model is called again.
-  if (ctx.work.captionOnly && reached(last, 'images')) {
+  // The caption of a picture document is its only chunk, and the pictures of a PDF add chunks: both are read back from the stored
+  // captions (and the public keys follow from the lineage), so no model is called again.
+  if ((ctx.work.captionOnly || ctx.config.pdfImageChunks) && reached(last, 'images')) {
     const outcome = await imagesStage.run(ctx);
     if (outcome.kind === 'yield') return false;
     if (outcome.kind !== 'next') return { failed: outcome.kind === 'fail' ? outcome.reason : 'rehydrate_failed' };

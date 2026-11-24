@@ -516,7 +516,7 @@ describe('registered stages and their switched-off behaviour', () => {
     expect(callsOf(calls, 'rag_mark_document_failed').map((call) => call.args.p_reason)).toEqual(['injection_scan_unavailable']);
   });
 
-  test('images passes with RAG_PDF_IMAGE_CHUNKS false and warns without failing when it is true but no captioner exists yet', async () => {
+  test('images passes with RAG_PDF_IMAGE_CHUNKS false, and with it true a document with no pictures passes without a warning', async () => {
     const off = fakeIngestDb();
     installIngestDeps({ db: off.db, env: { RAG_PDF_IMAGE_CHUNKS: 'false' } });
     const disabled = await upload();
@@ -528,7 +528,7 @@ describe('registered stages and their switched-off behaviour', () => {
     expect(disabled.status).toBe('ready');
     expect(disabled.warnings).not.toContain('image_chunks_unavailable');
     expect(enabled.status).toBe('ready');
-    expect(enabled.warnings).toContain('image_chunks_unavailable');
+    expect(enabled.warnings).not.toContain('image_chunks_unavailable');
   });
 });
 

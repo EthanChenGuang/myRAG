@@ -118,9 +118,13 @@ export function filterCandidates<C extends AssemblyCandidate>(input: AssembleInp
             external_url: docMetadata.metadata?.external_url,
           });
           docKeptBy.set(chunk.document_id, keptBy);
-        } else if (!existingDoc.similarity || chunk.similarity > existingDoc.similarity) {
-          existingDoc.similarity = chunk.similarity;
-          existingDoc.matched_chunk = chunk.content.substring(0, 150) + '...';
+        } else {
+          // A document with text and picture chunks (a PDF with figures) is one used document: the first picture chunk kept, in rank order, gives it the image.
+          if (!existingDoc.image_url && metadata?.image_url) existingDoc.image_url = metadata.image_url;
+          if (!existingDoc.similarity || chunk.similarity > existingDoc.similarity) {
+            existingDoc.similarity = chunk.similarity;
+            existingDoc.matched_chunk = chunk.content.substring(0, 150) + '...';
+          }
         }
       }
     }

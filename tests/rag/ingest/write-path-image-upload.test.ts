@@ -286,7 +286,7 @@ describe('an image upload through ingest()', () => {
     expect(callsOf(calls, 'rag_write_chunks')).toHaveLength(0);
   });
 
-  it('leaves documents that are not images on the switch behaviour of the images stage', async () => {
+  it('leaves documents that are not images with no pictures untouched when the picture switch is on', async () => {
     const seen = captionWith(recorded.captions.chart);
     const { db } = fakeIngestDb();
     installIngestDeps({ db, env: { RAG_PDF_IMAGE_CHUNKS: 'true' } });
@@ -302,7 +302,7 @@ describe('an image upload through ingest()', () => {
     });
 
     expect(result.status).toBe('ready');
-    expect(result.warnings).toContain('image_chunks_unavailable');
+    expect(result.warnings).not.toContain('image_chunks_unavailable');
     expect(seen).toHaveLength(0);
   });
 });
