@@ -23,9 +23,12 @@ export interface ReviewContent {
   model?: string;
 }
 
+/** The retrieval profiles plus `ingest`, the profile of an ingestion trace. */
+export type TraceProfile = Profile | 'ingest';
+
 export interface TraceCollector {
   readonly traceId: string;
-  readonly profile: Profile;
+  readonly profile: TraceProfile;
   readonly tenantKey: string;
   readonly startedAt: number;
   now(): number;
@@ -38,7 +41,7 @@ export interface TraceCollector {
 }
 
 export interface TraceCollectorOptions {
-  profile: Profile;
+  profile: TraceProfile;
   tenantKey: string;
 }
 
