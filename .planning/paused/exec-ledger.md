@@ -69,7 +69,8 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | 03.1-10 | [bc-662f8704](bc-662f8704-0693-5e51-9771-f8aaaf281623) **merged** | exec/03.1-10 — 7 PGlite tests |
 | 04-08 | [bc-b8d286f0](bc-b8d286f0-f82f-5d7d-b33e-a945526384a1) **merged** | exec/04-08 — vitest 56 pass on trunk |
 | 03.1-11 | [bc-b18bbe3f](bc-b18bbe3f-b7f9-57e3-8d19-200f419a1891) RUNNING | exec/03.1-11 |
-| 04-09 | [bc-d7fa6093](bc-d7fa6093-307f-5298-8249-06913c219f67) RUNNING | exec/04-09 |
+| 04-09 | [bc-d7fa6093](bc-d7fa6093-307f-5298-8249-06913c219f67) **merged** | exec/04-09 — vitest 12 pass |
+| 04-10 | [bc-ea9f7b6f](bc-ea9f7b6f-dc74-5d17-9573-573c0d79ab57) RUNNING | exec/04-10 |
 
 ## Remaining plan inventory (file-overlap basis)
 
@@ -91,7 +92,7 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | 03.1-03 | [bc-c5cb9fe1](bc-c5cb9fe1-91ef-5ec1-80f3-480362bbb755) RUNNING | `wt/03.1-03` | **Blocks 04-02** until merged |
 | **Refill (03.1-10 merge)** | — | — | **4/4** — 04-07, 03.1-03, 03.1-11, 04-09 still RUNNING; no spawn |
 | 03.1-11 | [bc-b18bbe3f](bc-b18bbe3f-b7f9-57e3-8d19-200f419a1891) RUNNING | `wt/03.1-11` | Refill after 03.1-09 merge |
-| 04-09 | [bc-d7fa6093](bc-d7fa6093-307f-5298-8249-06913c219f67) RUNNING | `wt/04-09` | Refill after 04-08 merge |
+| 04-10 | [bc-ea9f7b6f](bc-ea9f7b6f-dc74-5d17-9573-573c0d79ab57) RUNNING | `wt/04-10` | Refill after 04-09 merge |
 
 **Queued after 03.1-03 merge:** `04-02` (same config five-location set). **03-48 live Supabase:** Guang/box agent only — orchestrator **must not** run migrations against production.
 
