@@ -181,3 +181,40 @@ def to_parse_result(
         artifacts=[DOCLING_JSON, *picture_artifacts],
         text_layer_page_share=text_layer_page_share,
     )
+
+
+DEFAULT_DOCUMENT_TIMEOUT_SECONDS = 120.0
+PP_OCR_V6_CODES: frozenset[str] = frozenset()
+
+
+def to_ppocr_code(languages: list[str]) -> list[str]:
+    return []
+
+
+def build_pipeline_options(request, *, artifacts_path=None, document_timeout_seconds=DEFAULT_DOCUMENT_TIMEOUT_SECONDS):
+    from docling.datamodel.pipeline_options import PdfPipelineOptions
+
+    return PdfPipelineOptions()
+
+
+def build_document_converter(options):
+    from docling.document_converter import DocumentConverter
+
+    return DocumentConverter()
+
+
+def sniff_input_format(head: bytes) -> str:
+    return "pdf"
+
+
+class DoclingConverter:
+    def __init__(self, settings=None, document_timeout_seconds=DEFAULT_DOCUMENT_TIMEOUT_SECONDS, converter_factory=None):
+        self._settings = settings
+
+    def pipeline_options(self, request):
+        return build_pipeline_options(request)
+
+    def convert(self, input_path: Path, request: ParseJobRequest, out_dir: Path) -> ParseResult:
+        return ParseResult(
+            markdown="", chunks=[], pictures=[], page_count=0, language=None, parser="docling", parser_version="stub"
+        )

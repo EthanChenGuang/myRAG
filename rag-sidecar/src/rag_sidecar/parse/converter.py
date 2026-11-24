@@ -22,6 +22,11 @@ class PageCapExceeded(ConversionError):
         super().__init__("page_cap")
 
 
+class ConfigurationError(ConversionError):
+    def __init__(self) -> None:
+        super().__init__("configuration_error")
+
+
 class Converter(Protocol):
     """Turns one uploaded file into a ParseResult, writing every artifact it lists into out_dir.
 
