@@ -1,0 +1,13 @@
+{
+  "generator": {
+    "pillow": "13.0.0",
+    "render_dpi": 200,
+    "reportlab": "5.1.0"
+  },
+  "scan_font": {
+    "family": "WenQuanYi Zen Hei",
+    "index": 0,
+    "sha256": "79c18ebe7b811951e8311bad7103ebeae8c337ed9988ea69e8a78a66cfe029b9",
+    "style": "Regular"
+  }
+}

@@ -43,6 +43,10 @@ def _load(name: str):
 
 specs = _load("specs")
 generate = _load("generate_pdfs")
+requires_reportlab = pytest.mark.skipif(
+    importlib.util.find_spec("reportlab") is None or importlib.util.find_spec("PIL") is None,
+    reason="notice: the eval fixtures extra (reportlab, Pillow) is not installed, generator tests skipped",
+)
 
 
 def _sha256(data: bytes) -> str:
@@ -123,6 +127,7 @@ def test_the_generator_runs_reportlab_in_invariant_mode():
     assert "invariant" in source
 
 
+@requires_reportlab
 def test_digital_pdfs_are_written_for_every_digital_fixture(tmp_path):
     written = generate.generate(tmp_path / "pdf", tmp_path / "text", cjk_font=None)
     assert set(written) == DIGITAL_IDS
@@ -132,6 +137,7 @@ def test_digital_pdfs_are_written_for_every_digital_fixture(tmp_path):
         assert _text_operator_count(data) > 0, spec_id
 
 
+@requires_reportlab
 def test_regenerating_the_digital_pdfs_gives_identical_bytes(tmp_path):
     first = generate.generate(tmp_path / "a" / "pdf", tmp_path / "a" / "text", cjk_font=None)
     second = generate.generate(tmp_path / "b" / "pdf", tmp_path / "b" / "text", cjk_font=None)
@@ -142,6 +148,7 @@ def test_regenerating_the_digital_pdfs_gives_identical_bytes(tmp_path):
         assert _sha256(left) == _sha256(right), spec_id
 
 
+@requires_reportlab
 def test_committed_digital_pdfs_equal_a_fresh_build(tmp_path):
     fresh = generate.generate(tmp_path / "pdf", tmp_path / "text", cjk_font=None)
     assert set(fresh) == DIGITAL_IDS
@@ -165,6 +172,7 @@ def test_committed_scans_are_image_only():
         assert _text_operator_count(data) == 0, spec_id
 
 
+@requires_reportlab
 def test_scans_regenerate_byte_for_byte_when_the_recorded_font_is_present(tmp_path):
     font = _recorded_font()
     if font is None:
@@ -197,6 +205,7 @@ def test_contract_and_injection_fixtures_are_also_written_as_markdown():
         assert _read(TEXT_DIR / f"{spec_id}.md").decode("utf-8") == expected
 
 
+@requires_reportlab
 def test_the_generator_writes_the_markdown_next_to_the_pdfs(tmp_path):
     generate.generate(tmp_path / "pdf", tmp_path / "text", cjk_font=None)
     assert {path.stem for path in (tmp_path / "text").glob("*.md")} == TEXT_IDS
