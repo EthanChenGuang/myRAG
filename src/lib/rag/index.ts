@@ -1,5 +1,11 @@
 export { runRetrieval, runStage, deriveStatus, StageError } from './pipeline';
 export type { StageSpec, StageOutcome } from './pipeline';
+export { parseRetrievalFilters } from './query/filters';
+export type { RetrievalFilterInput } from './backend/types';
+export { LEXICAL_VERSION } from './lexical/chunk-text';
+export { RERANK_TEXT_VERSION } from './rerank/types';
+export { countTokens } from './ingest/text/tokens';
+export { isV2Pipeline } from './v2/switch';
 export { loadRagConfig, CORE_STAGES, OPTIONAL_STAGES, PROFILE_STAGE_DEFAULTS } from './config';
 export type { RagConfig, StageName } from './config';
 export { createTraceCollector } from './trace/collector';

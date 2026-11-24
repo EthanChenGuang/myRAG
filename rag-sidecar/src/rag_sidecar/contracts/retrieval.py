@@ -80,6 +80,7 @@ class RetrievalOverrides(_Contract):
     final_top_k: int | None = Field(default=None, ge=1, le=100)
     rrf_k: int | None = Field(default=None, ge=1)
     leg_weights: RetrievalLegWeights | None = None
+    rerank_model: str | None = Field(default=None, min_length=1)
 
 
 class DateRangeFilter(_Contract):

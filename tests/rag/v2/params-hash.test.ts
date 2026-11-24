@@ -85,7 +85,7 @@ describe('effectiveRetrievalParams', () => {
 
   it('applies retrieval_overrides only for eval', () => {
     const config = baseConfig();
-    const overrides: RetrievalOverrides = { final_top_k: 5, candidate_pool_size: null, rerank_input_cap: null, rrf_k: null, leg_weights: null };
+    const overrides: RetrievalOverrides = { final_top_k: 5, candidate_pool_size: null, rerank_input_cap: null, rrf_k: null, leg_weights: null, rerank_model: null };
     expect(effectiveRetrievalParams('eval', config, overrides).final_top_k).toBe(5);
     expect(effectiveRetrievalParams('chat', config, overrides).final_top_k).toBe(COMMITTED.final_top_k);
     expect(effectiveRetrievalParams('embed', config, overrides).final_top_k).toBe(COMMITTED.final_top_k);
@@ -100,6 +100,7 @@ describe('effectiveRetrievalParams', () => {
       final_top_k: null,
       rrf_k: null,
       leg_weights: null,
+      rerank_model: null,
     };
     expect(effectiveRetrievalParams('eval', config, overrides).rerank_input_cap).toBe(COMMITTED.rerank_input_cap);
     const warnSpy = console.warn as ReturnType<typeof vi.spyOn>;

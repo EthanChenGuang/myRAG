@@ -9,10 +9,13 @@ import {
   createEnhancedRAGPrompt,
   createTraceCollector,
   finishTrace,
+  isV2Pipeline,
   knowledgeBaseUnavailableMessage,
+  parseRetrievalFilters,
   resolveEmbedScope,
   runRetrieval,
   scopeKey,
+  type RetrievalFilterInput,
   type RetrievalResult,
   type TraceCollector,
 } from '@/lib/rag';
@@ -177,6 +180,19 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     console.log('EMBED API: Request body:', { messagesCount: body?.messages?.length, model: body?.model });
 
+    // Only the v2 pipeline reads this field; under legacy the body is handled exactly as before
+    let retrievalFilters: RetrievalFilterInput | undefined;
+    if (isV2Pipeline()) {
+      const filtersParsed = parseRetrievalFilters(body?.retrievalFilters);
+      if (!filtersParsed.ok) {
+        return NextResponse.json(
+          { success: false, error: 'Invalid request data', details: filtersParsed.details },
+          { status: 400, headers: CORS_HEADERS }
+        );
+      }
+      retrievalFilters = filtersParsed.filters;
+    }
+
     const embedScope = await resolveEmbedScope({
       rawBody: body,
       configuredTenant: env.RAG_EMBED_TENANT,
@@ -216,6 +232,7 @@ export async function POST(request: NextRequest) {
         },
         signal: request.signal,
         trace: collector,
+        ...(retrievalFilters ? { retrievalFilters } : {}),
       });
       collector.setReviewContent({ query: queryText, context: result.context, model });
       pendingTrace = { collector, result };

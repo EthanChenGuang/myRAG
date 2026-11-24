@@ -1,0 +1,7 @@
+{
+  "name": "v2-all-off",
+  "env": {
+    "RAG_PIPELINE": "v2"
+  },
+  "overrides": null
+}

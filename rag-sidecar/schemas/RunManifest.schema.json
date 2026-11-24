@@ -415,6 +415,19 @@
           "default": null,
           "title": "Rerank Input Cap"
         },
+        "rerank_model": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rerank Model"
+        },
         "rrf_k": {
           "anyOf": [
             {
@@ -430,6 +443,39 @@
         }
       },
       "title": "RetrievalOverrides",
+      "type": "object"
+    },
+    "RunConfigRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "env": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Env",
+          "type": "object"
+        },
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "overrides": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RetrievalOverrides"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "RunConfigRecord",
       "type": "object"
     },
     "RunEmbedder": {
@@ -674,6 +720,17 @@
     },
     "request_options": {
       "$ref": "#/$defs/RagRunOptions"
+    },
+    "run_config": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RunConfigRecord"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "run_config_hash": {
       "title": "Run Config Hash",
