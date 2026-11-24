@@ -66,8 +66,10 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | 04-07 | [bc-b39f21bf](bc-b39f21bf-71db-54ba-81d3-327871eb3a63) RUNNING | exec/04-07 |
 | 03.1-03 | [bc-c5cb9fe1](bc-c5cb9fe1-91ef-5ec1-80f3-480362bbb755) RUNNING | exec/03.1-03 |
 | 03.1-09 | [bc-2d791368](bc-2d791368-dff2-51b6-b84c-3678f8e3ed4c) **merged** | exec/03.1-09 — 32 PGlite tests |
-| 03.1-10 | [bc-662f8704](bc-662f8704-0693-5e51-9771-f8aaaf281623) RUNNING | exec/03.1-10 |
+| 03.1-10 | [bc-662f8704](bc-662f8704-0693-5e51-9771-f8aaaf281623) **merged** | exec/03.1-10 — 7 PGlite tests |
 | 04-08 | [bc-b8d286f0](bc-b8d286f0-f82f-5d7d-b33e-a945526384a1) **merged** | exec/04-08 — vitest 56 pass on trunk |
+| 03.1-11 | [bc-b18bbe3f](bc-b18bbe3f-b7f9-57e3-8d19-200f419a1891) RUNNING | exec/03.1-11 |
+| 04-09 | [bc-d7fa6093](bc-d7fa6093-307f-5298-8249-06913c219f67) RUNNING | exec/04-09 |
 
 ## Remaining plan inventory (file-overlap basis)
 
@@ -87,9 +89,9 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 |------|------|----------|-------|
 | 04-07 | [bc-b39f21bf](bc-b39f21bf-71db-54ba-81d3-327871eb3a63) RUNNING | `wt/04-07` | PGlite wave-1 tail; blocks 04-02 only via serialization table |
 | 03.1-03 | [bc-c5cb9fe1](bc-c5cb9fe1-91ef-5ec1-80f3-480362bbb755) RUNNING | `wt/03.1-03` | **Blocks 04-02** until merged |
-| 03.1-10 | [bc-662f8704](bc-662f8704-0693-5e51-9771-f8aaaf281623) RUNNING | `wt/03.1-10` | Wave 2 |
-| 03.1-11 | SPAWN | `wt/03.1-11` | Refill after 03.1-09 merge |
-| 04-09 | SPAWN | `wt/04-09` | Refill after 04-08 merge |
+| **Refill (03.1-10 merge)** | — | — | **4/4** — 04-07, 03.1-03, 03.1-11, 04-09 still RUNNING; no spawn |
+| 03.1-11 | [bc-b18bbe3f](bc-b18bbe3f-b7f9-57e3-8d19-200f419a1891) RUNNING | `wt/03.1-11` | Refill after 03.1-09 merge |
+| 04-09 | [bc-d7fa6093](bc-d7fa6093-307f-5298-8249-06913c219f67) RUNNING | `wt/04-09` | Refill after 04-08 merge |
 
 **Queued after 03.1-03 merge:** `04-02` (same config five-location set). **03-48 live Supabase:** Guang/box agent only — orchestrator **must not** run migrations against production.
 
@@ -119,4 +121,4 @@ Guang approval: **批准安装** → `approved` (2026-11-24 Europe/Rome). Orches
 1. Read **Active wave** and **Serialized** tables.
 2. If plan already has `running`/`merged` executor → no second executor.
 3. Create `wt/<plan>` + `exec/<plan>` if missing; base = `origin/claude/ecstatic-hamilton-86gtwv`.
-4. Update registry row before `Task`; set `merged` after merge to trunk.
+4. Update registry row before `Task`; set `merged` after merge to trunk; **same run** refill to 4 executors (see §2 merge refill in `orchestration.mdc`).
