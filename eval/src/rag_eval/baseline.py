@@ -158,6 +158,7 @@ def _record(args: argparse.Namespace) -> int:
         for flag, value in (
             ("--golden", args.golden),
             ("--corpus", args.corpus),
+            ("--fixture-mode", args.fixture_mode),
             ("--base-url", args.base_url),
             ("--org", args.org),
             ("--user", args.user),
@@ -204,6 +205,7 @@ def main(argv: list[str] | None = None) -> int:
     record.add_argument("--out", required=True, type=Path)
     record.add_argument("--golden")
     record.add_argument("--corpus")
+    record.add_argument("--fixture-mode", choices=("prechunked", "ingest"), help="how the harness builds the fixture database (default: prechunked)")
     record.add_argument("--base-url")
     record.add_argument("--allow-spread", action="store_true")
     record.add_argument("--org", help="organization UUID to scope the run to (multi-tenant)")

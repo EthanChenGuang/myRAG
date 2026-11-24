@@ -2,11 +2,16 @@ import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
+import { ingestModeGoldenPaths, mergeGoldenFiles } from './ingest-mode.mts';
 import { runEval, type EvalRequestOptions } from './run-eval.mts';
-import type { DeploymentMode } from './pglite-supabase.mts';
+import type { DeploymentMode, FixtureMode } from './pglite-supabase.mts';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const DEFAULT_BASELINE = path.join(REPO_ROOT, 'eval/baselines/fixture-baseline.json');
+const DEFAULT_BASELINES: Record<FixtureMode, string> = {
+  prechunked: path.join(REPO_ROOT, 'eval/baselines/fixture-baseline.json'),
+  ingest: path.join(REPO_ROOT, 'eval/baselines/fixture-ingest-baseline.json'),
+};
+const DEFAULT_GOLDEN = 'eval/fixtures/golden.jsonl';
 const NOISE_PATH = path.join(REPO_ROOT, 'eval/config/noise.json');
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -22,8 +27,9 @@ function runPython(module: string, args: string[]): number {
 async function main(): Promise<number> {
   const { values } = parseArgs({
     options: {
-      golden: { type: 'string', default: 'eval/fixtures/golden.jsonl' },
+      golden: { type: 'string' },
       corpus: { type: 'string', default: 'eval/fixtures/corpus' },
+      'fixture-mode': { type: 'string', default: 'prechunked' },
       out: { type: 'string', default: 'eval/out/smoke' },
       'deployment-mode': { type: 'string', default: 'single-tenant' },
       'max-results': { type: 'string' },
@@ -41,6 +47,14 @@ async function main(): Promise<number> {
   const deploymentMode = values['deployment-mode'];
   if (deploymentMode !== 'single-tenant' && deploymentMode !== 'multi-tenant') {
     throw new Error(`--deployment-mode must be single-tenant or multi-tenant, got ${String(deploymentMode)}`);
+  }
+
+  const fixtureMode = values['fixture-mode'];
+  if (fixtureMode !== 'prechunked' && fixtureMode !== 'ingest') {
+    throw new Error(`--fixture-mode must be prechunked or ingest, got ${String(fixtureMode)}`);
+  }
+  if (fixtureMode === 'ingest' && values['base-url']) {
+    throw new Error('--fixture-mode ingest builds the fixture database itself and cannot be combined with --base-url');
   }
 
   let maxResults: number | undefined;
@@ -70,10 +84,13 @@ async function main(): Promise<number> {
     console.error('[Eval Harness] a --base-url run needs --baseline <live baseline> or --no-gate');
     return 2;
   }
-  const baselinePath = path.resolve(values.baseline ?? DEFAULT_BASELINE);
+  const baselinePath = path.resolve(values.baseline ?? DEFAULT_BASELINES[fixtureMode]);
 
-  const goldenPath = path.resolve(values.golden as string);
   const outDir = path.resolve(values.out as string);
+  // Ingest mode scores the golden files it names itself unless --golden says otherwise, so its ingest-only items need no change here.
+  const defaultGolden = fixtureMode === 'ingest' ? ingestModeGoldenPaths() : [DEFAULT_GOLDEN];
+  const goldenFiles = values.golden !== undefined ? [path.resolve(values.golden)] : defaultGolden.map((file) => path.resolve(REPO_ROOT, file));
+  const goldenPath = mergeGoldenFiles(goldenFiles, path.join(outDir, 'golden.merged.jsonl'));
   if (runPython('rag_sidecar.contracts.validate', ['--model', 'GoldenItem', '--jsonl', goldenPath]) !== 0) {
     console.error('[Eval Harness] golden file failed Pydantic validation; nothing was run');
     return 2;
@@ -83,6 +100,7 @@ async function main(): Promise<number> {
     corpusDir: path.resolve(values.corpus as string),
     outDir,
     deploymentMode: deploymentMode as DeploymentMode,
+    fixtureMode,
     requestOptions,
     tier: baseUrl ? 'live' : 'smoke',
     baseUrl,

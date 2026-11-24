@@ -161,6 +161,46 @@ def test_cli_forwards_org_and_user_to_every_run(tmp_path, monkeypatch):
         assert command[command.index("--user") + 1] == user
 
 
+def _record_commands(tmp_path, monkeypatch, extra_args: list[str]) -> list[list[str]]:
+    commands: list[list[str]] = []
+
+    class _Done:
+        returncode = 0
+        stdout = "deadbeef\n"
+
+    def fake_run(command, **_kwargs):
+        if command[0] == "git":
+            return _Done()
+        commands.append(command)
+        out = baseline_module.resolve_cli_path(command[command.index("--out") + 1])
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "report.json").write_text(_report(f"run-{len(commands)}").model_dump_json(), encoding="utf-8")
+        return _Done()
+
+    monkeypatch.setattr(baseline_module.subprocess, "run", fake_run)
+    assert main(["record", "--runs", "3", *extra_args, "--out", str(tmp_path / "b.json")]) == 0
+    return commands
+
+
+def test_cli_forwards_the_fixture_mode_to_every_run(tmp_path, monkeypatch):
+    commands = _record_commands(tmp_path, monkeypatch, ["--fixture-mode", "ingest"])
+    assert len(commands) == 3
+    for command in commands:
+        assert command[command.index("--fixture-mode") + 1] == "ingest"
+
+
+def test_cli_without_a_fixture_mode_leaves_the_harness_default(tmp_path, monkeypatch):
+    commands = _record_commands(tmp_path, monkeypatch, [])
+    assert len(commands) == 3
+    assert all("--fixture-mode" not in command for command in commands)
+
+
+def test_cli_rejects_an_unknown_fixture_mode(tmp_path):
+    with pytest.raises(SystemExit) as excinfo:
+        main(["record", "--runs", "3", "--fixture-mode", "nope", "--out", str(tmp_path / "b.json")])
+    assert excinfo.value.code == 2
+
+
 def _item_dicts(rank: int | None = 2) -> list[dict]:
     base = {"language": "en", "category": "general", "refused": False, "provenance": "synthetic_fixture"}
     return [
