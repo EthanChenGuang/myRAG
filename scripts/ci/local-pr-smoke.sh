@@ -3,6 +3,8 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
+GATE_LOG_DIR="${GATE_LOG_DIR:-/tmp}"
+SUMMARY_LOG="${GATE_SUMMARY_LOG:-}"
 export DEEPEVAL_TELEMETRY_OPT_OUT=1
 export DEEPEVAL_UPDATE_WARNING_OPT_IN=0
 export RAGAS_DO_NOT_TRACK=true
@@ -15,7 +17,7 @@ run_job() {
   local name="$1"
   shift
   set +e
-  local log="/tmp/local-gate-${name}.log"
+  local log="${GATE_LOG_DIR}/local-gate-${name}.log"
   if "$@" >"$log" 2>&1; then
     STATUS[$name]=PASS
     DETAIL[$name]="ok"
@@ -69,4 +71,15 @@ for name in ts-vitest ts-root-mts ts-rag-db ts-config ts-boundary ts-config-self
   if [[ "$st" == FAIL ]]; then fail=$((fail + 1)); fi
 done
 echo "FAIL count: $fail"
+if [[ -n "$SUMMARY_LOG" ]]; then
+  {
+    echo "=== LOCAL GATE SUMMARY ==="
+    printf "%-24s %s  %s\n" "JOB" "STATUS" "DETAIL"
+    for name in ts-vitest ts-root-mts ts-rag-db ts-config ts-boundary ts-config-selftest ts-gen-zod ts-typecheck-new ts-next-typegen ts-tsc ts-workflows sibling-types voice-agent schema-parity python eval-smoke gate-negative-control docker-build; do
+      st="${STATUS[$name]:-SKIP}"
+      printf "%-24s %s  %s\n" "$name" "$st" "${DETAIL[$name]:-}"
+    done
+    echo "FAIL count: $fail"
+  } >"$SUMMARY_LOG"
+fi
 exit "$fail"
