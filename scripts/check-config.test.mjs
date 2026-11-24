@@ -286,3 +286,75 @@ test('fails when a managed LANGFUSE variable is missing from config-ui', () => {
     cleanup(root);
   }
 });
+
+test('fails when a tracked file declares a VOYAGE variable that is not in the manifest', () => {
+  const root = syntheticTree({
+    files: { 'src/lib/env.ts': "VOYAGE_API_KEY: process.env.VOYAGE_API_KEY || '',\n" },
+    manifest: {
+      schemaVersion: 1,
+      vars: [{ name: 'RAG_PLACEHOLDER', status: 'legacy', knownGaps: ['config-server', 'config-ui', 'env-ts', 'init-env'] }],
+    },
+  });
+  try {
+    const { code, out } = run(root);
+    assert.equal(code, 1);
+    assert.match(out, /VOYAGE_API_KEY \[manifest\] used in src\/ or a tracked file but not in the manifest/);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('fails when src reads a DEEPINFRA variable that is not in the manifest', () => {
+  const root = syntheticTree({
+    manifest: {
+      schemaVersion: 1,
+      vars: [{ name: 'RAG_PLACEHOLDER', status: 'legacy', knownGaps: ['config-server', 'config-ui', 'env-ts', 'init-env'] }],
+    },
+  });
+  try {
+    write(root, 'src/lib/probe.ts', 'export const probe = process.env.DEEPINFRA_BASE_URL;\n');
+    const { code, out } = run(root);
+    assert.equal(code, 1);
+    assert.match(out, /DEEPINFRA_BASE_URL \[manifest\] used in src\/ or a tracked file but not in the manifest/);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('reports a managed VOYAGE variable missing from init-env while present in env.ts', () => {
+  const root = syntheticTree({
+    files: {
+      'src/lib/env.ts': 'VOYAGE_API_KEY=\n',
+      'scripts/config-server.js': 'VOYAGE_API_KEY=\n',
+      'scripts/config-ui/index.html': 'VOYAGE_API_KEY=\n',
+    },
+    manifest: {
+      schemaVersion: 1,
+      vars: [{ name: 'VOYAGE_API_KEY', status: 'managed', knownGaps: [] }],
+    },
+  });
+  try {
+    const { code, out } = run(root);
+    assert.equal(code, 1);
+    assert.match(out, /VOYAGE_API_KEY \[init-env\] missing from this location/);
+    assert.doesNotMatch(out, /not in the manifest/);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('does not treat VOYAGER_* or a VOYAGE name without the underscore as a provider variable', () => {
+  const root = syntheticTree({
+    files: { 'scripts/init-env.js': 'VOYAGER_X=1\nVOYAGEX=2\nXVOYAGE_KEY=3\nDEEPINFRAX=4\n' },
+    manifest: {
+      schemaVersion: 1,
+      vars: [{ name: 'RAG_PLACEHOLDER', status: 'legacy', knownGaps: ['config-server', 'config-ui', 'env-ts', 'init-env'] }],
+    },
+  });
+  try {
+    const { code, out } = run(root);
+    assert.equal(code, 0, out);
+  } finally {
+    cleanup(root);
+  }
+});
