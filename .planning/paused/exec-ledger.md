@@ -36,7 +36,7 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 
 | Target | Role | Subagent | Status |
 |--------|------|----------|--------|
-| **03-46** merge on trunk | gsd-verifier + gates | [bc-834d683b](bc-834d683b-cd64-560c-936d-eba3fe025afc) **RUNNING** | Opus/GPT quota failed; Composer verifier |
+| **03-46** merge on trunk | gsd-verifier + gates | [bc-834d683b](bc-834d683b-cd64-560c-936d-eba3fe025afc) **done** (`human_needed` 4/5) | `03-46-VERIFICATION.md`; e2e harness = Guang/manual |
 | **03-43..03-45** | code-review already done for 03-43 | bc-061a508f IDLE | optional |
 
 ## Plan registry (executor slots)
