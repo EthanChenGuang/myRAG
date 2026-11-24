@@ -21,6 +21,7 @@ draft = [
 online = [
     "httpx==0.28.1",
 ]
+fixtures = ["reportlab==5.1.0"]
 
 [dependency-groups]
 dev = [
