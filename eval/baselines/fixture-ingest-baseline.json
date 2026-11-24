@@ -1,5 +1,5 @@
 {
-  "corpus_sha256": "72413f8ed4743c424def3e81eae2a7ee69e20b106d2bcd1437f8aa857c1c4dd5",
+  "corpus_sha256": "d7b8b8d310bd41c89858cbbbb8a3057103f33a2229b9344115a5f19caf126f90",
   "deployment_mode": "single-tenant",
   "embedder_id": "fixture-ngram",
   "embedder_source_sha256": "569156a98ef50469ce7ada4e6ee3c1c22182035c7ce6aa46b8d0bc5b200fc7ad",
@@ -3419,31 +3419,34 @@
   "request_options": {
     "degrade": null,
     "disabled_stages": null,
+    "embedding_profile": null,
     "generator_model": null,
     "max_results": null,
     "organization_id": null,
+    "retrieval_filters": null,
+    "retrieval_overrides": null,
     "stage_timeouts_ms": null,
     "user_id": null
   },
-  "run_config_hash": "d641c6eb88469c8bcb87031aed81a7543ec0dfeb0745083c5b1c2c44cbeec1e7",
+  "run_config_hash": "a9898a9c6afc5e13549c706485bca88499fa20178df2238f4eda3010868c21f1",
   "runs": [
     {
-      "created_at": "2026-11-24T10:42:07Z",
-      "git_sha": "06336248d69470555a8cb9db5e5cfe625b58e22e",
-      "run_config_hash": "d641c6eb88469c8bcb87031aed81a7543ec0dfeb0745083c5b1c2c44cbeec1e7",
-      "run_id": "a816f44a-3ecc-434d-8dd8-176e2fa63780"
+      "created_at": "2026-11-24T15:34:23Z",
+      "git_sha": "ba4f934114ff70bca849febea5853b12b357f6fd",
+      "run_config_hash": "a9898a9c6afc5e13549c706485bca88499fa20178df2238f4eda3010868c21f1",
+      "run_id": "a05f6a73-af9f-4deb-9ede-82ec847009af"
     },
     {
-      "created_at": "2026-11-24T10:42:15Z",
-      "git_sha": "06336248d69470555a8cb9db5e5cfe625b58e22e",
-      "run_config_hash": "d641c6eb88469c8bcb87031aed81a7543ec0dfeb0745083c5b1c2c44cbeec1e7",
-      "run_id": "d650cc71-aea2-4010-8a12-447ab312037d"
+      "created_at": "2026-11-24T15:34:30Z",
+      "git_sha": "ba4f934114ff70bca849febea5853b12b357f6fd",
+      "run_config_hash": "a9898a9c6afc5e13549c706485bca88499fa20178df2238f4eda3010868c21f1",
+      "run_id": "b8609279-a990-4d11-82cd-553bdcbd10d9"
     },
     {
-      "created_at": "2026-11-24T10:42:22Z",
-      "git_sha": "06336248d69470555a8cb9db5e5cfe625b58e22e",
-      "run_config_hash": "d641c6eb88469c8bcb87031aed81a7543ec0dfeb0745083c5b1c2c44cbeec1e7",
-      "run_id": "daa68856-1ecf-460b-8667-85050c027f47"
+      "created_at": "2026-11-24T15:34:37Z",
+      "git_sha": "ba4f934114ff70bca849febea5853b12b357f6fd",
+      "run_config_hash": "a9898a9c6afc5e13549c706485bca88499fa20178df2238f4eda3010868c21f1",
+      "run_id": "c3896516-1559-48bb-93ea-0065acdd2334"
     }
   ],
   "schema_version": 1,

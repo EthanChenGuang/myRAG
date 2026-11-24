@@ -40,6 +40,7 @@ interface DumpDocument {
   relpath: string;
   filename: string;
   language: string;
+  doc_type: string;
   chunks: DumpChunk[];
 }
 
@@ -80,6 +81,7 @@ describe('fixture corpus loaders', () => {
       relpath: doc.relpath,
       filename: doc.filename,
       language: doc.language,
+      doc_type: doc.docType,
       chunks: doc.chunks.map((chunk) => ({ index: chunk.index, section: chunk.section, text: chunk.text, stored: chunk.stored })),
     }));
     expect(fromTs).toEqual(python);
