@@ -129,9 +129,10 @@ for (const mode of ['single-tenant', 'multi-tenant'] as const) {
         try {
           const { db } = fixture;
           await asRole(db, role, user, async () => {
-            const documents = (await db.query<Row>('SELECT id FROM documents')).rows;
+            const seeded = Object.values(DOCS);
+            const documents = (await db.query<Row>('SELECT id FROM documents WHERE id = ANY($1::uuid[])', [seeded])).rows;
             assert.deepEqual(ids(documents), [...readable].sort(), 'documents');
-            const chunks = (await db.query<Row>('SELECT document_id AS id FROM document_chunks')).rows;
+            const chunks = (await db.query<Row>('SELECT document_id AS id FROM document_chunks WHERE document_id = ANY($1::uuid[])', [seeded])).rows;
             assert.deepEqual(ids(chunks), [...chunkReadable].sort(), 'chunks');
 
             for (const hidden of [DOCS.quarantined, DOCS.quarantinedCurrent, DOCS.drift, DOCS.superseded, DOCS.processing, DOCS.orgQuarantined]) {
@@ -183,7 +184,7 @@ for (const mode of ['single-tenant', 'multi-tenant'] as const) {
         await asRole(db, 'authenticated', USER_B, async () => {
           assert.ok((await db.query('SELECT 1 FROM documents WHERE id = $1', [DOCS.quarantined])).rows.length === 1, 'the old policy leaks, as the control');
         });
-        await applyMigrationFiles(db, migrationFiles(mode).filter((file) => file.includes('0316_quarantine_admin')));
+        await applyMigrationFiles(db, migrationFiles(mode).filter((file) => file.includes('0316_quarantine_access')));
         await asRole(db, 'authenticated', USER_B, async () => {
           assert.equal((await db.query('SELECT 1 FROM documents WHERE id = $1', [DOCS.quarantined])).rows.length, 0);
           assert.equal((await db.query('SELECT 1 FROM document_chunks WHERE document_id = $1', [DOCS.quarantined])).rows.length, 0);

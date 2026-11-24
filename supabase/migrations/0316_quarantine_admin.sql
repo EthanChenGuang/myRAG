@@ -6,7 +6,7 @@
 -- (s:default). Multi-tenant: the actor's personal tenant (u:<actor>) and every organization where the actor is owner or admin (o:<id>).
 -- A document of any other tenant is indistinguishable from an unknown id (not_found), so ids of other tenants are not probed.
 -- The functions are SECURITY DEFINER and executable by service_role only; the route layer passes the id of the verified admin as p_actor.
--- The mode-specific files 0316_quarantine_admin.single-tenant.sql and .multi-tenant.sql close the direct table read of quarantined rows.
+-- 0316_quarantine_access (mode-specific files, applied just before this one) closes the direct table read of quarantined rows.
 -- Idempotent: IF NOT EXISTS, CREATE OR REPLACE with fixed signatures, then REVOKE and GRANT.
 
 BEGIN;
