@@ -2,6 +2,16 @@
   "schemaVersion": 1,
   "vars": [
     {
+      "name": "DEEPINFRA_API_KEY",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "DEEPINFRA_BASE_URL",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "LANGFUSE_BASE_URL",
       "status": "managed",
       "knownGaps": []
@@ -238,6 +248,16 @@
       ]
     },
     {
+      "name": "RAG_DOC_TYPE_LLM_DETECT",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_EMBEDDING_PROFILES",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "RAG_EMBED_TENANT",
       "status": "managed",
       "knownGaps": []
@@ -280,6 +300,11 @@
     },
     {
       "name": "RAG_EVAL_SECRET",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_EXACT_ID_LOOKUP",
       "status": "managed",
       "knownGaps": []
     },
@@ -334,11 +359,26 @@
       ]
     },
     {
+      "name": "RAG_INGEST_PIPELINE",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "RAG_INITIAL_MATCH_COUNT",
       "status": "legacy",
       "knownGaps": [
         "config-ui"
       ]
+    },
+    {
+      "name": "RAG_INJECTION_SCAN",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_INVOICE_LLM_EXTRACT",
+      "status": "managed",
+      "knownGaps": []
     },
     {
       "name": "RAG_LOW_THRESHOLD",
@@ -401,6 +441,21 @@
       ]
     },
     {
+      "name": "RAG_PARSER",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_PARSE_POLL_BUDGET_MS",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_PDF_IMAGE_CHUNKS",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "RAG_PERFORMANCE_MODE",
       "status": "legacy",
       "knownGaps": [
@@ -429,6 +484,11 @@
       "knownGaps": [
         "env-ts"
       ]
+    },
+    {
+      "name": "RAG_QWEN_EMBED_FALLBACK",
+      "status": "managed",
+      "knownGaps": []
     },
     {
       "name": "RAG_RERANKING",
@@ -518,6 +578,16 @@
     },
     {
       "name": "VOICE_MAX_ACTIVE_ROOMS",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "VOYAGE_API_KEY",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "VOYAGE_BASE_URL",
       "status": "managed",
       "knownGaps": []
     }
