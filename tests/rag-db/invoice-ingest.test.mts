@@ -152,7 +152,7 @@ describe('invoice ingestion across two tenants (D-26, D-27, T-03-83)', () => {
     const chunks = await rows('SELECT chunk_kind, section_path, lexical_text FROM document_chunks WHERE document_id = $1 ORDER BY chunk_index', [resultA.documentId]);
     assert.equal(chunks[0]?.chunk_kind, 'invoice_header');
     assert.equal((chunks[0]?.section_path as string[])[0], 'Invoice INV-A-0001');
-    assert.ok((chunks[0]?.lexical_text as string).includes('INV-A-0001'));
+    assert.ok((chunks[0]?.lexical_text as string).includes('inva0001'));
   });
 
   test('findInvoices of one tenant never returns the invoice of the other, even for the same supplier tax id', async () => {

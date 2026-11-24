@@ -140,7 +140,8 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | 04-25 | `wt/04-25` / `exec/04-25` | **merged** |
 | 04-30 | `wt/04-30` / `exec/04-30` | **merged** |
 | 04-37 | `wt/04-37` / `exec/04-37` | **PARTIAL — held**: prechunked half done; ingest baseline re-record blocked by ingest-tier regression (bisect running) |
-| bisect-ingest | `wt/bisect-ingest` | **RUNNING** (gsd-debugger, Opus) — ingest fixture eval regression (recall@10 0.64→0.52) |
+| bisect-ingest | `wt/bisect-ingest` | **merged** → trunk `778f460b` (PR #10); recall@10 restore |
+| merge-train | `claude/ecstatic-hamilton-86gtwv` | **RUNNING** (Cursor) — queue #9→#22; baseline gate 17P/1F/1S (typecheck:new); tmux `merge-train`; runner `scripts/ci/run-merge-train.sh` |
 | 03.1-27 | `wt/03.1-27` / `exec/03.1-27` | **RUNNING** (gsd-executor, base `41861a7`) |
 | 03.1-28 | `wt/03.1-28` / `exec/03.1-28` | **RUNNING** (gsd-executor, base `41861a7`) |
 | 03.1-33 | `wt/03.1-33` / `exec/03.1-33` | **RUNNING** (gsd-executor, base `41861a7`) |
