@@ -151,3 +151,6 @@ export { checkSidecarSecret } from './ingest/callbacks/internal-auth';
 export type { ChangeDocumentTypeFailure, ChangeDocumentTypeInput, ChangeDocumentTypeResult } from './ingest/change-doc-type';
 export { scopeForAdminDocument, AdminDocumentScopeError } from './tenant/ingest-scope';
 export type { AdminDocumentScopeInput } from './tenant/ingest-scope';
+export { softDeleteLineage } from './ingest/soft-delete';
+export type { SoftDeleteResult, SoftDeleteFailure } from './ingest/soft-delete';
+export { queueConfigFromProcessEnv } from './ingest/queue-config';
