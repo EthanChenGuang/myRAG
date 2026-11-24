@@ -1,7 +1,9 @@
-import { after, before, describe, test } from 'node:test';
+import { after, afterEach, before, beforeEach, describe, mock, test } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from '../../eval/harness/fake-edge.mts';
 import { TWO_TENANT_IDS, createTwoTenantDatabase, type TwoTenantDatabase } from '../../eval/harness/two-tenant.mts';
+import type { EmbeddingProvider } from '@/lib/rag/embeddings/types';
 
 const LEGACY = 'openai-3-small-1536';
 const VOYAGE = 'voyage-4-large-2048';
@@ -341,5 +343,326 @@ describe('ingest writer: embeddings for every profile, gaps and the version swap
       defined.map((row) => row.proname),
       ['rag_latest_backfill_runs', 'rag_record_backfill_gap'],
     );
+  });
+});
+
+interface FakeProviderOptions {
+  fail?: boolean;
+  dims?: number;
+  model?: string;
+  host?: string;
+}
+
+function fakeProvider(id: 'voyage' | 'qwen3', model: string, dims: number, options: FakeProviderOptions = {}) {
+  const seen: string[] = [];
+  const provider: EmbeddingProvider = {
+    id,
+    model,
+    maxInputTokens: 8000,
+    supportedDims: [1024, 2048],
+    normalize: true,
+    async embedDocuments(texts) {
+      if (options.fail) throw new Error('vendor unavailable');
+      seen.push(...texts);
+      const width = options.dims ?? dims;
+      return {
+        vectors: texts.map((text, index) => vector(width, text.length + index)),
+        model: options.model ?? model,
+        host: options.host ?? 'fake-host',
+        usage: { tokens: texts.length },
+      };
+    },
+    async embedQuery(text) {
+      return { vectors: [vector(dims, text.length)], model, host: 'fake-host', usage: { tokens: 1 } };
+    },
+  };
+  return { provider, seen };
+}
+
+describe('ingest() writes every profile that must stay complete', () => {
+  let fixture: TwoTenantDatabase;
+  let edge: FakeEdge;
+  let ingestModule: typeof import('@/lib/rag/ingest');
+  let depsModule: typeof import('@/lib/rag/ingest/deps');
+  let configModule: typeof import('@/lib/rag/ingest/config');
+  let objectStoreModule: typeof import('@/lib/rag/ingest/object-store');
+  let fakeStoreModule: typeof import('../helpers/fake-object-store');
+  let activeModule: typeof import('@/lib/rag/embeddings/active-profile');
+  let registryModule: typeof import('@/lib/rag/embeddings/registry');
+  let resolver: typeof import('@/lib/rag/tenant/resolve-chat');
+  let supabaseModule: typeof import('@/lib/supabase');
+  let legacyTexts: string[] = [];
+
+  before(async () => {
+    fixture = await createTwoTenantDatabase();
+    edge = await startFakeEdge({ db: fixture.db });
+    Object.assign(process.env, fixtureProcessEnv(edge.url));
+    process.env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE = 'multi-tenant';
+    process.env.MYRAG_DEPLOYMENT_MODE = 'multi-tenant';
+    ingestModule = await import('@/lib/rag/ingest');
+    depsModule = await import('@/lib/rag/ingest/deps');
+    configModule = await import('@/lib/rag/ingest/config');
+    objectStoreModule = await import('@/lib/rag/ingest/object-store');
+    fakeStoreModule = await import('../helpers/fake-object-store');
+    activeModule = await import('@/lib/rag/embeddings/active-profile');
+    registryModule = await import('@/lib/rag/embeddings/registry');
+    resolver = await import('@/lib/rag/tenant/resolve-chat');
+    supabaseModule = await import('@/lib/supabase');
+  });
+
+  after(async () => {
+    await edge?.close();
+    await fixture?.db.close();
+  });
+
+  const setProfiles = async (states: Record<string, { status: string; previous?: string }>) => {
+    await fixture.db.query("UPDATE embedding_profiles SET status = 'available', previous_active_id = NULL WHERE status <> 'active'");
+    await fixture.db.query("UPDATE embedding_profiles SET status = 'available', previous_active_id = NULL WHERE status = 'active'");
+    for (const [id, state] of Object.entries(states)) {
+      await fixture.db.query('UPDATE embedding_profiles SET status = $2, previous_active_id = $3 WHERE id = $1', [id, state.status, state.previous ?? null]);
+    }
+    activeModule.resetActiveProfileForTests();
+  };
+
+  const useEnv = (env: Record<string, string>) => {
+    configModule.resetIngestConfigForTests();
+    depsModule.setIngestDepsForTests({
+      ingestEnv: () => env,
+      embedDocuments: async (texts) => {
+        legacyTexts.push(...texts);
+        return texts.map((text, index) => vector(1536, text.length + index));
+      },
+    });
+  };
+
+  beforeEach(async () => {
+    legacyTexts = [];
+    objectStoreModule.setObjectStoreForTests(fakeStoreModule.createFakeObjectStore());
+    await fixture.db.query('DELETE FROM embedding_backfill_runs');
+    await setProfiles({ [LEGACY]: { status: 'active' } });
+    useEnv({ RAG_EMBEDDING_PROFILES: 'on' });
+  });
+
+  afterEach(() => {
+    objectStoreModule.resetObjectStoreForTests();
+    depsModule.resetIngestDepsForTests();
+    registryModule.resetEmbeddingProvidersForTests();
+    activeModule.resetActiveProfileForTests();
+    mock.restoreAll();
+  });
+
+  const scopeOf = async (userId: string) => {
+    const resolved = await resolver.resolveTenantScope({
+      requestedOrganizationId: null,
+      deploymentMode: 'multi-tenant',
+      getUser: async () => ({ id: userId }),
+      admin: supabaseModule.getSupabaseAdmin(),
+      signal: new AbortController().signal,
+    });
+    assert.ok(resolved.ok && resolved.scope, 'scope must resolve');
+    return resolved.scope;
+  };
+
+  const upload = async (userId: string, label: string, sourceKey = `root/${label}.md`) =>
+    ingestModule.ingest({
+      scope: await scopeOf(userId),
+      source: 'config_upload',
+      sourceKey,
+      text: `# ${label}\n\nThe ${label} ledger lists every pallet that crossed the apron.\n\n## Second\n\nA second section about ${label} keeps the batch above one chunk.\n`,
+      filename: `${label}.md`,
+      mimeType: 'text/markdown',
+      signal: new AbortController().signal,
+    });
+
+  const rows = async (sql: string, params: unknown[] = []): Promise<Row[]> => (await fixture.db.query<Row>(sql, params)).rows;
+
+  const vectorsOf = (documentId: string | null, profileId: string) =>
+    rows(
+      `SELECT e.embedding_model, e.dims, e.embedding_host, e.tenant_key FROM chunk_embeddings e
+       JOIN document_chunks c ON c.id = e.chunk_id WHERE c.document_id = $1 AND e.profile_id = $2`,
+      [documentId, profileId],
+    );
+
+  const legacyCount = async (documentId: string | null): Promise<number> =>
+    Number((await rows('SELECT count(*)::int AS n FROM document_chunks WHERE document_id = $1 AND embedding IS NOT NULL', [documentId]))[0]?.n);
+
+  const gapsOf = (documentId: string | null) =>
+    rows(
+      `SELECT g.profile_id, g.reason, g.run_id FROM embedding_backfill_gaps g
+       JOIN document_chunks c ON c.id = g.chunk_id WHERE c.document_id = $1 ORDER BY c.chunk_index`,
+      [documentId],
+    );
+
+  const newRun = async (profileId: string, tenantKey: string | null = null): Promise<string> =>
+    String((await rows("INSERT INTO embedding_backfill_runs (profile_id, tenant_key, status) VALUES ($1, $2, 'running') RETURNING id", [profileId, tenantKey]))[0]?.id);
+
+  test('with RAG_EMBEDDING_PROFILES off a document gets the legacy vector only and no provider is called', async () => {
+    useEnv({});
+    await setProfiles({ [LEGACY]: { status: 'available' }, [VOYAGE]: { status: 'backfilling' } });
+    const voyage = fakeProvider('voyage', 'voyage-4-large', 2048);
+    registryModule.setEmbeddingProvidersForTests({ voyage: voyage.provider });
+    const result = await upload(TWO_TENANT_IDS.userA, 'switch-off');
+    assert.equal(result.status, 'ready');
+    assert.ok(result.chunkCount >= 2);
+    assert.equal(await legacyCount(result.documentId), result.chunkCount);
+    assert.equal((await vectorsOf(result.documentId, VOYAGE)).length, 0);
+    assert.equal(voyage.seen.length, 0);
+    const state = (await rows('SELECT processing_state FROM documents WHERE id = $1', [result.documentId]))[0]?.processing_state as Row;
+    assert.deepEqual(state.embeddingTargets, [LEGACY]);
+  });
+
+  test('a document ingested while voyage is backfilling has vectors in both profiles, from the same embedding text', async () => {
+    await setProfiles({ [LEGACY]: { status: 'active' }, [VOYAGE]: { status: 'backfilling' } });
+    const voyage = fakeProvider('voyage', 'voyage-4-large', 2048, { host: 'voyage-primary' });
+    registryModule.setEmbeddingProvidersForTests({ voyage: voyage.provider });
+    const result = await upload(TWO_TENANT_IDS.userA, 'mid-migration');
+    assert.equal(result.status, 'ready');
+    assert.equal(await legacyCount(result.documentId), result.chunkCount);
+    const stored = await vectorsOf(result.documentId, VOYAGE);
+    assert.equal(stored.length, result.chunkCount);
+    for (const row of stored) {
+      assert.deepEqual([row.embedding_model, row.dims, row.embedding_host, row.tenant_key], ['voyage-4-large', 2048, 'voyage-primary', `u:${TWO_TENANT_IDS.userA}`]);
+    }
+    assert.deepEqual(voyage.seen, legacyTexts, 'every target embeds the same text per chunk');
+    assert.deepEqual((await gapsOf(result.documentId)), []);
+    const state = (await rows('SELECT processing_state FROM documents WHERE id = $1', [result.documentId]))[0]?.processing_state as Row;
+    assert.deepEqual(state.embeddingTargets, [LEGACY, VOYAGE]);
+  });
+
+  test('a failing backfilling provider still publishes on the active profile and records each chunk as a gap of the open run', async () => {
+    await setProfiles({ [LEGACY]: { status: 'active' }, [VOYAGE]: { status: 'backfilling' } });
+    registryModule.setEmbeddingProvidersForTests({ voyage: fakeProvider('voyage', 'voyage-4-large', 2048, { fail: true }).provider });
+    mock.method(console, 'warn', () => undefined);
+    const runId = await newRun(VOYAGE);
+    const result = await upload(TWO_TENANT_IDS.userA, 'provider-down');
+    assert.equal(result.status, 'ready');
+    assert.equal(await legacyCount(result.documentId), result.chunkCount);
+    assert.equal((await vectorsOf(result.documentId, VOYAGE)).length, 0);
+    const gaps = await gapsOf(result.documentId);
+    assert.equal(gaps.length, result.chunkCount, 'every chunk of the document is a gap');
+    assert.ok(gaps.every((gap) => gap.profile_id === VOYAGE && gap.reason === 'provider_failed' && gap.run_id === runId));
+    assert.ok(result.warnings.includes(`embedding_gap:${VOYAGE}`));
+  });
+
+  test('a backfilling provider that answers with the wrong dims or model is a gap with reason embedding_profile_mismatch', async () => {
+    await setProfiles({ [LEGACY]: { status: 'active' }, [VOYAGE]: { status: 'backfilling' } });
+    mock.method(console, 'warn', () => undefined);
+    const runId = await newRun(VOYAGE);
+    registryModule.setEmbeddingProvidersForTests({ voyage: fakeProvider('voyage', 'voyage-4-large', 2048, { dims: 1024 }).provider });
+    const wrongDims = await upload(TWO_TENANT_IDS.userA, 'wrong-dims');
+    assert.equal(wrongDims.status, 'ready');
+    assert.equal((await vectorsOf(wrongDims.documentId, VOYAGE)).length, 0);
+    assert.ok((await gapsOf(wrongDims.documentId)).every((gap) => gap.reason === 'embedding_profile_mismatch' && gap.run_id === runId));
+
+    registryModule.setEmbeddingProvidersForTests({ voyage: fakeProvider('voyage', 'voyage-4-large', 2048, { model: 'another-model' }).provider });
+    const wrongModel = await upload(TWO_TENANT_IDS.userA, 'wrong-model');
+    assert.equal(wrongModel.status, 'ready');
+    assert.equal((await vectorsOf(wrongModel.documentId, VOYAGE)).length, 0);
+    assert.equal((await gapsOf(wrongModel.documentId)).length, wrongModel.chunkCount);
+  });
+
+  test('with voyage active and the legacy profile as its previous both are written; a failing active provider fails the run and a retry succeeds', async () => {
+    await setProfiles({ [VOYAGE]: { status: 'active', previous: LEGACY } });
+    mock.method(console, 'error', () => undefined);
+    registryModule.setEmbeddingProvidersForTests({ voyage: fakeProvider('voyage', 'voyage-4-large', 2048, { fail: true }).provider });
+    const failed = await upload(TWO_TENANT_IDS.userA, 'active-down');
+    assert.equal(failed.status, 'failed');
+    assert.equal(failed.reason, 'embed_failed');
+    const version = (await rows('SELECT status, is_current FROM documents WHERE id = $1', [failed.documentId]))[0] as Row;
+    assert.deepEqual([version.status, version.is_current], ['failed', false]);
+
+    registryModule.setEmbeddingProvidersForTests({ voyage: fakeProvider('voyage', 'voyage-4-large', 2048).provider });
+    const retried = await upload(TWO_TENANT_IDS.userA, 'active-down');
+    assert.equal(retried.status, 'ready');
+    assert.equal((await vectorsOf(retried.documentId, VOYAGE)).length, retried.chunkCount);
+    assert.equal(await legacyCount(retried.documentId), retried.chunkCount, 'the previous active profile stays complete for a rollback');
+  });
+
+  test('a provider that answers with the wrong model or dims for the active profile fails the run with embedding_profile_mismatch', async () => {
+    await setProfiles({ [VOYAGE]: { status: 'active', previous: LEGACY } });
+    mock.method(console, 'error', () => undefined);
+    registryModule.setEmbeddingProvidersForTests({ voyage: fakeProvider('voyage', 'voyage-4-large', 2048, { model: 'another-model' }).provider });
+    const wrongModel = await upload(TWO_TENANT_IDS.userA, 'active-wrong-model');
+    assert.equal(wrongModel.status, 'failed');
+    assert.equal(wrongModel.reason, 'embedding_profile_mismatch');
+
+    registryModule.setEmbeddingProvidersForTests({ voyage: fakeProvider('voyage', 'voyage-4-large', 2048, { dims: 1024 }).provider });
+    const wrongDims = await upload(TWO_TENANT_IDS.userA, 'active-wrong-dims');
+    assert.equal(wrongDims.status, 'failed');
+    assert.equal(wrongDims.reason, 'embedding_profile_mismatch');
+  });
+
+  test('under the unified pipeline the legacy target refuses to write when the configured OpenAI model is not the legacy profile model', async () => {
+    mock.method(console, 'error', () => undefined);
+    for (const env of [{ RAG_INGEST_PIPELINE: 'unified' }, { RAG_EMBEDDING_PROFILES: 'on' }]) {
+      useEnv(env);
+      activeModule.resetActiveProfileForTests();
+      const openai = fakeProvider('voyage', 'text-embedding-3-large', 1536).provider;
+      registryModule.setEmbeddingProvidersForTests({ openai: { ...openai, id: 'openai', supportedDims: [1536] } });
+      const refused = await upload(TWO_TENANT_IDS.userA, `model-swap-${Object.keys(env)[0]}`);
+      assert.equal(refused.status, 'failed');
+      assert.equal(refused.reason, 'embedding_profile_mismatch');
+      assert.equal(legacyTexts.length, 0, 'nothing was embedded under the wrong model');
+    }
+    registryModule.resetEmbeddingProvidersForTests();
+    useEnv({});
+    const unchanged = await upload(TWO_TENANT_IDS.userA, 'model-swap-off');
+    assert.equal(unchanged.status, 'ready', 'with the switch off and the legacy pipeline nothing changes');
+  });
+
+  test('two tenants: vectors and gaps stay with the tenant of the document and a run limited to another tenant is not used', async () => {
+    await setProfiles({ [LEGACY]: { status: 'active' }, [VOYAGE]: { status: 'backfilling' } });
+    mock.method(console, 'warn', () => undefined);
+    registryModule.setEmbeddingProvidersForTests({ voyage: fakeProvider('voyage', 'voyage-4-large', 2048, { fail: true }).provider });
+    const runForB = await newRun(VOYAGE, `u:${TWO_TENANT_IDS.userB}`);
+    const forA = await upload(TWO_TENANT_IDS.userA, 'tenant-a-doc');
+    const forB = await upload(TWO_TENANT_IDS.userB, 'tenant-b-doc');
+    assert.equal(forA.status, 'ready');
+    assert.equal(forB.status, 'ready');
+    assert.deepEqual(await gapsOf(forA.documentId), [], 'the only run is limited to tenant B, so tenant A has none to record against');
+    const gapsB = await gapsOf(forB.documentId);
+    assert.equal(gapsB.length, forB.chunkCount);
+    assert.ok(gapsB.every((gap) => gap.run_id === runForB));
+
+    registryModule.setEmbeddingProvidersForTests({ voyage: fakeProvider('voyage', 'voyage-4-large', 2048).provider });
+    const okA = await upload(TWO_TENANT_IDS.userA, 'tenant-a-second');
+    const okB = await upload(TWO_TENANT_IDS.userB, 'tenant-b-second');
+    assert.ok((await vectorsOf(okA.documentId, VOYAGE)).every((row) => row.tenant_key === `u:${TWO_TENANT_IDS.userA}`));
+    assert.ok((await vectorsOf(okB.documentId, VOYAGE)).every((row) => row.tenant_key === `u:${TWO_TENANT_IDS.userB}`));
+    const crossed = await rows(
+      `SELECT count(*)::int AS n FROM chunk_embeddings e JOIN document_chunks c ON c.id = e.chunk_id WHERE e.tenant_key <> c.tenant_key`,
+    );
+    assert.equal(crossed[0]?.n, 0);
+  });
+
+  test('replacing a document gives the new version vectors in both profiles and deletes the old version vectors', async () => {
+    await setProfiles({ [LEGACY]: { status: 'active' }, [VOYAGE]: { status: 'backfilling' } });
+    registryModule.setEmbeddingProvidersForTests({ voyage: fakeProvider('voyage', 'voyage-4-large', 2048).provider });
+    const first = await ingestModule.ingest({
+      scope: await scopeOf(TWO_TENANT_IDS.userA),
+      source: 'config_upload',
+      sourceKey: 'root/replace-me.md',
+      text: '# Replace\n\nThe first edition of the manual lists the old forklift rules.\n\n## Rules\n\nOld rules apply to every shift.\n',
+      filename: 'replace-me.md',
+      mimeType: 'text/markdown',
+      signal: new AbortController().signal,
+    });
+    assert.equal(first.status, 'ready');
+    assert.equal((await vectorsOf(first.documentId, VOYAGE)).length, first.chunkCount);
+    const second = await ingestModule.ingest({
+      scope: await scopeOf(TWO_TENANT_IDS.userA),
+      source: 'config_upload',
+      sourceKey: 'root/replace-me.md',
+      text: '# Replace\n\nThe second edition of the manual lists the new forklift rules.\n\n## Rules\n\nNew rules apply to every shift.\n',
+      filename: 'replace-me.md',
+      mimeType: 'text/markdown',
+      signal: new AbortController().signal,
+    });
+    assert.equal(second.status, 'ready');
+    assert.equal(second.version, 2);
+    assert.equal((await vectorsOf(first.documentId, VOYAGE)).length, 0);
+    assert.equal((await vectorsOf(second.documentId, VOYAGE)).length, second.chunkCount);
+    assert.equal(await legacyCount(second.documentId), second.chunkCount);
+    assert.equal(await legacyCount(first.documentId), 0);
   });
 });
