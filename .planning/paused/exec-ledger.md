@@ -123,7 +123,7 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 
 **Wave 1 (4):** 04-01–04 **parallel**; **04-05 → 04-06 → 04-07** one executor tree (PGlite migration order).
 
-## Wave F — Claude Code (2026-11-24, base `7a9b96f`)
+## Wave F — Claude Code (2026-11-24, base `7a9b96f`; Guang: up to 9 parallel agents)
 
 | Plan | Worktree / branch | Status |
 |------|-------------------|--------|
@@ -131,8 +131,8 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | 04-21 | `wt/04-21` / `exec/04-21` | **RUNNING** (gsd-executor) |
 | 04-22 | `wt/04-22` / `exec/04-22` | **RUNNING** (gsd-executor) |
 | 03.1-24 | `wt/03.1-24` / `exec/03.1-24` | **RUNNING** (gsd-executor) |
-| 03.1-26 | — | queued (next free slot) |
-| 04-31 | — | queued (next free slot) |
+| 03.1-26 | `wt/03.1-26` / `exec/03.1-26` | **RUNNING** (gsd-executor) |
+| 04-31 | `wt/04-31` / `exec/04-31` | **RUNNING** (gsd-executor) |
 
 ## Wave E — **PAUSE-96 STOPPED** (2026-11-24 ~13:48 Europe/Rome; Claude Code resumes)
 
