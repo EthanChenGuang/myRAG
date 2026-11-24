@@ -123,7 +123,17 @@ export async function handleIngestStatus(request: Request, params: Promise<{ id:
     if (!access.ok) return access.response;
     const report = await getIngestStatusReport(access.scope, access.documentId, { signal: request.signal });
     if (!report) return notFound();
-    return NextResponse.json({ ...report.view, warnings: report.warnings, ...(report.reason ? { reason: report.reason } : {}) });
+    const body: Record<string, unknown> = {
+      ...report.view,
+      warnings: report.warnings,
+      ...(report.reason ? { reason: report.reason } : {}),
+    };
+    if (report.jobId) {
+      body.jobId = report.jobId;
+      body.jobStatus = report.jobStatus;
+    }
+    if (report.provisional !== undefined) body.provisional = report.provisional;
+    return NextResponse.json(body);
   } catch (error) {
     logFailure(tag, error);
     return fail(503, 'Status unavailable');
