@@ -136,7 +136,7 @@ async function run(ctx: StageContext): Promise<StageOutcome> {
 
   // A resume rebuilds the profile of a type that was refined after parse.
   const refinedType = ctx.state.docTypeDetection?.refined ?? null;
-  if (refinedType !== null && identity.docTypeOrigin === 'auto' && refinedType !== identity.docType) {
+  if (refinedType !== null && identity.docTypeOrigin === 'auto') {
     identity.docType = refinedType;
     identity.profile = getProcessingProfile(refinedType);
   }

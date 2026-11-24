@@ -137,7 +137,7 @@ describe('sidecar Docling client', () => {
   });
 
   test('a resume with a saved job id polls without resubmitting; a 404 or an expired job resubmits exactly once', async () => {
-    fake.enqueue({ statuses: ['running'] });
+    fake.enqueue({ statuses: ['running', 'succeeded'] });
     const first = await parser().parse(request(null, { pollUntil: 0 }));
     expect(first.kind).toBe('pending');
     if (first.kind !== 'pending') return;
