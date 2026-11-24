@@ -55,15 +55,23 @@ function failed(reason: string, documentId: string | null = null, version: numbe
   return { status: 'failed', documentId, version, parserUsed: null, chunkCount: 0, warnings: [], reason };
 }
 
+export interface IngestStatusReport {
+  view: IngestStatusView;
+  /** Short codes only, never document text. */
+  warnings: string[];
+  /** The short failure code of a failed version. */
+  reason: string | null;
+}
+
 /**
  * The status of one document of the caller's tenant, read through the tenant-checked writer function.
  * An id that is not a UUID, does not exist or belongs to another tenant returns null.
  */
-export async function getIngestStatus(
+export async function getIngestStatusReport(
   scope: TenantScope,
   documentId: string,
   options: ResumeIngestOptions = {},
-): Promise<IngestStatusView | null> {
+): Promise<IngestStatusReport | null> {
   try {
     assertTenantScope(scope);
   } catch {
@@ -75,13 +83,25 @@ export async function getIngestStatus(
   const row = await writer.getDocument(documentId);
   if (!row) return null;
   return {
-    status: row.status,
-    version: row.version,
-    processingStatus: row.processingStatus,
-    lastCompleted: lastCompletedOf(row.processingState),
-    parserUsed: row.parserUsed,
-    docType: row.docType,
+    view: {
+      status: row.status,
+      version: row.version,
+      processingStatus: row.processingStatus,
+      lastCompleted: lastCompletedOf(row.processingState),
+      parserUsed: row.parserUsed,
+      docType: row.docType,
+    },
+    warnings: [],
+    reason: null,
   };
+}
+
+export async function getIngestStatus(
+  scope: TenantScope,
+  documentId: string,
+  options: ResumeIngestOptions = {},
+): Promise<IngestStatusView | null> {
+  return (await getIngestStatusReport(scope, documentId, options))?.view ?? null;
 }
 
 function objectOf<T>(value: unknown): T | null {
