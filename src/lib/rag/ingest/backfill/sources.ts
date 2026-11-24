@@ -4,7 +4,8 @@ import { realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import dns from 'node:dns';
-import { ORIGINALS_MAX_BYTES } from '../object-store';
+/** Matches `ORIGINALS_MAX_BYTES` in object-store; inlined so source listing does not import Supabase. */
+const ORIGINALS_MAX_BYTES = 20 * 1024 * 1024;
 
 type ManifestLine = {
   source_key: string;

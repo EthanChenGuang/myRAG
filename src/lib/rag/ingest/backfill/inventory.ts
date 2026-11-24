@@ -170,7 +170,7 @@ export async function inventory(
       ext: first.ext,
       filename: first.sourceKey.split('/').pop() ?? first.sourceKey,
       mimeType: mimeFromExt(first.ext),
-      docType: first.docType ?? null,
+      kindHint: first.kindHint ?? null,
     });
   }
 

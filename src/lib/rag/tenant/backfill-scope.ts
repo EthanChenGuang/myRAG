@@ -1,13 +1,41 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
-import { getDeploymentMode, type DeploymentMode } from '@/lib/deployment-mode';
-import { parseTenantKey } from './embed';
 import { mintScope, type TenantScope } from './scope';
+
+type DeploymentMode = 'single-tenant' | 'multi-tenant';
+
+const KEY_RE =
+  /^(?:(s):(default)|([ou]):([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}))$/;
+
+type BackfillTenantKey =
+  | { kind: 'single' }
+  | { kind: 'org'; organizationId: string }
+  | { kind: 'personal'; userId: string };
+
+function parseTenantKey(value: unknown): BackfillTenantKey | null {
+  if (typeof value !== 'string') return null;
+  const match = KEY_RE.exec(value.trim().toLowerCase());
+  if (!match) return null;
+  if (match[1] === 's') return { kind: 'single' };
+  if (match[3] === 'o') return { kind: 'org', organizationId: match[4] };
+  return { kind: 'personal', userId: match[4] };
+}
 
 export type BackfillScopeResult =
   | { ok: true; scope: TenantScope }
   | { ok: false; reason: 'invalid_tenant' | 'unknown_tenant' | 'unavailable' };
 
-export type BackfillScopeAdmin = Pick<SupabaseClient, 'from' | 'auth'>;
+export interface BackfillScopeAdmin {
+  from: (table: string) => {
+    select: (columns?: string) => unknown;
+    eq: (column: string, value: string) => unknown;
+    abortSignal: (signal: AbortSignal) => unknown;
+    maybeSingle: () => Promise<{ data: unknown; error: unknown }>;
+  };
+  auth: {
+    admin: {
+      getUserById: (id: string) => Promise<{ data: { user: { id: string } | null } | null; error: unknown }>;
+    };
+  };
+}
 
 export interface BackfillScopeDeps {
   deploymentMode?: DeploymentMode;
@@ -46,7 +74,11 @@ async function organizationExists(admin: BackfillScopeAdmin, organizationId: str
 }
 
 export async function backfillScope(tenantKey: string, deps?: BackfillScopeDeps): Promise<BackfillScopeResult> {
-  const mode = deps?.deploymentMode ?? getDeploymentMode();
+  let mode = deps?.deploymentMode;
+  if (!mode) {
+    const { getDeploymentMode } = await import('@/lib/deployment-mode');
+    mode = getDeploymentMode();
+  }
   const signal = deps?.signal ?? AbortSignal.timeout(30_000);
   const parsed = parseTenantKey(tenantKey);
   if (!parsed) return refuse('invalid_tenant');

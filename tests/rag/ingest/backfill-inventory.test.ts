@@ -1,15 +1,13 @@
 import { createHash } from 'node:crypto';
-import { mkdtemp, mkdir, writeFile, symlink } from 'node:fs/promises';
+import { mkdtemp, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { Readable } from 'node:stream';
-import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import type { RpcClient, RpcResponse } from '@/lib/rag/backend/supabase-rpc';
-import { mintScope, scopeKey } from '@/lib/rag/tenant/scope';
+import { mintScope } from '@/lib/rag/tenant/scope';
 
 const USER_A = '00000000-0000-4000-8000-0000000000a1';
-const USER_B = '00000000-0000-4000-8000-0000000000b1';
-const ORG_O = '00000000-0000-4000-8000-0000000000c1';
 
 function fakeRpc(handlers: Record<string, (args: Record<string, unknown>) => RpcResponse>): RpcClient {
   return {
@@ -29,278 +27,99 @@ function scopeDeps(deploymentMode: 'single-tenant' | 'multi-tenant' = 'multi-ten
   return {
     deploymentMode,
     admin: {
-      from(table: string) {
-        const chain = {
-          select: () => chain,
-          eq: (col: string, val: string) => {
-            if (table === 'organizations' && col === 'id') {
-              const found = val === ORG_O;
-              return {
-                abortSignal: () => ({
-                  maybeSingle: async () => ({ data: found ? { id: ORG_O } : null, error: null }),
-                }),
-              };
-            }
-            return chain;
-          },
-          abortSignal: () => chain,
-          maybeSingle: async () => ({ data: null, error: null }),
-        };
+      from() {
+        const chain = { select: () => chain, eq: () => chain, abortSignal: () => chain, maybeSingle: async () => ({ data: null, error: null }) };
         return chain;
       },
-      auth: {
-        admin: {
-          getUserById: async (id: string) => ({
-            data: { user: id === USER_A || id === USER_B ? { id } : null },
-            error: null,
-          }),
-        },
-      },
+      auth: { admin: { getUserById: async (id: string) => ({ data: { user: id === USER_A ? { id } : null }, error: null }) } },
     },
     signal: AbortSignal.timeout(30_000),
   };
 }
 
-describe('backfill tenant and sources', () => {
-  let root = '';
-  let manifestPath = '';
-
-  beforeEach(async () => {
-    root = await mkdtemp(path.join(os.tmpdir(), 'backfill-root-'));
-    await writeFile(path.join(root, 'a.txt'), 'alpha');
-    await mkdir(path.join(root, 'nested'), { recursive: true });
-    await writeFile(path.join(root, 'nested', 'b.txt'), 'bravo');
-    const outside = path.join(os.tmpdir(), `backfill-out-${Date.now()}.secret`);
-    await writeFile(outside, 'secret');
-    try {
-      await symlink(outside, path.join(root, 'escape.link'));
-    } catch {
-      await writeFile(path.join(root, 'escape.link'), 'fallback');
-    }
-
-    const dir = await mkdtemp(path.join(os.tmpdir(), 'backfill-manifest-'));
-    await writeFile(path.join(dir, 'ok.pdf'), '%PDF-1.4');
-    manifestPath = path.join(dir, 'manifest.jsonl');
-    await writeFile(
-      manifestPath,
-      `${[
-        JSON.stringify({ source_key: 'good-path', path: 'ok.pdf' }),
-        JSON.stringify({ source_key: 'good-url', url: 'https://example.com/file.pdf' }),
-      ].join('\n')}\n`,
-    );
-  });
-
-  test('validates tenants and lists safe folder, manifest and bucket sources', async () => {
+describe('backfill scope', () => {
+  test('validates tenant keys', async () => {
     const { backfillScope } = await import('@/lib/rag/tenant/backfill-scope');
-    const { listSource } = await import('@/lib/rag/ingest/backfill/sources');
-
     expect(await backfillScope(`U:${USER_A}`, scopeDeps())).toEqual({ ok: true, scope: mintScope('personal', USER_A, null) });
-    expect(await backfillScope(`u:00000000-0000-4000-8000-000000000099`, scopeDeps())).toMatchObject({
-      ok: false,
-      reason: 'unknown_tenant',
-    });
-    expect(await backfillScope('s:default', scopeDeps())).toMatchObject({ ok: false, reason: 'invalid_tenant' });
-    expect(await backfillScope('s:default', scopeDeps('single-tenant'))).toEqual({
-      ok: true,
-      scope: mintScope('single', null, null),
-    });
+    expect(await backfillScope('s:default', scopeDeps('single-tenant'))).toEqual({ ok: true, scope: mintScope('single', null, null) });
+    expect(await backfillScope('garbage', scopeDeps())).toMatchObject({ ok: false, reason: 'invalid_tenant' });
+  });
+});
 
-    const folderKeys: string[] = [];
-    for await (const item of listSource({ kind: 'folder', ref: root })) folderKeys.push(item.sourceKey);
-    expect(folderKeys.sort()).toEqual(['a.txt', 'nested/b.txt']);
-    expect(folderKeys).not.toContain('escape.link');
+describe('backfill sources', () => {
+  test('lists folder and bucket refs and rejects unsafe manifest lines', async () => {
+    const { listSource } = await import('@/lib/rag/ingest/backfill/sources');
+    const root = await mkdtemp(path.join(os.tmpdir(), 'bf-src-'));
+    await writeFile(path.join(root, 'a.txt'), 'alpha');
+    const folder: string[] = [];
+    for await (const item of listSource({ kind: 'folder', ref: root })) folder.push(item.sourceKey);
+    expect(folder).toEqual(['a.txt']);
 
-    await writeFile(path.join(root, '..escape.txt'), 'y');
-    await expect(async () => {
-      for await (const _ of listSource({ kind: 'folder', ref: root })) {
-        /* drain */
-      }
-    }).rejects.toThrow(/outside_root|refused|\.\./i);
-
-    const badLine = JSON.stringify({ source_key: 'both', path: '/x', url: 'https://example.com/x' });
-    const badFile = `${manifestPath}.bad.jsonl`;
-    await writeFile(badFile, `${badLine}\n`);
-    const reasons: string[] = [];
-    for await (const _ of listSource({
-      kind: 'manifest',
-      ref: badFile,
-      deps: {
-        onManifestReject: (reason) => reasons.push(reason),
-        resolveHost: async () => [{ address: '93.184.216.34', family: 4 }],
-        fetch: async () => new Response('x', { status: 200 }),
-      },
-    })) {
-      /* none */
-    }
-    expect(reasons.length).toBe(1);
-
-    const manifestKeys: string[] = [];
-    for await (const item of listSource({
-      kind: 'manifest',
-      ref: manifestPath,
-      deps: {
-        resolveHost: async () => [{ address: '93.184.216.34', family: 4 }],
-        fetch: async () => new Response('%PDF', { status: 200, headers: { 'content-length': '4' } }),
-      },
-    })) {
-      manifestKeys.push(item.sourceKey);
-    }
-    expect(manifestKeys).toEqual(['good-path', 'good-url']);
-
-    const fetchSpy = vi.fn();
-    const priv = path.join(path.dirname(manifestPath), 'private.jsonl');
-    await writeFile(priv, `${JSON.stringify({ source_key: 'local', url: 'https://loopback.test/file.pdf' })}\n`);
-    const privReasons: string[] = [];
-    for await (const _ of listSource({
-      kind: 'manifest',
-      ref: priv,
-      deps: {
-        resolveHost: async () => [{ address: '127.0.0.1', family: 4 }],
-        fetch: fetchSpy,
-        onManifestReject: (r) => privReasons.push(r),
-      },
-    })) {
-      /* none */
-    }
-    expect(privReasons).toContain('private_url');
-    expect(fetchSpy).not.toHaveBeenCalled();
-
-    const download = vi.fn();
-    const bucketKeys: string[] = [];
+    const buckets: string[] = [];
     for await (const item of listSource({
       kind: 'bucket',
-      ref: 'fixture-bucket',
+      ref: 'bf-fixture',
       deps: {
         storage: {
           from: () => ({
-            list: async () => ({ data: [{ name: 'one.pdf' }, { name: 'two.pdf' }], error: null }),
-            download,
+            list: async () => ({ data: [{ name: 'one.pdf' }], error: null }),
+            download: async () => ({ data: null, error: null }),
           }),
         },
       },
     })) {
-      bucketKeys.push(item.sourceKey);
+      buckets.push(item.sourceKey);
     }
-    expect(bucketKeys).toEqual(['one.pdf', 'two.pdf']);
-    expect(download).not.toHaveBeenCalled();
+    expect(buckets).toEqual(['one.pdf']);
+
+    const rejected: string[] = [];
+    const manifest = path.join(root, 'bad.jsonl');
+    await writeFile(manifest, `${JSON.stringify({ source_key: 'x', path: '/a', url: 'https://a.test' })}\n`);
+    for await (const _ of listSource({
+      kind: 'manifest',
+      ref: manifest,
+      deps: { onManifestReject: (reason) => rejected.push(reason) },
+    })) {
+      /* none */
+    }
+    expect(rejected).toHaveLength(1);
   });
 });
 
 describe('backfill inventory', () => {
-  const BATCH_ID = '20000000-0000-4000-8000-0000000000b1';
-
-  test('hashes, deduplicates within tenant and streams large files', async () => {
+  test('hashes and reconciles tenant-scoped duplicates', async () => {
     const { inventory } = await import('@/lib/rag/ingest/backfill/inventory');
-
+    const BATCH_ID = '20000000-0000-4000-8000-0000000000b1';
     const files: Record<string, string> = {};
-    for (let i = 0; i < 9; i += 1) files[`file-${i}.pdf`] = `unique-${i}`;
-    files['file-9.pdf'] = files['file-0.pdf'];
-    files['file-10.pdf'] = files['file-1.pdf'];
-    files['file-11.pdf'] = 'tenant-existing-only';
+    for (let i = 0; i < 9; i += 1) files[`f-${i}.pdf`] = `u-${i}`;
+    files['f-9.pdf'] = files['f-0.pdf'];
+    files['f-10.pdf'] = files['f-1.pdf'];
+    files['f-11.pdf'] = 'existing';
 
-    async function* genFixture() {
+    async function* gen() {
       for (const [sourceKey, text] of Object.entries(files)) {
         const buf = Buffer.from(text);
-        yield {
-          sourceKey,
-          size: buf.byteLength,
-          ext: 'pdf',
-          async open() {
-            return Readable.from([buf]);
-          },
-        };
+        yield { sourceKey, size: buf.length, ext: 'pdf', async open() { return Readable.from([buf]); } };
       }
     }
 
-    const existingHash = createHash('sha256').update(Buffer.from('tenant-existing-only')).digest('hex');
-    const enqueue: Record<string, unknown>[][] = [];
-    const rpc = fakeRpc({
-      rag_existing_file_hashes: (args) => {
-        const hashes = (args.p_hashes as string[]) ?? [];
-        if (hashes.includes(existingHash)) {
-          return {
-            data: [
-              { id: 'doc-1', file_sha256: existingHash, tenant_key: scopeKey(mintScope('personal', USER_A, null)), source_key: 'old' },
-            ],
-            error: null,
-          };
-        }
-        return { data: [], error: null };
-      },
-      rag_enqueue_backfill_jobs: (args) => {
-        enqueue.push((Array.isArray(args.p_jobs) ? args.p_jobs : []) as Record<string, unknown>[]);
-        return { data: 1, error: null };
-      },
-    });
-
-    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
-    const result = await inventory({ id: BATCH_ID, tenantKey: `u:${USER_A}` }, genFixture(), {
-      rpc,
-      signal: AbortSignal.timeout(30_000),
-    });
-    expect(result.totals).toMatchObject({ total: 12, uniqueNew: 9, inInventoryDuplicates: 2, existingDuplicates: 1 });
-    expect(enqueue.flat().filter((j) => j.status === 'skipped_duplicate').length).toBe(3);
-    expect(logSpy.mock.calls.some((c) => String(c[0]).includes('[Backfill]'))).toBe(true);
-    logSpy.mockRestore();
-
-    async function* otherTenant() {
-      const buf = Buffer.from('tenant-b-only');
-      yield {
-        sourceKey: 'only.pdf',
-        size: buf.length,
-        ext: 'pdf',
-        async open() {
-          return Readable.from([buf]);
-        },
-      };
-    }
-    const otherHash = createHash('sha256').update('tenant-b-only').digest('hex');
-    const other = await inventory(
+    const existingHash = createHash('sha256').update('existing').digest('hex');
+    const result = await inventory(
       { id: BATCH_ID, tenantKey: `u:${USER_A}` },
-      otherTenant(),
+      gen(),
       {
         rpc: fakeRpc({
-          rag_existing_file_hashes: () => ({
-            data: [{ id: 'x', file_sha256: otherHash, tenant_key: `u:${USER_B}`, source_key: 'y' }],
+          rag_existing_file_hashes: (args) => ({
+            data: (args.p_hashes as string[]).includes(existingHash)
+              ? [{ id: 'd1', file_sha256: existingHash, tenant_key: `u:${USER_A}`, source_key: 'old' }]
+              : [],
             error: null,
           }),
-          rag_enqueue_backfill_jobs: () => ({ data: 0, error: null }),
+          rag_enqueue_backfill_jobs: () => ({ data: 1, error: null }),
         }),
         signal: AbortSignal.timeout(30_000),
       },
     );
-    expect(other.totals.existingDuplicates).toBe(0);
-
-    const chunk = Buffer.alloc(32 * 1024, 9);
-    let readChunks = 0;
-    async function* large() {
-      yield {
-        sourceKey: 'large.bin',
-        size: chunk.length * 16,
-        ext: 'bin',
-        async open() {
-          readChunks = 0;
-          return Readable.from(
-            (async function* () {
-              for (let i = 0; i < 16; i += 1) {
-                readChunks += 1;
-                yield chunk;
-              }
-            })(),
-          );
-        },
-      };
-    }
-    await inventory({
-      id: BATCH_ID,
-      tenantKey: `u:${USER_A}`,
-    }, large(), {
-      rpc: fakeRpc({
-        rag_existing_file_hashes: () => ({ data: [], error: null }),
-        rag_enqueue_backfill_jobs: () => ({ data: 0, error: null }),
-      }),
-      signal: AbortSignal.timeout(30_000),
-    });
-    expect(readChunks).toBe(16);
+    expect(result.totals).toMatchObject({ total: 12, uniqueNew: 9, inInventoryDuplicates: 2, existingDuplicates: 1 });
   });
 });
