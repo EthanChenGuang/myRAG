@@ -25,6 +25,7 @@ from rag_sidecar.ingest.converters import RangeConverter
 from rag_sidecar.preflight.classify import classify
 from rag_sidecar.preflight.l1 import EncryptedPdf, l1_signals
 from rag_sidecar.preflight.l2 import L2Page, l2_refine, sha256_file
+from rag_sidecar.preflight.l3 import L3Page, VlmApp, l3_refine
 from rag_sidecar.preflight.ranges import TieredPage, build_ranges
 from rag_sidecar.preflight.tiers import LayerResults, page_tier
 
@@ -48,6 +49,8 @@ def _default_bounds(
 
 
 def _signals_for_page(page: L2Page) -> list[PageSignal]:
+    if isinstance(page, L3Page) and page.verdict is not None:
+        return list(page.l1.signals)
     signals = list(page.l1.signals)
     if not page.uncertain and "uncertain" in signals:
         signals = [signal for signal in signals if signal != "uncertain"]
@@ -88,6 +91,7 @@ def _to_tiered_pages(
         layers = LayerResults(
             l1_has_table=_l1_has_table(page),
             l2_has_table=page.l2_has_table,
+            verdict=page.verdict if isinstance(page, L3Page) else None,
         )
         tier, preset = page_tier(probe, layers, min_tier, max_tier)
         tiered.append(
@@ -165,14 +169,26 @@ def run_preflight(
     l3: L3Hook | None = None,
     *,
     file_sha: str | None = None,
-    vlm_app: object | None = None,
+    vlm_app: VlmApp | None = None,
 ) -> PreflightOutput:
-    """Run L1, optional L2, optional L3 hook, tiers, ranges and classification."""
+    """Run L1, optional L2, optional L3, tiers, ranges and classification.
+
+    L3 runs through `l3` when given, else through `l3_refine` with `vlm_app`; it needs the job snapshot to ask for it.
+    """
     target = Path(path)
     started = time.perf_counter()
     min_tier, max_tier = _default_bounds(settings)
     digest = file_sha or sha256_file(target)
-    l3_fn = l3 or _noop_l3
+    if l3 is not None:
+        l3_fn = l3
+    elif vlm_app is not None:
+        app = vlm_app
+
+        def l3_fn(pages, disagreements, path, settings, cfg):  # noqa: ANN001, ANN202
+            return l3_refine(pages, disagreements, path, settings, app, cfg)
+
+    else:
+        l3_fn = _noop_l3
 
     l1_started = time.perf_counter()
     l1 = l1_signals(target, routing_cfg)
@@ -191,6 +207,7 @@ def run_preflight(
     page_rows = _finalize_page_signals(l2_pages, tiered, ranges)
     doc_class = classify(page_rows)
     l2_count = sum(1 for page in l2_pages if page.l2_inspected)
+    l3_count = sum(1 for page in l2_pages if isinstance(page, L3Page) and page.l3_examined)
     total_ms = int((time.perf_counter() - started) * 1000)
 
     result = PreflightResult(
@@ -204,7 +221,7 @@ def run_preflight(
         detect_counts=DetectCounts(
             L1=len(l1.pages),
             L2=l2_count,
-            L3=0,
+            L3=l3_count,
             gated_share=l1.gated_share,
         ),
         timings_ms={
