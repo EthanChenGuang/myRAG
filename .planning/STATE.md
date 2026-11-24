@@ -207,4 +207,4 @@ Resume file: .planning/phases/02-unified-retrieval-pipeline-tenant-scope/.contin
 
 - `VOICE_MAX_ACTIVE_ROOMS` (app) must equal `VOICE_AGENT_MAX_SESSIONS` (voice agent); deploy app and voice agent together (G4).
 - Multi-tenant DB: apply `supabase/patches/2026-11-search-rpc-revoke-multi-tenant.sql` after the Phase 2 app deploy (G4).
-- Phase 3.1 plan 04: approve pdfplumber 0.11.11 (+ pdfminer.six) and ray[data] 2.60.1; plans 53/54 are live checkpoints (worker host, migrations 0351-0359, Batch API job).
+- Phase 3.1 plan 04: pdfplumber 0.11.11 (+ pdfminer.six) and ray[data] 2.60.1 APPROVED by the user 2026-11-24 (fallback ray 2.60.0 only if 2.60.1 fails to resolve); plans 53/54 are live checkpoints (worker host, migrations 0351-0359, Batch API job).
