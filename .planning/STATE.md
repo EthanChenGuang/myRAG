@@ -1,25 +1,25 @@
 ---
 gsd_state_version: "1.0"
 milestone: v5.0
-current_phase: 03.1
+current_phase: "03.1"
 current_phase_name: Tiered Parsing, Incremental Queue & Bulk Backfill
 status: paused
-stopped_at: PAUSE merge-train handback to Claude Code; trunk 56b0349d; merged PRs #10 #9 #4 #5; tmux merge-train stopped
-last_updated: "2026-11-24T19:10:00.000Z"
-state_head: 56b0349d6307b757e4df1eab897878f11e4b8d81
-package_legitimacy_03_1_04:
-  approved_at: "2026-11-24"
-  lock_commit: 3e83978e482f67da5ce6d463f39251f3e21e8bf4
-  pdfplumber: "0.11.11"
-  pdfminer_six: "20260107"
-  ray_data: "2.60.1"
-last_activity: 2026-11-24
-last_activity_desc: Trunk merge train paused at 56b0349d; PRs #10 #9 #4 #5 merged; queue #6+
+stopped_at: PAUSE merge-train handback to Claude Code; trunk 56b0349d; merged PRs
+last_updated: "2026-11-24T19:33:19.507Z"
+state_head: bbad74e8746322b9402d9d1f385a2cd2a2785768
 progress:
-  total_phases: 9
-  completed_phases: 0
-  total_plans: 58
-  completed_plans: 44
+  total_phases: 14
+  completed_phases: 1
+  total_plans: 342
+  completed_plans: 172
+package_legitimacy_03_1_04:
+  approved_at: 2026-11-24
+  lock_commit: 3e83978e482f67da5ce6d463f39251f3e21e8bf4
+  pdfplumber: 0.11.11
+  pdfminer_six: 20260107
+  ray_data: 2.60.1
+last_activity: 2026-11-24
+last_activity_desc: Trunk merge train paused at 56b0349d; PRs
 ---
 
 # Project State
@@ -185,6 +185,14 @@ None yet.
 - [Phase 5]: Deepest uncertainty: whether AI SDK v6 Anthropic Citations survive streaming with tools/MCP/webSearch (spike first); Vectara host, limits and retention.
 - [Phase 6]: `@langchain/core` zod 4 isolation from the app's zod 3; LangChain HyDE has no stock retriever and is a port.
 - [Phase 7]: Weaviate hybrid inside a tenant and Chinese tokenizer availability on Cloud; Qdrant per-prefetch filters; drain worker under the 60 s cap.
+
+### Roadmap Evolution
+
+- Phase 3.1.1 inserted after Phase 3.1: Domain embedding model candidates (voyage-law-2/finance-2 etc.) compared on our test set; per-doc-type model selection
+- Phase 4.1 inserted after Phase 4: Hybrid retrieval + rerank default on, only after calibrated refusal and a no-regression eval (Guang 2026-11-24)
+- Phase 4.1.1 inserted after Phase 4.1: Domain terminology dictionary in DB, expert-maintained; query expansion, index-time synonyms, zero-result log mining
+- Phase 5.1.1 inserted after Phase 5.1: Feedback loop + real domain test set (pulls EVAL-16/EVAL-17 forward): thumbs, failed-query mining into dictionary, training data and golden set
+- Phase 6.1 inserted after Phase 6: Embedding fine-tuning: synthetic queries, filtering, hard negatives, MNRL, document-level split, re-embed + profile switch
 
 ## Deferred Items
 

@@ -22,10 +22,15 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Unified Retrieval Pipeline & Tenant Scope** - Text chat, embedded chat and voice run through one `src/lib/rag/` pipeline that only searches a server-verified tenant, reproducing the baseline
 - [ ] **Phase 3: Unified Ingestion & Embedding Profiles** - One `ingest()` for every upload path with document types, Docling fallback, dedup, versioning, switchable embeddings and rollbackable re-embedding
 - [ ] **Phase 3.1: Tiered Parsing, Incremental Queue & Bulk Backfill** (INSERTED) - Cheapest-tier-that-passes parse routing with escalation, cloud and budget constraints, an ingestion ledger and parse cache, an async upload queue and a budgeted, resumable backfill. **2026-11-24 pause:** trunk merge train at `56b0349d` (#10 #9 #4 #5 merged); resume per `.planning/phases/03.1-tiered-parsing-incremental-queue-bulk-backfill/.continue-here.md`.
+- [ ] **Phase 03.1.1: Domain embedding model candidates and per-doc-type model selection**
 - [ ] **Phase 4: Hybrid Retrieval, Reranking & Calibrated Refusal** - Filtered hybrid search on pgvector, switchable rerankers, edge-ordered context and refusal from calibrated rerank scores
+- [ ] **Phase 04.1: Hybrid retrieval and rerank on by default, proven by eval**
+- [ ] **Phase 04.1.1: Domain terminology dictionary: expert-maintained synonyms, query expansion, index-time synonyms, log mining**
 - [ ] **Phase 5: Verified Citations & Groundedness** - Claude Citations, validated chunk-ID citations for other models, one persisted citation record and a post-stream groundedness badge
 - [ ] **Phase 5.1: Prompt Injection Defense** (INSERTED) - Tagged, instruction-free context, runtime injection detection and an injection eval gated at 0
+- [ ] **Phase 05.1.1: Feedback loop and real domain test set: thumbs, failed-query mining, dictionary/training/golden refresh**
 - [ ] **Phase 6: Query Layer (LlamaIndex & LangChain)** - History rewrite, multi-query fusion, HyDE and sub-questions with a router and budgets, in two switchable frameworks compared in eval
+- [ ] **Phase 06.1: Embedding fine-tuning pipeline: synthetic queries, hard negatives, MNRL training, re-embed and switch**
 - [ ] **Phase 7: External Backends & Release Defaults** - Weaviate and Qdrant synced from Supabase behind tenant canaries; a full regression sets the defaults; Config UI and docs complete
 
 ## Phase Details
@@ -229,6 +234,16 @@ Plans:
 **Plans**: 54 plans in 14 waves — see `phases/03.1-tiered-parsing-incremental-queue-bulk-backfill/03.1-PLAN-INDEX.md`
 **UI hint**: yes
 
+### Phase 03.1.1: Domain embedding model candidates and per-doc-type model selection (INSERTED)
+
+**Goal:** [Urgent work - to be planned]
+**Requirements**: TBD
+**Depends on:** Phase 3.1
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 03.1.1 to break down)
+
 ### Phase 4: Hybrid Retrieval, Reranking & Calibrated Refusal
 **Goal**: On pgvector, questions in Chinese, English and Italian find the right chunks through filtered hybrid search and reranking, and the system refuses when the best reranked evidence is too weak
 **Depends on**: Phase 3
@@ -292,6 +307,26 @@ Plans:
 - [ ] 04-44-PLAN.md
 - [ ] 04-45-PLAN.md
 
+### Phase 04.1: Hybrid retrieval and rerank on by default, proven by eval (INSERTED)
+
+**Goal:** [Urgent work - to be planned]
+**Requirements**: TBD
+**Depends on:** Phase 4
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 04.1 to break down)
+
+### Phase 04.1.1: Domain terminology dictionary: expert-maintained synonyms, query expansion, index-time synonyms, log mining (INSERTED)
+
+**Goal:** [Urgent work - to be planned]
+**Requirements**: TBD
+**Depends on:** Phase 4.1
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 04.1.1 to break down)
+
 ### Phase 5: Verified Citations & Groundedness
 **Goal**: Every RAG answer cites only chunks that were actually sent to the model, its citations survive later document changes, and users can see whether the answer was checked for groundedness
 **Depends on**: Phase 4
@@ -345,6 +380,16 @@ Plans:
 - [ ] 05.1-23-PLAN.md — Live verification: Lakera account, key, region and retention; Lakera live through the stage on synthetic chunks; Prompt Guard image; latency and live attack success (wave 7, autonomous: false)
 - [ ] 05.1-24-PLAN.md — Golden attack field and injection categories, eval run, trace and report contract changes with regenerated Zod (wave 2)
 - [ ] 05.1-25-PLAN.md — Prompt Guard scorer, bake step and promptguard image target on the orchestrator-locked environment (wave 4)
+
+### Phase 05.1.1: Feedback loop and real domain test set: thumbs, failed-query mining, dictionary/training/golden refresh (INSERTED)
+
+**Goal:** [Urgent work - to be planned]
+**Requirements**: TBD
+**Depends on:** Phase 5.1
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 05.1.1 to break down)
 
 ### Phase 6: Query Layer (LlamaIndex & LangChain)
 **Goal**: Follow-up, vague and compound questions retrieve as well as standalone ones under either query framework, within their latency budgets, and voice stays fast
@@ -409,6 +454,16 @@ Plans:
 - [ ] 06-45-PLAN.md — W12: fold migrations into both setup files, full gates with defaults, AGENTS.md
 - [ ] 06-46-PLAN.md — W13: live verification checkpoints (autonomous: false)
 **UI hint**: yes
+
+### Phase 06.1: Embedding fine-tuning pipeline: synthetic queries, hard negatives, MNRL training, re-embed and switch (INSERTED)
+
+**Goal:** [Urgent work - to be planned]
+**Requirements**: TBD
+**Depends on:** Phase 6
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 06.1 to break down)
 
 ### Phase 7: External Backends & Release Defaults
 **Goal**: Admins can switch retrieval to Weaviate or Qdrant without any cross-tenant leakage, every new provider and switch is configurable in the Config UI, and the shipped defaults are backed by a full regression
