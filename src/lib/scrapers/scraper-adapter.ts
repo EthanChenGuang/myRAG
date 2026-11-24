@@ -1,9 +1,8 @@
 import { scrapeUrl, crawlWebsite } from './firecrawl-client';
 import { processDocument } from '@/lib/document-processor';
 import type { ProcessDocumentMetadata } from '@/lib/document-processor';
-import { buildSourceKey, ingest, submitIngest } from '@/lib/rag';
+import { buildSourceKey, ingest, scheduleIngestWake, submitIngest } from '@/lib/rag';
 import type { EnqueueResult, IngestResult, TenantScope } from '@/lib/rag';
-import { scheduleIngestWake } from '@/lib/rag/ingest/wake';
 import { scraperPipeline } from './ingest-switch';
 import { normalizeScrapedUrl } from './url-utils';
 
@@ -153,7 +152,15 @@ export async function crawlAndProcess(options: CrawlOptions): Promise<{
     totalPages: number;
     successfulPages: number;
     failedPages: number;
-    documents: Array<{ documentId: string; url: string; title?: string; status?: IngestedPage['status']; version?: number | null }>;
+    documents: Array<{
+        documentId: string;
+        url: string;
+        title?: string;
+        status?: IngestedPage['status'];
+        version?: number | null;
+        jobId?: string | null;
+    }>;
+    jobIds?: Array<string | null>;
     errors: Array<{ url: string; error: string }>;
 }> {
     if (scraperPipeline() === 'unified') {
