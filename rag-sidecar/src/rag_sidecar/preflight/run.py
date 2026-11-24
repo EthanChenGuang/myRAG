@@ -165,6 +165,7 @@ def run_preflight(
     l3: L3Hook | None = None,
     *,
     file_sha: str | None = None,
+    vlm_app: object | None = None,
 ) -> PreflightOutput:
     """Run L1, optional L2, optional L3 hook, tiers, ranges and classification."""
     target = Path(path)
