@@ -63,3 +63,9 @@ After all: code review gate -> regression gate -> verifier -> update roadmap.
 - Reaper uses `rag_mark_document_failed`, which does not require `status='processing'`; a row quarantined between read and mark could be marked failed. Review pass: conditional SQL (new migration) with a failing test.
 - Single-tenant resume is admin-only until the unified writer records an owner in single-tenant mode.
 - Live: resume route against a real sidecar job (03-48 checklist).
+
+## Phase 3 wave 7 follow-ups (03-32)
+- `scripts/config-ui/index.html` `uploadKBImage` does not send `upload_source=config_upload`; Config UI image uploads get the session scope. Fix in 03-43 or the review pass.
+- Unified image uploads: identical bytes from one tenant dedup (legacy made two documents); accepted.
+- Live (03-48): real image upload on a deployed project — caption quality, after() finishing inside 60 s.
+- DATA-11 stays open until 03-38 (PDF images).
