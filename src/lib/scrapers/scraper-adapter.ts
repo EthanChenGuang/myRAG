@@ -1,8 +1,9 @@
 import { scrapeUrl, crawlWebsite } from './firecrawl-client';
 import { processDocument } from '@/lib/document-processor';
 import type { ProcessDocumentMetadata } from '@/lib/document-processor';
-import { buildSourceKey, ingest } from '@/lib/rag';
-import type { IngestResult, TenantScope } from '@/lib/rag';
+import { buildSourceKey, ingest, submitIngest } from '@/lib/rag';
+import type { EnqueueResult, IngestResult, TenantScope } from '@/lib/rag';
+import { scheduleIngestWake } from '@/lib/rag/ingest/wake';
 import { scraperPipeline } from './ingest-switch';
 import { normalizeScrapedUrl } from './url-utils';
 
@@ -32,8 +33,16 @@ export interface IngestedPage {
     documentId: string;
     url: string;
     title?: string;
-    status: IngestResult['status'];
+    status: IngestResult['status'] | EnqueueResult['status'];
     version: number | null;
+    jobId?: string | null;
+}
+
+function scraperAsyncIngestEnabled(): boolean {
+    return (
+        (process.env.RAG_INGEST_PIPELINE ?? 'legacy').toLowerCase() === 'unified' &&
+        (process.env.RAG_INGEST_ASYNC ?? 'off').toLowerCase() === 'on'
+    );
 }
 
 interface ScrapedPage {
@@ -247,7 +256,11 @@ async function scrapeAndIngest(
     const result = await scrapeUrl(normalizedUrl, { output });
 
     const deadlineMs = Math.max(MIN_PAGE_BUDGET_MS, SCRAPE_BUDGET_MS - (Date.now() - startedAt));
-    return ingestPage({ ...result, url: normalizedUrl }, output, scope, signal, deadlineMs);
+    const ingested = await ingestPage({ ...result, url: normalizedUrl }, output, scope, signal, deadlineMs);
+    if (ingested.status === 'queued') {
+        scheduleIngestWake();
+    }
+    return ingested;
 }
 
 async function crawlAndIngest(
@@ -258,6 +271,7 @@ async function crawlAndIngest(
     successfulPages: number;
     failedPages: number;
     documents: IngestedPage[];
+    jobIds: Array<string | null>;
     errors: Array<{ url: string; error: string }>;
 }> {
     const startedAt = Date.now();
@@ -269,6 +283,7 @@ async function crawlAndIngest(
 
     const documents: IngestedPage[] = [];
     const errors: Array<{ url: string; error: string }> = [];
+    let queuedPages = 0;
 
     for (const page of pages) {
         signal.throwIfAborted();
@@ -278,7 +293,9 @@ async function crawlAndIngest(
             continue;
         }
         try {
-            documents.push(await ingestPage(page, output, scope, signal, Math.min(PAGE_DEADLINE_MS, remaining)));
+            const ingested = await ingestPage(page, output, scope, signal, Math.min(PAGE_DEADLINE_MS, remaining));
+            documents.push(ingested);
+            if (ingested.status === 'queued') queuedPages += 1;
         } catch (error) {
             console.error(`[Scraper Adapter] Failed to ingest ${page.url}:`, error);
             errors.push({
@@ -288,6 +305,12 @@ async function crawlAndIngest(
         }
     }
 
+    if (queuedPages > 0) {
+        scheduleIngestWake();
+    }
+
+    const jobIds = documents.map((page) => page.jobId ?? null);
+
     console.log(`[Scraper Adapter] Crawl complete: ${documents.length}/${pages.length} pages ingested`);
 
     return {
@@ -295,6 +318,7 @@ async function crawlAndIngest(
         successfulPages: documents.length,
         failedPages: errors.length,
         documents,
+        jobIds,
         errors,
     };
 }
@@ -319,9 +343,9 @@ async function ingestPage(
     const metadata: Record<string, string> = { external_url: canonicalUrl, scraped_url: canonicalUrl };
     if (title) metadata.title = title;
 
-    const result = await ingest({
+    const ingestInput = {
         scope,
-        source: 'scraper',
+        source: 'scraper' as const,
         sourceKey: buildSourceKey('scraper', { url: canonicalUrl }),
         ...content,
         options: {
@@ -329,11 +353,31 @@ async function ingestPage(
         },
         signal,
         deadlineMs,
-    });
+    };
+    const result: IngestResult | EnqueueResult = scraperAsyncIngestEnabled()
+        ? await submitIngest(ingestInput)
+        : await ingest(ingestInput);
 
     if (result.status === 'failed') {
         throw new Error(`Ingest failed (${result.reason ?? 'unknown'})`);
     }
+
+    if ('jobId' in result) {
+        const documentId = result.documentId;
+        if (documentId === null) {
+            throw new Error(`Ingest returned no document (${result.status})`);
+        }
+        console.log(`[Scraper Adapter] Enqueued ${page.url} as ${result.status}`);
+        return {
+            documentId,
+            url: page.url,
+            title,
+            status: result.status,
+            version: null,
+            jobId: result.jobId,
+        };
+    }
+
     const documentId = result.documentId ?? result.duplicateOf ?? null;
     if (documentId === null) {
         throw new Error(`Ingest returned no document (${result.status})`);
