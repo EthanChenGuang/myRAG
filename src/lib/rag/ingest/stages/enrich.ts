@@ -20,6 +20,19 @@ async function run(ctx: StageContext): Promise<StageOutcome> {
 
   const language = detectLanguage(ctx.work.parseText ?? ctx.work.chunks.map((draft) => draft.content).join('\n'));
   if (language !== null) await ctx.writer.setFields(document.id, { language });
+
+  const detection = ctx.state.docTypeDetection?.detection;
+  if (detection && ctx.identity) {
+    // The type may have been refined after parse; the row, its profile and the detection that decided it are stored once, before the chunks are written.
+    const { docType, docTypeOrigin, profile } = ctx.identity;
+    await ctx.writer.setFields(document.id, {
+      doc_type: docType,
+      doc_type_origin: docTypeOrigin,
+      processing_profile_id: profile.id,
+      processing_profile_version: profile.version,
+      metadata: { doc_type_detection: detection },
+    });
+  }
   return { kind: 'next' };
 }
 

@@ -1,4 +1,4 @@
-import type { ParseResult } from '@/lib/rag-eval/contracts.generated';
+import type { DocTypeDetection, ParseResult } from '@/lib/rag-eval/contracts.generated';
 import type { TenantScope } from '../tenant/scope';
 import type { TraceCollector } from '../trace/collector';
 import type { IngestConfig } from './config';
@@ -29,6 +29,9 @@ export type StageName =
 export type DocTypeOrigin = 'picked' | 'source_default' | 'tenant_default' | 'auto' | 'fallback';
 
 export interface IngestOptions {
+  /** Nango sync only: the connection and folder the file came from, which the admin doc-type defaults can name. */
+  nangoConnectionId?: string;
+  nangoFolderId?: string;
   [key: string]: unknown;
 }
 
@@ -38,7 +41,8 @@ interface IngestInputBase {
   sourceKey: string;
   filename: string;
   mimeType: string;
-  docType?: DocType;
+  /** The type picked for the file, or 'auto' to detect it. Absent: the admin defaults decide. */
+  docType?: DocType | 'auto';
   options?: IngestOptions;
   signal: AbortSignal;
   trace?: TraceCollector;
@@ -70,7 +74,7 @@ export interface IngestState {
   docTypeOrigin: DocTypeOrigin | null;
   parseJob: { parser: string; jobId: string; submittedAt: string; attempt: number } | null;
   artifacts: Record<string, string>;
-  docTypeDetection: { signals: string[]; refined: DocType | null; reparsed: boolean } | null;
+  docTypeDetection: { signals: string[]; refined: DocType | null; reparsed: boolean; detection?: DocTypeDetection } | null;
   quarantine: { ruleIds: string[]; released: boolean } | null;
   invoice: { extractor: string; status: string } | null;
   images: { nextIndex: number; captioned: number } | null;
