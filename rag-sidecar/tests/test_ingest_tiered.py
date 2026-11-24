@@ -870,3 +870,45 @@ def test_run_once_hands_its_storage_and_converter_factory_to_process_job(monkeyp
     assert code == 0
     (deps,) = seen
     assert deps.storage is storage and deps.page_cap == 77 and deps.converter_factory() == "converter"
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# A scalar function answers with the bare value on PostgREST and with a one-column row on the fake edge (and in older gateways)
+# ---------------------------------------------------------------------------------------------------------------------
+
+
+def _ledger_answering(payload: Any):
+    import httpx
+
+    from rag_sidecar.ingest.ledger_client import LedgerClient
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=payload)
+
+    return LedgerClient(
+        base_url="https://example.supabase.co",
+        service_key="sb_secret_placeholder_value_for_tests",
+        client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+
+
+@pytest.mark.parametrize("payload", ["tenant/_parse-cache/h/p-v-o/", {"rag_parse_cache_prefix": "tenant/_parse-cache/h/p-v-o/"}, [{"rag_parse_cache_prefix": "tenant/_parse-cache/h/p-v-o/"}]])
+def test_cache_prefix_reads_a_bare_value_and_a_one_column_row(payload):
+    client = _ledger_answering(payload)
+
+    prefix = asyncio.run(client.cache_prefix(_JOB_ID, "docling", "v1", "a" * 64))
+
+    assert prefix == "tenant/_parse-cache/h/p-v-o/"
+
+
+@pytest.mark.parametrize("payload,expected", [(True, True), (False, False), ({"rag_heartbeat_ingestion_job": True}, True), ({"rag_heartbeat_ingestion_job": False}, False)])
+def test_heartbeat_reads_a_bare_boolean_and_a_one_column_row(payload, expected):
+    client = _ledger_answering(payload)
+
+    assert asyncio.run(client.heartbeat(_JOB_ID, _WORKER)) is expected
+
+
+def test_release_does_not_read_a_false_one_column_row_as_released():
+    client = _ledger_answering({"rag_release_ingestion_job": False})
+
+    assert asyncio.run(client.release(_JOB_ID, _WORKER)) is False
