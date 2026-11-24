@@ -19,16 +19,28 @@ const REFERENCE_CHUNK_LIMIT = 30;
 const PREVIEW_LENGTH = 200;
 
 interface Scopable {
-  eq(column: string, value: string): Scopable;
+  eq(column: string, value: string | boolean): Scopable;
   is(column: string, value: null): Scopable;
 }
 
-/** Every documents query goes through here so the tenant predicate cannot be left off. */
+/**
+ * Every documents query goes through here so the tenant predicate and the D-08 filter cannot be left off:
+ * only a current, ready version is ever read, so a quarantined or superseded document is not referenced.
+ */
 function scoped<T>(query: T, predicate: TenantPredicate): T {
-  const filter = query as unknown as Scopable;
+  const filter = (query as unknown as Scopable).eq('is_current', true).eq('status', 'ready');
   if (predicate.kind === 'org') return filter.eq('organization_id', predicate.organizationId) as unknown as T;
   if (predicate.kind === 'personal') return filter.eq('user_id', predicate.userId).is('organization_id', null) as unknown as T;
-  return query;
+  return filter as unknown as T;
+}
+
+interface CurrentChunks {
+  eq(column: string, value: unknown): CurrentChunks;
+}
+
+/** Chunk reads of a referenced document stop at the same line: current and ready only. */
+function currentChunks<T>(query: T): T {
+  return (query as unknown as CurrentChunks).eq('is_current', true).eq('status', 'ready') as unknown as T;
 }
 
 interface DocumentRef {
@@ -98,10 +110,7 @@ export async function resolveDocumentRefs(input: ResolveDocumentRefsInput): Prom
       external_url: docMetadata.metadata?.external_url,
     });
 
-    const { data: chunks, error } = await admin
-      .from('document_chunks')
-      .select('content')
-      .eq('document_id', docRef.id)
+    const { data: chunks, error } = await currentChunks(admin.from('document_chunks').select('content').eq('document_id', docRef.id))
       .limit(REFERENCE_CHUNK_LIMIT)
       .abortSignal(signal);
 
@@ -128,10 +137,7 @@ export async function resolveDocumentRefs(input: ResolveDocumentRefsInput): Prom
       continue;
     }
 
-    const { data: allChunks, error: allChunksError } = await admin
-      .from('document_chunks')
-      .select('*')
-      .eq('document_id', docRef.id)
+    const { data: allChunks, error: allChunksError } = await currentChunks(admin.from('document_chunks').select('*').eq('document_id', docRef.id))
       .limit(REFERENCE_CHUNK_LIMIT)
       .abortSignal(signal);
 

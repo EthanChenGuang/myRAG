@@ -33,7 +33,7 @@ export interface FakeIngestDbOptions {
   onCall?: (call: RecordedRpc) => void;
 }
 
-function answer(fn: string, args: Record<string, unknown>, options: FakeIngestDbOptions): Row[] {
+function answer(fn: string, args: Record<string, unknown>, options: FakeIngestDbOptions, quarantined: boolean): Row[] {
   const documentId = options.documentId ?? FAKE_DOCUMENT_ID;
   switch (fn) {
     case 'rag_begin_document_version':
@@ -49,7 +49,7 @@ function answer(fn: string, args: Record<string, unknown>, options: FakeIngestDb
     case 'rag_write_chunks':
       return [{ chunks_written: (args.p_chunks as unknown[]).length, chunks_deleted: 0 }];
     case 'rag_publish_document_version':
-      return [{ outcome: 'published', document_id: args.p_document_id, version: 1, superseded_document_id: null }];
+      return [{ outcome: quarantined ? 'quarantined' : 'published', document_id: args.p_document_id, version: 1, superseded_document_id: null }];
     case 'rag_mark_document_failed':
       return [{ document_id: args.p_document_id, status: 'failed' }];
     default:
@@ -60,13 +60,15 @@ function answer(fn: string, args: Record<string, unknown>, options: FakeIngestDb
 /** A recording RpcClient that answers the ingest writer functions without a database. */
 export function fakeIngestDb(options: FakeIngestDbOptions = {}): { db: RpcClient; calls: RecordedRpc[] } {
   const calls: RecordedRpc[] = [];
+  let quarantined = false;
   const db: RpcClient = {
     rpc(fn, args) {
       const call: RecordedRpc = { fn, args: (args ?? {}) as Record<string, unknown> };
       calls.push(call);
+      if (fn === 'rag_set_document_fields' && (call.args.p_fields as Record<string, unknown> | undefined)?.status === 'quarantined') quarantined = true;
       options.onCall?.(call);
       const failure = options.failures?.[fn];
-      const response: RpcResponse = failure ? { data: null, error: failure } : { data: answer(fn, call.args, options), error: null };
+      const response: RpcResponse = failure ? { data: null, error: failure } : { data: answer(fn, call.args, options, quarantined), error: null };
       const request: RpcRequest = {
         abortSignal: () => request,
         then: (onFulfilled, onRejected) => Promise.resolve(response).then(onFulfilled, onRejected),

@@ -6,6 +6,7 @@ import { createIngestTrace, finishIngestTrace } from '@/lib/rag/ingest/trace';
 import type { ChunkDraft, StageContext } from '@/lib/rag/ingest/types';
 import { resetLangfuseForTests } from '@/lib/rag/trace/langfuse';
 import { createTraceCollector } from '@/lib/rag/trace/collector';
+import { resetInjectionRulesForTests, setInjectionRulesForTests } from '@/lib/rag/security/injection-scan';
 import { mintScope } from '@/lib/rag/tenant/scope';
 import { startFakeLangfuse, type FakeLangfuse, type FakeSpan } from '../../helpers/fake-langfuse.mts';
 import { FAKE_DOCUMENT_ID, callsOf, fakeIngestDb, installIngestDeps, savedStages, uninstallIngestDeps } from '../../helpers/ingest-fakes';
@@ -51,6 +52,7 @@ afterEach(async () => {
   fake.release();
   await resetLangfuseForTests();
   uninstallIngestDeps();
+  resetInjectionRulesForTests();
   vi.unstubAllEnvs();
   vi.restoreAllMocks();
 });
@@ -128,6 +130,7 @@ describe('ingestion trace', () => {
     const byName = (name: string) => payload.stages.find((stage) => stage.name === name) as Record<string, unknown>;
     expect(byName('file_hash_dedup')).toMatchObject({ status: 'ok', outcome: 'unique' });
     expect(byName('store_original')).toMatchObject({ status: 'disabled', fallback_reason: 'no_object_store' });
+    expect(byName('scan_injection')).toMatchObject({ status: 'disabled', outcome: 'scan_off' });
     expect(byName('parse')).toMatchObject({ parser_used: 'text' });
     expect(byName('chunk')).toMatchObject({ doc_type: 'general', doc_type_origin: 'fallback' });
     expect(byName('chunk').chunk_count).toBeGreaterThanOrEqual(2);
@@ -137,6 +140,7 @@ describe('ingestion trace', () => {
   test('a stage that fails ends its span as an error with the reason code and nothing else', async () => {
     const { db } = fakeIngestDb();
     installIngestDeps({ db, env: { RAG_INJECTION_SCAN: 'quarantine' } });
+    setInjectionRulesForTests({ schema_version: 1, rules: [{ id: 'inj-en-99', language: 'en', kind: 'regex', severity: 'high', pattern: '(a+)+$' }] });
 
     const result = await upload();
 

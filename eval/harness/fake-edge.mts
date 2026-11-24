@@ -60,8 +60,25 @@ interface RpcSignature {
 }
 
 const TABLE_COLUMNS: Record<string, string[]> = {
-  documents: ['id', 'filename', 'content', 'metadata', 'created_at', 'source', 'source_provider', 'source_file_id', 'organization_id', 'user_id'],
-  document_chunks: ['id', 'document_id', 'content', 'metadata', 'created_at', 'organization_id', 'chunk_index'],
+  documents: [
+    'id',
+    'filename',
+    'content',
+    'metadata',
+    'created_at',
+    'source',
+    'source_provider',
+    'source_file_id',
+    'organization_id',
+    'user_id',
+    'is_current',
+    'status',
+    'tenant_key',
+    'lineage_id',
+    'version',
+    'doc_type',
+  ],
+  document_chunks: ['id', 'document_id', 'content', 'metadata', 'created_at', 'organization_id', 'chunk_index', 'is_current', 'status', 'tenant_key', 'version', 'doc_type'],
   organization_members: ['id', 'organization_id', 'user_id', 'role', 'created_at'],
   organizations: ['id', 'name', 'slug', 'owner_id', 'is_personal', 'subscription_tier', 'created_at'],
 };
@@ -69,11 +86,32 @@ const TABLE_COLUMNS: Record<string, string[]> = {
 type FilterOperator = 'eq' | 'in' | 'is.null';
 
 const TABLE_FILTERS: Record<string, Record<string, FilterOperator[]>> = {
-  documents: { id: ['eq', 'in'], organization_id: ['eq', 'is.null'], user_id: ['eq'] },
-  document_chunks: { id: ['eq', 'in'], document_id: ['eq', 'in'] },
+  documents: {
+    id: ['eq', 'in'],
+    organization_id: ['eq', 'is.null'],
+    user_id: ['eq'],
+    is_current: ['eq'],
+    status: ['eq'],
+    tenant_key: ['eq'],
+    lineage_id: ['eq'],
+    version: ['eq'],
+    doc_type: ['eq'],
+  },
+  document_chunks: { id: ['eq', 'in'], document_id: ['eq', 'in'], is_current: ['eq'], status: ['eq'], tenant_key: ['eq'], version: ['eq'], doc_type: ['eq'] },
   organization_members: { id: ['eq'], organization_id: ['eq'], user_id: ['eq'] },
   organizations: { id: ['eq'] },
 };
+
+/** Value type of a filtered column; a column that is not listed holds a uuid. */
+const FILTER_VALUE_TYPES: Record<string, 'boolean' | 'integer' | 'text'> = {
+  is_current: 'boolean',
+  version: 'integer',
+  status: 'text',
+  tenant_key: 'text',
+  doc_type: 'text',
+};
+const BOOLEAN_FILTER_RE = /^(true|false)$/;
+const INTEGER_FILTER_RE = /^-?\d{1,9}$/;
 
 const OR_ILIKE_COLUMNS: Record<string, string> = {
   content: '"content"',
@@ -264,8 +302,20 @@ function createHandlers(db: PGlite, calls: FakeEdgeCall[], extras: { documentFil
         where.push(`"${column}" IS NULL`);
       } else if (raw.startsWith('eq.') && operators.includes('eq')) {
         const value = raw.slice(3);
-        if (!UUID_RE.test(value)) throw new Rejection(400, `${column} filter must be a uuid`);
-        where.push(`"${column}" = ${bind(value, '::uuid')}`);
+        const valueType = FILTER_VALUE_TYPES[column];
+        if (valueType === 'boolean') {
+          if (!BOOLEAN_FILTER_RE.test(value)) throw new Rejection(400, `${column} filter must be true or false`);
+          where.push(`"${column}" = ${bind(value, '::boolean')}`);
+        } else if (valueType === 'integer') {
+          if (!INTEGER_FILTER_RE.test(value)) throw new Rejection(400, `${column} filter must be an integer`);
+          where.push(`"${column}" = ${bind(value, '::integer')}`);
+        } else if (valueType === 'text') {
+          if (value === '') throw new Rejection(400, `${column} filter must not be empty`);
+          where.push(`"${column}" = ${bind(value)}`);
+        } else {
+          if (!UUID_RE.test(value)) throw new Rejection(400, `${column} filter must be a uuid`);
+          where.push(`"${column}" = ${bind(value, '::uuid')}`);
+        }
       } else if (raw.startsWith('in.(') && raw.endsWith(')') && operators.includes('in')) {
         const inner = raw.slice(4, -1);
         const list = inner === '' ? [] : inner.split(',').map((item) => item.trim());

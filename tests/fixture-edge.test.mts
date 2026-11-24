@@ -409,6 +409,68 @@ describe('fake edge operators on the two-tenant fixture', () => {
     assert.deepEqual(await getIds('documents', { organization_id: `eq.${ids.orgO}` }), [ids.docO]);
   });
 
+  test('documents and document_chunks read and filter on is_current, status, tenant_key, version and doc_type, documents also on lineage_id', async () => {
+    await getEdge();
+    const db = tenant!.db;
+    await db.query("UPDATE documents SET status = 'quarantined', is_current = false WHERE id = $1", [ids.docB]);
+    await db.query("UPDATE document_chunks SET status = 'quarantined', is_current = false WHERE document_id = $1", [ids.docB]);
+    try {
+      const lineage = String(((await db.query<{ lineage_id: string }>('SELECT lineage_id FROM documents WHERE id = $1', [ids.docA])).rows[0] as { lineage_id: string }).lineage_id);
+      const filters: Array<[string, string, string]> = [
+        ['documents', 'is_current', 'true'],
+        ['documents', 'is_current', 'false'],
+        ['documents', 'status', 'ready'],
+        ['documents', 'status', 'quarantined'],
+        ['documents', 'tenant_key', `u:${ids.userA}`],
+        ['documents', 'lineage_id', lineage],
+        ['documents', 'version', '1'],
+        ['documents', 'doc_type', 'general'],
+        ['document_chunks', 'is_current', 'true'],
+        ['document_chunks', 'is_current', 'false'],
+        ['document_chunks', 'status', 'ready'],
+        ['document_chunks', 'status', 'quarantined'],
+        ['document_chunks', 'tenant_key', `u:${ids.userA}`],
+        ['document_chunks', 'version', '1'],
+        ['document_chunks', 'doc_type', 'general'],
+      ];
+      for (const [table, column, value] of filters) {
+        const expected = ((await db.query<{ id: string }>(`SELECT id FROM ${table} WHERE ${column}::text = $1 ORDER BY id`, [value])).rows).map((row) => row.id);
+        assert.deepEqual(await getIds(table, { [column]: `eq.${value}` }), expected, `${table}.${column}=eq.${value}`);
+      }
+
+      assert.deepEqual(await getIds('documents', { id: `in.(${ids.docA},${ids.docB},${ids.docO})`, is_current: 'eq.true', status: 'eq.ready' }), sorted([ids.docA, ids.docO]));
+      assert.deepEqual(await getIds('documents', { id: `in.(${ids.docA},${ids.docB},${ids.docO})`, status: 'eq.quarantined' }), [ids.docB]);
+      assert.deepEqual(await getIds('document_chunks', { document_id: `in.(${ids.docA},${ids.docB})`, is_current: 'eq.true', status: 'eq.ready' }), [ids.chunkA]);
+
+      const selected = await get('documents', { select: 'id,is_current,status,tenant_key,lineage_id,version,doc_type', id: `eq.${ids.docB}` });
+      assert.equal(selected.status, 200);
+      assert.deepEqual(((await selected.json()) as Array<Record<string, unknown>>).map((row) => [row.is_current, row.status, row.version, row.doc_type]), [[false, 'quarantined', 1, 'general']]);
+      const chunkSelected = await get('document_chunks', { select: 'id,is_current,status,tenant_key,version,doc_type', id: `eq.${ids.chunkB}` });
+      assert.equal(chunkSelected.status, 200);
+    } finally {
+      await db.query("UPDATE documents SET status = 'ready', is_current = true WHERE id = $1", [ids.docB]);
+      await db.query("UPDATE document_chunks SET status = 'ready', is_current = true WHERE document_id = $1", [ids.docB]);
+    }
+  });
+
+  test('the new filter columns reject values of the wrong type and operators other than eq', async () => {
+    const e = await getEdge();
+    const before = e.errors.length;
+    const attempts: Array<[string, Record<string, string>]> = [
+      ['documents', { select: 'id', is_current: 'eq.maybe' }],
+      ['documents', { select: 'id', version: 'eq.one' }],
+      ['documents', { select: 'id', status: 'in.(ready,quarantined)' }],
+      ['documents', { select: 'id', lineage_id: 'eq.not-a-uuid' }],
+      ['document_chunks', { select: 'id', is_current: 'is.null' }],
+      ['document_chunks', { select: 'id', lineage_id: `eq.${ids.docA}` }],
+    ];
+    for (const [table, query] of attempts) {
+      const res = await get(table, query);
+      assert.equal(res.status, 400, `${table} ${JSON.stringify(query)} returned ${res.status}`);
+    }
+    assert.equal(e.errors.length - before, attempts.length);
+  });
+
   test('organization_members and organizations GET with eq filters', async () => {
     const member = await get('organization_members', { select: 'id,role', organization_id: `eq.${ids.orgO}`, user_id: `eq.${ids.userA}` });
     assert.equal(member.status, 200);

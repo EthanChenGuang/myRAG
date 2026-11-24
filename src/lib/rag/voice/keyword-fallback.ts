@@ -33,14 +33,16 @@ interface ChunkQueryResult {
 }
 
 interface ChunkFilter {
+  eq(column: string, value: unknown): ChunkFilter;
   not(column: string, operator: string, value: unknown): ChunkFilter;
   or(filters: string): ChunkFilter;
   in(column: string, values: string[]): ChunkFilter;
   limit(count: number): { abortSignal(signal: AbortSignal): PromiseLike<{ data: unknown; error: { message: string } | null }> };
 }
 
+/** Every chunk read here is restricted to current, ready chunks (D-08): a quarantined or superseded chunk is never a keyword hit. */
 function chunkSelect(admin: SupabaseClient, columns: string): ChunkFilter {
-  return admin.from('document_chunks').select(columns) as unknown as ChunkFilter;
+  return (admin.from('document_chunks').select(columns) as unknown as ChunkFilter).eq('is_current', true).eq('status', 'ready');
 }
 
 const STOP_WORDS = new Set(['the', 'is', 'a', 'an', 'and', 'or', 'of', 'to', 'in', 'for', 'on', 'with', 'by', 'at', 'show', 'me', 'what', 'where', 'can', 'you', 'please', 'who']);
@@ -87,7 +89,7 @@ async function inScopeDocumentIds(admin: SupabaseClient, scope: TenantScope, sig
   const predicate = tenantPredicate(scope);
   if (predicate.kind === 'none') return null;
 
-  const base = admin.from('documents').select('id');
+  const base = admin.from('documents').select('id').eq('is_current', true).eq('status', 'ready');
   const scoped =
     predicate.kind === 'org' ? base.eq('organization_id', predicate.organizationId) : base.eq('user_id', predicate.userId).is('organization_id', null);
   const { data, error } = await scoped.limit(MAX_SCOPE_DOCUMENTS).abortSignal(signal);
