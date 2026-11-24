@@ -74,10 +74,14 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | 04-02 | [bc-5a4f4e08](bc-5a4f4e08-1575-5ed0-a16f-35d23901bcfd) **merged** | exec/04-02 — 122 manifest vars |
 | 03.1-12 | [bc-6699e991](bc-6699e991-7801-5751-be34-7d73844505c5) **merged** | exec/03.1-12 — pytest 14 |
 | 04-07 | [bc-b39f21bf](bc-b39f21bf-71db-54ba-81d3-327871eb3a63) **merged** | exec/04-07 |
-| 04-11 | [bc-ff29f720](bc-ff29f720-c984-5a3b-82e5-ff26dea712ca) RUNNING | exec/04-11 |
+| 04-11 | [bc-ff29f720](bc-ff29f720-c984-5a3b-82e5-ff26dea712ca) **merged** | exec/04-11 — fusion vitest 10 |
 | 04-12 | [bc-7e4cdf1c](bc-7e4cdf1c-68e8-51f1-92c1-f1c5b1bb0abc) RUNNING | exec/04-12 |
 | 03.1-12 | [bc-6699e991](bc-6699e991-7801-5751-be34-7d73844505c5) **merged** | exec/03.1-12 |
 | 03.1-13 | [bc-e72d1c49](bc-e72d1c49-cec3-59a1-ad07-7c158b89a381) RUNNING | exec/03.1-13 |
+| 04-02 | [bc-5a4f4e08](bc-5a4f4e08-1575-5ed0-a16f-35d23901bcfd) **merged** | exec/04-02 |
+| 04-13 | [bc-1df13648](bc-1df13648-cd9d-57fe-b726-181165f7ff56) RUNNING | exec/04-13 |
+| 04-11 | [bc-ff29f720](bc-ff29f720-c984-5a3b-82e5-ff26dea712ca) **merged** | exec/04-11 |
+| 04-14 | [bc-136b100d](bc-136b100d-6b2f-51bc-b0da-cf8849a609c2) RUNNING | exec/04-14 |
 
 ## Remaining plan inventory (file-overlap basis)
 
@@ -95,7 +99,7 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 
 | Plan | bcId | Worktree | Notes |
 |------|------|----------|-------|
-| 04-11 | [bc-ff29f720](bc-ff29f720-c984-5a3b-82e5-ff26dea712ca) RUNNING | `wt/04-11` | Refill after 04-07 merge |
+| 04-14 | [bc-136b100d](bc-136b100d-6b2f-51bc-b0da-cf8849a609c2) RUNNING | `wt/04-14` | Refill after 04-11 |
 | 04-12 | [bc-7e4cdf1c](bc-7e4cdf1c-68e8-51f1-92c1-f1c5b1bb0abc) RUNNING | `wt/04-12` | Refill after 04-10 merge |
 | 04-13 | [bc-1df13648](bc-1df13648-cd9d-57fe-b726-181165f7ff56) RUNNING | `wt/04-13` | Refill after 04-02 |
 | 03.1-13 | [bc-e72d1c49](bc-e72d1c49-cec3-59a1-ad07-7c158b89a381) RUNNING | `wt/03.1-13` | Refill after 03.1-12 |
