@@ -61,7 +61,7 @@ export function parseRechunkArgs(argv: string[]): ParsedRechunkArgs {
   const tenantKey = values.get('--tenant') ?? null;
   if (tenantKey !== null && !isTenantKey(tenantKey)) return { ok: false, error: '--tenant needs a tenant key: s:default, u:<uuid> or o:<uuid>' };
   const docType = values.get('--doc-type') ?? null;
-  if (docType !== null && !DOC_TYPE.test(docType)) return { ok: false, error: '--doc-type needs a document type name' };
+  if (values.has('--doc-type') && !DOC_TYPE.test(docType ?? '')) return { ok: false, error: '--doc-type needs a document type name' };
   const profileId = values.get('--profile') ?? null;
   const resume = values.get('--resume') ?? null;
   if (resume !== null) {
