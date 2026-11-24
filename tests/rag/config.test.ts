@@ -36,6 +36,7 @@ describe('stage tables', () => {
       'assemble',
       'voice_keyword_fallback',
       'local_rerank',
+      'exact_id_lookup',
     ]);
   });
 
@@ -49,6 +50,7 @@ describe('stage tables', () => {
         legacy_rank: 2000,
         post_filter: 10000,
         assemble: 10000,
+        exact_id_lookup: 1000,
       });
     }
     expect(PROFILE_STAGE_DEFAULTS.voice).toEqual({
@@ -60,6 +62,7 @@ describe('stage tables', () => {
       local_rerank: 1000,
       post_filter: 3000,
       assemble: 3000,
+      exact_id_lookup: 500,
     });
   });
 });
@@ -138,6 +141,26 @@ describe('loadRagConfig', () => {
     expect(config.timeouts.chat.legacy_rank).toBe(1);
     expect(config.timeouts.chat.post_filter).toBe(10000);
     expect(configWarnings()).toHaveLength(4);
+  });
+
+  test('the exact-id switch is off for empty, false and unknown values, and on only for true', () => {
+    expect(loadRagConfig({}).exactIdLookup).toBe(false);
+    expect(loadRagConfig({ RAG_EXACT_ID_LOOKUP: '' }).exactIdLookup).toBe(false);
+    expect(loadRagConfig({ RAG_EXACT_ID_LOOKUP: 'false' }).exactIdLookup).toBe(false);
+    expect(configWarnings()).toEqual([]);
+    expect(loadRagConfig({ RAG_EXACT_ID_LOOKUP: ' True ' }).exactIdLookup).toBe(true);
+    expect(loadRagConfig({ RAG_EXACT_ID_LOOKUP: 'yes' }).exactIdLookup).toBe(false);
+    expect(configWarnings()).toHaveLength(1);
+    expect(configWarnings()[0]).toContain('RAG_EXACT_ID_LOOKUP');
+  });
+
+  test('the exact-id stage can be disabled and its timeout overridden for every profile', () => {
+    const config = loadRagConfig({ RAG_DISABLED_STAGES: 'exact_id_lookup', RAG_STAGE_TIMEOUTS: 'exact_id_lookup=250' });
+    expect([...config.disabledStages]).toEqual(['exact_id_lookup']);
+    for (const profile of ['chat', 'embed', 'voice', 'media', 'eval'] as const) {
+      expect(config.timeouts[profile].exact_id_lookup).toBe(250);
+    }
+    expect(configWarnings()).toEqual([]);
   });
 
   test('loading does not mutate the shared profile defaults', () => {
