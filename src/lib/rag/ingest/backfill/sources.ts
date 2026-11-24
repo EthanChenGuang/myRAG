@@ -45,9 +45,11 @@ export interface BackfillStorageBucket {
   download: (objectPath: string) => Promise<{ data: Blob | null; error: { message?: string } | null }>;
 }
 
+type ResolvedHost = { address: string; family: 4 | 6 };
+
 export interface BackfillSourceDeps {
   fetch?: typeof fetch;
-  resolveHost?: typeof dns.promises.resolve;
+  resolveHost?: (host: string, signal: AbortSignal) => Promise<ResolvedHost[]>;
   onManifestReject?: (reason: string) => void;
   storage?: { from: (bucket: string) => BackfillStorageBucket };
 }
@@ -86,15 +88,24 @@ function isIpBlocked(address: string, family: number): boolean {
   return false;
 }
 
-async function assertPublicUrl(
-  url: URL,
-  resolveHost: typeof dns.promises.resolve,
-  signal: AbortSignal,
-): Promise<void> {
+async function defaultResolveHost(host: string, signal: AbortSignal): Promise<ResolvedHost[]> {
+  signal.throwIfAborted();
+  const [v4, v6] = await Promise.all([
+    dns.promises.resolve4(host, { ttl: true }).catch(() => [] as string[]),
+    dns.promises.resolve6(host, { ttl: true }).catch(() => [] as string[]),
+  ]);
+  const hosts: ResolvedHost[] = [];
+  for (const address of v4) hosts.push({ address: typeof address === 'string' ? address : address.address, family: 4 });
+  for (const address of v6) hosts.push({ address: typeof address === 'string' ? address : address.address, family: 6 });
+  return hosts;
+}
+
+async function assertPublicUrl(url: URL, resolveHost: BackfillSourceDeps['resolveHost'], signal: AbortSignal): Promise<void> {
   if (url.protocol !== 'https:') throw new Error('manifest_https_required');
   const host = url.hostname;
   if (host === 'localhost' || host.endsWith('.localhost')) throw new Error('private_url');
-  const records = await resolveHost(host, { signal, ttl: true, verbatim: true });
+  const resolve = resolveHost ?? defaultResolveHost;
+  const records = await resolve(host, signal);
   for (const record of records) {
     if (isIpBlocked(record.address, record.family)) throw new Error('private_url');
   }
@@ -105,7 +116,7 @@ async function fetchUrlBytes(
   deps: BackfillSourceDeps,
   signal: AbortSignal,
 ): Promise<{ bytes: Uint8Array; size: number }> {
-  const resolveHost = deps.resolveHost ?? dns.promises.resolve.bind(dns.promises);
+  const resolveHost = deps.resolveHost;
   const fetchFn = deps.fetch ?? fetch;
   let current = new URL(url);
   for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
@@ -235,8 +246,12 @@ async function* listBucket(ref: string, deps: BackfillSourceDeps, signal: AbortS
   if (bucket === '') throw new Error('bucket_ref_invalid');
   const api = storage.from(bucket);
   const pending: string[] = [''];
+  let listPasses = 0;
+  const MAX_BUCKET_LIST_PASSES = 10_000;
   while (pending.length > 0) {
     signal.throwIfAborted();
+    if (listPasses >= MAX_BUCKET_LIST_PASSES) throw new Error('bucket_list_limit');
+    listPasses += 1;
     const prefix = pending.pop() as string;
     const { data, error } = await api.list(prefix, { limit: 1000 });
     if (error) throw new Error('bucket_list_failed');
