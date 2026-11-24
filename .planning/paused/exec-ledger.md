@@ -123,6 +123,17 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 
 **Wave 1 (4):** 04-01–04 **parallel**; **04-05 → 04-06 → 04-07** one executor tree (PGlite migration order).
 
+## Wave F — Claude Code (2026-11-24, base `7a9b96f`)
+
+| Plan | Worktree / branch | Status |
+|------|-------------------|--------|
+| 03.1-19 | `wt/03.1-19` / `exec/03.1-19` | **RUNNING** (gsd-executor) |
+| 04-21 | `wt/04-21` / `exec/04-21` | **RUNNING** (gsd-executor) |
+| 04-22 | `wt/04-22` / `exec/04-22` | **RUNNING** (gsd-executor) |
+| 03.1-24 | `wt/03.1-24` / `exec/03.1-24` | **RUNNING** (gsd-executor) |
+| 03.1-26 | — | queued (next free slot) |
+| 04-31 | — | queued (next free slot) |
+
 ## Wave E — **PAUSE-96 STOPPED** (2026-11-24 ~13:48 Europe/Rome; Claude Code resumes)
 
 All four executors **stopped**; WIP on `origin/exec/*` + patches in `.planning/paused/patches/`. **Do not spawn** until `/gsd-resume-work`. See `.planning/CLAUDE-CODE-HANDOFF-PROMPT.md`.
