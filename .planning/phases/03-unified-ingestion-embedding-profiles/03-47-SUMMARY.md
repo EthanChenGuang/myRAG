@@ -18,7 +18,7 @@ completed: 2026-11-24
 |------|-----|---------|
 | 1 | `2313a77` | feat(03-47): fold Phase 3 migrations into both setup files |
 | 2 | `8ef58fc` | test(03-47): record Phase 3 final gates all green (empty) |
-| 3 | `c3a8846` | docs(03-47): AGENTS.md unified ingestion and phase summary |
+| 3 | `1edf4a5` | docs(03-47): AGENTS.md unified ingestion and phase summary |
 
 ## Task 1 — Setup fold & schema-equality
 
