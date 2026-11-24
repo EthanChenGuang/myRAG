@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
-import { repairOwnerMembership, resolveTenantScope, type RagAdminDb } from '@/lib/rag';
+import { repairOwnerMembership, resolveTenantScope, scopeKey, type RagAdminDb } from '@/lib/rag';
 import { checkSingleTenantKbWrite } from '@/lib/kb-write-access';
 
 export const runtime = 'nodejs';
@@ -22,6 +22,7 @@ interface Scopable<Q> {
 interface Authorized {
   admin: ReturnType<typeof getSupabaseAdmin>;
   predicate: Predicate;
+  tenantKey: string;
 }
 
 type AuthResult = { ok: true; value: Authorized } | { ok: false; response: Response };
@@ -96,7 +97,7 @@ async function authorize(
   } else if (scope.kind === 'personal' && scope.userId) {
     predicate = { kind: 'personal', userId: scope.userId };
   }
-  return { ok: true, value: { admin, predicate } };
+  return { ok: true, value: { admin, predicate, tenantKey: scopeKey(scope) } };
 }
 
 export async function DELETE(
@@ -109,10 +110,11 @@ export async function DELETE(
 
     const auth = await authorize(request, new URL(request.url).searchParams.get('organizationId'), true);
     if (!auth.ok) return auth.response;
-    const { admin, predicate } = auth.value;
+    const { admin, predicate, tenantKey } = auth.value;
 
+    // The row must be in the caller's tenant; another tenant's id reads exactly like an unknown id.
     const { data: owned, error: lookupError } = await applyPredicate(
-      admin.from('documents').select('id').eq('id', id),
+      admin.from('documents').select('id, lineage_id').eq('id', id).eq('tenant_key', tenantKey),
       predicate
     ).maybeSingle();
     if (lookupError) {
@@ -121,13 +123,28 @@ export async function DELETE(
     }
     if (!owned) return fail(404, 'Document not found');
 
-    const { error: chunksError } = await admin.from('document_chunks').delete().eq('document_id', id);
+    // Deleting a document deletes every version of its lineage, in this tenant only.
+    const lineageId: string = owned.lineage_id ?? owned.id;
+    const { data: versions, error: versionsError } = await applyPredicate(
+      admin.from('documents').select('id').eq('lineage_id', lineageId).eq('tenant_key', tenantKey),
+      predicate
+    );
+    if (versionsError) {
+      console.error('[Documents] Version lookup failed', { code: versionsError.code });
+      return fail(500, 'Failed to delete document');
+    }
+    const versionIds = Array.from(new Set([id, ...((versions ?? []) as Array<{ id: string }>).map((version) => version.id)]));
+
+    const { error: chunksError } = await admin.from('document_chunks').delete().in('document_id', versionIds);
     if (chunksError) {
       console.error('[Documents] Chunk delete failed', { code: chunksError.code });
       return fail(500, 'Failed to delete document');
     }
 
-    const { error: documentError } = await applyPredicate(admin.from('documents').delete().eq('id', id), predicate);
+    const { error: documentError } = await applyPredicate(
+      admin.from('documents').delete().eq('lineage_id', lineageId).eq('tenant_key', tenantKey),
+      predicate
+    );
     if (documentError) {
       console.error('[Documents] Document delete failed', { code: documentError.code });
       return fail(500, 'Failed to delete document');
@@ -162,7 +179,7 @@ export async function PATCH(
     const queryOrganizationId = new URL(request.url).searchParams.get('organizationId');
     const auth = await authorize(request, queryOrganizationId ?? body.organizationId, true);
     if (!auth.ok) return auth.response;
-    const { admin, predicate } = auth.value;
+    const { admin, predicate, tenantKey } = auth.value;
 
     const externalUrl = body.external_url;
     if (typeof externalUrl !== 'string' || externalUrl.length > MAX_URL_LENGTH) {
@@ -177,19 +194,46 @@ export async function PATCH(
       }
     }
 
-    const { data: doc, error: lookupError } = await applyPredicate(
-      admin.from('documents').select('id, metadata').eq('id', id),
+    const { data: named, error: lookupError } = await applyPredicate(
+      admin.from('documents').select('id, lineage_id, is_current, metadata').eq('id', id).eq('tenant_key', tenantKey),
       predicate
     ).maybeSingle();
     if (lookupError) {
       console.error('[Documents] Ownership lookup failed', { code: lookupError.code });
       return fail(500, 'Failed to update document');
     }
-    if (!doc) return fail(404, 'Document not found');
+    if (!named) return fail(404, 'Document not found');
 
-    const updatedMetadata = { ...(doc.metadata || {}), external_url: externalUrl };
+    // The link belongs to the document, so it goes on the lineage's current version (later versions copy it forward).
+    // A lineage with no current version yet takes it on the row that was named.
+    const lineageId: string = named.lineage_id ?? named.id;
+    const { data: currentVersion, error: currentError } = await applyPredicate(
+      admin
+        .from('documents')
+        .select('id, metadata')
+        .eq('lineage_id', lineageId)
+        .eq('is_current', true)
+        .eq('tenant_key', tenantKey),
+      predicate
+    ).maybeSingle();
+    if (currentError) {
+      console.error('[Documents] Version lookup failed', { code: currentError.code });
+      return fail(500, 'Failed to update document');
+    }
+    let target: { id: string; metadata: Record<string, unknown> | null; isCurrent: boolean } | null = currentVersion
+      ? { id: currentVersion.id, metadata: currentVersion.metadata, isCurrent: true }
+      : null;
+    target ??= { id: named.id, metadata: named.metadata, isCurrent: named.is_current === true };
+
+    const updatedMetadata = { ...(target.metadata || {}), external_url: externalUrl };
     const { error: updateError } = await applyPredicate(
-      admin.from('documents').update({ metadata: updatedMetadata }).eq('id', id),
+      admin
+        .from('documents')
+        .update({ metadata: updatedMetadata })
+        .eq('id', target.id)
+        .eq('lineage_id', lineageId)
+        .eq('is_current', target.isCurrent)
+        .eq('tenant_key', tenantKey),
       predicate
     );
     if (updateError) {
