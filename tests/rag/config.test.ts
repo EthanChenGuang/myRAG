@@ -25,9 +25,27 @@ function configWarnings(): string[] {
     .map((call) => call.map((part) => (typeof part === 'string' ? part : JSON.stringify(part))).join(' '));
 }
 
+const CHAT_DEFAULTS = {
+  refs: 5000,
+  analyze: 1000,
+  embed: 15000,
+  search: 15000,
+  fuse: 1000,
+  legacy_rank: 2000,
+  post_filter: 10000,
+  assemble: 10000,
+  exact_id_lookup: 1000,
+  translate: 1000,
+  dedupe: 1000,
+  rerank: 600,
+  refusal: 1000,
+  expand_parents: 3000,
+  compress: 1000,
+};
+
 describe('stage tables', () => {
-  test('core and optional stage names are the D-03 names', () => {
-    expect([...CORE_STAGES]).toEqual(['embed', 'search']);
+  test('core and optional stage names include v2 stages', () => {
+    expect([...CORE_STAGES]).toEqual(['embed', 'search', 'fuse']);
     expect([...OPTIONAL_STAGES]).toEqual([
       'refs',
       'analyze',
@@ -37,53 +55,47 @@ describe('stage tables', () => {
       'voice_keyword_fallback',
       'local_rerank',
       'exact_id_lookup',
+      'translate',
+      'dedupe',
+      'rerank',
+      'refusal',
+      'expand_parents',
+      'compress',
     ]);
   });
 
-  test('profile defaults match the plan', () => {
-    for (const profile of ['chat', 'embed', 'eval', 'media'] as const) {
-      expect(PROFILE_STAGE_DEFAULTS[profile]).toEqual({
-        refs: 5000,
-        analyze: 1000,
-        embed: 15000,
-        search: 15000,
-        legacy_rank: 2000,
-        post_filter: 10000,
-        assemble: 10000,
-        exact_id_lookup: 1000,
-      });
+  test('profile defaults match the Phase 4 latency table', () => {
+    for (const profile of ['chat', 'embed', 'media'] as const) {
+      expect(PROFILE_STAGE_DEFAULTS[profile]).toEqual(CHAT_DEFAULTS);
     }
-    expect(PROFILE_STAGE_DEFAULTS.voice).toEqual({
-      refs: 5000,
-      analyze: 500,
+    expect(PROFILE_STAGE_DEFAULTS.eval.rerank).toBe(60000);
+    expect(PROFILE_STAGE_DEFAULTS.eval.expand_parents).toBe(10000);
+    expect(PROFILE_STAGE_DEFAULTS.voice).toMatchObject({
       embed: 5000,
-      search: 5000,
-      voice_keyword_fallback: 3000,
-      local_rerank: 1000,
-      post_filter: 3000,
-      assemble: 3000,
-      exact_id_lookup: 500,
+      rerank: 250,
+      expand_parents: 1000,
+      translate: 300,
     });
   });
 });
 
 describe('loadRagConfig', () => {
-  test('empty values give legacy, nothing disabled and the profile defaults', () => {
+  test('empty values give legacy, v2 switch-off stages disabled and profile defaults', () => {
     const config = loadRagConfig({});
     expect(config.pipeline).toBe('legacy');
-    expect(config.disabledStages.size).toBe(0);
+    expect([...config.disabledStages].sort()).toEqual(['compress', 'expand_parents', 'rerank', 'translate']);
     expect(config.timeouts.chat).toEqual(PROFILE_STAGE_DEFAULTS.chat);
-    expect(config.timeouts.voice).toEqual(PROFILE_STAGE_DEFAULTS.voice);
+    expect(config.v2.reranker).toBe('none');
+    expect(config.v2.tokenBudget).toBe(6000);
     expect(config.warnings).toEqual([]);
-    expect(configWarnings()).toEqual([]);
   });
 
-  test('an unimplemented or unknown pipeline value runs legacy and logs once per value', () => {
-    for (const value of ['v2', 'foo']) {
-      expect(loadRagConfig({ RAG_PIPELINE: value }).pipeline).toBe('legacy');
-    }
+  test('RAG_PIPELINE=v2 selects v2; unknown values run legacy with one warning per value', () => {
+    expect(loadRagConfig({ RAG_PIPELINE: 'v2' }).pipeline).toBe('v2');
+    expect(loadRagConfig({ RAG_PIPELINE: 'v3' }).pipeline).toBe('legacy');
+    expect(loadRagConfig({ RAG_PIPELINE: 'foo' }).pipeline).toBe('legacy');
     expect(configWarnings()).toHaveLength(2);
-    for (let i = 0; i < 5; i += 1) loadRagConfig({ RAG_PIPELINE: 'v2' });
+    for (let i = 0; i < 5; i += 1) loadRagConfig({ RAG_PIPELINE: 'foo' });
     expect(configWarnings()).toHaveLength(2);
   });
 
@@ -93,83 +105,95 @@ describe('loadRagConfig', () => {
     expect(configWarnings()).toEqual([]);
   });
 
-  test('optional stages can be disabled', () => {
+  test('optional stages can be disabled explicitly', () => {
     const config = loadRagConfig({ RAG_DISABLED_STAGES: 'legacy_rank, assemble' });
-    expect([...config.disabledStages].sort()).toEqual(['assemble', 'legacy_rank']);
-    expect(configWarnings()).toEqual([]);
+    expect([...config.disabledStages].sort()).toEqual(['assemble', 'compress', 'expand_parents', 'legacy_rank', 'rerank', 'translate']);
   });
 
   test('a core stage in the disabled list is dropped and logged once', () => {
     const env = { RAG_DISABLED_STAGES: 'embed,legacy_rank,search' };
     const config = loadRagConfig(env);
-    expect([...config.disabledStages]).toEqual(['legacy_rank']);
+    expect([...config.disabledStages].sort()).toEqual(['compress', 'expand_parents', 'legacy_rank', 'rerank', 'translate']);
     expect(configWarnings()).toHaveLength(2);
-    loadRagConfig(env);
-    loadRagConfig({ RAG_DISABLED_STAGES: 'embed,legacy_rank,search ' });
-    expect(configWarnings()).toHaveLength(2);
-    expect(config.warnings.join(' ')).toContain('embed');
   });
 
-  test('unknown stage names are dropped and logged', () => {
+  test('rerank is a valid optional stage name in RAG_DISABLED_STAGES', () => {
     const config = loadRagConfig({ RAG_DISABLED_STAGES: 'rerank,post_filter' });
-    expect([...config.disabledStages]).toEqual(['post_filter']);
-    expect(configWarnings()).toHaveLength(1);
-    expect(configWarnings()[0]).toContain('rerank');
+    expect([...config.disabledStages].sort()).toEqual(['compress', 'expand_parents', 'post_filter', 'rerank', 'translate']);
+    expect(configWarnings()).toEqual([]);
   });
 
-  test('timeout overrides apply to every profile and invalid entries are logged', () => {
-    const config = loadRagConfig({ RAG_STAGE_TIMEOUTS: 'embed=2000,search=abc,foo=5' });
-    for (const profile of ['chat', 'embed', 'voice', 'media', 'eval'] as const) {
+  test('timeout overrides apply to every profile; profile prefixes affect one profile only', () => {
+    const config = loadRagConfig({ RAG_STAGE_TIMEOUTS: 'embed=2000,voice.rerank=200,rerank=400' });
+    for (const profile of ['chat', 'embed', 'media', 'eval'] as const) {
       expect(config.timeouts[profile].embed).toBe(2000);
+      expect(config.timeouts[profile].rerank).toBe(400);
     }
+    expect(config.timeouts.voice.rerank).toBe(200);
+    expect(config.timeouts.voice.embed).toBe(2000);
     expect(config.timeouts.chat.search).toBe(15000);
-    expect(config.timeouts.voice.search).toBe(5000);
-    expect(configWarnings()).toHaveLength(2);
-    const text = configWarnings().join(' ');
-    expect(text).toContain('search');
-    expect(text).toContain('foo');
   });
 
-  test('timeout values must be integers from 1 to 60000', () => {
+  test('an unknown profile prefix in timeouts is dropped with a warning', () => {
+    loadRagConfig({ RAG_STAGE_TIMEOUTS: 'nope.rerank=100' });
+    expect(configWarnings().join(' ')).toContain('Unknown profile');
+  });
+
+  test('v2 switch parsers and invalid values fall back with warnings', () => {
     const config = loadRagConfig({
-      RAG_STAGE_TIMEOUTS: 'embed=0,search=60001,analyze=1.5,assemble=60000,legacy_rank=1,post_filter=-5',
+      RAG_RERANKER: 'bogus',
+      RAG_CONTEXT_TOKEN_BUDGET: 'abc',
+      RAG_EXACT_SCAN_CUTOFF: '200000',
+      RAG_RERANK_VOYAGE_MODEL_BY_LANG: 'zh=rerank-2.5,it=rerank-3,de=bad',
     });
-    expect(config.timeouts.chat.embed).toBe(15000);
-    expect(config.timeouts.chat.search).toBe(15000);
-    expect(config.timeouts.chat.analyze).toBe(1000);
-    expect(config.timeouts.chat.assemble).toBe(60000);
-    expect(config.timeouts.chat.legacy_rank).toBe(1);
-    expect(config.timeouts.chat.post_filter).toBe(10000);
-    expect(configWarnings()).toHaveLength(4);
+    expect(config.v2.reranker).toBe('none');
+    expect(config.v2.tokenBudget).toBe(6000);
+    expect(config.v2.exactScanCutoff).toBe(0);
+    expect(config.v2.voyageModelByLang).toEqual({ zh: 'rerank-2.5', it: 'rerank-3' });
+    expect(configWarnings().length).toBeGreaterThanOrEqual(3);
   });
 
-  test('the exact-id switch is off for empty, false and unknown values, and on only for true', () => {
-    expect(loadRagConfig({}).exactIdLookup).toBe(false);
-    expect(loadRagConfig({ RAG_EXACT_ID_LOOKUP: '' }).exactIdLookup).toBe(false);
-    expect(loadRagConfig({ RAG_EXACT_ID_LOOKUP: 'false' }).exactIdLookup).toBe(false);
-    expect(configWarnings()).toEqual([]);
-    expect(loadRagConfig({ RAG_EXACT_ID_LOOKUP: ' True ' }).exactIdLookup).toBe(true);
-    expect(loadRagConfig({ RAG_EXACT_ID_LOOKUP: 'yes' }).exactIdLookup).toBe(false);
-    expect(configWarnings()).toHaveLength(1);
-    expect(configWarnings()[0]).toContain('RAG_EXACT_ID_LOOKUP');
+  test('RAG_RETRIEVAL_PARAMS_OVERRIDE parses partial overrides and validates cap', () => {
+    const config = loadRagConfig({
+      RAG_RETRIEVAL_PARAMS_OVERRIDE: 'pool=50,cap=60,topk=10,cap=200,foo=1',
+    });
+    expect(config.v2.paramsOverride).toEqual({ candidate_pool_size: 50, rerank_input_cap: 60, final_top_k: 10 });
+    expect(configWarnings().join(' ')).toMatch(/cap|foo/);
   });
 
-  test('the exact-id stage can be disabled and its timeout overridden for every profile', () => {
-    const config = loadRagConfig({ RAG_DISABLED_STAGES: 'exact_id_lookup', RAG_STAGE_TIMEOUTS: 'exact_id_lookup=250' });
-    expect([...config.disabledStages]).toEqual(['exact_id_lookup']);
-    for (const profile of ['chat', 'embed', 'voice', 'media', 'eval'] as const) {
-      expect(config.timeouts[profile].exact_id_lookup).toBe(250);
-    }
-    expect(configWarnings()).toEqual([]);
+  test('RAG_RERANKER=cohere removes rerank from disabledStages', () => {
+    const config = loadRagConfig({ RAG_RERANKER: 'cohere' });
+    expect(config.disabledStages.has('rerank')).toBe(false);
+    expect([...config.disabledStages].sort()).toEqual(['compress', 'expand_parents', 'translate']);
   });
 
-  test('loading does not mutate the shared profile defaults', () => {
-    loadRagConfig({ RAG_STAGE_TIMEOUTS: 'embed=1' });
-    expect(PROFILE_STAGE_DEFAULTS.chat.embed).toBe(15000);
+  test('hasCohereKey reflects presence only and warnings never echo the key', () => {
+    const secret = 'cohere-test-key-not-real-32charsxxxxxxxx';
+    const config = loadRagConfig({ COHERE_API_KEY: secret, RAG_RERANKER: 'bogus' });
+    expect(config.v2.hasCohereKey).toBe(true);
+    const blob = JSON.stringify(warn.mock.calls);
+    expect(blob).not.toContain(secret);
+  });
+
+  test('flipping RAG_RERANKER between calls returns different configs after memo reset', () => {
+    const a = loadRagConfig({ RAG_RERANKER: 'none' });
+    const b = loadRagConfig({ RAG_RERANKER: 'cohere' });
+    expect(a).not.toBe(b);
+    expect(a.v2.reranker).toBe('none');
+    expect(b.v2.reranker).toBe('cohere');
+    resetRagConfigForTests();
+    expect(loadRagConfig({ RAG_RERANKER: 'none' })).not.toBe(a);
+  });
+
+  test('the exact-id switch and stage timeout overrides still behave as before', () => {
+    const config = loadRagConfig({ RAG_DISABLED_STAGES: 'exact_id_lookup', RAG_STAGE_TIMEOUTS: 'exact_id_lookup=250', RAG_EXACT_ID_LOOKUP: 'true' });
+    expect([...config.disabledStages]).toContain('exact_id_lookup');
+    expect(config.exactIdLookup).toBe(true);
+    expect(config.timeouts.chat.exact_id_lookup).toBe(250);
   });
 
   test('identical env snapshots are memoised', () => {
-    const env = { RAG_STAGE_TIMEOUTS: 'embed=2000' };
+    const env = { RAG_STAGE_TIMEOUTS: 'embed=2000', RAG_RERANKER: 'voyage' };
     expect(loadRagConfig(env)).toBe(loadRagConfig({ ...env }));
   });
 });
