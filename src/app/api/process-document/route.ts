@@ -4,8 +4,21 @@ import fetch from 'node-fetch';
 import { env } from '@/lib/env';
 import { DocumentContent } from '@/types/chat';
 import { createClient } from '@supabase/supabase-js';
-import { embedText, type RagAdminDb } from '@/lib/rag';
+import {
+  buildSourceKey,
+  currentIngestConfig,
+  embedText,
+  ingest,
+  repairOwnerMembership,
+  resolveAdminWorkspaceScope,
+  resolveTenantScope,
+  type RagAdminDb,
+  type TenantScope,
+} from '@/lib/rag';
+import { adminDenied, checkAdmin } from '@/lib/admin-route-auth';
+import { DocTypeDetectionSchema } from '@/lib/rag-eval/contracts.generated';
 import { checkSingleTenantKbWrite } from '@/lib/kb-write-access';
+import { z } from 'zod/v3';
 import { v4 as uuidv4 } from 'uuid';
 import { extractURLs } from '@/lib/url-extractor';
 import { isMultiTenant, isSingleTenant } from '@/lib/deployment-mode';
@@ -545,8 +558,217 @@ async function storeDocument(
   }
 }
 
+// ---------------------------------------------------------------------------------------------------
+// Unified pipeline (RAG_INGEST_PIPELINE=unified): knowledge-base uploads go through ingest().
+// Everything below runs only after POST has verified the session (and, in multi-tenant mode, the
+// organization), so no path that parses, ingests or stores can be reached without a session.
+// ---------------------------------------------------------------------------------------------------
+
+const UPLOAD_BUDGET_MS = 50_000;
+const MIN_INGEST_BUDGET_MS = 5_000;
+const MAX_UNIFIED_FILE_SIZE = 20 * 1024 * 1024;
+
+const EXTENSION_MIME: Record<string, string> = {
+  pdf: 'application/pdf',
+  doc: 'application/msword',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  txt: 'text/plain',
+  md: 'text/markdown',
+  markdown: 'text/markdown',
+  csv: 'text/csv',
+  html: 'text/html',
+  htm: 'text/html',
+  rtf: 'application/rtf',
+  epub: 'application/epub+zip',
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  tif: 'image/tiff',
+  tiff: 'image/tiff',
+};
+const GENERIC_MIME_TYPES = new Set(['', 'application/octet-stream']);
+const ALLOWED_MIME_TYPES = new Set([
+  ...Object.values(EXTENSION_MIME),
+  'text/x-markdown',
+  'text/rtf',
+  'application/csv',
+  'application/vnd.ms-excel',
+]);
+
+const emptyToUndefined = (value: unknown) => (value === '' ? undefined : value);
+
+const unifiedUploadFormSchema = z.object({
+  doc_type: z.preprocess(emptyToUndefined, z.union([DocTypeDetectionSchema.shape.doc_type, z.literal('auto')]).optional()),
+  upload_source: z.preprocess(emptyToUndefined, z.enum(['chat_upload', 'config_upload']).optional()),
+  folder_id: z.preprocess(emptyToUndefined, z.string().trim().min(1).max(200).regex(/^[^\p{Cc}]*$/u).optional()),
+});
+
+function uploadPipeline(): 'legacy' | 'unified' {
+  try {
+    return currentIngestConfig().pipeline === 'unified' ? 'unified' : 'legacy';
+  } catch {
+    console.warn('[ProcessDocument] ingest switch unavailable, using the legacy pipeline');
+    return 'legacy';
+  }
+}
+
+function mimeForExtension(extension: string): string | undefined {
+  return Object.prototype.hasOwnProperty.call(EXTENSION_MIME, extension) ? EXTENSION_MIME[extension] : undefined;
+}
+
+function fileExtension(name: string): string {
+  const dot = name.lastIndexOf('.');
+  return dot >= 0 ? name.slice(dot + 1).toLowerCase() : '';
+}
+
+/** The media type handed to ingest, or null when the file is outside the allow-list. */
+function acceptedMediaType(name: string, declaredType: string): string | null {
+  const declared = declaredType.split(';')[0].trim().toLowerCase();
+  const extension = fileExtension(name);
+  const extensionMime = mimeForExtension(extension);
+  if (extension !== '' && !extensionMime) return null;
+  if (GENERIC_MIME_TYPES.has(declared)) return extensionMime ?? null;
+  return ALLOWED_MIME_TYPES.has(declared) ? declared : null;
+}
+
+function documentTypeOf(name: string): DocumentContent['type'] {
+  const extension = fileExtension(name);
+  return extension === 'pdf' || extension === 'doc' || extension === 'docx' || extension === 'txt' ||
+    extension === 'pptx' || extension === 'xlsx' || extension === 'html' || extension === 'rtf' || extension === 'epub'
+    ? (extension as DocumentContent['type'])
+    : 'txt';
+}
+
+function scopeRefusal(status: 401 | 403 | 503): NextResponse {
+  const error = status === 403 ? 'Forbidden' : status === 401 ? 'Unauthorized' : 'Workspace verification unavailable';
+  return NextResponse.json({ error }, { status });
+}
+
+async function uploadThroughIngest(input: {
+  req: Request;
+  formData: { get(name: string): FormDataEntryValue | null };
+  file: File;
+  userId: string | null;
+  orgIdFromForm: string | null;
+  startedAt: number;
+}): Promise<NextResponse> {
+  const { req, file, orgIdFromForm } = input;
+  if (!input.userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const userId = input.userId;
+
+  const parsedForm = unifiedUploadFormSchema.safeParse({
+    doc_type: input.formData.get('doc_type') ?? undefined,
+    upload_source: input.formData.get('upload_source') ?? undefined,
+    folder_id: input.formData.get('folder_id') ?? undefined,
+  });
+  if (!parsedForm.success) {
+    console.warn('[ProcessDocument] Invalid upload form', { paths: parsedForm.error.errors.map((issue) => issue.path.join('.')) });
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'Invalid request data',
+        details: parsedForm.error.errors.map((issue) => ({ path: issue.path.join('.'), message: issue.message })),
+      },
+      { status: 400 },
+    );
+  }
+  const form = parsedForm.data;
+
+  if (file.size > MAX_UNIFIED_FILE_SIZE) {
+    return NextResponse.json(
+      { error: `File size exceeds limit. Maximum allowed size is ${MAX_UNIFIED_FILE_SIZE / 1024 / 1024}MB` },
+      { status: 413 },
+    );
+  }
+  const mimeType = acceptedMediaType(file.name, file.type);
+  if (mimeType === null) {
+    return NextResponse.json({ error: 'This file type is not supported' }, { status: 415 });
+  }
+
+  // config_upload is honoured only for the verified session user when the admin guard names the same user.
+  let source: 'chat_upload' | 'config_upload' = 'chat_upload';
+  if (form.upload_source === 'config_upload') {
+    const admin = await checkAdmin(req);
+    if (!admin.ok && admin.status === 503) return adminDenied(503);
+    if (admin.ok && admin.userId.toLowerCase() === userId.toLowerCase()) source = 'config_upload';
+  }
+
+  const getUser = async () => ({ id: userId });
+  await repairOwnerMembership({ requestedOrganizationId: orgIdFromForm, getUser });
+  let scope: TenantScope;
+  if (source === 'config_upload') {
+    const resolved = await resolveAdminWorkspaceScope({
+      adminUserId: userId,
+      requestedOrganizationId: orgIdFromForm,
+      signal: req.signal,
+    });
+    if (!resolved.ok) return scopeRefusal(resolved.status);
+    scope = resolved.scope;
+  } else {
+    const tenant = await resolveTenantScope({
+      requestedOrganizationId: typeof orgIdFromForm === 'string' ? orgIdFromForm : null,
+      getUser,
+      signal: req.signal,
+    });
+    if (!tenant.ok) return scopeRefusal(tenant.status);
+    if (!tenant.scope) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    scope = tenant.scope;
+  }
+
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const deadlineMs = Math.max(MIN_INGEST_BUDGET_MS, UPLOAD_BUDGET_MS - (Date.now() - input.startedAt));
+
+  let result;
+  try {
+    result = await ingest({
+      scope,
+      source,
+      sourceKey: buildSourceKey(source, { folderId: form.folder_id, filename: file.name }),
+      file: bytes,
+      filename: file.name,
+      mimeType,
+      ...(form.doc_type ? { docType: form.doc_type } : {}),
+      signal: req.signal,
+      deadlineMs,
+    });
+  } catch (error) {
+    console.error('[ProcessDocument] ingest threw', error instanceof Error ? error.name : 'unknown');
+    return NextResponse.json({ error: 'Failed to process document', status: 'failed' }, { status: 500 });
+  }
+  console.log('[ProcessDocument] Ingested upload', {
+    source,
+    status: result.status,
+    documentId: result.documentId ?? result.duplicateOf ?? null,
+    chunks: result.chunkCount,
+    ...(result.reason ? { reason: result.reason } : {}),
+  });
+
+  if (result.status === 'failed') {
+    return NextResponse.json({ error: 'Failed to process document', status: 'failed' }, { status: 500 });
+  }
+  const documentId = result.documentId ?? result.duplicateOf ?? null;
+  return NextResponse.json(
+    {
+      id: documentId,
+      documentId,
+      name: file.name,
+      filename: file.name,
+      type: documentTypeOf(file.name),
+      successfulChunks: result.chunkCount,
+      totalChunks: result.chunkCount,
+      status: result.status,
+      version: result.version,
+      parserUsed: result.parserUsed,
+    },
+    { status: result.status === 'processing' ? 202 : 200 },
+  );
+}
+
 
 export async function POST(req: Request) {
+  const startedAt = Date.now();
   console.log('[ProcessDocument] POST request received');
   try {
     const formData = await req.formData();
@@ -651,6 +873,12 @@ export async function POST(req: Request) {
           { status: 401 }
         );
       }
+    }
+
+    // Knowledge-base uploads switch to ingest() only here, after the session and organization checks above.
+    // Temporary attachments stay on the legacy parse call in both pipelines.
+    if (!isTemporary && uploadPipeline() === 'unified') {
+      return await uploadThroughIngest({ req, formData, file, userId, orgIdFromForm, startedAt });
     }
 
     console.log('Processing file:', file.name, isTemporary ? '(temporary)' : '(permanent)');

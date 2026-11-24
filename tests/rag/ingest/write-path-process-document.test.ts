@@ -9,6 +9,7 @@ const ORG_Y = '00000000-0000-4000-8000-0000000000c2';
 const DOCUMENT = '00000000-0000-4000-8000-0000000000e1';
 const DUPLICATE_OF = '00000000-0000-4000-8000-0000000000d1';
 const SERVICE_KEY = 'test-service-role-key-placeholder';
+const ADMIN_A_TOKEN = 'placeholder-token-admin-a';
 const BODY = 'First placeholder paragraph.\n\nSecond placeholder paragraph.';
 
 type Row = Record<string, unknown>;
@@ -69,7 +70,10 @@ function routeAdmin() {
 /** The admin client of the admin guard (checkAdmin): counts every admin_users lookup so a test can show it never ran. */
 function guardAdmin() {
   return {
-    auth: { getUser: async () => ({ data: { user: null }, error: { message: 'invalid' } }) },
+    auth: {
+      getUser: async (token: string) =>
+        token === ADMIN_A_TOKEN ? { data: { user: { id: ADMIN_A } }, error: null } : { data: { user: null }, error: { message: 'invalid' } },
+    },
     from() {
       const filters: Record<string, unknown> = {};
       const builder = {
@@ -439,6 +443,10 @@ describe('process-document write path: unified chat_upload', () => {
     expect(unsupported.status).toBe(415);
     const unnamed = await POST(upload({}, { name: 'noextension', type: '' }));
     expect(unnamed.status).toBe(415);
+    const disguised = await POST(upload({}, { name: 'tool.exe', type: 'text/plain' }));
+    expect(disguised.status).toBe(415);
+    const prototypeName = await POST(upload({}, { name: 'notes.constructor', type: '' }));
+    expect(prototypeName.status).toBe(415);
     expectNothingRan();
   });
 
@@ -588,12 +596,12 @@ describe('process-document write path: unified config_upload (T-03-88, T-03-150)
     expect(await keyOf(lastIngest().scope)).toBe(`u:${USER_B}`);
   });
 
-  it('a bearer token of another admin cannot turn a different session user into config_upload', async () => {
+  it('a bearer token of admin A sent with the session of user B is an admin for a different user and gives chat_upload with B\'s scope', async () => {
     state.mode = 'multi-tenant';
     state.session = { id: USER_B };
     state.admins = [ADMIN_A];
     const POST = await loadPost('unified');
-    const response = await POST(upload({ upload_source: 'config_upload' }, { headers: { authorization: 'Bearer placeholder-token' } }));
+    const response = await POST(upload({ upload_source: 'config_upload' }, { headers: { authorization: `Bearer ${ADMIN_A_TOKEN}` } }));
     expect(response.status).toBe(200);
     expect(lastIngest().source).toBe('chat_upload');
     expect(await keyOf(lastIngest().scope)).toBe(`u:${USER_B}`);
