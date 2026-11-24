@@ -50,6 +50,7 @@ export async function ingest(input: IngestInput): Promise<IngestResult> {
     parserUsed: null,
     work: { parseText: null, parserVersion: null, chunks: [], chunksWritten: 0 },
   };
+  if (input.typeChange) ctx.state.typeChange = { ...input.typeChange };
   const trace = createIngestTrace(input.scope, input.trace);
   const result = await runIngestStages(ctx, REGISTERED_STAGES, { trace });
   if (trace?.owned) finishIngestTrace(trace, result);

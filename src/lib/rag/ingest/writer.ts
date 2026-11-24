@@ -55,6 +55,8 @@ export interface BeginArgs {
   docTypeOrigin: DocTypeOrigin;
   profileId: string;
   profileVersion: number;
+  /** The admin type change only: begin a new version although the file is unchanged. Never set by a user upload. */
+  forceNewVersion?: boolean;
 }
 
 export type BeginResult =
@@ -290,6 +292,7 @@ export function createIngestWriter(input: CreateIngestWriterInput): IngestWriter
         p_doc_type_origin: args.docTypeOrigin,
         p_profile_id: args.profileId,
         p_profile_version: args.profileVersion,
+        ...(args.forceNewVersion ? { p_force_new_version: true } : {}),
       });
       const outcome = text(row, 'outcome');
       if (outcome === 'skipped_duplicate') {

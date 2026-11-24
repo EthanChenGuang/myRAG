@@ -127,3 +127,7 @@ export type { DocTypeChoice, DocTypeDefaultRow, DocTypeDefaultSourceKind, Picker
 export { getEmbeddingProfileCompleteness } from './embeddings/profile-ops';
 export type { ProfileCompleteness } from './embeddings/profile-ops';
 export { INGEST_SOURCES } from './ingest/types';
+export { changeDocumentType } from './ingest/change-doc-type';
+export type { ChangeDocumentTypeFailure, ChangeDocumentTypeInput, ChangeDocumentTypeResult } from './ingest/change-doc-type';
+export { scopeForAdminDocument, AdminDocumentScopeError } from './tenant/ingest-scope';
+export type { AdminDocumentScopeInput } from './tenant/ingest-scope';

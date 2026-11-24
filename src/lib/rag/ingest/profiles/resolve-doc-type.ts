@@ -379,9 +379,20 @@ function stable(value: unknown): string {
   return JSON.stringify(value) ?? 'null';
 }
 
-/** True when two profiles ask a parser for the same output, so a stored parse of one is valid for the other. */
-export function sameParserOptions(a: ProcessingProfile, b: ProcessingProfile): boolean {
+function sameParserOptions(a: ProcessingProfile, b: ProcessingProfile): boolean {
   return stable(a.parser) === stable(b.parser);
+}
+
+/**
+ * True when a parse made for the `stored` profile is a valid parse for the `wanted` one (D-18): the parser options are equal, except that
+ * pictures the stored parse generated and the wanted profile does not ask for are simply left unused. The other way round (the wanted
+ * profile needs pictures the stored parse did not generate) is a different parse.
+ */
+export function storedParseServes(stored: ProcessingProfile, wanted: ProcessingProfile): boolean {
+  const comparable = wanted.parser.docling.generate_picture_images
+    ? wanted.parser
+    : { ...wanted.parser, docling: { ...wanted.parser.docling, generate_picture_images: stored.parser.docling.generate_picture_images } };
+  return stable(stored.parser) === stable(comparable);
 }
 
 /**

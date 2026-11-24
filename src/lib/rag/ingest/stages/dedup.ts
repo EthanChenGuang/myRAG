@@ -21,6 +21,7 @@ async function runFileHashDedup(ctx: StageContext): Promise<StageOutcome> {
     docTypeOrigin: identity.docTypeOrigin,
     profileId: identity.profile.id,
     profileVersion: identity.profile.version,
+    ...(ctx.state.typeChange ? { forceNewVersion: true } : {}),
   });
   if (begun.outcome === 'skipped_duplicate') {
     return {
@@ -50,7 +51,8 @@ async function runContentHashDedup(ctx: StageContext): Promise<StageOutcome> {
   // A picture parses to no text, so its content is the file itself; otherwise every image would match every other.
   const identity = requireIdentity(ctx, 'content_hash_dedup');
   const hash = contentHash(identity.profile.chunker.kind === 'image_caption' ? `image:${identity.fileSha256}` : (ctx.work.parseText ?? ''));
-  const duplicateOf = await ctx.writer.findContentDuplicate(hash, document.id);
+  // A type change re-processes the same content as a new version of the same document: the version it replaces always has this hash.
+  const duplicateOf = ctx.state.typeChange ? null : await ctx.writer.findContentDuplicate(hash, document.id);
   if (duplicateOf !== null) {
     await removeArtifacts(ctx);
     await ctx.writer.setFields(document.id, {
@@ -76,7 +78,7 @@ async function runContentHashDedup(ctx: StageContext): Promise<StageOutcome> {
     content_hash: hash,
     metadata: { content_hash_version: HASH_NORMALIZATION_VERSION },
   });
-  return { kind: 'next' };
+  return ctx.state.typeChange ? { kind: 'next', outcome: 'forced_version' } : { kind: 'next' };
 }
 
 export const fileHashDedupStage: StageSpec = { name: 'file_hash_dedup', minMsNeeded: 0, run: runFileHashDedup };
