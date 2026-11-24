@@ -27,6 +27,9 @@ export interface AssembleInput<C extends AssemblyCandidate = AssemblyCandidate> 
   ragMode: RagMode;
   webSearchEnabled: boolean;
   applyRelevanceFilter: boolean;
+  /** When set, document sections render in this id order (unknown ids are ignored). */
+  groupOrder?: string[];
+  keptByOverride?: KeptBy;
 }
 
 export interface FilteredCandidates<C extends AssemblyCandidate = AssemblyCandidate> {
@@ -182,7 +185,37 @@ export function buildContext<C extends AssemblyCandidate>(
 
     const contextParts: string[] = ['\n\n=== RELEVANT INFORMATION FROM DOCUMENTS ==='];
 
-    for (const [docName, chunks] of chunksByDocument) {
+    const docNameOrder: string[] = [];
+    if (input.groupOrder?.length) {
+      const idToName = new Map<string, string>();
+      for (const chunk of relevantChunks) {
+        const docInfo = docById.get(chunk.document_id);
+        const name = docInfo?.filename || docInfo?.name || 'Unknown Document';
+        if (!idToName.has(chunk.document_id)) idToName.set(chunk.document_id, name);
+      }
+      const seen = new Set<string>();
+      for (const documentId of input.groupOrder) {
+        const name = idToName.get(documentId);
+        if (name && chunksByDocument.has(name) && !seen.has(name)) {
+          docNameOrder.push(name);
+          seen.add(name);
+        }
+      }
+      for (const chunk of relevantChunks) {
+        const docInfo = docById.get(chunk.document_id);
+        const name = docInfo?.filename || docInfo?.name || 'Unknown Document';
+        if (chunksByDocument.has(name) && !seen.has(name)) {
+          docNameOrder.push(name);
+          seen.add(name);
+        }
+      }
+    } else {
+      docNameOrder.push(...chunksByDocument.keys());
+    }
+
+    for (const docName of docNameOrder) {
+      const chunks = chunksByDocument.get(docName);
+      if (!chunks) continue;
       const isImageDoc = IMAGE_EXTENSIONS.some((ext) => docName.toLowerCase().endsWith(ext));
       if (isImageDoc) continue;
 
@@ -258,7 +291,11 @@ export function buildContext<C extends AssemblyCandidate>(
       content: chunk.content,
       similarity: chunk.similarity,
       rank: index + 1,
-      kept_by: filtered.chunkKeptBy.get(chunk.chunk_id) ?? filtered.docKeptBy.get(chunk.document_id) ?? 'similarity',
+      kept_by:
+        input.keptByOverride ??
+        filtered.chunkKeptBy.get(chunk.chunk_id) ??
+        filtered.docKeptBy.get(chunk.document_id) ??
+        'similarity',
     });
   });
 
