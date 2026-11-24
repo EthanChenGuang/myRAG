@@ -1,12 +1,75 @@
 import { logger } from '@/lib/logger';
-import { vectorSearch, type RawChunk, type RpcClient } from '../backend/supabase-rpc';
+import { searchByEmbedding, type RawChunk, type RpcClient } from '../backend/supabase-rpc';
 import { analyzeQuery, validateTemporalMatch, type TemporalQueryContext } from '../query/temporal-query-detector';
 import type { TenantScope } from '../tenant/scope';
 import type { Candidate } from '../types';
 
+const LEGACY_EXACT_FLOOR = 0.7;
+const LEGACY_FALLBACK_THRESHOLD = 0.28;
+
+/**
+ * The similarity levels the search stage uses. The analyzer's precision tiers and the exact-match floor are tuned to the legacy model, so
+ * a profile's retrieval_threshold anchors them: the tier is multiplied by retrieval_threshold / 0.7 and the exact-match floor becomes
+ * retrieval_threshold. fallback_threshold replaces the 0.28 fallback. The legacy values give scale 1 and today's constants.
+ */
+export interface SearchThresholds {
+  scale: number;
+  exactFloor: number;
+  fallback: number;
+}
+
+export const LEGACY_SEARCH_THRESHOLDS: SearchThresholds = Object.freeze({
+  scale: 1,
+  exactFloor: LEGACY_EXACT_FLOOR,
+  fallback: LEGACY_FALLBACK_THRESHOLD,
+});
+
+export interface CalibratedProfile {
+  id: string;
+  scoreCalibration: Record<string, number>;
+}
+
+export type SearchProfile = CalibratedProfile & { dims: number; storage: string };
+
+const warnedCalibration = new Set<string>();
+
+function calibrationValue(calibration: Record<string, number>, key: string): number | null {
+  const value = calibration[key];
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 && value <= 1 ? value : null;
+}
+
+/** No profile (switch off) gives the legacy constants; a missing or invalid key falls back to the legacy value with one warning. */
+export function searchThresholdsFor(profile: CalibratedProfile | null | undefined): SearchThresholds {
+  if (!profile) return LEGACY_SEARCH_THRESHOLDS;
+  const retrieval = calibrationValue(profile.scoreCalibration, 'retrieval_threshold');
+  const fallback = calibrationValue(profile.scoreCalibration, 'fallback_threshold');
+  if ((retrieval === null || fallback === null) && !warnedCalibration.has(profile.id)) {
+    warnedCalibration.add(profile.id);
+    console.warn(
+      `[Embedding Profile] CALIBRATION MISSING ${JSON.stringify({ profile: profile.id, retrieval_threshold: retrieval !== null, fallback_threshold: fallback !== null })}`,
+    );
+  }
+  const exactFloor = retrieval ?? LEGACY_EXACT_FLOOR;
+  return {
+    scale: exactFloor === LEGACY_EXACT_FLOOR ? 1 : exactFloor / LEGACY_EXACT_FLOOR,
+    exactFloor,
+    fallback: fallback ?? LEGACY_FALLBACK_THRESHOLD,
+  };
+}
+
+/** Moves a legacy-scale constant onto the profile's scale; identity for the legacy profile. */
+export function scaleThreshold(thresholds: SearchThresholds, legacyValue: number): number {
+  return thresholds.scale === 1 ? legacyValue : legacyValue * thresholds.scale;
+}
+
+export function resetCalibrationWarningsForTests(): void {
+  warnedCalibration.clear();
+}
+
 export interface LegacySearchInput {
   query: string;
   embedding: number[];
+  profile?: SearchProfile | null;
   queryContext: TemporalQueryContext;
   maxResults: number;
   fallbackToLowerThreshold: boolean;
@@ -19,6 +82,12 @@ interface SearchEnv {
   scope: TenantScope;
   client: RpcClient;
   signal: AbortSignal;
+  profile: SearchProfile | null;
+  thresholds: SearchThresholds;
+}
+
+function search(env: SearchEnv, vector: number[], matchCount: number, threshold: number): Promise<RawChunk[]> {
+  return searchByEmbedding(env.scope, { vector, profile: env.profile }, matchCount, threshold, env);
 }
 
 export function legacyAnalyze(query: string): TemporalQueryContext {
@@ -34,7 +103,14 @@ export async function legacySearch(
   input: LegacySearchInput,
 ): Promise<{ results: Candidate[]; retrievalStrategy: string }> {
   const { embedding, queryContext, maxResults, fallbackToLowerThreshold } = input;
-  const searchEnv: SearchEnv = { scope: input.scope, client: input.client, signal: input.signal };
+  const profile = input.profile ?? null;
+  const searchEnv: SearchEnv = {
+    scope: input.scope,
+    client: input.client,
+    signal: input.signal,
+    profile,
+    thresholds: searchThresholdsFor(profile),
+  };
 
   let results: Candidate[] = [];
   let retrievalStrategy = '';
@@ -102,9 +178,9 @@ async function exactMatchRetrieval(
 ): Promise<Candidate[]> {
   logger.db(`[Enhanced RAG] Executing exact match retrieval`);
 
-  const threshold = Math.max(context.suggestedThreshold, 0.7);
+  const threshold = Math.max(scaleThreshold(searchEnv.thresholds, context.suggestedThreshold), searchEnv.thresholds.exactFloor);
 
-  const chunks = await vectorSearch(searchEnv.scope, queryEmbedding, Math.min(maxResults * 2, 50), threshold, searchEnv);
+  const chunks = await search(searchEnv, queryEmbedding, Math.min(maxResults * 2, 50), threshold);
 
   if (!chunks || chunks.length === 0) {
     logger.db(`[Enhanced RAG] No chunks found with threshold ${threshold}`);
@@ -135,9 +211,9 @@ async function multiStageRetrieval(
 ): Promise<Candidate[]> {
   logger.db(`[Enhanced RAG] Executing multi-stage retrieval`);
 
-  const stage1Threshold = context.suggestedThreshold;
+  const stage1Threshold = scaleThreshold(searchEnv.thresholds, context.suggestedThreshold);
   const stage1Count = maxResults * 2;
-  const stage1Chunks = await vectorSearch(searchEnv.scope, queryEmbedding, stage1Count, stage1Threshold, searchEnv);
+  const stage1Chunks = await search(searchEnv, queryEmbedding, stage1Count, stage1Threshold);
 
   if (!stage1Chunks || stage1Chunks.length === 0) {
     logger.db(`[Enhanced RAG] Stage 1 (semantic) found no results`);
@@ -169,7 +245,7 @@ async function temporalBoostedRetrieval(
 ): Promise<Candidate[]> {
   logger.db(`[Enhanced RAG] Executing temporal boosted retrieval`);
 
-  const chunks = await vectorSearch(searchEnv.scope, queryEmbedding, maxResults * 2, context.suggestedThreshold, searchEnv);
+  const chunks = await search(searchEnv, queryEmbedding, maxResults * 2, scaleThreshold(searchEnv.thresholds, context.suggestedThreshold));
 
   if (!chunks || chunks.length === 0) {
     return [];
@@ -192,7 +268,7 @@ async function semanticOnlyRetrieval(
 ): Promise<Candidate[]> {
   logger.db(`[Enhanced RAG] Executing semantic-only retrieval`);
 
-  const chunks = await vectorSearch(searchEnv.scope, queryEmbedding, maxResults, context.suggestedThreshold, searchEnv);
+  const chunks = await search(searchEnv, queryEmbedding, maxResults, scaleThreshold(searchEnv.thresholds, context.suggestedThreshold));
 
   if (!chunks || chunks.length === 0) {
     return [];
@@ -208,9 +284,9 @@ async function fallbackRetrieval(
   maxResults: number,
   searchEnv: SearchEnv,
 ): Promise<Candidate[]> {
-  logger.db(`[Enhanced RAG] Executing fallback retrieval with threshold 0.28`);
+  logger.db(`[Enhanced RAG] Executing fallback retrieval with threshold ${searchEnv.thresholds.fallback}`);
 
-  const chunks = await vectorSearch(searchEnv.scope, queryEmbedding, maxResults, 0.28, searchEnv);
+  const chunks = await search(searchEnv, queryEmbedding, maxResults, searchEnv.thresholds.fallback);
 
   if (!chunks || chunks.length === 0) {
     return [];
@@ -223,7 +299,7 @@ async function fallbackRetrieval(
     timeframe: null,
     financialMetrics: [],
     requiredPrecision: 'low',
-    suggestedThreshold: 0.28,
+    suggestedThreshold: LEGACY_FALLBACK_THRESHOLD,
     searchStrategy: 'semantic_only',
     requireTemporalMatch: false,
     reasoningText: 'Fallback retrieval',

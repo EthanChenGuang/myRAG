@@ -1,6 +1,6 @@
 import { env } from '@/lib/env';
 import { logger } from '@/lib/logger';
-import { RetrievalBackendError, vectorSearch, type RawChunk, type RpcClient } from './backend/supabase-rpc';
+import { RetrievalBackendError, searchByEmbedding, type RawChunk, type RpcClient } from './backend/supabase-rpc';
 import {
   CORE_STAGES,
   FALLBACK_STAGE_TIMEOUT_MS,
@@ -29,8 +29,8 @@ import {
 } from './context/overview';
 import { assembleVoiceResults, enrichVoiceCandidates, type VoiceResults } from './context/voice';
 import { getRagDeps, type RagDeps } from './deps';
-import { classifyProfileFailure, embedQuery } from './embeddings/query-embedding';
-import { legacyAnalyze, legacyRank, legacySearch } from './legacy/enhanced-retrieval';
+import { classifyProfileFailure, embedQuery, withStaleProfileRetry } from './embeddings/query-embedding';
+import { legacyAnalyze, legacyRank, legacySearch, scaleThreshold, searchThresholdsFor } from './legacy/enhanced-retrieval';
 import { defaultQueryContext } from './query/temporal-query-detector';
 import { resolveDocumentRefs } from './refs/resolve';
 import { hybridRerank } from './rerank/local-hybrid';
@@ -294,10 +294,12 @@ async function runMediaPipeline(input: RunRetrievalInput, collector: TraceCollec
         (stageSignal) => {
           const adminClient = deps.adminClient();
           if (!adminClient) throw new Error('[RAG Media] admin client unavailable');
-          return vectorSearch(scope, embedding.vector, MEDIA_MATCH_COUNT, MEDIA_SIMILARITY_THRESHOLD, {
-            client: adminClient as unknown as RpcClient,
-            signal: stageSignal,
-          });
+          return withStaleProfileRetry(input.query, embedding, stageSignal, (current) =>
+            searchByEmbedding(scope, current, MEDIA_MATCH_COUNT, scaleThreshold(searchThresholdsFor(current.profile), MEDIA_SIMILARITY_THRESHOLD), {
+              client: adminClient as unknown as RpcClient,
+              signal: stageSignal,
+            }),
+          );
         },
         collector,
         { candidatesOut: (value) => value.length },
@@ -406,10 +408,12 @@ async function runOverviewPipeline(
         (stageSignal) => {
           const adminClient = deps.adminClient();
           if (!adminClient) throw new Error('[RAG Overview] admin client unavailable');
-          return vectorSearch(scope, embedding.vector, OVERVIEW_MATCH_COUNT, OVERVIEW_SIMILARITY_THRESHOLD, {
-            client: adminClient as unknown as RpcClient,
-            signal: stageSignal,
-          });
+          return withStaleProfileRetry(OVERVIEW_QUERY, embedding, stageSignal, (current) =>
+            searchByEmbedding(scope, current, OVERVIEW_MATCH_COUNT, scaleThreshold(searchThresholdsFor(current.profile), OVERVIEW_SIMILARITY_THRESHOLD), {
+              client: adminClient as unknown as RpcClient,
+              signal: stageSignal,
+            }),
+          );
         },
         collector,
         { candidatesOut: (value) => value.length },
@@ -519,16 +523,19 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
         spec('search', 'throw'),
         signal,
         (stageSignal) =>
-          legacySearch({
-            query: input.query,
-            embedding: embedding.vector,
-            queryContext: analysed,
-            maxResults,
-            fallbackToLowerThreshold,
-            scope,
-            client: requireAdminSearchClient(deps),
-            signal: stageSignal,
-          }),
+          withStaleProfileRetry(input.query, embedding, stageSignal, (current) =>
+            legacySearch({
+              query: input.query,
+              embedding: current.vector,
+              profile: current.profile,
+              queryContext: analysed,
+              maxResults,
+              fallbackToLowerThreshold,
+              scope,
+              client: requireAdminSearchClient(deps),
+              signal: stageSignal,
+            }),
+          ),
         collector,
         { candidatesOut: (value) => value.results.length, detail: (value) => value.retrievalStrategy },
       ),
@@ -680,10 +687,15 @@ async function runVoicePipeline(input: RunRetrievalInput, collector: TraceCollec
         spec('search', 'throw'),
         signal,
         async (stageSignal) => {
-          const rows = await vectorSearch(scope, embedding.vector, matchCount * VOICE_SEARCH_MULTIPLIER, VOICE_SEARCH_THRESHOLD, {
-            client: requireAdmin() as unknown as RpcClient,
-            signal: stageSignal,
-          });
+          const rows = await withStaleProfileRetry(query, embedding, stageSignal, (current) =>
+            searchByEmbedding(
+              scope,
+              current,
+              matchCount * VOICE_SEARCH_MULTIPLIER,
+              scaleThreshold(searchThresholdsFor(current.profile), VOICE_SEARCH_THRESHOLD),
+              { client: requireAdmin() as unknown as RpcClient, signal: stageSignal },
+            ),
+          );
           return rows.map((row) => toVoiceChunk(row, scope));
         },
         collector,

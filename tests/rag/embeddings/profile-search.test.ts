@@ -9,7 +9,7 @@ import { resetProfileFailureLogForTests } from '@/lib/rag/embeddings/query-embed
 import { resetEmbeddingProvidersForTests, setEmbeddingProvidersForTests } from '@/lib/rag/embeddings/registry';
 import type { EmbeddingProvider } from '@/lib/rag/embeddings/types';
 import { resetIngestDepsForTests, setIngestDepsForTests } from '@/lib/rag/ingest/deps';
-import { legacyAnalyze } from '@/lib/rag/legacy/enhanced-retrieval';
+import { legacyAnalyze, resetCalibrationWarningsForTests } from '@/lib/rag/legacy/enhanced-retrieval';
 import { mintScope } from '@/lib/rag/tenant/scope';
 import { installDeps, uninstallDeps } from '../helpers/pipeline-fakes';
 
@@ -133,6 +133,7 @@ afterEach(() => {
   resetActiveProfileForTests();
   resetEmbeddingProvidersForTests();
   resetProfileFailureLogForTests();
+  resetCalibrationWarningsForTests();
 });
 
 describe('search through the active non-legacy profile', () => {

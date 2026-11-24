@@ -5,6 +5,7 @@ import {
   getActiveProfile,
   getStartupVerdict,
   isEmbeddingProfilesEnabled,
+  refreshActiveProfile,
   type EmbeddingProfile,
 } from './active-profile';
 import { EmbeddingProfileMismatch } from './mrl';
@@ -90,6 +91,27 @@ export async function embedQuery(text: string, signal: AbortSignal): Promise<Que
     });
   }
   return embedWithProfile(text, signal, await getActiveProfile(), deps);
+}
+
+/**
+ * Runs a search once and, when the database reports that the profile the query was embedded for is no longer active, refreshes the
+ * pointer and runs embed and search once more with the new active profile. A second failure propagates.
+ */
+export async function withStaleProfileRetry<T>(
+  text: string,
+  embedding: QueryEmbedding,
+  signal: AbortSignal,
+  run: (embedding: QueryEmbedding) => Promise<T>,
+): Promise<T> {
+  try {
+    return await run(embedding);
+  } catch (error) {
+    const stale = error instanceof EmbeddingProfileMismatchError && error.kind === 'not_active' && embedding.profile !== null;
+    if (!stale) throw error;
+    const fresh = await refreshActiveProfile();
+    if (fresh.id === embedding.profile?.id) throw error;
+    return run(await embedWithProfile(text, signal, fresh, getRagDeps()));
+  }
 }
 
 function logOnce(cause: string, line: () => void): void {
