@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi, type MockInstance } from 'vitest';
 import { createTraceCollector, finishTrace, runRetrieval } from '@/lib/rag';
+import { buildTraceLogPayload } from '@/lib/rag/trace/log';
 import { mintScope } from '@/lib/rag/tenant/scope';
 import { setRagDepsForTests } from '@/lib/rag/deps';
 import {
@@ -9,6 +10,7 @@ import {
   rows,
   uninstallDeps,
 } from './helpers/pipeline-fakes';
+import type { RefusalRecord } from '@/lib/rag/refusal/types';
 import type { RetrievalResult } from '@/lib/rag/types';
 
 const DISTINCT_QUERY = 'zebra-quartz-7731 handbook question';
@@ -110,6 +112,76 @@ describe('createTraceCollector', () => {
   });
 });
 
+describe('buildTraceLogPayload', () => {
+  test('includes per-stage counts only when recorded', () => {
+    const collector = createTraceCollector({ profile: 'eval', tenantKey: 's:default' });
+    collector.record({
+      name: 'search',
+      status: 'ok',
+      startedAt: 0,
+      endedAt: 1,
+      counts: { deduped: 2, rerank_input: 50 },
+    });
+    collector.record({ name: 'embed', status: 'ok', startedAt: 1, endedAt: 2 });
+    const stages = buildTraceLogPayload(collector, emptyResult()).stages as Array<Record<string, unknown>>;
+    expect(stages[0].counts).toEqual({ deduped: 2, rerank_input: 50 });
+    expect(stages[1]).not.toHaveProperty('counts');
+  });
+
+  test('includes refusal with numbers and codes only when present on the result', () => {
+    const collector = createTraceCollector({ profile: 'chat', tenantKey: 's:default' });
+    const refusal = {
+      decision: 'refuse',
+      basis: 'rerank_threshold',
+      reason: null,
+      topScore: 0.12,
+      threshold: 0.3,
+      cellKey: 'cohere|rerank-v5.0-pro|zh|same',
+    } as unknown as RefusalRecord;
+    const payload = buildTraceLogPayload(collector, emptyResult({ refusal }));
+    expect(payload.refusal).toEqual({
+      decision: 'refuse',
+      basis: 'rerank_threshold',
+      reason: null,
+      topScore: 0.12,
+      threshold: 0.3,
+      cellKey: 'cohere|rerank-v5.0-pro|zh|same',
+    });
+    expect(buildTraceLogPayload(collector, emptyResult()).refusal).toBeUndefined();
+  });
+
+  test('drops refusal cellKey values that fail the safe pattern or embed query text', () => {
+    const collector = createTraceCollector({ profile: 'chat', tenantKey: 's:default' });
+    const line = JSON.stringify(
+      buildTraceLogPayload(
+        collector,
+        emptyResult({
+          refusal: {
+            decision: 'refuse',
+            basis: 'rerank_threshold',
+            reason: 'invalid_score',
+            topScore: 0.1,
+            threshold: 0.2,
+            cellKey: `cohere|${DISTINCT_QUERY}|zh|same`,
+          },
+        }),
+      ),
+    );
+    expect(line).not.toContain('zebra-quartz-7731');
+    expect(line).not.toContain('handbook');
+    expect(line).not.toContain('question');
+    const payload = JSON.parse(line) as { refusal: Record<string, unknown> };
+    expect(payload.refusal).toMatchObject({
+      decision: 'refuse',
+      basis: 'rerank_threshold',
+      reason: 'invalid_score',
+      topScore: 0.1,
+      threshold: 0.2,
+    });
+    expect(payload.refusal).not.toHaveProperty('cellKey');
+  });
+});
+
 describe('finishTrace', () => {
   test('logs exactly one [RAG Trace] line with the fixed fields', () => {
     const collector = createTraceCollector({ profile: 'chat', tenantKey: 'o:acme' });
@@ -122,6 +194,7 @@ describe('finishTrace', () => {
     expect(lines[0].startsWith('[RAG Trace]')).toBe(true);
     const payload = parseLine(lines[0]);
     expect(Object.keys(payload).sort()).toEqual(['profile', 'reason', 'stages', 'status', 'tenantKey', 'traceId']);
+    expect(payload.refusal).toBeUndefined();
     expect(payload).toMatchObject({
       traceId: collector.traceId,
       tenantKey: 'o:acme',
@@ -173,6 +246,7 @@ describe('runRetrieval trace wiring', () => {
     expect(lines[0]).not.toContain('zebra-quartz-7731');
     expect(lines[0]).not.toContain('kestrel-9042');
     expect(lines[0]).not.toContain('handbook');
+    expect(lines[0]).not.toContain('chunk body marker');
     const payload = parseLine(lines[0]);
     expect(payload.traceId).toBe(result.traceId);
     expect(payload).toMatchObject({ tenantKey: 's:default', profile: 'chat', status: 'ok' });
