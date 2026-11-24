@@ -27,10 +27,10 @@ See: .planning/PROJECT.md (updated 2026-11-22)
 
 ## Current Position
 
-Phase: 03 (Unified Ingestion & Embedding Profiles) — EXECUTING (paused 2026-11-24 for account switch)
-Plan: 12 of 49 merged (03-01..03-12); 03-13, 03-14, 03-15 partial, saved as patches in .planning/paused/p3/
-Status: Phase 2 complete (human_needed live checks). Plans: 3.1 (55, PASS), 4 (45, PASS), 5 (26, PASS). 6 and 7 drafts in progress; 5.1 not yet planned.
-Last activity: 2026-11-24 — 03-12 + torch CPU-index fix merged; gates green (tsc 0, vitest 1534, node 143, rag-db 145+3 skip, sidecar 422, eval 333)
+Phase: 03 (Unified Ingestion & Embedding Profiles) — EXECUTING
+Plan: 17 of 49 merged (03-01..03-15, 03-13b, 03-21); running 03-16..03-20, 03-22, 03-25
+Status: Phase 2 complete (human_needed live checks). Plans: 3.1 (55, PASS), 4 (45, PASS), 5 (26, PASS), 6 (46, revising after check FAIL 4 blockers), 7 (33, plan-check running), 5.1 (planning in progress).
+Last activity: 2026-11-24 — 03-13, 03-14, 03-15, 03-13b, 03-21 merged; gates green (tsc 0, vitest 1602, node 143, rag-db 157+3 skip, sidecar 509 / 551 with chunking, eval 333)
 
 Progress: [█████████░] 94%
 
@@ -191,7 +191,7 @@ Items acknowledged and deferred at milestone close, most recent first:
 ## Session Continuity
 
 Last session: 2026-11-24
-Stopped at: Session resumed after account switch; restoring 03-13/14/15 from patches, relaunching Phase 5.1/6/7 planners
+Stopped at: Phase 3 wave 5 executing (03-16..20, 03-22, 03-25); next 03-23, 03-24, 03-26
 Resume file: .planning/phases/03-unified-ingestion-embedding-profiles/.continue-here.md
 
 ## Pending Human Actions (session 2026-11-23b)
