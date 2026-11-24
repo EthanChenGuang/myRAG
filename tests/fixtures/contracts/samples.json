@@ -493,6 +493,43 @@
       ],
       "schema_version": 1
     },
+    "InvoiceExtractRequest": {
+      "language_hint": "zh",
+      "markdown": "发票号码：INV-2026-0001\n\n| 项目 | 金额 |\n| --- | --- |\n| 咨询服务 | 100.00 |\n",
+      "tables": [
+        "| 项目 | 金额 |\n| --- | --- |\n| 咨询服务 | 100.00 |"
+      ]
+    },
+    "InvoiceFields": {
+      "buyer": {
+        "name": "Esempio Acquirente S.r.l.",
+        "tax_id": "99999999990",
+        "tax_id_scheme": "it_iva"
+      },
+      "confidence": 0.9,
+      "currency": "EUR",
+      "due_date": "2026-02-28",
+      "errors": [],
+      "gross_total": "122.00",
+      "invoice_number": "INV-2026-0001",
+      "issue_date": "2026-01-31",
+      "line_items": [
+        {
+          "amount": "100.00",
+          "description": "咨询服务",
+          "quantity": "2",
+          "tax_rate": "22",
+          "unit_price": "50.00"
+        }
+      ],
+      "net_total": "100.00",
+      "supplier": {
+        "name": "示例供应商有限公司",
+        "tax_id": "91000000MA0000000N",
+        "tax_id_scheme": "cn_uscc"
+      },
+      "tax_total": "22.00"
+    },
     "JudgeConfig": {
       "base_url": "https://example.invalid/api/v1",
       "embedding_model": "embed/model-c",
@@ -593,6 +630,151 @@
         "recall_at_5": "higher"
       },
       "schema_version": 1
+    },
+    "ParseJobAccepted": {
+      "job_id": "job-0123abcd"
+    },
+    "ParseJobRequest": {
+      "docling": {
+        "force_full_page_ocr": false,
+        "generate_picture_images": true,
+        "heading_hierarchy": true,
+        "ocr": true,
+        "table_mode": "accurate"
+      },
+      "input_format": "pdf",
+      "max_tokens": 512,
+      "ocr_languages": [
+        "zh",
+        "en",
+        "it"
+      ],
+      "page_cap": 200,
+      "profile_id": "financial_report@1",
+      "profile_version": 1,
+      "repeat_table_header": true,
+      "tokenizer": "cl100k_base"
+    },
+    "ParseJobState": {
+      "error_class": null,
+      "job_id": "job-0123abcd",
+      "result": {
+        "artifacts": [
+          "docling.json",
+          "picture-1.png"
+        ],
+        "chunks": [
+          {
+            "contextualized_text": "Report > Results\nRevenue grew in the second quarter.",
+            "headings": [
+              "Report",
+              "Results"
+            ],
+            "is_table": false,
+            "pages": [
+              1
+            ],
+            "table_header": null,
+            "text": "Revenue grew in the second quarter."
+          },
+          {
+            "contextualized_text": "Report > Tables\n| Item | Amount |\n| --- | --- |\n| Fees | 10 |",
+            "headings": [
+              "Report",
+              "Tables"
+            ],
+            "is_table": true,
+            "pages": [
+              2,
+              3
+            ],
+            "table_header": "| Item | Amount |\n| --- | --- |",
+            "text": "| Item | Amount |\n| --- | --- |\n| Fees | 10 |"
+          }
+        ],
+        "language": "en",
+        "markdown": "# Report\n\n## Results\n\nRevenue grew in the second quarter.\n\n| Item | Amount |\n| --- | --- |\n| Fees | 10 |\n",
+        "page_count": 3,
+        "parser": "docling",
+        "parser_version": "0.0.0-sample",
+        "partial": false,
+        "pictures": [
+          {
+            "bbox": [
+              10.0,
+              20.0,
+              110.0,
+              220.0
+            ],
+            "image_ref": "picture-1.png",
+            "page": 2,
+            "page_area_share": 0.12
+          }
+        ],
+        "text_layer_page_share": 1.0,
+        "warnings": [
+          "synthetic sample"
+        ]
+      },
+      "status": "succeeded"
+    },
+    "ParseResult": {
+      "artifacts": [
+        "docling.json",
+        "picture-1.png"
+      ],
+      "chunks": [
+        {
+          "contextualized_text": "Report > Results\nRevenue grew in the second quarter.",
+          "headings": [
+            "Report",
+            "Results"
+          ],
+          "is_table": false,
+          "pages": [
+            1
+          ],
+          "table_header": null,
+          "text": "Revenue grew in the second quarter."
+        },
+        {
+          "contextualized_text": "Report > Tables\n| Item | Amount |\n| --- | --- |\n| Fees | 10 |",
+          "headings": [
+            "Report",
+            "Tables"
+          ],
+          "is_table": true,
+          "pages": [
+            2,
+            3
+          ],
+          "table_header": "| Item | Amount |\n| --- | --- |",
+          "text": "| Item | Amount |\n| --- | --- |\n| Fees | 10 |"
+        }
+      ],
+      "language": "en",
+      "markdown": "# Report\n\n## Results\n\nRevenue grew in the second quarter.\n\n| Item | Amount |\n| --- | --- |\n| Fees | 10 |\n",
+      "page_count": 3,
+      "parser": "docling",
+      "parser_version": "0.0.0-sample",
+      "partial": false,
+      "pictures": [
+        {
+          "bbox": [
+            10.0,
+            20.0,
+            110.0,
+            220.0
+          ],
+          "image_ref": "picture-1.png",
+          "page": 2,
+          "page_area_share": 0.12
+        }
+      ],
+      "text_layer_page_share": 1.0,
+      "warnings": [
+        "synthetic sample"
+      ]
     },
     "ProcessingProfileSet": {
       "profiles": [
@@ -1062,6 +1244,51 @@
         "question": "What is the CEO's favourite colour?",
         "review_status": "approved",
         "split": "test"
+      }
+    },
+    "InvoiceFields:nothing_extracted": {
+      "model": "InvoiceFields",
+      "value": {
+        "buyer": {
+          "name": null,
+          "tax_id": null,
+          "tax_id_scheme": "unknown"
+        },
+        "confidence": 0.0,
+        "currency": null,
+        "due_date": null,
+        "errors": [
+          "no invoice number found"
+        ],
+        "gross_total": null,
+        "invoice_number": null,
+        "issue_date": null,
+        "line_items": [],
+        "net_total": null,
+        "supplier": {
+          "name": null,
+          "tax_id": null,
+          "tax_id_scheme": "unknown"
+        },
+        "tax_total": null
+      }
+    },
+    "ParseJobState:failed_with_error_class": {
+      "model": "ParseJobState",
+      "value": {
+        "error_class": "ocr_failed",
+        "job_id": "job-0123abcd",
+        "result": null,
+        "status": "failed"
+      }
+    },
+    "ParseJobState:running_without_result": {
+      "model": "ParseJobState",
+      "value": {
+        "error_class": null,
+        "job_id": "job-0123abcd",
+        "result": null,
+        "status": "running"
       }
     },
     "RagRunRequest:query_only": {

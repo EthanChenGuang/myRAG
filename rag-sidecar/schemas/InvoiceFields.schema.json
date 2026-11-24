@@ -1,0 +1,236 @@
+{
+  "$defs": {
+    "InvoiceLineItem": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "anyOf": [
+            {
+              "pattern": "^-?\\d+(\\.\\d{1,4})?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Amount"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "quantity": {
+          "anyOf": [
+            {
+              "pattern": "^-?\\d+(\\.\\d{1,4})?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Quantity"
+        },
+        "tax_rate": {
+          "anyOf": [
+            {
+              "pattern": "^-?\\d+(\\.\\d{1,4})?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tax Rate"
+        },
+        "unit_price": {
+          "anyOf": [
+            {
+              "pattern": "^-?\\d+(\\.\\d{1,4})?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unit Price"
+        }
+      },
+      "required": [
+        "description"
+      ],
+      "title": "InvoiceLineItem",
+      "type": "object"
+    },
+    "InvoiceParty": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "tax_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tax Id"
+        },
+        "tax_id_scheme": {
+          "default": "unknown",
+          "enum": [
+            "it_iva",
+            "cn_uscc",
+            "eu_vat",
+            "unknown"
+          ],
+          "title": "Tax Id Scheme",
+          "type": "string"
+        }
+      },
+      "title": "InvoiceParty",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "buyer": {
+      "$ref": "#/$defs/InvoiceParty"
+    },
+    "confidence": {
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Confidence",
+      "type": "number"
+    },
+    "currency": {
+      "anyOf": [
+        {
+          "pattern": "^[A-Z]{3}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Currency"
+    },
+    "due_date": {
+      "anyOf": [
+        {
+          "format": "date",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Due Date"
+    },
+    "errors": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Errors",
+      "type": "array"
+    },
+    "gross_total": {
+      "anyOf": [
+        {
+          "pattern": "^-?\\d+(\\.\\d{1,4})?$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Gross Total"
+    },
+    "invoice_number": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Invoice Number"
+    },
+    "issue_date": {
+      "anyOf": [
+        {
+          "format": "date",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Issue Date"
+    },
+    "line_items": {
+      "items": {
+        "$ref": "#/$defs/InvoiceLineItem"
+      },
+      "title": "Line Items",
+      "type": "array"
+    },
+    "net_total": {
+      "anyOf": [
+        {
+          "pattern": "^-?\\d+(\\.\\d{1,4})?$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Net Total"
+    },
+    "supplier": {
+      "$ref": "#/$defs/InvoiceParty"
+    },
+    "tax_total": {
+      "anyOf": [
+        {
+          "pattern": "^-?\\d+(\\.\\d{1,4})?$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Tax Total"
+    }
+  },
+  "required": [
+    "confidence"
+  ],
+  "title": "InvoiceFields",
+  "type": "object"
+}

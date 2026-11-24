@@ -1,0 +1,191 @@
+{
+  "$defs": {
+    "ParseChunk": {
+      "additionalProperties": false,
+      "properties": {
+        "contextualized_text": {
+          "title": "Contextualized Text",
+          "type": "string"
+        },
+        "headings": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Headings",
+          "type": "array"
+        },
+        "is_table": {
+          "title": "Is Table",
+          "type": "boolean"
+        },
+        "pages": {
+          "items": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "title": "Pages",
+          "type": "array"
+        },
+        "table_header": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Table Header"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "contextualized_text",
+        "headings",
+        "pages",
+        "is_table"
+      ],
+      "title": "ParseChunk",
+      "type": "object"
+    },
+    "ParsePicture": {
+      "additionalProperties": false,
+      "properties": {
+        "bbox": {
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 4,
+          "minItems": 4,
+          "title": "Bbox",
+          "type": "array"
+        },
+        "image_ref": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Image Ref",
+          "type": "string"
+        },
+        "page": {
+          "minimum": 1,
+          "title": "Page",
+          "type": "integer"
+        },
+        "page_area_share": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Page Area Share",
+          "type": "number"
+        }
+      },
+      "required": [
+        "page",
+        "bbox",
+        "image_ref",
+        "page_area_share"
+      ],
+      "title": "ParsePicture",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "artifacts": {
+      "items": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+        "type": "string"
+      },
+      "title": "Artifacts",
+      "type": "array"
+    },
+    "chunks": {
+      "items": {
+        "$ref": "#/$defs/ParseChunk"
+      },
+      "title": "Chunks",
+      "type": "array"
+    },
+    "language": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Language"
+    },
+    "markdown": {
+      "title": "Markdown",
+      "type": "string"
+    },
+    "page_count": {
+      "minimum": 0,
+      "title": "Page Count",
+      "type": "integer"
+    },
+    "parser": {
+      "enum": [
+        "docling",
+        "llamaparse",
+        "text"
+      ],
+      "title": "Parser",
+      "type": "string"
+    },
+    "parser_version": {
+      "title": "Parser Version",
+      "type": "string"
+    },
+    "partial": {
+      "default": false,
+      "title": "Partial",
+      "type": "boolean"
+    },
+    "pictures": {
+      "items": {
+        "$ref": "#/$defs/ParsePicture"
+      },
+      "title": "Pictures",
+      "type": "array"
+    },
+    "text_layer_page_share": {
+      "anyOf": [
+        {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Text Layer Page Share"
+    },
+    "warnings": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Warnings",
+      "type": "array"
+    }
+  },
+  "required": [
+    "markdown",
+    "chunks",
+    "pictures",
+    "page_count",
+    "parser",
+    "parser_version"
+  ],
+  "title": "ParseResult",
+  "type": "object"
+}

@@ -1,0 +1,130 @@
+{
+  "$defs": {
+    "DoclingOptions": {
+      "additionalProperties": false,
+      "properties": {
+        "force_full_page_ocr": {
+          "title": "Force Full Page Ocr",
+          "type": "boolean"
+        },
+        "generate_picture_images": {
+          "title": "Generate Picture Images",
+          "type": "boolean"
+        },
+        "heading_hierarchy": {
+          "title": "Heading Hierarchy",
+          "type": "boolean"
+        },
+        "ocr": {
+          "title": "Ocr",
+          "type": "boolean"
+        },
+        "table_mode": {
+          "enum": [
+            "off",
+            "fast",
+            "accurate"
+          ],
+          "title": "Table Mode",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ocr",
+        "force_full_page_ocr",
+        "table_mode",
+        "heading_hierarchy",
+        "generate_picture_images"
+      ],
+      "title": "DoclingOptions",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "docling": {
+      "$ref": "#/$defs/DoclingOptions"
+    },
+    "input_format": {
+      "anyOf": [
+        {
+          "enum": [
+            "pdf",
+            "docx",
+            "html",
+            "image",
+            "json_docling"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Input Format"
+    },
+    "max_tokens": {
+      "maximum": 4096,
+      "minimum": 64,
+      "title": "Max Tokens",
+      "type": "integer"
+    },
+    "ocr_languages": {
+      "items": {
+        "enum": [
+          "zh",
+          "en",
+          "it"
+        ],
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Ocr Languages",
+      "type": "array"
+    },
+    "page_cap": {
+      "anyOf": [
+        {
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Page Cap"
+    },
+    "profile_id": {
+      "pattern": "^[a-z][a-z_]*@[1-9][0-9]*$",
+      "title": "Profile Id",
+      "type": "string"
+    },
+    "profile_version": {
+      "minimum": 1,
+      "title": "Profile Version",
+      "type": "integer"
+    },
+    "repeat_table_header": {
+      "title": "Repeat Table Header",
+      "type": "boolean"
+    },
+    "tokenizer": {
+      "const": "cl100k_base",
+      "default": "cl100k_base",
+      "title": "Tokenizer",
+      "type": "string"
+    }
+  },
+  "required": [
+    "profile_id",
+    "profile_version",
+    "docling",
+    "ocr_languages",
+    "max_tokens",
+    "repeat_table_header"
+  ],
+  "title": "ParseJobRequest",
+  "type": "object"
+}
