@@ -138,6 +138,8 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | 04-23 | `wt/04-23` / `exec/04-23` | **RUNNING** (gsd-executor) |
 | 04-24 | `wt/04-24` / `exec/04-24` | **RUNNING** (gsd-executor) |
 | 04-25 | `wt/04-25` / `exec/04-25` | **merged** |
+| 04-30 | `wt/04-30` / `exec/04-30` | **RUNNING** (gsd-executor) |
+| 04-37 | `wt/04-37` / `exec/04-37` | **RUNNING** (gsd-executor) |
 | 04-26 | `wt/04-26` / `exec/04-26` | **merged** |
 | review-g-fix | `wt/fix-review-g` | **RUNNING** — review G BLOCKER-1 (ledger single-row RPC shape), HIGH-1 (cloud switch fail-open), MED-1/2/7, LOW-2/3/4/5 |
 | 03.1-36 | — | **UI-SPEC in progress** (gsd-ui-researcher, Opus); executor after spec check |
