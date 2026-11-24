@@ -35,7 +35,8 @@ const RPC_ARGUMENTS: Record<string, { vector: string; allowed: string[] }> = {
   },
 };
 
-const GENERIC_RPC_NAME = /^(?:rag_[a-z0-9_]+|match_chunks_by_profile)$/;
+const GENERIC_RPC_NAME = /^(?:rag_[a-z0-9_]+|match_chunks_by_profile|hybrid_search_chunks)$/;
+const FIXTURE_SERVICE_ROLE_KEY = 'fixture-service-role-key-placeholder';
 const VECTOR_ARGUMENT_TYPES = new Set(['vector', 'halfvec']);
 const JSON_ARGUMENT_TYPES = new Set(['json', 'jsonb']);
 const SQLSTATE_RE = /^[0-9A-Z]{5}$/;
@@ -138,7 +139,22 @@ const STORAGE_OBJECT_PATH = /^\/storage\/v1\/object\/([^/]+)\/(.+)$/;
 const STORAGE_LIST_PATH = /^\/storage\/v1\/object\/list\/([^/]+)$/;
 
 function defaultServiceKeys(): string[] {
-  return [DEFAULT_JWT_SERVICE_KEY, `sb_secret_${randomBytes(12).toString('hex')}`];
+  return [DEFAULT_JWT_SERVICE_KEY, FIXTURE_SERVICE_ROLE_KEY, `sb_secret_${randomBytes(12).toString('hex')}`];
+}
+
+type RpcRole = 'anon' | 'service_role';
+
+function roleMappedRpcName(fn: string): boolean {
+  return GENERIC_RPC_NAME.test(fn);
+}
+
+function resolveRpcRole(req: http.IncomingMessage, serviceKeys: string[], anonKey: string): RpcRole {
+  const apiKeyRaw = req.headers.apikey;
+  const apiKey = typeof apiKeyRaw === 'string' ? apiKeyRaw : undefined;
+  if (!apiKey) throw new Rejection(401, 'missing api key');
+  if (apiKey === anonKey) return 'anon';
+  if (serviceKeys.includes(apiKey)) return 'service_role';
+  throw new Rejection(401, 'invalid api key');
 }
 
 function isJwtShapedServiceKey(key: string): boolean {
@@ -269,7 +285,11 @@ function toVectorText(value: unknown, argName: string): string {
   throw new Rejection(400, `${argName} must be an array of numbers or pgvector text`);
 }
 
-function createHandlers(db: PGlite, calls: FakeEdgeCall[], extras: { documentFilenameFilter: boolean }) {
+function createHandlers(
+  db: PGlite,
+  calls: FakeEdgeCall[],
+  extras: { documentFilenameFilter: boolean; serviceKeys: string[]; anonKey: string },
+) {
   const signatures = new Map<string, RpcSignature>();
 
   async function signatureOf(fn: string): Promise<RpcSignature | null> {
@@ -362,7 +382,20 @@ function createHandlers(db: PGlite, calls: FakeEdgeCall[], extras: { documentFil
     };
   }
 
-  async function rpc(fn: string, body: Record<string, unknown>): Promise<unknown[]> {
+  async function queryRpcRows(fn: string, sql: string, values: unknown[], role?: RpcRole): Promise<unknown[]> {
+    if (!role) return (await db.query(sql, values)).rows as unknown[];
+    return (await db.transaction(async (tx) => {
+      await tx.exec(`SET LOCAL ROLE ${role}`);
+      return (await tx.query(sql, values)).rows as unknown[];
+    })) as unknown[];
+  }
+
+  async function rpc(fn: string, body: Record<string, unknown>, req?: http.IncomingMessage): Promise<unknown[]> {
+    if (roleMappedRpcName(fn)) {
+      if (!req) throw new Rejection(401, 'missing api key');
+      const role = resolveRpcRole(req, extras.serviceKeys, extras.anonKey);
+      return genericRpc(fn, body, role);
+    }
     const spec = RPC_ARGUMENTS[fn];
     if (!spec) return genericRpc(fn, body);
     const names = Object.keys(body);
@@ -372,13 +405,13 @@ function createHandlers(db: PGlite, calls: FakeEdgeCall[], extras: { documentFil
     calls.push({ method: 'POST', path: `/rest/v1/rpc/${fn}` });
     const sql = `SELECT * FROM ${fn}(${names.map((name, i) => `${name} => $${i + 1}`).join(', ')})`;
     try {
-      return (await db.query(sql, values)).rows as unknown[];
+      return await queryRpcRows(fn, sql, values);
     } catch (error) {
       throw new Rejection(400, `rpc ${fn} failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
-  async function genericRpc(fn: string, body: Record<string, unknown>): Promise<unknown[]> {
+  async function genericRpc(fn: string, body: Record<string, unknown>, role?: RpcRole): Promise<unknown[]> {
     if (!GENERIC_RPC_NAME.test(fn)) throw new Rejection(404, `unsupported rpc function: ${fn}`);
     const signature = await signatureOf(fn);
     if (!signature) throw new Rejection(404, `unsupported rpc function: ${fn}`);
@@ -389,7 +422,7 @@ function createHandlers(db: PGlite, calls: FakeEdgeCall[], extras: { documentFil
     calls.push({ method: 'POST', path: `/rest/v1/rpc/${fn}` });
     const sql = `SELECT * FROM ${fn}(${names.map((name, i) => `${name} => $${i + 1}`).join(', ')})`;
     try {
-      return (await db.query(sql, values)).rows as unknown[];
+      return await queryRpcRows(fn, sql, values, role);
     } catch (error) {
       throw databaseRejection(fn, error);
     }
@@ -522,9 +555,13 @@ export interface FakeEdgeOptions {
 export async function startFakeEdge(options: FakeEdgeOptions): Promise<FakeEdge> {
   const errors: FakeEdgeError[] = [];
   const calls: FakeEdgeCall[] = [];
-  const handlers = createHandlers(options.db, calls, { documentFilenameFilter: options.documentFilenameFilter === true });
   const serviceKeys = options.serviceKeys ?? defaultServiceKeys();
   const anonKey = options.anonKey ?? DEFAULT_ANON_KEY;
+  const handlers = createHandlers(options.db, calls, {
+    documentFilenameFilter: options.documentFilenameFilter === true,
+    serviceKeys,
+    anonKey,
+  });
   const storageObjects = new Map<string, Buffer>();
 
   const sendBytes = (res: http.ServerResponse, status: number, body: Buffer, extraHeaders?: Record<string, string>) => {
@@ -635,7 +672,7 @@ export async function startFakeEdge(options: FakeEdgeOptions): Promise<FakeEdge>
         send(res, 200, payload);
       } else if (rpcMatch) {
         if (method !== 'POST') throw new Rejection(405, `unsupported method ${method} for ${pathname}`);
-        send(res, 200, await handlers.rpc(rpcMatch[1], parseJsonObject(await readBody(req))));
+        send(res, 200, await handlers.rpc(rpcMatch[1], parseJsonObject(await readBody(req)), req));
       } else if (tableMatch) {
         if (method !== 'GET') throw new Rejection(405, `unsupported method ${method} for ${pathname}`);
         const wantsObject = String(req.headers.accept ?? '').includes(OBJECT_ACCEPT);

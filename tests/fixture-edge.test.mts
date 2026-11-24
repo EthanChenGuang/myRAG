@@ -521,6 +521,9 @@ describe('fake edge operators on the two-tenant fixture', () => {
   });
 });
 
+const FIXTURE_ANON_KEY = 'fixture-anon-key-placeholder';
+const FIXTURE_SERVICE_KEY = 'fixture-service-role-key-placeholder';
+
 describe('fake edge generic rag_* rpc routing', () => {
   type Fixture = Awaited<ReturnType<typeof createFixtureDatabase>>;
   let fixture: Fixture | undefined;
@@ -530,12 +533,20 @@ describe('fake edge generic rag_* rpc routing', () => {
     return fixture;
   };
   const getEdge = async (): Promise<FakeEdge> => {
-    edge ??= await startFakeEdge({ db: (await getFixture()).db });
+    edge ??= await startFakeEdge({
+      db: (await getFixture()).db,
+      anonKey: FIXTURE_ANON_KEY,
+      serviceKeys: [FIXTURE_SERVICE_KEY],
+    });
     return edge;
   };
-  const rpc = async (name: string, body: unknown) => {
+  const rpc = async (name: string, body: unknown, headers: Record<string, string> = { apikey: FIXTURE_SERVICE_KEY }) => {
     const e = await getEdge();
-    return fetch(`${e.url}/rest/v1/rpc/${name}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    return fetch(`${e.url}/rest/v1/rpc/${name}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...headers },
+      body: JSON.stringify(body),
+    });
   };
   const beginArgs = (sourceKey: string) => ({
     p_tenant_key: 's:default',
@@ -643,11 +654,79 @@ describe('fake edge generic rag_* rpc routing', () => {
   test('the two legacy rpc specs keep their argument lists and their error shape', async () => {
     const e = await getEdge();
     const question = embedText('What is the refund window for annual plans?');
-    const ok = await rpc('match_document_chunks', { query_embedding: question, match_count: 5, similarity_threshold: 0.1 });
+    const legacyPost = (body: unknown) =>
+      fetch(`${e.url}/rest/v1/rpc/match_document_chunks`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    const ok = await legacyPost({ query_embedding: question, match_count: 5, similarity_threshold: 0.1 });
     assert.equal(ok.status, 200);
-    const extra = await rpc('match_document_chunks', { query_embedding: question, match_count: 5, similarity_threshold: 0.1, p_extra: 1 });
+    const extra = await legacyPost({ query_embedding: question, match_count: 5, similarity_threshold: 0.1, p_extra: 1 });
     assert.equal(extra.status, 400);
     assert.equal(((await extra.json()) as { code: string }).code, 'FAKE_EDGE_UNSUPPORTED');
     assert.ok(e.calls.some((call) => call.path === '/rest/v1/rpc/match_document_chunks'));
+  });
+});
+
+describe('fake edge role-mapped RPC execution', () => {
+  type Fixture = Awaited<ReturnType<typeof createFixtureDatabase>>;
+  let fixture: Fixture | undefined;
+  let edge: FakeEdge | undefined;
+
+  const getFixture = async (): Promise<Fixture> => {
+    fixture ??= await createFixtureDatabase({ deploymentMode: 'single-tenant', corpusDir: REAL_CORPUS });
+    return fixture;
+  };
+  const getEdge = async (): Promise<FakeEdge> => {
+    edge ??= await startFakeEdge({
+      db: (await getFixture()).db,
+      anonKey: FIXTURE_ANON_KEY,
+      serviceKeys: [FIXTURE_SERVICE_KEY],
+    });
+    return edge;
+  };
+  const rpc = async (name: string, body: unknown, headers: Record<string, string>) => {
+    const e = await getEdge();
+    return fetch(`${e.url}/rest/v1/rpc/${name}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...headers },
+      body: JSON.stringify(body),
+    });
+  };
+
+  after(async () => {
+    await edge?.close();
+    await fixture?.db.close();
+  });
+
+  test('a service-role-only rag_* function returns 42501 for the anon key and succeeds for the service key', async () => {
+    const { db } = await getFixture();
+    const fn = 'rag_harness_service_only';
+    await db.exec(`
+      CREATE OR REPLACE FUNCTION ${fn}() RETURNS TABLE (ok boolean) LANGUAGE sql AS $$ SELECT true $$;
+      REVOKE ALL ON FUNCTION ${fn}() FROM PUBLIC, anon, authenticated;
+      GRANT EXECUTE ON FUNCTION ${fn}() TO service_role;
+    `);
+    const denied = await rpc(fn, {}, { apikey: FIXTURE_ANON_KEY });
+    assert.equal(denied.status, 403);
+    const body = (await denied.json()) as { code: string; message: string };
+    assert.equal(body.code, '42501');
+    assert.match(body.message, new RegExp(`for function ${fn}`));
+    const allowed = await rpc(fn, {}, { apikey: FIXTURE_SERVICE_KEY });
+    assert.equal(allowed.status, 200);
+    assert.deepEqual(await allowed.json(), [{ ok: true }]);
+  });
+
+  test('an unknown apikey is rejected with 401 before the database runs', async () => {
+    const res = await rpc('rag_get_ingest_document', { p_document_id: FIXTURE_USER_ID, p_tenant_key: 's:default' }, { apikey: 'not-a-configured-key' });
+    assert.equal(res.status, 401);
+    assert.match(((await res.json()) as { message: string }).message, /invalid api key/);
+  });
+
+  test('hybrid_search_chunks is routed like rag_* and returns 404 when the function does not exist', async () => {
+    const res = await rpc('hybrid_search_chunks', { p_tenant_key: 's:default' }, { apikey: FIXTURE_SERVICE_KEY });
+    assert.equal(res.status, 404);
+    assert.match(((await res.json()) as { message: string }).message, /hybrid_search_chunks/);
   });
 });
