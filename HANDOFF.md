@@ -84,6 +84,18 @@ Orchestrator applies this **fallback chain** per role. **Never use Grok** for an
 - **03-48-sec-rpc-2** planned, **not started**
 - Phase 3.1 / 4 wave through **04-45**, **04-19**, **03.1-23** merged (see exec-ledger)
 
+## 03.1-35 (exec/03.1-35)
+
+**Status:** implementation complete on `exec/03.1-35`; see `.planning/phases/03.1-tiered-parsing-incremental-queue-bulk-backfill/03.1-35-SUMMARY.md`.
+
+**Verify on branch:**
+
+```bash
+npx vitest run tests/rag/ingest/advance-outcomes.test.ts tests/rag/ingest/ingest-trace.test.ts
+node --import tsx --test tests/rag-e2e/zero-conversions.test.mts
+npx vitest run tests/rag/doc-type-routes.test.ts
+```
+
 ## How to verify (trunk)
 
 ```bash
