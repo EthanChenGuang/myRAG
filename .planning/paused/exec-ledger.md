@@ -63,6 +63,11 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | 04-05 | bc-91985997… | **merged** | exec/04-05 |
 | 04-06 | [bc-f05b8cec](bc-f05b8cec-070a-54b4-a156-96d6167bdbb7) **merged** | exec/04-06; smoke `eval/out/p4-06` PASS |
 | 03.1-08 | [bc-97f53a60](bc-97f53a60-1976-53e8-a0e4-10113dc0a4bb) **merged** | exec/03.1-08 — 28 PGlite tests pass on trunk |
+| 04-07 | [bc-b39f21bf](bc-b39f21bf-71db-54ba-81d3-327871eb3a63) RUNNING | exec/04-07 |
+| 03.1-03 | [bc-c5cb9fe1](bc-c5cb9fe1-91ef-5ec1-80f3-480362bbb755) RUNNING | exec/03.1-03 |
+| 03.1-09 | [bc-2d791368](bc-2d791368-dff2-51b6-b84c-3678f8e3ed4c) RUNNING | exec/03.1-09 |
+| 03.1-10 | [bc-662f8704](bc-662f8704-0693-5e51-9771-f8aaaf281623) RUNNING | exec/03.1-10 |
+| 04-08 | [bc-b8d286f0](bc-b8d286f0-f82f-5d7d-b33e-a945526384a1) RUNNING | exec/04-08 |
 
 ## Remaining plan inventory (file-overlap basis)
 
@@ -76,12 +81,17 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 
 **Wave 1 (4):** 04-01–04 **parallel**; **04-05 → 04-06 → 04-07** one executor tree (PGlite migration order).
 
-## Wave D (active)
+## Wave E (active — target 3–4 executors)
 
-| Plan | bcId | Worktree |
-|------|------|----------|
-| 04-07 | [bc-b39f21bf](bc-b39f21bf-71db-54ba-81d3-327871eb3a63) RUNNING | `wt/04-07` |
-| 03.1-08 | [bc-97f53a60](bc-97f53a60-1976-53e8-a0e4-10113dc0a4bb) RUNNING | `wt/03.1-08` |
+| Plan | bcId | Worktree | Notes |
+|------|------|----------|-------|
+| 04-07 | [bc-b39f21bf](bc-b39f21bf-71db-54ba-81d3-327871eb3a63) RUNNING | `wt/04-07` | PGlite wave-1 tail; blocks 04-02 only via serialization table |
+| 03.1-03 | [bc-c5cb9fe1](bc-c5cb9fe1-91ef-5ec1-80f3-480362bbb755) RUNNING | `wt/03.1-03` | **Blocks 04-02** until merged |
+| 03.1-09 | [bc-2d791368](bc-2d791368-dff2-51b6-b84c-3678f8e3ed4c) RUNNING | `wt/03.1-09` | Wave 2; after 07+08 |
+| 03.1-10 | [bc-662f8704](bc-662f8704-0693-5e51-9771-f8aaaf281623) RUNNING | `wt/03.1-10` | Wave 2 |
+| 04-08 | [bc-b8d286f0](bc-b8d286f0-f82f-5d7d-b33e-a945526384a1) RUNNING | `wt/04-08` | Phase 4 wave 2; no fixture-chain files |
+
+**Queued after 03.1-03 merge:** `04-02` (same config five-location set). **03-48 live Supabase:** Guang/box agent only — orchestrator **must not** run migrations against production.
 
 **Recently merged (no follow-up merge needed):** [03.1-04 Task 3](bc-4969184f-7107-55b3-a450-d63435dcb0a0), [03.1-07](bc-4a221b6f-f6a6-507b-8da0-d497c6662c2a), [04-05](bc-91985997-25a1-5b37-a987-32cb579c4746) → trunk `7d98d53`…`a06efce`.
 
