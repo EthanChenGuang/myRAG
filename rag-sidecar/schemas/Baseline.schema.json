@@ -84,6 +84,27 @@
       "title": "BaselineRun",
       "type": "object"
     },
+    "DateRangeFilter": {
+      "additionalProperties": false,
+      "properties": {
+        "from": {
+          "format": "date",
+          "title": "From",
+          "type": "string"
+        },
+        "to": {
+          "format": "date",
+          "title": "To",
+          "type": "string"
+        }
+      },
+      "required": [
+        "from",
+        "to"
+      ],
+      "title": "DateRangeFilter",
+      "type": "object"
+    },
     "GoldenFilter": {
       "additionalProperties": false,
       "properties": {
@@ -110,6 +131,40 @@
         "gate_split"
       ],
       "title": "GoldenFilter",
+      "type": "object"
+    },
+    "InvoiceFilter": {
+      "additionalProperties": false,
+      "properties": {
+        "amount_max": {
+          "pattern": "^-?\\d+(\\.\\d{1,4})?$",
+          "title": "Amount Max",
+          "type": "string"
+        },
+        "amount_min": {
+          "pattern": "^-?\\d+(\\.\\d{1,4})?$",
+          "title": "Amount Min",
+          "type": "string"
+        },
+        "currency": {
+          "maxLength": 3,
+          "minLength": 3,
+          "title": "Currency",
+          "type": "string"
+        },
+        "supplier": {
+          "minLength": 1,
+          "title": "Supplier",
+          "type": "string"
+        }
+      },
+      "required": [
+        "supplier",
+        "amount_min",
+        "amount_max",
+        "currency"
+      ],
+      "title": "InvoiceFilter",
       "type": "object"
     },
     "RagRunOptions": {
@@ -205,6 +260,28 @@
           "default": null,
           "title": "Organization Id"
         },
+        "retrieval_filters": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RetrievalFilters"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "retrieval_overrides": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RetrievalOverrides"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "stage_timeouts_ms": {
           "anyOf": [
             {
@@ -230,6 +307,213 @@
         }
       },
       "title": "RagRunOptions",
+      "type": "object"
+    },
+    "RetrievalFilters": {
+      "additionalProperties": false,
+      "properties": {
+        "current_only": {
+          "const": true,
+          "default": true,
+          "title": "Current Only",
+          "type": "boolean"
+        },
+        "date_range": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DateRangeFilter"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "doc_types": {
+          "anyOf": [
+            {
+              "items": {
+                "enum": [
+                  "general",
+                  "financial_report",
+                  "contract_legal",
+                  "invoice_receipt",
+                  "product_technical",
+                  "scanned_image"
+                ],
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Doc Types"
+        },
+        "document_ids": {
+          "anyOf": [
+            {
+              "items": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Document Ids"
+        },
+        "invoice": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/InvoiceFilter"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "languages": {
+          "anyOf": [
+            {
+              "items": {
+                "enum": [
+                  "zh",
+                  "en",
+                  "it"
+                ],
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Languages"
+        },
+        "sources": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sources"
+        }
+      },
+      "title": "RetrievalFilters",
+      "type": "object"
+    },
+    "RetrievalLegWeights": {
+      "additionalProperties": false,
+      "properties": {
+        "dense": {
+          "default": 1.0,
+          "exclusiveMinimum": 0,
+          "title": "Dense",
+          "type": "number"
+        },
+        "exact_id": {
+          "default": 1.0,
+          "exclusiveMinimum": 0,
+          "title": "Exact Id",
+          "type": "number"
+        },
+        "lexical": {
+          "default": 1.0,
+          "exclusiveMinimum": 0,
+          "title": "Lexical",
+          "type": "number"
+        }
+      },
+      "title": "RetrievalLegWeights",
+      "type": "object"
+    },
+    "RetrievalOverrides": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate_pool_size": {
+          "anyOf": [
+            {
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Candidate Pool Size"
+        },
+        "final_top_k": {
+          "anyOf": [
+            {
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Final Top K"
+        },
+        "leg_weights": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RetrievalLegWeights"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "rerank_input_cap": {
+          "anyOf": [
+            {
+              "maximum": 100,
+              "minimum": 50,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rerank Input Cap"
+        },
+        "rrf_k": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rrf K"
+        }
+      },
+      "title": "RetrievalOverrides",
       "type": "object"
     },
     "StageTimeoutsMs": {

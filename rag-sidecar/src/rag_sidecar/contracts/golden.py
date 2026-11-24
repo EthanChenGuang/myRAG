@@ -3,6 +3,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from rag_sidecar.contracts.eval_run import ConversationTurn
+from rag_sidecar.contracts.retrieval import RetrievalFilters
 
 Language = Literal["zh", "en", "it"]
 Category = Literal[
@@ -17,6 +18,7 @@ Category = Literal[
     "ambiguous",
     "typo",
     "cross_lingual",
+    "selective_filter",
 ]
 ReviewStatus = Literal["draft", "approved", "rejected"]
 Provenance = Literal["synthetic_fixture", "claude_draft", "ragas_generated", "human", "production"]
@@ -46,6 +48,8 @@ class GoldenItem(_Contract):
     review_status: ReviewStatus
     provenance: Provenance
     split: Split
+    retrieval_filters: RetrievalFilters | None = None
+    tags: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _check_rules(self) -> "GoldenItem":

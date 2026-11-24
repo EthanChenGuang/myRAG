@@ -210,7 +210,7 @@ Plans:
 - [x] 03-44-PLAN.md — Show Phase 3's success criteria 1, 2, 4, 6, 7 and 9 in ingest mode (wave 9)
 - [x] 03-45-PLAN.md — Make the eval harness able to measure any embedding profile (wave 9)
 - [x] 03-46-PLAN.md — Compare embedding profiles on the golden set per language and per cross-lingual pair (wave 10)
-- [ ] 03-47-PLAN.md — Close Phase 3 (wave 11)
+- [x] 03-47-PLAN.md — Close Phase 3 (wave 11)
 - [ ] 03-48-PLAN.md — Run the Phase 3 live verification items from the ROADMAP as explicit human checkpoints (the orchestrator… (wave 12)
 **UI hint**: yes
 
@@ -245,7 +245,52 @@ Plans:
   9. Admin can set child size, parent mode and parent size per document type in the Config UI (presets 128/512, 256/1024, 256/2048 or custom); a child size above the embedding input limit or a parent smaller than twice the child is rejected, ratio and context-budget problems are warned; the new profile is built side by side and can be activated and rolled back; the sweep report compares the candidate profiles on the fixture golden set per document type and question category, and the chosen profile is recorded with its numbers.
   10. With a `selective_filter` golden category (a tenant or document type at ≤ 3% of rows), filtered pgvector retrieval with `hnsw.iterative_scan` and the exact-scan cutoff returns the same top-k as an unfiltered exact search over the matching rows; the eval reports Recall@k for this category with iterative scan off and on (RET-10).
 **Live verification**: Calibrate thresholds and sweep pool size and top-k with real Cohere and Voyage keys on the real golden set's dev split, then check them on the holdout split; compare Voyage `rerank-3` with `rerank-2.5` on the zh and it slices; apply the hybrid SQL migration to the real Supabase project and confirm Chinese lexical behavior there.
-**Plans**: 45 plans (04-01..04-45) — see `phases/04-hybrid-retrieval-reranking-calibrated-refusal/04-PLAN-INDEX.md`
+**Plans**: 2/45 plans executed (04-01..04-45) — see `phases/04-hybrid-retrieval-reranking-calibrated-refusal/04-PLAN-INDEX.md`
+- [x] 04-01-PLAN.md
+- [ ] 04-02-PLAN.md
+- [x] 04-03-PLAN.md
+- [ ] 04-04-PLAN.md
+- [ ] 04-05-PLAN.md
+- [ ] 04-06-PLAN.md
+- [ ] 04-07-PLAN.md
+- [ ] 04-08-PLAN.md
+- [ ] 04-09-PLAN.md
+- [ ] 04-10-PLAN.md
+- [ ] 04-11-PLAN.md
+- [ ] 04-12-PLAN.md
+- [ ] 04-13-PLAN.md
+- [ ] 04-14-PLAN.md
+- [ ] 04-15-PLAN.md
+- [ ] 04-16-PLAN.md
+- [ ] 04-17-PLAN.md
+- [ ] 04-18-PLAN.md
+- [ ] 04-19-PLAN.md
+- [ ] 04-20-PLAN.md
+- [ ] 04-21-PLAN.md
+- [ ] 04-22-PLAN.md
+- [ ] 04-23-PLAN.md
+- [ ] 04-24-PLAN.md
+- [ ] 04-25-PLAN.md
+- [ ] 04-26-PLAN.md
+- [ ] 04-27-PLAN.md
+- [ ] 04-28-PLAN.md
+- [ ] 04-29-PLAN.md
+- [ ] 04-30-PLAN.md
+- [ ] 04-31-PLAN.md
+- [ ] 04-32-PLAN.md
+- [ ] 04-33-PLAN.md
+- [ ] 04-34-PLAN.md
+- [ ] 04-35-PLAN.md
+- [ ] 04-36-PLAN.md
+- [ ] 04-37-PLAN.md
+- [ ] 04-38-PLAN.md
+- [ ] 04-39-PLAN.md
+- [ ] 04-40-PLAN.md
+- [ ] 04-41-PLAN.md
+- [ ] 04-42-PLAN.md
+- [ ] 04-43-PLAN.md
+- [ ] 04-44-PLAN.md
+- [ ] 04-45-PLAN.md
 
 ### Phase 5: Verified Citations & Groundedness
 **Goal**: Every RAG answer cites only chunks that were actually sent to the model, its citations survive later document changes, and users can see whether the answer was checked for groundedness
@@ -427,7 +472,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 5.1 → 6 → 7. 
 | 2. Unified Retrieval Pipeline & Tenant Scope | 36/36 | Complete (live checks pending) | 2026-11-24 |
 | 3. Unified Ingestion & Embedding Profiles | 12/49 | In Progress | - |
 | 3.1. Tiered Parsing, Incremental Queue & Bulk Backfill (INSERTED) | 0/55 | Planned (plan-check PASS) | - |
-| 4. Hybrid Retrieval, Reranking & Calibrated Refusal | 0/45 | Planned | - |
+| 4. Hybrid Retrieval, Reranking & Calibrated Refusal | 2/45 | In Progress | - |
 | 5. Verified Citations & Groundedness | 0/26 | Planned (plan-check PASS after W1 fix) | - |
 | 5.1. Prompt Injection Defense (INSERTED) | 0/25 | Planned (revision pass 1) | - |
 | 6. Query Layer (LlamaIndex & LangChain) | 0/46 | Planned (plan-check pending) | - |

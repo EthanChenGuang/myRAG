@@ -24,6 +24,27 @@
       "title": "ConversationTurn",
       "type": "object"
     },
+    "DateRangeFilter": {
+      "additionalProperties": false,
+      "properties": {
+        "from": {
+          "format": "date",
+          "title": "From",
+          "type": "string"
+        },
+        "to": {
+          "format": "date",
+          "title": "To",
+          "type": "string"
+        }
+      },
+      "required": [
+        "from",
+        "to"
+      ],
+      "title": "DateRangeFilter",
+      "type": "object"
+    },
     "GoldSpan": {
       "additionalProperties": false,
       "properties": {
@@ -48,6 +69,149 @@
       ],
       "title": "GoldSpan",
       "type": "object"
+    },
+    "InvoiceFilter": {
+      "additionalProperties": false,
+      "properties": {
+        "amount_max": {
+          "pattern": "^-?\\d+(\\.\\d{1,4})?$",
+          "title": "Amount Max",
+          "type": "string"
+        },
+        "amount_min": {
+          "pattern": "^-?\\d+(\\.\\d{1,4})?$",
+          "title": "Amount Min",
+          "type": "string"
+        },
+        "currency": {
+          "maxLength": 3,
+          "minLength": 3,
+          "title": "Currency",
+          "type": "string"
+        },
+        "supplier": {
+          "minLength": 1,
+          "title": "Supplier",
+          "type": "string"
+        }
+      },
+      "required": [
+        "supplier",
+        "amount_min",
+        "amount_max",
+        "currency"
+      ],
+      "title": "InvoiceFilter",
+      "type": "object"
+    },
+    "RetrievalFilters": {
+      "additionalProperties": false,
+      "properties": {
+        "current_only": {
+          "const": true,
+          "default": true,
+          "title": "Current Only",
+          "type": "boolean"
+        },
+        "date_range": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DateRangeFilter"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "doc_types": {
+          "anyOf": [
+            {
+              "items": {
+                "enum": [
+                  "general",
+                  "financial_report",
+                  "contract_legal",
+                  "invoice_receipt",
+                  "product_technical",
+                  "scanned_image"
+                ],
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Doc Types"
+        },
+        "document_ids": {
+          "anyOf": [
+            {
+              "items": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Document Ids"
+        },
+        "invoice": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/InvoiceFilter"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "languages": {
+          "anyOf": [
+            {
+              "items": {
+                "enum": [
+                  "zh",
+                  "en",
+                  "it"
+                ],
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Languages"
+        },
+        "sources": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sources"
+        }
+      },
+      "title": "RetrievalFilters",
+      "type": "object"
     }
   },
   "additionalProperties": false,
@@ -68,7 +232,8 @@
         "colloquial",
         "ambiguous",
         "typo",
-        "cross_lingual"
+        "cross_lingual",
+        "selective_filter"
       ],
       "title": "Category",
       "type": "string"
@@ -145,6 +310,17 @@
       "title": "Question",
       "type": "string"
     },
+    "retrieval_filters": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RetrievalFilters"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "review_status": {
       "enum": [
         "draft",
@@ -161,6 +337,13 @@
       ],
       "title": "Split",
       "type": "string"
+    },
+    "tags": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Tags",
+      "type": "array"
     }
   },
   "required": [

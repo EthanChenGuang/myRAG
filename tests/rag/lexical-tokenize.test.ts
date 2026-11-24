@@ -4,18 +4,18 @@ import { LEXICAL_VERSION, lexicalText, lexicalTokens } from '@/lib/rag/lexical/t
 
 describe('lexical tokenizer (D-32)', () => {
   it('carries its version', () => {
-    expect(LEXICAL_VERSION).toBe(1);
+    expect(LEXICAL_VERSION).toBe(2);
   });
 
   it('keeps a Chinese invoice number whole and segments the words around it', () => {
     const tokens = lexicalTokens('发票号码FP-2025-0042不得转让');
-    expect(tokens.filter((t) => t === 'FP-2025-0042')).toHaveLength(1);
-    expect(tokens).toEqual(['发票', '号码', 'FP-2025-0042', '不得', '转让']);
+    expect(tokens.filter((t) => t === 'fp-2025-0042')).toHaveLength(1);
+    expect(tokens).toEqual(expect.arrayContaining(['发票', '号码', 'fp-2025-0042', '不得', '转让']));
   });
 
   it('keeps an Italian invoice number verbatim and lowercases the words', () => {
     const tokens = lexicalTokens('Fattura N. FT-2025-00417 del 15/03/2025');
-    expect(tokens).toContain('FT-2025-00417');
+    expect(tokens).toContain('ft-2025-00417');
     expect(tokens).toContain('fattura');
     expect(tokens).not.toContain('Fattura');
   });
@@ -27,13 +27,15 @@ describe('lexical tokenizer (D-32)', () => {
 
   it('keeps tax ids and model numbers verbatim', () => {
     const tokens = lexicalTokens('Partita IVA IT99999999990, USCC 91000000MA0000000N, modello XR-500B.');
-    expect(tokens).toContain('IT99999999990');
-    expect(tokens).toContain('91000000MA0000000N');
-    expect(tokens).toContain('XR-500B');
+    expect(tokens).toContain('it99999999990');
+    expect(tokens).toContain('91000000ma0000000n');
+    expect(tokens).toContain('xr-500b');
   });
 
   it('applies NFKC before anything else', () => {
-    expect(lexicalTokens('ＦＰ－２０２５－００４２')).toEqual(['FP-2025-0042']);
+    expect(lexicalTokens('ＦＰ－２０２５－００４２')).toEqual(
+      expect.arrayContaining(['fp-2025-0042', 'fp20250042']),
+    );
   });
 
   it('splits Latin text on whitespace and punctuation', () => {
@@ -42,9 +44,7 @@ describe('lexical tokenizer (D-32)', () => {
       'within',
       '15',
       'days',
-      'l',
       'anno',
-      'e',
       'mail',
     ]);
   });
@@ -57,7 +57,7 @@ describe('lexical tokenizer (D-32)', () => {
     expect(text).toBe(expected);
     expect(text.startsWith(lexicalTokens(path[0]!).join(' '))).toBe(true);
     expect(text).not.toMatch(/ {2}/);
-    expect(text).toContain('FP-2025-0042');
+    expect(text).toContain('fp-2025-0042');
   });
 
   it('uses only the content tokens when the path is empty', () => {
@@ -77,7 +77,8 @@ describe('identifier shapes', () => {
     const ids = extractIdentifiers(text);
     expect(ids).toEqual(['FP-2025-0042', 'PO_778/9', 'IT99999999990']);
     const tokens = lexicalTokens(text);
-    expect(tokens.filter((t) => ids.includes(t))).toEqual(ids);
+    const lowered = ids.map((id) => id.toLowerCase());
+    expect(tokens.filter((t) => lowered.includes(t)).sort()).toEqual(lowered.sort());
   });
 
   it('requires a digit and drops trailing punctuation', () => {

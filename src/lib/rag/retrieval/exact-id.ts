@@ -1,5 +1,6 @@
 import { RetrievalBackendError, type RpcClient } from '../backend/supabase-rpc';
 import { IDENTIFIER_PATTERN } from '../ids/shapes';
+import { queryLexicalTokens } from '../lexical/tokenize';
 import { classifyTaxId, type TaxIdScheme } from '../ids/tax-ids';
 import { assertTenantScope, scopeKey, type TenantScope } from '../tenant/scope';
 import type { Candidate } from '../types';
@@ -115,13 +116,19 @@ function lookupValues(tokens: ExactIdToken[]): string[] {
   const out: string[] = [];
   const seen = new Set<string>();
   const add = (value: string) => {
-    const key = value.toLowerCase();
-    if (seen.has(key)) return;
-    seen.add(key);
+    if (seen.has(value)) return;
+    seen.add(value);
     out.push(value);
   };
   for (const token of tokens) {
     add(token.value);
+    const lowered = token.value.normalize('NFKC').toLowerCase();
+    if (lowered !== token.value) add(lowered);
+    const joined = lowered.replace(/[-_./]/gu, '');
+    const allowed = new Set([lowered, joined]);
+    for (const form of queryLexicalTokens(token.value)) {
+      if (allowed.has(form)) add(form);
+    }
     if (token.kind !== 'tax_id') continue;
     if (token.scheme === 'eu_vat' && token.value.startsWith('IT')) add(token.value.slice(2));
     if (token.scheme === 'it_iva') add(`IT${token.value}`);

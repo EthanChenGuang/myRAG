@@ -1,0 +1,79 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "child_tokens": {
+      "minimum": 1,
+      "title": "Child Tokens",
+      "type": "integer"
+    },
+    "doc_type": {
+      "enum": [
+        "general",
+        "financial_report",
+        "contract_legal",
+        "invoice_receipt",
+        "product_technical",
+        "scanned_image"
+      ],
+      "title": "Doc Type",
+      "type": "string"
+    },
+    "id": {
+      "minLength": 1,
+      "title": "Id",
+      "type": "string"
+    },
+    "parent_mode": {
+      "enum": [
+        "none",
+        "structure",
+        "fixed"
+      ],
+      "title": "Parent Mode",
+      "type": "string"
+    },
+    "parent_tokens": {
+      "anyOf": [
+        {
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Parent Tokens"
+    },
+    "preset": {
+      "enum": [
+        "128/512",
+        "256/1024",
+        "256/2048",
+        "custom"
+      ],
+      "title": "Preset",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "building",
+        "ready",
+        "active",
+        "retired"
+      ],
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "doc_type",
+    "child_tokens",
+    "parent_mode",
+    "status",
+    "preset"
+  ],
+  "title": "ChunkingProfile",
+  "type": "object"
+}

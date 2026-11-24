@@ -3,6 +3,7 @@ import { runRetrieval } from '@/lib/rag';
 import type { RpcClient, RpcRequest, RpcResponse } from '@/lib/rag/backend/supabase-rpc';
 import type { RagEnvInput } from '@/lib/rag/config';
 import { legacyRank } from '@/lib/rag/legacy/enhanced-retrieval';
+import { identifierLexicalLookupForms, lexicalTokens } from '@/lib/rag/lexical/tokenize';
 import { exactIdLookup, extractExactIds, mergeExactCandidates, type ExactIdRow } from '@/lib/rag/retrieval/exact-id';
 import { mintScope } from '@/lib/rag/tenant/scope';
 import type { Candidate } from '@/lib/rag/types';
@@ -193,7 +194,14 @@ describe('exactIdLookup', () => {
     const [call] = rpc.exactCalls();
     expect(Object.keys(call?.args ?? {}).sort()).toEqual(['p_limit', 'p_tenant_key', 'p_tokens']);
     expect(call?.args.p_tenant_key).toBe(`o:${ORG_ID}`);
-    expect(call?.args.p_tokens).toEqual(['FT-2025-00417', 'IT99999999990', '99999999990']);
+    expect(call?.args.p_tokens).toEqual([
+      'FT-2025-00417',
+      'ft-2025-00417',
+      'ft202500417',
+      'IT99999999990',
+      'it99999999990',
+      '99999999990',
+    ]);
     expect(call?.args.p_limit).toBe(10);
   });
 
@@ -203,7 +211,24 @@ describe('exactIdLookup', () => {
     expect(bare.exactCalls()[0]?.args.p_tokens).toEqual(['99999999990', 'IT99999999990']);
     const other = routedRpc({});
     await exactIdLookup(scope, extractExactIds('VAT BE0000000097'), { client: other.client, signal: new AbortController().signal });
-    expect(other.exactCalls()[0]?.args.p_tokens).toEqual(['BE0000000097']);
+    expect(other.exactCalls()[0]?.args.p_tokens).toEqual(['BE0000000097', 'be0000000097']);
+  });
+
+  it('sends whole and joined v2 forms for a model number but not code parts', async () => {
+    const rpc = routedRpc({});
+    await exactIdLookup(scope, extractExactIds('XR-2000 保修多久'), { client: rpc.client, signal: new AbortController().signal });
+    expect(rpc.exactCalls()[0]?.args.p_tokens).toEqual(['XR-2000', 'xr-2000', 'xr2000']);
+    expect(rpc.exactCalls()[0]?.args.p_tokens).not.toContain('xr');
+    expect(rpc.exactCalls()[0]?.args.p_tokens).not.toContain('2000');
+  });
+
+  it('lookup forms match v1 and v2 lexical_text for the same model number', () => {
+    const query = 'XR-2000';
+    const v1Style = lexicalTokens(`Model ${query} warranty`);
+    const v2Style = lexicalTokens(`model ${query.toLowerCase()} warranty`);
+    const forms = identifierLexicalLookupForms(query);
+    expect(v1Style.some((t) => forms.map((f) => f.toLowerCase()).includes(t.toLowerCase()) || t === query)).toBe(true);
+    expect(v2Style.filter((t) => t === query.toLowerCase() || forms.includes(t)).length).toBeGreaterThan(0);
   });
 
   it('makes no call for no tokens and throws on a backend error', async () => {
@@ -277,7 +302,10 @@ describe('the exact_id_lookup stage in runRetrieval', () => {
       ['chunk-3', 'similarity: 0.800'],
     ]);
     expect(rpc.exactCalls()).toHaveLength(1);
-    expect(rpc.exactCalls()[0]?.args).toMatchObject({ p_tenant_key: 's:default', p_tokens: ['FT-2025-00417'] });
+    expect(rpc.exactCalls()[0]?.args).toMatchObject({
+      p_tenant_key: 's:default',
+      p_tokens: expect.arrayContaining(['FT-2025-00417']),
+    });
     expect(result.status).toBe('ok');
     expect(result.stages.find((stage) => stage.name === 'exact_id_lookup')).toMatchObject({ candidates_in: 3, candidates_out: 2 });
   });
