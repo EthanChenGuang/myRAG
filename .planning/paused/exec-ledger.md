@@ -93,10 +93,11 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | 03.1-16 | [bc-572eafe6](bc-572eafe6-375e-5fac-b690-23e40f4403cd) **merged** | exec/03.1-16 — pytest 17 |
 | 03.1-17 | [bc-d27c0a4b](bc-d27c0a4b-accb-54b2-a27a-29c7aa443e15) **merged** | exec/03.1-17 — pytest 19 |
 | 04-16 | [bc-d3b679cb](bc-d3b679cb-baac-50ce-8ff9-c0829a4fb24f) **merged** | exec/04-16 |
-| 03.1-18 | [bc-34cb4e3b](bc-34cb4e3b-b843-5ba6-94da-c58cb5093dc2) RUNNING | exec/03.1-18 |
+| 03.1-18 | [bc-34cb4e3b](bc-34cb4e3b-b843-5ba6-94da-c58cb5093dc2) **merged** | exec/03.1-18 — vitest 14 + PGlite 6 |
 | 04-17 | [bc-c1e4ed28](bc-c1e4ed28-8308-557d-a69c-46ed9166e777) RUNNING | exec/04-17 |
 | 04-15 | [bc-2f4f0524](bc-2f4f0524-6984-5e57-a50a-249d0a960a27) **merged** | exec/04-15 |
 | 04-18 | [bc-78743196](bc-78743196-9471-5cda-8414-1d4c80c9d85f) RUNNING | exec/04-18 |
+| 03.1-20 | [bc-7530e5d1](bc-7530e5d1-02b0-5c59-bf06-0bd96367216e) RUNNING | exec/03.1-20 |
 
 ## Remaining plan inventory (file-overlap basis)
 
@@ -114,8 +115,8 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 
 | Plan | bcId | Worktree | Notes |
 |------|------|----------|-------|
-| 03.1-18 | [bc-34cb4e3b](bc-34cb4e3b-b843-5ba6-94da-c58cb5093dc2) RUNNING | `wt/03.1-18` | ingest ledger TS |
-| 03.1-20 | SPAWN | `wt/03.1-20` | backfill migration 0356 |
+| 03.1-23 | [bc-ab1e9b2d](bc-ab1e9b2d-301d-50ad-85d3-54b3af5e3261) RUNNING | `wt/03.1-23` | Docling presets + converters |
+| 03.1-20 | [bc-7530e5d1](bc-7530e5d1-02b0-5c59-bf06-0bd96367216e) RUNNING | `wt/03.1-20` | backfill migration 0356 |
 | 04-17 | [bc-c1e4ed28](bc-c1e4ed28-8308-557d-a69c-46ed9166e777) RUNNING | `wt/04-17` | pgvector backend + conformance |
 | 04-18 | [bc-78743196](bc-78743196-9471-5cda-8414-1d4c80c9d85f) RUNNING | `wt/04-18` | selective-filter harness |
 
