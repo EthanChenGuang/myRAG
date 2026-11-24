@@ -67,7 +67,7 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | 03.1-03 | [bc-c5cb9fe1](bc-c5cb9fe1-91ef-5ec1-80f3-480362bbb755) RUNNING | exec/03.1-03 |
 | 03.1-09 | [bc-2d791368](bc-2d791368-dff2-51b6-b84c-3678f8e3ed4c) RUNNING | exec/03.1-09 |
 | 03.1-10 | [bc-662f8704](bc-662f8704-0693-5e51-9771-f8aaaf281623) RUNNING | exec/03.1-10 |
-| 04-08 | [bc-b8d286f0](bc-b8d286f0-f82f-5d7d-b33e-a945526384a1) RUNNING | exec/04-08 |
+| 04-08 | [bc-b8d286f0](bc-b8d286f0-f82f-5d7d-b33e-a945526384a1) **merged** | exec/04-08 — vitest 56 pass on trunk |
 
 ## Remaining plan inventory (file-overlap basis)
 
@@ -89,7 +89,6 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | 03.1-03 | [bc-c5cb9fe1](bc-c5cb9fe1-91ef-5ec1-80f3-480362bbb755) RUNNING | `wt/03.1-03` | **Blocks 04-02** until merged |
 | 03.1-09 | [bc-2d791368](bc-2d791368-dff2-51b6-b84c-3678f8e3ed4c) RUNNING | `wt/03.1-09` | Wave 2; after 07+08 |
 | 03.1-10 | [bc-662f8704](bc-662f8704-0693-5e51-9771-f8aaaf281623) RUNNING | `wt/03.1-10` | Wave 2 |
-| 04-08 | [bc-b8d286f0](bc-b8d286f0-f82f-5d7d-b33e-a945526384a1) RUNNING | `wt/04-08` | Phase 4 wave 2; no fixture-chain files |
 
 **Queued after 03.1-03 merge:** `04-02` (same config five-location set). **03-48 live Supabase:** Guang/box agent only — orchestrator **must not** run migrations against production.
 
