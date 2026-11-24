@@ -13,7 +13,7 @@ from typing import Any, Callable, Literal, Sequence
 from pydantic import BaseModel, ConfigDict
 
 from rag_sidecar.contracts.baseline import NoiseConfig
-from rag_sidecar.contracts.eval_run import RagTrace
+from rag_sidecar.contracts.eval_run import RagTrace, TraceRefusal
 from rag_sidecar.contracts.golden import GoldenItem
 from rag_sidecar.contracts.retrieval import (
     FilterLanguage,
@@ -510,11 +510,21 @@ def collect_rows(
     return rows, excluded
 
 
+GATE_REASONS = ("below_threshold", "above_threshold")
+
+
+def _gate_decided(refusal: TraceRefusal) -> bool:
+    """The threshold gate decided, as opposed to the fallback similarity floor (D-30), which runs with the switch off."""
+    if refusal.decision not in ("refuse", "answer"):
+        return False
+    return refusal.basis == "rerank_threshold" or refusal.reason in GATE_REASONS or refusal.cell_key is not None
+
+
 def _assert_refusal_off(traces: Sequence[RagTrace]) -> None:
     for trace in traces:
-        if trace.refusal is not None and trace.refusal.decision in ("refuse", "answer"):
+        if trace.refusal is not None and _gate_decided(trace.refusal):
             raise CalibrationError(
-                f"the run applied the refusal gate (decision {trace.refusal.decision!r} on item {trace.item_id!r}); "
+                f"the run applied the refusal threshold gate (decision {trace.refusal.decision!r} on item {trace.item_id!r}); "
                 f"calibration needs {REFUSAL_SWITCH} off so every candidate is scored"
             )
 
