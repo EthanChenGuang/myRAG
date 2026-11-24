@@ -1,4 +1,4 @@
--- 0414: Partial indexes for ingestion job claim, lease reclaim, and operator listing.
+-- 0421: Partial indexes for ingestion job claim, lease reclaim, and operator listing.
 
 BEGIN;
 

@@ -5,7 +5,7 @@ import type { PGlite } from '@electric-sql/pglite';
 import { createEmptyFixtureDatabase, type DeploymentMode } from '../../eval/harness/pglite-supabase.mts';
 import { applyMigrationFiles, applyMigrations } from '../../eval/harness/migrations.mts';
 
-const M0413 = 'supabase/migrations/0413_ingestion_queue_retention.sql';
+const M0420 = 'supabase/migrations/0420_ingestion_queue_retention.sql';
 const MODES: DeploymentMode[] = ['single-tenant', 'multi-tenant'];
 const TENANT = 's:default';
 
@@ -27,7 +27,7 @@ for (const mode of MODES) {
       const fixture = await createEmptyFixtureDatabase({ deploymentMode: mode });
       db = fixture.db;
       await applyMigrations(db, mode);
-      await applyMigrationFiles(db, [M0413]);
+      await applyMigrationFiles(db, [M0420]);
     });
 
     after(async () => {

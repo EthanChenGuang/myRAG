@@ -5,7 +5,7 @@ import type { PGlite } from '@electric-sql/pglite';
 import { createEmptyFixtureDatabase, type DeploymentMode } from '../../eval/harness/pglite-supabase.mts';
 import { applyMigrationFiles, applyMigrations } from '../../eval/harness/migrations.mts';
 
-const M0415 = 'supabase/migrations/0415_ingestion_dead_letter.sql';
+const M0422 = 'supabase/migrations/0422_ingestion_dead_letter.sql';
 const MODES: DeploymentMode[] = ['single-tenant'];
 const TENANT = 's:default';
 const ADMIN = '00000000-0000-4000-8000-0000000000c1';
@@ -28,7 +28,7 @@ for (const mode of MODES) {
       const fixture = await createEmptyFixtureDatabase({ deploymentMode: mode });
       db = fixture.db;
       await applyMigrations(db, mode);
-      await applyMigrationFiles(db, [M0415]);
+      await applyMigrationFiles(db, [M0422]);
       await db.query('INSERT INTO auth.users (id, email) VALUES ($1, $2)', [ADMIN, 'admin@example.invalid']);
       await db.query('INSERT INTO admin_users (id) VALUES ($1)', [ADMIN]);
     });

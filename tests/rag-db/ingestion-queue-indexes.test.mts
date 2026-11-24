@@ -5,7 +5,7 @@ import type { PGlite } from '@electric-sql/pglite';
 import { createEmptyFixtureDatabase, type DeploymentMode } from '../../eval/harness/pglite-supabase.mts';
 import { applyMigrationFiles, applyMigrations } from '../../eval/harness/migrations.mts';
 
-const M0414 = 'supabase/migrations/0414_ingestion_queue_indexes.sql';
+const M0421 = 'supabase/migrations/0421_ingestion_queue_indexes.sql';
 const MODES: DeploymentMode[] = ['single-tenant'];
 const TENANT = 's:default';
 
@@ -28,7 +28,7 @@ for (const mode of MODES) {
       const fixture = await createEmptyFixtureDatabase({ deploymentMode: mode });
       db = fixture.db;
       await applyMigrations(db, mode);
-      await applyMigrationFiles(db, [M0414]);
+      await applyMigrationFiles(db, [M0421]);
       await db.query(`INSERT INTO ingestion_jobs (tenant_key, kind, source_key, status, priority)
         SELECT $1, 'ingest', 'bulk-' || g, 'queued', (g % 5)
           FROM generate_series(1, 200) g`, [TENANT]);

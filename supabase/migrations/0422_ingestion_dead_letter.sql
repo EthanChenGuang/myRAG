@@ -1,4 +1,4 @@
--- 0415: Dead-letter tracking for exhausted ingestion retries (status stays failed).
+-- 0422: Dead-letter tracking for exhausted ingestion retries (status stays failed).
 
 BEGIN;
 

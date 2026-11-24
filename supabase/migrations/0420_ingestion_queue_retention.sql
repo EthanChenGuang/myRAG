@@ -1,4 +1,4 @@
--- 0413: Archive and purge terminal ingestion jobs past a retention window (queue hardening).
+-- 0420: Archive and purge terminal ingestion jobs past a retention window (queue hardening).
 -- Slim archive rows keep idempotency and citation seams; heavy jsonb is dropped. Service role only.
 
 BEGIN;
