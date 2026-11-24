@@ -247,7 +247,7 @@ describe('enqueued image job snapshot and worker routing', () => {
 
   it('enqueue payload carries image mime and configured routing for fixed and tiered', async () => {
     const { db, calls } = fakeIngestDb();
-    installIngestDeps({ db, env: { RAG_INGEST_PIPELINE: 'unified', RAG_INGEST_ASYNC: 'on', RAG_PARSE_ROUTING: 'tiered' } });
+    installIngestDeps({ db, env: { RAG_INGEST_PIPELINE: 'unified' } });
     await enqueueIngest(
       {
         scope,
@@ -276,7 +276,7 @@ describe('enqueued image job snapshot and worker routing', () => {
 
     resetRoute();
     const fixedDb = fakeIngestDb();
-    installIngestDeps({ db: fixedDb.db, env: { RAG_INGEST_PIPELINE: 'unified', RAG_INGEST_ASYNC: 'on', RAG_PARSE_ROUTING: 'fixed' } });
+    installIngestDeps({ db: fixedDb.db, env: { RAG_INGEST_PIPELINE: 'unified' } });
     await enqueueIngest(
       {
         scope,

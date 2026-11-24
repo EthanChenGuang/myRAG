@@ -385,8 +385,7 @@ async function scheduleImageIngest(
   });
 
   try {
-    const { ingest, submitIngest } = await import('@/lib/rag');
-    const { queueConfigFromProcessEnv } = await import('@/lib/rag/ingest/queue-config');
+    const { ingest, submitIngest, queueConfigFromProcessEnv, scheduleIngestWake } = await import('@/lib/rag');
     const queueConfig = queueConfigFromProcessEnv();
     if (queueConfig.ingestAsync) {
       const results: EnqueueResult[] = [];
@@ -397,10 +396,7 @@ async function scheduleImageIngest(
         if ('status' in result && result.status === 'queued') queued = true;
         results.push(result as EnqueueResult);
       }
-      if (queued) {
-        const { scheduleIngestWake } = await import('@/lib/rag/ingest/wake');
-        scheduleIngestWake();
-      }
+      if (queued) scheduleIngestWake();
       return results;
     }
 
