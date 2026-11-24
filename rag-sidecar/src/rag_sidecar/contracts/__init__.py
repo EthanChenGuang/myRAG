@@ -84,6 +84,19 @@ from rag_sidecar.contracts.report import (
     MetricValue,
     SliceMetrics,
 )
+from rag_sidecar.contracts.retrieval import (
+    ChunkingDecision,
+    ChunkingProfile,
+    ChunkingSweepReport,
+    RefusalCalibrationConfig,
+    RefusalCell,
+    RefusalThresholds,
+    RetrievalFilters,
+    RetrievalOverrides,
+    RetrievalParams,
+    compute_config_hash,
+    write_chunking_cases,
+)
 from rag_sidecar.contracts.eval_run import (
     ConversationTurn,
     GoldenFilter,
@@ -194,4 +207,15 @@ __all__ = [
     "ParserExpected",
     "ParserEvalReport",
     "ParseGateReport",
+    "ChunkingDecision",
+    "ChunkingProfile",
+    "ChunkingSweepReport",
+    "RefusalCalibrationConfig",
+    "RefusalCell",
+    "RefusalThresholds",
+    "RetrievalFilters",
+    "RetrievalOverrides",
+    "RetrievalParams",
+    "compute_config_hash",
+    "write_chunking_cases",
 ]
