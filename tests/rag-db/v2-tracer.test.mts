@@ -15,6 +15,8 @@ interface TraceBody {
   kept: Array<{ chunk_id: string; content: string }>;
   stage_status: Record<string, string>;
   candidates: Array<{ chunk_id: string; content: string }>;
+  refused?: boolean;
+  refusal_reason?: string | null;
 }
 
 let prepared: InProcessEval;
