@@ -1,10 +1,18 @@
 from datetime import date
 
 import pytest
+from fastapi.testclient import TestClient
+from pydantic import SecretStr
 
-from rag_sidecar.contracts import InvoiceFields
+from rag_sidecar.contracts import InvoiceFields, SidecarError
 from rag_sidecar.extract import invoice as invoice_module
 from rag_sidecar.extract.invoice import extract_invoice
+from rag_sidecar.main import create_app
+from rag_sidecar.settings import SidecarSettings
+
+SECRET = "k" * 48
+HEADER = "x-sidecar-secret"
+ROUTE = "/v1/extract/invoice"
 
 ZH_INVOICE = """# 增值税电子普通发票
 
@@ -204,3 +212,76 @@ def test_an_unexpected_failure_is_reported_instead_of_raised(monkeypatch):
 @pytest.mark.parametrize("hint", ["en", "it", "zh"])
 def test_language_hint_does_not_change_unambiguous_fields(hint):
     assert extract_invoice(EN_INVOICE, language_hint=hint).gross_total == "1200.00"
+
+
+def _client() -> TestClient:
+    return TestClient(create_app(SidecarSettings(secret=SecretStr(SECRET))))
+
+
+def test_route_without_the_secret_header_is_401():
+    response = _client().post(ROUTE, json={"markdown": EN_INVOICE})
+    assert response.status_code == 401
+    assert SidecarError.model_validate(response.json()).error == "unauthorized"
+
+
+def test_route_with_a_wrong_secret_is_401():
+    response = _client().post(ROUTE, json={"markdown": EN_INVOICE}, headers={HEADER: "wrong"})
+    assert response.status_code == 401
+
+
+def test_route_returns_invoice_fields_for_a_valid_request():
+    response = _client().post(ROUTE, json={"markdown": IT_INVOICE, "language_hint": "it"}, headers={HEADER: SECRET})
+    assert response.status_code == 200
+    fields = InvoiceFields.model_validate(response.json())
+    assert fields == extract_invoice(IT_INVOICE, language_hint="it")
+    assert fields.invoice_number == "FT-2025-00419"
+    assert fields.gross_total == "1220.00"
+
+
+def test_route_reads_the_tables_field():
+    table = "| Description | Qty | Unit price | Amount |\n| --- | --- | --- | --- |\n| Thermal probe | 8 | 100.00 | 800.00 |\n"
+    response = _client().post(ROUTE, json={"markdown": "Total: EUR 800.00\n", "tables": [table]}, headers={HEADER: SECRET})
+    assert response.status_code == 200
+    assert [item["amount"] for item in response.json()["line_items"]] == ["800.00"]
+
+
+def test_route_unreadable_input_is_200_with_errors_and_zero_confidence():
+    response = _client().post(ROUTE, json={"markdown": "no labels here at all"}, headers={HEADER: SECRET})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["confidence"] == 0.0
+    assert body["errors"]
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [{}, {"markdown": ""}, {"markdown": 5}, {"markdown": "x", "unknown": 1}, {"markdown": "x", "language_hint": "fr"}],
+)
+def test_route_invalid_body_is_422_with_a_sidecar_error(payload):
+    response = _client().post(ROUTE, json=payload, headers={HEADER: SECRET})
+    assert response.status_code == 422
+    assert SidecarError.model_validate(response.json()).error == "invalid_invoice_request"
+
+
+def test_route_non_json_body_is_422():
+    response = _client().post(ROUTE, content=b"not json", headers={HEADER: SECRET, "content-type": "application/json"})
+    assert response.status_code == 422
+    assert SidecarError.model_validate(response.json()).error == "invalid_invoice_request"
+
+
+def test_route_markdown_over_two_million_characters_is_413():
+    response = _client().post(ROUTE, json={"markdown": "a" * 2_000_001}, headers={HEADER: SECRET})
+    assert response.status_code == 413
+    assert SidecarError.model_validate(response.json()).error == "invoice_too_large"
+
+
+def test_route_body_declared_far_over_the_cap_is_413_before_it_is_read():
+    response = _client().post(
+        ROUTE, content=b"{}", headers={HEADER: SECRET, "content-type": "application/json", "content-length": str(64 * 1024 * 1024)}
+    )
+    assert response.status_code == 413
+
+
+def test_route_cap_counts_characters_so_multibyte_text_under_it_is_accepted():
+    response = _client().post(ROUTE, json={"markdown": "票" * 1_000_000}, headers={HEADER: SECRET})
+    assert response.status_code == 200
