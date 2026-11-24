@@ -1,0 +1,5562 @@
+From 67dfeea60cbcb2880fa9b7db99f3f835e61db4e4 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 24 Nov 2026 01:40:32 +0000
+Subject: [PATCH 1/2] test(03-15): add failing contract tests and recorded
+ fixtures for the Docling adapter
+
+- Deterministic builder writes three DoclingDocument JSON fixtures (table report, zh headings, pictures)
+- Contract tests cover table header repetition, cl100k_base token bounds, heading paths, pictures and artifacts
+- Skeleton adapter module returns empty results so the tests fail on assertions
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01SEn5g9gV3RHr18oaonxqof
+---
+ .../src/rag_sidecar/parse/docling_adapter.py  |   26 +
+ .../tests/fixtures/docling/build_fixtures.py  |  145 +
+ .../tests/fixtures/docling/headings-zh.json   |  201 +
+ .../tests/fixtures/docling/pictures.json      |  222 +
+ .../tests/fixtures/docling/table-report.json  | 4453 +++++++++++++++++
+ rag-sidecar/tests/test_docling_adapter.py     |  187 +
+ 6 files changed, 5234 insertions(+)
+ create mode 100644 rag-sidecar/src/rag_sidecar/parse/docling_adapter.py
+ create mode 100644 rag-sidecar/tests/fixtures/docling/build_fixtures.py
+ create mode 100644 rag-sidecar/tests/fixtures/docling/headings-zh.json
+ create mode 100644 rag-sidecar/tests/fixtures/docling/pictures.json
+ create mode 100644 rag-sidecar/tests/fixtures/docling/table-report.json
+ create mode 100644 rag-sidecar/tests/test_docling_adapter.py
+
+diff --git a/rag-sidecar/src/rag_sidecar/parse/docling_adapter.py b/rag-sidecar/src/rag_sidecar/parse/docling_adapter.py
+new file mode 100644
+index 0000000..fba04a6
+--- /dev/null
++++ b/rag-sidecar/src/rag_sidecar/parse/docling_adapter.py
+@@ -0,0 +1,26 @@
++from pathlib import Path
++
++from docling_core.transforms.chunker.hierarchical_chunker import ChunkingSerializerProvider
++from docling_core.types.doc import DoclingDocument
++
++from rag_sidecar.contracts import ParseJobRequest, ParseResult
++
++
++class MarkdownTableProvider(ChunkingSerializerProvider):
++    pass
++
++
++def detect_language(text: str) -> str | None:
++    return None
++
++
++def to_parse_result(doc: DoclingDocument, request: ParseJobRequest, out_dir: Path) -> ParseResult:
++    return ParseResult(
++        markdown="",
++        chunks=[],
++        pictures=[],
++        page_count=0,
++        language=None,
++        parser="docling",
++        parser_version="skeleton",
++    )
+diff --git a/rag-sidecar/tests/fixtures/docling/build_fixtures.py b/rag-sidecar/tests/fixtures/docling/build_fixtures.py
+new file mode 100644
+index 0000000..5391d32
+--- /dev/null
++++ b/rag-sidecar/tests/fixtures/docling/build_fixtures.py
+@@ -0,0 +1,145 @@
++"""Builds the recorded DoclingDocument fixtures deterministically with docling-core.
++
++Run `python build_fixtures.py [output-directory]` to rewrite the committed JSON files; the
++contract tests compare the committed bytes with a fresh build. All content is synthetic.
++"""
++
++import json
++import sys
++from pathlib import Path
++
++from docling_core.types.doc import (
++    BoundingBox,
++    CoordOrigin,
++    DocItemLabel,
++    DoclingDocument,
++    ImageRef,
++    ProvenanceItem,
++    Size,
++    TableCell,
++    TableData,
++)
++from docling_core.types.doc.document import DocumentOrigin
++
++PAGE = Size(width=600, height=800)
++TINY_PNG_BASE64 = "iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAFElEQVR4nGM8ISfHAANMDEgANwcANHYBDK9qubUAAAAASUVORK5CYII="
++FIXTURE_NAMES = ("table-report", "headings-zh", "pictures")
++
++
++def _document(name: str, pages: int, binary_hash: int) -> DoclingDocument:
++    doc = DoclingDocument(
++        name=name,
++        origin=DocumentOrigin(mimetype="application/pdf", binary_hash=binary_hash, filename=f"{name}.pdf"),
++    )
++    for page_no in range(1, pages + 1):
++        doc.add_page(page_no=page_no, size=PAGE)
++    return doc
++
++
++def _prov(page_no: int, left: float = 50, top: float = 80, right: float = 550, bottom: float = 140) -> ProvenanceItem:
++    box = BoundingBox(l=left, t=top, r=right, b=bottom, coord_origin=CoordOrigin.TOPLEFT)
++    return ProvenanceItem(page_no=page_no, bbox=box, charspan=(0, 0))
++
++
++def _table_data(rows: list[list[str]]) -> TableData:
++    cells = [
++        TableCell(
++            text=value,
++            start_row_offset_idx=row_index,
++            end_row_offset_idx=row_index + 1,
++            start_col_offset_idx=col_index,
++            end_col_offset_idx=col_index + 1,
++            column_header=row_index == 0,
++        )
++        for row_index, row in enumerate(rows)
++        for col_index, value in enumerate(row)
++    ]
++    return TableData(num_rows=len(rows), num_cols=len(rows[0]), table_cells=cells)
++
++
++def build_table_report() -> DoclingDocument:
++    doc = _document("table-report", pages=2, binary_hash=1001)
++    doc.add_heading("Quarterly stock report", level=1, prov=_prov(1))
++    doc.add_heading("Overview", level=2, prov=_prov(1))
++    doc.add_text(
++        DocItemLabel.TEXT,
++        "This synthetic report lists the items held in the example warehouse at the end of the quarter.",
++        prov=_prov(1, top=160, bottom=200),
++    )
++    doc.add_heading("Line items", level=2, prov=_prov(2))
++    rows = [["Item", "Quantity", "Unit price", "Total"]]
++    rows += [[f"Item {index:02d}", str(index), f"{index}.50", f"{index * 2}.00"] for index in range(1, 40)]
++    doc.add_table(data=_table_data(rows), prov=_prov(2, top=160, bottom=760))
++    return doc
++
++
++def build_headings_zh() -> DoclingDocument:
++    doc = _document("headings-zh", pages=2, binary_hash=1002)
++    doc.add_heading("示例股份有限公司 2025 年度报告", level=1, prov=_prov(1))
++    doc.add_heading("第三章 资产负债表", level=2, prov=_prov(1, top=120, bottom=160))
++    doc.add_text(
++        DocItemLabel.TEXT,
++        "本章列示示例公司在报告期末的资产和负债情况，数据均为虚构的演示内容。",
++        prov=_prov(1, top=180, bottom=240),
++    )
++    doc.add_heading("第5条 流动资产", level=3, prov=_prov(2))
++    doc.add_text(
++        DocItemLabel.TEXT,
++        "流动资产包括货币资金、应收账款和存货，具体金额以附注为准。",
++        prov=_prov(2, top=120, bottom=180),
++    )
++    return doc
++
++
++def _picture_image() -> ImageRef:
++    return ImageRef(
++        mimetype="image/png",
++        dpi=72,
++        size=Size(width=4, height=4),
++        uri=f"data:image/png;base64,{TINY_PNG_BASE64}",  # type: ignore[arg-type]
++    )
++
++
++def build_pictures() -> DoclingDocument:
++    doc = _document("pictures", pages=2, binary_hash=1003)
++    doc.add_heading("Product sheet", level=1, prov=_prov(1))
++    doc.add_text(DocItemLabel.TEXT, "Front view of the example device.", prov=_prov(1, top=120, bottom=160))
++    first_box = BoundingBox(l=100, t=700, r=300, b=500, coord_origin=CoordOrigin.BOTTOMLEFT)
++    doc.add_picture(
++        image=_picture_image(),
++        prov=ProvenanceItem(page_no=1, bbox=first_box, charspan=(0, 0)),
++    )
++    doc.add_text(DocItemLabel.TEXT, "Rear view of the example device.", prov=_prov(2, top=60, bottom=100))
++    doc.add_picture(
++        image=_picture_image(),
++        prov=_prov(2, left=50, top=100, right=550, bottom=500),
++    )
++    return doc
++
++
++BUILDERS = {
++    "table-report": build_table_report,
++    "headings-zh": build_headings_zh,
++    "pictures": build_pictures,
++}
++
++
++def render(doc: DoclingDocument) -> bytes:
++    payload = doc.export_to_dict()
++    return (json.dumps(payload, sort_keys=True, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
++
++
++def build_all() -> dict[str, bytes]:
++    return {name: render(builder()) for name, builder in BUILDERS.items()}
++
++
++def main(argv: list[str]) -> int:
++    target = Path(argv[1]) if len(argv) > 1 else Path(__file__).resolve().parent
++    target.mkdir(parents=True, exist_ok=True)
++    for name, payload in build_all().items():
++        (target / f"{name}.json").write_bytes(payload)
++    return 0
++
++
++if __name__ == "__main__":
++    raise SystemExit(main(sys.argv))
+diff --git a/rag-sidecar/tests/fixtures/docling/headings-zh.json b/rag-sidecar/tests/fixtures/docling/headings-zh.json
+new file mode 100644
+index 0000000..2c0de47
+--- /dev/null
++++ b/rag-sidecar/tests/fixtures/docling/headings-zh.json
+@@ -0,0 +1,201 @@
++{
++  "body": {
++    "children": [
++      {
++        "$ref": "#/texts/0"
++      },
++      {
++        "$ref": "#/texts/1"
++      },
++      {
++        "$ref": "#/texts/2"
++      },
++      {
++        "$ref": "#/texts/3"
++      },
++      {
++        "$ref": "#/texts/4"
++      }
++    ],
++    "content_layer": "body",
++    "label": "unspecified",
++    "name": "_root_",
++    "self_ref": "#/body"
++  },
++  "form_items": [],
++  "furniture": {
++    "children": [],
++    "content_layer": "furniture",
++    "label": "unspecified",
++    "name": "_root_",
++    "self_ref": "#/furniture"
++  },
++  "groups": [],
++  "key_value_items": [],
++  "name": "headings-zh",
++  "origin": {
++    "binary_hash": 1002,
++    "filename": "headings-zh.pdf",
++    "mimetype": "application/pdf"
++  },
++  "pages": {
++    "1": {
++      "page_no": 1,
++      "size": {
++        "height": 800.0,
++        "width": 600.0
++      }
++    },
++    "2": {
++      "page_no": 2,
++      "size": {
++        "height": 800.0,
++        "width": 600.0
++      }
++    }
++  },
++  "pictures": [],
++  "schema_name": "DoclingDocument",
++  "tables": [],
++  "texts": [
++    {
++      "children": [],
++      "content_layer": "body",
++      "label": "section_header",
++      "level": 1,
++      "orig": "示例股份有限公司 2025 年度报告",
++      "parent": {
++        "$ref": "#/body"
++      },
++      "prov": [
++        {
++          "bbox": {
++            "b": 140.0,
++            "coord_origin": "TOPLEFT",
++            "l": 50.0,
++            "r": 550.0,
++            "t": 80.0
++          },
++          "charspan": [
++            0,
++            0
++          ],
++          "page_no": 1
++        }
++      ],
++      "self_ref": "#/texts/0",
++      "text": "示例股份有限公司 2025 年度报告"
++    },
++    {
++      "children": [],
++      "content_layer": "body",
++      "label": "section_header",
++      "level": 2,
++      "orig": "第三章 资产负债表",
++      "parent": {
++        "$ref": "#/body"
++      },
++      "prov": [
++        {
++          "bbox": {
++            "b": 160.0,
++            "coord_origin": "TOPLEFT",
++            "l": 50.0,
++            "r": 550.0,
++            "t": 120.0
++          },
++          "charspan": [
++            0,
++            0
++          ],
++          "page_no": 1
++        }
++      ],
++      "self_ref": "#/texts/1",
++      "text": "第三章 资产负债表"
++    },
++    {
++      "children": [],
++      "content_layer": "body",
++      "label": "text",
++      "orig": "本章列示示例公司在报告期末的资产和负债情况，数据均为虚构的演示内容。",
++      "parent": {
++        "$ref": "#/body"
++      },
++      "prov": [
++        {
++          "bbox": {
++            "b": 240.0,
++            "coord_origin": "TOPLEFT",
++            "l": 50.0,
++            "r": 550.0,
++            "t": 180.0
++          },
++          "charspan": [
++            0,
++            0
++          ],
++          "page_no": 1
++        }
++      ],
++      "self_ref": "#/texts/2",
++      "text": "本章列示示例公司在报告期末的资产和负债情况，数据均为虚构的演示内容。"
++    },
++    {
++      "children": [],
++      "content_layer": "body",
++      "label": "section_header",
++      "level": 3,
++      "orig": "第5条 流动资产",
++      "parent": {
++        "$ref": "#/body"
++      },
++      "prov": [
++        {
++          "bbox": {
++            "b": 140.0,
++            "coord_origin": "TOPLEFT",
++            "l": 50.0,
++            "r": 550.0,
++            "t": 80.0
++          },
++          "charspan": [
++            0,
++            0
++          ],
++          "page_no": 2
++        }
++      ],
++      "self_ref": "#/texts/3",
++      "text": "第5条 流动资产"
++    },
++    {
++      "children": [],
++      "content_layer": "body",
++      "label": "text",
++      "orig": "流动资产包括货币资金、应收账款和存货，具体金额以附注为准。",
++      "parent": {
++        "$ref": "#/body"
++      },
++      "prov": [
++        {
++          "bbox": {
++            "b": 180.0,
++            "coord_origin": "TOPLEFT",
++            "l": 50.0,
++            "r": 550.0,
++            "t": 120.0
++          },
++          "charspan": [
++            0,
++            0
++          ],
++          "page_no": 2
++        }
++      ],
++      "self_ref": "#/texts/4",
++      "text": "流动资产包括货币资金、应收账款和存货，具体金额以附注为准。"
++    }
++  ],
++  "version": "1.11.0"
++}
+diff --git a/rag-sidecar/tests/fixtures/docling/pictures.json b/rag-sidecar/tests/fixtures/docling/pictures.json
+new file mode 100644
+index 0000000..ebdb2d2
+--- /dev/null
++++ b/rag-sidecar/tests/fixtures/docling/pictures.json
+@@ -0,0 +1,222 @@
++{
++  "body": {
++    "children": [
++      {
++        "$ref": "#/texts/0"
++      },
++      {
++        "$ref": "#/texts/1"
++      },
++      {
++        "$ref": "#/pictures/0"
++      },
++      {
++        "$ref": "#/texts/2"
++      },
++      {
++        "$ref": "#/pictures/1"
++      }
++    ],
++    "content_layer": "body",
++    "label": "unspecified",
++    "name": "_root_",
++    "self_ref": "#/body"
++  },
++  "form_items": [],
++  "furniture": {
++    "children": [],
++    "content_layer": "furniture",
++    "label": "unspecified",
++    "name": "_root_",
++    "self_ref": "#/furniture"
++  },
++  "groups": [],
++  "key_value_items": [],
++  "name": "pictures",
++  "origin": {
++    "binary_hash": 1003,
++    "filename": "pictures.pdf",
++    "mimetype": "application/pdf"
++  },
++  "pages": {
++    "1": {
++      "page_no": 1,
++      "size": {
++        "height": 800.0,
++        "width": 600.0
++      }
++    },
++    "2": {
++      "page_no": 2,
++      "size": {
++        "height": 800.0,
++        "width": 600.0
++      }
++    }
++  },
++  "pictures": [
++    {
++      "annotations": [],
++      "captions": [],
++      "children": [],
++      "content_layer": "body",
++      "footnotes": [],
++      "image": {
++        "dpi": 72,
++        "mimetype": "image/png",
++        "size": {
++          "height": 4.0,
++          "width": 4.0
++        },
++        "uri": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAFElEQVR4nGM8ISfHAANMDEgANwcANHYBDK9qubUAAAAASUVORK5CYII="
++      },
++      "label": "picture",
++      "parent": {
++        "$ref": "#/body"
++      },
++      "prov": [
++        {
++          "bbox": {
++            "b": 500.0,
++            "coord_origin": "BOTTOMLEFT",
++            "l": 100.0,
++            "r": 300.0,
++            "t": 700.0
++          },
++          "charspan": [
++            0,
++            0
++          ],
++          "page_no": 1
++        }
++      ],
++      "references": [],
++      "self_ref": "#/pictures/0"
++    },
++    {
++      "annotations": [],
++      "captions": [],
++      "children": [],
++      "content_layer": "body",
++      "footnotes": [],
++      "image": {
++        "dpi": 72,
++        "mimetype": "image/png",
++        "size": {
++          "height": 4.0,
++          "width": 4.0
++        },
++        "uri": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAFElEQVR4nGM8ISfHAANMDEgANwcANHYBDK9qubUAAAAASUVORK5CYII="
++      },
++      "label": "picture",
++      "parent": {
++        "$ref": "#/body"
++      },
++      "prov": [
++        {
++          "bbox": {
++            "b": 500.0,
++            "coord_origin": "TOPLEFT",
++            "l": 50.0,
++            "r": 550.0,
++            "t": 100.0
++          },
++          "charspan": [
++            0,
++            0
++          ],
++          "page_no": 2
++        }
++      ],
++      "references": [],
++      "self_ref": "#/pictures/1"
++    }
++  ],
++  "schema_name": "DoclingDocument",
++  "tables": [],
++  "texts": [
++    {
++      "children": [],
++      "content_layer": "body",
++      "label": "section_header",
++      "level": 1,
++      "orig": "Product sheet",
++      "parent": {
++        "$ref": "#/body"
++      },
++      "prov": [
++        {
++          "bbox": {
++            "b": 140.0,
++            "coord_origin": "TOPLEFT",
++            "l": 50.0,
++            "r": 550.0,
++            "t": 80.0
++          },
++          "charspan": [
++            0,
++            0
++          ],
++          "page_no": 1
++        }
++      ],
++      "self_ref": "#/texts/0",
++      "text": "Product sheet"
++    },
++    {
++      "children": [],
++      "content_layer": "body",
++      "label": "text",
++      "orig": "Front view of the example device.",
++      "parent": {
++        "$ref": "#/body"
++      },
++      "prov": [
++        {
++          "bbox": {
++            "b": 160.0,
++            "coord_origin": "TOPLEFT",
++            "l": 50.0,
++            "r": 550.0,
++            "t": 120.0
++          },
++          "charspan": [
++            0,
++            0
++          ],
++          "page_no": 1
++        }
++      ],
++      "self_ref": "#/texts/1",
++      "text": "Front view of the example device."
++    },
++    {
++      "children": [],
++      "content_layer": "body",
++      "label": "text",
++      "orig": "Rear view of the example device.",
++      "parent": {
++        "$ref": "#/body"
++      },
++      "prov": [
++        {
++          "bbox": {
++            "b": 100.0,
++            "coord_origin": "TOPLEFT",
++            "l": 50.0,
++            "r": 550.0,
++            "t": 60.0
++          },
++          "charspan": [
++            0,
++            0
++          ],
++          "page_no": 2
++        }
++      ],
++      "self_ref": "#/texts/2",
++      "text": "Rear view of the example device."
++    }
++  ],
++  "version": "1.11.0"
++}
+diff --git a/rag-sidecar/tests/fixtures/docling/table-report.json b/rag-sidecar/tests/fixtures/docling/table-report.json
+new file mode 100644
+index 0000000..f842e34
+--- /dev/null
++++ b/rag-sidecar/tests/fixtures/docling/table-report.json
+@@ -0,0 +1,4453 @@
++{
++  "body": {
++    "children": [
++      {
++        "$ref": "#/texts/0"
++      },
++      {
++        "$ref": "#/texts/1"
++      },
++      {
++        "$ref": "#/texts/2"
++      },
++      {
++        "$ref": "#/texts/3"
++      },
++      {
++        "$ref": "#/tables/0"
++      }
++    ],
++    "content_layer": "body",
++    "label": "unspecified",
++    "name": "_root_",
++    "self_ref": "#/body"
++  },
++  "form_items": [],
++  "furniture": {
++    "children": [],
++    "content_layer": "furniture",
++    "label": "unspecified",
++    "name": "_root_",
++    "self_ref": "#/furniture"
++  },
++  "groups": [],
++  "key_value_items": [],
++  "name": "table-report",
++  "origin": {
++    "binary_hash": 1001,
++    "filename": "table-report.pdf",
++    "mimetype": "application/pdf"
++  },
++  "pages": {
++    "1": {
++      "page_no": 1,
++      "size": {
++        "height": 800.0,
++        "width": 600.0
++      }
++    },
++    "2": {
++      "page_no": 2,
++      "size": {
++        "height": 800.0,
++        "width": 600.0
++      }
++    }
++  },
++  "pictures": [],
++  "schema_name": "DoclingDocument",
++  "tables": [
++    {
++      "annotations": [],
++      "captions": [],
++      "children": [],
++      "content_layer": "body",
++      "data": {
++        "grid": [
++          [
++            {
++              "col_span": 1,
++              "column_header": true,
++              "end_col_offset_idx": 1,
++              "end_row_offset_idx": 1,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 0,
++              "start_row_offset_idx": 0,
++              "text": "Item"
++            },
++            {
++              "col_span": 1,
++              "column_header": true,
++              "end_col_offset_idx": 2,
++              "end_row_offset_idx": 1,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 1,
++              "start_row_offset_idx": 0,
++              "text": "Quantity"
++            },
++            {
++              "col_span": 1,
++              "column_header": true,
++              "end_col_offset_idx": 3,
++              "end_row_offset_idx": 1,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 2,
++              "start_row_offset_idx": 0,
++              "text": "Unit price"
++            },
++            {
++              "col_span": 1,
++              "column_header": true,
++              "end_col_offset_idx": 4,
++              "end_row_offset_idx": 1,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 3,
++              "start_row_offset_idx": 0,
++              "text": "Total"
++            }
++          ],
++          [
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 1,
++              "end_row_offset_idx": 2,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 0,
++              "start_row_offset_idx": 1,
++              "text": "Item 01"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 2,
++              "end_row_offset_idx": 2,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 1,
++              "start_row_offset_idx": 1,
++              "text": "1"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 3,
++              "end_row_offset_idx": 2,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 2,
++              "start_row_offset_idx": 1,
++              "text": "1.50"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 4,
++              "end_row_offset_idx": 2,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 3,
++              "start_row_offset_idx": 1,
++              "text": "2.00"
++            }
++          ],
++          [
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 1,
++              "end_row_offset_idx": 3,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 0,
++              "start_row_offset_idx": 2,
++              "text": "Item 02"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 2,
++              "end_row_offset_idx": 3,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 1,
++              "start_row_offset_idx": 2,
++              "text": "2"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 3,
++              "end_row_offset_idx": 3,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 2,
++              "start_row_offset_idx": 2,
++              "text": "2.50"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 4,
++              "end_row_offset_idx": 3,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 3,
++              "start_row_offset_idx": 2,
++              "text": "4.00"
++            }
++          ],
++          [
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 1,
++              "end_row_offset_idx": 4,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 0,
++              "start_row_offset_idx": 3,
++              "text": "Item 03"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 2,
++              "end_row_offset_idx": 4,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 1,
++              "start_row_offset_idx": 3,
++              "text": "3"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 3,
++              "end_row_offset_idx": 4,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 2,
++              "start_row_offset_idx": 3,
++              "text": "3.50"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 4,
++              "end_row_offset_idx": 4,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 3,
++              "start_row_offset_idx": 3,
++              "text": "6.00"
++            }
++          ],
++          [
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 1,
++              "end_row_offset_idx": 5,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 0,
++              "start_row_offset_idx": 4,
++              "text": "Item 04"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 2,
++              "end_row_offset_idx": 5,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 1,
++              "start_row_offset_idx": 4,
++              "text": "4"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 3,
++              "end_row_offset_idx": 5,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 2,
++              "start_row_offset_idx": 4,
++              "text": "4.50"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 4,
++              "end_row_offset_idx": 5,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 3,
++              "start_row_offset_idx": 4,
++              "text": "8.00"
++            }
++          ],
++          [
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 1,
++              "end_row_offset_idx": 6,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 0,
++              "start_row_offset_idx": 5,
++              "text": "Item 05"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 2,
++              "end_row_offset_idx": 6,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 1,
++              "start_row_offset_idx": 5,
++              "text": "5"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 3,
++              "end_row_offset_idx": 6,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 2,
++              "start_row_offset_idx": 5,
++              "text": "5.50"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 4,
++              "end_row_offset_idx": 6,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 3,
++              "start_row_offset_idx": 5,
++              "text": "10.00"
++            }
++          ],
++          [
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 1,
++              "end_row_offset_idx": 7,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 0,
++              "start_row_offset_idx": 6,
++              "text": "Item 06"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 2,
++              "end_row_offset_idx": 7,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 1,
++              "start_row_offset_idx": 6,
++              "text": "6"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 3,
++              "end_row_offset_idx": 7,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 2,
++              "start_row_offset_idx": 6,
++              "text": "6.50"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 4,
++              "end_row_offset_idx": 7,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 3,
++              "start_row_offset_idx": 6,
++              "text": "12.00"
++            }
++          ],
++          [
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 1,
++              "end_row_offset_idx": 8,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 0,
++              "start_row_offset_idx": 7,
++              "text": "Item 07"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 2,
++              "end_row_offset_idx": 8,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 1,
++              "start_row_offset_idx": 7,
++              "text": "7"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 3,
++              "end_row_offset_idx": 8,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 2,
++              "start_row_offset_idx": 7,
++              "text": "7.50"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 4,
++              "end_row_offset_idx": 8,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 3,
++              "start_row_offset_idx": 7,
++              "text": "14.00"
++            }
++          ],
++          [
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 1,
++              "end_row_offset_idx": 9,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 0,
++              "start_row_offset_idx": 8,
++              "text": "Item 08"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 2,
++              "end_row_offset_idx": 9,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 1,
++              "start_row_offset_idx": 8,
++              "text": "8"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 3,
++              "end_row_offset_idx": 9,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 2,
++              "start_row_offset_idx": 8,
++              "text": "8.50"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 4,
++              "end_row_offset_idx": 9,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 3,
++              "start_row_offset_idx": 8,
++              "text": "16.00"
++            }
++          ],
++          [
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 1,
++              "end_row_offset_idx": 10,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 0,
++              "start_row_offset_idx": 9,
++              "text": "Item 09"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 2,
++              "end_row_offset_idx": 10,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 1,
++              "start_row_offset_idx": 9,
++              "text": "9"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 3,
++              "end_row_offset_idx": 10,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 2,
++              "start_row_offset_idx": 9,
++              "text": "9.50"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 4,
++              "end_row_offset_idx": 10,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 3,
++              "start_row_offset_idx": 9,
++              "text": "18.00"
++            }
++          ],
++          [
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 1,
++              "end_row_offset_idx": 11,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 0,
++              "start_row_offset_idx": 10,
++              "text": "Item 10"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 2,
++              "end_row_offset_idx": 11,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 1,
++              "start_row_offset_idx": 10,
++              "text": "10"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 3,
++              "end_row_offset_idx": 11,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 2,
++              "start_row_offset_idx": 10,
++              "text": "10.50"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 4,
++              "end_row_offset_idx": 11,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 3,
++              "start_row_offset_idx": 10,
++              "text": "20.00"
++            }
++          ],
++          [
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 1,
++              "end_row_offset_idx": 12,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 0,
++              "start_row_offset_idx": 11,
++              "text": "Item 11"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 2,
++              "end_row_offset_idx": 12,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 1,
++              "start_row_offset_idx": 11,
++              "text": "11"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 3,
++              "end_row_offset_idx": 12,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 2,
++              "start_row_offset_idx": 11,
++              "text": "11.50"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 4,
++              "end_row_offset_idx": 12,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 3,
++              "start_row_offset_idx": 11,
++              "text": "22.00"
++            }
++          ],
++          [
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 1,
++              "end_row_offset_idx": 13,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 0,
++              "start_row_offset_idx": 12,
++              "text": "Item 12"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 2,
++              "end_row_offset_idx": 13,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 1,
++              "start_row_offset_idx": 12,
++              "text": "12"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 3,
++              "end_row_offset_idx": 13,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 2,
++              "start_row_offset_idx": 12,
++              "text": "12.50"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 4,
++              "end_row_offset_idx": 13,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 3,
++              "start_row_offset_idx": 12,
++              "text": "24.00"
++            }
++          ],
++          [
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 1,
++              "end_row_offset_idx": 14,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 0,
++              "start_row_offset_idx": 13,
++              "text": "Item 13"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 2,
++              "end_row_offset_idx": 14,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 1,
++              "start_row_offset_idx": 13,
++              "text": "13"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 3,
++              "end_row_offset_idx": 14,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 2,
++              "start_row_offset_idx": 13,
++              "text": "13.50"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 4,
++              "end_row_offset_idx": 14,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 3,
++              "start_row_offset_idx": 13,
++              "text": "26.00"
++            }
++          ],
++          [
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 1,
++              "end_row_offset_idx": 15,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 0,
++              "start_row_offset_idx": 14,
++              "text": "Item 14"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 2,
++              "end_row_offset_idx": 15,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 1,
++              "start_row_offset_idx": 14,
++              "text": "14"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 3,
++              "end_row_offset_idx": 15,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 2,
++              "start_row_offset_idx": 14,
++              "text": "14.50"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 4,
++              "end_row_offset_idx": 15,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 3,
++              "start_row_offset_idx": 14,
++              "text": "28.00"
++            }
++          ],
++          [
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 1,
++              "end_row_offset_idx": 16,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 0,
++              "start_row_offset_idx": 15,
++              "text": "Item 15"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 2,
++              "end_row_offset_idx": 16,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 1,
++              "start_row_offset_idx": 15,
++              "text": "15"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 3,
++              "end_row_offset_idx": 16,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 2,
++              "start_row_offset_idx": 15,
++              "text": "15.50"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 4,
++              "end_row_offset_idx": 16,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 3,
++              "start_row_offset_idx": 15,
++              "text": "30.00"
++            }
++          ],
++          [
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 1,
++              "end_row_offset_idx": 17,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 0,
++              "start_row_offset_idx": 16,
++              "text": "Item 16"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 2,
++              "end_row_offset_idx": 17,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 1,
++              "start_row_offset_idx": 16,
++              "text": "16"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 3,
++              "end_row_offset_idx": 17,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 2,
++              "start_row_offset_idx": 16,
++              "text": "16.50"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 4,
++              "end_row_offset_idx": 17,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 3,
++              "start_row_offset_idx": 16,
++              "text": "32.00"
++            }
++          ],
++          [
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 1,
++              "end_row_offset_idx": 18,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 0,
++              "start_row_offset_idx": 17,
++              "text": "Item 17"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 2,
++              "end_row_offset_idx": 18,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 1,
++              "start_row_offset_idx": 17,
++              "text": "17"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 3,
++              "end_row_offset_idx": 18,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 2,
++              "start_row_offset_idx": 17,
++              "text": "17.50"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 4,
++              "end_row_offset_idx": 18,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 3,
++              "start_row_offset_idx": 17,
++              "text": "34.00"
++            }
++          ],
++          [
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 1,
++              "end_row_offset_idx": 19,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 0,
++              "start_row_offset_idx": 18,
++              "text": "Item 18"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 2,
++              "end_row_offset_idx": 19,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 1,
++              "start_row_offset_idx": 18,
++              "text": "18"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 3,
++              "end_row_offset_idx": 19,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 2,
++              "start_row_offset_idx": 18,
++              "text": "18.50"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 4,
++              "end_row_offset_idx": 19,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 3,
++              "start_row_offset_idx": 18,
++              "text": "36.00"
++            }
++          ],
++          [
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 1,
++              "end_row_offset_idx": 20,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 0,
++              "start_row_offset_idx": 19,
++              "text": "Item 19"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 2,
++              "end_row_offset_idx": 20,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 1,
++              "start_row_offset_idx": 19,
++              "text": "19"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 3,
++              "end_row_offset_idx": 20,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 2,
++              "start_row_offset_idx": 19,
++              "text": "19.50"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 4,
++              "end_row_offset_idx": 20,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 3,
++              "start_row_offset_idx": 19,
++              "text": "38.00"
++            }
++          ],
++          [
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 1,
++              "end_row_offset_idx": 21,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 0,
++              "start_row_offset_idx": 20,
++              "text": "Item 20"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 2,
++              "end_row_offset_idx": 21,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 1,
++              "start_row_offset_idx": 20,
++              "text": "20"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 3,
++              "end_row_offset_idx": 21,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 2,
++              "start_row_offset_idx": 20,
++              "text": "20.50"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 4,
++              "end_row_offset_idx": 21,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 3,
++              "start_row_offset_idx": 20,
++              "text": "40.00"
++            }
++          ],
++          [
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 1,
++              "end_row_offset_idx": 22,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 0,
++              "start_row_offset_idx": 21,
++              "text": "Item 21"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 2,
++              "end_row_offset_idx": 22,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 1,
++              "start_row_offset_idx": 21,
++              "text": "21"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 3,
++              "end_row_offset_idx": 22,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 2,
++              "start_row_offset_idx": 21,
++              "text": "21.50"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 4,
++              "end_row_offset_idx": 22,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 3,
++              "start_row_offset_idx": 21,
++              "text": "42.00"
++            }
++          ],
++          [
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 1,
++              "end_row_offset_idx": 23,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 0,
++              "start_row_offset_idx": 22,
++              "text": "Item 22"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 2,
++              "end_row_offset_idx": 23,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 1,
++              "start_row_offset_idx": 22,
++              "text": "22"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 3,
++              "end_row_offset_idx": 23,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 2,
++              "start_row_offset_idx": 22,
++              "text": "22.50"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 4,
++              "end_row_offset_idx": 23,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 3,
++              "start_row_offset_idx": 22,
++              "text": "44.00"
++            }
++          ],
++          [
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 1,
++              "end_row_offset_idx": 24,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 0,
++              "start_row_offset_idx": 23,
++              "text": "Item 23"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 2,
++              "end_row_offset_idx": 24,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 1,
++              "start_row_offset_idx": 23,
++              "text": "23"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 3,
++              "end_row_offset_idx": 24,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 2,
++              "start_row_offset_idx": 23,
++              "text": "23.50"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 4,
++              "end_row_offset_idx": 24,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 3,
++              "start_row_offset_idx": 23,
++              "text": "46.00"
++            }
++          ],
++          [
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 1,
++              "end_row_offset_idx": 25,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 0,
++              "start_row_offset_idx": 24,
++              "text": "Item 24"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 2,
++              "end_row_offset_idx": 25,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 1,
++              "start_row_offset_idx": 24,
++              "text": "24"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 3,
++              "end_row_offset_idx": 25,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 2,
++              "start_row_offset_idx": 24,
++              "text": "24.50"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 4,
++              "end_row_offset_idx": 25,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 3,
++              "start_row_offset_idx": 24,
++              "text": "48.00"
++            }
++          ],
++          [
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 1,
++              "end_row_offset_idx": 26,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 0,
++              "start_row_offset_idx": 25,
++              "text": "Item 25"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 2,
++              "end_row_offset_idx": 26,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 1,
++              "start_row_offset_idx": 25,
++              "text": "25"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 3,
++              "end_row_offset_idx": 26,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 2,
++              "start_row_offset_idx": 25,
++              "text": "25.50"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 4,
++              "end_row_offset_idx": 26,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 3,
++              "start_row_offset_idx": 25,
++              "text": "50.00"
++            }
++          ],
++          [
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 1,
++              "end_row_offset_idx": 27,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 0,
++              "start_row_offset_idx": 26,
++              "text": "Item 26"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 2,
++              "end_row_offset_idx": 27,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 1,
++              "start_row_offset_idx": 26,
++              "text": "26"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 3,
++              "end_row_offset_idx": 27,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 2,
++              "start_row_offset_idx": 26,
++              "text": "26.50"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 4,
++              "end_row_offset_idx": 27,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 3,
++              "start_row_offset_idx": 26,
++              "text": "52.00"
++            }
++          ],
++          [
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 1,
++              "end_row_offset_idx": 28,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 0,
++              "start_row_offset_idx": 27,
++              "text": "Item 27"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 2,
++              "end_row_offset_idx": 28,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 1,
++              "start_row_offset_idx": 27,
++              "text": "27"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 3,
++              "end_row_offset_idx": 28,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 2,
++              "start_row_offset_idx": 27,
++              "text": "27.50"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 4,
++              "end_row_offset_idx": 28,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 3,
++              "start_row_offset_idx": 27,
++              "text": "54.00"
++            }
++          ],
++          [
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 1,
++              "end_row_offset_idx": 29,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 0,
++              "start_row_offset_idx": 28,
++              "text": "Item 28"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 2,
++              "end_row_offset_idx": 29,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 1,
++              "start_row_offset_idx": 28,
++              "text": "28"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 3,
++              "end_row_offset_idx": 29,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 2,
++              "start_row_offset_idx": 28,
++              "text": "28.50"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 4,
++              "end_row_offset_idx": 29,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 3,
++              "start_row_offset_idx": 28,
++              "text": "56.00"
++            }
++          ],
++          [
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 1,
++              "end_row_offset_idx": 30,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 0,
++              "start_row_offset_idx": 29,
++              "text": "Item 29"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 2,
++              "end_row_offset_idx": 30,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 1,
++              "start_row_offset_idx": 29,
++              "text": "29"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 3,
++              "end_row_offset_idx": 30,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 2,
++              "start_row_offset_idx": 29,
++              "text": "29.50"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 4,
++              "end_row_offset_idx": 30,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 3,
++              "start_row_offset_idx": 29,
++              "text": "58.00"
++            }
++          ],
++          [
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 1,
++              "end_row_offset_idx": 31,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 0,
++              "start_row_offset_idx": 30,
++              "text": "Item 30"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 2,
++              "end_row_offset_idx": 31,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 1,
++              "start_row_offset_idx": 30,
++              "text": "30"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 3,
++              "end_row_offset_idx": 31,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 2,
++              "start_row_offset_idx": 30,
++              "text": "30.50"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 4,
++              "end_row_offset_idx": 31,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 3,
++              "start_row_offset_idx": 30,
++              "text": "60.00"
++            }
++          ],
++          [
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 1,
++              "end_row_offset_idx": 32,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 0,
++              "start_row_offset_idx": 31,
++              "text": "Item 31"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 2,
++              "end_row_offset_idx": 32,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 1,
++              "start_row_offset_idx": 31,
++              "text": "31"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 3,
++              "end_row_offset_idx": 32,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 2,
++              "start_row_offset_idx": 31,
++              "text": "31.50"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 4,
++              "end_row_offset_idx": 32,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 3,
++              "start_row_offset_idx": 31,
++              "text": "62.00"
++            }
++          ],
++          [
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 1,
++              "end_row_offset_idx": 33,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 0,
++              "start_row_offset_idx": 32,
++              "text": "Item 32"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 2,
++              "end_row_offset_idx": 33,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 1,
++              "start_row_offset_idx": 32,
++              "text": "32"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 3,
++              "end_row_offset_idx": 33,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 2,
++              "start_row_offset_idx": 32,
++              "text": "32.50"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 4,
++              "end_row_offset_idx": 33,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 3,
++              "start_row_offset_idx": 32,
++              "text": "64.00"
++            }
++          ],
++          [
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 1,
++              "end_row_offset_idx": 34,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 0,
++              "start_row_offset_idx": 33,
++              "text": "Item 33"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 2,
++              "end_row_offset_idx": 34,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 1,
++              "start_row_offset_idx": 33,
++              "text": "33"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 3,
++              "end_row_offset_idx": 34,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 2,
++              "start_row_offset_idx": 33,
++              "text": "33.50"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 4,
++              "end_row_offset_idx": 34,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 3,
++              "start_row_offset_idx": 33,
++              "text": "66.00"
++            }
++          ],
++          [
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 1,
++              "end_row_offset_idx": 35,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 0,
++              "start_row_offset_idx": 34,
++              "text": "Item 34"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 2,
++              "end_row_offset_idx": 35,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 1,
++              "start_row_offset_idx": 34,
++              "text": "34"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 3,
++              "end_row_offset_idx": 35,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 2,
++              "start_row_offset_idx": 34,
++              "text": "34.50"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 4,
++              "end_row_offset_idx": 35,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 3,
++              "start_row_offset_idx": 34,
++              "text": "68.00"
++            }
++          ],
++          [
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 1,
++              "end_row_offset_idx": 36,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 0,
++              "start_row_offset_idx": 35,
++              "text": "Item 35"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 2,
++              "end_row_offset_idx": 36,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 1,
++              "start_row_offset_idx": 35,
++              "text": "35"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 3,
++              "end_row_offset_idx": 36,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 2,
++              "start_row_offset_idx": 35,
++              "text": "35.50"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 4,
++              "end_row_offset_idx": 36,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 3,
++              "start_row_offset_idx": 35,
++              "text": "70.00"
++            }
++          ],
++          [
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 1,
++              "end_row_offset_idx": 37,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 0,
++              "start_row_offset_idx": 36,
++              "text": "Item 36"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 2,
++              "end_row_offset_idx": 37,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 1,
++              "start_row_offset_idx": 36,
++              "text": "36"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 3,
++              "end_row_offset_idx": 37,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 2,
++              "start_row_offset_idx": 36,
++              "text": "36.50"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 4,
++              "end_row_offset_idx": 37,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 3,
++              "start_row_offset_idx": 36,
++              "text": "72.00"
++            }
++          ],
++          [
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 1,
++              "end_row_offset_idx": 38,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 0,
++              "start_row_offset_idx": 37,
++              "text": "Item 37"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 2,
++              "end_row_offset_idx": 38,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 1,
++              "start_row_offset_idx": 37,
++              "text": "37"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 3,
++              "end_row_offset_idx": 38,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 2,
++              "start_row_offset_idx": 37,
++              "text": "37.50"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 4,
++              "end_row_offset_idx": 38,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 3,
++              "start_row_offset_idx": 37,
++              "text": "74.00"
++            }
++          ],
++          [
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 1,
++              "end_row_offset_idx": 39,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 0,
++              "start_row_offset_idx": 38,
++              "text": "Item 38"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 2,
++              "end_row_offset_idx": 39,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 1,
++              "start_row_offset_idx": 38,
++              "text": "38"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 3,
++              "end_row_offset_idx": 39,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 2,
++              "start_row_offset_idx": 38,
++              "text": "38.50"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 4,
++              "end_row_offset_idx": 39,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 3,
++              "start_row_offset_idx": 38,
++              "text": "76.00"
++            }
++          ],
++          [
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 1,
++              "end_row_offset_idx": 40,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 0,
++              "start_row_offset_idx": 39,
++              "text": "Item 39"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 2,
++              "end_row_offset_idx": 40,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 1,
++              "start_row_offset_idx": 39,
++              "text": "39"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 3,
++              "end_row_offset_idx": 40,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 2,
++              "start_row_offset_idx": 39,
++              "text": "39.50"
++            },
++            {
++              "col_span": 1,
++              "column_header": false,
++              "end_col_offset_idx": 4,
++              "end_row_offset_idx": 40,
++              "fillable": false,
++              "row_header": false,
++              "row_section": false,
++              "row_span": 1,
++              "start_col_offset_idx": 3,
++              "start_row_offset_idx": 39,
++              "text": "78.00"
++            }
++          ]
++        ],
++        "num_cols": 4,
++        "num_rows": 40,
++        "orientation": "rot_0",
++        "table_cells": [
++          {
++            "col_span": 1,
++            "column_header": true,
++            "end_col_offset_idx": 1,
++            "end_row_offset_idx": 1,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 0,
++            "start_row_offset_idx": 0,
++            "text": "Item"
++          },
++          {
++            "col_span": 1,
++            "column_header": true,
++            "end_col_offset_idx": 2,
++            "end_row_offset_idx": 1,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 1,
++            "start_row_offset_idx": 0,
++            "text": "Quantity"
++          },
++          {
++            "col_span": 1,
++            "column_header": true,
++            "end_col_offset_idx": 3,
++            "end_row_offset_idx": 1,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 2,
++            "start_row_offset_idx": 0,
++            "text": "Unit price"
++          },
++          {
++            "col_span": 1,
++            "column_header": true,
++            "end_col_offset_idx": 4,
++            "end_row_offset_idx": 1,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 3,
++            "start_row_offset_idx": 0,
++            "text": "Total"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 1,
++            "end_row_offset_idx": 2,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 0,
++            "start_row_offset_idx": 1,
++            "text": "Item 01"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 2,
++            "end_row_offset_idx": 2,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 1,
++            "start_row_offset_idx": 1,
++            "text": "1"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 3,
++            "end_row_offset_idx": 2,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 2,
++            "start_row_offset_idx": 1,
++            "text": "1.50"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 4,
++            "end_row_offset_idx": 2,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 3,
++            "start_row_offset_idx": 1,
++            "text": "2.00"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 1,
++            "end_row_offset_idx": 3,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 0,
++            "start_row_offset_idx": 2,
++            "text": "Item 02"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 2,
++            "end_row_offset_idx": 3,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 1,
++            "start_row_offset_idx": 2,
++            "text": "2"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 3,
++            "end_row_offset_idx": 3,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 2,
++            "start_row_offset_idx": 2,
++            "text": "2.50"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 4,
++            "end_row_offset_idx": 3,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 3,
++            "start_row_offset_idx": 2,
++            "text": "4.00"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 1,
++            "end_row_offset_idx": 4,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 0,
++            "start_row_offset_idx": 3,
++            "text": "Item 03"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 2,
++            "end_row_offset_idx": 4,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 1,
++            "start_row_offset_idx": 3,
++            "text": "3"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 3,
++            "end_row_offset_idx": 4,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 2,
++            "start_row_offset_idx": 3,
++            "text": "3.50"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 4,
++            "end_row_offset_idx": 4,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 3,
++            "start_row_offset_idx": 3,
++            "text": "6.00"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 1,
++            "end_row_offset_idx": 5,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 0,
++            "start_row_offset_idx": 4,
++            "text": "Item 04"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 2,
++            "end_row_offset_idx": 5,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 1,
++            "start_row_offset_idx": 4,
++            "text": "4"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 3,
++            "end_row_offset_idx": 5,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 2,
++            "start_row_offset_idx": 4,
++            "text": "4.50"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 4,
++            "end_row_offset_idx": 5,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 3,
++            "start_row_offset_idx": 4,
++            "text": "8.00"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 1,
++            "end_row_offset_idx": 6,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 0,
++            "start_row_offset_idx": 5,
++            "text": "Item 05"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 2,
++            "end_row_offset_idx": 6,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 1,
++            "start_row_offset_idx": 5,
++            "text": "5"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 3,
++            "end_row_offset_idx": 6,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 2,
++            "start_row_offset_idx": 5,
++            "text": "5.50"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 4,
++            "end_row_offset_idx": 6,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 3,
++            "start_row_offset_idx": 5,
++            "text": "10.00"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 1,
++            "end_row_offset_idx": 7,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 0,
++            "start_row_offset_idx": 6,
++            "text": "Item 06"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 2,
++            "end_row_offset_idx": 7,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 1,
++            "start_row_offset_idx": 6,
++            "text": "6"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 3,
++            "end_row_offset_idx": 7,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 2,
++            "start_row_offset_idx": 6,
++            "text": "6.50"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 4,
++            "end_row_offset_idx": 7,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 3,
++            "start_row_offset_idx": 6,
++            "text": "12.00"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 1,
++            "end_row_offset_idx": 8,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 0,
++            "start_row_offset_idx": 7,
++            "text": "Item 07"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 2,
++            "end_row_offset_idx": 8,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 1,
++            "start_row_offset_idx": 7,
++            "text": "7"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 3,
++            "end_row_offset_idx": 8,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 2,
++            "start_row_offset_idx": 7,
++            "text": "7.50"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 4,
++            "end_row_offset_idx": 8,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 3,
++            "start_row_offset_idx": 7,
++            "text": "14.00"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 1,
++            "end_row_offset_idx": 9,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 0,
++            "start_row_offset_idx": 8,
++            "text": "Item 08"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 2,
++            "end_row_offset_idx": 9,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 1,
++            "start_row_offset_idx": 8,
++            "text": "8"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 3,
++            "end_row_offset_idx": 9,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 2,
++            "start_row_offset_idx": 8,
++            "text": "8.50"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 4,
++            "end_row_offset_idx": 9,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 3,
++            "start_row_offset_idx": 8,
++            "text": "16.00"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 1,
++            "end_row_offset_idx": 10,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 0,
++            "start_row_offset_idx": 9,
++            "text": "Item 09"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 2,
++            "end_row_offset_idx": 10,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 1,
++            "start_row_offset_idx": 9,
++            "text": "9"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 3,
++            "end_row_offset_idx": 10,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 2,
++            "start_row_offset_idx": 9,
++            "text": "9.50"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 4,
++            "end_row_offset_idx": 10,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 3,
++            "start_row_offset_idx": 9,
++            "text": "18.00"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 1,
++            "end_row_offset_idx": 11,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 0,
++            "start_row_offset_idx": 10,
++            "text": "Item 10"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 2,
++            "end_row_offset_idx": 11,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 1,
++            "start_row_offset_idx": 10,
++            "text": "10"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 3,
++            "end_row_offset_idx": 11,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 2,
++            "start_row_offset_idx": 10,
++            "text": "10.50"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 4,
++            "end_row_offset_idx": 11,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 3,
++            "start_row_offset_idx": 10,
++            "text": "20.00"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 1,
++            "end_row_offset_idx": 12,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 0,
++            "start_row_offset_idx": 11,
++            "text": "Item 11"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 2,
++            "end_row_offset_idx": 12,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 1,
++            "start_row_offset_idx": 11,
++            "text": "11"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 3,
++            "end_row_offset_idx": 12,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 2,
++            "start_row_offset_idx": 11,
++            "text": "11.50"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 4,
++            "end_row_offset_idx": 12,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 3,
++            "start_row_offset_idx": 11,
++            "text": "22.00"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 1,
++            "end_row_offset_idx": 13,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 0,
++            "start_row_offset_idx": 12,
++            "text": "Item 12"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 2,
++            "end_row_offset_idx": 13,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 1,
++            "start_row_offset_idx": 12,
++            "text": "12"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 3,
++            "end_row_offset_idx": 13,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 2,
++            "start_row_offset_idx": 12,
++            "text": "12.50"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 4,
++            "end_row_offset_idx": 13,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 3,
++            "start_row_offset_idx": 12,
++            "text": "24.00"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 1,
++            "end_row_offset_idx": 14,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 0,
++            "start_row_offset_idx": 13,
++            "text": "Item 13"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 2,
++            "end_row_offset_idx": 14,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 1,
++            "start_row_offset_idx": 13,
++            "text": "13"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 3,
++            "end_row_offset_idx": 14,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 2,
++            "start_row_offset_idx": 13,
++            "text": "13.50"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 4,
++            "end_row_offset_idx": 14,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 3,
++            "start_row_offset_idx": 13,
++            "text": "26.00"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 1,
++            "end_row_offset_idx": 15,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 0,
++            "start_row_offset_idx": 14,
++            "text": "Item 14"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 2,
++            "end_row_offset_idx": 15,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 1,
++            "start_row_offset_idx": 14,
++            "text": "14"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 3,
++            "end_row_offset_idx": 15,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 2,
++            "start_row_offset_idx": 14,
++            "text": "14.50"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 4,
++            "end_row_offset_idx": 15,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 3,
++            "start_row_offset_idx": 14,
++            "text": "28.00"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 1,
++            "end_row_offset_idx": 16,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 0,
++            "start_row_offset_idx": 15,
++            "text": "Item 15"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 2,
++            "end_row_offset_idx": 16,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 1,
++            "start_row_offset_idx": 15,
++            "text": "15"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 3,
++            "end_row_offset_idx": 16,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 2,
++            "start_row_offset_idx": 15,
++            "text": "15.50"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 4,
++            "end_row_offset_idx": 16,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 3,
++            "start_row_offset_idx": 15,
++            "text": "30.00"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 1,
++            "end_row_offset_idx": 17,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 0,
++            "start_row_offset_idx": 16,
++            "text": "Item 16"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 2,
++            "end_row_offset_idx": 17,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 1,
++            "start_row_offset_idx": 16,
++            "text": "16"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 3,
++            "end_row_offset_idx": 17,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 2,
++            "start_row_offset_idx": 16,
++            "text": "16.50"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 4,
++            "end_row_offset_idx": 17,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 3,
++            "start_row_offset_idx": 16,
++            "text": "32.00"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 1,
++            "end_row_offset_idx": 18,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 0,
++            "start_row_offset_idx": 17,
++            "text": "Item 17"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 2,
++            "end_row_offset_idx": 18,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 1,
++            "start_row_offset_idx": 17,
++            "text": "17"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 3,
++            "end_row_offset_idx": 18,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 2,
++            "start_row_offset_idx": 17,
++            "text": "17.50"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 4,
++            "end_row_offset_idx": 18,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 3,
++            "start_row_offset_idx": 17,
++            "text": "34.00"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 1,
++            "end_row_offset_idx": 19,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 0,
++            "start_row_offset_idx": 18,
++            "text": "Item 18"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 2,
++            "end_row_offset_idx": 19,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 1,
++            "start_row_offset_idx": 18,
++            "text": "18"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 3,
++            "end_row_offset_idx": 19,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 2,
++            "start_row_offset_idx": 18,
++            "text": "18.50"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 4,
++            "end_row_offset_idx": 19,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 3,
++            "start_row_offset_idx": 18,
++            "text": "36.00"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 1,
++            "end_row_offset_idx": 20,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 0,
++            "start_row_offset_idx": 19,
++            "text": "Item 19"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 2,
++            "end_row_offset_idx": 20,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 1,
++            "start_row_offset_idx": 19,
++            "text": "19"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 3,
++            "end_row_offset_idx": 20,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 2,
++            "start_row_offset_idx": 19,
++            "text": "19.50"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 4,
++            "end_row_offset_idx": 20,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 3,
++            "start_row_offset_idx": 19,
++            "text": "38.00"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 1,
++            "end_row_offset_idx": 21,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 0,
++            "start_row_offset_idx": 20,
++            "text": "Item 20"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 2,
++            "end_row_offset_idx": 21,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 1,
++            "start_row_offset_idx": 20,
++            "text": "20"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 3,
++            "end_row_offset_idx": 21,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 2,
++            "start_row_offset_idx": 20,
++            "text": "20.50"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 4,
++            "end_row_offset_idx": 21,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 3,
++            "start_row_offset_idx": 20,
++            "text": "40.00"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 1,
++            "end_row_offset_idx": 22,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 0,
++            "start_row_offset_idx": 21,
++            "text": "Item 21"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 2,
++            "end_row_offset_idx": 22,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 1,
++            "start_row_offset_idx": 21,
++            "text": "21"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 3,
++            "end_row_offset_idx": 22,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 2,
++            "start_row_offset_idx": 21,
++            "text": "21.50"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 4,
++            "end_row_offset_idx": 22,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 3,
++            "start_row_offset_idx": 21,
++            "text": "42.00"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 1,
++            "end_row_offset_idx": 23,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 0,
++            "start_row_offset_idx": 22,
++            "text": "Item 22"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 2,
++            "end_row_offset_idx": 23,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 1,
++            "start_row_offset_idx": 22,
++            "text": "22"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 3,
++            "end_row_offset_idx": 23,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 2,
++            "start_row_offset_idx": 22,
++            "text": "22.50"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 4,
++            "end_row_offset_idx": 23,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 3,
++            "start_row_offset_idx": 22,
++            "text": "44.00"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 1,
++            "end_row_offset_idx": 24,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 0,
++            "start_row_offset_idx": 23,
++            "text": "Item 23"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 2,
++            "end_row_offset_idx": 24,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 1,
++            "start_row_offset_idx": 23,
++            "text": "23"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 3,
++            "end_row_offset_idx": 24,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 2,
++            "start_row_offset_idx": 23,
++            "text": "23.50"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 4,
++            "end_row_offset_idx": 24,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 3,
++            "start_row_offset_idx": 23,
++            "text": "46.00"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 1,
++            "end_row_offset_idx": 25,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 0,
++            "start_row_offset_idx": 24,
++            "text": "Item 24"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 2,
++            "end_row_offset_idx": 25,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 1,
++            "start_row_offset_idx": 24,
++            "text": "24"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 3,
++            "end_row_offset_idx": 25,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 2,
++            "start_row_offset_idx": 24,
++            "text": "24.50"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 4,
++            "end_row_offset_idx": 25,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 3,
++            "start_row_offset_idx": 24,
++            "text": "48.00"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 1,
++            "end_row_offset_idx": 26,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 0,
++            "start_row_offset_idx": 25,
++            "text": "Item 25"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 2,
++            "end_row_offset_idx": 26,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 1,
++            "start_row_offset_idx": 25,
++            "text": "25"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 3,
++            "end_row_offset_idx": 26,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 2,
++            "start_row_offset_idx": 25,
++            "text": "25.50"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 4,
++            "end_row_offset_idx": 26,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 3,
++            "start_row_offset_idx": 25,
++            "text": "50.00"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 1,
++            "end_row_offset_idx": 27,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 0,
++            "start_row_offset_idx": 26,
++            "text": "Item 26"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 2,
++            "end_row_offset_idx": 27,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 1,
++            "start_row_offset_idx": 26,
++            "text": "26"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 3,
++            "end_row_offset_idx": 27,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 2,
++            "start_row_offset_idx": 26,
++            "text": "26.50"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 4,
++            "end_row_offset_idx": 27,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 3,
++            "start_row_offset_idx": 26,
++            "text": "52.00"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 1,
++            "end_row_offset_idx": 28,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 0,
++            "start_row_offset_idx": 27,
++            "text": "Item 27"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 2,
++            "end_row_offset_idx": 28,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 1,
++            "start_row_offset_idx": 27,
++            "text": "27"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 3,
++            "end_row_offset_idx": 28,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 2,
++            "start_row_offset_idx": 27,
++            "text": "27.50"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 4,
++            "end_row_offset_idx": 28,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 3,
++            "start_row_offset_idx": 27,
++            "text": "54.00"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 1,
++            "end_row_offset_idx": 29,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 0,
++            "start_row_offset_idx": 28,
++            "text": "Item 28"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 2,
++            "end_row_offset_idx": 29,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 1,
++            "start_row_offset_idx": 28,
++            "text": "28"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 3,
++            "end_row_offset_idx": 29,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 2,
++            "start_row_offset_idx": 28,
++            "text": "28.50"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 4,
++            "end_row_offset_idx": 29,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 3,
++            "start_row_offset_idx": 28,
++            "text": "56.00"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 1,
++            "end_row_offset_idx": 30,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 0,
++            "start_row_offset_idx": 29,
++            "text": "Item 29"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 2,
++            "end_row_offset_idx": 30,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 1,
++            "start_row_offset_idx": 29,
++            "text": "29"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 3,
++            "end_row_offset_idx": 30,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 2,
++            "start_row_offset_idx": 29,
++            "text": "29.50"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 4,
++            "end_row_offset_idx": 30,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 3,
++            "start_row_offset_idx": 29,
++            "text": "58.00"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 1,
++            "end_row_offset_idx": 31,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 0,
++            "start_row_offset_idx": 30,
++            "text": "Item 30"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 2,
++            "end_row_offset_idx": 31,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 1,
++            "start_row_offset_idx": 30,
++            "text": "30"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 3,
++            "end_row_offset_idx": 31,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 2,
++            "start_row_offset_idx": 30,
++            "text": "30.50"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 4,
++            "end_row_offset_idx": 31,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 3,
++            "start_row_offset_idx": 30,
++            "text": "60.00"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 1,
++            "end_row_offset_idx": 32,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 0,
++            "start_row_offset_idx": 31,
++            "text": "Item 31"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 2,
++            "end_row_offset_idx": 32,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 1,
++            "start_row_offset_idx": 31,
++            "text": "31"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 3,
++            "end_row_offset_idx": 32,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 2,
++            "start_row_offset_idx": 31,
++            "text": "31.50"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 4,
++            "end_row_offset_idx": 32,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 3,
++            "start_row_offset_idx": 31,
++            "text": "62.00"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 1,
++            "end_row_offset_idx": 33,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 0,
++            "start_row_offset_idx": 32,
++            "text": "Item 32"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 2,
++            "end_row_offset_idx": 33,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 1,
++            "start_row_offset_idx": 32,
++            "text": "32"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 3,
++            "end_row_offset_idx": 33,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 2,
++            "start_row_offset_idx": 32,
++            "text": "32.50"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 4,
++            "end_row_offset_idx": 33,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 3,
++            "start_row_offset_idx": 32,
++            "text": "64.00"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 1,
++            "end_row_offset_idx": 34,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 0,
++            "start_row_offset_idx": 33,
++            "text": "Item 33"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 2,
++            "end_row_offset_idx": 34,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 1,
++            "start_row_offset_idx": 33,
++            "text": "33"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 3,
++            "end_row_offset_idx": 34,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 2,
++            "start_row_offset_idx": 33,
++            "text": "33.50"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 4,
++            "end_row_offset_idx": 34,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 3,
++            "start_row_offset_idx": 33,
++            "text": "66.00"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 1,
++            "end_row_offset_idx": 35,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 0,
++            "start_row_offset_idx": 34,
++            "text": "Item 34"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 2,
++            "end_row_offset_idx": 35,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 1,
++            "start_row_offset_idx": 34,
++            "text": "34"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 3,
++            "end_row_offset_idx": 35,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 2,
++            "start_row_offset_idx": 34,
++            "text": "34.50"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 4,
++            "end_row_offset_idx": 35,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 3,
++            "start_row_offset_idx": 34,
++            "text": "68.00"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 1,
++            "end_row_offset_idx": 36,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 0,
++            "start_row_offset_idx": 35,
++            "text": "Item 35"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 2,
++            "end_row_offset_idx": 36,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 1,
++            "start_row_offset_idx": 35,
++            "text": "35"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 3,
++            "end_row_offset_idx": 36,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 2,
++            "start_row_offset_idx": 35,
++            "text": "35.50"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 4,
++            "end_row_offset_idx": 36,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 3,
++            "start_row_offset_idx": 35,
++            "text": "70.00"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 1,
++            "end_row_offset_idx": 37,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 0,
++            "start_row_offset_idx": 36,
++            "text": "Item 36"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 2,
++            "end_row_offset_idx": 37,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 1,
++            "start_row_offset_idx": 36,
++            "text": "36"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 3,
++            "end_row_offset_idx": 37,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 2,
++            "start_row_offset_idx": 36,
++            "text": "36.50"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 4,
++            "end_row_offset_idx": 37,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 3,
++            "start_row_offset_idx": 36,
++            "text": "72.00"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 1,
++            "end_row_offset_idx": 38,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 0,
++            "start_row_offset_idx": 37,
++            "text": "Item 37"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 2,
++            "end_row_offset_idx": 38,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 1,
++            "start_row_offset_idx": 37,
++            "text": "37"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 3,
++            "end_row_offset_idx": 38,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 2,
++            "start_row_offset_idx": 37,
++            "text": "37.50"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 4,
++            "end_row_offset_idx": 38,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 3,
++            "start_row_offset_idx": 37,
++            "text": "74.00"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 1,
++            "end_row_offset_idx": 39,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 0,
++            "start_row_offset_idx": 38,
++            "text": "Item 38"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 2,
++            "end_row_offset_idx": 39,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 1,
++            "start_row_offset_idx": 38,
++            "text": "38"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 3,
++            "end_row_offset_idx": 39,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 2,
++            "start_row_offset_idx": 38,
++            "text": "38.50"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 4,
++            "end_row_offset_idx": 39,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 3,
++            "start_row_offset_idx": 38,
++            "text": "76.00"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 1,
++            "end_row_offset_idx": 40,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 0,
++            "start_row_offset_idx": 39,
++            "text": "Item 39"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 2,
++            "end_row_offset_idx": 40,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 1,
++            "start_row_offset_idx": 39,
++            "text": "39"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 3,
++            "end_row_offset_idx": 40,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 2,
++            "start_row_offset_idx": 39,
++            "text": "39.50"
++          },
++          {
++            "col_span": 1,
++            "column_header": false,
++            "end_col_offset_idx": 4,
++            "end_row_offset_idx": 40,
++            "fillable": false,
++            "row_header": false,
++            "row_section": false,
++            "row_span": 1,
++            "start_col_offset_idx": 3,
++            "start_row_offset_idx": 39,
++            "text": "78.00"
++          }
++        ]
++      },
++      "footnotes": [],
++      "label": "table",
++      "parent": {
++        "$ref": "#/body"
++      },
++      "prov": [
++        {
++          "bbox": {
++            "b": 760.0,
++            "coord_origin": "TOPLEFT",
++            "l": 50.0,
++            "r": 550.0,
++            "t": 160.0
++          },
++          "charspan": [
++            0,
++            0
++          ],
++          "page_no": 2
++        }
++      ],
++      "references": [],
++      "self_ref": "#/tables/0"
++    }
++  ],
++  "texts": [
++    {
++      "children": [],
++      "content_layer": "body",
++      "label": "section_header",
++      "level": 1,
++      "orig": "Quarterly stock report",
++      "parent": {
++        "$ref": "#/body"
++      },
++      "prov": [
++        {
++          "bbox": {
++            "b": 140.0,
++            "coord_origin": "TOPLEFT",
++            "l": 50.0,
++            "r": 550.0,
++            "t": 80.0
++          },
++          "charspan": [
++            0,
++            0
++          ],
++          "page_no": 1
++        }
++      ],
++      "self_ref": "#/texts/0",
++      "text": "Quarterly stock report"
++    },
++    {
++      "children": [],
++      "content_layer": "body",
++      "label": "section_header",
++      "level": 2,
++      "orig": "Overview",
++      "parent": {
++        "$ref": "#/body"
++      },
++      "prov": [
++        {
++          "bbox": {
++            "b": 140.0,
++            "coord_origin": "TOPLEFT",
++            "l": 50.0,
++            "r": 550.0,
++            "t": 80.0
++          },
++          "charspan": [
++            0,
++            0
++          ],
++          "page_no": 1
++        }
++      ],
++      "self_ref": "#/texts/1",
++      "text": "Overview"
++    },
++    {
++      "children": [],
++      "content_layer": "body",
++      "label": "text",
++      "orig": "This synthetic report lists the items held in the example warehouse at the end of the quarter.",
++      "parent": {
++        "$ref": "#/body"
++      },
++      "prov": [
++        {
++          "bbox": {
++            "b": 200.0,
++            "coord_origin": "TOPLEFT",
++            "l": 50.0,
++            "r": 550.0,
++            "t": 160.0
++          },
++          "charspan": [
++            0,
++            0
++          ],
++          "page_no": 1
++        }
++      ],
++      "self_ref": "#/texts/2",
++      "text": "This synthetic report lists the items held in the example warehouse at the end of the quarter."
++    },
++    {
++      "children": [],
++      "content_layer": "body",
++      "label": "section_header",
++      "level": 2,
++      "orig": "Line items",
++      "parent": {
++        "$ref": "#/body"
++      },
++      "prov": [
++        {
++          "bbox": {
++            "b": 140.0,
++            "coord_origin": "TOPLEFT",
++            "l": 50.0,
++            "r": 550.0,
++            "t": 80.0
++          },
++          "charspan": [
++            0,
++            0
++          ],
++          "page_no": 2
++        }
++      ],
++      "self_ref": "#/texts/3",
++      "text": "Line items"
++    }
++  ],
++  "version": "1.11.0"
++}
+diff --git a/rag-sidecar/tests/test_docling_adapter.py b/rag-sidecar/tests/test_docling_adapter.py
+new file mode 100644
+index 0000000..2f5847b
+--- /dev/null
++++ b/rag-sidecar/tests/test_docling_adapter.py
+@@ -0,0 +1,187 @@
++import importlib.util
++import re
++from pathlib import Path
++
++import pytest
++
++pytest.importorskip("docling_core.transforms.chunker.hybrid_chunker")
++tiktoken = pytest.importorskip("tiktoken")
++
++from docling_core.transforms.chunker.hybrid_chunker import HybridChunker  # noqa: E402
++from docling_core.types.doc import DoclingDocument  # noqa: E402
++
++from rag_sidecar.contracts import DoclingOptions, ParseJobRequest, ParseResult  # noqa: E402
++from rag_sidecar.parse import docling_adapter  # noqa: E402
++
++FIXTURES = Path(__file__).parent / "fixtures" / "docling"
++ARTIFACT_NAME = re.compile(r"[a-z0-9_.-]{1,64}")
++SEPARATOR_ROW = re.compile(r"^\|[-: |]+\|$")
++
++
++def _builder():
++    spec = importlib.util.spec_from_file_location("build_docling_fixtures", FIXTURES / "build_fixtures.py")
++    assert spec is not None and spec.loader is not None
++    module = importlib.util.module_from_spec(spec)
++    spec.loader.exec_module(module)
++    return module
++
++
++def _load(name: str) -> DoclingDocument:
++    return DoclingDocument.load_from_json(FIXTURES / f"{name}.json")
++
++
++def _request(**overrides) -> ParseJobRequest:
++    values = {
++        "profile_id": "general@1",
++        "profile_version": 1,
++        "docling": DoclingOptions(
++            ocr=True,
++            force_full_page_ocr=False,
++            table_mode="accurate",
++            heading_hierarchy=True,
++            generate_picture_images=True,
++        ),
++        "ocr_languages": ["zh", "en", "it"],
++        "max_tokens": 200,
++        "repeat_table_header": True,
++    }
++    values.update(overrides)
++    return ParseJobRequest(**values)
++
++
++def _convert(name: str, tmp_path: Path, **overrides) -> ParseResult:
++    return docling_adapter.to_parse_result(_load(name), _request(**overrides), tmp_path)
++
++
++def _token_count(text: str) -> int:
++    return len(tiktoken.get_encoding("cl100k_base").encode(text))
++
++
++def test_committed_fixtures_equal_a_fresh_build():
++    fresh = _builder().build_all()
++    assert set(fresh) == {"table-report", "headings-zh", "pictures"}
++    for name, payload in fresh.items():
++        assert (FIXTURES / f"{name}.json").read_bytes() == payload, name
++
++
++def test_every_table_chunk_starts_with_the_header_row_and_separator(tmp_path):
++    result = _convert("table-report", tmp_path)
++    tables = [chunk for chunk in result.chunks if chunk.is_table]
++    assert len(tables) > 1
++    for chunk in tables:
++        lines = chunk.text.splitlines()
++        assert lines[0].startswith("| Item") and "Quantity" in lines[0]
++        assert SEPARATOR_ROW.match(lines[1])
++
++
++def test_table_header_is_the_header_row_and_separator_of_each_table_chunk(tmp_path):
++    result = _convert("table-report", tmp_path)
++    tables = [chunk for chunk in result.chunks if chunk.is_table]
++    assert len(tables) > 1
++    for chunk in tables:
++        assert chunk.table_header == "\n".join(chunk.text.splitlines()[:2])
++    assert all(chunk.table_header is None for chunk in result.chunks if not chunk.is_table)
++
++
++def test_a_disabled_header_repeat_leaves_later_table_chunks_without_a_header(tmp_path):
++    result = _convert("table-report", tmp_path, repeat_table_header=False)
++    tables = [chunk for chunk in result.chunks if chunk.is_table]
++    assert len(tables) > 1
++    assert tables[0].text.startswith("| Item")
++    assert any(not chunk.text.startswith("| Item") for chunk in tables[1:])
++
++
++def test_every_contextualized_text_is_within_max_tokens_on_cl100k(tmp_path):
++    for name in ("table-report", "headings-zh"):
++        result = _convert(name, tmp_path, max_tokens=200)
++        assert result.chunks
++        for chunk in result.chunks:
++            assert 0 < _token_count(chunk.contextualized_text) <= 200
++
++
++def test_contextualized_text_carries_the_heading_path(tmp_path):
++    result = _convert("table-report", tmp_path)
++    tables = [chunk for chunk in result.chunks if chunk.is_table]
++    assert tables
++    for chunk in tables:
++        assert chunk.contextualized_text.splitlines()[:3] == ["Quarterly stock report", "Line items", chunk.text.splitlines()[0]]
++
++
++def test_chinese_headings_come_outermost_first_with_their_pages(tmp_path):
++    result = _convert("headings-zh", tmp_path)
++    by_headings = {tuple(chunk.headings): chunk for chunk in result.chunks}
++    chapter = by_headings.get(("示例股份有限公司 2025 年度报告", "第三章 资产负债表"))
++    clause = by_headings.get(("示例股份有限公司 2025 年度报告", "第三章 资产负债表", "第5条 流动资产"))
++    assert chapter is not None and clause is not None
++    assert chapter.pages == [1]
++    assert clause.pages == [2]
++    assert "第5条 流动资产" in clause.contextualized_text
++
++
++def test_pictures_carry_page_bbox_share_and_an_artifact_name(tmp_path):
++    result = _convert("pictures", tmp_path)
++    assert [picture.page for picture in result.pictures] == [1, 2]
++    first, second = result.pictures
++    assert first.bbox == pytest.approx([100, 100, 300, 300])
++    assert first.page_area_share == pytest.approx(200 * 200 / (600 * 800))
++    assert second.bbox == pytest.approx([50, 100, 550, 500])
++    assert second.page_area_share == pytest.approx(500 * 400 / (600 * 800))
++    assert first.image_ref != second.image_ref
++    for picture in result.pictures:
++        assert ARTIFACT_NAME.fullmatch(picture.image_ref)
++        assert picture.image_ref in result.artifacts
++        assert (tmp_path / picture.image_ref).read_bytes().startswith(b"\x89PNG")
++
++
++def test_the_docling_json_is_written_and_listed_as_an_artifact(tmp_path):
++    result = _convert("pictures", tmp_path)
++    assert "docling.json" in result.artifacts
++    assert all(ARTIFACT_NAME.fullmatch(name) for name in result.artifacts)
++    assert all((tmp_path / name).is_file() for name in result.artifacts)
++    reloaded = DoclingDocument.load_from_json(tmp_path / "docling.json")
++    assert [text.text for text in reloaded.texts] == [text.text for text in _load("pictures").texts]
++
++
++def test_a_picture_without_image_data_is_skipped_with_a_warning(tmp_path):
++    doc = _load("pictures")
++    doc.pictures[0].image = None
++    result = docling_adapter.to_parse_result(doc, _request(), tmp_path)
++    assert [picture.page for picture in result.pictures] == [2]
++    assert result.warnings == ["picture_image_unavailable"]
++
++
++def test_parser_fields_page_count_and_markdown(tmp_path):
++    result = _convert("table-report", tmp_path)
++    assert result.parser == "docling"
++    assert re.fullmatch(r"docling-\d+\.\d+\.\d+", result.parser_version)
++    assert result.page_count == 2
++    assert result.partial is False
++    assert result.markdown.startswith("# Quarterly stock report")
++    assert "| Item" in result.markdown
++    assert ParseResult.model_validate_json(result.model_dump_json()) == result
++
++
++def test_language_is_the_majority_language_of_the_chunks(tmp_path):
++    assert _convert("headings-zh", tmp_path).language == "zh"
++    assert _convert("table-report", tmp_path).language == "en"
++
++
++@pytest.mark.parametrize(
++    ("text", "expected"),
++    [
++        ("The invoice must be paid within thirty days of the date of issue.", "en"),
++        ("Il pagamento della fattura deve essere effettuato entro trenta giorni dalla data di emissione.", "it"),
++        ("本合同自双方签字盖章之日起生效，有效期为三年。", "zh"),
++        ("1234 5678 ---", None),
++        ("", None),
++    ],
++)
++def test_detect_language(text, expected):
++    assert docling_adapter.detect_language(text) == expected
++
++
++def test_the_chunker_is_configured_with_the_markdown_table_serializer():
++    provider = docling_adapter.MarkdownTableProvider()
++    serializer = provider.get_serializer(DoclingDocument(name="empty"))
++    assert type(serializer.table_serializer).__name__ == "MarkdownTableSerializer"
++    assert isinstance(HybridChunker(serializer_provider=provider), HybridChunker)
+-- 
+2.43.0
+
+
+From e2ec330716c69e83586752f5f50eecd9267c3c33 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 24 Nov 2026 01:42:16 +0000
+Subject: [PATCH 2/2] feat(03-15): convert a DoclingDocument to a ParseResult
+ with visible table headers
+
+- HybridChunker uses OpenAITokenizer on cl100k_base and a Markdown table serializer, so every table chunk starts with its header and separator rows
+- Headings, pages, contextualized text, pictures (page, bbox, area share) and the docling.json artifact are mapped into the contract
+- Language is the length-weighted majority over chunks (zh, en, it)
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01SEn5g9gV3RHr18oaonxqof
+---
+ .../src/rag_sidecar/parse/docling_adapter.py  | 181 ++++++++++++++++--
+ rag-sidecar/tests/test_docling_adapter.py     |  12 +-
+ 2 files changed, 176 insertions(+), 17 deletions(-)
+
+diff --git a/rag-sidecar/src/rag_sidecar/parse/docling_adapter.py b/rag-sidecar/src/rag_sidecar/parse/docling_adapter.py
+index fba04a6..c76acf8 100644
+--- a/rag-sidecar/src/rag_sidecar/parse/docling_adapter.py
++++ b/rag-sidecar/src/rag_sidecar/parse/docling_adapter.py
+@@ -1,26 +1,183 @@
++import json
++import re
++from collections import Counter
++from importlib.metadata import version as _package_version
+ from pathlib import Path
+ 
+-from docling_core.transforms.chunker.hierarchical_chunker import ChunkingSerializerProvider
+-from docling_core.types.doc import DoclingDocument
++import tiktoken
++from docling_core.transforms.chunker.hierarchical_chunker import ChunkingDocSerializer, ChunkingSerializerProvider
++from docling_core.transforms.chunker.hybrid_chunker import HybridChunker
++from docling_core.transforms.chunker.tokenizer.openai import OpenAITokenizer
++from docling_core.transforms.serializer.markdown import MarkdownTableSerializer
++from docling_core.types.doc import DocItemLabel, DoclingDocument
+ 
+-from rag_sidecar.contracts import ParseJobRequest, ParseResult
++from rag_sidecar.contracts import ParseChunk, ParseJobRequest, ParsePicture, ParseResult
++
++DOCLING_JSON = "docling.json"
++SIDECAR_METADATA_KEY = "x_rag_sidecar"
++_SEPARATOR_ROW = re.compile(r"^\|[\s:|-]+\|$")
++_CJK = re.compile(r"[㐀-䶿一-鿿]")
++_WORD = re.compile(r"[a-zà-ÿ]+")
++_CJK_SHARE_FOR_ZH = 0.3
++_STOPWORDS = {
++    "en": frozenset(
++        "the of and to in is for that with on are be by as at from within this shall which or an not it its".split()
++    ),
++    "it": frozenset(
++        "il lo la le gli un una di del della dei delle che e è per con su al alla dal dalla nel nella entro sono non "
++        "come anche si da in ai agli".split()
++    ),
++}
+ 
+ 
+ class MarkdownTableProvider(ChunkingSerializerProvider):
+-    pass
++    """Serializes tables as Markdown so HybridChunker can repeat the header and separator rows."""
++
++    def get_serializer(self, doc: DoclingDocument) -> ChunkingDocSerializer:
++        return ChunkingDocSerializer(doc=doc, table_serializer=MarkdownTableSerializer())
++
++
++def parser_version() -> str:
++    return f"docling-{_package_version('docling-core')}"
+ 
+ 
+ def detect_language(text: str) -> str | None:
++    """Returns zh, en or it when the text gives clear evidence, otherwise None."""
++    letters = sum(1 for char in text if char.isalpha())
++    if letters == 0:
++        return None
++    if len(_CJK.findall(text)) / letters >= _CJK_SHARE_FOR_ZH:
++        return "zh"
++    words = _WORD.findall(text.lower())
++    scores = {language: sum(1 for word in words if word in stopwords) for language, stopwords in _STOPWORDS.items()}
++    best = max(scores.values())
++    if best == 0 or list(scores.values()).count(best) > 1:
++        return None
++    return max(scores, key=lambda language: scores[language])
++
++
++def _majority_language(texts: list[str]) -> str | None:
++    weights: Counter[str] = Counter()
++    for text in texts:
++        language = detect_language(text)
++        if language is not None:
++            weights[language] += len(text)
++    if not weights:
++        return None
++    return weights.most_common(1)[0][0]
++
++
++def _table_header(text: str) -> str | None:
++    lines = text.splitlines()
++    for index in range(1, min(len(lines), 6)):
++        if lines[index - 1].startswith("|") and _SEPARATOR_ROW.match(lines[index]):
++            return "\n".join(lines[index - 1 : index + 1])
+     return None
+ 
+ 
+-def to_parse_result(doc: DoclingDocument, request: ParseJobRequest, out_dir: Path) -> ParseResult:
++def _chunks(doc: DoclingDocument, request: ParseJobRequest) -> list[ParseChunk]:
++    tokenizer = OpenAITokenizer(tokenizer=tiktoken.get_encoding(request.tokenizer), max_tokens=request.max_tokens)
++    chunker = HybridChunker(
++        tokenizer=tokenizer,
++        repeat_table_header=request.repeat_table_header,
++        serializer_provider=MarkdownTableProvider(),
++    )
++    chunks: list[ParseChunk] = []
++    for raw in chunker.chunk(dl_doc=doc):
++        if not raw.text.strip():
++            continue
++        items = raw.meta.doc_items
++        is_table = any(item.label == DocItemLabel.TABLE for item in items)
++        pages = sorted({provenance.page_no for item in items for provenance in item.prov})
++        chunks.append(
++            ParseChunk(
++                text=raw.text,
++                contextualized_text=chunker.contextualize(chunk=raw),
++                headings=list(raw.meta.headings or []),
++                pages=pages,
++                is_table=is_table,
++                table_header=_table_header(raw.text) if is_table else None,
++            )
++        )
++    return chunks
++
++
++def _pictures(doc: DoclingDocument, out_dir: Path) -> tuple[list[ParsePicture], list[str], list[str]]:
++    pictures: list[ParsePicture] = []
++    artifacts: list[str] = []
++    warnings: list[str] = []
++    for number, picture in enumerate(doc.pictures, start=1):
++        if not picture.prov:
++            continue
++        provenance = picture.prov[0]
++        image = picture.get_image(doc)
++        if image is None:
++            if "picture_image_unavailable" not in warnings:
++                warnings.append("picture_image_unavailable")
++            continue
++        page = doc.pages.get(provenance.page_no)
++        left, top, right, bottom = provenance.bbox.l, provenance.bbox.t, provenance.bbox.r, provenance.bbox.b
++        share = 0.0
++        if page is not None:
++            box = provenance.bbox.to_top_left_origin(page_height=page.size.height)
++            left, top, right, bottom = box.l, box.t, box.r, box.b
++            page_area = page.size.width * page.size.height
++            if page_area > 0:
++                share = min(1.0, max(0.0, abs(right - left) * abs(bottom - top) / page_area))
++        name = f"picture-{number}.png"
++        image.save(out_dir / name, format="PNG")
++        artifacts.append(name)
++        pictures.append(
++            ParsePicture(
++                page=provenance.page_no,
++                bbox=[float(left), float(top), float(right), float(bottom)],
++                image_ref=name,
++                page_area_share=share,
++            )
++        )
++    return pictures, artifacts, warnings
++
++
++def _page_count(doc: DoclingDocument) -> int:
++    pages = set(doc.pages)
++    for item, _level in doc.iterate_items():
++        pages.update(provenance.page_no for provenance in getattr(item, "prov", []))
++    return max(pages, default=0)
++
++
++def write_docling_json(doc: DoclingDocument, out_dir: Path, parser: str, version: str) -> None:
++    payload = doc.export_to_dict()
++    payload[SIDECAR_METADATA_KEY] = {"parser": parser, "parser_version": version}
++    (out_dir / DOCLING_JSON).write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
++
++
++def to_parse_result(
++    doc: DoclingDocument,
++    request: ParseJobRequest,
++    out_dir: Path,
++    *,
++    parser: str = "docling",
++    parser_version_text: str | None = None,
++    warnings: list[str] | None = None,
++    partial: bool = False,
++    text_layer_page_share: float | None = None,
++) -> ParseResult:
++    """Chunks a DoclingDocument and writes docling.json plus one PNG per picture into out_dir."""
++    version = parser_version_text or parser_version()
++    chunks = _chunks(doc, request)
++    pictures, picture_artifacts, picture_warnings = _pictures(doc, out_dir)
++    write_docling_json(doc, out_dir, parser, version)
++    merged_warnings = list(dict.fromkeys([*(warnings or []), *picture_warnings]))
+     return ParseResult(
+-        markdown="",
+-        chunks=[],
+-        pictures=[],
+-        page_count=0,
+-        language=None,
+-        parser="docling",
+-        parser_version="skeleton",
++        markdown=doc.export_to_markdown(),
++        chunks=chunks,
++        pictures=pictures,
++        page_count=_page_count(doc),
++        language=_majority_language([chunk.contextualized_text for chunk in chunks]),
++        parser=parser,  # type: ignore[arg-type]
++        parser_version=version,
++        warnings=merged_warnings,
++        partial=partial,
++        artifacts=[DOCLING_JSON, *picture_artifacts],
++        text_layer_page_share=text_layer_page_share,
+     )
+diff --git a/rag-sidecar/tests/test_docling_adapter.py b/rag-sidecar/tests/test_docling_adapter.py
+index 2f5847b..0234266 100644
+--- a/rag-sidecar/tests/test_docling_adapter.py
++++ b/rag-sidecar/tests/test_docling_adapter.py
+@@ -8,6 +8,7 @@ pytest.importorskip("docling_core.transforms.chunker.hybrid_chunker")
+ tiktoken = pytest.importorskip("tiktoken")
+ 
+ from docling_core.transforms.chunker.hybrid_chunker import HybridChunker  # noqa: E402
++from docling_core.transforms.chunker.tokenizer.openai import OpenAITokenizer  # noqa: E402
+ from docling_core.types.doc import DoclingDocument  # noqa: E402
+ 
+ from rag_sidecar.contracts import DoclingOptions, ParseJobRequest, ParseResult  # noqa: E402
+@@ -87,8 +88,8 @@ def test_a_disabled_header_repeat_leaves_later_table_chunks_without_a_header(tmp
+     result = _convert("table-report", tmp_path, repeat_table_header=False)
+     tables = [chunk for chunk in result.chunks if chunk.is_table]
+     assert len(tables) > 1
+-    assert tables[0].text.startswith("| Item")
+-    assert any(not chunk.text.startswith("| Item") for chunk in tables[1:])
++    assert "Quantity" in tables[0].text.splitlines()[0]
++    assert all("Quantity" not in chunk.text.splitlines()[0] for chunk in tables[1:])
+ 
+ 
+ def test_every_contextualized_text_is_within_max_tokens_on_cl100k(tmp_path):
+@@ -156,8 +157,8 @@ def test_parser_fields_page_count_and_markdown(tmp_path):
+     assert re.fullmatch(r"docling-\d+\.\d+\.\d+", result.parser_version)
+     assert result.page_count == 2
+     assert result.partial is False
+-    assert result.markdown.startswith("# Quarterly stock report")
+-    assert "| Item" in result.markdown
++    assert "Quarterly stock report" in result.markdown.splitlines()[0]
++    assert "| Item 39" in result.markdown
+     assert ParseResult.model_validate_json(result.model_dump_json()) == result
+ 
+ 
+@@ -184,4 +185,5 @@ def test_the_chunker_is_configured_with_the_markdown_table_serializer():
+     provider = docling_adapter.MarkdownTableProvider()
+     serializer = provider.get_serializer(DoclingDocument(name="empty"))
+     assert type(serializer.table_serializer).__name__ == "MarkdownTableSerializer"
+-    assert isinstance(HybridChunker(serializer_provider=provider), HybridChunker)
++    tokenizer = OpenAITokenizer(tokenizer=tiktoken.get_encoding("cl100k_base"), max_tokens=200)
++    assert isinstance(HybridChunker(tokenizer=tokenizer, serializer_provider=provider), HybridChunker)
+-- 
+2.43.0
+

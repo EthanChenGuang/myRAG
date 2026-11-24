@@ -1,65 +1,56 @@
 {
   "version": "1.0",
-  "timestamp": "2026-11-23T22:46:11.212Z",
-  "phase": "02",
-  "phase_name": "unified-retrieval-pipeline-tenant-scope",
-  "phase_dir": ".planning/phases/02-unified-retrieval-pipeline-tenant-scope",
-  "plan": 28,
+  "timestamp": "2026-11-24T12:00:00Z",
+  "phase": "03",
+  "phase_name": "unified-ingestion-embedding-profiles",
+  "phase_dir": ".planning/phases/03-unified-ingestion-embedding-profiles",
+  "plan": 13,
   "task": 1,
-  "total_tasks": 36,
+  "total_tasks": 49,
   "status": "paused",
   "branch": "claude/ecstatic-hamilton-86gtwv",
-  "head_at_pause": "ba2fcc8 + planning checkpoints (see git log)",
   "completed_tasks": [
-    {"id": "02-01..02-27", "name": "Phase 2 plans 01-27", "status": "done", "commit": "ba2fcc8"},
-    {"id": "02-29..02-35", "name": "Phase 2 plans 29-35", "status": "done"},
-    {"id": "SEC-docs-ai2rag", "name": "Security fixes for documents/[id] and ai-to-rag", "status": "done"},
-    {"id": "SEC-S1..S6", "name": "Audit security batches: S1 admin guard and signed admin cookie, S2 images, S3 mcp/execute deleted plus approve and tool-execution-state, S4 nango, S5 whatsapp, S6 single-tenant writes and upload", "status": "done", "commit": "816390e"},
-    {"id": "SAFETY-gmail", "name": "Gmail draft-to-send redirect removed (chat + approve)", "status": "done"},
-    {"id": "02-28", "name": "Langfuse review scores (eval side)", "status": "in_progress", "progress": "2 commits (RED, then GREEN contract/samples/judge.json); saved as .planning/paused/02-28.patch against ba2fcc8"},
-    {"id": "SEC-S7", "name": "config/*, config/connectors, mcp/servers, mcp/health admin guard (C1, H5, H6 + mediums)", "status": "in_progress", "progress": "uncommitted work saved as .planning/paused/S7-config-mcp.patch against 7e8933e; agent stopped while writing the shared test fixture; untested"},
-    {"id": "P3-rev2", "name": "Phase 3 plan revision pass 2 (5 blockers from 03-PLAN-CHECK.md 'Re-check (pass 2)')", "status": "in_progress", "progress": "stopped while editing 03-07 Task 1; 03-07-PLAN.md partially edited"},
-    {"id": "P4-plan", "name": "Phase 4 planning", "status": "in_progress", "progress": "32 plan files written (04-01..04-32), planner stopped mid-run; set is incomplete and unvalidated"}
+    {"id": "P2", "name": "Phase 2 complete: 36/36, G4 gaps closed, re-verified 7/7 (human_needed live checks), PIPE-06 complete", "status": "done"},
+    {"id": "03-01..03-12", "name": "Phase 3 plans 01-12 merged with full gates green", "status": "done"},
+    {"id": "fix-torch", "name": "Sidecar torch/torchvision locked from the CPU index (no CUDA libs), lock test added", "status": "done"},
+    {"id": "P3.1-plans", "name": "Phase 3.1: 55 plans, plan-check pass 2 PASS", "status": "done"},
+    {"id": "P5-plans", "name": "Phase 5: 26 plans, plan-check pass 1 (W1 fixed upstream, I1 accepted)", "status": "done"},
+    {"id": "P5.1-prep", "name": "Phase 5.1: CONTEXT + adjustments A-1..A-14, RESEARCH, PATTERNS", "status": "done"},
+    {"id": "P6-prep", "name": "Phase 6: CONTEXT + adjustments A-1..A-10, RESEARCH, PATTERNS", "status": "done"},
+    {"id": "P7-prep", "name": "Phase 7: CONTEXT + adjustments A-1..A-12, RESEARCH, PATTERNS", "status": "done"},
+    {"id": "03-13", "name": "Phase 3 tracer", "status": "in_progress", "progress": "3 task commits done, gates and SUMMARY not run; .planning/paused/p3/03-13-commits.patch (base 2875743)"},
+    {"id": "03-14", "name": "Invoice extraction / validators", "status": "in_progress", "progress": "3 commits + uncommitted labels.py; .planning/paused/p3/03-14-commits.patch and 03-14-uncommitted.patch (base df280c6)"},
+    {"id": "03-15", "name": "Docling adapter", "status": "in_progress", "progress": "2 commits (RED + first GREEN); .planning/paused/p3/03-15-commits.patch (base df280c6)"}
   ],
   "remaining_tasks": [
-    {"id": "02-28", "name": "Finish 02-28 (apply the patch or re-run the plan from ba2fcc8)", "status": "not_started"},
-    {"id": "SEC-S7", "name": "Finish S7 (apply the patch and complete it, or re-run the brief)", "status": "not_started"},
-    {"id": "02-36", "name": "Phase 2 closing plan (depends on 02-28)", "status": "not_started"},
-    {"id": "SEC-review", "name": "Opus code review of all security fixes", "status": "not_started"},
-    {"id": "P2-gates", "name": "Phase 2 code-review gate, regression gate, verifier, mark REQUIREMENTS, ROADMAP update", "status": "not_started"},
-    {"id": "P3-rev2", "name": "Finish Phase 3 plan revision pass 2, then plan-checker pass 3", "status": "not_started"},
-    {"id": "P4-plan", "name": "Finish Phase 4 plans, then plan-checker", "status": "not_started"},
-    {"id": "P3.1+", "name": "Phase 3.1 research/patterns/plans; then phases 5, 5.1, 6, 7", "status": "not_started"},
-    {"id": "P3-exec", "name": "Execute Phase 3 (after Phase 2 done)", "status": "not_started"}
+    {"id": "03-13/14/15", "name": "Restore patches into worktrees (git am), finish remaining tasks, SUMMARY, merge with full gates", "status": "not_started"},
+    {"id": "03-rest", "name": "Phase 3 waves 4-12 (03-13b, 03-16..03-48), then code review, verification, REQUIREMENTS, ROADMAP", "status": "not_started"},
+    {"id": "P6-plans", "name": "Phase 6 planning: 46 draft plans written, planner stopped in wave 6; finish (planner revision mode), validators, plan-check", "status": "not_started"},
+    {"id": "P7-plans", "name": "Phase 7 planning: 24 draft plans, no index/validation; finish, validators, plan-check", "status": "not_started"},
+    {"id": "P5.1-plans", "name": "Phase 5.1 planning (planner had not written any plan yet)", "status": "not_started"},
+    {"id": "P3.1-exec", "name": "Execute Phase 3.1 after Phase 3", "status": "not_started"},
+    {"id": "P4-exec", "name": "Execute Phase 4 after Phase 3 (3.1 in parallel where deps allow)", "status": "not_started"}
   ],
-  "blockers": [
-    {"description": "03-05 has a blocking legitimacy checkpoint for nine SUS Python packages plus huggingface_hub", "type": "human_action", "workaround": "none; user must approve before Phase 3 wave 1 installs"}
-  ],
+  "blockers": [],
   "async_jobs": [],
   "human_actions_pending": [
-    {"action": "Apply DB DDL from supabase/*-setup.sql: tool_execution_states.user_id column; nango_connections UNIQUE(connection_id) (dedupe duplicates first)", "context": "security fixes S3 and S4", "blocking": false},
-    {"action": "Admins must log in again (admin_session cookie is now HMAC-signed)", "context": "security fix S1", "blocking": false},
-    {"action": "Set WHATSAPP_WEBHOOK_SECRET in production (webhook returns 503 without it)", "context": "security fix S5", "blocking": false},
-    {"action": "Phase 1 open items: nightly eval hand-check, golden-item drafts from the real KB, live baseline", "context": "Phase 1 human verification", "blocking": false},
-    {"action": "Live checks: embed widget error bubble, Config UI cards, Vercel on Node 22, voice-agent image build and live voice session with token, Langfuse review tags in a real project, pr-smoke on a runner", "context": "Phase 2 VERIFICATION", "blocking": false}
+    {"action": "Confirm huggingface_hub 1.33.0 instead of the approved 2.4.0 (docling-ibm-models requires <2) and transformers constrained to 5.23.0", "context": "03-05 install", "blocking": false},
+    {"action": "03.1-04 package checkpoint: answer 'approved' at execution (user already approved pdfplumber 0.11.11 and ray[data] 2.60.1 to the orchestrator; agents will not accept a relayed approval)", "context": "Phase 3.1", "blocking": true},
+    {"action": "Phase 5 checkpoints: 05-05 packages (@ai-sdk/anthropic 3.0.143, HHEM rev, flan-t5-base rev), 05-10 which Claude models get anthropicId (recommend 5.5 family), 05-26 live keys", "context": "Phase 5", "blocking": true},
+    {"action": "Phase 6 packages: LangChain trio not before 2026-12-04 with --save-exact --before; optional redisvl 0.32.0/redis 8.1.0", "context": "Phase 6", "blocking": true},
+    {"action": "Phase 7: @weaviate/node 3.15.5 + @qdrant/js-client-rest 1.20.0 approval; Vercel plan; hosting/region/read-only keys; backend-canary branch protection", "context": "Phase 7", "blocking": true},
+    {"action": "Phase 5.1: Prompt Guard license + HF gated access + build token; Lakera account/key/region/retention", "context": "Phase 5.1", "blocking": false},
+    {"action": "Live DB: back up, then apply supabase/migrations in `scripts/setup-database.sh --list-migrations <mode>` order (03-01, 03-09, 03-10 so far) in a quiet window; multi-tenant search-RPC revoke patch after the Phase 2 app deploy", "context": "Phase 2/3", "blocking": false},
+    {"action": "Build `docker build --target docling rag-sidecar` once and confirm model download", "context": "03-05", "blocking": false},
+    {"action": "Phase 2 live checks (11 items in 02-VERIFICATION.md); VOICE_MAX_ACTIVE_ROOMS == VOICE_AGENT_MAX_SESSIONS; deploy app + voice agent together", "context": "Phase 2", "blocking": false}
   ],
   "decisions": [
-    {"decision": "All questions follow the orchestrator's recommendations; work autonomously; use parallel agents", "rationale": "standing user instruction", "phase": "all"},
-    {"decision": "Planning, research, review and verification run on Opus; executors on Sonnet; Fable only on request", "rationale": "user decision, .claude/rules/gsd-model-roles.md", "phase": "all"},
-    {"decision": "Fix old bugs found along the way (security audit batches S1-S7, Gmail approval integrity)", "rationale": "user: fix the old bugs too", "phase": "02"},
-    {"decision": "Phase 4 D-30..D-33: fallback similarity floor keeps strict refusal; refusal drops candidates; cross-language no-answer items; lower-case ids at mint", "rationale": "research open questions resolved per recommendations", "phase": "04"},
-    {"decision": "Subagent commits keep the attribution trailer their own harness gives; merge commits use the session attribution", "rationale": "accurate attribution", "phase": "all"}
+    {"decision": "Standing user instruction: decide by the orchestrator's recommendation, work autonomously and in parallel, fix old (security) bugs with a test that fails on old code, push only to claude/ecstatic-hamilton-86gtwv, no PR, no secrets", "rationale": "user", "phase": "all"},
+    {"decision": "Opus for research/planning/plan-check/review/verification; Sonnet gsd-executor in manual worktrees /home/user/wt/<plan> on exec/<plan>", "rationale": ".claude/rules/gsd-model-roles.md", "phase": "all"},
+    {"decision": "Post-research adjustments recorded in each phase CONTEXT ('Adjustments after research'): 3.1 A-1..A-10, 5.1 A-1..A-14, 6 A-1..A-10, 7 A-1..A-12", "rationale": "research findings, recommended options", "phase": "3.1-7"},
+    {"decision": "03-05 pins: docling 2.150.1, docling-core 2.107.1, huggingface_hub 1.33.0, transformers 5.23.0, torch 2.15.0+cpu; exclude-newer 2026-11-17 with exemptions for existing pins and torch", "rationale": "user approval + resolver constraints", "phase": "03"}
   ],
-  "uncommitted_files": [
-    " M .planning/phases/03-unified-ingestion-embedding-profiles/03-07-PLAN.md",
-    " M .planning/phases/04-hybrid-retrieval-reranking-calibrated-refusal/04-04-PLAN.md",
-    " M .planning/phases/04-hybrid-retrieval-reranking-calibrated-refusal/04-21-PLAN.md",
-    "?? .planning/paused/",
-    "?? .planning/phases/04-hybrid-retrieval-reranking-calibrated-refusal/04-30-PLAN.md",
-    "?? .planning/phases/04-hybrid-retrieval-reranking-calibrated-refusal/04-31-PLAN.md",
-    "?? .planning/phases/04-hybrid-retrieval-reranking-calibrated-refusal/04-32-PLAN.md"
-  ],
-  "uncommitted_note": "All of the above are committed by the pause commit itself.",
-  "next_action": "Read .planning/phases/02-unified-retrieval-pipeline-tenant-scope/.continue-here.md, then apply .planning/paused/02-28.patch in a worktree based on ba2fcc8 (git apply --3way) and finish 02-28, in parallel with finishing S7 from .planning/paused/S7-config-mcp.patch.",
-  "context_notes": "The orchestrator merges each executor branch with git merge --no-ff and a message carrying trailers, then runs: npx next typegen; node scripts/ci/tsc-ratchet.mjs (must be 0); npx vitest run; node --import tsx --test tests/*.test.mts; node scripts/ci/check-rag-boundary.mjs; for eval changes, also (cd eval && uv run --all-extras --frozen pytest -q) and (cd rag-sidecar && uv run --frozen pytest -q). Executor sandboxes refuse commands naming the eval directory, so the orchestrator runs eval pytest itself; rag_eval.paired resolves paths from the repo root."
+  "uncommitted_files": ["see git status at pause commit; all planning drafts and patches are committed by the pause commit"],
+  "next_action": "Read .planning/phases/03-unified-ingestion-embedding-profiles/.continue-here.md, then restore 03-13/14/15 from .planning/paused/p3/ into fresh worktrees and finish them, while relaunching the Phase 5.1/6/7 planners.",
+  "context_notes": "Merge procedure: git merge --no-ff exec/<plan> with trailers; remove worktree and branch; run full gates in the main tree (typegen+tsc, vitest, node tests/*.test.mts, tests/rag-db/*.test.mts, rag-boundary, check-workflows, check-config, sidecar pytest, eval pytest --all-extras when eval/sidecar touched, smoke tier `npm run test-rag -- --out <dir>` when retrieval-visible data changes); push only when green."
 }

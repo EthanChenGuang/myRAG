@@ -314,10 +314,10 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 5.1 → 6 → 7. 
 |-------|----------------|--------|-----------|
 | 1. Evaluation Harness & Baseline | 22/22 | In Progress | - |
 | 2. Unified Retrieval Pipeline & Tenant Scope | 36/36 | Complete (live checks pending) | 2026-11-24 |
-| 3. Unified Ingestion & Embedding Profiles | 0/49 | Planned | - |
-| 3.1. Tiered Parsing, Incremental Queue & Bulk Backfill (INSERTED) | 0/54 | Planned (revising after plan-check) | - |
+| 3. Unified Ingestion & Embedding Profiles | 12/49 | In Progress | - |
+| 3.1. Tiered Parsing, Incremental Queue & Bulk Backfill (INSERTED) | 0/55 | Planned (plan-check PASS) | - |
 | 4. Hybrid Retrieval, Reranking & Calibrated Refusal | 0/45 | Planned | - |
-| 5. Verified Citations & Groundedness | 0/TBD | Not started | - |
-| 5.1. Prompt Injection Defense (INSERTED) | 0/TBD | Not started | - |
-| 6. Query Layer (LlamaIndex & LangChain) | 0/TBD | Not started | - |
-| 7. External Backends & Release Defaults | 0/TBD | Not started | - |
+| 5. Verified Citations & Groundedness | 0/26 | Planned (plan-check PASS after W1 fix) | - |
+| 5.1. Prompt Injection Defense (INSERTED) | 0/TBD | Context+research+patterns done; planning not started | - |
+| 6. Query Layer (LlamaIndex & LangChain) | 0/TBD | Planning in progress (46 draft plans) | - |
+| 7. External Backends & Release Defaults | 0/TBD | Planning in progress (24 draft plans) | - |

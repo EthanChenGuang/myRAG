@@ -27,10 +27,10 @@ See: .planning/PROJECT.md (updated 2026-11-22)
 
 ## Current Position
 
-Phase: 02 (Unified Retrieval Pipeline & Tenant Scope) — COMPLETE (human_needed: 11 live checks); next: execute Phase 3
-Plan: 36 of 36 complete; security batches S1-S9f, review fixes G1-G3 and verification gap fixes G4 merged
-Status: Phase 2 re-verified 7/7; Phase 3.1 plans (54) written, plan-check pass 1 running; Phase 5, 5.1, 6, 7 context capture running
-Last activity: 2026-11-24 — G4 merged; gates green (tsc 0, vitest 1333, node 136, eval 315, sidecar 189)
+Phase: 03 (Unified Ingestion & Embedding Profiles) — EXECUTING (paused 2026-11-24 for account switch)
+Plan: 12 of 49 merged (03-01..03-12); 03-13, 03-14, 03-15 partial, saved as patches in .planning/paused/p3/
+Status: Phase 2 complete (human_needed live checks). Plans: 3.1 (55, PASS), 4 (45, PASS), 5 (26, PASS). 6 and 7 drafts in progress; 5.1 not yet planned.
+Last activity: 2026-11-24 — 03-12 + torch CPU-index fix merged; gates green (tsc 0, vitest 1534, node 143, rag-db 145+3 skip, sidecar 422, eval 333)
 
 Progress: [█████████░] 94%
 

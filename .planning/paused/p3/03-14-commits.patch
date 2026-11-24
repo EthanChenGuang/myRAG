@@ -1,0 +1,968 @@
+From 0a6b299cb612b05e50d83394eff2ae5b91061df5 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 24 Nov 2026 01:39:35 +0000
+Subject: [PATCH 1/3] test(03-14): add failing tests for date, amount and
+ tax-id validators
+
+- Dates in zh, day-first and ISO forms; impossible dates rejected
+- Amounts with comma or dot decimals chosen by locale cues
+- Tax ids classified per scheme against shared stdnum-generated vectors
+- Stub modules return empty results so the assertions fail
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01SEn5g9gV3RHr18oaonxqof
+---
+ .../src/rag_sidecar/extract/__init__.py       |   0
+ .../src/rag_sidecar/extract/amounts.py        |   6 +
+ rag-sidecar/src/rag_sidecar/extract/dates.py  |   9 +
+ .../src/rag_sidecar/extract/tax_ids.py        |  18 ++
+ rag-sidecar/tests/test_tax_id_vectors.py      | 105 +++++++++
+ tests/fixtures/ingest/tax-id-vectors.json     | 222 ++++++++++++++++++
+ 6 files changed, 360 insertions(+)
+ create mode 100644 rag-sidecar/src/rag_sidecar/extract/__init__.py
+ create mode 100644 rag-sidecar/src/rag_sidecar/extract/amounts.py
+ create mode 100644 rag-sidecar/src/rag_sidecar/extract/dates.py
+ create mode 100644 rag-sidecar/src/rag_sidecar/extract/tax_ids.py
+ create mode 100644 rag-sidecar/tests/test_tax_id_vectors.py
+ create mode 100644 tests/fixtures/ingest/tax-id-vectors.json
+
+diff --git a/rag-sidecar/src/rag_sidecar/extract/__init__.py b/rag-sidecar/src/rag_sidecar/extract/__init__.py
+new file mode 100644
+index 0000000..e69de29
+diff --git a/rag-sidecar/src/rag_sidecar/extract/amounts.py b/rag-sidecar/src/rag_sidecar/extract/amounts.py
+new file mode 100644
+index 0000000..99a8d7d
+--- /dev/null
++++ b/rag-sidecar/src/rag_sidecar/extract/amounts.py
+@@ -0,0 +1,6 @@
++def parse_amount(text: str, locale_hint: str | None = None) -> str | None:
++    return None
++
++
++def detect_currency(text: str) -> str | None:
++    return None
+diff --git a/rag-sidecar/src/rag_sidecar/extract/dates.py b/rag-sidecar/src/rag_sidecar/extract/dates.py
+new file mode 100644
+index 0000000..38a546c
+--- /dev/null
++++ b/rag-sidecar/src/rag_sidecar/extract/dates.py
+@@ -0,0 +1,9 @@
++from datetime import date
++
++
++def find_date(text: str) -> date | None:
++    return None
++
++
++def parse_date(text: str) -> date | None:
++    return None
+diff --git a/rag-sidecar/src/rag_sidecar/extract/tax_ids.py b/rag-sidecar/src/rag_sidecar/extract/tax_ids.py
+new file mode 100644
+index 0000000..92e2785
+--- /dev/null
++++ b/rag-sidecar/src/rag_sidecar/extract/tax_ids.py
+@@ -0,0 +1,18 @@
++from dataclasses import dataclass
++
++from rag_sidecar.contracts.ingest import TaxIdScheme
++
++
++@dataclass(frozen=True)
++class TaxIdCheck:
++    scheme: TaxIdScheme
++    valid: bool
++    normalized: str
++
++
++def classify_tax_id(raw: str) -> TaxIdCheck:
++    return TaxIdCheck(scheme="unknown", valid=False, normalized="")
++
++
++def render_tax_id_vectors() -> str:
++    return ""
+diff --git a/rag-sidecar/tests/test_tax_id_vectors.py b/rag-sidecar/tests/test_tax_id_vectors.py
+new file mode 100644
+index 0000000..f1eee2d
+--- /dev/null
++++ b/rag-sidecar/tests/test_tax_id_vectors.py
+@@ -0,0 +1,105 @@
++import json
++from datetime import date
++from pathlib import Path
++
++import pytest
++
++from rag_sidecar.extract.amounts import detect_currency, parse_amount
++from rag_sidecar.extract.dates import find_date, parse_date
++from rag_sidecar.extract.tax_ids import classify_tax_id, render_tax_id_vectors
++
++VECTORS_PATH = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "ingest" / "tax-id-vectors.json"
++VECTORS = json.loads(VECTORS_PATH.read_text(encoding="utf-8"))["vectors"]
++
++
++def test_parse_date_reads_the_chinese_form():
++    assert parse_date("2025年3月15日") == date(2025, 3, 15)
++    assert parse_date("2025年03月05日") == date(2025, 3, 5)
++
++
++def test_parse_date_reads_day_first_slash_form():
++    assert parse_date("15/03/2025") == date(2025, 3, 15)
++    assert parse_date("5/3/2025") == date(2025, 3, 5)
++
++
++def test_parse_date_reads_iso_form():
++    assert parse_date("2025-03-15") == date(2025, 3, 15)
++
++
++def test_parse_date_rejects_impossible_calendar_dates():
++    assert parse_date("31/02/2025") is None
++    assert parse_date("2025-13-01") is None
++    assert parse_date("no date here") is None
++
++
++def test_find_date_picks_the_first_date_inside_a_longer_value():
++    assert find_date("Data 15/03/2025 scadenza 14/04/2025") == date(2025, 3, 15)
++    assert find_date("开票日期 2025年3月15日 (含税)") == date(2025, 3, 15)
++
++
++def test_parse_amount_handles_both_separator_conventions():
++    assert parse_amount("1.234,56", locale_hint="it") == "1234.56"
++    assert parse_amount("1,234.56") == "1234.56"
++    assert parse_amount("1.234,56") == "1234.56"
++
++
++def test_parse_amount_uses_the_locale_for_a_lone_separator():
++    assert parse_amount("99,00") == "99.00"
++    assert parse_amount("1.234", locale_hint="it") == "1234"
++    assert parse_amount("1,234", locale_hint="it") == "1.234"
++    assert parse_amount("1,234", locale_hint="en") == "1234"
++    assert parse_amount("1 234,50") == "1234.50"
++
++
++def test_parse_amount_skips_percentages_and_signs_negatives():
++    assert parse_amount("Tax 8 % 107.36") == "107.36"
++    assert parse_amount("-12,50", locale_hint="it") == "-12.50"
++    assert parse_amount("n/a") is None
++
++
++def test_currency_is_detected_separately_from_the_amount():
++    assert parse_amount("€ 99,00") == "99.00"
++    assert detect_currency("€ 99,00") == "EUR"
++    assert parse_amount("¥1,200.00") == "1200.00"
++    assert detect_currency("¥1,200.00") == "CNY"
++    assert detect_currency("Total USD 10.00") == "USD"
++    assert detect_currency("Total 10.00") is None
++
++
++def test_classify_tax_id_accepts_the_synthetic_ids_of_each_scheme():
++    italian = classify_tax_id("99999999990")
++    assert (italian.scheme, italian.valid) == ("it_iva", True)
++    chinese = classify_tax_id("91000000MA0000000N")
++    assert (chinese.scheme, chinese.valid) == ("cn_uscc", True)
++    european = classify_tax_id("IT99999999990")
++    assert (european.scheme, european.valid) == ("eu_vat", True)
++
++
++def test_classify_tax_id_rejects_a_failed_checksum():
++    broken = classify_tax_id("99999999991")
++    assert (broken.scheme, broken.valid) == ("it_iva", False)
++    assert classify_tax_id("91000000MA0000000X").valid is False
++    assert classify_tax_id("IT99999999991").valid is False
++
++
++def test_classify_tax_id_normalizes_separators_and_case():
++    spaced = classify_tax_id("it 999 999 999 90")
++    assert (spaced.scheme, spaced.valid, spaced.normalized) == ("eu_vat", True, "IT99999999990")
++
++
++@pytest.mark.parametrize("vector", VECTORS, ids=[f"{v['scheme']}:{v['value']}" for v in VECTORS])
++def test_every_committed_vector_matches_the_classifier(vector):
++    result = classify_tax_id(vector["value"])
++    assert (result.scheme, result.valid) == (vector["scheme"], vector["valid"])
++
++
++def test_each_scheme_has_four_valid_and_four_invalid_vectors():
++    for scheme in ("it_iva", "cn_uscc", "eu_vat"):
++        valid = [v for v in VECTORS if v["scheme"] == scheme and v["valid"]]
++        invalid = [v for v in VECTORS if v["scheme"] == scheme and not v["valid"]]
++        assert len(valid) >= 4, scheme
++        assert len(invalid) >= 4, scheme
++
++
++def test_committed_vector_file_equals_the_regenerated_content():
++    assert render_tax_id_vectors() == VECTORS_PATH.read_text(encoding="utf-8")
+diff --git a/tests/fixtures/ingest/tax-id-vectors.json b/tests/fixtures/ingest/tax-id-vectors.json
+new file mode 100644
+index 0000000..18a2a92
+--- /dev/null
++++ b/tests/fixtures/ingest/tax-id-vectors.json
+@@ -0,0 +1,222 @@
++{
++  "schema_version": 1,
++  "note": "synthetic ids, validity computed with python-stdnum; regenerate with: uv run --directory rag-sidecar python -m rag_sidecar.extract.tax_ids",
++  "normalization": "remove whitespace and . - / _ then uppercase; 11 digits is it_iva, 18 letters or digits is cn_uscc, two letters plus 2 to 12 letters or digits is eu_vat, anything else is unknown and invalid",
++  "vectors": [
++    {
++      "scheme": "it_iva",
++      "value": "99999999990",
++      "valid": true
++    },
++    {
++      "scheme": "it_iva",
++      "value": "00000010017",
++      "valid": true
++    },
++    {
++      "scheme": "it_iva",
++      "value": "00000021006",
++      "valid": true
++    },
++    {
++      "scheme": "it_iva",
++      "value": "00000031203",
++      "valid": true
++    },
++    {
++      "scheme": "it_iva",
++      "value": "00000041210",
++      "valid": true
++    },
++    {
++      "scheme": "it_iva",
++      "value": "00000058883",
++      "valid": true
++    },
++    {
++      "scheme": "it_iva",
++      "value": "23456780016",
++      "valid": true
++    },
++    {
++      "scheme": "it_iva",
++      "value": "99999999991",
++      "valid": false
++    },
++    {
++      "scheme": "it_iva",
++      "value": "00000010010",
++      "valid": false
++    },
++    {
++      "scheme": "it_iva",
++      "value": "00000021000",
++      "valid": false
++    },
++    {
++      "scheme": "it_iva",
++      "value": "23456780010",
++      "valid": false
++    },
++    {
++      "scheme": "it_iva",
++      "value": "00000011015",
++      "valid": false
++    },
++    {
++      "scheme": "it_iva",
++      "value": "00000000018",
++      "valid": false
++    },
++    {
++      "scheme": "it_iva",
++      "value": "999 999 999 90",
++      "valid": true
++    },
++    {
++      "scheme": "cn_uscc",
++      "value": "91000000MA0000000N",
++      "valid": true
++    },
++    {
++      "scheme": "cn_uscc",
++      "value": "91000000MA0000001R",
++      "valid": true
++    },
++    {
++      "scheme": "cn_uscc",
++      "value": "91000000MA0000002W",
++      "valid": true
++    },
++    {
++      "scheme": "cn_uscc",
++      "value": "51000000MA1234567J",
++      "valid": true
++    },
++    {
++      "scheme": "cn_uscc",
++      "value": "9100000069ABCDEFG0",
++      "valid": true
++    },
++    {
++      "scheme": "cn_uscc",
++      "value": "110000001000000007",
++      "valid": true
++    },
++    {
++      "scheme": "cn_uscc",
++      "value": "91000000MA0000000X",
++      "valid": false
++    },
++    {
++      "scheme": "cn_uscc",
++      "value": "91000000MA0000001T",
++      "valid": false
++    },
++    {
++      "scheme": "cn_uscc",
++      "value": "51000000MA1234567K",
++      "valid": false
++    },
++    {
++      "scheme": "cn_uscc",
++      "value": "91000000IA0000000N",
++      "valid": false
++    },
++    {
++      "scheme": "cn_uscc",
++      "value": "9100000069ABCDEFG1",
++      "valid": false
++    },
++    {
++      "scheme": "eu_vat",
++      "value": "IT99999999990",
++      "valid": true
++    },
++    {
++      "scheme": "eu_vat",
++      "value": "DE100142542",
++      "valid": true
++    },
++    {
++      "scheme": "eu_vat",
++      "value": "FR00000000093",
++      "valid": true
++    },
++    {
++      "scheme": "eu_vat",
++      "value": "ATU10000005",
++      "valid": true
++    },
++    {
++      "scheme": "eu_vat",
++      "value": "NL100000009B01",
++      "valid": true
++    },
++    {
++      "scheme": "eu_vat",
++      "value": "BE0000000097",
++      "valid": true
++    },
++    {
++      "scheme": "eu_vat",
++      "value": "IT99999999991",
++      "valid": false
++    },
++    {
++      "scheme": "eu_vat",
++      "value": "DE100142543",
++      "valid": false
++    },
++    {
++      "scheme": "eu_vat",
++      "value": "FR00000000094",
++      "valid": false
++    },
++    {
++      "scheme": "eu_vat",
++      "value": "ATU10000006",
++      "valid": false
++    },
++    {
++      "scheme": "eu_vat",
++      "value": "NL100000008B01",
++      "valid": false
++    },
++    {
++      "scheme": "eu_vat",
++      "value": "XX12345678",
++      "valid": false
++    },
++    {
++      "scheme": "eu_vat",
++      "value": "it 99999999990",
++      "valid": true
++    },
++    {
++      "scheme": "cn_uscc",
++      "value": "91000000-MA0000000-N",
++      "valid": true
++    },
++    {
++      "scheme": "unknown",
++      "value": "12345",
++      "valid": false
++    },
++    {
++      "scheme": "unknown",
++      "value": "9999999999",
++      "valid": false
++    },
++    {
++      "scheme": "unknown",
++      "value": "99999999990999",
++      "valid": false
++    },
++    {
++      "scheme": "unknown",
++      "value": "N/A",
++      "valid": false
++    }
++  ]
++}
+-- 
+2.43.0
+
+
+From 0b6b44d1dea3c6ad62cb9097ea5ed6cc9dfc6b58 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 24 Nov 2026 01:40:18 +0000
+Subject: [PATCH 2/3] feat(03-14): implement date, amount and tax-id validators
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- Dates read YYYY年M月D日, ISO and DD/MM/YYYY; impossible dates give None
+- Amounts choose the decimal separator from the last separator or locale hint
+- Tax ids are classified by shape and checked with python-stdnum
+- Vector file regenerated by the module so it stays shared with TypeScript
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01SEn5g9gV3RHr18oaonxqof
+---
+ .../src/rag_sidecar/extract/amounts.py        | 71 ++++++++++++-
+ rag-sidecar/src/rag_sidecar/extract/dates.py  | 26 ++++-
+ .../src/rag_sidecar/extract/tax_ids.py        | 99 ++++++++++++++++++-
+ tests/fixtures/ingest/tax-id-vectors.json     | 10 +-
+ 4 files changed, 196 insertions(+), 10 deletions(-)
+
+diff --git a/rag-sidecar/src/rag_sidecar/extract/amounts.py b/rag-sidecar/src/rag_sidecar/extract/amounts.py
+index 99a8d7d..2987927 100644
+--- a/rag-sidecar/src/rag_sidecar/extract/amounts.py
++++ b/rag-sidecar/src/rag_sidecar/extract/amounts.py
+@@ -1,6 +1,75 @@
++import re
++from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
++
++_PERCENT = re.compile(r"\d+(?:[.,]\d+)?\s*[%％]")
++_TOKEN = re.compile(
++    r"(?<![\w.,])-?\d{1,3}(?:[   .,']\d{3})+(?:[.,]\d+)?(?![\d])|(?<![\w.,])-?\d+(?:[.,]\d+)?(?![\d])"
++)
++_SPACES = re.compile(r"[   ']")
++_CODES = {"EUR": "EUR", "USD": "USD", "CNY": "CNY", "RMB": "CNY", "GBP": "GBP", "CHF": "CHF", "JPY": "JPY"}
++_CODE_PATTERN = re.compile(r"(?<![A-Za-z])(" + "|".join(_CODES) + r")(?![A-Za-z])")
++_SYMBOLS = (("€", "EUR"), ("￥", "CNY"), ("¥", "CNY"), ("£", "GBP"), ("人民币", "CNY"), ("$", "USD"))
++_YUAN = re.compile(r"\d\s*元")
++_MAX_DECIMALS = 4
++
++
++def _plain(token: str, locale_hint: str | None) -> str | None:
++    negative = token.startswith("-")
++    body = _SPACES.sub("", token.lstrip("-"))
++    has_dot = "." in body
++    has_comma = "," in body
++    if has_dot and has_comma:
++        decimal_sep = "." if body.rfind(".") > body.rfind(",") else ","
++    elif has_dot or has_comma:
++        sep = "." if has_dot else ","
++        parts = body.split(sep)
++        if len(parts) > 2:
++            if any(len(part) != 3 for part in parts[1:]):
++                return None
++            decimal_sep = None
++        elif len(parts[1]) != 3 or parts[0] == "0":
++            decimal_sep = sep
++        else:
++            locale_decimal = "," if locale_hint == "it" else "."
++            decimal_sep = sep if sep == locale_decimal else None
++    else:
++        decimal_sep = None
++    thousands_sep = "," if decimal_sep == "." else "."
++    if decimal_sep is None:
++        integer, fraction = body.replace(".", "").replace(",", ""), ""
++    else:
++        integer_part, _, fraction = body.rpartition(decimal_sep)
++        integer = integer_part.replace(thousands_sep, "")
++    if not integer.isdigit() or (fraction and not fraction.isdigit()):
++        return None
++    if len(fraction) > _MAX_DECIMALS:
++        try:
++            quantum = Decimal(1).scaleb(-_MAX_DECIMALS)
++            rounded = Decimal(f"{integer}.{fraction}").quantize(quantum, rounding=ROUND_HALF_UP)
++        except InvalidOperation:
++            return None
++        integer, _, fraction = f"{rounded:f}".partition(".")
++    integer = integer.lstrip("0") or "0"
++    value = f"{integer}.{fraction}" if fraction else integer
++    is_zero = not integer.strip("0") and not fraction.strip("0")
++    return f"-{value}" if negative and not is_zero else value
++
++
+ def parse_amount(text: str, locale_hint: str | None = None) -> str | None:
+-    return None
++    """Last number in the text as a plain decimal string; percentages are skipped so 'Tax 8 % 107.36' reads 107.36."""
++    tokens = _TOKEN.findall(_PERCENT.sub(" ", text))
++    if not tokens:
++        return None
++    return _plain(tokens[-1], locale_hint)
+ 
+ 
+ def detect_currency(text: str) -> str | None:
++    code = _CODE_PATTERN.search(text)
++    if code:
++        return _CODES[code.group(1)]
++    for symbol, currency in _SYMBOLS:
++        if symbol in text:
++            return currency
++    if _YUAN.search(text):
++        return "CNY"
+     return None
+diff --git a/rag-sidecar/src/rag_sidecar/extract/dates.py b/rag-sidecar/src/rag_sidecar/extract/dates.py
+index 38a546c..5bc66ba 100644
+--- a/rag-sidecar/src/rag_sidecar/extract/dates.py
++++ b/rag-sidecar/src/rag_sidecar/extract/dates.py
+@@ -1,9 +1,31 @@
++import re
+ from datetime import date
+ 
++_CHINESE = re.compile(r"(?<!\d)(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日?")
++_ISO = re.compile(r"(?<!\d)(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})(?!\d)")
++_DAY_FIRST = re.compile(r"(?<!\d)(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})(?!\d)")
++
++
++def _build(year: str, month: str, day: str) -> date | None:
++    try:
++        return date(int(year), int(month), int(day))
++    except ValueError:
++        return None
++
+ 
+ def find_date(text: str) -> date | None:
+-    return None
++    """First valid date in the text, reading YYYY年M月D日, YYYY-MM-DD and DD/MM/YYYY."""
++    found: list[tuple[int, date]] = []
++    for pattern, day_first in ((_CHINESE, False), (_ISO, False), (_DAY_FIRST, True)):
++        for match in pattern.finditer(text):
++            first, second, third = match.groups()
++            parsed = _build(third, second, first) if day_first else _build(first, second, third)
++            if parsed is not None:
++                found.append((match.start(), parsed))
++    if not found:
++        return None
++    return min(found, key=lambda item: item[0])[1]
+ 
+ 
+ def parse_date(text: str) -> date | None:
+-    return None
++    return find_date(text)
+diff --git a/rag-sidecar/src/rag_sidecar/extract/tax_ids.py b/rag-sidecar/src/rag_sidecar/extract/tax_ids.py
+index 92e2785..f91518a 100644
+--- a/rag-sidecar/src/rag_sidecar/extract/tax_ids.py
++++ b/rag-sidecar/src/rag_sidecar/extract/tax_ids.py
+@@ -1,7 +1,21 @@
++import json
++import re
+ from dataclasses import dataclass
++from pathlib import Path
++
++from stdnum import luhn
++from stdnum.cn import uscc
++from stdnum.eu import vat
++from stdnum.it import iva
+ 
+ from rag_sidecar.contracts.ingest import TaxIdScheme
+ 
++_SEPARATORS = re.compile(r"[\s.\-/_]")
++_IT_IVA_SHAPE = re.compile(r"\d{11}")
++_CN_USCC_SHAPE = re.compile(r"[0-9A-Z]{18}")
++_EU_VAT_SHAPE = re.compile(r"[A-Z]{2}[0-9A-Z]{2,12}")
++VECTORS_PATH = Path(__file__).resolve().parents[4] / "tests" / "fixtures" / "ingest" / "tax-id-vectors.json"
++
+ 
+ @dataclass(frozen=True)
+ class TaxIdCheck:
+@@ -10,9 +24,90 @@ class TaxIdCheck:
+     normalized: str
+ 
+ 
++def normalize_tax_id(raw: str) -> str:
++    return _SEPARATORS.sub("", raw).upper()
++
++
+ def classify_tax_id(raw: str) -> TaxIdCheck:
+-    return TaxIdCheck(scheme="unknown", valid=False, normalized="")
++    """Pick the scheme by shape and validate it with python-stdnum; no checksum is hand-rolled."""
++    normalized = normalize_tax_id(raw)
++    if _IT_IVA_SHAPE.fullmatch(normalized):
++        return TaxIdCheck("it_iva", iva.is_valid(normalized), normalized)
++    if _CN_USCC_SHAPE.fullmatch(normalized):
++        return TaxIdCheck("cn_uscc", uscc.is_valid(normalized), normalized)
++    if _EU_VAT_SHAPE.fullmatch(normalized):
++        return TaxIdCheck("eu_vat", vat.is_valid(normalized), normalized)
++    return TaxIdCheck("unknown", False, normalized)
++
++
++def _with_italian_check_digit(body: str) -> str:
++    return body + luhn.calc_check_digit(body)
++
++
++def _with_changed_last_character(value: str) -> str:
++    return value[:-1] + ("0" if value[-1] != "0" else "1")
++
++
++def _candidates() -> list[tuple[TaxIdScheme, str]]:
++    italian = [
++        _with_italian_check_digit(body)
++        for body in ("9999999999"[:7] + "999", "0000001001", "0000002100", "0000003120", "0000004121", "0000005888", "2345678001")
++    ]
++    italian_invalid = [
++        _with_changed_last_character(italian[0]),
++        _with_changed_last_character(italian[1]),
++        _with_changed_last_character(italian[2]),
++        _with_changed_last_character(italian[6]),
++        _with_italian_check_digit("0000001101"),
++        _with_italian_check_digit("0000000001"),
++    ]
++    chinese = [
++        "91000000MA0000000N",
++        "91000000MA0000001R",
++        "91000000MA0000002W",
++        "51000000MA1234567J",
++        "9100000069ABCDEFG0",
++        "110000001000000007",
++    ]
++    chinese_invalid = [
++        "91000000MA0000000X",
++        "91000000MA0000001T",
++        "51000000MA1234567K",
++        "91000000IA0000000N",
++        "9100000069ABCDEFG1",
++    ]
++    european = ["IT99999999990", "DE100142542", "FR00000000093", "ATU10000005", "NL100000009B01", "BE0000000097"]
++    european_invalid = ["IT99999999991", "DE100142543", "FR00000000094", "ATU10000006", "NL100000008B01", "XX12345678"]
++    return [
++        *(("it_iva", value) for value in [*italian, *italian_invalid, "999 999 999 90"]),
++        *(("cn_uscc", value) for value in [*chinese, *chinese_invalid, "91000000-MA0000000-N"]),
++        *(("eu_vat", value) for value in [*european, *european_invalid, "it 99999999990"]),
++    ]
++
++
++_DIRECT_VALIDATORS = {"it_iva": iva.is_valid, "cn_uscc": uscc.is_valid, "eu_vat": vat.is_valid}
++
++
++def build_tax_id_vectors() -> dict[str, object]:
++    vectors: list[dict[str, object]] = [
++        {"scheme": scheme, "value": value, "valid": bool(_DIRECT_VALIDATORS[scheme](value))}
++        for scheme, value in _candidates()
++    ]
++    vectors += [{"scheme": "unknown", "value": value, "valid": False} for value in ("12345", "9999999999", "99999999990999", "N/A")]
++    return {
++        "schema_version": 1,
++        "note": "synthetic ids, validity computed with python-stdnum; regenerate with: uv run --directory rag-sidecar python -m rag_sidecar.extract.tax_ids",
++        "normalization": (
++            "remove whitespace and . - / _ then uppercase; 11 digits is it_iva, 18 letters or digits is cn_uscc, "
++            "two letters plus 2 to 12 letters or digits is eu_vat, anything else is unknown and invalid"
++        ),
++        "vectors": vectors,
++    }
+ 
+ 
+ def render_tax_id_vectors() -> str:
+-    return ""
++    return json.dumps(build_tax_id_vectors(), indent=2, ensure_ascii=False) + "\n"
++
++
++if __name__ == "__main__":
++    VECTORS_PATH.write_text(render_tax_id_vectors(), encoding="utf-8")
+diff --git a/tests/fixtures/ingest/tax-id-vectors.json b/tests/fixtures/ingest/tax-id-vectors.json
+index 18a2a92..5b6333e 100644
+--- a/tests/fixtures/ingest/tax-id-vectors.json
++++ b/tests/fixtures/ingest/tax-id-vectors.json
+@@ -128,6 +128,11 @@
+       "value": "9100000069ABCDEFG1",
+       "valid": false
+     },
++    {
++      "scheme": "cn_uscc",
++      "value": "91000000-MA0000000-N",
++      "valid": true
++    },
+     {
+       "scheme": "eu_vat",
+       "value": "IT99999999990",
+@@ -193,11 +198,6 @@
+       "value": "it 99999999990",
+       "valid": true
+     },
+-    {
+-      "scheme": "cn_uscc",
+-      "value": "91000000-MA0000000-N",
+-      "valid": true
+-    },
+     {
+       "scheme": "unknown",
+       "value": "12345",
+-- 
+2.43.0
+
+
+From 65df60cf34ad29d46ebf51ceda6f00ed3186e601 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 24 Nov 2026 01:42:40 +0000
+Subject: [PATCH 3/3] test(03-14): add failing tests for the invoice extractor
+
+- zh, en and it synthetic invoices expect the full field set
+- Missing number or date, bad checksum and totals mismatch expect errors
+- Unlabelled text and unexpected failures expect confidence 0 without raising
+- Stub extractor returns not_implemented so the assertions fail
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01SEn5g9gV3RHr18oaonxqof
+---
+ .../src/rag_sidecar/extract/invoice.py        |  11 +
+ rag-sidecar/tests/test_invoice_extract.py     | 206 ++++++++++++++++++
+ 2 files changed, 217 insertions(+)
+ create mode 100644 rag-sidecar/src/rag_sidecar/extract/invoice.py
+ create mode 100644 rag-sidecar/tests/test_invoice_extract.py
+
+diff --git a/rag-sidecar/src/rag_sidecar/extract/invoice.py b/rag-sidecar/src/rag_sidecar/extract/invoice.py
+new file mode 100644
+index 0000000..020d946
+--- /dev/null
++++ b/rag-sidecar/src/rag_sidecar/extract/invoice.py
+@@ -0,0 +1,11 @@
++from rag_sidecar.contracts.ingest import InvoiceFields, OcrLanguage
++
++
++def _extract_fields(markdown: str, tables: list[str], language_hint: OcrLanguage | None) -> InvoiceFields:
++    return InvoiceFields(confidence=0.0, errors=["not_implemented"])
++
++
++def extract_invoice(
++    markdown: str, tables: list[str] | None = None, language_hint: OcrLanguage | None = None
++) -> InvoiceFields:
++    return InvoiceFields(confidence=0.0, errors=["not_implemented"])
+diff --git a/rag-sidecar/tests/test_invoice_extract.py b/rag-sidecar/tests/test_invoice_extract.py
+new file mode 100644
+index 0000000..1b90a58
+--- /dev/null
++++ b/rag-sidecar/tests/test_invoice_extract.py
+@@ -0,0 +1,206 @@
++from datetime import date
++
++import pytest
++
++from rag_sidecar.contracts import InvoiceFields
++from rag_sidecar.extract import invoice as invoice_module
++from rag_sidecar.extract.invoice import extract_invoice
++
++ZH_INVOICE = """# 增值税电子普通发票
++
++发票号码：FP-2025-00417
++开票日期：2025年3月15日
++
++购买方
++名称：示例买方有限公司
++纳税人识别号：91000000MA0000001R
++
++销售方
++名称：示例销售有限公司
++纳税人识别号：91000000MA0000000N
++
++| 项目名称 | 数量 | 单价 | 金额 | 税率 | 税额 |
++| --- | --- | --- | --- | --- | --- |
++| 测试传感器 | 2 | 300.00 | 600.00 | 13% | 78.00 |
++| 安装服务 | 1 | 400.00 | 400.00 | 13% | 52.00 |
++| 合计 |  |  | ¥1,000.00 |  | ¥130.00 |
++
++价税合计（小写）：¥1,130.00
++"""
++
++EN_INVOICE = """# Invoice
++
++Invoice No.: INV-2025-00418
++Invoice date: 2025-03-15
++Due date: 2025-04-14
++
++Supplier: Example Supplier Ltd
++VAT No.: DE100142542
++
++Bill to: Example Buyer GmbH
++VAT No.: FR00000000093
++
++| Description | Qty | Unit price | Amount | VAT % |
++| --- | --- | --- | --- | --- |
++| Thermal probe | 8 | 100.00 | 800.00 | 20% |
++| Probe cable 5 m | 4 | 50.00 | 200.00 | 20% |
++
++Subtotal: EUR 1,000.00
++VAT 20 %: EUR 200.00
++Total: EUR 1,200.00
++"""
++
++IT_INVOICE = """## Fattura
++
++Numero fattura: FT-2025-00419
++Data: 15/03/2025
++Data scadenza: 14/04/2025
++
++Cedente/Prestatore: Esempio Fornitore S.r.l.
++P.IVA: 99999999990
++
++Cessionario/Committente: Esempio Cliente S.p.A.
++P.IVA: 00000010017
++
++| Descrizione | Quantità | Prezzo unitario | Importo | Aliquota IVA |
++| --- | --- | --- | --- | --- |
++| Sonda termica | 8 | 100,00 | 800,00 | 22% |
++| Cavo di ricambio 5 m | 4 | 50,00 | 200,00 | 22% |
++
++Imponibile: € 1.000,00
++IVA 22 %: € 220,00
++Totale documento: € 1.220,00
++"""
++
++
++def test_chinese_invoice_yields_every_field():
++    fields = extract_invoice(ZH_INVOICE)
++    assert fields.invoice_number == "FP-2025-00417"
++    assert fields.issue_date == date(2025, 3, 15)
++    assert fields.supplier.name == "示例销售有限公司"
++    assert (fields.supplier.tax_id, fields.supplier.tax_id_scheme) == ("91000000MA0000000N", "cn_uscc")
++    assert fields.buyer.name == "示例买方有限公司"
++    assert (fields.buyer.tax_id, fields.buyer.tax_id_scheme) == ("91000000MA0000001R", "cn_uscc")
++    assert fields.currency == "CNY"
++    assert (fields.net_total, fields.tax_total, fields.gross_total) == ("1000.00", "130.00", "1130.00")
++    assert [(i.description, i.quantity, i.unit_price, i.amount, i.tax_rate) for i in fields.line_items] == [
++        ("测试传感器", "2", "300.00", "600.00", "13"),
++        ("安装服务", "1", "400.00", "400.00", "13"),
++    ]
++    assert fields.errors == []
++    assert fields.confidence == 1.0
++
++
++def test_italian_invoice_yields_the_same_field_set():
++    fields = extract_invoice(IT_INVOICE)
++    assert fields.invoice_number == "FT-2025-00419"
++    assert fields.issue_date == date(2025, 3, 15)
++    assert fields.due_date == date(2025, 4, 14)
++    assert fields.supplier.name == "Esempio Fornitore S.r.l."
++    assert (fields.supplier.tax_id, fields.supplier.tax_id_scheme) == ("99999999990", "it_iva")
++    assert fields.buyer.name == "Esempio Cliente S.p.A."
++    assert (fields.buyer.tax_id, fields.buyer.tax_id_scheme) == ("00000010017", "it_iva")
++    assert fields.currency == "EUR"
++    assert (fields.net_total, fields.tax_total, fields.gross_total) == ("1000.00", "220.00", "1220.00")
++    assert [(i.description, i.quantity, i.unit_price, i.amount, i.tax_rate) for i in fields.line_items] == [
++        ("Sonda termica", "8", "100.00", "800.00", "22"),
++        ("Cavo di ricambio 5 m", "4", "50.00", "200.00", "22"),
++    ]
++    assert fields.errors == []
++    assert fields.confidence == 1.0
++
++
++def test_english_invoice_yields_the_same_field_set():
++    fields = extract_invoice(EN_INVOICE)
++    assert fields.invoice_number == "INV-2025-00418"
++    assert fields.issue_date == date(2025, 3, 15)
++    assert fields.due_date == date(2025, 4, 14)
++    assert fields.supplier.name == "Example Supplier Ltd"
++    assert (fields.supplier.tax_id, fields.supplier.tax_id_scheme) == ("DE100142542", "eu_vat")
++    assert fields.buyer.name == "Example Buyer GmbH"
++    assert (fields.buyer.tax_id, fields.buyer.tax_id_scheme) == ("FR00000000093", "eu_vat")
++    assert fields.currency == "EUR"
++    assert (fields.net_total, fields.tax_total, fields.gross_total) == ("1000.00", "200.00", "1200.00")
++    assert [(i.description, i.quantity, i.unit_price, i.amount, i.tax_rate) for i in fields.line_items] == [
++        ("Thermal probe", "8", "100.00", "800.00", "20"),
++        ("Probe cable 5 m", "4", "50.00", "200.00", "20"),
++    ]
++    assert fields.errors == []
++    assert fields.confidence == 1.0
++
++
++def test_line_items_come_from_the_tables_argument_when_the_markdown_has_none():
++    table = "| Description | Qty | Unit price | Amount |\n| --- | --- | --- | --- |\n| Thermal probe | 8 | 100.00 | 800.00 |\n"
++    markdown = EN_INVOICE.split("| Description")[0] + "Total: EUR 1,200.00\n"
++    fields = extract_invoice(markdown, tables=[table])
++    assert [(i.description, i.amount) for i in fields.line_items] == [("Thermal probe", "800.00")]
++
++
++def test_extraction_is_deterministic():
++    assert extract_invoice(IT_INVOICE) == extract_invoice(IT_INVOICE)
++
++
++def test_missing_invoice_number_lowers_confidence_and_is_listed():
++    without_number = EN_INVOICE.replace("Invoice No.: INV-2025-00418\n", "")
++    fields = extract_invoice(without_number)
++    assert fields.invoice_number is None
++    assert "missing:invoice_number" in fields.errors
++    assert fields.confidence < 0.5
++
++
++def test_missing_issue_date_is_listed_and_lowers_confidence():
++    fields = extract_invoice(IT_INVOICE.replace("Data: 15/03/2025\n", ""))
++    assert fields.issue_date is None
++    assert "missing:issue_date" in fields.errors
++    assert 0.5 <= fields.confidence < 1.0
++
++
++def test_tax_id_failing_its_checksum_is_not_accepted_and_is_reported():
++    fields = extract_invoice(IT_INVOICE.replace("P.IVA: 99999999990", "P.IVA: 99999999991"))
++    assert fields.supplier.tax_id is None
++    assert fields.supplier.tax_id_scheme == "unknown"
++    assert fields.supplier.name == "Esempio Fornitore S.r.l."
++    assert "invalid_tax_id:supplier" in fields.errors
++    assert fields.buyer.tax_id == "00000010017"
++
++
++def test_totals_that_do_not_add_up_are_flagged_and_lower_confidence():
++    consistent = extract_invoice(EN_INVOICE)
++    skewed = extract_invoice(EN_INVOICE.replace("Total: EUR 1,200.00", "Total: EUR 1,250.00"))
++    assert "totals_mismatch" in skewed.errors
++    assert "totals_mismatch" not in consistent.errors
++    assert skewed.confidence < consistent.confidence
++
++
++def test_totals_within_one_cent_are_not_a_mismatch():
++    fields = extract_invoice(EN_INVOICE.replace("Total: EUR 1,200.00", "Total: EUR 1,200.01"))
++    assert "totals_mismatch" not in fields.errors
++
++
++def test_text_without_invoice_labels_returns_errors_and_zero_confidence():
++    fields = extract_invoice("Dear team,\n\nthe warehouse opens at nine. Please bring your badge.\n")
++    assert isinstance(fields, InvoiceFields)
++    assert fields.confidence == 0.0
++    assert "no_invoice_labels" in fields.errors
++    assert fields.line_items == []
++
++
++def test_whitespace_only_input_does_not_raise():
++    fields = extract_invoice("   \n")
++    assert fields.confidence == 0.0
++    assert fields.errors
++
++
++def test_an_unexpected_failure_is_reported_instead_of_raised(monkeypatch):
++    def explode(*_args, **_kwargs):
++        raise RuntimeError("boom")
++
++    monkeypatch.setattr(invoice_module, "_extract_fields", explode)
++    fields = extract_invoice(EN_INVOICE)
++    assert fields.confidence == 0.0
++    assert fields.errors == ["extraction_failed"]
++
++
++@pytest.mark.parametrize("hint", ["en", "it", "zh"])
++def test_language_hint_does_not_change_unambiguous_fields(hint):
++    assert extract_invoice(EN_INVOICE, language_hint=hint).gross_total == "1200.00"
+-- 
+2.43.0
+
