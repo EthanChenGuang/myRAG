@@ -100,16 +100,16 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | 03.1-18 | [bc-34cb4e3b](bc-34cb4e3b-b843-5ba6-94da-c58cb5093dc2) **merged** | exec/03.1-18 — vitest 14 + PGlite 6 |
 | 04-17 | [bc-c1e4ed28](bc-c1e4ed28-8308-557d-a69c-46ed9166e777) **merged** | exec/04-17 — conformance 42 |
 | 04-15 | [bc-2f4f0524](bc-2f4f0524-6984-5e57-a50a-249d0a960a27) **merged** | exec/04-15 |
-| 04-18 | [bc-78743196](bc-78743196-9471-5cda-8414-1d4c80c9d85f) **COMPLETE** (post-PAUSE; not merged) | `origin/exec/04-18` @ `b4a6b3c` |
+| 04-18 | [bc-78743196](bc-78743196-9471-5cda-8414-1d4c80c9d85f) **merged** trunk `a064d99` (Claude Code resume) | `origin/exec/04-18` @ `b4a6b3c` |
 | 03.1-20 | [bc-7530e5d1](bc-7530e5d1-02b0-5c59-bf06-0bd96367216e) **merged** | exec/03.1-20 — PGlite 13 |
 | 03.1-23 | [bc-ab1e9b2d](bc-ab1e9b2d-301d-50ad-85d3-54b3af5e3261) **merged** | exec/03.1-23 |
 | 04-44 | [bc-e6e2bd84](bc-e6e2bd84-1486-5c1d-b545-6f44a20de765) **merged** | exec/04-44 — params-hash 15 |
-| 03.1-25 | [bc-1f542e8a](bc-1f542e8a-f80a-58a7-99bb-5c47f655d0ce) **COMPLETE** (post-PAUSE; not merged) | `origin/exec/03.1-25` @ `494d60a` |
+| 03.1-25 | [bc-1f542e8a](bc-1f542e8a-f80a-58a7-99bb-5c47f655d0ce) **merged** trunk `feb9555` (Claude Code resume) | `origin/exec/03.1-25` @ `494d60a` |
 | 04-19 | [bc-eafdad13](bc-eafdad13-4e57-5750-a00f-8bc029517ee2) **merged** | exec/04-19 — tracer 6 + vitest 18 |
 | 04-45 | [bc-32843230](bc-32843230-3c15-53cb-be49-93f84da0a3bb) **merged** | exec/04-45 — vitest 13 |
 | 03-48-sec-rpc | [bc-049b7ab0](bc-049b7ab0-c778-50b5-bce6-77842e48a55e) **merged** | exec/03-48-sec-rpc — PGlite 2/2 |
-| 04-20 | [bc-36e7beb3](bc-36e7beb3-7655-51e7-964a-e1082fa083c3) **COMPLETE** (post-PAUSE; not merged) | `origin/exec/04-20` @ `081224a` |
-| 03-48-setup-idempotent | [bc-b37c0b7a](bc-b37c0b7a-eb5e-51b0-83b2-b0e870bb6318) **COMPLETE** (post-PAUSE; not merged) | `origin/exec/03-48-setup-idempotent` @ `90635ae` |
+| 04-20 | [bc-36e7beb3](bc-36e7beb3-7655-51e7-964a-e1082fa083c3) **merged** trunk `6418feb` (Claude Code resume) | `origin/exec/04-20` @ `081224a` |
+| 03-48-setup-idempotent | [bc-b37c0b7a](bc-b37c0b7a-eb5e-51b0-83b2-b0e870bb6318) **merged** trunk `da1ed63` (Claude Code resume) | `origin/exec/03-48-setup-idempotent` @ `90635ae` |
 
 ## Remaining plan inventory (file-overlap basis)
 
@@ -132,17 +132,17 @@ All four executors **stopped**; WIP on `origin/exec/*` + patches in `.planning/p
 | Plan | bcId | Cloud | Worktree | WIP signal |
 |------|------|-------|----------|------------|
 | 03.1-23 | [bc-ab1e9b2d](bc-ab1e9b2d-301d-50ad-85d3-54b3af5e3261) | **merged** | — | pytest 67 |
-| 03-48-setup-idempotent | [bc-b37c0b7a](bc-b37c0b7a-eb5e-51b0-83b2-b0e870bb6318) | **COMPLETE** | `wt/03-48-setup-idempotent` | **merge-ready** `90635ae`; idempotency tests pass; note residual `schema-equality` relex RPC failures on merge |
-| 03.1-25 | [bc-1f542e8a](bc-1f542e8a-f80a-58a7-99bb-5c47f655d0ce) | **COMPLETE** | `wt/03.1-25` | **merge-ready** `494d60a` (DATA-16); run backfill vitest on merge; full vitest may need larger worker (listSource OOM note) |
-| 04-18 | [bc-78743196](bc-78743196-9471-5cda-8414-1d4c80c9d85f) | **COMPLETE** | `wt/04-18` | **merge-ready** `b4a6b3c` (RET-10 harness; 7 PGlite tests) |
-| 04-20 | [bc-36e7beb3](bc-36e7beb3-7655-51e7-964a-e1082fa083c3) | **COMPLETE** | `wt/04-20` | **merge-ready** `081224a` (`11c0e0f` feat + SUMMARY); supersedes pause WIP `b5e47fe` — **do not merge until resume** |
+| 03-48-setup-idempotent | [bc-b37c0b7a](bc-b37c0b7a-eb5e-51b0-83b2-b0e870bb6318) | **merged** | `wt/03-48-setup-idempotent` | **merge-ready** `90635ae`; idempotency tests pass; note residual `schema-equality` relex RPC failures on merge |
+| 03.1-25 | [bc-1f542e8a](bc-1f542e8a-f80a-58a7-99bb-5c47f655d0ce) | **merged** | `wt/03.1-25` | **merge-ready** `494d60a` (DATA-16); run backfill vitest on merge; full vitest may need larger worker (listSource OOM note) |
+| 04-18 | [bc-78743196](bc-78743196-9471-5cda-8414-1d4c80c9d85f) | **merged** | `wt/04-18` | **merge-ready** `b4a6b3c` (RET-10 harness; 7 PGlite tests) |
+| 04-20 | [bc-36e7beb3](bc-36e7beb3-7655-51e7-964a-e1082fa083c3) | **merged** | `wt/04-20` | **merge-ready** `081224a` (`11c0e0f` feat + SUMMARY); supersedes pause WIP `b5e47fe` — **do not merge until resume** |
 
 **Overflow queue (spawn next free slot, same turn as merge):**
 
 | Plan | Worktree ready | Notes |
 |------|----------------|-------|
-| **03-48-setup-idempotent** | `wt/03-48-setup-idempotent` | **COMPLETE** — merge on resume |
-| **03-48-sec-rpc-2** | (create on spawn) | **next free slot**; [03-48-FOLLOWUP-SECURITY-RPC-2-PLAN.md](../phases/03-unified-ingestion-embedding-profiles/03-48-FOLLOWUP-SECURITY-RPC-2-PLAN.md) — full DEFINER inventory (live 23); `tests/rag/search-rpc-grants.test.ts` must pass |
+| **03-48-setup-idempotent** | `wt/03-48-setup-idempotent` | **merged** `da1ed63` |
+| **03-48-sec-rpc-2** | `wt/03-48-sec-rpc-2` | **RUNNING** (Claude Code gsd-executor, local branch, not pushed); [03-48-FOLLOWUP-SECURITY-RPC-2-PLAN.md](../phases/03-unified-ingestion-embedding-profiles/03-48-FOLLOWUP-SECURITY-RPC-2-PLAN.md) — full DEFINER inventory (live 23); `tests/rag/search-rpc-grants.test.ts` must pass |
 
 **03-48 follow-ups (one executor per plan when a slot frees — do not duplicate running work):**
 
