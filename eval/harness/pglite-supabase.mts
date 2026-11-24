@@ -5,6 +5,9 @@ import { fileURLToPath } from 'node:url';
 import { PGlite } from '@electric-sql/pglite';
 import { pg_trgm } from '@electric-sql/pglite/contrib/pg_trgm';
 import { vector } from '@electric-sql/pglite-pgvector';
+import type { RpcClient, RpcRequest, RpcResponse } from '@/lib/rag/backend/supabase-rpc';
+import { LEXICAL_VERSION } from '@/lib/rag/lexical/chunk-text';
+import { runRelex } from '@/lib/rag/ingest/relex/run';
 import { loadCorpus } from './corpus.mts';
 import type { FakeEdge } from './fake-edge.mts';
 import { applyMigrations } from './migrations.mts';
@@ -58,6 +61,36 @@ function vectorLiteral(values: number[]): string {
   return `[${values.join(',')}]`;
 }
 
+const LEXICAL_SHA_KEY = `lexical_version:${LEXICAL_VERSION}`;
+
+type RelexRow = Record<string, unknown>;
+
+/** Service-role RPC access over an in-process PGlite database (no HTTP). */
+function pgliteRpcClient(db: PGlite): RpcClient {
+  return {
+    rpc(fn, args) {
+      const keys = Object.keys(args);
+      const sql = `SELECT * FROM ${fn}(${keys.map((key, index) => `${key} => $${index + 1}`).join(', ')})`;
+      const run = db
+        .query<RelexRow>(sql, keys.map((key) => args[key]))
+        .then((result): RpcResponse => ({ data: result.rows as unknown[], error: null }))
+        .catch((error: unknown): RpcResponse => ({
+          data: null,
+          error: { code: 'P0001', message: error instanceof Error ? error.message : String(error) },
+        }));
+      const request: RpcRequest = {
+        abortSignal: () => request,
+        then: (onFulfilled, onRejected) => run.then(onFulfilled, onRejected),
+      };
+      return request;
+    },
+  };
+}
+
+export async function runFixtureRelex(db: PGlite): Promise<void> {
+  await runRelex({ db: pgliteRpcClient(db), batchSize: 500 });
+}
+
 export interface EmptyFixtureDatabase {
   db: PGlite;
   fixtureUserId: string;
@@ -107,6 +140,8 @@ export async function createFixtureDatabase(options: {
   supabaseGrants?: boolean;
   migrations?: boolean;
   setupSqlPath?: string;
+  /** Rebuild lexical_text after corpus load (default true). */
+  relex?: boolean;
 }): Promise<FixtureDatabase> {
   const { deploymentMode, corpusDir } = options;
   if (deploymentMode !== 'single-tenant' && deploymentMode !== 'multi-tenant') {
@@ -172,6 +207,10 @@ export async function createFixtureDatabase(options: {
         }
       }
     }
+    if (options.relex !== false) {
+      await runFixtureRelex(db);
+    }
+    sqlSha256[LEXICAL_SHA_KEY] = crypto.createHash('sha256').update(String(LEXICAL_VERSION)).digest('hex');
   } catch (error) {
     await db.close().catch(() => undefined);
     throw error;
