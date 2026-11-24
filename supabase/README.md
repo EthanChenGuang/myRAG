@@ -99,7 +99,11 @@ Both setup files include:
 
 ## Updating an Existing Database
 
-The setup files are for new databases and are not safe to re-run. For a database created from an earlier version, run the matching file from `patches/` in the SQL Editor (idempotent), before deploying the application code that goes with it:
+**Fresh install:** run one folded setup file (`single-tenant-setup.sql` or `multi-tenant-setup.sql`), then apply every file from `scripts/setup-database.sh --list-migrations <mode>` in order.
+
+**Same folded baseline:** the setup files are idempotent (triggers and RLS policies use `DROP … IF EXISTS` before `CREATE`). Re-running the matching folded file on a database that was originally created from that same file leaves the catalog unchanged; prefer this only to repair a half-applied run, not as a routine upgrade path.
+
+**Older databases:** for a project created from an earlier schema version, run the matching file from `patches/` in the SQL Editor (idempotent), before deploying the application code that goes with it:
 
 - `patches/2026-11-security-review-single-tenant.sql`
 - `patches/2026-11-security-review-multi-tenant.sql`

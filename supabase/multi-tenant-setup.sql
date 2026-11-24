@@ -1335,6 +1335,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS track_document_storage ON documents;
 CREATE TRIGGER track_document_storage
 AFTER INSERT OR DELETE ON documents
 FOR EACH ROW EXECUTE FUNCTION update_org_storage();
@@ -1518,6 +1519,7 @@ ALTER TABLE organization_domains ENABLE ROW LEVEL SECURITY;
 -- ORGANIZATIONS POLICIES (3-TIER AWARE)
 ------------------------------------------
 
+DROP POLICY IF EXISTS "Users can view their organizations" ON organizations;
 CREATE POLICY "Users can view their organizations" ON organizations
   FOR SELECT USING (
     -- Personal projects: only owner can see
@@ -1527,6 +1529,7 @@ CREATE POLICY "Users can view their organizations" ON organizations
     (is_personal = false AND is_org_member(id, auth.uid()))
   );
 
+DROP POLICY IF EXISTS "Users can create organizations" ON organizations;
 CREATE POLICY "Users can create organizations" ON organizations
   FOR INSERT WITH CHECK (
     auth.uid() = owner_id
@@ -1534,6 +1537,7 @@ CREATE POLICY "Users can create organizations" ON organizations
     -- Team workspaces blocked at API level, only via shareOrganization conversion
   );
 
+DROP POLICY IF EXISTS "Users can update organizations" ON organizations;
 CREATE POLICY "Users can update organizations" ON organizations
   FOR UPDATE USING (
     -- Personal orgs: only owner
@@ -1543,6 +1547,7 @@ CREATE POLICY "Users can update organizations" ON organizations
     (is_personal = false AND is_org_admin(id))
   );
 
+DROP POLICY IF EXISTS "Users can delete organizations" ON organizations;
 CREATE POLICY "Users can delete organizations" ON organizations
   FOR DELETE USING (
     owner_id = auth.uid()
@@ -1552,6 +1557,7 @@ CREATE POLICY "Users can delete organizations" ON organizations
 -- ORGANIZATION MEMBERS POLICIES
 ------------------------------------------
 
+DROP POLICY IF EXISTS "Users can view org members" ON organization_members;
 CREATE POLICY "Users can view org members" ON organization_members
   FOR SELECT USING (
     is_org_owner(organization_id)
@@ -1559,12 +1565,14 @@ CREATE POLICY "Users can view org members" ON organization_members
     user_id = auth.uid()
   );
 
+DROP POLICY IF EXISTS "Admins can add members" ON organization_members;
 CREATE POLICY "Admins can add members" ON organization_members
   FOR INSERT WITH CHECK (
     is_org_owner(organization_id)
   );
 
 
+DROP POLICY IF EXISTS "Admins can remove members" ON organization_members;
 CREATE POLICY "Admins can remove members" ON organization_members
   FOR DELETE USING (
     is_org_owner(organization_id)
@@ -1574,6 +1582,7 @@ CREATE POLICY "Admins can remove members" ON organization_members
 -- ORGANIZATION DOMAINS POLICIES
 ------------------------------------------
 
+DROP POLICY IF EXISTS "Users can view org domains" ON organization_domains;
 CREATE POLICY "Users can view org domains" ON organization_domains
   FOR SELECT USING (
     organization_id IN (
@@ -1586,6 +1595,7 @@ CREATE POLICY "Users can view org domains" ON organization_domains
     )
   );
 
+DROP POLICY IF EXISTS "Owners can add org domains" ON organization_domains;
 CREATE POLICY "Owners can add org domains" ON organization_domains
   FOR INSERT WITH CHECK (
     organization_id IN (
@@ -1594,6 +1604,7 @@ CREATE POLICY "Owners can add org domains" ON organization_domains
     )
   );
 
+DROP POLICY IF EXISTS "Owners can update org domains" ON organization_domains;
 CREATE POLICY "Owners can update org domains" ON organization_domains
   FOR UPDATE USING (
     organization_id IN (
@@ -1602,6 +1613,7 @@ CREATE POLICY "Owners can update org domains" ON organization_domains
     )
   );
 
+DROP POLICY IF EXISTS "Owners can delete org domains" ON organization_domains;
 CREATE POLICY "Owners can delete org domains" ON organization_domains
   FOR DELETE USING (
     organization_id IN (
@@ -1614,6 +1626,7 @@ CREATE POLICY "Owners can delete org domains" ON organization_domains
 -- TEAM INVITATIONS POLICIES (3-TIER)
 ------------------------------------------
 
+DROP POLICY IF EXISTS "Users can view org invitations" ON team_invitations;
 CREATE POLICY "Users can view org invitations" ON team_invitations
   FOR SELECT USING (
     organization_id IN (
@@ -1624,6 +1637,7 @@ CREATE POLICY "Users can view org invitations" ON team_invitations
     )
   );
 
+DROP POLICY IF EXISTS "Admins can create invitations" ON team_invitations;
 CREATE POLICY "Admins can create invitations" ON team_invitations
   FOR INSERT WITH CHECK (
     organization_id IN (
@@ -1635,6 +1649,7 @@ CREATE POLICY "Admins can create invitations" ON team_invitations
     )
   );
 
+DROP POLICY IF EXISTS "Admins can delete invitations" ON team_invitations;
 CREATE POLICY "Admins can delete invitations" ON team_invitations
   FOR DELETE USING (
     organization_id IN (
@@ -1650,6 +1665,7 @@ CREATE POLICY "Admins can delete invitations" ON team_invitations
 -- DOCUMENTS POLICIES (HYBRID ISOLATION)
 ------------------------------------------
 
+DROP POLICY IF EXISTS "Users can view documents" ON documents;
 CREATE POLICY "Users can view documents" ON documents
   FOR SELECT USING (
     -- Personal documents (flat workspace)
@@ -1659,6 +1675,7 @@ CREATE POLICY "Users can view documents" ON documents
     (organization_id IS NOT NULL AND is_org_member(organization_id, auth.uid()))
   );
 
+DROP POLICY IF EXISTS "Users can create documents" ON documents;
 CREATE POLICY "Users can create documents" ON documents
   FOR INSERT WITH CHECK (
     -- Personal upload
@@ -1668,6 +1685,7 @@ CREATE POLICY "Users can create documents" ON documents
     (organization_id IS NOT NULL AND is_org_member(organization_id, auth.uid()))
   );
 
+DROP POLICY IF EXISTS "Users can delete documents" ON documents;
 CREATE POLICY "Users can delete documents" ON documents
   FOR DELETE USING (
     -- Own personal documents
@@ -1677,6 +1695,7 @@ CREATE POLICY "Users can delete documents" ON documents
     (organization_id IS NOT NULL AND is_org_member(organization_id, auth.uid()))
   );
 
+DROP POLICY IF EXISTS "Users can update documents" ON documents;
 CREATE POLICY "Users can update documents" ON documents
   FOR UPDATE USING (
     -- Own personal documents
@@ -1690,6 +1709,7 @@ CREATE POLICY "Users can update documents" ON documents
 -- DOCUMENT CHUNKS POLICIES (HYBRID)
 ------------------------------------------
 
+DROP POLICY IF EXISTS "Users can view chunks" ON document_chunks;
 CREATE POLICY "Users can view chunks" ON document_chunks
   FOR SELECT USING (
     -- Personal chunks (via document ownership)
@@ -1702,6 +1722,7 @@ CREATE POLICY "Users can view chunks" ON document_chunks
     (organization_id IS NOT NULL AND is_org_member(organization_id, auth.uid()))
   );
 
+DROP POLICY IF EXISTS "Users can create chunks" ON document_chunks;
 CREATE POLICY "Users can create chunks" ON document_chunks
   FOR INSERT WITH CHECK (
     -- Personal chunks
@@ -1714,6 +1735,7 @@ CREATE POLICY "Users can create chunks" ON document_chunks
     (organization_id IS NOT NULL AND is_org_member(organization_id, auth.uid()))
   );
 
+DROP POLICY IF EXISTS "Users can delete chunks" ON document_chunks;
 CREATE POLICY "Users can delete chunks" ON document_chunks
   FOR DELETE USING (
     -- Personal chunks
@@ -1730,6 +1752,7 @@ CREATE POLICY "Users can delete chunks" ON document_chunks
 -- FOLDERS POLICIES (HYBRID)
 ------------------------------------------
 
+DROP POLICY IF EXISTS "Users can view folders" ON folders;
 CREATE POLICY "Users can view folders" ON folders
   FOR SELECT USING (
     -- Own personal folders
@@ -1739,6 +1762,7 @@ CREATE POLICY "Users can view folders" ON folders
     (user_id = auth.uid() AND organization_id IS NOT NULL AND is_org_member(organization_id, auth.uid()))
   );
 
+DROP POLICY IF EXISTS "Users can create folders" ON folders;
 CREATE POLICY "Users can create folders" ON folders
   FOR INSERT WITH CHECK (
     user_id = auth.uid()
@@ -1749,6 +1773,7 @@ CREATE POLICY "Users can create folders" ON folders
     )
   );
 
+DROP POLICY IF EXISTS "Users can update folders" ON folders;
 CREATE POLICY "Users can update folders" ON folders
   FOR UPDATE USING (
     user_id = auth.uid()
@@ -1759,6 +1784,7 @@ CREATE POLICY "Users can update folders" ON folders
     )
   );
 
+DROP POLICY IF EXISTS "Users can delete folders" ON folders;
 CREATE POLICY "Users can delete folders" ON folders
   FOR DELETE USING (
     user_id = auth.uid()
@@ -1773,6 +1799,7 @@ CREATE POLICY "Users can delete folders" ON folders
 -- CHATS POLICIES (HYBRID)
 ------------------------------------------
 
+DROP POLICY IF EXISTS "Users can view chats" ON chats;
 CREATE POLICY "Users can view chats" ON chats
   FOR SELECT USING (
     -- Own personal chats
@@ -1785,6 +1812,7 @@ CREATE POLICY "Users can view chats" ON chats
     (shared = true)
   );
 
+DROP POLICY IF EXISTS "Users can create chats" ON chats;
 CREATE POLICY "Users can create chats" ON chats
   FOR INSERT WITH CHECK (
     user_id = auth.uid()
@@ -1797,6 +1825,7 @@ CREATE POLICY "Users can create chats" ON chats
     )
   );
 
+DROP POLICY IF EXISTS "Users can update chats" ON chats;
 CREATE POLICY "Users can update chats" ON chats
   FOR UPDATE USING (
     user_id = auth.uid()
@@ -1807,6 +1836,7 @@ CREATE POLICY "Users can update chats" ON chats
     )
   );
 
+DROP POLICY IF EXISTS "Users can delete chats" ON chats;
 CREATE POLICY "Users can delete chats" ON chats
   FOR DELETE USING (
     user_id = auth.uid()
@@ -1822,6 +1852,7 @@ CREATE POLICY "Users can delete chats" ON chats
 ------------------------------------------
 
 -- Tool execution states
+DROP POLICY IF EXISTS "Users can view own tool states" ON tool_execution_states;
 CREATE POLICY "Users can view own tool states" ON tool_execution_states
   FOR SELECT USING (
     user_id = auth.uid()
@@ -1832,6 +1863,7 @@ CREATE POLICY "Users can view own tool states" ON tool_execution_states
     )
   );
 
+DROP POLICY IF EXISTS "Users can insert tool states" ON tool_execution_states;
 CREATE POLICY "Users can insert tool states" ON tool_execution_states
   FOR INSERT WITH CHECK (
     user_id = auth.uid()
@@ -1842,6 +1874,7 @@ CREATE POLICY "Users can insert tool states" ON tool_execution_states
     )
   );
 
+DROP POLICY IF EXISTS "Users can update tool states" ON tool_execution_states;
 CREATE POLICY "Users can update tool states" ON tool_execution_states
   FOR UPDATE USING (
     user_id = auth.uid()
@@ -1861,48 +1894,62 @@ CREATE POLICY "Users can update tool states" ON tool_execution_states
   );
 
 -- User preferences
+DROP POLICY IF EXISTS "Users can view own preferences" ON user_preferences;
 CREATE POLICY "Users can view own preferences" ON user_preferences
   FOR SELECT USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can insert own preferences" ON user_preferences;
 CREATE POLICY "Users can insert own preferences" ON user_preferences
   FOR INSERT WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can update own preferences" ON user_preferences;
 CREATE POLICY "Users can update own preferences" ON user_preferences
   FOR UPDATE USING (auth.uid() = user_id);
 
 -- Admin
+DROP POLICY IF EXISTS "Admins can view admin users" ON admin_users;
 CREATE POLICY "Admins can view admin users" ON admin_users
   FOR SELECT USING (check_admin_status() OR auth.role() = 'service_role');
 
+DROP POLICY IF EXISTS "Admins can view admin settings" ON admin_settings;
 CREATE POLICY "Admins can view admin settings" ON admin_settings
   FOR SELECT USING (check_admin_status() OR auth.role() = 'service_role');
 
+DROP POLICY IF EXISTS "Admins can update settings" ON admin_settings;
 CREATE POLICY "Admins can update settings" ON admin_settings
   FOR UPDATE USING (check_admin_status() OR auth.role() = 'service_role');
 
 -- Subscriptions
+DROP POLICY IF EXISTS "Users can view own subscription" ON subscriptions;
 CREATE POLICY "Users can view own subscription" ON subscriptions
   FOR SELECT USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Service role can manage subscriptions" ON subscriptions;
 CREATE POLICY "Service role can manage subscriptions" ON subscriptions
   FOR ALL USING (auth.role() = 'service_role');
 
+DROP POLICY IF EXISTS "Service role can manage pending subscriptions" ON pending_subscriptions;
 CREATE POLICY "Service role can manage pending subscriptions" ON pending_subscriptions
   FOR ALL USING (auth.role() = 'service_role');
 
 -- WhatsApp
+DROP POLICY IF EXISTS "Users can view own WhatsApp sessions" ON whatsapp_sessions;
 CREATE POLICY "Users can view own WhatsApp sessions" ON whatsapp_sessions
   FOR SELECT USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can manage own WhatsApp sessions" ON whatsapp_sessions;
 CREATE POLICY "Users can manage own WhatsApp sessions" ON whatsapp_sessions
   FOR ALL USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can view own WhatsApp conversations" ON whatsapp_conversations;
 CREATE POLICY "Users can view own WhatsApp conversations" ON whatsapp_conversations
   FOR SELECT USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can manage own WhatsApp conversations" ON whatsapp_conversations;
 CREATE POLICY "Users can manage own WhatsApp conversations" ON whatsapp_conversations
   FOR ALL USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can view messages in their conversations" ON whatsapp_messages;
 CREATE POLICY "Users can view messages in their conversations" ON whatsapp_messages
   FOR SELECT USING (
     EXISTS (
@@ -1913,6 +1960,7 @@ CREATE POLICY "Users can view messages in their conversations" ON whatsapp_messa
   );
 
 -- Tenant usage
+DROP POLICY IF EXISTS "Users can view org usage" ON tenant_usage;
 CREATE POLICY "Users can view org usage" ON tenant_usage
   FOR SELECT USING (
     organization_id IN (
@@ -1921,10 +1969,12 @@ CREATE POLICY "Users can view org usage" ON tenant_usage
     )
   );
 
+DROP POLICY IF EXISTS "Service role can manage usage" ON tenant_usage;
 CREATE POLICY "Service role can manage usage" ON tenant_usage
   FOR ALL USING (auth.role() = 'service_role');
 
 -- API usage logs
+DROP POLICY IF EXISTS "Users can view org API logs" ON api_usage_logs;
 CREATE POLICY "Users can view org API logs" ON api_usage_logs
   FOR SELECT USING (
     organization_id IN (
@@ -1935,6 +1985,7 @@ CREATE POLICY "Users can view org API logs" ON api_usage_logs
     user_id = auth.uid()
   );
 
+DROP POLICY IF EXISTS "Service role can manage API logs" ON api_usage_logs;
 CREATE POLICY "Service role can manage API logs" ON api_usage_logs
   FOR ALL USING (auth.role() = 'service_role');
 
@@ -1999,18 +2050,22 @@ END $$;
 -- TRIGGERS
 ------------------------------------------
 
+DROP TRIGGER IF EXISTS update_organizations_updated_at ON organizations;
 CREATE TRIGGER update_organizations_updated_at
   BEFORE UPDATE ON organizations
   FOR EACH ROW EXECUTE FUNCTION set_last_updated_timestamp();
 
+DROP TRIGGER IF EXISTS update_chats_updated_at ON chats;
 CREATE TRIGGER update_chats_updated_at
   BEFORE UPDATE ON chats
   FOR EACH ROW EXECUTE FUNCTION set_last_updated_timestamp();
 
+DROP TRIGGER IF EXISTS update_folders_updated_at ON folders;
 CREATE TRIGGER update_folders_updated_at
   BEFORE UPDATE ON folders
   FOR EACH ROW EXECUTE FUNCTION set_last_updated_timestamp();
 
+DROP TRIGGER IF EXISTS update_user_preferences_updated_at ON user_preferences;
 CREATE TRIGGER update_user_preferences_updated_at
   BEFORE UPDATE ON user_preferences
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
@@ -2215,6 +2270,7 @@ ALTER TABLE connector_config ENABLE ROW LEVEL SECURITY;
 ALTER TABLE connector_feature_settings ENABLE ROW LEVEL SECURITY;
 
 -- Admin-only policy for connector_config write
+DROP POLICY IF EXISTS connector_config_admin ON connector_config;
 CREATE POLICY connector_config_admin
   ON connector_config
   FOR ALL
@@ -2222,12 +2278,14 @@ CREATE POLICY connector_config_admin
   WITH CHECK (auth.jwt()->>'role' = 'admin');
 
 -- All users can read connector_config
+DROP POLICY IF EXISTS connector_config_read ON connector_config;
 CREATE POLICY connector_config_read
   ON connector_config
   FOR SELECT
   USING (true);
 
 -- Admin-only policy for connector_feature_settings write
+DROP POLICY IF EXISTS connector_feature_settings_admin ON connector_feature_settings;
 CREATE POLICY connector_feature_settings_admin
   ON connector_feature_settings
   FOR ALL
@@ -2235,6 +2293,7 @@ CREATE POLICY connector_feature_settings_admin
   WITH CHECK (auth.jwt()->>'role' = 'admin');
 
 -- All users can read connector_feature_settings
+DROP POLICY IF EXISTS connector_feature_settings_read ON connector_feature_settings;
 CREATE POLICY connector_feature_settings_read
   ON connector_feature_settings
   FOR SELECT

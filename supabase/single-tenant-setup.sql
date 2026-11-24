@@ -217,21 +217,25 @@ END $$;
 
 -- Allow public access to view backgrounds
 DROP POLICY IF EXISTS "Backgrounds are publicly accessible" ON storage.objects;
+DROP POLICY IF EXISTS "Backgrounds are publicly accessible" ON storage;
 CREATE POLICY "Backgrounds are publicly accessible" ON storage.objects
   FOR SELECT USING (bucket_id = 'backgrounds');
 
 -- Allow authenticated users to upload backgrounds
 DROP POLICY IF EXISTS "Users can upload backgrounds" ON storage.objects;
+DROP POLICY IF EXISTS "Users can upload backgrounds" ON storage;
 CREATE POLICY "Users can upload backgrounds" ON storage.objects
   FOR INSERT WITH CHECK (bucket_id = 'backgrounds' AND auth.role() = 'authenticated');
 
 -- Allow authenticated users to update their own backgrounds
 DROP POLICY IF EXISTS "Users can update own backgrounds" ON storage.objects;
+DROP POLICY IF EXISTS "Users can update own backgrounds" ON storage;
 CREATE POLICY "Users can update own backgrounds" ON storage.objects
   FOR UPDATE USING (bucket_id = 'backgrounds' AND owner = auth.uid());
 
 -- Allow authenticated users to delete their own backgrounds
 DROP POLICY IF EXISTS "Users can delete own backgrounds" ON storage.objects;
+DROP POLICY IF EXISTS "Users can delete own backgrounds" ON storage;
 CREATE POLICY "Users can delete own backgrounds" ON storage.objects
   FOR DELETE USING (bucket_id = 'backgrounds' AND owner = auth.uid());
 
@@ -255,21 +259,25 @@ END $$;
 
 -- Allow public access to 3D models
 DROP POLICY IF EXISTS "3D models are publicly accessible" ON storage.objects;
+DROP POLICY IF EXISTS "3D models are publicly accessible" ON storage;
 CREATE POLICY "3D models are publicly accessible" ON storage.objects
   FOR SELECT USING (bucket_id = '3d-models');
 
 -- Allow authenticated users to upload 3D models
 DROP POLICY IF EXISTS "Users can upload 3D models" ON storage.objects;
+DROP POLICY IF EXISTS "Users can upload 3D models" ON storage;
 CREATE POLICY "Users can upload 3D models" ON storage.objects
   FOR INSERT WITH CHECK (bucket_id = '3d-models' AND auth.role() = 'authenticated');
 
 -- Allow service role to upload 3D models (for AI-generated content)
 DROP POLICY IF EXISTS "Service role can upload 3D models" ON storage.objects;
+DROP POLICY IF EXISTS "Service role can upload 3D models" ON storage;
 CREATE POLICY "Service role can upload 3D models" ON storage.objects
   FOR INSERT WITH CHECK (bucket_id = '3d-models');
 
 -- Allow users to delete their own 3D models
 DROP POLICY IF EXISTS "Users can delete their own 3D models" ON storage.objects;
+DROP POLICY IF EXISTS "Users can delete their own 3D models" ON storage;
 CREATE POLICY "Users can delete their own 3D models" ON storage.objects
   FOR DELETE USING (bucket_id = '3d-models' AND (SELECT auth.uid()) = owner);
 
@@ -783,9 +791,11 @@ DROP POLICY IF EXISTS "Authenticated users insert own documents" ON documents;
 DROP POLICY IF EXISTS "Owners and admins update documents" ON documents;
 DROP POLICY IF EXISTS "Owners and admins delete documents" ON documents;
 
+DROP POLICY IF EXISTS "Allow read access to anonymous users" ON documents;
 CREATE POLICY "Allow read access to anonymous users" ON documents
   FOR SELECT USING (true);
 
+DROP POLICY IF EXISTS "Authenticated users insert own documents" ON documents;
 CREATE POLICY "Authenticated users insert own documents" ON documents
   FOR INSERT TO authenticated
   WITH CHECK (
@@ -793,6 +803,7 @@ CREATE POLICY "Authenticated users insert own documents" ON documents
     AND (NOT kb_writes_locked() OR is_admin((SELECT auth.uid())))
   );
 
+DROP POLICY IF EXISTS "Owners and admins update documents" ON documents;
 CREATE POLICY "Owners and admins update documents" ON documents
   FOR UPDATE TO authenticated
   USING (
@@ -804,6 +815,7 @@ CREATE POLICY "Owners and admins update documents" ON documents
     OR (user_id = (SELECT auth.uid()) AND NOT kb_writes_locked())
   );
 
+DROP POLICY IF EXISTS "Owners and admins delete documents" ON documents;
 CREATE POLICY "Owners and admins delete documents" ON documents
   FOR DELETE TO authenticated
   USING (
@@ -818,9 +830,11 @@ DROP POLICY IF EXISTS "Authenticated users insert chunks of own documents" ON do
 DROP POLICY IF EXISTS "Owners and admins update chunks" ON document_chunks;
 DROP POLICY IF EXISTS "Owners and admins delete chunks" ON document_chunks;
 
+DROP POLICY IF EXISTS "Allow read access to anonymous users" ON document_chunks;
 CREATE POLICY "Allow read access to anonymous users" ON document_chunks
   FOR SELECT USING (true);
 
+DROP POLICY IF EXISTS "Authenticated users insert chunks of own documents" ON document_chunks;
 CREATE POLICY "Authenticated users insert chunks of own documents" ON document_chunks
   FOR INSERT TO authenticated
   WITH CHECK (
@@ -834,6 +848,7 @@ CREATE POLICY "Authenticated users insert chunks of own documents" ON document_c
     )
   );
 
+DROP POLICY IF EXISTS "Owners and admins update chunks" ON document_chunks;
 CREATE POLICY "Owners and admins update chunks" ON document_chunks
   FOR UPDATE TO authenticated
   USING (
@@ -857,6 +872,7 @@ CREATE POLICY "Owners and admins update chunks" ON document_chunks
     )
   );
 
+DROP POLICY IF EXISTS "Owners and admins delete chunks" ON document_chunks;
 CREATE POLICY "Owners and admins delete chunks" ON document_chunks
   FOR DELETE TO authenticated
   USING (
@@ -1376,11 +1392,13 @@ END;
 $$;
 
 -- Create triggers
+DROP TRIGGER IF EXISTS update_whatsapp_sessions_timestamp ON whatsapp_sessions;
 CREATE TRIGGER update_whatsapp_sessions_timestamp
   BEFORE UPDATE ON whatsapp_sessions
   FOR EACH ROW
   EXECUTE FUNCTION update_whatsapp_timestamp();
 
+DROP TRIGGER IF EXISTS update_whatsapp_conversations_timestamp ON whatsapp_conversations;
 CREATE TRIGGER update_whatsapp_conversations_timestamp
   BEFORE UPDATE ON whatsapp_conversations
   FOR EACH ROW
@@ -1417,20 +1435,25 @@ CREATE INDEX IF NOT EXISTS idx_user_preferences_user_id ON user_preferences(user
 ALTER TABLE user_preferences ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies
+DROP POLICY IF EXISTS "Users can view own preferences" ON user_preferences;
 CREATE POLICY "Users can view own preferences" ON user_preferences
   FOR SELECT USING ((SELECT auth.uid()) = user_id);
 
+DROP POLICY IF EXISTS "Users can insert own preferences" ON user_preferences;
 CREATE POLICY "Users can insert own preferences" ON user_preferences
   FOR INSERT WITH CHECK ((SELECT auth.uid()) = user_id);
 
+DROP POLICY IF EXISTS "Users can update own preferences" ON user_preferences;
 CREATE POLICY "Users can update own preferences" ON user_preferences
   FOR UPDATE USING ((SELECT auth.uid()) = user_id);
 
 -- Service role can manage all preferences
+DROP POLICY IF EXISTS "Service role can manage user preferences" ON user_preferences;
 CREATE POLICY "Service role can manage user preferences" ON user_preferences
   FOR ALL USING (auth.role() = 'service_role');
 
 -- Create trigger to update updated_at timestamp
+DROP TRIGGER IF EXISTS update_user_preferences_updated_at ON user_preferences;
 CREATE TRIGGER update_user_preferences_updated_at
   BEFORE UPDATE ON user_preferences
   FOR EACH ROW
@@ -1734,6 +1757,7 @@ ALTER TABLE connector_config ENABLE ROW LEVEL SECURITY;
 ALTER TABLE connector_feature_settings ENABLE ROW LEVEL SECURITY;
 
 -- Admin-only policy for connector_config write
+DROP POLICY IF EXISTS connector_config_admin ON connector_config;
 CREATE POLICY connector_config_admin
   ON connector_config
   FOR ALL
@@ -1741,12 +1765,14 @@ CREATE POLICY connector_config_admin
   WITH CHECK (auth.jwt()->>'role' = 'admin');
 
 -- All users can read connector_config
+DROP POLICY IF EXISTS connector_config_read ON connector_config;
 CREATE POLICY connector_config_read
   ON connector_config
   FOR SELECT
   USING (true);
 
 -- Admin-only policy for connector_feature_settings write
+DROP POLICY IF EXISTS connector_feature_settings_admin ON connector_feature_settings;
 CREATE POLICY connector_feature_settings_admin
   ON connector_feature_settings
   FOR ALL
@@ -1754,6 +1780,7 @@ CREATE POLICY connector_feature_settings_admin
   WITH CHECK (auth.jwt()->>'role' = 'admin');
 
 -- All users can read connector_feature_settings
+DROP POLICY IF EXISTS connector_feature_settings_read ON connector_feature_settings;
 CREATE POLICY connector_feature_settings_read
   ON connector_feature_settings
   FOR SELECT
