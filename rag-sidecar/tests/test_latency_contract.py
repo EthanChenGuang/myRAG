@@ -87,9 +87,15 @@ class TestLatencyBudgets:
         for name in ("chat", "embed"):
             profile = budgets.profiles[name]
             assert (profile.total_p50_ms, profile.total_p95_ms) == (1000, 2000)
-            assert profile.stages == {"embed": 200, "search": 400, "assemble": 100}
+            assert {key: profile.stages[key] for key in ("embed", "search", "assemble")} == {
+                "embed": 200,
+                "search": 400,
+                "assemble": 100,
+            }
+            assert profile.stages["rerank"] == 600
         voice = budgets.profiles["voice"]
         assert (voice.total_p50_ms, voice.total_p95_ms) == (400, 800)
+        assert voice.stages["rerank"] == 250
 
 
 class TestStageLatency:
