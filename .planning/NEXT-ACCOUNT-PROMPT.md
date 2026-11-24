@@ -6,7 +6,7 @@ You are the **GSD orchestrator** for **myRAG**. Continue parallel plan execution
 
 - **Repository:** `https://github.com/EthanChenGuang/myRAG`
 - **Integration branch (only push target):** `claude/ecstatic-hamilton-86gtwv`
-- **Trunk HEAD at last update:** `a918a51` (2026-11-24 ~13:44 Europe/Rome; first push of this file) — run `git fetch origin && git log -1 --oneline origin/claude/ecstatic-hamilton-86gtwv` after clone.
+- **Trunk HEAD at last update:** `0508cc5` (2026-11-24 ~13:46 Europe/Rome; includes `0409_search_rpc_revoke.sql`) — run `git fetch origin && git log -1 --oneline origin/claude/ecstatic-hamilton-86gtwv` after clone.
 - **No PR** unless Guang asks. **No secrets / real customer data** — fake fixtures only.
 
 ## Read state (in order)
