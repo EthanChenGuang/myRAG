@@ -15,3 +15,7 @@ def test_rejects_direct_dsn():
 def test_rejects_db_host():
     with pytest.raises(ValueError, match="db.\\*"):
         assert_supabase_api_url("https://db.x.supabase.co")
+
+def test_keeps_the_port_of_a_local_api_url():
+    assert assert_supabase_api_url("http://127.0.0.1:54321/") == "http://127.0.0.1:54321"
+    assert assert_supabase_api_url("http://localhost:8000") == "http://localhost:8000"
