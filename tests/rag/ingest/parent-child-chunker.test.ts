@@ -31,14 +31,19 @@ const SEPARATOR = '|---|---|---|---|';
 const ROWS = Array.from({ length: 40 }, (_, index) => `|Item ${index}|${1000 + index}.00|${2000 + index}.00|note text ${index}|`);
 const TABLE = `## Balance sheet\n\n${[HEADER, SEPARATOR, ...ROWS].join('\n')}\n`;
 
+const collapse = (text: string): string => text.replace(/\s+/g, ' ').trim();
+
 function assertChildrenInsideParents(result: ParentChildResult): void {
   for (const child of result.children) {
     const parent = result.parents[child.parent_index ?? -1];
     expect(parent, 'child without a parent').toBeDefined();
     expect(child.section_path).toEqual(parent?.section_path);
-    for (const line of child.content.split('\n')) {
-      if (line.trim() === '') continue;
-      expect(parent?.content.includes(line.trim()), `child line not inside its parent: ${line.slice(0, 40)}`).toBe(true);
+    const parentText = collapse(parent?.content ?? '');
+    const lines = child.content.split('\n').filter((line) => line.trim() !== '');
+    if (lines.some((line) => line.startsWith('|'))) {
+      for (const line of lines) expect(parentText.includes(collapse(line)), `child line not inside its parent: ${line.slice(0, 60)}`).toBe(true);
+    } else {
+      expect(parentText.includes(collapse(child.content)), `child text not inside its parent: ${child.content.slice(0, 60)}`).toBe(true);
     }
   }
 }
