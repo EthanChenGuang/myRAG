@@ -480,7 +480,7 @@ def test_get_reports_queued_or_running_before_the_job_finishes(make_client, gate
 def test_get_unknown_or_malformed_job_id_is_404_with_a_sidecar_error(make_client):
     client = make_client(StubConverter())
 
-    for job_id in (UNKNOWN_JOB, "not-a-uuid", "..%2F..%2Fetc"):
+    for job_id in (UNKNOWN_JOB, "not-a-uuid", "job_0123", "%2e%2e"):
         response = client.get(f"/v1/parse/jobs/{job_id}", headers=AUTH)
         assert response.status_code == 404, job_id
         assert SidecarError.model_validate(response.json()).error == "job_not_found"
