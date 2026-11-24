@@ -80,6 +80,7 @@ describe('stage idempotency: a slice is bounded, a replay changes nothing and a 
     for (let call = 0; call < 40; call += 1) {
       const body = advanceBody(cacheId, cursor, 1);
       requests.push(body);
+      await harness.heartbeat(jobId, WORKER);
       last = await harness.callback(jobId, 'advance', body);
       assert.equal(last.status, 200, JSON.stringify(last.body));
       stages.push(String(last.body.stage));
@@ -151,6 +152,7 @@ describe('stage idempotency: a slice is bounded, a replay changes nothing and a 
       let cursor: string | null = null;
       let rewound = false;
       for (let call = 0; call < 40; call += 1) {
+        await harness.heartbeat(jobId, WORKER);
         const reply = await harness.callback(jobId, 'advance', advanceBody(cacheId, cursor, 1));
         assert.equal(reply.status, 200, JSON.stringify(reply.body));
         if (reply.body.done === true) break;
