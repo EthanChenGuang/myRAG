@@ -1,4 +1,8 @@
+import importlib
+import importlib.util
 import os
+import re
+import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -19,7 +23,31 @@ class PageCapExceeded(ConversionError):
 
 
 class Converter(Protocol):
+    """Turns one uploaded file into a ParseResult, writing every artifact it lists into out_dir.
+
+    Instances are pickled into each pool worker (spawn), so they must be picklable and cheap to
+    construct; models and pipelines are built lazily on the first convert call inside the worker.
+    Raise ConversionError(error_class) for a classified failure; any other exception is reported
+    by its snake_case class name and its message is dropped.
+    """
+
     def convert(self, input_path: Path, request: ParseJobRequest, out_dir: Path) -> ParseResult: ...
+
+
+_ERROR_CLASS = re.compile(r"[a-z][a-z0-9_]{0,63}")
+_ADAPTER_MODULE = "rag_sidecar.parse.docling_adapter"
+
+
+def error_class_of(error: BaseException) -> str:
+    declared = getattr(error, "error_class", None)
+    if isinstance(declared, str) and _ERROR_CLASS.fullmatch(declared):
+        return declared
+    name = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1_\2", type(error).__name__)
+    name = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", name).lower()
+    name = re.sub(r"[^a-z0-9_]", "_", name)
+    if not name or not name[0].isalpha():
+        name = f"error_{name}"
+    return name[:64]
 
 
 def stub_result(page_count: int = 1, artifacts: list[str] | None = None) -> ParseResult:
@@ -62,16 +90,43 @@ class StubConverter:
         if self.error_class is not None:
             raise ConversionError(self.error_class)
         if self.raises is not None:
-            raise self.raises(self.message)
+            raise self.raises(self.message) if self.message else self.raises()
         for name, payload in {**self.artifacts, **self.unlisted}.items():
             (out_dir / name).write_bytes(payload)
         base = self.result if self.result is not None else stub_result()
         return base.model_copy(update={"artifacts": sorted(self.artifacts)}) if self.artifacts else base
 
 
+def _importable(name: str) -> bool:
+    if name in sys.modules:
+        return True
+    try:
+        return importlib.util.find_spec(name) is not None
+    except (ImportError, ValueError):
+        return False
+
+
 def docling_available() -> bool:
-    return False
+    return _importable("docling") and _importable(_ADAPTER_MODULE)
+
+
+class LazyDoclingConverter:
+    """Defers the heavy Docling import to the first convert call, which runs in a pool worker."""
+
+    def __init__(self) -> None:
+        self._converter: Converter | None = None
+
+    def __getstate__(self) -> dict[str, object]:
+        return {}
+
+    def __setstate__(self, _state: dict[str, object]) -> None:
+        self._converter = None
+
+    def convert(self, input_path: Path, request: ParseJobRequest, out_dir: Path) -> ParseResult:
+        if self._converter is None:
+            self._converter = importlib.import_module(_ADAPTER_MODULE).DoclingConverter()
+        return self._converter.convert(input_path, request, out_dir)
 
 
 def default_converter() -> Converter | None:
-    return None
+    return LazyDoclingConverter() if docling_available() else None

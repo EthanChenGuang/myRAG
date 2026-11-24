@@ -153,7 +153,7 @@ def test_runner_page_count_within_cap_succeeds(make_runner):
 
 
 def test_runner_page_cap_exceeded_exception_maps_to_page_cap(make_runner):
-    runner = make_runner(StubConverter(raises=PageCapExceeded))
+    runner = make_runner(StubConverter(raises=PageCapExceeded, message=""))
     state = finished(runner, runner.submit(make_request(), PDF_BYTES))
 
     assert state.error_class == "page_cap"

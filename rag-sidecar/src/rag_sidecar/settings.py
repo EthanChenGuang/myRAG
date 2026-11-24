@@ -1,7 +1,7 @@
 import os
 from importlib.metadata import PackageNotFoundError, version as _package_version
 
-from pydantic import BaseModel, ConfigDict, Field, SecretStr
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError
 
 SECRET_ENV_VAR = "RAG_SIDECAR_SECRET"
 PARSE_WORKERS_ENV_VAR = "RAG_SIDECAR_PARSE_WORKERS"
@@ -47,6 +47,33 @@ class SidecarSettings(BaseModel):
         return self.max_upload_mb * 1024 * 1024
 
 
+_INT_VARIABLES = {
+    "parse_workers": PARSE_WORKERS_ENV_VAR,
+    "parse_queue": PARSE_QUEUE_ENV_VAR,
+    "parse_ttl_seconds": PARSE_TTL_ENV_VAR,
+    "max_upload_mb": MAX_UPLOAD_ENV_VAR,
+    "page_cap": PAGE_CAP_ENV_VAR,
+}
+
+
+def _usable_int(field: str, raw: str | None) -> int | None:
+    if raw is None:
+        return None
+    try:
+        value = int(raw.strip())
+        SidecarSettings(**{field: value})
+    except (ValueError, ValidationError):
+        return None
+    return value
+
+
 def load_settings() -> SidecarSettings:
     raw = os.environ.get(SECRET_ENV_VAR)
-    return SidecarSettings(secret=SecretStr(raw) if raw else None)
+    values: dict[str, object] = {"secret": SecretStr(raw) if raw else None}
+    for field, variable in _INT_VARIABLES.items():
+        value = _usable_int(field, os.environ.get(variable))
+        if value is not None:
+            values[field] = value
+    artifacts = (os.environ.get(DOCLING_ARTIFACTS_ENV_VAR) or "").strip()
+    values["docling_artifacts"] = artifacts or None
+    return SidecarSettings(**values)
