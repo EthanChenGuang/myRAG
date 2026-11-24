@@ -369,3 +369,82 @@ test('LEGACY_WRITERS: every entry still exempts a real violation on the tree, so
     assert.ok(hits.length > 0, `${entry.path} no longer violates ${entry.rules.join(', ')}; remove its LEGACY_WRITERS entry`);
   }
 });
+
+test('exports the Phase 3.1 ledger, budget and cache rule ids', () => {
+  const ids = RULES.map((r) => r.id);
+  for (const id of ['ledger-table-write', 'ledger-rpc', 'budget-rpc', 'cache-rpc', 'backfill-rpc']) {
+    assert.ok(ids.includes(id), `missing rule ${id}`);
+  }
+});
+
+test('ledger-table-write: mutating ledger tables fails anywhere under src, including ledger.ts', () => {
+  const write = "await admin.from('ingestion_jobs').update({ status: 'done' });\n";
+  assert.deepEqual(rulesFor({ 'src/app/api/x/route.ts': write }), ['src/app/api/x/route.ts:ledger-table-write']);
+  assert.deepEqual(rulesFor({ 'src/lib/rag/ingest/ledger.ts': write }), ['src/lib/rag/ingest/ledger.ts:ledger-table-write']);
+  const tables = {
+    'src/lib/a.ts': "await admin.from('ingestion_batches').insert(rows);\n",
+    'src/lib/b.ts': 'await admin.from(`rag_parse_cache`).delete().eq("id", id);\n',
+    'src/lib/c.ts': "await admin.from('rag_parse_budget_usage').upsert(row);\n",
+    'src/lib/d.ts': "await admin.from('rag_embed_batches').update({ n: 1 }).eq('id', id);\n",
+  };
+  const out = rulesFor(tables);
+  assert.equal(out.length, 4);
+  assert.ok(out.every((entry) => entry.endsWith(':ledger-table-write')));
+});
+
+test('ledger-table-write: select on ledger tables passes', () => {
+  assert.deepEqual(
+    rulesFor({ 'src/lib/a.ts': "await admin.from('ingestion_jobs').select('id');\n" }),
+    [],
+  );
+});
+
+test('ledger-rpc: ingestion_job RPCs fail outside ledger.ts and pass inside', () => {
+  const outside = "await db.rpc('rag_claim_ingestion_jobs', args);\n";
+  assert.deepEqual(rulesFor({ 'src/lib/rag/ingest/enqueue.ts': outside }), ['src/lib/rag/ingest/enqueue.ts:ledger-rpc']);
+  assert.deepEqual(rulesFor({ 'src/lib/rag/ingest/ledger.ts': outside }), []);
+  assert.deepEqual(rulesFor({ 'src/lib/rag/ingest/ledger.ts': 'await db.rpc(`rag_claim_ingestion_jobs_${n}`, args);\n' }), []);
+  assert.deepEqual(rulesFor({ 'src/lib/a.ts': "await db.rpc('increment_counter', {});\n" }), []);
+});
+
+test('budget-rpc: budget RPCs fail outside cloud-budget.ts', () => {
+  const names = ['rag_reserve_parse_budget', 'rag_settle_parse_budget', 'rag_release_parse_budget', 'rag_reserve_batch_budget'];
+  const files = {};
+  names.forEach((name, i) => {
+    files[`src/lib/x${i}.ts`] = `await db.rpc('${name}', args);\n`;
+  });
+  const out = rulesFor(files);
+  assert.equal(out.length, names.length);
+  assert.ok(out.every((entry) => entry.endsWith(':budget-rpc')));
+  assert.deepEqual(
+    rulesFor({ 'src/lib/rag/ingest/guard/cloud-budget.ts': "await db.rpc('rag_reserve_parse_budget', args);\n" }),
+    [],
+  );
+});
+
+test('cache-rpc: parse-cache RPCs fail outside parse-cache.ts', () => {
+  assert.deepEqual(rulesFor({ 'src/lib/a.ts': "await db.rpc('rag_parse_cache_put', args);\n" }), ['src/lib/a.ts:cache-rpc']);
+  assert.deepEqual(rulesFor({ 'src/lib/b.ts': "await db.rpc('rag_set_document_parse_cache', args);\n" }), ['src/lib/b.ts:cache-rpc']);
+  assert.deepEqual(rulesFor({ 'src/lib/c.ts': 'await db.rpc(`rag_parse_cache_get_${id}`, args);\n' }), ['src/lib/c.ts:cache-rpc']);
+  assert.deepEqual(rulesFor({ 'src/lib/rag/ingest/parse-cache.ts': "await db.rpc('rag_parse_cache_put', args);\n" }), []);
+});
+
+test('backfill-rpc: batch RPCs fail outside src/lib/rag/ingest/backfill/', () => {
+  const calls = [
+    "await db.rpc('rag_enqueue_backfill_jobs', args);\n",
+    "await db.rpc('rag_existing_file_hashes', args);\n",
+    'await db.rpc(`rag_embed_batch_run_${id}`, args);\n',
+    "await db.rpc('finish_ingestion_batch', args);\n",
+  ];
+  const files = {};
+  calls.forEach((code, i) => {
+    files[`src/lib/out${i}.ts`] = code;
+  });
+  const out = rulesFor(files);
+  assert.equal(out.length, calls.length);
+  assert.ok(out.every((entry) => entry.endsWith(':backfill-rpc')));
+  assert.deepEqual(
+    rulesFor({ 'src/lib/rag/ingest/backfill/run.ts': calls[0] }),
+    [],
+  );
+});

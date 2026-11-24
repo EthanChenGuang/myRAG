@@ -83,6 +83,10 @@ const RAG_DIR = 'src/lib/rag/';
 const TENANT_DIR = 'src/lib/rag/tenant/';
 const INGEST_DIR = 'src/lib/rag/ingest/';
 const PROFILES_DIR = 'src/lib/rag/ingest/profiles/';
+const LEDGER_CLIENT = 'src/lib/rag/ingest/ledger.ts';
+const BUDGET_CLIENT = 'src/lib/rag/ingest/guard/cloud-budget.ts';
+const CACHE_CLIENT = 'src/lib/rag/ingest/parse-cache.ts';
+const BACKFILL_DIR = 'src/lib/rag/ingest/backfill/';
 
 const outsideRag = (rel) => !rel.startsWith(RAG_DIR);
 const outsideTenant = (rel) => !rel.startsWith(TENANT_DIR);
@@ -99,6 +103,40 @@ const DOC_TYPE_NAME = String.raw`(?:doc_type|docType)\b`;
 const DOC_TYPE_COMPARE_RE = new RegExp(String.raw`\b${DOC_TYPE_NAME}\s*[!=]==?`, 'g');
 const DOC_TYPE_COMPARE_REVERSED_RE = new RegExp(String.raw`[!=]==?\s*[\w$.]*\b${DOC_TYPE_NAME}`, 'g');
 const DOC_TYPE_SWITCH_RE = new RegExp(String.raw`\bswitch\s*\(\s*[\w$.]*\b${DOC_TYPE_NAME}`, 'g');
+
+const LEDGER_TABLES = [
+  'ingestion_jobs',
+  'ingestion_batches',
+  'rag_parse_cache',
+  'rag_parse_budget_usage',
+  'rag_parse_budget_reservations',
+  'rag_parse_tier_overrides',
+  'rag_embed_batches',
+];
+const LEDGER_TABLE_WRITE_RE = new RegExp(
+  String.raw`\.from\s*(?:<[^>()]*>)?\s*\(\s*(['"\`])(${LEDGER_TABLES.join('|')})\1[^()]*\)\s*\.\s*(?:insert|update|upsert|delete)\s*\(`,
+  'g',
+);
+const LEDGER_RPC_RE = /\.rpc\s*\(\s*(['"`])[^'"`]*ingestion_job/g;
+const BUDGET_RPCS = [
+  'rag_reserve_parse_budget',
+  'rag_settle_parse_budget',
+  'rag_release_parse_budget',
+  'rag_reserve_batch_budget',
+];
+const BUDGET_RPC_RE = new RegExp(String.raw`\.rpc\s*\(\s*(['"\`])(?:${BUDGET_RPCS.join('|')})`, 'g');
+const CACHE_RPC_RE = /\.rpc\s*\(\s*(['"`])(?:rag_set_document_parse_cache|rag_parse_cache_)/g;
+const BACKFILL_RPC_TOKENS = ['ingestion_batch', 'rag_enqueue_backfill_jobs', 'rag_existing_file_hashes', 'embed_batch'];
+const BACKFILL_RPC_RE = new RegExp(
+  `\\.rpc\\s*\\(\\s*(['"\`])[^'"\`\\$]*(?:${BACKFILL_RPC_TOKENS.join('|')})`,
+  'g',
+);
+
+const inSrc = (rel) => rel.startsWith('src/');
+const outsideLedgerClient = (rel) => inSrc(rel) && rel !== LEDGER_CLIENT;
+const outsideBudgetClient = (rel) => inSrc(rel) && rel !== BUDGET_CLIENT;
+const outsideCacheClient = (rel) => inSrc(rel) && rel !== CACHE_CLIENT;
+const outsideBackfillDir = (rel) => inSrc(rel) && !rel.startsWith(BACKFILL_DIR);
 
 const IMPORT_FROM_RE =
   /\b(?:import|export)\s+(?:type\s+)?((?:[\w$]+\s*,?\s*)?(?:\*(?:\s*as\s+[\w$]+)?|\{[^}]*\})?)\s*from\s*(['"])([^'"\n]+)\2/g;
@@ -276,6 +314,36 @@ export const RULES = [
       ...regexMatches(DOC_TYPE_COMPARE_REVERSED_RE, text),
       ...regexMatches(DOC_TYPE_SWITCH_RE, text),
     ],
+  },
+  {
+    id: 'ledger-table-write',
+    description: 'ledger, cache or budget tables mutated via PostgREST outside SQL RPCs (D-04)',
+    appliesTo: inSrc,
+    find: (text) => regexMatches(LEDGER_TABLE_WRITE_RE, text),
+  },
+  {
+    id: 'ledger-rpc',
+    description: 'ingestion_job RPC called outside src/lib/rag/ingest/ledger.ts',
+    appliesTo: outsideLedgerClient,
+    find: (text) => regexMatches(LEDGER_RPC_RE, text),
+  },
+  {
+    id: 'budget-rpc',
+    description: 'parse or batch budget RPC called outside src/lib/rag/ingest/guard/cloud-budget.ts',
+    appliesTo: outsideBudgetClient,
+    find: (text) => regexMatches(BUDGET_RPC_RE, text),
+  },
+  {
+    id: 'cache-rpc',
+    description: 'parse-cache RPC called outside src/lib/rag/ingest/parse-cache.ts',
+    appliesTo: outsideCacheClient,
+    find: (text) => regexMatches(CACHE_RPC_RE, text),
+  },
+  {
+    id: 'backfill-rpc',
+    description: 'backfill batch RPC called outside src/lib/rag/ingest/backfill/',
+    appliesTo: outsideBackfillDir,
+    find: (text) => regexMatches(BACKFILL_RPC_RE, text),
   },
 ];
 
