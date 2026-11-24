@@ -138,6 +138,7 @@ def write_drafted_items(
                 answerable=proposal.answerable,
                 expected_answer=proposal.expected_answer,
                 gold_evidence=proposal.gold_evidence,
+                evidence_language=proposal.evidence_language,
                 review_status="draft",
                 provenance=entry.provenance,
                 split=assignments.get(item_id) or assign_split(item_id),

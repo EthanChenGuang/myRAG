@@ -252,6 +252,22 @@ def _no_answer_item() -> GoldenItem:
     )
 
 
+def _cross_lingual_item() -> GoldenItem:
+    return GoldenItem(
+        id="xl-en-zh-01",
+        question="How many days of annual leave does a new employee get?",
+        language="en",
+        category="cross_lingual",
+        answerable=True,
+        expected_answer="Five days per year.",
+        gold_evidence=[GoldSpan(document="handbook.zh.md", section="Leave policy", quote="每年 5 天")],
+        evidence_language="zh",
+        review_status="approved",
+        provenance="synthetic_fixture",
+        split="dev",
+    )
+
+
 def _trace(answer: str | None) -> RagTrace:
     return RagTrace(
         item_id="en-general-001",
@@ -342,6 +358,7 @@ def _eval_report() -> EvalReport:
         by_language={"en": _slice_metrics()},
         by_category={"general": _slice_metrics()},
         by_language_category={"en:general": _slice_metrics()},
+        by_language_pair={"en->zh": _slice_metrics()},
         by_split={"dev": _slice_metrics()},
         by_provenance={"synthetic_fixture": _slice_metrics()},
         by_provenance_category={"synthetic_fixture/general": _slice_metrics()},
@@ -594,6 +611,10 @@ def build_samples() -> dict[str, dict[str, Any]]:
         "GoldenItem:no_answer_null_expected": {
             "model": "GoldenItem",
             "value": _no_answer_item().model_dump(mode="json"),
+        },
+        "GoldenItem:cross_lingual": {
+            "model": "GoldenItem",
+            "value": _cross_lingual_item().model_dump(mode="json"),
         },
         "RagTrace:answer_null": {
             "model": "RagTrace",

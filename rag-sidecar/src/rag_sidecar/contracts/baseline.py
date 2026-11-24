@@ -71,7 +71,9 @@ class NoiseConfig(_Contract):
     schema_version: Literal[1] = 1
     k: float = Field(default=3.0, ge=0)
     floor: float = Field(default=0.02, ge=0)
-    gated_slice_prefixes: list[str] = Field(default_factory=lambda: ["overall", "language:"])
+    gated_slice_prefixes: list[str] = Field(
+        default_factory=lambda: ["overall", "language:", "category:cross_lingual", "pair:"]
+    )
     metrics: dict[str, Literal["higher", "lower"]] = Field(default_factory=_default_metric_directions)
 
 

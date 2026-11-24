@@ -2674,6 +2674,391 @@
     "source_images": []
   },
   {
+    "query": "Is the TOTALE COMPLESSIVO line on the receipt 294.63?",
+    "results": [
+      {
+        "chunk_id": "00093786-bf58-48ba-89c6-5abd38c6a349",
+        "document_id": "b0f11cff-e756-4458-a963-b53776c9da72",
+        "content": "Document: scanned-receipt.it.md. Chunk 3 of 5. Content: ## Totali\n\nTota1e imponibi1e                              241,5O\nIVA 22 %                                        53,13\nTOTALE COMPLESSIVO                             294,63\nPagato con carta di credito                    294,63\nResto                                            O,OO\n[Metadata:   ]",
+        "similarity": 0.4787874611940133,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "4a19a9ae-ac20-4be5-9a3e-a3e8f4001e99",
+        "document_id": "4dda7ba2-55f3-4e0f-8cfd-83f2ef597e40",
+        "content": "Document: warehouse-floorplan.png. Chunk 2 of 4. Content: ## Receiving zone\n\nThe image marks the receiving zone in blue along the south wall, next to dock doors 1 and 2. Pallets arrive here, are scanned and wait on a yellow floor line before they move into the aisles. A small desk with a scanner stands at the west end of the zone.\n[Metadata:   ]",
+        "similarity": 0.1545826123287486,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "Is the IVA at 22% on the receipt 53.13?",
+    "results": [
+      {
+        "chunk_id": "00093786-bf58-48ba-89c6-5abd38c6a349",
+        "document_id": "b0f11cff-e756-4458-a963-b53776c9da72",
+        "content": "Document: scanned-receipt.it.md. Chunk 3 of 5. Content: ## Totali\n\nTota1e imponibi1e                              241,5O\nIVA 22 %                                        53,13\nTOTALE COMPLESSIVO                             294,63\nPagato con carta di credito                    294,63\nResto                                            O,OO\n[Metadata:   ]",
+        "similarity": 0.33642738110235193,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "Does the warranty cover an instrument that was dropped or submerged in water?",
+    "results": [
+      {
+        "chunk_id": "14d86797-5795-41e5-ae46-43a0a2934a19",
+        "document_id": "959e010a-5e5f-4725-a739-cb8cddeeda49",
+        "content": "Document: product-specs.en.md. Chunk 6 of 6. Content: ## Warranty and replacement parts\n\nEvery instrument in this list carries a two year limited warranty that starts on the delivery date. Replacement probe cables are sold under SKU LV-RC-0030 for the 3 metre cable and LV-RC-0050 for a 5 metre cable. Battery covers are sold under SKU LV-BC-0011. Warranty claims go to warranty@example.org with the device identifier and a photo of the label.\n[Metadata:   ]",
+        "similarity": 0.33738447132481064,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "0aa02763-f10b-4517-997a-e61d8f850df3",
+        "document_id": "b3cea6c0-8718-4ce2-a5cc-4907af5a33fb",
+        "content": "Document: shipping-handbook.en.md. Chunk 2 of 6. Content: ## Packaging rules\n\nEvery instrument is packed in a foam-lined box with a moisture sachet. Thermal probes with a cable longer than 3 metres are coiled and fixed with a paper band before boxing. Packages that weigh more than 20 kilograms are shipped on a pallet and are never sent as ordinary parcels. Batteries are packed separately from instruments and carry a lithium handling label when the model uses lithium cells.\n[Metadata:   ]",
+        "similarity": 0.2068954505795837,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "If a unit is replaced under warranty, which expiry date does the new unit get?",
+    "results": [
+      {
+        "chunk_id": "14d86797-5795-41e5-ae46-43a0a2934a19",
+        "document_id": "959e010a-5e5f-4725-a739-cb8cddeeda49",
+        "content": "Document: product-specs.en.md. Chunk 6 of 6. Content: ## Warranty and replacement parts\n\nEvery instrument in this list carries a two year limited warranty that starts on the delivery date. Replacement probe cables are sold under SKU LV-RC-0030 for the 3 metre cable and LV-RC-0050 for a 5 metre cable. Battery covers are sold under SKU LV-BC-0011. Warranty claims go to warranty@example.org with the device identifier and a photo of the label.\n[Metadata:   ]",
+        "similarity": 0.3009387581701305,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "a8b0fc80-ffca-4f16-8984-deb9858da091",
+        "document_id": "68800580-ea11-489e-9d23-5ac0bfacdec7",
+        "content": "Document: scanned-invoice.en.md. Chunk 1 of 5. Content: ## lnvoice header\n\nLUMEN VA1LEY lNSTRUMENTS\nlnvoice no. INV-24-00381\nDate of issue: 12 Marcl1 2O24\nCustomer: Harbor Light Laboratories, Unit 4B\nOrder reference: PO-7731\n[Metadata:   ]",
+        "similarity": 0.17209492942561266,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "On what date did 示例化工有限公司 and 绿谷仪器股份有限公司 sign service contract GV-MS-2024-0057?",
+    "results": [
+      {
+        "chunk_id": "f6c3034f-9022-42b8-a0c5-66ff73e9fc5d",
+        "document_id": "1338762a-94bb-4894-b1a8-4ca497e3f3cc",
+        "content": "Document: scanned-contract.zh.md. Chunk 6 of 6. Content: ## 签章页\n\n甲方（盖章）：示例化工有限公司\n乙方（盖章）：绿谷仪器股份有限公司\n本合同一式两份，甲乙双方各执一份，具\n有同等法律效力。联系邮箱：service@example.net\n[Metadata:   ]",
+        "similarity": 0.510573177899537,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "aba6bb79-15e1-4547-8dd7-a0ce99177467",
+        "document_id": "1338762a-94bb-4894-b1a8-4ca497e3f3cc",
+        "content": "Document: scanned-contract.zh.md. Chunk 1 of 6. Content: ## 设备维护服务合 同\n\n合同编号：GV-MS-2O24-0057\n甲方：示例化工有限公司（以下简称“甲\n方”）\n乙方：绿谷仪器股份有限公司（以下简称\n“乙方”）\n签订日期：2O24 年 6 月 18 日\n甲方代表：陈示例    乙方代表：周样本\n[Metadata:   ]",
+        "similarity": 0.43772179079216733,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "How often can an employee work from home in a week once the manager agrees?",
+    "results": [],
+    "source_images": []
+  },
+  {
+    "query": "Is service@example.net the contact email on the signature page of the contract between 示例化工有限公司 and 绿谷仪器股份有限公司?",
+    "results": [
+      {
+        "chunk_id": "f6c3034f-9022-42b8-a0c5-66ff73e9fc5d",
+        "document_id": "1338762a-94bb-4894-b1a8-4ca497e3f3cc",
+        "content": "Document: scanned-contract.zh.md. Chunk 6 of 6. Content: ## 签章页\n\n甲方（盖章）：示例化工有限公司\n乙方（盖章）：绿谷仪器股份有限公司\n本合同一式两份，甲乙双方各执一份，具\n有同等法律效力。联系邮箱：service@example.net\n[Metadata:   ]",
+        "similarity": 0.5351422941345809,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "aba6bb79-15e1-4547-8dd7-a0ce99177467",
+        "document_id": "1338762a-94bb-4894-b1a8-4ca497e3f3cc",
+        "content": "Document: scanned-contract.zh.md. Chunk 1 of 6. Content: ## 设备维护服务合 同\n\n合同编号：GV-MS-2O24-0057\n甲方：示例化工有限公司（以下简称“甲\n方”）\n乙方：绿谷仪器股份有限公司（以下简称\n“乙方”）\n签订日期：2O24 年 6 月 18 日\n甲方代表：陈示例    乙方代表：周样本\n[Metadata:   ]",
+        "similarity": 0.36495382681358524,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "How is an employee paid while off sick?",
+    "results": [
+      {
+        "chunk_id": "821d8054-a2c0-49a0-9685-60bee8f80d9b",
+        "document_id": "b3cea6c0-8718-4ce2-a5cc-4907af5a33fb",
+        "content": "Document: shipping-handbook.en.md. Chunk 1 of 6. Content: ## Carrier cut-off times\n\nLumen Valley Instruments ships from one warehouse. Orders paid before 14:00 on a business day leave the warehouse the same day with the standard carrier. Orders paid after 14:00 leave on the next business day. The express carrier has an earlier cut-off of 12:00 for same-day dispatch. Orders placed on a Saturday or Sunday leave on Monday.\n[Metadata:   ]",
+        "similarity": 0.15156129859416623,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "In quale unità si trova il cliente Harbor Light Laboratories della fattura INV-24-00381?",
+    "results": [
+      {
+        "chunk_id": "a8b0fc80-ffca-4f16-8984-deb9858da091",
+        "document_id": "68800580-ea11-489e-9d23-5ac0bfacdec7",
+        "content": "Document: scanned-invoice.en.md. Chunk 1 of 5. Content: ## lnvoice header\n\nLUMEN VA1LEY lNSTRUMENTS\nlnvoice no. INV-24-00381\nDate of issue: 12 Marcl1 2O24\nCustomer: Harbor Light Laboratories, Unit 4B\nOrder reference: PO-7731\n[Metadata:   ]",
+        "similarity": 0.3714706914564887,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "A quale ordine di riferimento corrisponde la fattura INV-24-00381 del cliente Harbor Light Laboratories?",
+    "results": [
+      {
+        "chunk_id": "a8b0fc80-ffca-4f16-8984-deb9858da091",
+        "document_id": "68800580-ea11-489e-9d23-5ac0bfacdec7",
+        "content": "Document: scanned-invoice.en.md. Chunk 1 of 5. Content: ## lnvoice header\n\nLUMEN VA1LEY lNSTRUMENTS\nlnvoice no. INV-24-00381\nDate of issue: 12 Marcl1 2O24\nCustomer: Harbor Light Laboratories, Unit 4B\nOrder reference: PO-7731\n[Metadata:   ]",
+        "similarity": 0.38964912912302574,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "0f2c29e3-bd3d-463e-b081-e3d542ede4a3",
+        "document_id": "fb5ddaad-1d78-4479-a51a-51dc0824ed5d",
+        "content": "Document: refund-policy.it.md. Chunk 2 of 5. Content: ## Piani mensili\n\nValle Verde Strumenti accetta richieste di rimborso per i piani con fatturazione mensile. La richiesta va inviata all'ufficio amministrazione insieme al numero d'ordine. Il rimborso viene accreditato sul metodo di pagamento originale entro 12 giorni lavorativi. Per i piani mensili il termine per chiedere il rimborso è di 10 giorni dalla data di acquisto.\n[Metadata:   ]",
+        "similarity": 0.1660972090611902,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "cb66cdc7-d8bf-4346-a673-d82095c8a676",
+        "document_id": "fb5ddaad-1d78-4479-a51a-51dc0824ed5d",
+        "content": "Document: refund-policy.it.md. Chunk 1 of 5. Content: ## Piani annuali\n\nValle Verde Strumenti accetta richieste di rimborso per i piani con fatturazione annuale. La richiesta va inviata all'ufficio amministrazione insieme al numero d'ordine. Il rimborso viene accreditato sul metodo di pagamento originale entro 12 giorni lavorativi. Per i piani annuali il termine per chiedere il rimborso è di 60 giorni dalla data di acquisto.\n[Metadata:   ]",
+        "similarity": 0.1617914635477028,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "e2bee7d6-7735-4b8f-b424-393d77af6ee0",
+        "document_id": "b956386c-b598-4884-bc39-b15acb72a252",
+        "content": "Document: warranty-terms.it.md. Chunk 5 of 6. Content: ## Tempi e costi di spedizione\n\nIl centro di assistenza completa la riparazione entro 15 giorni lavorativi dal ricevimento dello strumento. Le spese di spedizione verso il centro sono a carico del cliente, mentre la spedizione di ritorno è a carico di Valle Verde Strumenti per gli interventi in garanzia. Per gli interventi fuori garanzia viene inviato prima un preventivo, valido 10 giorni.\n[Metadata:   ]",
+        "similarity": 0.15718047066406216,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "52e54dac-e99f-41bb-9001-2746a0897469",
+        "document_id": "fb5ddaad-1d78-4479-a51a-51dc0824ed5d",
+        "content": "Document: refund-policy.it.md. Chunk 5 of 5. Content: ## Come inviare la richiesta\n\nScrivere a rimborsi@example.com indicando il numero d'ordine e l'indirizzo email usato al momento dell'acquisto. Le richieste telefoniche sono gestite al numero 555-0144 nei giorni feriali dalle 9:00 alle 17:00. La ricezione della richiesta viene confermata entro due giorni lavorativi.\n[Metadata:   ]",
+        "similarity": 0.1501669630458159,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "Con quale modalità vengono spediti i pacchi molto pesanti?",
+    "results": [],
+    "source_images": []
+  },
+  {
+    "query": "Gli ordini spediti all'estero possono essere soggetti a dazi doganali?",
+    "results": [
+      {
+        "chunk_id": "96b82c4c-5d34-4e6c-8222-02a29b8f20a3",
+        "document_id": "b0f11cff-e756-4458-a963-b53776c9da72",
+        "content": "Document: scanned-receipt.it.md. Chunk 4 of 5. Content: ## Condizioni di reso\n\nI1 reso e possibi1e entro 14 giorni dalla data dello scontrino, perche la merce deve essere integra e nella confezione origina1e. Per i1 reso occorre presentare questo scontrino. Gli articoli personalizzati non si possono restituire. Il rimborso avviene sulla stessa carta usata per l'acquisto.\n[Metadata:   ]",
+        "similarity": 0.15713862989592564,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "In quale data 示例化工有限公司 e 绿谷仪器股份有限公司 hanno firmato il contratto di servizio GV-MS-2024-0057?",
+    "results": [
+      {
+        "chunk_id": "f6c3034f-9022-42b8-a0c5-66ff73e9fc5d",
+        "document_id": "1338762a-94bb-4894-b1a8-4ca497e3f3cc",
+        "content": "Document: scanned-contract.zh.md. Chunk 6 of 6. Content: ## 签章页\n\n甲方（盖章）：示例化工有限公司\n乙方（盖章）：绿谷仪器股份有限公司\n本合同一式两份，甲乙双方各执一份，具\n有同等法律效力。联系邮箱：service@example.net\n[Metadata:   ]",
+        "similarity": 0.4788784800288799,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "aba6bb79-15e1-4547-8dd7-a0ce99177467",
+        "document_id": "1338762a-94bb-4894-b1a8-4ca497e3f3cc",
+        "content": "Document: scanned-contract.zh.md. Chunk 1 of 6. Content: ## 设备维护服务合 同\n\n合同编号：GV-MS-2O24-0057\n甲方：示例化工有限公司（以下简称“甲\n方”）\n乙方：绿谷仪器股份有限公司（以下简称\n“乙方”）\n签订日期：2O24 年 6 月 18 日\n甲方代表：陈示例    乙方代表：周样本\n[Metadata:   ]",
+        "similarity": 0.4365128013843189,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "service@example.net è l'email di contatto nella pagina delle firme del contratto tra 示例化工有限公司 e 绿谷仪器股份有限公司?",
+    "results": [
+      {
+        "chunk_id": "f6c3034f-9022-42b8-a0c5-66ff73e9fc5d",
+        "document_id": "1338762a-94bb-4894-b1a8-4ca497e3f3cc",
+        "content": "Document: scanned-contract.zh.md. Chunk 6 of 6. Content: ## 签章页\n\n甲方（盖章）：示例化工有限公司\n乙方（盖章）：绿谷仪器股份有限公司\n本合同一式两份，甲乙双方各执一份，具\n有同等法律效力。联系邮箱：service@example.net\n[Metadata:   ]",
+        "similarity": 0.528598983377067,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "aba6bb79-15e1-4547-8dd7-a0ce99177467",
+        "document_id": "1338762a-94bb-4894-b1a8-4ca497e3f3cc",
+        "content": "Document: scanned-contract.zh.md. Chunk 1 of 6. Content: ## 设备维护服务合 同\n\n合同编号：GV-MS-2O24-0057\n甲方：示例化工有限公司（以下简称“甲\n方”）\n乙方：绿谷仪器股份有限公司（以下简称\n“乙方”）\n签订日期：2O24 年 6 月 18 日\n甲方代表：陈示例    乙方代表：周样本\n[Metadata:   ]",
+        "similarity": 0.3558499509662286,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "3927fe78-043d-4503-8d61-f79dc1923e57",
+        "document_id": "b956386c-b598-4884-bc39-b15acb72a252",
+        "content": "Document: warranty-terms.it.md. Chunk 3 of 6. Content: ## Cosa non è coperto\n\nSono esclusi i danni da caduta, da immersione oltre il grado di protezione indicato, da uso di batterie non conformi e da aperture non autorizzate dell'involucro. Sono esclusi anche la taratura periodica e la normale usura dei cavi. Se l'involucro risulta aperto o i sigilli sono rotti, la garanzia decade.\n[Metadata:   ]",
+        "similarity": 0.16849746006461452,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "afd07bb5-fa97-41c0-8b75-ec650f244b19",
+        "document_id": "b0f11cff-e756-4458-a963-b53776c9da72",
+        "content": "Document: scanned-receipt.it.md. Chunk 5 of 5. Content: ## Pie di pagina\n\nGrazie per aver scelto Valle Verde Strumenti. Per informazioni sul punto vendita di Citta Esempio scrivere a negozio@example.net. Conservare lo scontrino per la garanzia: 1a garanzia dura 24 mesi dalla data di acquisto.\n[Metadata:   ]",
+        "similarity": 0.1607460363455655,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "Quante volte alla settimana può lavorare da casa un dipendente, se il responsabile è d'accordo?",
+    "results": [],
+    "source_images": []
+  },
+  {
+    "query": "Come viene pagato un dipendente durante l'assenza per malattia?",
+    "results": [
+      {
+        "chunk_id": "c0e03e32-45c4-48ad-9f0f-015238916504",
+        "document_id": "b956386c-b598-4884-bc39-b15acb72a252",
+        "content": "Document: warranty-terms.it.md. Chunk 2 of 6. Content: ## Cosa è coperto\n\nLa garanzia copre i difetti di fabbricazione e i guasti dell'elettronica che si manifestano durante il normale utilizzo. Il servizio di assistenza ripara o sostituisce lo strumento a propria discrezione, senza costi per il cliente. Se lo strumento viene sostituito, il nuovo esemplare eredita la scadenza della garanzia originale.\n[Metadata:   ]",
+        "similarity": 0.19387347934988142,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "5f717f10-61d7-4427-b414-1554737c9390",
+        "document_id": "fb5ddaad-1d78-4479-a51a-51dc0824ed5d",
+        "content": "Document: refund-policy.it.md. Chunk 4 of 5. Content: ## Politica precedente (fino al 2023)\n\nFino alla fine del 2023 l'azienda applicava una regola più vecchia: qualsiasi cliente poteva domandare la restituzione del denaro entro 25 giorni dal pagamento, qualunque fosse il periodo di fatturazione, ma l'importo veniva restituito solo come credito sul conto cliente e non sul metodo di pagamento usato. Questa regola è stata abrogata il 1 gennaio 2024 e non vale più per i nuovi ordini.\n[Metadata:   ]",
+        "similarity": 0.17135313915343775,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "发票 INV-24-00381 上的客户 Harbor Light Laboratories 在哪个单元？",
+    "results": [
+      {
+        "chunk_id": "a8b0fc80-ffca-4f16-8984-deb9858da091",
+        "document_id": "68800580-ea11-489e-9d23-5ac0bfacdec7",
+        "content": "Document: scanned-invoice.en.md. Chunk 1 of 5. Content: ## lnvoice header\n\nLUMEN VA1LEY lNSTRUMENTS\nlnvoice no. INV-24-00381\nDate of issue: 12 Marcl1 2O24\nCustomer: Harbor Light Laboratories, Unit 4B\nOrder reference: PO-7731\n[Metadata:   ]",
+        "similarity": 0.3586977140404788,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "发票 INV-24-00381 上的客户 Harbor Light Laboratories 对应哪个订单号？",
+    "results": [
+      {
+        "chunk_id": "a8b0fc80-ffca-4f16-8984-deb9858da091",
+        "document_id": "68800580-ea11-489e-9d23-5ac0bfacdec7",
+        "content": "Document: scanned-invoice.en.md. Chunk 1 of 5. Content: ## lnvoice header\n\nLUMEN VA1LEY lNSTRUMENTS\nlnvoice no. INV-24-00381\nDate of issue: 12 Marcl1 2O24\nCustomer: Harbor Light Laboratories, Unit 4B\nOrder reference: PO-7731\n[Metadata:   ]",
+        "similarity": 0.3221056905544184,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "非常重的包裹用什么方式发货？",
+    "results": [],
+    "source_images": []
+  },
+  {
+    "query": "寄往国外的订单可能要缴纳进口关税吗？",
+    "results": [],
+    "source_images": []
+  },
+  {
+    "query": "仪器摔坏了或者泡了水，保修会包含吗？",
+    "results": [],
+    "source_images": []
+  },
+  {
+    "query": "收据上 TOTALE COMPLESSIVO 一栏是 294.63 吗？",
+    "results": [
+      {
+        "chunk_id": "00093786-bf58-48ba-89c6-5abd38c6a349",
+        "document_id": "b0f11cff-e756-4458-a963-b53776c9da72",
+        "content": "Document: scanned-receipt.it.md. Chunk 3 of 5. Content: ## Totali\n\nTota1e imponibi1e                              241,5O\nIVA 22 %                                        53,13\nTOTALE COMPLESSIVO                             294,63\nPagato con carta di credito                    294,63\nResto                                            O,OO\n[Metadata:   ]",
+        "similarity": 0.4413139715160088,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "收据上 IVA 22% 对应的金额是 53.13 吗？",
+    "results": [
+      {
+        "chunk_id": "00093786-bf58-48ba-89c6-5abd38c6a349",
+        "document_id": "b0f11cff-e756-4458-a963-b53776c9da72",
+        "content": "Document: scanned-receipt.it.md. Chunk 3 of 5. Content: ## Totali\n\nTota1e imponibi1e                              241,5O\nIVA 22 %                                        53,13\nTOTALE COMPLESSIVO                             294,63\nPagato con carta di credito                    294,63\nResto                                            O,OO\n[Metadata:   ]",
+        "similarity": 0.25790002942086,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "如果仪器被更换了，新仪器的保修到期日怎么算？",
+    "results": [],
+    "source_images": []
+  },
+  {
     "query": "试用期多久？",
     "results": [
       {

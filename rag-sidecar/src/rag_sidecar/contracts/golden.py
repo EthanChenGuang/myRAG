@@ -16,6 +16,7 @@ Category = Literal[
     "colloquial",
     "ambiguous",
     "typo",
+    "cross_lingual",
 ]
 ReviewStatus = Literal["draft", "approved", "rejected"]
 Provenance = Literal["synthetic_fixture", "claude_draft", "ragas_generated", "human", "production"]
@@ -41,6 +42,7 @@ class GoldenItem(_Contract):
     answerable: bool
     expected_answer: str | None = None
     gold_evidence: list[GoldSpan] = Field(default_factory=list)
+    evidence_language: Language | None = None
     review_status: ReviewStatus
     provenance: Provenance
     split: Split
@@ -60,6 +62,13 @@ class GoldenItem(_Contract):
             raise ValueError("multi_turn items need a non-empty conversation")
         if len(set(self.gold_evidence)) != len(self.gold_evidence):
             raise ValueError("gold_evidence contains identical spans")
+        if self.category == "cross_lingual":
+            if self.evidence_language is None:
+                raise ValueError("cross_lingual items need an evidence_language")
+            if self.evidence_language == self.language:
+                raise ValueError("cross_lingual evidence_language must differ from the question language")
+        elif self.evidence_language is not None and self.evidence_language != self.language:
+            raise ValueError("evidence_language must equal the question language outside cross_lingual items")
         return self
 
 
@@ -77,6 +86,7 @@ class DraftedItemProposal(_Contract):
     answerable: bool
     expected_answer: str | None = None
     gold_evidence: list[GoldSpan] = Field(default_factory=list)
+    evidence_language: Language | None = None
 
 
 class DraftedItemBatch(_Contract):

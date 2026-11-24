@@ -187,6 +187,23 @@ class TestEvalReport:
         assert report.by_provenance_category["human/typo"].mrr.n == 10
         assert report.gate_population == "production"
 
+    def test_report_language_pair_defaults_to_empty_and_old_json_still_validates(self):
+        payload = _report()
+        assert "by_language_pair" not in payload
+        report = EvalReport(**payload)
+        assert report.by_language_pair == {}
+        assert EvalReport.model_validate_json(report.model_dump_json()).by_language_pair == {}
+
+    def test_report_accepts_language_pair_slices(self):
+        report = EvalReport(**_report(by_language_pair={"en->zh": _slice_metrics()}))
+        assert report.by_language_pair["en->zh"].mrr.n == 10
+
+    def test_item_result_evidence_language_is_optional(self):
+        assert ItemResult(**_item_result()).evidence_language is None
+        assert ItemResult(**_item_result(category="cross_lingual", evidence_language="zh")).evidence_language == "zh"
+        with pytest.raises(ValidationError):
+            ItemResult(**_item_result(evidence_language="fr"))
+
     def test_report_rejects_unknown_gate_population(self):
         with pytest.raises(ValidationError):
             EvalReport(**_report(gate_population="synthetic"))
@@ -243,7 +260,7 @@ class TestNoiseConfig:
         noise = NoiseConfig()
         assert noise.k == 3.0
         assert noise.floor == 0.02
-        assert noise.gated_slice_prefixes == ["overall", "language:"]
+        assert noise.gated_slice_prefixes == ["overall", "language:", "category:cross_lingual", "pair:"]
         assert noise.schema_version == 1
 
     def test_false_refusal_rate_is_lower_is_better_by_default(self):
