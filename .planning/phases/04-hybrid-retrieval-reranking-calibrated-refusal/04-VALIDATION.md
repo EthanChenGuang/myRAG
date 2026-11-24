@@ -122,9 +122,9 @@ Requirements and threat references per plan are in `04-PLAN-INDEX.md`. Kind: tra
 | 04-15-03 | 2 | tdd | `node --import tsx --test tests/rag-db/hybrid-filters.test.mts && npm run test-rag -- --out eval/out/p4-15 && jq -e '.paired.all_zero == true' eval/out/p4-15/gate.json` (includes `legacy fallback for a document missing from the active profile`) | ✅ filters in suite; smoke deferred (uv) |
 | 04-16-01 | 2 | tdd | `node --import tsx --test tests/rag-db/relex.test.mts` | ✅ 9/9 trunk |
 | 04-16-02 | 2 | auto | `node --import tsx --test tests/rag-db/relex.test.mts tests/two-tenant-fixture.test.mts && npm run test-rag -- --out eval/out/p4-16 && jq -e '.passed == true and .paired.all_zero == true' eval/out/p4-16/gate.json` | ✅ 8/8 two-tenant; smoke deferred (uv ENOENT) |
-| 04-17-01 | 3 | tdd | `npx vitest run tests/rag/backend/pgvector-adapter.test.ts` | ⬜ pending |
-| 04-17-02 | 3 | tdd | `npx vitest run tests/rag/backend-conformance` | ⬜ pending |
-| 04-17-03 | 3 | tdd | `npx vitest run tests/rag/v2/startup.test.ts tests/rag/instrumentation.test.ts && node scripts/ci/check-rag-boundary.mjs` | ⬜ pending |
+| 04-17-01 | 3 | tdd | `npx vitest run tests/rag/backend/pgvector-adapter.test.ts` | ✅ trunk |
+| 04-17-02 | 3 | tdd | `npx vitest run tests/rag/backend-conformance` | ✅ 42 tests total w/ startup |
+| 04-17-03 | 3 | tdd | `npx vitest run tests/rag/v2/startup.test.ts tests/rag/instrumentation.test.ts && node scripts/ci/check-rag-boundary.mjs` | ✅ boundary ok |
 | 04-18-01 | 3 | auto | builder smoke: import `createSelectiveFilterDatabase` and count rows (exact command in 04-18-PLAN.md Task 1) | ⬜ pending |
 | 04-18-02 | 3 | tdd | `node --import tsx --test tests/rag-db/selective-filter.test.mts` | ⬜ pending |
 | 04-18-03 | 3 | tdd | `node --import tsx --test tests/rag-db/selective-filter.test.mts` (report-mode case; moved from 04-40) | ⬜ pending |
