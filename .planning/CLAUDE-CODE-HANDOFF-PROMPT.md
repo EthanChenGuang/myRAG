@@ -10,7 +10,7 @@ Run **`/gsd-resume-work`** before spawning executors or merging.
 
 - **Repository:** https://github.com/EthanChenGuang/myRAG
 - **Integration branch (only push target):** `claude/ecstatic-hamilton-86gtwv`
-- **Trunk at pause:** `201b66bbbe74d704317d8093c9e33ade3a81286a` (`201b66b`) — confirm with `git fetch origin && git log -1 origin/claude/ecstatic-hamilton-86gtwv`
+- **Trunk (PAUSE-96 handoff pushed):** `92e2136c0e5fe27dc6c14129960052f87b55876e` (`92e2136`) — confirm with `git fetch origin && git log -1 origin/claude/ecstatic-hamilton-86gtwv` (pre-handoff tip was `201b66b`)
 - **No PR** unless Guang asks. **No secrets / real customer data** — fake fixtures only.
 
 ## Read order (mandatory)
