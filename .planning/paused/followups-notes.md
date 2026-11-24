@@ -22,3 +22,18 @@ After all: code review gate -> regression gate -> verifier -> update roadmap.
 ## From 03-01 (2026-11-24)
 - D-08 quarantine/not-current filter covers only the 8 search RPCs. Direct readers still see quarantined or non-current chunks: voice keyword fallback, `refs/resolve`, `context/fetch-rows`, documents routes, and the table SELECT policies (single-tenant `USING (true)`, multi-tenant owner/member). No Phase 3 plan names these paths explicitly. Check in the Phase 3 code review; add a gap plan if 03-30/03-37 do not close it.
 - Security backlog (05.1 research F-11): `baileys-whatsapp/server.ts:119` fetches link previews server-side for any URL in a reply (exfiltration/SSRF channel). Fix with an allowlist or disable previews for assistant replies.
+
+## Phase 3 wave 5 follow-ups (2026-11-24, orchestrator)
+- Quarantine bypass readers left after 03-20 (fold into 03-30 / 03-37 / a gap plan):
+  - `GET /api/documents` lists quarantined rows and derives `ready` from chunk count (03-30; decide whether owners see their own quarantined docs, status `quarantined`).
+  - `GET /api/images` and `GET /api/scrapers/status` read chunks/documents unfiltered (03-30 Task 2: add `is_current` AND `status='ready'`).
+  - Table SELECT RLS: single-tenant `FOR SELECT USING (true)` on documents/document_chunks lets anon read quarantined text via PostgREST; multi-tenant lets owner/org members. Needs a migration in both setup files + schema-equality test (03-37 migration or gap plan).
+  - `get_document_chunks(doc_id)` (ST SQL) unfiltered and not revoked from anon/authenticated; same migration.
+  - `fetch-rows.ts` by-id reads stay unfiltered on purpose (ids come from filtered RPCs).
+  - Legacy writers never scanned while `RAG_INGEST_PIPELINE=legacy` (T-03-58, accepted). Image captions (03-38) and invoice party names (03-29) must call `scanText`.
+- 03-29 hand-offs:
+  - Register `invoice` in CHUNKERS and EXTRACTORS; restore `extractor_unavailable`-free assertions in tests/rag/ingest/extractors.test.ts, runner.test.ts; drop the stand-in chunker in resolve-doc-type.test.ts.
+  - Real Docling merges adjacent short Latin lines: `extract_invoice` returned confidence 0 on real en/it invoice Markdown (zh fine). Make the extractor tolerate merged lines.
+  - Old bug: `_table_header` in rag-sidecar docling_adapter.py returns None when a table starts after the first six lines of a chunk. Fix with a failing-first test.
+- 03-17: resume rehydrate re-runs chunk/enrich/extract; images output is kept in processing_state.images (03-32/03-38).
+- Operator: apply migrations 0311 (private rag-originals bucket + rag_get_ingest_origin) and 0312 (doc type defaults); run `npm run rag:backfill-hashes -- --dry-run` after 0301..0312.
