@@ -53,13 +53,14 @@ export async function createFixtureDatabase(options: {
   corpusDir: string;
   supabaseGrants?: boolean;
   migrations?: boolean;
+  setupSqlPath?: string;
 }): Promise<FixtureDatabase> {
   const { deploymentMode, corpusDir } = options;
   if (deploymentMode !== 'single-tenant' && deploymentMode !== 'multi-tenant') {
     throw new Error(`[Fixture DB] unsupported deployment mode: ${String(deploymentMode)}`);
   }
 
-  const sqlRelpath = SQL_FILES[deploymentMode];
+  const sqlRelpath = options.setupSqlPath ?? SQL_FILES[deploymentMode];
   const sqlBytes = fs.readFileSync(path.join(REPO_ROOT, sqlRelpath));
   const corpus = loadCorpus(corpusDir);
 
