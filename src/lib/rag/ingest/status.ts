@@ -169,9 +169,8 @@ function typeChangeOf(value: unknown): TypeChangeState | null {
   return { reuseParseOfVersion: version, reusedParser: reused };
 }
 
-/** The persisted state of a row, with every slice checked for shape; anything unreadable falls back to its empty value. */
-function stateOf(row: IngestDocumentRow): IngestState {
-  const raw = row.processingState;
+/** A persisted state record (a document row's processing_state or a ledger row's stage_state), with every slice checked for shape; anything unreadable falls back to its empty value. */
+export function ingestStateFromRecord(raw: Record<string, unknown>): IngestState {
   const state = emptyIngestState();
   state.lastCompleted = lastCompletedOf(raw);
   state.chunkCount = typeof raw.chunkCount === 'number' && Number.isInteger(raw.chunkCount) && raw.chunkCount >= 0 ? raw.chunkCount : null;
@@ -187,6 +186,10 @@ function stateOf(row: IngestDocumentRow): IngestState {
   if (Array.isArray(raw.embeddingTargets)) state.embeddingTargets = raw.embeddingTargets.filter((id): id is string => typeof id === 'string');
   if (Array.isArray(raw.embeddingGaps)) state.embeddingGaps = raw.embeddingGaps as IngestState['embeddingGaps'];
   return state;
+}
+
+function stateOf(row: IngestDocumentRow): IngestState {
+  return ingestStateFromRecord(row.processingState);
 }
 
 function settledResult(row: IngestDocumentRow, state: IngestState, documentId: string): IngestResult | null {

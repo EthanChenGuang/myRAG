@@ -109,8 +109,8 @@ function stagesAfter(first: StageName, clock: { t: number }, stepMs: number): St
 describe('state store: the ledger is the only state authority of a queued run', () => {
   test('without a store the state goes to the document row, as before', async () => {
     const { db, calls } = fakeIngestDb();
-    installIngestDeps({ db });
     const clock = { t: 1_000 };
+    installIngestDeps({ db, now: () => clock.t });
     const ctx = makeCtx(undefined, () => clock.t);
     await runIngestStages(ctx, stagesAfter('content_hash_dedup', clock, 5));
     expect(callsOf(calls, 'rag_save_ingest_state').length).toBeGreaterThan(0);
@@ -118,8 +118,8 @@ describe('state store: the ledger is the only state authority of a queued run', 
 
   test('a ledger store writes stage, status, cursor and per-stage timing through advance and never the document row', async () => {
     const { db, calls } = fakeIngestDb();
-    installIngestDeps({ db });
     const clock = { t: 1_000 };
+    installIngestDeps({ db, now: () => clock.t });
     const ledger = ledgerDb();
     const store = createLedgerStateStore({
       jobId: JOB_ID,
@@ -157,8 +157,8 @@ describe('state store: the ledger is the only state authority of a queued run', 
 
   test('a yield before any new stage completed writes the state again without counting time twice', async () => {
     const { db } = fakeIngestDb();
-    installIngestDeps({ db });
     const clock = { t: 5_000 };
+    installIngestDeps({ db, now: () => clock.t });
     const ledger = ledgerDb();
     const store = createLedgerStateStore({
       jobId: JOB_ID,

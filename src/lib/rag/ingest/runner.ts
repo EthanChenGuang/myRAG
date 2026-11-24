@@ -1,6 +1,7 @@
 import { ParseResultSchema } from '@/lib/rag-eval/contracts.generated';
 import { PARSE_ARTIFACT, PARSE_CHUNKS_ARTIFACT, PICTURES_ARTIFACT, isArtifactName, loadArtifact, originalName, versionPrefix } from './artifacts';
 import { ObjectStoreError } from './object-store';
+import { saveContextState } from './state-store';
 import { IngestWriterError, createIngestWriter } from './writer';
 import { chunkStage } from './stages/chunk';
 import { contentHashDedupStage, fileHashDedupStage } from './stages/dedup';
@@ -144,11 +145,11 @@ function syncState(ctx: StageContext): void {
   if (ctx.work.chunksWritten > 0) ctx.state.chunkCount = ctx.work.chunksWritten;
 }
 
-/** Writes the resumable record of the run to the document row. Nothing is written before the row exists. */
+/** Writes the resumable record of the run to its state store (the document row unless a queued run installed the ledger). Nothing is written before the row exists. */
 async function persistState(ctx: StageContext, processingStatus: string): Promise<void> {
   if (!ctx.document) return;
   syncState(ctx);
-  await ctx.writer.saveState(ctx.document.id, processingStatus, { ...ctx.state });
+  await saveContextState(ctx, processingStatus);
 }
 
 /** Stops the run before a stage and keeps the document resumable. Without a document row nothing can resume. */
@@ -177,6 +178,8 @@ export function nextStageAfter(last: StageName | null): StageName | null {
 export interface RunIngestOptions {
   /** Receives one span per stage that starts, named as the stage. */
   trace?: IngestTrace | null;
+  /** The stage list is a prefix of the run (the enqueue stages): finishing it ends the run as processing instead of failing it. */
+  partial?: boolean;
 }
 
 const DEDUP_STAGES: ReadonlySet<StageName> = new Set(['file_hash_dedup', 'content_hash_dedup']);
@@ -257,6 +260,7 @@ export async function runIngestStages(
       return failRun(ctx, stage.name, reason, error);
     }
   }
+  if (options.partial) return processingResult(ctx, 'stages_complete');
   return failRun(ctx, 'publish', 'stage_list_incomplete');
 }
 
