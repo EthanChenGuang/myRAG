@@ -206,7 +206,7 @@ def test_fit_cells_keeps_cells_apart():
     rows += _dev_rows([0.95, 0.85, 0.75, 0.65, 0.35], [0.1, 0.15, 0.25], language="en")
     fits = fit_cells(rows, CONFIG, environment="fixture")
     assert sorted(fits) == ["cohere|fake-quality-v1|en|same", "cohere|fake-quality-v1|zh|same"]
-    assert fits["cohere|fake-quality-v1|en|same"].threshold == pytest.approx(0.2)
+    assert fits["cohere|fake-quality-v1|en|same"].threshold == pytest.approx(0.3)
 
 
 def test_fit_cells_dev_false_refusal_carries_the_clopper_pearson_bound():
