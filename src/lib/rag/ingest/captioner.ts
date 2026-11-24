@@ -6,6 +6,11 @@ export const IMAGE_CAPTION_PROMPT =
   'Describe this image in extreme detail to allow for future search retrieval. Include text found in the image, visual elements, colors, and context. If it is a chart or graph, describe the data points and trends.';
 
 const CAPTION_MODEL = 'gpt-4o';
+
+/** Default vision model for ingest job settings when RAG_PARSE_VLM_MODEL is unset (shared with image captioning). */
+export function imageCaptionModelId(): string {
+  return CAPTION_MODEL;
+}
 const MEDIA_TYPES: Readonly<Record<string, string>> = {
   'image/jpeg': 'image/jpeg',
   'image/jpg': 'image/jpeg',
