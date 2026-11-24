@@ -6,7 +6,7 @@
 
 | Phase | Plans left | Notes |
 |-------|------------|-------|
-| **3** | **03-47** (in flight), **03-48** | 03-48 Guang live only — no executor |
+| **3** | **03-48** only | 03-48 Guang live / secrets — preflight `03-48-LIVE-PREFLIGHT.md` |
 | **3.1** | **03.1-01 … 03.1-55** | 54 automated + 03.1-53/54 human; start after 03-47 merges (policy) but wave-1 file-disjoint plans may run **in parallel with 03-47** |
 | **4** | **04-01 … 04-45** | Index: 14 waves; Phase 3 complete required — **04-01+ may start in worktrees** on trunk after 03-46 merge |
 
@@ -58,6 +58,11 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | 04-04 | bc-66bbcf6a… | **merged** | exec/04-04 |
 | 03.1-05 | bc-94d16ba7… | **merged** | exec/03.1-05 |
 | 03.1-06 | bc-cf431776… | **merged** | exec/03.1-06 |
+| 03.1-04 | bc-4969184f… | **merged** | exec/03.1-04 |
+| 03.1-07 | — | **merged** | exec/03.1-07 |
+| 04-05 | bc-91985997… | **merged** | exec/04-05 |
+| 04-06 | [bc-f05b8cec](bc-f05b8cec-070a-54b4-a156-96d6167bdbb7) RUNNING | wt/04-06 |
+| 03.1-08 | [bc-97f53a60](bc-97f53a60-1976-53e8-a0e4-10113dc0a4bb) RUNNING | wt/03.1-08 |
 
 ## Remaining plan inventory (file-overlap basis)
 
