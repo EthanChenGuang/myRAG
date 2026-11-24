@@ -472,6 +472,35 @@ for (const mode of MODES) {
       });
     });
 
+    test("a chunk's tenant_key always follows its document, and the trigger functions are not callable by anon or authenticated", async () => {
+      await withFixture(mode, { migrations: true }, async (fixture) => {
+        await insertDocument(fixture, mode, { id: legacyId(91) });
+        await fixture.db.query('INSERT INTO document_chunks (id, document_id, content, embedding, tenant_key) VALUES ($1, $2, $3, $4::vector, $5)', [
+          legacyId(92),
+          legacyId(91),
+          'chunk that claims another tenant',
+          vectorLiteral('chunk that claims another tenant'),
+          'o:00000000-0000-4000-8000-000000000999',
+        ]);
+        const result = await fixture.db.query<{ tenant_key: string; parent_key: string }>(
+          'SELECT dc.tenant_key, d.tenant_key AS parent_key FROM document_chunks dc JOIN documents d ON d.id = dc.document_id WHERE dc.id = $1',
+          [legacyId(92)],
+        );
+        assert.equal(result.rows[0]?.tenant_key, result.rows[0]?.parent_key);
+        assert.notEqual(result.rows[0]?.tenant_key, 'o:00000000-0000-4000-8000-000000000999');
+        const exposed = await fixture.db.query<{ proname: string }>(
+          `SELECT p.proname FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+           WHERE n.nspname = 'public' AND p.proname LIKE 'rag\_%' AND (has_function_privilege('anon', p.oid, 'EXECUTE') OR has_function_privilege('authenticated', p.oid, 'EXECUTE'))`,
+        );
+        assert.deepEqual(exposed.rows, []);
+        const defined = await fixture.db.query<{ proname: string }>("SELECT proname FROM pg_proc WHERE proname LIKE 'rag\_%' ORDER BY proname");
+        assert.deepEqual(
+          defined.rows.map((row) => row.proname),
+          ['rag_chunks_legacy_defaults', 'rag_documents_legacy_defaults'],
+        );
+      });
+    });
+
     test('a writer that supplies identity, parser and state keeps its values', async () => {
       await withFixture(mode, { migrations: true }, async (fixture) => {
         await insertDocument(fixture, mode, {
