@@ -76,3 +76,9 @@ After all: code review gate -> regression gate -> verifier -> update roadmap.
 - Service-role SQL functions without D-08 filter and no app caller: `get_documents_by_type_slug`, `get_documents_by_type_slug_workspace`, `get_workspace_context` (multi-tenant). Review pass: filter or drop, with tests.
 - `DELETE /api/documents/{id}` still leaves stored objects in `rag-originals` (only admin delete removes them). Review pass fix.
 - 03-43 panel: show `detected_by`; handle delete 200 `{artifacts_failed}`.
+
+## Phase 3 wave 8 follow-ups (03-41a)
+- 03-41 deferred item (empty documents.content) resolved by 03-41a / migration 0319 (operator: apply after 0318).
+- Unified docs ingested before 0319 keep content = '' until re-ingested (no backfill).
+- Full parse text goes in one rag_set_document_fields call; watch PostgREST request size for multi-MB documents (live check).
+- Correct-refusal on the fixture no-answer slice is 0.333 in both modes (6 of 9 answered wrongly); Phase 5 abstention work should target it.
