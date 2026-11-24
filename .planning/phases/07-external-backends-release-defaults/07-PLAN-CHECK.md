@@ -43,3 +43,37 @@
 ## Recommendation
 
 Revise 07-01 and 07-14 (with 07-28 if the cases go there), address the warnings, then re-check.
+
+## Re-check (pass 2)
+
+**Verdict: PASS.** 0 blockers, 2 warnings (both carried over), 2 info. 34 plans checked. No git commands were run.
+
+### Earlier blockers
+- **B1 (07-01): closed.** The install is now an `<orchestrator-only>` step after the Task 1 approval. Task 2 has a precondition that halts if the install commit is missing, and its action says "do not run npm install, npm ci, npm update or any other package-manager command". Task 2 now only checks the pins.
+- **B2 (07-14 and 07-28): closed by the new 07-34.**
+  - It covers the voice path through `resolveVoiceScope` with a token from `mintVoiceToken`, and the embed path through `resolveEmbedScope` with `RAG_EMBED_TENANT`.
+  - Both paths are tested on pgvector, Weaviate and Qdrant.
+  - Each case has a negative control: a test-only read client that ignores the tenant filter, so the tests can actually fail. Production wiring is unchanged.
+  - 07-28 adds voice and embed cache cases and depends on 07-34.
+
+### Former warnings
+- **07-29 promote auth: closed.** Every review endpoint first calls `GET /api/rag/admin/review/authorize`, which runs `checkAdmin` and imports only admin-route-auth. It fails closed: 401 when there is no session, 403 for a non-admin, 503 when the lookup fails or the app cannot be reached. Only a 200 that carries an admin id lets the action proceed. On refusal no temp file is written and `execFile` is never called.
+  - Cross-site: the route is a GET with no side effects and `Cache-Control: no-store`. It returns only `{ ok, adminId }`, it is called server-to-server from the loopback config server behind the CSRF header, and the plan adds no CORS headers. A cross-site caller can trigger it but cannot read the answer or cause any effect.
+- **07-19 leak: closed.** The response is `{provider, ok, latencyMs, code, message}` with a fixed message per code, and a test asserts that the endpoint and host never leak. Keeping latencyMs is accepted by the coordinator (D-15).
+- **07-33 with 4 tasks:** accepted by the coordinator.
+
+### New plan and wave checks
+- **07-34 sits in wave 6.** Its Phase 7 dependencies (07-06, 07-07, 07-08, 07-12, 07-14) are all in waves 2 to 5, so the order is valid.
+- **No shared files within a wave.** 07-34's files do not overlap with 07-15 or 07-16 in wave 6. 07-28 does not overlap with 07-17, 07-18 or 07-19 in wave 7.
+- **Downstream edges hold.** 07-31 reaches 07-34 through 07-28. The index, the RET-07 and RET-08 rows and the D-26 step 7 entry are updated.
+- **Voice default keeps today's behaviour.**
+  - 07-12 asserts that with the defaults, chat, embed, voice and eval all get pgvector and no readiness call is made.
+  - 07-34 asserts that voice stays on pgvector with no readiness call even when `RAG_RETRIEVAL_BACKEND=qdrant`.
+
+### Remaining WARNINGS
+1. **Phase 5.1 edges are still deferred.** This was accepted and is listed under pending in 07-PLAN-INDEX.md. 07-04, 07-05, 07-12, 07-25 and the closeout plans (07-17 to 07-27, 07-29, 07-30) need the 5.1 closing plan id once 5.1 has a plan index.
+2. **Baselines remain fragile while Phase 3 executes.** Re-measure notes were added, but the baselines in 07-02, 07-06, 07-10, 07-13 and 07-14 must be re-run after Phase 3 closes.
+
+### INFO
+1. 07-29: consider asserting that the authorize route sends no `Access-Control-Allow-Origin` header.
+2. The same-wave note for 07-07 and 07-10 (PGlite migration order) is unchanged and remains advisory.
