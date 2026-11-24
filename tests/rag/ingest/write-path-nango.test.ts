@@ -16,7 +16,7 @@ const state = {
   mode: 'multi-tenant' as 'single-tenant' | 'multi-tenant',
   configThrows: false,
   ingestResults: [] as IngestResult[],
-  scopeKey: (_scope: TenantScope): string => '',
+  scopeKey: ((): string => '') as (scope: TenantScope) => string,
 };
 
 const processDocument = vi.fn();
@@ -720,7 +720,7 @@ describe('nango sync against two owners with real ingest', () => {
   async function snapshot(tenantKey: string) {
     const documents = (await documentRows(db)).filter((row) => row.tenant_key === tenantKey);
     const { rows: chunkRows } = await db.query<{ id: string }>(
-      `SELECT c.id FROM document_chunks c JOIN documents d ON d.id = c.document_id WHERE d.tenant_key = $1 ORDER BY c.id`,
+      `SELECT c.id FROM document_chunks c JOIN documents d ON d.id = c.document_id WHERE d.tenant_key = $1 AND d.source = 'nango' ORDER BY c.id`,
       [tenantKey],
     );
     return { documents, chunkIds: chunkRows.map((row) => row.id), records: JSON.parse(JSON.stringify(recordsOf(tenantKey.slice(2)))) as Row[] };
@@ -928,11 +928,17 @@ describe('nango sync against two owners with real ingest', () => {
     await sync(CONN_A);
     // A chat upload of the same tenant, and a Nango file of the same tenant held by another connection, must survive.
     await db.exec(
-      `INSERT INTO documents (id, lineage_id, version, is_current, status, source, source_key, filename, content, metadata, user_id, tenant_key)
-       VALUES ('00000000-0000-4000-8000-0000000000f1', '00000000-0000-4000-8000-0000000000f1', 1, true, 'ready', 'chat_upload', 'root/drop.txt', 'drop.txt', 'upload', '{}', '${userA}', 'u:${userA}'),
-              ('00000000-0000-4000-8000-0000000000f2', '00000000-0000-4000-8000-0000000000f2', 1, true, 'ready', 'nango', 'drop', 'drop.txt', 'other connection', '{}', '${userA}', 'u:${userA}')`,
+      `INSERT INTO documents (id, lineage_id, version, is_current, status, source, source_key, filename, content, metadata, user_id)
+       VALUES ('00000000-0000-4000-8000-0000000000f1', '00000000-0000-4000-8000-0000000000f1', 1, true, 'ready', 'chat_upload', 'root/drop.txt', 'drop.txt', 'upload', '{}', '${userA}'),
+              ('00000000-0000-4000-8000-0000000000f2', '00000000-0000-4000-8000-0000000000f2', 1, true, 'ready', 'nango', 'drop-elsewhere', 'drop.txt', 'other connection', '{}', '${userA}')`,
+    );
+    // A document of the other owner that claims this connection and file id (a corrupt or forged row) must survive too: the tenant decides, not the claim.
+    await db.exec(
+      `INSERT INTO documents (id, lineage_id, version, is_current, status, source, source_key, filename, content, metadata, user_id)
+       VALUES ('00000000-0000-4000-8000-0000000000f3', '00000000-0000-4000-8000-0000000000f3', 1, true, 'ready', 'nango', 'drop-claimed', 'drop.txt', 'claims conn a', '{}', '${userB}')`,
     );
     await db.exec(`UPDATE documents SET source_file_id = 'drop', source_connection_id = 'conn-elsewhere' WHERE id = '00000000-0000-4000-8000-0000000000f2'`);
+    await db.exec(`UPDATE documents SET source_file_id = 'drop', source_connection_id = '${CONN_A}' WHERE id = '00000000-0000-4000-8000-0000000000f3'`);
     expect((await documentRows(db)).filter((row) => row.source_key === 'drop' && row.source_connection_id === CONN_A)).toHaveLength(2);
 
     remote.drive[CONN_A][FOLDER] = [textFile('keep', OLD)];
@@ -943,6 +949,7 @@ describe('nango sync against two owners with real ingest', () => {
     expect(remaining).toContain('chat_upload:root/drop.txt');
     expect(remaining).toContain('nango:keep');
     expect(rows.some((row) => row.id === '00000000-0000-4000-8000-0000000000f2')).toBe(true);
+    expect(rows.some((row) => row.id === '00000000-0000-4000-8000-0000000000f3')).toBe(true);
     expect((await documentRows(db)).filter((row) => row.source_key === 'drop' && row.source_connection_id === CONN_A)).toEqual([]);
     expect(recordsOf(userA).map((row) => row.file_id)).toEqual(['keep']);
   });
