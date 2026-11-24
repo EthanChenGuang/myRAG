@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { MockInstance } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { register } from '@/instrumentation';
 import { env } from '@/lib/env';
@@ -20,8 +21,8 @@ const savedRuntime = process.env.NEXT_RUNTIME;
 
 let mode: string | undefined;
 let rpcCalls: string[];
-let errorSpy: ReturnType<typeof vi.spyOn>;
-let warnSpy: ReturnType<typeof vi.spyOn>;
+let errorSpy: MockInstance<typeof console.error>;
+let warnSpy: MockInstance<typeof console.warn>;
 
 function row(id: string, status: string, over: Record<string, unknown> = {}): Record<string, unknown> {
   return {
