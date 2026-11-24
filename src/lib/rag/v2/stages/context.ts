@@ -6,12 +6,15 @@ import {
   type AssembleOutput,
   type AssemblyDocumentRow,
 } from '../../context/assemble';
-import { selectWithinBudget, type BudgetCandidate } from '../../context/budget';
+import { selectWithinBudget, type BudgetOptions, type RenderEstimate } from '../../context/budget';
 import { compressChunks, type CompressibleChunk } from '../../context/compress';
 import { edgeOrder } from '../../context/edge-order';
 import type { AssemblyRows } from '../../context/fetch-rows';
 import { mergeAdjacent, type AdjacentChunk } from '../../context/merge-adjacent';
+import { getRagDeps } from '../../deps';
 import { countTokens } from '../../ingest/text/tokens';
+import type { RpcClient } from '../../backend/supabase-rpc';
+import { expandParents, selectWithParents, type ParentBudgetCandidate, type ParentSelection } from '../../parents/expand';
 import type { RerankSpan } from '../../rerank/types';
 import type { FusedHit } from '../../fusion/rrf';
 import type { RagConfig, StageName } from '../../config';
@@ -94,9 +97,16 @@ function chunkIndexOf(hit: FusedHit['hit'], rank: number): number {
   return hit.chunkIndex ?? -1_000_000 - rank * 2;
 }
 
+interface ExpandStageValue {
+  /** Null when no parent came back: assembly then takes the plain child selection. */
+  selection: ParentSelection<ParentBudgetCandidate> | null;
+  fetched: number;
+}
+
 interface AssembleStageValue {
   output: AssembleOutput<Candidate>;
   selected: Candidate[];
+  parentChunkIds: Set<string>;
   groupOrder: string[];
   budgetTokens: number;
   usedTokens: number;
@@ -142,34 +152,59 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
 
   const filenameOf = (documentId: string) => rows.documents.get(documentId)?.filename ?? 'Unknown Document';
 
+  const budgetInput: ParentBudgetCandidate[] = candidates.map((candidate, index) => ({
+    rank: index + 1,
+    chunk_id: candidate.chunk_id,
+    document_id: candidate.document_id,
+    document_filename: filenameOf(candidate.document_id),
+    content: candidate.content,
+    parent_id: candidate.parent_id ?? null,
+  }));
+  const budgetOptions: BudgetOptions = { imageExtensions: IMAGE_EXTENSIONS };
+  const estimateRender: RenderEstimate<ParentBudgetCandidate> = (candidate, { addsDocumentHeader }) => {
+    const header = addsDocumentHeader ? `\n--- Document: ${candidate.document_filename} (1 relevant chunks) ---\n\n` : '';
+    const label = isGPTModel ? `[Source: ${candidate.document_filename}]\n` : '';
+    return `${header}${label}${candidate.content}`;
+  };
+
+  const expansion = await runStage(
+    spec('expand_parents', 'skip'),
+    signal,
+    async (stageSignal): Promise<ExpandStageValue> => {
+      if (!input.scope) throw new Error('[RAG Context] expand_parents needs a tenant scope');
+      const expanded = await expandParents({
+        survivors: budgetInput,
+        scope: input.scope,
+        admin: getRagDeps().adminClient() as RpcClient | null,
+        signal: stageSignal,
+        eligible: (child) => !isImageFilename(child.document_filename),
+      });
+      const selection =
+        expanded.fetched > 0 ? selectWithParents(expanded.candidates, settings.tokenBudget, estimateRender, budgetOptions) : null;
+      return { selection, fetched: expanded.fetched };
+    },
+    collector,
+    {
+      candidatesIn: candidates.length,
+      candidatesOut: (value) => value.selection?.selected.length ?? candidates.length,
+      counts: (value) => ({ parents_fetched: value.fetched, parents_used: value.selection?.parentIds.size ?? 0 }),
+    },
+  );
+  const parentSelection = expansion.skipped || !expansion.value.selection?.parentIds.size ? null : expansion.value.selection;
+
   const assembled = await runStage(
     spec('assemble', 'skip'),
     signal,
     (): AssembleStageValue => {
-      const budgetInput: BudgetCandidate[] = candidates.map((candidate, index) => ({
-        rank: index + 1,
-        chunk_id: candidate.chunk_id,
-        document_id: candidate.document_id,
-        document_filename: filenameOf(candidate.document_id),
-        content: candidate.content,
-      }));
-      const selection = selectWithinBudget(
-        budgetInput,
-        settings.tokenBudget,
-        (candidate, { addsDocumentHeader }) => {
-          const header = addsDocumentHeader ? `\n--- Document: ${candidate.document_filename} (1 relevant chunks) ---\n\n` : '';
-          const label = isGPTModel ? `[Source: ${candidate.document_filename}]\n` : '';
-          return `${header}${label}${candidate.content}`;
-        },
-        { imageExtensions: IMAGE_EXTENSIONS },
-      );
+      const selection = parentSelection ?? selectWithinBudget(budgetInput, settings.tokenBudget, estimateRender, budgetOptions);
 
-      const selectedIds = new Set(selection.selected.map((chosen) => chosen.chunk_id));
+      const chosenById = new Map(selection.selected.map((chosen) => [chosen.chunk_id, chosen]));
       const selected = candidates
-        .filter((candidate) => selectedIds.has(candidate.chunk_id))
+        .filter((candidate) => chosenById.has(candidate.chunk_id))
         .map((candidate) => {
-          const truncated = selection.contentOverrides.get(candidate.chunk_id);
-          return truncated === undefined ? candidate : { ...candidate, content: truncated };
+          const content =
+            selection.contentOverrides.get(candidate.chunk_id) ?? (parentSelection ? chosenById.get(candidate.chunk_id)?.content : undefined);
+          return content === undefined || content === candidate.content ? candidate : { ...candidate, content };
         });
 
       const adjacent: AdjacentChunk[] = selected
@@ -193,6 +228,7 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
       return {
         output: { ...output, kept },
         selected,
+        parentChunkIds: parentSelection?.parentChunkIds ?? new Set<string>(),
         groupOrder,
         budgetTokens: settings.tokenBudget,
         usedTokens: selection.usedTokens,
@@ -228,6 +264,7 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
         chunk_kind: hitById.get(candidate.chunk_id)?.chunkKind ?? null,
         metadata: candidate.metadata,
         language: candidate.language,
+        mergedParent: base.parentChunkIds.has(candidate.chunk_id),
       }));
       const result = compressChunks(compressible, {
         query: input.query,
