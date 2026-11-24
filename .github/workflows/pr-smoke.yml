@@ -44,6 +44,14 @@ jobs:
         run: node --import tsx --test tests/*.test.mts
       - name: tsx DB tests
         run: node --import tsx --test tests/rag-db/*.test.mts
+      - name: tsx rag-e2e tests
+        shell: bash
+        run: |
+          shopt -s nullglob
+          files=(tests/rag-e2e/*.test.mts)
+          if ((${#files[@]})); then
+            node --import tsx --test tests/rag-e2e/*.test.mts
+          fi
       - name: Config drift check
         run: node scripts/check-config.mjs
       - name: RAG boundary check
@@ -140,6 +148,7 @@ jobs:
           enable-cache: true
           cache-dependency-glob: '**/uv.lock'
       - run: uv sync --directory rag-sidecar --locked --extra chunking
+      - run: uv sync --directory rag-sidecar --locked --extra preflight
       - run: uv sync --directory eval --locked --all-extras
       - name: rag-sidecar pytest
         run: uv run --directory rag-sidecar --extra chunking pytest -q

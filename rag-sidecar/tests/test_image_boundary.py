@@ -140,3 +140,9 @@ def test_locked_dependencies_exclude_eval_only_packages():
     lock = tomllib.loads((SIDECAR_DIR / "uv.lock").read_text(encoding="utf-8"))
     names = {package["name"].lower() for package in lock["package"]}
     assert FORBIDDEN_PACKAGES.isdisjoint(names), FORBIDDEN_PACKAGES & names
+
+
+def test_no_dockerfile_stage_installs_ray_extra():
+    for name, lines in _stages().items():
+        for line in lines:
+            assert "--extra ray" not in line, f"{name}: {line}"
