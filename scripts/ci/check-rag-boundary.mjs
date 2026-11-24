@@ -80,6 +80,7 @@ export function legacyWriterProblems(list, knownRules = null) {
 }
 
 const RAG_DIR = 'src/lib/rag/';
+const RERANK_DIR = 'src/lib/rag/rerank/';
 const TENANT_DIR = 'src/lib/rag/tenant/';
 const INGEST_DIR = 'src/lib/rag/ingest/';
 const PROFILES_DIR = 'src/lib/rag/ingest/profiles/';
@@ -89,6 +90,8 @@ const CACHE_CLIENT = 'src/lib/rag/ingest/parse-cache.ts';
 const BACKFILL_DIR = 'src/lib/rag/ingest/backfill/';
 
 const outsideRag = (rel) => !rel.startsWith(RAG_DIR);
+const inSrcOrScripts = (rel) => rel.startsWith('src/') || rel.startsWith('scripts/');
+const outsideRerankHttp = (rel) => inSrcOrScripts(rel) && !rel.startsWith(RERANK_DIR);
 const outsideTenant = (rel) => !rel.startsWith(TENANT_DIR);
 const inVoiceAgent = (rel) => rel.startsWith('voice-agent/src/');
 const isLegacyWriter = (rel, ruleId) => LEGACY_WRITERS.some((w) => w.path === rel && w.rules.includes(ruleId));
@@ -344,6 +347,19 @@ export const RULES = [
     description: 'backfill batch RPC called outside src/lib/rag/ingest/backfill/',
     appliesTo: outsideBackfillDir,
     find: (text) => regexMatches(BACKFILL_RPC_RE, text),
+  },
+  {
+    id: 'rerank-http',
+    description: 'hosted rerank HTTP call outside src/lib/rag/rerank/',
+    appliesTo: outsideRerankHttp,
+    find: (text) => {
+      const out = [];
+      out.push(...regexMatches(/fetch\s*\([^)\n]*api\.cohere\.com/g, text));
+      out.push(...regexMatches(/fetch\s*\([^)\n]*api\.voyageai\.com/g, text));
+      out.push(...regexMatches(/fetch\s*\(\s*[`'"][^`'"\n]*\/rerank/g, text));
+      out.push(...regexMatches(/fetch\s*\(\s*`[^`\n]*\/rerank/g, text));
+      return out;
+    },
   },
 ];
 
