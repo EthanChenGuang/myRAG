@@ -330,6 +330,31 @@ describe('listSource folder', () => {
     }
   });
 
+  test('a file that grows past the limit after listing is cut off while streaming at open', async () => {
+    const { items } = await drain({ kind: 'folder', ref: root });
+    const target = items.find((i) => i.sourceKey === 'a.txt') as SourceItem;
+    expect(target.size).toBe(5);
+    await truncate(path.join(root, 'a.txt'), ORIGINALS_MAX_BYTES + 1);
+    let received = 0;
+    const stream = await target.open();
+    await expect(
+      (async () => {
+        for await (const chunk of stream) received += (chunk as Buffer).length;
+      })(),
+    ).rejects.toMatchObject({ reason: 'too_large' });
+    expect(received).toBeLessThanOrEqual(ORIGINALS_MAX_BYTES);
+  });
+
+  test('a file of exactly the limit streams in full', async () => {
+    await writeFile(path.join(root, 'exact.bin'), '');
+    await truncate(path.join(root, 'exact.bin'), ORIGINALS_MAX_BYTES);
+    const { items } = await drain({ kind: 'folder', ref: root });
+    const exact = items.find((i) => i.sourceKey === 'exact.bin') as SourceItem;
+    let received = 0;
+    for await (const chunk of await exact.open()) received += (chunk as Buffer).length;
+    expect(received).toBe(ORIGINALS_MAX_BYTES);
+  });
+
   test('an aborted signal stops the listing', async () => {
     const controller = new AbortController();
     controller.abort();
@@ -454,6 +479,17 @@ describe('listSource manifest', () => {
     const { items, reasons } = await drain({ kind: 'manifest', ref, root: dir, deps: netDeps().deps });
     expect(items.map((i) => i.sourceKey)).toEqual(['fine']);
     expect(reasons).toEqual(['outside_root', 'outside_root', 'path_absolute', 'outside_root', 'path_unreadable', 'path_unreadable']);
+  });
+
+  test('a manifest path file that grows past the limit after listing is cut off while streaming at open', async () => {
+    const ref = await manifest([{ source_key: 'one', path: 'ok.pdf' }]);
+    const { items } = await drain({ kind: 'manifest', ref, root: dir, deps: netDeps().deps });
+    await truncate(path.join(dir, 'ok.pdf'), ORIGINALS_MAX_BYTES + 1);
+    await expect(
+      (async () => {
+        for await (const _chunk of await (items[0] as SourceItem).open()) void _chunk;
+      })(),
+    ).rejects.toMatchObject({ reason: 'too_large' });
   });
 
   test('a url on a private address is refused before any request: literals, localhost, mapped IPv6 and DNS answers', async () => {
@@ -736,6 +772,31 @@ describe('listSource bucket', () => {
     const { items, reasons } = await drain({ kind: 'bucket', ref: 'fixture-bucket', deps, ...allow('fixture-bucket') });
     expect(items.map((i) => i.sourceKey)).toEqual(['small.pdf']);
     expect(reasons).toEqual(['too_large']);
+  });
+
+  test('a bucket object without size metadata is limited at open: an oversize blob is refused before it is read, the limit itself passes', async () => {
+    const arrayBuffer = vi.fn(async () => new ArrayBuffer(0));
+    const sizes: Record<string, number> = { 'no-size-big.bin': ORIGINALS_MAX_BYTES + 1, 'no-size-exact.bin': ORIGINALS_MAX_BYTES, 'no-size-small.bin': 3 };
+    const bucket: BackfillStorageBucket = {
+      list: async () => ({ data: Object.keys(sizes).map((name) => ({ name, id: name, metadata: null })), error: null }),
+      download: async (objectPath) => {
+        const size = sizes[objectPath] as number;
+        const blob = new Blob([new Uint8Array(size)]);
+        return { data: Object.assign(blob, { arrayBuffer }), error: null };
+      },
+    };
+    const { items, reasons } = await drain({ kind: 'bucket', ref: 'fixture-bucket', deps: { storage: { from: () => bucket } }, ...allow('fixture-bucket') });
+    expect(items.map((i) => i.size)).toEqual([0, 0, 0]);
+    expect(reasons).toEqual([]);
+    const byKey = (key: string) => items.find((i) => i.sourceKey === key) as SourceItem;
+    await expect(byKey('no-size-big.bin').open()).rejects.toMatchObject({ reason: 'too_large' });
+    expect(arrayBuffer).not.toHaveBeenCalled();
+    let received = 0;
+    for await (const chunk of await byKey('no-size-exact.bin').open()) received += (chunk as Buffer).length;
+    expect(received).toBe(ORIGINALS_MAX_BYTES);
+    received = 0;
+    for await (const chunk of await byKey('no-size-small.bin').open()) received += (chunk as Buffer).length;
+    expect(received).toBe(3);
   });
 
   test('every bucket the application owns is refused, even when the operator lists it, and nothing is listed or downloaded', async () => {
