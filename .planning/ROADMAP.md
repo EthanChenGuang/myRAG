@@ -207,7 +207,7 @@ Plans:
 - [x] 03-41-PLAN.md — Add the `ingest` fixture mode to the eval harness (wave 7)
 - [x] 03-42-PLAN.md — Add the per-file document-type picker to the chat knowledge-base upload (wave 9)
 - [x] 03-43-PLAN.md — Build the Config UI side of Phase 3 (wave 10)
-- [ ] 03-44-PLAN.md — Show Phase 3's success criteria 1, 2, 4, 6, 7 and 9 in ingest mode (wave 9)
+- [x] 03-44-PLAN.md — Show Phase 3's success criteria 1, 2, 4, 6, 7 and 9 in ingest mode (wave 9)
 - [x] 03-45-PLAN.md — Make the eval harness able to measure any embedding profile (wave 9)
 - [ ] 03-46-PLAN.md — Compare embedding profiles on the golden set per language and per cross-lingual pair (wave 10)
 - [ ] 03-47-PLAN.md — Close Phase 3 (wave 11)

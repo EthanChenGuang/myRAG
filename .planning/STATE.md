@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-11-22)
 ## Current Position
 
 Phase: 03 (Unified Ingestion & Embedding Profiles) — EXECUTING
-Plan: 47 of 50 merged on trunk (through 03-43, 03-45 incl.); remaining 03-44, 03-46, 03-47 + Guang live 03-48
+Plan: 48 of 50 merged on trunk (through 03-44, 03-43, 03-45); remaining 03-46, 03-47 + Guang live 03-48
 Status: Phase 2 complete (human_needed live checks). All remaining phases planned and plan-checked PASS: 3.1 (55), 4 (45), 5 (26), 5.1 (25), 6 (46), 7 (34).
 Last activity: 2026-11-24 — merged 03-40, 03-38, 03-39, 03-42; gates vitest 2459, node 145, test-rag both modes PASS; Sonnet executor quota → orchestrator/Composer for 03-39 task 3 and 03-42
 
