@@ -393,3 +393,20 @@ Dependencies:
 
 *Phase: 07-external-backends-release-defaults*
 *Context gathered: 2026-11-24*
+
+## Adjustments after research (orchestrator, 2026-11-24)
+
+Standing user instruction: follow the recommendations. These override the matching locked decisions.
+
+- **A-1 (corrects D-09):** use `@weaviate/node` 3.15.5 (the renamed client; `weaviate-client` only as fallback) and `@qdrant/js-client-rest` 1.20.0, behind a blocking package checkpoint. The boundary check blocks all four Weaviate package names plus `@qdrant/qdrant-js` outside the adapters.
+- **A-2 (settles D-13):** Qdrant's lexical leg is a whitespace full-text index with BM25 over the shared-tokenizer `lexical_text`, IDF scoped to the tenant; Weaviate BM25 per tenant. The conformance suite proves parity.
+- **A-3 (Qdrant wrapper):** inject the tenant clause into the top-level filter, every prefetch and `params.idf.corpus`; reject `lookup_from`, `shard_key` and global IDF.
+- **A-4 (Weaviate):** missing/unknown tenant maps to "not ready"; tenant names map `:` to an allowed character; empty BM25 queries skip the lexical call; quantization off via `quantizer.none()`.
+- **A-5 (tenant key case, bug):** one lowercase helper for tenant keys used everywhere a key leaves the app (Postgres, Qdrant, Weaviate); a test proves an upper-case UUID input still matches.
+- **A-6 (scheduler):** default drain trigger is Supabase pg_cron + pg_net + Vault (pg_net timeout 58 s), plus `after()` kicks after ingest; Vercel Cron is optional (needs a GET handler with `CRON_SECRET`; Hobby runs daily only, so no minutely entry in `vercel.json`).
+- **A-7 (sync SQL):** one trigger per event; the claim skips entities with a live lease; retry backoff reuses `lease_until`.
+- **A-8 (latency):** when the external call passes the search budget, race pgvector and use whichever answers within budget (reported `degraded` if pgvector wins).
+- **A-9 (CI):** images pinned by digest with pull retry; Qdrant health via a runner wait loop; a missing backend fails the canary job.
+- **A-10 (regression stats):** reuse the paired bootstrap (seed 20261123, 10000 resamples); pre-register configs; count test-split uses; Holm correction across ablations; slices under 10 items are reported, not gated; one final confirmatory run of the combined defaults.
+- **A-11 (inventory):** `lexical_text` and vectors are listed as content in the vendor data-flow inventory.
+- **A-12:** the planner resolves the remaining open questions (legacy_column re-validation branch, outbox cursor column, outbox pruning, PGlite vs real Postgres for the canary) per the research recommendations, each with a test.
