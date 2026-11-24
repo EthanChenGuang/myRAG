@@ -17,7 +17,8 @@ import {
   type StageSpec,
 } from '@/lib/rag/ingest/types';
 import { createIngestWriter } from '@/lib/rag/ingest/writer';
-import { lexicalText } from '@/lib/rag/lexical/tokenize';
+import { chunkLexicalText } from '@/lib/rag/lexical/chunk-text';
+import { LEXICAL_VERSION } from '@/lib/rag/lexical/tokenize';
 import { mintScope } from '@/lib/rag/tenant/scope';
 import {
   FAKE_DOCUMENT_ID,
@@ -361,7 +362,16 @@ describe('registered stages and their switched-off behaviour', () => {
     for (const chunk of chunks) {
       const content = chunk.content as string;
       const path = chunk.section_path as string[];
-      expect(chunk.lexical_text).toBe(lexicalText(path, content));
+      expect(chunk.lexical_text).toBe(
+        chunkLexicalText({
+          sectionPath: path,
+          content,
+          chunkKind: chunk.chunk_kind as string | undefined,
+          metadata: chunk.metadata as Record<string, unknown>,
+          documentFilename: 'handbook.md',
+        }),
+      );
+      expect(chunk.metadata).toMatchObject({ lexical_version: LEXICAL_VERSION });
       expect(chunk.content_hash).toBe(contentHash(content));
       expect(chunk.metadata).toEqual(
         expect.objectContaining({ urls: expect.any(Array), has_urls: expect.any(Boolean), url_count: expect.any(Number), url_categories: expect.any(Array) }),
