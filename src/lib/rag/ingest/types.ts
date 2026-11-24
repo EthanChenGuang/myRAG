@@ -108,6 +108,12 @@ export interface ChunkDraft {
   lexical_text?: string;
 }
 
+/** What a chunker returns: the drafts plus stable warning codes for the stage to report. */
+export interface ChunkResult {
+  chunks: ChunkDraft[];
+  warnings: string[];
+}
+
 export interface IngestIdentity {
   tenantKey: string;
   filename: string;
