@@ -11,6 +11,7 @@ import {
   currentIngestConfig,
   embedText,
   ingest,
+  submitIngest,
   repairOwnerMembership,
   resolveAdminWorkspaceScope,
   resolveTenantScope,
@@ -25,6 +26,10 @@ import { v4 as uuidv4 } from 'uuid';
 import { extractURLs } from '@/lib/url-extractor';
 import { isMultiTenant, isSingleTenant } from '@/lib/deployment-mode';
 import { verifyUserOrganizationAccess } from '@/lib/auth/organization-handler';
+import { scheduleIngestWake } from '@/lib/rag/ingest/wake';
+import { queueConfigFromProcessEnv } from '@/lib/rag/ingest/queue-config';
+import type { EnqueueResult } from '@/lib/rag/ingest/enqueue';
+import type { IngestResult } from '@/lib/rag/ingest/types';
 
 // Use Node.js runtime
 export const runtime = 'nodejs';
@@ -636,6 +641,10 @@ function acceptedMediaType(name: string, declaredType: string): string | null {
   return ALLOWED_MIME_TYPES.has(declared) ? declared : null;
 }
 
+function isEnqueueResult(result: IngestResult | EnqueueResult): result is EnqueueResult {
+  return 'jobId' in result;
+}
+
 function documentTypeOf(name: string): DocumentContent['type'] {
   const extension = fileExtension(name);
   return extension === 'pdf' || extension === 'doc' || extension === 'docx' || extension === 'txt' ||
@@ -723,23 +732,66 @@ async function uploadThroughIngest(input: {
   const bytes = new Uint8Array(await file.arrayBuffer());
   const deadlineMs = Math.max(MIN_INGEST_BUDGET_MS, UPLOAD_BUDGET_MS - (Date.now() - input.startedAt));
 
-  let result;
+  const ingestInput = {
+    scope,
+    source,
+    sourceKey: buildSourceKey(source, { folderId: form.folder_id, filename: file.name }),
+    file: bytes,
+    filename: file.name,
+    mimeType,
+    ...(form.doc_type ? { docType: form.doc_type } : {}),
+    signal: req.signal,
+    deadlineMs,
+  };
+
+  let result: IngestResult | EnqueueResult;
   try {
-    result = await ingest({
-      scope,
-      source,
-      sourceKey: buildSourceKey(source, { folderId: form.folder_id, filename: file.name }),
-      file: bytes,
-      filename: file.name,
-      mimeType,
-      ...(form.doc_type ? { docType: form.doc_type } : {}),
-      signal: req.signal,
-      deadlineMs,
-    });
+    result = queueConfigFromProcessEnv().ingestAsync ? await submitIngest(ingestInput) : await ingest(ingestInput);
   } catch (error) {
     console.error('[ProcessDocument] ingest threw', error instanceof Error ? error.name : 'unknown');
     return NextResponse.json({ error: 'Failed to process document', status: 'failed' }, { status: 500 });
   }
+
+  if (isEnqueueResult(result)) {
+    console.log('[ProcessDocument] Enqueued upload', {
+      source,
+      status: result.status,
+      documentId: result.documentId,
+      jobId: result.jobId,
+      ...(result.reason ? { reason: result.reason } : {}),
+    });
+    if (result.status === 'failed') {
+      return NextResponse.json({ error: 'Failed to process document', status: 'failed' }, { status: 500 });
+    }
+    if (result.status === 'skipped_duplicate') {
+      return NextResponse.json(
+        {
+          id: result.documentId,
+          documentId: result.documentId,
+          jobId: result.jobId,
+          name: file.name,
+          filename: file.name,
+          type: documentTypeOf(file.name),
+          status: 'skipped_duplicate',
+        },
+        { status: 200 },
+      );
+    }
+    scheduleIngestWake();
+    return NextResponse.json(
+      {
+        jobId: result.jobId,
+        documentId: result.documentId,
+        status: 'queued',
+        id: result.documentId,
+        name: file.name,
+        filename: file.name,
+        type: documentTypeOf(file.name),
+      },
+      { status: 202 },
+    );
+  }
+
   console.log('[ProcessDocument] Ingested upload', {
     source,
     status: result.status,
