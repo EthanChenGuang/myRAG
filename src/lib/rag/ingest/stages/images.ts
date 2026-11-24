@@ -17,6 +17,7 @@ import {
   type StageOutcome,
   type StageSpec,
 } from '../types';
+import { saveContextState } from '../state-store';
 import { quarantineDocument } from './scan-injection';
 
 /** Less than this left before the deadline: the run yields instead of starting a vision call. */
@@ -83,7 +84,7 @@ async function runCaptionOnly(ctx: StageContext): Promise<StageOutcome> {
     caption = made;
     await saveCaption(ctx, 0, caption);
     ctx.state.images = { ...slot, nextIndex: 1, captioned: 1 };
-    await ctx.writer.saveState(document.id, 'processing', { ...ctx.state });
+    await saveContextState(ctx, 'processing');
   }
 
   let outcome = 'image_captioned';
@@ -207,7 +208,7 @@ async function runPictures(ctx: StageContext): Promise<StageOutcome> {
   };
   const yieldNow = async (): Promise<StageOutcome> => {
     record();
-    await ctx.writer.saveState(document.id, 'processing', { ...ctx.state });
+    await saveContextState(ctx, 'processing');
     return { kind: 'yield', reason: 'deadline' };
   };
 
@@ -241,7 +242,7 @@ async function runPictures(ctx: StageContext): Promise<StageOutcome> {
       captioned += 1;
       nextIndex = index + 1;
       record();
-      await ctx.writer.saveState(document.id, 'processing', { ...ctx.state });
+      await saveContextState(ctx, 'processing');
     }
     if (ctx.config.injectionScan !== 'off') {
       let result: InjectionScanResult;

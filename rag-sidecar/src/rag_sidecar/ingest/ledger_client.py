@@ -47,6 +47,18 @@ class ParseCacheEntry(BaseModel):
     byte_size: int | None = None
 
 
+_STRIPPED_JOB_COLUMNS = ("error",)
+
+
+def _job_from_row(row: Any) -> IngestionJob:
+    """Validates a table row: the contract leaves out the error column and models an absent detect_counts as null, not {}."""
+    if isinstance(row, dict):
+        row = {key: value for key, value in row.items() if key not in _STRIPPED_JOB_COLUMNS}
+        if row.get("detect_counts") == {}:
+            row["detect_counts"] = None
+    return IngestionJob.model_validate(row)
+
+
 def _error_code(payload: Any) -> str | None:
     if isinstance(payload, dict):
         code = payload.get("code")
@@ -148,7 +160,7 @@ class LedgerClient:
                 "p_runner": runner,
             },
         )
-        return [IngestionJob.model_validate(row) for row in self._rows(payload)]
+        return [_job_from_row(row) for row in self._rows(payload)]
 
     async def claim_one(self, job_id: str, *, worker: str, runner: str = "worker") -> IngestionJob | None:
         payload = await self._rpc(
@@ -158,7 +170,7 @@ class LedgerClient:
         rows = self._rows(payload)
         if not rows:
             return None
-        return IngestionJob.model_validate(rows[0])
+        return _job_from_row(rows[0])
 
     async def heartbeat(self, job_id: str, worker: str) -> bool:
         payload = await self._rpc(
@@ -201,7 +213,7 @@ class LedgerClient:
         rows = self._rows(payload)
         if not rows:
             raise LedgerError("advance returned no row")
-        return IngestionJob.model_validate(rows[0])
+        return _job_from_row(rows[0])
 
     async def record_attempt(self, job_id: str, worker: str, attempt: dict[str, Any]) -> int:
         payload = await self._rpc(
@@ -213,8 +225,11 @@ class LedgerClient:
         if isinstance(payload, (int, float)):
             return int(payload)
         rows = self._rows(payload)
-        if rows and isinstance(rows[0], (int, float)):
-            return int(rows[0])
+        first = rows[0] if rows else None
+        if isinstance(first, dict) and len(first) == 1:
+            first = next(iter(first.values()))
+        if isinstance(first, (int, float)) and not isinstance(first, bool):
+            return int(first)
         raise LedgerError("record_attempt returned unexpected payload")
 
     async def fail(self, job_id: str, worker: str, *, error_class: str, retryable: bool) -> IngestionJob:
@@ -230,7 +245,7 @@ class LedgerClient:
         rows = self._rows(payload)
         if not rows:
             raise LedgerError("fail returned no row")
-        return IngestionJob.model_validate(rows[0])
+        return _job_from_row(rows[0])
 
     async def cache_prefix(
         self,

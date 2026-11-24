@@ -238,3 +238,38 @@ describe('IngestLedgerError', () => {
     expect(error.message).not.toContain('{');
   });
 });
+describe('PostgREST answers a function that returns one composite row or one scalar with the bare value, not an array', () => {
+  const asData = (value: unknown): unknown[] => value as unknown[];
+
+  test('enqueueJob, advanceJob and getJobInternal read a bare row', async () => {
+    const scope = mintScope('personal', USER_A, null);
+    const settings = buildJobSettings({
+      queueConfig: loadQueueConfig({}),
+      profile: getProcessingProfile('general'),
+      bounds: { min_tier: 'fast', max_tier: 'premium' },
+      routingConfig: loadRoutingConfig(),
+    });
+    const row = validJobRow({ settings, stage: 'chunk', status: 'chunking' });
+    const rpc = fakeRpc({
+      rag_enqueue_ingestion_job: () => ({ data: asData(row), error: null }),
+      rag_advance_ingestion_job: () => ({ data: asData(row), error: null }),
+      rag_get_ingestion_job_internal: () => ({ data: asData(row), error: null }),
+    });
+    const options = { signal: new AbortController().signal, deps: { db: () => rpc } };
+    const { advanceJob } = await import('@/lib/rag/ingest/ledger');
+    expect((await enqueueJob(scope, { source: 'config_upload', sourceKey: 'x', settings }, options)).id).toBe(JOB_ID);
+    expect((await advanceJob({ jobId: JOB_ID, worker: 'w', stage: 'chunk', status: 'chunking' }, options)).stage).toBe('chunk');
+    expect((await getJobInternal(JOB_ID, options))?.id).toBe(JOB_ID);
+  });
+
+  test('a null answer is no row, and a bare integer is the attempt number', async () => {
+    const rpc = fakeRpc({
+      rag_get_ingestion_job_internal: () => ({ data: null, error: null }),
+      rag_record_parse_attempt: () => ({ data: asData(3), error: null }),
+    });
+    const options = { signal: new AbortController().signal, deps: { db: () => rpc } };
+    const { recordAttempt } = await import('@/lib/rag/ingest/ledger');
+    expect(await getJobInternal(JOB_ID, options)).toBeNull();
+    expect(await recordAttempt(JOB_ID, 'w', { reason: 'fixed_chain' }, options)).toBe(3);
+  });
+});

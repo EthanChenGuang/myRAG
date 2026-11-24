@@ -16,6 +16,7 @@ import { buildParserChain, parseWithFallback, type ChainOutcome } from '../parse
 import type { ParseArtifact, PendingJob } from '../parsers/shared';
 import { profileFor } from '../profiles/load';
 import { refineDocTypeAfterParse } from '../profiles/resolve-doc-type';
+import { saveContextState } from '../state-store';
 import {
   IngestStageError,
   requireDocument,
@@ -30,7 +31,7 @@ const POLL_RESERVE_MS = 3000;
 /** Less than this left before the deadline: the run yields instead of starting a parser. */
 const MIN_PARSE_MS = 2000;
 
-interface Parsed {
+export interface Parsed {
   result: ParseResult;
   artifacts: ParseArtifact[];
   warnings: string[];
@@ -182,7 +183,7 @@ async function runChain(ctx: StageContext, bytes: Uint8Array, resume: PendingJob
     // The job id is saved before the first poll, so a request that ends mid-wait can resume the same job.
     onSubmitted: async (job) => {
       ctx.state.parseJob = { ...job };
-      await ctx.writer.saveState(document.id, 'processing', { ...ctx.state });
+      await saveContextState(ctx, 'processing');
     },
   });
   for (const fallback of outcome.fallbacks) warn(ctx, `parser_fallback:${fallback.parser}:${fallback.reason}`);
@@ -201,8 +202,8 @@ async function persistRefinedType(ctx: StageContext): Promise<void> {
   });
 }
 
-/** Keeps the result: the work every later stage reads, the parser fields, the artifacts and parse.md. */
-async function applyResult(ctx: StageContext, parsed: Parsed): Promise<void> {
+/** Keeps the result: the work every later stage reads, the parser fields, the artifacts and parse.md. A queued run applies the parse result its callback cached through the same function. */
+export async function applyParseResult(ctx: StageContext, parsed: Parsed): Promise<void> {
   const document = requireDocument(ctx, 'parse');
   const { result } = parsed;
   ctx.state.parseJob = null;
@@ -236,7 +237,14 @@ async function applyResult(ctx: StageContext, parsed: Parsed): Promise<void> {
   await stored(ctx, () => saveArtifact(ctx, PARSE_ARTIFACT, new TextEncoder().encode(ctx.work.parseText ?? ''), 'text/markdown'));
 }
 
-async function run(ctx: StageContext): Promise<StageOutcome> {
+/** Either the parse output, or the outcome the stage ends with when there is none (a failure, or a yield while a parse job is pending). */
+export type ParseToResult = { kind: 'parsed'; parsed: Parsed } | { kind: 'stopped'; outcome: StageOutcome };
+
+/**
+ * The parse stage up to, and not including, keeping the result: the chain (or plain text, or the whole image), the doc type refinement
+ * and the one re-parse it may ask for. The parse-external callback of a queued job runs this and caches what it returns.
+ */
+export async function parseToResult(ctx: StageContext): Promise<ParseToResult> {
   const identity = requireIdentity(ctx, 'parse');
   requireDocument(ctx, 'parse');
 
@@ -251,24 +259,24 @@ async function run(ctx: StageContext): Promise<StageOutcome> {
   const bytes = identity.bytes;
   if (identity.profile.chunker.kind === 'image_caption') {
     const image = wholeImage(ctx, bytes);
-    if ('reason' in image) return { kind: 'fail', reason: image.reason };
+    if ('reason' in image) return { kind: 'stopped', outcome: { kind: 'fail', reason: image.reason } };
     parsed = image.parsed;
   } else if (ctx.input.text !== undefined) {
     parsed = { result: textResult(stripBom(ctx.input.text)), artifacts: [], warnings: [] };
   } else {
-    if (bytes === null) return { kind: 'fail', reason: 'no_parser_available' };
+    if (bytes === null) return { kind: 'stopped', outcome: { kind: 'fail', reason: 'no_parser_available' } };
     const previousVersion = ctx.state.typeChange?.reuseParseOfVersion ?? null;
     const reused = previousVersion === null ? null : await reuseStoredParse(ctx, previousVersion);
     if (reused !== null) {
       parsed = reused;
     } else {
-      if (ctx.deadline - ctx.deps.now() < MIN_PARSE_MS) return { kind: 'yield', reason: 'deadline' };
+      if (ctx.deadline - ctx.deps.now() < MIN_PARSE_MS) return { kind: 'stopped', outcome: { kind: 'yield', reason: 'deadline' } };
       const first = await runChain(ctx, bytes, savedJob(ctx));
       if (first.kind === 'failed') {
         ctx.state.parseJob = null;
-        return { kind: 'fail', reason: first.reason };
+        return { kind: 'stopped', outcome: { kind: 'fail', reason: first.reason } };
       }
-      if (first.kind === 'pending') return { kind: 'yield', reason: 'parse_pending' };
+      if (first.kind === 'pending') return { kind: 'stopped', outcome: { kind: 'yield', reason: 'parse_pending' } };
       parsed = first;
     }
   }
@@ -284,12 +292,18 @@ async function run(ctx: StageContext): Promise<StageOutcome> {
     if (ctx.state.docTypeDetection) ctx.state.docTypeDetection.reparsed = true;
     ctx.state.parseJob = null;
     const second = await runChain(ctx, bytes, null);
-    if (second.kind === 'pending') return { kind: 'yield', reason: 'parse_pending' };
+    if (second.kind === 'pending') return { kind: 'stopped', outcome: { kind: 'yield', reason: 'parse_pending' } };
     if (second.kind === 'done') parsed = second;
     else warn(ctx, 'reparse_failed');
   }
 
-  await applyResult(ctx, parsed);
+  return { kind: 'parsed', parsed };
+}
+
+async function run(ctx: StageContext): Promise<StageOutcome> {
+  const outcome = await parseToResult(ctx);
+  if (outcome.kind === 'stopped') return outcome.outcome;
+  await applyParseResult(ctx, outcome.parsed);
   return { kind: 'next' };
 }
 
