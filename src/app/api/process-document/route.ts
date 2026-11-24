@@ -12,9 +12,13 @@ import {
   embedText,
   ingest,
   submitIngest,
+  scheduleIngestWake,
+  queueConfigFromProcessEnv,
   repairOwnerMembership,
   resolveAdminWorkspaceScope,
   resolveTenantScope,
+  type EnqueueResult,
+  type IngestResult,
   type RagAdminDb,
   type TenantScope,
 } from '@/lib/rag';
@@ -26,10 +30,6 @@ import { v4 as uuidv4 } from 'uuid';
 import { extractURLs } from '@/lib/url-extractor';
 import { isMultiTenant, isSingleTenant } from '@/lib/deployment-mode';
 import { verifyUserOrganizationAccess } from '@/lib/auth/organization-handler';
-import { scheduleIngestWake } from '@/lib/rag/ingest/wake';
-import { queueConfigFromProcessEnv } from '@/lib/rag/ingest/queue-config';
-import type { EnqueueResult } from '@/lib/rag/ingest/enqueue';
-import type { IngestResult } from '@/lib/rag/ingest/types';
 
 // Use Node.js runtime
 export const runtime = 'nodejs';

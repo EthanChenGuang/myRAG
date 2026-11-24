@@ -249,7 +249,7 @@ describe('process-document enqueue path (RAG_INGEST_ASYNC=on)', () => {
   it('registers after() for the wake without blocking the response body', async () => {
     state.session = { id: USER_B };
     scheduleWakeMock.mockImplementation(() => {
-      afterMock();
+      afterMock(() => Promise.resolve());
     });
     const POST = await loadPost(true);
     await POST(upload());
