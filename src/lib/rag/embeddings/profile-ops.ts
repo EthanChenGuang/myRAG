@@ -1,4 +1,5 @@
 import type { RpcError } from '../backend/supabase-rpc';
+import { createReembedWriter } from '../ingest/writer';
 import type { EmbeddingProfile, StartupVerdict } from './active-profile';
 import {
   LEGACY_PROFILE,
@@ -25,6 +26,12 @@ export interface EmbeddingProfileStatus {
   profiles: EmbeddingProfile[];
   startup: StartupVerdict;
 }
+
+/** How many current ready chunks hold a vector of a profile. The legacy column is counted by the gate itself, not here. */
+export type ProfileCompleteness =
+  | { state: 'measured'; chunks: number; missing: number; percent: number }
+  | { state: 'legacy_column' }
+  | { state: 'unavailable' };
 
 export type ActivateResult = { ok: true; activated: string; previous: string | null } | ProfileRefusal;
 export type RollbackResult = { ok: true; restored: string; rolledBack: string } | ProfileRefusal;
@@ -105,4 +112,31 @@ export async function setEmbeddingProfileStatus(profileId: string, status: strin
   if (!id || !next) throw new ProfileUnavailableError('rpc_failed', 'malformed_response');
   await refreshAfterOperation();
   return { ok: true, profileId: id, status: next };
+}
+
+/**
+ * Completeness per profile for operator views: current ready chunks with a vector of the profile's model and dims, over all current ready
+ * chunks, through the re-embed count function. A profile whose count cannot be read is reported unavailable, never as complete.
+ */
+export async function getEmbeddingProfileCompleteness(
+  profiles: EmbeddingProfile[],
+  signal: AbortSignal = new AbortController().signal,
+): Promise<Record<string, ProfileCompleteness>> {
+  const writer = createReembedWriter({ db: requireRegistryClient(), signal });
+  const out: Record<string, ProfileCompleteness> = {};
+  for (const profile of profiles) {
+    if (profile.storage === 'legacy_column') {
+      out[profile.id] = { state: 'legacy_column' };
+      continue;
+    }
+    try {
+      const tenants = await writer.count(profile.id, null);
+      const chunks = tenants.reduce((sum, tenant) => sum + tenant.chunks, 0);
+      const missing = tenants.reduce((sum, tenant) => sum + tenant.chunksMissing, 0);
+      out[profile.id] = { state: 'measured', chunks, missing, percent: chunks === 0 ? 100 : ((chunks - missing) / chunks) * 100 };
+    } catch {
+      out[profile.id] = { state: 'unavailable' };
+    }
+  }
+  return out;
 }

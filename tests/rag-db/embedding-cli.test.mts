@@ -127,6 +127,8 @@ describe('rag:embedding CLI over the gated pointer flip', () => {
     await fixture.db.query('UPDATE embedding_profiles SET eval_evidence = $2::jsonb WHERE id = $1', [profileId, JSON.stringify(evidence)]);
   }
 
+  const currentChunkCount = async (): Promise<number> => Number((await rows("SELECT count(*)::int AS n FROM document_chunks WHERE is_current AND status = 'ready'"))[0]?.n);
+
   const activeId = async (): Promise<string | undefined> => (await rows("SELECT id FROM embedding_profiles WHERE status = 'active'"))[0]?.id as string | undefined;
 
   async function retrieve(userId: string | null, organizationId: string | null) {
@@ -145,6 +147,8 @@ describe('rag:embedding CLI over the gated pointer flip', () => {
   const searches = (fn: string): number => edge.calls.filter((call) => call.path.endsWith(`/rpc/${fn}`)).length;
 
   test('status lists the five seeded profiles with status, dims, storage, completeness per profile and whether evidence exists', async () => {
+    const total = await currentChunkCount();
+    assert.ok(total > 1, 'the fixture has several current ready chunks');
     const first = (await rows("SELECT id FROM document_chunks WHERE is_current AND status = 'ready' ORDER BY id LIMIT 1"))[0]?.id;
     await fixture.db.query(
       `INSERT INTO chunk_embeddings (chunk_id, profile_id, tenant_key, embedding, embedding_model, dims)
@@ -158,7 +162,8 @@ describe('rag:embedding CLI over the gated pointer flip', () => {
     for (const id of SEEDED) assert.match(text, new RegExp(`profile ${id}\\b`), `${id} is listed`);
     const line = (id: string): string => text.split('\n').find((entry) => entry.includes(`profile ${id} `)) ?? '';
     assert.match(line(LEGACY), /status=active\b.*dims=1536\b.*storage=legacy_column\b/);
-    assert.match(line(VOYAGE), /status=available\b.*dims=2048\b.*storage=halfvec\b.*completeness=33\.3%.*evidence=no\b/);
+    assert.match(line(VOYAGE), /status=available\b.*dims=2048\b.*storage=halfvec\b.*evidence=no\b/);
+    assert.ok(line(VOYAGE).includes(`completeness=${((1 / total) * 100).toFixed(1)}% (1 of ${total} current ready chunks)`), line(VOYAGE));
     assert.match(line(QWEN), /completeness=0\.0%.*evidence=yes\b/);
     assert.match(line('voyage-4-large-1024'), /completeness=0\.0%/);
     assert.match(text, /switch: on/);
@@ -170,7 +175,7 @@ describe('rag:embedding CLI over the gated pointer flip', () => {
     const { code, text } = await run('activate', VOYAGE);
     assert.notEqual(code, 0);
     assert.match(text, /activation_refused: incomplete/);
-    assert.match(text, /\b3 current ready chunks have no vector for profile voyage-4-large-2048/);
+    assert.ok(text.includes(`(${await currentChunkCount()} current ready chunks have no vector for profile ${VOYAGE})`), text);
     assert.equal(await activeId(), LEGACY);
   });
 
@@ -209,7 +214,7 @@ describe('rag:embedding CLI over the gated pointer flip', () => {
     }
 
     await setEvidence(VOYAGE, runId);
-    await fixture.db.query("UPDATE chunk_embeddings SET embedding_model = 'another-model' WHERE profile_id = $1 AND chunk_id = (SELECT min(chunk_id) FROM chunk_embeddings WHERE profile_id = $1)", [VOYAGE]);
+    await fixture.db.query("UPDATE chunk_embeddings SET embedding_model = 'another-model' WHERE profile_id = $1 AND chunk_id = (SELECT chunk_id FROM chunk_embeddings WHERE profile_id = $1 ORDER BY chunk_id LIMIT 1)", [VOYAGE]);
     const mismatch = await run('activate', VOYAGE);
     assert.notEqual(mismatch.code, 0);
     assert.match(mismatch.text, /activation_refused: model_mismatch/);
