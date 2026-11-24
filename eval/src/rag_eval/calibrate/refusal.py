@@ -29,7 +29,7 @@ from rag_eval.bounds import binom_cdf, upper_bound
 from rag_eval.config_files import finalize_config, write_config_atomically
 from rag_eval.golden_io import golden_sha256, load_golden
 from rag_eval.harness_runner import HarnessRun, run_harness
-from rag_eval.paths import REPO_ROOT
+from rag_eval.paths import REPO_ROOT, repo_relative
 from rag_eval.split import assign_split
 
 NEVER_REFUSE = float("-inf")
@@ -859,7 +859,7 @@ def run_refusal_calibration(
         )
         write_config_atomically(thresholds_file, merged)
         result.thresholds_written = True
-        result.thresholds_path = str(thresholds_file)
+        result.thresholds_path = repo_relative(thresholds_file)
 
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / RESULT_NAME).write_text(_stable_json(result.model_dump(mode="json")), encoding="utf-8")

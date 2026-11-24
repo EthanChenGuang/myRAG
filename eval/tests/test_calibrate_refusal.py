@@ -361,7 +361,16 @@ class _Runner:
         )
 
 
+def _empty_thresholds(tmp_path: Path) -> Path:
+    path = tmp_path / "empty-thresholds.json"
+    if not path.is_file():
+        write_config_atomically(path, finalize_config(RefusalThresholds(cells=[]), provenance_source="calibration"))
+    return path
+
+
 def _calibrate(tmp_path: Path, runner, golden: Path, **kwargs):
+    if "thresholds_path" not in kwargs:
+        kwargs["thresholds_path"] = _empty_thresholds(tmp_path)
     return run_refusal_calibration(
         V2_RECOMMENDED, tmp_path / "out", golden=golden, runner=runner, now=DAY, **kwargs
     )
@@ -426,8 +435,9 @@ def test_collect_rows_drops_items_whose_split_field_disagrees_with_the_rule():
 def test_run_writes_result_and_report_and_leaves_the_committed_thresholds_alone(tmp_path):
     golden, _, scores = _world(tmp_path)
     before = COMMITTED_THRESHOLDS.read_bytes()
+    committed = {c.key: c.holdout_evaluations for c in RefusalThresholds.model_validate_json(before).cells}
     runner = _Runner(scores)
-    result = _calibrate(tmp_path, runner, golden)
+    result = _calibrate(tmp_path, runner, golden, thresholds_path=None)
     out = tmp_path / "out"
     assert (out / "refusal-calibration-result.json").is_file()
     assert (out / "report.md").is_file()
@@ -437,7 +447,7 @@ def test_run_writes_result_and_report_and_leaves_the_committed_thresholds_alone(
     assert record.cell.key == KEY_ZH_SAME
     assert record.cell.status == "calibrated"
     assert record.cell.source == "fixture"
-    assert record.cell.holdout_evaluations == 1
+    assert record.cell.holdout_evaluations == committed.get(KEY_ZH_SAME, 0) + 1
     on_disk = json.loads((out / "refusal-calibration-result.json").read_text(encoding="utf-8"))
     assert on_disk["dev_only_fit"] is True
     assert on_disk["cells"][0]["cell"]["threshold"] == pytest.approx(0.525)
@@ -511,7 +521,9 @@ def test_run_twice_with_unchanged_inputs_is_a_byte_identical_no_op(tmp_path):
     out = tmp_path / "out"
     _calibrate(tmp_path, _Runner(scores), golden)
     first = {n: (out / n).read_bytes() for n in ("refusal-calibration-result.json", "report.md")}
-    again = run_refusal_calibration(V2_RECOMMENDED, out, golden=golden, runner=_Runner(scores), now="2027-02-02")
+    again = run_refusal_calibration(
+        V2_RECOMMENDED, out, golden=golden, runner=_Runner(scores), now="2027-02-02", thresholds_path=_empty_thresholds(tmp_path)
+    )
     second = {n: (out / n).read_bytes() for n in ("refusal-calibration-result.json", "report.md")}
     assert first == second
     assert again.cells[0].cell.holdout_evaluations == 1
