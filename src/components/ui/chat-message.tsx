@@ -34,6 +34,8 @@ import { useAuth } from '@/components/providers/auth-provider';
 import { useTheme } from '@/components/theme-provider';
 import { onAudioStateChange, stopAudioPlayback, textToSpeech, getCachedAudioBlob, isAudioCached, generateAudioFilename } from '@/lib/audio-utils';
 import { useUserSettingsStore } from '@/lib/user-settings-store';
+import { useOrganizationStore } from '@/lib/stores/organization-store';
+import { isMultiTenant } from '@/lib/deployment-mode';
 import { env } from '@/lib/env';
 import { useTextSize } from '@/components/providers/text-size-provider';
 import { useFont } from '@/components/providers/font-provider';
@@ -3748,6 +3750,12 @@ ChatMessage = function ({
         return;
       }
 
+      let organizationId: string | undefined;
+      if (isMultiTenant()) {
+        const { currentOrganization, isPersonalMode } = useOrganizationStore.getState();
+        if (!isPersonalMode && currentOrganization) organizationId = currentOrganization.id;
+      }
+
       // Send to the API endpoint
       const response = await fetch('/api/ai-to-rag', {
         method: 'POST',
@@ -3759,6 +3767,7 @@ ChatMessage = function ({
           messageId: message.id,
           chatId: sessionId,
           userId: user?.id,
+          ...(organizationId ? { organizationId } : {}),
         }),
       });
 
@@ -3769,10 +3778,14 @@ ChatMessage = function ({
 
       const result = await response.json();
 
-      // Show success notification
       toast({
         title: "Success",
-        description: `Added "${result.title}" to knowledge base (${result.chunksStored} chunks)`,
+        description:
+          result.status === 'skipped_duplicate'
+            ? `"${result.title}" is already in the knowledge base`
+            : result.status === 'quarantined'
+              ? `"${result.title}" was saved but is held for review`
+              : `Added "${result.title}" to knowledge base (${result.chunksStored} chunks)`,
       });
 
     } catch (error) {
