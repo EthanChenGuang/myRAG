@@ -1,0 +1,478 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const ADMIN_ID = '00000000-0000-4000-8000-0000000000a1';
+const OTHER_ADMIN_ID = '00000000-0000-4000-8000-0000000000a2';
+const USER_ID = '00000000-0000-4000-8000-0000000000b1';
+const REPO_ROOT = path.resolve(__dirname, '../..');
+const LEGACY = 'openai-3-small-1536';
+const VOYAGE = 'voyage-4-large-2048';
+const QWEN = 'qwen3-8b-2048';
+const DB_SECRET = 'connection reset by peer: secret text';
+
+type Row = Record<string, unknown>;
+type RpcOutcome = { data: Row[] | null; error: { code?: string; message: string } | null };
+
+function profileRow(id: string, status: string, over: Row = {}): Row {
+  return {
+    id,
+    provider: id.startsWith('voyage') ? 'voyage' : id.startsWith('qwen3') ? 'qwen3' : 'openai',
+    model: id.startsWith('voyage') ? 'voyage-4-large' : id.startsWith('qwen3') ? 'Qwen/Qwen3-Embedding-8B' : 'text-embedding-3-small',
+    dims: id.endsWith('1536') ? 1536 : 2048,
+    storage: id === LEGACY ? 'legacy_column' : 'halfvec',
+    status,
+    query_instruction: null,
+    score_calibration: {},
+    activated_at: null,
+    activated_by: null,
+    previous_active_id: null,
+    has_evidence: false,
+    created_at: '2026-11-01T00:00:00.000Z',
+    ...over,
+  };
+}
+
+const state = {
+  admins: [] as string[],
+  session: null as { id: string } | null,
+  tokens: {} as Record<string, string>,
+  sessionThrows: false,
+  lookupFails: false,
+  rpcCalls: [] as Array<{ fn: string; args: Record<string, unknown> }>,
+  outcomes: {} as Record<string, RpcOutcome>,
+  profiles: [] as Row[],
+  dbAvailable: true,
+};
+
+function fakeGuardClient() {
+  return {
+    auth: {
+      getUser: async (token: string) => {
+        const id = state.tokens[token];
+        return id ? { data: { user: { id } }, error: null } : { data: { user: null }, error: { message: 'invalid' } };
+      },
+    },
+    from(table: string) {
+      const filters: Record<string, unknown> = {};
+      const builder = {
+        select: () => builder,
+        abortSignal: () => builder,
+        eq(column: string, value: unknown) {
+          filters[column] = value;
+          return builder;
+        },
+        maybeSingle() {
+          if (table !== 'admin_users') throw new Error(`the guard read ${table}`);
+          if (state.lookupFails) return Promise.resolve({ data: null, error: { message: 'down' } });
+          return Promise.resolve({ data: state.admins.includes(filters.id as string) ? { id: filters.id } : null, error: null });
+        },
+      };
+      return builder;
+    },
+  };
+}
+
+function setActive(id: string, previous: string | null): void {
+  state.profiles = state.profiles.map((row) => {
+    if (row.id === id) return { ...row, status: 'active', previous_active_id: previous };
+    return row.status === 'active' ? { ...row, status: 'available' } : row;
+  });
+}
+
+function respond(fn: string, args: Record<string, unknown>): RpcOutcome {
+  const forced = state.outcomes[fn];
+  if (forced) return forced;
+  switch (fn) {
+    case 'rag_list_embedding_profiles':
+      return { data: state.profiles, error: null };
+    case 'rag_activate_embedding_profile': {
+      const previous = state.profiles.find((row) => row.status === 'active')?.id as string | undefined;
+      setActive(String(args.p_target), previous ?? null);
+      return { data: [{ activated_profile: args.p_target, previous_profile: previous ?? null }], error: null };
+    }
+    case 'rag_rollback_embedding_profile': {
+      const active = state.profiles.find((row) => row.status === 'active');
+      const restored = String(active?.previous_active_id ?? LEGACY);
+      setActive(restored, null);
+      return { data: [{ restored_profile: restored, rolled_back_profile: active?.id ?? VOYAGE }], error: null };
+    }
+    case 'rag_reembed_count':
+      return { data: [{ tenant_key: 's:default', chunks: '10', chunks_missing: args.p_profile_id === VOYAGE ? '4' : '10', content_chars: '100' }], error: null };
+    default:
+      return { data: [], error: null };
+  }
+}
+
+function rpcClient() {
+  return {
+    rpc(fn: string, args: Record<string, unknown>) {
+      state.rpcCalls.push({ fn, args });
+      const outcome = respond(fn, args);
+      const request = {
+        abortSignal: () => request,
+        then: (onFulfilled: (value: RpcOutcome) => unknown, onRejected?: (reason: unknown) => unknown) => Promise.resolve(outcome).then(onFulfilled, onRejected),
+      };
+      return request;
+    },
+  };
+}
+
+async function load() {
+  vi.resetModules();
+  vi.doMock('@/lib/supabase/server', () => ({
+    createClient: async () => ({
+      auth: {
+        getUser: async () => {
+          if (state.sessionThrows) throw new Error('auth down');
+          return { data: { user: state.session } };
+        },
+      },
+    }),
+  }));
+  vi.doMock('@/lib/supabase', () => ({ getSupabaseAdmin: () => fakeGuardClient(), getSupabase: () => ({}) }));
+  const ragDeps = await import('@/lib/rag/deps');
+  ragDeps.setRagDepsForTests({ adminClient: () => (state.dbAvailable ? (rpcClient() as never) : null) });
+  const ingestDeps = await import('@/lib/rag/ingest/deps');
+  ingestDeps.setIngestDepsForTests({ ingestEnv: () => ({ RAG_EMBEDDING_PROFILES: 'on' }) });
+  const activeProfile = await import('@/lib/rag/embeddings/active-profile');
+  activeProfile.resetActiveProfileForTests();
+  const session = await import('@/lib/admin-session');
+  const list = await import('@/app/api/rag/admin/embedding-profiles/route');
+  const activate = await import('@/app/api/rag/admin/embedding-profiles/[id]/activate/route');
+  const rollback = await import('@/app/api/rag/admin/embedding-profiles/rollback/route');
+  return { session, list, activate, rollback, activeProfile };
+}
+
+type Loaded = Awaited<ReturnType<typeof load>>;
+
+function req(url: string, init: { method?: string; cookie?: string; authorization?: string; body?: unknown; rawBody?: string; headers?: Record<string, string> } = {}) {
+  const headers: Record<string, string> = { 'content-type': 'application/json', ...(init.headers ?? {}) };
+  if (init.cookie) headers.cookie = init.cookie;
+  if (init.authorization) headers.authorization = init.authorization;
+  const body = init.rawBody ?? (init.body !== undefined ? JSON.stringify(init.body) : undefined);
+  return new Request(`http://localhost${url}`, { method: init.method ?? 'GET', headers, ...(body !== undefined ? { body } : {}) });
+}
+
+const params = (id: string) => ({ params: Promise.resolve({ id }) });
+type Init = Parameters<typeof req>[1];
+
+interface RouteCase {
+  name: string;
+  call: (loaded: Loaded, init?: Init) => Promise<Response>;
+}
+
+const activateRequest = (id: string, init: Init = {}) => req(`/api/rag/admin/embedding-profiles/${id}/activate`, { method: 'POST', ...init });
+const rollbackRequest = (init: Init = {}) => req('/api/rag/admin/embedding-profiles/rollback', { method: 'POST', ...init });
+
+const ROUTES: RouteCase[] = [
+  { name: 'GET /api/rag/admin/embedding-profiles', call: (l, init) => l.list.GET(req('/api/rag/admin/embedding-profiles', init)) },
+  { name: 'POST /api/rag/admin/embedding-profiles/{id}/activate', call: (l, init) => l.activate.POST(activateRequest(VOYAGE, init), params(VOYAGE)) },
+  { name: 'POST /api/rag/admin/embedding-profiles/rollback', call: (l, init) => l.rollback.POST(rollbackRequest(init)) },
+];
+
+const cookieOf = (value: string | null) => `admin_session=${value}`;
+
+describe('embedding profile admin routes', () => {
+  let logged: string[];
+
+  beforeEach(() => {
+    state.admins = [ADMIN_ID, OTHER_ADMIN_ID];
+    state.session = null;
+    state.tokens = {};
+    state.sessionThrows = false;
+    state.lookupFails = false;
+    state.rpcCalls = [];
+    state.outcomes = {};
+    state.dbAvailable = true;
+    state.profiles = [
+      profileRow(LEGACY, 'active', { activated_at: '2026-11-02T00:00:00.000Z', activated_by: 'seed' }),
+      profileRow(VOYAGE, 'backfilling', { has_evidence: true }),
+      profileRow(QWEN, 'available'),
+    ];
+    logged = [];
+    for (const method of ['warn', 'error', 'log', 'info'] as const) {
+      vi.spyOn(console, method).mockImplementation((...args: unknown[]) => {
+        logged.push(args.map((arg) => (typeof arg === 'string' ? arg : JSON.stringify(arg))).join(' '));
+      });
+    }
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.resetModules();
+  });
+
+  describe.each(ROUTES)('$name fails closed', (route) => {
+    it('without any credential gives 401 and runs no profile function', async () => {
+      const loaded = await load();
+      const response = await route.call(loaded);
+      expect(response.status).toBe(401);
+      expect((await response.json()).success).toBe(false);
+      expect(state.rpcCalls).toEqual([]);
+    });
+
+    it('gives 503 when the auth lookup throws, with a session or a signed cookie, and when the admin_users lookup fails', async () => {
+      const loaded = await load();
+      state.sessionThrows = true;
+      expect((await route.call(loaded)).status).toBe(503);
+      expect((await route.call(loaded, { cookie: cookieOf(loaded.session.mintAdminSessionValue(ADMIN_ID)) })).status).toBe(503);
+      state.sessionThrows = false;
+      state.session = { id: ADMIN_ID };
+      state.lookupFails = true;
+      expect((await route.call(loaded)).status).toBe(503);
+      expect(state.rpcCalls).toEqual([]);
+    });
+
+    it('gives 403 to an authenticated user who is not an admin, by session and by bearer token', async () => {
+      const loaded = await load();
+      state.session = { id: USER_ID };
+      expect((await route.call(loaded)).status).toBe(403);
+      state.session = null;
+      state.tokens = { 'token-user': USER_ID };
+      expect((await route.call(loaded, { authorization: 'Bearer token-user' })).status).toBe(403);
+      expect(state.rpcCalls).toEqual([]);
+    });
+
+    it('gives 401 to a forged or unsigned admin_session cookie and to a signed cookie without the matching live session', async () => {
+      const loaded = await load();
+      expect((await route.call(loaded, { cookie: cookieOf(ADMIN_ID) })).status).toBe(401);
+      const signed = loaded.session.mintAdminSessionValue(ADMIN_ID) as string;
+      const [id, expiry, signature] = signed.split('.');
+      const flipped = `${signature.slice(0, -1)}${signature.endsWith('A') ? 'B' : 'A'}`;
+      expect((await route.call(loaded, { cookie: cookieOf(`${id}.${expiry}.${flipped}`) })).status).toBe(401);
+      expect((await route.call(loaded, { cookie: cookieOf(signed) })).status).toBe(401);
+      expect((await route.call(loaded, { authorization: 'Bearer admin' })).status).toBe(401);
+      expect(state.rpcCalls).toEqual([]);
+    });
+
+    it('gives 403 to a validly signed admin_session cookie of a user who is not in admin_users', async () => {
+      const loaded = await load();
+      state.session = { id: USER_ID };
+      expect((await route.call(loaded, { cookie: cookieOf(loaded.session.mintAdminSessionValue(USER_ID)) })).status).toBe(403);
+      expect(state.rpcCalls).toEqual([]);
+    });
+
+    it('admits a signed admin_session cookie with its live session, and a bearer token of an admin', async () => {
+      const loaded = await load();
+      state.session = { id: ADMIN_ID };
+      const withCookie = await route.call(loaded, { cookie: cookieOf(loaded.session.mintAdminSessionValue(ADMIN_ID)) });
+      expect(withCookie.status).toBe(200);
+      state.session = null;
+      state.tokens = { 'token-admin': ADMIN_ID };
+      const withToken = await route.call(loaded, { authorization: 'Bearer token-admin' });
+      expect(withToken.status).toBe(200);
+      expect(state.rpcCalls.length).toBeGreaterThan(0);
+    });
+  });
+
+  it('lists the profiles with status, storage and whether evidence exists, and never an evidence body or a score calibration', async () => {
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    const response = await loaded.list.GET(req('/api/rag/admin/embedding-profiles'));
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    const body = await response.json();
+    expect(body.success).toBe(true);
+    expect(body.switch).toBe('on');
+    expect(body.active).toBe(LEGACY);
+    expect(body.profiles.map((profile: Row) => profile.id)).toEqual([LEGACY, VOYAGE, QWEN]);
+    expect(body.profiles[1]).toEqual({
+      id: VOYAGE,
+      provider: 'voyage',
+      model: 'voyage-4-large',
+      dims: 2048,
+      storage: 'halfvec',
+      status: 'backfilling',
+      has_evidence: true,
+      activated_at: null,
+      activated_by: null,
+      previous_active_id: null,
+    });
+    expect(JSON.stringify(body)).not.toMatch(/eval_evidence|score_calibration|query_instruction/);
+    expect(state.rpcCalls.map((call) => call.fn)).toEqual(['rag_list_embedding_profiles']);
+  });
+
+  it('adds the completeness per profile only when asked, and never calls the legacy column complete', async () => {
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    const response = await loaded.list.GET(req('/api/rag/admin/embedding-profiles?completeness=true'));
+    expect(response.status).toBe(200);
+    const byId = Object.fromEntries((await response.json()).profiles.map((profile: Row) => [profile.id, profile.completeness]));
+    expect(byId[LEGACY]).toEqual({ state: 'legacy_column' });
+    expect(byId[VOYAGE]).toEqual({ state: 'measured', chunks: 10, missing: 4, percent: 60 });
+    expect(byId[QWEN]).toEqual({ state: 'measured', chunks: 10, missing: 10, percent: 0 });
+    expect(state.rpcCalls.filter((call) => call.fn === 'rag_reembed_count').map((call) => call.args)).toEqual([
+      { p_profile_id: VOYAGE, p_tenant_key: null },
+      { p_profile_id: QWEN, p_tenant_key: null },
+    ]);
+    state.rpcCalls = [];
+    expect((await loaded.list.GET(req('/api/rag/admin/embedding-profiles?completeness=maybe'))).status).toBe(400);
+    expect(state.rpcCalls).toEqual([]);
+  });
+
+  it('answers 503 without database text when the registry cannot be read or the admin client is missing', async () => {
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    state.outcomes.rag_list_embedding_profiles = { data: null, error: { code: 'XX000', message: DB_SECRET } };
+    const failed = await loaded.list.GET(req('/api/rag/admin/embedding-profiles'));
+    expect(failed.status).toBe(503);
+    expect(JSON.stringify(await failed.json())).not.toContain('secret text');
+    state.outcomes = {};
+    state.dbAvailable = false;
+    expect((await loaded.list.GET(req('/api/rag/admin/embedding-profiles'))).status).toBe(503);
+    expect(logged.join('\n')).not.toContain('secret text');
+  });
+
+  it('activates a profile: 200 with the new active id, the actor is the verified admin and never a header or the body', async () => {
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    const response = await loaded.activate.POST(activateRequest(VOYAGE, { body: {}, headers: { 'x-actor-id': OTHER_ADMIN_ID, 'x-user-id': OTHER_ADMIN_ID } }), params(VOYAGE));
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(await response.json()).toEqual({ success: true, activated: VOYAGE, previous: LEGACY });
+    const calls = state.rpcCalls.filter((call) => call.fn === 'rag_activate_embedding_profile');
+    expect(calls).toEqual([{ fn: 'rag_activate_embedding_profile', args: { p_target: VOYAGE, p_actor: ADMIN_ID } }]);
+    expect(logged.some((line) => line.includes('[Embedding Profile]') && line.includes(VOYAGE) && line.includes('activate'))).toBe(true);
+    expect(logged.join('\n')).not.toContain(ADMIN_ID);
+  });
+
+  it('records the cookie admin as the actor when the request comes with the signed cookie and its session', async () => {
+    const loaded = await load();
+    state.session = { id: OTHER_ADMIN_ID };
+    const cookie = cookieOf(loaded.session.mintAdminSessionValue(OTHER_ADMIN_ID));
+    expect((await loaded.activate.POST(activateRequest(VOYAGE, { cookie }), params(VOYAGE))).status).toBe(200);
+    expect((await loaded.rollback.POST(rollbackRequest({ cookie }))).status).toBe(200);
+    expect(state.rpcCalls.filter((call) => /activate|rollback/.test(call.fn)).map((call) => call.args.p_actor)).toEqual([OTHER_ADMIN_ID, OTHER_ADMIN_ID]);
+  });
+
+  it('refuses an actor or any other key in the body of an activation or a rollback with 400 before any function runs', async () => {
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    for (const body of [{ actor: OTHER_ADMIN_ID }, { p_actor: OTHER_ADMIN_ID }, { target: QWEN }, [1], 'text']) {
+      expect((await loaded.activate.POST(activateRequest(VOYAGE, { body }), params(VOYAGE))).status).toBe(400);
+      expect((await loaded.rollback.POST(rollbackRequest({ body }))).status).toBe(400);
+    }
+    expect((await loaded.activate.POST(activateRequest(VOYAGE, { rawBody: '{not json' }), params(VOYAGE))).status).toBe(400);
+    expect((await loaded.rollback.POST(rollbackRequest({ rawBody: '{not json' }))).status).toBe(400);
+    expect(state.rpcCalls).toEqual([]);
+    expect((await loaded.activate.POST(new Request('http://localhost/x', { method: 'POST' }), params(VOYAGE))).status).toBe(200);
+  });
+
+  it('gives 400 to a malformed profile id before any function runs', async () => {
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    for (const id of ['Bad Id!', '../etc', 'UPPER-1', '-leading', 'a'.repeat(65), '']) {
+      expect((await loaded.activate.POST(activateRequest('x'), params(id))).status, id).toBe(400);
+    }
+    expect(state.rpcCalls).toEqual([]);
+  });
+
+  it('gives 404 to an unknown profile and 409 with the gate reason to every other refusal, never the database message', async () => {
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    const refuse = (message: string) => {
+      state.outcomes.rag_activate_embedding_profile = { data: null, error: { code: '55000', message } };
+    };
+
+    refuse('activation_refused: unknown_profile');
+    const unknown = await loaded.activate.POST(activateRequest('no-such-profile-1'), params('no-such-profile-1'));
+    expect(unknown.status).toBe(404);
+    expect(await unknown.json()).toEqual({ success: false, error: 'Profile not found' });
+
+    refuse('activation_refused: incomplete (74 current ready chunks have no vector for profile voyage-4-large-2048)');
+    const incomplete = await loaded.activate.POST(activateRequest(VOYAGE), params(VOYAGE));
+    expect(incomplete.status).toBe(409);
+    expect(await incomplete.json()).toEqual({ success: false, error: 'Activation refused', reason: 'activation_refused: incomplete', missing_chunks: 74 });
+
+    for (const code of ['already_active', 'model_mismatch', 'eval_missing', 'eval_target_mismatch', 'eval_baseline_mismatch', 'eval_failed', 'pre_migration_missing', 'eval_run_mismatch', 'eval_stale']) {
+      refuse(`activation_refused: ${code} (some detail with ${DB_SECRET})`);
+      const response = await loaded.activate.POST(activateRequest(VOYAGE), params(VOYAGE));
+      expect(response.status, code).toBe(409);
+      const body = await response.json();
+      expect(body.reason).toBe(`activation_refused: ${code}`);
+      expect(body.success).toBe(false);
+      expect(JSON.stringify(body)).not.toContain('secret text');
+    }
+    expect(logged.join('\n')).not.toContain('secret text');
+  });
+
+  it('fails closed when the gate answers with anything it does not name: 503, no pointer change, no database text', async () => {
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    state.outcomes.rag_activate_embedding_profile = { data: null, error: { code: 'XX000', message: DB_SECRET } };
+    const failed = await loaded.activate.POST(activateRequest(VOYAGE), params(VOYAGE));
+    expect(failed.status).toBe(503);
+    expect(JSON.stringify(await failed.json())).not.toContain('secret text');
+    state.outcomes.rag_activate_embedding_profile = { data: [], error: null };
+    expect((await loaded.activate.POST(activateRequest(VOYAGE), params(VOYAGE))).status).toBe(503);
+    state.outcomes = {};
+    state.dbAvailable = false;
+    expect((await loaded.activate.POST(activateRequest(VOYAGE), params(VOYAGE))).status).toBe(503);
+    expect((await loaded.rollback.POST(rollbackRequest())).status).toBe(503);
+    expect(state.profiles.find((row) => row.id === LEGACY)?.status).toBe('active');
+    expect(logged.join('\n')).not.toContain('secret text');
+  });
+
+  it('rolls back: 200 with the restored id, and 409 with the gate reason when the gate refuses', async () => {
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    setActive(VOYAGE, LEGACY);
+    const response = await loaded.rollback.POST(rollbackRequest({ body: {}, headers: { 'x-actor-id': OTHER_ADMIN_ID } }));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ success: true, restored: LEGACY, rolled_back: VOYAGE });
+    expect(state.rpcCalls.filter((call) => call.fn === 'rag_rollback_embedding_profile')).toEqual([{ fn: 'rag_rollback_embedding_profile', args: { p_actor: ADMIN_ID } }]);
+
+    for (const code of ['no_active', 'no_previous', 'incomplete']) {
+      state.outcomes.rag_rollback_embedding_profile = { data: null, error: { code: '55000', message: `rollback_refused: ${code} (3 current ready chunks have no vector for profile ${LEGACY})` } };
+      const refused = await loaded.rollback.POST(rollbackRequest());
+      expect(refused.status, code).toBe(409);
+      const body = await refused.json();
+      expect(body).toMatchObject({ success: false, error: 'Rollback refused', reason: `rollback_refused: ${code}` });
+      expect(body.missing_chunks).toBe(code === 'incomplete' ? 3 : undefined);
+    }
+  });
+
+  it('refreshes the in-process active-profile cache after every successful flip, and not after a refusal', async () => {
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    const listCalls = () => state.rpcCalls.filter((call) => call.fn === 'rag_list_embedding_profiles').length;
+    expect((await loaded.activeProfile.getActiveProfile()).id).toBe(LEGACY);
+    expect(listCalls()).toBe(1);
+
+    state.outcomes.rag_activate_embedding_profile = { data: null, error: { code: '55000', message: 'activation_refused: eval_stale' } };
+    expect((await loaded.activate.POST(activateRequest(VOYAGE), params(VOYAGE))).status).toBe(409);
+    expect(listCalls()).toBe(1);
+    expect((await loaded.activeProfile.getActiveProfile()).id).toBe(LEGACY);
+    delete state.outcomes.rag_activate_embedding_profile;
+
+    expect((await loaded.activate.POST(activateRequest(VOYAGE), params(VOYAGE))).status).toBe(200);
+    expect(listCalls()).toBe(2);
+    expect((await loaded.activeProfile.getActiveProfile()).id).toBe(VOYAGE);
+    expect(listCalls()).toBe(2);
+
+    expect((await loaded.rollback.POST(rollbackRequest())).status).toBe(200);
+    expect(listCalls()).toBe(3);
+    expect((await loaded.activeProfile.getActiveProfile()).id).toBe(LEGACY);
+    expect(listCalls()).toBe(3);
+  });
+
+  it('keeps the route files on the shared guard: checkAdmin or requireAdminOrDeny, no direct guard, no direct RPC name', () => {
+    const files = [
+      'src/app/api/rag/admin/embedding-profiles/route.ts',
+      'src/app/api/rag/admin/embedding-profiles/[id]/activate/route.ts',
+      'src/app/api/rag/admin/embedding-profiles/rollback/route.ts',
+    ].map((file) => fs.readFileSync(path.join(REPO_ROOT, file), 'utf8'));
+    for (const source of files) {
+      expect(source).toMatch(/\b(checkAdmin|requireAdminOrDeny)\b/);
+      expect(source).toContain("'@/lib/admin-route-auth'");
+      expect(source).not.toContain('requireRagAdmin');
+      expect(source).not.toMatch(/rag_(activate|rollback|list|set)_/);
+      expect(source).toContain("from 'zod/v3'");
+    }
+    expect(files[1]).toContain('checkAdmin');
+    expect(files[1]).toContain('adminDenied');
+    expect(files[2]).toContain('checkAdmin');
+    expect(files[2]).toContain('adminDenied');
+  });
+});
