@@ -88,6 +88,8 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | 04-07 | [bc-b39f21bf](bc-b39f21bf-71db-54ba-81d3-327871eb3a63) RUNNING | `wt/04-07` | PGlite wave-1 tail; blocks 04-02 only via serialization table |
 | 03.1-03 | [bc-c5cb9fe1](bc-c5cb9fe1-91ef-5ec1-80f3-480362bbb755) RUNNING | `wt/03.1-03` | **Blocks 04-02** until merged |
 | 03.1-10 | [bc-662f8704](bc-662f8704-0693-5e51-9771-f8aaaf281623) RUNNING | `wt/03.1-10` | Wave 2 |
+| 03.1-11 | SPAWN | `wt/03.1-11` | Refill after 03.1-09 merge |
+| 04-09 | SPAWN | `wt/04-09` | Refill after 04-08 merge |
 
 **Queued after 03.1-03 merge:** `04-02` (same config five-location set). **03-48 live Supabase:** Guang/box agent only — orchestrator **must not** run migrations against production.
 

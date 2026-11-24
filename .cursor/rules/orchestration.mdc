@@ -19,6 +19,7 @@ After each wave/merge, or when context feels ~60% full:
 - Run **3–4 concurrent executors** when plans have **non-overlapping** `files_modified`.
 - **Never** more than one executor on the same plan id.
 - **Before every spawn:** read `.planning/paused/exec-ledger.md` (plan → agent → status).
+- **Merge refill (same run):** After each merge to the integration branch, **in that same turn** spawn replacements until **4** concurrent executors (dependency-ready, file-disjoint). Update the ledger **before** each `Task`. Do not finish a turn with **&lt;3** executors running unless nothing else is runnable — record **why** in the ledger.
 - **Retry** only after the previous agent for that plan is confirmed stopped; log duplicates in the ledger.
 
 ## 3. Autonomy

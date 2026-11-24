@@ -411,7 +411,7 @@ Use these entry points:
 
 Do not make direct repo edits outside a GSD workflow unless the user explicitly asks to bypass it.
 
-**Orchestrator:** follow `.cursor/rules/orchestration.mdc` (context hygiene, one executor per plan, ledger in `.planning/paused/exec-ledger.md`, and **autonomy** — pre-authorized approvals; only pause for human login with the exact link).
+**Orchestrator:** follow `.cursor/rules/orchestration.mdc` (context hygiene, one executor per plan, ledger in `.planning/paused/exec-ledger.md`, **merge refill to 4 executors same run**, and **autonomy** — pre-authorized approvals; only pause for human login with the exact link).
 <!-- GSD:workflow-end -->
 
 <!-- GSD:profile-start -->
