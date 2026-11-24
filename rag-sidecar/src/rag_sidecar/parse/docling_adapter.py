@@ -19,6 +19,7 @@ from rag_sidecar.contracts import ParseChunk, ParseJobRequest, ParsePicture, Par
 from rag_sidecar.contracts.ingest import ParserUsed
 from rag_sidecar.parse import probe
 from rag_sidecar.parse.converter import ConfigurationError, ConversionError, PageCapExceeded
+from rag_sidecar.preflight.config import load_routing_config
 from rag_sidecar.settings import SidecarSettings, load_settings
 
 DOCLING_JSON = "docling.json"
@@ -384,3 +385,85 @@ class DoclingConverter:
             partial=partial,
             text_layer_page_share=text_layer_share,
         )
+
+
+_PRESET_CONVERTERS: dict[str, Any] = {}
+
+
+def _preset_cache_key(preset: str, ocr_languages: list[str]) -> str:
+    return json.dumps([preset, to_ppocr_code(ocr_languages)], sort_keys=True)
+
+
+def _preset_document_converter(
+    preset: str,
+    ocr_languages: list[str],
+    *,
+    artifacts_path: str | None = None,
+    document_timeout_seconds: float = DEFAULT_DOCUMENT_TIMEOUT_SECONDS,
+) -> Any:
+    from rag_sidecar.parse import presets
+
+    key = _preset_cache_key(preset, ocr_languages)
+    if key not in _PRESET_CONVERTERS:
+        pipeline = presets.pipeline_options(
+            preset,
+            ocr_languages,
+            load_routing_config(),
+            artifacts_path=artifacts_path,
+            document_timeout_seconds=document_timeout_seconds,
+        )
+        _PRESET_CONVERTERS[key] = presets.build_preset_document_converter(preset, pipeline)
+    return _PRESET_CONVERTERS[key]
+
+
+def _conversion_document(
+    converter: Any,
+    path: Path,
+    *,
+    page_range: tuple[int, int] | None = None,
+) -> DoclingDocument:
+    converted = converter.convert(path, raises_on_error=True, page_range=page_range or (1, 9223372036854775807))
+    status = _status_value(converted.status)
+    if status not in _SUCCESS_STATUSES:
+        raise ConversionError("conversion_failed")
+    return converted.document
+
+
+def convert_range(
+    path: Path,
+    preset: str,
+    start: int,
+    end: int,
+    *,
+    ocr_languages: list[str] | None = None,
+    artifacts_path: str | None = None,
+    document_timeout_seconds: float = DEFAULT_DOCUMENT_TIMEOUT_SECONDS,
+) -> DoclingDocument:
+    """Convert one PDF inclusive page range with original page numbers preserved."""
+    languages = ocr_languages or ["zh", "en", "it"]
+    converter = _preset_document_converter(
+        preset,
+        languages,
+        artifacts_path=artifacts_path,
+        document_timeout_seconds=document_timeout_seconds,
+    )
+    return _conversion_document(converter, path, page_range=(start, end))
+
+
+def convert_whole(
+    path: Path,
+    preset: str,
+    ocr_languages: list[str] | None = None,
+    *,
+    artifacts_path: str | None = None,
+    document_timeout_seconds: float = DEFAULT_DOCUMENT_TIMEOUT_SECONDS,
+) -> DoclingDocument:
+    """Convert an office or HTML file as one document."""
+    languages = ocr_languages or ["zh", "en", "it"]
+    converter = _preset_document_converter(
+        preset,
+        languages,
+        artifacts_path=artifacts_path,
+        document_timeout_seconds=document_timeout_seconds,
+    )
+    return _conversion_document(converter, path)
