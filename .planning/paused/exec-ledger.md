@@ -81,9 +81,11 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | 04-02 | [bc-5a4f4e08](bc-5a4f4e08-1575-5ed0-a16f-35d23901bcfd) **merged** | exec/04-02 |
 | 04-13 | [bc-1df13648](bc-1df13648-cd9d-57fe-b726-181165f7ff56) **merged** | exec/04-13 — refusal 21 pass |
 | 04-11 | [bc-ff29f720](bc-ff29f720-c984-5a3b-82e5-ff26dea712ca) **merged** | exec/04-11 |
-| 04-14 | [bc-136b100d](bc-136b100d-6b2f-51bc-b0da-cf8849a609c2) RUNNING | exec/04-14 |
+| 04-14 | [bc-136b100d](bc-136b100d-6b2f-51bc-b0da-cf8849a609c2) **merged** | exec/04-14 — query 16 pass |
 | 04-13 | [bc-1df13648](bc-1df13648-cd9d-57fe-b726-181165f7ff56) **merged** | exec/04-13 |
 | 04-15 | [bc-2f4f0524](bc-2f4f0524-6984-5e57-a50a-249d0a960a27) RUNNING | exec/04-15 |
+| 04-12 | [bc-7e4cdf1c](bc-7e4cdf1c-68e8-51f1-92c1-f1c5b1bb0abc) **merged** | exec/04-12 |
+| 04-16 | [bc-d3b679cb](bc-d3b679cb-baac-50ce-8ff9-c0829a4fb24f) RUNNING | exec/04-16 |
 
 ## Remaining plan inventory (file-overlap basis)
 
@@ -101,7 +103,7 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 
 | Plan | bcId | Worktree | Notes |
 |------|------|----------|-------|
-| 04-14 | [bc-136b100d](bc-136b100d-6b2f-51bc-b0da-cf8849a609c2) RUNNING | `wt/04-14` | Refill after 04-11 |
+| 03.1-14 | [bc-6ed38246](bc-6ed38246-5368-58ee-9409-cafed132af21) RUNNING | `wt/03.1-14` | Refill after 04-14 |
 | 04-16 | [bc-d3b679cb](bc-d3b679cb-baac-50ce-8ff9-c0829a4fb24f) RUNNING | `wt/04-16` | rag:relex |
 | 04-15 | [bc-2f4f0524](bc-2f4f0524-6984-5e57-a50a-249d0a960a27) RUNNING | `wt/04-15` | hybrid_search RPC |
 | 03.1-13 | [bc-e72d1c49](bc-e72d1c49-cec3-59a1-ad07-7c158b89a381) RUNNING | `wt/03.1-13` | Refill after 03.1-12 |
