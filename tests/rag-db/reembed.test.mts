@@ -444,8 +444,8 @@ describe('re-embed SQL functions (migration 0315)', () => {
     assert.match((await errorOf('SELECT * FROM rag_reembed_rollback_run(p_run_id => $1, p_actor => $2)', [runId, 'test'])) ?? 'no error', /rollback_refused: profile_is_active/);
     assert.equal(await rowCount(VOYAGE), batch.length, 'a refused rollback deletes nothing');
 
-    await fixture.db.query("UPDATE embedding_profiles SET status = 'active', activated_at = now(), previous_active_id = NULL WHERE id = $1", [LEGACY]);
     await fixture.db.query("UPDATE embedding_profiles SET status = 'available' WHERE id = $1", [VOYAGE]);
+    await fixture.db.query("UPDATE embedding_profiles SET status = 'active', activated_at = now(), previous_active_id = NULL WHERE id = $1", [LEGACY]);
     assert.match((await errorOf('SELECT * FROM rag_reembed_rollback_run(p_run_id => $1, p_actor => $2)', [runId, 'test'])) ?? 'no error', /rollback_refused: recently_active/);
     assert.equal(await rowCount(VOYAGE), batch.length);
 
@@ -457,14 +457,14 @@ describe('re-embed SQL functions (migration 0315)', () => {
 
   test('the legacy guard reports documents past version 1 and profiles other than the legacy one that are in use or hold vectors', async () => {
     const clean = await query('SELECT * FROM rag_reembed_legacy_guard()');
-    assert.equal(Number(clean[0]?.versioned_documents), 0);
-    assert.deepEqual(clean[0]?.profiles_in_use, []);
+    const baseline = Number(clean[0]?.versioned_documents);
+    assert.deepEqual(clean[0]?.profiles_in_use, [], 'only the legacy profile is active and none holds vectors');
 
     await seedDocument(A, 'guard-v1', 1, 'reembed-guard-edition.md');
     await seedDocument(A, 'guard-v2', 1, 'reembed-guard-edition.md');
     await fixture.db.query("UPDATE embedding_profiles SET status = 'backfilling' WHERE id = $1", [VOYAGE]);
     const used = await query('SELECT * FROM rag_reembed_legacy_guard()');
-    assert.ok(Number(used[0]?.versioned_documents) >= 1);
+    assert.equal(Number(used[0]?.versioned_documents), baseline + 1, 'one more document is past version 1');
     assert.deepEqual(used[0]?.profiles_in_use, [VOYAGE]);
 
     await fixture.db.query("UPDATE embedding_profiles SET status = 'available' WHERE id = $1", [VOYAGE]);
