@@ -660,15 +660,17 @@ for (const p of ["@langchain/core","@langchain/classic","@langchain/openai"]) {
 | A9 | F-1 router mapping replacing "conversational/complex" semantics | Summary F-1 | Changes locked D-09 wording; needs orchestrator decision |
 | A10 | F-3 soft-stage status rule | Summary F-3 | Changes D-28 reading; needs orchestrator decision |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Router mapping (F-1).** What we know: the classifier returns `conversational` with MCP off or for short statements, and `complex` by default. Recommendation: adopt the F-1 mapping and pin the MCP flag in the eval env.
-2. **Status precedence (F-3).** Recommendation: soft query stages; `empty` wins when zero results and the original search succeeded.
-3. **Cache poisoning and groundedness timing (F-4).** Recommendation: adopt (a)–(e); the user confirms because the spec is locked.
-4. **LangChain fusion ties (F-2).** Recommendation: accept the tie-order difference and report it; chunk-ID documents are mandatory.
-5. **Install timing.** The three direct pins are 4 days old today. Recommendation: install at the Phase 6 package checkpoint, not before 2026-12-04, with `--before`. If the checkpoint comes earlier, use the 1.4.1/1.0.61/1.8.4 set.
-6. **Budget overshoot.** Recommendation: A-3 deadline anchored at gate start; revisit the 2 s first-token budget with live numbers.
-7. **Phase 4/5 seams not yet executed.** Planning proceeds against 04-01 (`QueryVariant`, `RetrievalOverrides`), 04-07 (`rag_assert_tenant_key`), 04-15 (`hybrid_search_chunks`), 04-20/04-24 (`runQueryStages`, `buildQueryVariants`, cap 3) and 05-CONTEXT D-15/D-16 (`rag_answer_records`, groundedness). Each Phase 6 plan names the upstream plan it relies on, as Phase 4 did.
+All seven are resolved by the orchestrator's "Adjustments after research" in 06-CONTEXT.md (A-1 to A-10), and the plans implement them (see 06-PLAN-INDEX.md).
+
+1. **Router mapping (F-1).** What we know: the classifier returns `conversational` with MCP off or for short statements, and `complex` by default. Recommendation: adopt the F-1 mapping and pin the MCP flag in the eval env. **RESOLVED by A-1.**
+2. **Status precedence (F-3).** Recommendation: soft query stages; `empty` wins when zero results and the original search succeeded. **RESOLVED by A-2.**
+3. **Cache poisoning and groundedness timing (F-4).** Recommendation: adopt (a)–(e); the user confirms because the spec is locked. **RESOLVED by A-3.**
+4. **LangChain fusion ties (F-2).** Recommendation: accept the tie-order difference and report it; chunk-ID documents are mandatory. **RESOLVED by A-4.**
+5. **Install timing.** The three direct pins are 4 days old today. Recommendation: install at the Phase 6 package checkpoint, not before 2026-12-04, with `--before`. If the checkpoint comes earlier, use the 1.4.1/1.0.61/1.8.4 set. **RESOLVED by A-9** (never installed before 2026-12-04; the install is orchestrator-only after the user's approval, plan 06-22).
+6. **Budget overshoot.** Recommendation: A-3 deadline anchored at gate start; revisit the 2 s first-token budget with live numbers. **RESOLVED by A-7** (live budgets replace the starting ones in plan 06-46).
+7. **Phase 4/5 seams not yet executed.** Planning proceeds against 04-01 (`QueryVariant`, `RetrievalOverrides`), 04-07 (`rag_assert_tenant_key`), 04-15 (`hybrid_search_chunks`), 04-20/04-24 (`runQueryStages`, `buildQueryVariants`, cap 3) and 05-CONTEXT D-15/D-16 (`rag_answer_records`, groundedness). Each Phase 6 plan names the upstream plan it relies on, as Phase 4 did. **RESOLVED by A-6 and A-10** (widened seams and the remaining assumptions, each with a test); Phase 4 and Phase 5 plan ids are now real `depends_on` edges, and the Phase 5.1 edges are pending (06-PLAN-INDEX.md).
 
 ## Environment Availability
 

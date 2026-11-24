@@ -10,7 +10,28 @@
   - contract seams: 06-09 and 06-17 (05-01 CitationRecord and AnswerGroundedness labels), 06-33 (05-08 `decorateSystemPrompt`, which appends the citation instruction to the output of `createEnhancedRAGPrompt`; Phase 5 does not edit `prompt.ts`), 06-36 (05-13 answerId and `scheduleAnswerFinish`, 05-18 the post-stream groundedness label).
   The 06-09 and 06-36 `<precondition>` lines now name those plans.
 - Older last-editor ids that were only named in prose are now in `depends_on` as well: 06-09 (03-11 `test_golden_contract.py`), 06-21 (03-13 publish stage, 03.1-39 soft-delete module).
-- **Phase 5.1 has no plan files yet** (CONTEXT, research and patterns only). Its CONTEXT names these files that Phase 6 also changes: `src/app/api/chat/route.ts` (06-27), `src/lib/rag/generation/prompt.ts` (06-33), `rag-sidecar/src/rag_sidecar/main.py` (06-30), `contracts/golden.py` (06-09), `export_schemas.py` (06-05), `eval/src/rag_eval/report.py` (06-34), and the five env locations plus `scripts/rag/env-manifest.json` (06-02). When Phase 5.1 is planned, add the Phase 5.1 plan that last edits each file to the `depends_on` of the Phase 6 plan in brackets. Until then, the ROADMAP order (5.1 before 6) is the only guard, and the objectives of 06-27, 06-33 and 06-45 say so.
+- **Pending 5.1 edges (deferred by the orchestrator until the Phase 5.1 plan ids are final).** Phase 5.1 planning is in progress (`05.1-01-PLAN.md` exists). Plan-check pass 1 (W3, 06-PLAN-CHECK.md) lists the 16 Phase 6 plans that are the first Phase 6 editor of a file Phase 5.1 also names; each will gain a `depends_on` edge to the Phase 5.1 plan that last edits that file. Later Phase 6 editors of the same files inherit it through the chain. Until the edges land, the ROADMAP order (5.1 before 6) is the only guard.
+
+  | Phase 6 plan | Shared file(s) named by Phase 5.1 |
+  |--------------|------------------------------------|
+  | 06-01 | `rag-sidecar/src/rag_sidecar/contracts/__init__.py`, `contracts/eval_run.py` |
+  | 06-02 | the five env locations, `scripts/rag/env-manifest.json` |
+  | 06-05 | `rag-sidecar/src/rag_sidecar/export_schemas.py` |
+  | 06-09 | `rag-sidecar/src/rag_sidecar/contracts/golden.py` |
+  | 06-10 | `src/lib/rag/config.ts`, `src/lib/rag/deps.ts` |
+  | 06-13 | `src/lib/rag/types.ts` |
+  | 06-19 | `src/lib/rag/v2/pipeline.ts` |
+  | 06-22 | `next.config.js`, `rag-sidecar/pyproject.toml` |
+  | 06-27 | `src/lib/rag/index.ts`, `src/app/api/chat/route.ts` |
+  | 06-28 | `src/app/api/internal/voice-rag/route.ts` |
+  | 06-30 | `rag-sidecar/src/rag_sidecar/main.py` |
+  | 06-31 | `voice-agent/src/voice_agent.ts`, `voice-agent/src/rag_client.ts` |
+  | 06-33 | `src/lib/rag/generation/prompt.ts` |
+  | 06-34 | `eval/src/rag_eval/report.py` |
+  | 06-38 | `eval/fixtures/golden.jsonl` |
+  | 06-45 | `AGENTS.md` |
+
+  Revision pass 1 also gave 06-02 a new file, `scripts/config-server-security.js`. When the 5.1 ids arrive, check it and the 06-30 addition `rag-sidecar/.env.example` against the final Phase 5.1 plans too.
 - Migration numbers 0601 to 0603 follow Phase 4's 0401 to 0409; Phase 5 and 5.1 use 05xx numbers, so ordering by filename stays correct.
 - PGlite note: 06-04 (wave 1), 06-08 (wave 2) and 06-12 (wave 3) each add a migration that every PGlite test applies; they are in different waves and chained by `depends_on`; with `workflow.use_worktrees` false, never run two of them at once.
 
@@ -123,7 +144,7 @@ No item is missing, split or deferred beyond the CONTEXT's own deferred list.
 - RedisVL import paths and tag escaping: confirmed against the installed 0.32.0 wheel in 06-30 Task 1 (case runs with the `cache` extra).
 - `serverExternalPackages`: added in 06-22 and proven by `npm run build` plus the langchain-mode end-to-end test in 06-37.
 - LangChain cold import: pre-warmed at module load in langchain mode with `import_ms` traced (06-37).
-- Package install timing (A-9, confirmed by the orchestrator in this revision): the LangChain trio is never installed before 2026-12-04. 06-22's checkpoint precondition and Task 2 both stop earlier. The install is `npm install --save-exact --before=<install date minus 7 days, 00:00:00Z>`, which is 2026-11-27 on 2026-12-04 and matches the research cutoff. The direct pins (published 2026-11-20) are then at least 14 days old, and every package the cutoff admits is at least 7 days old. The earlier draft's 2026-12-11 date was stricter than A-9 and is withdrawn. The RedisVL extra (`redisvl==0.32.0`, `redis==8.1.0`) stays optional: the human can drop it at the checkpoint, Task 4 is skipped, and 06-30's precondition stops with a report.
+- Package install timing (A-9, confirmed by the orchestrator in this revision): the LangChain trio is never installed before 2026-12-04. 06-22's checkpoint precondition and Task 2 both stop earlier. The install is `npm install --save-exact --before=<install date minus 7 days, 00:00:00Z>`, which is 2026-11-27 on 2026-12-04 and matches the research cutoff. The direct pins (published 2026-11-20) are then at least 14 days old, and every package the cutoff admits is at least 7 days old. The earlier draft's 2026-12-11 date was stricter than A-9 and is withdrawn. The RedisVL extra (`redisvl==0.32.0`, `redis==8.1.0`) stays optional: the human can drop it at the checkpoint, Task 4 is skipped, and 06-30's precondition stops with a report. Plan-check B3 (revision pass 1): executors never install, lock or sync. 06-22 Task 2 is an orchestrator-only `checkpoint:human-action` (blocking-human) that runs the npm install, uv lock and `uv sync --extra cache` after the approval and ends in one lock commit. Executor tasks only verify that lock (`npm ls`, `uv lock --check`, `uv run --frozen --no-sync`), and 06-30 runs only after the orchestrator synced the extra. Declining RedisVL requires a D-35 and CACHE-01 decision change by the user at the checkpoint.
 - Classifier calls: embed, voice-rag and the eval route call `classifyQuery` once at entry only when `RAG_QUERY_LAYER` is true, so the layer-off path stays byte-identical (D-04, D-09); the chat route keeps its single existing call.
 - Eval timeouts: D-27 says "eval: none"; query-layer stages get 60000 ms for the eval profile, the Phase 4 precedent for a stage with no effective timeout (06-10).
 - New eval-only contract field `cache_seed_answer` (06-01) lets the fixture cache-pair run store an anchor answer without a live generator (06-41). Plan-check B2: the route accepts it only when NODE_ENV is not production (structured 403 otherwise), and every eval entry lives in the eval key namespace, which never matches chat or embed.
@@ -132,13 +153,39 @@ No item is missing, split or deferred beyond the CONTEXT's own deferred list.
 
 ## Security summary
 
-Threat ids T-06-01 to T-06-98 are unique across the phase; every plan also carries T-06-SC. Critical threats and their mitigations: cross-tenant language shares (T-06-07, guard plus two-tenant test), undated rows across tenants (T-06-14, T-06-54), cross-tenant cache hits (T-06-21, T-06-45, T-06-65, T-06-69, T-06-91), variants searched outside the tenant (T-06-44), the framework choosing a scope (T-06-56, T-06-74, T-06-80; scope bound in the port closure, adapter allow-list), adapter reaching internals (T-06-37), anon reaching new functions on the live project (T-06-97). Every new SQL function calls `rag_assert_tenant_key` first and is revoked from PUBLIC, anon and authenticated; the cache table has RLS on with no client policies. No plan adds a CORS header, logs a key, query, rewrite or chunk text, or commits a secret.
+Threat ids T-06-01 to T-06-110 are unique across the phase (T-06-99 to T-06-110 added in revision pass 1); every plan also carries T-06-SC. Critical threats and their mitigations: cross-tenant language shares (T-06-07, guard plus two-tenant test), undated rows across tenants (T-06-14, T-06-54), cross-tenant cache hits (T-06-21, T-06-45, T-06-65, T-06-69, T-06-91), variants searched outside the tenant (T-06-44), the framework choosing a scope (T-06-56, T-06-74, T-06-80; scope bound in the port closure, adapter allow-list), adapter reaching internals (T-06-37), anon reaching new functions on the live project (T-06-97), another session's or tenant's voice history reaching query rewriting (T-06-108, token-bound history), answers about one user's attachments reaching a colleague (T-06-102, T-06-105, bypass), and eval-written entries reaching chat (T-06-103, T-06-107, eval namespace and production refusal). Every new SQL function calls `rag_assert_tenant_key` first and is revoked from PUBLIC, anon and authenticated; the cache table has RLS on with no client policies. No plan adds a CORS header, logs a key, query, rewrite or chunk text, or commits a secret.
 
 Switches and two-tenant coverage (completion revision):
 - Every new component has a switch whose off state is today's behaviour: `RAG_QUERY_LAYER` (off means run-layer.ts is never imported and parity holds, 06-13 and 06-44 a), the sub-switches inert under the master (06-10), `RAG_QUERY_FRAMEWORK=llamaindex` (06-37), `RAG_SEMANTIC_CACHE=off` (06-21, 06-32, a byte-identical chat stream in 06-36, cache off equal to the baseline in 06-44 e), `RAG_SEMANTIC_CACHE_EMBED_STORE=false` (06-36), `VOICE_SERVER_QUERY_REWRITE=false` (06-31), `subQuestionCoverage` (06-25), `p_include_undated DEFAULT false` (06-08), the layer-gated answer-language line (06-33) and the delegate-free search stage (06-26). The 0603 triggers are always installed. With the cache empty they delete nothing, and 06-12 Task 3 now also runs the Phase 3 publish and Phase 3.1 soft-delete PGlite suites unchanged.
-- Two-tenant tests: SQL and PGlite in 06-04, 06-08, 06-12, 06-21 Task 1 and 06-24; the canary matrix and route level in 06-42; LangChain end to end in 06-37. This revision adds explicit two-tenant cases to the shares cache (06-16), the RedisVL HTTP client (06-21 Task 2), the scope-bound port (06-26), the sidecar cache service (06-30), the pipeline cache stage (06-32), the chat and embed cache routes (06-36) and the admin clear route (06-40). Every component that reads or writes tenant data now has one.
+- Two-tenant tests: SQL and PGlite in 06-04, 06-08, 06-12, 06-21 Task 1 and 06-24; the canary matrix and route level in 06-42; LangChain end to end in 06-37. This revision adds explicit two-tenant cases to the shares cache (06-16), the RedisVL HTTP client (06-21 Task 2), the scope-bound port (06-26), the sidecar cache service (06-30), the pipeline cache stage (06-32), the chat and embed cache routes (06-36) and the admin clear route (06-40). Revision pass 1 (plan-check B4) adds the voice path: 06-28 binds voice history to the scope token it was recorded under, and its two-tenant test shows that a tenant-B token carrying tenant-A history retrieves only tenant-B chunks, with no tenant-A text reaching query rewriting. Every component that reads or writes tenant data now has a two-tenant test.
+
+## Revision pass 1 (plan check 06-PLAN-CHECK.md, coordinator decisions applied as written)
+
+| Item | Plans changed | Change |
+|------|---------------|--------|
+| B1 document references and retrieval options | 06-17, 06-32, 06-36 | `document_refs` (an @mention or an attached document) and `retrieval_options` (mediaKind set, generalOverview true, maxResults other than the configured count, eval degrade) are bypass reasons at check and store. Such a turn neither reads nor writes the cache, and neither is a key part. 06-36 adds same-tenant colleague and two-tenant attachment tests and a non-default-options test, each with a positive control so it fails before the wiring |
+| B2 eval key namespace and seed answers | 06-17, 06-32, 06-41, 06-01 (field note) | Eval is a third entry profile and key namespace, derived from the request profile and never from caller data. `cache_seed_answer` is accepted only when NODE_ENV is not production, otherwise a structured 403 `cache_seed_answer_not_allowed`. Tests that fail first: a single-tenant eval seed is a miss for chat, and a production seed is refused |
+| B3 executors never install | 06-22, 06-30 | Install, lock and sync are in the orchestrator-only checkpoint 06-22 Task 2, after the approval, not before 2026-12-04, with `--save-exact --before`. 06-22 Tasks 3 and 4 and 06-30 only verify the committed lock (`npm ls`, `uv lock --check`, `uv run --frozen --no-sync`). The 06-30 Task 1 verify no longer installs the extra, and its precondition requires the orchestrator's sync. The dependency boundary test checks metadata and a no-extras export, not importability |
+| B4 voice two-tenant | 06-28, 06-31 | History turns carry the binding of their session's scope token, and voice-rag drops mismatched turns before the query layer. Two-tenant test (tenant-B token with tenant-A history) with a positive control; the agent records the binding per turn |
+| W1 RedisVL refusals | 06-21, 06-30, 06-36 | Refusals are never cached in RedisVL (adapter drops them, sidecar rejects them with 422); pgvector keeps them with synchronous trigger invalidation |
+| W2 voice switch interplay | 06-28, 06-31 | voice-rag sends the `x-rag-server-query-rewrite: 1` header only when it will condense. The agent skips its own rewrite only after seeing it, so `VOICE_SERVER_QUERY_REWRITE=true` with `RAG_QUERY_LAYER=false` keeps today's agent-side condensing. The JSON wire contract is unchanged |
+| W4 RedisVL declined | 06-22 | Declining RedisVL at the checkpoint requires a D-35 and CACHE-01 decision change by the user then; the plans stay as written |
+| W5 REDIS_URL | 06-02, 06-30 | Managed manifest entry, the four tracked locations plus .env.local with an empty default, always a secret in `config-server-security.js` (new 06-02 Task 3), and a placeholder line in `rag-sidecar/.env.example` |
+| W6 hit answer record | 06-09, 06-12, 06-32, 06-36 | A hit writes the Phase 5 answer record through `scheduleAnswerFinish`, with citations re-resolved against the current sources by the new `rag_cache_resolve_sources` function (unresolved means miss) and the cached AnswerGroundedness object, which `CachedAnswer` now stores whole |
+| W7 fragile baselines | 06-21, 06-12 | Preconditions re-measure the `publish.ts` and `soft-delete.ts` gates, and the ingestion suites, at the start |
+| W8 research | 06-RESEARCH.md | Open Questions marked RESOLVED with pointers to A-1, A-2, A-3, A-4, A-6, A-7, A-9 and A-10 |
+| W3 Phase 5.1 edges | 06-PLAN-INDEX.md | Deferred by the orchestrator; the 16 plans are listed above as pending 5.1 edges |
+| W9 06-41 size | none | Not in the coordinator's fix list; 06-41 keeps 4 auto tasks |
 
 ## Checks run
+
+Revision pass 1 (2026-11-24, current working tree; git not run):
+
+- `frontmatter.validate --schema plan`: 46 of 46 valid.
+- `verify.plan-structure`: 46 of 46 valid, exit 0, no errors; the same 4 one-way warnings (06-04, 06-08, 06-12, 06-45), already settled in CONTEXT. 06-22 now has two blocking-human checkpoints (human-verify and the orchestrator-only human-action) and two auto tasks.
+- `check.decision-coverage-plan` with 06-CONTEXT.md: passed, 88 of 88.
+- Wave, overlap, cross-phase last-editor and section scripts: 0 problems (new files `scripts/config-server-security.js` and its test in 06-02, `rag-sidecar/.env.example` in 06-30, `src/lib/rag/cache/sources.ts` in 06-32 and `tests/rag/voice-rag-two-tenant.test.ts` in 06-28 have no same-wave overlap; `rag-sidecar/.env.example`'s last prior editor 05-12 is an ancestor of 06-30). Threat ids T-06-01 to T-06-110 are unique, with T-06-SC in every plan.
+- Acceptance baselines: all 171 grep and test gates re-run on the current tree, each matching its recorded HEAD value.
 
 Completion revision (2026-11-24, current working tree; git was not run, so `@e6dea83` stays the recorded baseline label):
 

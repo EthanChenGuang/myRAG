@@ -272,7 +272,32 @@ Plans:
   3. The fixture `injection` category (zh/en/it) has an attack-success rate of 0, gated in CI, and no other category drops beyond the noise band; with all SEC switches off, results match the baseline.
   4. A design document describes reading critical facts (prices, stock) from the database through tools/MCP instead of document text.
 **Live verification**: Run Prompt Guard in the sidecar image and Lakera Guard with a real key against the injection set and real documents; measure added latency against the OBS-02 budgets.
-**Plans**: TBD
+**Plans**: 23 plans in 6 waves (05.1-01..05.1-23) — validation contract in `phases/05.1-prompt-injection-defense/05.1-VALIDATION.md`
+
+Plans:
+- [ ] 05.1-01-PLAN.md — Indirect zh/en/it rules in the shared Phase 3 rule file, injection-rules.ts re-export with a content-derived version, clean-corpus zero-false-positive test (wave 1)
+- [ ] 05.1-02-PLAN.md — wrapDocuments, tag and attribute escaping with look-alikes and tag characters, fixed notice and reminder, Claude replacement builder, 20,000-case property test (wave 1)
+- [ ] 05.1-03-PLAN.md — Pydantic contracts with generated Zod: classify request/response, detector config file, golden attack field and injection categories, trace, run and report additions (wave 1)
+- [ ] 05.1-04-PLAN.md — Nine switches and keys in the five config places and the manifest, Prompt-injection defense card, call-time security config reader (wave 1)
+- [ ] 05.1-05-PLAN.md — SEC-05 design document for critical facts via tools; WhatsApp link-preview follow-up in the backlog (wave 1)
+- [ ] 05.1-06-PLAN.md — TRACER: tagged, rule-checked context for one web-chat request on the legacy graph; flag, drop and downweight; status precedence and strict refusal (wave 2)
+- [ ] 05.1-07-PLAN.md — Sidecar POST /v1/injection/classify with windowing and a fake scorer; app-side Prompt Guard client (wave 2)
+- [ ] 05.1-08-PLAN.md — Lakera adapter on recorded shapes, detector config loader, tenant-keyed verdict cache, lakera-http boundary rule (wave 2)
+- [ ] 05.1-09-PLAN.md — Synthetic zh/en/it injection and evasive fixture documents, prechunked in ingest mode, both baselines re-recorded with zero change (wave 2)
+- [ ] 05.1-10-PLAN.md — exposure_rate, attack_success_rate, detector false-positive rates and the absolute-zero gate kind (wave 2)
+- [ ] 05.1-11-PLAN.md — Markdown image allowlist renderer behind its own switch (wave 2)
+- [ ] 05.1-12-PLAN.md — Detector configuration summary in the Prompt-injection defense card (wave 2)
+- [ ] 05.1-13-PLAN.md — Overview, voice and media graphs; overview and voice context wrapping; released rule ids with a two-tenant test; trace counts and log redaction (wave 3)
+- [ ] 05.1-14-PLAN.md — v2: check after expand_parents, downweight ordering, wrapping after compression, retrievalConfigHash and eval effective config (wave 3)
+- [ ] 05.1-15-PLAN.md — Tool-result guard for webSearch, MCP and the approve-route summariser; YOLO suspension on flagged turns; injectionFlagged (wave 3)
+- [ ] 05.1-16-PLAN.md — Notice on the Claude Citations path; citation-instruction sentinel; raw quotes and premises (wave 3)
+- [ ] 05.1-17-PLAN.md — Injection and evasive golden items (4 and 2 per language) and the prechunked re-baseline (wave 3)
+- [ ] 05.1-18-PLAN.md — Prompt Guard license, gated access and build-token checkpoint; promptguard extra, real scorer and image target (wave 3, autonomous: false)
+- [ ] 05.1-19-PLAN.md — Eval route injection record, SEC run configs, CI absolute-zero step, nightly matrix, injection_check budgets (wave 4)
+- [ ] 05.1-20-PLAN.md — Voice-rag context field and voice agent preference; chat, embed and eval entry points, sentinel and source_images (wave 4)
+- [ ] 05.1-21-PLAN.md — Prompt Guard and Lakera inside injection_check: language gate, warm cache, inner deadline, fault injection, two-tenant cache test (wave 4)
+- [ ] 05.1-22-PLAN.md — Phase comparison (all-off equals baseline; recommended passes absolute-zero and category noise), AGENTS.md, full gates (wave 5)
+- [ ] 05.1-23-PLAN.md — Live verification: Lakera account, key, region and retention; Lakera live; Prompt Guard image; latency and live attack success (wave 6, autonomous: false)
 
 ### Phase 6: Query Layer (LlamaIndex & LangChain)
 **Goal**: Follow-up, vague and compound questions retrieve as well as standalone ones under either query framework, within their latency budgets, and voice stays fast
@@ -291,7 +316,7 @@ Plans:
 
 Plans:
 - [ ] 06-01-PLAN.md — W1: Pydantic query contracts (QueryPlan, transform outputs, RewriteGateResult) and query-params.json
-- [ ] 06-02-PLAN.md — W1: Phase 6 env switches in the five config locations, manifest and eval pin (MCP flag pinned)
+- [ ] 06-02-PLAN.md — W1: Phase 6 env switches and REDIS_URL (always secret) in the five config locations, manifest and eval pin (MCP flag pinned)
 - [ ] 06-03-PLAN.md — W1: locked rewrite gate, lexicon, protected tokens, fixture table and p99 < 1 ms benchmark
 - [ ] 06-04-PLAN.md — W1: `rag_tenant_language_shares` server-role SQL (0601) with two-tenant tests
 - [ ] 06-05-PLAN.md — W2: generated JSON Schema and Zod for the query contracts
@@ -311,13 +336,13 @@ Plans:
 - [ ] 06-19-PLAN.md — W5: full layer orchestration: parallel group, deadline, soft status, small talk
 - [ ] 06-20-PLAN.md — W5: variants through the Phase 4 path with caps, dense-only HyDE, one batch and one RRF
 - [ ] 06-21-PLAN.md — W5: pgvector and RedisVL cache backends behind a fail-open wrapper; RedisVL invalidation emission
-- [ ] 06-22-PLAN.md — W5: package legitimacy checkpoint (not before 2026-12-04, `--save-exact --before`), installs, zod isolation CI, optional RedisVL extra (autonomous: false)
+- [ ] 06-22-PLAN.md — W5: package legitimacy checkpoint, then orchestrator-only install and lock (not before 2026-12-04, `--save-exact --before`); executor verifies the lock, zod isolation CI, optional RedisVL extra (autonomous: false)
 - [ ] 06-23-PLAN.md — W6: real translator in the Phase 4 translate slot; en/it to zh cross-language retrieval
 - [ ] 06-24-PLAN.md — W6: relative-date filter end to end with undated documents kept
 - [ ] 06-25-PLAN.md — W6: sub-question coverage reservation; rerank and refusal on the standalone query
 - [ ] 06-26-PLAN.md — W6: scope-bound retrieval port and search-delegate hook
 - [ ] 06-27-PLAN.md — W6: chat and embed inputs (classification, history window, time zone, small talk)
-- [ ] 06-28-PLAN.md — W6: server-side voice profile within the voice budget
+- [ ] 06-28-PLAN.md — W6: server-side voice profile within the voice budget; token-bound history with a two-tenant test; server-rewrite header
 - [ ] 06-29-PLAN.md — W6: eval overrides for layer, framework, transforms and cache; run configs
 - [ ] 06-30-PLAN.md — W6: RedisVL cache endpoints in the sidecar behind the shared secret
 - [ ] 06-31-PLAN.md — W7: voice-agent `VOICE_SERVER_QUERY_REWRITE` switch (default off)
@@ -401,6 +426,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 5.1 → 6 → 7. 
 | 3.1. Tiered Parsing, Incremental Queue & Bulk Backfill (INSERTED) | 0/55 | Planned (plan-check PASS) | - |
 | 4. Hybrid Retrieval, Reranking & Calibrated Refusal | 0/45 | Planned | - |
 | 5. Verified Citations & Groundedness | 0/26 | Planned (plan-check PASS after W1 fix) | - |
-| 5.1. Prompt Injection Defense (INSERTED) | 0/TBD | Context+research+patterns done; planning not started | - |
+| 5.1. Prompt Injection Defense (INSERTED) | 0/23 | Planned | - |
 | 6. Query Layer (LlamaIndex & LangChain) | 0/46 | Planned (plan-check pending) | - |
 | 7. External Backends & Release Defaults | 0/33 | Planned (33 plans, 13 waves; plan check not yet run) | - |
