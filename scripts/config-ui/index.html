@@ -8407,7 +8407,7 @@
                     <div class="tab-content" id="rag-administration">
                         <div class="card bg-base-100 shadow-lg">
                             <div class="card-body p-4 lg:p-6">
-                                <h2 class="card-title text-xl lg:text-2xl text-myrag-primary mb-2">🛡️ RAG administration</h2>
+                                <h2 class="card-title text-xl lg:text-2xl text-myrag-primary mb-2">🛡️ RAG Administration</h2>
                                 <p class="text-base-content/70 mb-6">Manage document-type defaults, quarantined uploads, and embedding profiles using your existing admin session.</p>
 
                                 <div class="grid gap-6">
@@ -8415,7 +8415,7 @@
                                         <div class="card-body">
                                             <h3 class="text-lg font-semibold mb-2">Document types</h3>
                                             <p class="text-sm text-base-content/70 mb-4">Tenant and per-source defaults for the selected workspace.</p>
-                                            <div data-rag-doc-types-status class="text-sm mb-2"></div>
+                                            <div data-rag-doc-types-status class="text-sm mb-2" role="status" aria-live="polite"></div>
                                             <div data-rag-doc-types-form></div>
                                             <div class="flex gap-2 mt-4">
                                                 <button type="button" class="btn btn-primary btn-sm" data-rag-doc-types-save>Save defaults</button>
@@ -8427,7 +8427,7 @@
                                     <section id="rag-administration-quarantine" class="card bg-base-200 shadow-md">
                                         <div class="card-body">
                                             <h3 class="text-lg font-semibold mb-2">Quarantine</h3>
-                                            <div data-rag-quarantine-status class="text-sm mb-2"></div>
+                                            <div data-rag-quarantine-status class="text-sm mb-2" role="status" aria-live="polite"></div>
                                             <button type="button" class="btn btn-outline btn-sm mb-4" data-rag-quarantine-refresh>Refresh</button>
                                             <div data-rag-quarantine-list></div>
                                         </div>
@@ -8436,7 +8436,7 @@
                                     <section id="rag-administration-profiles" class="card bg-base-200 shadow-md">
                                         <div class="card-body">
                                             <h3 class="text-lg font-semibold mb-2">Embedding profiles</h3>
-                                            <div data-rag-profiles-status class="text-sm mb-2"></div>
+                                            <div data-rag-profiles-status class="text-sm mb-2" role="status" aria-live="polite"></div>
                                             <div class="flex gap-2 mb-4">
                                                 <button type="button" class="btn btn-outline btn-sm" data-rag-profiles-refresh>Refresh</button>
                                                 <button type="button" class="btn btn-outline btn-sm" data-rag-profiles-rollback>Rollback active profile</button>
