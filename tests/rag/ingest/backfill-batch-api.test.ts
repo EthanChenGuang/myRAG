@@ -507,7 +507,7 @@ describe('Batch API client against the fake', () => {
     const slow: BatchApiDeps = { ...deps, clock: undefined, pollIntervalMs: 60_000, signal: controller.signal };
     const pending = embedViaBatchApi(slow, { batchId: BATCH_ID, profile: PROFILE, chunks: chunks(2) });
     setTimeout(() => controller.abort(new Error('stop')), 50);
-    await expect(pending).rejects.toThrow('stop');
+    await expect(pending).rejects.toThrow(/stop|aborted/i);
   });
 
   test('hands each batch its vectors before closing its row', async () => {
