@@ -100,6 +100,10 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_chunks_legacy_defaults() FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_chunks_legacy_defaults() TO service_role;
   END IF;
+  IF to_regprocedure('public.rag_chunks_lexical_tsv()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_chunks_lexical_tsv() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_chunks_lexical_tsv() TO service_role;
+  END IF;
   IF to_regprocedure('public.rag_claim_ingestion_job(uuid, text, text)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_claim_ingestion_job(uuid, text, text) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_claim_ingestion_job(uuid, text, text) TO service_role;

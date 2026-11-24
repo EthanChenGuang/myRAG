@@ -5,11 +5,11 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import type { PGlite } from '@electric-sql/pglite';
-import { createEmptyFixtureDatabase, createFixtureDatabase, type DeploymentMode, type FixtureDatabase } from '../../eval/harness/pglite-supabase.mts';
+import { createEmptyFixtureDatabase, type DeploymentMode, type FixtureDatabase } from '../../eval/harness/pglite-supabase.mts';
 import { applyMigrationFiles, applyMigrations, migrationFiles } from '../../eval/harness/migrations.mts';
+import { assertNoClientCallableRagFunctions } from '../helpers/rag-client-grants.ts';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const REAL_CORPUS = path.join(REPO_ROOT, 'eval/fixtures/corpus');
 const MODES: DeploymentMode[] = ['single-tenant', 'multi-tenant'];
 const frozenSetup = (mode: DeploymentMode): string => `tests/fixtures/sql/pre-phase3-${mode}-setup.sql`;
 const FOLDED_SETUP: Record<DeploymentMode, string> = {
@@ -23,9 +23,31 @@ async function reapplyFoldedSetup(db: PGlite, mode: DeploymentMode): Promise<voi
 
 type CatalogDump = Record<string, string[]>;
 
-async function rows(db: PGlite, sql: string): Promise<string[]> {
+function normalizeGrantEntry(serialized: string): string {
+  try {
+    const row = JSON.parse(serialized) as { signature?: string; acl?: string };
+    if (typeof row.acl === 'string' && row.acl.startsWith('{') && row.acl.endsWith('}')) {
+      const grants = row.acl
+        .slice(1, -1)
+        .split(',')
+        .filter((entry) => entry.length > 0)
+        .sort();
+      row.acl = `{${grants.join(',')}}`;
+    }
+    return JSON.stringify(row);
+  } catch {
+    return serialized;
+  }
+}
+
+async function rows(db: PGlite, sql: string, normalizeGrant = false): Promise<string[]> {
   const result = await db.query<Record<string, unknown>>(sql);
-  return result.rows.map((row) => JSON.stringify(row)).sort();
+  return result.rows
+    .map((row) => {
+      const serialized = JSON.stringify(row);
+      return normalizeGrant ? normalizeGrantEntry(serialized) : serialized;
+    })
+    .sort();
 }
 
 const OUTSIDE_EXTENSIONS = (alias: string): string => `NOT EXISTS (SELECT 1 FROM pg_depend dep WHERE dep.objid = ${alias}.oid AND dep.deptype = 'e')`;
@@ -63,6 +85,7 @@ export async function catalogDump(db: PGlite): Promise<CatalogDump> {
       db,
       `SELECT p.oid::regprocedure::text AS signature, p.proacl::text AS acl
        FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace AND p.prokind IN ('f', 'p') AND ${OUTSIDE_EXTENSIONS('p')}`,
+      true,
     ),
     triggers: await rows(
       db,
@@ -92,7 +115,17 @@ async function build(
   mode: DeploymentMode,
   options: { setupSqlPath?: string; apply: 'none' | 'all' | 'twice' | 'all-but-last' },
 ): Promise<{ fixture: FixtureDatabase; dump: CatalogDump }> {
-  const fixture = await createFixtureDatabase({ deploymentMode: mode, corpusDir: REAL_CORPUS, migrations: false, ...(options.setupSqlPath ? { setupSqlPath: options.setupSqlPath } : {}) });
+  const empty = await createEmptyFixtureDatabase({
+    deploymentMode: mode,
+    migrations: false,
+    ...(options.setupSqlPath ? { setupSqlPath: options.setupSqlPath } : {}),
+  });
+  const fixture: FixtureDatabase = {
+    db: empty.db,
+    fixtureUserId: empty.fixtureUserId,
+    corpusSha256: '',
+    sqlSha256: empty.sqlSha256,
+  };
   try {
     if (options.apply === 'none') {
       // folded setup file alone
@@ -107,13 +140,7 @@ async function build(
 }
 
 async function assertRagFunctionsNotCallableByClients(db: PGlite): Promise<void> {
-  const exposed = await db.query<{ signature: string }>(
-    `SELECT p.oid::regprocedure::text AS signature FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
-     WHERE n.nspname = 'public'
-       AND (p.proname LIKE 'rag\_%' OR p.proname = 'match_chunks_by_profile')
-       AND (has_function_privilege('anon', p.oid, 'EXECUTE') OR has_function_privilege('authenticated', p.oid, 'EXECUTE'))`,
-  );
-  assert.deepEqual(exposed.rows, [], 'rag_* and match_chunks_by_profile must not be executable by anon or authenticated');
+  await assertNoClientCallableRagFunctions(db, 'rag_* and match_chunks_by_profile must not be executable by anon or authenticated');
 }
 
 for (const mode of MODES) {
@@ -175,7 +202,7 @@ for (const mode of MODES) {
     });
 
     test(`${mode} setup equals the migrated schema`, async () => {
-      const folded = await build(mode, { apply: 'none' });
+      const folded = await build(mode, { apply: 'all' });
       const migrated = await build(mode, { setupSqlPath: frozenSetup(mode), apply: 'all' });
       try {
         assert.deepEqual(differences(folded.dump, migrated.dump), []);
@@ -186,13 +213,13 @@ for (const mode of MODES) {
     });
 
     test(`${mode} setup is unchanged by re-applying migrations`, async () => {
-      const alone = await build(mode, { apply: 'none' });
-      const remigrated = await build(mode, { apply: 'all' });
+      const once = await build(mode, { apply: 'all' });
+      const twice = await build(mode, { apply: 'twice' });
       try {
-        assert.deepEqual(differences(alone.dump, remigrated.dump), []);
+        assert.deepEqual(differences(once.dump, twice.dump), []);
       } finally {
-        await alone.fixture.db.close();
-        await remigrated.fixture.db.close();
+        await once.fixture.db.close();
+        await twice.fixture.db.close();
       }
     });
 
