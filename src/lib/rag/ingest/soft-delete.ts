@@ -21,7 +21,7 @@ export interface SoftDeleteLineageOptions {
 function failureOf(message: string | undefined, code: string | null | undefined): SoftDeleteFailure {
   if (code === '22023') {
     const word = /^[a-z_]+/.exec(message ?? '')?.[0];
-    if (word !== undefined && SQL_REASONS.has(word as SoftDeleteFailure)) return word as SoftDeleteFailure;
+    if (word !== undefined && (SQL_REASONS as ReadonlySet<string>).has(word)) return word as SoftDeleteFailure;
     if (/^ingest_refused:/.test(message ?? '')) return 'invalid_tenant_key';
     return 'tenant_mismatch';
   }
