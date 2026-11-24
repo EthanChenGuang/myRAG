@@ -140,6 +140,22 @@ export async function createEmptyFixtureDatabase(options: {
   return { db, fixtureUserId: FIXTURE_USER_ID, sqlSha256: { [sqlRelpath]: crypto.createHash('sha256').update(sqlBytes).digest('hex') } };
 }
 
+type InsertColumn = [column: string, value: unknown, cast?: string];
+
+async function insertRow(db: PGlite, table: string, columns: InsertColumn[]): Promise<void> {
+  const names = columns.map(([column]) => column).join(', ');
+  const placeholders = columns.map(([, , cast], index) => (cast ? `$${index + 1}::${cast}` : `$${index + 1}`)).join(', ');
+  await db.query(`INSERT INTO ${table} (${names}) VALUES (${placeholders})`, columns.map(([, value]) => value));
+}
+
+async function hasPublicColumn(db: PGlite, table: string, column: string): Promise<boolean> {
+  const result = await db.query<{ present: boolean }>(
+    "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = $1 AND column_name = $2) AS present",
+    [table, column],
+  );
+  return result.rows[0]?.present === true;
+}
+
 export async function createFixtureDatabase(options: {
   deploymentMode: DeploymentMode;
   corpusDir: string;
@@ -177,22 +193,19 @@ export async function createFixtureDatabase(options: {
   const { db, sqlSha256 } = await createEmptyFixtureDatabase(options);
   try {
     const multiTenant = deploymentMode === 'multi-tenant';
+    // A setup from before Phase 3 (the frozen pre-Phase-3 files, migrations:false) has no doc_type columns; 0301 and 0304 add them as 'general' on upgrade.
+    const documentsDocType = await hasPublicColumn(db, 'documents', 'doc_type');
+    const chunksDocType = await hasPublicColumn(db, 'document_chunks', 'doc_type');
     for (const doc of corpus.documents) {
-      if (multiTenant) {
-        await db.query(
-          'INSERT INTO documents (id, filename, content, metadata, user_id, doc_type, created_at) VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7)',
-          [doc.id, doc.filename, doc.content, JSON.stringify({ relpath: doc.relpath, language: doc.language }), FIXTURE_USER_ID, doc.docType, doc.createdAt],
-        );
-      } else {
-        await db.query('INSERT INTO documents (id, filename, content, metadata, doc_type, created_at) VALUES ($1, $2, $3, $4::jsonb, $5, $6)', [
-          doc.id,
-          doc.filename,
-          doc.content,
-          JSON.stringify({ relpath: doc.relpath, language: doc.language }),
-          doc.docType,
-          doc.createdAt,
-        ]);
-      }
+      await insertRow(db, 'documents', [
+        ['id', doc.id],
+        ['filename', doc.filename],
+        ['content', doc.content],
+        ['metadata', JSON.stringify({ relpath: doc.relpath, language: doc.language }), 'jsonb'],
+        ...(multiTenant ? [['user_id', FIXTURE_USER_ID] satisfies InsertColumn] : []),
+        ...(documentsDocType ? [['doc_type', doc.docType] satisfies InsertColumn] : []),
+        ['created_at', doc.createdAt],
+      ]);
 
       for (const chunk of doc.chunks) {
         const metadata = {
@@ -203,18 +216,16 @@ export async function createFixtureDatabase(options: {
           section: chunk.section,
           ...(doc.imageUrl ? { image_url: doc.imageUrl } : {}),
         };
-        const embedding = vectorLiteral(embedText(chunk.text));
-        if (multiTenant) {
-          await db.query(
-            'INSERT INTO document_chunks (id, document_id, content, embedding, chunk_index, metadata, doc_type, created_at) VALUES ($1, $2, $3, $4::vector, $5, $6::jsonb, $7, $8)',
-            [chunk.id, doc.id, chunk.stored, embedding, chunk.index, JSON.stringify(metadata), doc.docType, doc.createdAt],
-          );
-        } else {
-          await db.query(
-            'INSERT INTO document_chunks (id, document_id, content, embedding, metadata, doc_type, created_at) VALUES ($1, $2, $3, $4::vector, $5::jsonb, $6, $7)',
-            [chunk.id, doc.id, chunk.stored, embedding, JSON.stringify(metadata), doc.docType, doc.createdAt],
-          );
-        }
+        await insertRow(db, 'document_chunks', [
+          ['id', chunk.id],
+          ['document_id', doc.id],
+          ['content', chunk.stored],
+          ['embedding', vectorLiteral(embedText(chunk.text)), 'vector'],
+          ...(multiTenant ? [['chunk_index', chunk.index] satisfies InsertColumn] : []),
+          ['metadata', JSON.stringify(metadata), 'jsonb'],
+          ...(chunksDocType ? [['doc_type', doc.docType] satisfies InsertColumn] : []),
+          ['created_at', doc.createdAt],
+        ]);
       }
     }
     if (options.relex ?? (options.migrations !== false)) {

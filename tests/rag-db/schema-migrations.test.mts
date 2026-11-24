@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import type { PGlite } from '@electric-sql/pglite';
 import { createFixtureDatabase, type DeploymentMode, type FixtureDatabase } from '../../eval/harness/pglite-supabase.mts';
 import { assertNoClientCallableRagFunctions } from '../helpers/rag-client-grants.ts';
+import { loadCorpus } from '../../eval/harness/corpus.mts';
 import { embedText } from '../../eval/harness/fixture-embedder.mts';
 import { applyMigrationFiles, applyMigrations, migrationFiles } from '../../eval/harness/migrations.mts';
 import { TWO_TENANT_IDS, createTwoTenantDatabase } from '../../eval/harness/two-tenant.mts';
@@ -163,18 +164,23 @@ for (const mode of MODES) {
       });
     });
 
-    test('rows inserted by the fixture loader after the migrations carry the column defaults', async () => {
+    test('rows inserted by the fixture loader after the migrations carry the column defaults and the doc_type of their corpus document', async () => {
       await withFixture(mode, { migrations: true }, async ({ db }) => {
         await assertHasColumns(db, 'documents', DOCUMENT_COLUMNS);
-        const result = await db.query<{ total: number; expected: number }>(
-          `SELECT count(*)::int AS total,
-             count(*) FILTER (WHERE version = 1 AND is_current AND status = 'ready' AND doc_type = 'general' AND doc_type_origin = 'fallback'
-               AND source = 'config_upload' AND processing_state = '{}'::jsonb)::int AS expected
-           FROM documents`,
+        const result = await db.query<{ id: string; doc_type: string; defaults: boolean }>(
+          `SELECT id, doc_type,
+             (version = 1 AND is_current AND status = 'ready' AND doc_type_origin = 'fallback'
+               AND source = 'config_upload' AND processing_state = '{}'::jsonb) AS defaults
+           FROM documents ORDER BY id`,
         );
-        const row = result.rows[0] as { total: number; expected: number };
-        assert.ok(row.total > 0);
-        assert.equal(row.expected, row.total);
+        const expected = loadCorpus(REAL_CORPUS)
+          .documents.map((doc) => [doc.id, doc.docType, true])
+          .sort((a, b) => String(a[0]).localeCompare(String(b[0])));
+        assert.ok(expected.length > 0);
+        assert.deepEqual(
+          result.rows.map((row) => [row.id, row.doc_type, row.defaults]).sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
+          expected,
+        );
       });
     });
 
