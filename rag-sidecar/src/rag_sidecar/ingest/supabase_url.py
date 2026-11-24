@@ -26,4 +26,5 @@ def assert_supabase_api_url(raw: str, *, label: str = "NEXT_PUBLIC_SUPABASE_URL"
         raise ValueError(f"{label} must not use the db.* direct database host")
     if host not in {"localhost", "127.0.0.1"} and not _PROJECT_API_HOST.match(host):
         raise ValueError(f"{label} must be a Supabase project hostname")
-    return f"{parsed.scheme}://{host}"
+    port = f":{parsed.port}" if parsed.port else ""
+    return f"{parsed.scheme}://{host}{port}"
