@@ -78,7 +78,7 @@ describe('quarantined documents never reach retrieval', () => {
     depsModule.setIngestDepsForTests({ ingestEnv: () => ({ RAG_INJECTION_SCAN: mode }) });
   };
 
-  const upload = async (item: InjectionFixture, userId = TWO_TENANT_IDS.userA) =>
+  const upload = async (item: InjectionFixture, userId: string = TWO_TENANT_IDS.userA) =>
     ingestModule.ingest({
       scope: await scopeOf(userId),
       source: 'config_upload',
@@ -101,7 +101,7 @@ describe('quarantined documents never reach retrieval', () => {
     return lines;
   };
 
-  const retrieve = async (profile: (typeof PROFILES)[number], query: string, userId = TWO_TENANT_IDS.userA) =>
+  const retrieve = async (profile: (typeof PROFILES)[number], query: string, userId: string = TWO_TENANT_IDS.userA) =>
     rag.runRetrieval({
       scope: await scopeOf(userId),
       query,
