@@ -1,14 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { assembleContext, type AssembleInput, type AssemblyDocumentRow } from '@/lib/rag/context/assemble';
+import { compressChunks } from '@/lib/rag/context/compress';
 import { countContextTokens } from '@/lib/rag/context/budget';
 import { loadRagConfig, resetRagConfigForTests, type RagConfig } from '@/lib/rag/config';
 import type { FusedHit } from '@/lib/rag/fusion/rrf';
+import type { RerankSpan } from '@/lib/rag/rerank/types';
 import { createTraceCollector } from '@/lib/rag/trace/collector';
 import { mintScope } from '@/lib/rag/tenant/scope';
 import type { Profile } from '@/lib/rag/types';
 import { effectiveRetrievalParams } from '@/lib/rag/v2/retrieval-params';
 import { runContextStages, type ContextStagesInput } from '@/lib/rag/v2/stages/context';
 import { hit } from '../fusion/helpers';
+
+vi.mock('@/lib/rag/context/compress', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/rag/context/compress')>();
+  return { ...actual, compressChunks: vi.fn(actual.compressChunks) };
+});
 
 const scope = mintScope('single', null, null);
 
@@ -244,5 +251,103 @@ describe('runContextStages assemble (D-15)', () => {
     expect(assembly!.context).toBe(expected.context);
     expect(assembly!.usedDocuments).toEqual(expected.usedDocuments);
     expect(assembly!.kept).toEqual(expected.kept);
+  });
+});
+
+function sentenceBlock(label: string, count: number): string {
+  return Array.from(
+    { length: count },
+    (_, index) => `${label} sentence ${index + 1} explains the quarterly widget pricing policy in some detail.`,
+  ).join(' ');
+}
+
+describe('runContextStages compress (D-16)', () => {
+  const long = sentenceBlock('first', 40);
+  const specs: Spec[] = [
+    { chunkId: 'a-1', documentId: 'doc-a', filename: 'alpha.pdf', chunkIndex: 1, content: long },
+    { chunkId: 'b-1', documentId: 'doc-b', filename: 'beta.pdf', chunkIndex: 1, content: 'short body' },
+  ];
+
+  beforeEach(() => {
+    resetRagConfigForTests();
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    vi.mocked(compressChunks).mockClear();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    resetRagConfigForTests();
+  });
+
+  it('is recorded disabled and leaves the context byte-identical when the switch is off', async () => {
+    const off = run(specs);
+    const out = await off.promise;
+    expect(stageCounts(off.collector, 'compress')?.status).toBe('disabled');
+    expect(compressChunks).not.toHaveBeenCalled();
+    expect(out.assembly!.context).toContain(long);
+  });
+
+  it('replaces a candidate text with its provider spans only', async () => {
+    const needle = 'first sentence 7 explains the quarterly widget pricing policy in some detail.';
+    const start = [...long].length - [...long.slice(long.indexOf(needle))].length;
+    const spans: RerankSpan[] = [{ start, end: start + [...needle].length, score: 0.9 }];
+    const { promise, collector } = run(
+      specs,
+      { RAG_CONTEXT_COMPRESSION: 'true' },
+      { rerank: { ran: true, spansByChunk: new Map([['a-1', spans]]), prefixLengthByChunk: new Map([['a-1', 0]]) } },
+    );
+    const { assembly } = await promise;
+    expect(assembly!.context).toContain(needle);
+    expect(assembly!.context).not.toContain('first sentence 8 explains');
+    expect(assembly!.context).toContain('short body');
+    const record = stageCounts(collector, 'compress');
+    expect(record?.status).toBe('ok');
+    expect(record?.counts?.compressed).toBe(1);
+    expect(record?.counts?.saved_tokens).toBeGreaterThan(0);
+  });
+
+  it('keeps fewer tokens with local scoring and only verbatim sentences when no spans exist', async () => {
+    const { promise } = run(specs, { RAG_CONTEXT_COMPRESSION: 'true' });
+    const { assembly } = await promise;
+    const rendered = assembly!.context;
+    expect(countContextTokens(rendered)).toBeLessThan(countContextTokens(long));
+    const sentences = long.match(/first sentence \d+ explains the quarterly widget pricing policy in some detail\./g) ?? [];
+    const present = sentences.filter((sentence) => rendered.includes(sentence));
+    expect(present.length).toBeGreaterThan(0);
+    expect(present.length).toBeLessThan(sentences.length);
+    const stripped = rendered.replace(/first sentence \d+ explains the quarterly widget pricing policy in some detail\./g, '');
+    expect(stripped).not.toContain('first sentence');
+  });
+
+  it('keeps the same document group order after compression', async () => {
+    const many: Spec[] = [
+      { chunkId: 'a-1', documentId: 'doc-a', filename: 'alpha.pdf', chunkIndex: 1, content: long },
+      { chunkId: 'b-1', documentId: 'doc-b', filename: 'beta.pdf', chunkIndex: 1, content: sentenceBlock('second', 40) },
+      { chunkId: 'c-1', documentId: 'doc-c', filename: 'gamma.pdf', chunkIndex: 1, content: sentenceBlock('third', 40) },
+      { chunkId: 'd-1', documentId: 'doc-d', filename: 'delta.pdf', chunkIndex: 1, content: 'tiny' },
+    ];
+    const edge = { RAG_CONTEXT_EDGE_ORDER: 'true' };
+    const plain = await run(many, edge).promise;
+    const compressed = await run(many, { ...edge, RAG_CONTEXT_COMPRESSION: 'true' }).promise;
+    const names = ['alpha.pdf', 'beta.pdf', 'gamma.pdf', 'delta.pdf'];
+    expect(docOrder(compressed.assembly!.context, names)).toEqual(docOrder(plain.assembly!.context, names));
+  });
+
+  it('does not run for the voice profile and records disabled', async () => {
+    const { promise, collector } = run(specs, { RAG_CONTEXT_COMPRESSION: 'true' }, {}, 'voice');
+    const { assembly } = await promise;
+    expect(stageCounts(collector, 'compress')?.status).toBe('disabled');
+    expect(compressChunks).not.toHaveBeenCalled();
+    expect(assembly!.context).toContain(long);
+  });
+
+  it('skips a failing compression as degraded and uses the uncompressed context', async () => {
+    vi.mocked(compressChunks).mockImplementationOnce(() => {
+      throw new Error('compression failed');
+    });
+    const { promise, collector } = run(specs, { RAG_CONTEXT_COMPRESSION: 'true' });
+    const { assembly } = await promise;
+    expect(stageCounts(collector, 'compress')?.status).toBe('skipped');
+    expect(assembly!.context).toContain(long);
   });
 });
