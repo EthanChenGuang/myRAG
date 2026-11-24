@@ -27,8 +27,12 @@ const state = {
   readOnly: false,
 };
 
+// Rows written before the Phase 3 columns existed read as current and ready, as the migration defaults make them.
+const COLUMN_DEFAULTS: Row = { is_current: true, status: 'ready' };
+
 function matches(row: Row, filters: Filter[]): boolean {
-  return filters.every(([op, column, value]) => (op === 'is' ? (row[column] ?? null) === value : row[column] === value));
+  const read = (column: string) => row[column] ?? COLUMN_DEFAULTS[column];
+  return filters.every(([op, column, value]) => (op === 'is' ? (read(column) ?? null) === value : read(column) === value));
 }
 
 function dataAdmin() {

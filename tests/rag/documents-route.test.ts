@@ -28,8 +28,23 @@ const state = {
   settingsFail: false,
 };
 
+// The columns the Phase 3 migrations add: lineage_id defaults to the row id, tenant_key is generated from the owner columns.
+function read(row: Row, column: string): unknown {
+  if (column === 'lineage_id') return row.lineage_id ?? row.id;
+  if (column === 'is_current') return row.is_current ?? true;
+  if (column === 'tenant_key') {
+    if (state.mode === 'single-tenant') return 's:default';
+    return row.organization_id ? `o:${row.organization_id}` : `u:${row.user_id}`;
+  }
+  return row[column];
+}
+
 function matches(row: Row, filters: Array<[string, string, unknown]>): boolean {
-  return filters.every(([op, column, value]) => (op === 'is' ? (row[column] ?? null) === value : row[column] === value));
+  return filters.every(([op, column, value]) => {
+    if (op === 'is') return (read(row, column) ?? null) === value;
+    if (op === 'in') return (value as unknown[]).includes(read(row, column));
+    return read(row, column) === value;
+  });
 }
 
 function dataAdmin() {
@@ -77,6 +92,10 @@ function dataAdmin() {
         },
         is(column: string, value: unknown) {
           filters.push(['is', column, value]);
+          return builder;
+        },
+        in(column: string, value: unknown[]) {
+          filters.push(['in', column, value]);
           return builder;
         },
         maybeSingle: () =>
