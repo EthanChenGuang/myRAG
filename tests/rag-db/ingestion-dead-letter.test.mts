@@ -6,6 +6,7 @@ import { createEmptyFixtureDatabase, type DeploymentMode } from '../../eval/harn
 import { applyMigrationFiles, applyMigrations } from '../../eval/harness/migrations.mts';
 
 const M0422 = 'supabase/migrations/0422_ingestion_dead_letter.sql';
+const M0423 = 'supabase/migrations/0423_ingestion_claim_lease_dead_letter.sql';
 const MODES: DeploymentMode[] = ['single-tenant'];
 const TENANT = 's:default';
 const ADMIN = '00000000-0000-4000-8000-0000000000c1';
@@ -28,7 +29,7 @@ for (const mode of MODES) {
       const fixture = await createEmptyFixtureDatabase({ deploymentMode: mode });
       db = fixture.db;
       await applyMigrations(db, mode);
-      await applyMigrationFiles(db, [M0422]);
+      await applyMigrationFiles(db, [M0422, M0423]);
       await db.query('INSERT INTO auth.users (id, email) VALUES ($1, $2)', [ADMIN, 'admin@example.invalid']);
       await db.query('INSERT INTO admin_users (id) VALUES ($1)', [ADMIN]);
     });
@@ -49,6 +50,34 @@ for (const mode of MODES) {
       assert.equal(row?.error, 'stage_timeout');
       assert.ok(row?.dead_letter_at);
 
+      const count = (await db.query<{ n: string }>(`SELECT rag_count_ingestion_dead_letters(NULL)::text AS n`)).rows[0]?.n;
+      assert.equal(count, '1');
+    });
+
+    test('expired lease reclaim with exhausted retries dead-letters with lease expired error', async () => {
+      const jobId = crypto.randomUUID();
+      await db.query(
+        `INSERT INTO ingestion_jobs (id, tenant_key, kind, source_key, status, stage, locked_by, lease_until, retries, max_retries)
+         VALUES ($1, $2, 'ingest', $3, 'parsing', 'parsing', 'stale', now() - interval '1 minute', 3, 2)`,
+        [jobId, TENANT, `lease-${jobId}`],
+      );
+      const claimed = (
+        await db.query<{ id: string }>(
+          `SELECT id FROM rag_claim_ingestion_jobs($1, 1, true, 'worker')`,
+          ['reclaimer'],
+        )
+      ).rows;
+      assert.equal(claimed.length, 0);
+      const row = (
+        await db.query<{ status: string; error: string; error_class: string; dead_letter_at: string | null }>(
+          'SELECT status, error, error_class, dead_letter_at::text FROM ingestion_jobs WHERE id = $1',
+          [jobId],
+        )
+      ).rows[0];
+      assert.equal(row?.status, 'failed');
+      assert.equal(row?.error_class, 'lease_expired');
+      assert.equal(row?.error, 'lease expired');
+      assert.ok(row?.dead_letter_at);
       const count = (await db.query<{ n: string }>(`SELECT rag_count_ingestion_dead_letters(NULL)::text AS n`)).rows[0]?.n;
       assert.equal(count, '1');
     });

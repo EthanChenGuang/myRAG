@@ -258,8 +258,16 @@ for (const mode of MODES) {
         [jobId],
       );
       assert.deepEqual(await claimRows(db, 'fail', 1, true), []);
-      const terminal = (await db.query<{ status: string; error_class: string }>('SELECT status, error_class FROM ingestion_jobs WHERE id = $1', [jobId])).rows[0];
-      assert.deepEqual(terminal, { status: 'failed', error_class: 'lease_expired' });
+      const terminal = (
+        await db.query<{ status: string; error_class: string; error: string; dead_letter_at: string | null }>(
+          'SELECT status, error_class, error, dead_letter_at::text FROM ingestion_jobs WHERE id = $1',
+          [jobId],
+        )
+      ).rows[0];
+      assert.equal(terminal?.status, 'failed');
+      assert.equal(terminal?.error_class, 'lease_expired');
+      assert.equal(terminal?.error, 'lease expired');
+      assert.ok(terminal?.dead_letter_at);
     });
 
     test('release resumes at stored stage', async () => {
