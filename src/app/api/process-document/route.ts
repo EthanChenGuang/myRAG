@@ -5,6 +5,8 @@ import { env } from '@/lib/env';
 import { DocumentContent } from '@/types/chat';
 import { createClient } from '@supabase/supabase-js';
 import {
+  CloudRefused,
+  assertCloudAllowed,
   buildSourceKey,
   currentIngestConfig,
   embedText,
@@ -18,7 +20,6 @@ import {
 import { adminDenied, checkAdmin } from '@/lib/admin-route-auth';
 import { DocTypeDetectionSchema } from '@/lib/rag-eval/contracts.generated';
 import { checkSingleTenantKbWrite } from '@/lib/kb-write-access';
-import { CloudRefused, assertCloudAllowed } from '@/lib/rag/ingest/guard/cloud-budget';
 import { z } from 'zod/v3';
 import { v4 as uuidv4 } from 'uuid';
 import { extractURLs } from '@/lib/url-extractor';

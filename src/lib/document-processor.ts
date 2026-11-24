@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { storeDocument } from './supabase';
 import { env } from './env';
-import { embedText, embedBatch } from '@/lib/rag';
+import { embedText, embedBatch, CloudRefused, assertCloudAllowed } from '@/lib/rag';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -12,7 +12,6 @@ import fetch from 'node-fetch';
 import { createSemanticChunks, mergeSmallChunks, type ChunkingConfig } from './semantic-chunker';
 import { generateText } from 'ai';
 import { openai as aiOpenai } from '@ai-sdk/openai';
-import { CloudRefused, assertCloudAllowed } from '@/lib/rag/ingest/guard/cloud-budget';
 
 const mkdir = promisify(fs.mkdir);
 const writeFile = promisify(fs.writeFile);
@@ -164,15 +163,11 @@ function createTokenBasedChunks(text: string, maxTokens: number = 600, overlapTo
 }
 
 /** The legacy parser has no Docling fallback, so a refused call fails the file; Nango stores this message as the failure reason. */
-export class CloudParsingDisabled extends CloudRefused {
-  constructor() {
-    super('cloud_not_allowed');
-    this.message = 'cloud_parsing_disabled';
-  }
-}
-
 function requireCloudParsing(): void {
-  if (!assertCloudAllowed('parse').ok) throw new CloudParsingDisabled();
+  if (assertCloudAllowed('parse').ok) return;
+  const refusal = new CloudRefused('cloud_not_allowed');
+  refusal.message = 'cloud_parsing_disabled';
+  throw refusal;
 }
 
 async function uploadAndParseDocument(filePath: string): Promise<{ chunks: string[] }> {

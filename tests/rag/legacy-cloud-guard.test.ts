@@ -171,7 +171,10 @@ describe('document-processor: cloud switch', () => {
         return 'doc-1';
       },
     }));
-    vi.doMock('@/lib/rag', () => ({ embedText: async () => [0.1], embedBatch: async (chunks: string[]) => chunks.map(() => [0.1, 0.2]) }));
+    vi.doMock('@/lib/rag', async (importOriginal) => {
+      const original = await importOriginal<typeof import('@/lib/rag')>();
+      return { ...original, embedText: async () => [0.1], embedBatch: async (chunks: string[]) => chunks.map(() => [0.1, 0.2]) };
+    });
     return import('@/lib/document-processor');
   }
 
@@ -185,7 +188,7 @@ describe('document-processor: cloud switch', () => {
   it('cloud off: processDocument on a PDF throws CloudRefused with reason cloud_parsing_disabled before any request, and keeps no copy on disk', async () => {
     stubCloud('false');
     const { processDocument } = await loadProcessor();
-    const { CloudRefused } = await import('@/lib/rag/ingest/guard/cloud-budget');
+    const { CloudRefused } = await import('@/lib/rag');
     const failure = await processDocument(filename, Buffer.from(BODY), { user_id: USER }).then(
       () => null,
       (error: unknown) => error,

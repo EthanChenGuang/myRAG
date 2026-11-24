@@ -110,6 +110,7 @@ export type {
   ResumeIngestOptions,
 } from './ingest';
 export { loadIngestConfig } from './ingest/config';
+export { assertCloudAllowed, CloudRefused } from './ingest/guard/cloud-budget';
 export { findInvoices } from './retrieval/invoices';
 export type { FindInvoicesDeps, InvoiceFilters, InvoiceHit } from './retrieval/invoices';
 export { getIngestStatusReport, STALE_PROCESSING_MS } from './ingest/status';
