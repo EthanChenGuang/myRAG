@@ -52,7 +52,14 @@ class Picture:
     caption: str
 
 
-Block = Heading | Paragraph | ListItem | Table | Picture
+@dataclass(frozen=True)
+class ColumnParagraph:
+    text: str
+    column: int
+    page: int = 1
+
+
+Block = Heading | Paragraph | ListItem | Table | Picture | ColumnParagraph
 
 
 @dataclass(frozen=True)
@@ -437,6 +444,25 @@ def all_specs() -> tuple[FixtureSpec, ...]:
         _injection_en(),
         _injection_it(),
     )
+
+
+def all_parse_specs() -> tuple[FixtureSpec, ...]:
+    import importlib.util
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[1] / "parse" / "parse_specs.py"
+    spec = importlib.util.spec_from_file_location("parse_fixture_specs", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.all_specs()
+
+
+def parse_spec_by_id(spec_id: str) -> FixtureSpec:
+    for spec in all_parse_specs():
+        if spec.id == spec_id:
+            return spec
+    raise KeyError(spec_id)
 
 
 def spec_by_id(spec_id: str) -> FixtureSpec:
