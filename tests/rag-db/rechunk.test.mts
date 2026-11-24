@@ -2,6 +2,8 @@ import { after, afterEach, before, beforeEach, describe, test } from 'node:test'
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { TWO_TENANT_IDS, createTwoTenantDatabase, type TwoTenantDatabase } from '../../eval/harness/two-tenant.mts';
 import type { RpcClient } from '@/lib/rag/backend/supabase-rpc';
 import type { TenantScope } from '@/lib/rag/tenant/scope';
@@ -131,7 +133,13 @@ describe('rechunk job (src/lib/rag/ingest/rechunk)', () => {
 
   before(async () => {
     const { fixtureProcessEnv, startFakeEdge } = await import('../../eval/harness/fake-edge.mts');
-    fixture = await createTwoTenantDatabase();
+    // Every contract_legal and invoice_receipt document the suite counts is its own; the shared corpus carries typed prechunked documents (a contract among them) that would be extra no_parse_output gaps.
+    const emptyCorpus = fs.mkdtempSync(path.join(os.tmpdir(), 'rechunk-corpus-'));
+    try {
+      fixture = await createTwoTenantDatabase({ corpusDir: emptyCorpus });
+    } finally {
+      fs.rmdirSync(emptyCorpus);
+    }
     edge = await startFakeEdge({ db: fixture.db });
     childEnv = fixtureProcessEnv(edge.url);
     Object.assign(process.env, childEnv);
