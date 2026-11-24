@@ -145,8 +145,77 @@ export function checkConfig(root) {
     }
   }
 
+  const effectiveEnv = loadEffectiveEnv(root);
+  const ingestion = checkIngestionSwitches(effectiveEnv);
+  violations.push(...ingestion.errors);
+
   violations.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : a.location < b.location ? -1 : a.location > b.location ? 1 : 0));
-  return { violations, varCount: vars.length };
+  return { violations, warnings: ingestion.warnings, varCount: vars.length };
+}
+
+function parseEnvAssignments(text) {
+  const map = {};
+  for (const line of text.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eq = trimmed.indexOf('=');
+    if (eq <= 0) continue;
+    const name = trimmed.slice(0, eq).replace(/^export\s+/, '').trim();
+    map[name] = trimmed.slice(eq + 1).trim();
+  }
+  return map;
+}
+
+function loadEffectiveEnv(root) {
+  let env = {};
+  const initPath = path.join(root, TRACKED['init-env']);
+  if (fs.existsSync(initPath)) {
+    env = { ...env, ...parseEnvAssignments(fs.readFileSync(initPath, 'utf8')) };
+  }
+  const localPath = path.join(root, ENV_LOCAL);
+  if (fs.existsSync(localPath)) {
+    env = { ...env, ...parseEnvAssignments(fs.readFileSync(localPath, 'utf8')) };
+  }
+  return env;
+}
+
+/** D-10, D-22 and A-2: invalid switch combinations fail CI; cloud-off with legacy warns only. */
+export function checkIngestionSwitches(env) {
+  const errors = [];
+  const warnings = [];
+  const pipeline = (env.RAG_INGEST_PIPELINE ?? 'legacy').trim().toLowerCase();
+  const routing = (env.RAG_PARSE_ROUTING ?? 'fixed').trim().toLowerCase();
+  const asyncVal = (env.RAG_INGEST_ASYNC ?? 'off').trim().toLowerCase();
+  const allowCloud = (env.RAG_PARSER_ALLOW_CLOUD ?? 'true').trim().toLowerCase();
+  const llamaKey = (env.LLAMA_CLOUD_API_KEY ?? '').trim();
+
+  if (routing === 'tiered' && (pipeline !== 'unified' || asyncVal !== 'on')) {
+    errors.push({
+      name: 'RAG_PARSE_ROUTING',
+      location: 'ingestion',
+      message:
+        'D-10: RAG_PARSE_ROUTING=tiered requires RAG_INGEST_PIPELINE=unified and RAG_INGEST_ASYNC=on',
+    });
+  }
+
+  if (asyncVal === 'on' && pipeline !== 'unified') {
+    errors.push({
+      name: 'RAG_INGEST_ASYNC',
+      location: 'ingestion',
+      message: 'D-22: RAG_INGEST_ASYNC=on requires RAG_INGEST_PIPELINE=unified',
+    });
+  }
+
+  if (allowCloud === 'false' && pipeline === 'legacy' && llamaKey !== '') {
+    warnings.push({
+      name: 'RAG_PARSER_ALLOW_CLOUD',
+      location: 'ingestion',
+      message:
+        'A-2: RAG_PARSER_ALLOW_CLOUD=false with legacy pipeline while LLAMA_CLOUD_API_KEY is set (key present; value not shown)',
+    });
+  }
+
+  return { errors, warnings };
 }
 
 function parseArgs(argv) {
@@ -159,7 +228,8 @@ function parseArgs(argv) {
 
 function main() {
   const { root } = parseArgs(process.argv.slice(2));
-  const { violations, varCount } = checkConfig(root);
+  const { violations, varCount, warnings } = checkConfig(root);
+  for (const w of warnings) console.warn(`${w.name} [${w.location}] ${w.message}`);
   if (violations.length === 0) {
     console.log(`[check-config] ok: ${varCount} variable(s) match the manifest`);
     return 0;
