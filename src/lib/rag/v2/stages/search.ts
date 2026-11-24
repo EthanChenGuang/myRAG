@@ -24,6 +24,8 @@ export interface SearchStagesInput {
   collector: TraceCollector;
   stageOverrides?: StageOverrides;
   variants?: QueryVariant[];
+  /** Index-aligned with variants; a missing entry falls back to the embedding of the original. */
+  variantEmbeddings?: QueryEmbedding[];
   filters?: RetrievalFilters;
 }
 
@@ -35,6 +37,10 @@ export interface SearchStagesOutput {
 function buildFilters(input: RunRetrievalInput): RetrievalFilters {
   const extra: RetrievalFilterInput = input.retrievalFilters ?? {};
   return { currentOnly: true, ...extra };
+}
+
+function lexicalLanguagesFor(variant: QueryVariant): string[] | null {
+  return variant.kind === 'translated' && variant.language ? [variant.language] : null;
 }
 
 function profileId(embedding: QueryEmbedding): string {
@@ -86,15 +92,16 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
     let denseTotal = 0;
     let lexicalTotal = 0;
     const legsByVariant = await Promise.all(
-      variants.map(async (variant) => {
+      variants.map(async (variant, index) => {
+        const variantEmbedding = ctx.variantEmbeddings?.[index] ?? embedding;
         const useLexical = lexicalEnabled && verdict.icuAvailable;
         const tokens = useLexical ? queryLexicalTokens(variant.text) : [];
         const legs = await backend.search({
           scope,
-          embeddingProfileId: profileId(embedding),
-          denseVector: embedding.vector,
+          embeddingProfileId: profileId(variantEmbedding),
+          denseVector: variantEmbedding.vector,
           lexicalTokens: tokens,
-          lexicalLanguages: variant.language ? [variant.language] : null,
+          lexicalLanguages: lexicalLanguagesFor(variant),
           filters,
           denseLimit: pool,
           lexicalLimit: pool,

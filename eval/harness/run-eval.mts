@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import util from 'node:util';
 import { NextRequest } from 'next/server';
 import { spawnSync } from 'node:child_process';
@@ -131,6 +132,17 @@ function createStubLanguageModel(): LanguageModel {
   }) as unknown as LanguageModel;
 }
 
+const TRANSLATION_TABLE_PATH = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../fixtures/translation-table.json');
+
+function switchIsOn(value: string | undefined, expected: string): boolean {
+  return (value ?? '').trim().toLowerCase() === expected;
+}
+
+/** The fixture translator serves v2 runs whose overlay turns RAG_LEXICAL_TRANSLATION on; legacy runs never get it. */
+export function shouldInstallFixtureTranslator(env: Record<string, string> | undefined): boolean {
+  return switchIsOn(env?.RAG_PIPELINE, 'v2') && switchIsOn(env?.RAG_LEXICAL_TRANSLATION, 'true');
+}
+
 export async function prepareInProcessEval(options: {
   corpusDir: string;
   deploymentMode: DeploymentMode;
@@ -182,6 +194,13 @@ export async function prepareInProcessEval(options: {
 
   const route = await import('../../src/app/api/internal/rag/run/route.ts');
 
+  let translatorModule: typeof import('../../src/lib/rag/query/translate.ts') | null = null;
+  if (shouldInstallFixtureTranslator(envOverrides)) {
+    translatorModule = await import('../../src/lib/rag/query/translate.ts');
+    const table = JSON.parse(fs.readFileSync(TRANSLATION_TABLE_PATH, 'utf8')) as import('../../src/lib/rag/query/translate.ts').TranslationTable;
+    translatorModule.setTranslatorForTests(translatorModule.createFixtureTranslator(table));
+  }
+
   return {
     POST: route.POST as unknown as InProcessEval['POST'],
     secret,
@@ -190,6 +209,7 @@ export async function prepareInProcessEval(options: {
     corpusSha256: fixture.corpusSha256,
     sqlSha256: fixture.sqlSha256,
     close: async () => {
+      translatorModule?.resetTranslatorForTests();
       if (!ingestFixture) {
         await startedEdge.close();
         await fixture.db.close().catch(() => undefined);

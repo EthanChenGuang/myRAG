@@ -5,6 +5,8 @@ import { getRagDeps } from '../deps';
 import { getEmbeddingProfileById } from '../embeddings/active-profile';
 import {
   classifyProfileFailure,
+  embedQueries,
+  embedQueriesForEvalProfile,
   embedQuery,
   embedQueryForEvalProfile,
   type QueryEmbedding,
@@ -27,10 +29,15 @@ function evalEmbeddingProfileId(input: RunRetrievalInput): string | undefined {
   return input.profile === 'eval' ? input.options?.embeddingProfile : undefined;
 }
 
-async function embedForRetrieval(input: RunRetrievalInput, signal: AbortSignal): Promise<QueryEmbedding> {
+async function embedForRetrieval(input: RunRetrievalInput, texts: string[], signal: AbortSignal): Promise<QueryEmbedding[]> {
   const profileId = evalEmbeddingProfileId(input);
-  if (profileId) return embedQueryForEvalProfile(input.query, signal, await getEmbeddingProfileById(profileId));
-  return embedQuery(input.query, signal);
+  if (texts.length === 1) {
+    const [text] = texts;
+    if (profileId) return [await embedQueryForEvalProfile(text!, signal, await getEmbeddingProfileById(profileId))];
+    return [await embedQuery(text!, signal)];
+  }
+  if (profileId) return embedQueriesForEvalProfile(texts, signal, await getEmbeddingProfileById(profileId));
+  return embedQueries(texts, signal);
 }
 
 const PROFILE_FAILURE_REASONS = {
@@ -78,12 +85,22 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
     queryContext = query.queryContext;
     queryLanguage = query.queryLanguage;
 
-    embedding = requireValue(
-      await runStage(spec('embed', 'throw'), signal, (stageSignal) => embedForRetrieval(input, stageSignal), collector, {
-        detail: (value) => value.profile?.id,
-      }),
+    const variantEmbeddings = requireValue(
+      await runStage(
+        spec('embed', 'throw'),
+        signal,
+        (stageSignal) =>
+          embedForRetrieval(
+            input,
+            query.variants.map((variant) => variant.text),
+            stageSignal,
+          ),
+        collector,
+        { detail: (value) => value[0]?.profile?.id },
+      ),
       'embed',
     );
+    embedding = variantEmbeddings[0]!;
 
     const search = await runSearchStages({
       input,
@@ -96,6 +113,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
       collector,
       stageOverrides: input.stageOverrides,
       variants: query.variants,
+      variantEmbeddings,
       filters: query.filters,
     });
 

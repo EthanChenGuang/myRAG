@@ -82,10 +82,7 @@ export async function embedQueryForEvalProfile(text: string, signal: AbortSignal
   return embedWithProfile(text, signal, profile, getRagDeps());
 }
 
-export async function embedQuery(text: string, signal: AbortSignal): Promise<QueryEmbedding> {
-  const deps = getRagDeps();
-  if (!isEmbeddingProfilesEnabled()) return { vector: await deps.embedder(text, { signal }), profile: null };
-
+function assertNoStartupMismatch(): void {
   const verdict = getStartupVerdict();
   if (verdict.status === 'mismatch') {
     throw new EmbeddingProfileMismatchError('startup', {
@@ -95,7 +92,54 @@ export async function embedQuery(text: string, signal: AbortSignal): Promise<Que
       alreadyLogged: true,
     });
   }
+}
+
+export async function embedQuery(text: string, signal: AbortSignal): Promise<QueryEmbedding> {
+  const deps = getRagDeps();
+  if (!isEmbeddingProfilesEnabled()) return { vector: await deps.embedder(text, { signal }), profile: null };
+
+  assertNoStartupMismatch();
   return embedWithProfile(text, signal, await getActiveProfile(), deps);
+}
+
+async function embedManyWithProfile(
+  texts: string[],
+  signal: AbortSignal,
+  profile: EmbeddingProfile,
+  deps: RagDeps,
+): Promise<QueryEmbedding[]> {
+  if (profile.storage !== 'legacy_column' && deps.profileBatchEmbedder) {
+    const outputs = await deps.profileBatchEmbedder(texts, { signal, profile });
+    if (outputs) {
+      if (outputs.length !== texts.length) throw mismatchError('vector', profile, outputs.length);
+      return outputs.map((output) => {
+        assertDims(profile, output.vector.length);
+        if (canonicalModelId(output.model) !== canonicalModelId(profile.model)) throw mismatchError('model', profile, output.model);
+        return { vector: output.vector, profile };
+      });
+    }
+  }
+  return Promise.all(texts.map((text) => embedWithProfile(text, signal, profile, deps)));
+}
+
+/**
+ * Embeds several queries (the original and its translated variants) for one search. One text is exactly embedQuery. Several texts use
+ * the provider's batch call when the active profile's provider offers one and run in parallel under the same signal otherwise.
+ */
+export async function embedQueries(texts: string[], signal: AbortSignal): Promise<QueryEmbedding[]> {
+  if (texts.length <= 1) return Promise.all(texts.map((text) => embedQuery(text, signal)));
+  const deps = getRagDeps();
+  if (!isEmbeddingProfilesEnabled()) {
+    return Promise.all(texts.map(async (text) => ({ vector: await deps.embedder(text, { signal }), profile: null })));
+  }
+
+  assertNoStartupMismatch();
+  return embedManyWithProfile(texts, signal, await getActiveProfile(), deps);
+}
+
+export async function embedQueriesForEvalProfile(texts: string[], signal: AbortSignal, profile: EmbeddingProfile): Promise<QueryEmbedding[]> {
+  if (texts.length <= 1) return Promise.all(texts.map((text) => embedQueryForEvalProfile(text, signal, profile)));
+  return embedManyWithProfile(texts, signal, profile, getRagDeps());
 }
 
 /**

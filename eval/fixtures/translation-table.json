@@ -1,0 +1,221 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "question": "Is the TOTALE COMPLESSIVO line on the receipt 294.63?",
+      "translations": [
+        {
+          "language": "it",
+          "text": "La riga TOTALE COMPLESSIVO dello scontrino è 294.63?"
+        }
+      ]
+    },
+    {
+      "question": "Is the IVA at 22% on the receipt 53.13?",
+      "translations": [
+        {
+          "language": "it",
+          "text": "L'IVA al 22% sullo scontrino è 53.13?"
+        }
+      ]
+    },
+    {
+      "question": "Does the warranty cover an instrument that was dropped or submerged in water?",
+      "translations": [
+        {
+          "language": "it",
+          "text": "La garanzia copre i danni da caduta o da immersione in acqua dello strumento?"
+        }
+      ]
+    },
+    {
+      "question": "If a unit is replaced under warranty, which expiry date does the new unit get?",
+      "translations": [
+        {
+          "language": "it",
+          "text": "Se uno strumento viene sostituito in garanzia, quale scadenza della garanzia eredita il nuovo esemplare?"
+        }
+      ]
+    },
+    {
+      "question": "On what date did 示例化工有限公司 and 绿谷仪器股份有限公司 sign service contract GV-MS-2024-0057?",
+      "translations": [
+        {
+          "language": "zh",
+          "text": "示例化工有限公司和绿谷仪器股份有限公司是在哪一天签订服务合同 GV-MS-2024-0057 的？"
+        }
+      ]
+    },
+    {
+      "question": "How often can an employee work from home in a week once the manager agrees?",
+      "translations": [
+        {
+          "language": "zh",
+          "text": "经主管同意，员工每周最多可以在家办公几天？"
+        }
+      ]
+    },
+    {
+      "question": "Is service@example.net the contact email on the signature page of the contract between 示例化工有限公司 and 绿谷仪器股份有限公司?",
+      "translations": [
+        {
+          "language": "zh",
+          "text": "示例化工有限公司与绿谷仪器股份有限公司之间合同的签章页上，联系邮箱是 service@example.net 吗？"
+        }
+      ]
+    },
+    {
+      "question": "How is an employee paid while off sick?",
+      "translations": [
+        {
+          "language": "zh",
+          "text": "员工病假期间的工资如何发放？"
+        }
+      ]
+    },
+    {
+      "question": "In quale unità si trova il cliente Harbor Light Laboratories della fattura INV-24-00381?",
+      "translations": [
+        {
+          "language": "en",
+          "text": "In which unit is the customer Harbor Light Laboratories on invoice INV-24-00381 located?"
+        }
+      ]
+    },
+    {
+      "question": "A quale ordine di riferimento corrisponde la fattura INV-24-00381 del cliente Harbor Light Laboratories?",
+      "translations": [
+        {
+          "language": "en",
+          "text": "Which order reference does invoice INV-24-00381 for the customer Harbor Light Laboratories correspond to?"
+        }
+      ]
+    },
+    {
+      "question": "Con quale modalità vengono spediti i pacchi molto pesanti?",
+      "translations": [
+        {
+          "language": "en",
+          "text": "How are very heavy packages shipped?"
+        }
+      ]
+    },
+    {
+      "question": "Gli ordini spediti all'estero possono essere soggetti a dazi doganali?",
+      "translations": [
+        {
+          "language": "en",
+          "text": "Can orders shipped abroad be subject to customs and import duties?"
+        }
+      ]
+    },
+    {
+      "question": "In quale data 示例化工有限公司 e 绿谷仪器股份有限公司 hanno firmato il contratto di servizio GV-MS-2024-0057?",
+      "translations": [
+        {
+          "language": "zh",
+          "text": "示例化工有限公司和绿谷仪器股份有限公司在哪一天签订了服务合同 GV-MS-2024-0057？"
+        }
+      ]
+    },
+    {
+      "question": "service@example.net è l'email di contatto nella pagina delle firme del contratto tra 示例化工有限公司 e 绿谷仪器股份有限公司?",
+      "translations": [
+        {
+          "language": "zh",
+          "text": "service@example.net 是示例化工有限公司与绿谷仪器股份有限公司之间合同签章页上的联系邮箱吗？"
+        }
+      ]
+    },
+    {
+      "question": "Quante volte alla settimana può lavorare da casa un dipendente, se il responsabile è d'accordo?",
+      "translations": [
+        {
+          "language": "zh",
+          "text": "经主管同意，员工每周可以在家办公几天？"
+        }
+      ]
+    },
+    {
+      "question": "Come viene pagato un dipendente durante l'assenza per malattia?",
+      "translations": [
+        {
+          "language": "zh",
+          "text": "员工在病假期间的工资如何发放？"
+        }
+      ]
+    },
+    {
+      "question": "发票 INV-24-00381 上的客户 Harbor Light Laboratories 在哪个单元？",
+      "translations": [
+        {
+          "language": "en",
+          "text": "In which unit is the customer Harbor Light Laboratories on invoice INV-24-00381?"
+        }
+      ]
+    },
+    {
+      "question": "发票 INV-24-00381 上的客户 Harbor Light Laboratories 对应哪个订单号？",
+      "translations": [
+        {
+          "language": "en",
+          "text": "What is the order reference for the customer Harbor Light Laboratories on invoice INV-24-00381?"
+        }
+      ]
+    },
+    {
+      "question": "非常重的包裹用什么方式发货？",
+      "translations": [
+        {
+          "language": "en",
+          "text": "How are very heavy packages shipped?"
+        }
+      ]
+    },
+    {
+      "question": "寄往国外的订单可能要缴纳进口关税吗？",
+      "translations": [
+        {
+          "language": "en",
+          "text": "Can orders shipped abroad be subject to import duties?"
+        }
+      ]
+    },
+    {
+      "question": "仪器摔坏了或者泡了水，保修会包含吗？",
+      "translations": [
+        {
+          "language": "it",
+          "text": "La garanzia copre uno strumento danneggiato da una caduta o dall'immersione in acqua?"
+        }
+      ]
+    },
+    {
+      "question": "收据上 TOTALE COMPLESSIVO 一栏是 294.63 吗？",
+      "translations": [
+        {
+          "language": "it",
+          "text": "La voce TOTALE COMPLESSIVO sullo scontrino è 294.63?"
+        }
+      ]
+    },
+    {
+      "question": "收据上 IVA 22% 对应的金额是 53.13 吗？",
+      "translations": [
+        {
+          "language": "it",
+          "text": "L'importo corrispondente all'IVA al 22% sullo scontrino è 53.13?"
+        }
+      ]
+    },
+    {
+      "question": "如果仪器被更换了，新仪器的保修到期日怎么算？",
+      "translations": [
+        {
+          "language": "it",
+          "text": "Se lo strumento viene sostituito, come si calcola la scadenza della garanzia del nuovo strumento?"
+        }
+      ]
+    }
+  ]
+}

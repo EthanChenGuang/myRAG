@@ -187,5 +187,6 @@ export function createQwenProvider(options: QwenProviderOptions = {}): Embedding
     normalize: true,
     embedDocuments: (texts, opts) => embed(texts, opts),
     embedQuery: (text, opts) => embed([`Instruct: ${QWEN_QUERY_TASK}\nQuery:${text}`], opts),
+    embedQueries: (texts, opts) => embed(texts.map((text) => `Instruct: ${QWEN_QUERY_TASK}\nQuery:${text}`), opts),
   };
 }
