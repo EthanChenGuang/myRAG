@@ -64,6 +64,8 @@ const state = {
   currentDocs: new Set<string>(),
   calls: [] as Call[],
   rpcFails: false,
+  budgetRows: [] as Row[],
+  overrides: [] as Row[],
 };
 
 function jobRow(n: number, tenantKey: string, overrides: Row = {}): Row {
@@ -185,6 +187,20 @@ function fakeDb(): RpcClient {
         row.deleted_at = '2026-11-24T12:00:00.000Z';
         return respond([{ ...row }]);
       }
+      if (fn === 'rag_parse_budget_month') {
+        return respond(state.budgetRows.filter((row) => a.p_tenant_key === null || row.tenant_key === a.p_tenant_key).map((row) => ({ ...row })));
+      }
+      if (fn === 'rag_get_parse_tier_overrides') return respond(state.overrides.map((row) => ({ ...row })));
+      if (fn === 'rag_set_parse_tier_override') {
+        const docType = a.p_doc_type as string;
+        const min = a.p_min_tier as string | null;
+        const max = a.p_max_tier as string | null;
+        state.overrides = state.overrides.filter((row) => row.doc_type !== docType);
+        if (min === null && max === null) return respond([]);
+        const row = { doc_type: docType, min_tier: min, max_tier: max, updated_by: a.p_actor, updated_at: '2026-11-24T12:00:00.000Z' };
+        state.overrides.push(row);
+        return respond([{ ...row }]);
+      }
       return respond([]);
     },
   };
@@ -239,7 +255,9 @@ async function loadRoutes() {
   const list = await import('@/app/api/rag/admin/ingest-jobs/route');
   const detail = await import('@/app/api/rag/admin/ingest-jobs/[id]/route');
   const retry = await import('@/app/api/rag/admin/ingest-jobs/[id]/retry/route');
-  return { list, detail, retry };
+  const budget = await import('@/app/api/rag/admin/parse-budget/route');
+  const tiers = await import('@/app/api/rag/admin/parse-tiers/route');
+  return { list, detail, retry, budget, tiers };
 }
 
 const ctx = (jobId: string) => ({ params: Promise.resolve({ id: jobId }) });
@@ -276,6 +294,8 @@ function resetState() {
   state.currentDocs = new Set();
   state.calls = [];
   state.rpcFails = false;
+  state.budgetRows = [];
+  state.overrides = [];
   logged = [];
   for (const level of ['log', 'warn', 'error'] as const) {
     vi.spyOn(console, level).mockImplementation((...args: unknown[]) => void logged.push(JSON.stringify(args)));
@@ -288,6 +308,7 @@ function cleanup() {
   vi.doUnmock('@/lib/supabase');
   vi.doUnmock('@/lib/supabase/server');
   vi.doUnmock('@/lib/deployment-mode');
+  vi.unstubAllEnvs();
 }
 
 describe('admin ingest job routes', () => {
@@ -662,6 +683,200 @@ describe('admin ingest job routes', () => {
       expect(await foreign.json()).toEqual(await unknown.json());
       expect(callsOf('rag_delete_ingestion_job')).toEqual([]);
       expect(state.jobs[0]?.deleted_at).toBeNull();
+    });
+  });
+});
+
+describe('admin parse budget and tier routes', () => {
+  beforeEach(() => {
+    resetState();
+    vi.stubEnv('RAG_PARSE_PREMIUM_PAGE_BUDGET', '5000');
+    vi.stubEnv('RAG_PARSE_PREMIUM_MAX_PAGES_PER_DOC', '150');
+  });
+  afterEach(cleanup);
+
+  const BUDGET = '/api/rag/admin/parse-budget';
+  const TIERS = '/api/rag/admin/parse-tiers';
+  const DOC_TYPES = ['contract_legal', 'financial_report', 'general', 'invoice_receipt', 'product_technical', 'scanned_image'];
+
+  describe('guard', () => {
+    type Invoke = (routes: Awaited<ReturnType<typeof loadRoutes>>, headers: Record<string, string>) => Promise<Response>;
+    const body = { docType: 'general', minTier: 'fast', maxTier: 'premium' };
+    const targets: Array<[string, Invoke]> = [
+      ['GET budget', (r, headers) => r.budget.GET(req(BUDGET, { headers }))],
+      ['GET tiers', (r, headers) => r.tiers.GET(req(TIERS, { headers }))],
+      ['PUT tiers', (r, headers) => r.tiers.PUT(req(TIERS, { method: 'PUT', headers, body }))],
+    ];
+    for (const [label, invoke] of targets) {
+      describe(label, () => {
+        const cases: Array<[string, () => void, Record<string, string>, number]> = [
+          ['401 without a credential', () => {}, {}, 401],
+          ['403 for a signed-in non-admin', () => (state.session = { id: PLAIN_USER }), {}, 403],
+          ['503 when the session lookup throws', () => {
+            state.session = { id: ADMIN_A };
+            state.authThrows = true;
+          }, {}, 503],
+          ['503 when the admin_users lookup fails', () => {
+            state.session = { id: ADMIN_A };
+            state.lookupFails = true;
+          }, {}, 503],
+          ['401 for a forged admin_session cookie', () => {}, { cookie: `admin_session=${ADMIN_A}` }, 401],
+          ['401 for the literal bearer admin', () => {}, { authorization: 'Bearer admin' }, 401],
+        ];
+        for (const [name, setup, headers, status] of cases) {
+          it(name, async () => {
+            setup();
+            const routes = await loadRoutes();
+            const response = await invoke(routes, headers);
+            expect(response.status).toBe(status);
+            expect(response.headers.get('cache-control')).toBe('no-store');
+            expect(state.calls).toEqual([]);
+            expect(state.overrides).toEqual([]);
+          });
+        }
+      });
+    }
+  });
+
+  describe('GET parse-budget', () => {
+    it('returns this month reserved, used and L3 pages for the admin tenant with the configured limits', async () => {
+      asAdminA();
+      state.budgetRows = [
+        { tenant_key: `u:${ADMIN_A}`, month: '2026-11-01', pages_reserved: 12, pages_used: 340, vlm_pages_used: 7 },
+        { tenant_key: `u:${ADMIN_B}`, month: '2026-11-01', pages_reserved: 99, pages_used: 999, vlm_pages_used: 99 },
+      ];
+      const { budget } = await loadRoutes();
+      const response = await budget.GET(req(BUDGET));
+      expect(response.status).toBe(200);
+      expect(response.headers.get('cache-control')).toBe('no-store');
+      const body = await response.json();
+      expect(body).toEqual({
+        success: true,
+        month: '2026-11',
+        budgetPages: 5000,
+        maxPagesPerDoc: 150,
+        tenants: [{ tenantKey: `u:${ADMIN_A}`, reserved: 12, used: 340, vlmUsed: 7 }],
+      });
+      expect(callsOf('rag_parse_budget_month')).toEqual([{ fn: 'rag_parse_budget_month', args: { p_tenant_key: `u:${ADMIN_A}` } }]);
+    });
+
+    it('shows a zero row for a tenant that has used nothing yet', async () => {
+      asAdminA();
+      const { budget } = await loadRoutes();
+      const body = await (await budget.GET(req(BUDGET))).json();
+      expect(body.tenants).toEqual([{ tenantKey: `u:${ADMIN_A}`, reserved: 0, used: 0, vlmUsed: 0 }]);
+    });
+
+    it('an organization workspace needs the membership check; another tenant is never read', async () => {
+      asAdminA();
+      state.budgetRows = [{ tenant_key: `o:${ORG_X}`, month: '2026-11-01', pages_reserved: 1, pages_used: 2, vlm_pages_used: 3 }];
+      const { budget } = await loadRoutes();
+      const denied = await budget.GET(req(`${BUDGET}?organizationId=${ORG_X}`));
+      expect(denied.status).toBe(403);
+      expect(callsOf('rag_parse_budget_month')).toEqual([]);
+      state.orgMembers = [{ organization_id: ORG_X, user_id: ADMIN_A, role: 'admin' }];
+      const allowed = await (await budget.GET(req(`${BUDGET}?organizationId=${ORG_X}`))).json();
+      expect(allowed.tenants).toEqual([{ tenantKey: `o:${ORG_X}`, reserved: 1, used: 2, vlmUsed: 3 }]);
+    });
+
+    it('503 without echoing the database message', async () => {
+      asAdminA();
+      state.rpcFails = true;
+      const { budget } = await loadRoutes();
+      const response = await budget.GET(req(BUDGET));
+      expect(response.status).toBe(503);
+      expect(await response.text()).not.toContain('secret_db_detail');
+    });
+  });
+
+  describe('GET parse-tiers', () => {
+    it('lists every doc type with its profile bounds, its override and the effective bounds', async () => {
+      asAdminA();
+      state.overrides = [{ doc_type: 'general', min_tier: 'structured', max_tier: 'premium', updated_by: ADMIN_B, updated_at: '2026-11-20T10:00:00.000Z' }];
+      const { tiers } = await loadRoutes();
+      const response = await tiers.GET(req(TIERS));
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body.items.map((item: Row) => item.doc_type)).toEqual(DOC_TYPES);
+      const general = body.items.find((item: Row) => item.doc_type === 'general');
+      expect(general.profile).toEqual({ min_tier: 'fast', max_tier: 'premium' });
+      expect(general.override).toMatchObject({ min_tier: 'structured', max_tier: 'premium' });
+      expect(general.effective).toEqual({ min_tier: 'structured', max_tier: 'premium' });
+      const invoice = body.items.find((item: Row) => item.doc_type === 'invoice_receipt');
+      expect(invoice.override).toBeNull();
+      expect(invoice.effective).toEqual(invoice.profile);
+    });
+  });
+
+  describe('PUT parse-tiers', () => {
+    const put = (routes: Awaited<ReturnType<typeof loadRoutes>>, body: unknown) => routes.tiers.PUT(req(TIERS, { method: 'PUT', body }));
+
+    it('stores the override with the verified admin as actor and returns the new effective bounds', async () => {
+      asAdminA();
+      const routes = await loadRoutes();
+      const response = await put(routes, { docType: 'general', minTier: 'structured', maxTier: 'premium' });
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body.success).toBe(true);
+      expect(body.doc_type).toBe('general');
+      expect(body.effective).toEqual({ min_tier: 'structured', max_tier: 'premium' });
+      expect(callsOf('rag_set_parse_tier_override')).toEqual([
+        { fn: 'rag_set_parse_tier_override', args: { p_doc_type: 'general', p_min_tier: 'structured', p_max_tier: 'premium', p_actor: ADMIN_A } },
+      ]);
+    });
+
+    it('400 for min above max, and nothing is stored', async () => {
+      asAdminA();
+      const routes = await loadRoutes();
+      const response = await put(routes, { docType: 'general', minTier: 'premium', maxTier: 'fast' });
+      expect(response.status).toBe(400);
+      const body = await response.json();
+      expect(body.success).toBe(false);
+      expect(Array.isArray(body.details)).toBe(true);
+      expect(callsOf('rag_set_parse_tier_override')).toEqual([]);
+      expect(state.overrides).toEqual([]);
+    });
+
+    it('400 for an unknown tier or doc type, one null bound, an extra field such as actor, and a body that is not JSON', async () => {
+      asAdminA();
+      const routes = await loadRoutes();
+      const bad: unknown[] = [
+        { docType: 'general', minTier: 'ultra', maxTier: 'premium' },
+        { docType: 'novel', minTier: 'fast', maxTier: 'premium' },
+        { docType: 'general', minTier: null, maxTier: 'premium' },
+        { docType: 'general', minTier: 'fast', maxTier: null },
+        { docType: 'general', minTier: 'fast', maxTier: 'premium', actor: ADMIN_B },
+        { docType: 'general' },
+      ];
+      for (const body of bad) {
+        const response = await put(routes, body);
+        expect(response.status, JSON.stringify(body)).toBe(400);
+      }
+      const notJson = await routes.tiers.PUT(new NextRequest(`http://localhost${TIERS}`, { method: 'PUT', body: '{nope', headers: { 'content-type': 'application/json' } }));
+      expect(notJson.status).toBe(400);
+      expect(callsOf('rag_set_parse_tier_override')).toEqual([]);
+    });
+
+    it('both null clears the override and the effective bounds fall back to the profile', async () => {
+      asAdminA();
+      state.overrides = [{ doc_type: 'general', min_tier: 'structured', max_tier: 'premium', updated_by: ADMIN_B, updated_at: '2026-11-20T10:00:00.000Z' }];
+      const routes = await loadRoutes();
+      const response = await put(routes, { docType: 'general', minTier: null, maxTier: null });
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body.override).toBeNull();
+      expect(body.effective).toEqual({ min_tier: 'fast', max_tier: 'premium' });
+      expect(callsOf('rag_set_parse_tier_override')[0]?.args).toEqual({ p_doc_type: 'general', p_min_tier: null, p_max_tier: null, p_actor: ADMIN_A });
+      expect(state.overrides).toEqual([]);
+    });
+
+    it('503 without echoing the database message', async () => {
+      asAdminA();
+      state.rpcFails = true;
+      const routes = await loadRoutes();
+      const response = await put(routes, { docType: 'general', minTier: 'fast', maxTier: 'premium' });
+      expect(response.status).toBe(503);
+      expect(await response.text()).not.toContain('secret_db_detail');
     });
   });
 });
