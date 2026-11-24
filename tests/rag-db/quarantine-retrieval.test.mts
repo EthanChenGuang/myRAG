@@ -1,4 +1,4 @@
-import { after, afterEach, before, describe, mock, test } from 'node:test';
+import { after, afterEach, before, beforeEach, describe, mock, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from '../../eval/harness/fake-edge.mts';
 import { TWO_TENANT_IDS, createTwoTenantDatabase, type TwoTenantDatabase } from '../../eval/harness/two-tenant.mts';
@@ -34,6 +34,8 @@ describe('quarantined documents never reach retrieval', () => {
   let rag: typeof import('@/lib/rag');
   let ingestModule: typeof import('@/lib/rag/ingest');
   let depsModule: typeof import('@/lib/rag/ingest/deps');
+  let objectStoreModule: typeof import('@/lib/rag/ingest/object-store');
+  let fakeStoreModule: typeof import('../helpers/fake-object-store');
   let resolver: typeof import('@/lib/rag/tenant/resolve-chat');
   let supabaseModule: typeof import('@/lib/supabase');
 
@@ -48,6 +50,8 @@ describe('quarantined documents never reach retrieval', () => {
     rag = await import('@/lib/rag');
     ingestModule = await import('@/lib/rag/ingest');
     depsModule = await import('@/lib/rag/ingest/deps');
+    objectStoreModule = await import('@/lib/rag/ingest/object-store');
+    fakeStoreModule = await import('../helpers/fake-object-store');
     resolver = await import('@/lib/rag/tenant/resolve-chat');
     supabaseModule = await import('@/lib/supabase');
   });
@@ -57,7 +61,12 @@ describe('quarantined documents never reach retrieval', () => {
     await db?.db.close();
   });
 
+  beforeEach(() => {
+    objectStoreModule.setObjectStoreForTests(fakeStoreModule.createFakeObjectStore());
+  });
+
   afterEach(() => {
+    objectStoreModule.resetObjectStoreForTests();
     depsModule.resetIngestDepsForTests();
     mock.restoreAll();
   });

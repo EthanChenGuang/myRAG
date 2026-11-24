@@ -20,6 +20,8 @@ describe('legacy content-hash backfill (D-09)', () => {
   let hashModule: typeof import('@/lib/rag/ingest/hash');
   let ingestModule: typeof import('@/lib/rag/ingest');
   let depsModule: typeof import('@/lib/rag/ingest/deps');
+  let objectStoreModule: typeof import('@/lib/rag/ingest/object-store');
+  let fakeStoreModule: typeof import('../helpers/fake-object-store');
   let resolver: typeof import('@/lib/rag/tenant/resolve-chat');
   let supabaseModule: typeof import('@/lib/supabase');
   const inserted: string[] = [];
@@ -35,6 +37,8 @@ describe('legacy content-hash backfill (D-09)', () => {
     hashModule = await import('@/lib/rag/ingest/hash');
     ingestModule = await import('@/lib/rag/ingest');
     depsModule = await import('@/lib/rag/ingest/deps');
+    objectStoreModule = await import('@/lib/rag/ingest/object-store');
+    fakeStoreModule = await import('../helpers/fake-object-store');
     resolver = await import('@/lib/rag/tenant/resolve-chat');
     supabaseModule = await import('@/lib/supabase');
     const corpus = await fixture.db.query<Row>('SELECT count(*)::int AS n FROM documents WHERE content_hash IS NULL AND status = $1 AND id <> ALL($2::uuid[])', ['ready', BASE_IDS]);
@@ -51,7 +55,12 @@ describe('legacy content-hash backfill (D-09)', () => {
     await fixture.db.query("UPDATE documents SET content_hash = NULL, metadata = metadata - 'content_hash_version' WHERE source_key LIKE 'legacy:%'");
   });
 
+  beforeEach(() => {
+    objectStoreModule.setObjectStoreForTests(fakeStoreModule.createFakeObjectStore());
+  });
+
   afterEach(async () => {
+    objectStoreModule.resetObjectStoreForTests();
     depsModule.resetIngestDepsForTests();
     mock.restoreAll();
     const ids = inserted.splice(0);

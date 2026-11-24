@@ -482,7 +482,7 @@ describe('registered stages and their switched-off behaviour', () => {
     installIngestDeps({ db, env: { RAG_INJECTION_SCAN: 'quarantine' } });
     const ctx = makeCtx();
     ctx.identity = { profile: { scan_injection: false } } as unknown as StageContext['identity'];
-    ctx.document = { id: FAKE_DOCUMENT_ID, version: 1, resumed: false };
+    ctx.document = { id: FAKE_DOCUMENT_ID, lineageId: FAKE_LINEAGE_ID, version: 1, resumed: false };
     ctx.work.parseText = INJECTION_MARKDOWN;
 
     const outcome = await scanInjectionStage.run(ctx);
