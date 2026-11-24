@@ -473,6 +473,26 @@ def test_run_refuses_traces_that_were_produced_with_refusal_on(tmp_path):
         _calibrate(tmp_path, _Runner(scores, refusal=refused), golden)
 
 
+def test_run_refuses_traces_where_the_threshold_gate_answered(tmp_path):
+    golden, _, scores = _world(tmp_path)
+    answered = TraceRefusal(decision="answer", basis="none", reason="above_threshold", top_score=0.9, threshold=0.5, cell_key=KEY_ZH_SAME)
+    with pytest.raises(CalibrationError, match="refusal"):
+        _calibrate(tmp_path, _Runner(scores, refusal=answered), golden)
+
+
+@pytest.mark.parametrize(
+    "floor",
+    [
+        TraceRefusal(decision="refuse", basis="similarity_floor", reason="below_similarity_floor", top_score=0.3, threshold=0.65, cell_key=None),
+        TraceRefusal(decision="answer", basis="none", reason="above_similarity_floor", top_score=0.7, threshold=0.65, cell_key=None),
+    ],
+)
+def test_run_accepts_traces_decided_by_the_fallback_similarity_floor(tmp_path, floor):
+    golden, _, scores = _world(tmp_path)
+    result = _calibrate(tmp_path, _Runner(scores, refusal=floor), golden)
+    assert [r.cell.status for r in result.cells] == ["calibrated"]
+
+
 def test_run_accepts_traces_where_the_gate_recorded_not_applied(tmp_path):
     golden, _, scores = _world(tmp_path)
     off = TraceRefusal(decision="not_applied", basis="none", reason="switch_off", top_score=None, threshold=None, cell_key=None)
