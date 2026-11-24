@@ -7,9 +7,12 @@ from rag_sidecar.contracts.report import EvalReport
 
 import rag_eval.baseline as baseline_module
 import rag_eval.gate as gate_module
+from rag_eval.corpus import load_corpus
 from rag_eval.gate import evaluate_gate
+from rag_eval.golden_io import load_golden
 from rag_eval.metrics import score_items
 from rag_eval.paired import item_metrics, paired_report
+from rag_eval.paths import REPO_ROOT
 from rag_eval.report import build_report, write_report
 
 NOISE_PATH = Path(__file__).resolve().parents[1] / "config" / "noise.json"
@@ -233,3 +236,26 @@ def test_markdown_renders_the_language_pair_table_only_when_the_mapping_is_non_e
     _, without_pairs = write_report(plain, tmp_path / "without")
     assert "By language pair" not in without_pairs.read_text(encoding="utf-8")
 
+
+
+def test_no_cross_lingual_gold_document_has_a_translated_twin_in_another_language_folder():
+    corpus_dir = REPO_ROOT / "eval/fixtures/corpus"
+    stem_languages: dict[str, set[str]] = {}
+    for doc in load_corpus(corpus_dir):
+        stem_languages.setdefault(doc.relpath.split("/", 1)[1].split(".", 1)[0], set()).add(doc.language)
+    items = [item for item in load_golden(REPO_ROOT / "eval/fixtures/golden.jsonl") if item.category == "cross_lingual"]
+    assert items
+    documents = {doc.filename: doc for doc in load_corpus(corpus_dir)}
+    for item in items:
+        for span in item.gold_evidence:
+            stem = documents[span.document].relpath.split("/", 1)[1].split(".", 1)[0]
+            assert stem_languages[stem] == {item.evidence_language}, (item.id, span.document, stem_languages[stem])
+
+
+def test_the_parallel_document_check_rejects_a_stem_that_exists_in_two_languages():
+    corpus_dir = REPO_ROOT / "eval/fixtures/corpus"
+    stem_languages: dict[str, set[str]] = {}
+    for doc in load_corpus(corpus_dir):
+        stem_languages.setdefault(doc.relpath.split("/", 1)[1].split(".", 1)[0], set()).add(doc.language)
+    assert stem_languages["product-specs"] == {"zh", "en", "it"}
+    assert stem_languages["refund-policy"] == {"zh", "en", "it"}
