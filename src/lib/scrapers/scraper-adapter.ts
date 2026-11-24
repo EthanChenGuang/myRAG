@@ -45,6 +45,13 @@ interface ScrapedPage {
 
 type UnifiedIdentity = { scope: TenantScope; signal: AbortSignal };
 
+// The scrape route allows 60 s and the crawl route 300 s; ingest gets what is left so a slow page ends as
+// processing (resumable) instead of the request being cut off.
+const SCRAPE_BUDGET_MS = 55000;
+const CRAWL_BUDGET_MS = 280000;
+const PAGE_DEADLINE_MS = 50000;
+const MIN_PAGE_BUDGET_MS = 5000;
+
 function requireUnifiedIdentity(options: ScraperIdentity): UnifiedIdentity {
     if (!options.scope || !options.signal) {
         throw new Error('[Scraper Adapter] the unified pipeline needs a tenant scope and a request signal');
@@ -232,13 +239,15 @@ async function scrapeAndIngest(
     { url, outputFormat }: ScrapeOptions,
     { scope, signal }: UnifiedIdentity
 ): Promise<IngestedPage> {
+    const startedAt = Date.now();
     const normalizedUrl = normalizeScrapedUrl(url);
     const output = outputFormat === 'pdf' ? 'pdf' : 'markdown';
 
     console.log(`[Scraper Adapter] Scraping ${normalizedUrl} as ${output}...`);
     const result = await scrapeUrl(normalizedUrl, { output });
 
-    return ingestPage({ ...result, url: normalizedUrl }, output, scope, signal);
+    const deadlineMs = Math.max(MIN_PAGE_BUDGET_MS, SCRAPE_BUDGET_MS - (Date.now() - startedAt));
+    return ingestPage({ ...result, url: normalizedUrl }, output, scope, signal, deadlineMs);
 }
 
 async function crawlAndIngest(
@@ -251,6 +260,7 @@ async function crawlAndIngest(
     documents: IngestedPage[];
     errors: Array<{ url: string; error: string }>;
 }> {
+    const startedAt = Date.now();
     const normalizedUrl = normalizeScrapedUrl(url);
     const output = outputFormat === 'pdf' ? 'pdf' : 'markdown';
 
@@ -262,8 +272,13 @@ async function crawlAndIngest(
 
     for (const page of pages) {
         signal.throwIfAborted();
+        const remaining = CRAWL_BUDGET_MS - (Date.now() - startedAt);
+        if (remaining < MIN_PAGE_BUDGET_MS) {
+            errors.push({ url: page.url, error: 'Crawl time budget spent before this page was ingested' });
+            continue;
+        }
         try {
-            documents.push(await ingestPage(page, output, scope, signal));
+            documents.push(await ingestPage(page, output, scope, signal, Math.min(PAGE_DEADLINE_MS, remaining)));
         } catch (error) {
             console.error(`[Scraper Adapter] Failed to ingest ${page.url}:`, error);
             errors.push({
@@ -288,7 +303,8 @@ async function ingestPage(
     page: ScrapedPage,
     output: 'markdown' | 'pdf',
     scope: TenantScope,
-    signal: AbortSignal
+    signal: AbortSignal,
+    deadlineMs: number
 ): Promise<IngestedPage> {
     const canonicalUrl = normalizeScrapedUrl(page.url);
     const title = page.metadata?.title;
@@ -312,6 +328,7 @@ async function ingestPage(
             origin: { sourceProvider: 'firecrawl', sourceFileId: canonicalUrl, metadata },
         },
         signal,
+        deadlineMs,
     });
 
     if (result.status === 'failed') {
