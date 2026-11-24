@@ -21,6 +21,8 @@ export interface ExpandableChild {
 
 export type Expanded<C> = C & { parent?: ParentExpansion };
 
+export type ParentBudgetCandidate = BudgetCandidate & ExpandableChild & { parent?: ParentExpansion };
+
 export interface ExpandParentsInput<C extends ExpandableChild> {
   survivors: C[];
   scope: TenantScope;
