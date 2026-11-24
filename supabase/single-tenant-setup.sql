@@ -217,21 +217,25 @@ END $$;
 
 -- Allow public access to view backgrounds
 DROP POLICY IF EXISTS "Backgrounds are publicly accessible" ON storage.objects;
+DROP POLICY IF EXISTS "Backgrounds are publicly accessible" ON storage;
 CREATE POLICY "Backgrounds are publicly accessible" ON storage.objects
   FOR SELECT USING (bucket_id = 'backgrounds');
 
 -- Allow authenticated users to upload backgrounds
 DROP POLICY IF EXISTS "Users can upload backgrounds" ON storage.objects;
+DROP POLICY IF EXISTS "Users can upload backgrounds" ON storage;
 CREATE POLICY "Users can upload backgrounds" ON storage.objects
   FOR INSERT WITH CHECK (bucket_id = 'backgrounds' AND auth.role() = 'authenticated');
 
 -- Allow authenticated users to update their own backgrounds
 DROP POLICY IF EXISTS "Users can update own backgrounds" ON storage.objects;
+DROP POLICY IF EXISTS "Users can update own backgrounds" ON storage;
 CREATE POLICY "Users can update own backgrounds" ON storage.objects
   FOR UPDATE USING (bucket_id = 'backgrounds' AND owner = auth.uid());
 
 -- Allow authenticated users to delete their own backgrounds
 DROP POLICY IF EXISTS "Users can delete own backgrounds" ON storage.objects;
+DROP POLICY IF EXISTS "Users can delete own backgrounds" ON storage;
 CREATE POLICY "Users can delete own backgrounds" ON storage.objects
   FOR DELETE USING (bucket_id = 'backgrounds' AND owner = auth.uid());
 
@@ -255,21 +259,25 @@ END $$;
 
 -- Allow public access to 3D models
 DROP POLICY IF EXISTS "3D models are publicly accessible" ON storage.objects;
+DROP POLICY IF EXISTS "3D models are publicly accessible" ON storage;
 CREATE POLICY "3D models are publicly accessible" ON storage.objects
   FOR SELECT USING (bucket_id = '3d-models');
 
 -- Allow authenticated users to upload 3D models
 DROP POLICY IF EXISTS "Users can upload 3D models" ON storage.objects;
+DROP POLICY IF EXISTS "Users can upload 3D models" ON storage;
 CREATE POLICY "Users can upload 3D models" ON storage.objects
   FOR INSERT WITH CHECK (bucket_id = '3d-models' AND auth.role() = 'authenticated');
 
 -- Allow service role to upload 3D models (for AI-generated content)
 DROP POLICY IF EXISTS "Service role can upload 3D models" ON storage.objects;
+DROP POLICY IF EXISTS "Service role can upload 3D models" ON storage;
 CREATE POLICY "Service role can upload 3D models" ON storage.objects
   FOR INSERT WITH CHECK (bucket_id = '3d-models');
 
 -- Allow users to delete their own 3D models
 DROP POLICY IF EXISTS "Users can delete their own 3D models" ON storage.objects;
+DROP POLICY IF EXISTS "Users can delete their own 3D models" ON storage;
 CREATE POLICY "Users can delete their own 3D models" ON storage.objects
   FOR DELETE USING (bucket_id = '3d-models' AND (SELECT auth.uid()) = owner);
 
@@ -1749,6 +1757,7 @@ ALTER TABLE connector_config ENABLE ROW LEVEL SECURITY;
 ALTER TABLE connector_feature_settings ENABLE ROW LEVEL SECURITY;
 
 -- Admin-only policy for connector_config write
+DROP POLICY IF EXISTS connector_config_admin ON connector_config;
 CREATE POLICY connector_config_admin
   ON connector_config
   FOR ALL
@@ -1756,12 +1765,14 @@ CREATE POLICY connector_config_admin
   WITH CHECK (auth.jwt()->>'role' = 'admin');
 
 -- All users can read connector_config
+DROP POLICY IF EXISTS connector_config_read ON connector_config;
 CREATE POLICY connector_config_read
   ON connector_config
   FOR SELECT
   USING (true);
 
 -- Admin-only policy for connector_feature_settings write
+DROP POLICY IF EXISTS connector_feature_settings_admin ON connector_feature_settings;
 CREATE POLICY connector_feature_settings_admin
   ON connector_feature_settings
   FOR ALL
@@ -1769,6 +1780,7 @@ CREATE POLICY connector_feature_settings_admin
   WITH CHECK (auth.jwt()->>'role' = 'admin');
 
 -- All users can read connector_feature_settings
+DROP POLICY IF EXISTS connector_feature_settings_read ON connector_feature_settings;
 CREATE POLICY connector_feature_settings_read
   ON connector_feature_settings
   FOR SELECT

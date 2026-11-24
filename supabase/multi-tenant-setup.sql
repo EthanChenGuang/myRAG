@@ -2270,6 +2270,7 @@ ALTER TABLE connector_config ENABLE ROW LEVEL SECURITY;
 ALTER TABLE connector_feature_settings ENABLE ROW LEVEL SECURITY;
 
 -- Admin-only policy for connector_config write
+DROP POLICY IF EXISTS connector_config_admin ON connector_config;
 CREATE POLICY connector_config_admin
   ON connector_config
   FOR ALL
@@ -2277,12 +2278,14 @@ CREATE POLICY connector_config_admin
   WITH CHECK (auth.jwt()->>'role' = 'admin');
 
 -- All users can read connector_config
+DROP POLICY IF EXISTS connector_config_read ON connector_config;
 CREATE POLICY connector_config_read
   ON connector_config
   FOR SELECT
   USING (true);
 
 -- Admin-only policy for connector_feature_settings write
+DROP POLICY IF EXISTS connector_feature_settings_admin ON connector_feature_settings;
 CREATE POLICY connector_feature_settings_admin
   ON connector_feature_settings
   FOR ALL
@@ -2290,6 +2293,7 @@ CREATE POLICY connector_feature_settings_admin
   WITH CHECK (auth.jwt()->>'role' = 'admin');
 
 -- All users can read connector_feature_settings
+DROP POLICY IF EXISTS connector_feature_settings_read ON connector_feature_settings;
 CREATE POLICY connector_feature_settings_read
   ON connector_feature_settings
   FOR SELECT
