@@ -1,0 +1,16 @@
+{
+  "candidate_pool_size": 75,
+  "config_hash": "ffd5b1d0c5cf0422a5a53f7cab907976d7a402bc5131431db1ad0ad52114021a",
+  "final_top_k": 8,
+  "leg_weights": {
+    "dense": 1.0,
+    "exact_id": 1.0,
+    "lexical": 1.0
+  },
+  "provenance": {
+    "source": "defaults"
+  },
+  "rerank_input_cap": 75,
+  "rrf_k": 60,
+  "schema_version": 1
+}
