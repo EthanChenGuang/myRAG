@@ -6,6 +6,8 @@ import { lookupParseCache, putParseResult } from '../parse-cache';
 import { buildQueuedContext } from '../queued-context';
 import { createLedgerStateStore } from '../state-store';
 import { parseToResult } from '../stages/parse';
+import { handleNativeMode } from './native';
+import { handlePremiumMode } from './premium';
 import { isTerminal, leaseHolds, mapError, refuse, type CallbackResult } from './common';
 
 /** One callback call parses for at most this long; a LlamaParse job that is still running is handed back as pending. */
@@ -50,11 +52,46 @@ export async function handleParseExternal(
     const job = await getJobInternal(jobId, { signal });
     if (!job) return refuse(404, 'job_not_found');
     if (isTerminal(job) || !leaseHolds(job, body.worker_id, deps.now())) return refuse(409, 'lease_lost');
-    if (body.mode !== 'chain') return refuse(400, 'mode_not_supported');
+    if (body.mode === 'chain' || body.mode === 'native') {
+      if (body.subpdf_ref !== null) return refuse(400, 'subpdf_not_allowed');
+    }
+    if (body.mode === 'premium') {
+      if (body.pages === null || body.subpdf_ref === null) return refuse(400, 'premium_fields_required');
+    }
     if (!body.options_hash) return refuse(400, 'options_hash_required');
 
     const scope = await scopeFromIngestionJob(jobId, { db: deps.db, signal });
     if (!scope) return refuse(404, 'job_not_found');
+
+    const store = createLedgerStateStore({ jobId, worker: body.worker_id, signal, now: deps.now });
+
+    if (body.mode === 'premium') {
+      const built = await buildQueuedContext({
+        job,
+        scope,
+        signal,
+        deadlineMs: PARSE_SLICE_MS,
+        withOriginal: false,
+        store,
+      });
+      if (!built.ok) return refuse(built.reason === 'document_not_processing' ? 409 : 404, built.reason);
+      const premium = await handlePremiumMode(job, body, scope, { signal, now: deps.now, state: built.ctx.state });
+      if (premium.status === 200 && 'status' in premium.body && premium.body.status === 'done') {
+        await advanceJob(
+          {
+            jobId,
+            worker: body.worker_id,
+            stage: 'parse',
+            status: 'parsing',
+            stageState: { ...built.ctx.state },
+            timingMs: 0,
+            fields: { parser_used: 'llamaparse', parser_version: 'premium' },
+          },
+          { signal },
+        );
+      }
+      return premium;
+    }
 
     const built = await buildQueuedContext({
       job,
@@ -62,7 +99,7 @@ export async function handleParseExternal(
       signal,
       deadlineMs: PARSE_SLICE_MS,
       withOriginal: true,
-      store: createLedgerStateStore({ jobId, worker: body.worker_id, signal, now: deps.now }),
+      store,
     });
     if (!built.ok) {
       if (built.reason === 'original_unavailable') return failed(body.worker_id, 'original_unavailable');
@@ -70,11 +107,14 @@ export async function handleParseExternal(
     }
     const { ctx } = built;
 
+    if (body.mode === 'native') {
+      return handleNativeMode(jobId, body, ctx, body.options_hash, signal);
+    }
+
     // A continuation is trusted only when it names the parse job this job's own state recorded.
     if (body.continuation !== null && ctx.state.parseJob?.jobId !== body.continuation) ctx.state.parseJob = null;
 
     const version = chainCacheVersion(ctx.config.parser, job.settings.cloud_allowed);
-    // An auto-detected type is refined while parsing; a cached result carries no refinement for a first parse of this job.
     const refinable = ctx.identity?.docTypeOrigin === 'auto' && ctx.state.docTypeDetection?.refined == null;
     if (body.continuation === null && !refinable) {
       const hit = await lookupParseCache(jobId, CHAIN_CACHE_PARSER, version, body.options_hash, signal);

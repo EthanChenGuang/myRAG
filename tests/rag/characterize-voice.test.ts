@@ -75,4 +75,19 @@ describe('voice-rag route characterization', () => {
     expect(actual.some((entry) => Array.isArray(entry.results) && entry.results.length > 0)).toBe(true);
     expectCharacterization('voice', actual);
   });
+
+  it('under RAG_PIPELINE=v2 returns the same wire contract as legacy for every fixture and intent query', async () => {
+    process.env.RAG_PIPELINE = 'v2';
+    const { POST } = await fixture.loadRoute('internal/voice-rag');
+    const queries = [...readGoldenQuestions().map((item) => item.question), ...INTENT_QUERIES];
+    const actual: Array<{ query: string; results: unknown; source_images: unknown }> = [];
+    for (const query of queries) {
+      const response = await POST(voiceRequest(query));
+      expect(response.status, `voice-rag v2 failed for: ${query}`).toBe(200);
+      const body = (await response.json()) as { results?: unknown; source_images?: unknown };
+      actual.push({ query, results: body.results ?? [], source_images: body.source_images ?? [] });
+    }
+    expectCharacterization('voice-v2', actual);
+    delete process.env.RAG_PIPELINE;
+  });
 });

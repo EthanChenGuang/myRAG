@@ -4,7 +4,10 @@ import { getActiveChunkingProfiles } from '../chunking/active';
 import { LEGACY_PROFILE } from '../embeddings/active-profile';
 import type { QueryEmbedding } from '../embeddings/query-embedding';
 import { LEXICAL_VERSION } from '../lexical/chunk-text';
+import type { FusedHit } from '../fusion/rrf';
+import type { ChunkWithScore } from '../rerank/local-hybrid';
 import { assembleDisabledStatus, degradedReason, deriveStatus, failure } from '../pipeline';
+import type { VoiceResults } from '../context/voice';
 import { evalRetrievalOverrides } from './overrides';
 import { loadThresholds } from '../refusal/thresholds';
 import type { RefusalRecord } from '../refusal/types';
@@ -31,6 +34,24 @@ export interface BuildV2ResultInput {
   refusal: RefusalRecord | null;
   queryLanguage?: string | null;
   preRefusalCandidates?: Candidate[];
+  /** Wire payload from assembleVoiceResults in runV2Pipeline when profile is voice. */
+  voice?: VoiceResults | null;
+}
+
+export function fusedHitsToVoiceChunks(hits: FusedHit[], scoreByChunk?: Map<string, number>): ChunkWithScore[] {
+  return hits.map((row) => {
+    const chunkId = row.hit.chunkId;
+    const rerankScore = scoreByChunk?.get(chunkId);
+    const chunk: ChunkWithScore = {
+      chunk_id: chunkId,
+      document_id: row.hit.documentId,
+      content: row.hit.content,
+      similarity: row.hit.similarity ?? 0,
+      metadata: row.hit.metadata ?? undefined,
+      ...(rerankScore !== undefined ? { rerankScore } : {}),
+    };
+    return chunk;
+  });
 }
 
 function survivorCount(assembly: AssembleOutput<Candidate>): number {
@@ -67,12 +88,15 @@ export async function buildV2Result(ctx: BuildV2ResultInput): Promise<RetrievalR
     refusal,
     queryLanguage = null,
     preRefusalCandidates,
+    voice = null,
   } = ctx;
   const records = collector.stages();
   const outputCandidates = resolveCandidates(profile, refusal, candidates, preRefusalCandidates);
-  const survivors = assembly ? survivorCount(assembly) : outputCandidates.length;
+  const voiceCount = voice?.results.length ?? 0;
+  const survivors = profile === 'voice' ? voiceCount : assembly ? survivorCount(assembly) : outputCandidates.length;
+  const assemblyWeight = profile === 'voice' ? (voiceCount > 0 ? 1 : 0) : assembly ? 1 : 0;
 
-  let status = assembleDisabledStatus(records, deriveStatus(records, survivors), assembly ? 1 : 0);
+  let status = assembleDisabledStatus(records, deriveStatus(records, survivors), assemblyWeight);
   let reason =
     status === 'ok'
       ? 'ok'
@@ -116,6 +140,18 @@ export async function buildV2Result(ctx: BuildV2ResultInput): Promise<RetrievalR
   });
 
   const base = failure(collector, status, reason, queryContext);
+
+  if (profile === 'voice') {
+    return {
+      ...base,
+      candidates: outputCandidates,
+      voice: voice ?? { results: [], source_images: [] },
+      retrievalConfigHash,
+      refusal,
+      queryLanguage,
+    };
+  }
+
   if (!assembly) {
     return { ...base, candidates: outputCandidates, retrievalConfigHash, refusal, queryLanguage };
   }

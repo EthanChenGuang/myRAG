@@ -67,10 +67,13 @@
     <script src="mcp-config.js"></script>
     <script src="connectors-config.js"></script>
     <script src="document-processing/document-manager.js"></script>
+    <script src="document-processing/status-monitor.js"></script>
+    <script src="document-processing/process-documents.js"></script>
     <script src="rag-panels/rag-fetch.js"></script>
     <script src="rag-panels/doc-types.js"></script>
     <script src="rag-panels/quarantine.js"></script>
     <script src="rag-panels/embedding-profiles.js"></script>
+    <script src="rag-panels/ingestion.js"></script>
 
     <style>
         /* Tab content visibility */
@@ -6748,132 +6751,8 @@
                                         </div>
 
                                         <h4 class="text-md font-semibold mt-6 mb-2">Ingestion</h4>
-                                        <p class="text-base-content/70 mb-4 text-sm">Phase 3.1 queue, tiered parsing and async ingest switches. Defaults keep Phase 3 behaviour.</p>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label">
-                                                <span class="label-text">Parse routing</span>
-                                            </label>
-                                            <select id="RAG_PARSE_ROUTING" class="select select-bordered w-full">
-                                                <option value="fixed">fixed</option>
-                                                <option value="tiered">tiered</option>
-                                            </select>
-                                            <label class="label">
-                                                <span class="label-text-alt">tiered needs unified pipeline and async ingest.</span>
-                                            </label>
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label">
-                                                <span class="label-text">Allow cloud parsers</span>
-                                            </label>
-                                            <select id="RAG_PARSER_ALLOW_CLOUD" class="select select-bordered w-full">
-                                                <option value="true">true</option>
-                                                <option value="false">false</option>
-                                            </select>
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label">
-                                                <span class="label-text">Premium page budget (month)</span>
-                                            </label>
-                                            <input type="number" min="0" step="1" placeholder="0" id="RAG_PARSE_PREMIUM_PAGE_BUDGET"
-                                                class="input input-bordered w-full">
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label">
-                                                <span class="label-text">Premium pages per document cap</span>
-                                            </label>
-                                            <input type="number" min="1" step="1" placeholder="200" id="RAG_PARSE_PREMIUM_MAX_PAGES_PER_DOC"
-                                                class="input input-bordered w-full">
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label">
-                                                <span class="label-text">Parse escalation</span>
-                                            </label>
-                                            <select id="RAG_PARSE_ESCALATION" class="select select-bordered w-full">
-                                                <option value="on">on</option>
-                                                <option value="off">off</option>
-                                            </select>
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label">
-                                                <span class="label-text">VLM page detection</span>
-                                            </label>
-                                            <select id="RAG_PARSE_VLM_DETECT" class="select select-bordered w-full">
-                                                <option value="false">false</option>
-                                                <option value="true">true</option>
-                                            </select>
-                                            <label class="label">
-                                                <span class="label-text-alt">Active only under tiered routing.</span>
-                                            </label>
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label">
-                                                <span class="label-text">VLM model override</span>
-                                            </label>
-                                            <input type="text" placeholder="" id="RAG_PARSE_VLM_MODEL"
-                                                class="input input-bordered w-full">
-                                            <label class="label">
-                                                <span class="label-text-alt">empty = image captioning model</span>
-                                            </label>
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label">
-                                                <span class="label-text">Async ingest queue</span>
-                                            </label>
-                                            <select id="RAG_INGEST_ASYNC" class="select select-bordered w-full">
-                                                <option value="off">off</option>
-                                                <option value="on">on</option>
-                                            </select>
-                                            <label class="label">
-                                                <span class="label-text-alt">on needs unified pipeline.</span>
-                                            </label>
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label">
-                                                <span class="label-text">Worker concurrency</span>
-                                            </label>
-                                            <input type="number" min="1" step="1" placeholder="2" id="RAG_INGEST_WORKER_CONCURRENCY"
-                                                class="input input-bordered w-full">
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label">
-                                                <span class="label-text">Progressive publish</span>
-                                            </label>
-                                            <select id="RAG_PARSE_PROGRESSIVE" class="select select-bordered w-full">
-                                                <option value="false">false</option>
-                                                <option value="true">true</option>
-                                            </select>
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label">
-                                                <span class="label-text">Embed batch mode</span>
-                                            </label>
-                                            <select id="RAG_EMBED_BATCH_MODE" class="select select-bordered w-full">
-                                                <option value="sync">sync</option>
-                                                <option value="batch_api">batch_api</option>
-                                            </select>
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label">
-                                                <span class="label-text">Ingest realtime UI</span>
-                                            </label>
-                                            <select id="NEXT_PUBLIC_RAG_INGEST_REALTIME" class="select select-bordered w-full">
-                                                <option value="false">false</option>
-                                                <option value="true">true</option>
-                                            </select>
-                                        </div>
-
+                                        <p class="text-sm mb-2" data-ingestion-i18n="settings.movedPointer">Queue and tiered parsing settings are under RAG administration, Ingestion.</p>
+                                        <button type="button" class="btn btn-link btn-sm" id="open-ingestion-settings-link" data-ingestion-i18n="settings.movedOpen">Open Ingestion settings</button>
                                         <div class="form-control mb-4">
                                             <label class="label">
                                                 <span class="label-text">Voyage API key</span>
@@ -8564,7 +8443,7 @@
                                             </div>
 
                                             <!-- Results List -->
-                                            <div id="results-list" class="space-y-3 hidden">
+                                            <div id="results-list" class="space-y-3 hidden" aria-live="polite">
                                                 <!-- Results will be dynamically added here -->
                                             </div>
                                         </div>
@@ -8638,7 +8517,7 @@
                         <div class="card bg-base-100 shadow-lg">
                             <div class="card-body p-4 lg:p-6">
                                 <h2 class="card-title text-xl lg:text-2xl text-myrag-primary mb-2">🛡️ RAG Administration</h2>
-                                <p class="text-base-content/70 mb-6">Manage document-type defaults, quarantined uploads, and embedding profiles using your existing admin session.</p>
+                                <p class="text-base-content/70 mb-6">Manage document-type defaults, ingestion jobs, quarantined uploads, and embedding profiles using your existing admin session.</p>
 
                                 <div class="grid gap-6">
                                     <section id="rag-administration-doc-types" class="card bg-base-200 shadow-md">
@@ -8651,6 +8530,193 @@
                                                 <button type="button" class="btn btn-primary btn-sm" data-rag-doc-types-save>Save defaults</button>
                                                 <button type="button" class="btn btn-outline btn-sm" data-rag-doc-types-refresh>Refresh</button>
                                             </div>
+                                        </div>
+                                    </section>
+
+                                    <section id="rag-administration-ingestion" class="card bg-base-200 shadow-md">
+                                        <div class="card-body">
+                                            <h3 class="text-lg font-semibold mb-2" data-ingestion-title>Ingestion</h3>
+                                            <p class="text-sm text-base-content/70 mb-4 max-w-prose" data-ingestion-description></p>
+                                            <div data-ingestion-auth class="mb-4"></div>
+                                            <div data-ingestion-budget class="mb-6"></div>
+                                            <div class="tabs tabs-bordered mb-4" role="tablist" aria-label="Ingestion views">
+                                                <button type="button" class="tab tab-active" role="tab" data-ingestion-tab="jobs" aria-selected="true">Jobs</button>
+                                                <button type="button" class="tab" role="tab" data-ingestion-tab="tiers" aria-selected="false">Tier bounds</button>
+                                                <button type="button" class="tab" role="tab" data-ingestion-tab="settings" aria-selected="false">Settings</button>
+                                            </div>
+                                            <div data-ingestion-panel="jobs">
+                                                <fieldset class="mb-4">
+                                                    <legend class="text-xs font-semibold mb-2">Status</legend>
+                                                    <div class="flex flex-wrap gap-2">
+                                                        <input type="radio" class="btn btn-sm" name="ingestion-status" value="all" checked aria-label="All">
+                                                        <input type="radio" class="btn btn-sm" name="ingestion-status" value="failed" aria-label="Failed">
+                                                        <input type="radio" class="btn btn-sm" name="ingestion-status" value="needs_review" aria-label="Needs review">
+                                                        <input type="radio" class="btn btn-sm" name="ingestion-status" value="active" aria-label="In progress">
+                                                        <input type="radio" class="btn btn-sm" name="ingestion-status" value="ready" aria-label="Ready">
+                                                        <input type="radio" class="btn btn-sm" name="ingestion-status" value="other" aria-label="Quarantined or skipped">
+                                                    </div>
+                                                </fieldset>
+                                                <div class="flex gap-2 mb-4">
+                                                    <select data-ingestion-kind class="select select-bordered select-sm">
+                                                        <option value="all">All kinds</option>
+                                                        <option value="ingest">Ingest</option>
+                                                        <option value="dry_run">Dry run</option>
+                                                        <option value="delete">Removal</option>
+                                                    </select>
+                                                    <button type="button" class="btn btn-outline btn-sm ml-auto" data-ingestion-refresh-jobs>Refresh jobs</button>
+                                                </div>
+                                                <div class="overflow-x-auto">
+                                                    <table class="table table-sm">
+                                                        <thead>
+                                                            <tr>
+                                                                <th scope="col">File</th>
+                                                                <th scope="col">Status</th>
+                                                                <th scope="col">Actions</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody data-ingestion-jobs-tbody></tbody>
+                                                    </table>
+                                                </div>
+                                                <div data-ingestion-jobs-status class="text-sm mt-4" role="status" aria-live="polite"></div>
+                                            </div>
+                                            <div data-ingestion-panel="tiers" hidden>
+                                                <p class="text-sm text-base-content/70" data-ingestion-i18n="tiers.note"></p>
+                                                <div data-ingestion-tiers-table></div>
+                                            </div>
+                                            <div data-ingestion-panel="settings" hidden>
+                                                <div data-ingestion-settings-host></div>
+                                            </div>
+                                            <!-- rag-ingestion-settings:start -->
+                                            <div id="rag-ingestion-settings" class="hidden">
+                                        <h4 class="text-md font-semibold mt-6 mb-2">Ingestion</h4>
+                                        <p class="text-base-content/70 mb-4 text-sm">Phase 3.1 queue, tiered parsing and async ingest switches. Defaults keep Phase 3 behaviour.</p>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">Parse routing</span>
+                                            </label>
+                                            <select id="RAG_PARSE_ROUTING" class="select select-bordered w-full">
+                                                <option value="fixed">fixed</option>
+                                                <option value="tiered">tiered</option>
+                                            </select>
+                                            <label class="label">
+                                                <span class="label-text-alt">tiered needs unified pipeline and async ingest.</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">Allow cloud parsers</span>
+                                            </label>
+                                            <select id="RAG_PARSER_ALLOW_CLOUD" class="select select-bordered w-full">
+                                                <option value="true">true</option>
+                                                <option value="false">false</option>
+                                            </select>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">Premium page budget (month)</span>
+                                            </label>
+                                            <input type="number" min="0" step="1" placeholder="0" id="RAG_PARSE_PREMIUM_PAGE_BUDGET"
+                                                class="input input-bordered w-full">
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">Premium pages per document cap</span>
+                                            </label>
+                                            <input type="number" min="1" step="1" placeholder="200" id="RAG_PARSE_PREMIUM_MAX_PAGES_PER_DOC"
+                                                class="input input-bordered w-full">
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">Parse escalation</span>
+                                            </label>
+                                            <select id="RAG_PARSE_ESCALATION" class="select select-bordered w-full">
+                                                <option value="on">on</option>
+                                                <option value="off">off</option>
+                                            </select>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">VLM page detection</span>
+                                            </label>
+                                            <select id="RAG_PARSE_VLM_DETECT" class="select select-bordered w-full">
+                                                <option value="false">false</option>
+                                                <option value="true">true</option>
+                                            </select>
+                                            <label class="label">
+                                                <span class="label-text-alt">Active only under tiered routing.</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">VLM model override</span>
+                                            </label>
+                                            <input type="text" placeholder="" id="RAG_PARSE_VLM_MODEL"
+                                                class="input input-bordered w-full">
+                                            <label class="label">
+                                                <span class="label-text-alt">empty = image captioning model</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">Async ingest queue</span>
+                                            </label>
+                                            <select id="RAG_INGEST_ASYNC" class="select select-bordered w-full">
+                                                <option value="off">off</option>
+                                                <option value="on">on</option>
+                                            </select>
+                                            <label class="label">
+                                                <span class="label-text-alt">on needs unified pipeline.</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">Worker concurrency</span>
+                                            </label>
+                                            <input type="number" min="1" step="1" placeholder="2" id="RAG_INGEST_WORKER_CONCURRENCY"
+                                                class="input input-bordered w-full">
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">Progressive publish</span>
+                                            </label>
+                                            <select id="RAG_PARSE_PROGRESSIVE" class="select select-bordered w-full">
+                                                <option value="false">false</option>
+                                                <option value="true">true</option>
+                                            </select>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">Embed batch mode</span>
+                                            </label>
+                                            <select id="RAG_EMBED_BATCH_MODE" class="select select-bordered w-full">
+                                                <option value="sync">sync</option>
+                                                <option value="batch_api">batch_api</option>
+                                            </select>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label">
+                                                <span class="label-text">Ingest realtime UI</span>
+                                            </label>
+                                            <select id="NEXT_PUBLIC_RAG_INGEST_REALTIME" class="select select-bordered w-full">
+                                                <option value="false">false</option>
+                                                <option value="true">true</option>
+                                            </select>
+                                        </div>
+
+                                            </div>
+                                            <!-- rag-ingestion-settings:end -->
                                         </div>
                                     </section>
 
@@ -13411,6 +13477,47 @@
                         body: formData
                     });
 
+                    const captureOrgId = this.workspaces.isMultiTenant ? this.workspaces.currentSelection : null;
+
+                    if (response.status === 202) {
+                        let payload = {};
+                        try {
+                            payload = await response.json();
+                        } catch (_) {
+                            payload = {};
+                        }
+                        const jobId = payload && payload.jobId;
+                        if (jobId) {
+                            const lang = (navigator.language || 'en').slice(0, 2);
+                            const locale = lang === 'zh' || lang === 'it' ? lang : 'en';
+                            const queuedLabel = typeof ingestLabel === 'function'
+                                ? ingestLabel('status.queued', locale)
+                                : 'Queued';
+                            const resultEntry = {
+                                ...fileItem,
+                                status: 'ingest_queued',
+                                displayStatus: queuedLabel,
+                                jobId,
+                                organizationId: captureOrgId,
+                                timestamp: new Date().toLocaleString(),
+                                stage: payload.status || 'queued',
+                            };
+                            this.results.push(resultEntry);
+                            this.updateResultsDisplay();
+                            const logQueued = typeof ingestLabel === 'function'
+                                ? ingestLabel('monitor.log.queued', locale, { file: fileItem.name })
+                                : `${fileItem.name} queued`;
+                            this.logActivity(this.escapeHtml(logQueued));
+                            fileItem.status = 'completed';
+                            fileItem.progress = 100;
+                            this.beginQueuedUploadMonitor(resultEntry, locale);
+                            this.updateQueueDisplay();
+                            this.updateCurrentProcessing();
+                            this.updateStatus();
+                            return true;
+                        }
+                    }
+
                     if (response.ok) {
                         const result = await response.json();
                         fileItem.status = 'completed';
@@ -13598,6 +13705,100 @@
                 }
             }
 
+            monitorUiLocale() {
+                const lang = (navigator.language || 'en').slice(0, 2);
+                return lang === 'zh' || lang === 'it' ? lang : 'en';
+            }
+
+            beginQueuedUploadMonitor(resultEntry, locale) {
+                if (typeof pollQueuedUpload !== 'function' || typeof ingestJobStatusView !== 'function') return;
+                const self = this;
+                const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+                resultEntry.pollController = controller;
+                pollQueuedUpload({
+                    jobId: resultEntry.jobId,
+                    organizationId: resultEntry.organizationId,
+                    signal: controller ? controller.signal : undefined,
+                    onUpdate(update) {
+                        if (update.kind === 'job' && update.job) {
+                            const view = ingestJobStatusView(update.job, locale);
+                            resultEntry.displayStatus = view.label;
+                            resultEntry.stage = update.job.stage || resultEntry.stage;
+                            resultEntry.ingestTerminal = view.terminal;
+                            resultEntry.ingestView = view;
+                            resultEntry.monitorStatus = update.job.status;
+                            self.updateIngestResultRow(resultEntry);
+                            if (view.terminal) {
+                                self.finalizeIngestResult(resultEntry, update.job, locale, view);
+                            }
+                        } else if (update.kind === 'retrying') {
+                            resultEntry.retryLine = typeof ingestLabel === 'function'
+                                ? ingestLabel('monitor.retrying', locale)
+                                : 'Retrying…';
+                            self.updateIngestResultRow(resultEntry);
+                        } else if (update.kind === 'stopped' || update.kind === 'not_found' || update.kind === 'auth') {
+                            const key = update.messageKey || 'monitor.stopped';
+                            resultEntry.displayStatus = typeof ingestLabel === 'function' ? ingestLabel(key, locale) : key;
+                            self.updateIngestResultRow(resultEntry);
+                        }
+                    },
+                });
+            }
+
+            finalizeIngestResult(resultEntry, job, locale, view) {
+                const status = job.status;
+                if (status === 'ready') {
+                    this.stats.processedToday++;
+                } else if (status === 'failed') {
+                    this.updateSuccessRate();
+                } else if (status === 'failed') {
+                    /* counted as processed, not failure for needs_review/quarantined/skipped */
+                }
+                if (status === 'ready' || status === 'failed' || status === 'needs_review') {
+                    const logKey = status === 'ready'
+                        ? 'monitor.log.ready'
+                        : status === 'failed'
+                          ? 'monitor.log.failed'
+                          : 'monitor.log.needsReview';
+                    const reason = job.error_class || job.needs_review_reason || '';
+                    const logLine = typeof ingestLabel === 'function'
+                        ? ingestLabel(logKey, locale, { file: resultEntry.name, reason })
+                        : `${resultEntry.name}: ${status}`;
+                    this.logActivity(this.escapeHtml(logLine));
+                }
+                const announce = typeof ingestLabel === 'function'
+                    ? ingestLabel('monitor.announce', locale, { file: resultEntry.name, status: view.label })
+                    : view.label;
+                const resultsList = document.getElementById('results-list');
+                if (resultsList) {
+                    let live = resultsList.querySelector('[data-ingest-live]');
+                    if (!live) {
+                        live = document.createElement('span');
+                        live.className = 'sr-only';
+                        live.setAttribute('data-ingest-live', '1');
+                        resultsList.appendChild(live);
+                    }
+                    live.textContent = announce;
+                }
+                this.updateStatus();
+                this.updateSuccessRate();
+                if (status === 'ready' && window.documentManager) {
+                    window.documentManager.refresh();
+                }
+            }
+
+            updateIngestResultRow(resultEntry) {
+                const el = document.querySelector(`[data-ingest-result="${resultEntry.jobId}"]`);
+                if (!el) {
+                    this.updateResultsDisplay();
+                    return;
+                }
+                const statusEl = el.querySelector('[data-ingest-status]');
+                const stageEl = el.querySelector('[data-ingest-stage]');
+                if (statusEl) statusEl.textContent = resultEntry.displayStatus || '';
+                if (stageEl && resultEntry.stage) stageEl.textContent = String(resultEntry.stage);
+            }
+
             updateResultsDisplay() {
                 const emptyState = document.getElementById('results-empty-state');
                 const resultsList = document.getElementById('results-list');
@@ -13614,6 +13815,9 @@
             }
 
             createResultHTML(result) {
+                if (result.jobId) {
+                    return this.createIngestResultHTML(result);
+                }
                 const safeName = this.escapeHtml(result.name);
                 const safeTimestamp = this.escapeHtml(result.timestamp);
                 const safeError = result.error ? this.escapeHtml(result.error) : '';
@@ -13633,6 +13837,34 @@
                             <div class="text-right">
                                 <div class="${statusColor} font-medium capitalize">${result.status}</div>
                                 ${safeError ? `<div class="text-xs text-error">${safeError}</div>` : ''}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            createIngestResultHTML(result) {
+                const safeName = this.escapeHtml(result.name);
+                const safeTimestamp = this.escapeHtml(result.timestamp);
+                const view = result.ingestView || {};
+                const statusText = this.escapeHtml(result.displayStatus || 'Queued');
+                const stage = result.stage ? `<div class="text-xs font-mono text-base-content/70" data-ingest-stage>${this.escapeHtml(String(result.stage))}</div>` : '';
+                const retryLine = result.retryLine ? `<div class="text-xs text-base-content/60">${this.escapeHtml(result.retryLine)}</div>` : '';
+                const retryBtn = view.showRetry && typeof ingestLabel === 'function'
+                    ? `<button type="button" class="btn btn-xs btn-outline" data-ingest-retry="${this.escapeHtml(result.jobId)}">${this.escapeHtml(ingestLabel('action.retry', this.monitorUiLocale()))}</button>`
+                    : '';
+                return `
+                    <div class="bg-base-100 p-4 rounded-lg" data-ingest-result="${this.escapeHtml(result.jobId)}">
+                        <div class="flex justify-between items-center gap-3">
+                            <div>
+                                <div class="font-medium">${safeName}</div>
+                                <div class="text-sm text-base-content/60">${safeTimestamp}</div>
+                            </div>
+                            <div class="text-right">
+                                <div class="${view.colorClass || 'text-info'} font-medium" data-ingest-status>${statusText}</div>
+                                ${stage}
+                                ${retryLine}
+                                ${retryBtn}
                             </div>
                         </div>
                     </div>
