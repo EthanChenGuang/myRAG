@@ -130,8 +130,8 @@ Requirements and threat references per plan are in `04-PLAN-INDEX.md`. Kind: tra
 | 04-18-03 | 3 | tdd | `node --import tsx --test tests/rag-db/selective-filter.test.mts` (report-mode case; moved from 04-40) | ⬜ pending |
 | 04-44-01 | 3 | tdd | `npx vitest run tests/rag/v2/params-hash.test.ts` | ✅ 15 trunk |
 | 04-44-02 | 3 | tdd | `npx vitest run tests/rag/v2/params-hash.test.ts` | ✅ (same) |
-| 04-45-01 | 3 | tdd | `npx vitest run tests/rag/rerank/text.test.ts` | ⬜ pending |
-| 04-45-02 | 3 | tdd | `npx vitest run tests/rag/rerank/select.test.ts` | ⬜ pending |
+| 04-45-01 | 3 | tdd | `npx vitest run tests/rag/rerank/text.test.ts` | ✅ trunk |
+| 04-45-02 | 3 | tdd | `npx vitest run tests/rag/rerank/select.test.ts` | ✅ 13 total |
 | 04-19-01 | 4 | tracer | `node --import tsx --test tests/rag-db/v2-tracer.test.mts && node --import tsx --test tests/rag-legacy-differential.test.mts` | ⬜ pending |
 | 04-19-02 | 4 | tdd | `npx vitest run tests/rag/v2/search-stages.test.ts tests/rag/status.test.ts` | ⬜ pending |
 | 04-20-01 | 5 | tdd | `npx vitest run tests/rag/v2/refusal-routing.test.ts tests/rag/v2/search-stages.test.ts` | ⬜ pending |
