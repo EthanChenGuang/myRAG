@@ -90,10 +90,13 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | 03.1-14 | [bc-6ed38246](bc-6ed38246-5368-58ee-9409-cafed132af21) **merged** | exec/03.1-14 — vitest 34, pytest 50 |
 | 03.1-13 | [bc-e72d1c49](bc-e72d1c49-cec3-59a1-ad07-7c158b89a381) **merged** | exec/03.1-13 |
 | 03.1-15 | [bc-7064801d](bc-7064801d-6459-56da-b3bf-9ee5be726931) **merged** | exec/03.1-15 — pytest 31 |
-| 03.1-16 | [bc-572eafe6](bc-572eafe6-375e-5fac-b690-23e40f4403cd) RUNNING | exec/03.1-16 — L1 pdfplumber |
+| 03.1-16 | [bc-572eafe6](bc-572eafe6-375e-5fac-b690-23e40f4403cd) **merged** | exec/03.1-16 — pytest 17 |
 | 03.1-17 | [bc-d27c0a4b](bc-d27c0a4b-accb-54b2-a27a-29c7aa443e15) RUNNING | exec/03.1-17 — ingest clients |
 | 04-16 | [bc-d3b679cb](bc-d3b679cb-baac-50ce-8ff9-c0829a4fb24f) **merged** | exec/04-16 |
 | 03.1-18 | [bc-34cb4e3b](bc-34cb4e3b-b843-5ba6-94da-c58cb5093dc2) RUNNING | exec/03.1-18 |
+| 04-17 | [bc-c1e4ed28](bc-c1e4ed28-8308-557d-a69c-46ed9166e777) RUNNING | exec/04-17 |
+| 04-15 | [bc-2f4f0524](bc-2f4f0524-6984-5e57-a50a-249d0a960a27) **merged** | exec/04-15 |
+| 04-18 | [bc-78743196](bc-78743196-9471-5cda-8414-1d4c80c9d85f) RUNNING | exec/04-18 |
 
 ## Remaining plan inventory (file-overlap basis)
 
@@ -114,7 +117,7 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | 03.1-18 | [bc-34cb4e3b](bc-34cb4e3b-b843-5ba6-94da-c58cb5093dc2) RUNNING | `wt/03.1-18` | ingest ledger TS |
 | 03.1-17 | [bc-d27c0a4b](bc-d27c0a4b-accb-54b2-a27a-29c7aa443e15) RUNNING | `wt/03.1-17` | ingest HTTP clients |
 | 04-17 | [bc-c1e4ed28](bc-c1e4ed28-8308-557d-a69c-46ed9166e777) RUNNING | `wt/04-17` | pgvector backend + conformance |
-| 03.1-16 | [bc-572eafe6](bc-572eafe6-375e-5fac-b690-23e40f4403cd) RUNNING | `wt/03.1-16` | L1 preflight |
+| 04-18 | [bc-78743196](bc-78743196-9471-5cda-8414-1d4c80c9d85f) RUNNING | `wt/04-18` | selective-filter harness |
 
 **03-48 follow-ups (one executor per plan when a slot frees — do not duplicate running work):**
 
