@@ -7,6 +7,7 @@ import { LEXICAL_VERSION } from '../lexical/chunk-text';
 import { assembleDisabledStatus, degradedReason, deriveStatus, failure } from '../pipeline';
 import { evalRetrievalOverrides } from './overrides';
 import { loadThresholds } from '../refusal/thresholds';
+import type { RefusalRecord } from '../refusal/types';
 import { RERANK_TEXT_VERSION } from '../rerank/types';
 import type { TraceCollector } from '../trace/collector';
 import type { Candidate, Profile, RetrievalResult, RunRetrievalInput } from '../types';
@@ -26,25 +27,64 @@ export interface BuildV2ResultInput {
   candidates: Candidate[];
   collector: TraceCollector;
   queryContext: TemporalQueryContext | null;
+  refusal: RefusalRecord | null;
+  queryLanguage?: string | null;
+  preRefusalCandidates?: Candidate[];
 }
 
 function survivorCount(assembly: AssembleOutput<Candidate>): number {
   return assembly.usedDocuments.length + assembly.relevantChunks.length;
 }
 
+function refusedReason(record: RefusalRecord): string {
+  if (record.reason === 'below_threshold' || record.reason === 'below_similarity_floor') return record.reason;
+  return 'below_similarity_floor';
+}
+
+function resolveCandidates(
+  profile: Profile,
+  refusal: RefusalRecord | null,
+  candidates: Candidate[],
+  preRefusalCandidates: Candidate[] | undefined,
+): Candidate[] {
+  if (refusal?.decision === 'refuse' && profile === 'eval' && preRefusalCandidates) return preRefusalCandidates;
+  if (refusal?.decision === 'refuse') return [];
+  return candidates;
+}
+
 export async function buildV2Result(ctx: BuildV2ResultInput): Promise<RetrievalResult> {
-  const { input, config, profile, params, embedding, assembly, candidates, collector, queryContext } = ctx;
+  const {
+    input,
+    config,
+    profile,
+    params,
+    embedding,
+    assembly,
+    candidates,
+    collector,
+    queryContext,
+    refusal,
+    queryLanguage = null,
+    preRefusalCandidates,
+  } = ctx;
   const records = collector.stages();
-  const survivors = assembly ? survivorCount(assembly) : candidates.length;
-  const status = assembleDisabledStatus(records, deriveStatus(records, survivors), assembly ? 1 : 0);
-  const reason =
+  const outputCandidates = resolveCandidates(profile, refusal, candidates, preRefusalCandidates);
+  const survivors = assembly ? survivorCount(assembly) : outputCandidates.length;
+
+  let status = assembleDisabledStatus(records, deriveStatus(records, survivors), assembly ? 1 : 0);
+  let reason =
     status === 'ok'
       ? 'ok'
       : status === 'empty'
-        ? candidates.length === 0
+        ? outputCandidates.length === 0
           ? 'no_candidates'
           : 'no_relevant_context'
         : degradedReason(records);
+
+  if (refusal?.decision === 'refuse') {
+    status = 'empty';
+    reason = refusedReason(refusal);
+  }
 
   const { configHash: thresholdsConfigHash } = loadThresholds();
   const chunking = await getActiveChunkingProfiles();
@@ -76,12 +116,12 @@ export async function buildV2Result(ctx: BuildV2ResultInput): Promise<RetrievalR
 
   const base = failure(collector, status, reason, queryContext);
   if (!assembly) {
-    return { ...base, candidates, retrievalConfigHash, refusal: null };
+    return { ...base, candidates: outputCandidates, retrievalConfigHash, refusal, queryLanguage };
   }
 
   return {
     ...base,
-    candidates,
+    candidates: outputCandidates,
     context: assembly.context,
     usedDocuments: assembly.usedDocuments,
     sourceImages: assembly.sourceImages,
@@ -91,6 +131,7 @@ export async function buildV2Result(ctx: BuildV2ResultInput): Promise<RetrievalR
     queryTerms: assembly.queryTerms,
     refusalCandidate: assembly.refusalCandidate,
     retrievalConfigHash,
-    refusal: null,
+    refusal,
+    queryLanguage,
   };
 }

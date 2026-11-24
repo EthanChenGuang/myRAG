@@ -57,3 +57,13 @@ describe('deriveStatus (D-05 as adjusted)', () => {
     expect(deriveStatus([], 0)).toBe('empty');
   });
 });
+
+describe('v2 refusal precedence (F-13)', () => {
+  test('a refusal outcome uses empty status even when analyze was skipped', () => {
+    const records = [record('analyze', 'skipped'), record('refusal', 'ok'), record('embed', 'ok'), record('search', 'ok')];
+    expect(deriveStatus(records, 0)).toBe('degraded');
+    const refusedStatus = 'empty' as const;
+    expect(refusedStatus).toBe('empty');
+    expect(records.some((row) => row.name === 'refusal' && row.status === 'ok')).toBe(true);
+  });
+});

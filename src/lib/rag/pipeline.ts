@@ -354,7 +354,7 @@ async function runMediaPipeline(input: RunRetrievalInput, collector: TraceCollec
   return { ...failure(collector, status, reason, null), candidates, context };
 }
 
-async function runRefsStage(
+export async function runRefsStage(
   input: RunRetrievalInput,
   scope: NonNullable<RunRetrievalInput['scope']>,
   stage: StageSpec,
