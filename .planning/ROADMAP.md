@@ -272,32 +272,34 @@ Plans:
   3. The fixture `injection` category (zh/en/it) has an attack-success rate of 0, gated in CI, and no other category drops beyond the noise band; with all SEC switches off, results match the baseline.
   4. A design document describes reading critical facts (prices, stock) from the database through tools/MCP instead of document text.
 **Live verification**: Run Prompt Guard in the sidecar image and Lakera Guard with a real key against the injection set and real documents; measure added latency against the OBS-02 budgets.
-**Plans**: 23 plans in 6 waves (05.1-01..05.1-23) — validation contract in `phases/05.1-prompt-injection-defense/05.1-VALIDATION.md`
+**Plans**: 25 plans in 7 waves (05.1-01..05.1-25); closing plan 05.1-22 — plan index `phases/05.1-prompt-injection-defense/05.1-PLAN-INDEX.md`, validation contract `05.1-VALIDATION.md`
 
 Plans:
-- [ ] 05.1-01-PLAN.md — Indirect zh/en/it rules in the shared Phase 3 rule file, injection-rules.ts re-export with a content-derived version, clean-corpus zero-false-positive test (wave 1)
+- [ ] 05.1-01-PLAN.md — Six named indirect zh/en/it rules in the shared Phase 3 rule file (zh >= 7, en >= 8, it >= 6, >= 22), injection-rules.ts re-export with a content-derived version, clean-corpus zero-false-positive test (wave 1)
 - [ ] 05.1-02-PLAN.md — wrapDocuments, tag and attribute escaping with look-alikes and tag characters, fixed notice and reminder, Claude replacement builder, 20,000-case property test (wave 1)
-- [ ] 05.1-03-PLAN.md — Pydantic contracts with generated Zod: classify request/response, detector config file, golden attack field and injection categories, trace, run and report additions (wave 1)
+- [ ] 05.1-03-PLAN.md — Pydantic classify request/response and detector-config contracts with generated Zod, and the committed detector config file (wave 1)
 - [ ] 05.1-04-PLAN.md — Nine switches and keys in the five config places and the manifest, Prompt-injection defense card, call-time security config reader (wave 1)
 - [ ] 05.1-05-PLAN.md — SEC-05 design document for critical facts via tools; WhatsApp link-preview follow-up in the backlog (wave 1)
 - [ ] 05.1-06-PLAN.md — TRACER: tagged, rule-checked context for one web-chat request on the legacy graph; flag, drop and downweight; status precedence and strict refusal (wave 2)
 - [ ] 05.1-07-PLAN.md — Sidecar POST /v1/injection/classify with windowing and a fake scorer; app-side Prompt Guard client (wave 2)
-- [ ] 05.1-08-PLAN.md — Lakera adapter on recorded shapes, detector config loader, tenant-keyed verdict cache, lakera-http boundary rule (wave 2)
-- [ ] 05.1-09-PLAN.md — Synthetic zh/en/it injection and evasive fixture documents, prechunked in ingest mode, both baselines re-recorded with zero change (wave 2)
-- [ ] 05.1-10-PLAN.md — exposure_rate, attack_success_rate, detector false-positive rates and the absolute-zero gate kind (wave 2)
+- [ ] 05.1-08-PLAN.md — Lakera adapter on recorded shapes with the full lakeraAllowed gate, detector config loader, tenant-keyed verdict cache, lakera-http boundary rule (wave 2)
+- [ ] 05.1-09-PLAN.md — Synthetic zh/en/it injection and evasive fixture documents, prechunked in ingest mode, both baselines re-recorded with zero change (wave 3)
+- [ ] 05.1-10-PLAN.md — exposure_rate, attack_success_rate, detector false-positive rates and the absolute-zero gate kind (wave 3)
 - [ ] 05.1-11-PLAN.md — Markdown image allowlist renderer behind its own switch (wave 2)
 - [ ] 05.1-12-PLAN.md — Detector configuration summary in the Prompt-injection defense card (wave 2)
-- [ ] 05.1-13-PLAN.md — Overview, voice and media graphs; overview and voice context wrapping; released rule ids with a two-tenant test; trace counts and log redaction (wave 3)
-- [ ] 05.1-14-PLAN.md — v2: check after expand_parents, downweight ordering, wrapping after compression, retrievalConfigHash and eval effective config (wave 3)
-- [ ] 05.1-15-PLAN.md — Tool-result guard for webSearch, MCP and the approve-route summariser; YOLO suspension on flagged turns; injectionFlagged (wave 3)
+- [ ] 05.1-13-PLAN.md — Overview, voice and media graphs; overview and voice context wrapping; scoped released rule ids with a two-tenant test; trace counts and log redaction (wave 3)
+- [ ] 05.1-14-PLAN.md — v2: check after expand_parents with the scoped released-rule read and a v2 two-tenant test, downweight ordering, wrapping after compression, retrievalConfigHash with Lakera's effective state, eval effective config (wave 4)
+- [ ] 05.1-15-PLAN.md — Tool-result guard for webSearch, MCP and the approve-route summariser; YOLO suspension on all three consumer paths; injectionFlagged (wave 3)
 - [ ] 05.1-16-PLAN.md — Notice on the Claude Citations path; citation-instruction sentinel; raw quotes and premises (wave 3)
-- [ ] 05.1-17-PLAN.md — Injection and evasive golden items (4 and 2 per language) and the prechunked re-baseline (wave 3)
-- [ ] 05.1-18-PLAN.md — Prompt Guard license, gated access and build-token checkpoint; promptguard extra, real scorer and image target (wave 3, autonomous: false)
-- [ ] 05.1-19-PLAN.md — Eval route injection record, SEC run configs, CI absolute-zero step, nightly matrix, injection_check budgets (wave 4)
+- [ ] 05.1-17-PLAN.md — Injection and evasive golden items (4 and 2 per language) and the prechunked re-baseline (wave 4)
+- [ ] 05.1-18-PLAN.md — Prompt Guard license, gated access, build-token and pin approval; promptguard extra in pyproject; orchestrator-only lock and sync (wave 3, autonomous: false)
+- [ ] 05.1-19-PLAN.md — Eval route injection record, SEC run configs, all-off zero proof, CI absolute-zero step, nightly matrix, injection_check budgets (wave 5)
 - [ ] 05.1-20-PLAN.md — Voice-rag context field and voice agent preference; chat, embed and eval entry points, sentinel and source_images (wave 4)
-- [ ] 05.1-21-PLAN.md — Prompt Guard and Lakera inside injection_check: language gate, warm cache, inner deadline, fault injection, two-tenant cache test (wave 4)
-- [ ] 05.1-22-PLAN.md — Phase comparison (all-off equals baseline; recommended passes absolute-zero and category noise), AGENTS.md, full gates (wave 5)
-- [ ] 05.1-23-PLAN.md — Live verification: Lakera account, key, region and retention; Lakera live; Prompt Guard image; latency and live attack success (wave 6, autonomous: false)
+- [ ] 05.1-21-PLAN.md — Prompt Guard and Lakera inside injection_check: Lakera zero-request gate table and route-level multi-tenant case, language gate, warm cache, inner deadline, fault injection, two-tenant cache test (wave 5)
+- [ ] 05.1-22-PLAN.md — CLOSING PLAN: phase comparison (all-off equals baseline; recommended passes absolute-zero and category noise), AGENTS.md, full gates (wave 6)
+- [ ] 05.1-23-PLAN.md — Live verification: Lakera account, key, region and retention; Lakera live through the stage on synthetic chunks; Prompt Guard image; latency and live attack success (wave 7, autonomous: false)
+- [ ] 05.1-24-PLAN.md — Golden attack field and injection categories, eval run, trace and report contract changes with regenerated Zod (wave 2)
+- [ ] 05.1-25-PLAN.md — Prompt Guard scorer, bake step and promptguard image target on the orchestrator-locked environment (wave 4)
 
 ### Phase 6: Query Layer (LlamaIndex & LangChain)
 **Goal**: Follow-up, vague and compound questions retrieve as well as standalone ones under either query framework, within their latency budgets, and voice stays fast
@@ -427,6 +429,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 5.1 → 6 → 7. 
 | 3.1. Tiered Parsing, Incremental Queue & Bulk Backfill (INSERTED) | 0/55 | Planned (plan-check PASS) | - |
 | 4. Hybrid Retrieval, Reranking & Calibrated Refusal | 0/45 | Planned | - |
 | 5. Verified Citations & Groundedness | 0/26 | Planned (plan-check PASS after W1 fix) | - |
-| 5.1. Prompt Injection Defense (INSERTED) | 0/23 | Planned | - |
+| 5.1. Prompt Injection Defense (INSERTED) | 0/25 | Planned (revision pass 1) | - |
 | 6. Query Layer (LlamaIndex & LangChain) | 0/46 | Planned (plan-check pending) | - |
 | 7. External Backends & Release Defaults | 0/34 | Planned (34 plans, 13 waves; revised after plan-check pass 1) | - |
