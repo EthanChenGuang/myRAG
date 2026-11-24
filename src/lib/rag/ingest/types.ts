@@ -65,6 +65,8 @@ export interface IngestResult {
 
 export interface IngestState {
   lastCompleted: StageName | null;
+  chunkCount: number | null;
+  docTypeOrigin: DocTypeOrigin | null;
   parseJob: { parser: string; jobId: string; submittedAt: string; attempt: number } | null;
   artifacts: Record<string, string>;
   docTypeDetection: { signals: string[]; refined: DocType | null; reparsed: boolean } | null;
@@ -78,6 +80,8 @@ export interface IngestState {
 export function emptyIngestState(): IngestState {
   return {
     lastCompleted: null,
+    chunkCount: null,
+    docTypeOrigin: null,
     parseJob: null,
     artifacts: {},
     docTypeDetection: null,
@@ -99,6 +103,9 @@ export interface ChunkDraft {
   page_start: number | null;
   page_end: number | null;
   metadata: Record<string, unknown>;
+  /** Set by the enrich stage. */
+  content_hash?: string;
+  lexical_text?: string;
 }
 
 export interface IngestIdentity {
@@ -141,8 +148,15 @@ export interface StageContext {
   work: IngestWork;
 }
 
+/** What a stage that continues tells the trace: it ran switched off, took a fallback, or reached a named outcome. */
+export interface StageNote {
+  disabled?: boolean;
+  fallbackReason?: string;
+  outcome?: string;
+}
+
 export type StageOutcome =
-  | { kind: 'next' }
+  | ({ kind: 'next' } & StageNote)
   | { kind: 'done'; result: IngestResult }
   | { kind: 'fail'; reason: string }
   | { kind: 'yield'; reason: string };

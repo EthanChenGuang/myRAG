@@ -22,6 +22,8 @@ function toWrites(ctx: StageContext): ChunkWrite[] {
     embedding_text_version: EMBEDDING_TEXT_VERSION,
     page_start: draft.page_start,
     page_end: draft.page_end,
+    content_hash: draft.content_hash ?? null,
+    lexical_text: draft.lexical_text ?? null,
     metadata: draft.metadata,
   }));
 }
@@ -81,5 +83,8 @@ async function runWrite(ctx: StageContext): Promise<StageOutcome> {
   return { kind: 'next' };
 }
 
-export const embedStage: StageSpec = { name: 'embed', minMsNeeded: 0, run: runEmbed };
+/** Room for one embedding batch and its write; with less time left the run yields and resumes. */
+const EMBED_MIN_MS = 5000;
+
+export const embedStage: StageSpec = { name: 'embed', minMsNeeded: EMBED_MIN_MS, run: runEmbed };
 export const writeStage: StageSpec = { name: 'write', minMsNeeded: 0, run: runWrite };

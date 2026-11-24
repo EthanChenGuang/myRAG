@@ -1,10 +1,15 @@
 import { IngestWriterError, createIngestWriter } from './writer';
-import { contentHashDedupStage, fileHashDedupStage } from './stages/dedup';
 import { chunkStage } from './stages/chunk';
+import { contentHashDedupStage, fileHashDedupStage } from './stages/dedup';
 import { embedStage, writeStage } from './stages/embed-write';
+import { enrichStage } from './stages/enrich';
+import { extractStage } from './stages/extract';
 import { identifyStage } from './stages/identify';
+import { imagesStage } from './stages/images';
 import { parseStage } from './stages/parse';
 import { publishStage } from './stages/publish';
+import { scanInjectionStage } from './stages/scan-injection';
+import { storeOriginalStage } from './stages/store-original';
 import {
   IngestStageError,
   type IngestResult,
@@ -32,13 +37,18 @@ export const INGEST_STAGES = [
 
 const _everyStageListed: [Exclude<StageName, (typeof INGEST_STAGES)[number]>] extends [never] ? true : never = true;
 
-/** Registered stage modules in D-02 order. Plan 03-13b registers store_original, scan_injection, enrich, extract and images. */
-const REGISTERED_STAGES: readonly StageSpec[] = [
+/** The stage modules in D-02 order. */
+export const REGISTERED_STAGES: readonly StageSpec[] = [
   identifyStage,
   fileHashDedupStage,
+  storeOriginalStage,
   parseStage,
   contentHashDedupStage,
+  scanInjectionStage,
   chunkStage,
+  enrichStage,
+  extractStage,
+  imagesStage,
   embedStage,
   writeStage,
   publishStage,
@@ -106,32 +116,78 @@ async function failRun(ctx: StageContext, stage: StageName, reason: string, erro
   };
 }
 
+function processingResult(ctx: StageContext, reason: string): IngestResult {
+  return {
+    status: 'processing',
+    documentId: ctx.document?.id ?? null,
+    version: ctx.document?.version ?? null,
+    parserUsed: ctx.parserUsed,
+    chunkCount: ctx.work.chunksWritten,
+    warnings: ctx.warnings.slice(),
+    reason,
+  };
+}
+
+function syncState(ctx: StageContext): void {
+  if (ctx.identity) ctx.state.docTypeOrigin = ctx.identity.docTypeOrigin;
+  if (ctx.work.chunksWritten > 0) ctx.state.chunkCount = ctx.work.chunksWritten;
+}
+
+/** Writes the resumable record of the run to the document row. Nothing is written before the row exists. */
+async function persistState(ctx: StageContext, processingStatus: string): Promise<void> {
+  if (!ctx.document) return;
+  syncState(ctx);
+  await ctx.writer.saveState(ctx.document.id, processingStatus, { ...ctx.state });
+}
+
+/** Stops the run before a stage and keeps the document resumable. Without a document row nothing can resume. */
+async function yieldRun(ctx: StageContext, stage: StageName, reason: string): Promise<IngestResult> {
+  if (!ctx.document) return failRun(ctx, stage, reason === 'deadline' ? 'deadline_exceeded' : reason);
+  await persistState(ctx, 'processing');
+  return processingResult(ctx, reason);
+}
+
+/** The terminal stage's state is recorded on a best-effort basis: the version is already published by then. */
+async function recordFinalState(ctx: StageContext, stage: StageName, result: IngestResult): Promise<void> {
+  if (result.status !== 'ready' && result.status !== 'quarantined') return;
+  ctx.state.lastCompleted = stage;
+  try {
+    await persistState(ctx, result.status);
+  } catch (error) {
+    console.error('[Ingest] could not record the final state', { stage, error: error instanceof Error ? error.name : 'unknown' });
+  }
+}
+
+/** The first stage that has not completed: the one after lastCompleted, or the first when nothing completed. */
+export function nextStageAfter(last: StageName | null): StageName | null {
+  return INGEST_STAGES[last === null ? 0 : INGEST_STAGES.indexOf(last) + 1] ?? null;
+}
+
 /**
- * Runs the registered stages in D-02 order. A stage that fails or throws marks the version failed with its
- * reason; the run ends at the first stage that returns a result. Plan 03-13b adds the deadline, state
- * persistence and resume.
+ * Runs the stages in D-02 order, starting after ctx.state.lastCompleted so a resumed run does not repeat
+ * finished work. Before each stage the request deadline is checked: a stage that does not fit ends the
+ * run as processing with the document resumable. Once the document row exists, every finished stage
+ * persists processing_status and the state. A stage that fails, throws or meets an abort marks the
+ * version failed; the run ends at the first stage that returns a result.
  */
 export async function runIngestStages(ctx: StageContext, stages: readonly StageSpec[] = REGISTERED_STAGES): Promise<IngestResult> {
   void _everyStageListed;
   assertOrder(stages);
+  const resumeAfter = ctx.state.lastCompleted === null ? -1 : INGEST_STAGES.indexOf(ctx.state.lastCompleted);
   for (const stage of stages) {
+    if (INGEST_STAGES.indexOf(stage.name) <= resumeAfter) continue;
     try {
       ctx.signal.throwIfAborted();
+      if (ctx.deadline - ctx.deps.now() < stage.minMsNeeded) return await yieldRun(ctx, stage.name, 'deadline');
       const outcome = await stage.run(ctx);
-      if (outcome.kind === 'done') return outcome.result;
-      if (outcome.kind === 'fail') return await failRun(ctx, stage.name, outcome.reason);
-      if (outcome.kind === 'yield') {
-        return {
-          status: 'processing',
-          documentId: ctx.document?.id ?? null,
-          version: ctx.document?.version ?? null,
-          parserUsed: ctx.parserUsed,
-          chunkCount: 0,
-          warnings: ctx.warnings.slice(),
-          reason: outcome.reason,
-        };
+      if (outcome.kind === 'done') {
+        await recordFinalState(ctx, stage.name, outcome.result);
+        return outcome.result;
       }
+      if (outcome.kind === 'fail') return await failRun(ctx, stage.name, outcome.reason);
+      if (outcome.kind === 'yield') return await yieldRun(ctx, stage.name, outcome.reason);
       ctx.state.lastCompleted = stage.name;
+      await persistState(ctx, 'processing');
     } catch (error) {
       return failRun(ctx, stage.name, failureReason(stage.name, error, ctx.signal), error);
     }
