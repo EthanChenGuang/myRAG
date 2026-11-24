@@ -238,7 +238,16 @@ class IngestWorker:
     async def _execute(self, job: IngestionJob) -> JobOutcome:
         if self.process_fn is not None:
             return await self.process_fn(job)
-        deps = WorkerDeps(ledger=self.ledger, app=self.app, worker_id=self._worker_id, sleep=self.sleep)
+        deps = WorkerDeps(
+            ledger=self.ledger,
+            app=self.app,
+            worker_id=self._worker_id,
+            sleep=self.sleep,
+            storage=self.storage,
+            pool=self.pool,
+            converter_factory=getattr(self.settings, "build_range_converter", None),
+            page_cap=getattr(self.settings, "page_cap", None),
+        )
         return await process_job(job, deps)
 
     async def _finish_outcome(self, job: IngestionJob, outcome: JobOutcome) -> None:

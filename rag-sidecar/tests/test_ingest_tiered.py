@@ -799,3 +799,74 @@ def test_a_dry_run_of_a_text_file_records_a_native_attempt_without_calling_the_a
     assert env.app.calls == []
     assert [(a.tier, a.reason) for a in env.job.attempts] == [("native", "native")]
     assert env.job.status == "ready" and env.job.doc_class == "native"
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Wiring: the worker loop and the one-shot runner hand the tiered dependencies to process_job
+# ---------------------------------------------------------------------------------------------------------------------
+
+
+class _WorkerSettings:
+    ingest_worker_concurrency = 1
+    worker_id = "sidecar-test"
+    page_cap = 123
+
+    def build_range_converter(self):
+        return "converter"
+
+
+def test_the_ingest_worker_hands_its_storage_pool_and_converter_factory_to_process_job(monkeypatch):
+    import random
+
+    from rag_sidecar.ingest import worker as worker_module
+
+    seen: list[WorkerDeps] = []
+
+    async def fake_process_job(job, deps):
+        seen.append(deps)
+        return JobOutcome(status="ready")
+
+    monkeypatch.setattr(worker_module, "process_job", fake_process_job)
+    storage, pool = object(), object()
+    ingest_worker = worker_module.IngestWorker(
+        _WorkerSettings(), FakeLedger(), storage, FakeApp(), pool, worker_module.RealClock(), random.Random(1)
+    )
+
+    asyncio.run(ingest_worker._execute(_job(sha="c" * 64)))
+
+    (deps,) = seen
+    assert deps.storage is storage and deps.pool is pool
+    assert deps.page_cap == 123
+    assert deps.converter_factory is not None and deps.converter_factory() == "converter"
+
+
+def test_run_once_hands_its_storage_and_converter_factory_to_process_job(monkeypatch):
+    from rag_sidecar.ingest import run_once as run_once_module
+
+    seen: list[WorkerDeps] = []
+
+    async def fake_process_job(job, deps):
+        seen.append(deps)
+        return JobOutcome(status="ready")
+
+    monkeypatch.setattr(run_once_module, "process_job", fake_process_job)
+    ledger = FakeLedger()
+    ledger.seed(_job(sha="c" * 64).model_copy(update={"status": "queued", "locked_by": None, "lease_until": None}))
+    storage = object()
+
+    code = asyncio.run(
+        run_once_module.run_once(
+            _JOB_ID,
+            ledger=ledger,
+            app=FakeApp(),
+            worker_id=_WORKER,
+            storage=storage,
+            converter_factory=lambda: "converter",
+            page_cap=77,
+            heartbeat_seconds=3600,
+        )
+    )
+
+    assert code == 0
+    (deps,) = seen
+    assert deps.storage is storage and deps.page_cap == 77 and deps.converter_factory() == "converter"
