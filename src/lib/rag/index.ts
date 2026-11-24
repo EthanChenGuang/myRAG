@@ -110,3 +110,15 @@ export { findInvoices } from './retrieval/invoices';
 export type { FindInvoicesDeps, InvoiceFilters, InvoiceHit } from './retrieval/invoices';
 export { getIngestStatusReport, STALE_PROCESSING_MS } from './ingest/status';
 export type { IngestStatusReport } from './ingest/status';
+export { listQuarantine } from './ingest/quarantine-admin';
+export { releaseQuarantined } from './ingest/quarantine-admin';
+export { deleteQuarantined } from './ingest/quarantine-admin';
+export type {
+  DeleteQuarantinedResult,
+  ListQuarantineInput,
+  ListQuarantineResult,
+  QuarantineActionInput,
+  QuarantineFailure,
+  QuarantineItem,
+  ReleaseQuarantinedResult,
+} from './ingest/quarantine-admin';
