@@ -258,6 +258,17 @@ def check_pr(errors: list[str]) -> None:
             for step in all_steps(voice)
         ):
             errors.append("pr-smoke: job voice-agent must run npm test in the voice-agent working directory")
+    py_job = jobs.get("python")
+    if py_job is not None:
+        body = step_text(py_job)
+        for needle in (
+            "uv sync --directory rag-sidecar --locked --extra chunking",
+            "uv run --directory rag-sidecar --extra chunking pytest -q",
+        ):
+            if needle not in body:
+                errors.append(f"pr-smoke: job python is missing '{needle}'")
+        if "--extra docling" in body:
+            errors.append("pr-smoke: job python must not install the heavy docling extra")
     sp = jobs.get("schema-parity")
     if sp is not None:
         body = step_text(sp)
