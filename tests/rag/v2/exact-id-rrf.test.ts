@@ -102,7 +102,14 @@ describe('runSearchStages exact_id RRF leg (D-24)', () => {
 
   it('adds an exact-only hit as a third RRF list with score weight/(k+1)', async () => {
     const cfg = config();
-    const params = effectiveRetrievalParams('eval', cfg, { leg_weights: { dense: 1, lexical: 1, exact_id: 2 } });
+    const params = effectiveRetrievalParams('eval', cfg, {
+      candidate_pool_size: null,
+      final_top_k: null,
+      rrf_k: null,
+      rerank_input_cap: null,
+      rerank_model: null,
+      leg_weights: { dense: 1, lexical: 1, exact_id: 2 },
+    });
     const { backend } = routedBackend(denseLexical(['a', 'b'], ['b', 'c']), [exactRow('x')]);
     setRetrievalBackendForTests(backend);
     await verifyV2Startup();
