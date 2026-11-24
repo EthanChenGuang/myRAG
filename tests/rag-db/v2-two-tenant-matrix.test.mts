@@ -9,6 +9,7 @@ import { embedText } from '../../eval/harness/fixture-embedder.mts';
 import { TWO_TENANT_IDS } from '../../eval/harness/two-tenant.mts';
 import {
   V2_CANARY_QUERY,
+  V2_CONTRACT_QUESTION,
   V2_EXACT_CODE,
   V2_EXACT_QUERY,
   V2_LEGACY_EMBEDDING_PROFILE,
@@ -399,7 +400,7 @@ describe('every v2 retrieval path stays inside the caller tenant, for every entr
 
   test('a doc type only another tenant has returns no rows, and the owner still finds it', async () => {
     const { typeOnly } = fixture.seed;
-    const question = `${V2_CANARY_QUERY} supply contract`;
+    const question = V2_CONTRACT_QUESTION;
     const asA = await retrieve(await scopeFor('chat', 'a'), 'chat', question, { retrievalFilters: { docTypes: [typeOnly.docType] } });
     assert.equal(chunkIdsOf(asA.result).length, 0);
     assertNoForeignText('a', { result: asA.result }, 'foreign doc type filter');

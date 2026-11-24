@@ -12,6 +12,7 @@ export const V2_LEGACY_EMBEDDING_PROFILE = 'openai-3-small-1536';
 
 export const V2_CANARY_QUERY = 'two tenant isolation canary phrase';
 export const V2_EXACT_QUERY = `${V2_CANARY_QUERY} ${V2_EXACT_CODE}`;
+export const V2_CONTRACT_QUESTION = 'What are the supply contract renewal terms and termination notice?';
 export const V2_TRANSLATED_QUESTION = 'Which isolation canary sentence does the Italian handbook hold?';
 export const V2_TRANSLATED_TEXT = 'frase canarino isolamento manuale italiano';
 
@@ -185,7 +186,7 @@ async function seedTypeOnlyDocument(db: PGlite, tenant: TwoTenantV2Tenant): Prom
     docType: 'contract_legal',
     marker: 'v2contractbravo',
   };
-  const content = `Two tenant isolation canary phrase: supply contract ${typeOnly.marker}`;
+  const content = `Supply contract renewal terms: ${typeOnly.marker} termination notice sixty days`;
   await insertDocument(db, tenant, typeOnly.documentId, 'v2-contract-b.md', content, null, typeOnly.docType);
   await insertLegacyChunk(db, tenant, typeOnly.documentId, typeOnly.chunkId, content, { name: 'v2-contract-b.md' }, 'text');
   return typeOnly;
