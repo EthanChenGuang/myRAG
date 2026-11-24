@@ -39,6 +39,48 @@ export class RetrievalBackendError extends Error {
   }
 }
 
+export type EmbeddingProfileMismatchKind =
+  | 'dims'
+  | 'model'
+  | 'vector'
+  | 'provider'
+  | 'startup'
+  | 'not_active'
+  | 'unknown_profile';
+
+export interface EmbeddingProfileMismatchDetail {
+  profile?: string | null;
+  model?: string | null;
+  dims?: number | null;
+  actual?: number | string | null;
+  /** The startup check already wrote its own MISMATCH line for this cause. */
+  alreadyLogged?: boolean;
+}
+
+/**
+ * The query vector and the profile it must be searched in disagree (length, model, provider) or the database refused the
+ * profile. Carries codes and numbers only, never keys or text.
+ */
+export class EmbeddingProfileMismatchError extends Error {
+  readonly kind: EmbeddingProfileMismatchKind;
+  readonly profile: string | null;
+  readonly model: string | null;
+  readonly dims: number | null;
+  readonly actual: number | string | null;
+  readonly alreadyLogged: boolean;
+
+  constructor(kind: EmbeddingProfileMismatchKind, detail: EmbeddingProfileMismatchDetail = {}) {
+    super(`embedding_profile_mismatch: ${kind}`);
+    this.name = 'EmbeddingProfileMismatchError';
+    this.kind = kind;
+    this.profile = detail.profile ?? null;
+    this.model = detail.model ?? null;
+    this.dims = detail.dims ?? null;
+    this.actual = detail.actual ?? null;
+    this.alreadyLogged = detail.alreadyLogged ?? false;
+  }
+}
+
 interface WorkspaceRow {
   id: string;
   document_id: string;
