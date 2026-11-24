@@ -27,6 +27,12 @@ export type {
 export { resolveTenantScope } from './tenant/resolve-chat';
 export type { ResolveTenantScopeInput, TenantResolveFailure, TenantResolveResult } from './tenant/resolve-chat';
 export { isOrganizationMember } from './tenant/membership';
+export { resolveAdminWorkspaceScope, nangoOwnerScope } from './tenant/ingest-scope';
+export type {
+  IngestScopeResult,
+  NangoOwnerScopeInput,
+  ResolveAdminWorkspaceScopeInput,
+} from './tenant/ingest-scope';
 export { resolveEmbedScope, parseTenantKey } from './tenant/embed';
 export type { EmbedScopeFailure, EmbedScopeResult, ResolveEmbedScopeInput, TenantKey } from './tenant/embed';
 export { mintVoiceToken, verifyVoiceToken, defaultVoiceTtlSeconds, VOICE_TOKEN_AUDIENCE } from './tenant/voice-token';

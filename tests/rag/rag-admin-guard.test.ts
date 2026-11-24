@@ -185,6 +185,33 @@ describe('requireRagAdmin', () => {
     expect(calls).toHaveLength(2);
   });
 
+  test('the admin_users query receives the very AbortSignal the caller passed', async () => {
+    const { admin, calls } = fakeAdmin({ admins: [ADMIN], tokens: { 'tok-a': ADMIN } });
+    const cookieSignal = signal();
+    await requireRagAdmin({ headers: headers(), getCookieUser: async () => ({ id: ADMIN }), admin, signal: cookieSignal });
+    const bearerSignal = signal();
+    await requireRagAdmin({ headers: headers('Bearer tok-a'), admin, signal: bearerSignal });
+    expect(calls).toHaveLength(2);
+    expect(calls[0].signal).toBe(cookieSignal);
+    expect(calls[1].signal).toBe(bearerSignal);
+  });
+
+  test('an already aborted caller signal is refused with 503 and makes no admin_users query', async () => {
+    const { admin, calls } = fakeAdmin({ admins: [ADMIN], tokens: { 'tok-a': ADMIN } });
+    const controller = new AbortController();
+    controller.abort();
+    const cookie = await requireRagAdmin({
+      headers: headers(),
+      getCookieUser: async () => ({ id: ADMIN }),
+      admin,
+      signal: controller.signal,
+    });
+    const bearer = await requireRagAdmin({ headers: headers('Bearer tok-a'), admin, signal: controller.signal });
+    expect(cookie).toEqual({ ok: false, status: 503, reason: 'admin_check_unavailable' });
+    expect(bearer).toEqual({ ok: false, status: 503, reason: 'admin_check_unavailable' });
+    expect(calls).toHaveLength(0);
+  });
+
   test('the refusal log carries only the reason', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const { admin } = fakeAdmin({ admins: [ADMIN] });
