@@ -28,9 +28,9 @@ See: .planning/PROJECT.md (updated 2026-11-22)
 ## Current Position
 
 Phase: 03 (Unified Ingestion & Embedding Profiles) — EXECUTING
-Plan: 17 of 49 merged (03-01..03-15, 03-13b, 03-21); running 03-16..03-20, 03-22, 03-25
-Status: Phase 2 complete (human_needed live checks). Plans: 3.1 (55, PASS), 4 (45, PASS), 5 (26, PASS), 6 (46, revising after check FAIL 4 blockers), 7 (33, plan-check running), 5.1 (planning in progress).
-Last activity: 2026-11-24 — 03-13, 03-14, 03-15, 03-13b, 03-21 merged; gates green (tsc 0, vitest 1602, node 143, rag-db 157+3 skip, sidecar 509 / 551 with chunking, eval 333)
+Plan: 25 of 49 merged (03-01..03-22, 03-13b, 03-25); running 03-23, 03-24, 03-26..03-30
+Status: Phase 2 complete (human_needed live checks). Plans: 3.1 (55, PASS), 4 (45, PASS), 5 (26, PASS), 6 (46, PASS pass 2), 7 (34, re-check running), 5.1 (23, plan-check running).
+Last activity: 2026-11-24 — wave 5 (03-16..03-20, 03-22) and 03-25 merged with integration fixes; gates green (tsc 0, vitest 1823, node 145, rag-db 226+3 skip, sidecar 554, eval 364)
 
 Progress: [█████████░] 94%
 
@@ -191,7 +191,7 @@ Items acknowledged and deferred at milestone close, most recent first:
 ## Session Continuity
 
 Last session: 2026-11-24
-Stopped at: Phase 3 wave 5 executing (03-16..20, 03-22, 03-25); next 03-23, 03-24, 03-26
+Stopped at: Phase 3 waves 5-6 executing (03-23, 03-24, 03-26..03-30); 5.1 plan-check and Phase 7 re-check running
 Resume file: .planning/phases/03-unified-ingestion-embedding-profiles/.continue-here.md
 
 ## Pending Human Actions (session 2026-11-23b)
