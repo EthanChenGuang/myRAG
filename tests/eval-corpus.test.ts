@@ -133,7 +133,11 @@ describe('multi-tenant retrieval', () => {
     const tracerLine = fs
       .readFileSync(GOLDEN_PATH, 'utf8')
       .split('\n')
-      .find((line) => line.includes(`"id": "${TRACER_ITEM_ID}"`));
+      .find((line) => {
+        const trimmed = line.trim();
+        if (!trimmed) return false;
+        return (JSON.parse(trimmed) as { id: string }).id === TRACER_ITEM_ID;
+      });
     expect(tracerLine).toBeDefined();
     const dir = makeTmpDir();
     const tracerGolden = path.join(dir, 'tracer.jsonl');

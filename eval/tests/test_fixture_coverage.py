@@ -193,7 +193,7 @@ def _selective_filter_items(items):
 
 def test_selective_filter_filters_admit_rows_within_fixture_ceiling(items):
     documents = load_corpus(CORPUS_DIR)
-    documents_by_relpath = {doc.relpath.rsplit("/", 1)[-1]: doc for doc in documents}
+    documents_by_filename = {doc.filename: doc for doc in documents}
     total = sum(len(doc.chunks) for doc in documents)
     selective = _selective_filter_items(items)
     assert len(selective) == 12
@@ -205,7 +205,7 @@ def test_selective_filter_filters_admit_rows_within_fixture_ceiling(items):
         assert matched >= 1
         assert matched / total <= FIXTURE_MAX_SELECTIVE_ROW_SHARE, item.id
         for span in item.gold_evidence:
-            doc = documents_by_relpath[span.document]
+            doc = documents_by_filename[span.document]
             assert any(chunk_matches_span(span.document, chunk.text, span) for chunk in doc.chunks), (item.id, span.quote)
 
 
