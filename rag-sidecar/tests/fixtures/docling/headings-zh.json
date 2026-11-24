@@ -1,0 +1,201 @@
+{
+  "body": {
+    "children": [
+      {
+        "$ref": "#/texts/0"
+      },
+      {
+        "$ref": "#/texts/1"
+      },
+      {
+        "$ref": "#/texts/2"
+      },
+      {
+        "$ref": "#/texts/3"
+      },
+      {
+        "$ref": "#/texts/4"
+      }
+    ],
+    "content_layer": "body",
+    "label": "unspecified",
+    "name": "_root_",
+    "self_ref": "#/body"
+  },
+  "form_items": [],
+  "furniture": {
+    "children": [],
+    "content_layer": "furniture",
+    "label": "unspecified",
+    "name": "_root_",
+    "self_ref": "#/furniture"
+  },
+  "groups": [],
+  "key_value_items": [],
+  "name": "headings-zh",
+  "origin": {
+    "binary_hash": 1002,
+    "filename": "headings-zh.pdf",
+    "mimetype": "application/pdf"
+  },
+  "pages": {
+    "1": {
+      "page_no": 1,
+      "size": {
+        "height": 800.0,
+        "width": 600.0
+      }
+    },
+    "2": {
+      "page_no": 2,
+      "size": {
+        "height": 800.0,
+        "width": 600.0
+      }
+    }
+  },
+  "pictures": [],
+  "schema_name": "DoclingDocument",
+  "tables": [],
+  "texts": [
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "section_header",
+      "level": 1,
+      "orig": "示例股份有限公司 2025 年度报告",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 140.0,
+            "coord_origin": "TOPLEFT",
+            "l": 50.0,
+            "r": 550.0,
+            "t": 80.0
+          },
+          "charspan": [
+            0,
+            0
+          ],
+          "page_no": 1
+        }
+      ],
+      "self_ref": "#/texts/0",
+      "text": "示例股份有限公司 2025 年度报告"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "section_header",
+      "level": 2,
+      "orig": "第三章 资产负债表",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 160.0,
+            "coord_origin": "TOPLEFT",
+            "l": 50.0,
+            "r": 550.0,
+            "t": 120.0
+          },
+          "charspan": [
+            0,
+            0
+          ],
+          "page_no": 1
+        }
+      ],
+      "self_ref": "#/texts/1",
+      "text": "第三章 资产负债表"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "本章列示示例公司在报告期末的资产和负债情况，数据均为虚构的演示内容。",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 240.0,
+            "coord_origin": "TOPLEFT",
+            "l": 50.0,
+            "r": 550.0,
+            "t": 180.0
+          },
+          "charspan": [
+            0,
+            0
+          ],
+          "page_no": 1
+        }
+      ],
+      "self_ref": "#/texts/2",
+      "text": "本章列示示例公司在报告期末的资产和负债情况，数据均为虚构的演示内容。"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "section_header",
+      "level": 3,
+      "orig": "第5条 流动资产",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 140.0,
+            "coord_origin": "TOPLEFT",
+            "l": 50.0,
+            "r": 550.0,
+            "t": 80.0
+          },
+          "charspan": [
+            0,
+            0
+          ],
+          "page_no": 2
+        }
+      ],
+      "self_ref": "#/texts/3",
+      "text": "第5条 流动资产"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "流动资产包括货币资金、应收账款和存货，具体金额以附注为准。",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 180.0,
+            "coord_origin": "TOPLEFT",
+            "l": 50.0,
+            "r": 550.0,
+            "t": 120.0
+          },
+          "charspan": [
+            0,
+            0
+          ],
+          "page_no": 2
+        }
+      ],
+      "self_ref": "#/texts/4",
+      "text": "流动资产包括货币资金、应收账款和存货，具体金额以附注为准。"
+    }
+  ],
+  "version": "1.11.0"
+}
