@@ -69,3 +69,10 @@ After all: code review gate -> regression gate -> verifier -> update roadmap.
 - Unified image uploads: identical bytes from one tenant dedup (legacy made two documents); accepted.
 - Live (03-48): real image upload on a deployed project — caption quality, after() finishing inside 60 s.
 - DATA-11 stays open until 03-38 (PDF images).
+
+## Phase 3 wave 7 follow-ups (03-37)
+- Admin quarantine scope = administered tenants (own `u:` + orgs where owner/admin; `s:default` single-tenant), narrower than the plan's deployment-wide list. Accepted (safer). One place: `rag_admin_tenant_keys`.
+- 03-47 must fold BOTH 0316 stems (`0316_quarantine_access.<mode>.sql`, `0316_quarantine_admin.sql`) into setup files; until then a setup-file re-run reopens SELECT policies.
+- Service-role SQL functions without D-08 filter and no app caller: `get_documents_by_type_slug`, `get_documents_by_type_slug_workspace`, `get_workspace_context` (multi-tenant). Review pass: filter or drop, with tests.
+- `DELETE /api/documents/{id}` still leaves stored objects in `rag-originals` (only admin delete removes them). Review pass fix.
+- 03-43 panel: show `detected_by`; handle delete 200 `{artifacts_failed}`.
