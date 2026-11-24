@@ -82,3 +82,4 @@ After all: code review gate -> regression gate -> verifier -> update roadmap.
 - Unified docs ingested before 0319 keep content = '' until re-ingested (no backfill).
 - Full parse text goes in one rag_set_document_fields call; watch PostgREST request size for multi-MB documents (live check).
 - Correct-refusal on the fixture no-answer slice is 0.333 in both modes (6 of 9 answered wrongly); Phase 5 abstention work should target it.
+- (03-40) CLI/route completeness does not count the legacy `embedding` column (no SQL function exposes it); the activation gate still counts it in the flip transaction. A profile flip refreshes only the local process cache (others within 30 s TTL). Live: real project activation + rollback.
