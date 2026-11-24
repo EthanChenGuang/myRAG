@@ -80,6 +80,11 @@ npm run test-rag -- --out /tmp/rag-pre && npm run test-rag -- --fixture-mode ing
 | 03-39 Task 3 (admin doc-type route) | Orchestrator worktree after Sonnet quota failures |
 | 03-42 | Composer `gsd-executor` (`inherit`) after two Sonnet Task failures |
 
+## Executor dedupe (Guang)
+
+- **Ledger:** `.planning/paused/exec-ledger.md` — one executor per plan; check before every `Task` spawn.
+- **03-44 DUPLICATE EXECUTION:** [bc-cdb95a3d](bc-cdb95a3d-1ebc-5b58-a6a1-46d7c48b8221), [bc-9cd7df41](bc-9cd7df41-c92d-5032-a8a1-d1547071d01f), [bc-645e437f](bc-645e437f-c0b8-5e86-a96d-f80cec58aab7) — canonical merge via bc-645e437f only.
+
 ## Open for Guang
 
 - **03-48** live checkpoint (manual)
