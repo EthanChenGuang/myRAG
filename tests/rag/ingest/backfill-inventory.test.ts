@@ -929,7 +929,7 @@ const SCOPE_B = mintScope('personal', USER_B, null);
 /** The batch rows of the fake SQL: each belongs to one tenant. */
 const batchRows = {
   rag_update_ingestion_batch: (args: Record<string, unknown>): RpcResponse => ({
-    data: { id: args.p_batch_id, tenant_key: args.p_batch_id === BATCH_B ? TENANT_B : TENANT_A },
+    data: { id: args.p_batch_id, tenant_key: args.p_batch_id === BATCH_B ? TENANT_B : TENANT_A } as unknown as unknown[],
     error: null,
   }),
 };
@@ -1166,12 +1166,12 @@ describe('backfill inventory tenant binding', () => {
   function batchLedger(batchTenant: string | null, hashesByTenant: Record<string, string[]>) {
     const opened: string[] = [];
     const fake = fakeRpc({
-      rag_update_ingestion_batch: () => (batchTenant === null ? { data: null, error: { message: 'backfill_refused: batch_not_found' } } : { data: { id: BATCH, tenant_key: batchTenant }, error: null }),
+      rag_update_ingestion_batch: () => (batchTenant === null ? { data: null, error: { message: 'backfill_refused: batch_not_found' } } : { data: { id: BATCH, tenant_key: batchTenant } as unknown as unknown[], error: null }),
       rag_existing_file_hashes: (args) => {
         const known = new Set(hashesByTenant[String(args.p_tenant_key)] ?? []);
         return { data: (args.p_hashes as string[]).filter((h) => known.has(h)).map((h) => ({ file_sha256: h, tenant_key: args.p_tenant_key })), error: null };
       },
-      rag_enqueue_backfill_jobs: () => ({ data: 1, error: null }),
+      rag_enqueue_backfill_jobs: () => ({ data: 1 as unknown as unknown[], error: null }),
     });
     const tracked = (key: string, text: string): SourceItem => {
       const base = item(key, text);
