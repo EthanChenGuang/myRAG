@@ -402,6 +402,11 @@ class DocumentManager {
         // Get status styling
         const statusClass = this.getStatusClass(doc.status);
         const statusText = this.getStatusText(doc.status);
+        const docType = doc.doc_type || doc.metadata?.doc_type || '—';
+        const invoiceFailed =
+            doc.metadata?.invoice_extraction?.status === 'failed'
+                ? '<div class="badge badge-error badge-xs mt-1">Invoice extraction failed</div>'
+                : '';
 
         // Get URL status
         const hasUrl = doc.metadata?.external_url;
@@ -418,11 +423,18 @@ class DocumentManager {
                 ${sourceBadge}
             </td>
             <td class="w-1/6 text-center text-sm">${uploadDate}</td>
+            <td class="w-1/6 text-center text-sm">
+                <div class="truncate">${this.escapeHtml(docType)}</div>
+                ${invoiceFailed}
+            </td>
             <td class="w-1/6 text-center">
                 <div class="badge ${statusClass} badge-sm">${statusText}</div>
             </td>
             <td class="w-1/12 text-center">${doc.chunk_count}</td>
             <td class="w-1/6 text-center">
+                <button class="btn btn-outline btn-sm mr-1" onclick="window.documentManager.promptChangeDocType('${doc.id}', '${this.escapeHtml(String(docType)).replace(/'/g, "\\'")}')">
+                    ✏️ Change type
+                </button>
                 <button class="btn ${urlButtonClass} btn-sm mr-2" onclick="window.documentManager.addUrl('${doc.id}', '${this.escapeHtml(doc.metadata?.external_url || '').replace(/'/g, "\\'")}')">
                     ${urlButtonText}
                 </button>
@@ -463,6 +475,34 @@ class DocumentManager {
             default:
                 return status || 'Unknown';
         }
+    }
+
+    async promptChangeDocType(docId, currentType) {
+        if (typeof window.ragFetch !== 'function' || typeof window.buildDocTypeSelectOptions !== 'function') {
+            this.showError('RAG admin tools are not loaded. Refresh the Config UI.');
+            return;
+        }
+        const options = window.buildDocTypeSelectOptions('general', 'en').filter((opt) => opt.value !== 'auto');
+        const labels = options.map((opt, index) => `${index + 1}. ${opt.label} (${opt.value})`).join('\n');
+        const choice = globalThis.prompt(
+            `Change document type for this file.\nCurrent: ${currentType}\n\n${labels}\n\nEnter the type id (e.g. invoice_receipt):`,
+            currentType !== '—' ? currentType : 'general',
+        );
+        if (!choice) return;
+        const normalized = String(choice).trim();
+        if (!options.some((opt) => opt.value === normalized)) {
+            this.showError('Invalid document type.');
+            return;
+        }
+        const result = await window.ragFetch(`admin/documents/${encodeURIComponent(docId)}/doc-type`, {
+            method: 'POST',
+            body: JSON.stringify({ docType: normalized }),
+        });
+        if (!result.ok) {
+            this.showError(result.message || `Type change failed (${result.status})`);
+            return;
+        }
+        await this.loadDocuments();
     }
 
     confirmDelete(docId, docName) {

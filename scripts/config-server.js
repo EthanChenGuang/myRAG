@@ -3357,6 +3357,65 @@ app.get('/api/mcp/servers', async (req, res) => {
   }
 });
 
+function buildRagProxyTargetPath(pathParam, queryString) {
+  const raw = String(pathParam ?? '').replace(/^\/+/, '');
+  const parts = raw ? raw.split('/').filter(Boolean) : [];
+  for (const part of parts) {
+    let decoded;
+    try {
+      decoded = decodeURIComponent(part);
+    } catch {
+      return null;
+    }
+    if (decoded === '.' || decoded === '..') return null;
+  }
+  const joined = parts.map((p) => {
+    try {
+      return decodeURIComponent(p);
+    } catch {
+      return p;
+    }
+  }).join('/');
+  const base = joined ? `/api/rag/${joined}` : '/api/rag';
+  const normalized = path.posix.normalize(base);
+  if (normalized.includes('..')) return null;
+  if (!normalized.startsWith('/api/rag')) return null;
+  if (normalized.length > '/api/rag'.length && !normalized.startsWith('/api/rag/')) return null;
+  return `${normalized}${queryString || ''}`;
+}
+
+app.all('/api/rag/*path', async (req, res) => {
+  const query = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+  const targetPath = buildRagProxyTargetPath(req.params.path, query);
+  if (!targetPath) {
+    return res.status(400).json({ success: false, error: 'Invalid RAG proxy path' });
+  }
+  const logPath = targetPath.split('?')[0];
+  console.log('[RAG Proxy]', req.method, logPath);
+  try {
+    const headers = withAuthHeaders(req, {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    });
+    const init = { method: req.method, headers };
+    if (req.method !== 'GET' && req.method !== 'HEAD' && req.body !== undefined) {
+      init.body = JSON.stringify(req.body);
+    }
+    const response = await fetch(getMainAppUrl(targetPath), init);
+    const text = await response.text();
+    let body;
+    try {
+      body = text ? JSON.parse(text) : {};
+    } catch {
+      return res.status(502).json({ success: false, error: 'Invalid response from main app' });
+    }
+    return res.status(response.status).json(body);
+  } catch (error) {
+    console.error('[RAG Proxy] connection error:', error.message);
+    return res.status(500).json(mainAppConnectionError(error));
+  }
+});
+
 // Proxy endpoint for MCP servers (POST)
 app.post('/api/mcp/servers', async (req, res) => {
   try {

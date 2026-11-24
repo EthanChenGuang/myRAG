@@ -67,6 +67,10 @@
     <script src="mcp-config.js"></script>
     <script src="connectors-config.js"></script>
     <script src="document-processing/document-manager.js"></script>
+    <script src="rag-panels/rag-fetch.js"></script>
+    <script src="rag-panels/doc-types.js"></script>
+    <script src="rag-panels/quarantine.js"></script>
+    <script src="rag-panels/embedding-profiles.js"></script>
 
     <style>
         /* Tab content visibility */
@@ -1955,6 +1959,7 @@
                     <li><a class="menu-item" data-tab="connectors">Connectors</a></li>
                     <li><a class="menu-item" data-tab="web-scraper">Web Scraper</a></li>
                     <li><a class="menu-item" data-tab="rag-prompt">System Prompt</a></li>
+                    <li><a class="menu-item" data-tab="rag-administration">RAG administration</a></li>
                     <li><a class="menu-item" data-tab="admin">Admin</a></li>
                     <li><a class="menu-item" data-tab="branding">Branding & UI</a></li>
                     <li><a class="menu-item" data-tab="saved-chats">Saved Chats</a></li>
@@ -8379,6 +8384,7 @@
                                                                     <span class="truncate block">Document Name</span>
                                                                 </th>
                                                                 <th class="w-1/6 text-center">Upload Date</th>
+                                                                <th class="w-1/6 text-center">Type</th>
                                                                 <th class="w-1/6 text-center">Status</th>
                                                                 <th class="w-1/12 text-center">Chunks</th>
                                                                 <th class="w-1/6 text-center">Actions</th>
@@ -8392,6 +8398,52 @@
                                             </div>
                                         </div>
                                     </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- RAG Administration Tab -->
+                    <div class="tab-content" id="rag-administration">
+                        <div class="card bg-base-100 shadow-lg">
+                            <div class="card-body p-4 lg:p-6">
+                                <h2 class="card-title text-xl lg:text-2xl text-myrag-primary mb-2">🛡️ RAG administration</h2>
+                                <p class="text-base-content/70 mb-6">Manage document-type defaults, quarantined uploads, and embedding profiles using your existing admin session.</p>
+
+                                <div class="grid gap-6">
+                                    <section id="rag-administration-doc-types" class="card bg-base-200 shadow-md">
+                                        <div class="card-body">
+                                            <h3 class="text-lg font-semibold mb-2">Document types</h3>
+                                            <p class="text-sm text-base-content/70 mb-4">Tenant and per-source defaults for the selected workspace.</p>
+                                            <div data-rag-doc-types-status class="text-sm mb-2"></div>
+                                            <div data-rag-doc-types-form></div>
+                                            <div class="flex gap-2 mt-4">
+                                                <button type="button" class="btn btn-primary btn-sm" data-rag-doc-types-save>Save defaults</button>
+                                                <button type="button" class="btn btn-outline btn-sm" data-rag-doc-types-refresh>Refresh</button>
+                                            </div>
+                                        </div>
+                                    </section>
+
+                                    <section id="rag-administration-quarantine" class="card bg-base-200 shadow-md">
+                                        <div class="card-body">
+                                            <h3 class="text-lg font-semibold mb-2">Quarantine</h3>
+                                            <div data-rag-quarantine-status class="text-sm mb-2"></div>
+                                            <button type="button" class="btn btn-outline btn-sm mb-4" data-rag-quarantine-refresh>Refresh</button>
+                                            <div data-rag-quarantine-list></div>
+                                        </div>
+                                    </section>
+
+                                    <section id="rag-administration-profiles" class="card bg-base-200 shadow-md">
+                                        <div class="card-body">
+                                            <h3 class="text-lg font-semibold mb-2">Embedding profiles</h3>
+                                            <div data-rag-profiles-status class="text-sm mb-2"></div>
+                                            <div class="flex gap-2 mb-4">
+                                                <button type="button" class="btn btn-outline btn-sm" data-rag-profiles-refresh>Refresh</button>
+                                                <button type="button" class="btn btn-outline btn-sm" data-rag-profiles-rollback>Rollback active profile</button>
+                                            </div>
+                                            <div data-rag-profiles-list></div>
+                                        </div>
+                                    </section>
                                 </div>
                             </div>
                         </div>
@@ -9073,6 +9125,7 @@
                     <li><a class="menu-item" data-tab="rag-settings">RAG Settings</a></li>
                     <li><a class="menu-item" data-tab="document-processing">Document Processing</a></li>
                     <li><a class="menu-item" data-tab="rag-prompt">System Prompt</a></li>
+                    <li><a class="menu-item" data-tab="rag-administration">RAG administration</a></li>
                     <li><a class="menu-item" data-tab="admin">Admin</a></li>
                     <li><a class="menu-item" data-tab="branding">Branding & UI</a></li>
                     <li><a class="menu-item" data-tab="saved-chats">Saved Chats</a></li>
@@ -12814,6 +12867,7 @@
 
             // Initialize document processor
             window.documentProcessor = new DocumentProcessor();
+            window.documentProcessor.refreshUploadPickerDefaults();
 
             // Initialize drag and drop
             initDragAndDrop();
@@ -12843,6 +12897,29 @@
                     isMultiTenant: false,
                     currentSelection: null // null = flat personal workspace
                 };
+                this.uploadPicker = {
+                    enabled: false,
+                    defaultType: 'auto',
+                    loaded: false,
+                };
+            }
+
+            async refreshUploadPickerDefaults() {
+                if (typeof window.fetchUploadPickerDefault !== 'function') return;
+                const orgId = this.workspaces.isMultiTenant ? this.workspaces.currentSelection : null;
+                const defaults = await window.fetchUploadPickerDefault(orgId);
+                if (defaults.error) {
+                    this.uploadPicker.enabled = false;
+                    this.uploadPicker.loaded = true;
+                    return;
+                }
+                this.uploadPicker.enabled = Boolean(defaults.enabled);
+                this.uploadPicker.defaultType = defaults.docType || 'auto';
+                this.uploadPicker.loaded = true;
+                for (const item of this.queue) {
+                    if (!item.docType) item.docType = this.uploadPicker.defaultType;
+                }
+                this.updateQueueDisplay();
             }
 
             async loadWorkspaces() {
@@ -12863,6 +12940,7 @@
                     // Hide workspace selector in single-tenant mode
                     const container = document.getElementById('workspace-selector-container');
                     if (container) container.classList.add('hidden');
+                    await this.refreshUploadPickerDefaults();
                     return;
                 }
 
@@ -12954,7 +13032,9 @@
                     if (window.documentManager) {
                         window.documentManager.setWorkspace(this.workspaces.currentSelection);
                     }
+                    this.refreshUploadPickerDefaults();
                 });
+                this.refreshUploadPickerDefaults();
             }
 
             getWorkspaceName(orgId) {
@@ -12974,7 +13054,8 @@
                             size: this.formatFileSize(file.size),
                             status: 'queued',
                             progress: 0,
-                            error: null
+                            error: null,
+                            docType: this.uploadPicker.defaultType || 'auto',
                         };
                         this.queue.push(fileItem);
                     }
@@ -13078,8 +13159,15 @@
                 this.logActivity(`Processing ${fileItem.name} → ${workspaceName}`);
 
                 try {
-                    const formData = new FormData();
-                    formData.append('file', fileItem.file);
+                    let formData;
+                    if (this.uploadPicker.enabled && typeof window.buildUploadForm === 'function') {
+                        formData = window.buildUploadForm(fileItem.file, fileItem.docType || this.uploadPicker.defaultType, true);
+                    } else if (typeof window.buildUploadForm === 'function') {
+                        formData = window.buildUploadForm(fileItem.file, fileItem.docType, false);
+                    } else {
+                        formData = new FormData();
+                        formData.append('file', fileItem.file);
+                    }
 
                     // Add organization context for multi-tenant mode
                     // If currentSelection is null → saves to flat personal workspace (user_id, org_id=NULL)
@@ -13208,6 +13296,13 @@
                     queueItems.classList.remove('hidden');
 
                     queueItems.innerHTML = this.queue.map(item => this.createQueueItemHTML(item)).join('');
+                    queueItems.querySelectorAll('[data-queue-doc-type]').forEach((select) => {
+                        select.addEventListener('change', (event) => {
+                            const id = event.target.getAttribute('data-queue-doc-type');
+                            const item = this.queue.find((q) => String(q.id) === String(id));
+                            if (item) item.docType = event.target.value;
+                        });
+                    });
                 }
             }
 
@@ -13229,6 +13324,14 @@
                     'failed': 'text-error'
                 }[item.status];
 
+                const docTypeSelect = this.uploadPicker.enabled && typeof window.buildDocTypeSelectOptions === 'function'
+                    ? `<label class="label mt-2"><span class="label-text text-xs">Document type</span></label>
+                       <select class="select select-bordered select-sm w-full max-w-xs" data-queue-doc-type="${item.id}">
+                         ${window.buildDocTypeSelectOptions(item.docType || this.uploadPicker.defaultType, 'en').map((opt) =>
+                            `<option value="${this.escapeHtml(opt.value)}" ${opt.selected ? 'selected' : ''}>${this.escapeHtml(opt.label)}</option>`).join('')}
+                       </select>`
+                    : '';
+
                 return `
                     <div class="bg-base-100 p-4 rounded-lg">
                         <div class="flex justify-between items-center">
@@ -13237,6 +13340,7 @@
                                 <div>
                                     <div class="font-medium">${safeName}</div>
                                     <div class="text-sm text-base-content/60">${safeSize}</div>
+                                    ${docTypeSelect}
                                 </div>
                             </div>
                             <div class="text-right">
