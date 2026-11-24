@@ -28,7 +28,7 @@ export interface ExpandParentsInput<C extends ExpandableChild> {
   scope: TenantScope;
   admin: RpcClient | null;
   signal: AbortSignal;
-  eligible?: (child: C) => boolean;
+  eligible?: (_child: C) => boolean;
 }
 
 export interface ExpandParentsResult<C extends ExpandableChild> {
@@ -128,13 +128,13 @@ export async function expandParents<C extends ExpandableChild>(input: ExpandPare
 /** One entry per used parent, at the rank of its best child; every other child stays as it is. */
 export function collapseByParent<C extends ExpandableChild>(
   candidates: Array<Expanded<C>>,
-  useParent: (parentId: string) => boolean,
+  replacesChildren: (_parentId: string) => boolean,
 ): Array<Expanded<C>> {
   const placed = new Set<string>();
   const collapsed: Array<Expanded<C>> = [];
   for (const candidate of candidates) {
     const parent = candidate.parent;
-    if (parent && useParent(parent.id)) {
+    if (parent && replacesChildren(parent.id)) {
       if (placed.has(parent.id)) continue;
       placed.add(parent.id);
     }
@@ -155,16 +155,16 @@ export function selectWithParents<C extends BudgetCandidate & ExpandableChild & 
 ): ParentSelection<C> {
   const fallback = new Set<string>();
   for (;;) {
-    const useParent = (parentId: string) => !fallback.has(parentId);
-    const entries = collapseByParent<C>(candidates, useParent).map((entry): C =>
-      entry.parent && useParent(entry.parent.id) ? { ...entry, content: entry.parent.content } : entry,
+    const replacesChildren = (parentId: string) => !fallback.has(parentId);
+    const entries = collapseByParent<C>(candidates, replacesChildren).map((entry): C =>
+      entry.parent && replacesChildren(entry.parent.id) ? { ...entry, content: entry.parent.content } : entry,
     );
     const result = selectWithinBudget<C>(entries, budget, renderEstimate, options);
     const selectedIds = new Set(result.selected.map((entry) => entry.chunk_id));
     const failing = entries.find(
       (entry) =>
         entry.parent !== undefined &&
-        useParent(entry.parent.id) &&
+        replacesChildren(entry.parent.id) &&
         (!selectedIds.has(entry.chunk_id) || result.contentOverrides.has(entry.chunk_id)),
     );
     if (failing?.parent) {
@@ -175,7 +175,7 @@ export function selectWithParents<C extends BudgetCandidate & ExpandableChild & 
     const parentIds = new Set<string>();
     const parentChunkIds = new Set<string>();
     for (const entry of result.selected) {
-      if (entry.parent && useParent(entry.parent.id)) {
+      if (entry.parent && replacesChildren(entry.parent.id)) {
         parentIds.add(entry.parent.id);
         parentChunkIds.add(entry.chunk_id);
       }
