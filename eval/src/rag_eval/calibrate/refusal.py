@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 from bisect import bisect_left
 from dataclasses import dataclass
@@ -14,14 +16,17 @@ from rag_sidecar.contracts.retrieval import (
     RefusalCalibrationConfig,
     RefusalCell,
     RefusalMetricBlock,
+    compute_config_hash,
 )
 
-from rag_eval.bounds import upper_bound
+from rag_eval.bounds import binom_cdf, upper_bound
 
 NEVER_REFUSE = float("-inf")
 LANGUAGES = ("zh", "en", "it")
 TOP_MARGIN = 1e-9
 DEV_SPLIT = "dev"
+TEST_SPLIT = "test"
+PASS_EPSILON = 1e-12
 
 
 class CalibrationError(RuntimeError):
@@ -226,6 +231,18 @@ class CellRecord(BaseModel):
     holdout_false_refusal_p_value: float | None = None
 
 
+def _check_one_row_set(test_rows: Sequence[CalibrationRow]) -> None:
+    for row in test_rows:
+        if row.split != TEST_SPLIT:
+            raise ValueError(f"holdout_check reads test-split rows only, got {row.split!r} for {row.item_id}")
+
+
+def _p_value_at_least(k: int, n: int, p: float) -> float:
+    if n == 0 or k == 0:
+        return 1.0
+    return min(1.0, max(0.0, 1.0 - binom_cdf(k - 1, n, p)))
+
+
 def holdout_check(
     fit: CellFit,
     test_rows: Sequence[CalibrationRow],
@@ -234,10 +251,53 @@ def holdout_check(
     environment: str,
     noise_floor: float,
 ) -> HoldoutResult:
-    block = _metric_block([], [], None)
+    """Apply the fitted threshold to the cell's frozen test rows once; the result holds counts and rates only."""
+    if fit.threshold is None:
+        raise ValueError(f"cell {fit.key} has no threshold to check")
+    _check_one_row_set(test_rows)
+    cell_rows = [r for r in test_rows if r.key == fit.key]
+    answerable = [r.score for r in cell_rows if r.answerable]
+    no_answer = [r.score for r in cell_rows if not r.answerable]
+    block = _metric_block(answerable, no_answer, fit.threshold)
+    false_refusals = sum(1 for s in answerable if s < fit.threshold)
+    correct_refusals = sum(1 for s in no_answer if s < fit.threshold)
+    target = config.target_false_refusal
+    limit = target + max(noise_floor, 1 / len(answerable) if answerable else 0.0)
+    minimums = getattr(config.holdout_minimums, environment)
+    status: HoldoutStatus
+    if len(answerable) < minimums.answerable or len(no_answer) < minimums.no_answer:
+        status = "insufficient_data"
+    elif block.false_refusal_rate <= limit + PASS_EPSILON:
+        status = "calibrated"
+    else:
+        status = "failed_holdout"
     return HoldoutResult(
-        status="insufficient_data", metrics=block, false_refusal_count=0, correct_refusal_count=0, pass_limit=0.0, false_refusal_p_value=1.0
+        status=status,
+        metrics=block,
+        false_refusal_count=false_refusals,
+        correct_refusal_count=correct_refusals,
+        pass_limit=limit,
+        false_refusal_p_value=_p_value_at_least(false_refusals, len(answerable), target),
     )
+
+
+def _input_hash(fit: CellFit, rows: Sequence[CalibrationRow], config: RefusalCalibrationConfig, *, with_test: bool) -> str:
+    picked = sorted(
+        ((r.item_id, r.split, r.answerable, r.score) for r in rows if r.key == fit.key and (with_test or r.split == DEV_SPLIT)),
+    )
+    payload = {
+        "cell": fit.key,
+        "rows": picked,
+        "calibration_config": compute_config_hash(config),
+        "retrieval_config": fit.config_hash,
+        "tokenizer_version": fit.tokenizer_version,
+        "rerank_text_version": fit.rerank_text_version,
+    }
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+
+
+def _no_read_status(fit: CellFit) -> Literal["insufficient_data", "uncalibrated"]:
+    return "insufficient_data" if fit.status == "insufficient_data" else "uncalibrated"
 
 
 def calibrate_cells(
@@ -249,4 +309,56 @@ def calibrate_cells(
     previous: dict[str, PreviousCell] | None = None,
     now: str,
 ) -> list[CellRecord]:
-    return []
+    """Fit on dev, check once on test, and record every number. The test split is read only for cells that have a threshold."""
+    if source not in ("fixture", "live"):
+        raise ValueError(f"source must be fixture or live, got {source!r}")
+    prior = previous or {}
+    fits = fit_cells(rows, config, environment=source)
+    test_rows = [r for r in rows if r.split == TEST_SPLIT]
+    records: list[CellRecord] = []
+    for key in sorted(fits):
+        fit = fits[key]
+        before = prior.get(key)
+        holdout: HoldoutResult | None = None
+        if fit.threshold is not None:
+            holdout = holdout_check(fit, test_rows, config=config, environment=source, noise_floor=noise_floor)
+        digest = _input_hash(fit, rows, config, with_test=holdout is not None)
+        unchanged = before is not None and before.input_hash == digest
+        previous_evaluations = before.holdout_evaluations if before else 0
+        if holdout is None:
+            evaluations = previous_evaluations
+            status: str = _no_read_status(fit)
+            holdout_block = _metric_block([], [], None)
+            holdout_block = holdout_block.model_copy(update={"false_refusal_rate_upper_bound": 1.0})
+        else:
+            evaluations = previous_evaluations if unchanged else previous_evaluations + 1
+            status = holdout.status
+            holdout_block = holdout.metrics
+        recorded_at = before.recorded_at if unchanged and before and before.recorded_at else now
+        cell = RefusalCell(
+            key=key,
+            provider=fit.provider,
+            model=fit.model,
+            query_language=fit.query_language,
+            pairing=fit.pairing,
+            threshold=fit.threshold,
+            status=status,  # type: ignore[arg-type]
+            tokenizer_version=fit.tokenizer_version,
+            rerank_text_version=fit.rerank_text_version,
+            config_hash=fit.config_hash,
+            source=source,  # type: ignore[arg-type]
+            recorded_at=recorded_at,
+            holdout_evaluations=evaluations,
+            dev=fit.dev,
+            holdout=holdout_block,
+        )
+        records.append(
+            CellRecord(
+                cell=cell,
+                fit_status=fit.status,
+                input_hash=digest,
+                holdout_pass_limit=holdout.pass_limit if holdout else None,
+                holdout_false_refusal_p_value=holdout.false_refusal_p_value if holdout else None,
+            )
+        )
+    return records

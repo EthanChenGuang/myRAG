@@ -71,7 +71,7 @@ def test_holdout_check_the_pass_limit_is_inclusive():
 
 
 def test_holdout_check_noise_floor_wins_when_larger_than_one_item():
-    answerable = [0.9] * 95 + [0.1] * 5
+    answerable = [0.9] * 92 + [0.1] * 8
     result = _check(_fit(), _test_rows(answerable, [0.1]), noise=0.08)
     assert result.pass_limit == pytest.approx(0.05 + 0.08)
     assert result.status == "calibrated"
@@ -166,7 +166,8 @@ def test_calibrate_cells_cell_short_on_dev_data_never_reads_the_test_split():
     assert record.cell.holdout_evaluations == 0
     assert record.cell.holdout.answerable_count == 0
     assert record.cell.holdout.no_answer_count == 0
-    assert record.input_hash is None
+    changed = _dev_rows([0.9, 0.8, 0.7, 0.6, 0.55], [0.2, 0.3]) + _test_rows([0.1, 0.2, 0.3], [0.9])
+    assert _records(changed)[0].input_hash == record.input_hash
 
 
 def test_calibrate_cells_a_fit_that_never_refuses_is_uncalibrated_without_a_holdout_read():
