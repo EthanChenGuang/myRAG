@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { MockInstance } from 'vitest';
+import type { Mock, MockInstance } from 'vitest';
 import { env } from '@/lib/env';
 import { runRetrieval } from '@/lib/rag';
 import type { RpcClient, RpcRequest, RpcResponse } from '@/lib/rag/backend/supabase-rpc';
-import { resetRagDepsForTests } from '@/lib/rag/deps';
+import { resetRagDepsForTests, type RagDeps } from '@/lib/rag/deps';
 import {
   getStartupVerdict,
   resetActiveProfileForTests,
@@ -113,9 +113,9 @@ function mismatchLines(): string[] {
     .filter((line) => line.startsWith('[Embedding Profile] MISMATCH'));
 }
 
-function setUp(options: { registry?: () => RpcResponse; embedder?: ReturnType<typeof vi.fn> } = {}) {
+function setUp(options: { registry?: () => RpcResponse; embedder?: Mock<RagDeps['embedder']> } = {}) {
   const rpc = fakeRpc(options.registry ?? (() => ({ data: [profileRow('voyage-4-large-2048')], error: null })));
-  const embedder = options.embedder ?? vi.fn(async () => Array.from({ length: LEGACY_VECTOR_LENGTH }, () => 0.02));
+  const embedder: Mock<RagDeps['embedder']> = options.embedder ?? vi.fn<RagDeps['embedder']>(async () => Array.from({ length: LEGACY_VECTOR_LENGTH }, () => 0.02));
   installDeps({ embedder, searchRpc: rpc.client });
   return { rpc, embedder };
 }
@@ -260,7 +260,7 @@ describe('the legacy profile while the switch is on', () => {
   it('a legacy embedder that returns the wrong number of values fails with embedding_profile_mismatch', async () => {
     const { rpc } = setUp({
       registry: () => ({ data: [LEGACY_ROW], error: null }),
-      embedder: vi.fn(async () => [0.1, 0.2, 0.3]),
+      embedder: vi.fn<RagDeps['embedder']>(async () => [0.1, 0.2, 0.3]),
     });
 
     const result = await retrieve();
