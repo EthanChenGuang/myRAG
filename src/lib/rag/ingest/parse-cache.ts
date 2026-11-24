@@ -1,7 +1,8 @@
 import { z } from 'zod/v3';
 import { ParseResultSchema, type IngestionJob, type ParseResult } from '@/lib/rag-eval/contracts.generated';
 import type { RpcClient } from '../backend/supabase-rpc';
-import { isArtifactName, safeContentType } from './artifacts';
+import { assertTenantScope, scopeKey, type TenantScope } from '../tenant/scope';
+import { isArtifactName, loadArtifact, PARSE_ARTIFACT, safeContentType, type ArtifactContext } from './artifacts';
 import { getIngestDeps } from './deps';
 import { getObjectStore } from './object-store';
 import type { ParseArtifact } from './parsers/shared';
@@ -199,4 +200,79 @@ export async function readParseResultForJob(job: IngestionJob, cacheId: string, 
     artifacts.push({ name: listed.name, bytes: object.bytes, contentType: listed.content_type });
   }
   return { result: parsed.data, artifacts, entry };
+}
+
+async function loadCachedParseResult(entry: ParseCacheRow, signal: AbortSignal): Promise<ParseResult | null> {
+  const store = getObjectStore();
+  const stored = await store.get(`${entry.objectPrefix}${PARSE_RESULT_OBJECT}`, { signal });
+  if (!stored) return null;
+  let json: unknown;
+  try {
+    json = JSON.parse(new TextDecoder('utf-8').decode(stored.bytes));
+  } catch {
+    return null;
+  }
+  const parsed = ParseResultSchema.safeParse(json);
+  return parsed.success ? parsed.data : null;
+}
+
+/**
+ * Phase 4 re-chunk read path (D-21): the merged cache entry when the document points at one, otherwise the Phase 3 parse.md
+ * artifact of the current version. Returns null for another tenant, a missing document or no stored output.
+ */
+export async function readParseOutputForDocument(scope: TenantScope, documentId: string, signal: AbortSignal): Promise<ParseResult | null> {
+  try {
+    assertTenantScope(scope);
+  } catch {
+    return null;
+  }
+  if (!UUID.test(documentId)) return null;
+  const tenantKey = scopeKey(scope).toLowerCase();
+  signal.throwIfAborted();
+
+  const rows = await callRows('rag_parse_cache_for_document', { p_tenant_key: tenantKey, p_document_id: documentId }, signal);
+  const first = rows[0];
+  if (first?.id) {
+    const entry = rowOf(first);
+    if (entry.tenantKey !== tenantKey) return null;
+    return await loadCachedParseResult(entry, signal);
+  }
+
+  const docRows = await callRows('rag_get_ingest_document', { p_document_id: documentId, p_tenant_key: tenantKey }, signal);
+  const doc = docRows[0];
+  if (!doc) return null;
+  const version = typeof doc?.version === 'number' ? doc.version : null;
+  const originRows = await callRows('rag_get_ingest_origin', { p_document_id: documentId, p_tenant_key: tenantKey }, signal);
+  const origin = originRows[0];
+  const lineageId = typeof origin?.lineage_id === 'string' ? origin.lineage_id : null;
+  const parserUsed = typeof doc?.parser_used === 'string' ? doc.parser_used : 'unknown';
+  const parserVersion = typeof doc?.parser_version === 'string' ? doc.parser_version : 'unknown';
+  if (lineageId === null || version === null) return null;
+
+  const artifactCtx: ArtifactContext = {
+    identity: { tenantKey },
+    document: { lineageId, version },
+    signal,
+    state: { artifacts: {} },
+  };
+  let stored;
+  try {
+    stored = await loadArtifact(artifactCtx, PARSE_ARTIFACT);
+  } catch {
+    return null;
+  }
+  if (stored === null) return null;
+  const markdown = new TextDecoder('utf-8').decode(stored.bytes);
+  if (markdown.trim() === '') return null;
+  return ParseResultSchema.parse({
+    markdown,
+    chunks: [],
+    pictures: [],
+    page_count: 1,
+    parser: parserUsed,
+    parser_version: parserVersion,
+    partial: false,
+    warnings: [],
+    text_layer_page_share: null,
+  });
 }

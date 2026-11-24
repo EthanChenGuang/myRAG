@@ -29,7 +29,7 @@ export const notFound = (): NextResponse => fail(404, 'Job not found');
 /**
  * Operator view of a job. An explicit allow-list, not a spread of the ledger row: a column added to ingestion_jobs stays hidden
  * until it is added here on purpose. Omitted on purpose: original_ref, settings, stage_state, source_key, file_sha256, locked_by,
- * timings and trace_id.
+ * timings, trace_id and provisional_published_at (surfaced only as provisional).
  */
 export function projectJob(job: IngestionJob) {
   return {
@@ -44,6 +44,7 @@ export function projectJob(job: IngestionJob) {
     doc_class: job.doc_class,
     tier: job.tier,
     pages: job.pages,
+    provisional: job.provisional_published_at != null,
     retries: job.retries,
     max_retries: job.max_retries,
     error_class: job.error_class,

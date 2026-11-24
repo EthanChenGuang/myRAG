@@ -496,13 +496,13 @@ export async function runRetrieval(input: RunRetrievalInput): Promise<RetrievalR
   const useV2 =
     config.pipeline === 'v2' &&
     !input.options?.generalOverview &&
-    input.profile !== 'voice' &&
     input.profile !== 'media' &&
-    (['chat', 'embed', 'eval'] as const).includes(input.profile as 'chat' | 'embed' | 'eval');
+    (['chat', 'embed', 'eval', 'voice'] as const).includes(input.profile as 'chat' | 'embed' | 'eval' | 'voice');
 
-  const result = input.profile === 'voice'
-    ? await runVoicePipeline(input, collector)
-    : useV2
+  const result =
+    input.profile === 'voice' && !useV2
+      ? await runVoicePipeline(input, collector)
+      : useV2
       ? await (await import('./v2/pipeline')).runV2Pipeline(input, collector)
       : await runPipeline(input, collector);
   if (ownsTrace) finishTrace(collector, result, { query: input.query });

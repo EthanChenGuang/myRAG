@@ -1,6 +1,22 @@
 import { processDocument } from '@/lib/document-processor';
 import { logger } from '@/lib/logger';
-import { buildSourceKey, currentIngestConfig, ingest, nangoOwnerScope } from '@/lib/rag';
+import {
+  buildSourceKey,
+  currentIngestConfig,
+  ingest,
+  nangoOwnerScope,
+  submitIngest,
+  type EnqueueResult,
+  type IngestInput,
+  type IngestResult,
+} from '@/lib/rag';
+
+function nangoAsyncIngestEnabled(): boolean {
+  return (
+    (process.env.RAG_INGEST_PIPELINE ?? 'legacy').toLowerCase() === 'unified' &&
+    (process.env.RAG_INGEST_ASYNC ?? 'off').toLowerCase() === 'on'
+  );
+}
 
 /**
  * Options for processing documents with source tracking
@@ -138,7 +154,7 @@ async function ingestNangoDocument(filename: string, buffer: Buffer, options: Pr
   if (!owner.ok) throw new NangoIngestError(owner.reason, owner.status);
 
   const mimeType = ingestMimeType(filename, options.mimeType);
-  const result = await ingest({
+  const ingestInput: IngestInput = {
     scope: owner.scope,
     source: 'nango',
     sourceKey: buildSourceKey('nango', { providerFileId: sourceFileId }),
@@ -156,13 +172,17 @@ async function ingestNangoDocument(filename: string, buffer: Buffer, options: Pr
     },
     signal: options.signal ?? AbortSignal.timeout(INGEST_DEADLINE_MS + SIGNAL_GRACE_MS),
     deadlineMs: INGEST_DEADLINE_MS,
-  });
+  };
+  const result: IngestResult | EnqueueResult = nangoAsyncIngestEnabled()
+    ? await submitIngest(ingestInput)
+    : await ingest(ingestInput);
 
   if (result.status === 'failed') throw new NangoIngestError(result.reason ?? 'ingest_failed');
   // Not finished: the sync record stays unsynced, and the next sync of the same bytes resumes the stored run.
   if (result.status === 'processing') throw new NangoIngestError(result.reason ?? 'ingest_processing');
 
-  const documentId = result.documentId ?? result.duplicateOf ?? null;
+  const documentId =
+    result.documentId ?? ('duplicateOf' in result ? result.duplicateOf : undefined) ?? null;
   if (documentId === null) throw new NangoIngestError(`no_document_${result.status}`);
 
   if (result.status === 'quarantined') {

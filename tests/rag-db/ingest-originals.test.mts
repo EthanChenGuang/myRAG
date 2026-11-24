@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import type { PGlite } from '@electric-sql/pglite';
 import { createFixtureDatabase, type DeploymentMode } from '../../eval/harness/pglite-supabase.mts';
 import { applyMigrationFiles } from '../../eval/harness/migrations.mts';
+import { assertNoClientCallableRagFunctions } from '../helpers/rag-client-grants.ts';
 import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from '../../eval/harness/fake-edge.mts';
 import { TWO_TENANT_IDS, createTwoTenantDatabase, type TwoTenantDatabase } from '../../eval/harness/two-tenant.mts';
 import type { RpcClient, RpcResponse } from '@/lib/rag/backend/supabase-rpc';
@@ -114,12 +115,7 @@ describe('rag_get_ingest_origin returns what a rehydrator needs, for its own ten
       { role: 'authenticated', can_execute: false },
       { role: 'service_role', can_execute: true },
     ]);
-    const exposed = await rowsOf(
-      fixture.db,
-      `SELECT p.proname FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
-       WHERE n.nspname = 'public' AND p.proname LIKE 'rag\\_%' AND (has_function_privilege('anon', p.oid, 'EXECUTE') OR has_function_privilege('authenticated', p.oid, 'EXECUTE'))`,
-    );
-    assert.deepEqual(exposed, []);
+    await assertNoClientCallableRagFunctions(fixture.db);
   });
 
   test('applying the migration a second time changes nothing the function returns', async () => {
