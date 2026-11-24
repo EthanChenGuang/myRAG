@@ -43,7 +43,8 @@
             "colloquial",
             "ambiguous",
             "typo",
-            "cross_lingual"
+            "cross_lingual",
+            "selective_filter"
           ],
           "title": "Category",
           "type": "string"

@@ -159,7 +159,7 @@ describe('invoice extractor in the extract stage', () => {
       expect(sectionPath.join(' ')).toContain('BE0000000097');
       expect(sectionPath.join(' ')).toContain('FR00000000093');
       expect(sectionPath).toContain('Invoice');
-      expect(chunk.lexical_text as string).toContain('INV-2025-00418');
+      expect(chunk.lexical_text as string).toContain('inv-2025-00418');
     }
     expect(chunks[0]?.chunk_kind).toBe('invoice_header');
     expect(embedded.length).toBe(chunks.length);

@@ -2,6 +2,8 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from rag_sidecar.contracts.retrieval import RetrievalFilters, RetrievalOverrides
+
 
 class _Contract(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -48,6 +50,8 @@ class RagRunOptions(_Contract):
     disabled_stages: list[StageName] | None = Field(default=None, max_length=9)
     stage_timeouts_ms: StageTimeoutsMs | None = None
     embedding_profile: str | None = None
+    retrieval_overrides: RetrievalOverrides | None = None
+    retrieval_filters: RetrievalFilters | None = None
 
 
 class RagRunRequest(_Contract):
@@ -79,6 +83,10 @@ class TraceCandidate(_Contract):
     final_score: float | None = None
     match_reason: str | None = None
     has_image: bool
+    rerank_score: float | None = None
+    fused_score: float | None = None
+    language: str | None = None
+    legs: dict[str, int] = Field(default_factory=dict)
 
 
 class TraceKeptChunk(_Contract):
@@ -88,7 +96,7 @@ class TraceKeptChunk(_Contract):
     document_name: str
     content: str
     similarity: float
-    kept_by: Literal["similarity", "name", "image"]
+    kept_by: Literal["similarity", "name", "image", "rerank", "fused"]
 
 
 class TraceUsedDocument(_Contract):
@@ -106,6 +114,20 @@ class TraceQueryTransform(_Contract):
 class TraceCitation(_Contract):
     document_id: str
     chunk_id: str | None = None
+
+
+class TraceRetrievalVersions(_Contract):
+    lexical: int = Field(ge=0)
+    rerank_text: int = Field(ge=0)
+
+
+class TraceRefusal(_Contract):
+    decision: Literal["refuse", "answer", "not_applied"]
+    basis: str
+    reason: str
+    top_score: float | None = None
+    threshold: float | None = None
+    cell_key: str | None = None
 
 
 class TraceEffectiveConfig(_Contract):
@@ -129,7 +151,13 @@ class RagTrace(_Contract):
     used_documents: list[TraceUsedDocument]
     context: str
     refused: bool
-    refusal_reason: Literal["no_relevant_context"] | None = None
+    refusal_reason: Literal["no_relevant_context", "below_threshold", "below_similarity_floor"] | None = None
+    query_language: str | None = None
+    retrieval_versions: TraceRetrievalVersions | None = None
+    refusal: TraceRefusal | None = None
+    retrieval_config_hash: str | None = None
+    context_tokens: int | None = Field(default=None, ge=0)
+    stage_counts: dict[str, dict[str, float]] = Field(default_factory=dict)
     answer: str | None = None
     citations: list[TraceCitation]
     stage_latency_ms: dict[str, float]

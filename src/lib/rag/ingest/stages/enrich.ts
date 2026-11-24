@@ -1,8 +1,8 @@
 import { enrichChunkWithURLs } from '@/lib/url-extractor';
 import { detectLanguage } from '../../lang/detect';
-import { lexicalText } from '../../lexical/tokenize';
+import { LEXICAL_VERSION, chunkLexicalText } from '../../lexical/chunk-text';
 import { contentHash } from '../hash';
-import { requireDocument, type StageContext, type StageOutcome, type StageSpec } from '../types';
+import { requireDocument, requireIdentity, type StageContext, type StageOutcome, type StageSpec } from '../types';
 
 /**
  * Per chunk: the lexical text (path prefix plus content), the normalised chunk content hash and the URL
@@ -12,10 +12,20 @@ import { requireDocument, type StageContext, type StageOutcome, type StageSpec }
 async function run(ctx: StageContext): Promise<StageOutcome> {
   const document = requireDocument(ctx, 'enrich');
 
+  const filename = requireIdentity(ctx, 'enrich').filename;
   for (const draft of ctx.work.chunks) {
-    draft.lexical_text = lexicalText(draft.section_path, draft.content);
+    draft.lexical_text = chunkLexicalText({
+      sectionPath: draft.section_path,
+      content: draft.content,
+      chunkKind: draft.chunk_kind,
+      metadata: draft.metadata,
+      documentFilename: filename,
+    });
     draft.content_hash = contentHash(draft.content);
-    draft.metadata = enrichChunkWithURLs(draft.content, draft.metadata) as Record<string, unknown>;
+    draft.metadata = {
+      ...(enrichChunkWithURLs(draft.content, draft.metadata) as Record<string, unknown>),
+      lexical_version: LEXICAL_VERSION,
+    };
   }
 
   const language = detectLanguage(ctx.work.parseText ?? ctx.work.chunks.map((draft) => draft.content).join('\n'));

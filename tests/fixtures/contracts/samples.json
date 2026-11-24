@@ -119,6 +119,8 @@
         "generator_model": null,
         "max_results": 10,
         "organization_id": null,
+        "retrieval_filters": null,
+        "retrieval_overrides": null,
         "stage_timeouts_ms": null,
         "user_id": null
       },
@@ -200,6 +202,37 @@
       },
       "spread_kind": "stdev_ddof1",
       "tier": "smoke"
+    },
+    "ChunkingDecision": {
+      "build_run_id": "build-run-001",
+      "chosen_on": {
+        "recall_at_5": 0.72
+      },
+      "decided_by": "admin",
+      "doc_type": "general",
+      "gate_passed": true,
+      "profile_id": "general@256x1024",
+      "recorded_at": "2026-01-01T00:00:00.000Z",
+      "regressions": [],
+      "report_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "source": "fixture"
+    },
+    "ChunkingProfile": {
+      "child_tokens": 256,
+      "doc_type": "general",
+      "id": "general@256x1024",
+      "parent_mode": "structure",
+      "parent_tokens": 512,
+      "preset": "256/1024",
+      "status": "ready"
+    },
+    "ChunkingSweepReport": {
+      "config_hash": null,
+      "profiles": [],
+      "provenance": {
+        "source": "defaults"
+      },
+      "schema_version": 1
     },
     "ConversationTurn": {
       "content": "Tell me about leave.",
@@ -1022,6 +1055,8 @@
         "generator_model": null,
         "max_results": 10,
         "organization_id": null,
+        "retrieval_filters": null,
+        "retrieval_overrides": null,
         "stage_timeouts_ms": null,
         "user_id": null
       },
@@ -1096,8 +1131,10 @@
       "language": "en",
       "provenance": "synthetic_fixture",
       "question": "How many leave days do employees get?",
+      "retrieval_filters": null,
       "review_status": "approved",
-      "split": "dev"
+      "split": "dev",
+      "tags": []
     },
     "GoldenSplitManifest": {
       "assignments": {
@@ -2170,6 +2207,8 @@
         "generator_model": "generator/model-b",
         "max_results": 10,
         "organization_id": null,
+        "retrieval_filters": null,
+        "retrieval_overrides": null,
         "stage_timeouts_ms": null,
         "user_id": null
       },
@@ -2187,9 +2226,13 @@
           "document_id": "doc-001",
           "document_name": "handbook.md",
           "final_score": 0.85,
+          "fused_score": null,
           "has_image": false,
+          "language": null,
+          "legs": {},
           "match_reason": "vector",
           "rank": 1,
+          "rerank_score": null,
           "similarity": 0.82
         },
         {
@@ -2198,9 +2241,13 @@
           "document_id": "doc-002",
           "document_name": null,
           "final_score": null,
+          "fused_score": null,
           "has_image": false,
+          "language": null,
+          "legs": {},
           "match_reason": null,
           "rank": 2,
+          "rerank_score": null,
           "similarity": 0.41
         }
       ],
@@ -2212,6 +2259,7 @@
       ],
       "config_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       "context": "Employees receive twenty days of leave per year.",
+      "context_tokens": null,
       "effective_config": {
         "deployment_mode": "single-tenant",
         "embedding_model": "text-embedding-3-small",
@@ -2244,16 +2292,21 @@
         "search_strategy": "semantic_only",
         "suggested_threshold": 0.3
       },
+      "query_language": null,
       "query_transforms": [
         {
           "kind": "rewrite",
           "text": "leave days per year"
         }
       ],
+      "refusal": null,
       "refusal_reason": null,
       "refused": false,
+      "retrieval_config_hash": null,
       "retrieval_strategy": "standard",
+      "retrieval_versions": null,
       "schema_version": 1,
+      "stage_counts": {},
       "stage_latency_ms": {
         "analyze": 1.5,
         "embed": 4.0,
@@ -2274,6 +2327,79 @@
           "similarity": 0.82
         }
       ]
+    },
+    "RefusalCalibrationConfig": {
+      "config_hash": null,
+      "dev_minimums": {
+        "fixture": {
+          "answerable": 5,
+          "no_answer": 3
+        },
+        "live": {
+          "answerable": 20,
+          "no_answer": 10
+        }
+      },
+      "holdout_minimums": {
+        "fixture": {
+          "answerable": 2,
+          "no_answer": 1
+        },
+        "live": {
+          "answerable": 6,
+          "no_answer": 3
+        }
+      },
+      "pass_rule": "false_refusal_test <= target + max(noise_floor, 1 / n_test_answerable)",
+      "provenance": {
+        "source": "defaults"
+      },
+      "schema_version": 1,
+      "target_false_refusal": 0.05
+    },
+    "RefusalThresholds": {
+      "cells": [],
+      "config_hash": null,
+      "provenance": {
+        "source": "defaults"
+      },
+      "schema_version": 1
+    },
+    "RetrievalFilters": {
+      "current_only": true,
+      "date_range": null,
+      "doc_types": null,
+      "document_ids": null,
+      "invoice": null,
+      "languages": [
+        "en"
+      ],
+      "sources": [
+        "manual"
+      ]
+    },
+    "RetrievalOverrides": {
+      "candidate_pool_size": null,
+      "final_top_k": 10,
+      "leg_weights": null,
+      "rerank_input_cap": null,
+      "rrf_k": null
+    },
+    "RetrievalParams": {
+      "candidate_pool_size": 75,
+      "config_hash": null,
+      "final_top_k": 8,
+      "leg_weights": {
+        "dense": 1.0,
+        "exact_id": 1.0,
+        "lexical": 1.0
+      },
+      "provenance": {
+        "source": "defaults"
+      },
+      "rerank_input_cap": 75,
+      "rrf_k": 60,
+      "schema_version": 1
     },
     "ReviewQueueItem": {
       "answer_masked": "Twenty days per year.",
@@ -2318,6 +2444,8 @@
         "generator_model": null,
         "max_results": 10,
         "organization_id": null,
+        "retrieval_filters": null,
+        "retrieval_overrides": null,
         "stage_timeouts_ms": null,
         "user_id": null
       },
@@ -2365,8 +2493,10 @@
         "language": "en",
         "provenance": "synthetic_fixture",
         "question": "How many days of annual leave does a new employee get?",
+        "retrieval_filters": null,
         "review_status": "approved",
-        "split": "dev"
+        "split": "dev",
+        "tags": []
       }
     },
     "GoldenItem:no_answer_null_expected": {
@@ -2382,8 +2512,10 @@
         "language": "en",
         "provenance": "synthetic_fixture",
         "question": "What is the CEO's favourite colour?",
+        "retrieval_filters": null,
         "review_status": "approved",
-        "split": "test"
+        "split": "test",
+        "tags": []
       }
     },
     "InvoiceFields:nothing_extracted": {
@@ -2448,9 +2580,13 @@
             "document_id": "doc-001",
             "document_name": "handbook.md",
             "final_score": 0.85,
+            "fused_score": null,
             "has_image": false,
+            "language": null,
+            "legs": {},
             "match_reason": "vector",
             "rank": 1,
+            "rerank_score": null,
             "similarity": 0.82
           },
           {
@@ -2459,9 +2595,13 @@
             "document_id": "doc-002",
             "document_name": null,
             "final_score": null,
+            "fused_score": null,
             "has_image": false,
+            "language": null,
+            "legs": {},
             "match_reason": null,
             "rank": 2,
+            "rerank_score": null,
             "similarity": 0.41
           }
         ],
@@ -2473,6 +2613,7 @@
         ],
         "config_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         "context": "Employees receive twenty days of leave per year.",
+        "context_tokens": null,
         "effective_config": {
           "deployment_mode": "single-tenant",
           "embedding_model": "text-embedding-3-small",
@@ -2505,16 +2646,21 @@
           "search_strategy": "semantic_only",
           "suggested_threshold": 0.3
         },
+        "query_language": null,
         "query_transforms": [
           {
             "kind": "rewrite",
             "text": "leave days per year"
           }
         ],
+        "refusal": null,
         "refusal_reason": null,
         "refused": false,
+        "retrieval_config_hash": null,
         "retrieval_strategy": "standard",
+        "retrieval_versions": null,
         "schema_version": 1,
+        "stage_counts": {},
         "stage_latency_ms": {
           "analyze": 1.5,
           "embed": 4.0,

@@ -68,7 +68,7 @@ All requirements are written so they can be checked. "Behind a switch" means an 
 
 - [ ] **RET-01**: Retrieval backends are switchable — pgvector (kept permanently, default), Weaviate and Qdrant — behind one `RetrievalBackend` interface that only accepts a `TenantScope`
 - [ ] **RET-02**: Each backend runs hybrid retrieval (lexical + vector, filters applied before search) and the results are fused with reciprocal rank fusion
-- [ ] **RET-03**: Lexical search works for Chinese, English and Italian on all three backends using one shared application tokenizer that writes a `lexical_text` field; a Chinese exact-term test (model numbers, IDs, names) passes on every backend
+- [x] **RET-03**: Lexical search works for Chinese, English and Italian on all three backends using one shared application tokenizer that writes a `lexical_text` field; a Chinese exact-term test (model numbers, IDs, names) passes on every backend
 - [ ] **RET-04**: The pgvector hybrid function is callable only by the server role, never by `anon`
 - [ ] **RET-05**: Supabase stays the only source of truth; a trigger-fed outbox and a drain worker sync inserts, updates, deletes (including cascade deletes) and re-embeds to Weaviate and Qdrant, and a reconcile job detects and repairs drift
 - [ ] **RET-06**: Weaviate uses one tenant per workspace; Qdrant uses a shared collection per embedding profile with an `is_tenant` index and a tenant filter injected by the adapter on every query and prefetch
@@ -230,7 +230,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | EMB-05 | Phase 3 | Pending |
 | RET-01 | Phase 4 | Pending |
 | RET-02 | Phase 4 | Pending |
-| RET-03 | Phase 4 | Pending |
+| RET-03 | Phase 4 | Complete |
 | RET-04 | Phase 4 | Pending |
 | RET-10 | Phase 4 | Pending |
 | RET-05 | Phase 7 | Pending |

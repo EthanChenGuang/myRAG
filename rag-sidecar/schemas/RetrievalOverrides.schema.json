@@ -1,0 +1,100 @@
+{
+  "$defs": {
+    "RetrievalLegWeights": {
+      "additionalProperties": false,
+      "properties": {
+        "dense": {
+          "default": 1.0,
+          "exclusiveMinimum": 0,
+          "title": "Dense",
+          "type": "number"
+        },
+        "exact_id": {
+          "default": 1.0,
+          "exclusiveMinimum": 0,
+          "title": "Exact Id",
+          "type": "number"
+        },
+        "lexical": {
+          "default": 1.0,
+          "exclusiveMinimum": 0,
+          "title": "Lexical",
+          "type": "number"
+        }
+      },
+      "title": "RetrievalLegWeights",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "candidate_pool_size": {
+      "anyOf": [
+        {
+          "maximum": 200,
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Candidate Pool Size"
+    },
+    "final_top_k": {
+      "anyOf": [
+        {
+          "maximum": 100,
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Final Top K"
+    },
+    "leg_weights": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RetrievalLegWeights"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "rerank_input_cap": {
+      "anyOf": [
+        {
+          "maximum": 100,
+          "minimum": 50,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Rerank Input Cap"
+    },
+    "rrf_k": {
+      "anyOf": [
+        {
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Rrf K"
+    }
+  },
+  "title": "RetrievalOverrides",
+  "type": "object"
+}

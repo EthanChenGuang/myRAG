@@ -1,0 +1,95 @@
+{
+  "cases": [
+    {
+      "errors": [],
+      "input": {
+        "child_tokens": 256,
+        "doc_type": "general",
+        "id": "general@256x1024",
+        "parent_mode": "structure",
+        "parent_tokens": 1024,
+        "preset": "256/1024",
+        "status": "ready"
+      },
+      "warnings": [
+        "top_k_parent_over_budget"
+      ]
+    },
+    {
+      "errors": [
+        "child_exceeds_embedding_input"
+      ],
+      "input": {
+        "child_tokens": 9000,
+        "doc_type": "general",
+        "id": "general@child-too-large",
+        "parent_mode": "none",
+        "parent_tokens": null,
+        "preset": "custom",
+        "status": "ready"
+      },
+      "warnings": []
+    },
+    {
+      "errors": [
+        "parent_below_twice_child"
+      ],
+      "input": {
+        "child_tokens": 256,
+        "doc_type": "general",
+        "id": "general@parent-small",
+        "parent_mode": "fixed",
+        "parent_tokens": 400,
+        "preset": "custom",
+        "status": "ready"
+      },
+      "warnings": []
+    },
+    {
+      "errors": [],
+      "input": {
+        "child_tokens": 128,
+        "doc_type": "general",
+        "id": "general@ratio",
+        "parent_mode": "fixed",
+        "parent_tokens": 1536,
+        "preset": "custom",
+        "status": "ready"
+      },
+      "warnings": [
+        "ratio_outside_4_8",
+        "top_k_parent_over_budget"
+      ]
+    },
+    {
+      "errors": [
+        "parent_tokens_required"
+      ],
+      "input": {
+        "child_tokens": 256,
+        "doc_type": "general",
+        "id": "general@fixed-missing-parent",
+        "parent_mode": "fixed",
+        "parent_tokens": null,
+        "preset": "custom",
+        "status": "ready"
+      },
+      "warnings": []
+    }
+  ],
+  "default_context": {
+    "context_budget": 6000,
+    "max_child_tokens": 8191,
+    "top_k": 8
+  },
+  "error_codes": [
+    "child_exceeds_embedding_input",
+    "parent_below_twice_child",
+    "parent_tokens_required"
+  ],
+  "schema_version": 1,
+  "warning_codes": [
+    "ratio_outside_4_8",
+    "top_k_parent_over_budget"
+  ]
+}

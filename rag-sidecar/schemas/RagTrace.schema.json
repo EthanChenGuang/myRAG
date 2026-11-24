@@ -39,9 +39,40 @@
           "default": null,
           "title": "Final Score"
         },
+        "fused_score": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fused Score"
+        },
         "has_image": {
           "title": "Has Image",
           "type": "boolean"
+        },
+        "language": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Language"
+        },
+        "legs": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Legs",
+          "type": "object"
         },
         "match_reason": {
           "anyOf": [
@@ -59,6 +90,18 @@
           "minimum": 1,
           "title": "Rank",
           "type": "integer"
+        },
+        "rerank_score": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rerank Score"
         },
         "similarity": {
           "title": "Similarity",
@@ -177,7 +220,9 @@
           "enum": [
             "similarity",
             "name",
-            "image"
+            "image",
+            "rerank",
+            "fused"
           ],
           "title": "Kept By",
           "type": "string"
@@ -269,6 +314,92 @@
       "title": "TraceQueryTransform",
       "type": "object"
     },
+    "TraceRefusal": {
+      "additionalProperties": false,
+      "properties": {
+        "basis": {
+          "title": "Basis",
+          "type": "string"
+        },
+        "cell_key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cell Key"
+        },
+        "decision": {
+          "enum": [
+            "refuse",
+            "answer",
+            "not_applied"
+          ],
+          "title": "Decision",
+          "type": "string"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        },
+        "threshold": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Threshold"
+        },
+        "top_score": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Top Score"
+        }
+      },
+      "required": [
+        "decision",
+        "basis",
+        "reason"
+      ],
+      "title": "TraceRefusal",
+      "type": "object"
+    },
+    "TraceRetrievalVersions": {
+      "additionalProperties": false,
+      "properties": {
+        "lexical": {
+          "minimum": 0,
+          "title": "Lexical",
+          "type": "integer"
+        },
+        "rerank_text": {
+          "minimum": 0,
+          "title": "Rerank Text",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "lexical",
+        "rerank_text"
+      ],
+      "title": "TraceRetrievalVersions",
+      "type": "object"
+    },
     "TraceUsedDocument": {
       "additionalProperties": false,
       "properties": {
@@ -349,6 +480,19 @@
       "title": "Context",
       "type": "string"
     },
+    "context_tokens": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Context Tokens"
+    },
     "effective_config": {
       "$ref": "#/$defs/TraceEffectiveConfig"
     },
@@ -378,6 +522,18 @@
     "query_context": {
       "$ref": "#/$defs/TraceQueryContext"
     },
+    "query_language": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Query Language"
+    },
     "query_transforms": {
       "items": {
         "$ref": "#/$defs/TraceQueryTransform"
@@ -385,10 +541,25 @@
       "title": "Query Transforms",
       "type": "array"
     },
+    "refusal": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/TraceRefusal"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "refusal_reason": {
       "anyOf": [
         {
-          "const": "no_relevant_context",
+          "enum": [
+            "no_relevant_context",
+            "below_threshold",
+            "below_similarity_floor"
+          ],
           "type": "string"
         },
         {
@@ -402,15 +573,48 @@
       "title": "Refused",
       "type": "boolean"
     },
+    "retrieval_config_hash": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Retrieval Config Hash"
+    },
     "retrieval_strategy": {
       "title": "Retrieval Strategy",
       "type": "string"
+    },
+    "retrieval_versions": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/TraceRetrievalVersions"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "schema_version": {
       "const": 1,
       "default": 1,
       "title": "Schema Version",
       "type": "integer"
+    },
+    "stage_counts": {
+      "additionalProperties": {
+        "additionalProperties": {
+          "type": "number"
+        },
+        "type": "object"
+      },
+      "title": "Stage Counts",
+      "type": "object"
     },
     "stage_latency_ms": {
       "additionalProperties": {
