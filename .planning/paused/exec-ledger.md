@@ -73,6 +73,8 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | 04-10 | [bc-ea9f7b6f](bc-ea9f7b6f-dc74-5d17-9573-573c0d79ab57) RUNNING | exec/04-10 |
 | 04-02 | [bc-5a4f4e08](bc-5a4f4e08-1575-5ed0-a16f-35d23901bcfd) RUNNING | exec/04-02 |
 | 03.1-12 | [bc-6699e991](bc-6699e991-7801-5751-be34-7d73844505c5) RUNNING | exec/03.1-12 |
+| 04-07 | [bc-b39f21bf](bc-b39f21bf-71db-54ba-81d3-327871eb3a63) **merged** | exec/04-07 |
+| 04-11 | [bc-ff29f720](bc-ff29f720-c984-5a3b-82e5-ff26dea712ca) RUNNING | exec/04-11 |
 
 ## Remaining plan inventory (file-overlap basis)
 

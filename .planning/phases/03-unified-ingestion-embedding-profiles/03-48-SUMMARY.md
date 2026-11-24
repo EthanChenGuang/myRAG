@@ -28,6 +28,10 @@ Apply in repo order when promoting past Task 1 baseline:
 | `0355_parse_cache.sql` | 03.1-10 |
 | `0401_lexical_index.sql` | 04-06 |
 | `0402_relex_batch.sql` | 04-06 |
+| `0403_tenant_key_guard.*.sql` | 04-07 |
+| `0404_document_parents.sql` | 04-07 |
+| `0405_document_parents_rls.*.sql` | 04-07 |
+| `0406_chunking_profiles.sql` | 04-07 |
 
 Further numbered migrations (e.g. after **04-07** on trunk) must be re-listed at each live promotion.
 
