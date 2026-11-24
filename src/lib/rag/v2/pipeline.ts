@@ -7,6 +7,8 @@ import {
   classifyProfileFailure,
   embedQueries,
   embedQueriesForEvalProfile,
+  embedQuery,
+  embedQueryForEvalProfile,
   type QueryEmbedding,
 } from '../embeddings/query-embedding';
 import { failure, requireValue, runStage, stageSpec, StageError } from '../pipeline';
@@ -29,6 +31,11 @@ function evalEmbeddingProfileId(input: RunRetrievalInput): string | undefined {
 
 async function embedForRetrieval(input: RunRetrievalInput, texts: string[], signal: AbortSignal): Promise<QueryEmbedding[]> {
   const profileId = evalEmbeddingProfileId(input);
+  if (texts.length === 1) {
+    const [text] = texts;
+    if (profileId) return [await embedQueryForEvalProfile(text!, signal, await getEmbeddingProfileById(profileId))];
+    return [await embedQuery(text!, signal)];
+  }
   if (profileId) return embedQueriesForEvalProfile(texts, signal, await getEmbeddingProfileById(profileId));
   return embedQueries(texts, signal);
 }
