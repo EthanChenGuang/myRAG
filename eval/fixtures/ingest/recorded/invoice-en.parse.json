@@ -12,7 +12,7 @@
       "pages": [
         1
       ],
-      "table_header": null,
+      "table_header": "| Description     |   Qty |   Unit price |   Amount | VAT %   |\n|-----------------|-------|--------------|----------|---------|",
       "text": "Invoice No.: INV-2025-00418\nInvoice date: 2025-03-15\nDue date: 2025-04-14\nSupplier: Example Supplier Ltd\nVAT No.: BE0000000097\nBill to: Example Buyer GmbH\nVAT No.: FR00000000093\n| Description     |   Qty |   Unit price |   Amount | VAT %   |\n|-----------------|-------|--------------|----------|---------|\n| Thermal probe   |     8 |       100.00 |   800.00 | 20%     |\n| Probe cable 5 m |     4 |        50.00 |   200.00 | 20%     |\nSubtotal: EUR 1,000.00\nVAT 20 %: EUR 200.00\nTotal: EUR 1,200.00"
     }
   ],
