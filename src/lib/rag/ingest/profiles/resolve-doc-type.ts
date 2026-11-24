@@ -4,6 +4,7 @@ import { assertTenantScope, scopeKey, type TenantScope } from '../../tenant/scop
 import type { IngestConfig } from '../config';
 import type { DocTypeOrigin, IngestIdentity, IngestSource, IngestState } from '../types';
 import { DOC_TYPE_CONFIDENCE_FLOOR, detectDocType, type DetectDocTypeInput } from './detect-doc-type';
+import { detectDocTypeWithLlm } from './llm-detect';
 import { getProcessingProfile, type DocType, type ProcessingProfile } from './load';
 
 export type DocTypeChoice = DocType | 'auto';
@@ -277,8 +278,19 @@ function chooseDefault(rows: readonly DocTypeDefaultRow[], input: ResolveDocType
   return null;
 }
 
-async function runDetection(input: DetectDocTypeInput, _config: IngestConfig, _signal: AbortSignal, _warnings: string[]): Promise<DocTypeDetection> {
-  return detectDocType(input);
+/** Rules first; the optional classifier runs only when the switch is on, the rules are below the floor and there is text. */
+async function runDetection(input: DetectDocTypeInput, config: IngestConfig, signal: AbortSignal, warnings: string[]): Promise<DocTypeDetection> {
+  const rules = detectDocType(input);
+  if (rules.confidence >= DOC_TYPE_CONFIDENCE_FLOOR || !config.docTypeLlmDetect) return rules;
+  const text = input.text;
+  if (typeof text !== 'string' || text.trim() === '') return rules;
+  const outcome = await detectDocTypeWithLlm({ filename: input.filename, text, signal });
+  if (!outcome.ok) {
+    warnings.push(outcome.warning);
+    return rules;
+  }
+  const answer = outcome.detection;
+  return answer.doc_type !== 'general' && answer.confidence < DOC_TYPE_CONFIDENCE_FLOOR ? { ...answer, doc_type: 'general' } : answer;
 }
 
 function resolved(docType: DocType, origin: DocTypeOrigin, detection: DocTypeDetection | null, warnings: string[]): ResolvedDocType {
