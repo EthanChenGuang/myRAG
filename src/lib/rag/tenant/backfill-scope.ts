@@ -1,38 +1,21 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { getDeploymentMode, type DeploymentMode } from '@/lib/deployment-mode';
+import { parseTenantKey } from './embed';
 import { mintScope, type TenantScope } from './scope';
 
-type DeploymentMode = 'single-tenant' | 'multi-tenant';
+export type BackfillScopeRefusal = 'invalid_tenant' | 'unknown_tenant' | 'unavailable';
 
-const KEY_RE =
-  /^(?:(s):(default)|([ou]):([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}))$/;
-
-type BackfillTenantKey =
-  | { kind: 'single' }
-  | { kind: 'org'; organizationId: string }
-  | { kind: 'personal'; userId: string };
-
-function parseTenantKey(value: unknown): BackfillTenantKey | null {
-  if (typeof value !== 'string') return null;
-  const match = KEY_RE.exec(value.trim().toLowerCase());
-  if (!match) return null;
-  if (match[1] === 's') return { kind: 'single' };
-  if (match[3] === 'o') return { kind: 'org', organizationId: match[4] };
-  return { kind: 'personal', userId: match[4] };
-}
-
-export type BackfillScopeResult =
-  | { ok: true; scope: TenantScope }
-  | { ok: false; reason: 'invalid_tenant' | 'unknown_tenant' | 'unavailable' };
+export type BackfillScopeResult = { ok: true; scope: TenantScope } | { ok: false; reason: BackfillScopeRefusal };
 
 export type BackfillScopeAdmin = Pick<SupabaseClient, 'from' | 'auth'>;
 
 export interface BackfillScopeDeps {
   deploymentMode?: DeploymentMode;
   admin?: BackfillScopeAdmin | null;
-  signal: AbortSignal;
+  signal?: AbortSignal;
 }
 
-function refuse(reason: 'invalid_tenant' | 'unknown_tenant' | 'unavailable'): BackfillScopeResult {
+function refuse(reason: BackfillScopeRefusal): BackfillScopeResult {
   console.warn('[Backfill] tenant scope refused', { reason });
   return { ok: false, reason };
 }
@@ -63,11 +46,7 @@ async function organizationExists(admin: BackfillScopeAdmin, organizationId: str
 }
 
 export async function backfillScope(tenantKey: string, deps?: BackfillScopeDeps): Promise<BackfillScopeResult> {
-  let mode = deps?.deploymentMode;
-  if (!mode) {
-    const { getDeploymentMode } = await import('@/lib/deployment-mode');
-    mode = getDeploymentMode();
-  }
+  const mode = deps?.deploymentMode ?? getDeploymentMode();
   const signal = deps?.signal ?? AbortSignal.timeout(30_000);
   const parsed = parseTenantKey(tenantKey);
   if (!parsed) return refuse('invalid_tenant');
@@ -77,10 +56,11 @@ export async function backfillScope(tenantKey: string, deps?: BackfillScopeDeps)
 
   if (parsed.kind === 'single') return { ok: true, scope: mintScope('single', null, null) };
 
-  const admin =
-    deps?.admin === undefined
-      ? ((await import('../deps')).getRagDeps().adminClient() as BackfillScopeAdmin | null)
-      : deps.admin;
+  let admin = deps?.admin;
+  if (admin === undefined) {
+    const { getRagDeps } = await import('../deps');
+    admin = getRagDeps().adminClient();
+  }
   if (!admin) return refuse('unavailable');
 
   try {

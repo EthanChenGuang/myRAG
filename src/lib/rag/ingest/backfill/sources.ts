@@ -1,18 +1,12 @@
+import { BlockList, isIP } from 'node:net';
 import { createReadStream } from 'node:fs';
+import { lstat, readdir, realpath, stat } from 'node:fs/promises';
+import { lookup as dnsLookup } from 'node:dns/promises';
 import { createInterface } from 'node:readline';
-import { realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { Readable } from 'node:stream';
-import dns from 'node:dns';
-/** Matches `ORIGINALS_MAX_BYTES` in object-store; inlined so source listing does not import Supabase. */
-const ORIGINALS_MAX_BYTES = 20 * 1024 * 1024;
-
-type ManifestLine = {
-  source_key: string;
-  path?: string | null;
-  url?: string | null;
-  kindHint?: string | null;
-};
+import { BackfillManifestEntrySchema, type BackfillManifestEntry } from '@/lib/rag-eval/contracts.generated';
+import { ORIGINALS_BUCKET, ORIGINALS_MAX_BYTES } from '../object-store';
 
 export type SourceKind = 'folder' | 'bucket' | 'manifest';
 
@@ -20,15 +14,8 @@ export interface SourceItem {
   sourceKey: string;
   size: number;
   ext: string;
-  kindHint?: ManifestLine['kindHint'];
+  docType?: BackfillManifestEntry['doc_type'];
   open(signal?: AbortSignal): Promise<NodeJS.ReadableStream>;
-}
-
-export interface ListSourceInput {
-  kind: SourceKind;
-  ref: string;
-  signal?: AbortSignal;
-  deps?: BackfillSourceDeps;
 }
 
 export interface StorageListObject {
@@ -45,102 +32,127 @@ export interface BackfillStorageBucket {
   download: (objectPath: string) => Promise<{ data: Blob | null; error: { message?: string } | null }>;
 }
 
-type ResolvedHost = { address: string; family: 4 | 6 };
+export interface ResolvedAddress {
+  address: string;
+  family: number;
+}
 
 export interface BackfillSourceDeps {
   fetch?: typeof fetch;
-  resolveHost?: (host: string, signal: AbortSignal) => Promise<ResolvedHost[]>;
-  onManifestReject?: (reason: string) => void;
+  /** Resolves every address the host maps to; the default is getaddrinfo, the same lookup a connection uses. */
+  lookupHost?: (host: string, signal: AbortSignal) => Promise<ResolvedAddress[]>;
+  /** Called with a reason code (never a name or a path) for every refused entry. */
+  onReject?: (reason: string) => void;
   storage?: { from: (bucket: string) => BackfillStorageBucket };
 }
 
-const MANIFEST_FETCH_MS = 30_000;
-const MAX_REDIRECTS = 8;
-
-function signalOrTimeout(signal?: AbortSignal): AbortSignal {
-  return signal ?? AbortSignal.timeout(MANIFEST_FETCH_MS);
+export interface ListSourceInput {
+  kind: SourceKind;
+  ref: string;
+  signal?: AbortSignal;
+  deps?: BackfillSourceDeps;
 }
 
-function extname(name: string): string {
-  const base = path.basename(name);
-  const dot = base.lastIndexOf('.');
-  if (dot < 1) return 'bin';
-  const ext = base.slice(dot + 1).toLowerCase();
-  return /^[a-z0-9]{1,8}$/.test(ext) ? ext : 'bin';
-}
+export class SourceRejection extends Error {
+  readonly reason: string;
 
-function isIpBlocked(address: string, family: number): boolean {
-  if (family === 6) {
-    const lower = address.toLowerCase();
-    if (lower === '::1' || lower === '::') return true;
-    if (lower.startsWith('fc') || lower.startsWith('fd') || lower.startsWith('fe80')) return true;
-    return false;
+  constructor(reason: string) {
+    super(`[Backfill] source refused: ${reason}`);
+    this.name = 'SourceRejection';
+    this.reason = reason;
   }
-  const parts = address.split('.').map((p) => Number(p));
-  if (parts.length !== 4 || parts.some((p) => !Number.isInteger(p) || p < 0 || p > 255)) return true;
-  const [a, b] = parts;
-  if (a === 127) return true;
-  if (a === 10) return true;
-  if (a === 169 && b === 254) return true;
-  if (a === 0) return true;
-  if (a === 172 && b >= 16 && b <= 31) return true;
-  if (a === 192 && b === 168) return true;
-  return false;
 }
 
-async function defaultResolveHost(host: string, signal: AbortSignal): Promise<ResolvedHost[]> {
+const FETCH_TIMEOUT_MS = 30_000;
+const MAX_REDIRECTS = 5;
+const BUCKET_PAGE = 1_000;
+const BUCKET_NAME_RE = /^[a-z0-9][a-z0-9._-]{1,62}$/;
+/** Buckets that hold other tenants' files; a backfill must never read them as a source. */
+const INTERNAL_BUCKETS = new Set([ORIGINALS_BUCKET, 'chat-images']);
+
+const BLOCKED_V4: Array<[string, number]> = [
+  ['0.0.0.0', 8],
+  ['10.0.0.0', 8],
+  ['100.64.0.0', 10],
+  ['127.0.0.0', 8],
+  ['169.254.0.0', 16],
+  ['172.16.0.0', 12],
+  ['192.0.0.0', 24],
+  ['192.168.0.0', 16],
+  ['198.18.0.0', 15],
+  ['224.0.0.0', 4],
+  ['240.0.0.0', 4],
+];
+const BLOCKED_V6: Array<[string, number]> = [
+  ['::', 128],
+  ['::1', 128],
+  ['64:ff9b::', 96],
+  ['100::', 64],
+  ['2001::', 32],
+  ['2002::', 16],
+  ['fc00::', 7],
+  ['fe80::', 10],
+  ['ff00::', 8],
+];
+
+const blockList = new BlockList();
+for (const [net, prefix] of BLOCKED_V4) blockList.addSubnet(net, prefix, 'ipv4');
+for (const [net, prefix] of BLOCKED_V6) blockList.addSubnet(net, prefix, 'ipv6');
+
+/** True for loopback, private, link-local, carrier-grade NAT, multicast, reserved and any unparsable address (fails closed). */
+export function isBlockedAddress(raw: string): boolean {
+  let address = raw.trim().toLowerCase();
+  const zone = address.indexOf('%');
+  if (zone >= 0) address = address.slice(0, zone);
+  const family = isIP(address);
+  if (family === 0) return true;
+  if (family === 4) return blockList.check(address, 'ipv4');
+  const dotted = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/.exec(address);
+  if (dotted) return isBlockedAddress(dotted[1] as string);
+  const hex = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(address);
+  if (hex) {
+    const hi = Number.parseInt(hex[1] as string, 16);
+    const lo = Number.parseInt(hex[2] as string, 16);
+    return isBlockedAddress(`${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`);
+  }
+  return blockList.check(address, 'ipv6');
+}
+
+async function defaultLookup(host: string, signal: AbortSignal): Promise<ResolvedAddress[]> {
   signal.throwIfAborted();
-  const [v4, v6] = await Promise.all([
-    dns.promises.resolve4(host, { ttl: true }).catch(() => [] as string[]),
-    dns.promises.resolve6(host, { ttl: true }).catch(() => [] as string[]),
-  ]);
-  const hosts: ResolvedHost[] = [];
-  for (const address of v4) hosts.push({ address: typeof address === 'string' ? address : address.address, family: 4 });
-  for (const address of v6) hosts.push({ address: typeof address === 'string' ? address : address.address, family: 6 });
-  return hosts;
+  const records = await dnsLookup(host, { all: true, verbatim: true });
+  signal.throwIfAborted();
+  return records;
 }
 
-async function assertPublicUrl(url: URL, resolveHost: BackfillSourceDeps['resolveHost'], signal: AbortSignal): Promise<void> {
-  if (url.protocol !== 'https:') throw new Error('manifest_https_required');
-  const host = url.hostname;
-  if (host === 'localhost' || host.endsWith('.localhost')) throw new Error('private_url');
-  const resolve = resolveHost ?? defaultResolveHost;
-  const records = await resolve(host, signal);
+async function assertPublicUrl(url: URL, lookupHost: NonNullable<BackfillSourceDeps['lookupHost']>, signal: AbortSignal): Promise<void> {
+  if (url.protocol !== 'https:') throw new SourceRejection('manifest_https');
+  if (url.username !== '' || url.password !== '') throw new SourceRejection('manifest_https');
+  const host = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  if (host === '' || host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') || host.endsWith('.internal')) {
+    throw new SourceRejection('private_url');
+  }
+  if (isIP(host) !== 0) {
+    if (isBlockedAddress(host)) throw new SourceRejection('private_url');
+    return;
+  }
+  let records: ResolvedAddress[];
+  try {
+    records = await lookupHost(host, signal);
+  } catch {
+    throw new SourceRejection('manifest_dns');
+  }
+  if (records.length === 0) throw new SourceRejection('manifest_dns');
   for (const record of records) {
-    if (isIpBlocked(record.address, record.family)) throw new Error('private_url');
+    if (isBlockedAddress(record.address)) throw new SourceRejection('private_url');
   }
-}
-
-async function fetchUrlBytes(
-  url: string,
-  deps: BackfillSourceDeps,
-  signal: AbortSignal,
-): Promise<{ bytes: Uint8Array; size: number }> {
-  const resolveHost = deps.resolveHost;
-  const fetchFn = deps.fetch ?? fetch;
-  let current = new URL(url);
-  for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
-    await assertPublicUrl(current, resolveHost, signal);
-    const response = await fetchFn(current.toString(), { redirect: 'manual', signal: AbortSignal.any([signal, AbortSignal.timeout(MANIFEST_FETCH_MS)]) });
-    if (response.status >= 300 && response.status < 400) {
-      const location = response.headers.get('location');
-      await response.body?.cancel().catch(() => undefined);
-      if (!location) throw new Error('manifest_redirect_invalid');
-      current = new URL(location, current);
-      continue;
-    }
-    if (!response.ok) throw new Error('manifest_fetch_failed');
-    const bytes = await readResponseBody(response, ORIGINALS_MAX_BYTES, signal);
-    return { bytes, size: bytes.byteLength };
-  }
-  throw new Error('manifest_redirect_limit');
 }
 
 async function readResponseBody(response: Response, maxBytes: number, signal: AbortSignal): Promise<Uint8Array> {
   const declared = Number(response.headers.get('content-length') ?? '');
   if (Number.isFinite(declared) && declared > maxBytes) {
     await response.body?.cancel().catch(() => undefined);
-    throw new Error('manifest_too_large');
+    throw new SourceRejection('too_large');
   }
   if (!response.body) return new Uint8Array(0);
   const reader = response.body.getReader();
@@ -152,214 +164,290 @@ async function readResponseBody(response: Response, maxBytes: number, signal: Ab
       const { done, value } = await reader.read();
       if (done) break;
       total += value.byteLength;
-      if (total > maxBytes) throw new Error('manifest_too_large');
+      if (total > maxBytes) throw new SourceRejection('too_large');
       chunks.push(value);
     }
   } finally {
     await reader.cancel().catch(() => undefined);
   }
-  const out = new Uint8Array(total);
-  let offset = 0;
-  for (const part of chunks) {
-    out.set(part, offset);
-    offset += part.byteLength;
-  }
-  return out;
+  return Buffer.concat(chunks, total);
 }
 
-function validateManifestLine(raw: unknown): { ok: true; entry: ManifestLine } | { ok: false; reason: string } {
-  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return { ok: false, reason: 'manifest_schema' };
-  const row = raw as Record<string, unknown>;
-  if (typeof row.source_key !== 'string' || row.source_key.trim() === '') return { ok: false, reason: 'manifest_schema' };
-  const kindField = `${'doc'}_${'type'}`;
-  const hintedKind = row[kindField];
-  if (hintedKind !== undefined && hintedKind !== null && typeof hintedKind !== 'string') {
-    return { ok: false, reason: 'manifest_schema' };
+/** Fetches one https URL: every hop (the first and each redirect) is checked against private ranges before a request is made. */
+async function fetchUrlBytes(url: string, deps: BackfillSourceDeps, signal: AbortSignal): Promise<Uint8Array> {
+  const lookupHost = deps.lookupHost ?? defaultLookup;
+  const fetchFn = deps.fetch ?? fetch;
+  let current: URL;
+  try {
+    current = new URL(url);
+  } catch {
+    throw new SourceRejection('manifest_https');
   }
-  const entry: ManifestLine = {
-    source_key: row.source_key,
-    path: row.path === undefined ? null : (row.path as string | null),
-    url: row.url === undefined ? null : (row.url as string | null),
-    kindHint: typeof hintedKind === 'string' ? hintedKind : null,
-  };
-  const hasPath = entry.path !== null && entry.path !== undefined && entry.path.trim() !== '';
-  const hasUrl = entry.url !== null && entry.url !== undefined && entry.url.trim() !== '';
-  if (hasPath === hasUrl) return { ok: false, reason: 'manifest_location' };
-  if (hasUrl) {
-    try {
-      const u = new URL(entry.url as string);
-      if (u.protocol !== 'https:') return { ok: false, reason: 'manifest_https' };
-    } catch {
-      return { ok: false, reason: 'manifest_https' };
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
+    await assertPublicUrl(current, lookupHost, signal);
+    const hopSignal = AbortSignal.any([signal, AbortSignal.timeout(FETCH_TIMEOUT_MS)]);
+    const response = await fetchFn(current.toString(), { redirect: 'manual', signal: hopSignal });
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get('location');
+      await response.body?.cancel().catch(() => undefined);
+      if (!location) throw new SourceRejection('manifest_redirect');
+      try {
+        current = new URL(location, current);
+      } catch {
+        throw new SourceRejection('manifest_redirect');
+      }
+      continue;
     }
+    if (!response.ok) {
+      await response.body?.cancel().catch(() => undefined);
+      throw new SourceRejection('manifest_fetch_failed');
+    }
+    return readResponseBody(response, ORIGINALS_MAX_BYTES, hopSignal);
   }
-  if (hasPath && (entry.path as string).includes('..')) return { ok: false, reason: 'manifest_path' };
-  return { ok: true, entry };
+  throw new SourceRejection('manifest_redirect');
 }
 
-async function* listFolder(ref: string, _deps: BackfillSourceDeps, signal: AbortSignal): AsyncGenerator<SourceItem> {
-  signal.throwIfAborted();
-  const rootRaw = path.resolve(ref);
-  const root = await realpath(rootRaw);
-  const { readdir, lstat } = await import('node:fs/promises');
-  const stack: string[] = [root];
-  while (stack.length > 0) {
-    const dir = stack.pop() as string;
-    const names = await readdir(dir);
+function extname(name: string): string {
+  const base = path.basename(name);
+  const dot = base.lastIndexOf('.');
+  if (dot < 1) return 'bin';
+  const ext = base.slice(dot + 1).toLowerCase();
+  return /^[a-z0-9]{1,8}$/.test(ext) ? ext : 'bin';
+}
+
+function inside(root: string, candidate: string): boolean {
+  return candidate === root || candidate.startsWith(root.endsWith(path.sep) ? root : `${root}${path.sep}`);
+}
+
+function makeReject(deps: BackfillSourceDeps): (reason: string) => void {
+  const counts = new Map<string, number>();
+  return (reason) => {
+    counts.set(reason, (counts.get(reason) ?? 0) + 1);
+    console.warn('[Backfill] source refused', { reason, count: counts.get(reason) });
+    deps.onReject?.(reason);
+  };
+}
+
+async function* listFolder(ref: string, deps: BackfillSourceDeps, signal: AbortSignal): AsyncGenerator<SourceItem> {
+  const reject = makeReject(deps);
+  const root = await realpath(path.resolve(ref));
+  const pending: string[] = [root];
+  while (pending.length > 0) {
+    signal.throwIfAborted();
+    const dir = pending.pop() as string;
+    const names = (await readdir(dir)).sort();
+    const subdirs: string[] = [];
     for (const name of names) {
-      if (name.includes('..')) throw new Error('outside_root');
       const joined = path.join(dir, name);
-      const info = await lstat(joined);
-      if (info.isDirectory()) {
-        stack.push(joined);
+      const link = await lstat(joined);
+      if (link.isDirectory()) {
+        subdirs.push(joined);
         continue;
       }
-      if (!info.isFile()) continue;
+      if (!link.isFile() && !link.isSymbolicLink()) continue;
       let canonical: string;
       try {
         canonical = await realpath(joined);
       } catch {
-        console.warn('[Backfill] source refused', { reason: 'unreadable', count: 1 });
+        reject('path_unreadable');
         continue;
       }
-      if (!canonical.startsWith(`${root}${path.sep}`) && canonical !== root) {
-        console.warn('[Backfill] source refused', { reason: 'outside_root', count: 1 });
+      if (!inside(root, canonical)) {
+        reject('outside_root');
         continue;
       }
-      const rel = path.relative(root, canonical).split(path.sep).join('/');
+      const info = await stat(canonical);
+      if (!info.isFile()) continue;
+      if (info.size > ORIGINALS_MAX_BYTES) {
+        reject('too_large');
+        continue;
+      }
+      const rel = path.relative(root, joined).split(path.sep).join('/');
       yield {
         sourceKey: rel,
         size: info.size,
         ext: extname(rel),
         async open() {
-          return createReadStream(canonical);
+          const again = await realpath(joined);
+          if (!inside(root, again)) throw new SourceRejection('outside_root');
+          return createReadStream(again);
         },
       };
     }
+    for (const sub of subdirs.reverse()) pending.push(sub);
   }
 }
 
 async function* listBucket(ref: string, deps: BackfillSourceDeps, signal: AbortSignal): AsyncGenerator<SourceItem> {
-  const storage = deps.storage;
-  if (!storage) throw new Error('bucket_storage_unavailable');
+  const reject = makeReject(deps);
   const bucket = ref.trim();
-  if (bucket === '') throw new Error('bucket_ref_invalid');
-  const api = storage.from(bucket);
+  if (!BUCKET_NAME_RE.test(bucket)) throw new SourceRejection('bucket_ref_invalid');
+  if (INTERNAL_BUCKETS.has(bucket)) throw new SourceRejection('bucket_internal');
+  if (!deps.storage) throw new SourceRejection('bucket_storage_unavailable');
+  const api = deps.storage.from(bucket);
+  const visited = new Set<string>();
   const pending: string[] = [''];
-  let listPasses = 0;
-  const MAX_BUCKET_LIST_PASSES = 10_000;
   while (pending.length > 0) {
-    signal.throwIfAborted();
-    if (listPasses >= MAX_BUCKET_LIST_PASSES) throw new Error('bucket_list_limit');
-    listPasses += 1;
     const prefix = pending.pop() as string;
-    const { data, error } = await api.list(prefix, { limit: 1000 });
-    if (error) throw new Error('bucket_list_failed');
-    for (const row of data ?? []) {
-      if (!row?.name) continue;
-      const full = prefix === '' ? row.name : `${prefix}/${row.name}`;
-      if (row.id === null || row.metadata == null) {
-        pending.push(full);
-        continue;
+    if (visited.has(prefix)) continue;
+    visited.add(prefix);
+    for (let offset = 0; ; offset += BUCKET_PAGE) {
+      signal.throwIfAborted();
+      const { data, error } = await api.list(prefix, { limit: BUCKET_PAGE, offset });
+      if (error) throw new SourceRejection('bucket_list_failed');
+      const rows = data ?? [];
+      for (const row of rows) {
+        if (!row?.name) continue;
+        const full = prefix === '' ? row.name : `${prefix}/${row.name}`;
+        if (row.id === null || row.id === undefined) {
+          pending.push(full);
+          continue;
+        }
+        const size = Number(row.metadata?.size ?? 0);
+        if (Number.isFinite(size) && size > ORIGINALS_MAX_BYTES) {
+          reject('too_large');
+          continue;
+        }
+        yield {
+          sourceKey: full,
+          size: Number.isFinite(size) ? size : 0,
+          ext: extname(full),
+          async open() {
+            const { data: blob, error: downloadError } = await api.download(full);
+            if (downloadError || !blob) throw new SourceRejection('bucket_download_failed');
+            return Readable.from([Buffer.from(await blob.arrayBuffer())]);
+          },
+        };
       }
-      const size = Number(row.metadata?.size ?? 0);
-      yield {
-        sourceKey: full,
-        size: Number.isFinite(size) ? size : 0,
-        ext: extname(full),
-        async open() {
-          const { data: blob, error: dlErr } = await api.download(full);
-          if (dlErr || !blob) throw new Error('bucket_download_failed');
-          const buffer = await blob.arrayBuffer();
-          return Readable.from([Buffer.from(buffer)]);
-        },
-      };
+      if (rows.length < BUCKET_PAGE) break;
     }
   }
+}
+
+function parseManifestLine(line: string): { ok: true; entry: BackfillManifestEntry } | { ok: false; reason: string } {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(line);
+  } catch {
+    return { ok: false, reason: 'manifest_json' };
+  }
+  const parsed = BackfillManifestEntrySchema.safeParse(raw);
+  if (!parsed.success) return { ok: false, reason: 'manifest_schema' };
+  const entry = parsed.data;
+  const hasPath = entry.path !== null && entry.path.trim() !== '';
+  const hasUrl = entry.url !== null && entry.url.trim() !== '';
+  if (hasPath === hasUrl) return { ok: false, reason: 'manifest_location' };
+  if (hasUrl) {
+    try {
+      if (new URL(entry.url as string).protocol !== 'https:') return { ok: false, reason: 'manifest_https' };
+    } catch {
+      return { ok: false, reason: 'manifest_https' };
+    }
+  }
+  return { ok: true, entry };
 }
 
 async function* listManifest(ref: string, deps: BackfillSourceDeps, signal: AbortSignal): AsyncGenerator<SourceItem> {
-  const manifestPath = path.resolve(ref);
+  const reject = makeReject(deps);
+  const manifestPath = await realpath(path.resolve(ref));
   const manifestDir = path.dirname(manifestPath);
-  const reject = deps.onManifestReject ?? ((reason: string) => console.warn('[Backfill] manifest line refused', { reason, count: 1 }));
+  const root = await realpath(manifestDir);
   const stream = createReadStream(manifestPath);
-  const rl = createInterface({ input: stream, crlfDelay: Infinity });
-  for await (const line of rl) {
-    const trimmed = line.trim();
-    if (trimmed === '') continue;
-    let raw: unknown;
-    try {
-      raw = JSON.parse(trimmed) as unknown;
-    } catch {
-      reject('manifest_json');
-      continue;
-    }
-    const validated = validateManifestLine(raw);
-    if (!validated.ok) {
-      reject(validated.reason);
-      continue;
-    }
-    const entry = validated.entry;
-    if (entry.path) {
-      const resolved = path.isAbsolute(entry.path) ? path.resolve(entry.path) : path.resolve(manifestDir, entry.path);
-      if (resolved.includes('..')) {
-        reject('manifest_path');
+  const lines = createInterface({ input: stream, crlfDelay: Infinity });
+  const seenKeys = new Set<string>();
+  try {
+    for await (const line of lines) {
+      signal.throwIfAborted();
+      const trimmed = line.trim();
+      if (trimmed === '') continue;
+      const parsed = parseManifestLine(trimmed);
+      if (!parsed.ok) {
+        reject(parsed.reason);
         continue;
       }
-      let canonical: string;
-      let size = 0;
-      try {
-        canonical = await realpath(resolved);
-        const info = await stat(canonical);
-        size = info.size;
-        const root = await realpath(manifestDir);
-        if (!canonical.startsWith(`${root}${path.sep}`) && canonical !== root) {
+      const { entry } = parsed;
+      if (seenKeys.has(entry.source_key)) {
+        reject('manifest_duplicate_key');
+        continue;
+      }
+      seenKeys.add(entry.source_key);
+      const docType = entry.doc_type ?? undefined;
+
+      if (entry.path !== null && entry.path.trim() !== '') {
+        if (entry.path.split(/[\\/]+/).includes('..')) {
           reject('outside_root');
           continue;
         }
-      } catch {
-        reject('manifest_path');
+        const resolved = path.isAbsolute(entry.path) ? path.resolve(entry.path) : path.resolve(manifestDir, entry.path);
+        let canonical: string;
+        let size: number;
+        try {
+          canonical = await realpath(resolved);
+          const info = await stat(canonical);
+          if (!info.isFile()) {
+            reject('path_unreadable');
+            continue;
+          }
+          size = info.size;
+        } catch {
+          reject('path_unreadable');
+          continue;
+        }
+        if (!inside(root, canonical)) {
+          reject('outside_root');
+          continue;
+        }
+        if (size > ORIGINALS_MAX_BYTES) {
+          reject('too_large');
+          continue;
+        }
+        yield {
+          sourceKey: entry.source_key,
+          size,
+          ext: extname(entry.path),
+          docType,
+          async open() {
+            const again = await realpath(resolved);
+            if (!inside(root, again)) throw new SourceRejection('outside_root');
+            return createReadStream(again);
+          },
+        };
+        continue;
+      }
+
+      const url = entry.url as string;
+      let bytes: Uint8Array;
+      try {
+        bytes = await fetchUrlBytes(url, deps, signal);
+      } catch (error) {
+        if (signal.aborted) throw error;
+        reject(error instanceof SourceRejection ? error.reason : 'manifest_fetch_failed');
         continue;
       }
       yield {
         sourceKey: entry.source_key,
-        size,
-        ext: extname(entry.path),
-        kindHint: entry.kindHint ?? undefined,
+        size: bytes.byteLength,
+        ext: extname(new URL(url).pathname),
+        docType,
         async open() {
-          return createReadStream(canonical);
+          return Readable.from([Buffer.from(bytes)]);
         },
       };
-      continue;
     }
-    try {
-      const { bytes, size } = await fetchUrlBytes(entry.url as string, deps, signalOrTimeout(signal));
-      yield {
-        sourceKey: entry.source_key,
-        size,
-        ext: extname(new URL(entry.url as string).pathname),
-        kindHint: entry.kindHint ?? undefined,
-        async open() {
-          return Readable.from([bytes]);
-        },
-      };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'manifest_fetch_failed';
-      reject(message.includes('private') ? 'private_url' : message);
-    }
+  } finally {
+    lines.close();
+    stream.destroy();
   }
 }
 
+/**
+ * Lists the files of one source in a stable order. Refused entries (outside the root, private URL, oversize, ...) are
+ * skipped and reported by reason code only; nothing about a file's name or content is logged.
+ */
 export async function* listSource(input: ListSourceInput): AsyncGenerator<SourceItem> {
-  const signal = signalOrTimeout(input.signal);
+  const signal = input.signal ?? new AbortController().signal;
   const deps = input.deps ?? {};
-  if (input.kind === 'folder') {
-    yield* listFolder(input.ref, deps, signal);
-    return;
-  }
-  if (input.kind === 'bucket') {
-    yield* listBucket(input.ref, deps, signal);
-    return;
-  }
-  yield* listManifest(input.ref, deps, signal);
+  if (input.kind === 'folder') yield* listFolder(input.ref, deps, signal);
+  else if (input.kind === 'bucket') yield* listBucket(input.ref, deps, signal);
+  else yield* listManifest(input.ref, deps, signal);
 }

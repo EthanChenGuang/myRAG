@@ -1,11 +1,11 @@
 import { createHash } from 'node:crypto';
-import type { Readable } from 'node:stream';
-import { once } from 'node:events';
+import { Writable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import type { RpcClient } from '@/lib/rag/backend/supabase-rpc';
 import type { SourceItem } from './sources';
 
-const HASH_CHUNK = 64 * 1024;
 const EXISTING_HASH_CHUNK = 1_000;
+const SKIPPED_ENQUEUE_CHUNK = 1_000;
 
 export interface BackfillBatchRef {
   id: string;
@@ -19,7 +19,7 @@ export interface InventoryEntry {
   ext: string;
   filename: string;
   mimeType: string;
-  kindHint?: string | null;
+  docType: SourceItem['docType'] | null;
 }
 
 export interface InventoryDuplicateCounts {
@@ -27,11 +27,13 @@ export interface InventoryDuplicateCounts {
   alreadyExisting: number;
 }
 
+/** total = uniqueNew + inInventoryDuplicates + existingDuplicates + unreadable. */
 export interface InventoryTotals {
   total: number;
   uniqueNew: number;
   inInventoryDuplicates: number;
   existingDuplicates: number;
+  unreadable: number;
 }
 
 export interface InventoryResult {
@@ -45,20 +47,22 @@ export interface BackfillInventoryDeps {
   signal: AbortSignal;
 }
 
-async function streamSha256(stream: Readable, signal: AbortSignal): Promise<string> {
+interface FirstSeen {
+  sourceKey: string;
+  size: number;
+  ext: string;
+  docType: SourceItem['docType'] | null;
+}
+
+async function streamSha256(stream: NodeJS.ReadableStream, signal: AbortSignal): Promise<string> {
   const hash = createHash('sha256');
-  stream.on('data', (chunk: Buffer | Uint8Array) => {
-    hash.update(chunk);
+  const sink = new Writable({
+    write(chunk: Buffer, _encoding, callback) {
+      hash.update(chunk);
+      callback();
+    },
   });
-  const abort = (): void => {
-    stream.destroy(signal.reason ?? new Error('aborted'));
-  };
-  signal.addEventListener('abort', abort, { once: true });
-  try {
-    await once(stream, 'end');
-  } finally {
-    signal.removeEventListener('abort', abort);
-  }
+  await pipeline(stream, sink, { signal });
   return hash.digest('hex');
 }
 
@@ -78,52 +82,47 @@ function mimeFromExt(ext: string): string {
   }
 }
 
-async function existingHashes(
-  rpc: RpcClient,
-  tenantKey: string,
-  hashes: string[],
-  signal: AbortSignal,
-): Promise<Set<string>> {
+function baseName(sourceKey: string): string {
+  return sourceKey.split('/').pop() ?? sourceKey;
+}
+
+async function existingHashes(rpc: RpcClient, tenantKey: string, hashes: string[], signal: AbortSignal): Promise<Set<string>> {
   const found = new Set<string>();
   for (let i = 0; i < hashes.length; i += EXISTING_HASH_CHUNK) {
     signal.throwIfAborted();
-    const slice = hashes.slice(i, i + EXISTING_HASH_CHUNK);
-    const response = await rpc.rpc('rag_existing_file_hashes', {
-      p_tenant_key: tenantKey,
-      p_hashes: slice,
-    });
-    if (response.error) throw new Error('[Backfill] existing hash lookup failed');
-    const rows = Array.isArray(response.data) ? response.data : [];
-    for (const row of rows as Array<{ file_sha256?: string; tenant_key?: string }>) {
+    const { data, error } = await rpc
+      .rpc('rag_existing_file_hashes', { p_tenant_key: tenantKey, p_hashes: hashes.slice(i, i + EXISTING_HASH_CHUNK) })
+      .abortSignal(signal);
+    if (error) throw new Error('[Backfill] existing hash lookup failed');
+    for (const row of (data as Array<{ file_sha256?: string; tenant_key?: string }> | null) ?? []) {
+      // The SQL already filters on the tenant; a row of any other tenant is ignored here as well.
       if (typeof row?.file_sha256 === 'string' && row.tenant_key === tenantKey) found.add(row.file_sha256);
     }
   }
   return found;
 }
 
-async function enqueueSkipped(
-  rpc: RpcClient,
-  batchId: string,
-  jobs: Record<string, unknown>[],
-  signal: AbortSignal,
-): Promise<void> {
-  if (jobs.length === 0) return;
-  signal.throwIfAborted();
-  const response = await rpc.rpc('rag_enqueue_backfill_jobs', {
-    p_batch_id: batchId,
-    p_jobs: jobs,
-  });
-  if (response.error) throw new Error('[Backfill] skipped_duplicate enqueue failed');
+async function enqueueSkipped(rpc: RpcClient, batchId: string, jobs: Record<string, unknown>[], signal: AbortSignal): Promise<void> {
+  for (let i = 0; i < jobs.length; i += SKIPPED_ENQUEUE_CHUNK) {
+    signal.throwIfAborted();
+    const { error } = await rpc
+      .rpc('rag_enqueue_backfill_jobs', { p_batch_id: batchId, p_jobs: jobs.slice(i, i + SKIPPED_ENQUEUE_CHUNK) })
+      .abortSignal(signal);
+    if (error) throw new Error('[Backfill] skipped_duplicate enqueue failed');
+  }
 }
 
-export async function inventory(
-  batch: BackfillBatchRef,
-  source: AsyncIterable<SourceItem>,
-  deps: BackfillInventoryDeps,
-): Promise<InventoryResult> {
-  const firstByHash = new Map<string, SourceItem & { hash: string }>();
+/**
+ * D-33 step 1. Hashes every file of the source (streaming, never whole in memory), keeps the first file of each hash
+ * and records every other copy, and every file whose hash the tenant already has as a current ready document, as a
+ * skipped_duplicate ledger row of the batch. Dedupe is inside the batch's tenant only. Re-running it for the same batch
+ * is safe: the ledger's unique key on (batch, kind, source_key) drops rows that exist already.
+ */
+export async function inventory(batch: BackfillBatchRef, source: AsyncIterable<SourceItem>, deps: BackfillInventoryDeps): Promise<InventoryResult> {
+  const firstByHash = new Map<string, FirstSeen>();
   const skippedJobs: Record<string, unknown>[] = [];
   let inInventoryDuplicates = 0;
+  let unreadable = 0;
   let total = 0;
 
   const skipRow = (sourceKey: string, ext: string, fileHash: string): void => {
@@ -131,7 +130,7 @@ export async function inventory(
       kind: 'ingest',
       source_key: sourceKey,
       file_sha256: fileHash,
-      filename: sourceKey,
+      filename: baseName(sourceKey),
       mime_type: mimeFromExt(ext),
       status: 'skipped_duplicate',
       settings: {},
@@ -141,54 +140,53 @@ export async function inventory(
   for await (const item of source) {
     deps.signal.throwIfAborted();
     total += 1;
-    const stream = await item.open(deps.signal);
-    const hash = await streamSha256(stream as Readable, deps.signal);
-
+    let hash: string;
+    try {
+      hash = await streamSha256(await item.open(deps.signal), deps.signal);
+    } catch (error) {
+      if (deps.signal.aborted) throw error;
+      unreadable += 1;
+      console.warn('[Backfill] source unreadable', { count: unreadable });
+      continue;
+    }
     if (firstByHash.has(hash)) {
       inInventoryDuplicates += 1;
       skipRow(item.sourceKey, item.ext, hash);
       continue;
     }
-    firstByHash.set(hash, { ...item, hash });
+    firstByHash.set(hash, { sourceKey: item.sourceKey, size: item.size, ext: item.ext, docType: item.docType ?? null });
   }
 
-  const uniqueHashes = [...firstByHash.keys()];
-  const tenantExisting = await existingHashes(deps.rpc, batch.tenantKey, uniqueHashes, deps.signal);
+  const tenantExisting = await existingHashes(deps.rpc, batch.tenantKey, [...firstByHash.keys()], deps.signal);
 
   const entries: InventoryEntry[] = [];
   let existingDuplicates = 0;
-
-  for (const first of firstByHash.values()) {
-    if (tenantExisting.has(first.hash)) {
+  for (const [hash, first] of firstByHash) {
+    if (tenantExisting.has(hash)) {
       existingDuplicates += 1;
-      skipRow(first.sourceKey, first.ext, first.hash);
+      skipRow(first.sourceKey, first.ext, hash);
       continue;
     }
     entries.push({
       sourceKey: first.sourceKey,
-      fileSha256: first.hash,
+      fileSha256: hash,
       size: first.size,
       ext: first.ext,
-      filename: first.sourceKey.split('/').pop() ?? first.sourceKey,
+      filename: baseName(first.sourceKey),
       mimeType: mimeFromExt(first.ext),
-      kindHint: first.kindHint ?? null,
+      docType: first.docType,
     });
   }
 
   await enqueueSkipped(deps.rpc, batch.id, skippedJobs, deps.signal);
 
-  const totals: InventoryTotals = {
-    total,
-    uniqueNew: entries.length,
-    inInventoryDuplicates,
-    existingDuplicates,
-  };
-
+  const totals: InventoryTotals = { total, uniqueNew: entries.length, inInventoryDuplicates, existingDuplicates, unreadable };
   console.log('[Backfill] inventory complete', {
     total: totals.total,
     unique_new: totals.uniqueNew,
     in_inventory: totals.inInventoryDuplicates,
     already_existing: totals.existingDuplicates,
+    unreadable: totals.unreadable,
   });
 
   return {
