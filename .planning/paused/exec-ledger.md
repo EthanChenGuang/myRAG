@@ -108,7 +108,7 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | 04-19 | [bc-eafdad13](bc-eafdad13-4e57-5750-a00f-8bc029517ee2) **merged** | exec/04-19 — tracer 6 + vitest 18 |
 | 04-45 | [bc-32843230](bc-32843230-3c15-53cb-be49-93f84da0a3bb) **merged** | exec/04-45 — vitest 13 |
 | 03-48-sec-rpc | [bc-049b7ab0](bc-049b7ab0-c778-50b5-bce6-77842e48a55e) **merged** | exec/03-48-sec-rpc — PGlite 2/2 |
-| 04-20 | [bc-36e7beb3](bc-36e7beb3-7655-51e7-964a-e1082fa083c3) RUNNING | exec/04-20 |
+| 04-20 | [bc-36e7beb3](bc-36e7beb3-7655-51e7-964a-e1082fa083c3) **COMPLETE** (post-PAUSE; not merged) | `origin/exec/04-20` @ `081224a` |
 | 03-48-setup-idempotent | [bc-b37c0b7a](bc-b37c0b7a-eb5e-51b0-83b2-b0e870bb6318) RUNNING | exec/03-48-setup-idempotent |
 
 ## Remaining plan inventory (file-overlap basis)
@@ -135,7 +135,7 @@ All four executors **stopped**; WIP on `origin/exec/*` + patches in `.planning/p
 | 03-48-setup-idempotent | [bc-b37c0b7a](bc-b37c0b7a-eb5e-51b0-83b2-b0e870bb6318) | **STOPPED** | `wt/03-48-setup-idempotent` | WIP `d1c5821` on `origin/exec/03-48-setup-idempotent` |
 | 03.1-25 | [bc-1f542e8a](bc-1f542e8a-f80a-58a7-99bb-5c47f655d0ce) | **STOPPED** | `wt/03.1-25` | WIP `7c5f7f8` on `origin/exec/03.1-25` |
 | 04-18 | [bc-78743196](bc-78743196-9471-5cda-8414-1d4c80c9d85f) | **STOPPED** | `wt/04-18` | WIP `258a14f` on `origin/exec/04-18` |
-| 04-20 | [bc-36e7beb3](bc-36e7beb3-7655-51e7-964a-e1082fa083c3) | **STOPPED** | `wt/04-20` | WIP `b5e47fe` on `origin/exec/04-20` |
+| 04-20 | [bc-36e7beb3](bc-36e7beb3-7655-51e7-964a-e1082fa083c3) | **COMPLETE** | `wt/04-20` | **merge-ready** `081224a` (`11c0e0f` feat + SUMMARY); supersedes pause WIP `b5e47fe` — **do not merge until resume** |
 
 **Overflow queue (spawn next free slot, same turn as merge):**
 
