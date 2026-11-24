@@ -21,3 +21,4 @@ After all: code review gate -> regression gate -> verifier -> update roadmap.
 
 ## From 03-01 (2026-11-24)
 - D-08 quarantine/not-current filter covers only the 8 search RPCs. Direct readers still see quarantined or non-current chunks: voice keyword fallback, `refs/resolve`, `context/fetch-rows`, documents routes, and the table SELECT policies (single-tenant `USING (true)`, multi-tenant owner/member). No Phase 3 plan names these paths explicitly. Check in the Phase 3 code review; add a gap plan if 03-30/03-37 do not close it.
+- Security backlog (05.1 research F-11): `baileys-whatsapp/server.ts:119` fetches link previews server-side for any URL in a reply (exfiltration/SSRF channel). Fix with an allowlist or disable previews for assistant replies.
