@@ -115,6 +115,8 @@ Prechunked gate: `paired.all_zero == true`. Ingest gate: `passed == true`.
 
 ## Commits
 
-1. `feat(eval): ingest typed manifest fixtures and success-criteria PGlite tests`
-2. `test(rag-db): write-path metadata parity under unified ingest`
-3. `chore(eval): ingest-only golden items and re-record ingest baseline`
+| Task | SHA | Message |
+|------|-----|---------|
+| 1 | `77ee195` | feat(03-44): typed ingest fixtures and success-criteria PGlite tests |
+| 2 | `46da393` | test(03-44): write-path chunk metadata parity across five sources |
+| 3 | `35b2404` | feat(03-44): ingest golden items, contract test, and re-recorded baseline |
