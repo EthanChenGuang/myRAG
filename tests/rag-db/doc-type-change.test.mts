@@ -272,12 +272,16 @@ describe('multi-tenant: changing the type of a document creates a new version', 
         if (!/\.(ts|tsx)$/.test(entry.name)) continue;
         const source = fs.readFileSync(full, 'utf8');
         const rel = path.relative(REPO_ROOT, full);
-        if (/\btypeChange\s*:/.test(source)) builders.push(rel);
+        if (/typeChange:\s*typeChangeOf\(/.test(source)) builders.push(rel);
         if (/\.typeChange\s*=/.test(source)) carriers.push(rel);
       }
     };
     walk(path.join(REPO_ROOT, 'src'));
     assert.deepEqual(builders, ['src/lib/rag/ingest/change-doc-type.ts']);
-    assert.deepEqual(carriers.sort(), ['src/lib/rag/ingest/index.ts', 'src/lib/rag/ingest/status.ts']);
+    assert.deepEqual(carriers.sort(), [
+      'src/lib/rag/ingest/enqueue.ts',
+      'src/lib/rag/ingest/index.ts',
+      'src/lib/rag/ingest/status.ts',
+    ]);
   });
 });
