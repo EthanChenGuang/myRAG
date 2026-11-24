@@ -7,6 +7,15 @@ from rag_sidecar.contracts.report import ItemResult, MetricValue, SliceMetrics
 from rag_eval.matching import chunk_matches_span
 
 _RECALL_FIELDS = {5: "spans_hit_at_5", 10: "spans_hit_at_10"}
+CROSS_LINGUAL = "cross_lingual"
+
+
+def language_pair_key(language: str, evidence_language: str) -> str:
+    return f"{language}->{evidence_language}"
+
+
+def _pair_members(results: Iterable[ItemResult]) -> list[ItemResult]:
+    return [r for r in results if r.category == CROSS_LINGUAL and r.evidence_language is not None]
 
 
 def _first_rank_per_span(trace: RagTrace, item: GoldenItem) -> list[int | None]:
@@ -41,6 +50,7 @@ def score_items(traces: list[RagTrace], golden: list[GoldenItem]) -> list[ItemRe
                 item_id=item.id,
                 language=item.language,
                 category=item.category,
+                evidence_language=item.evidence_language,
                 split=item.split,
                 provenance=item.provenance,
                 answerable=item.answerable,
@@ -100,6 +110,9 @@ def aggregate(
         "by_language": _group(population, lambda r: r.language),
         "by_category": _group(population, lambda r: r.category),
         "by_language_category": _group(gated, lambda r: f"{r.language}/{r.category}"),
+        "by_language_pair": _group(
+            _pair_members(population), lambda r: language_pair_key(r.language, r.evidence_language or "")
+        ),
         "by_split": _group(results, lambda r: r.split),
         "by_provenance": _group(gated, lambda r: r.provenance),
         "by_provenance_category": _group(gated, lambda r: f"{r.provenance}/{r.category}"),

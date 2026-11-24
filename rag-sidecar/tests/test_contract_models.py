@@ -260,7 +260,7 @@ class TestNoiseConfig:
         noise = NoiseConfig()
         assert noise.k == 3.0
         assert noise.floor == 0.02
-        assert noise.gated_slice_prefixes == ["overall", "language:"]
+        assert noise.gated_slice_prefixes == ["overall", "language:", "category:cross_lingual", "pair:"]
         assert noise.schema_version == 1
 
     def test_false_refusal_rate_is_lower_is_better_by_default(self):

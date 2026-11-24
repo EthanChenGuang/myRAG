@@ -165,7 +165,7 @@ def test_write_report_markdown_has_tables_rounding_and_na(tmp_path: Path):
     assert "n/a (n=0)" in md
     assert "0.3333333" not in md
     assert "categories are report-only" in md.lower()
-    assert "only overall and per-language slices gate" in md.lower()
+    assert "only overall, per-language, cross_lingual and per-language-pair slices gate" in md.lower()
 
 
 def test_write_report_is_byte_identical_across_two_writes(tmp_path: Path):

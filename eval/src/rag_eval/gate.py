@@ -22,6 +22,8 @@ def _report_slices(report: EvalReport) -> dict[str, SliceMetrics]:
         slices[f"language:{language}"] = metrics
     for category, metrics in report.by_category.items():
         slices[f"category:{category}"] = metrics
+    for pair, metrics in report.by_language_pair.items():
+        slices[f"pair:{pair}"] = metrics
     return slices
 
 

@@ -33,9 +33,9 @@ ZH_QUIRK_NOTE = (
     "zh slices can look better than en and it slices for that reason."
 )
 GATING_NOTE = (
-    "Overall, language and category tables cover the dev split only. Categories are report-only; "
-    "only overall and per-language slices gate (D-20). The held-out test split is reported under By split "
-    "and never gates (D-14)."
+    "Overall, language, language pair and category tables cover the dev split only. Categories are report-only "
+    "except cross_lingual; only overall, per-language, cross_lingual and per-language-pair slices gate "
+    "(D-20, D-41). The held-out test split is reported under By split and never gates (D-14)."
 )
 
 PRODUCTION_GATE_NOTE = (
@@ -149,6 +149,12 @@ def _table(first_column: str, rows: dict[str, SliceMetrics]) -> list[str]:
     return lines
 
 
+def _language_pair_section(report: EvalReport) -> list[str]:
+    if not report.by_language_pair:
+        return []
+    return ["## By language pair", "", *_table("Question->evidence", report.by_language_pair), ""]
+
+
 def _ms(value: float | None) -> str:
     return "-" if value is None else f"{value:.1f}"
 
@@ -223,6 +229,7 @@ def _render_markdown(report: EvalReport, budgets: LatencyBudgets | None = None) 
         "",
         *_table("Language/category", report.by_language_category),
         "",
+        *_language_pair_section(report),
         "## By provenance",
         "",
         *_table("Provenance", report.by_provenance),

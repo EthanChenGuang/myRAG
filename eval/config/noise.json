@@ -2,7 +2,9 @@
   "floor": 0.02,
   "gated_slice_prefixes": [
     "overall",
-    "language:"
+    "language:",
+    "category:cross_lingual",
+    "pair:"
   ],
   "k": 3,
   "metrics": {

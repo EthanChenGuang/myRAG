@@ -8,6 +8,7 @@ from pydantic import ValidationError
 from rag_sidecar.contracts.baseline import Baseline, NoiseConfig, PairedReport, PairedStat
 from rag_sidecar.contracts.report import EvalReport, ItemResult
 
+from rag_eval.metrics import CROSS_LINGUAL, language_pair_key
 from rag_eval.paths import resolve_cli_path
 
 SEED = 20261123
@@ -78,6 +79,9 @@ def _slice_members(items: list[ItemResult]) -> dict[str, list[ItemResult]]:
     for item in items:
         members.setdefault(f"language:{item.language}", []).append(item)
         members.setdefault(f"category:{item.category}", []).append(item)
+        if item.category == CROSS_LINGUAL and item.evidence_language is not None:
+            pair = language_pair_key(item.language, item.evidence_language)
+            members.setdefault(f"pair:{pair}", []).append(item)
     return members
 
 
