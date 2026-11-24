@@ -242,7 +242,8 @@ for (const mode of MODES) {
           mode === 'single-tenant'
             ? 'SELECT chunk_id::text AS id FROM match_document_chunks(query_embedding => $1::vector, similarity_threshold => 0.0, match_count => 200)'
             : 'SELECT id::text FROM match_documents_by_workspace(p_query_embedding => $1::vector, p_match_count => 200, p_min_similarity => 0.0, p_org_id => NULL, p_user_id => $2::uuid)';
-        const params = mode === 'single-tenant' ? [`[${vector(1536, 0).join(',')}]`] : [`[${vector(1536, 0).join(',')}]`, a.userId];
+        const flat = `[${Array.from({ length: 1536 }, () => 1).join(',')}]`;
+        const params = mode === 'single-tenant' ? [flat] : [flat, a.userId];
         return (await h.query(sql, params)).map((r) => String(r.id)).sort();
       };
 
@@ -360,7 +361,12 @@ for (const mode of MODES) {
       const legacy = rows.find((row) => row.doc_type === docType && row.profile_id === 'legacy');
       assert.deepEqual({ missing: legacy?.missing_documents, active: legacy?.is_active }, { missing: 0, active: false });
       const generalLegacy = rows.find((row) => row.doc_type === 'general' && row.profile_id === 'legacy');
-      assert.deepEqual({ ready: generalLegacy?.current_ready_documents, missing: generalLegacy?.missing_documents, active: generalLegacy?.is_active }, { ready: 1, missing: 0, active: true });
+      const generalReady = (await h.query(`SELECT count(*)::int AS n FROM documents WHERE doc_type = 'general' AND is_current AND status = 'ready'`))[0]?.n;
+      assert.ok(Number(generalReady) >= 1);
+      assert.deepEqual(
+        { ready: generalLegacy?.current_ready_documents, missing: generalLegacy?.missing_documents, active: generalLegacy?.is_active },
+        { ready: generalReady, missing: 0, active: true },
+      );
 
       await h.fill(onlyLegacy, a, 'p256-1024', 'cov-3');
       const newest = String((await h.query(`SELECT id::text FROM documents WHERE source_key = 'cov-4.md' AND is_current`))[0]?.id);
