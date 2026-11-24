@@ -1,6 +1,6 @@
 # 03-48 Live verification summary
 
-**Status:** Task 1 recorded (box agent, multi-tenant Supabase `ppvywaxrycaxrtrrditl`). Tasks 2–3 **pending** (vendor keys, Nango, unified ingest build). No secrets in this file.
+**Status:** Task 1 + Task 2 (API-level, fake data) recorded from operator box (2026-11-24 ~13:13 Europe/Rome). Task 3 pending. No secrets in this file.
 
 ## Task 1 — Live Supabase (2026-11-24, ppvywaxrycaxrtrrditl, multi-tenant)
 
@@ -35,10 +35,18 @@ Apply in repo order when promoting past Task 1 baseline:
 
 Further numbered migrations (e.g. after **04-07** on trunk) must be re-listed at each live promotion.
 
-## Task 2 — Parsers, embeddings, sidecar (pending)
+## Task 2 — Live parsers and embedding providers (2026-11-24, API-level, fake data)
 
-Blocked: `LLAMA_CLOUD_API_KEY`, Docker sidecar image, Voyage/Qwen/DeepInfra/OpenRouter keys. See `03-48-LIVE-PREFLIGHT.md`.
+Recorded from operator box (13:13 Europe/Rome). No customer data; no API key material in this file.
+
+- **T2.1 LlamaParse v2 — PASS:** v2 upload+poll as in `llamaparse-v2.ts` (`tier` `cost_effective`, `version` `latest`); fake 2-page en/it/zh invoice PDF with 3-col table; **COMPLETED** in 5.1 s, 2/2 pages, items heading/table/text; table HTML on page markdown matches item html so `applyTables` swap applies; item md is GFM with header row, empty cell kept; Italian diacritics and Chinese verbatim. `/api/v2/parse/versions` **200:** `cost_effective` 2026-11-09, `agentic` 2026-11-09, `fast` 2026-11-12 (**pin `cost_effective` 2026-11-09** if pinning).
+- **T2.2 Docling OCR — NOT RUN (operator box):** needs Docker sidecar image (`docker build --target docling rag-sidecar`, zh/it fake scans, `docker stats` peak memory). **CI-only on cloud VM** (no Docker daemon here). Same gate for integration-branch CI unless a runner with Docker is added.
+- **T2.3 Voyage `voyage-4-large` — PASS:** dim **2048** n=200 in 1.4 s, norms 1.0; en–it 0.901, en–zh 0.963, it–zh 0.891, unrelated 0.470; query ranks relevant > unrelated (0.546/0.525/0.489 vs 0.205). dim **1024** n=200, similar (0.904/0.965/0.893/0.460). Account has no payment method: free tier 3 RPM / 10K TPM, one **429** then retry OK — real reembed needs billing (owner decision); reembed CLI must respect 429/backoff.
+- **T2.4a Qwen3-Embedding-8B via OpenRouter — PASS:** **200** in 1.16 s, **4096** dims, norm 1.0, upstream provider reported DeepInfra; Instruct/Query prefix changes query vector as intended (0.579 vs 0.735 without); MRL to **2048** per `mrl.ts` norm 1.000000; ranking identical full vs truncated (en>zh>it>off), max pairwise cosine delta 0.028.
+- **T2.4b DeepInfra direct vs OpenRouter `cosine>0.999` — BLOCKED:** DeepInfra **402** (no balance). OpenRouter routes this model to DeepInfra; a real two-host check should pin a different OpenRouter provider.
+
+**Task 2 verdict (plan):** partial — parser API + embedding providers verified; **Docling OCR path open until CI Docker run (T2.2)**; DeepInfra parity (T2.4b) open until funded second host.
 
 ## Task 3 — Re-embed, profiles, Nango, Config UI (pending)
 
-Blocked: Task 2 + running app with auth + Nango connector test.
+Blocked: live re-embed / profile compare (billing + keys), unified ingest build, Nango connector test in Config UI. Task 2 embedding APIs OK for dev; production reembed still needs owner billing decision (Voyage free-tier limits).
