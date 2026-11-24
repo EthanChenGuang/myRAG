@@ -1,8 +1,183 @@
 {
-  "cells": [],
-  "config_hash": "bbc27005f6daf8b537eb82db19a1f9fb85516a22b2f5084cd3e62f94dc25929e",
+  "cells": [
+    {
+      "config_hash": "d345c405bc7df23561571c14f44e14f357afc55cfa6011a99577b9410bdd5076",
+      "dev": {
+        "answerable_count": 2,
+        "correct_refusal_rate": 0.0,
+        "false_refusal_rate": 0.0,
+        "false_refusal_rate_upper_bound": 0.7763932022500211,
+        "no_answer_count": 1
+      },
+      "holdout": {
+        "answerable_count": 0,
+        "correct_refusal_rate": 0.0,
+        "false_refusal_rate": 0.0,
+        "false_refusal_rate_upper_bound": 1.0,
+        "no_answer_count": 0
+      },
+      "holdout_evaluations": 0,
+      "key": "cohere|fake-quality-v1|en|cross",
+      "model": "fake-quality-v1",
+      "pairing": "cross",
+      "provider": "cohere",
+      "query_language": "en",
+      "recorded_at": "2026-11-24",
+      "rerank_text_version": 1,
+      "source": "fixture",
+      "status": "insufficient_data",
+      "threshold": null,
+      "tokenizer_version": 2
+    },
+    {
+      "config_hash": "d345c405bc7df23561571c14f44e14f357afc55cfa6011a99577b9410bdd5076",
+      "dev": {
+        "answerable_count": 27,
+        "correct_refusal_rate": 0.42857142857142855,
+        "false_refusal_rate": 0.0,
+        "false_refusal_rate_upper_bound": 0.10501923017634435,
+        "no_answer_count": 7
+      },
+      "holdout": {
+        "answerable_count": 7,
+        "correct_refusal_rate": 0.0,
+        "false_refusal_rate": 0.14285714285714285,
+        "false_refusal_rate_upper_bound": 0.5207029735913071,
+        "no_answer_count": 1
+      },
+      "holdout_evaluations": 1,
+      "key": "cohere|fake-quality-v1|en|same",
+      "model": "fake-quality-v1",
+      "pairing": "same",
+      "provider": "cohere",
+      "query_language": "en",
+      "recorded_at": "2026-11-24",
+      "rerank_text_version": 1,
+      "source": "fixture",
+      "status": "calibrated",
+      "threshold": 0.14972065823582034,
+      "tokenizer_version": 2
+    },
+    {
+      "config_hash": "d345c405bc7df23561571c14f44e14f357afc55cfa6011a99577b9410bdd5076",
+      "dev": {
+        "answerable_count": 4,
+        "correct_refusal_rate": 0.0,
+        "false_refusal_rate": 0.0,
+        "false_refusal_rate_upper_bound": 0.5271291954984121,
+        "no_answer_count": 1
+      },
+      "holdout": {
+        "answerable_count": 0,
+        "correct_refusal_rate": 0.0,
+        "false_refusal_rate": 0.0,
+        "false_refusal_rate_upper_bound": 1.0,
+        "no_answer_count": 0
+      },
+      "holdout_evaluations": 0,
+      "key": "cohere|fake-quality-v1|it|cross",
+      "model": "fake-quality-v1",
+      "pairing": "cross",
+      "provider": "cohere",
+      "query_language": "it",
+      "recorded_at": "2026-11-24",
+      "rerank_text_version": 1,
+      "source": "fixture",
+      "status": "insufficient_data",
+      "threshold": null,
+      "tokenizer_version": 2
+    },
+    {
+      "config_hash": "d345c405bc7df23561571c14f44e14f357afc55cfa6011a99577b9410bdd5076",
+      "dev": {
+        "answerable_count": 18,
+        "correct_refusal_rate": 0.2,
+        "false_refusal_rate": 0.0,
+        "false_refusal_rate_upper_bound": 0.15331755395727828,
+        "no_answer_count": 5
+      },
+      "holdout": {
+        "answerable_count": 10,
+        "correct_refusal_rate": 0.0,
+        "false_refusal_rate": 0.1,
+        "false_refusal_rate_upper_bound": 0.3941633024365049,
+        "no_answer_count": 4
+      },
+      "holdout_evaluations": 1,
+      "key": "cohere|fake-quality-v1|it|same",
+      "model": "fake-quality-v1",
+      "pairing": "same",
+      "provider": "cohere",
+      "query_language": "it",
+      "recorded_at": "2026-11-24",
+      "rerank_text_version": 1,
+      "source": "fixture",
+      "status": "calibrated",
+      "threshold": 0.0785353225402049,
+      "tokenizer_version": 2
+    },
+    {
+      "config_hash": "d345c405bc7df23561571c14f44e14f357afc55cfa6011a99577b9410bdd5076",
+      "dev": {
+        "answerable_count": 3,
+        "correct_refusal_rate": 0.0,
+        "false_refusal_rate": 0.0,
+        "false_refusal_rate_upper_bound": 0.6315968501359613,
+        "no_answer_count": 3
+      },
+      "holdout": {
+        "answerable_count": 0,
+        "correct_refusal_rate": 0.0,
+        "false_refusal_rate": 0.0,
+        "false_refusal_rate_upper_bound": 1.0,
+        "no_answer_count": 0
+      },
+      "holdout_evaluations": 0,
+      "key": "cohere|fake-quality-v1|zh|cross",
+      "model": "fake-quality-v1",
+      "pairing": "cross",
+      "provider": "cohere",
+      "query_language": "zh",
+      "recorded_at": "2026-11-24",
+      "rerank_text_version": 1,
+      "source": "fixture",
+      "status": "insufficient_data",
+      "threshold": null,
+      "tokenizer_version": 2
+    },
+    {
+      "config_hash": "d345c405bc7df23561571c14f44e14f357afc55cfa6011a99577b9410bdd5076",
+      "dev": {
+        "answerable_count": 28,
+        "correct_refusal_rate": 0.25,
+        "false_refusal_rate": 0.0,
+        "false_refusal_rate_upper_bound": 0.10146573557272472,
+        "no_answer_count": 4
+      },
+      "holdout": {
+        "answerable_count": 9,
+        "correct_refusal_rate": 0.3333333333333333,
+        "false_refusal_rate": 0.0,
+        "false_refusal_rate_upper_bound": 0.2831288355631136,
+        "no_answer_count": 3
+      },
+      "holdout_evaluations": 1,
+      "key": "cohere|fake-quality-v1|zh|same",
+      "model": "fake-quality-v1",
+      "pairing": "same",
+      "provider": "cohere",
+      "query_language": "zh",
+      "recorded_at": "2026-11-24",
+      "rerank_text_version": 1,
+      "source": "fixture",
+      "status": "calibrated",
+      "threshold": 0.04455691316323019,
+      "tokenizer_version": 2
+    }
+  ],
+  "config_hash": "21b50744a8acd2184cf788f18bac0da06c8209f7fa28041fa8c3a594e2dabb23",
   "provenance": {
-    "source": "defaults"
+    "source": "calibration"
   },
   "schema_version": 1
 }
