@@ -39,6 +39,14 @@ Mechanical steps run **without** live Supabase, vendor keys, or Docker. Full SUM
 | Phase 3 default gates | `03-47-SUMMARY.md` (`eval/out/p3-final*`) | recorded pass on executor |
 | Package pins for Docling/L1 path | trunk lock `3e83978` | pdfplumber / ray optional extra |
 
+## PostgREST (Task 1 note, 2026-11-24)
+
+Role **`authenticator`**: `statement_timeout` **8s**, `lock_timeout` **8s**. Profile activation gates and long migrations must complete within that budget or use a **direct Postgres session** (management SQL / `psql`), not PostgREST.
+
+## Task 1 recorded
+
+See **`03-48-SUMMARY.md`** (box agent, project `ppvywaxrycaxrtrrditl`). Integration branch agents **do not** apply further live migrations.
+
 ## Blocked live tasks (need Guang or secrets injection)
 
 | Task | Blocker |

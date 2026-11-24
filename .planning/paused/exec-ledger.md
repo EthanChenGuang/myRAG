@@ -90,11 +90,19 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 |------|------|----------|-------|
 | 04-07 | [bc-b39f21bf](bc-b39f21bf-71db-54ba-81d3-327871eb3a63) RUNNING | `wt/04-07` | PGlite wave-1 tail; blocks 04-02 only via serialization table |
 | 03.1-03 | [bc-c5cb9fe1](bc-c5cb9fe1-91ef-5ec1-80f3-480362bbb755) RUNNING | `wt/03.1-03` | **Blocks 04-02** until merged |
-| **Refill (03.1-10 merge)** | — | — | **4/4** — 04-07, 03.1-03, 03.1-11, 04-09 still RUNNING; no spawn |
 | 03.1-11 | [bc-b18bbe3f](bc-b18bbe3f-b7f9-57e3-8d19-200f419a1891) RUNNING | `wt/03.1-11` | Refill after 03.1-09 merge |
 | 04-10 | [bc-ea9f7b6f](bc-ea9f7b6f-dc74-5d17-9573-573c0d79ab57) RUNNING | `wt/04-10` | Refill after 04-09 merge |
 
-**Queued after 03.1-03 merge:** `04-02` (same config five-location set). **03-48 live Supabase:** Guang/box agent only — orchestrator **must not** run migrations against production.
+**Queued after 03.1-03 merge:** `04-02` (same config five-location set).
+
+**03-48 follow-ups (one executor per plan when a slot frees — do not duplicate running work):**
+
+| Plan id | PLAN file | Priority |
+|---------|-----------|----------|
+| `03-48-sec-rpc` | [03-48-FOLLOWUP-SECURITY-RPC-PLAN.md](../phases/03-unified-ingestion-embedding-profiles/03-48-FOLLOWUP-SECURITY-RPC-PLAN.md) | D-08 / live anon EXECUTE hole |
+| `03-48-setup-idempotent` | [03-48-FOLLOWUP-SETUP-IDEMPOTENT-PLAN.md](../phases/03-unified-ingestion-embedding-profiles/03-48-FOLLOWUP-SETUP-IDEMPOTENT-PLAN.md) | 42710 on re-run setup |
+
+**03-48 live Supabase:** Guang/box agent only for production DB; Task 1 logged in `03-48-SUMMARY.md`.
 
 **Recently merged (no follow-up merge needed):** [03.1-04 Task 3](bc-4969184f-7107-55b3-a450-d63435dcb0a0), [03.1-07](bc-4a221b6f-f6a6-507b-8da0-d497c6662c2a), [04-05](bc-91985997-25a1-5b37-a987-32cb579c4746) → trunk `7d98d53`…`a06efce`.
 
