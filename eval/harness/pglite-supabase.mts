@@ -57,6 +57,10 @@ ALTER ROLE service_role BYPASSRLS;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;`;
 
+/** Hosted Supabase grants EXECUTE on every new public function to the API roles; opt in to reproduce it. */
+const SUPABASE_FUNCTION_DEFAULTS_SQL = `
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON FUNCTIONS TO anon, authenticated, service_role;`;
+
 function vectorLiteral(values: number[]): string {
   return `[${values.join(',')}]`;
 }
@@ -101,6 +105,7 @@ export interface EmptyFixtureDatabase {
 export async function createEmptyFixtureDatabase(options: {
   deploymentMode: DeploymentMode;
   supabaseGrants?: boolean;
+  supabaseFunctionDefaults?: boolean;
   migrations?: boolean;
   setupSqlPath?: string;
 }): Promise<EmptyFixtureDatabase> {
@@ -117,6 +122,7 @@ export async function createEmptyFixtureDatabase(options: {
     await db.waitReady;
     await db.exec(SUPABASE_SHIM_SQL);
     if (options.supabaseGrants !== false) await db.exec(SUPABASE_GRANTS_SQL);
+    if (options.supabaseFunctionDefaults === true) await db.exec(SUPABASE_FUNCTION_DEFAULTS_SQL);
     await db.exec(sqlBytes.toString('utf8'));
     if (options.migrations !== false) await applyMigrations(db, deploymentMode);
 
