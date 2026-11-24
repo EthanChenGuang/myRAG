@@ -1,21 +1,20 @@
 ---
 gsd_state_version: "1.0"
 milestone: v5.0
-current_phase: 02
-current_phase_name: Unified Retrieval Pipeline & Tenant Scope
+current_phase: 03.1
+current_phase_name: Tiered Parsing, Incremental Queue & Bulk Backfill
 status: paused
-stopped_at: PAUSE-96 Claude Code takeover; trunk 201b66b; 4 executors STOPPED with WIP on origin/exec/*; sec-rpc-2 queued not started
-last_updated: "2026-11-24T12:48:00.000Z"
+stopped_at: PAUSE merge-train handback to Claude Code; trunk 56b0349d; merged PRs #10 #9 #4 #5; tmux merge-train stopped
+last_updated: "2026-11-24T19:10:00.000Z"
+state_head: 56b0349d6307b757e4df1eab897878f11e4b8d81
 package_legitimacy_03_1_04:
   approved_at: "2026-11-24"
   lock_commit: 3e83978e482f67da5ce6d463f39251f3e21e8bf4
   pdfplumber: "0.11.11"
   pdfminer_six: "20260107"
   ray_data: "2.60.1"
-last_updated: "2026-11-24T11:15:00.000Z"
-last_activity: 2026-11-23
-last_activity_desc: Phase 02 plans 11, 12, 16, 17, 18, 22 merged
-state_head: 3facf75a846e7a13be2716bdf7768179dca6018b
+last_activity: 2026-11-24
+last_activity_desc: Trunk merge train paused at 56b0349d; PRs #10 #9 #4 #5 merged; queue #6+
 progress:
   total_phases: 9
   completed_phases: 0
@@ -34,12 +33,12 @@ See: .planning/PROJECT.md (updated 2026-11-22)
 
 ## Current Position
 
-Phase: 03 (Unified Ingestion & Embedding Profiles) — EXECUTING
-Plan: 03-43..03-46, 03-45 merged; in flight 03-47; skip 03-48 (Guang live). Wave A early 3.1 + Phase 4 parallel.
-Status: Phase 2 complete (human_needed live checks). All remaining phases planned and plan-checked PASS: 3.1 (55), 4 (45), 5 (26), 5.1 (25), 6 (46), 7 (34).
-Last activity: 2026-11-24 — merged 03-40, 03-38, 03-39, 03-42; gates vitest 2459, node 145, test-rag both modes PASS; Sonnet executor quota → orchestrator/Composer for 03-39 task 3 and 03-42
+Phase: 03.1 — merge train paused for Claude Code takeover  
+Trunk: `claude/ecstatic-hamilton-86gtwv` @ `56b0349d` (merged GitHub PRs #10, #9, #4, #5)  
+Resume: `.planning/phases/03.1-tiered-parsing-incremental-queue-bulk-backfill/.continue-here.md`  
+Local gates only (GitHub Actions billing blocked); runner killed mid-#15 gate.
 
-Progress: [█████████░] 90%
+Progress: merge train ~4/18 PRs to trunk
 
 ## Performance Metrics
 
