@@ -1,5 +1,5 @@
 import type { RpcClient } from '../../backend/supabase-rpc';
-import { isEmbeddingProfilesEnabled, listEmbeddingProfiles, refreshAfterOperation } from '../../embeddings/active-profile';
+import { getBackfillingProfiles, isEmbeddingProfilesEnabled, listEmbeddingProfiles, refreshAfterOperation } from '../../embeddings/active-profile';
 import { EmbeddingProfileMismatch } from '../../embeddings/mrl';
 import { canonicalModelId, getEmbeddingProvider } from '../../embeddings/registry';
 import type { EmbedOutput, EmbeddingProvider } from '../../embeddings/types';
@@ -197,7 +197,16 @@ export async function runReembed(input: RunReembedInput): Promise<ReembedReport>
   await refreshPointer();
 
   const warnings = new Set<string>();
-  if (switchIsOff()) warnings.add('profiles_switch_off');
+  if (switchIsOff()) {
+    warnings.add('profiles_switch_off');
+  } else {
+    // With the switch on, ingestion dual-writes every backfilling profile; confirm this one is in that set so documents added during the run are covered.
+    try {
+      if (!(await getBackfillingProfiles()).some((profile) => profile.id === run.profileId)) warnings.add('dual_write_not_active');
+    } catch {
+      warnings.add('dual_write_unverified');
+    }
+  }
   const tenants: Record<string, { chunks: number; tokens: number }> = {};
   const hosts = new Map<string, number>();
   let embedded = 0;

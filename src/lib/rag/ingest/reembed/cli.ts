@@ -150,6 +150,9 @@ export async function main(argv: string[] = process.argv.slice(2), io: CliIo = c
       ...(signal ? { signal } : {}),
     });
     if (report.warnings.includes('profiles_switch_off')) io.out(`[Re-embed] warning: ${SWITCH_OFF_WARNING}`);
+    if (report.warnings.includes('dual_write_not_active') || report.warnings.includes('dual_write_unverified')) {
+      io.out('[Re-embed] warning: could not confirm that ingestion dual-writes this profile; documents added during the run may need another run.');
+    }
     if (report.warnings.includes('unknown_doc_type')) io.out('[Re-embed] warning: some chunks have a document type with no profile; they were embedded without a header');
     if (report.derived) io.out('[Re-embed] note: derived vectors assume the model truncates by Matryoshka prefix; the evaluation decides whether the derived profile holds.');
 

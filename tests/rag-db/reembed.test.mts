@@ -780,6 +780,7 @@ describe('re-embed job (src/lib/rag/ingest/reembed)', () => {
       available.set(text, (available.get(text) ?? 0) - 1);
     }
 
+    assert.deepEqual(report.warnings, [], 'with the switch on, the profile is confirmed as dual-written and nothing else is worth a warning');
     const run = await runRow(report.runId);
     assert.deepEqual([run.status, Number(run.chunks_done)], ['completed', chunks.length]);
     assert.equal((await rows('SELECT status FROM embedding_profiles WHERE id = $1', [VOYAGE]))[0]?.status, 'backfilling');
