@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { storeDocument } from './supabase';
 import { env } from './env';
-import { embedText, embedBatch } from '@/lib/rag';
+import { embedText, embedBatch, CloudRefused, assertCloudAllowed } from '@/lib/rag';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -162,7 +162,16 @@ function createTokenBasedChunks(text: string, maxTokens: number = 600, overlapTo
   return chunks;
 }
 
+/** The legacy parser has no Docling fallback, so a refused call fails the file; Nango stores this message as the failure reason. */
+function requireCloudParsing(): void {
+  if (assertCloudAllowed('parse').ok) return;
+  const refusal = new CloudRefused('cloud_not_allowed');
+  refusal.message = 'cloud_parsing_disabled';
+  throw refusal;
+}
+
 async function uploadAndParseDocument(filePath: string): Promise<{ chunks: string[] }> {
+  requireCloudParsing();
   const formData = new FormData();
   formData.append('file', fs.createReadStream(filePath));
 
@@ -383,6 +392,9 @@ async function processDocument(
   console.log(`Processing document: ${filename}`);
 
   try {
+    // Refuse before the bytes are written to disk; Markdown is parsed locally and needs no cloud.
+    if (!filename.toLowerCase().endsWith('.md')) requireCloudParsing();
+
     // Create a temporary file to store the buffer
     const tempDir = path.join(os.tmpdir(), 'myrag');
     await mkdir(tempDir, { recursive: true });

@@ -89,6 +89,8 @@ async function loadProcessDocument() {
   }));
   vi.doMock('@supabase/supabase-js', () => ({ createClient: () => adminClient() }));
   vi.doMock('@/lib/rag', () => ({
+    assertCloudAllowed: () => ({ ok: true }),
+    CloudRefused: class CloudRefused extends Error {},
     embedText: async () => {
       state.embedCalls += 1;
       return [0.1, 0.2];

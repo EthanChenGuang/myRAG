@@ -5,6 +5,8 @@ import { env } from '@/lib/env';
 import { DocumentContent } from '@/types/chat';
 import { createClient } from '@supabase/supabase-js';
 import {
+  CloudRefused,
+  assertCloudAllowed,
   buildSourceKey,
   currentIngestConfig,
   embedText,
@@ -186,6 +188,7 @@ function isLlamaCloudConfigurationError(error: unknown): boolean {
 }
 
 async function uploadToLlamaCloud(buffer: Buffer, filename: string): Promise<LlamaCloudUploadResponse> {
+  if (!assertCloudAllowed('parse').ok) throw new CloudRefused('cloud_not_allowed');
   const llamaCloudApiKey = getLlamaCloudApiKey();
   const formData = new FormData();
   formData.append('file', buffer, filename);
@@ -903,6 +906,12 @@ export async function POST(req: Request) {
       );
     }
 
+    // The cloud switch holds in every pipeline; the session and organization checks above stay first.
+    if (!assertCloudAllowed('parse').ok) {
+      console.warn('[Ingest] cloud parsing disabled');
+      return NextResponse.json({ error: 'cloud_parsing_disabled' }, { status: 503 });
+    }
+
     // Process with LlamaCloud (for both temporary and permanent documents)
     console.log('Using LlamaCloud for document processing', isTemporary ? '(temporary)' : '(permanent)');
     
@@ -916,6 +925,9 @@ export async function POST(req: Request) {
       
       console.log('File uploaded to LlamaCloud, job ID:', uploadResult.id);
     } catch (uploadError) {
+      if (uploadError instanceof CloudRefused) {
+        return NextResponse.json({ error: 'cloud_parsing_disabled' }, { status: 503 });
+      }
       console.error('Error uploading to LlamaCloud:', uploadError);
       return NextResponse.json(
         { error: `Failed to upload document: ${uploadError instanceof Error ? uploadError.message : 'Unknown error'}` },
