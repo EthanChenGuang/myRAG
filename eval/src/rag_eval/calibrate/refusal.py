@@ -3,10 +3,18 @@ from __future__ import annotations
 import math
 from bisect import bisect_left
 from dataclasses import dataclass
-from typing import Sequence
+from typing import Literal, Sequence
+
+from pydantic import BaseModel, ConfigDict
 
 from rag_sidecar.contracts.eval_run import RagTrace
-from rag_sidecar.contracts.retrieval import FilterLanguage, Pairing, RefusalCalibrationConfig, RefusalMetricBlock
+from rag_sidecar.contracts.retrieval import (
+    FilterLanguage,
+    Pairing,
+    RefusalCalibrationConfig,
+    RefusalCell,
+    RefusalMetricBlock,
+)
 
 from rag_eval.bounds import upper_bound
 
@@ -184,3 +192,61 @@ def fit_cells(rows: Sequence[CalibrationRow], config: RefusalCalibrationConfig, 
             config_hash=identity.config_hash,
         )
     return fits
+
+
+HoldoutStatus = Literal["calibrated", "failed_holdout", "insufficient_data"]
+
+
+class HoldoutResult(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    status: HoldoutStatus
+    metrics: RefusalMetricBlock
+    false_refusal_count: int
+    correct_refusal_count: int
+    pass_limit: float
+    false_refusal_p_value: float
+
+
+class PreviousCell(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    holdout_evaluations: int
+    input_hash: str | None = None
+    recorded_at: str | None = None
+
+
+class CellRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    cell: RefusalCell
+    fit_status: str
+    input_hash: str | None = None
+    holdout_pass_limit: float | None = None
+    holdout_false_refusal_p_value: float | None = None
+
+
+def holdout_check(
+    fit: CellFit,
+    test_rows: Sequence[CalibrationRow],
+    *,
+    config: RefusalCalibrationConfig,
+    environment: str,
+    noise_floor: float,
+) -> HoldoutResult:
+    block = _metric_block([], [], None)
+    return HoldoutResult(
+        status="insufficient_data", metrics=block, false_refusal_count=0, correct_refusal_count=0, pass_limit=0.0, false_refusal_p_value=1.0
+    )
+
+
+def calibrate_cells(
+    rows: Sequence[CalibrationRow],
+    config: RefusalCalibrationConfig,
+    *,
+    source: str,
+    noise_floor: float,
+    previous: dict[str, PreviousCell] | None = None,
+    now: str,
+) -> list[CellRecord]:
+    return []
