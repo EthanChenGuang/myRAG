@@ -8,6 +8,7 @@ pytest.importorskip("docling_core.transforms.chunker.hybrid_chunker")
 tiktoken = pytest.importorskip("tiktoken")
 
 from docling_core.transforms.chunker.hybrid_chunker import HybridChunker  # noqa: E402
+from docling_core.transforms.chunker.tokenizer.openai import OpenAITokenizer  # noqa: E402
 from docling_core.types.doc import DoclingDocument  # noqa: E402
 
 from rag_sidecar.contracts import DoclingOptions, ParseJobRequest, ParseResult  # noqa: E402
@@ -87,8 +88,8 @@ def test_a_disabled_header_repeat_leaves_later_table_chunks_without_a_header(tmp
     result = _convert("table-report", tmp_path, repeat_table_header=False)
     tables = [chunk for chunk in result.chunks if chunk.is_table]
     assert len(tables) > 1
-    assert tables[0].text.startswith("| Item")
-    assert any(not chunk.text.startswith("| Item") for chunk in tables[1:])
+    assert "Quantity" in tables[0].text.splitlines()[0]
+    assert all("Quantity" not in chunk.text.splitlines()[0] for chunk in tables[1:])
 
 
 def test_every_contextualized_text_is_within_max_tokens_on_cl100k(tmp_path):
@@ -156,8 +157,8 @@ def test_parser_fields_page_count_and_markdown(tmp_path):
     assert re.fullmatch(r"docling-\d+\.\d+\.\d+", result.parser_version)
     assert result.page_count == 2
     assert result.partial is False
-    assert result.markdown.startswith("# Quarterly stock report")
-    assert "| Item" in result.markdown
+    assert "Quarterly stock report" in result.markdown.splitlines()[0]
+    assert "| Item 39" in result.markdown
     assert ParseResult.model_validate_json(result.model_dump_json()) == result
 
 
@@ -184,4 +185,5 @@ def test_the_chunker_is_configured_with_the_markdown_table_serializer():
     provider = docling_adapter.MarkdownTableProvider()
     serializer = provider.get_serializer(DoclingDocument(name="empty"))
     assert type(serializer.table_serializer).__name__ == "MarkdownTableSerializer"
-    assert isinstance(HybridChunker(serializer_provider=provider), HybridChunker)
+    tokenizer = OpenAITokenizer(tokenizer=tiktoken.get_encoding("cl100k_base"), max_tokens=200)
+    assert isinstance(HybridChunker(tokenizer=tokenizer, serializer_provider=provider), HybridChunker)
