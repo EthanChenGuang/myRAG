@@ -131,6 +131,10 @@ function createStubLanguageModel(): LanguageModel {
   }) as unknown as LanguageModel;
 }
 
+export function shouldInstallFixtureTranslator(_env: Record<string, string> | undefined): boolean {
+  return false;
+}
+
 export async function prepareInProcessEval(options: {
   corpusDir: string;
   deploymentMode: DeploymentMode;
