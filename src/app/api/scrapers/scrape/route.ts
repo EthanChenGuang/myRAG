@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
-import type { RagAdminDb } from '@/lib/rag';
+import { repairOwnerMembership, resolveTenantScope } from '@/lib/rag';
+import type { RagAdminDb, TenantScope } from '@/lib/rag';
+import { requireSessionUser } from '@/lib/session-auth';
 import { checkSingleTenantKbWrite } from '@/lib/kb-write-access';
 import { scrapeAndProcess } from '@/lib/scrapers/scraper-adapter';
 import { isFirecrawlEnabled } from '@/lib/scrapers/firecrawl-client';
+import { scraperPipeline } from '@/lib/scrapers/ingest-switch';
 import { isHttpUrl, normalizeScrapedUrl } from '@/lib/scrapers/url-utils';
 import { isSingleTenant } from '@/lib/deployment-mode';
 import { verifyUserOrganizationAccess } from '@/lib/auth/organization-handler';
@@ -24,17 +26,18 @@ export const maxDuration = 60; // Scraping can take time
 export async function POST(request: NextRequest) {
     console.log('[Scrape API] POST request received');
 
-    let userId: string | null = null;
     let organizationId: string | null = null;
 
-    try {
-        const supabase = await createClient();
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
-        if (!user || authError) {
-            return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
-        }
-        userId = user.id;
-        if (isSingleTenant()) {
+    const session = await requireSessionUser('[Scrape API]');
+    if ('response' in session) {
+        return session.response.status === 401
+            ? NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+            : session.response;
+    }
+    const userId = session.user.id;
+
+    if (isSingleTenant()) {
+        try {
             const admin = getSupabaseAdmin();
             if (!admin) {
                 console.error('[Scrape API] Database client is not available');
@@ -42,16 +45,16 @@ export async function POST(request: NextRequest) {
             }
             const access = await checkSingleTenantKbWrite({
                 admin: admin as unknown as RagAdminDb,
-                userId: user.id,
+                userId,
                 signal: request.signal,
             });
             if (!access.ok) {
                 return NextResponse.json({ error: access.error }, { status: access.status });
             }
+        } catch {
+            console.error('[Scrape API] Authorization lookup failed');
+            return NextResponse.json({ error: 'Authentication unavailable' }, { status: 503 });
         }
-    } catch {
-        console.error('[Scrape API] Session lookup failed');
-        return NextResponse.json({ error: 'Authentication unavailable' }, { status: 503 });
     }
 
     // Check if Firecrawl is enabled
@@ -92,9 +95,33 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        // The unified pipeline takes the scope from the tenant module; the session user comes from the lookup above
+        let scope: TenantScope | null = null;
+        if (scraperPipeline() === 'unified') {
+            await repairOwnerMembership({ requestedOrganizationId: orgIdFromBody, getUser: session.getUser });
+            const tenant = await resolveTenantScope({
+                requestedOrganizationId: typeof orgIdFromBody === 'string' ? orgIdFromBody : null,
+                getUser: session.getUser,
+                signal: request.signal,
+            });
+            if (!tenant.ok) {
+                const error =
+                    tenant.status === 403
+                        ? 'You are not a member of this organization'
+                        : tenant.status === 401
+                            ? 'Authentication required'
+                            : 'Workspace verification unavailable';
+                return NextResponse.json({ error }, { status: tenant.status });
+            }
+            if (!tenant.scope) {
+                return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+            }
+            scope = tenant.scope;
+        }
+
         // Handle organization ID for multi-tenant mode
-        if (!isSingleTenant() && orgIdFromBody) {
-            const access = await verifyUserOrganizationAccess(userId!, orgIdFromBody);
+        if (!scope && !isSingleTenant() && orgIdFromBody) {
+            const access = await verifyUserOrganizationAccess(userId, orgIdFromBody);
 
             if (access.hasAccess) {
                 organizationId = orgIdFromBody;
@@ -110,17 +137,16 @@ export async function POST(request: NextRequest) {
         console.log('[Scrape API] Scraping URL:', {
             url: normalizedUrl,
             outputFormat: outputFormat || 'html',
-            userId: userId || 'single-tenant',
+            userId,
             organizationId: organizationId || 'personal'
         });
 
         // Scrape and process the URL
-        const result = await scrapeAndProcess({
-            url: normalizedUrl,
-            userId: userId || 'single-tenant-user',
-            organizationId,
-            outputFormat: outputFormat || 'html',
-        });
+        const result = await scrapeAndProcess(
+            scope
+                ? { url: normalizedUrl, scope, signal: request.signal, outputFormat: outputFormat || 'html' }
+                : { url: normalizedUrl, userId, organizationId, outputFormat: outputFormat || 'html' }
+        );
 
         console.log('[Scrape API] Successfully scraped and processed:', result);
 
@@ -129,6 +155,7 @@ export async function POST(request: NextRequest) {
             documentId: result.documentId,
             url: result.url,
             title: result.title,
+            ...(result.status !== undefined ? { status: result.status, version: result.version ?? null } : {}),
             message: 'URL scraped and processed successfully',
         });
 

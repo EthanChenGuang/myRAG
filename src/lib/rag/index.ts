@@ -91,10 +91,14 @@ export {
   ingest,
   resumeIngest,
   getIngestStatus,
+  currentIngestConfig,
+  buildSourceKey,
 } from './ingest';
+export type { IngestConfig } from './ingest/config';
 export type {
   IngestInput,
   IngestOptions,
+  IngestOrigin,
   IngestResult,
   IngestSource,
   IngestStatus,

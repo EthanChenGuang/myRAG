@@ -13,9 +13,12 @@ import { createIngestWriter } from './writer';
 
 export { getIngestStatus, resumeIngest } from './status';
 export type { IngestStatusView, ResumeIngestOptions } from './status';
+export { currentIngestConfig } from './current-config';
+export { buildSourceKey } from './identity';
 export type {
   IngestInput,
   IngestOptions,
+  IngestOrigin,
   IngestResult,
   IngestSource,
   IngestStatus,
