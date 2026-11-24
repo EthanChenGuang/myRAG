@@ -132,6 +132,8 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | 04-22 | `wt/04-22` / `exec/04-22` | **merged** |
 | 03.1-24 | `wt/03.1-24` / `exec/03.1-24` | **RUNNING** (gsd-executor) |
 | 03.1-26 | `wt/03.1-26` / `exec/03.1-26` | **merged** |
+| 03.1-25-fix | `wt/fix-backfill-tenant` | **RUNNING** — review F HIGH-1, MED-1, MED-4, LOW-5/6/7 |
+| 03-48-sec-rpc-3 | `wt/fix-definer-search-path` | **RUNNING** — review F MED-3 (0411 search_path), LOW-3 |
 | 04-31 | `wt/04-31` / `exec/04-31` | **RUNNING** (gsd-executor) |
 | 03.1-21 | `wt/03.1-21` / `exec/03.1-21` | **RUNNING** (gsd-executor, base `e3b4d12`) |
 | 03.1-22 | `wt/03.1-22` / `exec/03.1-22` | **RUNNING** (gsd-executor, base `e3b4d12`) |
