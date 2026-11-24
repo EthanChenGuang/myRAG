@@ -1,0 +1,55 @@
+{
+  "$defs": {
+    "DetectVlmPageImage": {
+      "additionalProperties": false,
+      "properties": {
+        "page": {
+          "minimum": 1,
+          "title": "Page",
+          "type": "integer"
+        },
+        "png_base64": {
+          "minLength": 1,
+          "title": "Png Base64",
+          "type": "string"
+        }
+      },
+      "required": [
+        "page",
+        "png_base64"
+      ],
+      "title": "DetectVlmPageImage",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "attempt_no": {
+      "minimum": 1,
+      "title": "Attempt No",
+      "type": "integer"
+    },
+    "pages": {
+      "items": {
+        "$ref": "#/$defs/DetectVlmPageImage"
+      },
+      "maxItems": 20,
+      "minItems": 1,
+      "title": "Pages",
+      "type": "array"
+    },
+    "worker_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Worker Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "worker_id",
+    "attempt_no",
+    "pages"
+  ],
+  "title": "DetectVlmRequest",
+  "type": "object"
+}

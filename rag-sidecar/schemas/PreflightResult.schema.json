@@ -1,0 +1,342 @@
+{
+  "$defs": {
+    "DetectCounts": {
+      "additionalProperties": false,
+      "properties": {
+        "L1": {
+          "minimum": 0,
+          "title": "L1",
+          "type": "integer"
+        },
+        "L2": {
+          "minimum": 0,
+          "title": "L2",
+          "type": "integer"
+        },
+        "L3": {
+          "minimum": 0,
+          "title": "L3",
+          "type": "integer"
+        },
+        "gated_share": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Gated Share",
+          "type": "number"
+        }
+      },
+      "required": [
+        "L1",
+        "L2",
+        "L3",
+        "gated_share"
+      ],
+      "title": "DetectCounts",
+      "type": "object"
+    },
+    "PageRange": {
+      "additionalProperties": false,
+      "properties": {
+        "cache_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cache Id"
+        },
+        "end": {
+          "minimum": 1,
+          "title": "End",
+          "type": "integer"
+        },
+        "layer": {
+          "enum": [
+            "L1",
+            "L2",
+            "L3"
+          ],
+          "title": "Layer",
+          "type": "string"
+        },
+        "parser": {
+          "title": "Parser",
+          "type": "string"
+        },
+        "preset": {
+          "enum": [
+            "native",
+            "fast",
+            "structured_layout",
+            "structured_full",
+            "structured_ocr",
+            "premium"
+          ],
+          "title": "Preset",
+          "type": "string"
+        },
+        "signals": {
+          "items": {
+            "enum": [
+              "tables",
+              "multi_col",
+              "has_figure",
+              "scanned",
+              "garbled",
+              "uncertain",
+              "table_continues"
+            ],
+            "type": "string"
+          },
+          "title": "Signals",
+          "type": "array"
+        },
+        "start": {
+          "minimum": 1,
+          "title": "Start",
+          "type": "integer"
+        },
+        "status": {
+          "enum": [
+            "pending",
+            "ok",
+            "escalated",
+            "needs_review"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "tier": {
+          "enum": [
+            "native",
+            "fast",
+            "structured",
+            "premium"
+          ],
+          "title": "Tier",
+          "type": "string"
+        }
+      },
+      "required": [
+        "start",
+        "end",
+        "tier",
+        "preset",
+        "parser",
+        "layer",
+        "signals",
+        "status"
+      ],
+      "title": "PageRange",
+      "type": "object"
+    },
+    "PageSignals": {
+      "additionalProperties": false,
+      "properties": {
+        "aligned_number_rows": {
+          "minimum": 0,
+          "title": "Aligned Number Rows",
+          "type": "integer"
+        },
+        "chars": {
+          "minimum": 0,
+          "title": "Chars",
+          "type": "integer"
+        },
+        "continues_to_next": {
+          "title": "Continues To Next",
+          "type": "boolean"
+        },
+        "garbled_ratio": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Garbled Ratio",
+          "type": "number"
+        },
+        "has_figure": {
+          "title": "Has Figure",
+          "type": "boolean"
+        },
+        "image_area_ratio": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Image Area Ratio",
+          "type": "number"
+        },
+        "layer": {
+          "enum": [
+            "L1",
+            "L2",
+            "L3"
+          ],
+          "title": "Layer",
+          "type": "string"
+        },
+        "multi_column": {
+          "title": "Multi Column",
+          "type": "boolean"
+        },
+        "page": {
+          "minimum": 1,
+          "title": "Page",
+          "type": "integer"
+        },
+        "preset": {
+          "enum": [
+            "native",
+            "fast",
+            "structured_layout",
+            "structured_full",
+            "structured_ocr",
+            "premium"
+          ],
+          "title": "Preset",
+          "type": "string"
+        },
+        "ruled_tables": {
+          "minimum": 0,
+          "title": "Ruled Tables",
+          "type": "integer"
+        },
+        "scanned": {
+          "title": "Scanned",
+          "type": "boolean"
+        },
+        "signals": {
+          "items": {
+            "enum": [
+              "tables",
+              "multi_col",
+              "has_figure",
+              "scanned",
+              "garbled",
+              "uncertain",
+              "table_continues"
+            ],
+            "type": "string"
+          },
+          "title": "Signals",
+          "type": "array"
+        },
+        "text_layer": {
+          "title": "Text Layer",
+          "type": "boolean"
+        },
+        "tier": {
+          "enum": [
+            "native",
+            "fast",
+            "structured",
+            "premium"
+          ],
+          "title": "Tier",
+          "type": "string"
+        }
+      },
+      "required": [
+        "page",
+        "chars",
+        "text_layer",
+        "image_area_ratio",
+        "ruled_tables",
+        "aligned_number_rows",
+        "multi_column",
+        "has_figure",
+        "scanned",
+        "garbled_ratio",
+        "signals",
+        "layer",
+        "tier",
+        "preset",
+        "continues_to_next"
+      ],
+      "title": "PageSignals",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "detect_counts": {
+      "$ref": "#/$defs/DetectCounts"
+    },
+    "doc_class": {
+      "enum": [
+        "text_pdf",
+        "tables",
+        "layout",
+        "scanned",
+        "mixed",
+        "image",
+        "native"
+      ],
+      "title": "Doc Class",
+      "type": "string"
+    },
+    "encrypted": {
+      "title": "Encrypted",
+      "type": "boolean"
+    },
+    "page_count": {
+      "minimum": 1,
+      "title": "Page Count",
+      "type": "integer"
+    },
+    "pages": {
+      "items": {
+        "$ref": "#/$defs/PageSignals"
+      },
+      "title": "Pages",
+      "type": "array"
+    },
+    "probe_version": {
+      "title": "Probe Version",
+      "type": "string"
+    },
+    "ranges": {
+      "items": {
+        "$ref": "#/$defs/PageRange"
+      },
+      "title": "Ranges",
+      "type": "array"
+    },
+    "tier_page_counts": {
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "propertyNames": {
+        "enum": [
+          "native",
+          "fast",
+          "structured",
+          "premium"
+        ]
+      },
+      "title": "Tier Page Counts",
+      "type": "object"
+    },
+    "timings_ms": {
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "title": "Timings Ms",
+      "type": "object"
+    }
+  },
+  "required": [
+    "probe_version",
+    "page_count",
+    "encrypted",
+    "doc_class",
+    "pages",
+    "ranges",
+    "tier_page_counts",
+    "detect_counts",
+    "timings_ms"
+  ],
+  "title": "PreflightResult",
+  "type": "object"
+}

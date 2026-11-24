@@ -1,7 +1,10 @@
 import type { ExtractedURL } from '@/lib/url-extractor';
+import type { RetrievalFilterInput } from './backend/types';
 import type { VoiceResults } from './context/voice';
 import type { StageName, StageTimeouts } from './config';
 import type { TemporalQueryContext } from './query/temporal-query-detector';
+import type { RefusalRecord } from './refusal/types';
+import type { RerankProviderId } from './rerank/types';
 import type { TenantScope } from './tenant/scope';
 import type { TraceCollector } from './trace/collector';
 
@@ -19,6 +22,11 @@ export interface Candidate {
   financial_score: number;
   final_score: number;
   match_reason: string;
+  rerank_score?: number;
+  fused_score?: number;
+  parent_id?: string | null;
+  legs?: Record<string, number>;
+  language?: string | null;
 }
 
 export type StageRunStatus = 'ok' | 'skipped' | 'disabled' | 'error' | 'timeout' | 'aborted';
@@ -36,6 +44,7 @@ export interface StageRecord {
   candidates_out: number | null;
   rules: string[];
   detail?: string;
+  counts?: Record<string, number>;
 }
 
 export interface UsedDocument {
@@ -58,7 +67,7 @@ export interface SourceImage {
   url: string | undefined;
 }
 
-export type KeptBy = 'similarity' | 'name' | 'image';
+export type KeptBy = 'similarity' | 'name' | 'image' | 'rerank' | 'fused';
 
 export interface KeptChunk {
   chunk_id: string;
@@ -100,9 +109,38 @@ export interface RetrievalOptions {
   embeddingProfile?: string;
 }
 
+export interface QueryVariant {
+  text: string;
+  language: string | null;
+  kind: 'original' | 'translated';
+}
+
+export interface RetrievalOverrides {
+  candidatePoolSize?: number;
+  rerankInputCap?: number;
+  finalTopK?: number;
+  rrfK?: number;
+  legWeights?: { dense?: number; lexical?: number; exactId?: number };
+  reranker?: RerankProviderId | 'none';
+  rerankModel?: string;
+  rerankTier?: 'fast' | 'quality';
+  switches?: {
+    lexicalSearch?: boolean;
+    refusalThreshold?: boolean;
+    edgeOrder?: boolean;
+    compression?: boolean;
+    parentChild?: boolean;
+    lexicalTranslation?: boolean;
+  };
+  iterativeScan?: string;
+  exactScanCutoff?: number;
+  chunkingProfileByDocType?: Record<string, string>;
+}
+
 export interface StageOverrides {
   disabledStages?: StageName[];
   timeouts?: StageTimeouts;
+  retrievalOverrides?: RetrievalOverrides;
 }
 
 export interface RunRetrievalInput {
@@ -114,6 +152,8 @@ export interface RunRetrievalInput {
   signal: AbortSignal;
   trace?: TraceCollector;
   stageOverrides?: StageOverrides;
+  retrievalFilters?: RetrievalFilterInput;
+  queryVariants?: QueryVariant[];
 }
 
 export interface RetrievalResult {
@@ -132,4 +172,7 @@ export interface RetrievalResult {
   traceId: string;
   queryContext: TemporalQueryContext | null;
   voice?: VoiceResults;
+  refusal?: RefusalRecord | null;
+  retrievalConfigHash?: string;
+  queryLanguage?: string | null;
 }

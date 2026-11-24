@@ -1,6 +1,26 @@
+import base64
+from datetime import datetime, timezone
 from typing import Any
 
 from rag_sidecar.contracts import (
+    AdvanceRequest,
+    AdvanceResponse,
+    BackfillDryRunReport,
+    BackfillManifestEntry,
+    DetectVlmRequest,
+    DetectVlmResponse,
+    IngestionJob,
+    JobSettingsSnapshot,
+    ParseExternalRequest,
+    ParseExternalResponse,
+    ParseGateReport,
+    ParserEvalReport,
+    ParserExpected,
+    PageStructureVerdict,
+    ParseAttempt,
+    ParseRoutingConfig,
+    PreflightResult,
+    QualityCheckResult,
     Baseline,
     BaselineMetricStat,
     BaselineRun,
@@ -69,10 +89,247 @@ from rag_sidecar.contracts import (
     TraceUsedDocument,
 )
 
+from rag_sidecar.contracts.parse_eval import (
+    DuplicateCounts,
+    ExpectedHeading,
+    ExpectedPage,
+    InventoryTotals,
+    ModeProjection,
+    PairedMetricDelta,
+    ProjectedCostSplit,
+    ReadingOrderAnchor,
+    TableCell,
+    TierParseMetrics,
+    PageTierAccuracy,
+)
+from rag_sidecar.contracts.queue import (
+    DetectVlmPageImage,
+    DetectVlmPageResult,
+    OriginalRef,
+    ParseAttemptPages,
+    ParseExternalPageText,
+)
+from rag_sidecar.contracts.routing import (
+    DetectCounts,
+    PageCheck,
+    PageRange,
+    PageSignals,
+    ParseAttemptPages as RoutingParseAttemptPages,
+    default_parse_routing_config,
+)
+
 _HASH_A = "a" * 64
 _HASH_B = "b" * 64
 _HASH_C = "c" * 64
 _METRICS = ["recall_at_5", "recall_at_10", "mrr", "correct_refusal_rate", "false_refusal_rate"]
+
+_SAMPLE_JOB_ID = "00000000-0000-4000-8000-000000000001"
+_SAMPLE_DOC_ID = "00000000-0000-4000-8000-000000000002"
+_SAMPLE_NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
+_TINY_PNG = base64.b64encode(b"\x89PNG" + b"\x00" * 8).decode("ascii")
+
+
+def _phase31_contract_samples() -> dict[str, Any]:
+    page = PageSignals(
+        page=1,
+        chars=120,
+        text_layer=True,
+        image_area_ratio=0.0,
+        ruled_tables=0,
+        aligned_number_rows=0,
+        multi_column=False,
+        has_figure=False,
+        scanned=False,
+        garbled_ratio=0.01,
+        signals=[],
+        layer="L1",
+        tier="fast",
+        preset="fast",
+        continues_to_next=False,
+    )
+    page_range = PageRange(
+        start=1,
+        end=1,
+        tier="fast",
+        preset="fast",
+        parser="docling",
+        layer="L1",
+        signals=[],
+        status="ok",
+    )
+    settings = JobSettingsSnapshot(
+        routing="tiered",
+        cloud_allowed=True,
+        escalation=True,
+        progressive=False,
+        premium_max_pages_per_doc=20,
+        premium_page_budget=0,
+        vlm_detect=False,
+        profile_id="general@1",
+        profile_version=1,
+        doc_type="general",
+        min_tier="fast",
+        max_tier="premium",
+        embed_mode="sync",
+        ocr_languages=["en"],
+        routing_config_version="1",
+    )
+    attempt = ParseAttempt(
+        attempt_no=1,
+        tier="fast",
+        preset="fast",
+        parser="docling",
+        parser_version="2.0",
+        pages=RoutingParseAttemptPages(start=1, end=1),
+        reason="initial",
+        ms=40,
+        est_cost_usd=0.002,
+        cache_hit=False,
+        refused=False,
+        check=QualityCheckResult(
+            passed=True,
+            pages=[PageCheck(page=1, failed=[])],
+            score=1.0,
+            partial=False,
+        ),
+    )
+    verdict = PageStructureVerdict(
+        has_table=False,
+        has_multi_column=False,
+        is_scanned=False,
+        has_formula=False,
+        has_chart=False,
+        complexity="simple",
+        confidence=0.92,
+    )
+    return {
+        "PreflightResult": PreflightResult(
+            probe_version="2026.1",
+            page_count=1,
+            encrypted=False,
+            doc_class="text_pdf",
+            pages=[page],
+            ranges=[page_range],
+            tier_page_counts={"native": 0, "fast": 1, "structured": 0, "premium": 0},
+            detect_counts=DetectCounts(L1=1, L2=0, L3=0, gated_share=0.0),
+            timings_ms={"preflight": 10},
+        ),
+        "PageStructureVerdict": verdict,
+        "ParseRoutingConfig": default_parse_routing_config(),
+        "ParseAttempt": attempt,
+        "QualityCheckResult": QualityCheckResult(
+            passed=False,
+            pages=[PageCheck(page=1, failed=["low_chars"])],
+            score=0.45,
+            partial=False,
+        ),
+        "JobSettingsSnapshot": settings,
+        "IngestionJob": IngestionJob(
+            id=_SAMPLE_JOB_ID,
+            kind="ingest",
+            status="queued",
+            tenant_key="tenant-a",
+            source="upload",
+            source_key="docs/sample.pdf",
+            file_sha256=_HASH_A,
+            filename="sample.pdf",
+            mime_type="application/pdf",
+            original_ref=OriginalRef(bucket="originals", path="tenant-a/sample.pdf"),
+            settings=settings,
+            attempts=[attempt],
+            page_ranges=[page_range],
+            tier_page_counts={"fast": 1},
+            created_at=_SAMPLE_NOW,
+            updated_at=_SAMPLE_NOW,
+        ),
+        "DetectVlmRequest": DetectVlmRequest(
+            worker_id="worker-1",
+            attempt_no=1,
+            pages=[DetectVlmPageImage(page=1, png_base64=_TINY_PNG)],
+        ),
+        "DetectVlmResponse": DetectVlmResponse(
+            worker_id="worker-1",
+            pages=[DetectVlmPageResult(page=1, verdict=verdict)],
+        ),
+        "ParseExternalRequest": ParseExternalRequest(
+            worker_id="worker-1",
+            attempt_no=1,
+            mode="native",
+        ),
+        "ParseExternalResponse": ParseExternalResponse(
+            worker_id="worker-1",
+            status="done",
+            cache_id="cache-1",
+        ),
+        "AdvanceRequest": AdvanceRequest(
+            worker_id="worker-1",
+            attempt_no=1,
+            phase="begin",
+            deadline_ms=10_000,
+        ),
+        "AdvanceResponse": AdvanceResponse(
+            worker_id="worker-1",
+            stage="identify",
+            done=False,
+            wait_ms=0,
+        ),
+        "BackfillManifestEntry": BackfillManifestEntry(
+            source_key="kb/doc-1",
+            path="/data/doc-1.pdf",
+            doc_type="general",
+        ),
+        "BackfillDryRunReport": BackfillDryRunReport(
+            inventory=InventoryTotals(files=100, bytes=50_000_000, pages_estimated=500),
+            duplicates=DuplicateCounts(in_inventory=3, already_existing=2),
+            sample_size_by_class={"text_pdf": 5},
+            class_shares={"text_pdf": 0.7},
+            projected_pages_by_tier={"fast": 300, "structured": 150, "premium": 50},
+            projected_l2_pages=40,
+            projected_l3_pages=5,
+            projected_cost=ProjectedCostSplit(
+                premium_parse_usd=2.0,
+                vlm_usd=0.5,
+                embeddings_usd=1.0,
+                total_usd=3.5,
+            ),
+            projected_wall_time_s=3600.0,
+            embedding_cost_by_profile_usd={"general@1": 1.0},
+            budget_usd=10.0,
+            fits_budget=True,
+        ),
+        "ParserExpected": ParserExpected(
+            fixture_id="digital-text",
+            language="en",
+            pages=[ExpectedPage(page=1, signals=[], tier="fast", preset="fast")],
+            table_cells=[TableCell(row=0, col=0, text="A1")],
+            reading_order=[ReadingOrderAnchor(text="intro", page=1, order=0)],
+            headings=[ExpectedHeading(text="Overview", level=1, page=1)],
+        ),
+        "ParserEvalReport": ParserEvalReport(
+            fixture_id="digital-text",
+            by_tier={
+                "fast": TierParseMetrics(
+                    text_similarity=0.95,
+                    table_cell_f1=0.9,
+                    reading_order=0.98,
+                    headings_f1=0.92,
+                    s_per_page=0.8,
+                    cost_per_page=0.001,
+                    recall_at_k=0.88,
+                )
+            },
+            page_tier_accuracy=[PageTierAccuracy(layer_combo="L1", pages_below_expected_tier=0)],
+        ),
+        "ParseGateReport": ParseGateReport(
+            recall_at_k=[PairedMetricDelta(metric="recall_at_5", delta=0.01, within_noise_band=True)],
+            correct_refusal=[PairedMetricDelta(metric="correct_refusal_rate", delta=0.0, within_noise_band=True)],
+            noise_band_k=3.0,
+            noise_band_floor=0.02,
+            fixed=ModeProjection(premium_page_share=0.02, projected_cost_per_1000_pages_usd=4.0),
+            tiered=ModeProjection(premium_page_share=0.05, projected_cost_per_1000_pages_usd=6.0),
+            passed=True,
+        ),
+    }
 
 
 _DOC_TYPES = [
@@ -659,6 +916,7 @@ def _models() -> dict[str, Any]:
         "SidecarError": SidecarError(error="synthetic error"),
         "EmbeddingProfileComparison": _profile_comparison(),
         "ActivationEvidence": _activation_evidence(),
+        **_phase31_contract_samples(),
     }
 
 

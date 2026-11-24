@@ -1,0 +1,185 @@
+{
+  "$defs": {
+    "ExpectedHeading": {
+      "additionalProperties": false,
+      "properties": {
+        "level": {
+          "maximum": 6,
+          "minimum": 1,
+          "title": "Level",
+          "type": "integer"
+        },
+        "page": {
+          "minimum": 1,
+          "title": "Page",
+          "type": "integer"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "level",
+        "page"
+      ],
+      "title": "ExpectedHeading",
+      "type": "object"
+    },
+    "ExpectedPage": {
+      "additionalProperties": false,
+      "properties": {
+        "page": {
+          "minimum": 1,
+          "title": "Page",
+          "type": "integer"
+        },
+        "preset": {
+          "enum": [
+            "native",
+            "fast",
+            "structured_layout",
+            "structured_full",
+            "structured_ocr",
+            "premium"
+          ],
+          "title": "Preset",
+          "type": "string"
+        },
+        "signals": {
+          "items": {
+            "enum": [
+              "tables",
+              "multi_col",
+              "has_figure",
+              "scanned",
+              "garbled",
+              "uncertain",
+              "table_continues"
+            ],
+            "type": "string"
+          },
+          "title": "Signals",
+          "type": "array"
+        },
+        "tier": {
+          "enum": [
+            "native",
+            "fast",
+            "structured",
+            "premium"
+          ],
+          "title": "Tier",
+          "type": "string"
+        }
+      },
+      "required": [
+        "page",
+        "signals",
+        "tier",
+        "preset"
+      ],
+      "title": "ExpectedPage",
+      "type": "object"
+    },
+    "ReadingOrderAnchor": {
+      "additionalProperties": false,
+      "properties": {
+        "order": {
+          "minimum": 0,
+          "title": "Order",
+          "type": "integer"
+        },
+        "page": {
+          "minimum": 1,
+          "title": "Page",
+          "type": "integer"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "page",
+        "order"
+      ],
+      "title": "ReadingOrderAnchor",
+      "type": "object"
+    },
+    "TableCell": {
+      "additionalProperties": false,
+      "properties": {
+        "col": {
+          "minimum": 0,
+          "title": "Col",
+          "type": "integer"
+        },
+        "row": {
+          "minimum": 0,
+          "title": "Row",
+          "type": "integer"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "row",
+        "col",
+        "text"
+      ],
+      "title": "TableCell",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "fixture_id": {
+      "title": "Fixture Id",
+      "type": "string"
+    },
+    "headings": {
+      "items": {
+        "$ref": "#/$defs/ExpectedHeading"
+      },
+      "title": "Headings",
+      "type": "array"
+    },
+    "language": {
+      "title": "Language",
+      "type": "string"
+    },
+    "pages": {
+      "items": {
+        "$ref": "#/$defs/ExpectedPage"
+      },
+      "title": "Pages",
+      "type": "array"
+    },
+    "reading_order": {
+      "items": {
+        "$ref": "#/$defs/ReadingOrderAnchor"
+      },
+      "title": "Reading Order",
+      "type": "array"
+    },
+    "table_cells": {
+      "items": {
+        "$ref": "#/$defs/TableCell"
+      },
+      "title": "Table Cells",
+      "type": "array"
+    }
+  },
+  "required": [
+    "fixture_id",
+    "language",
+    "pages"
+  ],
+  "title": "ParserExpected",
+  "type": "object"
+}

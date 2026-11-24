@@ -1,0 +1,59 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "doc_type": {
+      "anyOf": [
+        {
+          "enum": [
+            "general",
+            "financial_report",
+            "contract_legal",
+            "invoice_receipt",
+            "product_technical",
+            "scanned_image"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Doc Type"
+    },
+    "path": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Path"
+    },
+    "source_key": {
+      "minLength": 1,
+      "title": "Source Key",
+      "type": "string"
+    },
+    "url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Url"
+    }
+  },
+  "required": [
+    "source_key"
+  ],
+  "title": "BackfillManifestEntry",
+  "type": "object"
+}

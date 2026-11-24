@@ -45,7 +45,13 @@ export function mintScope(kind: TenantScopeKind, userId: string | null, organiza
   } else {
     throw new Error('[RAG Tenant] unknown scope kind');
   }
-  const scope = Object.freeze({ kind, userId, organizationId }) as unknown as TenantScope;
+  const scopedUserId = userId !== null ? userId.toLowerCase() : null;
+  const scopedOrganizationId = organizationId !== null ? organizationId.toLowerCase() : null;
+  const scope = Object.freeze({
+    kind,
+    userId: scopedUserId,
+    organizationId: scopedOrganizationId,
+  }) as unknown as TenantScope;
   minted.add(scope);
   return scope;
 }

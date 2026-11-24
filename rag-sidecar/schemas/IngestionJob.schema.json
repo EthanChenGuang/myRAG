@@ -1,0 +1,980 @@
+{
+  "$defs": {
+    "DetectCounts": {
+      "additionalProperties": false,
+      "properties": {
+        "L1": {
+          "minimum": 0,
+          "title": "L1",
+          "type": "integer"
+        },
+        "L2": {
+          "minimum": 0,
+          "title": "L2",
+          "type": "integer"
+        },
+        "L3": {
+          "minimum": 0,
+          "title": "L3",
+          "type": "integer"
+        },
+        "gated_share": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Gated Share",
+          "type": "number"
+        }
+      },
+      "required": [
+        "L1",
+        "L2",
+        "L3",
+        "gated_share"
+      ],
+      "title": "DetectCounts",
+      "type": "object"
+    },
+    "JobSettingsSnapshot": {
+      "additionalProperties": false,
+      "properties": {
+        "cloud_allowed": {
+          "title": "Cloud Allowed",
+          "type": "boolean"
+        },
+        "doc_type": {
+          "enum": [
+            "general",
+            "financial_report",
+            "contract_legal",
+            "invoice_receipt",
+            "product_technical",
+            "scanned_image"
+          ],
+          "title": "Doc Type",
+          "type": "string"
+        },
+        "embed_mode": {
+          "enum": [
+            "sync",
+            "batch_api"
+          ],
+          "title": "Embed Mode",
+          "type": "string"
+        },
+        "escalation": {
+          "title": "Escalation",
+          "type": "boolean"
+        },
+        "max_tier": {
+          "anyOf": [
+            {
+              "enum": [
+                "native",
+                "fast",
+                "structured",
+                "premium"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Tier"
+        },
+        "min_tier": {
+          "anyOf": [
+            {
+              "enum": [
+                "native",
+                "fast",
+                "structured",
+                "premium"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Min Tier"
+        },
+        "ocr_languages": {
+          "items": {
+            "enum": [
+              "zh",
+              "en",
+              "it"
+            ],
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Ocr Languages",
+          "type": "array"
+        },
+        "premium_max_pages_per_doc": {
+          "minimum": 0,
+          "title": "Premium Max Pages Per Doc",
+          "type": "integer"
+        },
+        "premium_page_budget": {
+          "minimum": 0,
+          "title": "Premium Page Budget",
+          "type": "integer"
+        },
+        "profile_id": {
+          "title": "Profile Id",
+          "type": "string"
+        },
+        "profile_version": {
+          "minimum": 1,
+          "title": "Profile Version",
+          "type": "integer"
+        },
+        "progressive": {
+          "title": "Progressive",
+          "type": "boolean"
+        },
+        "routing": {
+          "enum": [
+            "fixed",
+            "tiered"
+          ],
+          "title": "Routing",
+          "type": "string"
+        },
+        "routing_config_version": {
+          "title": "Routing Config Version",
+          "type": "string"
+        },
+        "vlm_detect": {
+          "title": "Vlm Detect",
+          "type": "boolean"
+        },
+        "vlm_model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vlm Model"
+        }
+      },
+      "required": [
+        "routing",
+        "cloud_allowed",
+        "escalation",
+        "progressive",
+        "premium_max_pages_per_doc",
+        "premium_page_budget",
+        "vlm_detect",
+        "profile_id",
+        "profile_version",
+        "doc_type",
+        "embed_mode",
+        "ocr_languages",
+        "routing_config_version"
+      ],
+      "title": "JobSettingsSnapshot",
+      "type": "object"
+    },
+    "OriginalRef": {
+      "additionalProperties": false,
+      "properties": {
+        "bucket": {
+          "title": "Bucket",
+          "type": "string"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "bucket",
+        "path"
+      ],
+      "title": "OriginalRef",
+      "type": "object"
+    },
+    "PageCheck": {
+      "additionalProperties": false,
+      "properties": {
+        "failed": {
+          "items": {
+            "enum": [
+              "empty_text",
+              "low_chars",
+              "garbled",
+              "language_mismatch",
+              "missing_table",
+              "partial_conversion",
+              "table_boundary"
+            ],
+            "type": "string"
+          },
+          "title": "Failed",
+          "type": "array"
+        },
+        "page": {
+          "minimum": 1,
+          "title": "Page",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "page",
+        "failed"
+      ],
+      "title": "PageCheck",
+      "type": "object"
+    },
+    "PageRange": {
+      "additionalProperties": false,
+      "properties": {
+        "cache_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cache Id"
+        },
+        "end": {
+          "minimum": 1,
+          "title": "End",
+          "type": "integer"
+        },
+        "layer": {
+          "enum": [
+            "L1",
+            "L2",
+            "L3"
+          ],
+          "title": "Layer",
+          "type": "string"
+        },
+        "parser": {
+          "title": "Parser",
+          "type": "string"
+        },
+        "preset": {
+          "enum": [
+            "native",
+            "fast",
+            "structured_layout",
+            "structured_full",
+            "structured_ocr",
+            "premium"
+          ],
+          "title": "Preset",
+          "type": "string"
+        },
+        "signals": {
+          "items": {
+            "enum": [
+              "tables",
+              "multi_col",
+              "has_figure",
+              "scanned",
+              "garbled",
+              "uncertain",
+              "table_continues"
+            ],
+            "type": "string"
+          },
+          "title": "Signals",
+          "type": "array"
+        },
+        "start": {
+          "minimum": 1,
+          "title": "Start",
+          "type": "integer"
+        },
+        "status": {
+          "enum": [
+            "pending",
+            "ok",
+            "escalated",
+            "needs_review"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "tier": {
+          "enum": [
+            "native",
+            "fast",
+            "structured",
+            "premium"
+          ],
+          "title": "Tier",
+          "type": "string"
+        }
+      },
+      "required": [
+        "start",
+        "end",
+        "tier",
+        "preset",
+        "parser",
+        "layer",
+        "signals",
+        "status"
+      ],
+      "title": "PageRange",
+      "type": "object"
+    },
+    "ParseAttempt": {
+      "additionalProperties": false,
+      "properties": {
+        "attempt_no": {
+          "minimum": 1,
+          "title": "Attempt No",
+          "type": "integer"
+        },
+        "cache_hit": {
+          "title": "Cache Hit",
+          "type": "boolean"
+        },
+        "check": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/QualityCheckResult"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "est_cost_usd": {
+          "minimum": 0,
+          "title": "Est Cost Usd",
+          "type": "number"
+        },
+        "ms": {
+          "minimum": 0,
+          "title": "Ms",
+          "type": "integer"
+        },
+        "pages": {
+          "$ref": "#/$defs/ParseAttemptPages"
+        },
+        "parser": {
+          "title": "Parser",
+          "type": "string"
+        },
+        "parser_version": {
+          "title": "Parser Version",
+          "type": "string"
+        },
+        "preset": {
+          "enum": [
+            "native",
+            "fast",
+            "structured_layout",
+            "structured_full",
+            "structured_ocr",
+            "premium"
+          ],
+          "title": "Preset",
+          "type": "string"
+        },
+        "reason": {
+          "enum": [
+            "initial",
+            "escalation",
+            "table_boundary",
+            "progressive_fast",
+            "fixed_chain",
+            "native"
+          ],
+          "title": "Reason",
+          "type": "string"
+        },
+        "refused": {
+          "title": "Refused",
+          "type": "boolean"
+        },
+        "tier": {
+          "enum": [
+            "native",
+            "fast",
+            "structured",
+            "premium"
+          ],
+          "title": "Tier",
+          "type": "string"
+        }
+      },
+      "required": [
+        "attempt_no",
+        "tier",
+        "preset",
+        "parser",
+        "parser_version",
+        "pages",
+        "reason",
+        "ms",
+        "est_cost_usd",
+        "cache_hit",
+        "refused"
+      ],
+      "title": "ParseAttempt",
+      "type": "object"
+    },
+    "ParseAttemptPages": {
+      "additionalProperties": false,
+      "properties": {
+        "end": {
+          "minimum": 1,
+          "title": "End",
+          "type": "integer"
+        },
+        "start": {
+          "minimum": 1,
+          "title": "Start",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "start",
+        "end"
+      ],
+      "title": "ParseAttemptPages",
+      "type": "object"
+    },
+    "QualityCheckResult": {
+      "additionalProperties": false,
+      "properties": {
+        "pages": {
+          "items": {
+            "$ref": "#/$defs/PageCheck"
+          },
+          "title": "Pages",
+          "type": "array"
+        },
+        "partial": {
+          "title": "Partial",
+          "type": "boolean"
+        },
+        "passed": {
+          "title": "Passed",
+          "type": "boolean"
+        },
+        "score": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Score",
+          "type": "number"
+        }
+      },
+      "required": [
+        "passed",
+        "pages",
+        "score",
+        "partial"
+      ],
+      "title": "QualityCheckResult",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "attempts": {
+      "items": {
+        "$ref": "#/$defs/ParseAttempt"
+      },
+      "title": "Attempts",
+      "type": "array"
+    },
+    "batch_id": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Batch Id"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "deleted_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Deleted At"
+    },
+    "detect_counts": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DetectCounts"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "doc_class": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Doc Class"
+    },
+    "document_id": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Document Id"
+    },
+    "embedding_profile": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Embedding Profile"
+    },
+    "error_class": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error Class"
+    },
+    "escalations": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Escalations",
+      "type": "integer"
+    },
+    "est_cost_usd": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Est Cost Usd"
+    },
+    "file_sha256": {
+      "anyOf": [
+        {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "File Sha256"
+    },
+    "filename": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Filename"
+    },
+    "id": {
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "title": "Id",
+      "type": "string"
+    },
+    "kind": {
+      "enum": [
+        "ingest",
+        "dry_run",
+        "delete"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "lease_until": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Lease Until"
+    },
+    "lineage_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Lineage Id"
+    },
+    "locked_by": {
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Locked By"
+    },
+    "max_retries": {
+      "default": 3,
+      "minimum": 0,
+      "title": "Max Retries",
+      "type": "integer"
+    },
+    "mime_type": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Mime Type"
+    },
+    "needs_review_reason": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Needs Review Reason"
+    },
+    "original_ref": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/OriginalRef"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "page_ranges": {
+      "items": {
+        "$ref": "#/$defs/PageRange"
+      },
+      "title": "Page Ranges",
+      "type": "array"
+    },
+    "pages": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Pages"
+    },
+    "parser_used": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Parser Used"
+    },
+    "parser_version": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Parser Version"
+    },
+    "preflight_ref": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Preflight Ref"
+    },
+    "priority": {
+      "default": 100,
+      "minimum": 0,
+      "title": "Priority",
+      "type": "integer"
+    },
+    "provisional_published_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Provisional Published At"
+    },
+    "retries": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Retries",
+      "type": "integer"
+    },
+    "routing_note": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Routing Note"
+    },
+    "run_after": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Run After"
+    },
+    "runner": {
+      "anyOf": [
+        {
+          "enum": [
+            "worker",
+            "ray"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Runner"
+    },
+    "settings": {
+      "$ref": "#/$defs/JobSettingsSnapshot"
+    },
+    "source": {
+      "title": "Source",
+      "type": "string"
+    },
+    "source_key": {
+      "title": "Source Key",
+      "type": "string"
+    },
+    "stage": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Stage"
+    },
+    "stage_state": {
+      "additionalProperties": true,
+      "title": "Stage State",
+      "type": "object"
+    },
+    "status": {
+      "enum": [
+        "queued",
+        "preflight",
+        "parsing",
+        "checking",
+        "chunking",
+        "embedding",
+        "ready",
+        "failed",
+        "quarantined",
+        "needs_review",
+        "skipped_duplicate"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "tenant_key": {
+      "maxLength": 256,
+      "minLength": 1,
+      "title": "Tenant Key",
+      "type": "string"
+    },
+    "tier": {
+      "anyOf": [
+        {
+          "enum": [
+            "native",
+            "fast",
+            "structured",
+            "premium"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Tier"
+    },
+    "tier_page_counts": {
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "title": "Tier Page Counts",
+      "type": "object"
+    },
+    "timings": {
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "title": "Timings",
+      "type": "object"
+    },
+    "trace_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Trace Id"
+    },
+    "updated_at": {
+      "format": "date-time",
+      "title": "Updated At",
+      "type": "string"
+    },
+    "version": {
+      "anyOf": [
+        {
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Version"
+    }
+  },
+  "required": [
+    "id",
+    "kind",
+    "status",
+    "tenant_key",
+    "source",
+    "source_key",
+    "settings",
+    "created_at",
+    "updated_at"
+  ],
+  "title": "IngestionJob",
+  "type": "object"
+}

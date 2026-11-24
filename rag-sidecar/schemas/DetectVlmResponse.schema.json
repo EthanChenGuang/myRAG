@@ -1,0 +1,120 @@
+{
+  "$defs": {
+    "DetectVlmPageResult": {
+      "additionalProperties": false,
+      "properties": {
+        "page": {
+          "minimum": 1,
+          "title": "Page",
+          "type": "integer"
+        },
+        "refused": {
+          "anyOf": [
+            {
+              "enum": [
+                "cloud_not_allowed",
+                "budget_exhausted",
+                "over_page_cap",
+                "batch_budget_exhausted"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Refused"
+        },
+        "verdict": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PageStructureVerdict"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "page"
+      ],
+      "title": "DetectVlmPageResult",
+      "type": "object"
+    },
+    "PageStructureVerdict": {
+      "additionalProperties": false,
+      "properties": {
+        "complexity": {
+          "enum": [
+            "simple",
+            "complex"
+          ],
+          "title": "Complexity",
+          "type": "string"
+        },
+        "confidence": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "has_chart": {
+          "title": "Has Chart",
+          "type": "boolean"
+        },
+        "has_formula": {
+          "title": "Has Formula",
+          "type": "boolean"
+        },
+        "has_multi_column": {
+          "title": "Has Multi Column",
+          "type": "boolean"
+        },
+        "has_table": {
+          "title": "Has Table",
+          "type": "boolean"
+        },
+        "is_scanned": {
+          "title": "Is Scanned",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "has_table",
+        "has_multi_column",
+        "is_scanned",
+        "has_formula",
+        "has_chart",
+        "complexity",
+        "confidence"
+      ],
+      "title": "PageStructureVerdict",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "pages": {
+      "items": {
+        "$ref": "#/$defs/DetectVlmPageResult"
+      },
+      "title": "Pages",
+      "type": "array"
+    },
+    "worker_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Worker Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "worker_id",
+    "pages"
+  ],
+  "title": "DetectVlmResponse",
+  "type": "object"
+}
