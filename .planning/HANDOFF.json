@@ -14,7 +14,7 @@
   "completed_tasks": [],
   "remaining_tasks": [
     {"id": "03.1-25", "name": "backfill inventory", "status": "in_progress", "exec_branch": "exec/03.1-25", "wip_commit": "7c5f7f8"},
-    {"id": "04-18", "name": "selective-filter harness", "status": "in_progress", "exec_branch": "exec/04-18", "wip_commit": "258a14f"},
+    {"id": "04-18", "name": "selective-filter harness", "status": "complete_unmerged", "exec_branch": "exec/04-18", "tip_commit": "b4a6b3c", "summary": "04-18-SUMMARY.md", "requirement": "RET-10"},
     {"id": "04-20", "name": "refusal routing stages", "status": "complete_unmerged", "exec_branch": "exec/04-20", "tip_commit": "081224a", "summary": ".planning/phases/04-hybrid-retrieval-reranking-calibrated-refusal/04-20-SUMMARY.md on exec branch"},
     {"id": "03-48-setup-idempotent", "name": "multi-tenant-setup 42710", "status": "complete_unmerged", "exec_branch": "exec/03-48-setup-idempotent", "tip_commit": "90635ae", "summary": "03-48-SETUP-IDEMPOTENT-SUMMARY.md", "merge_note": "schema-equality relex cases may still fail unrelated to idempotency"},
     {"id": "03-48-sec-rpc-2", "name": "full DEFINER RPC grants", "status": "not_started", "note": "overflow; vitest inventory gate"}
