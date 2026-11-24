@@ -45,3 +45,5 @@ After all: code review gate -> regression gate -> verifier -> update roadmap.
 - 03-23: Firecrawl `pdf` output (`actions.pdfs`) unverified live.
 - Flaky under load: `tests/rag/injection-scan.test.ts` 1 MB < 1 s timing bound; `tests/rag-langfuse-export.test.mts` waitFor timeout. Fix if they fail in the main tree.
 - Operator: apply migration 0313 (dual-write writer) before enabling RAG_EMBEDDING_PROFILES or a backfill; fill score_calibration before activating a non-legacy profile; restart after fixing a startup MISMATCH.
+- 03-30: lineage DELETE does not remove stored originals / parse.md / docling.json in the private `rag-originals` bucket (orphaned objects). No plan owns it — gap fix using `removeArtifacts`, with a two-tenant test. Images DELETE removes only the named document, not the lineage. Dashboard (`document-dashboard.tsx`) does not know `quarantined` (03-43). Response gained `version` (1 for legacy rows).
+- Still open after 03-30 (03-37 or gap plan): table SELECT RLS on documents/document_chunks (ST `USING (true)`), `get_document_chunks(doc_id)` unrevoked.
