@@ -12,6 +12,7 @@ import fetch from 'node-fetch';
 import { createSemanticChunks, mergeSmallChunks, type ChunkingConfig } from './semantic-chunker';
 import { generateText } from 'ai';
 import { openai as aiOpenai } from '@ai-sdk/openai';
+import { CloudRefused, assertCloudAllowed } from '@/lib/rag/ingest/guard/cloud-budget';
 
 const mkdir = promisify(fs.mkdir);
 const writeFile = promisify(fs.writeFile);
@@ -162,7 +163,20 @@ function createTokenBasedChunks(text: string, maxTokens: number = 600, overlapTo
   return chunks;
 }
 
+/** The legacy parser has no Docling fallback, so a refused call fails the file; Nango stores this message as the failure reason. */
+export class CloudParsingDisabled extends CloudRefused {
+  constructor() {
+    super('cloud_not_allowed');
+    this.message = 'cloud_parsing_disabled';
+  }
+}
+
+function requireCloudParsing(): void {
+  if (!assertCloudAllowed('parse').ok) throw new CloudParsingDisabled();
+}
+
 async function uploadAndParseDocument(filePath: string): Promise<{ chunks: string[] }> {
+  requireCloudParsing();
   const formData = new FormData();
   formData.append('file', fs.createReadStream(filePath));
 
@@ -383,6 +397,9 @@ async function processDocument(
   console.log(`Processing document: ${filename}`);
 
   try {
+    // Refuse before the bytes are written to disk; Markdown is parsed locally and needs no cloud.
+    if (!filename.toLowerCase().endsWith('.md')) requireCloudParsing();
+
     // Create a temporary file to store the buffer
     const tempDir = path.join(os.tmpdir(), 'myrag');
     await mkdir(tempDir, { recursive: true });
