@@ -11,6 +11,7 @@ const VOYAGE = 'voyage-4-large-2048';
 const VOYAGE_MODEL = 'voyage-4-large';
 const PROFILE = 'p256';
 const RETIRED = 'p256-retired';
+const EMPTY_TYPE = 'p256-invoice';
 const WRITE_PATH = '/rest/v1/rpc/rag_write_profile_chunks';
 
 type Row = Record<string, unknown>;
@@ -62,6 +63,8 @@ describe('rechunk job (src/lib/rag/ingest/rechunk)', () => {
   let objectStoreModule: typeof import('@/lib/rag/ingest/object-store');
   let ingestModule: typeof import('@/lib/rag/ingest');
   let scopeModule: typeof import('@/lib/rag/tenant/scope');
+  let cliModule: typeof import('@/lib/rag/ingest/rechunk/cli');
+  let childEnv: Record<string, string> = {};
   let store: import('../helpers/fake-object-store').FakeObjectStore;
   let embeddedTexts: string[] = [];
   let embedMode: 'ok' | 'throw' = 'ok';
@@ -130,7 +133,8 @@ describe('rechunk job (src/lib/rag/ingest/rechunk)', () => {
     const { fixtureProcessEnv, startFakeEdge } = await import('../../eval/harness/fake-edge.mts');
     fixture = await createTwoTenantDatabase();
     edge = await startFakeEdge({ db: fixture.db });
-    Object.assign(process.env, fixtureProcessEnv(edge.url));
+    childEnv = fixtureProcessEnv(edge.url);
+    Object.assign(process.env, childEnv);
     process.env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE = 'multi-tenant';
     process.env.MYRAG_DEPLOYMENT_MODE = 'multi-tenant';
     globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
@@ -140,6 +144,7 @@ describe('rechunk job (src/lib/rag/ingest/rechunk)', () => {
     }) as typeof fetch;
     rechunk = await import('@/lib/rag/ingest/rechunk/run');
     costModule = await import('@/lib/rag/ingest/rechunk/cost');
+    cliModule = await import('@/lib/rag/ingest/rechunk/cli');
     depsModule = await import('@/lib/rag/ingest/deps');
     configModule = await import('@/lib/rag/ingest/config');
     registryModule = await import('@/lib/rag/embeddings/registry');
@@ -153,7 +158,8 @@ describe('rechunk job (src/lib/rag/ingest/rechunk)', () => {
       INSERT INTO chunking_profiles (id, doc_type, child_tokens, parent_mode, parent_tokens, status, preset)
       VALUES ('${PROFILE}', 'contract_legal', 256, 'structure', 1024, 'building', '256/1024'),
              ('${RETIRED}', 'contract_legal', 256, 'structure', 1024, 'retired', '256/1024'),
-             ('${PROFILE}', 'general', 256, 'structure', 1024, 'building', '256/1024')
+             ('${PROFILE}', 'general', 256, 'structure', 1024, 'building', '256/1024'),
+             ('${EMPTY_TYPE}', 'invoice_receipt', 256, 'structure', 1024, 'building', '256/1024')
       ON CONFLICT DO NOTHING`);
     await fixture.db.exec(`DELETE FROM chunking_profiles WHERE id = '${PROFILE}' AND doc_type = 'general'`);
     useEnv({ RAG_EMBEDDING_PROFILES: 'off' });
@@ -475,8 +481,146 @@ describe('rechunk job (src/lib/rag/ingest/rechunk)', () => {
     assert.equal(await code(rechunk.runRechunk({ db: db(), resumeRunId: first.runId, scopeFor })), 'run_not_resumable', 'a completed run is not resumed');
   });
 
+  // ---------------------------------------------------------------------------------------------------------------------------------
+  // CLI: npm run rag:rechunk
+  // ---------------------------------------------------------------------------------------------------------------------------------
+
+  const cli = async (argv: string[], extra: { scopeFor?: typeof scopeFor } = {}) => {
+    const lines: string[] = [];
+    const io = { out: (line: string) => lines.push(line), err: (line: string) => lines.push(line) };
+    const code = await cliModule.main(argv, io, undefined, extra);
+    return { code, output: lines.join('\n') };
+  };
+
+  test('CLI --dry-run prints the per-tenant table, the gap list and the cost, exits 0 and writes nothing', async () => {
+    const { code, output } = await cli(['--profile', PROFILE, '--dry-run', '--batch-size', '2']);
+    assert.equal(code, 0, output);
+    assert.match(output, /dry run, nothing written/);
+    assert.match(output, new RegExp(`profile ${PROFILE} \\(contract_legal, building`));
+    assert.match(output, new RegExp(`${A.key}: documents 2, parents \\d+, children \\d+, tokens \\d+, estimated cost [0-9.]+ USD, without parse output 1`));
+    assert.match(output, new RegExp(`${B.key}: documents 1`));
+    assert.match(output, /total: documents 3, /);
+    assert.match(output, new RegExp(`${docs.legacyA}[^\\n]*no_parse_output`), 'the gap document is listed');
+    assert.equal(Number((await rows('SELECT count(*)::int AS n FROM chunking_build_runs'))[0]?.n), 0);
+    assert.equal(writeCalls(), 0);
+    assert.ok(!/sk-|service-role|apikey/i.test(output), 'no key material in the output');
+  });
+
+  test('CLI run prints the run id, the profile status and the gap list, and exits 3 while documents are missing children', async () => {
+    const { code, output } = await cli(['--profile', PROFILE, '--batch-size', '2'], { scopeFor });
+    assert.equal(code, 3, output);
+    const runId = String((await rows('SELECT id FROM chunking_build_runs'))[0]?.id);
+    assert.ok(output.includes(runId), 'the run id is printed');
+    assert.match(output, /incomplete/);
+    assert.match(output, /built 3 documents/);
+    assert.match(output, new RegExp(`profile ${PROFILE} is building`));
+    assert.match(output, new RegExp(`${docs.legacyA}[^\\n]*no_parse_output`));
+    assert.equal(await profileStatus(), 'building');
+  });
+
+  test('CLI run exits 0 once nothing is missing and the profile is ready', async () => {
+    await fixture.db.query(`UPDATE documents SET status = 'deleted' WHERE id = $1`, [docs.legacyA]);
+    const { code, output } = await cli(['--profile', PROFILE], { scopeFor });
+    assert.equal(code, 0, output);
+    assert.match(output, /completed/);
+    assert.match(output, new RegExp(`profile ${PROFILE} is ready`));
+    assert.equal(await profileStatus(), 'ready');
+  });
+
+  test('CLI exits 1 with a resume hint when a run fails, and --resume finishes it', async () => {
+    await fixture.db.query(`UPDATE documents SET status = 'deleted' WHERE id = $1`, [docs.legacyA]);
+    embedMode = 'throw';
+    const failed = await cli(['--profile', PROFILE], { scopeFor });
+    assert.equal(failed.code, 1, failed.output);
+    const runId = String((await rows('SELECT id FROM chunking_build_runs'))[0]?.id);
+    assert.match(failed.output, /embed_failed/);
+    assert.match(failed.output, new RegExp(`--resume ${runId}`));
+
+    embedMode = 'ok';
+    const resumed = await cli(['--resume', runId], { scopeFor });
+    assert.equal(resumed.code, 0, resumed.output);
+    assert.match(resumed.output, /completed/);
+    assert.equal(await profileStatus(), 'ready');
+  });
+
+  test('CLI refuses wrong arguments with exit 2 and a usage line, and a refused profile with exit 2', async () => {
+    for (const argv of [[], ['--dry-run'], ['--profile'], ['--profile', PROFILE, '--tenant', 'nope'], ['--profile', PROFILE, '--batch-size', '0'], ['--profile', PROFILE, '--bogus'], ['--resume', 'not-a-uuid'], ['--resume', crypto.randomUUID(), '--dry-run']]) {
+      const { code, output } = await cli(argv);
+      assert.equal(code, 2, `${argv.join(' ')}: ${output}`);
+      assert.match(output, /usage: npm run rag:rechunk/);
+    }
+    for (const [profile, reason] of [['legacy', 'profile_is_legacy'], ['no-such-profile', 'unknown_profile'], [RETIRED, 'profile_retired']] as const) {
+      const { code, output } = await cli(['--profile', profile]);
+      assert.equal(code, 2, output);
+      assert.match(output, new RegExp(reason));
+    }
+    assert.equal(Number((await rows('SELECT count(*)::int AS n FROM chunking_build_runs'))[0]?.n), 0);
+  });
+
+  test('CLI refuses to run without SUPABASE_SERVICE_ROLE_KEY', async () => {
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    try {
+      const { code, output } = await cli(['--profile', PROFILE, '--dry-run']);
+      assert.equal(code, 1, output);
+      assert.match(output, /SUPABASE_SERVICE_ROLE_KEY/);
+    } finally {
+      process.env.SUPABASE_SERVICE_ROLE_KEY = key;
+    }
+    assert.equal(edge.calls.length, 0, 'nothing was asked of the database');
+  });
+
+  async function spawnCli(args: string[], env: Record<string, string | undefined> = {}): Promise<{ code: number | null; stdout: string; stderr: string }> {
+    const { spawn } = await import('node:child_process');
+    const merged: Record<string, string | undefined> = { ...process.env, ...childEnv, ...env };
+    for (const key of Object.keys(merged)) if (merged[key] === undefined) delete merged[key];
+    return new Promise((resolve, reject) => {
+      const child = spawn(process.execPath, ['--import', 'tsx', 'src/lib/rag/ingest/rechunk/cli.ts', ...args], { env: merged as NodeJS.ProcessEnv, stdio: ['ignore', 'pipe', 'pipe'] });
+      let stdout = '';
+      let stderr = '';
+      child.stdout.on('data', (chunk: Buffer) => (stdout += chunk.toString('utf8')));
+      child.stderr.on('data', (chunk: Buffer) => (stderr += chunk.toString('utf8')));
+      const timer = setTimeout(() => {
+        child.kill('SIGKILL');
+        reject(new Error('the CLI did not finish in 90 s'));
+      }, 90_000);
+      child.on('error', reject);
+      child.on('close', (code) => {
+        clearTimeout(timer);
+        resolve({ code, stdout, stderr });
+      });
+    });
+  }
+
+  test('the spawned CLI runs --dry-run against the fixture edge, exits 0 and writes nothing; its exit codes follow the contract', async () => {
+    const dry = await spawnCli(['--profile', EMPTY_TYPE, '--dry-run']);
+    assert.equal(dry.code, 0, `${dry.stdout}\n${dry.stderr}`);
+    assert.match(dry.stdout, /dry run, nothing written/);
+    assert.match(dry.stdout, new RegExp(`profile ${EMPTY_TYPE} \\(invoice_receipt, building`));
+    assert.match(dry.stdout, /total: documents 0, /);
+    const paths = edge.calls.map((call) => call.path);
+    assert.ok(paths.includes('/rest/v1/rpc/rag_rechunk_documents'), 'the job ran against the database');
+    assert.ok(!paths.some((path) => /rag_rechunk_(start|advance|record|finish|resume)|rag_write_profile_chunks/.test(path)));
+    assert.equal(Number((await rows('SELECT count(*)::int AS n FROM chunking_build_runs'))[0]?.n), 0);
+
+    const missing = await spawnCli(['--dry-run']);
+    assert.equal(missing.code, 2);
+    assert.match(missing.stderr, /--profile is required/);
+    const unknown = await spawnCli(['--profile', 'no-such-profile', '--dry-run']);
+    assert.equal(unknown.code, 2);
+    assert.match(unknown.stderr, /unknown_profile/);
+    const keyless = await spawnCli(['--profile', EMPTY_TYPE, '--dry-run'], { SUPABASE_SERVICE_ROLE_KEY: '' });
+    assert.equal(keyless.code, 1);
+    assert.match(keyless.stderr, /SUPABASE_SERVICE_ROLE_KEY/);
+  });
+
+  test('package.json has the rag:rechunk script', () => {
+    const scripts = (JSON.parse(fs.readFileSync('package.json', 'utf8')) as { scripts: Record<string, string> }).scripts;
+    assert.equal(scripts['rag:rechunk'], 'tsx src/lib/rag/ingest/rechunk/cli.ts');
+  });
+
   test('the job modules import no parser, sidecar, LlamaParse client or OpenAI client', () => {
-    for (const file of ['run.ts', 'cost.ts']) {
+    for (const file of ['run.ts', 'cost.ts', 'cli.ts']) {
       const source = fs.readFileSync(`src/lib/rag/ingest/rechunk/${file}`, 'utf8');
       const imports = [...source.matchAll(/(?:from|import\()\s*['"]([^'"]+)['"]/g)].map((match) => match[1] as string);
       assert.ok(imports.length > 0 || file === 'cost.ts');
