@@ -137,3 +137,55 @@ def test_gate_result_is_identical_with_and_without_latency():
     )
     noise = NoiseConfig.model_validate_json(NOISE_PATH.read_text(encoding="utf-8"))
     assert evaluate_gate(timed, baseline, noise) == evaluate_gate(plain, baseline, noise)
+
+
+V2_CHAT_STAGES = {
+    "translate": 5,
+    "embed": 200,
+    "search": 400,
+    "fuse": 5,
+    "dedupe": 5,
+    "rerank": 600,
+    "refusal": 1,
+    "expand_parents": 100,
+    "assemble": 100,
+    "compress": 50,
+}
+V2_VOICE_STAGES = {
+    "translate": 5,
+    "embed": 200,
+    "search": 300,
+    "fuse": 5,
+    "dedupe": 5,
+    "rerank": 250,
+    "refusal": 1,
+    "assemble": 50,
+}
+
+
+def test_committed_budgets_carry_the_v2_stage_p95_targets():
+    profiles = load_latency_budgets(BUDGETS_PATH).profiles
+    assert profiles["chat"].stages == V2_CHAT_STAGES
+    assert profiles["embed"].stages == V2_CHAT_STAGES
+    assert profiles["voice"].stages == V2_VOICE_STAGES
+    assert profiles["chat"].stages["rerank"] == 600 and profiles["voice"].stages["rerank"] == 250
+
+
+def test_committed_budget_totals_are_unchanged():
+    profiles = load_latency_budgets(BUDGETS_PATH).profiles
+    assert (profiles["chat"].total_p50_ms, profiles["chat"].total_p95_ms) == (1000, 2000)
+    assert (profiles["voice"].total_p50_ms, profiles["voice"].total_p95_ms) == (400, 800)
+
+
+def test_markdown_shows_rerank_against_the_committed_chat_budget(tmp_path: Path):
+    golden, traces = _four_items()
+    traces = [_with_latency(trace, rerank=value, search=50.0) for trace, value in zip(traces, [100, 200, 300, 700])]
+    report = build_report(_manifest(), score_items(traces, golden), golden, traces)
+    _, md_path = write_report(report, tmp_path, load_latency_budgets(BUDGETS_PATH))
+    rows = {
+        line.split("|")[1].strip(): [cell.strip() for cell in line.split("|")[2:-1]]
+        for line in md_path.read_text(encoding="utf-8").splitlines()
+        if line.startswith("| ")
+    }
+    assert rows["rerank"] == ["200.0", "700.0", "4", "-", "600.0", "over"]
+    assert rows["search"][-1] == "within"
