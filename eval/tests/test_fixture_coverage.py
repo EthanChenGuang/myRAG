@@ -7,6 +7,7 @@ import pytest
 
 from rag_eval.corpus import load_corpus
 from rag_eval.golden_io import load_golden
+from rag_eval.matching import chunk_matches_span
 from rag_eval.paths import REPO_ROOT
 from rag_eval.split import SPLIT_RULE, assign_split, load_manifest
 
@@ -141,8 +142,6 @@ def test_gold_document_language_folder_equals_the_evidence_language(items):
 
 
 def test_every_cross_lingual_quote_is_found_in_a_chunk_of_its_document(items):
-    from rag_eval.matching import chunk_matches_span
-
     documents = {doc.filename: doc for doc in load_corpus(CORPUS_DIR)}
     for item in _cross_lingual_items(items):
         for span in item.gold_evidence:
@@ -152,17 +151,39 @@ def test_every_cross_lingual_quote_is_found_in_a_chunk_of_its_document(items):
 
 
 _NUMBER = re.compile(r"\d+")
+_IDENTIFIER = re.compile(r"[A-Za-z0-9]+(?:[-@.][A-Za-z0-9]+)+")
 
 
-def _shares_a_number(item) -> bool:
-    quoted = set().union(*(set(_NUMBER.findall(span.quote)) for span in item.gold_evidence))
-    return bool(set(_NUMBER.findall(item.question)) & quoted)
+def _shared_features(text: str) -> set[str]:
+    return set(_NUMBER.findall(text)) | {token.casefold() for token in _IDENTIFIER.findall(text)}
+
+
+def _shares_a_number_or_identifier(item, documents) -> bool:
+    chunk_features: set[str] = set()
+    for span in item.gold_evidence:
+        for chunk in documents[span.document].chunks:
+            if chunk_matches_span(span.document, chunk.text, span):
+                chunk_features |= _shared_features(chunk.text)
+    return bool(_shared_features(item.question) & chunk_features)
 
 
 def test_each_pair_mixes_number_sharing_and_purely_semantic_questions(items):
+    documents = {doc.filename: doc for doc in load_corpus(CORPUS_DIR)}
     for pair in PAIRS:
         members = [item for item in _cross_lingual_items(items) if (item.language, item.evidence_language) == pair]
-        sharing = [item.id for item in members if _shares_a_number(item)]
-        semantic = [item.id for item in members if not _shares_a_number(item)]
+        sharing = [item.id for item in members if _shares_a_number_or_identifier(item, documents)]
+        semantic = [item.id for item in members if not _shares_a_number_or_identifier(item, documents)]
         assert len(sharing) >= 2, (pair, sharing)
         assert len(semantic) >= 2, (pair, semantic)
+
+
+def test_each_pair_gates_on_a_dev_split_that_mixes_both_kinds_of_question(items):
+    documents = {doc.filename: doc for doc in load_corpus(CORPUS_DIR)}
+    for pair in PAIRS:
+        dev = [
+            item
+            for item in _cross_lingual_items(items)
+            if (item.language, item.evidence_language) == pair and item.split == "dev"
+        ]
+        kinds = {_shares_a_number_or_identifier(item, documents) for item in dev}
+        assert kinds == {True, False}, (pair, [item.id for item in dev])
