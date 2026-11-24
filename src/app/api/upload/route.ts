@@ -5,7 +5,7 @@ import { processImageDocument } from '@/lib/document-processor';
 import { logger } from '@/lib/logger';
 import { isSingleTenant } from '@/lib/deployment-mode';
 import { checkSingleTenantKbWrite } from '@/lib/kb-write-access';
-import type { RagAdminDb, TenantScope } from '@/lib/rag';
+import type { EnqueueResult, RagAdminDb, TenantScope } from '@/lib/rag';
 
 /**
  * Dedicated file upload endpoint for MCP tool compatibility
@@ -266,8 +266,9 @@ export async function POST(request: NextRequest) {
     // We don't await this to keep the upload response fast
     const imageContext = formData.get('image_context') as string | undefined;
 
+    let queuedIngest: EnqueueResult[] | null = null;
     if (ingestScope && pendingImages.length > 0) {
-      await scheduleImageIngest(ingestScope, pendingImages, imageContext || undefined, startedAt);
+      queuedIngest = await scheduleImageIngest(ingestScope, pendingImages, imageContext || undefined, startedAt);
     }
 
     (async () => {
@@ -317,6 +318,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(response, { status: 400 });
     }
 
+    if (queuedIngest) {
+      const failed = queuedIngest.some((row) => row.status === 'failed');
+      const queued = queuedIngest.some((row) => row.status === 'queued');
+      if (failed && !queued) {
+        return NextResponse.json({ ...response, status: 'failed' }, { status: 500 });
+      }
+      const ingestPayload =
+        queuedIngest.length === 1
+          ? {
+              jobId: queuedIngest[0]!.jobId,
+              documentId: queuedIngest[0]!.documentId,
+              status: queuedIngest[0]!.status,
+            }
+          : { ingestJobs: queuedIngest };
+      return NextResponse.json(
+        { ...response, ...ingestPayload },
+        { status: queued ? 202 : 200 },
+      );
+    }
+
     return NextResponse.json(response, { status: 200 });
 
   } catch (error) {
@@ -338,43 +359,70 @@ export async function POST(request: NextRequest) {
  * the bytes and never reads the session or the form again. Each image gets what is left of the request budget and a document that
  * runs out of time stays processing and resumable.
  */
-async function scheduleImageIngest(scope: TenantScope, images: PendingImage[], imageContext: string | undefined, startedAt: number): Promise<void> {
+async function scheduleImageIngest(
+  scope: TenantScope,
+  images: PendingImage[],
+  imageContext: string | undefined,
+  startedAt: number,
+): Promise<EnqueueResult[] | null> {
   const deadlineAt = startedAt + INGEST_BUDGET_MS;
 
-  const ingestOne = async (ingest: typeof import('@/lib/rag').ingest, image: PendingImage): Promise<void> => {
-    const budgetMs = Math.max(MIN_INGEST_MS, deadlineAt - Date.now());
-    try {
-      const result = await ingest({
-        scope,
-        source: 'image_upload',
-        sourceKey: image.filePath,
-        file: image.bytes,
-        filename: image.name,
-        mimeType: image.type,
-        signal: AbortSignal.timeout(budgetMs),
-        deadlineMs: budgetMs,
-        options: {
-          imageUrl: image.downloadUrl,
-          ...(imageContext ? { imageContext } : {}),
-          origin: { sourceFileId: image.filePath },
-          documentMetadata: { image_type: image.type },
-        },
-      });
-      console.log('[Ingest] image upload finished', { status: result.status, ...(result.reason ? { reason: result.reason } : {}) });
-    } catch (error) {
-      console.error('[Ingest] image upload failed', { error: error instanceof Error ? error.name : 'unknown' });
-    }
-  };
+  const buildInput = (image: PendingImage, budgetMs: number) => ({
+    scope,
+    source: 'image_upload' as const,
+    sourceKey: image.filePath,
+    file: image.bytes,
+    filename: image.name,
+    mimeType: image.type,
+    signal: AbortSignal.timeout(budgetMs),
+    deadlineMs: budgetMs,
+    options: {
+      imageUrl: image.downloadUrl,
+      ...(imageContext ? { imageContext } : {}),
+      origin: { sourceFileId: image.filePath },
+      documentMetadata: { image_type: image.type },
+    },
+  });
 
   try {
-    const { ingest } = await import('@/lib/rag');
+    const { ingest, submitIngest } = await import('@/lib/rag');
+    const { queueConfigFromProcessEnv } = await import('@/lib/rag/ingest/queue-config');
+    const queueConfig = queueConfigFromProcessEnv();
+    if (queueConfig.ingestAsync) {
+      const results: EnqueueResult[] = [];
+      let queued = false;
+      for (const image of images) {
+        const budgetMs = Math.max(MIN_INGEST_MS, deadlineAt - Date.now());
+        const result = await submitIngest(buildInput(image, budgetMs), { queueConfig: () => queueConfig });
+        if ('status' in result && result.status === 'queued') queued = true;
+        results.push(result as EnqueueResult);
+      }
+      if (queued) {
+        const { scheduleIngestWake } = await import('@/lib/rag/ingest/wake');
+        scheduleIngestWake();
+      }
+      return results;
+    }
+
+    const ingestOne = async (image: PendingImage): Promise<void> => {
+      const budgetMs = Math.max(MIN_INGEST_MS, deadlineAt - Date.now());
+      try {
+        const result = await ingest(buildInput(image, budgetMs));
+        console.log('[Ingest] image upload finished', { status: result.status, ...(result.reason ? { reason: result.reason } : {}) });
+      } catch (error) {
+        console.error('[Ingest] image upload failed', { error: error instanceof Error ? error.name : 'unknown' });
+      }
+    };
+
     after(async () => {
       for (let index = 0; index < images.length; index += INGEST_CONCURRENCY) {
-        await Promise.allSettled(images.slice(index, index + INGEST_CONCURRENCY).map((image) => ingestOne(ingest, image)));
+        await Promise.allSettled(images.slice(index, index + INGEST_CONCURRENCY).map((image) => ingestOne(image)));
       }
     });
+    return null;
   } catch {
     logger.error('Upload API', 'Could not schedule the background ingestion');
+    return null;
   }
 }
 
