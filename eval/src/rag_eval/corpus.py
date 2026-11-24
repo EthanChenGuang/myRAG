@@ -36,6 +36,7 @@ class CorpusDocument:
     created_at: str
     content: str
     chunks: list[CorpusChunk]
+    doc_type: str | None = None
 
 
 def _js_trim(text: str) -> str:
@@ -113,6 +114,7 @@ def load_corpus(corpus_dir: Path) -> list[CorpusDocument]:
                     )
                     for index, text in enumerate(texts)
                 ],
+                doc_type=meta["doc_type"] if isinstance(meta.get("doc_type"), str) else None,
             )
         )
     return documents

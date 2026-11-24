@@ -32,6 +32,11 @@ ZH_QUIRK_NOTE = (
     "for Chinese queries, so every retrieved chunk passes Filter 1 and zh retrieval is not narrowed by it; "
     "zh slices can look better than en and it slices for that reason."
 )
+FALSE_REFUSAL_BOUND_LABEL = "False refusal upper 95"
+BOUND_NOTE = (
+    "False refusal upper 95 is the exact one-sided 95% Clopper-Pearson upper bound on the false-refusal rate of "
+    "the slice (answerable items only); a point estimate at or below a target says nothing until this bound does too."
+)
 GATING_NOTE = (
     "Overall, language, language pair and category tables cover the dev split only. Categories are report-only "
     "except cross_lingual; only overall, per-language, cross_lingual and per-language-pair slices gate "
@@ -139,14 +144,30 @@ def _cell(metric: MetricValue) -> str:
     return f"{shown} (n={metric.n})"
 
 
+def _bound_cell(value: float | None) -> str:
+    return "n/a" if value is None else f"{round(value, 3):.3f}"
+
+
 def _table(first_column: str, rows: dict[str, SliceMetrics]) -> list[str]:
-    header = "| " + " | ".join([first_column, *(label for label, _ in _METRIC_COLUMNS)]) + " |"
-    divider = "|" + "|".join(["---"] * (len(_METRIC_COLUMNS) + 1)) + "|"
+    labels = [label for label, _ in _METRIC_COLUMNS] + [FALSE_REFUSAL_BOUND_LABEL]
+    header = "| " + " | ".join([first_column, *labels]) + " |"
+    divider = "|" + "|".join(["---"] * (len(labels) + 1)) + "|"
     lines = [header, divider]
     for name, metrics in rows.items():
         cells = [_cell(getattr(metrics, field)) for _, field in _METRIC_COLUMNS]
+        cells.append(_bound_cell(metrics.false_refusal_upper_95))
         lines.append("| " + " | ".join([name, *cells]) + " |")
     return lines
+
+
+def _optional_slices_section(title: str, first_column: str, rows: dict[str, SliceMetrics]) -> list[str]:
+    if not rows:
+        return []
+    return [f"## {title}", "", *_table(first_column, rows), ""]
+
+
+def _metric_line(label: str, metric: MetricValue | None) -> str:
+    return f"- {label}: {_cell(metric) if metric is not None else 'n/a (n=0)'}"
 
 
 def _language_pair_section(report: EvalReport) -> list[str]:
@@ -230,6 +251,8 @@ def _render_markdown(report: EvalReport, budgets: LatencyBudgets | None = None) 
         *_table("Language/category", report.by_language_category),
         "",
         *_language_pair_section(report),
+        *_optional_slices_section("By document type", "Document type", report.by_doc_type),
+        *_optional_slices_section("By question kind", "Question kind", report.by_question_kind),
         "## By provenance",
         "",
         *_table("Provenance", report.by_provenance),
@@ -237,6 +260,13 @@ def _render_markdown(report: EvalReport, budgets: LatencyBudgets | None = None) 
         "## By provenance and category",
         "",
         *_table("Provenance/category", report.by_provenance_category),
+        "",
+        "## Retrieval stage metrics",
+        "",
+        _metric_line("Rerank skipped rate", report.rerank_skipped_rate),
+        _metric_line("Lexical leg hit rate@10", report.lexical_leg_hit_rate_at_10),
+        "",
+        BOUND_NOTE,
         "",
     ]
     if report.latency:
