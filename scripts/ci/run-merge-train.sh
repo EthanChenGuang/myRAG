@@ -43,6 +43,23 @@ if ! git diff --quiet || ! git diff --cached --quiet; then
   exit 1
 fi
 
+# Handoff/state docs are rewritten on trunk at every pause; when they are the only
+# conflicts in a trunk-into-branch merge, take trunk's copy ("theirs").
+HANDOFF_DOC_RE='^(HANDOFF\.md|\.planning/STATE\.md|\.planning/HANDOFF\.json|\.planning/paused/exec-ledger\.md|\.planning/.*/\.continue-here\.md|\.planning/\.continue-here\.md)$'
+resolve_handoff_conflicts() {
+  local conflicted
+  conflicted=$(git diff --name-only --diff-filter=U)
+  [[ -n "$conflicted" ]] || return 1
+  if grep -qvE "$HANDOFF_DOC_RE" <<<"$conflicted"; then
+    return 1
+  fi
+  while IFS= read -r f; do
+    git checkout --theirs -- "$f"
+    git add -- "$f"
+  done <<<"$conflicted"
+  return 0
+}
+
 already_merged() {
   local pr="$1"
   if [[ -f "$RESULTS" ]]; then
@@ -67,10 +84,14 @@ while read -r pr branch; do
   git fetch origin "$branch" || { echo "SKIP #$pr fetch failed"; continue; }
   git checkout -B "train/${branch#exec/}" "origin/$branch"
   if ! git merge "origin/$TRUNK" -m "merge trunk into $branch for train"; then
+    if resolve_handoff_conflicts; then
+      git commit --no-edit -m "merge trunk into $branch for train (handoff docs from trunk)"
+    else
     git merge --abort 2>/dev/null || true
     git checkout "$TRUNK"
     echo "{\"pr\":$pr,\"branch\":\"$branch\",\"status\":\"skip\",\"reason\":\"merge conflict\"}" >>"$RESULTS"
     continue
+    fi
   fi
   ./scripts/ci/merge-train-gate.sh "pr${pr}" || true
   gate_fail=$(grep 'FAIL count:' "$ROOT/.merge-train-gates/pr${pr}/full.log" 2>/dev/null | tail -1 | awk '{print $NF}' || echo "?")
