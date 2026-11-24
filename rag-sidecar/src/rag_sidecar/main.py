@@ -1,13 +1,17 @@
+import json
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import APIRouter, FastAPI, Request, Response
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import ValidationError
 
 from rag_sidecar.auth import SharedSecretMiddleware
 from rag_sidecar.contracts import (
+    InvoiceExtractRequest,
+    InvoiceFields,
     ParseJobAccepted,
     ParseJobRequest,
     SidecarError,
@@ -15,12 +19,15 @@ from rag_sidecar.contracts import (
     SidecarInfo,
     SidecarReady,
 )
+from rag_sidecar.extract.invoice import extract_invoice
 from rag_sidecar.parse.converter import Converter, default_converter
 from rag_sidecar.parse.jobs import JobRunner, QueueFull
 from rag_sidecar.parse.upload import BODY_ALLOWANCE_BYTES, MalformedUpload, UploadTooLarge, read_upload
 from rag_sidecar.settings import SidecarSettings, load_settings
 
 CONTRACTS_SCHEMA_VERSION = 2
+INVOICE_MARKDOWN_MAX_CHARS = 2_000_000
+INVOICE_BODY_MAX_BYTES = 8 * 1024 * 1024
 
 _ARTIFACT_MEDIA_TYPES = {
     ".png": "image/png",
@@ -140,6 +147,32 @@ def create_app(settings: SidecarSettings | None = None, converter: Converter | N
             return _error(404, "artifact_not_found")
         media_type = _ARTIFACT_MEDIA_TYPES.get(path.suffix.lower(), "application/octet-stream")
         return FileResponse(path, media_type=media_type, headers={"x-content-type-options": "nosniff"})
+
+    @v1.post("/extract/invoice", response_model=InvoiceFields)
+    async def extract_invoice_fields(request: Request) -> Response:
+        declared = request.headers.get("content-length", "")
+        if declared.isdigit() and int(declared) > INVOICE_BODY_MAX_BYTES:
+            return _error(413, "invoice_too_large")
+        body = bytearray()
+        async for chunk in request.stream():
+            body += chunk
+            if len(body) > INVOICE_BODY_MAX_BYTES:
+                return _error(413, "invoice_too_large")
+        try:
+            payload = json.loads(body)
+        except (ValueError, RecursionError):
+            return _error(422, "invalid_invoice_request")
+        markdown = payload.get("markdown") if isinstance(payload, dict) else None
+        if isinstance(markdown, str) and len(markdown) > INVOICE_MARKDOWN_MAX_CHARS:
+            return _error(413, "invoice_too_large")
+        try:
+            extract_request = InvoiceExtractRequest.model_validate(payload)
+        except ValidationError:
+            return _error(422, "invalid_invoice_request")
+        fields = await run_in_threadpool(
+            extract_invoice, extract_request.markdown, extract_request.tables, extract_request.language_hint
+        )
+        return JSONResponse(content=fields.model_dump(mode="json"))
 
     app.include_router(v1)
     return app
