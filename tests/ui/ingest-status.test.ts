@@ -13,6 +13,14 @@ import {
 } from '@/lib/hooks/use-ingest-job-status';
 import { IngestStatusBadge } from '@/components/ui/ingest-status-badge';
 import { describeIngestStatus } from '@/components/ui/ingest-status-labels';
+import {
+  attachQueuedJob,
+  classifyUploadResponse,
+  failStalledProcessingRows,
+  mergeRefreshedDocuments,
+  settleQueuedRow,
+  type IngestRow,
+} from '@/components/ui/ingest-document-rows';
 
 const JOB_ID = '11111111-1111-4111-8111-111111111111';
 const OTHER_JOB_ID = '22222222-2222-4222-8222-222222222222';
@@ -433,5 +441,161 @@ describe('IngestStatusBadge', () => {
     );
     expect(new Set(labels).size).toBe(labels.length);
     expect(labels.every((label) => label.length > 0)).toBe(true);
+  });
+});
+
+describe('classifyUploadResponse', () => {
+  it('treats a 202 with a job id as a queued upload', () => {
+    expect(classifyUploadResponse(202, { jobId: JOB_ID, documentId: 'doc-1', status: 'queued' })).toEqual({
+      kind: 'queued',
+      jobId: JOB_ID,
+      documentId: 'doc-1',
+    });
+  });
+
+  it('falls back to the id field when documentId is absent', () => {
+    expect(classifyUploadResponse(202, { jobId: JOB_ID, id: 'doc-2' })).toEqual({ kind: 'queued', jobId: JOB_ID, documentId: 'doc-2' });
+  });
+
+  it('keeps a 202 without a job id on the document status poll of today', () => {
+    expect(classifyUploadResponse(202, { id: 'doc-3', status: 'processing' })).toEqual({ kind: 'poll', documentId: 'doc-3' });
+  });
+
+  it('leaves 200 responses inline, even when they carry a job id', () => {
+    expect(classifyUploadResponse(200, { id: 'doc-4', status: 'ready' })).toEqual({ kind: 'inline' });
+    expect(classifyUploadResponse(200, { id: 'doc-5', jobId: JOB_ID, status: 'skipped_duplicate' })).toEqual({ kind: 'inline' });
+  });
+
+  it('never queues a malformed 202', () => {
+    expect(classifyUploadResponse(202, null)).toEqual({ kind: 'inline' });
+    expect(classifyUploadResponse(202, { jobId: 42 })).toEqual({ kind: 'inline' });
+    expect(classifyUploadResponse(202, { jobId: '' , id: 'doc-6' })).toEqual({ kind: 'poll', documentId: 'doc-6' });
+  });
+});
+
+const row = (id: string, name: string, extra: Partial<IngestRow> = {}): IngestRow => ({
+  id,
+  name,
+  status: 'processing',
+  uploadedAt: new Date('2026-11-24T10:00:00.000Z'),
+  ...extra,
+});
+
+const apiRow = (id: string, name: string, at = '2026-11-24T09:00:00.000Z'): IngestRow => ({
+  id,
+  name,
+  status: 'ready',
+  uploadedAt: new Date(at),
+});
+
+describe('attachQueuedJob', () => {
+  it('turns the temporary row into a processing row carrying jobId and the document id', () => {
+    const rows = [row('tmp-1', 'a.pdf'), row('tmp-2', 'b.pdf')];
+    const next = attachQueuedJob(rows, 'tmp-1', { jobId: JOB_ID, documentId: 'doc-1', organizationId: ORG_ID });
+    expect(next[0]).toMatchObject({ id: 'doc-1', status: 'processing', jobId: JOB_ID, jobOrganizationId: ORG_ID });
+    expect(next[1]).toBe(rows[1]);
+  });
+
+  it('keeps the temporary id when the response had no document id', () => {
+    const next = attachQueuedJob([row('tmp-1', 'a.pdf')], 'tmp-1', { jobId: JOB_ID, documentId: null, organizationId: null });
+    expect(next[0]).toMatchObject({ id: 'tmp-1', jobId: JOB_ID, jobOrganizationId: null });
+  });
+});
+
+describe('failStalledProcessingRows', () => {
+  it('fails rows that are still processing without a job', () => {
+    const [failed] = failStalledProcessingRows([row('tmp-1', 'a.pdf')]);
+    expect(failed?.status).toBe('failed');
+  });
+
+  it('leaves a queued upload that is still polling alone', () => {
+    const queued = row('doc-1', 'a.pdf', { jobId: JOB_ID });
+    const [kept] = failStalledProcessingRows([queued]);
+    expect(kept).toBe(queued);
+    expect(kept?.status).toBe('processing');
+  });
+
+  it('leaves ready and failed rows alone', () => {
+    const ready = apiRow('doc-2', 'b.pdf');
+    expect(failStalledProcessingRows([ready])[0]).toBe(ready);
+  });
+});
+
+describe('settleQueuedRow', () => {
+  const state = (status: string, extra: Partial<IngestJobState> = {}): IngestJobState => ({
+    ...INITIAL_INGEST_JOB_STATE,
+    status,
+    ...extra,
+  });
+  const queued = () => [row('doc-1', 'a.pdf', { jobId: JOB_ID })];
+
+  it('marks a ready job ready and keeps the final state', () => {
+    const [settled] = settleQueuedRow(queued(), JOB_ID, state('ready'));
+    expect(settled).toMatchObject({ status: 'ready', ingest: { status: 'ready' } });
+  });
+
+  it('marks a failed job failed with the reason as the error', () => {
+    const [settled] = settleQueuedRow(queued(), JOB_ID, state('failed', { reason: 'parse_failed' }));
+    expect(settled).toMatchObject({ status: 'failed', error: 'parse_failed', ingest: { status: 'failed' } });
+  });
+
+  it('keeps a needs_review job visible as its own state, not as ready or failed text', () => {
+    const [settled] = settleQueuedRow(queued(), JOB_ID, state('needs_review', { needsReview: true, reason: 'low_confidence_ocr' }));
+    expect(settled).toMatchObject({ status: 'ready', ingest: { status: 'needs_review', needsReview: true } });
+  });
+
+  it.each(['quarantined', 'not_found', 'unavailable'])('marks a %s job failed', (status) => {
+    const [settled] = settleQueuedRow(queued(), JOB_ID, state(status));
+    expect(settled?.status).toBe('failed');
+  });
+
+  it('ignores another job id', () => {
+    const rows = queued();
+    expect(settleQueuedRow(rows, OTHER_JOB_ID, state('ready'))[0]).toBe(rows[0]);
+  });
+});
+
+describe('mergeRefreshedDocuments', () => {
+  it('keeps a queued row that has a same-named document in the list', () => {
+    const queued = row('doc-1', 'a.pdf', { jobId: JOB_ID });
+    const merged = mergeRefreshedDocuments([queued], [apiRow('doc-1', 'a.pdf'), apiRow('doc-9', 'z.pdf')]);
+    expect(merged.map((d) => d.id).sort()).toEqual(['doc-1', 'doc-9']);
+    expect(merged.find((d) => d.id === 'doc-1')).toBe(queued);
+  });
+
+  it('replaces a processing row without a job by its same-named document, as today', () => {
+    const merged = mergeRefreshedDocuments([row('tmp-1', 'a.pdf')], [apiRow('doc-1', 'a.pdf')]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0]).toMatchObject({ id: 'doc-1', status: 'ready' });
+  });
+
+  it('replaces a settled ready row with the normal document row', () => {
+    const settled = row('doc-1', 'a.pdf', { jobId: JOB_ID, status: 'ready', ingest: { ...INITIAL_INGEST_JOB_STATE, status: 'ready' } });
+    const fetched = apiRow('doc-1', 'a.pdf');
+    const merged = mergeRefreshedDocuments([settled], [fetched]);
+    expect(merged).toEqual([fetched]);
+    expect(merged[0]?.ingest).toBeUndefined();
+  });
+
+  it('keeps needs_review and failed job rows until the user reloads', () => {
+    const review = row('doc-1', 'a.pdf', {
+      jobId: JOB_ID,
+      status: 'ready',
+      ingest: { ...INITIAL_INGEST_JOB_STATE, status: 'needs_review', needsReview: true },
+    });
+    const failed = row('doc-2', 'b.pdf', { jobId: OTHER_JOB_ID, status: 'failed', ingest: { ...INITIAL_INGEST_JOB_STATE, status: 'failed' } });
+    const merged = mergeRefreshedDocuments([review, failed], [apiRow('doc-1', 'a.pdf'), apiRow('doc-2', 'b.pdf')]);
+    expect(merged).toHaveLength(2);
+    expect(merged).toContain(review);
+    expect(merged).toContain(failed);
+  });
+
+  it('drops rows that are neither processing nor a kept job row, and sorts newest first', () => {
+    const stale = row('tmp-9', 'gone.pdf', { status: 'failed' });
+    const merged = mergeRefreshedDocuments(
+      [stale],
+      [apiRow('doc-1', 'old.pdf', '2026-11-20T00:00:00.000Z'), apiRow('doc-2', 'new.pdf', '2026-11-23T00:00:00.000Z')],
+    );
+    expect(merged.map((d) => d.id)).toEqual(['doc-2', 'doc-1']);
   });
 });
