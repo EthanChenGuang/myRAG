@@ -28,9 +28,9 @@ See: .planning/PROJECT.md (updated 2026-11-22)
 ## Current Position
 
 Phase: 03 (Unified Ingestion & Embedding Profiles) — EXECUTING
-Plan: 33 of 49 merged (03-01..03-30, 03-13b); running wave 7: 03-31..03-37, 03-41
+Plan: 39 of 50 merged (03-01..03-37, 03-13b, 03-41; 03-41a added for the empty documents.content gap); running wave 8: 03-38, 03-39, 03-40, 03-41a
 Status: Phase 2 complete (human_needed live checks). All remaining phases planned and plan-checked PASS: 3.1 (55), 4 (45), 5 (26), 5.1 (25), 6 (46), 7 (34).
-Last activity: 2026-11-24 — 03-23, 03-24, 03-26..03-30 merged; gates green (tsc 0, vitest 2072, node 145, rag-db 281+3 skip, sidecar 565, eval 364, test-rag PASS)
+Last activity: 2026-11-24 — wave 7 (03-31..03-37, 03-41) merged; gates green (tsc 0, vitest 2352, node 145, rag-db 372+3 skip, eval 367, test-rag prechunked and ingest PASS); langfuse held-export test race fixed
 
 Progress: [█████████░] 94%
 
@@ -191,7 +191,7 @@ Items acknowledged and deferred at milestone close, most recent first:
 ## Session Continuity
 
 Last session: 2026-11-24
-Stopped at: Phase 3 wave 7 executing (03-31..03-37, 03-41); then 03-38..03-40, 03-42..03-48
+Stopped at: Phase 3 wave 8 executing (03-38, 03-39, 03-40, 03-41a); then 03-42..03-48; follow-ups in .planning/paused/followups-notes.md
 Resume file: .planning/phases/03-unified-ingestion-embedding-profiles/.continue-here.md
 
 ## Pending Human Actions (session 2026-11-23b)
