@@ -12,6 +12,36 @@ export type { EvalScopeInput, EvalScopeOutcome } from './tenant/eval';
 export type { TenantScope } from './tenant/scope';
 export { RetrievalBackendError } from './backend/supabase-rpc';
 export { embedText, embedBatch } from './embeddings/openai';
+export {
+  getActiveProfile,
+  refreshActiveProfile,
+  getBackfillingProfiles,
+  getStartupVerdict,
+  verifyActiveEmbeddingProfileAtStartup,
+  isEmbeddingProfilesEnabled,
+  LEGACY_PROFILE,
+  ProfileUnavailableError,
+} from './embeddings/active-profile';
+export type {
+  EmbeddingProfile,
+  EmbeddingProfileState,
+  ProfileUnavailableReason,
+  StartupMismatchReason,
+  StartupVerdict,
+} from './embeddings/active-profile';
+export {
+  getEmbeddingProfileStatus,
+  activateEmbeddingProfile,
+  rollbackEmbeddingProfile,
+  setEmbeddingProfileStatus,
+} from './embeddings/profile-ops';
+export type {
+  ActivateResult,
+  EmbeddingProfileStatus,
+  ProfileRefusal,
+  RollbackResult,
+  SetStatusResult,
+} from './embeddings/profile-ops';
 export type {
   Candidate,
   Profile,
