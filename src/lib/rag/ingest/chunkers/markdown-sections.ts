@@ -30,8 +30,8 @@ interface PackedChunk {
   newStart: number;
 }
 
-const HEADING = /^ {0,3}(#{1,6})[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*$/;
-const FENCE = /^ {0,3}(```|~~~)/;
+export const HEADING = /^ {0,3}(#{1,6})[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*$/;
+export const FENCE = /^ {0,3}(```|~~~)/;
 const LIST_ITEM = /^ {0,6}(?:[-*+]|\d{1,9}[.)])[ \t]+\S/;
 const TABLE_SEPARATOR = /^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)*\|?\s*$/;
 export const SENTENCE_END = /(?<=[.!?;。！？；])\s+|(?<=[。！？；])/u;
