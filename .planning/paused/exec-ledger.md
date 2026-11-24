@@ -104,7 +104,7 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | 03.1-20 | [bc-7530e5d1](bc-7530e5d1-02b0-5c59-bf06-0bd96367216e) **merged** | exec/03.1-20 — PGlite 13 |
 | 03.1-23 | [bc-ab1e9b2d](bc-ab1e9b2d-301d-50ad-85d3-54b3af5e3261) **merged** | exec/03.1-23 |
 | 04-44 | [bc-e6e2bd84](bc-e6e2bd84-1486-5c1d-b545-6f44a20de765) **merged** | exec/04-44 — params-hash 15 |
-| 03.1-25 | [bc-1f542e8a](bc-1f542e8a-f80a-58a7-99bb-5c47f655d0ce) **merged** trunk `feb9555` (Claude Code resume) | `origin/exec/03.1-25` @ `494d60a` |
+| 03.1-25 | [bc-1f542e8a](bc-1f542e8a-f80a-58a7-99bb-5c47f655d0ce) **merged** trunk `feb9555` (Cursor) then superseded by Claude executor `d544c36` | `origin/exec/03.1-25` @ `494d60a` |
 | 04-19 | [bc-eafdad13](bc-eafdad13-4e57-5750-a00f-8bc029517ee2) **merged** | exec/04-19 — tracer 6 + vitest 18 |
 | 04-45 | [bc-32843230](bc-32843230-3c15-53cb-be49-93f84da0a3bb) **merged** | exec/04-45 — vitest 13 |
 | 03-48-sec-rpc | [bc-049b7ab0](bc-049b7ab0-c778-50b5-bce6-77842e48a55e) **merged** | exec/03-48-sec-rpc — PGlite 2/2 |
@@ -142,14 +142,14 @@ All four executors **stopped**; WIP on `origin/exec/*` + patches in `.planning/p
 | Plan | Worktree ready | Notes |
 |------|----------------|-------|
 | **03-48-setup-idempotent** | `wt/03-48-setup-idempotent` | **merged** `da1ed63` |
-| **03-48-sec-rpc-2** | `wt/03-48-sec-rpc-2` | **RUNNING** (Claude Code gsd-executor, local branch, not pushed); [03-48-FOLLOWUP-SECURITY-RPC-2-PLAN.md](../phases/03-unified-ingestion-embedding-profiles/03-48-FOLLOWUP-SECURITY-RPC-2-PLAN.md) — full DEFINER inventory (live 23); `tests/rag/search-rpc-grants.test.ts` must pass |
+| **03-48-sec-rpc-2** | `wt/03-48-sec-rpc-2` | **merged** `7ea728a` (0410 + 0409 single-tenant guard; 109 signatures locked); [03-48-FOLLOWUP-SECURITY-RPC-2-PLAN.md](../phases/03-unified-ingestion-embedding-profiles/03-48-FOLLOWUP-SECURITY-RPC-2-PLAN.md) — full DEFINER inventory (live 23); `tests/rag/search-rpc-grants.test.ts` must pass |
 
 **03-48 follow-ups (one executor per plan when a slot frees — do not duplicate running work):**
 
 | Plan id | PLAN file | Priority |
 |---------|-----------|----------|
 | `03-48-sec-rpc` | [03-48-FOLLOWUP-SECURITY-RPC-PLAN.md](../phases/03-unified-ingestion-embedding-profiles/03-48-FOLLOWUP-SECURITY-RPC-PLAN.md) | **merged** — four search RPCs (`0409`) |
-| `03-48-sec-rpc-2` | [03-48-FOLLOWUP-SECURITY-RPC-2-PLAN.md](../phases/03-unified-ingestion-embedding-profiles/03-48-FOLLOWUP-SECURITY-RPC-2-PLAN.md) | overflow — full inventory; vitest gate |
+| `03-48-sec-rpc-2` | [03-48-FOLLOWUP-SECURITY-RPC-2-PLAN.md](../phases/03-unified-ingestion-embedding-profiles/03-48-FOLLOWUP-SECURITY-RPC-2-PLAN.md) | **merged** `7ea728a` |
 | `03-48-setup-idempotent` | [03-48-FOLLOWUP-SETUP-IDEMPOTENT-PLAN.md](../phases/03-unified-ingestion-embedding-profiles/03-48-FOLLOWUP-SETUP-IDEMPOTENT-PLAN.md) | 42710 on re-run setup |
 
 **03-48 live Supabase:** Guang/box agent only for production DB; Task 1 logged in `03-48-SUMMARY.md`.
@@ -174,6 +174,8 @@ Guang approval: **批准安装** → `approved` (2026-11-24 Europe/Rome). Orches
 ## DUPLICATE EXECUTION (2026-11-24)
 
 **03-44:** Three executors (bc-cdb95a3d, bc-9cd7df41, bc-645e437f). Canonical merge: bc-645e437f.
+
+**03.1-25:** Two executors (Cursor bc-1f542e8a → `494d60a`; Claude Code pre-/clear executor → `c8d0b6f`), both from WIP `7c5f7f8`. Merged Cursor first (`feb9555`), then the Claude version (`d544c36`), which passes the Cursor tests and adds SSRF/symlink/bucket hardening. Canonical: `d544c36`. Deferred from its SUMMARY: folder upload to `rag-originals` belongs to **03.1-46**; generated Zod lacks the path/url cross-field rule (`tests/ingest-queue-contracts.test.ts`, 03.1-02).
 
 ## Spawn checklist
 

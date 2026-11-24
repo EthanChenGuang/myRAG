@@ -87,8 +87,8 @@ Full registry: `.planning/paused/exec-ledger.md` rows marked **merged**.
 
 | Item | Status |
 |------|--------|
-| **SECURITY DEFINER inventory test** | `tests/rag/search-rpc-grants.test.ts` — **1 failing** (10 pass); fixed by **03-48-sec-rpc-2**, not noise |
-| **multi-tenant-setup idempotency** | **03-48-setup-idempotent** WIP `d1c5821` |
+| **SECURITY DEFINER inventory test** | **fixed** by 03-48-sec-rpc-2 (0410; 18/18 vitest, 6/6 PGlite). Live: apply 0409 then 0410 on box, then run the read-only check in 03-48-SEC-RPC-2-SUMMARY.md |
+| **multi-tenant-setup idempotency** | **merged** (03-48-setup-idempotent) |
 | **Docling T2.2** | CI Docker only on cloud VM |
 | **Live DB** | Guang/box; live at **0351**; trunk has **0352–0356**, **0401–0409+** — **not live** |
 | **Voyage billing** | blocks re-embed |

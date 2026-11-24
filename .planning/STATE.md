@@ -198,7 +198,7 @@ Items acknowledged and deferred at milestone close, most recent first:
 ## Session Continuity
 
 Last session: 2026-11-24
-Stopped at: PAUSED (usage limit) — read .planning/phases/03-unified-ingestion-embedding-profiles/.continue-here.md first
+Stopped at: Claude Code resume — 04-18, 04-20, 03-48-setup-idempotent, 03.1-25 and 03-48-sec-rpc-2 merged on trunk (see .planning/paused/exec-ledger.md). Next: 04-21+, 03.1-26+ per plan indices; live promotion of 0409/0410 is Guang/box only.
 Resume file: .planning/phases/03-unified-ingestion-embedding-profiles/.continue-here.md
 
 ## Pending Human Actions (session 2026-11-23b)
