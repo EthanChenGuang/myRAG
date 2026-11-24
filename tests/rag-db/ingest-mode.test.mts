@@ -110,6 +110,16 @@ describe('ingest fixture mode: the corpus goes through the real ingest()', () =>
     assert.ok(stripped.length >= 1, 'the corpus has a document with a fixture-meta line, so the check above is not vacuous');
   });
 
+  test('documents.content holds the parsed text of every document, the text the chunker consumed', async () => {
+    const { rows } = await fixture.db.query<Row>('SELECT filename, content FROM documents');
+    assert.equal(rows.length, corpus.documents.length, 'every corpus document is there to inspect');
+    for (const row of rows) {
+      const source = corpus.documents.find((doc) => doc.filename === row.filename);
+      assert.ok(source, `${String(row.filename)} is a corpus document`);
+      assert.equal(row.content, source.content, `${String(row.filename)} content`);
+    }
+  });
+
   test('every gold quote of the fixture golden set lies inside a single chunk of its document', async () => {
     const { rows } = await fixture.db.query<Row>(
       'SELECT d.filename AS filename, c.content AS content FROM document_chunks c JOIN documents d ON d.id = c.document_id',

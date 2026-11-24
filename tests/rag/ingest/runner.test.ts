@@ -294,7 +294,8 @@ describe('runner: ordered stages, deadline, state and resume', () => {
 
     for (const calls of [first, second]) {
       expect(callsOf(calls, 'rag_begin_document_version')).toHaveLength(0);
-      expect(callsOf(calls, 'rag_set_document_fields')).toHaveLength(0);
+      // The only field a resume after images writes is the parsed text, once, at the write stage.
+      expect(callsOf(calls, 'rag_set_document_fields').map((call) => call.args.p_fields)).toEqual([{ content: MARKDOWN }]);
     }
     const writes = (calls: RecordedRpc[]) =>
       callsOf(calls, 'rag_write_chunks').map((call) => ({
