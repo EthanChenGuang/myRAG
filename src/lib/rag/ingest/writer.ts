@@ -428,3 +428,254 @@ export function createIngestWriter(input: CreateIngestWriterInput): IngestWriter
     },
   };
 }
+
+/** A refused or failed re-embed RPC. Carries the function name, the code and the refusal words only, never the rest of a database message. */
+export class ReembedWriterError extends Error {
+  readonly rpc: string;
+  readonly code: string | null;
+  /** The first word of the message, for example reembed_refused, rollback_refused, embedding_profile_mismatch or tenant_mismatch. */
+  readonly reason: string | null;
+  /** The word after the colon of a refusal, for example profile_is_active. */
+  readonly detail: string | null;
+
+  constructor(rpc: string, code: string | null, reason: string | null = null, detail: string | null = null) {
+    super(`[Re-embed] ${rpc} failed${code ? ` (${code})` : ''}${reason ? `: ${reason}${detail ? ` ${detail}` : ''}` : ''}`);
+    this.name = 'ReembedWriterError';
+    this.rpc = rpc;
+    this.code = code;
+    this.reason = reason;
+    this.detail = detail;
+  }
+}
+
+const REEMBED_REASONS = new Set(['reembed_refused', 'rollback_refused', 'embedding_profile_mismatch', 'tenant_mismatch', 'invalid_rows']);
+
+export interface ReembedRun {
+  runId: string;
+  profileId: string;
+  tenantKey: string | null;
+  cursorChunkId: string | null;
+  chunksTotal: number;
+  chunksDone: number;
+  tokens: number;
+  status: string;
+  derivedFrom: string | null;
+  provider: string;
+  model: string;
+  dims: number;
+  storage: string;
+  profileStatus: string;
+}
+
+/** A stored chunk as the re-embed job reads it: the columns the embedding text is rebuilt from and nothing else. */
+export interface ReembedChunk {
+  id: string;
+  documentId: string;
+  tenantKey: string;
+  content: string;
+  sectionPath: string[];
+  chunkKind: string;
+  docType: string | null;
+  templateRow: Record<string, string | null>;
+  hasGap: boolean;
+}
+
+export interface ReembedVector {
+  chunkId: string;
+  vector: number[];
+  host: string | null;
+}
+
+export interface ReembedCountRow {
+  tenantKey: string;
+  chunks: number;
+  chunksMissing: number;
+  contentChars: number;
+}
+
+export interface ReembedLegacyGuard {
+  versionedDocuments: number;
+  profilesInUse: string[];
+}
+
+export interface ReembedWriter {
+  start(args: { profileId: string; tenantKey: string | null; actor: string; derivedFrom: string | null }): Promise<ReembedRun>;
+  get(runId: string): Promise<ReembedRun | null>;
+  resume(runId: string, actor: string): Promise<ReembedRun>;
+  nextBatch(runId: string, after: string | null, limit: number): Promise<ReembedChunk[]>;
+  missingBatch(runId: string, after: string | null, limit: number): Promise<ReembedChunk[]>;
+  /** Upserts the vectors and moves the cursor and counts in one transaction; a null cursor leaves the cursor alone. */
+  writeBatch(runId: string, rows: ReembedVector[], cursor: string | null, tokens: number): Promise<{ written: number; done: number; cursor: string | null }>;
+  deriveBatch(runId: string, limit: number): Promise<{ derived: number; done: number; cursor: string | null }>;
+  remaining(runId: string): Promise<number>;
+  finish(runId: string, status: 'completed' | 'failed'): Promise<{ status: string; missing: number }>;
+  rollback(runId: string, actor: string): Promise<{ rowsDeleted: number; profileStatus: string }>;
+  count(profileId: string, tenantKey: string | null): Promise<ReembedCountRow[]>;
+  previewBatch(profileId: string, tenantKey: string | null, after: string | null, limit: number): Promise<ReembedChunk[]>;
+  legacyGuard(): Promise<ReembedLegacyGuard>;
+}
+
+function reembedRefusal(message: string | undefined): { reason: string | null; detail: string | null } {
+  const match = /^([a-z_]+)(?:: ([a-z_]+))?/.exec(message ?? '');
+  const reason = match?.[1];
+  if (reason === undefined || !REEMBED_REASONS.has(reason)) return { reason: null, detail: null };
+  return { reason, detail: match?.[2] ?? null };
+}
+
+function count(row: Row, key: string): number {
+  const value = row[key];
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && /^\d+$/.test(value)) return Number(value);
+  return 0;
+}
+
+function parseRun(rpc: string, row: Row): ReembedRun {
+  return {
+    runId: requireText(rpc, row, 'run_id'),
+    profileId: requireText(rpc, row, 'profile_id'),
+    tenantKey: text(row, 'tenant_key'),
+    cursorChunkId: text(row, 'cursor_chunk_id'),
+    chunksTotal: count(row, 'chunks_total'),
+    chunksDone: count(row, 'chunks_done'),
+    tokens: count(row, 'tokens'),
+    status: text(row, 'status') ?? 'running',
+    derivedFrom: text(row, 'derived_from'),
+    provider: text(row, 'provider') ?? '',
+    model: text(row, 'model') ?? '',
+    dims: count(row, 'dims'),
+    storage: text(row, 'storage') ?? '',
+    profileStatus: text(row, 'profile_status') ?? '',
+  };
+}
+
+function parseChunk(rpc: string, row: Row): ReembedChunk {
+  const sectionPath = Array.isArray(row.section_path) ? row.section_path.filter((entry): entry is string => typeof entry === 'string') : [];
+  const templateRow: Record<string, string | null> = {};
+  if (typeof row.template_row === 'object' && row.template_row !== null && !Array.isArray(row.template_row)) {
+    for (const [key, value] of Object.entries(row.template_row as Row)) templateRow[key] = typeof value === 'string' ? value : null;
+  }
+  return {
+    id: requireText(rpc, row, 'id'),
+    documentId: requireText(rpc, row, 'document_id'),
+    tenantKey: requireText(rpc, row, 'tenant_key'),
+    content: text(row, 'content') ?? '',
+    sectionPath,
+    chunkKind: text(row, 'chunk_kind') ?? 'text',
+    docType: text(row, 'doc_type'),
+    templateRow,
+    hasGap: row.has_gap === true,
+  };
+}
+
+/**
+ * The operator re-embed job's only door to the database. Every call after the start names a run, and the SQL takes the profile and the tenant
+ * scope from the run row, so a job limited to one tenant cannot be pointed at another tenant's chunks from here. Vectors get the tenant key of
+ * the chunk they belong to inside the database (rag_chunk_embeddings_guard); nothing here mints a tenant scope.
+ */
+export function createReembedWriter(input: { db: RpcClient; signal: AbortSignal }): ReembedWriter {
+  const { db, signal } = input;
+
+  async function call(rpc: string, args: Record<string, unknown>): Promise<Row[]> {
+    signal.throwIfAborted();
+    const response = await db.rpc(rpc, args).abortSignal(signal);
+    signal.throwIfAborted();
+    if (response.error) {
+      const { reason, detail } = reembedRefusal(response.error.message);
+      throw new ReembedWriterError(rpc, response.error.code ?? null, reason, detail);
+    }
+    return (response.data ?? []) as Row[];
+  }
+
+  async function callOne(rpc: string, args: Record<string, unknown>): Promise<Row> {
+    const row = (await call(rpc, args))[0];
+    if (!row) throw new ReembedWriterError(rpc, 'no_row');
+    return row;
+  }
+
+  const writer: ReembedWriter = {
+    async start(args) {
+      const row = await callOne('rag_reembed_start_run', {
+        p_profile_id: args.profileId,
+        p_tenant_key: args.tenantKey,
+        p_actor: args.actor,
+        p_derived_from: args.derivedFrom,
+      });
+      const runId = requireText('rag_reembed_start_run', row, 'run_id');
+      const run = await writer.get(runId);
+      if (!run) throw new ReembedWriterError('rag_reembed_start_run', 'no_row');
+      return run;
+    },
+
+    async get(runId) {
+      const rows = await call('rag_reembed_get_run', { p_run_id: runId });
+      return rows[0] ? parseRun('rag_reembed_get_run', rows[0]) : null;
+    },
+
+    async resume(runId, actor) {
+      return parseRun('rag_reembed_resume_run', await callOne('rag_reembed_resume_run', { p_run_id: runId, p_actor: actor }));
+    },
+
+    async nextBatch(runId, after, limit) {
+      const rows = await call('rag_reembed_next_batch', { p_run_id: runId, p_after: after, p_limit: limit });
+      return rows.map((row) => parseChunk('rag_reembed_next_batch', row));
+    },
+
+    async missingBatch(runId, after, limit) {
+      const rows = await call('rag_reembed_missing_batch', { p_run_id: runId, p_after: after, p_limit: limit });
+      return rows.map((row) => parseChunk('rag_reembed_missing_batch', row));
+    },
+
+    async writeBatch(runId, rows, cursor, tokens) {
+      const row = await callOne('rag_reembed_write_batch', {
+        p_run_id: runId,
+        p_rows: rows.map((entry) => ({ chunk_id: entry.chunkId, vector: entry.vector, host: entry.host })),
+        p_cursor: cursor,
+        p_tokens: Math.max(0, Math.trunc(tokens)),
+      });
+      return { written: count(row, 'chunks_written'), done: count(row, 'chunks_done'), cursor: text(row, 'cursor_chunk_id') };
+    },
+
+    async deriveBatch(runId, limit) {
+      const row = await callOne('rag_reembed_derive_batch', { p_run_id: runId, p_limit: limit });
+      return { derived: count(row, 'chunks_derived'), done: count(row, 'chunks_done'), cursor: text(row, 'cursor_chunk_id') };
+    },
+
+    async remaining(runId) {
+      return count(await callOne('rag_reembed_remaining', { p_run_id: runId }), 'chunks_missing');
+    },
+
+    async finish(runId, status) {
+      const row = await callOne('rag_reembed_finish_run', { p_run_id: runId, p_status: status });
+      return { status: text(row, 'status') ?? status, missing: count(row, 'chunks_missing') };
+    },
+
+    async rollback(runId, actor) {
+      const row = await callOne('rag_reembed_rollback_run', { p_run_id: runId, p_actor: actor });
+      return { rowsDeleted: count(row, 'rows_deleted'), profileStatus: text(row, 'profile_status') ?? '' };
+    },
+
+    async count(profileId, tenantKey) {
+      const rows = await call('rag_reembed_count', { p_profile_id: profileId, p_tenant_key: tenantKey });
+      return rows.map((row) => ({
+        tenantKey: requireText('rag_reembed_count', row, 'tenant_key'),
+        chunks: count(row, 'chunks'),
+        chunksMissing: count(row, 'chunks_missing'),
+        contentChars: count(row, 'content_chars'),
+      }));
+    },
+
+    async previewBatch(profileId, tenantKey, after, limit) {
+      const rows = await call('rag_reembed_preview_batch', { p_profile_id: profileId, p_tenant_key: tenantKey, p_after: after, p_limit: limit });
+      return rows.map((row) => parseChunk('rag_reembed_preview_batch', row));
+    },
+
+    async legacyGuard() {
+      const row = await callOne('rag_reembed_legacy_guard', {});
+      return {
+        versionedDocuments: count(row, 'versioned_documents'),
+        profilesInUse: Array.isArray(row.profiles_in_use) ? row.profiles_in_use.filter((id): id is string => typeof id === 'string') : [],
+      };
+    },
+  };
+  return writer;
+}
