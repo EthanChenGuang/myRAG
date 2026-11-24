@@ -68,3 +68,46 @@
 ## Recommendation
 
 4 blockers and 9 warnings need revision. Return to the planner with this file.
+
+---
+
+## Re-check (pass 2)
+
+**Verdict: PASS.** 0 blockers, 6 warnings, 2 info. Execution can proceed. The warnings are worth fixing, but none of them stops the phase goal.
+
+Re-measured on the revised plans: `verify plan-structure` 46 of 46 valid with no plan above 4 tasks. My dependency script finds no missing ids, no wave errors, no unordered shared files and no cross-phase last-editor gaps. Every `grep -c` gate with a HEAD note matches the current tree.
+
+### Earlier blockers
+
+| # | Status | Evidence |
+|---|--------|----------|
+| B1 (06-17, 06-32, 06-36) | CLOSED | `document_refs` (mentions, documentParts) and `retrieval_options` (mediaKind, generalOverview, maxResults other than the configured count, degrade) bypass at check and at store, with zh/en/it cases. 06-32 builds TurnFacts from `input.documentRefs` and `input.options` and records the bypass with no ticket. 06-36 store cases include both. New gates `document_refs` / `retrieval_options` in `bypass.ts`. |
+| B2 (06-17, 06-32, 06-41) | CLOSED | `eval` is its own entry profile in the key hash. The profile is derived from `RunRetrievalInput.profile`, never from caller data, and the eval route hardcodes `profile: 'eval'` (route.ts L59/68). A single-tenant test (written to fail first) shows an eval-seeded entry is a miss for chat. `cache_seed_answer` gets a structured 403 when `NODE_ENV` is production, checked before any retrieval or store, with a test that fails first. |
+| B3 (06-22, 06-30) | CLOSED | 06-22 Task 2 is a `checkpoint:human-action` (blocking-human), orchestrator-only, after Task 1 approval and not before 2026-12-04, with `npm install --save-exact --before=$CUTOFF`. Executor tasks have a precondition that the lock commit exists and run only `npm ls`, `uv lock --check`, `uv export --frozen` and `uv run --frozen --no-sync`. 06-30 uses `--frozen --no-sync` everywhere. The other plans' plain `uv run` calls only sync packages already locked and add nothing new, so they are not new installs. |
+| B4 (06-28, 06-31) | CLOSED | Each history turn carries a binding (SHA-256 of the scope token). The server drops turns whose binding does not match before anything reaches the query layer, and a turn with no binding gets a 400. The new test `tests/rag/voice-rag-two-tenant.test.ts` (written first) checks that a tenant-B token with tenant-A history sends no A text to the fake LLM and calls every backend with B's scope. |
+
+The pass-1 warnings W1 (no RedisVL refusals), W2 (the `x-rag-server-query-rewrite` header; the agent rewrites locally unless the latest response carried it, so either switch off gives today's behaviour), W5 (REDIS_URL in the manifest, the five places and config-server-security), W6 (`rag_cache_resolve_sources` re-resolves citations for the hit's answer record) and W8 (Open Questions marked RESOLVED) are resolved.
+
+### The three points you asked about
+
+1. **`rag_cache_resolve_sources` (06-12 Task 2).** The plan text requires `rag_assert_tenant_key` first, SECURITY INVOKER, revoked from PUBLIC/anon/authenticated and granted to service_role only. The behaviour block tests 42501 for anon and authenticated, a two-tenant case with no rows, and that soft-deleted or replaced documents are hidden. The design is sound; two verification gaps follow as W-A and W-B.
+2. **Voice history binding.** The binding is a public hash of the token, so anyone who holds the token (the voice agent, behind the internal API key) can compute it and stamp any text. This is not an authenticity control. It stops turns from one session leaking into another by accident. That is acceptable, because tenant isolation still comes from the verified scope token: a forged history can only carry text the caller already has, and retrieval stays inside B's scope, which the two-tenant test proves. The plan's wording claims more than this; see W-C.
+3. **`NODE_ENV` refusal.** The request cannot change `NODE_ENV`. `next start` and Vercel (preview included) always run with `production`. The only way around it is to run `next dev` on a production server, which is a misconfiguration. Even then the seeded entry lands only in the eval namespace, and no chat or embed key can match it. The refusal is defence in depth, not the only control. It cannot be bypassed in a correct deployment (INFO).
+
+### Warnings (pass 2)
+
+- **W-A (06-12): the guard gate does not cover the fifth function.** There are now 5 tenant-keyed functions (check, store, invalidate, sources_current, resolve_sources), but the gate is still `grep -c "rag_assert_tenant_key" ... >= 4`. One function could miss the guard and the gate would still pass. Required: the count gate is at least the number of guarded functions (5), or a per-function test asserts that a malformed key raises 22023 for `rag_cache_resolve_sources`.
+- **W-B (06-46 Task 1): the live anon check covers one function.** It tests only `rag_tenant_language_shares`, `rag_cache_check` and `hybrid_search_chunks`. Required: the live permission-denied check covers every new function, including `rag_cache_store`, `rag_cache_invalidate`, `rag_cache_sources_current`, `rag_cache_resolve_sources` and the `rag_semantic_cache` table.
+- **W-C (06-28 / 06-31): the binding's claim needs narrowing.** The threat text should say the binding stops accidental cross-session mixing, not that it authenticates history. The plan should also say what happens to history after a voice token refresh mid-session: with a new token every earlier turn is dropped, so condensing quietly falls back to the original query.
+- **W3 (kept): Phase 5.1 edges.** Deferred on purpose and listed as pending in 06-PLAN-INDEX.md. The 16 plans: 06-01, 06-02, 06-05, 06-09, 06-10, 06-13, 06-19, 06-22, 06-27, 06-28, 06-30, 06-31, 06-33, 06-34, 06-38, 06-45.
+- **W7 (kept): baselines that can still move.** Gates on `src/lib/rag/ingest/**` (06-21 Task 3: `publish.ts`, and `soft-delete.ts`, which does not exist yet) must be re-measured when the plan starts, while Phase 3 and 3.1 are still executing.
+- **W9 (accepted by the coordinator): 06-41 has 4 tasks.**
+
+W4 also stands as a decision note. If the user declines RedisVL at 06-22, D-35 and CACHE-01 need a recorded decision change. 06-22 Task 4 and 06-30 now say so explicitly.
+
+### Info
+
+- The `NODE_ENV` gate is sound for every supported deployment (see point 3).
+- No new insecure compat path, CORS header, key logging or package install was introduced by the revision.
+
+**Recommendation:** PASS. 0 blockers, 6 warnings (of which W3 and W9 are accepted and deferred). W-A and W-B are one-line gate and checklist fixes and are worth making before 06-12 and 06-46 run.

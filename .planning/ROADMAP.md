@@ -375,7 +375,7 @@ Plans:
   5. The regression runner evaluates backend, embedding profile and reranker combinations on the locked test split and writes a defaults decision record with its numbers (shown on fixtures). `AGENTS.md`, the `.env` templates and setup docs describe the sidecar, providers, switches, sync and eval workflow. A vendor data-flow inventory lists what content goes to Vectara, Cohere, Voyage, DeepInfra, Weaviate, Qdrant, Anthropic, LlamaCloud and any other external service the pipeline calls.
   6. Admin can open a queued case in the Config UI, write its expected answer and evidence spans and promote it into the private golden set with provenance `production`; the next eval run includes it, and the periodic failure report groups new failures by layer and category.
 **Live verification**: Provision Weaviate and Qdrant (cloud or self-hosted), host the drain worker within the 60 s function limit, and run the canary suite against them; run Test-connection for each real provider; run the full regression on the real locked test split with all real keys (the ADM-02 defaults decision is final only from this live run, not from fixtures); check voice latency end to end.
-**Plans**: 33 plans in 13 waves — see `phases/07-external-backends-release-defaults/07-PLAN-INDEX.md`
+**Plans**: 34 plans in 13 waves — see `phases/07-external-backends-release-defaults/07-PLAN-INDEX.md`
 
 Plans:
 - [ ] 07-01-PLAN.md — Gate and install the two vector-store clients, and make the boundary check confine them to the adapter… (wave 1, autonomous: false)
@@ -405,12 +405,13 @@ Plans:
 - [ ] 07-25-PLAN.md — Connect the regression runner of plan 07-24 to the eval harness for external backends, then run the full… (wave 9)
 - [ ] 07-26-PLAN.md — Add the periodic failure report that lists new production failures by layer and category, and run it… (wave 8)
 - [ ] 07-27-PLAN.md — Write the documentation ADM-03 asks for: a RAG pipeline guide with generated switch tables, the `.env`… (wave 10)
-- [ ] 07-28-PLAN.md — Add the semantic-cache case to the cross-tenant canary suite on all three backends (D-12, CACHE-01). (wave 6)
+- [ ] 07-28-PLAN.md — Add the semantic-cache case to the cross-tenant canary suite on all three backends, for the chat, embed and voice… (wave 7)
 - [ ] 07-29-PLAN.md — Let admins work the review queue in the Config UI: open a queued case, see its question, answer,… (wave 9)
 - [ ] 07-30-PLAN.md — Make CI prove that the shipped defaults equal the latest defaults decision: today's defaults while the… (wave 10)
 - [ ] 07-31-PLAN.md — Close the automated part of Phase 7: fold the Phase 7 migrations into both setup files, prove every… (wave 11)
 - [ ] 07-32-PLAN.md — Collect the three human decisions and actions Phase 7 needs before the live checks: the Vercel plan… (wave 12, autonomous: false)
 - [ ] 07-33-PLAN.md — Run the Phase 7 live verification items as explicit checkpoints, then apply the shipped defaults from… (wave 13, autonomous: false)
+- [ ] 07-34-PLAN.md — Extend the cross-tenant canary suite to the voice and embed entry points on pgvector, Weaviate and Qdrant,… (wave 6)
 **UI hint**: yes
 
 ## Progress
@@ -428,4 +429,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 5.1 → 6 → 7. 
 | 5. Verified Citations & Groundedness | 0/26 | Planned (plan-check PASS after W1 fix) | - |
 | 5.1. Prompt Injection Defense (INSERTED) | 0/23 | Planned | - |
 | 6. Query Layer (LlamaIndex & LangChain) | 0/46 | Planned (plan-check pending) | - |
-| 7. External Backends & Release Defaults | 0/33 | Planned (33 plans, 13 waves; plan check not yet run) | - |
+| 7. External Backends & Release Defaults | 0/34 | Planned (34 plans, 13 waves; revised after plan-check pass 1) | - |
