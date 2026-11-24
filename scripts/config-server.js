@@ -3357,6 +3357,14 @@ app.get('/api/mcp/servers', async (req, res) => {
   }
 });
 
+function isAllowedRagProxyPathname(pathname) {
+  const normalized = path.posix.normalize(pathname);
+  if (normalized.includes('..')) return false;
+  if (!normalized.startsWith('/api/rag')) return false;
+  if (normalized.length > '/api/rag'.length && !normalized.startsWith('/api/rag/')) return false;
+  return true;
+}
+
 function buildRagProxyTargetPath(pathParam, queryString) {
   const raw = String(pathParam ?? '').replace(/^\/+/, '');
   const parts = raw ? raw.split('/').filter(Boolean) : [];
@@ -3378,10 +3386,19 @@ function buildRagProxyTargetPath(pathParam, queryString) {
   }).join('/');
   const base = joined ? `/api/rag/${joined}` : '/api/rag';
   const normalized = path.posix.normalize(base);
-  if (normalized.includes('..')) return null;
-  if (!normalized.startsWith('/api/rag')) return null;
-  if (normalized.length > '/api/rag'.length && !normalized.startsWith('/api/rag/')) return null;
+  if (!isAllowedRagProxyPathname(normalized)) return null;
   return `${normalized}${queryString || ''}`;
+}
+
+function resolveRagProxyMainAppUrl(targetPath) {
+  let resolved;
+  try {
+    resolved = new URL(targetPath, getMainAppBaseUrl());
+  } catch {
+    return null;
+  }
+  if (!isAllowedRagProxyPathname(resolved.pathname)) return null;
+  return resolved.toString();
 }
 
 app.all('/api/rag/*path', async (req, res) => {
@@ -3391,6 +3408,10 @@ app.all('/api/rag/*path', async (req, res) => {
     return res.status(400).json({ success: false, error: 'Invalid RAG proxy path' });
   }
   const logPath = targetPath.split('?')[0];
+  const mainAppUrl = resolveRagProxyMainAppUrl(targetPath);
+  if (!mainAppUrl) {
+    return res.status(400).json({ success: false, error: 'Invalid RAG proxy path' });
+  }
   console.log('[RAG Proxy]', req.method, logPath);
   try {
     const headers = withAuthHeaders(req, {
@@ -3401,7 +3422,7 @@ app.all('/api/rag/*path', async (req, res) => {
     if (req.method !== 'GET' && req.method !== 'HEAD' && req.body !== undefined) {
       init.body = JSON.stringify(req.body);
     }
-    const response = await fetch(getMainAppUrl(targetPath), init);
+    const response = await fetch(mainAppUrl, init);
     const text = await response.text();
     let body;
     try {

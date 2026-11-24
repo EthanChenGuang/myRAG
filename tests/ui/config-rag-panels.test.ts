@@ -216,6 +216,13 @@ describe('config-server /api/rag proxy', () => {
     expect(reply.status).toBe(400);
     expect(lastStub).toBeNull();
   });
+
+  it('refuses double-encoded dot segments that URL resolution would escape /api/rag', async () => {
+    lastStub = null;
+    const reply = await configCall('GET', '/api/rag/%252e%252e/admin/quarantine');
+    expect(reply.status).toBe(400);
+    expect(lastStub).toBeNull();
+  });
 });
 
 describe('config-server static guards', () => {
