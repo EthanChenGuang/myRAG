@@ -1,0 +1,59 @@
+{
+  "note": "Synthetic recorded structured-output responses of the optional document-type classifier. No real document text.",
+  "responses": {
+    "invoice": {
+      "doc_type": "invoice_receipt",
+      "confidence": 0.86,
+      "signals": ["seller and buyer block", "line items with totals"],
+      "method": "llm"
+    },
+    "contract_unsure": {
+      "doc_type": "contract_legal",
+      "confidence": 0.41,
+      "signals": ["names two parties"],
+      "method": "llm"
+    },
+    "general_sure": {
+      "doc_type": "general",
+      "confidence": 0.93,
+      "signals": ["free-form prose"],
+      "method": "llm"
+    },
+    "unknown_type": {
+      "doc_type": "memo",
+      "confidence": 0.9,
+      "signals": ["short note"],
+      "method": "llm"
+    },
+    "out_of_range_confidence": {
+      "doc_type": "invoice_receipt",
+      "confidence": 1.7,
+      "signals": [],
+      "method": "llm"
+    },
+    "extra_field": {
+      "doc_type": "invoice_receipt",
+      "confidence": 0.9,
+      "signals": [],
+      "method": "llm",
+      "reasoning": "not part of the contract"
+    },
+    "noisy_signals": {
+      "doc_type": "financial_report",
+      "confidence": 0.8,
+      "signals": [
+        "Statement of Financial Position With A Very Long Descriptive Phrase That Keeps Going Well Past Any Reasonable Limit For A Short Signal Code",
+        "table of assets",
+        "table of liabilities",
+        "table of equity",
+        "notes to the statements",
+        "auditor opinion",
+        "comparative year column",
+        "currency totals",
+        "extra eight",
+        "extra nine"
+      ],
+      "method": "llm"
+    }
+  }
+}
