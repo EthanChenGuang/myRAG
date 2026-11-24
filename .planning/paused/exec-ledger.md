@@ -29,7 +29,7 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | **03.1-03** | **04-02** not running / merged | Shared: `scripts/init-env.js`, `src/lib/env.ts`, config UI, `check-config.mjs` |
 | **04-02** | **03.1-03** complete preferred | Same config five-location files |
 | **04-05, 04-06, 04-07** | Each other + after **04-05** first | Shared `createFixtureDatabase` / migration shim (per 04-PLAN-INDEX) |
-| **03.1-04** | **03-48** SUMMARY + Guang `approved` | Package-legitimacy gate (pdfplumber / ray); executor idle at task 0 |
+| **03.1-04** | **03-48** only for live verification narrative | Package gate **cleared** (`approved`); locks on trunk — executor task 3 |
 | **03.1-52**, **04-42** | Prior waves | Fold migrations into setup — overlaps **03-47** files |
 | **All 3.1** wave 2+ | Wave 1 merge to trunk | `depends_on` + ledger |
 
@@ -75,7 +75,7 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 
 | Plan | bcId | Worktree |
 |------|------|----------|
-| 03.1-04 | [bc-4969184f](bc-4969184f-7107-55b3-a450-d63435dcb0a0) **blocked** (human) | wt/03.1-04 — needs `03-48-SUMMARY.md` + package approval (`approved` / `approved ray 2.60.0`) |
+| 03.1-04 | [bc-4969184f](bc-4969184f-7107-55b3-a450-d63435dcb0a0) **resumed** (task 3) | wt/03.1-04 — locks on trunk `3e83978` |
 | 04-04 | [bc-66bbcf6a](bc-66bbcf6a-fea9-522c-9d57-3ef3695ca16a) **merged** | trunk `55fb76f` |
 | 03.1-05 | [bc-94d16ba7](bc-94d16ba7-3968-5075-9a7b-d09e071ca6e4) RUNNING | wt/03.1-05 |
 | 03.1-06 | [bc-cf431776](bc-cf431776-961d-5942-b066-822c3bec106b) RUNNING | wt/03.1-06 |
@@ -88,6 +88,17 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | 03.1-06 | `wt/03.1-06` ready | concurrency cap |
 
 **Concurrent spawn (2026-11-24 ~13:05 Europe/Rome):** 5 `Task` calls in one turn — **4 succeeded** (gsd-executor ×4), **1 failed** (gsd-verifier + `claude-opus-5-5-medium`: *user exceeded selected model’s available usage*). No platform limit on concurrent subagents observed.
+
+## Package legitimacy (03.1-04)
+
+| Package | Pin | Lock commit (trunk) |
+|---------|-----|---------------------|
+| pdfplumber | 0.11.11 | `3e83978` |
+| pdfminer-six | 20260107 | (transitive in uv.lock) |
+| ray[data] | 2.60.1 | optional extra in pyproject |
+| pypdfium2 | 5.15.2 | preflight extra |
+
+Guang approval: **批准安装** → `approved` (2026-11-24 Europe/Rome). Orchestrator owns Task 2 lock; executor **must not** `uv lock`/install.
 
 ## DUPLICATE EXECUTION (2026-11-24)
 

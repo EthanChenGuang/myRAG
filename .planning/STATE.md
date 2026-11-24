@@ -4,7 +4,13 @@ milestone: v5.0
 current_phase: 02
 current_phase_name: Unified Retrieval Pipeline & Tenant Scope
 status: executing
-stopped_at: Phase 3 closed 03-47 merged; wave 03.1-01/05/06 + 04-03 in flight; 04-04 merged
+stopped_at: 03.1-04 packages approved; lock 3e83978; wave D 03.1-07 + 04-05 running
+package_legitimacy_03_1_04:
+  approved_at: "2026-11-24"
+  lock_commit: 3e83978e482f67da5ce6d463f39251f3e21e8bf4
+  pdfplumber: "0.11.11"
+  pdfminer_six: "20260107"
+  ray_data: "2.60.1"
 last_updated: "2026-11-24T11:15:00.000Z"
 last_activity: 2026-11-23
 last_activity_desc: Phase 02 plans 11, 12, 16, 17, 18, 22 merged
