@@ -362,16 +362,17 @@ describe('registered stages and their switched-off behaviour', () => {
     expect(languageWrites.map((fields) => fields.language)).toEqual(['en']);
   });
 
-  test('extract records extractor_unavailable for profile extractors that do not exist yet and leaves urls to enrich', async () => {
+  test('extract records extractor_unavailable only for profile extractors without an implementation and leaves urls to enrich', async () => {
     const { db } = fakeIngestDb();
     installIngestDeps({ db });
 
     const general = await upload();
     const financial = await upload({ docType: 'financial_report', sourceKey: 'root/report.md' });
+    const invoice = await upload({ docType: 'invoice_receipt', sourceKey: 'root/invoice.md' });
 
-    expect(general.warnings).toContain('extractor_unavailable:dates');
-    expect(general.warnings).not.toContain('extractor_unavailable:urls');
-    expect(financial.warnings).toEqual(expect.arrayContaining(['extractor_unavailable:dates', 'extractor_unavailable:financial']));
+    expect(general.warnings.filter((warning) => warning.startsWith('extractor_unavailable'))).toEqual([]);
+    expect(financial.warnings.filter((warning) => warning.startsWith('extractor_unavailable'))).toEqual([]);
+    expect(invoice.warnings).toContain('extractor_unavailable:invoice');
   });
 
   test('store_original records no_object_store and writes nothing to a store', async () => {
