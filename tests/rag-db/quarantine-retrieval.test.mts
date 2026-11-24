@@ -41,7 +41,7 @@ describe('quarantined documents never reach retrieval', () => {
 
   before(async () => {
     db = await createTwoTenantDatabase();
-    edge = await startFakeEdge({ db: db.db });
+    edge = await startFakeEdge({ db: db.db, documentFilenameFilter: true });
     Object.assign(process.env, fixtureProcessEnv(edge.url));
     process.env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE = 'multi-tenant';
     process.env.MYRAG_DEPLOYMENT_MODE = 'multi-tenant';
@@ -194,6 +194,73 @@ describe('quarantined documents never reach retrieval', () => {
       }
     });
   }
+
+  test('the voice keyword fallback returns no chunk of a quarantined document and still finds the visible ones', async () => {
+    const { voiceKeywordFallback } = await import('@/lib/rag/voice/keyword-fallback');
+    const marked: Array<[InjectionFixture, string]> = [
+      [ZH, 'zqxkwz'],
+      [EN, 'zqxkwe'],
+      [IT, 'zqxkwi'],
+      [CLEAN, 'zqxkwc'],
+      [SWITCHED_OFF, 'zqxkwo'],
+    ];
+    for (const [item, keyword] of marked) {
+      const known = ingested.get(item.token);
+      assert.ok(known, `${item.token} was ingested`);
+      await db.db.query("UPDATE document_chunks SET metadata = metadata || jsonb_build_object('name', $2::text, 'image_context', $2::text) WHERE document_id = $1", [known.documentId, keyword]);
+    }
+
+    const scope = await scopeOf(TWO_TENANT_IDS.userA);
+    const signal = new AbortController().signal;
+    const admin = supabaseModule.getSupabaseAdmin();
+    for (const [item, keyword] of marked) {
+      const known = ingested.get(item.token) as { documentId: string; chunkIds: string[] };
+      const found = await voiceKeywordFallback({ query: keyword, scope, admin, signal, existing: [] });
+      const foundIds = found.map((chunk) => String(chunk.id));
+      if (INJECTED.includes(item)) {
+        for (const chunkId of known.chunkIds) assert.ok(!foundIds.includes(chunkId), `the keyword fallback does not return a chunk of the quarantined ${item.language} document`);
+        assert.equal(found.length, 0);
+      } else {
+        assert.ok(known.chunkIds.some((chunkId) => foundIds.includes(chunkId)), `the keyword fallback finds the visible document ${item.token}`);
+      }
+
+      const viaVoice = everything(await retrieve('voice', keyword));
+      if (INJECTED.includes(item)) assert.ok(!viaVoice.includes(item.token), `voice retrieval does not surface the quarantined ${item.language} document by keyword`);
+    }
+  });
+
+  test('a chat request that references a quarantined document by id or by name gets none of its chunks', async () => {
+    const scope = await scopeOf(TWO_TENANT_IDS.userA);
+    const referenced = async (documentRefs: { mentions: string[]; documentParts: Array<{ id: string; name: string }> }) =>
+      everything(
+        await rag.runRetrieval({
+          scope,
+          query: 'what do the forklift batteries need',
+          profile: 'chat',
+          documentRefs,
+          options: OPTIONS,
+          signal: new AbortController().signal,
+        }),
+      );
+
+    for (const item of INJECTED) {
+      const known = ingested.get(item.token) as { documentId: string; chunkIds: string[] };
+      const byId = await referenced({ mentions: [], documentParts: [{ id: known.documentId, name: item.filename }] });
+      const byName = await referenced({ mentions: [item.filename.replace(/\.md$/, '')], documentParts: [] });
+      for (const dump of [byId, byName]) {
+        assert.ok(!dump.includes(item.token), `no text or filename of the ${item.language} document`);
+        assert.ok(!dump.includes(known.documentId));
+        for (const chunkId of known.chunkIds) assert.ok(!dump.includes(chunkId));
+      }
+    }
+
+    for (const item of [CLEAN, SWITCHED_OFF]) {
+      const known = ingested.get(item.token) as { documentId: string; chunkIds: string[] };
+      const byId = await referenced({ mentions: [], documentParts: [{ id: known.documentId, name: item.filename }] });
+      const byName = await referenced({ mentions: [item.filename.replace(/\.md$/, '')], documentParts: [] });
+      for (const dump of [byId, byName]) assert.ok(dump.includes(item.token), `the visible document ${item.token} is still referenced`);
+    }
+  });
 
   test('another tenant never sees any of them either', async () => {
     for (const profile of PROFILES) {
