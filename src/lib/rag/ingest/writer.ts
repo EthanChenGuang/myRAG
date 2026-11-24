@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { RpcClient } from '../backend/supabase-rpc';
 import { assertTenantScope, scopeKey, type TenantScope } from '../tenant/scope';
 import { HASH_NORMALIZATION_VERSION } from './hash';
@@ -20,6 +21,10 @@ const KNOWN_REASONS = new Set([
   'invalid_total',
   'invalid_embeddings',
   'embedding_profile_unsupported',
+  'embedding_profile_mismatch',
+  'run_not_found',
+  'run_profile_mismatch',
+  'invalid_gap',
   'embedding_count_mismatch',
   'document_not_writable',
   'document_not_publishable',
@@ -87,9 +92,12 @@ export interface ChunkWrite {
   metadata: Record<string, unknown>;
 }
 
+/** The vectors of one profile, lined up with the chunks; a non-legacy profile also names the host that served them. */
+export type ProfileVectors = number[][] | { vectors: number[][]; host: string | null };
+
 export interface WriteChunksOptions {
-  /** Vectors keyed by embedding profile id; each array lines up with the chunks. */
-  embeddings: Record<string, number[][]> | null;
+  /** Vectors keyed by embedding profile id. */
+  embeddings: Record<string, ProfileVectors> | null;
   final: boolean;
   total: number;
 }
@@ -127,6 +135,26 @@ export interface IngestOriginRow {
   sourceKey: string | null;
 }
 
+/** The newest run of a profile that applies to the caller's tenant. */
+export interface BackfillRunRow {
+  profileId: string;
+  runId: string;
+  status: string;
+}
+
+export interface BackfillGapArgs {
+  runId: string;
+  chunkIds: string[];
+  profileId: string;
+  reason: string;
+}
+
+/** The id rag_write_chunks gives a chunk: the first 16 bytes of sha256(document id : chunk index) as a UUID. */
+export function chunkIdFor(documentId: string, chunkIndex: number): string {
+  const hex = createHash('sha256').update(`${documentId}:${chunkIndex}`, 'utf8').digest('hex').slice(0, 32);
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+}
+
 export interface IngestWriter {
   begin(args: BeginArgs): Promise<BeginResult>;
   findContentDuplicate(contentHash: string, documentId: string | null): Promise<string | null>;
@@ -137,6 +165,10 @@ export interface IngestWriter {
   getOrigin(documentId: string): Promise<IngestOriginRow | null>;
   writeChunks(documentId: string, chunks: ChunkWrite[], options: WriteChunksOptions): Promise<WriteChunksResult>;
   publish(documentId: string): Promise<PublishResult>;
+  /** Per profile the newest backfill run that applies to this tenant, a running one first. */
+  findBackfillRuns(): Promise<BackfillRunRow[]>;
+  /** Records chunks that have no vector for a profile; returns how many rows were written. */
+  recordBackfillGap(args: BackfillGapArgs): Promise<number>;
   markFailed(documentId: string, reason: string): Promise<void>;
 }
 
@@ -355,6 +387,30 @@ export function createIngestWriter(input: CreateIngestWriterInput): IngestWriter
         version: integer(row, 'version') ?? 0,
         supersededDocumentId: text(row, 'superseded_document_id'),
       };
+    },
+
+    async findBackfillRuns() {
+      const rows = await call('rag_latest_backfill_runs', { p_tenant_key: identity().tenantKey });
+      const runs: BackfillRunRow[] = [];
+      for (const row of rows) {
+        const profileId = text(row, 'profile_id');
+        const runId = text(row, 'run_id');
+        const status = text(row, 'status');
+        if (profileId !== null && runId !== null && status !== null) runs.push({ profileId, runId, status });
+      }
+      return runs;
+    },
+
+    async recordBackfillGap(args) {
+      if (args.chunkIds.length === 0) return 0;
+      const row = await callOne('rag_record_backfill_gap', {
+        p_run_id: args.runId,
+        p_chunk_ids: args.chunkIds,
+        p_profile_id: args.profileId,
+        p_reason: args.reason,
+        p_tenant_key: identity().tenantKey,
+      });
+      return integer(row, 'gaps_recorded') ?? 0;
     },
 
     async markFailed(documentId, reason) {
