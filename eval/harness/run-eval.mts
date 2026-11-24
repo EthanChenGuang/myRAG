@@ -82,6 +82,10 @@ export interface RunEvalResult {
   manifest: RunManifest;
 }
 
+export function itemRequestOptions(base: EvalRequestOptions, _item: GoldenItem): EvalRequestOptions {
+  return { ...base };
+}
+
 const ROUTE_PATH = '/api/internal/rag/run';
 const FIRST_SENTENCE_RE = /^[\s\S]*?[.!?。！？](?=\s|$)/;
 const NO_CONTEXT_ANSWER = 'No context was provided.';
