@@ -30,7 +30,7 @@ All requirements are written so they can be checked. "Behind a switch" means an 
 - [x] **PIPE-03**: Embedded chat resolves its tenant from the embed widget's server-side configuration (the owning workspace), never from the caller
 - [x] **PIPE-04**: Voice retrieval resolves its tenant from a signed, expiring token minted by the app, not from a bare caller-supplied `userId`, and never falls back to a global search
 - [x] **PIPE-05**: Context assembly (dedupe, grouping, source labels, links section, image handling) lives in the pipeline and is shared by all three entry points, without per-chunk N+1 lookups
-- [ ] **PIPE-06**: The pipeline returns a discriminated status (`ok | empty | error | degraded`); only a verified `empty` result may trigger the "information not available" refusal, and errors are logged and surfaced as errors
+- [x] **PIPE-06**: The pipeline returns a discriminated status (`ok | empty | error | degraded`); only a verified `empty` result may trigger the "information not available" refusal, and errors are logged and surfaced as errors
 - [x] **PIPE-07**: Each pipeline stage has its own switch, timeout and degrade-to-skip path; an `AbortSignal` flows through all stages
 - [x] **PIPE-08**: Unused retrieval modules (`retrieval-strategies.ts`, `optimized-search.ts`, `adaptive-retrieval.ts`, `reranker-adapter.ts`, never-called parts of `thinking-rag-enhancer.ts`) are removed; still-used logic is re-homed under `src/lib/rag/`
 - [x] **PIPE-09**: With all new switches off (`RAG_PIPELINE=legacy`), the eval results reproduce the baseline within its noise band
@@ -210,7 +210,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PIPE-03 | Phase 2 | Complete |
 | PIPE-04 | Phase 2 | Complete |
 | PIPE-05 | Phase 2 | Complete (override: voice keeps its own result list per the 02-CONTEXT D-16 adjustment) |
-| PIPE-06 | Phase 2 | Pending |
+| PIPE-06 | Phase 2 | Complete |
 | PIPE-07 | Phase 2 | Complete |
 | PIPE-08 | Phase 2 | Complete |
 | PIPE-09 | Phase 2 | Complete |

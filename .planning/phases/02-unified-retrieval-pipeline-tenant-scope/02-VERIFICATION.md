@@ -1,8 +1,8 @@
 ---
 phase: 02-unified-retrieval-pipeline-tenant-scope
-verified: 2026-11-24T00:05:53Z
-status: gaps_found
-score: 5/7 must-haves verified
+verified: 2026-11-24T00:23:03Z
+status: human_needed
+score: 7/7 must-haves verified
 covered_files:
   - ".github/workflows/nightly.yml"
   - ".github/workflows/pr-smoke.yml"
@@ -88,9 +88,13 @@ covered_files:
   - "eval/src/rag_eval/review_queue.py"
   - "next.config.js"
   - "package.json"
+  - "rag-sidecar/src/rag_sidecar/contracts/eval_run.py"
   - "scripts/ci/check-node-runtime.mjs"
   - "scripts/ci/check-rag-boundary.mjs"
   - "scripts/ci/check-workflows.py"
+  - "scripts/config-server.js"
+  - "scripts/config-ui/index.html"
+  - "scripts/init-env.js"
   - "src/app/api/chat/route.ts"
   - "src/app/api/embed/chat/route.ts"
   - "src/app/api/generate-image/route.ts"
@@ -99,6 +103,9 @@ covered_files:
   - "src/app/api/internal/voice-chat/route.ts"
   - "src/app/api/internal/voice-rag/route.ts"
   - "src/app/api/livekit/token/route.ts"
+  - "src/app/page.tsx"
+  - "src/lib/env.ts"
+  - "src/lib/rag-eval/contracts.generated.ts"
   - "src/lib/rag/backend/supabase-rpc.ts"
   - "src/lib/rag/config.ts"
   - "src/lib/rag/context/assemble.ts"
@@ -135,63 +142,60 @@ covered_files:
   - "src/lib/rag/trace/schedule.ts"
   - "src/lib/rag/types.ts"
   - "src/lib/rag/voice/keyword-fallback.ts"
+  - "supabase/README.md"
   - "supabase/multi-tenant-setup.sql"
+  - "supabase/patches/2026-11-search-rpc-revoke-multi-tenant.sql"
   - "supabase/patches/2026-11-security-review-multi-tenant.sql"
   - "supabase/single-tenant-setup.sql"
+  - "tests/rag/agents-guide.test.ts"
   - "tests/rag/chat-status.test.ts"
+  - "tests/rag/embed-route.test.ts"
+  - "tests/rag/eval-route-stage-overrides.test.ts"
+  - "tests/rag/livekit-token-route.test.ts"
+  - "tests/rag/search-rpc-grants.test.ts"
+  - "tests/rag/voice-deploy-docs.test.ts"
   - "voice-agent/src/agent.ts"
   - "voice-agent/src/rag_client.ts"
   - "voice-agent/src/room_session.ts"
   - "voice-agent/src/voice_agent.ts"
-covered_digest: "v4:sha256:dff9b6998ffc428b2b5da99535f28eb10cf781f72f398450db43c1db374f4a7a"
+covered_digest: "v4:sha256:84232f828f80025fe685d746ade1787cbd4f9726cd78dd132b318ec9efc58641"
 behavior_unverified: 0
-overrides_applied: 0
-gaps:
-  - truth: "SC4 / PIPE-06: a failing or timed-out stage is surfaced as error or degraded, never as 'information not available'; only a verified empty result triggers the strict-mode refusal"
-    status: failed
-    reason: "Review fix G3 (86df908, MD-02) changed the chat route so that status error, or degraded with no used documents, in strict mode with web search off returns buildNoKnowledgeBaseResponse ('# Information Not Available ... I couldn't find this information in your knowledge base'). The tests were rewritten to assert this. A knowledge-base outage, a timed-out core stage and RAG_DISABLED_STAGES=assemble are now reported to the strict-mode user as 'not in your knowledge base'. That is the exact failure the phase was meant to remove (02-CONTEXT D-05/D-06, STATE note on 02-12). No recorded decision accepts it, and the review's own MD-02 fix text said to keep the in-band error for strict && !webSearch."
-    artifacts:
-      - path: "src/app/api/chat/route.ts"
-        issue: "L2130-2160: the strictWithoutWebSearch branch writes buildNoKnowledgeBaseResponse(fallbackLanguage) instead of knowledgeBaseUnavailableMessage(fallbackLanguage); knowledgeBaseUnavailableMessage is imported (L16) but never used"
-      - path: "tests/rag/chat-status.test.ts"
-        issue: "L164 'status error in strict mode with web search off streams the refusal', L226 (assemble disabled) and L235 (degraded without documents, strict) assert the refusal and assert the unavailable text is absent"
-    missing:
-      - "In the strictWithoutWebSearch branch, stream the localized knowledgeBaseUnavailableMessage(fallbackLanguage), either as the pre-G3 in-band `type:'error'` part (formatErrorSSE style) or as a text part. It must not be the 'Information Not Available' refusal, and the trace status must stay error or degraded"
-      - "Keep the MD-02 continuation unchanged: webSearch on, or balanced/flexible, continue with no knowledge-base context and flag the trace degraded"
-      - "Flip the three chat-status tests to assert the unavailable message and the absence of 'Information Not Available'; keep the 'status empty streams the refusal' test (L155)"
-      - "If the user prefers the refusal, record an override and amend ROADMAP SC4, REQUIREMENTS PIPE-06 and D-06 in the same change instead"
-  - truth: "SC2 / CR-01 (code review): tenant search RPCs cannot be called with caller-chosen tenant ids at the database"
-    status: partial
-    reason: "Code (search on the admin client) and multi-tenant-setup.sql (REVOKE ... FROM PUBLIC, anon, authenticated on match_documents_by_workspace, match_document_chunks_by_org, get_documents_by_type_slug, get_documents_by_type_slug_workspace) are fixed and tested on PGlite. The upgrade patch for existing databases does not contain these four REVOKE/GRANT pairs (grep count 0), so a deployed multi-tenant database stays readable across tenants through the public anon key"
-    artifacts:
-      - path: "supabase/patches/2026-11-security-review-multi-tenant.sql"
-        issue: "No REVOKE for the four search RPCs. The header says to run the patch BEFORE the app deploy, but these revokes must run AFTER it, because the pre-phase app searched with the anon client"
-    missing:
-      - "Add a separate idempotent patch (for example supabase/patches/2026-11-search-rpc-service-role.sql) with the four REVOKE/GRANT pairs from multi-tenant-setup.sql L747-748, L845-846, L890-891, L935-936, marked 'run after deploying the Phase 2 app', and list it in supabase/README.md 'Updating an Existing Database'"
-  - truth: "PIPE-04 deploy contract: README_VOICE_INTEGRATION.md describes the shipped voice token and room model"
-    status: partial
-    reason: "After G2 (c9a9234, HI-01) the token goes in room metadata of a per-session room `myrag-voice-<128-bit hex>`, and the agent polls for those rooms. The README still says the token is in participant metadata, that there is 'one active user per agent' with 409 while busy, and to 'deploy the voice agent first... harmless against the old app'. The new agent ignores the old fixed room `myrag-voice` (isVoiceRoomName needs the trailing '-' plus a suffix), and the old agent never joins per-session rooms, so the app and the agent must ship together. voice_busy now means 4 active rooms (hard-coded MAX_ACTIVE_VOICE_ROOMS=4 in the app) against VOICE_AGENT_MAX_SESSIONS in the agent (default 4, undocumented)"
-    artifacts:
-      - path: "README_VOICE_INTEGRATION.md"
-        issue: "L250-257 describe the pre-G2 model"
-    missing:
-      - "Rewrite L250-257: per-session rooms created by /api/livekit/token, scope token in room metadata, the agent watches myrag-voice-* rooms, serves only the identity in the metadata and removes anyone else, 10-minute join TTL, voice_busy at 4 rooms, VOICE_AGENT_MAX_SESSIONS must equal the app limit, ship app and agent together (expect a short voice outage), roll back together"
+overrides_applied: 1
+overrides:
+  - must_have: "All three entry points share one context-assembly step; query count fixed as chunks grow"
+    reason: "D-16 adjustment: voice runs its own assembleVoiceResults inside the same pipeline 'assemble' stage and keeps the {results, source_images, debug_info} wire contract; chat and embed share assembleContext (byte-identical to the frozen oracle, two-query fetch proven at 5/25/100 chunks)"
+    accepted_by: "orchestrator (recorded in b86ef87)"
+    accepted_at: "2026-11-24T00:09:40Z"
+re_verification:
+  previous_status: gaps_found
+  previous_score: 5/7
+  gaps_closed:
+    - "SC4 / PIPE-06: strict chat with web search off streams the localized in-band knowledge-base-unavailable error for error, and for degraded with no documents (including assemble disabled); only a verified empty gets the refusal (23e35e9)"
+    - "SC2 / CR-01 upgrade path: supabase/patches/2026-11-search-rpc-revoke-multi-tenant.sql revokes the four tenant search RPCs, post-deploy, documented in supabase/README.md (067c558)"
+    - "PIPE-04 deploy contract: README_VOICE_INTEGRATION.md describes per-session rooms, room metadata, the poller, matching limits and joint deploy/rollback; VOICE_MAX_ACTIVE_ROOMS replaces the hard-coded limit and is synced (1ecb3ab)"
+    - "IN-01 (warning): per-request stage overrides reachable from the eval endpoint only, gated to the eval profile, core stages cannot be disabled (921bebe)"
+    - "SC5 / PIPE-05: accepted with override (voice keeps its own result list)"
+  gaps_remaining: []
+  regressions: []
 deferred:
   - truth: "SC6 part: eval reports show per-stage p50/p95 against the voice budget"
     addressed_in: "Phase 4"
     evidence: "Phase 4 SC7: 'the fast rerank tier keeps voice within its latency budget'; Phase 6 live verification measures voice p50/p95 and replaces the starting budgets. Today the voice budget (400/800 ms) is only documented in eval/config/latency-budgets.json; report.py compares against LATENCY_PROFILE=chat only, because the eval harness runs no voice profile"
 human_verification:
-  - test: "Decide SC5 for voice: chat and embed share assembleContext (byte-identical, 2-query row fetch). Voice runs its own assembleVoiceResults in the same pipeline 'assemble' stage and returns ranked {results, source_images} with no dedupe/grouping/source labels/links section. Accept with an override (D-16 adjustment: voice wire contract {results, source_images, debug_info}) or require voice to consume assembleContext blocks"
-    expected: "An override entry in this file's frontmatter, or a follow-up plan"
-    why_human: "Spec interpretation: the literal SC5 text ('all three entry points share one context-assembly step') versus the accepted D-16 wire-contract adjustment"
   - test: "Live tenant resolution on a real Supabase project, single-tenant and multi-tenant: personal, organization member, non-member (403 before stream), owner without a member row (repaired), anonymous (no_tenant leads to strict refusal); embed with RAG_EMBED_TENANT set and unset"
     expected: "Scoped answers or 403/no_tenant as in the tests; no cross-tenant chunk"
     why_human: "No live Supabase in this environment"
-  - test: "Live voice session with the deployed voice-agent: start a session, ask a knowledge-base question, check that x-rag-scope-token reaches voice-rag (logs); join the same room with a second token or identity (it is removed); open 5 concurrent sessions (the 5th gets voice_busy); let a token expire (spoken 'can't reach the knowledge base')"
-    expected: "Answers come from the session owner's tenant only; intruders are removed; no data or audio reaches non-owners"
+  - test: "Multi-tenant upgrade on a copy of an existing database: apply 2026-11-security-review-multi-tenant.sql, deploy the app, then 2026-11-search-rpc-revoke-multi-tenant.sql; check that chat/embed/voice still retrieve and that an anon-key call to match_documents_by_workspace is denied"
+    expected: "Patch applies cleanly (signatures match the pre-phase functions); retrieval works on the service-role client; anon gets permission denied"
+    why_human: "Needs a real Supabase database with the earlier schema"
+  - test: "Strict mode, web search off, knowledge base made unreachable (or RAG_DISABLED_STAGES=assemble) in the chat UI and the embed widget"
+    expected: "The chat shows a warning bubble with the localized 'knowledge base is temporarily unavailable' text, never '# Information Not Available'; with a verified empty result the refusal still appears"
+    why_human: "Rendering of the in-band error part in the browser; route behaviour itself is covered by chat-status and embed-route tests"
+  - test: "Live voice session with the deployed voice-agent: start a session, ask a knowledge-base question, check that x-rag-scope-token reaches voice-rag (logs); join the same room with a second token or identity (it is removed); open VOICE_MAX_ACTIVE_ROOMS+1 concurrent sessions (the last gets voice_busy); let a token expire, or make the knowledge base unreachable (spoken 'can't reach the knowledge base')"
+    expected: "Answers come from the session owner's tenant only; intruders are removed; no data or audio reaches non-owners; KB failure is spoken as unavailable"
     why_human: "Needs LiveKit, the agent image and keys"
-  - test: "docker build voice-agent (node:22-slim) and connect to LiveKit; confirm the Vercel project runs Node 22 and a preview build passes with ignoreBuildErrors false"
-    expected: "Image builds, rtc-node native binaries load; Vercel build green"
+  - test: "docker build voice-agent (node:22-slim) and connect to LiveKit; confirm the Vercel project runs Node 22 and a preview build passes with ignoreBuildErrors false; deploy app and agent together as README_VOICE_INTEGRATION.md now describes"
+    expected: "Image builds, rtc-node native binaries load; Vercel build green; short voice gap only"
     why_human: "No Docker daemon or Vercel access here"
   - test: "Legacy parity on the real golden set: npm run test-rag -- --base-url <deployment> --baseline <live baseline>"
     expected: "Gate PASS within the noise band"
@@ -449,3 +453,89 @@ _Verifier: Claude (gsd-verifier)_
 - **SC5 / PIPE-05: accepted with override.** Voice keeps its own result list as planned under the D-16 adjustment; chat and embed share one assembly step. Marked complete in REQUIREMENTS.md with the override noted.
 - **Gap 1 (SC4 / PIPE-06):** the strict + web-search-off refusal introduced by G3 (MD-02) was an orchestrator error against D-06; being reverted to the in-band "knowledge base unavailable" error in fix batch G4. PIPE-06 stays pending until G4 merges.
 - **Gaps 2, 3 and IN-01:** fixed in G4 (post-deploy search-RPC revoke patch, voice deploy docs, eval-only stage overrides), together with the AGENTS.md updates listed above.
+
+## Re-verification (2026-11-24)
+
+**Verified:** 2026-11-24T00:23:03Z at HEAD 173d6a2 (branch claude/ecstatic-hamilton-86gtwv; includes the G4 merge 00d5902; commits after it touch `.planning/` only)
+**Status:** human_needed (was gaps_found)
+**Score:** 7/7 truths (6 verified, 1 passed by override; 0 present, behavior-unverified)
+**Mode:** re-verification. Every previous gap got a full check: does it exist, is it substantive, is it wired. The previously passed truths got a regression check.
+
+The status line and the frontmatter above replace the initial report's header. The initial report body is kept above as history.
+
+### Gap closure, checked in code
+
+| # | Gap | Fix | Code evidence (not only tests) | Behavioural test run by the verifier | Result |
+|---|-----|-----|--------------------------------|--------------------------------------|--------|
+| 1 | SC4 / PIPE-06 (BLOCKER) | 23e35e9 | `src/app/api/chat/route.ts` L2130-2161. `retrievalFailed` = RAG enabled and (`error`, or `degraded` with 0 used documents). In the `strict && !webSearch` branch, `finishRagTrace()` runs, then `writer.write({ type: 'error', errorText: knowledgeBaseUnavailableMessage(fallbackLanguage) })`. The `setReviewContent` refusal write is gone. Other modes continue without KB context, with the trace set to `degraded`. The refusal (`buildNoKnowledgeBaseResponse`, L2164-2183) now requires `retrievalResult === null \|\| status === 'empty'`. `retrievalResult` is never null when RAG is enabled: both `runRetrieval` branches assign it. A thrown error goes to the outer catch and the generic error response (L4113), never to the refusal | `chat-status.test.ts` L155 (empty gives the refusal), L164 (error, zh, `"type":"error"`, no `text-delta`, trace `error`), L179/L194 (webSearch on, balanced, flexible continue with the trace `degraded`), L227 (assemble disabled), L238 (degraded with no docs, it, trace `degraded`) | ✓ CLOSED |
+| 2 | SC2 / CR-01 upgrade path | 067c558 | `supabase/patches/2026-11-search-rpc-revoke-multi-tenant.sql` contains the four REVOKE/GRANT pairs. The test checks them for statement equality with multi-tenant-setup.sql L791-792, L889-890, L934-935, L979-980. The signatures match the pre-phase functions (checked against `150729f`), so the patch applies to existing databases. It is wrapped in BEGIN/COMMIT, is idempotent, and is marked to run AFTER the app deploy, with a rollback note. `supabase/README.md` gives the three-step multi-tenant order. The only remaining caller of these RPCs is `src/lib/rag/backend/supabase-rpc.ts:83` on the admin client | `search-rpc-grants.test.ts` (patch ACL = setup ACL, README mention); `tests/rag-search-rpc-grants.test.mts` + `rag-two-tenant.test.mts` on PGlite: 8/8 pass | ✓ CLOSED (live apply is a human item) |
+| 3 | PIPE-04 voice deploy docs | 1ecb3ab | README_VOICE_INTEGRATION.md L250-257 now describes what ships. The room is `myrag-voice-<32 hex>` (`crypto.randomBytes(16)`, token route L83). The metadata is `{v, participant_identity, rag_scope_token}`. The join TTL is 10 minutes, and the agent polls every 1 s (`ROOM_POLL_INTERVAL_MS = 1000`, agent.ts L102). `VOICE_AGENT_MAX_SESSIONS` defaults to 4 (agent.ts L104). App and agent must deploy and roll back together. The hard-coded limit is replaced by `maxActiveVoiceRooms()` reading `env.VOICE_MAX_ACTIVE_ROOMS` (default 4, invalid values fall back). The variable is synced in init-env, env.ts, config-server (3 places), Config UI, the allowlist and the manifest | `livekit-token-route.test.ts`, `voice-deploy-docs.test.ts` pass; `node scripts/check-config.mjs`: ok, 79 variables | ✓ CLOSED |
+| 4 | IN-01 (warning) | 921bebe | `RagRunOptions.disabled_stages` / `stage_timeouts_ms` are in Pydantic (stage-name Literal, 1..60000 ms); the schemas and Zod are regenerated. The eval route builds `stageOverrides` after `checkEvalAccess` and scope resolution. `stageSpec` (pipeline.ts L168-190) applies request overrides only when `profile === 'eval'`, CORE_STAGES can never be disabled, and tenant scope is not a stage. Only the eval route passes `stageOverrides` (grep) | `eval-route-stage-overrides.test.ts` passes | ✓ CLOSED |
+| 5 | SC5 / PIPE-05 | override | Orchestrator decision recorded in b86ef87 (see `overrides:`) | n/a | PASSED (override) |
+| 6 | AGENTS.md updates | 2be9b27 | §6 boundary line, §8 per-session rooms and the matching limits, §10 MCP admin-only, §12 login requirements, §14 line 169 (verified `empty` only; KB failure never "information not available") are all present on disk | `agents-guide.test.ts` passes | ✓ DONE |
+
+### Sweep: can a KB failure still become "information not available"?
+
+| Surface | Path | Finding |
+|---------|------|---------|
+| Chat, strict, web search off | `error` / `degraded`+0 docs / assemble disabled | In-band `error` part with the localized unavailable text. No refusal |
+| Chat, strict, web search on; balanced; flexible | same statuses | Continues with `context = 'No relevant context found.'`, no KB documents and the trace `degraded`. Not the refusal (the default prompt tells the model to say the information is not in the context, which is the intended MD-02 behaviour) |
+| Chat, `runRetrieval` throws | outer catch L4113 | Generic "having trouble connecting" error response. No refusal |
+| Chat, scope resolution failure | membership query error | 503 JSON before the stream (chat-status L340) |
+| Chat, anonymous / no tenant | `failure('empty','no_tenant')` | Strict refusal. This is intended (nothing to search) and listed under live human checks |
+| Chat client | `src/app/page.tsx` L2235-2246 | The `error` SSE event's `errorText` is shown as a `⚠️` message bubble |
+| Embed | `src/app/api/embed/chat/route.ts` L185-190, L230-233 | 403 on workspace mismatch. Scope unavailable, `error`, or `degraded`+0 docs return `knowledgeBaseUnavailableResponse` (localized) |
+| Voice app side | `src/app/api/internal/voice-rag/route.ts` L65-67, L86-87 | `error` / `degraded`+0 results give 503 `knowledge_base_unavailable`; an exception gives 500 |
+| Voice agent | `voice-agent/src/rag_client.ts` `classifyFailure`; `voice_agent.ts` L487-494 | Any non-2xx or network error gives `ok:false`, and the agent speaks the fixed "can't reach the knowledge base" line instead of answering |
+| Pipeline status | `deriveStatus` (pipeline.ts L160-166) | error/timeout/aborted give `error`; a skipped optional stage gives `degraded`; `empty` only when no stage failed and 0 candidates survive; assemble disabled gives `degraded` |
+
+No remaining path maps a knowledge-base failure to the strict refusal in chat, embed or voice.
+
+### Regression check on previously passed truths
+
+| Truth | Check | Result |
+|-------|-------|--------|
+| SC1 boundary / tsc | `node scripts/ci/check-rag-boundary.mjs`: ok, 620 files, 0 violations. tsc 0 (orchestrator gate on HEAD) | ✓ no regression |
+| SC2 tenant scope | PGlite `rag-two-tenant` + `rag-search-rpc-grants`: 8/8. The org-RLS commits (S9e, b8d0dcd) change only the organizations/organization_members policies and helpers; the search RPCs and their grants are unchanged; RAG membership checks run on the admin client (`tenant/membership.ts`) | ✓ no regression |
+| SC3 parity | No retrieval, ranking or assembly code changed since f56588a; the chat change is limited to the failure branch | ✓ no regression (orchestrator gates: vitest 1333/1333, node 136/136, eval 315, sidecar 189) |
+| SC6 / SC7 | No trace, report or eval-harness code changed except the additive `RagRunOptions` fields; sidecar contract tests pass (189) | ✓ no regression |
+
+Targeted run by the verifier: `npx vitest run` over chat-status, embed-route, search-rpc-grants, livekit-token-route, voice-deploy-docs, eval-route-stage-overrides, agents-guide, assemble-switch and voice-rag-route gives 9 files and 116 tests passed. `tests/chat-strict.test.ts` was run separately: 2/2 pass.
+
+### Observable Truths (re-verified)
+
+| # | Truth | Status |
+|---|-------|--------|
+| 1 | One pipeline in `src/lib/rag/`, boundary check, retired modules, tsc | ✓ VERIFIED |
+| 2 | Tenant scope cannot be widened (body org, embed workspace, voice token) | ✓ VERIFIED (code plus upgrade patch; live apply is a human item) |
+| 3 | Legacy parity on Node 22 | ✓ VERIFIED (offline; live parity is a human item) |
+| 4 | Failures surfaced as error/degraded, never "information not available"; only `empty` refuses; switches/timeouts/abort | ✓ VERIFIED (behavioural tests above) |
+| 5 | Shared context-assembly step | PASSED (override) |
+| 6 | Langfuse trace per request; per-stage latency vs budgets | ✓ VERIFIED (voice budget comparison deferred to Phase 4) |
+| 7 | Provenance/category slices, review queue, online judge | ✓ VERIFIED |
+
+**Score:** 7/7 (1 by override).
+
+### Requirements (updated)
+
+PIPE-06 is now ✓ SATISFIED (gap 1 closed) and can be marked complete. PIPE-05 is satisfied with the override. PIPE-04 docs and PIPE-07 (IN-01) are closed. All 14 Phase-2 requirement IDs are satisfied in code; the live items below remain.
+
+### Anti-patterns (new or changed files)
+
+The unused `knowledgeBaseUnavailableMessage` import is resolved, and so is the hard-coded `MAX_ACTIVE_VOICE_ROOMS`. No TBD/FIXME/XXX markers are in the changed files. No new-scope advisories.
+
+### Operator actions (updated)
+
+- **Multi-tenant upgrade:** 1. run `2026-11-security-review-multi-tenant.sql`, together with or after S9e; 2. deploy the app and the voice agent together; 3. run `2026-11-search-rpc-revoke-multi-tenant.sql`. To roll back the app, re-grant the four RPCs to anon and authenticated first.
+- **Env:** `VOICE_MAX_ACTIVE_ROOMS` (app) must equal `VOICE_AGENT_MAX_SESSIONS` (agent); both default to 4.
+
+### Human Verification Required
+
+The 11 items in the frontmatter `human_verification` list are all live or browser checks. Two are new or changed: the multi-tenant upgrade dry run on a copy of an existing database, and a UI check that strict mode shows the unavailable warning bubble, not the refusal. The SC5 decision item is removed because it was resolved by override.
+
+### Verdict
+
+All three gaps and IN-01 are closed in code with behavioural tests, and no regression was found. The status is `human_needed` only because the live items (Supabase, LiveKit/agent, Vercel/Docker, Langfuse, runners, browser UX) cannot run here.
+
+_Re-verified: 2026-11-24T00:23:03Z_
+_Verifier: Claude (gsd-verifier)_

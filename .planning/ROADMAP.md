@@ -19,7 +19,7 @@ This milestone upgrades myRAG's retrieval from "vector search plus heuristic boo
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [ ] **Phase 1: Evaluation Harness & Baseline** - Python sidecar, Pydantic/Zod contract, golden set, eval runner, CI gates and a measured baseline of today's system
-- [ ] **Phase 2: Unified Retrieval Pipeline & Tenant Scope** - Text chat, embedded chat and voice run through one `src/lib/rag/` pipeline that only searches a server-verified tenant, reproducing the baseline
+- [x] **Phase 2: Unified Retrieval Pipeline & Tenant Scope** - Text chat, embedded chat and voice run through one `src/lib/rag/` pipeline that only searches a server-verified tenant, reproducing the baseline
 - [ ] **Phase 3: Unified Ingestion & Embedding Profiles** - One `ingest()` for every upload path with document types, Docling fallback, dedup, versioning, switchable embeddings and rollbackable re-embedding
 - [ ] **Phase 3.1: Tiered Parsing, Incremental Queue & Bulk Backfill** (INSERTED) - Cheapest-tier-that-passes parse routing with escalation, cloud and budget constraints, an ingestion ledger and parse cache, an async upload queue and a budgeted, resumable backfill
 - [ ] **Phase 4: Hybrid Retrieval, Reranking & Calibrated Refusal** - Filtered hybrid search on pgvector, switchable rerankers, edge-ordered context and refusal from calibrated rerank scores
@@ -93,7 +93,7 @@ Plans:
   6. A production request produces one Langfuse trace with a span per stage (latency, candidate counts), sent asynchronously without delaying the answer, with a `[RAG Trace]` log line as the fallback when Langfuse is off or unreachable (tested with a fake Langfuse endpoint), and eval reports show p50/p95 latency per stage against the documented text-chat and voice budgets.
   7. Reports split every metric by provenance and the new `colloquial`, `ambiguous` and `typo` categories; a sampled, PII-masked share of production traces lands in a review queue, and online judge scores appear on the Langfuse traces (tested with a fake Langfuse endpoint and a stub judge).
 **Live verification**: Check tenant resolution against a real Supabase project with personal and organization memberships in both single-tenant and multi-tenant modes; run a voice session with the running `voice-agent/` using the signed token; repeat the legacy-parity check on the real golden set.
-**Plans**: 36/36 plans executed; verification gaps closed by G4 (re-verification running)
+**Plans**: 36/36 plans executed; verified 7/7 (SC5 by override) on 2026-11-24, 11 live checks pending
 
 Plans:
 **Wave 1**
@@ -313,9 +313,9 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 5.1 → 6 → 7. 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Evaluation Harness & Baseline | 22/22 | In Progress | - |
-| 2. Unified Retrieval Pipeline & Tenant Scope | 36/36 | Verifying | - |
+| 2. Unified Retrieval Pipeline & Tenant Scope | 36/36 | Complete (live checks pending) | 2026-11-24 |
 | 3. Unified Ingestion & Embedding Profiles | 0/49 | Planned | - |
-| 3.1. Tiered Parsing, Incremental Queue & Bulk Backfill (INSERTED) | 0/54 | Planned (plan-check running) | - |
+| 3.1. Tiered Parsing, Incremental Queue & Bulk Backfill (INSERTED) | 0/54 | Planned (revising after plan-check) | - |
 | 4. Hybrid Retrieval, Reranking & Calibrated Refusal | 0/45 | Planned | - |
 | 5. Verified Citations & Groundedness | 0/TBD | Not started | - |
 | 5.1. Prompt Injection Defense (INSERTED) | 0/TBD | Not started | - |

@@ -27,9 +27,9 @@ See: .planning/PROJECT.md (updated 2026-11-22)
 
 ## Current Position
 
-Phase: 02 (Unified Retrieval Pipeline & Tenant Scope) — VERIFYING
+Phase: 02 (Unified Retrieval Pipeline & Tenant Scope) — COMPLETE (human_needed: 11 live checks); next: execute Phase 3
 Plan: 36 of 36 complete; security batches S1-S9f, review fixes G1-G3 and verification gap fixes G4 merged
-Status: Re-verification running; Phase 3.1 plans (54) written, plan-check pass 1 running; Phase 5, 5.1, 6, 7 context capture running
+Status: Phase 2 re-verified 7/7; Phase 3.1 plans (54) written, plan-check pass 1 running; Phase 5, 5.1, 6, 7 context capture running
 Last activity: 2026-11-24 — G4 merged; gates green (tsc 0, vitest 1333, node 136, eval 315, sidecar 189)
 
 Progress: [█████████░] 94%
@@ -208,3 +208,4 @@ Resume file: .planning/phases/02-unified-retrieval-pipeline-tenant-scope/.contin
 - `VOICE_MAX_ACTIVE_ROOMS` (app) must equal `VOICE_AGENT_MAX_SESSIONS` (voice agent); deploy app and voice agent together (G4).
 - Multi-tenant DB: apply `supabase/patches/2026-11-search-rpc-revoke-multi-tenant.sql` after the Phase 2 app deploy (G4).
 - Phase 3.1 plan 04: pdfplumber 0.11.11 (+ pdfminer.six) and ray[data] 2.60.1 APPROVED by the user 2026-11-24 (fallback ray 2.60.0 only if 2.60.1 fails to resolve); plans 53/54 are live checkpoints (worker host, migrations 0351-0359, Batch API job).
+- Phase 2 live checks (02-VERIFICATION.md, 11 items), new: multi-tenant upgrade dry run on a DB copy applying the patches in order; UI check that strict mode shows the "unavailable" bubble in chat and embed.
