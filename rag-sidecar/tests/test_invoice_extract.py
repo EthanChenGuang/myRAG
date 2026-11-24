@@ -1,4 +1,7 @@
+import json
+import time
 from datetime import date
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -212,6 +215,107 @@ def test_an_unexpected_failure_is_reported_instead_of_raised(monkeypatch):
 @pytest.mark.parametrize("hint", ["en", "it", "zh"])
 def test_language_hint_does_not_change_unambiguous_fields(hint):
     assert extract_invoice(EN_INVOICE, language_hint=hint).gross_total == "1200.00"
+
+
+RECORDED = Path(__file__).resolve().parents[2] / "eval" / "fixtures" / "ingest" / "recorded"
+
+
+def _recorded_markdown(name: str) -> str:
+    return json.loads((RECORDED / f"{name}.parse.json").read_text(encoding="utf-8"))["markdown"]
+
+
+def _merge_adjacent_lines(markdown: str) -> str:
+    """What real Docling does to short Latin lines: a run of plain paragraphs comes back as one space-joined line."""
+    blocks: list[str] = []
+    run: list[str] = []
+    for block in markdown.split("\n\n"):
+        text = block.strip()
+        if text and not text.startswith(("#", "|")):
+            run.append(" ".join(text.split()))
+            continue
+        if run:
+            blocks.append(" ".join(run))
+            run = []
+        if text:
+            blocks.append(text)
+    if run:
+        blocks.append(" ".join(run))
+    return "\n\n".join(blocks)
+
+
+def test_the_merged_sample_really_has_several_labels_on_one_line():
+    merged = _merge_adjacent_lines(_recorded_markdown("invoice-en"))
+    header = next(line for line in merged.splitlines() if line.startswith("Invoice No."))
+    assert "Invoice date:" in header and "Supplier:" in header and "Bill to:" in header
+
+
+def test_merged_english_lines_still_yield_every_field():
+    fields = extract_invoice(_merge_adjacent_lines(_recorded_markdown("invoice-en")))
+    assert fields.invoice_number == "INV-2025-00418"
+    assert fields.issue_date == date(2025, 3, 15)
+    assert fields.due_date == date(2025, 4, 14)
+    assert fields.supplier.name == "Example Supplier Ltd"
+    assert (fields.supplier.tax_id, fields.supplier.tax_id_scheme) == ("BE0000000097", "eu_vat")
+    assert fields.buyer.name == "Example Buyer GmbH"
+    assert (fields.buyer.tax_id, fields.buyer.tax_id_scheme) == ("FR00000000093", "eu_vat")
+    assert fields.currency == "EUR"
+    assert (fields.net_total, fields.tax_total, fields.gross_total) == ("1000.00", "200.00", "1200.00")
+    assert len(fields.line_items) == 2
+    assert fields.errors == []
+    assert fields.confidence == 1.0
+
+
+def test_merged_italian_lines_still_yield_every_field():
+    fields = extract_invoice(_merge_adjacent_lines(_recorded_markdown("invoice-it")))
+    assert fields.invoice_number == "FT-2025-00419"
+    assert fields.issue_date == date(2025, 3, 15)
+    assert fields.due_date == date(2025, 4, 14)
+    assert fields.supplier.name == "Esempio Fornitore S.r.l."
+    assert (fields.supplier.tax_id, fields.supplier.tax_id_scheme) == ("99999999990", "it_iva")
+    assert fields.buyer.name == "Esempio Cliente S.p.A."
+    assert (fields.buyer.tax_id, fields.buyer.tax_id_scheme) == ("00000010017", "it_iva")
+    assert fields.currency == "EUR"
+    assert (fields.net_total, fields.tax_total, fields.gross_total) == ("1000.00", "220.00", "1220.00")
+    assert len(fields.line_items) == 2
+    assert fields.errors == []
+    assert fields.confidence == 1.0
+
+
+def test_chinese_stays_at_full_confidence_unmerged_and_merged():
+    markdown = _recorded_markdown("invoice-zh")
+    for text in (markdown, _merge_adjacent_lines(markdown)):
+        fields = extract_invoice(text)
+        assert fields.confidence == 1.0
+        assert fields.invoice_number == "FP-2025-00417"
+        assert fields.supplier.name == "示例销售有限公司"
+        assert fields.buyer.name == "示例买方有限公司"
+        assert fields.gross_total == "1130.00"
+
+
+@pytest.mark.parametrize("name", ["invoice-zh", "invoice-en", "invoice-it"])
+def test_merging_lines_does_not_change_the_result(name):
+    markdown = _recorded_markdown(name)
+    assert extract_invoice(_merge_adjacent_lines(markdown)) == extract_invoice(markdown)
+
+
+def test_a_colon_inside_a_value_is_not_a_label():
+    merged = "Supplier: Example: Holdings Ltd VAT No.: BE0000000097 Invoice No.: INV-1"
+    fields = extract_invoice(merged)
+    assert fields.supplier.name == "Example: Holdings Ltd"
+    assert fields.supplier.tax_id == "BE0000000097"
+    assert fields.invoice_number == "INV-1"
+
+
+def test_a_long_merged_line_is_read_and_a_hostile_one_is_skipped_quickly():
+    padding = "Example Supplier Holding Company " * 20
+    fields = extract_invoice(f"Supplier: {padding}Ltd Invoice No.: INV-9 Total: EUR 5.00")
+    assert fields.invoice_number == "INV-9"
+    assert fields.gross_total == "5.00"
+
+    started = time.monotonic()
+    hostile = extract_invoice("Invoice No.: INV-9 " + "a: b " * 40_000)
+    assert time.monotonic() - started < 2.0
+    assert hostile.invoice_number is None
 
 
 def _client() -> TestClient:
