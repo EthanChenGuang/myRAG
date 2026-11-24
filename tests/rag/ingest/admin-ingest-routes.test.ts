@@ -64,6 +64,7 @@ const state = {
   currentDocs: new Set<string>(),
   calls: [] as Call[],
   rpcFails: false,
+  refuseWrite: null as string | null,
   budgetRows: [] as Row[],
   overrides: [] as Row[],
 };
@@ -169,6 +170,7 @@ function fakeDb(): RpcClient {
         return respond(row ? [{ ...row }] : []);
       }
       if (fn === 'rag_retry_ingestion_job' || fn === 'rag_delete_ingestion_job') {
+        if (state.refuseWrite) return respond(null, { code: '22023', message: `ingest_refused: ${state.refuseWrite}` });
         const keys = adminTenantKeys(a.p_actor as string);
         const row = live().find((job) => job.id === a.p_job_id && keys.includes(job.tenant_key as string));
         if (!row) return respond(null, { code: '22023', message: 'ingest_refused: job_not_found' });
@@ -217,13 +219,20 @@ function guardDb() {
           filters[column] = value;
           return query;
         },
+        in(column: string, values: unknown[]) {
+          filters[`${column}__in`] = values;
+          return query;
+        },
         abortSignal: () => query,
         maybeSingle() {
           if (table === 'admin_users') {
             if (state.lookupFails) return Promise.resolve({ data: null, error: { message: 'down' } });
             return Promise.resolve({ data: state.admins.includes(filters.id as string) ? { id: filters.id } : null, error: null });
           }
-          const member = state.orgMembers.find((m) => m.organization_id === filters.organization_id && m.user_id === filters.user_id);
+          const roles = filters.role__in as string[] | undefined;
+          const member = state.orgMembers.find(
+            (m) => m.organization_id === filters.organization_id && m.user_id === filters.user_id && (!roles || roles.includes(m.role)),
+          );
           return Promise.resolve({ data: member ? { organization_id: member.organization_id } : null, error: null });
         },
       };
@@ -294,6 +303,7 @@ function resetState() {
   state.currentDocs = new Set();
   state.calls = [];
   state.rpcFails = false;
+  state.refuseWrite = null;
   state.budgetRows = [];
   state.overrides = [];
   logged = [];
@@ -490,6 +500,83 @@ describe('admin ingest job routes', () => {
       const allowed = await (await list.GET(req(`${BASE}?organizationId=${ORG_X}`))).json();
       expect(allowed.items.map((item: Row) => item.id)).toEqual([id(2)]);
       expect(callsOf('rag_list_ingestion_jobs').at(-1)?.args.p_tenant_key).toBe(`o:${ORG_X}`);
+    });
+
+    it('an organization workspace needs owner or admin, the role the SQL writes need: a plain member is refused like a non-member', async () => {
+      asAdminA();
+      state.jobs = [jobRow(1, `o:${ORG_X}`), jobRow(2, `o:${ORG_Y}`)];
+      state.orgMembers = [
+        { organization_id: ORG_X, user_id: ADMIN_A, role: 'member' },
+        { organization_id: ORG_Y, user_id: ADMIN_A, role: 'admin' },
+      ];
+      const { list } = await loadRoutes();
+
+      const asMember = await list.GET(req(`${BASE}?organizationId=${ORG_X}`));
+      expect(asMember.status).toBe(403);
+      expect(callsOf('rag_list_ingestion_jobs')).toEqual([]);
+
+      const asAdmin = await (await list.GET(req(`${BASE}?organizationId=${ORG_Y}`))).json();
+      expect(asAdmin.items.map((item: Row) => item.id)).toEqual([id(2)]);
+      expect(callsOf('rag_list_ingestion_jobs').every((call) => call.args.p_tenant_key === `o:${ORG_Y}`)).toBe(true);
+    });
+
+    it('detail, retry and delete in an organization also need owner or admin', async () => {
+      asAdminA();
+      state.jobs = [jobRow(1, `o:${ORG_X}`, { status: 'failed' })];
+      state.orgMembers = [{ organization_id: ORG_X, user_id: ADMIN_A, role: 'member' }];
+      const { detail, retry } = await loadRoutes();
+      const q = `?organizationId=${ORG_X}`;
+      expect((await detail.GET(req(`${BASE}/${id(1)}${q}`), ctx(id(1)))).status).toBe(403);
+      expect((await retry.POST(req(`${BASE}/${id(1)}/retry${q}`, { method: 'POST' }), ctx(id(1)))).status).toBe(403);
+      expect((await detail.DELETE(req(`${BASE}/${id(1)}${q}`, { method: 'DELETE' }), ctx(id(1)))).status).toBe(403);
+      expect(state.calls).toEqual([]);
+
+      state.orgMembers = [{ organization_id: ORG_X, user_id: ADMIN_A, role: 'owner' }];
+      expect((await detail.GET(req(`${BASE}/${id(1)}${q}`), ctx(id(1)))).status).toBe(200);
+    });
+
+    it('a job_not_found refusal from the SQL reads like an unknown id (404), not a status conflict', async () => {
+      asAdminA();
+      state.jobs = [jobRow(1, `u:${ADMIN_A}`, { status: 'failed' })];
+      state.refuseWrite = 'job_not_found';
+      const { detail, retry } = await loadRoutes();
+      const retried = await retry.POST(req(`${BASE}/${id(1)}/retry`, { method: 'POST' }), ctx(id(1)));
+      expect(retried.status).toBe(404);
+      const deleted = await detail.DELETE(req(`${BASE}/${id(1)}`, { method: 'DELETE' }), ctx(id(1)));
+      expect(deleted.status).toBe(404);
+    });
+
+    it('keeps rows that differ only in microseconds in order: no repeat and no skip across pages', async () => {
+      asAdminA();
+      const tenant = `u:${ADMIN_A}`;
+      state.jobs = [
+        jobRow(1, tenant, { created_at: '2026-11-01T00:00:00.123900+00:00' }),
+        jobRow(2, tenant, { created_at: '2026-11-01T00:00:00.123500+00:00' }),
+        jobRow(3, tenant, { created_at: '2026-11-01T00:00:00.123100+00:00' }),
+      ];
+      const { list } = await loadRoutes();
+      const seen: string[] = [];
+      let cursor: string | null = null;
+      for (let page = 0; page < 5; page += 1) {
+        const url: string = `${BASE}?limit=1${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`;
+        const body = await (await list.GET(req(url))).json();
+        seen.push(...body.items.map((item: Row) => item.id));
+        cursor = body.next_cursor;
+        if (!cursor) break;
+      }
+      expect(seen).toEqual([id(1), id(2), id(3)]);
+    });
+
+    it('one malformed row does not fail the list, and later pages are still reached', async () => {
+      asAdminA();
+      const tenant = `u:${ADMIN_A}`;
+      state.jobs = [jobRow(1, tenant), jobRow(2, tenant, { source_key: 123 }), jobRow(3, tenant)];
+      const { list } = await loadRoutes();
+      const response = await list.GET(req(BASE));
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body.items.map((item: Row) => item.id)).toEqual([id(3), id(1)]);
+      expect(logged.join('\n')).toContain('[Ingest]');
     });
 
     it('single-tenant deployments list the default tenant', async () => {
@@ -777,6 +864,23 @@ describe('admin parse budget and tier routes', () => {
       state.orgMembers = [{ organization_id: ORG_X, user_id: ADMIN_A, role: 'admin' }];
       const allowed = await (await budget.GET(req(`${BUDGET}?organizationId=${ORG_X}`))).json();
       expect(allowed.tenants).toEqual([{ tenantKey: `o:${ORG_X}`, reserved: 1, used: 2, vlmUsed: 3 }]);
+    });
+
+    it('the budget of an organization needs owner or admin, two orgs: member of X is refused, admin of Y is read', async () => {
+      asAdminA();
+      state.budgetRows = [
+        { tenant_key: `o:${ORG_X}`, month: '2026-11-01', pages_reserved: 1, pages_used: 2, vlm_pages_used: 3 },
+        { tenant_key: `o:${ORG_Y}`, month: '2026-11-01', pages_reserved: 4, pages_used: 5, vlm_pages_used: 6 },
+      ];
+      state.orgMembers = [
+        { organization_id: ORG_X, user_id: ADMIN_A, role: 'member' },
+        { organization_id: ORG_Y, user_id: ADMIN_A, role: 'owner' },
+      ];
+      const { budget } = await loadRoutes();
+      expect((await budget.GET(req(`${BUDGET}?organizationId=${ORG_X}`))).status).toBe(403);
+      expect(callsOf('rag_parse_budget_month')).toEqual([]);
+      const allowed = await (await budget.GET(req(`${BUDGET}?organizationId=${ORG_Y}`))).json();
+      expect(allowed.tenants).toEqual([{ tenantKey: `o:${ORG_Y}`, reserved: 4, used: 5, vlmUsed: 6 }]);
     });
 
     it('503 without echoing the database message', async () => {
