@@ -142,7 +142,7 @@ for (const mode of MODES) {
 
 describe('setup-database.sh --list-migrations', () => {
   const run = (...args: string[]) =>
-    spawnSync('bash', ['scripts/setup-database.sh', ...args], { cwd: REPO_ROOT, env: { PATH: process.env.PATH ?? '' }, encoding: 'utf8' });
+    spawnSync('bash', ['scripts/setup-database.sh', ...args], { cwd: REPO_ROOT, env: { PATH: process.env.PATH ?? '', NODE_ENV: 'test' }, encoding: 'utf8' });
 
   for (const mode of MODES) {
     test(`prints exactly migrationFiles('${mode}') in order without needing Supabase environment variables`, () => {
