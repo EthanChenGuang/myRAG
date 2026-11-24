@@ -122,3 +122,5 @@ export type {
   QuarantineItem,
   ReleaseQuarantinedResult,
 } from './ingest/quarantine-admin';
+export { getEmbeddingProfileCompleteness } from './embeddings/profile-ops';
+export type { ProfileCompleteness } from './embeddings/profile-ops';

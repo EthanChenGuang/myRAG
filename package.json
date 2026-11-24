@@ -14,6 +14,7 @@
     "reprocess-docs": "node scripts/rag/reprocess-documents.js",
     "rag:backfill-hashes": "tsx src/lib/rag/ingest/backfill-hashes.ts",
     "rag:reembed": "tsx src/lib/rag/ingest/reembed/cli.ts",
+    "rag:embedding": "tsx src/lib/rag/embeddings/cli.ts",
     "test": "vitest run",
     "test-rag": "tsx eval/harness/run-smoke.mts",
     "typecheck:new": "node scripts/typecheck-new.mjs",
