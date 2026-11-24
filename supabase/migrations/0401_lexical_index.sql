@@ -37,6 +37,7 @@ $fn$;
 
 CREATE OR REPLACE FUNCTION public.rag_chunks_lexical_tsv() RETURNS trigger
 LANGUAGE plpgsql
+SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $fn$
 DECLARE
