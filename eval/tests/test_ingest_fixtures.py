@@ -299,15 +299,35 @@ def test_every_recorded_parse_result_validates_against_the_contract():
         assert result.text_layer_page_share == (0.0 if spec.layer == "scanned" else 1.0), spec.id
 
 
+def _header_and_separator_index(lines: list[str]) -> int | None:
+    for index in range(1, len(lines)):
+        if lines[index - 1].startswith("|") and SEPARATOR_ROW.match(lines[index]):
+            return index
+    return None
+
+
 def test_every_table_chunk_starts_with_its_header_and_separator_rows():
-    with_tables = 0
+    pure = 0
     for spec in specs.all_specs():
         for chunk in _table_chunks(_result(spec.id)):
             lines = chunk.text.splitlines()
-            assert lines[0].startswith("|") and SEPARATOR_ROW.match(lines[1]), spec.id
-            assert chunk.table_header == "\n".join(lines[:2]), spec.id
-            with_tables += 1
-    assert with_tables >= 5
+            separator = _header_and_separator_index(lines)
+            assert separator is not None, f"{spec.id}: a table chunk without a header and separator row"
+            if lines[0].startswith("|"):
+                assert separator == 1, spec.id
+                assert chunk.table_header == "\n".join(lines[:2]), spec.id
+                pure += 1
+    assert pure >= 3
+
+
+def test_an_invoice_chunk_keeps_its_header_block_and_the_line_item_table_together():
+    for spec_id in ("invoice-zh", "invoice-en", "invoice-it"):
+        chunks = _table_chunks(_result(spec_id))
+        assert len(chunks) == 1, spec_id
+        lines = chunks[0].text.splitlines()
+        assert not lines[0].startswith("|"), spec_id
+        assert _header_and_separator_index(lines) is not None, spec_id
+        assert specs.spec_by_id(spec_id).facts["invoice"]["invoice_number"] in chunks[0].text
 
 
 def test_the_report_table_is_split_into_chunks_that_each_repeat_the_header():
@@ -371,13 +391,6 @@ def test_invoice_recordings_yield_the_expected_fields_through_the_extractor():
             expected["gross_total"],
         )
         assert len(fields.line_items) == expected["line_item_count"]
-
-
-def test_invoice_header_block_and_line_items_are_recorded_as_table_chunks_with_a_header():
-    for spec_id in ("invoice-zh", "invoice-en", "invoice-it"):
-        chunks = _table_chunks(_result(spec_id))
-        assert len(chunks) == 1, spec_id
-        assert chunks[0].table_header is not None
 
 
 def test_the_images_fixture_lists_pictures_on_pages_one_and_two_with_artifact_names():

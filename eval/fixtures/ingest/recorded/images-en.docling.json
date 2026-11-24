@@ -1,0 +1,317 @@
+{
+  "body": {
+    "children": [
+      {
+        "$ref": "#/texts/0"
+      },
+      {
+        "$ref": "#/texts/1"
+      },
+      {
+        "$ref": "#/pictures/0"
+      },
+      {
+        "$ref": "#/texts/2"
+      },
+      {
+        "$ref": "#/texts/3"
+      },
+      {
+        "$ref": "#/texts/4"
+      },
+      {
+        "$ref": "#/pictures/1"
+      },
+      {
+        "$ref": "#/texts/5"
+      }
+    ],
+    "content_layer": "body",
+    "label": "unspecified",
+    "name": "_root_",
+    "self_ref": "#/body"
+  },
+  "form_items": [],
+  "furniture": {
+    "children": [],
+    "content_layer": "furniture",
+    "label": "unspecified",
+    "name": "_root_",
+    "self_ref": "#/furniture"
+  },
+  "groups": [],
+  "key_value_items": [],
+  "name": "images-en",
+  "origin": {
+    "binary_hash": 2008,
+    "filename": "images-en.pdf",
+    "mimetype": "application/pdf"
+  },
+  "pages": {
+    "1": {
+      "page_no": 1,
+      "size": {
+        "height": 841.89,
+        "width": 595.28
+      }
+    },
+    "2": {
+      "page_no": 2,
+      "size": {
+        "height": 841.89,
+        "width": 595.28
+      }
+    }
+  },
+  "pictures": [
+    {
+      "annotations": [],
+      "captions": [],
+      "children": [],
+      "content_layer": "body",
+      "footnotes": [],
+      "image": {
+        "dpi": 72,
+        "mimetype": "image/png",
+        "size": {
+          "height": 160.0,
+          "width": 240.0
+        },
+        "uri": "data:image/png;base64,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"
+      },
+      "label": "picture",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 317.5,
+            "coord_origin": "TOPLEFT",
+            "l": 147.64,
+            "r": 447.64,
+            "t": 117.5
+          },
+          "charspan": [
+            0,
+            0
+          ],
+          "page_no": 1
+        }
+      ],
+      "references": [],
+      "self_ref": "#/pictures/0"
+    },
+    {
+      "annotations": [],
+      "captions": [],
+      "children": [],
+      "content_layer": "body",
+      "footnotes": [],
+      "image": {
+        "dpi": 72,
+        "mimetype": "image/png",
+        "size": {
+          "height": 160.0,
+          "width": 240.0
+        },
+        "uri": "data:image/png;base64,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"
+      },
+      "label": "picture",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 317.5,
+            "coord_origin": "TOPLEFT",
+            "l": 147.64,
+            "r": 447.64,
+            "t": 117.5
+          },
+          "charspan": [
+            0,
+            0
+          ],
+          "page_no": 2
+        }
+      ],
+      "references": [],
+      "self_ref": "#/pictures/1"
+    }
+  ],
+  "schema_name": "DoclingDocument",
+  "tables": [],
+  "texts": [
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "section_header",
+      "level": 1,
+      "orig": "Example Sensor Hub Product Sheet",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 86.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 60.0
+          },
+          "charspan": [
+            0,
+            32
+          ],
+          "page_no": 1
+        }
+      ],
+      "self_ref": "#/texts/0",
+      "text": "Example Sensor Hub Product Sheet"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "The Example Sensor Hub is a fictional device used to test document parsing.",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 111.5,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 96.0
+          },
+          "charspan": [
+            0,
+            75
+          ],
+          "page_no": 1
+        }
+      ],
+      "self_ref": "#/texts/1",
+      "text": "The Example Sensor Hub is a fictional device used to test document parsing."
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Figure 1. Front view of the example device.",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 337.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 321.5
+          },
+          "charspan": [
+            0,
+            43
+          ],
+          "page_no": 1
+        }
+      ],
+      "self_ref": "#/texts/2",
+      "text": "Figure 1. Front view of the example device."
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "section_header",
+      "level": 2,
+      "orig": "Rear panel",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 86.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 60.0
+          },
+          "charspan": [
+            0,
+            10
+          ],
+          "page_no": 2
+        }
+      ],
+      "self_ref": "#/texts/3",
+      "text": "Rear panel"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "The rear panel carries two connectors and a status light.",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 111.5,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 96.0
+          },
+          "charspan": [
+            0,
+            57
+          ],
+          "page_no": 2
+        }
+      ],
+      "self_ref": "#/texts/4",
+      "text": "The rear panel carries two connectors and a status light."
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Figure 2. Rear view of the example device.",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 337.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 321.5
+          },
+          "charspan": [
+            0,
+            42
+          ],
+          "page_no": 2
+        }
+      ],
+      "self_ref": "#/texts/5",
+      "text": "Figure 2. Rear view of the example device."
+    }
+  ],
+  "version": "1.11.0",
+  "x_rag_sidecar": {
+    "parser": "docling",
+    "parser_version": "docling-2.107.1"
+  }
+}

@@ -36,12 +36,18 @@ def email_violations(text: str) -> list[str]:
 
 
 INGEST_FIXTURES = FIXTURES / "ingest"
-INGEST_FILE_COUNT = 5
+INGEST_FILE_COUNT = 30
 
 
 def _ingest_files():
-    """Text of the typed ingestion fixtures: the specs every PDF is built from and the Markdown written for the text path."""
-    return [INGEST_FIXTURES / "specs.py", *sorted((INGEST_FIXTURES / "text").glob("*.md"))]
+    """Text of the typed ingestion fixtures: the specs every PDF is built from, the Markdown for the text path,
+    the manifest and the recorded parse results and Docling JSON (the PDFs and pictures are binary renderings of these)."""
+    return [
+        INGEST_FIXTURES / "specs.py",
+        *sorted((INGEST_FIXTURES / "text").glob("*.md")),
+        INGEST_FIXTURES / "manifest.json",
+        *sorted((INGEST_FIXTURES / "recorded").glob("*.json")),
+    ]
 
 
 def _fixture_files():
