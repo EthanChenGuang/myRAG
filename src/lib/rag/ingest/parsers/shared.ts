@@ -1,5 +1,6 @@
 import type { ParseResult } from '@/lib/rag-eval/contracts.generated';
 import type { TenantScope } from '../../tenant/scope';
+import type { PremiumContext, Reservation } from '../guard/cloud-budget';
 import type { ProcessingProfile } from '../profiles/load';
 
 /** The two parsers that call a service. */
@@ -33,6 +34,13 @@ export interface ParseArtifact {
   contentType: string;
 }
 
+/** Set by the queued tiered caller: the call is metered, so the client reserves pages before the upload and hands the reservation back. */
+export interface ParseGuard {
+  context: PremiumContext;
+  /** Called once with the open reservation, before the upload; the caller settles it or releases it. */
+  onReserved?: (handle: Reservation) => void | Promise<void>;
+}
+
 export interface ParseRequest {
   /** The minted scope of the run; LlamaParse refuses to run without one. */
   scope: TenantScope;
@@ -50,6 +58,8 @@ export interface ParseRequest {
   resume: PendingJob | null;
   /** Called with a freshly submitted job before the first poll, so the caller can save it. */
   onSubmitted: (job: PendingJob) => Promise<void>;
+  /** Present only for queued tiered jobs; inline and fixed runs leave it unset and only the cloud switch applies. */
+  guard?: ParseGuard;
 }
 
 export type ParseAttempt =

@@ -1,5 +1,6 @@
 import type { ParseResult } from '@/lib/rag-eval/contracts.generated';
 import { isTenantScope } from '../../tenant/scope';
+import { CloudRefused } from '../guard/cloud-budget';
 import type { IngestParser } from '../config';
 import type { ProcessingProfile } from '../profiles/load';
 import { getLlamaParseParser } from './llamaparse-v2';
@@ -73,6 +74,11 @@ export async function parseWithFallback(chain: ParserName[], request: ParseReque
       return { kind: 'done', parser: name, result: attempt.result, artifacts: attempt.artifacts, warnings: attempt.warnings, fallbacks };
     } catch (error) {
       if (request.signal.aborted) throw error;
+      if (error instanceof CloudRefused) {
+        // The guard already logged the refusal; the chain moves on to the next parser (Docling) without a second line.
+        fallbacks.push({ parser: name, reason: error.reason });
+        continue;
+      }
       note(fallbacks, name, error instanceof ParserError ? error.reason : 'error');
     }
   }
