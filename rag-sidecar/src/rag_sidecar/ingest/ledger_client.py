@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from rag_sidecar.contracts.queue import IngestionJob
 from rag_sidecar.ingest.supabase_headers import supabase_headers
+from rag_sidecar.ingest.supabase_url import assert_supabase_api_url
 
 logger = logging.getLogger(__name__)
 
@@ -91,9 +92,8 @@ class LedgerClient:
         connect_timeout: float = _DEFAULT_CONNECT_TIMEOUT,
         read_timeout: float = _DEFAULT_READ_TIMEOUT,
     ) -> None:
-        if not base_url.strip():
-            raise ValueError("base_url must not be empty")
-        self._base_url = base_url.rstrip("/")
+        api = assert_supabase_api_url(base_url, label="NEXT_PUBLIC_SUPABASE_URL")
+        self._base_url = api.rstrip("/")
         self._service_key = service_key
         self._owns_client = client is None
         timeout = httpx.Timeout(connect=connect_timeout, read=read_timeout, write=read_timeout, pool=connect_timeout)

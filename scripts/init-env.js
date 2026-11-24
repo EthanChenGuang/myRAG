@@ -451,6 +451,7 @@ RAG_PARSE_PROGRESSIVE=false
 RAG_EMBED_BATCH_MODE=sync
 # Browser realtime job updates (Supabase broadcast): true | false
 NEXT_PUBLIC_RAG_INGEST_REALTIME=false
+# Ledger workers and the app must use the Supabase project HTTPS URL (PostgREST), never a direct Postgres DSN.
 
 # Voyage embeddings
 VOYAGE_API_KEY=
