@@ -12,6 +12,14 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 const REAL_CORPUS = path.join(REPO_ROOT, 'eval/fixtures/corpus');
 const MODES: DeploymentMode[] = ['single-tenant', 'multi-tenant'];
 const frozenSetup = (mode: DeploymentMode): string => `tests/fixtures/sql/pre-phase3-${mode}-setup.sql`;
+const FOLDED_SETUP: Record<DeploymentMode, string> = {
+  'single-tenant': 'supabase/single-tenant-setup.sql',
+  'multi-tenant': 'supabase/multi-tenant-setup.sql',
+};
+
+async function reapplyFoldedSetup(db: PGlite, mode: DeploymentMode): Promise<void> {
+  await db.exec(fs.readFileSync(path.join(REPO_ROOT, FOLDED_SETUP[mode]), 'utf8'));
+}
 
 type CatalogDump = Record<string, string[]>;
 
@@ -185,6 +193,18 @@ for (const mode of MODES) {
       } finally {
         await alone.fixture.db.close();
         await remigrated.fixture.db.close();
+      }
+    });
+
+    test(`${mode} folded setup is safe to re-run on an existing schema`, async () => {
+      const empty = await createEmptyFixtureDatabase({ deploymentMode: mode, migrations: false });
+      try {
+        const dumpBefore = await catalogDump(empty.db);
+        await reapplyFoldedSetup(empty.db, mode);
+        const dumpAfter = await catalogDump(empty.db);
+        assert.deepEqual(differences(dumpBefore, dumpAfter), []);
+      } finally {
+        await empty.db.close();
       }
     });
   });

@@ -783,9 +783,11 @@ DROP POLICY IF EXISTS "Authenticated users insert own documents" ON documents;
 DROP POLICY IF EXISTS "Owners and admins update documents" ON documents;
 DROP POLICY IF EXISTS "Owners and admins delete documents" ON documents;
 
+DROP POLICY IF EXISTS "Allow read access to anonymous users" ON documents;
 CREATE POLICY "Allow read access to anonymous users" ON documents
   FOR SELECT USING (true);
 
+DROP POLICY IF EXISTS "Authenticated users insert own documents" ON documents;
 CREATE POLICY "Authenticated users insert own documents" ON documents
   FOR INSERT TO authenticated
   WITH CHECK (
@@ -793,6 +795,7 @@ CREATE POLICY "Authenticated users insert own documents" ON documents
     AND (NOT kb_writes_locked() OR is_admin((SELECT auth.uid())))
   );
 
+DROP POLICY IF EXISTS "Owners and admins update documents" ON documents;
 CREATE POLICY "Owners and admins update documents" ON documents
   FOR UPDATE TO authenticated
   USING (
@@ -804,6 +807,7 @@ CREATE POLICY "Owners and admins update documents" ON documents
     OR (user_id = (SELECT auth.uid()) AND NOT kb_writes_locked())
   );
 
+DROP POLICY IF EXISTS "Owners and admins delete documents" ON documents;
 CREATE POLICY "Owners and admins delete documents" ON documents
   FOR DELETE TO authenticated
   USING (
@@ -818,9 +822,11 @@ DROP POLICY IF EXISTS "Authenticated users insert chunks of own documents" ON do
 DROP POLICY IF EXISTS "Owners and admins update chunks" ON document_chunks;
 DROP POLICY IF EXISTS "Owners and admins delete chunks" ON document_chunks;
 
+DROP POLICY IF EXISTS "Allow read access to anonymous users" ON document_chunks;
 CREATE POLICY "Allow read access to anonymous users" ON document_chunks
   FOR SELECT USING (true);
 
+DROP POLICY IF EXISTS "Authenticated users insert chunks of own documents" ON document_chunks;
 CREATE POLICY "Authenticated users insert chunks of own documents" ON document_chunks
   FOR INSERT TO authenticated
   WITH CHECK (
@@ -834,6 +840,7 @@ CREATE POLICY "Authenticated users insert chunks of own documents" ON document_c
     )
   );
 
+DROP POLICY IF EXISTS "Owners and admins update chunks" ON document_chunks;
 CREATE POLICY "Owners and admins update chunks" ON document_chunks
   FOR UPDATE TO authenticated
   USING (
@@ -857,6 +864,7 @@ CREATE POLICY "Owners and admins update chunks" ON document_chunks
     )
   );
 
+DROP POLICY IF EXISTS "Owners and admins delete chunks" ON document_chunks;
 CREATE POLICY "Owners and admins delete chunks" ON document_chunks
   FOR DELETE TO authenticated
   USING (
@@ -1376,11 +1384,13 @@ END;
 $$;
 
 -- Create triggers
+DROP TRIGGER IF EXISTS update_whatsapp_sessions_timestamp ON whatsapp_sessions;
 CREATE TRIGGER update_whatsapp_sessions_timestamp
   BEFORE UPDATE ON whatsapp_sessions
   FOR EACH ROW
   EXECUTE FUNCTION update_whatsapp_timestamp();
 
+DROP TRIGGER IF EXISTS update_whatsapp_conversations_timestamp ON whatsapp_conversations;
 CREATE TRIGGER update_whatsapp_conversations_timestamp
   BEFORE UPDATE ON whatsapp_conversations
   FOR EACH ROW
@@ -1417,20 +1427,25 @@ CREATE INDEX IF NOT EXISTS idx_user_preferences_user_id ON user_preferences(user
 ALTER TABLE user_preferences ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies
+DROP POLICY IF EXISTS "Users can view own preferences" ON user_preferences;
 CREATE POLICY "Users can view own preferences" ON user_preferences
   FOR SELECT USING ((SELECT auth.uid()) = user_id);
 
+DROP POLICY IF EXISTS "Users can insert own preferences" ON user_preferences;
 CREATE POLICY "Users can insert own preferences" ON user_preferences
   FOR INSERT WITH CHECK ((SELECT auth.uid()) = user_id);
 
+DROP POLICY IF EXISTS "Users can update own preferences" ON user_preferences;
 CREATE POLICY "Users can update own preferences" ON user_preferences
   FOR UPDATE USING ((SELECT auth.uid()) = user_id);
 
 -- Service role can manage all preferences
+DROP POLICY IF EXISTS "Service role can manage user preferences" ON user_preferences;
 CREATE POLICY "Service role can manage user preferences" ON user_preferences
   FOR ALL USING (auth.role() = 'service_role');
 
 -- Create trigger to update updated_at timestamp
+DROP TRIGGER IF EXISTS update_user_preferences_updated_at ON user_preferences;
 CREATE TRIGGER update_user_preferences_updated_at
   BEFORE UPDATE ON user_preferences
   FOR EACH ROW
