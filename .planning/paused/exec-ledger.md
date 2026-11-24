@@ -61,7 +61,7 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | 03.1-04 | bc-4969184f… | **merged** | exec/03.1-04 |
 | 03.1-07 | — | **merged** | exec/03.1-07 |
 | 04-05 | bc-91985997… | **merged** | exec/04-05 |
-| 04-06 | [bc-f05b8cec](bc-f05b8cec-070a-54b4-a156-96d6167bdbb7) RUNNING | wt/04-06 |
+| 04-06 | [bc-f05b8cec](bc-f05b8cec-070a-54b4-a156-96d6167bdbb7) **merged** | exec/04-06; smoke `eval/out/p4-06` PASS |
 | 03.1-08 | [bc-97f53a60](bc-97f53a60-1976-53e8-a0e4-10113dc0a4bb) RUNNING | wt/03.1-08 |
 
 ## Remaining plan inventory (file-overlap basis)
@@ -80,7 +80,7 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 
 | Plan | bcId | Worktree |
 |------|------|----------|
-| 04-06 | [bc-f05b8cec](bc-f05b8cec-070a-54b4-a156-96d6167bdbb7) RUNNING | `wt/04-06` |
+| 04-07 | (spawn next) | `wt/04-07` — **only after 04-06 merged** |
 | 03.1-08 | [bc-97f53a60](bc-97f53a60-1976-53e8-a0e4-10113dc0a4bb) RUNNING | `wt/03.1-08` |
 
 **Recently merged (no follow-up merge needed):** [03.1-04 Task 3](bc-4969184f-7107-55b3-a450-d63435dcb0a0), [03.1-07](bc-4a221b6f-f6a6-507b-8da0-d497c6662c2a), [04-05](bc-91985997-25a1-5b37-a987-32cb579c4746) → trunk `7d98d53`…`a06efce`.
