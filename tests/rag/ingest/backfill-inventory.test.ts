@@ -1,7 +1,11 @@
+import { createHash } from 'node:crypto';
 import { mkdtemp, mkdir, rm, symlink, truncate, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { Readable } from 'node:stream';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import type { RpcClient, RpcRequest, RpcResponse } from '@/lib/rag/backend/supabase-rpc';
+import { inventory } from '@/lib/rag/ingest/backfill/inventory';
 import { ORIGINALS_MAX_BYTES } from '@/lib/rag/ingest/object-store';
 import {
   isBlockedAddress,
@@ -12,6 +16,22 @@ import {
 } from '@/lib/rag/ingest/backfill/sources';
 import { backfillScope, type BackfillScopeAdmin } from '@/lib/rag/tenant/backfill-scope';
 import { mintScope, scopeKey } from '@/lib/rag/tenant/scope';
+
+const hashEvents = vi.hoisted(() => ({ recording: false, log: [] as string[] }));
+
+vi.mock('node:crypto', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:crypto')>();
+  const createHash: typeof actual.createHash = (...args: Parameters<typeof actual.createHash>) => {
+    const hash = actual.createHash(...args);
+    const update = hash.update.bind(hash) as (data: unknown, encoding?: unknown) => typeof hash;
+    (hash as unknown as { update: typeof update }).update = (data, encoding) => {
+      if (hashEvents.recording) hashEvents.log.push('update');
+      return update(data, encoding);
+    };
+    return hash;
+  };
+  return { ...actual, default: { ...actual, createHash }, createHash };
+});
 
 const USER_A = '00000000-0000-4000-8000-0000000000a1';
 const USER_B = '00000000-0000-4000-8000-0000000000b1';
@@ -577,5 +597,269 @@ describe('listSource bucket', () => {
     const { items, reasons } = await drain({ kind: 'bucket', ref: 'fixture-bucket', deps });
     expect(items.map((i) => i.sourceKey)).toEqual(['small.pdf']);
     expect(reasons).toEqual(['too_large']);
+  });
+});
+
+function fakeRpc(handlers: Record<string, (args: Record<string, unknown>) => RpcResponse>): { rpc: RpcClient; calls: Array<{ fn: string; args: Record<string, unknown> }> } {
+  const calls: Array<{ fn: string; args: Record<string, unknown> }> = [];
+  const rpc: RpcClient = {
+    rpc(fn, args) {
+      calls.push({ fn, args });
+      const result = handlers[fn]?.(args) ?? { data: [], error: null };
+      const request: RpcRequest = {
+        abortSignal: () => request,
+        then: (onFulfilled, onRejected) => Promise.resolve(result).then(onFulfilled, onRejected),
+      };
+      return request;
+    },
+  };
+  return { rpc, calls };
+}
+
+const sha = (text: string): string => createHash('sha256').update(text).digest('hex');
+
+function item(sourceKey: string, text: string, extra: Partial<SourceItem> = {}): SourceItem {
+  const bytes = Buffer.from(text);
+  return {
+    sourceKey,
+    size: bytes.byteLength,
+    ext: sourceKey.includes('.') ? (sourceKey.split('.').pop() as string) : 'bin',
+    async open() {
+      return Readable.from([bytes]);
+    },
+    ...extra,
+  };
+}
+
+async function* from<T>(values: T[]): AsyncGenerator<T> {
+  for (const value of values) yield value;
+}
+
+const BATCH = '20000000-0000-4000-8000-0000000000b1';
+const TENANT_A = `u:${USER_A}`;
+const TENANT_B = `u:${USER_B}`;
+
+/** A fake of the tenant-scoped SQL: rag_existing_file_hashes answers from the hashes of the tenant it is asked about. */
+function tenantLedger(existing: Record<string, string[]>) {
+  const skipped: Array<Record<string, unknown>> = [];
+  const fake = fakeRpc({
+    rag_existing_file_hashes: (args) => {
+      const tenant = String(args.p_tenant_key);
+      const known = new Set(existing[tenant] ?? []);
+      const rows = (args.p_hashes as string[]).filter((h) => known.has(h)).map((h) => ({ id: `doc-${h.slice(0, 6)}`, file_sha256: h, tenant_key: tenant, source_key: 'old' }));
+      return { data: rows, error: null };
+    },
+    rag_enqueue_backfill_jobs: (args) => {
+      skipped.push(...((args.p_jobs as Array<Record<string, unknown>>) ?? []));
+      return { data: [], error: null };
+    },
+  });
+  return { ...fake, skipped };
+}
+
+describe('backfill inventory', () => {
+  test('12 files with two identical pairs and one already ingested: 9 new, 3 skipped_duplicate rows, totals reconcile', async () => {
+    const files: Array<[string, string]> = [];
+    for (let i = 0; i < 9; i += 1) files.push([`file-${i}.pdf`, `unique-${i}`]);
+    files.push(['file-9.pdf', 'unique-0'], ['file-10.pdf', 'unique-1'], ['file-11.pdf', 'tenant-existing-only']);
+    const ledger = tenantLedger({ [TENANT_A]: [sha('tenant-existing-only')] });
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+
+    const result = await inventory(
+      { id: BATCH, tenantKey: TENANT_A },
+      from(files.map(([key, text]) => item(key, text, key === 'file-3.pdf' ? { docType: 'contract_legal' } : {}))),
+      { rpc: ledger.rpc, signal: new AbortController().signal },
+    );
+
+    expect(result.totals).toEqual({ total: 12, uniqueNew: 9, inInventoryDuplicates: 2, existingDuplicates: 1, unreadable: 0 });
+    expect(result.duplicates).toEqual({ inInventory: 2, alreadyExisting: 1 });
+    const { totals } = result;
+    expect(totals.total).toBe(totals.uniqueNew + totals.inInventoryDuplicates + totals.existingDuplicates + totals.unreadable);
+    expect(result.entries.map((e) => e.sourceKey)).toEqual(Array.from({ length: 9 }, (_, i) => `file-${i}.pdf`));
+    expect(result.entries[3]).toMatchObject({ fileSha256: sha('unique-3'), docType: 'contract_legal', mimeType: 'application/pdf', filename: 'file-3.pdf', size: 8 });
+    expect(result.entries[0]?.docType).toBeNull();
+
+    expect(ledger.skipped).toHaveLength(3);
+    expect(ledger.skipped.map((j) => j.source_key).sort()).toEqual(['file-10.pdf', 'file-11.pdf', 'file-9.pdf']);
+    expect(ledger.skipped.every((j) => j.status === 'skipped_duplicate' && j.kind === 'ingest' && typeof j.file_sha256 === 'string')).toBe(true);
+    expect(ledger.calls.filter((c) => c.fn === 'rag_enqueue_backfill_jobs').every((c) => c.args.p_batch_id === BATCH)).toBe(true);
+    expect(log.mock.calls.some((c) => String(c[0]).startsWith('[Backfill]'))).toBe(true);
+    log.mockRestore();
+  });
+
+  test('a file already ingested for another tenant is not a duplicate; the same file is a duplicate for the tenant that has it', async () => {
+    const ledger = tenantLedger({ [TENANT_B]: [sha('shared-contract')], [`o:${ORG_O}`]: [sha('org-only')] });
+    const signal = new AbortController().signal;
+
+    const forA = await inventory({ id: BATCH, tenantKey: TENANT_A }, from([item('shared.pdf', 'shared-contract'), item('org.pdf', 'org-only')]), { rpc: ledger.rpc, signal });
+    expect(forA.totals).toMatchObject({ uniqueNew: 2, existingDuplicates: 0 });
+    expect(ledger.skipped).toEqual([]);
+
+    const forB = await inventory({ id: BATCH, tenantKey: TENANT_B }, from([item('shared.pdf', 'shared-contract'), item('org.pdf', 'org-only')]), { rpc: ledger.rpc, signal });
+    expect(forB.totals).toMatchObject({ uniqueNew: 1, existingDuplicates: 1 });
+    expect(forB.entries.map((e) => e.sourceKey)).toEqual(['org.pdf']);
+
+    const lookups = ledger.calls.filter((c) => c.fn === 'rag_existing_file_hashes');
+    expect(lookups.map((c) => c.args.p_tenant_key)).toEqual([TENANT_A, TENANT_B]);
+  });
+
+  test('a row of another tenant in a lookup answer is ignored (second line of defence behind the SQL filter)', async () => {
+    const leaky = fakeRpc({
+      rag_existing_file_hashes: (args) => ({
+        data: (args.p_hashes as string[]).map((h) => ({ id: 'x', file_sha256: h, tenant_key: TENANT_B, source_key: 'y' })),
+        error: null,
+      }),
+    });
+    const result = await inventory({ id: BATCH, tenantKey: TENANT_A }, from([item('a.pdf', 'aaa')]), { rpc: leaky.rpc, signal: new AbortController().signal });
+    expect(result.totals).toMatchObject({ uniqueNew: 1, existingDuplicates: 0 });
+  });
+
+  test('the kept copy of identical files is the first in source order, and entries keep that order', async () => {
+    const ledger = tenantLedger({});
+    const result = await inventory(
+      { id: BATCH, tenantKey: TENANT_A },
+      from([item('z-first.txt', 'same'), item('a-second.txt', 'same'), item('m-third.txt', 'other')]),
+      { rpc: ledger.rpc, signal: new AbortController().signal },
+    );
+    expect(result.entries.map((e) => e.sourceKey)).toEqual(['z-first.txt', 'm-third.txt']);
+    expect(ledger.skipped.map((j) => j.source_key)).toEqual(['a-second.txt']);
+  });
+
+  test('hashes are computed streaming: a 15 MB file is hashed in 64 KiB pieces as it is read, never gathered first', async () => {
+    const CHUNK = 64 * 1024;
+    const COUNT = 240;
+    hashEvents.log = [];
+    hashEvents.recording = true;
+    const big: SourceItem = {
+      sourceKey: 'big.bin',
+      size: CHUNK * COUNT,
+      ext: 'bin',
+      async open() {
+        return Readable.from(
+          (async function* () {
+            for (let i = 0; i < COUNT; i += 1) {
+              hashEvents.log.push('produce');
+              yield Buffer.alloc(CHUNK, i % 251);
+            }
+          })(),
+        );
+      },
+    };
+    const ledger = tenantLedger({});
+    let result;
+    try {
+      result = await inventory({ id: BATCH, tenantKey: TENANT_A }, from([big]), { rpc: ledger.rpc, signal: new AbortController().signal });
+    } finally {
+      hashEvents.recording = false;
+    }
+    const expected = createHash('sha256');
+    for (let i = 0; i < COUNT; i += 1) expected.update(Buffer.alloc(CHUNK, i % 251));
+    expect(result.entries[0]?.fileSha256).toBe(expected.digest('hex'));
+
+    const produced = hashEvents.log.filter((e) => e === 'produce').length;
+    const updates = hashEvents.log.filter((e) => e === 'update').length;
+    expect(produced).toBe(COUNT);
+    expect(updates).toBe(COUNT);
+    let producedSoFar = 0;
+    let updatedSoFar = 0;
+    let maxAhead = 0;
+    for (const event of hashEvents.log) {
+      if (event === 'produce') producedSoFar += 1;
+      else updatedSoFar += 1;
+      maxAhead = Math.max(maxAhead, producedSoFar - updatedSoFar);
+    }
+    expect(maxAhead).toBeLessThanOrEqual(4);
+  });
+
+  test('looks existing hashes up in chunks of 1,000 and records skipped rows in chunks of 1,000', async () => {
+    const texts = Array.from({ length: 2_500 }, (_, i) => `doc-${i}`);
+    const ledger = tenantLedger({ [TENANT_A]: texts.map(sha) });
+    const result = await inventory({ id: BATCH, tenantKey: TENANT_A }, from(texts.map((t, i) => item(`f${i}.txt`, t))), {
+      rpc: ledger.rpc,
+      signal: new AbortController().signal,
+    });
+    expect(result.totals).toMatchObject({ total: 2_500, uniqueNew: 0, existingDuplicates: 2_500 });
+    expect(ledger.calls.filter((c) => c.fn === 'rag_existing_file_hashes').map((c) => (c.args.p_hashes as string[]).length)).toEqual([1_000, 1_000, 500]);
+    expect(ledger.calls.filter((c) => c.fn === 'rag_enqueue_backfill_jobs').map((c) => (c.args.p_jobs as unknown[]).length)).toEqual([1_000, 1_000, 500]);
+    expect(ledger.skipped).toHaveLength(2_500);
+  });
+
+  test('an unreadable file is counted and skipped without stopping the inventory, and still reconciles', async () => {
+    const failing: SourceItem = {
+      ...item('broken.pdf', 'x'),
+      async open() {
+        throw new Error('EACCES /srv/customer-data/broken.pdf');
+      },
+    };
+    const midStream: SourceItem = {
+      ...item('cut.pdf', 'x'),
+      async open() {
+        return Readable.from(
+          (async function* () {
+            yield Buffer.from('partial');
+            throw new Error('ECONNRESET /srv/customer-data/cut.pdf');
+          })(),
+        );
+      },
+    };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const ledger = tenantLedger({});
+    const result = await inventory({ id: BATCH, tenantKey: TENANT_A }, from([item('ok.pdf', 'ok'), failing, midStream, item('ok2.pdf', 'ok2')]), {
+      rpc: ledger.rpc,
+      signal: new AbortController().signal,
+    });
+    expect(result.totals).toEqual({ total: 4, uniqueNew: 2, inInventoryDuplicates: 0, existingDuplicates: 0, unreadable: 2 });
+    expect(result.entries.map((e) => e.sourceKey)).toEqual(['ok.pdf', 'ok2.pdf']);
+    const logged = JSON.stringify([...warn.mock.calls, ...log.mock.calls]);
+    expect(logged).not.toContain('customer-data');
+    expect(logged).not.toContain('broken');
+    warn.mockRestore();
+    log.mockRestore();
+  });
+
+  test('logs carry counts and the [Backfill] prefix only, never a file name or content', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const ledger = tenantLedger({});
+    await inventory(
+      { id: BATCH, tenantKey: TENANT_A },
+      from([item('confidential-contract.pdf', 'top secret clause'), item('copy-of-confidential-contract.pdf', 'top secret clause')]),
+      { rpc: ledger.rpc, signal: new AbortController().signal },
+    );
+    const lines = [...warn.mock.calls, ...log.mock.calls];
+    expect(lines.length).toBeGreaterThan(0);
+    expect(lines.every((c) => String(c[0]).startsWith('[Backfill]'))).toBe(true);
+    const logged = JSON.stringify(lines);
+    expect(logged).not.toContain('confidential');
+    expect(logged).not.toContain('top secret');
+    expect(logged).not.toContain(sha('top secret clause'));
+    warn.mockRestore();
+    log.mockRestore();
+  });
+
+  test('a failed lookup or enqueue rejects with a generic message; nothing is enqueued when the lookup fails', async () => {
+    const failingLookup = fakeRpc({ rag_existing_file_hashes: () => ({ data: null, error: { message: 'relation documents (tenant u:abc) exploded', code: 'XX000' } }) });
+    await expect(
+      inventory({ id: BATCH, tenantKey: TENANT_A }, from([item('a.pdf', 'a'), item('b.pdf', 'a')]), { rpc: failingLookup.rpc, signal: new AbortController().signal }),
+    ).rejects.toThrow('[Backfill] existing hash lookup failed');
+    expect(failingLookup.calls.some((c) => c.fn === 'rag_enqueue_backfill_jobs')).toBe(false);
+
+    const failingEnqueue = fakeRpc({ rag_enqueue_backfill_jobs: () => ({ data: null, error: { message: 'boom' } }) });
+    await expect(
+      inventory({ id: BATCH, tenantKey: TENANT_A }, from([item('a.pdf', 'a'), item('b.pdf', 'a')]), { rpc: failingEnqueue.rpc, signal: new AbortController().signal }),
+    ).rejects.toThrow('[Backfill] skipped_duplicate enqueue failed');
+  });
+
+  test('an aborted signal stops the inventory before any lookup', async () => {
+    const controller = new AbortController();
+    const ledger = tenantLedger({});
+    async function* aborting() {
+      yield item('a.pdf', 'a');
+      controller.abort();
+      yield item('b.pdf', 'b');
+    }
+    await expect(inventory({ id: BATCH, tenantKey: TENANT_A }, aborting(), { rpc: ledger.rpc, signal: controller.signal })).rejects.toThrow();
+    expect(ledger.calls).toEqual([]);
   });
 });
