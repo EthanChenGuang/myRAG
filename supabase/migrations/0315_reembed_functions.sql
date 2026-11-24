@@ -478,7 +478,7 @@ $$;
 
 -- How many current, ready chunks of the run's scope still lack a vector of the profile.
 CREATE OR REPLACE FUNCTION rag_reembed_remaining(p_run_id uuid)
-RETURNS bigint
+RETURNS TABLE (chunks_missing bigint)
 LANGUAGE plpgsql
 STABLE
 SECURITY DEFINER
@@ -501,7 +501,7 @@ BEGIN
     AND NOT EXISTS (
       SELECT 1 FROM chunk_embeddings e
       WHERE e.chunk_id = c.id AND e.profile_id = p.id AND e.embedding_model = p.model AND e.dims = p.dims);
-  RETURN v_count;
+  RETURN QUERY SELECT v_count;
 END
 $$;
 
@@ -600,7 +600,7 @@ BEGIN
   IF v_run.status <> 'running' THEN
     RAISE EXCEPTION 'reembed_refused: run_not_running' USING ERRCODE = '55000';
   END IF;
-  v_missing := rag_reembed_remaining(p_run_id);
+  SELECT m.chunks_missing INTO v_missing FROM rag_reembed_remaining(p_run_id) AS m;
   IF p_status = 'completed' AND v_missing > 0 THEN
     RAISE EXCEPTION 'reembed_refused: incomplete (% current ready chunks have no vector)', v_missing USING ERRCODE = '55000';
   END IF;

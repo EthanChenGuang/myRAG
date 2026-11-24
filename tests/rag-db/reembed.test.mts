@@ -700,6 +700,7 @@ describe('re-embed job (src/lib/rag/ingest/reembed)', () => {
     await fixture.db.query("UPDATE embedding_profiles SET status = 'available', activated_at = NULL, activated_by = NULL, previous_active_id = NULL");
     await fixture.db.query("UPDATE embedding_profiles SET status = 'active', activated_at = now() - interval '2 hours' WHERE id = $1", [LEGACY]);
     useEnv({ RAG_EMBEDDING_PROFILES: 'on' });
+    objectStoreModule.setObjectStoreForTests((await import('../helpers/fake-object-store')).createFakeObjectStore());
     edge.calls.length = 0;
   });
 
