@@ -225,8 +225,11 @@ class LedgerClient:
         if isinstance(payload, (int, float)):
             return int(payload)
         rows = self._rows(payload)
-        if rows and isinstance(rows[0], (int, float)):
-            return int(rows[0])
+        first = rows[0] if rows else None
+        if isinstance(first, dict) and len(first) == 1:
+            first = next(iter(first.values()))
+        if isinstance(first, (int, float)) and not isinstance(first, bool):
+            return int(first)
         raise LedgerError("record_attempt returned unexpected payload")
 
     async def fail(self, job_id: str, worker: str, *, error_class: str, retryable: bool) -> IngestionJob:
