@@ -71,7 +71,7 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 
 | Plan | bcId | Worktree |
 |------|------|----------|
-| 03.1-04 | [bc-4969184f](bc-4969184f-7107-55b3-a450-d63435dcb0a0) RUNNING | wt/03.1-04 |
+| 03.1-04 | [bc-4969184f](bc-4969184f-7107-55b3-a450-d63435dcb0a0) **blocked** (human) | wt/03.1-04 — needs `03-48-SUMMARY.md` + package approval (`approved` / `approved ray 2.60.0`) |
 | 04-04 | [bc-66bbcf6a](bc-66bbcf6a-fea9-522c-9d57-3ef3695ca16a) RUNNING | wt/04-04 |
 
 **Concurrent spawn (2026-11-24 ~13:05 Europe/Rome):** 5 `Task` calls in one turn — **4 succeeded** (gsd-executor ×4), **1 failed** (gsd-verifier + `claude-opus-5-5-medium`: *user exceeded selected model’s available usage*). No platform limit on concurrent subagents observed.
