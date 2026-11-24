@@ -91,7 +91,17 @@ export interface IngestState {
   quarantine: { ruleIds: string[]; released: boolean } | null;
   invoice: { extractor: string; status: string } | null;
   /** Caption progress, and for a whole image what a resumed run needs without the upload: the public URL, the context and the media type. */
-  images: { nextIndex: number; captioned: number; imageUrl?: string; imageContext?: string; mimeType?: string } | null;
+  images: {
+    nextIndex: number;
+    captioned: number;
+    imageUrl?: string;
+    imageContext?: string;
+    mimeType?: string;
+    /** Pictures inside a document: positions of the kept pictures that were given up (bytes gone, type unsupported, caption failed), so a resumed run does not try them again. */
+    skipped?: number[];
+    /** Pictures inside a document: how many kept pictures are stored in the public bucket, in order. */
+    uploaded?: number;
+  } | null;
   embeddingTargets: string[];
   embeddingGaps: Array<{ profileId: string; chunkIndex: number }>;
 }
