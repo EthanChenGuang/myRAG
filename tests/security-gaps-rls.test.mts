@@ -42,6 +42,8 @@ async function rejection(promise: Promise<unknown>, pattern: RegExp): Promise<vo
   await assert.rejects(promise, pattern);
 }
 
+const INSERT_DENIED = /row-level security|permission denied for function rag_lexical_tsvector/i;
+
 async function insertUsers(db: PGlite, ids: string[]): Promise<void> {
   for (const id of ids) await db.query('INSERT INTO auth.users (id, email) VALUES ($1, $2)', [id, `${id.slice(-4)}@example.invalid`]);
 }
@@ -53,6 +55,7 @@ async function seedKnowledgeBase(db: PGlite): Promise<void> {
   await db.query("INSERT INTO documents (id, filename, content) VALUES ($1, 'legacy.md', 'legacy content')", [DOC_LEGACY]);
   await db.query("INSERT INTO document_chunks (id, document_id, content, embedding) VALUES ($1, $2, 'owned chunk', $3::vector)", [CHUNK_OWNED, DOC_OWNED, ZERO_VECTOR]);
   await db.query("INSERT INTO document_chunks (id, document_id, content, embedding) VALUES ($1, $2, 'legacy chunk', $3::vector)", [CHUNK_LEGACY, DOC_LEGACY, ZERO_VECTOR]);
+  await db.exec('GRANT EXECUTE ON FUNCTION public.rag_lexical_tsvector(text) TO authenticated');
 }
 
 async function count(db: PGlite, table: string): Promise<number> {
@@ -109,14 +112,14 @@ function singleTenantSuite(label: string, build: () => Promise<FixtureDatabase>)
 
     test('inserts need user_id = auth.uid(): a null or foreign owner is refused, the caller own id is accepted', async () => {
       await asRole(db, 'authenticated', OTHER, async () => {
-        await rejection(db.query("INSERT INTO documents (id, filename, content) VALUES (gen_random_uuid(), 'a', 'b')"), /row-level security/i);
+        await rejection(db.query("INSERT INTO documents (id, filename, content) VALUES (gen_random_uuid(), 'a', 'b')"), INSERT_DENIED);
         await rejection(
           db.query("INSERT INTO documents (id, filename, content, user_id) VALUES (gen_random_uuid(), 'a', 'b', $1)", [OWNER]),
-          /row-level security/i,
+          INSERT_DENIED,
         );
         await rejection(
           db.query("INSERT INTO document_chunks (id, document_id, content, embedding) VALUES (gen_random_uuid(), $1, 'c', $2::vector)", [DOC_OWNED, ZERO_VECTOR]),
-          /row-level security/i,
+          INSERT_DENIED,
         );
         const id = '00000000-0000-4000-8000-00000000f201';
         await db.query("INSERT INTO documents (id, filename, content, user_id) VALUES ($1, 'mine.md', 'mine', $2)", [id, OTHER]);
