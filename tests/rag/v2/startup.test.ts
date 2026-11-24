@@ -56,7 +56,7 @@ describe('verifyV2Startup', () => {
       adminClient: () => null,
     });
     expect(verdict.reasons).toContain('admin_key_missing');
-    const text = (console.error as ReturnType<typeof vi.spyOn>).mock.calls.map((call) => call.join(' ')).join('\n');
+    const text = (console.error as ReturnType<typeof vi.spyOn>).mock.calls.map((call: unknown[]) => call.join(' ')).join('\n');
     expect(text).not.toMatch(/eyJ|sk-/);
   });
 
@@ -65,7 +65,7 @@ describe('verifyV2Startup', () => {
       ...DEFAULT_DEPS,
       pgvectorVersion: async () => '0.7.4',
     });
-    const warnText = (console.warn as ReturnType<typeof vi.spyOn>).mock.calls.map((call) => call.join(' ')).join('\n');
+    const warnText = (console.warn as ReturnType<typeof vi.spyOn>).mock.calls.map((call: unknown[]) => call.join(' ')).join('\n');
     expect(warnText).toMatch(/0\.8\.0/);
     expect(warnText).toMatch(/iterative scan/i);
     const count = (console.warn as ReturnType<typeof vi.spyOn>).mock.calls.length;

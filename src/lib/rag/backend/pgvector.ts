@@ -131,7 +131,8 @@ export function createPgvectorBackend(deps: PgvectorBackendDeps): RetrievalBacke
       const client = deps.adminClient();
       if (!client) throw new RetrievalBackendError('hybrid_search_chunks', 'admin_unavailable');
       const config = deps.getConfig();
-      const response = await client.rpc('hybrid_search_chunks', buildRpcArgs(req, config)).abortSignal(req.signal);
+      const rpcClient = client as RpcClient;
+      const response = await rpcClient.rpc('hybrid_search_chunks', buildRpcArgs(req, config)).abortSignal(req.signal);
       req.signal.throwIfAborted();
       if (response.error) {
         if (response.error.message.includes('embedding_profile_mismatch')) {

@@ -49,7 +49,7 @@ function recordingClient(rows: Record<string, unknown>[] = [], error: RpcRespons
               'abort',
               () => {
                 clearTimeout(timer);
-                reject(signal.reason ?? new DOMException('Aborted', 'AbortError'));
+                reject(signal?.reason ?? new DOMException('Aborted', 'AbortError'));
               },
               { once: true },
             );

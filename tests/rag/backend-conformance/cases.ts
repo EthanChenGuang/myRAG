@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { evalScope } from '@/lib/rag';
-import type { RetrievalBackend } from '@/lib/rag/backend/types';
+import type { RetrievalBackend, RetrievalFilters } from '@/lib/rag/backend/types';
 import type { TenantScope } from '@/lib/rag/tenant/scope';
 import { mintScope } from '@/lib/rag/tenant/scope';
 import { EXACT_SCAN_CUTOFF, IDS, PROFILE_ID, QUERIES } from './dataset';
@@ -20,7 +20,7 @@ export interface ConformanceContext {
 
 export type ConformanceFactory = () => Promise<ConformanceContext>;
 
-async function searchLexical(ctx: ConformanceContext, scope: TenantScope, query: string, filters = { currentOnly: true as const }) {
+async function searchLexical(ctx: ConformanceContext, scope: TenantScope, query: string, filters: RetrievalFilters = { currentOnly: true }) {
   const controller = new AbortController();
   return ctx.backend.search({
     scope,
