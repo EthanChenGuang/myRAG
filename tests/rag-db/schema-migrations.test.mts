@@ -11,6 +11,7 @@ import { TWO_TENANT_IDS, createTwoTenantDatabase } from '../../eval/harness/two-
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const REAL_CORPUS = path.join(REPO_ROOT, 'eval/fixtures/corpus');
 const MODES: DeploymentMode[] = ['single-tenant', 'multi-tenant'];
+const frozenSetup = (mode: DeploymentMode): string => `tests/fixtures/sql/pre-phase3-${mode}-setup.sql`;
 
 const DOCUMENT_COLUMNS = [
   'lineage_id',
@@ -40,7 +41,12 @@ async function withFixture<T>(
   options: { migrations: boolean },
   run: (fixture: FixtureDatabase) => Promise<T>,
 ): Promise<T> {
-  const fixture = await createFixtureDatabase({ deploymentMode: mode, corpusDir: REAL_CORPUS, migrations: options.migrations });
+  const fixture = await createFixtureDatabase({
+    deploymentMode: mode,
+    corpusDir: REAL_CORPUS,
+    migrations: options.migrations,
+    ...(options.migrations ? {} : { setupSqlPath: frozenSetup(mode) }),
+  });
   try {
     return await run(fixture);
   } finally {

@@ -5,7 +5,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import type { PGlite } from '@electric-sql/pglite';
-import { createFixtureDatabase, type DeploymentMode, type FixtureDatabase } from '../../eval/harness/pglite-supabase.mts';
+import { createEmptyFixtureDatabase, createFixtureDatabase, type DeploymentMode, type FixtureDatabase } from '../../eval/harness/pglite-supabase.mts';
 import { applyMigrationFiles, applyMigrations, migrationFiles } from '../../eval/harness/migrations.mts';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -80,10 +80,15 @@ function differences(left: CatalogDump, right: CatalogDump): string[] {
   return out;
 }
 
-async function build(mode: DeploymentMode, options: { setupSqlPath?: string; apply: 'all' | 'twice' | 'all-but-last' }): Promise<{ fixture: FixtureDatabase; dump: CatalogDump }> {
+async function build(
+  mode: DeploymentMode,
+  options: { setupSqlPath?: string; apply: 'none' | 'all' | 'twice' | 'all-but-last' },
+): Promise<{ fixture: FixtureDatabase; dump: CatalogDump }> {
   const fixture = await createFixtureDatabase({ deploymentMode: mode, corpusDir: REAL_CORPUS, migrations: false, ...(options.setupSqlPath ? { setupSqlPath: options.setupSqlPath } : {}) });
   try {
-    if (options.apply === 'all-but-last') await applyMigrationFiles(fixture.db, migrationFiles(mode).slice(0, -1));
+    if (options.apply === 'none') {
+      // folded setup file alone
+    } else if (options.apply === 'all-but-last') await applyMigrationFiles(fixture.db, migrationFiles(mode).slice(0, -1));
     else await applyMigrations(fixture.db, mode);
     if (options.apply === 'twice') await applyMigrations(fixture.db, mode);
     return { fixture, dump: await catalogDump(fixture.db) };
@@ -91,6 +96,16 @@ async function build(mode: DeploymentMode, options: { setupSqlPath?: string; app
     await fixture.db.close();
     throw error;
   }
+}
+
+async function assertRagFunctionsNotCallableByClients(db: PGlite): Promise<void> {
+  const exposed = await db.query<{ signature: string }>(
+    `SELECT p.oid::regprocedure::text AS signature FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+     WHERE n.nspname = 'public'
+       AND (p.proname LIKE 'rag\_%' OR p.proname = 'match_chunks_by_profile')
+       AND (has_function_privilege('anon', p.oid, 'EXECUTE') OR has_function_privilege('authenticated', p.oid, 'EXECUTE'))`,
+  );
+  assert.deepEqual(exposed.rows, [], 'rag_* and match_chunks_by_profile must not be executable by anon or authenticated');
 }
 
 for (const mode of MODES) {
@@ -135,6 +150,41 @@ for (const mode of MODES) {
       } finally {
         await full.fixture.db.close();
         await partial.fixture.db.close();
+      }
+    });
+  });
+}
+
+for (const mode of MODES) {
+  describe(`${mode} setup`, () => {
+    test(`${mode} setup applies cleanly on fresh PGlite`, async () => {
+      const fixture = await createEmptyFixtureDatabase({ deploymentMode: mode, supabaseGrants: true, migrations: false });
+      try {
+        await assertRagFunctionsNotCallableByClients(fixture.db);
+      } finally {
+        await fixture.db.close();
+      }
+    });
+
+    test(`${mode} setup equals the migrated schema`, async () => {
+      const folded = await build(mode, { apply: 'none' });
+      const migrated = await build(mode, { setupSqlPath: frozenSetup(mode), apply: 'all' });
+      try {
+        assert.deepEqual(differences(folded.dump, migrated.dump), []);
+      } finally {
+        await folded.fixture.db.close();
+        await migrated.fixture.db.close();
+      }
+    });
+
+    test(`${mode} setup is unchanged by re-applying migrations`, async () => {
+      const alone = await build(mode, { apply: 'none' });
+      const remigrated = await build(mode, { apply: 'all' });
+      try {
+        assert.deepEqual(differences(alone.dump, remigrated.dump), []);
+      } finally {
+        await alone.fixture.db.close();
+        await remigrated.fixture.db.close();
       }
     });
   });
