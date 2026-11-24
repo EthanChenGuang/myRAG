@@ -37,7 +37,7 @@ import { resolveDocumentRefs } from './refs/resolve';
 import { exactIdStage, mergeExactCandidates } from './retrieval/exact-id';
 import { hybridRerank } from './rerank/local-hybrid';
 import { assertTenantScope, scopeKey } from './tenant/scope';
-import { createTraceCollector, type TraceCollector } from './trace/collector';
+import { createTraceCollector, sanitizeStageCounts, type TraceCollector } from './trace/collector';
 import { finishTrace } from './trace/finish';
 import { voiceKeywordFallback, type VoiceChunk } from './voice/keyword-fallback';
 import type {
@@ -65,6 +65,7 @@ export type StageOutcome<T> =
 export interface StageRunOptions<T> {
   candidatesIn?: number | null;
   candidatesOut?: (value: T) => number | null;
+  counts?: (value: T) => Record<string, number>;
   detail?: (value: T) => string | undefined;
 }
 
@@ -134,6 +135,7 @@ export async function runStage<T>(
   try {
     const value = await runAgainstSignal(signal, fn);
     signal.throwIfAborted();
+    const counts = options.counts ? sanitizeStageCounts(options.counts(value)) : undefined;
     collector.record({
       name: spec.name,
       status: 'ok',
@@ -141,6 +143,7 @@ export async function runStage<T>(
       endedAt: collector.now(),
       candidatesIn,
       candidatesOut: options.candidatesOut ? options.candidatesOut(value) : null,
+      ...(counts !== undefined ? { counts } : {}),
       detail: options.detail ? options.detail(value) : undefined,
     });
     return { skipped: false, value };

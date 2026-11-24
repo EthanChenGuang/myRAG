@@ -4,6 +4,17 @@ import type { Profile, StageFailureReason, StageRecord, StageRunStatus } from '.
 
 const TRACE_ID = /^[0-9a-f]{32}$/;
 
+const STAGE_COUNT_KEY = /^[a-z][a-z0-9_]{0,63}$/;
+
+export function sanitizeStageCounts(raw: Record<string, number>): Record<string, number> | undefined {
+  const counts: Record<string, number> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (!STAGE_COUNT_KEY.test(key) || typeof value !== 'number' || !Number.isFinite(value)) continue;
+    counts[key] = value;
+  }
+  return Object.keys(counts).length > 0 ? counts : undefined;
+}
+
 export interface StageEntry {
   name: string;
   status: StageRunStatus;
@@ -12,6 +23,7 @@ export interface StageEntry {
   endedAt: number;
   candidatesIn?: number | null;
   candidatesOut?: number | null;
+  counts?: Record<string, number>;
   rules?: string[];
   detail?: string;
 }
@@ -76,6 +88,7 @@ export function createTraceCollector(options: TraceCollectorOptions): TraceColle
       };
       if (entry.reason !== undefined) record.reason = entry.reason;
       if (entry.detail !== undefined) record.detail = entry.detail;
+      if (entry.counts !== undefined) record.counts = entry.counts;
       records.push(record);
       return record;
     },
