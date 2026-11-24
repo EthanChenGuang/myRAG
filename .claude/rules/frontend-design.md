@@ -1,12 +1,11 @@
 ---
 description: Frontend design pipeline for Config UI and React surfaces (myRAG)
-globs:
+paths:
   - scripts/config-ui/**
   - scripts/config-server.js
   - src/components/**
   - src/app/**/page.tsx
   - src/app/**/layout.tsx
-alwaysApply: false
 ---
 
 # Frontend design (Guang / GSD)
