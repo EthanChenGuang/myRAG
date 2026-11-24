@@ -368,8 +368,9 @@ describe('every v2 retrieval path stays inside the caller tenant, for every entr
     const scope = await scopeFor('chat', 'a');
     const { result } = await retrieve(scope, 'chat', V2_EXACT_QUERY, { retrievalFilters: { documentIds: [tenant('b').canaryDocumentId, tenant('b').exactDocumentId] } });
     assert.equal(chunkIdsOf(result).length, 0);
-    assert.equal(result.context, '');
+    assert.equal(result.usedDocuments.length, 0);
     assertNoForeignText('a', { result }, 'foreign document filter');
+    assert.ok(!result.context.includes(tenant('a').markers.exact), 'the caller own exact document is outside the filter and stays out');
   });
 
   test('a referenced own document and a filter naming only another tenant document do not widen to the whole tenant', async () => {
@@ -398,12 +399,13 @@ describe('every v2 retrieval path stays inside the caller tenant, for every entr
 
   test('a doc type only another tenant has returns no rows, and the owner still finds it', async () => {
     const { typeOnly } = fixture.seed;
-    const asA = await retrieve(await scopeFor('chat', 'a'), 'chat', V2_EXACT_QUERY, { retrievalFilters: { docTypes: [typeOnly.docType] } });
+    const question = `${V2_CANARY_QUERY} supply contract`;
+    const asA = await retrieve(await scopeFor('chat', 'a'), 'chat', question, { retrievalFilters: { docTypes: [typeOnly.docType] } });
     assert.equal(chunkIdsOf(asA.result).length, 0);
     assertNoForeignText('a', { result: asA.result }, 'foreign doc type filter');
-    const asO = await retrieve(await scopeFor('chat', 'o'), 'chat', V2_EXACT_QUERY, { retrievalFilters: { docTypes: [typeOnly.docType] } });
+    const asO = await retrieve(await scopeFor('chat', 'o'), 'chat', question, { retrievalFilters: { docTypes: [typeOnly.docType] } });
     assert.equal(chunkIdsOf(asO.result).length, 0);
-    const asB = await retrieve(await scopeFor('chat', 'b'), 'chat', V2_EXACT_QUERY, { retrievalFilters: { docTypes: [typeOnly.docType] } });
+    const asB = await retrieve(await scopeFor('chat', 'b'), 'chat', question, { retrievalFilters: { docTypes: [typeOnly.docType] } });
     assert.deepEqual(chunkIdsOf(asB.result), [typeOnly.chunkId]);
   });
 

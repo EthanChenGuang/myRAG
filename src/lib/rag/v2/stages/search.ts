@@ -44,6 +44,24 @@ function buildFilters(input: RunRetrievalInput): RetrievalFilters {
   return { currentOnly: true, ...extra };
 }
 
+function nonEmpty(values: readonly unknown[] | undefined): boolean {
+  return values !== undefined && values.length > 0;
+}
+
+/** Mirrors what the backend sends as filter arguments: an empty list is no filter. */
+export function hasNarrowingFilters(filters: RetrievalFilters): boolean {
+  const invoice = filters.invoice;
+  return (
+    filters.dateRange?.from !== undefined ||
+    filters.dateRange?.to !== undefined ||
+    nonEmpty(filters.sources) ||
+    nonEmpty(filters.documentIds) ||
+    nonEmpty(filters.docTypes) ||
+    nonEmpty(filters.languages) ||
+    (invoice !== undefined && Object.values(invoice).some((value) => value !== undefined))
+  );
+}
+
 function lexicalLanguagesFor(variant: QueryVariant): string[] | null {
   return variant.kind === 'translated' && variant.language ? [variant.language] : null;
 }
@@ -247,8 +265,10 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
 
   let exactList: RankedList | null = null;
   if (config.exactIdLookup) {
+    // rag_exact_id_documents takes no filter arguments, so while a request narrows the search the leg stands down rather than widen it.
+    const exactSpec = spec('exact_id_lookup', 'skip');
     const exact = await runStage(
-      spec('exact_id_lookup', 'skip'),
+      hasNarrowingFilters(filters) ? { ...exactSpec, enabled: false } : exactSpec,
       signal,
       (stageSignal) =>
         exactIdStage(input.query, scope, { client: requireAdminSearchClient(getRagDeps()), signal: stageSignal, limit: pool }),
