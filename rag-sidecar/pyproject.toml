@@ -41,6 +41,7 @@ torchvision = [{ index = "pytorch-cpu" }]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["real_docling: runs a real Docling conversion; needs the docling extra and baked models"]
 
 [build-system]
 requires = ["uv_build>=0.11.32,<0.12.0"]
