@@ -33,6 +33,7 @@ import { classifyProfileFailure, embedQuery, withStaleProfileRetry } from './emb
 import { legacyAnalyze, legacyRank, legacySearch, scaleThreshold, searchThresholdsFor } from './legacy/enhanced-retrieval';
 import { defaultQueryContext } from './query/temporal-query-detector';
 import { resolveDocumentRefs } from './refs/resolve';
+import { exactIdStage, mergeExactCandidates } from './retrieval/exact-id';
 import { hybridRerank } from './rerank/local-hybrid';
 import { assertTenantScope, scopeKey } from './tenant/scope';
 import { createTraceCollector, type TraceCollector } from './trace/collector';
@@ -542,14 +543,30 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
       'search',
     );
 
+    let rankInput = searched.results;
+    if (config.exactIdLookup) {
+      const exact = await runStage(
+        spec('exact_id_lookup', 'skip'),
+        signal,
+        (stageSignal) => exactIdStage(input.query, scope, { client: requireAdminSearchClient(deps), signal: stageSignal }),
+        collector,
+        {
+          candidatesIn: searched.results.length,
+          candidatesOut: (value) => value.rows.length,
+          detail: (value) => `tokens=${value.tokenCount}`,
+        },
+      );
+      if (!exact.skipped && exact.value.rows.length > 0) rankInput = mergeExactCandidates(searched.results, exact.value.rows, maxResults);
+    }
+
     const ranked = await runStage(
       spec('legacy_rank', 'skip'),
       signal,
-      () => legacyRank(searched.results, analysed),
+      () => legacyRank(rankInput, analysed),
       collector,
-      { candidatesIn: searched.results.length, candidatesOut: (value) => value.length },
+      { candidatesIn: rankInput.length, candidatesOut: (value) => value.length },
     );
-    candidates = ranked.skipped ? searched.results : ranked.value;
+    candidates = ranked.skipped ? rankInput : ranked.value;
     if (profile === 'eval' && input.options?.degrade === 'drop_top_candidate') candidates = candidates.slice(1);
 
     if ((ASSEMBLY_PROFILES as readonly string[]).includes(profile)) {

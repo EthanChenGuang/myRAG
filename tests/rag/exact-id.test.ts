@@ -197,6 +197,15 @@ describe('exactIdLookup', () => {
     expect(call?.args.p_limit).toBe(10);
   });
 
+  it('looks an Italian VAT number up with and without its IT prefix, whichever way it was asked', async () => {
+    const bare = routedRpc({});
+    await exactIdLookup(scope, extractExactIds('P.IVA 99999999990'), { client: bare.client, signal: new AbortController().signal });
+    expect(bare.exactCalls()[0]?.args.p_tokens).toEqual(['99999999990', 'IT99999999990']);
+    const other = routedRpc({});
+    await exactIdLookup(scope, extractExactIds('VAT BE0000000097'), { client: other.client, signal: new AbortController().signal });
+    expect(other.exactCalls()[0]?.args.p_tokens).toEqual(['BE0000000097']);
+  });
+
   it('makes no call for no tokens and throws on a backend error', async () => {
     const quiet = routedRpc({});
     expect(await exactIdLookup(scope, [], { client: quiet.client, signal: new AbortController().signal })).toEqual([]);

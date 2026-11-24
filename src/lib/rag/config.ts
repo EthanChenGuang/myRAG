@@ -9,6 +9,7 @@ export const OPTIONAL_STAGES = [
   'assemble',
   'voice_keyword_fallback',
   'local_rerank',
+  'exact_id_lookup',
 ] as const;
 
 export type CoreStageName = (typeof CORE_STAGES)[number];
@@ -25,6 +26,7 @@ const STANDARD_TIMEOUTS: StageTimeouts = {
   legacy_rank: 2000,
   post_filter: 10000,
   assemble: 10000,
+  exact_id_lookup: 1000,
 };
 
 export const PROFILE_STAGE_DEFAULTS: Record<Profile, StageTimeouts> = {
@@ -41,6 +43,7 @@ export const PROFILE_STAGE_DEFAULTS: Record<Profile, StageTimeouts> = {
     local_rerank: 1000,
     post_filter: 3000,
     assemble: 3000,
+    exact_id_lookup: 500,
   },
 };
 
@@ -61,6 +64,8 @@ export interface RagConfig {
   pipeline: 'legacy';
   disabledStages: ReadonlySet<StageName>;
   timeouts: Record<Profile, StageTimeouts>;
+  /** RAG_EXACT_ID_LOOKUP: the optional exact_id_lookup stage runs only when this is true. */
+  exactIdLookup: boolean;
   warnings: string[];
 }
 
@@ -91,6 +96,16 @@ function parsePipeline(raw: string | undefined, warnings: string[]): 'legacy' {
     problem(warnings, `pipeline:${value}`, 'Unsupported RAG_PIPELINE value, running legacy', { value });
   }
   return 'legacy';
+}
+
+function parseExactIdSwitch(raw: string | undefined, warnings: string[]): boolean {
+  const value = (raw ?? '').trim();
+  if (value === '') return false;
+  const normalised = value.toLowerCase();
+  if (normalised === 'true') return true;
+  if (normalised === 'false') return false;
+  problem(warnings, `exact-id-switch:${value}`, 'Unsupported RAG_EXACT_ID_LOOKUP value, expected true or false, using false', { value });
+  return false;
 }
 
 function parseDisabled(raw: string | undefined, warnings: string[]): Set<StageName> {
@@ -133,7 +148,7 @@ function parseTimeouts(raw: string | undefined, warnings: string[]): StageTimeou
 }
 
 export function loadRagConfig(env: RagEnvInput): RagConfig {
-  const snapshot = JSON.stringify([env.RAG_PIPELINE ?? '', env.RAG_DISABLED_STAGES ?? '', env.RAG_STAGE_TIMEOUTS ?? '']);
+  const snapshot = JSON.stringify([env.RAG_PIPELINE ?? '', env.RAG_DISABLED_STAGES ?? '', env.RAG_STAGE_TIMEOUTS ?? '', env.RAG_EXACT_ID_LOOKUP ?? '']);
   const cached = memo.get(snapshot);
   if (cached) return cached;
 
@@ -147,7 +162,9 @@ export function loadRagConfig(env: RagEnvInput): RagConfig {
     timeouts[profile] = { ...PROFILE_STAGE_DEFAULTS[profile], ...overrides };
   }
 
-  const config: RagConfig = { pipeline, disabledStages, timeouts, warnings };
+  const exactIdLookup = parseExactIdSwitch(env.RAG_EXACT_ID_LOOKUP, warnings);
+
+  const config: RagConfig = { pipeline, disabledStages, timeouts, exactIdLookup, warnings };
   memo.set(snapshot, config);
   return config;
 }

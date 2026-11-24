@@ -1,7 +1,7 @@
-import type { RpcClient } from '../backend/supabase-rpc';
+import { RetrievalBackendError, type RpcClient } from '../backend/supabase-rpc';
 import { IDENTIFIER_PATTERN } from '../ids/shapes';
 import { classifyTaxId, type TaxIdScheme } from '../ids/tax-ids';
-import type { TenantScope } from '../tenant/scope';
+import { assertTenantScope, scopeKey, type TenantScope } from '../tenant/scope';
 import type { Candidate } from '../types';
 
 export type ExactIdKind = 'invoice' | 'tax_id' | 'model';
@@ -88,6 +88,8 @@ export function extractExactIds(query: string): ExactIdToken[] {
 }
 
 export const EXACT_ID_LIMIT = 10;
+const MAX_LOOKUP_VALUES = 20;
+const RPC_NAME = 'rag_exact_id_documents';
 
 export interface ExactIdRow {
   chunk_id: string;
@@ -103,10 +105,101 @@ export interface ExactIdLookupOptions {
   limit?: number;
 }
 
-export async function exactIdLookup(_scope: TenantScope, _tokens: ExactIdToken[], _options: ExactIdLookupOptions): Promise<ExactIdRow[]> {
-  return [];
+export interface ExactIdStageResult {
+  rows: ExactIdRow[];
+  tokenCount: number;
 }
 
-export function mergeExactCandidates(vector: Candidate[], _rows: ExactIdRow[], _maxResults: number): Candidate[] {
-  return vector;
+/** The texts sent to the lookup: each token once, plus the Italian VAT number with and without its IT prefix. */
+function lookupValues(tokens: ExactIdToken[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const add = (value: string) => {
+    const key = value.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(value);
+  };
+  for (const token of tokens) {
+    add(token.value);
+    if (token.kind !== 'tax_id') continue;
+    if (token.scheme === 'eu_vat' && token.value.startsWith('IT')) add(token.value.slice(2));
+    if (token.scheme === 'it_iva') add(`IT${token.value}`);
+  }
+  return out.slice(0, MAX_LOOKUP_VALUES);
+}
+
+function toRow(raw: unknown): ExactIdRow | null {
+  if (typeof raw !== 'object' || raw === null) return null;
+  const row = raw as Record<string, unknown>;
+  if (typeof row.chunk_id !== 'string' || typeof row.document_id !== 'string') return null;
+  const metadata = typeof row.metadata === 'object' && row.metadata !== null && !Array.isArray(row.metadata) ? (row.metadata as Record<string, unknown>) : null;
+  return {
+    chunk_id: row.chunk_id,
+    document_id: row.document_id,
+    content: typeof row.content === 'string' ? row.content : '',
+    metadata,
+    matched_field: typeof row.matched_field === 'string' ? row.matched_field : '',
+  };
+}
+
+/**
+ * Current, ready chunks of the scope's tenant that carry one of the tokens (invoice number or supplier tax id column, or the token as a whole
+ * word of the chunk's lexical text). The tenant key is the scope's and nothing else, the tokens travel as one text[] parameter, and the SQL
+ * function repeats the tenant, current and ready predicates. No tokens, no call.
+ */
+export async function exactIdLookup(scope: TenantScope, tokens: ExactIdToken[], options: ExactIdLookupOptions): Promise<ExactIdRow[]> {
+  assertTenantScope(scope);
+  const values = lookupValues(tokens);
+  if (values.length === 0) return [];
+  const { client, signal } = options;
+  signal.throwIfAborted();
+  const response = await client
+    .rpc(RPC_NAME, { p_tenant_key: scopeKey(scope).toLowerCase(), p_tokens: values, p_limit: options.limit ?? EXACT_ID_LIMIT })
+    .abortSignal(signal);
+  signal.throwIfAborted();
+  if (response.error) throw new RetrievalBackendError(RPC_NAME, response.error.code ?? null);
+  return (response.data ?? []).map(toRow).filter((row): row is ExactIdRow => row !== null);
+}
+
+/** Extracts the identifiers of a question and looks them up; a question with none costs no call. */
+export async function exactIdStage(query: string, scope: TenantScope, options: ExactIdLookupOptions): Promise<ExactIdStageResult> {
+  const tokens = extractExactIds(query);
+  if (tokens.length === 0) return { rows: [], tokenCount: 0 };
+  return { rows: await exactIdLookup(scope, tokens, options), tokenCount: tokens.length };
+}
+
+/**
+ * Puts the exact chunks ahead of the vector candidates. A chunk both routes found is listed once, as an exact match, with what the vector
+ * route knew about it. Exact chunks score as high as the best vector candidate and similarity 1, so the legacy ranking (a stable sort) and
+ * the relevance filters keep them in front. The list does not grow past maxResults unless the exact chunks alone exceed it.
+ */
+export function mergeExactCandidates(vector: Candidate[], rows: ExactIdRow[], maxResults: number): Candidate[] {
+  if (rows.length === 0) return vector;
+  const known = new Map(vector.map((candidate) => [candidate.chunk_id, candidate]));
+  const top = vector.reduce((best, candidate) => Math.max(best, candidate.final_score), 1);
+  const taken = new Set<string>();
+  const exact: Candidate[] = [];
+  for (const row of rows) {
+    if (taken.has(row.chunk_id)) continue;
+    taken.add(row.chunk_id);
+    const seen = known.get(row.chunk_id);
+    exact.push(
+      seen
+        ? { ...seen, similarity: 1, final_score: top, match_reason: 'exact_id' }
+        : {
+            chunk_id: row.chunk_id,
+            document_id: row.document_id,
+            content: row.content,
+            similarity: 1,
+            metadata: row.metadata,
+            temporal_score: 0,
+            financial_score: 0,
+            final_score: top,
+            match_reason: 'exact_id',
+          },
+    );
+  }
+  const rest = vector.filter((candidate) => !taken.has(candidate.chunk_id));
+  return [...exact, ...rest].slice(0, Math.max(maxResults, exact.length));
 }
