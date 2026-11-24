@@ -2,8 +2,7 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod/v3';
 import { requireSessionUser } from '@/lib/session-auth';
-import { resolveTenantScope } from '@/lib/rag';
-import { getJobForScope, IngestLedgerError } from '@/lib/rag/ingest/ledger';
+import { getJobForScope, IngestLedgerError, resolveTenantScope } from '@/lib/rag';
 import type { IngestionJob } from '@/lib/rag-eval/contracts.generated';
 
 export const runtime = 'nodejs';
