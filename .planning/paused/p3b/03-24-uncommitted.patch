@@ -1,0 +1,424 @@
+diff --git a/src/app/api/ai-to-rag/route.ts b/src/app/api/ai-to-rag/route.ts
+index 12361a7..f6d9087 100644
+--- a/src/app/api/ai-to-rag/route.ts
++++ b/src/app/api/ai-to-rag/route.ts
+@@ -1,11 +1,12 @@
+ import { NextResponse } from 'next/server';
+ import { createClient } from '@supabase/supabase-js';
+-import { embedText, repairOwnerMembership, resolveTenantScope, type RagAdminDb } from '@/lib/rag';
++import { embedText, ingest, loadIngestConfig, repairOwnerMembership, resolveTenantScope, type RagAdminDb, type TenantScope } from '@/lib/rag';
+ import { checkSingleTenantKbWrite } from '@/lib/kb-write-access';
+ import { isMultiTenant } from '@/lib/deployment-mode';
+ import { v4 as uuidv4 } from 'uuid';
+ import { env } from '@/lib/env';
+ import OpenAI from 'openai';
++import { z } from 'zod/v3';
+ 
+ // Initialize Supabase admin client
+ const supabaseAdmin = createClient(
+@@ -189,6 +190,94 @@ async function storeAIResponseAsDocument(
+   }
+ }
+ 
++const MAX_FILENAME_TITLE_LENGTH = 120;
++
++const unifiedSaveSchema = z.object({
++  messageId: z.string().trim().min(1).max(200).regex(/^[^\p{Cc}]*$/u),
++  chatId: z.string().trim().min(1).max(200).regex(/^[^\p{Cc}]*$/u).nullish(),
++});
++
++function filenameFromTitle(title: string): string {
++  const cleaned = title
++    .replace(/[\\/]+/g, '-')
++    .replace(/\p{Cc}+/gu, ' ')
++    .replace(/\s+/g, ' ')
++    .trim()
++    .slice(0, MAX_FILENAME_TITLE_LENGTH)
++    .trim();
++  return `${cleaned === '' ? 'AI Response' : cleaned}.md`;
++}
++
++// Runs only after the session, body user, organization and write-access checks of POST have passed.
++async function saveThroughIngest(input: {
++  content: string;
++  body: Record<string, unknown>;
++  scope: TenantScope;
++  signal: AbortSignal;
++}): Promise<NextResponse> {
++  const parsed = unifiedSaveSchema.safeParse({
++    messageId: input.body.messageId,
++    chatId: input.body.chatId === '' ? undefined : input.body.chatId,
++  });
++  if (!parsed.success) {
++    console.warn('[AI to RAG] Invalid request data', { paths: parsed.error.errors.map((issue) => issue.path.join('.')) });
++    return NextResponse.json(
++      {
++        success: false,
++        error: 'Invalid request data',
++        details: parsed.error.errors.map((issue) => ({ path: issue.path.join('.'), message: issue.message })),
++      },
++      { status: 400 },
++    );
++  }
++  const { messageId, chatId } = parsed.data;
++
++  console.log('[AI to RAG] Processing AI response', { contentLength: input.content.length });
++  const title = await generateTitle(input.content);
++  const filename = filenameFromTitle(title);
++
++  const result = await ingest({
++    scope: input.scope,
++    source: 'ai_to_rag',
++    sourceKey: `chat:${chatId ?? 'none'}/message:${messageId}`,
++    text: input.content,
++    filename,
++    mimeType: 'text/markdown',
++    options: {
++      documentMetadata: {
++        source: 'ai_response',
++        messageId,
++        ...(chatId ? { chatId } : {}),
++        generatedAt: new Date().toISOString(),
++      },
++    },
++    signal: input.signal,
++  });
++  console.log('[AI to RAG] Ingested AI response', {
++    status: result.status,
++    documentId: result.documentId ?? result.duplicateOf ?? null,
++    chunks: result.chunkCount,
++    ...(result.reason ? { reason: result.reason } : {}),
++  });
++
++  if (result.status === 'failed') {
++    return NextResponse.json({ success: false, error: 'Failed to save to the knowledge base', status: result.status }, { status: 500 });
++  }
++  return NextResponse.json(
++    {
++      success: true,
++      documentId: result.documentId ?? result.duplicateOf ?? null,
++      filename,
++      title,
++      status: result.status,
++      version: result.version,
++      chunksStored: result.chunkCount,
++      totalChunks: result.chunkCount,
++    },
++    { status: result.status === 'processing' ? 202 : 200 },
++  );
++}
++
+ export async function POST(req: Request) {
+   try {
+     let sessionUserPromise: Promise<{ id: string } | null> | null = null;
+@@ -262,6 +351,10 @@ export async function POST(req: Request) {
+       }
+     }
+ 
++    if (loadIngestConfig({ RAG_INGEST_PIPELINE: env.RAG_INGEST_PIPELINE }).pipeline === 'unified') {
++      return await saveThroughIngest({ content, body, scope: tenant.scope, signal: req.signal });
++    }
++
+     const owner = {
+       userId: sessionUser.id,
+       ...(isMultiTenant() ? { organizationId: tenant.scope.organizationId } : {}),
+diff --git a/src/lib/rag/index.ts b/src/lib/rag/index.ts
+index dca598a..cf6b86c 100644
+--- a/src/lib/rag/index.ts
++++ b/src/lib/rag/index.ts
+@@ -101,3 +101,4 @@ export type {
+   IngestStatusView,
+   ResumeIngestOptions,
+ } from './ingest';
++export { loadIngestConfig } from './ingest/config';
+diff --git a/src/lib/rag/ingest/document-metadata.ts b/src/lib/rag/ingest/document-metadata.ts
+new file mode 100644
+index 0000000..1bee1f2
+--- /dev/null
++++ b/src/lib/rag/ingest/document-metadata.ts
+@@ -0,0 +1,32 @@
++import type { IngestOptions } from './types';
++
++const MAX_KEYS = 20;
++const MAX_STRING_LENGTH = 500;
++const KEY_PATTERN = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
++
++/** Keys the pipeline writes itself; a caller can neither set nor overwrite them. */
++const PIPELINE_KEYS: ReadonlySet<string> = new Set([
++  'quarantine',
++  'duplicate_of',
++  'content_hash_version',
++  'doc_type_detection',
++  'external_url',
++]);
++
++/**
++ * The plain facts a write path wants on its document row (for example the chat and message an AI answer
++ * came from): short strings, numbers and booleans under safe key names. Anything else is dropped, so a
++ * caller cannot nest objects, smuggle content or replace metadata the pipeline owns. Null when nothing is left.
++ */
++export function callerDocumentMetadata(options: IngestOptions | undefined): Record<string, string | number | boolean> | null {
++  const raw = options?.documentMetadata;
++  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null;
++  const kept: Record<string, string | number | boolean> = {};
++  for (const [key, value] of Object.entries(raw)) {
++    if (Object.keys(kept).length >= MAX_KEYS) break;
++    if (!KEY_PATTERN.test(key) || PIPELINE_KEYS.has(key)) continue;
++    if (typeof value === 'string') kept[key] = value.slice(0, MAX_STRING_LENGTH);
++    else if (typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value))) kept[key] = value;
++  }
++  return Object.keys(kept).length > 0 ? kept : null;
++}
+diff --git a/src/lib/rag/ingest/stages/dedup.ts b/src/lib/rag/ingest/stages/dedup.ts
+index aceb7c6..76eca79 100644
+--- a/src/lib/rag/ingest/stages/dedup.ts
++++ b/src/lib/rag/ingest/stages/dedup.ts
+@@ -1,4 +1,5 @@
+ import { removeArtifacts } from '../artifacts';
++import { callerDocumentMetadata } from '../document-metadata';
+ import { HASH_NORMALIZATION_VERSION, contentHash } from '../hash';
+ import {
+   requireDocument,
+@@ -35,6 +36,9 @@ async function runFileHashDedup(ctx: StageContext): Promise<StageOutcome> {
+     };
+   }
+   ctx.document = { id: begun.documentId, version: begun.version, lineageId: begun.lineageId, resumed: begun.outcome === 'resumed' };
++  // Written first so every later stage that writes system metadata wins over a caller key.
++  const callerMetadata = callerDocumentMetadata(ctx.input.options);
++  if (callerMetadata) await ctx.writer.setFields(begun.documentId, { metadata: callerMetadata });
+   return { kind: 'next' };
+ }
+ 
+diff --git a/tests/rag/ingest/write-path-ai-to-rag-two-tenant.test.ts b/tests/rag/ingest/write-path-ai-to-rag-two-tenant.test.ts
+new file mode 100644
+index 0000000..9a883fa
+--- /dev/null
++++ b/tests/rag/ingest/write-path-ai-to-rag-two-tenant.test.ts
+@@ -0,0 +1,227 @@
++import type { PGlite } from '@electric-sql/pglite';
++import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
++import { embedText } from '../../../eval/harness/fixture-embedder.mts';
++import { TWO_TENANT_IDS } from '../../../eval/harness/two-tenant.mts';
++import { startRouteFixture, type RouteFixture } from '../../helpers/route-fixture';
++
++const h = await vi.hoisted(async () => {
++  const session: { userId: string | null } = { userId: null };
++  return {
++    session,
++    ssr: {
++      auth: {
++        getUser: async () => ({ data: { user: session.userId ? { id: session.userId } : null }, error: null }),
++      },
++    },
++  };
++});
++
++vi.mock('@/lib/supabase/server', () => ({ createClient: async () => h.ssr }));
++// The fixture database has no admin tables; the write-access rules are covered in tests/rag/ai-to-rag-route.test.ts.
++vi.mock('@/lib/kb-write-access', () => ({ checkSingleTenantKbWrite: async () => ({ ok: true, isAdmin: false }) }));
++vi.mock('openai', () => ({
++  default: class FakeOpenAI {
++    chat = { completions: { create: async () => ({ choices: [{ message: { content: 'Quarterly Handover Notes' } }] }) } };
++  },
++}));
++
++const { userA, userB, orgO } = TWO_TENANT_IDS;
++const CONTENT = 'The harbour crane inspection ritual starts at dawn.\n\nIt ends when the kestrel logbook is signed.';
++
++type Post = (req: Request) => Promise<Response>;
++
++function request(body: Record<string, unknown>): Request {
++  return new Request('http://localhost/api/ai-to-rag', {
++    method: 'POST',
++    headers: { 'content-type': 'application/json' },
++    body: JSON.stringify({ content: CONTENT, messageId: 'message-1', chatId: 'chat-1', ...body }),
++  });
++}
++
++interface Loaded {
++  fixture: RouteFixture;
++  db: PGlite;
++  post: Post;
++}
++
++async function start(deploymentMode: 'single-tenant' | 'multi-tenant'): Promise<Loaded> {
++  vi.stubEnv('RAG_INGEST_PIPELINE', 'unified');
++  let db: PGlite | null = null;
++  const fixture = await startRouteFixture({
++    deploymentMode,
++    ...(deploymentMode === 'multi-tenant' ? { twoTenant: true } : {}),
++    seed: async (database) => {
++      db = database;
++    },
++  });
++  process.env.RAG_INGEST_PIPELINE = 'unified';
++  const { POST } = await fixture.loadRoute<{ POST: Post }>('ai-to-rag');
++  const { setIngestDepsForTests } = await import('@/lib/rag/ingest/deps');
++  setIngestDepsForTests({ embedDocuments: async (texts) => texts.map((text) => embedText(text)) });
++  const { setObjectStoreForTests } = await import('@/lib/rag/ingest/object-store');
++  const { createFakeObjectStore } = await import('../../helpers/fake-object-store');
++  setObjectStoreForTests(createFakeObjectStore());
++  return { fixture, db: db as unknown as PGlite, post: POST };
++}
++
++async function stop(loaded: Loaded): Promise<void> {
++  const { resetIngestDepsForTests } = await import('@/lib/rag/ingest/deps');
++  const { resetObjectStoreForTests } = await import('@/lib/rag/ingest/object-store');
++  resetIngestDepsForTests();
++  resetObjectStoreForTests();
++  await loaded.fixture.close();
++  vi.unstubAllEnvs();
++}
++
++async function aiRows(db: PGlite) {
++  const { rows } = await db.query<{
++    id: string;
++    tenant_key: string;
++    user_id: string | null;
++    organization_id: string | null;
++    source: string;
++    source_key: string;
++    filename: string;
++    status: string;
++    is_current: boolean;
++    version: number;
++    metadata: Record<string, unknown>;
++    chunks: number;
++  }>(
++    `SELECT d.id, d.tenant_key, d.user_id, d.organization_id, d.source, d.source_key, d.filename, d.status, d.is_current, d.version, d.metadata,
++            (SELECT count(*)::int FROM document_chunks c WHERE c.document_id = d.id) AS chunks
++       FROM documents d WHERE d.source = 'ai_to_rag' ORDER BY d.created_at, d.id`,
++  );
++  return rows;
++}
++
++beforeEach(() => {
++  h.session.userId = null;
++  vi.spyOn(console, 'log').mockImplementation(() => {});
++  vi.spyOn(console, 'warn').mockImplementation(() => {});
++  vi.spyOn(console, 'error').mockImplementation(() => {});
++});
++
++afterEach(() => {
++  vi.restoreAllMocks();
++});
++
++describe('ai-to-rag unified write path against two tenants', () => {
++  let loaded: Loaded;
++
++  beforeAll(async () => {
++    loaded = await start('multi-tenant');
++  });
++
++  afterAll(async () => {
++    await stop(loaded);
++  });
++
++  it('a signed-in user saves an answer as a ready, current, chunked document of their own personal tenant', async () => {
++    h.session.userId = userA;
++    const response = await loaded.post(request({}));
++    expect(response.status).toBe(200);
++    const body = await response.json();
++    expect(body).toMatchObject({ success: true, status: 'ready', version: 1, title: 'Quarterly Handover Notes', filename: 'Quarterly Handover Notes.md' });
++    const rows = await aiRows(loaded.db);
++    expect(rows).toHaveLength(1);
++    expect(rows[0]).toMatchObject({
++      id: body.documentId,
++      tenant_key: `u:${userA}`,
++      user_id: userA,
++      organization_id: null,
++      source: 'ai_to_rag',
++      source_key: 'chat:chat-1/message:message-1',
++      status: 'ready',
++      is_current: true,
++      version: 1,
++    });
++    expect(rows[0].chunks).toBeGreaterThanOrEqual(1);
++    expect(rows[0].metadata).toMatchObject({ source: 'ai_response', messageId: 'message-1', chatId: 'chat-1' });
++    expect(Number.isNaN(Date.parse(String(rows[0].metadata.generatedAt)))).toBe(false);
++  });
++
++  it('saving the same answer again is skipped as a duplicate and adds no document', async () => {
++    h.session.userId = userA;
++    const before = await aiRows(loaded.db);
++    const response = await loaded.post(request({}));
++    expect(response.status).toBe(200);
++    expect(await response.json()).toMatchObject({
++      success: true,
++      status: 'skipped_duplicate',
++      documentId: before[0].id,
++      version: null,
++      filename: 'Quarterly Handover Notes.md',
++      title: 'Quarterly Handover Notes',
++    });
++    expect(await aiRows(loaded.db)).toHaveLength(before.length);
++  });
++
++  it('another user saving the same text under the same message id gets a separate document in their own tenant', async () => {
++    h.session.userId = userB;
++    const response = await loaded.post(request({}));
++    expect(response.status).toBe(200);
++    expect(await response.json()).toMatchObject({ status: 'ready', version: 1 });
++    const rows = await aiRows(loaded.db);
++    expect(rows.map((row) => row.tenant_key).sort()).toEqual([`u:${userA}`, `u:${userB}`].sort());
++    expect(rows.every((row) => row.status === 'ready' && row.is_current)).toBe(true);
++  });
++
++  it('a member saves into the organization workspace', async () => {
++    h.session.userId = userA;
++    const response = await loaded.post(request({ organizationId: orgO, messageId: 'message-org' }));
++    expect(response.status).toBe(200);
++    const row = (await aiRows(loaded.db)).find((candidate) => candidate.source_key.endsWith('message:message-org'));
++    expect(row).toMatchObject({ tenant_key: `o:${orgO}`, organization_id: orgO, status: 'ready' });
++  });
++
++  it('a non-member naming the organization gets 403 and nothing is written', async () => {
++    h.session.userId = userB;
++    const before = await aiRows(loaded.db);
++    const response = await loaded.post(request({ organizationId: orgO, messageId: 'message-denied' }));
++    expect(response.status).toBe(403);
++    expect(await aiRows(loaded.db)).toEqual(before);
++  });
++
++  it('a body userId other than the session user gets 403, and no session gets 401, with nothing written', async () => {
++    const before = await aiRows(loaded.db);
++    h.session.userId = userA;
++    expect((await loaded.post(request({ userId: userB, messageId: 'message-spoof' }))).status).toBe(403);
++    h.session.userId = null;
++    expect((await loaded.post(request({ messageId: 'message-anon' }))).status).toBe(401);
++    expect(await aiRows(loaded.db)).toEqual(before);
++  });
++});
++
++describe('ai-to-rag unified write path, single-tenant', () => {
++  let loaded: Loaded;
++
++  beforeAll(async () => {
++    loaded = await start('single-tenant');
++  });
++
++  afterAll(async () => {
++    await stop(loaded);
++  });
++
++  it('writes under s:default with no user id and skips the second identical save', async () => {
++    h.session.userId = userA;
++    const first = await loaded.post(request({ userId: userA }));
++    expect(first.status).toBe(200);
++    const body = await first.json();
++    expect(body).toMatchObject({ status: 'ready', version: 1 });
++    const rows = await aiRows(loaded.db);
++    expect(rows).toHaveLength(1);
++    expect(rows[0]).toMatchObject({ tenant_key: 's:default', user_id: null, organization_id: null, status: 'ready', is_current: true });
++    const second = await loaded.post(request({}));
++    expect(await second.json()).toMatchObject({ status: 'skipped_duplicate', documentId: body.documentId });
++    expect(await aiRows(loaded.db)).toHaveLength(1);
++  });
++
++  it('refuses a request with no session before any write', async () => {
++    h.session.userId = null;
++    const before = await aiRows(loaded.db);
++    expect((await loaded.post(request({ messageId: 'message-anon' }))).status).toBe(401);
++    expect(await aiRows(loaded.db)).toEqual(before);
++  });
++});
