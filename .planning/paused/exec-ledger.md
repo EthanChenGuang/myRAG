@@ -63,7 +63,7 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | 04-05 | bc-91985997… | **merged** | exec/04-05 |
 | 04-06 | [bc-f05b8cec](bc-f05b8cec-070a-54b4-a156-96d6167bdbb7) **merged** | exec/04-06; smoke `eval/out/p4-06` PASS |
 | 03.1-08 | [bc-97f53a60](bc-97f53a60-1976-53e8-a0e4-10113dc0a4bb) **merged** | exec/03.1-08 — 28 PGlite tests pass on trunk |
-| 04-07 | [bc-b39f21bf](bc-b39f21bf-71db-54ba-81d3-327871eb3a63) RUNNING | exec/04-07 |
+| 04-07 | [bc-b39f21bf](bc-b39f21bf-71db-54ba-81d3-327871eb3a63) **merged** | exec/04-07 — 0403–0406; smoke eval/out/p4-07 |
 | 03.1-03 | [bc-c5cb9fe1](bc-c5cb9fe1-91ef-5ec1-80f3-480362bbb755) **merged** | exec/03.1-03 — 12 switches, check-config manifest |
 | 03.1-09 | [bc-2d791368](bc-2d791368-dff2-51b6-b84c-3678f8e3ed4c) **merged** | exec/03.1-09 — 32 PGlite tests |
 | 03.1-10 | [bc-662f8704](bc-662f8704-0693-5e51-9771-f8aaaf281623) **merged** | exec/03.1-10 — 7 PGlite tests |
@@ -71,6 +71,8 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | 03.1-11 | [bc-b18bbe3f](bc-b18bbe3f-b7f9-57e3-8d19-200f419a1891) **merged** | exec/03.1-11 — routing JSON + loaders |
 | 04-09 | [bc-d7fa6093](bc-d7fa6093-307f-5298-8249-06913c219f67) **merged** | exec/04-09 — vitest 12 pass |
 | 04-10 | [bc-ea9f7b6f](bc-ea9f7b6f-dc74-5d17-9573-573c0d79ab57) RUNNING | exec/04-10 |
+| 04-02 | [bc-5a4f4e08](bc-5a4f4e08-1575-5ed0-a16f-35d23901bcfd) RUNNING | exec/04-02 |
+| 03.1-12 | [bc-6699e991](bc-6699e991-7801-5751-be34-7d73844505c5) RUNNING | exec/03.1-12 |
 
 ## Remaining plan inventory (file-overlap basis)
 
@@ -88,12 +90,10 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 
 | Plan | bcId | Worktree | Notes |
 |------|------|----------|-------|
-| 04-07 | [bc-b39f21bf](bc-b39f21bf-71db-54ba-81d3-327871eb3a63) RUNNING | `wt/04-07` | PGlite wave-1 tail; blocks 04-02 only via serialization table |
+| 04-11 | [bc-ff29f720](bc-ff29f720-c984-5a3b-82e5-ff26dea712ca) RUNNING | `wt/04-11` | Refill after 04-07 merge |
 | 04-10 | [bc-ea9f7b6f](bc-ea9f7b6f-dc74-5d17-9573-573c0d79ab57) RUNNING | `wt/04-10` | |
 | 04-02 | [bc-5a4f4e08](bc-5a4f4e08-1575-5ed0-a16f-35d23901bcfd) RUNNING | `wt/04-02` | After 03.1-03 merge |
 | 03.1-12 | [bc-6699e991](bc-6699e991-7801-5751-be34-7d73844505c5) RUNNING | `wt/03.1-12` | Refill 2→4 |
-
-**Queued after 03.1-03 merge:** `04-02` (same config five-location set).
 
 **03-48 follow-ups (one executor per plan when a slot frees — do not duplicate running work):**
 
