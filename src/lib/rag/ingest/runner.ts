@@ -338,5 +338,12 @@ export async function rehydrateFromStore(ctx: StageContext): Promise<RehydrateRe
     const failure = await rerun(stage, ctx);
     if (failure !== null) return { failed: failure };
   }
+
+  // The caption of a picture document is its only chunk; it is read back from the stored caption, so no model is called again.
+  if (ctx.work.captionOnly && reached(last, 'images')) {
+    const outcome = await imagesStage.run(ctx);
+    if (outcome.kind === 'yield') return false;
+    if (outcome.kind !== 'next') return { failed: outcome.kind === 'fail' ? outcome.reason : 'rehydrate_failed' };
+  }
   return true;
 }

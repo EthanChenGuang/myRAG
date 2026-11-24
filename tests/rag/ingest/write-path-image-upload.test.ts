@@ -172,7 +172,7 @@ describe('an image upload through ingest()', () => {
       total_chunks: 1,
     });
     expect(typeof chunks[0]!.content_hash).toBe('string');
-    expect(String(chunks[0]!.lexical_text)).toContain('Quarterly');
+    expect(String(chunks[0]!.lexical_text)).toContain('quarterly');
     expect(fieldsSet(calls)).toContainEqual({ parser_used: 'text', parser_version: 'image' });
     expect(fieldsSet(calls).some((fields) => fields.language !== undefined)).toBe(true);
   });

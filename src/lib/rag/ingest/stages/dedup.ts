@@ -47,7 +47,9 @@ async function runFileHashDedup(ctx: StageContext): Promise<StageOutcome> {
 
 async function runContentHashDedup(ctx: StageContext): Promise<StageOutcome> {
   const document = requireDocument(ctx, 'content_hash_dedup');
-  const hash = contentHash(ctx.work.parseText ?? '');
+  // A picture parses to no text, so its content is the file itself; otherwise every image would match every other.
+  const identity = requireIdentity(ctx, 'content_hash_dedup');
+  const hash = contentHash(identity.profile.chunker.kind === 'image_caption' ? `image:${identity.fileSha256}` : (ctx.work.parseText ?? ''));
   const duplicateOf = await ctx.writer.findContentDuplicate(hash, document.id);
   if (duplicateOf !== null) {
     await removeArtifacts(ctx);

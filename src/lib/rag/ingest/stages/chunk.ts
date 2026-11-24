@@ -19,7 +19,9 @@ async function run(ctx: StageContext): Promise<StageOutcome> {
   for (const warning of warnings) {
     if (!ctx.warnings.includes(warning)) ctx.warnings.push(warning);
   }
-  if (drafts.length === 0) return { kind: 'fail', reason: 'no_chunks' };
+  // A picture has no text chunk: its caption becomes the only chunk in the images stage.
+  ctx.work.captionOnly = result.captionOnly === true;
+  if (drafts.length === 0 && !ctx.work.captionOnly) return { kind: 'fail', reason: 'no_chunks' };
 
   drafts.forEach((draft, index) => {
     draft.metadata = {

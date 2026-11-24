@@ -1,5 +1,21 @@
 import { scanText, type InjectionScanResult } from '../../security/injection-scan';
-import { requireDocument, requireIdentity, type StageContext, type StageOutcome, type StageSpec } from '../types';
+import { requireDocument, requireIdentity, type StageContext, type StageName, type StageOutcome, type StageSpec } from '../types';
+
+/**
+ * Sets the document to quarantined with the rule ids and up to three snippets of the match. Only the rule ids are logged.
+ * Called before any chunk is written, so the chunk writer stamps every chunk quarantined and the version is never published.
+ */
+export async function quarantineDocument(ctx: StageContext, stage: StageName, result: InjectionScanResult): Promise<void> {
+  const document = requireDocument(ctx, stage);
+  await ctx.writer.setFields(document.id, {
+    status: 'quarantined',
+    metadata: {
+      quarantine: { rule_ids: result.rule_ids, snippets: result.snippets, quarantined_at: new Date().toISOString() },
+    },
+  });
+  ctx.state.quarantine = { ruleIds: result.rule_ids, released: false };
+  console.warn('[Ingest] injection scan quarantined a document', { ruleIds: result.rule_ids });
+}
 
 /**
  * Scans the parse text for prompt-injection phrasing. A match sets the document to quarantined before any chunk
@@ -21,15 +37,7 @@ async function run(ctx: StageContext): Promise<StageOutcome> {
   }
   if (!result.matched) return { kind: 'next', outcome: 'scan_clean' };
 
-  const document = requireDocument(ctx, 'scan_injection');
-  await ctx.writer.setFields(document.id, {
-    status: 'quarantined',
-    metadata: {
-      quarantine: { rule_ids: result.rule_ids, snippets: result.snippets, quarantined_at: new Date().toISOString() },
-    },
-  });
-  ctx.state.quarantine = { ruleIds: result.rule_ids, released: false };
-  console.warn('[Ingest] injection scan quarantined a document', { ruleIds: result.rule_ids });
+  await quarantineDocument(ctx, 'scan_injection', result);
   return { kind: 'next', outcome: 'quarantined' };
 }
 

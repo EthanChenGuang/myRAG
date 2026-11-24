@@ -5,7 +5,7 @@ import type { IngestConfig } from '../config';
 import type { DocTypeOrigin, IngestIdentity, IngestSource, IngestState } from '../types';
 import { DOC_TYPE_CONFIDENCE_FLOOR, detectDocType, type DetectDocTypeInput } from './detect-doc-type';
 import { detectDocTypeWithLlm } from './llm-detect';
-import { getProcessingProfile, type DocType, type ProcessingProfile } from './load';
+import { getProcessingProfile, profileFor, type DocType, type ProcessingProfile } from './load';
 
 export type DocTypeChoice = DocType | 'auto';
 
@@ -75,7 +75,7 @@ export interface RefineContext {
   config: IngestConfig;
   signal: AbortSignal;
   warnings: string[];
-  input: { filename: string; mimeType: string };
+  input: { filename: string; mimeType: string; source?: IngestSource };
 }
 
 export interface RefineOutcome {
@@ -391,7 +391,7 @@ export async function refineDocTypeAfterParse(ctx: RefineContext, parse: RefineP
     return unchanged();
   }
 
-  const profile = getProcessingProfile(target);
+  const profile = ctx.input.source ? profileFor(ctx.input.source, target) : getProcessingProfile(target);
   const differ = !base.reparsed && !sameParserOptions(identity.profile, profile);
   identity.docType = target;
   identity.profile = profile;
