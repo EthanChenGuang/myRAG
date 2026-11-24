@@ -29,6 +29,7 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | **03.1-03** | **04-02** not running / merged | Shared: `scripts/init-env.js`, `src/lib/env.ts`, config UI, `check-config.mjs` |
 | **04-02** | **03.1-03** complete preferred | Same config five-location files |
 | **04-05, 04-06, 04-07** | Each other + after **04-05** first | Shared `createFixtureDatabase` / migration shim (per 04-PLAN-INDEX) |
+| **03.1-04** | **03-48** SUMMARY + Guang `approved` | Package-legitimacy gate (pdfplumber / ray); executor idle at task 0 |
 | **03.1-52**, **04-42** | Prior waves | Fold migrations into setup — overlaps **03-47** files |
 | **All 3.1** wave 2+ | Wave 1 merge to trunk | `depends_on` + ledger |
 
