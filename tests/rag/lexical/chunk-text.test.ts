@@ -12,7 +12,8 @@ describe('icu-check (P-6)', () => {
       () =>
         ({
           segment: () => [{ isWordLike: true, segment: '适用范围' }],
-        }) as Intl.Segmenter,
+          resolvedOptions: () => ({ locale: 'zh', granularity: 'word' }),
+        }) as unknown as Intl.Segmenter,
     );
     expect(() => assertIcuSegmentsChinese()).toThrow(/\[RAG Config\].*icu/u);
     expect(() => assertIcuSegmentsChinese()).toThrow(process.versions.icu ?? '');

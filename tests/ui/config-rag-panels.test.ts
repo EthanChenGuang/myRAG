@@ -192,22 +192,25 @@ describe('config-server /api/rag proxy', () => {
     lastStub = null;
     const a = await configCall('GET', '/api/rag/admin/quarantine', { Cookie: cookie });
     expect(a.status).toBe(200);
-    expect(lastStub?.headers.cookie).toBe(cookie);
+    expect(lastStub).not.toBeNull();
+    expect(lastStub!.headers.cookie).toBe(cookie);
     expect(JSON.parse(a.body).stub).toBe(true);
 
     lastStub = null;
     const bearer = 'Bearer ey.test.token';
     const b = await configCall('GET', '/api/rag/admin/embedding-profiles', { Authorization: bearer });
     expect(b.status).toBe(200);
-    expect(lastStub?.headers.authorization).toBe(bearer);
+    expect(lastStub).not.toBeNull();
+    expect(lastStub!.headers.authorization).toBe(bearer);
   });
 
   it('does not invent credentials when the browser sends none', async () => {
     lastStub = null;
     const reply = await configCall('GET', '/api/rag/admin/quarantine');
     expect(reply.status).toBe(200);
-    expect(lastStub?.headers.cookie).toBeUndefined();
-    expect(lastStub?.headers.authorization).toBeUndefined();
+    expect(lastStub).not.toBeNull();
+    expect(lastStub!.headers.cookie).toBeUndefined();
+    expect(lastStub!.headers.authorization).toBeUndefined();
   });
 
   it('refuses encoded dot segments with 400', async () => {
