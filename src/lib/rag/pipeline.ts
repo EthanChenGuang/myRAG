@@ -1,6 +1,6 @@
 import { env } from '@/lib/env';
 import { logger } from '@/lib/logger';
-import { RetrievalBackendError, vectorSearch, type RawChunk, type RpcClient } from './backend/supabase-rpc';
+import { RetrievalBackendError, searchByEmbedding, type RawChunk, type RpcClient } from './backend/supabase-rpc';
 import {
   CORE_STAGES,
   FALLBACK_STAGE_TIMEOUT_MS,
@@ -29,7 +29,8 @@ import {
 } from './context/overview';
 import { assembleVoiceResults, enrichVoiceCandidates, type VoiceResults } from './context/voice';
 import { getRagDeps, type RagDeps } from './deps';
-import { legacyAnalyze, legacyRank, legacySearch } from './legacy/enhanced-retrieval';
+import { classifyProfileFailure, embedQuery, withStaleProfileRetry } from './embeddings/query-embedding';
+import { legacyAnalyze, legacyRank, legacySearch, scaleThreshold, searchThresholdsFor } from './legacy/enhanced-retrieval';
 import { defaultQueryContext } from './query/temporal-query-detector';
 import { resolveDocumentRefs } from './refs/resolve';
 import { hybridRerank } from './rerank/local-hybrid';
@@ -77,6 +78,17 @@ export class StageError extends Error {
     this.reason = reason;
     this.original = original;
   }
+}
+
+const PROFILE_FAILURE_REASONS = {
+  mismatch: 'embedding_profile_mismatch',
+  unavailable: 'embedding_profile_unavailable',
+} as const;
+
+/** Embedding-profile failures are retrieval errors, never an empty result: strict chat then says the knowledge base is unavailable. */
+function profileFailureReason(original: unknown): string | null {
+  const kind = classifyProfileFailure(original);
+  return kind ? PROFILE_FAILURE_REASONS[kind] : null;
 }
 
 const MIN_OVERRIDE_TIMEOUT_MS = 1;
@@ -269,7 +281,9 @@ async function runMediaPipeline(input: RunRetrievalInput, collector: TraceCollec
 
   try {
     const embedding = requireValue(
-      await runStage(spec('embed', 'throw'), signal, (stageSignal) => deps.embedder(input.query, { signal: stageSignal }), collector),
+      await runStage(spec('embed', 'throw'), signal, (stageSignal) => embedQuery(input.query, stageSignal), collector, {
+        detail: (value) => value.profile?.id,
+      }),
       'embed',
     );
 
@@ -280,10 +294,12 @@ async function runMediaPipeline(input: RunRetrievalInput, collector: TraceCollec
         (stageSignal) => {
           const adminClient = deps.adminClient();
           if (!adminClient) throw new Error('[RAG Media] admin client unavailable');
-          return vectorSearch(scope, embedding, MEDIA_MATCH_COUNT, MEDIA_SIMILARITY_THRESHOLD, {
-            client: adminClient as unknown as RpcClient,
-            signal: stageSignal,
-          });
+          return withStaleProfileRetry(input.query, embedding, stageSignal, (current) =>
+            searchByEmbedding(scope, current, MEDIA_MATCH_COUNT, scaleThreshold(searchThresholdsFor(current.profile), MEDIA_SIMILARITY_THRESHOLD), {
+              client: adminClient as unknown as RpcClient,
+              signal: stageSignal,
+            }),
+          );
         },
         collector,
         { candidatesOut: (value) => value.length },
@@ -314,6 +330,8 @@ async function runMediaPipeline(input: RunRetrievalInput, collector: TraceCollec
   } catch (error) {
     if (error instanceof StageError) {
       if (error.reason === 'aborted') return failure(collector, 'error', 'aborted', null);
+      const profileReason = profileFailureReason(error.original);
+      if (profileReason) return failure(collector, 'error', profileReason, null);
       if (error.original instanceof RetrievalBackendError) {
         logger.error('RAG Pipeline', 'Backend error', { rpc: error.original.rpc, code: error.original.code });
         return failure(collector, 'error', 'backend_error', null);
@@ -377,7 +395,9 @@ async function runOverviewPipeline(
     const referenced = await runRefsStage(input, scope, spec('refs', 'skip'), collector);
 
     const embedding = requireValue(
-      await runStage(spec('embed', 'throw'), signal, (stageSignal) => deps.embedder(OVERVIEW_QUERY, { signal: stageSignal }), collector),
+      await runStage(spec('embed', 'throw'), signal, (stageSignal) => embedQuery(OVERVIEW_QUERY, stageSignal), collector, {
+        detail: (value) => value.profile?.id,
+      }),
       'embed',
     );
 
@@ -388,10 +408,12 @@ async function runOverviewPipeline(
         (stageSignal) => {
           const adminClient = deps.adminClient();
           if (!adminClient) throw new Error('[RAG Overview] admin client unavailable');
-          return vectorSearch(scope, embedding, OVERVIEW_MATCH_COUNT, OVERVIEW_SIMILARITY_THRESHOLD, {
-            client: adminClient as unknown as RpcClient,
-            signal: stageSignal,
-          });
+          return withStaleProfileRetry(OVERVIEW_QUERY, embedding, stageSignal, (current) =>
+            searchByEmbedding(scope, current, OVERVIEW_MATCH_COUNT, scaleThreshold(searchThresholdsFor(current.profile), OVERVIEW_SIMILARITY_THRESHOLD), {
+              client: adminClient as unknown as RpcClient,
+              signal: stageSignal,
+            }),
+          );
         },
         collector,
         { candidatesOut: (value) => value.length },
@@ -415,6 +437,8 @@ async function runOverviewPipeline(
   } catch (error) {
     if (error instanceof StageError) {
       if (error.reason === 'aborted') return failure(collector, 'error', 'aborted', null);
+      const profileReason = profileFailureReason(error.original);
+      if (profileReason) return failure(collector, 'error', profileReason, null);
       if (error.original instanceof RetrievalBackendError) {
         logger.error('RAG Pipeline', 'Backend error', { rpc: error.original.rpc, code: error.original.code });
         return failure(collector, 'error', 'backend_error', null);
@@ -488,7 +512,9 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
     queryContext = analysed;
 
     const embedding = requireValue(
-      await runStage(spec('embed', 'throw'), signal, (stageSignal) => deps.embedder(input.query, { signal: stageSignal }), collector),
+      await runStage(spec('embed', 'throw'), signal, (stageSignal) => embedQuery(input.query, stageSignal), collector, {
+        detail: (value) => value.profile?.id,
+      }),
       'embed',
     );
 
@@ -497,16 +523,19 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
         spec('search', 'throw'),
         signal,
         (stageSignal) =>
-          legacySearch({
-            query: input.query,
-            embedding,
-            queryContext: analysed,
-            maxResults,
-            fallbackToLowerThreshold,
-            scope,
-            client: requireAdminSearchClient(deps),
-            signal: stageSignal,
-          }),
+          withStaleProfileRetry(input.query, embedding, stageSignal, (current) =>
+            legacySearch({
+              query: input.query,
+              embedding: current.vector,
+              profile: current.profile,
+              queryContext: analysed,
+              maxResults,
+              fallbackToLowerThreshold,
+              scope,
+              client: requireAdminSearchClient(deps),
+              signal: stageSignal,
+            }),
+          ),
         collector,
         { candidatesOut: (value) => value.results.length, detail: (value) => value.retrievalStrategy },
       ),
@@ -573,6 +602,8 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
   } catch (error) {
     if (error instanceof StageError) {
       if (error.reason === 'aborted') return failure(collector, 'error', 'aborted', queryContext);
+      const profileReason = profileFailureReason(error.original);
+      if (profileReason) return failure(collector, 'error', profileReason, queryContext);
       if (error.original instanceof RetrievalBackendError) {
         logger.error('RAG Pipeline', 'Backend error', { rpc: error.original.rpc, code: error.original.code });
         return failure(collector, 'error', 'backend_error', queryContext);
@@ -645,7 +676,9 @@ async function runVoicePipeline(input: RunRetrievalInput, collector: TraceCollec
 
   try {
     const embedding = requireValue(
-      await runStage(spec('embed', 'throw'), signal, (stageSignal) => deps.embedder(query, { signal: stageSignal }), collector),
+      await runStage(spec('embed', 'throw'), signal, (stageSignal) => embedQuery(query, stageSignal), collector, {
+        detail: (value) => value.profile?.id,
+      }),
       'embed',
     );
 
@@ -654,10 +687,15 @@ async function runVoicePipeline(input: RunRetrievalInput, collector: TraceCollec
         spec('search', 'throw'),
         signal,
         async (stageSignal) => {
-          const rows = await vectorSearch(scope, embedding, matchCount * VOICE_SEARCH_MULTIPLIER, VOICE_SEARCH_THRESHOLD, {
-            client: requireAdmin() as unknown as RpcClient,
-            signal: stageSignal,
-          });
+          const rows = await withStaleProfileRetry(query, embedding, stageSignal, (current) =>
+            searchByEmbedding(
+              scope,
+              current,
+              matchCount * VOICE_SEARCH_MULTIPLIER,
+              scaleThreshold(searchThresholdsFor(current.profile), VOICE_SEARCH_THRESHOLD),
+              { client: requireAdmin() as unknown as RpcClient, signal: stageSignal },
+            ),
+          );
           return rows.map((row) => toVoiceChunk(row, scope));
         },
         collector,
@@ -696,6 +734,8 @@ async function runVoicePipeline(input: RunRetrievalInput, collector: TraceCollec
   } catch (error) {
     if (error instanceof StageError) {
       if (error.reason === 'aborted') return failure(collector, 'error', 'aborted', null);
+      const profileReason = profileFailureReason(error.original);
+      if (profileReason) return failure(collector, 'error', profileReason, null);
       if (error.original instanceof RetrievalBackendError) {
         logger.error('RAG Pipeline', 'Backend error', { rpc: error.original.rpc, code: error.original.code });
         return failure(collector, 'error', 'backend_error', null);
