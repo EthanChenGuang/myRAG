@@ -72,9 +72,12 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | 04-09 | [bc-d7fa6093](bc-d7fa6093-307f-5298-8249-06913c219f67) **merged** | exec/04-09 — vitest 12 pass |
 | 04-10 | [bc-ea9f7b6f](bc-ea9f7b6f-dc74-5d17-9573-573c0d79ab57) **merged** | exec/04-10 — vitest 50 + fixture-edge |
 | 04-02 | [bc-5a4f4e08](bc-5a4f4e08-1575-5ed0-a16f-35d23901bcfd) RUNNING | exec/04-02 |
-| 03.1-12 | [bc-6699e991](bc-6699e991-7801-5751-be34-7d73844505c5) RUNNING | exec/03.1-12 |
+| 03.1-12 | [bc-6699e991](bc-6699e991-7801-5751-be34-7d73844505c5) **merged** | exec/03.1-12 — pytest 14 |
 | 04-07 | [bc-b39f21bf](bc-b39f21bf-71db-54ba-81d3-327871eb3a63) **merged** | exec/04-07 |
 | 04-11 | [bc-ff29f720](bc-ff29f720-c984-5a3b-82e5-ff26dea712ca) RUNNING | exec/04-11 |
+| 04-12 | [bc-7e4cdf1c](bc-7e4cdf1c-68e8-51f1-92c1-f1c5b1bb0abc) RUNNING | exec/04-12 |
+| 03.1-12 | [bc-6699e991](bc-6699e991-7801-5751-be34-7d73844505c5) **merged** | exec/03.1-12 |
+| 03.1-13 | [bc-e72d1c49](bc-e72d1c49-cec3-59a1-ad07-7c158b89a381) RUNNING | exec/03.1-13 |
 
 ## Remaining plan inventory (file-overlap basis)
 
@@ -95,7 +98,7 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | 04-11 | [bc-ff29f720](bc-ff29f720-c984-5a3b-82e5-ff26dea712ca) RUNNING | `wt/04-11` | Refill after 04-07 merge |
 | 04-12 | [bc-7e4cdf1c](bc-7e4cdf1c-68e8-51f1-92c1-f1c5b1bb0abc) RUNNING | `wt/04-12` | Refill after 04-10 merge |
 | 04-02 | [bc-5a4f4e08](bc-5a4f4e08-1575-5ed0-a16f-35d23901bcfd) RUNNING | `wt/04-02` | After 03.1-03 merge |
-| 03.1-12 | [bc-6699e991](bc-6699e991-7801-5751-be34-7d73844505c5) RUNNING | `wt/03.1-12` | Refill 2→4 |
+| 03.1-13 | [bc-e72d1c49](bc-e72d1c49-cec3-59a1-ad07-7c158b89a381) RUNNING | `wt/03.1-13` | Refill after 03.1-12 |
 
 **03-48 follow-ups (one executor per plan when a slot frees — do not duplicate running work):**
 
