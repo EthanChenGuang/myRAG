@@ -207,6 +207,9 @@ async function runEmbed(ctx: StageContext): Promise<StageOutcome> {
 
 async function runWrite(ctx: StageContext): Promise<StageOutcome> {
   if (ctx.work.chunksWritten !== ctx.work.chunks.length) return { kind: 'fail', reason: 'write_incomplete' };
+  // The text the chunker consumed (after the injection scan, which never changes it), stored once per version for the readers of documents.content.
+  const document = requireDocument(ctx, 'write');
+  if (ctx.work.parseText) await ctx.writer.setFields(document.id, { content: ctx.work.parseText });
   return { kind: 'next' };
 }
 

@@ -81,6 +81,8 @@ export interface DocumentFields {
   issue_date?: string | null;
   gross_total?: string | null;
   currency?: string | null;
+  /** The parsed text, kept for the relevance filter and the source preview that read documents.content. */
+  content?: string;
   status?: 'processing' | 'quarantined' | 'failed' | 'deleted';
   metadata?: Record<string, unknown>;
 }
