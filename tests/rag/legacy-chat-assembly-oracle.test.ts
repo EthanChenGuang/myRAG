@@ -9,6 +9,10 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 const ORACLE_PATH = path.join(REPO_ROOT, 'tests/fixtures/legacy-chat-assembly.ts');
 const CHAT_SNAPSHOT_PATH = path.join(REPO_ROOT, 'tests/fixtures/characterization/chat.json');
 const ROUTE_AT_BASELINE = 'git show 172c2ad:src/app/api/chat/route.ts';
+const ROUTE_REGION_AT_BASELINE = path.join(
+  REPO_ROOT,
+  'tests/fixtures/characterization/chat-route-assembly-region-at-172c2ad.txt',
+);
 
 interface FrozenCandidates {
   question: string;
@@ -58,8 +62,14 @@ const normalize = (input: unknown): string => {
 
 describe('frozen chat assembly oracle', () => {
   it('contains the route region verbatim as of the baseline commit', () => {
-    const routeAtBaseline = execSync(ROUTE_AT_BASELINE, { cwd: REPO_ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
-    const region = extractRegion(routeAtBaseline);
+    const region = (() => {
+      try {
+        const routeAtBaseline = execSync(ROUTE_AT_BASELINE, { cwd: REPO_ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+        return extractRegion(routeAtBaseline);
+      } catch {
+        return fs.readFileSync(ROUTE_REGION_AT_BASELINE, 'utf8').replace(/\r\n/g, '\n');
+      }
+    })();
     expect(region.length).toBeGreaterThan(10_000);
     const oracle = fs.readFileSync(ORACLE_PATH, 'utf8').replace(/\r\n/g, '\n');
     expect(oracle.includes(region)).toBe(true);

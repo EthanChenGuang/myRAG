@@ -1,118 +1,69 @@
-# HANDOFF — exec/03.1-34 (Cloud Agent)
-
-**Branch:** `exec/03.1-34` → base `claude/ecstatic-hamilton-86gtwv`
-
-## Done
-
-- Plan **03.1-34**: `parse-external` **native** and **premium** modes.
-- Files: `src/lib/rag/ingest/callbacks/{native,premium,premium-continuation}.ts`, `parse-external.ts`, `tests/rag/ingest/parse-external.test.ts`.
-
-## Next
-
-- **03.1-40**: worker premium calls with `cursor` JSON and sub-PDF under `{tenant}/_parse-cache/{sha}/`.
-- Deferred: batch USD refund on failed premium (`ingestion_batches.spent_usd`).
-
-## Verify
-
-```bash
-npx vitest run tests/rag/ingest/parse-external.test.ts tests/rag/ingest/cloud-guard.test.ts
-npx next typegen && npx tsc --noEmit -p tsconfig.json
-node scripts/ci/check-rag-boundary.mjs && python3 scripts/ci/check-workflows.py && node scripts/check-config.mjs
-```
-
----
-
-# HANDOFF — Phase 3 (PAUSE-96 → Claude Code)
+# HANDOFF — Trunk merge train pause (Claude Code takeover)
 
 **Branch:** `claude/ecstatic-hamilton-86gtwv` (push only; no PR)  
-**Trunk at pause:** `201b66b` (2026-11-24 ~13:48 Europe/Rome)  
-**Takeover:** **Claude Code** with GSD in `.claude/` — start with `/gsd-resume-work` and `.planning/CLAUDE-CODE-HANDOFF-PROMPT.md`
+**Trunk HEAD:** `56b0349d6307b757e4df1eab897878f11e4b8d81` (2026-11-24)  
+**Resume:** `/gsd-resume-work` + `.planning/phases/03.1-tiered-parsing-incremental-queue-bulk-backfill/.continue-here.md`
 
-## PAUSE-96 status
+## Merge train status (stopped)
 
-- **No spawns** at pause (including `03-48-sec-rpc-2`).
-- **No half-merges.**
-- Executors **STOPPED**; WIP pushed:
+Cursor **killed** `tmux merge-train`. **#15** was mid-gate and was **not** merged. Local trunk **matches** `origin` (no dangling unpushed merges).
 
-| Plan | Branch | WIP commit | Patch |
-|------|--------|------------|-------|
-| 03.1-25 | `exec/03.1-25` | `7c5f7f8` | `.planning/paused/patches/03.1-25.patch` |
-| 04-18 | `exec/04-18` | `258a14f` | `.planning/paused/patches/04-18.patch` |
-| 04-20 | `exec/04-20` | `b5e47fe` | `.planning/paused/patches/04-20.patch` |
-| 03-48-setup-idempotent | `exec/03-48-setup-idempotent` | `d1c5821` | `.planning/paused/patches/03-48-setup-idempotent.patch` |
+### Merged to trunk (with SHAs)
 
-Cursor bcIds: `bc-1f542e8a`, `bc-78743196`, `bc-36e7beb3`, `bc-b37c0b7a` (+ push nudges `bc-8f62493e`, `bc-ca34e9a0`) — assume **stopped**.
+| PR | Plan | Merge SHA |
+|----|------|-----------|
+| #10 | bisect-ingest | `778f460b2477e2f5591c353ad505af95491c2859` |
+| #9 | 03.1-27 | `cfeffab4b4443f5897f878f095968b98ebcb40b3` |
+| #4 | 03.1-28 | `ea1fd7c02de34dac34679c40b40306ad8b3bcfe9` |
+| #5 | 03.1-33 | `56b0349d6307b757e4df1eab897878f11e4b8d81` |
 
-**Machine state:** `.planning/HANDOFF.json`, `.planning/.continue-here.md`
+Each passed local gate with **no new failures vs baseline** (17 PASS / 1 FAIL `ts-typecheck-new` / 1 SKIP `docker-build`).
 
-## UI / frontend (Guang)
+### Pre-gate agents (stopped; trunk merged, gates **not** run)
 
-Enforced pipeline (both runtimes): **gsd-ui-phase** → **frontend-design** → **Impeccable** → **web-design-guidelines** → **gsd-ui-review** → verify (+ SUMMARY gate).
+All agents below were **stopped** before local gates. Each **merged trunk `56b0349d` into its PR branch and pushed** — treat as **unverified** until full `local-pr-smoke` + compare vs baseline.
 
-| Layer | Cursor | Claude Code takeover |
-|-------|--------|----------------------|
-| Skills | `.cursor/skills/{frontend-design,impeccable,web-design-guidelines}` | `.claude/skills/` (same SHAs) |
-| Pipeline doc | `.cursor/gsd-core/references/frontend-design-*.md` | `.claude/gsd-core/references/frontend-design-*.md` |
-| Rule | `.cursor/rules/frontend-design.mdc` | `.claude/rules/frontend-design.mdc` |
-| Gate | `scripts/ci/check-frontend-design-summary.mjs` | same (verifier BLOCKER) |
-| Config | `.planning/config.json`: `workflow.ui_phase`, `ui_safety_gate`, `ui_review`; `agent_skills` on ui-researcher / executor / ui-auditor / verifier |
+| PR | Branch | Tip after trunk merge | Gate |
+|----|--------|------------------------|------|
+| #20 | `exec/03.1-37` | `9a4095e1` | not run |
+| #16 | `exec/03.1-32` | `d38c0bd7` | not run |
+| #15 | `exec/04-29` | `c6d086d9` | not run |
+| #21 | `exec/03.1-30` | `c5a077f1` | not run |
+| #18 | `exec/03.1-29` | `fd6c75eb` | not run |
+| #12 | `exec/03.1-35` | `78ad6123` | not run |
+| #7 | `exec/03.1-55` | `f61eaed7` | not run |
+| #11 | `exec/04-28` | `14a7abf0` | not run |
+| #8 | `exec/03.1-36` | `2378f6a2` | not run |
 
-Index: `.cursor/skills/FRONTEND-SKILLS.md`
+**Unchanged on origin (no new trunk merge push recorded):** **#6** `exec/03.1-34`, **#19** `exec/03.1-39`, **#22** `exec/queue-hardening` @ `c62e93c1` (zero new failures vs its base per fix-up run; merge only after **#7** on trunk).
 
-## Claude Code takeover
+**BLOCKER — #17** `exec/03.1-31` @ `4dd3d98e`: **git conflict markers committed** in `src/lib/rag/index.ts`. Fix on branch before any merge; then full gate + union export review.
 
-When Cursor credits run out, continue on **Claude Code** with GSD **1.22.0** in `.claude/` only — do **not** run `.claude/` GSD hooks from Cursor (no `.claude/settings.json` hook changes; avoids double execution).
+### Remaining queue + last gate state (merge train)
 
-- Skills and SHAs are duplicated under `.claude/skills/`; pipeline is in `.claude/CLAUDE.md` and agent overrides (`gsd-verifier`, `gsd-executor`, `gsd-ui-researcher`, `gsd-ui-auditor`).
-- **Do not upgrade** vendored `.claude/gsd-core` without a deliberate bump; this pass only added project `references/` and agent lines.
-- Shared `.planning/config.json` works for 1.22 and 1.23 (`agent_skills` lists both `.cursor/skills/…` and `.claude/skills/…` paths so each runtime resolves its tree).
+| PR | Branch | Status | Notes |
+|----|--------|--------|-------|
+| #6 | `exec/03.1-34` | unverified | Trunk merge not in pre-gate batch — runner had `HANDOFF.md` conflict |
+| #12 | `exec/03.1-35` | unverified | Tip `78ad6123` (trunk merged; gate not run) |
+| #8 | `exec/03.1-36` | unverified | Tip `2378f6a2` |
+| #7 | `exec/03.1-55` | unverified | Tip `f61eaed7` (**blocks wave 6 + #22**) |
+| #11 | `exec/04-28` | unverified | Tip `14a7abf0`; runner also saw rag-db `match_chunks_by_profile` fail pre-merge |
+| #15 | `exec/04-29` | unverified | Tip `c6d086d9` |
+| #13 | `exec/04-37` | pending | — |
+| #18,#21,#17,#16,#20,#19 | wave‑6 | unverified / blocked | Tips: #18 `fd6c75eb`, #21 `c5a077f1`, #16 `d38c0bd7`, #20 `9a4095e1`; **#17 blocked**; **#19** unchanged |
+| #22 | `exec/queue-hardening` | pending after #7 | `c62e93c1`, **0420–0423**, ingest recall ≥ 0.6195 |
 
-## Model routing (Guang-approved)
+### CI / gates
 
-Orchestrator applies this **fallback chain** per role. **Never use Grok** for any role.
+- **GitHub Actions billing blocked** — use `./scripts/ci/local-pr-smoke.sh` (mirrors `pr-smoke.yml`).
+- Merge automation: `scripts/ci/run-merge-train.sh`, `gate-compare.sh`, `merge-train-verify.sh`, `merge-train-gate.sh`.
+- **Baseline:** only `ts-typecheck-new` fails on trunk (43 Phase‑1 diagnostics); do not treat as a regression if unchanged.
 
-| Role | Primary | If no Opus quota | If no GPT quota |
-|------|---------|------------------|-----------------|
-| **Execution** (`gsd-executor`) | Sonnet | — | **Composer 2.5** (retry Sonnet once, then orchestrator/worktree) |
-| **Review** (`gsd-code-reviewer`) | Opus high/xhigh | **GPT-5.6 sol high/xhigh** | **Composer 2.5** |
-| **Verification** (`gsd-verifier`, `gsd-integration-checker`) | Opus high/xhigh | **GPT-5.6 sol high/xhigh** | **Composer 2.5** |
-| **Research write-up** (synthesizer, phase/project researcher) | Opus | **GPT-5.6 sol high/xhigh** | **Composer 2.5** |
-| **Planning** (`gsd-planner`, roadmapper, pattern-mapper) | Opus medium–high | **GPT-5.6 sol medium/high** | **Composer 2.5** |
-| **Plan-check** (`gsd-plan-checker`) | Opus | **GPT-5.6 sol high/xhigh** (prefer **different** from planner) | **Composer 2.5** (separate spawn) |
+### Open questions
 
-**Rules**
-
-- **Review / verification / integration** always run as a **separate pass** (own spawn), never inlined with execution.
-- **Plan-check** should use a **different model** from the planner when both are non-Composer (e.g. planner Opus + plan-check GPT, or planner GPT medium + plan-check GPT high).
-- **Codebase explore / quick grep** may use **Composer 2.5** regardless.
-- **FORBIDDEN:** any Grok / `cursor-grok-*` model for any agent.
-
-`model_overrides` in `.planning/config.json` pins **primary** targets when quota exists; orchestrator implements the fallback table above when Task/spawn fails on quota.
-
-## Account switch / pause
-
-- **Cold resume (Cursor):** `.planning/NEXT-ACCOUNT-PROMPT.md`
-- **Claude Code resume:** `.planning/CLAUDE-CODE-HANDOFF-PROMPT.md`
-- **Executors:** push `origin/exec/<plan>` after each task commit.
-- **`PAUSE-96`:** completed 2026-11-24 — patches + WIP branches above.
-
-## Parallelism (when resumed)
-
-**Keep exactly 4 executors RUNNING** whenever dependency-ready disjoint plans exist; refill in the same step as each merge. See `.planning/paused/exec-ledger.md`.
-
-**Overflow first after slot frees:** `03-48-sec-rpc-2` (vitest inventory gate).
-
-## Done before pause
-
-- **03-48-sec-rpc** merged (`0409`, trunk `cec95b3`)
-- **03-48-sec-rpc-2** planned, **not started**
-- Phase 3.1 / 4 wave through **04-45**, **04-19**, **03.1-23** merged (see exec-ledger)
-
-## How to verify (trunk)
-
-```bash
-export RUNTIME_DIR="$(git rev-parse --show-toplevel)/.claude"
-node --import tsx --test tests/rag-db/search-rpc-grants-pglite.test.mts
-npx vitest run tests/rag/search-rpc-grants.test.ts   # 1 fail until sec-rpc-2
-node scripts/ci/check-rag-boundary.mjs
-```
+- MED-4 / human UAT for **#8** (03.1-36 tier overrides)
+- MED-6 refund deferral for **#6** (03.1-34)
+- **03.1-32** scrape/crawl `jobId`
+- **03.1-37** / #20 `doc_class` threshold
+- **#22** schema-equality fold follow-up
+- Wave 7: **03.1-38, 03.1-40, 03.1-41**; then **04-33** (0413 reserved)
