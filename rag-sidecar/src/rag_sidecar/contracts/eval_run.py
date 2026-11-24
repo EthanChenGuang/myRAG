@@ -177,6 +177,12 @@ class GoldenFilter(_Contract):
     gate_split: Literal["dev"]
 
 
+class RunConfigRecord(_Contract):
+    name: str = Field(min_length=1)
+    env: dict[str, str] = Field(default_factory=dict)
+    overrides: RetrievalOverrides | None = None
+
+
 class RunManifest(_Contract):
     schema_version: Literal[1] = 1
     run_id: str
@@ -196,3 +202,4 @@ class RunManifest(_Contract):
     run_config_hash: str
     item_count: int = Field(ge=0)
     edge_errors: int = Field(ge=0)
+    run_config: RunConfigRecord | None = None

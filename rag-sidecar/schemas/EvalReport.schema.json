@@ -564,6 +564,19 @@
           "default": null,
           "title": "Rerank Input Cap"
         },
+        "rerank_model": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rerank Model"
+        },
         "rrf_k": {
           "anyOf": [
             {

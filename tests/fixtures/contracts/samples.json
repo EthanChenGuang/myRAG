@@ -2383,6 +2383,7 @@
       "final_top_k": 10,
       "leg_weights": null,
       "rerank_input_cap": null,
+      "rerank_model": null,
       "rrf_k": null
     },
     "RetrievalParams": {
@@ -2449,6 +2450,7 @@
         "stage_timeouts_ms": null,
         "user_id": null
       },
+      "run_config": null,
       "run_config_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "run_id": "run-001",
       "schema_version": 1,
