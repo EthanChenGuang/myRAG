@@ -270,7 +270,7 @@ def test_corpus_loader_reads_doc_type_from_fixture_meta(tmp_path: Path):
     (tmp_path / "en" / "b.md").write_text("# B\n\ntext\n", encoding="utf-8")
     docs = {doc.relpath: doc for doc in load_corpus(tmp_path)}
     assert docs["en/a.md"].doc_type == "financial_report"
-    assert docs["en/b.md"].doc_type is None
+    assert docs["en/b.md"].doc_type == "general"
 
 
 def test_runner_corpus_flag_feeds_doc_types_into_the_report(tmp_path: Path):

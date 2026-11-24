@@ -50,9 +50,10 @@
     }
   ],
   "next": {
-    "command": "/gsd-progress --next",
-    "label": "Advance to the next step",
-    "reason": "Phase 2 of 9 · executing"
+    "command": "/gsd-resume-work",
+    "label": "Resume merge train from #6",
+    "reason": "Paused at trunk 56b0349d; local merge train #10 #9 #4 #5 merged"
   },
-  "updated_at": "2026-11-23T14:27:13.243Z"
+  "updated_at": "2026-11-24T19:10:00.000Z",
+  "trunk_sha": "56b0349d6307b757e4df1eab897878f11e4b8d81"
 }
