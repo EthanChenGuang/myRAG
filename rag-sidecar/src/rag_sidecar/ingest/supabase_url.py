@@ -16,9 +16,9 @@ def assert_supabase_api_url(raw: str, *, label: str = "NEXT_PUBLIC_SUPABASE_URL"
         raise ValueError(f"{label} must be set to the Supabase project HTTPS URL (PostgREST)")
     if _DIRECT_DSN.match(trimmed):
         raise ValueError(f"{label} must not be a direct Postgres DSN")
-    if ":5432" in trimmed:
-        raise ValueError(f"{label} must not target the database port")
     parsed = urlparse(trimmed if "://" in trimmed else f"https://{trimmed}")
+    if parsed.port == 5432:
+        raise ValueError(f"{label} must not target the database port")
     if parsed.scheme != "https" and parsed.hostname not in {"localhost", "127.0.0.1"}:
         raise ValueError(f"{label} must use https for the project API URL")
     host = parsed.hostname or ""
