@@ -36,8 +36,9 @@ export type ProfileCompleteness =
 export type ActivateResult = { ok: true; activated: string; previous: string | null } | ProfileRefusal;
 export type RollbackResult = { ok: true; restored: string; rolledBack: string } | ProfileRefusal;
 export type SetStatusResult = { ok: true; profileId: string; status: string } | ProfileRefusal;
+export type RecordEvidenceResult = { ok: true; profileId: string } | ProfileRefusal;
 
-const REFUSAL = /^((?:activation|rollback|profile_status)_refused): ([a-z_]+)/;
+const REFUSAL = /^((?:activation|rollback|profile_status|evidence)_refused): ([a-z_]+)/;
 
 function refusalFrom(error: RpcError): ProfileRefusal | null {
   const match = REFUSAL.exec(error.message);
@@ -101,6 +102,23 @@ export async function rollbackEmbeddingProfile(actor: string): Promise<RollbackR
   if (!restored || !rolledBack) throw new ProfileUnavailableError('rpc_failed', 'malformed_response');
   await refreshAfterOperation();
   return { ok: true, restored, rolledBack };
+}
+
+/** Stores eval evidence on a target profile through the service-role SQL recorder. */
+export async function recordEmbeddingEvalEvidence(
+  profileId: string,
+  evidence: Record<string, unknown>,
+  actor: string,
+): Promise<RecordEvidenceResult> {
+  const outcome = await callGate('rag_record_eval_evidence', {
+    p_profile_id: profileId,
+    p_evidence: evidence,
+    p_actor: actor,
+  });
+  if ('refusal' in outcome) return outcome.refusal;
+  const id = text(outcome.row, 'profile_id') ?? profileId;
+  await refreshAfterOperation();
+  return { ok: true, profileId: id };
 }
 
 /** Moves a profile between available, backfilling and retired. Activation only goes through the gate. */
