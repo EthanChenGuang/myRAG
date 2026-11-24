@@ -37,3 +37,11 @@ After all: code review gate -> regression gate -> verifier -> update roadmap.
   - Old bug: `_table_header` in rag-sidecar docling_adapter.py returns None when a table starts after the first six lines of a chunk. Fix with a failing-first test.
 - 03-17: resume rehydrate re-runs chunk/enrich/extract; images output is kept in processing_state.images (03-32/03-38).
 - Operator: apply migrations 0311 (private rag-originals bucket + rag_get_ingest_origin) and 0312 (doc type defaults); run `npm run rag:backfill-hashes -- --dry-run` after 0301..0312.
+
+## Phase 3 wave 6 follow-ups (2026-11-24, orchestrator)
+- 03-26: post-filter thresholds in `src/lib/rag/context/assemble.ts` (0.65 chunk, 0.6 document, 0.25 image) are still legacy constants. Before a non-legacy embedding profile is activated, pass `context_threshold` / `context_image_threshold` from the profile's `score_calibration` into `AssembleInput` (plan 04-20 or 04-13). Seeded Voyage/Qwen rows have `{}` calibration and warn `CALIBRATION MISSING`.
+- 03-27: LlamaParse v2 response shapes (upload field, job.status location, items/bbox, image hosts) verified only against a local fake; 03-48 live item 1. LlamaParse chunks have null page_start/page_end. 03-38 rebuilds the picture list from processing_state.artifacts + docling.json.
+- 03-28: `rag_record_backfill_gap` takes `p_tenant_key`; 04-31 calls `resolveEmbeddingTargets(writer)`. Live Voyage/Qwen dual-write unverified.
+- 03-23: Firecrawl `pdf` output (`actions.pdfs`) unverified live.
+- Flaky under load: `tests/rag/injection-scan.test.ts` 1 MB < 1 s timing bound; `tests/rag-langfuse-export.test.mts` waitFor timeout. Fix if they fail in the main tree.
+- Operator: apply migration 0313 (dual-write writer) before enabling RAG_EMBEDDING_PROFILES or a backfill; fill score_calibration before activating a non-legacy profile; restart after fixing a startup MISMATCH.
