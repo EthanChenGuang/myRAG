@@ -101,9 +101,16 @@ describe('processing profile loader', () => {
     }
   });
 
-  it('keeps the reserved tier and parent_child fields explicit and empty', () => {
+  it('applies the D-13 tier bounds on every profile', () => {
+    const structuredMin = new Set<DocType>(['financial_report', 'invoice_receipt', 'scanned_image']);
     for (const profile of loadProcessingProfiles().profiles) {
-      expect([profile.min_tier, profile.max_tier, profile.parent_child], profile.id).toEqual([null, null, null]);
+      expect(profile.max_tier, profile.id).toBe('premium');
+      if (structuredMin.has(profile.doc_type)) {
+        expect(profile.min_tier, profile.id).toBe('structured');
+      } else {
+        expect(profile.min_tier, profile.id).toBe('fast');
+      }
+      expect(profile.parent_child, profile.id).toBeNull();
     }
   });
 
