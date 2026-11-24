@@ -458,3 +458,134 @@ describe('fake edge operators on the two-tenant fixture', () => {
     assert.equal(e.errors.length - before, attempts.length);
   });
 });
+
+describe('fake edge generic rag_* rpc routing', () => {
+  type Fixture = Awaited<ReturnType<typeof createFixtureDatabase>>;
+  let fixture: Fixture | undefined;
+  let edge: FakeEdge | undefined;
+  const getFixture = async (): Promise<Fixture> => {
+    fixture ??= await createFixtureDatabase({ deploymentMode: 'single-tenant', corpusDir: REAL_CORPUS });
+    return fixture;
+  };
+  const getEdge = async (): Promise<FakeEdge> => {
+    edge ??= await startFakeEdge({ db: (await getFixture()).db });
+    return edge;
+  };
+  const rpc = async (name: string, body: unknown) => {
+    const e = await getEdge();
+    return fetch(`${e.url}/rest/v1/rpc/${name}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  };
+  const beginArgs = (sourceKey: string) => ({
+    p_tenant_key: 's:default',
+    p_user_id: null,
+    p_org_id: null,
+    p_source: 'config_upload',
+    p_source_key: sourceKey,
+    p_filename: 'edge-fixture.md',
+    p_file_sha256: null,
+    p_doc_type: 'general',
+    p_doc_type_origin: 'fallback',
+    p_profile_id: 'general-1',
+    p_profile_version: 1,
+  });
+
+  after(async () => {
+    await edge?.close();
+    await fixture?.db.close();
+  });
+
+  test('a rag_* function in the database is called with named arguments and answers with an array of rows', async () => {
+    const e = await getEdge();
+    const begun = await rpc('rag_begin_document_version', beginArgs('edge/routing.md'));
+    assert.equal(begun.status, 200);
+    const rows = (await begun.json()) as Array<{ outcome: string; document_id: string; version: number }>;
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0]?.outcome, 'created');
+    const read = await rpc('rag_get_ingest_document', { p_document_id: rows[0]?.document_id, p_tenant_key: 's:default' });
+    assert.equal(read.status, 200);
+    const doc = (await read.json()) as Array<{ status: string; version: number; filename: string }>;
+    assert.deepEqual(doc.map((row) => [row.status, row.version, row.filename]), [['processing', 1, 'edge-fixture.md']]);
+    assert.ok(e.calls.some((call) => call.path === '/rest/v1/rpc/rag_get_ingest_document'));
+    const none = await rpc('rag_get_ingest_document', { p_document_id: rows[0]?.document_id, p_tenant_key: 'u:00000000-0000-4000-8000-000000000999' });
+    assert.deepEqual(await none.json(), []);
+  });
+
+  test('an argument the function does not have returns 400 and is recorded', async () => {
+    const e = await getEdge();
+    const before = e.errors.length;
+    const res = await rpc('rag_get_ingest_document', { p_document_id: FIXTURE_USER_ID, p_tenant_key: 's:default', p_extra: 1 });
+    assert.equal(res.status, 400);
+    assert.match(((await res.json()) as { message: string }).message, /p_extra/);
+    assert.equal(e.errors.length - before, 1);
+  });
+
+  test('names outside the legacy specs, rag_* and match_chunks_by_profile return 404, and so does a rag_* name with no function', async () => {
+    const e = await getEdge();
+    const before = e.errors.length;
+    const names = ['match_document_chunks_by_org', 'get_documents_by_type_slug', 'delete_everything', 'RAG_get_ingest_document', 'rag_no_such_function', 'match_chunks_by_profile'];
+    for (const name of names) {
+      const res = await rpc(name, {});
+      assert.equal(res.status, 404, name);
+    }
+    assert.equal(e.errors.length - before, names.length);
+  });
+
+  test('vector and halfvec arguments sent as arrays are converted, jsonb arguments pass through and other values bind as they are', async () => {
+    const { db } = await getFixture();
+    await db.exec(`CREATE FUNCTION rag_test_echo(p_full vector, p_half halfvec, p_payload jsonb, p_count integer, p_note text)
+      RETURNS TABLE (full_dims integer, half_dims integer, payload jsonb, doubled integer, note text) LANGUAGE sql
+      AS $$ SELECT vector_dims(p_full), vector_dims(p_half), p_payload, p_count * 2, p_note $$`);
+    const payload = { chunks: [{ chunk_index: 0, content: 'x' }], nested: { ok: true } };
+    const res = await rpc('rag_test_echo', { p_full: [0.5, 0.25, 0.125], p_half: [1, 2, 3, 4], p_payload: payload, p_count: 21, p_note: null });
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), [{ full_dims: 3, half_dims: 4, payload, doubled: 42, note: null }]);
+    const text = await rpc('rag_test_echo', { p_full: '[1,2]', p_half: '[1,2,3]', p_payload: [1, 2], p_count: 1, p_note: 'n' });
+    assert.deepEqual(await text.json(), [{ full_dims: 2, half_dims: 3, payload: [1, 2], doubled: 2, note: 'n' }]);
+    const bad = await rpc('rag_test_echo', { p_full: [1, 'x'], p_half: [1], p_payload: {}, p_count: 1, p_note: 'n' });
+    assert.equal(bad.status, 400);
+  });
+
+  test('a function that raises answers 400 with the PostgREST body, the SQLSTATE as code and the message text', async () => {
+    const { db } = await getFixture();
+    await db.exec(`CREATE FUNCTION rag_test_raise(p_dims integer) RETURNS TABLE (ok boolean) LANGUAGE plpgsql AS $$
+      BEGIN
+        IF p_dims = 1 THEN RAISE EXCEPTION 'embedding_profile_mismatch: expected %', p_dims USING DETAIL = 'profile detail', HINT = 'use the active profile'; END IF;
+        IF p_dims = 2 THEN RAISE EXCEPTION 'blocked' USING ERRCODE = '42501'; END IF;
+        RETURN QUERY SELECT true;
+      END $$`);
+    const e = await getEdge();
+    const before = e.errors.length;
+    const mismatch = await rpc('rag_test_raise', { p_dims: 1 });
+    assert.equal(mismatch.status, 400);
+    assert.deepEqual(await mismatch.json(), {
+      code: 'P0001',
+      message: 'embedding_profile_mismatch: expected 1',
+      details: 'profile detail',
+      hint: 'use the active profile',
+    });
+    const forbidden = await rpc('rag_test_raise', { p_dims: 2 });
+    assert.equal(forbidden.status, 403);
+    assert.equal(((await forbidden.json()) as { code: string }).code, '42501');
+    assert.equal(e.errors.length - before, 2);
+    assert.deepEqual(await (await rpc('rag_test_raise', { p_dims: 3 })).json(), [{ ok: true }]);
+  });
+
+  test('a call that does not match the function signature is refused with the database error, not a crash', async () => {
+    const res = await rpc('rag_get_ingest_document', { p_document_id: 'not-a-uuid', p_tenant_key: 's:default' });
+    assert.equal(res.status, 400);
+    const body = (await res.json()) as { code: string; message: string };
+    assert.equal(body.code, '22P02');
+    assert.match(body.message, /uuid/);
+  });
+
+  test('the two legacy rpc specs keep their argument lists and their error shape', async () => {
+    const e = await getEdge();
+    const question = embedText('What is the refund window for annual plans?');
+    const ok = await rpc('match_document_chunks', { query_embedding: question, match_count: 5, similarity_threshold: 0.1 });
+    assert.equal(ok.status, 200);
+    const extra = await rpc('match_document_chunks', { query_embedding: question, match_count: 5, similarity_threshold: 0.1, p_extra: 1 });
+    assert.equal(extra.status, 400);
+    assert.equal(((await extra.json()) as { code: string }).code, 'FAKE_EDGE_UNSUPPORTED');
+    assert.ok(e.calls.some((call) => call.path === '/rest/v1/rpc/match_document_chunks'));
+  });
+});
