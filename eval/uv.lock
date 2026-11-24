@@ -1663,6 +1663,8 @@ requires-dist = [
     { name = "python-stdnum", specifier = "==2.2" },
     { name = "tiktoken", marker = "extra == 'chunking'", specifier = "==0.14.0" },
     { name = "tiktoken", marker = "extra == 'docling'", specifier = "==0.14.0" },
+    { name = "torch", marker = "extra == 'docling'", specifier = "==2.15.0", index = "https://download.pytorch.org/whl/cpu" },
+    { name = "torchvision", marker = "extra == 'docling'", specifier = "==0.29.2", index = "https://download.pytorch.org/whl/cpu" },
     { name = "uvicorn", specifier = "==0.54.0" },
 ]
 provides-extras = ["chunking", "docling"]
