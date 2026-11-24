@@ -603,3 +603,199 @@ def test_cache_objects_are_written_with_upsert_so_a_resumed_job_can_write_them_a
     asyncio.run(run())
 
     assert seen == ["true"]
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Task 2: dispatch by routing and type, and dry-run jobs
+# ---------------------------------------------------------------------------------------------------------------------
+
+_CACHE_ID = "00000000-0000-4000-8000-0000000000c1"
+_DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+_PPTX = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+
+
+def _process(env: Env) -> JobOutcome:
+    from rag_sidecar.ingest.process_job import process_job
+
+    return asyncio.run(process_job(env.job, env.deps))
+
+
+def _native_done(text: str = "# Notes\n\nThe teal ledger lists every cart.") -> dict:
+    return {"worker_id": _WORKER, "status": "done", "cache_id": _CACHE_ID, "pages": [{"page": 1, "text": text, "has_table": False}]}
+
+
+class OfficeConverter:
+    def __init__(self, pages: int = 2) -> None:
+        self.pages = pages
+        self.calls: list[tuple[str, str, list[str]]] = []
+
+    def __call__(self, path, preset, ocr_languages):
+        self.calls.append((Path(path).name, preset, list(ocr_languages)))
+        return _synthetic_doc(1, self.pages)
+
+
+def _plain_env(tmp_path: Path, filename: str, mime: str, **deps: Any) -> Env:
+    job = _job(sha="c" * 64, filename=filename, mime=mime)
+    return Env(tmp_path, job, b"original bytes", **deps)
+
+
+class ExplodingStorage:
+    def __getattr__(self, name):
+        raise AssertionError(f"fixed routing must not use storage ({name})")
+
+
+def test_fixed_routing_keeps_the_chain_path_and_never_touches_storage_the_pool_or_the_converter(tmp_path):
+    job = _job(sha="c" * 64, routing="fixed")
+    env = Env(tmp_path, job, b"%PDF-1.4", pool=RecordingPool())
+    env.deps = WorkerDeps(**{**env.deps.__dict__, "storage": ExplodingStorage()})
+    env.app.script("parse_external", [AppScript(response={"worker_id": _WORKER, "status": "done", "cache_id": _CACHE_ID})])
+
+    outcome = _process(env)
+
+    assert outcome == JobOutcome(status="ready")
+    assert [call[2]["mode"] for call in env.app.calls if call[0] == "parse_external"] == ["chain"]
+    assert [attempt.reason for attempt in env.job.attempts] == ["fixed_chain"]
+    assert env.deps.pool.calls == []
+
+
+def test_a_tiered_markdown_file_goes_to_parse_external_native_and_never_to_storage(tmp_path):
+    env = _plain_env(tmp_path, "notes.md", "text/markdown")
+    env.app.script("parse_external", [AppScript(response=_native_done())])
+
+    outcome = _process(env)
+
+    assert outcome == JobOutcome(status="ready")
+    calls = [call[2] for call in env.app.calls if call[0] == "parse_external"]
+    assert len(calls) == 1
+    assert calls[0]["mode"] == "native" and calls[0]["subpdf_ref"] is None and calls[0]["pages"] is None
+    assert len(calls[0]["options_hash"]) == 64
+    assert [call for call in env.storage.calls if call[0] in ("download", "put")] == []
+    (attempt,) = env.job.attempts
+    assert (attempt.tier, attempt.preset, attempt.reason, attempt.parser) == ("native", "native", "native", "plain_text")
+    assert (attempt.pages.start, attempt.pages.end) == (1, 1)
+    assert attempt.check is not None and attempt.check.passed
+    assert [(r.start, r.end, r.tier, r.status, r.cache_id) for r in env.job.page_ranges] == [(1, 1, "native", "ok", _CACHE_ID)]
+    assert env.job.doc_class == "native" and env.job.tier == "native"
+    assert env.advance_calls()[0]["parse_cache_id"] == _CACHE_ID
+
+
+@pytest.mark.parametrize("filename,mime", [("scan.png", "image/png"), ("photo.JPG", "image/jpeg")])
+def test_a_tiered_image_goes_to_native_captioning(tmp_path, filename, mime):
+    env = _plain_env(tmp_path, filename, mime)
+    env.app.script("parse_external", [AppScript(response=_native_done("A dock with teal carts."))])
+
+    outcome = _process(env)
+
+    assert outcome == JobOutcome(status="ready")
+    assert [call[2]["mode"] for call in env.app.calls if call[0] == "parse_external"] == ["native"]
+    (attempt,) = env.job.attempts
+    assert (attempt.tier, attempt.parser, attempt.parser_version) == ("native", "text", "image")
+    assert env.job.doc_class == "image"
+
+
+@pytest.mark.parametrize("filename,mime,pages", [("report.docx", _DOCX, 2), ("page.html", "text/html", 1)])
+def test_tiered_docx_and_html_are_converted_in_process_as_one_native_range(tmp_path, filename, mime, pages):
+    office = OfficeConverter(pages)
+    env = _plain_env(tmp_path, filename, mime, office_converter=office)
+
+    outcome = _process(env)
+
+    assert outcome == JobOutcome(status="ready")
+    assert office.calls == [(filename, "fast", ["en"])]
+    assert [call for call in env.app.calls if call[0] == "parse_external"] == []
+    (attempt,) = env.job.attempts
+    assert (attempt.tier, attempt.preset, attempt.parser, attempt.reason) == ("native", "native", "docling", "initial")
+    assert (attempt.pages.start, attempt.pages.end) == (1, pages)
+    assert [(r.start, r.end, r.preset, r.parser) for r in env.job.page_ranges] == [(1, pages, "native", "docling")]
+    merged = _merged_entries(env)
+    assert len(merged) == 1
+    assert env.advance_calls()[0]["parse_cache_id"] == merged[0].id
+    assert env.job.doc_class == "native" and env.job.tier == "native"
+
+
+def test_a_tiered_pptx_is_one_structured_range(tmp_path):
+    office = OfficeConverter(3)
+    env = _plain_env(tmp_path, "deck.pptx", _PPTX, office_converter=office)
+
+    outcome = _process(env)
+
+    assert outcome == JobOutcome(status="ready")
+    assert office.calls == [("deck.pptx", "structured_layout", ["en"])]
+    (attempt,) = env.job.attempts
+    assert (attempt.tier, attempt.preset) == ("structured", "structured_layout")
+    assert [(r.start, r.end, r.tier) for r in env.job.page_ranges] == [(1, 3, "structured")]
+    assert env.job.tier == "structured"
+
+
+def test_a_tiered_pdf_goes_through_the_page_range_flow(tmp_path):
+    env = _fixture_env(tmp_path, "digital-text")
+
+    outcome = _process(env)
+
+    assert outcome == JobOutcome(status="ready")
+    assert [attempt.reason for attempt in env.job.attempts] == ["initial"]
+    assert [call[2]["mode"] for call in env.app.calls if call[0] == "parse_external"] == []
+
+
+def test_an_encrypted_pdf_fails_at_once_and_is_not_retried(tmp_path):
+    job = _job(sha="d" * 64)
+    env = Env(tmp_path, job, ENCRYPTED.read_bytes(), converter=converters.RecordedRangeConverter(RECORDED))
+
+    outcome = _process(env)
+
+    assert outcome == JobOutcome(status="failed", error_class="encrypted_pdf")
+    assert env.job.status == "failed" and env.job.retries == 1
+    assert env.advance_calls() == []
+    assert [call for call in env.storage.calls if call[0] == "put"] == []
+
+
+def test_a_file_type_nothing_can_parse_fails_without_a_retry(tmp_path):
+    env = _plain_env(tmp_path, "archive.zip", "application/zip")
+
+    outcome = _process(env)
+
+    assert outcome == JobOutcome(status="failed", error_class="unsupported_type")
+    assert env.job.status == "failed"
+
+
+def test_a_dry_run_stops_after_checking_records_its_attempts_and_publishes_nothing(tmp_path):
+    job = _job(sha=SHA["mixed-routing"], kind="dry_run")
+    env = Env(tmp_path, job, PDF["mixed-routing"].read_bytes(), converter=converters.RecordedRangeConverter(RECORDED))
+
+    outcome = _process(env)
+
+    assert outcome == JobOutcome(status="ready")
+    assert env.advance_calls() == [], "no post_parse advance for a dry run"
+    done = env.job
+    assert done.status == "ready" and done.document_id is None
+    assert done.stage_state == {"dry_run": True, "ended_at": "check"}
+    assert isinstance(done.timings.get("check"), int)
+    assert [(a.pages.start, a.pages.end, a.preset) for a in done.attempts] == [
+        (1, 6, "fast"),
+        (7, 8, "structured_full"),
+        (9, 9, "structured_ocr"),
+        (10, 10, "fast"),
+    ]
+    assert all(a.check is not None for a in done.attempts)
+    assert [(r.start, r.end, r.preset, r.status) for r in done.page_ranges] == [
+        (1, 6, "fast", "ok"),
+        (7, 8, "structured_full", "ok"),
+        (9, 9, "structured_ocr", "ok"),
+        (10, 10, "fast", "ok"),
+    ]
+    assert done.tier_page_counts == {"native": 0, "fast": 7, "structured": 3, "premium": 0}
+    assert done.preflight_ref
+    assert _merged_entries(env) == []
+    assert len(_docling_entries(env)) == 4, "the parse results stay in the cache"
+
+
+def test_a_dry_run_of_a_text_file_records_a_native_attempt_without_calling_the_app(tmp_path):
+    job = _job(sha="c" * 64, kind="dry_run", filename="notes.md", mime="text/markdown")
+    env = Env(tmp_path, job, b"# Notes")
+
+    outcome = _process(env)
+
+    assert outcome == JobOutcome(status="ready")
+    assert env.app.calls == []
+    assert [(a.tier, a.reason) for a in env.job.attempts] == [("native", "native")]
+    assert env.job.status == "ready" and env.job.doc_class == "native"
