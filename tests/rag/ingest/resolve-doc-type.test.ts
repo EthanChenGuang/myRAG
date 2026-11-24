@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import type { DocTypeDetection } from '@/lib/rag-eval/contracts.generated';
 import type { RpcClient, RpcRequest, RpcResponse } from '@/lib/rag/backend/supabase-rpc';
 import { loadIngestConfig, resetIngestConfigForTests } from '@/lib/rag/ingest/config';
 import type { DocType } from '@/lib/rag/ingest/profiles/load';
@@ -13,6 +14,13 @@ import {
   type ResolveDocTypeInput,
 } from '@/lib/rag/ingest/profiles/resolve-doc-type';
 import { mintScope } from '@/lib/rag/tenant/scope';
+
+// Detection itself is tested in detect-doc-type.test.ts; here a canned answer shows what the resolver does with it.
+const detector = vi.hoisted(() => ({ canned: null as DocTypeDetection | null }));
+vi.mock('@/lib/rag/ingest/profiles/detect-doc-type', async (importActual) => {
+  const actual = await importActual<typeof import('@/lib/rag/ingest/profiles/detect-doc-type')>();
+  return { ...actual, detectDocType: (input: Parameters<typeof actual.detectDocType>[0]) => detector.canned ?? actual.detectDocType(input) };
+});
 
 const USER_A = '00000000-0000-4000-8000-0000000000a1';
 const USER_B = '00000000-0000-4000-8000-0000000000b2';
@@ -66,6 +74,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  detector.canned = null;
   resetIngestConfigForTests();
   vi.restoreAllMocks();
 });
@@ -209,12 +218,18 @@ describe('resolveDocType precedence (D-15)', () => {
 
 describe('resolveDocType with auto (D-16)', () => {
   const INVOICE_FILE: ResolveDocTypeInput = { source: 'config_upload', filename: 'fattura_2025_0042.pdf', mimeType: 'application/pdf' };
+  const INVOICE: DocTypeDetection = { doc_type: 'invoice_receipt', confidence: 0.8, signals: ['filename:keyword:fattura'], method: 'rules' };
+  const NOTHING: DocTypeDetection = { doc_type: 'general', confidence: 0.2, signals: [], method: 'rules' };
+
+  beforeEach(() => {
+    detector.canned = INVOICE;
+  });
 
   test('a picked auto runs the detector and records the origin auto', async () => {
     const { db } = rowsDb([]);
     const resolved = await resolveDocType(scopeA, { ...INVOICE_FILE, picked: 'auto' }, depsOf(db));
     expect(resolved).toMatchObject({ docType: 'invoice_receipt', origin: 'auto' });
-    expect(resolved.detection).toMatchObject({ doc_type: 'invoice_receipt', method: 'rules' });
+    expect(resolved.detection).toEqual(INVOICE);
   });
 
   test('a default of auto from the source level runs the detector', async () => {
@@ -224,6 +239,7 @@ describe('resolveDocType with auto (D-16)', () => {
   });
 
   test('a tenant default of auto with nothing recognisable resolves to general with the origin auto', async () => {
+    detector.canned = NOTHING;
     const { db } = rowsDb([{ tenant_key: KEY_A, source_kind: 'tenant', source_ref: null, doc_type: 'auto' }]);
     const resolved = await resolveDocType(scopeA, { source: 'chat_upload', filename: 'notes.txt', mimeType: 'text/plain' }, depsOf(db));
     expect(resolved).toMatchObject({ docType: 'general', origin: 'auto' });

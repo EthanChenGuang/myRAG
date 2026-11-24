@@ -1,3 +1,4 @@
+import type { DocTypeDetection } from '@/lib/rag-eval/contracts.generated';
 import type { TenantScope } from '../tenant/scope';
 import type { TraceCollector } from '../trace/collector';
 import type { IngestConfig } from './config';
@@ -69,7 +70,7 @@ export interface IngestState {
   docTypeOrigin: DocTypeOrigin | null;
   parseJob: { parser: string; jobId: string; submittedAt: string; attempt: number } | null;
   artifacts: Record<string, string>;
-  docTypeDetection: { signals: string[]; refined: DocType | null; reparsed: boolean } | null;
+  docTypeDetection: { signals: string[]; refined: DocType | null; reparsed: boolean; detection?: DocTypeDetection } | null;
   quarantine: { ruleIds: string[]; released: boolean } | null;
   invoice: { extractor: string; status: string } | null;
   images: { nextIndex: number; captioned: number } | null;
