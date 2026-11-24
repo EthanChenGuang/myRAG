@@ -320,5 +320,8 @@ describe('ai-to-rag native routing for text jobs', () => {
     expect(parsed.parser_version).toBe('native');
     expect(settings.premium_page_budget).toBe(0);
     expect(settings.vlm_detect).toBe(false);
+    expect(settings.doc_type).toBe('general');
+    expect(settings.min_tier).toBe('fast');
+    expect(settings.max_tier).toBe('premium');
   });
 });
