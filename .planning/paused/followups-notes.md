@@ -18,3 +18,6 @@ After all: code review gate -> regression gate -> verifier -> update roadmap.
 - 02-13 pre-existing bug: chat route collapses text+document array message to plain text unless an image_url part exists, so document parts rarely reach retrieval. Needs decision/gap plan. characterize-chat still mocks thinking-rag-enhancer (drop in 02-19).
 - 02-14 human check: load /embed/chat.js with RAG_EMBED_TENANT unset (multi-tenant) -> generic error bubble, no dots; valid tenant -> normal stream.
 - 02-23: pre-existing — metadata object in createUIMessageStream onFinish is ignored by SDK (never reaches client); 02-23 added real messageMetadata for ragTraceId only. Live: review tags in a real Langfuse project.
+
+## From 03-01 (2026-11-24)
+- D-08 quarantine/not-current filter covers only the 8 search RPCs. Direct readers still see quarantined or non-current chunks: voice keyword fallback, `refs/resolve`, `context/fetch-rows`, documents routes, and the table SELECT policies (single-tenant `USING (true)`, multi-tenant owner/member). No Phase 3 plan names these paths explicitly. Check in the Phase 3 code review; add a gap plan if 03-30/03-37 do not close it.
