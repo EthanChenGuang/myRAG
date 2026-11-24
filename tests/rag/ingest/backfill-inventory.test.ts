@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { mkdtemp, mkdir, rm, symlink, truncate, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -31,6 +32,22 @@ vi.mock('node:crypto', async (importOriginal) => {
     return hash;
   };
   return { ...actual, default: { ...actual, createHash }, createHash };
+});
+
+const fsFaults = vi.hoisted(() => ({ lstat: [] as string[], readdir: [] as string[], stat: [] as string[] }));
+
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  type Call = (...args: unknown[]) => Promise<unknown>;
+  const faulty = (name: 'lstat' | 'readdir' | 'stat', code: string): Call => {
+    const real = actual[name] as unknown as Call;
+    return async (target, ...rest) => {
+      if (fsFaults[name].some((suffix) => String(target).endsWith(suffix))) throw Object.assign(new Error(`${code}: simulated`), { code });
+      return real(target, ...rest);
+    };
+  };
+  const wrapped = { ...actual, lstat: faulty('lstat', 'ENOENT'), readdir: faulty('readdir', 'EACCES'), stat: faulty('stat', 'ENOENT') };
+  return { ...wrapped, default: wrapped };
 });
 
 const USER_A = '00000000-0000-4000-8000-0000000000a1';
@@ -188,13 +205,21 @@ describe('isBlockedAddress', () => {
     '::ffff:7f00:1',
     '::ffff:10.0.0.1',
     '64:ff9b::7f00:1',
+    '::127.0.0.1',
+    '::7f00:1',
+    '::a9fe:a9fe',
+    '::8.8.8.8',
+    '64:ff9b:1::a9fe:a9fe',
+    '64:ff9b:1:ffff:ffff:ffff:ffff:ffff',
+    'fec0::1',
+    'feff:ffff::1',
     'not-an-ip',
     '',
   ])('%s is blocked', (address) => {
     expect(isBlockedAddress(address)).toBe(true);
   });
 
-  test.each(['93.184.216.34', '8.8.8.8', '172.15.0.1', '172.32.0.1', '100.63.255.255', '2606:4700:4700::1111', '::ffff:8.8.8.8'])(
+  test.each(['93.184.216.34', '8.8.8.8', '172.15.0.1', '172.32.0.1', '100.63.255.255', '2606:4700:4700::1111', '::ffff:8.8.8.8', '64:ff9b:2::1', 'fe00::1', '::1:0:0'])(
     '%s is public',
     (address) => {
       expect(isBlockedAddress(address)).toBe(false);
@@ -213,7 +238,7 @@ describe('listSource folder', () => {
     await mkdir(path.join(root, 'nested', 'deeper'), { recursive: true });
     await mkdir(outside);
     await writeFile(path.join(root, 'a.txt'), 'alpha');
-    await writeFile(path.join(root, '..dots.txt'), 'dots');
+    await writeFile(path.join(root, 'a..b.txt'), 'dots');
     await writeFile(path.join(root, 'nested', 'b.txt'), 'bravo');
     await writeFile(path.join(root, 'nested', 'deeper', 'c.txt'), 'charlie');
     await writeFile(path.join(outside, 'secret.txt'), 'secret');
@@ -227,7 +252,7 @@ describe('listSource folder', () => {
 
   test('lists every file recursively in a stable sorted order, keys relative to the root', async () => {
     const { items, reasons } = await drain({ kind: 'folder', ref: root });
-    expect(items.map((i) => i.sourceKey)).toEqual(['..dots.txt', 'a.txt', 'nested/b.txt', 'nested/deeper/c.txt']);
+    expect(items.map((i) => i.sourceKey)).toEqual(['a..b.txt', 'a.txt', 'nested/b.txt', 'nested/deeper/c.txt']);
     expect(items.map((i) => i.ext)).toEqual(['txt', 'txt', 'txt', 'txt']);
     expect(items.map((i) => i.size)).toEqual([4, 5, 5, 7]);
     expect(reasons).toEqual([]);
@@ -241,7 +266,7 @@ describe('listSource folder', () => {
     await symlink(outside, path.join(root, 'dirlink'));
     await symlink(path.join(outside, 'dir', 'inner.txt'), path.join(root, 'second.link'));
     const { items, reasons } = await drain({ kind: 'folder', ref: root });
-    expect(items.map((i) => i.sourceKey)).toEqual(['..dots.txt', 'a.txt', 'nested/b.txt', 'nested/deeper/c.txt']);
+    expect(items.map((i) => i.sourceKey)).toEqual(['a..b.txt', 'a.txt', 'nested/b.txt', 'nested/deeper/c.txt']);
     expect(reasons).toEqual(['outside_root', 'outside_root', 'outside_root']);
   });
 
@@ -284,6 +309,50 @@ describe('listSource folder', () => {
     expect(logged).not.toContain(root);
     warn.mockRestore();
     log.mockRestore();
+  });
+
+  test('a file that vanishes (lstat), cannot be stat-ed or a directory that cannot be read counts as unreadable and the walk goes on', async () => {
+    await mkdir(path.join(root, 'locked'));
+    await writeFile(path.join(root, 'locked', 'hidden-from-us.txt'), 'x');
+    await writeFile(path.join(root, 'gone.txt'), 'gone');
+    await writeFile(path.join(root, 'late.txt'), 'late');
+    fsFaults.lstat = [`${path.sep}gone.txt`];
+    fsFaults.readdir = [`${path.sep}locked`];
+    fsFaults.stat = [`${path.sep}late.txt`];
+    try {
+      const { items, reasons } = await drain({ kind: 'folder', ref: root });
+      expect(items.map((i) => i.sourceKey)).toEqual(['a.txt', 'a..b.txt', 'nested/b.txt', 'nested/deeper/c.txt'].sort());
+      expect(reasons).toEqual(['path_unreadable', 'path_unreadable', 'path_unreadable']);
+    } finally {
+      fsFaults.lstat = [];
+      fsFaults.readdir = [];
+      fsFaults.stat = [];
+    }
+  });
+
+  test('a file that grows past the limit after listing is cut off while streaming at open', async () => {
+    const { items } = await drain({ kind: 'folder', ref: root });
+    const target = items.find((i) => i.sourceKey === 'a.txt') as SourceItem;
+    expect(target.size).toBe(5);
+    await truncate(path.join(root, 'a.txt'), ORIGINALS_MAX_BYTES + 1);
+    let received = 0;
+    const stream = await target.open();
+    await expect(
+      (async () => {
+        for await (const chunk of stream) received += (chunk as Buffer).length;
+      })(),
+    ).rejects.toMatchObject({ reason: 'too_large' });
+    expect(received).toBeLessThanOrEqual(ORIGINALS_MAX_BYTES);
+  });
+
+  test('a file of exactly the limit streams in full', async () => {
+    await writeFile(path.join(root, 'exact.bin'), '');
+    await truncate(path.join(root, 'exact.bin'), ORIGINALS_MAX_BYTES);
+    const { items } = await drain({ kind: 'folder', ref: root });
+    const exact = items.find((i) => i.sourceKey === 'exact.bin') as SourceItem;
+    let received = 0;
+    for await (const chunk of await exact.open()) received += (chunk as Buffer).length;
+    expect(received).toBe(ORIGINALS_MAX_BYTES);
   });
 
   test('an aborted signal stops the listing', async () => {
@@ -346,7 +415,7 @@ describe('listSource manifest', () => {
       { source_key: 'three', path: 'second.txt' },
     ]);
     const { deps, urls, inits } = netDeps();
-    const { items, reasons } = await drain({ kind: 'manifest', ref, deps });
+    const { items, reasons } = await drain({ kind: 'manifest', ref, root: dir, deps });
     expect(items.map((i) => i.sourceKey)).toEqual(['one', 'two', 'three']);
     expect(items.map((i) => i.docType)).toEqual(['contract_legal', undefined, undefined]);
     expect(items.map((i) => i.ext)).toEqual(['pdf', 'pdf', 'txt']);
@@ -375,7 +444,7 @@ describe('listSource manifest', () => {
       { source_key: 'good-2', path: 'second.txt' },
     ]);
     const { deps, urls } = netDeps();
-    const { items, reasons } = await drain({ kind: 'manifest', ref, deps });
+    const { items, reasons } = await drain({ kind: 'manifest', ref, root: dir, deps });
     expect(items.map((i) => i.sourceKey)).toEqual(['good-1', 'good-2']);
     expect(reasons).toEqual([
       'manifest_location',
@@ -394,7 +463,7 @@ describe('listSource manifest', () => {
     expect(urls).toEqual([]);
   });
 
-  test('paths are confined to the manifest directory: ../ segments, absolute paths, outside symlinks and missing files are refused', async () => {
+  test('paths are confined to the explicit root: ../ segments, absolute paths, outside symlinks and missing files are refused', async () => {
     await symlink(outsideFile, path.join(dir, 'link.pdf'));
     await mkdir(path.join(dir, 'sub'));
     await writeFile(path.join(dir, 'sub', 'in.txt'), 'in');
@@ -407,9 +476,20 @@ describe('listSource manifest', () => {
       { source_key: 'directory', path: 'sub' },
       { source_key: 'fine', path: 'sub/in.txt' },
     ]);
-    const { items, reasons } = await drain({ kind: 'manifest', ref, deps: netDeps().deps });
+    const { items, reasons } = await drain({ kind: 'manifest', ref, root: dir, deps: netDeps().deps });
     expect(items.map((i) => i.sourceKey)).toEqual(['fine']);
-    expect(reasons).toEqual(['outside_root', 'outside_root', 'outside_root', 'outside_root', 'path_unreadable', 'path_unreadable']);
+    expect(reasons).toEqual(['outside_root', 'outside_root', 'path_absolute', 'outside_root', 'path_unreadable', 'path_unreadable']);
+  });
+
+  test('a manifest path file that grows past the limit after listing is cut off while streaming at open', async () => {
+    const ref = await manifest([{ source_key: 'one', path: 'ok.pdf' }]);
+    const { items } = await drain({ kind: 'manifest', ref, root: dir, deps: netDeps().deps });
+    await truncate(path.join(dir, 'ok.pdf'), ORIGINALS_MAX_BYTES + 1);
+    await expect(
+      (async () => {
+        for await (const _chunk of await (items[0] as SourceItem).open()) void _chunk;
+      })(),
+    ).rejects.toMatchObject({ reason: 'too_large' });
   });
 
   test('a url on a private address is refused before any request: literals, localhost, mapped IPv6 and DNS answers', async () => {
@@ -437,7 +517,7 @@ describe('listSource manifest', () => {
         'six.example.com': [{ address: 'fd00::1', family: 6 }],
       },
     });
-    const { items, reasons } = await drain({ kind: 'manifest', ref, deps });
+    const { items, reasons } = await drain({ kind: 'manifest', ref, root: dir, deps });
     expect(items.map((i) => i.sourceKey)).toEqual(['public']);
     expect(reasons).toEqual([
       'private_url',
@@ -480,7 +560,7 @@ describe('listSource manifest', () => {
         return new Response('final-bytes', { status: 200 });
       },
     };
-    const { items, reasons } = await drain({ kind: 'manifest', ref, deps });
+    const { items, reasons } = await drain({ kind: 'manifest', ref, root: dir, deps });
     expect(items.map((i) => i.sourceKey)).toEqual(['relative-ok']);
     expect(await readAll(await (items[0] as SourceItem).open())).toBe('final-bytes');
     expect(reasons).toEqual(['private_url', 'private_url', 'manifest_https', 'manifest_redirect', 'manifest_redirect']);
@@ -524,7 +604,7 @@ describe('listSource manifest', () => {
       },
     };
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    const { items, reasons } = await drain({ kind: 'manifest', ref, deps });
+    const { items, reasons } = await drain({ kind: 'manifest', ref, root: dir, deps });
     expect(items.map((i) => i.sourceKey)).toEqual(['exact']);
     expect(items[0]?.size).toBe(ORIGINALS_MAX_BYTES);
     expect(reasons).toEqual(['too_large', 'too_large', 'manifest_fetch_failed', 'manifest_fetch_failed']);
@@ -534,8 +614,97 @@ describe('listSource manifest', () => {
   });
 });
 
+describe('listSource explicit root and hidden paths', () => {
+  let base = '';
+  let root = '';
+
+  beforeEach(async () => {
+    base = await mkdtemp(path.join(os.tmpdir(), 'backfill-root-'));
+    root = path.join(base, 'root');
+    await mkdir(path.join(root, '.git'), { recursive: true });
+    await mkdir(path.join(root, 'sub', '.cache'), { recursive: true });
+    await writeFile(path.join(root, 'ok.pdf'), '%PDF-1.4');
+    await writeFile(path.join(root, 'sub', 'in.txt'), 'in');
+    await writeFile(path.join(root, '.env.local'), 'SECRET=1');
+    await writeFile(path.join(root, '.git', 'config'), 'cfg');
+    await writeFile(path.join(root, 'sub', '.cache', 'x.txt'), 'x');
+    await writeFile(path.join(root, 'sub', '.hidden.txt'), 'h');
+    await writeFile(path.join(base, 'neighbor.txt'), 'next to the manifest, outside the root');
+  });
+
+  afterEach(async () => {
+    await rm(base, { recursive: true, force: true });
+  });
+
+  async function manifestAt(dir: string, lines: unknown[]): Promise<string> {
+    const file = path.join(dir, 'manifest.jsonl');
+    await writeFile(file, `${lines.map((l) => JSON.stringify(l)).join('\n')}\n`);
+    return file;
+  }
+
+  test('a manifest source needs an explicit root: none, empty and a missing directory are refused', async () => {
+    const ref = await manifestAt(base, [{ source_key: 'one', path: 'root/ok.pdf' }]);
+    await expect(drain({ kind: 'manifest', ref })).rejects.toMatchObject({ reason: 'manifest_root_required' });
+    await expect(drain({ kind: 'manifest', ref, root: '' })).rejects.toMatchObject({ reason: 'manifest_root_required' });
+    await expect(drain({ kind: 'manifest', ref, root: path.join(base, 'nope') })).rejects.toMatchObject({ reason: 'manifest_root_required' });
+  });
+
+  test('manifest paths resolve under the explicit root, not the manifest directory, and absolute paths are refused', async () => {
+    const ref = await manifestAt(base, [
+      { source_key: 'under-root', path: 'ok.pdf' },
+      { source_key: 'next-to-manifest', path: 'neighbor.txt' },
+      { source_key: 'up', path: '../neighbor.txt' },
+      { source_key: 'absolute-inside', path: path.join(root, 'ok.pdf') },
+      { source_key: 'absolute-outside', path: path.join(base, 'neighbor.txt') },
+    ]);
+    const { items, reasons } = await drain({ kind: 'manifest', ref, root });
+    expect(items.map((i) => i.sourceKey)).toEqual(['under-root']);
+    expect(reasons).toEqual(['path_unreadable', 'outside_root', 'path_absolute', 'path_absolute']);
+  });
+
+  test('manifest paths with a component starting with a dot are refused, also through a visible symlink and after open', async () => {
+    await symlink(path.join(root, '.env.local'), path.join(root, 'innocent.txt'));
+    const ref = await manifestAt(base, [
+      { source_key: 'env', path: '.env.local' },
+      { source_key: 'git', path: '.git/config' },
+      { source_key: 'nested-dir', path: 'sub/.cache/x.txt' },
+      { source_key: 'nested-file', path: 'sub/.hidden.txt' },
+      { source_key: 'dot-segment', path: './ok.pdf' },
+      { source_key: 'link', path: 'innocent.txt' },
+      { source_key: 'fine', path: 'sub/in.txt' },
+    ]);
+    const { items, reasons } = await drain({ kind: 'manifest', ref, root });
+    expect(items.map((i) => i.sourceKey)).toEqual(['fine']);
+    expect(reasons).toEqual(['hidden_path', 'hidden_path', 'hidden_path', 'hidden_path', 'hidden_path', 'hidden_path']);
+    await rm(path.join(root, 'sub', 'in.txt'));
+    await symlink(path.join(root, '.env.local'), path.join(root, 'sub', 'in.txt'));
+    await expect((items[0] as SourceItem).open()).rejects.toMatchObject({ reason: 'hidden_path' });
+  });
+
+  test('a manifest stored inside the root does not widen it: the root alone decides', async () => {
+    const ref = await manifestAt(root, [{ source_key: 'env', path: '.env.local' }, { source_key: 'ok', path: 'ok.pdf' }]);
+    const { items, reasons } = await drain({ kind: 'manifest', ref, root });
+    expect(items.map((i) => i.sourceKey)).toEqual(['ok']);
+    expect(reasons).toEqual(['hidden_path']);
+  });
+
+  test('a folder source skips dotfiles and dot directories (.env.local, .git/) and a symlink to one', async () => {
+    await symlink(path.join(root, '.env.local'), path.join(root, 'innocent.txt'));
+    const { items, reasons } = await drain({ kind: 'folder', ref: root });
+    expect(items.map((i) => i.sourceKey)).toEqual(['ok.pdf', 'sub/in.txt']);
+    expect(reasons.length).toBeGreaterThanOrEqual(4);
+    expect(new Set(reasons)).toEqual(new Set(['hidden_path']));
+  });
+});
+
 describe('listSource bucket', () => {
-  function bucketOf(tree: Record<string, Array<{ name: string; id: string | null; size?: number }>>) {
+  const SCOPE_SINGLE = mintScope('single', null, null);
+  const SCOPE_A = mintScope('personal', USER_A, null);
+  const SCOPE_B = mintScope('personal', USER_B, null);
+  const SCOPE_ORG = mintScope('org', null, ORG_O);
+  const APP_BUCKETS = ['rag-originals', 'chat-images', 'chat-attachments', 'chat-videos', '3d-models', 'backgrounds'];
+
+  function bucketOf(tree: Record<string, Array<{ name: string; id: string | null; size?: number | null }>>) {
     const lists: Array<{ prefix: string; offset: number }> = [];
     const download = vi.fn(async (objectPath: string) => ({ data: new Blob([`bytes of ${objectPath}`]), error: null }));
     const bucket: BackfillStorageBucket = {
@@ -545,7 +714,11 @@ describe('listSource bucket', () => {
         const offset = options?.offset ?? 0;
         const limit = options?.limit ?? 100;
         return {
-          data: rows.slice(offset, offset + limit).map((r) => ({ name: r.name, id: r.id, metadata: r.id === null ? null : { size: r.size ?? 10 } })),
+          data: rows.slice(offset, offset + limit).map((r) => ({
+            name: r.name,
+            id: r.id,
+            metadata: r.id === null ? null : r.size === null ? {} : { size: r.size ?? 10 },
+          })),
           error: null,
         };
       },
@@ -555,6 +728,8 @@ describe('listSource bucket', () => {
     return { deps: { storage: { from } } satisfies BackfillSourceDeps, lists, download, from };
   }
 
+  const allow = (...names: string[]) => ({ allowedBuckets: names, scope: SCOPE_SINGLE });
+
   test('lists nested prefixes and every page without downloading anything', async () => {
     const many = Array.from({ length: 1_500 }, (_, i) => ({ name: `f${String(i).padStart(4, '0')}.pdf`, id: `id-${i}` }));
     const { deps, lists, download, from } = bucketOf({
@@ -562,7 +737,7 @@ describe('listSource bucket', () => {
       folder: [{ name: 'inner.txt', id: 'id-inner' }, { name: 'deeper', id: null }],
       'folder/deeper': [{ name: 'leaf.md', id: 'id-leaf' }],
     });
-    const { items } = await drain({ kind: 'bucket', ref: 'fixture-bucket', deps });
+    const { items } = await drain({ kind: 'bucket', ref: 'fixture-bucket', deps, ...allow('fixture-bucket') });
     expect(items).toHaveLength(1_500 + 2);
     expect(items.map((i) => i.sourceKey)).toContain('folder/inner.txt');
     expect(items.map((i) => i.sourceKey)).toContain('folder/deeper/leaf.md');
@@ -575,16 +750,16 @@ describe('listSource bucket', () => {
     expect(download).toHaveBeenCalledTimes(1);
   });
 
-  test('refuses buckets that hold other tenants\' files, invalid names, a missing client and list errors', async () => {
+  test('refuses invalid names, a missing client and list errors', async () => {
     const { deps } = bucketOf({ '': [] });
-    for (const ref of ['rag-originals', 'chat-images', '', 'UPPER', '../x', 'a/b', 'x']) {
-      await expect(drain({ kind: 'bucket', ref, deps })).rejects.toMatchObject({ name: 'SourceRejection' });
+    for (const ref of ['', 'UPPER', '../x', 'a/b', 'x']) {
+      await expect(drain({ kind: 'bucket', ref, deps, ...allow(ref, 'fixture-bucket') })).rejects.toMatchObject({ name: 'SourceRejection' });
     }
-    await expect(drain({ kind: 'bucket', ref: 'fixture-bucket' })).rejects.toMatchObject({ reason: 'bucket_storage_unavailable' });
+    await expect(drain({ kind: 'bucket', ref: 'fixture-bucket', ...allow('fixture-bucket') })).rejects.toMatchObject({ reason: 'bucket_storage_unavailable' });
     const failing: BackfillSourceDeps = {
       storage: { from: () => ({ list: async () => ({ data: null, error: { message: 'boom' } }), download: vi.fn() }) },
     };
-    await expect(drain({ kind: 'bucket', ref: 'fixture-bucket', deps: failing })).rejects.toMatchObject({ reason: 'bucket_list_failed' });
+    await expect(drain({ kind: 'bucket', ref: 'fixture-bucket', deps: failing, ...allow('fixture-bucket') })).rejects.toMatchObject({ reason: 'bucket_list_failed' });
   });
 
   test('an object over the size limit is refused', async () => {
@@ -594,9 +769,119 @@ describe('listSource bucket', () => {
         { name: 'huge.pdf', id: 'b', size: ORIGINALS_MAX_BYTES + 1 },
       ],
     });
-    const { items, reasons } = await drain({ kind: 'bucket', ref: 'fixture-bucket', deps });
+    const { items, reasons } = await drain({ kind: 'bucket', ref: 'fixture-bucket', deps, ...allow('fixture-bucket') });
     expect(items.map((i) => i.sourceKey)).toEqual(['small.pdf']);
     expect(reasons).toEqual(['too_large']);
+  });
+
+  test('a bucket object without size metadata is limited at open: an oversize blob is refused before it is read, the limit itself passes', async () => {
+    const arrayBuffer = vi.fn(async () => new ArrayBuffer(0));
+    const sizes: Record<string, number> = { 'no-size-big.bin': ORIGINALS_MAX_BYTES + 1, 'no-size-exact.bin': ORIGINALS_MAX_BYTES, 'no-size-small.bin': 3 };
+    const bucket: BackfillStorageBucket = {
+      list: async () => ({ data: Object.keys(sizes).map((name) => ({ name, id: name, metadata: null })), error: null }),
+      download: async (objectPath) => {
+        const size = sizes[objectPath] as number;
+        const blob = new Blob([new Uint8Array(size)]);
+        return { data: Object.assign(blob, { arrayBuffer }), error: null };
+      },
+    };
+    const { items, reasons } = await drain({ kind: 'bucket', ref: 'fixture-bucket', deps: { storage: { from: () => bucket } }, ...allow('fixture-bucket') });
+    expect(items.map((i) => i.size)).toEqual([0, 0, 0]);
+    expect(reasons).toEqual([]);
+    const byKey = (key: string) => items.find((i) => i.sourceKey === key) as SourceItem;
+    await expect(byKey('no-size-big.bin').open()).rejects.toMatchObject({ reason: 'too_large' });
+    expect(arrayBuffer).not.toHaveBeenCalled();
+    let received = 0;
+    for await (const chunk of await byKey('no-size-exact.bin').open()) received += (chunk as Buffer).length;
+    expect(received).toBe(ORIGINALS_MAX_BYTES);
+    received = 0;
+    for await (const chunk of await byKey('no-size-small.bin').open()) received += (chunk as Buffer).length;
+    expect(received).toBe(3);
+  });
+
+  test('every bucket the application owns is refused, even when the operator lists it, and nothing is listed or downloaded', async () => {
+    const fromSetup = ['supabase/single-tenant-setup.sql', 'supabase/multi-tenant-setup.sql'].flatMap((file) =>
+      [...readFileSync(path.join(process.cwd(), file), 'utf8').matchAll(/INSERT INTO storage\.buckets[^;]*?VALUES\s*\(\s*'([a-z0-9._-]+)'/g)].map((m) => m[1] as string),
+    );
+    expect(fromSetup.length).toBeGreaterThanOrEqual(5);
+    for (const name of new Set([...APP_BUCKETS, ...fromSetup])) {
+      const { deps, lists, download, from } = bucketOf({ '': [{ name: 'tenantB-user', id: null }], 'tenantB-user': [{ name: 'secret.pdf', id: 'x' }] });
+      await expect(drain({ kind: 'bucket', ref: name, deps, ...allow(name) })).rejects.toMatchObject({ reason: 'bucket_internal' });
+      expect(lists).toEqual([]);
+      expect(download).not.toHaveBeenCalled();
+      expect(from).not.toHaveBeenCalled();
+    }
+  });
+
+  test('a bucket that is not on the allow-list is refused: absent, empty and different lists all deny', async () => {
+    const { deps, lists, from } = bucketOf({ '': [{ name: 'a.pdf', id: 'x' }] });
+    const base = { kind: 'bucket' as const, ref: 'fixture-bucket', deps, scope: SCOPE_SINGLE };
+    await expect(drain(base)).rejects.toMatchObject({ reason: 'bucket_not_allowed' });
+    await expect(drain({ ...base, allowedBuckets: [] })).rejects.toMatchObject({ reason: 'bucket_not_allowed' });
+    await expect(drain({ ...base, allowedBuckets: ['other-bucket'] })).rejects.toMatchObject({ reason: 'bucket_not_allowed' });
+    await expect(drain({ ...base, allowedBuckets: ['Fixture-Bucket', ' fixture-bucket'] })).rejects.toMatchObject({ reason: 'bucket_not_allowed' });
+    expect(lists).toEqual([]);
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  test('a bucket source needs a minted tenant scope: none, a look-alike object and a string are refused', async () => {
+    const { deps, lists } = bucketOf({ '': [{ name: 'a.pdf', id: 'x' }] });
+    const base = { kind: 'bucket' as const, ref: 'fixture-bucket', deps, allowedBuckets: ['fixture-bucket'] };
+    await expect(drain(base)).rejects.toMatchObject({ reason: 'bucket_scope_required' });
+    await expect(drain({ ...base, scope: { kind: 'single', userId: null, organizationId: null } as never })).rejects.toMatchObject({ reason: 'bucket_scope_required' });
+    await expect(drain({ ...base, scope: TENANT_A as never })).rejects.toMatchObject({ reason: 'bucket_scope_required' });
+    expect(lists).toEqual([]);
+  });
+
+  test('two tenants: tenant A never lists or opens tenant B objects, and the other way round', async () => {
+    const tree = {
+      '': [{ name: 'u', id: null }, { name: 'o', id: null }],
+      u: [{ name: USER_A, id: null }, { name: USER_B, id: null }],
+      [`u/${USER_A}`]: [{ name: 'a1.pdf', id: 'a1' }, { name: 'sub', id: null }],
+      [`u/${USER_A}/sub`]: [{ name: 'a2.pdf', id: 'a2' }],
+      [`u/${USER_B}`]: [{ name: 'b1.pdf', id: 'b1' }, { name: 'sub', id: null }],
+      [`u/${USER_B}/sub`]: [{ name: 'b2.pdf', id: 'b2' }],
+      o: [{ name: ORG_O, id: null }],
+      [`o/${ORG_O}`]: [{ name: 'org.pdf', id: 'o1' }],
+    };
+    for (const [scope, own, other] of [
+      [SCOPE_A, USER_A, USER_B],
+      [SCOPE_B, USER_B, USER_A],
+    ] as const) {
+      const { deps, lists, download } = bucketOf(tree);
+      const { items } = await drain({ kind: 'bucket', ref: 'shared-bucket', deps, allowedBuckets: ['shared-bucket'], scope });
+      expect(items.map((i) => i.sourceKey).sort()).toEqual([`u/${own}/${own === USER_A ? 'a1' : 'b1'}.pdf`, `u/${own}/sub/${own === USER_A ? 'a2' : 'b2'}.pdf`]);
+      for (const entry of items) await readAll(await entry.open());
+      const touched = [...lists.map((l) => l.prefix), ...download.mock.calls.map((c) => String(c[0]))];
+      expect(touched.length).toBeGreaterThan(0);
+      expect(touched.every((p) => p === `u/${own}` || p.startsWith(`u/${own}/`))).toBe(true);
+      expect(touched.some((p) => p.includes(other))).toBe(false);
+      expect(lists.some((l) => l.prefix === '' || l.prefix === 'u')).toBe(false);
+    }
+    const { deps, lists } = bucketOf(tree);
+    const org = await drain({ kind: 'bucket', ref: 'shared-bucket', deps, allowedBuckets: ['shared-bucket'], scope: SCOPE_ORG });
+    expect(org.items.map((i) => i.sourceKey)).toEqual([`o/${ORG_O}/org.pdf`]);
+    expect(lists.every((l) => l.prefix === `o/${ORG_O}` || l.prefix.startsWith(`o/${ORG_O}/`))).toBe(true);
+  });
+
+  test('a storage answer that reaches outside the tenant prefix is refused row by row and never opened', async () => {
+    const hostile = {
+      [`u/${USER_A}`]: [
+        { name: 'ok.pdf', id: 'ok' },
+        { name: `../${USER_B}/b1.pdf`, id: 'x1' },
+        { name: `/u/${USER_B}/b1.pdf`, id: 'x2' },
+        { name: `u/${USER_B}/b1.pdf`, id: 'x3' },
+        { name: '..', id: null },
+        { name: '.', id: null },
+        { name: `${USER_B}/b1.pdf`, id: 'x4' },
+      ],
+    };
+    const { deps, lists, download } = bucketOf(hostile);
+    const { items, reasons } = await drain({ kind: 'bucket', ref: 'shared-bucket', deps, allowedBuckets: ['shared-bucket'], scope: SCOPE_A });
+    expect(items.map((i) => i.sourceKey)).toEqual([`u/${USER_A}/ok.pdf`]);
+    expect(reasons).toEqual(Array.from({ length: 6 }, () => 'outside_prefix'));
+    expect(lists.every((l) => l.prefix === `u/${USER_A}`)).toBe(true);
+    expect(download).not.toHaveBeenCalled();
   });
 });
 
@@ -636,13 +921,24 @@ async function* from<T>(values: T[]): AsyncGenerator<T> {
 }
 
 const BATCH = '20000000-0000-4000-8000-0000000000b1';
+const BATCH_B = '20000000-0000-4000-8000-0000000000b2';
 const TENANT_A = `u:${USER_A}`;
 const TENANT_B = `u:${USER_B}`;
+const SCOPE_A = mintScope('personal', USER_A, null);
+const SCOPE_B = mintScope('personal', USER_B, null);
+/** The batch rows of the fake SQL: each belongs to one tenant. */
+const batchRows = {
+  rag_update_ingestion_batch: (args: Record<string, unknown>): RpcResponse => ({
+    data: { id: args.p_batch_id, tenant_key: args.p_batch_id === BATCH_B ? TENANT_B : TENANT_A } as unknown as unknown[],
+    error: null,
+  }),
+};
 
 /** A fake of the tenant-scoped SQL: rag_existing_file_hashes answers from the hashes of the tenant it is asked about. */
 function tenantLedger(existing: Record<string, string[]>) {
   const skipped: Array<Record<string, unknown>> = [];
   const fake = fakeRpc({
+    ...batchRows,
     rag_existing_file_hashes: (args) => {
       const tenant = String(args.p_tenant_key);
       const known = new Set(existing[tenant] ?? []);
@@ -666,7 +962,7 @@ describe('backfill inventory', () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
 
     const result = await inventory(
-      { id: BATCH, tenantKey: TENANT_A },
+      { id: BATCH, scope: SCOPE_A },
       from(files.map(([key, text]) => item(key, text, key === 'file-3.pdf' ? { docType: 'contract_legal' } : {}))),
       { rpc: ledger.rpc, signal: new AbortController().signal },
     );
@@ -691,11 +987,11 @@ describe('backfill inventory', () => {
     const ledger = tenantLedger({ [TENANT_B]: [sha('shared-contract')], [`o:${ORG_O}`]: [sha('org-only')] });
     const signal = new AbortController().signal;
 
-    const forA = await inventory({ id: BATCH, tenantKey: TENANT_A }, from([item('shared.pdf', 'shared-contract'), item('org.pdf', 'org-only')]), { rpc: ledger.rpc, signal });
+    const forA = await inventory({ id: BATCH, scope: SCOPE_A }, from([item('shared.pdf', 'shared-contract'), item('org.pdf', 'org-only')]), { rpc: ledger.rpc, signal });
     expect(forA.totals).toMatchObject({ uniqueNew: 2, existingDuplicates: 0 });
     expect(ledger.skipped).toEqual([]);
 
-    const forB = await inventory({ id: BATCH, tenantKey: TENANT_B }, from([item('shared.pdf', 'shared-contract'), item('org.pdf', 'org-only')]), { rpc: ledger.rpc, signal });
+    const forB = await inventory({ id: BATCH_B, scope: SCOPE_B }, from([item('shared.pdf', 'shared-contract'), item('org.pdf', 'org-only')]), { rpc: ledger.rpc, signal });
     expect(forB.totals).toMatchObject({ uniqueNew: 1, existingDuplicates: 1 });
     expect(forB.entries.map((e) => e.sourceKey)).toEqual(['org.pdf']);
 
@@ -705,19 +1001,20 @@ describe('backfill inventory', () => {
 
   test('a row of another tenant in a lookup answer is ignored (second line of defence behind the SQL filter)', async () => {
     const leaky = fakeRpc({
+      ...batchRows,
       rag_existing_file_hashes: (args) => ({
         data: (args.p_hashes as string[]).map((h) => ({ id: 'x', file_sha256: h, tenant_key: TENANT_B, source_key: 'y' })),
         error: null,
       }),
     });
-    const result = await inventory({ id: BATCH, tenantKey: TENANT_A }, from([item('a.pdf', 'aaa')]), { rpc: leaky.rpc, signal: new AbortController().signal });
+    const result = await inventory({ id: BATCH, scope: SCOPE_A }, from([item('a.pdf', 'aaa')]), { rpc: leaky.rpc, signal: new AbortController().signal });
     expect(result.totals).toMatchObject({ uniqueNew: 1, existingDuplicates: 0 });
   });
 
   test('the kept copy of identical files is the first in source order, and entries keep that order', async () => {
     const ledger = tenantLedger({});
     const result = await inventory(
-      { id: BATCH, tenantKey: TENANT_A },
+      { id: BATCH, scope: SCOPE_A },
       from([item('z-first.txt', 'same'), item('a-second.txt', 'same'), item('m-third.txt', 'other')]),
       { rpc: ledger.rpc, signal: new AbortController().signal },
     );
@@ -748,7 +1045,7 @@ describe('backfill inventory', () => {
     const ledger = tenantLedger({});
     let result;
     try {
-      result = await inventory({ id: BATCH, tenantKey: TENANT_A }, from([big]), { rpc: ledger.rpc, signal: new AbortController().signal });
+      result = await inventory({ id: BATCH, scope: SCOPE_A }, from([big]), { rpc: ledger.rpc, signal: new AbortController().signal });
     } finally {
       hashEvents.recording = false;
     }
@@ -774,7 +1071,7 @@ describe('backfill inventory', () => {
   test('looks existing hashes up in chunks of 1,000 and records skipped rows in chunks of 1,000', async () => {
     const texts = Array.from({ length: 2_500 }, (_, i) => `doc-${i}`);
     const ledger = tenantLedger({ [TENANT_A]: texts.map(sha) });
-    const result = await inventory({ id: BATCH, tenantKey: TENANT_A }, from(texts.map((t, i) => item(`f${i}.txt`, t))), {
+    const result = await inventory({ id: BATCH, scope: SCOPE_A }, from(texts.map((t, i) => item(`f${i}.txt`, t))), {
       rpc: ledger.rpc,
       signal: new AbortController().signal,
     });
@@ -805,7 +1102,7 @@ describe('backfill inventory', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     const ledger = tenantLedger({});
-    const result = await inventory({ id: BATCH, tenantKey: TENANT_A }, from([item('ok.pdf', 'ok'), failing, midStream, item('ok2.pdf', 'ok2')]), {
+    const result = await inventory({ id: BATCH, scope: SCOPE_A }, from([item('ok.pdf', 'ok'), failing, midStream, item('ok2.pdf', 'ok2')]), {
       rpc: ledger.rpc,
       signal: new AbortController().signal,
     });
@@ -823,7 +1120,7 @@ describe('backfill inventory', () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     const ledger = tenantLedger({});
     await inventory(
-      { id: BATCH, tenantKey: TENANT_A },
+      { id: BATCH, scope: SCOPE_A },
       from([item('confidential-contract.pdf', 'top secret clause'), item('copy-of-confidential-contract.pdf', 'top secret clause')]),
       { rpc: ledger.rpc, signal: new AbortController().signal },
     );
@@ -839,15 +1136,15 @@ describe('backfill inventory', () => {
   });
 
   test('a failed lookup or enqueue rejects with a generic message; nothing is enqueued when the lookup fails', async () => {
-    const failingLookup = fakeRpc({ rag_existing_file_hashes: () => ({ data: null, error: { message: 'relation documents (tenant u:abc) exploded', code: 'XX000' } }) });
+    const failingLookup = fakeRpc({ ...batchRows, rag_existing_file_hashes: () => ({ data: null, error: { message: 'relation documents (tenant u:abc) exploded', code: 'XX000' } }) });
     await expect(
-      inventory({ id: BATCH, tenantKey: TENANT_A }, from([item('a.pdf', 'a'), item('b.pdf', 'a')]), { rpc: failingLookup.rpc, signal: new AbortController().signal }),
+      inventory({ id: BATCH, scope: SCOPE_A }, from([item('a.pdf', 'a'), item('b.pdf', 'a')]), { rpc: failingLookup.rpc, signal: new AbortController().signal }),
     ).rejects.toThrow('[Backfill] existing hash lookup failed');
     expect(failingLookup.calls.some((c) => c.fn === 'rag_enqueue_backfill_jobs')).toBe(false);
 
-    const failingEnqueue = fakeRpc({ rag_enqueue_backfill_jobs: () => ({ data: null, error: { message: 'boom' } }) });
+    const failingEnqueue = fakeRpc({ ...batchRows, rag_enqueue_backfill_jobs: () => ({ data: null, error: { message: 'boom' } }) });
     await expect(
-      inventory({ id: BATCH, tenantKey: TENANT_A }, from([item('a.pdf', 'a'), item('b.pdf', 'a')]), { rpc: failingEnqueue.rpc, signal: new AbortController().signal }),
+      inventory({ id: BATCH, scope: SCOPE_A }, from([item('a.pdf', 'a'), item('b.pdf', 'a')]), { rpc: failingEnqueue.rpc, signal: new AbortController().signal }),
     ).rejects.toThrow('[Backfill] skipped_duplicate enqueue failed');
   });
 
@@ -859,7 +1156,75 @@ describe('backfill inventory', () => {
       controller.abort();
       yield item('b.pdf', 'b');
     }
-    await expect(inventory({ id: BATCH, tenantKey: TENANT_A }, aborting(), { rpc: ledger.rpc, signal: controller.signal })).rejects.toThrow();
-    expect(ledger.calls).toEqual([]);
+    await expect(inventory({ id: BATCH, scope: SCOPE_A }, aborting(), { rpc: ledger.rpc, signal: controller.signal })).rejects.toThrow();
+    expect(ledger.calls.map((c) => c.fn)).toEqual(['rag_update_ingestion_batch']);
   });
 });
+
+describe('backfill inventory tenant binding', () => {
+  /** The batch row lives in SQL with its own tenant; the lookup and the enqueue are answered per that tenant only. */
+  function batchLedger(batchTenant: string | null, hashesByTenant: Record<string, string[]>) {
+    const opened: string[] = [];
+    const fake = fakeRpc({
+      rag_update_ingestion_batch: () => (batchTenant === null ? { data: null, error: { message: 'backfill_refused: batch_not_found' } } : { data: { id: BATCH, tenant_key: batchTenant } as unknown as unknown[], error: null }),
+      rag_existing_file_hashes: (args) => {
+        const known = new Set(hashesByTenant[String(args.p_tenant_key)] ?? []);
+        return { data: (args.p_hashes as string[]).filter((h) => known.has(h)).map((h) => ({ file_sha256: h, tenant_key: args.p_tenant_key })), error: null };
+      },
+      rag_enqueue_backfill_jobs: () => ({ data: 1 as unknown as unknown[], error: null }),
+    });
+    const tracked = (key: string, text: string): SourceItem => {
+      const base = item(key, text);
+      return {
+        ...base,
+        async open(signal) {
+          opened.push(key);
+          return base.open(signal);
+        },
+      };
+    };
+    return { ...fake, opened, tracked };
+  }
+
+  test("a batch of tenant A run with tenant B's scope fails closed before any file is read, looked up or enqueued", async () => {
+    const ledger = batchLedger(TENANT_A, { [TENANT_B]: [sha('shared-contract')] });
+    await expect(
+      inventory({ id: BATCH, scope: SCOPE_B }, from([ledger.tracked('shared.pdf', 'shared-contract')]), { rpc: ledger.rpc, signal: new AbortController().signal }),
+    ).rejects.toThrow('[Backfill] batch tenant mismatch');
+    expect(ledger.opened).toEqual([]);
+    expect(ledger.calls.map((c) => c.fn)).not.toContain('rag_existing_file_hashes');
+    expect(ledger.calls.map((c) => c.fn)).not.toContain('rag_enqueue_backfill_jobs');
+  });
+
+  test('the duplicate lookup carries the tenant stored on the batch row, never a caller string', async () => {
+    const ledger = batchLedger(TENANT_A, { [TENANT_A]: [sha('mine')] });
+    const result = await inventory({ id: BATCH, scope: SCOPE_A }, from([ledger.tracked('mine.pdf', 'mine'), ledger.tracked('new.pdf', 'new')]), {
+      rpc: ledger.rpc,
+      signal: new AbortController().signal,
+    });
+    expect(result.totals).toMatchObject({ uniqueNew: 1, existingDuplicates: 1 });
+    const lookups = ledger.calls.filter((c) => c.fn === 'rag_existing_file_hashes');
+    expect(lookups.length).toBeGreaterThan(0);
+    expect(lookups.every((c) => c.args.p_tenant_key === TENANT_A)).toBe(true);
+    expect(ledger.calls[0]?.fn).toBe('rag_update_ingestion_batch');
+    expect(ledger.calls[0]?.args).toEqual({ p_batch_id: BATCH });
+  });
+
+  test('a missing batch, a failed batch lookup, an unminted scope and a case-variant tenant all fail closed', async () => {
+    const signal = new AbortController().signal;
+    const missing = batchLedger(null, {});
+    await expect(inventory({ id: BATCH, scope: SCOPE_A }, from([missing.tracked('a.pdf', 'a')]), { rpc: missing.rpc, signal })).rejects.toThrow('[Backfill] batch lookup failed');
+    expect(missing.opened).toEqual([]);
+
+    const variant = batchLedger(TENANT_A.toUpperCase(), { [TENANT_A]: [sha('a')] });
+    await expect(inventory({ id: BATCH, scope: SCOPE_A }, from([variant.tracked('a.pdf', 'a')]), { rpc: variant.rpc, signal })).rejects.toThrow('[Backfill] batch tenant mismatch');
+
+    const fine = batchLedger(TENANT_A, {});
+    await expect(
+      inventory({ id: BATCH, scope: { kind: 'personal', userId: USER_A, organizationId: null } as never }, from([fine.tracked('a.pdf', 'a')]), { rpc: fine.rpc, signal }),
+    ).rejects.toThrow('[Backfill] batch tenant mismatch');
+    expect(fine.opened).toEqual([]);
+    expect(fine.calls.filter((c) => c.fn !== 'rag_update_ingestion_batch')).toEqual([]);
+  });
+});
+

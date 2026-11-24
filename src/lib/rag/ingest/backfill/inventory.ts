@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { Writable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { RpcClient } from '@/lib/rag/backend/supabase-rpc';
+import { isTenantScope, scopeKey, type TenantScope } from '@/lib/rag/tenant/scope';
 import type { SourceItem } from './sources';
 
 const EXISTING_HASH_CHUNK = 1_000;
@@ -9,7 +10,8 @@ const SKIPPED_ENQUEUE_CHUNK = 1_000;
 
 export interface BackfillBatchRef {
   id: string;
-  tenantKey: string;
+  /** The scope from backfillScope; it must be the tenant the batch row belongs to, or the inventory refuses. */
+  scope: TenantScope;
 }
 
 export interface InventoryEntry {
@@ -86,6 +88,19 @@ function baseName(sourceKey: string): string {
   return sourceKey.split('/').pop() ?? sourceKey;
 }
 
+/**
+ * The tenant is whatever the batch row says: rag_enqueue_backfill_jobs reads it from there, so the duplicate lookup must
+ * too. A no-op update is the one existing RPC that returns the row; it only touches updated_at.
+ */
+async function batchTenantKey(rpc: RpcClient, batchId: string, signal: AbortSignal): Promise<string> {
+  signal.throwIfAborted();
+  const { data, error } = await rpc.rpc('rag_update_ingestion_batch', { p_batch_id: batchId }).abortSignal(signal);
+  if (error) throw new Error('[Backfill] batch lookup failed');
+  const row = (Array.isArray(data) ? data[0] : data) as { tenant_key?: unknown } | null | undefined;
+  if (typeof row?.tenant_key !== 'string' || row.tenant_key === '') throw new Error('[Backfill] batch lookup failed');
+  return row.tenant_key;
+}
+
 async function existingHashes(rpc: RpcClient, tenantKey: string, hashes: string[], signal: AbortSignal): Promise<Set<string>> {
   const found = new Set<string>();
   for (let i = 0; i < hashes.length; i += EXISTING_HASH_CHUNK) {
@@ -119,6 +134,12 @@ async function enqueueSkipped(rpc: RpcClient, batchId: string, jobs: Record<stri
  * is safe: the ledger's unique key on (batch, kind, source_key) drops rows that exist already.
  */
 export async function inventory(batch: BackfillBatchRef, source: AsyncIterable<SourceItem>, deps: BackfillInventoryDeps): Promise<InventoryResult> {
+  if (!isTenantScope(batch.scope)) throw new Error('[Backfill] batch tenant mismatch');
+  const tenantKey = await batchTenantKey(deps.rpc, batch.id, deps.signal);
+  if (scopeKey(batch.scope) !== tenantKey) {
+    console.warn('[Backfill] batch tenant mismatch');
+    throw new Error('[Backfill] batch tenant mismatch');
+  }
   const firstByHash = new Map<string, FirstSeen>();
   const skippedJobs: Record<string, unknown>[] = [];
   let inInventoryDuplicates = 0;
@@ -157,7 +178,7 @@ export async function inventory(batch: BackfillBatchRef, source: AsyncIterable<S
     firstByHash.set(hash, { sourceKey: item.sourceKey, size: item.size, ext: item.ext, docType: item.docType ?? null });
   }
 
-  const tenantExisting = await existingHashes(deps.rpc, batch.tenantKey, [...firstByHash.keys()], deps.signal);
+  const tenantExisting = await existingHashes(deps.rpc, tenantKey, [...firstByHash.keys()], deps.signal);
 
   const entries: InventoryEntry[] = [];
   let existingDuplicates = 0;
