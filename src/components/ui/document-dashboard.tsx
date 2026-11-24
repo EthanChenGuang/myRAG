@@ -30,6 +30,12 @@ import { ConnectorGrid } from "@/components/ui/nango"
 import { useConnectorConfig } from "@/lib/hooks/use-connector-config"
 import { useFirecrawlConfig } from "@/lib/hooks/use-firecrawl-config"
 import { UrlScraper } from "@/components/ui/scrapers/url-scraper"
+import {
+  DocTypePicker,
+  buildChatUploadFormData,
+  pollIngestUntilTerminal,
+  type DocTypePickerValue,
+} from "@/components/ui/doc-type-picker"
 
 export interface ProcessedDocument {
   id: string
@@ -238,13 +244,17 @@ export function DocumentDashboard({
   onProcessingError,
   onDelete
 }: DocumentDashboardProps) {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const [isDragging, setIsDragging] = React.useState(false)
   const [isProcessing, setIsProcessing] = React.useState(false)
   const [searchQuery, setSearchQuery] = React.useState("")
   const [files, setFiles] = React.useState<File[]>([])
   const [storedDocuments, setStoredDocuments] = React.useState<ProcessedDocument[]>([])
   const [activeTab, setActiveTab] = React.useState(readOnly ? "stored" : "upload")
+  const [docTypePickerEnabled, setDocTypePickerEnabled] = React.useState(false)
+  const [tenantDocTypeDefault, setTenantDocTypeDefault] = React.useState<DocTypePickerValue>("auto")
+  const [fileDocTypes, setFileDocTypes] = React.useState<Record<string, DocTypePickerValue>>({})
+  const docTypeDefaultsLoadedRef = React.useRef<string | null>(null)
   const [isTabSwitching, setIsTabSwitching] = React.useState(false)
   const [isLoading, setIsLoading] = React.useState(false)
   const [showSkeleton, setShowSkeleton] = React.useState(false)
@@ -422,6 +432,76 @@ export function DocumentDashboard({
       intersectionObserver.disconnect();
     };
   }, [debouncedSetContainerWidth, isVisible, isTabSwitching]);
+
+  const docTypeDefaultsKey =
+    activeTab === "upload" && !readOnly
+      ? `${isPersonalMode ? "personal" : currentOrganization?.id ?? "personal"}`
+      : null
+
+  React.useEffect(() => {
+    if (!docTypeDefaultsKey || docTypeDefaultsLoadedRef.current === docTypeDefaultsKey) {
+      return
+    }
+    docTypeDefaultsLoadedRef.current = docTypeDefaultsKey
+    let cancelled = false
+    const params = new URLSearchParams({ source: "chat_upload" })
+    if (isMultiTenant() && !isPersonalMode && currentOrganization) {
+      params.set("organizationId", currentOrganization.id)
+    }
+    void (async () => {
+      try {
+        const response = await fetch(`/api/rag/doc-type-defaults?${params.toString()}`)
+        if (!response.ok || cancelled) return
+        const data = (await response.json()) as { enabled?: boolean; docType?: DocTypePickerValue }
+        if (cancelled) return
+        if (data.enabled) {
+          const defaultType: DocTypePickerValue = data.docType ?? "auto"
+          setDocTypePickerEnabled(true)
+          setTenantDocTypeDefault(defaultType)
+        } else {
+          setDocTypePickerEnabled(false)
+        }
+      } catch (error) {
+        console.error("[DocumentDashboard] doc-type defaults fetch failed", error)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [docTypeDefaultsKey, currentOrganization?.id, isPersonalMode])
+
+  React.useEffect(() => {
+    if (!docTypePickerEnabled) return
+    setFileDocTypes((prev) => {
+      const next = { ...prev }
+      let changed = false
+      for (const file of files) {
+        if (!(file.name in next)) {
+          next[file.name] = tenantDocTypeDefault
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [docTypePickerEnabled, tenantDocTypeDefault, files])
+
+  const workspaceQuery =
+    isMultiTenant() && !isPersonalMode && currentOrganization
+      ? `?organizationId=${encodeURIComponent(currentOrganization.id)}`
+      : ''
+
+  const mergeDocTypesForFiles = React.useCallback(
+    (incoming: File[]) => {
+      setFileDocTypes((prev) => {
+        const next = { ...prev }
+        for (const file of incoming) {
+          if (!(file.name in next)) next[file.name] = tenantDocTypeDefault
+        }
+        return next
+      })
+    },
+    [tenantDocTypeDefault],
+  )
 
   // Force stored tab when in read-only mode
   React.useEffect(() => {
@@ -655,6 +735,7 @@ export function DocumentDashboard({
     )
 
     setFiles((prev) => [...prev, ...documentFiles])
+    mergeDocTypesForFiles(documentFiles)
   }
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -672,11 +753,22 @@ export function DocumentDashboard({
         return true
       })
       setFiles((prev) => [...prev, ...validFiles])
+      mergeDocTypesForFiles(validFiles)
     }
   }
 
   const removeFile = (index: number) => {
-    setFiles((prev) => prev.filter((_, i) => i !== index))
+    setFiles((prev) => {
+      const removed = prev[index]
+      if (removed) {
+        setFileDocTypes((types) => {
+          const next = { ...types }
+          delete next[removed.name]
+          return next
+        })
+      }
+      return prev.filter((_, i) => i !== index)
+    })
   }
 
   const handleUpload = React.useCallback(async () => {
@@ -720,15 +812,18 @@ export function DocumentDashboard({
       try {
         onProcessingStart?.(file.name);
 
-        const formData = new FormData();
-        formData.append('file', file);
-
-        // Add organization context for multi-tenant mode
-        // If no organization selected (personal workspace mode), omit organization_id
-        // This will save to flat personal workspace (user_id, org_id=NULL)
-        if (isMultiTenant() && !isPersonalMode && currentOrganization) {
-          formData.append('organization_id', currentOrganization.id);
-          console.log('[DocumentDashboard] Added organization_id to formData:', currentOrganization.id);
+        const organizationId =
+          isMultiTenant() && !isPersonalMode && currentOrganization ? currentOrganization.id : null;
+        const pickedType = fileDocTypes[file.name] ?? tenantDocTypeDefault;
+        // Unified ingest sends doc_type per file; legacy leaves the request unchanged.
+        const formData = buildChatUploadFormData({
+          file,
+          organizationId,
+          pickerEnabled: docTypePickerEnabled,
+          docType: pickedType,
+        });
+        if (organizationId) {
+          console.log('[DocumentDashboard] Added organization_id to formData:', organizationId);
         } else {
           console.log('[DocumentDashboard] Personal workspace mode, no organization_id added');
         }
@@ -755,14 +850,42 @@ export function DocumentDashboard({
           throw new Error(result.error);
         }
 
-        // Update document status to ready using original temporary ID
+        const resolvedId = (result.id ?? result.documentId) as string | undefined;
+        let ingestStatus: string = typeof result.status === 'string' ? result.status : 'ready';
+
+        if (response.status === 202 && resolvedId) {
+          const polled = await pollIngestUntilTerminal(resolvedId, {
+            fetchStatus: async (documentId) => {
+              const statusUrl = `/api/rag/ingest/${documentId}${workspaceQuery}`;
+              const statusRes = await fetch(statusUrl);
+              if (!statusRes.ok) return { status: 'processing' };
+              const body = (await statusRes.json()) as { status?: string };
+              return { status: body.status ?? 'processing' };
+            },
+            sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+            now: () => Date.now(),
+          });
+          ingestStatus = polled.status;
+          if (ingestStatus === 'failed') {
+            throw new Error('Document processing failed');
+          }
+        }
+
+        const uiStatus: ProcessedDocument['status'] =
+          ingestStatus === 'failed'
+            ? 'failed'
+            : ingestStatus === 'processing'
+              ? 'processing'
+              : 'ready';
+
+        // Update document status using original temporary ID
         setStoredDocuments(prev => {
           return prev.map(d =>
             d.id === doc.id
               ? {
                 ...d,
-                id: result.id, // Replace with server-generated ID
-                status: 'ready',
+                id: resolvedId ?? d.id,
+                status: uiStatus,
                 // Update additional fields that may have changed
                 pages: result.pages,
                 text: result.text || d.text,
@@ -777,8 +900,8 @@ export function DocumentDashboard({
 
         onProcessingComplete?.({
           ...doc,
-          id: result.id,
-          status: 'ready',
+          id: resolvedId ?? doc.id,
+          status: uiStatus === 'processing' ? 'processing' : uiStatus,
           pages: result.pages,
           text: result.text || doc.text,
           partialSuccess: result.successfulChunks !== undefined &&
@@ -806,6 +929,7 @@ export function DocumentDashboard({
     // All documents processed, clean up
     setIsProcessing(false);
     setFiles([]);
+    setFileDocTypes({});
 
     // Check if any documents failed
     const failedCount = storedDocuments.filter(doc =>
@@ -815,7 +939,7 @@ export function DocumentDashboard({
     if (failedCount > 0) {
       console.warn(`${failedCount} document(s) failed to process.`);
     }
-  }, [files, onProcessingStart, onProcessingComplete, onProcessingError, setActiveTab, storedDocuments, currentOrganization?.id, isPersonalMode]);
+  }, [files, fileDocTypes, docTypePickerEnabled, tenantDocTypeDefault, onProcessingStart, onProcessingComplete, onProcessingError, setActiveTab, storedDocuments, currentOrganization?.id, isPersonalMode, workspaceQuery]);
 
   // Create a function to handle tab switching with better visual feedback
   const handleTabChange = (tab: string) => {
@@ -843,11 +967,6 @@ export function DocumentDashboard({
   ) : (
     "Upload"
   );
-
-  const workspaceQuery =
-    isMultiTenant() && !isPersonalMode && currentOrganization
-      ? `?organizationId=${encodeURIComponent(currentOrganization.id)}`
-      : '';
 
   const handleDelete = async (id: string) => {
     try {
@@ -1331,12 +1450,22 @@ export function DocumentDashboard({
                               {files.map((file, index) => (
                                 <div
                                   key={index}
-                                  className="group flex items-center justify-between px-4 py-2 hover:bg-white/50 dark:hover:bg-[#212121]"
+                                  className="group flex items-center justify-between gap-2 px-4 py-2 hover:bg-white/50 dark:hover:bg-[#212121]"
                                 >
                                   <div className="grid gap-0.5 min-w-0 flex-1 mr-2">
                                     <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{file.name}</p>
                                     <p className="text-xs text-gray-600 dark:text-gray-400">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
                                   </div>
+                                  {docTypePickerEnabled ? (
+                                    <DocTypePicker
+                                      value={fileDocTypes[file.name] ?? tenantDocTypeDefault}
+                                      language={language}
+                                      disabled={isProcessing}
+                                      onChange={(value) =>
+                                        setFileDocTypes((prev) => ({ ...prev, [file.name]: value }))
+                                      }
+                                    />
+                                  ) : null}
                                   <Button
                                     variant="ghost"
                                     size="icon"
