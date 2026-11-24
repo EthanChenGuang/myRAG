@@ -24,12 +24,21 @@ function countMatches(text: string, pattern: RegExp): number {
  * Dominant language of a text among zh, en and it, or null without evidence.
  * Han share of all letters decides zh; Latin text is split between en and it by stopword hits.
  */
-export function detectLanguage(text: string): DetectedLanguage | null {
+export type LanguageDetection = {
+  language: DetectedLanguage | null;
+  confident: boolean;
+};
+
+export function detectLanguageWithConfidence(text: string): LanguageDetection {
   const han = countMatches(text, /\p{Script=Han}/gu);
   const latin = countMatches(text, /\p{Script=Latin}/gu);
   const letters = han + latin;
-  if (letters === 0) return null;
-  if (han / letters >= HAN_SHARE_FOR_ZH) return 'zh';
+  if (letters === 0) {
+    return { language: null, confident: false };
+  }
+  if (han / letters >= HAN_SHARE_FOR_ZH) {
+    return { language: 'zh', confident: true };
+  }
 
   let en = 0;
   let it = 0;
@@ -38,6 +47,14 @@ export function detectLanguage(text: string): DetectedLanguage | null {
     if (EN_STOPWORDS.has(word)) en += 1;
     if (IT_STOPWORDS.has(word)) it += 1;
   }
-  if (en === 0 && it === 0) return null;
-  return it > en ? 'it' : 'en';
+  if (en === 0 && it === 0) {
+    return { language: null, confident: false };
+  }
+  const confident = en !== it;
+  const language: DetectedLanguage = it > en ? 'it' : 'en';
+  return { language, confident };
+}
+
+export function detectLanguage(text: string): DetectedLanguage | null {
+  return detectLanguageWithConfidence(text).language;
 }
