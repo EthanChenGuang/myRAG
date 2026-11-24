@@ -2,6 +2,8 @@
 
 BEGIN;
 
+DROP FUNCTION IF EXISTS public.rag_fail_ingestion_job(uuid, text, text, boolean);
+
 ALTER TABLE public.ingestion_jobs
   ADD COLUMN IF NOT EXISTS dead_letter_at timestamptz;
 

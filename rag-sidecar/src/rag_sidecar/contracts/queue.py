@@ -117,6 +117,7 @@ class IngestionJob(_Contract):
     est_cost_usd: float | None = Field(default=None, ge=0)
     embedding_profile: str | None = None
     error_class: str | None = None
+    dead_letter_at: datetime | None = None
     needs_review_reason: str | None = None
     routing_note: str | None = None
     provisional_published_at: datetime | None = None

@@ -76,7 +76,7 @@ const STRIPPED_JOB_COLUMNS = new Set(['error']);
 function normalizeJobRow(row: Row): Row {
   const out: Row = { ...row };
   for (const key of STRIPPED_JOB_COLUMNS) delete out[key];
-  for (const key of ['created_at', 'updated_at', 'deleted_at', 'lease_until', 'run_after', 'provisional_published_at'] as const) {
+  for (const key of ['created_at', 'updated_at', 'deleted_at', 'lease_until', 'run_after', 'provisional_published_at', 'dead_letter_at'] as const) {
     const value = iso(out[key]);
     if (value !== null) out[key] = value;
   }
