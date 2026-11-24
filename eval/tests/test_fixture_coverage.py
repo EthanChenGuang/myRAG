@@ -18,6 +18,8 @@ MANIFEST_PATH = REPO_ROOT / "eval/fixtures/split-manifest.json"
 LANGUAGES = ("zh", "en", "it")
 PAIRS = (("en", "zh"), ("it", "zh"), ("zh", "en"), ("it", "en"), ("zh", "it"), ("en", "it"))
 PER_PAIR_MINIMUM = 4
+NO_ANSWER_ADDED_BY_PLAN_04_38 = 18
+CROSS_LINGUAL_ADDED_BY_PLAN_04_38 = 2
 PER_LANGUAGE_CATEGORY = {
     "general": 6,
     "multi_turn": 3,
@@ -25,13 +27,14 @@ PER_LANGUAGE_CATEGORY = {
     "exact_term": 3,
     "table": 3,
     "scanned": 2,
-    "no_answer": 4,
+    "no_answer": 10,
     "colloquial": 2,
     "ambiguous": 2,
     "typo": 2,
     "cross_lingual": 8,
     "selective_filter": 4,
 }
+PER_LANGUAGE_CATEGORY_OVERRIDES = {("en", "cross_lingual"): 9, ("it", "cross_lingual"): 9}
 # Tightest selective_filter in this corpus pins a single document (4–6 chunk rows of 71).
 FIXTURE_MAX_SELECTIVE_ROW_SHARE = 6 / 71
 RELATIVE_DATE_LATIN = ("today", "yesterday", "last week", "this month", "oggi", "ieri")
@@ -55,17 +58,17 @@ def test_corpus_has_one_image_caption_document():
     assert [doc.filename for doc in documents if doc.image_url] == ["warehouse-floorplan.png"]
 
 
-def test_single_language_items_thirty_four_per_language(items):
+def test_single_language_items_forty_per_language(items):
     single = [item for item in items if item.category != "cross_lingual"]
     counts = collections.Counter(item.language for item in single)
-    assert len(single) == 102
-    assert {language: counts[language] for language in LANGUAGES} == {"zh": 34, "en": 34, "it": 34}
+    assert len(single) == 102 + NO_ANSWER_ADDED_BY_PLAN_04_38
+    assert {language: counts[language] for language in LANGUAGES} == {"zh": 40, "en": 40, "it": 40}
 
 
-def test_twenty_four_cross_lingual_items_four_per_pair(items):
+def test_twenty_six_cross_lingual_items_at_least_four_per_pair(items):
     cross = [item for item in items if item.category == "cross_lingual"]
-    assert len(items) == 102 + len(cross)
-    assert len(cross) == PER_PAIR_MINIMUM * len(PAIRS)
+    assert len(items) == 102 + NO_ANSWER_ADDED_BY_PLAN_04_38 + len(cross)
+    assert len(cross) == PER_PAIR_MINIMUM * len(PAIRS) + CROSS_LINGUAL_ADDED_BY_PLAN_04_38
     counts = collections.Counter((item.language, item.evidence_language) for item in cross)
     for pair in PAIRS:
         assert counts[pair] >= PER_PAIR_MINIMUM, pair
@@ -76,6 +79,7 @@ def test_every_language_category_cell_has_the_planned_count_and_at_least_two(ite
     cells = collections.Counter((item.language, item.category) for item in items)
     for language in LANGUAGES:
         for category, expected in PER_LANGUAGE_CATEGORY.items():
+            expected = PER_LANGUAGE_CATEGORY_OVERRIDES.get((language, category), expected)
             assert cells[(language, category)] == expected, (language, category)
             assert cells[(language, category)] >= 2
 
