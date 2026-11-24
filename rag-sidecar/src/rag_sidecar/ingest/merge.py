@@ -112,7 +112,7 @@ def merge(parts: Sequence[DoclingDocument], n_pages: int) -> DoclingDocument:
     return merged
 
 
-def _shift_pages(doc: DoclingDocument, offset: int) -> DoclingDocument:
+def shift_pages(doc: DoclingDocument, offset: int) -> DoclingDocument:
     """A deep copy of ``doc`` with every page number moved by ``offset``; the input is left alone."""
     shifted = doc.model_copy(deep=True)
     shifted.pages = {
@@ -143,8 +143,8 @@ def join_page_parts(parts: Sequence[DoclingDocument]) -> DoclingDocument:
         if flat[0] == 1:
             return merge(ordered, flat[-1])
         offset = flat[0] - 1
-        lowered = [_shift_pages(part, -offset) for part in ordered]
-        return _shift_pages(merge(lowered, flat[-1] - offset), offset)
+        lowered = [shift_pages(part, -offset) for part in ordered]
+        return shift_pages(merge(lowered, flat[-1] - offset), offset)
     merged = parts[0].model_copy(deep=True)
     merged.pages = {key: value for part in parts for key, value in part.pages.items()}
     merged.texts = []
@@ -243,7 +243,7 @@ def slice_pages(doc: DoclingDocument, pages: Iterable[int]) -> DoclingDocument:
     sliced = doc.filter(page_nrs=set(pages))
     # DoclingDocument.filter numbers pages from the first page of the source document, not from page one of the file.
     offset = min(doc.pages) - 1 if doc.pages else 0
-    return _shift_pages(sliced, offset) if offset else sliced
+    return shift_pages(sliced, offset) if offset else sliced
 
 
 def merge_dict_fingerprint(doc: DoclingDocument) -> bytes:

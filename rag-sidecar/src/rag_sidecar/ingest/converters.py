@@ -9,7 +9,7 @@ from typing import Any, Protocol
 
 from docling_core.types.doc import DoclingDocument, Size
 
-from rag_sidecar.ingest.merge import join_page_parts, merge, slice_pages
+from rag_sidecar.ingest.merge import join_page_parts, merge, shift_pages, slice_pages
 from rag_sidecar.parse import docling_adapter
 from rag_sidecar.parse.converter import ConversionError
 from rag_sidecar.preflight.config import load_routing_config
@@ -163,6 +163,9 @@ class RecordedRangeConverter:
             if not recorded.is_file():
                 raise RecordedMiss()
             doc = DoclingDocument.load_from_json(recorded)
+            if page not in doc.pages and sorted(doc.pages) == [1]:
+                # per-page recordings of a one-page spec (bench-100) are numbered 1
+                doc = shift_pages(doc, page - 1)
             parts.append(slice_pages(doc, {page}))
             _increment_conversion_counter()
         document = join_page_parts(parts)
