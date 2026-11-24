@@ -100,28 +100,31 @@ interface Ledger {
   events: string[];
 }
 
-function fakeLedger(options: { job?: Record<string, unknown> | null; batchFits?: boolean; failReserve?: boolean } = {}): Ledger {
+function fakeLedger(
+  options: { job?: Record<string, unknown> | null; batchFits?: boolean; failReserve?: boolean; onBatch?: () => void } = {},
+): Ledger {
   const calls: LedgerCall[] = [];
   const events: string[] = [];
   const job = options.job === undefined ? jobRow() : options.job;
-  const handlers: Record<string, (args: Record<string, unknown>) => RpcResponse> = {
+  const handlers: Record<string, (_args: Record<string, unknown>) => RpcResponse> = {
     rag_get_ingestion_job_internal: (args) => ({ data: job && args.p_job_id === JOB ? [job] : [], error: null }),
     rag_reserve_parse_budget: (args) => {
       events.push('reserve');
       if (options.failReserve) return { data: null, error: { code: 'XX000', message: 'db exploded with sensitive text' } };
-      return { data: Number(args.p_pages) <= Number(args.p_limit), error: null };
+      return { data: [{ rag_reserve_parse_budget: Number(args.p_pages) <= Number(args.p_limit) }], error: null };
     },
     rag_reserve_batch_budget: () => {
       events.push('batch');
-      return { data: options.batchFits ?? true, error: null };
+      options.onBatch?.();
+      return { data: [{ rag_reserve_batch_budget: options.batchFits ?? true }], error: null };
     },
     rag_settle_parse_budget: () => {
       events.push('settle');
-      return { data: true, error: null };
+      return { data: [{ rag_settle_parse_budget: true }], error: null };
     },
     rag_release_parse_budget: () => {
       events.push('release');
-      return { data: true, error: null };
+      return { data: [{ rag_release_parse_budget: true }], error: null };
     },
   };
   const db: RpcClient = {
@@ -142,7 +145,7 @@ interface Stub {
   inputs: VlmDetectInput[];
 }
 
-function installStub(answer: (index: number, input: VlmDetectInput) => unknown, ledger?: Ledger): Stub {
+function installStub(answer: (_index: number, _input: VlmDetectInput) => unknown, ledger?: Ledger): Stub {
   const stub: Stub = { inputs: [] };
   setVlmDetectorForTests(async (input) => {
     ledger?.events.push('model');
@@ -238,7 +241,7 @@ describe('detect-vlm authentication, validation and lease', () => {
     expect(unset.status).toBe(401);
     expect(unset.json).toEqual({ error: 'unauthorized' });
     process.env.RAG_SIDECAR_SECRET = SECRET;
-    for (const secret of [undefined, '', 'not-the-secret', SECRET.slice(0, -1)]) {
+    for (const secret of [null, '', 'not-the-secret', SECRET.slice(0, -1)]) {
       const res = await post(JOB, body([1]), secret);
       expect(res.status).toBe(401);
       expect(res.json).toEqual({ error: 'unauthorized' });
@@ -485,12 +488,11 @@ describe('detect-vlm answer validation', () => {
     expect(settle.args.p_pages_used).toBe(3);
   });
 
-  it('releases the whole reservation when no model request could be started', async () => {
-    const ledger = fakeLedger();
+  it('releases the whole reservation when the request is aborted before any model request starts', async () => {
+    const controller = new AbortController();
+    const ledger = fakeLedger({ onBatch: () => controller.abort() });
     install(ledger);
     installStub(() => SIMPLE_VERDICT, ledger);
-    const controller = new AbortController();
-    controller.abort();
     const handler = await import('@/lib/rag/ingest/callbacks/detect-vlm');
     const result = await handler.handleDetectVlm(JOB, body([1, 2]) as never, { signal: controller.signal });
     expect(result.status).toBe(200);
