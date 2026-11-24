@@ -114,6 +114,8 @@ export { findInvoices } from './retrieval/invoices';
 export type { FindInvoicesDeps, InvoiceFilters, InvoiceHit } from './retrieval/invoices';
 export { getIngestStatusReport, STALE_PROCESSING_MS } from './ingest/status';
 export type { IngestStatusReport } from './ingest/status';
+export { IngestLedgerError, deleteJob, getJobForScope, listJobs, retryJob } from './ingest/ledger';
+export type { ListJobsArgs } from './ingest/ledger';
 export { listQuarantine } from './ingest/quarantine-admin';
 export { releaseQuarantined } from './ingest/quarantine-admin';
 export { deleteQuarantined } from './ingest/quarantine-admin';
