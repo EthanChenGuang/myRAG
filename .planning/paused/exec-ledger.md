@@ -138,9 +138,9 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | 03.1-36 | — | **UI-SPEC in progress** (gsd-ui-researcher, Opus); executor after spec check |
 | fix-relex-rpc | `wt/fix-relex-rpc` | **RUNNING** (gsd-debugger, Opus) — pre-existing `rag_relex_candidates rpc_failed` in PGlite fixtures |
 | 04-31 | `wt/04-31` / `exec/04-31` | **merged** (0408) |
-| 03.1-21 | `wt/03.1-21` / `exec/03.1-21` | **RUNNING** (gsd-executor, base `e3b4d12`) |
+| 03.1-21 | `wt/03.1-21` / `exec/03.1-21` | **merged** |
 | 03.1-22 | `wt/03.1-22` / `exec/03.1-22` | **RUNNING** (gsd-executor, base `e3b4d12`) |
-| 04-27 | `wt/04-27` / `exec/04-27` | **RUNNING** (gsd-executor, base `e3b4d12`) |
+| 04-27 | `wt/04-27` / `exec/04-27` | **merged** |
 
 ## Wave E — **PAUSE-96 STOPPED** (2026-11-24 ~13:48 Europe/Rome; Claude Code resumes)
 
