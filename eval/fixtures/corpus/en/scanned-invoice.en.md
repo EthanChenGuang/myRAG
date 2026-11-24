@@ -1,3 +1,4 @@
+<!-- fixture-meta {"doc_type":"invoice_receipt"} -->
 ## lnvoice header
 
 LUMEN VA1LEY lNSTRUMENTS
