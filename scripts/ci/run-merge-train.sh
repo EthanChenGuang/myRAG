@@ -31,6 +31,10 @@ run_queue() {
 git fetch origin "$TRUNK"
 git checkout "$TRUNK"
 git pull origin "$TRUNK"
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  echo "ERROR: working tree dirty; stash or commit before merge train" >&2
+  exit 1
+fi
 
 while read -r pr branch; do
   [[ -z "$pr" ]] && continue
