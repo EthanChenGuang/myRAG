@@ -52,6 +52,12 @@ function loadTypedManifest(): ManifestFixture[] {
  * eval/fixtures/ingest/manifest.json follow, each with its picked doc_type. The fake edge it ingests through stays up and is handed to
  * the caller together with the database; the app environment points at it.
  */
+export interface IngestFixtureBuildState {
+  fixture: FixtureDatabase;
+  edge: FakeEdge;
+  scope: import('@/lib/rag/tenant/scope').TenantScope;
+}
+
 export async function buildIngestFixtureDatabase(options: {
   deploymentMode: DeploymentMode;
   corpusDir: string;
@@ -59,11 +65,29 @@ export async function buildIngestFixtureDatabase(options: {
   supabaseGrants?: boolean;
   migrations?: boolean;
   setupSqlPath?: string;
-}): Promise<FixtureDatabase> {
+  /** When set, only these corpus documents are ingested (half-open range). */
+  corpusRange?: { start: number; end: number };
+  includeTypedFixtures?: boolean;
+  continueFrom?: IngestFixtureBuildState;
+  onAfterCorpusSlice?: (state: IngestFixtureBuildState) => Promise<void>;
+  /** Ingest corpus documents [0, index) first, run the callback, then ingest [index, end) and typed fixtures. */
+  splitAtCorpusIndex?: number;
+}): Promise<FixtureDatabase & { buildState: IngestFixtureBuildState }> {
   const { deploymentMode } = options;
+  const includeTyped = options.includeTypedFixtures ?? true;
   const corpus = loadCorpus(options.corpusDir);
-  const empty = await createEmptyFixtureDatabase(options);
+  const corpusStart = options.corpusRange?.start ?? 0;
+  const corpusEnd = options.corpusRange?.end ?? corpus.documents.length;
+  const splitAt = options.splitAtCorpusIndex;
+  const corpusSlice =
+    splitAt === undefined
+      ? corpus.documents.slice(corpusStart, corpusEnd)
+      : corpus.documents.slice(corpusStart, Math.min(splitAt, corpusEnd));
+  const corpusTail =
+    splitAt === undefined ? [] : corpus.documents.slice(Math.max(corpusStart, splitAt), corpusEnd);
+  const empty = options.continueFrom?.fixture ?? (await createEmptyFixtureDatabase(options));
   let edge: FakeEdge | undefined;
+  let scope: import('@/lib/rag/tenant/scope').TenantScope | undefined;
   let uninstall: (() => Promise<void>) | undefined;
   let sidecarUploads: FixtureDatabase['ingestSidecarUploads'];
   let llamaAttempts = 0;
@@ -77,8 +101,13 @@ export async function buildIngestFixtureDatabase(options: {
     ...options.processEnv,
   };
   try {
-    edge = await startFakeEdge({ db: empty.db });
-    applyFixtureProcessEnv({ edgeUrl: edge.url, deploymentMode, extra: harnessEnv });
+    edge = options.continueFrom?.edge ?? (await startFakeEdge({ db: empty.db }));
+    applyFixtureProcessEnv({
+      edgeUrl: edge.url,
+      deploymentMode,
+      extra: options.continueFrom ? { ...harnessEnv, ...options.processEnv } : harnessEnv,
+      vendorEmbeddingRoutes: Boolean(harnessEnv.RAG_EMBEDDING_PROFILES === 'on' || options.processEnv?.RAG_EMBEDDING_PROFILES === 'on'),
+    });
 
     const { fixtureAdminClient, installIngestFakes } = await import('./ingest-fakes.mts');
     const { ingest } = await import('@/lib/rag/ingest');
@@ -89,8 +118,10 @@ export async function buildIngestFixtureDatabase(options: {
     const fakes = await installIngestFakes({ db: fixtureAdminClient(edge.url), env: INGEST_MODE_FEATURE_ENV });
     uninstall = fakes.uninstall;
 
-    const scope = deploymentMode === 'multi-tenant' ? mintScope('personal', empty.fixtureUserId, null) : mintScope('single', null, null);
-    for (const doc of corpus.documents) {
+    scope =
+      options.continueFrom?.scope ??
+      (deploymentMode === 'multi-tenant' ? mintScope('personal', empty.fixtureUserId, null) : mintScope('single', null, null));
+    for (const doc of corpusSlice) {
       const result = await ingest({
         scope,
         source: 'config_upload',
@@ -106,7 +137,29 @@ export async function buildIngestFixtureDatabase(options: {
       }
     }
 
-    for (const entry of loadTypedManifest()) {
+    if (options.onAfterCorpusSlice && edge !== undefined) {
+      const partialFixture = { ...empty, corpusSha256: ingestCorpusSha256(corpus.corpusSha256) } as FixtureDatabase;
+      await options.onAfterCorpusSlice({ fixture: partialFixture, edge, scope });
+    }
+
+    for (const doc of corpusTail) {
+      const result = await ingest({
+        scope,
+        source: 'config_upload',
+        sourceKey: buildSourceKey('config_upload', { filename: doc.filename }),
+        text: doc.content,
+        filename: doc.filename,
+        mimeType: 'text/markdown',
+        docType: 'general',
+        signal: new AbortController().signal,
+      });
+      if (result.status !== 'ready') {
+        throw new Error(`[Ingest Mode] ${doc.relpath} ended ${result.status} (${result.reason ?? 'no reason'})`);
+      }
+    }
+
+    const ingestTyped = includeTyped && (splitAt === undefined || corpusTail.length > 0);
+    if (ingestTyped) for (const entry of loadTypedManifest()) {
       const filePath = path.join('eval/fixtures/ingest', entry.path);
       const bytes = fs.readFileSync(filePath);
       const filename = path.basename(entry.path);
@@ -149,11 +202,15 @@ export async function buildIngestFixtureDatabase(options: {
     await uninstall?.();
   }
 
+  if (edge === undefined || scope === undefined) throw new Error('[Ingest Mode] internal error: ingest did not finish');
+  const fixtureWithCorpus = { ...empty, corpusSha256: ingestCorpusSha256(corpus.corpusSha256) } as FixtureDatabase;
+  const buildState: IngestFixtureBuildState = { fixture: fixtureWithCorpus, edge, scope };
   return {
     ...empty,
     corpusSha256: ingestCorpusSha256(corpus.corpusSha256),
     edge,
     ingestSidecarUploads: sidecarUploads,
     ingestLlamaParseAttempts: llamaAttempts,
+    buildState,
   };
 }

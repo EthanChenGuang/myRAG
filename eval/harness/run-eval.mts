@@ -23,6 +23,9 @@ export interface EvalRequestOptions {
   generator_model?: string | null;
   degrade?: 'drop_top_candidate' | null;
   embedding_profile?: string | null;
+  disabled_stages?: Array<
+    'refs' | 'analyze' | 'embed' | 'search' | 'legacy_rank' | 'post_filter' | 'assemble' | 'voice_keyword_fallback' | 'local_rerank'
+  >;
 }
 
 export type EvalGenerator = 'stub' | 'live';
@@ -61,6 +64,10 @@ export interface RunEvalOptions {
   includeDrafts?: boolean;
   /** When set (in-process smoke only), backfill this profile via runReembed before traces are collected. */
   embeddingProfileId?: string;
+  /** Reuse an ingest-mode fixture database instead of building a new one. */
+  ingestFixture?: import('./pglite-supabase.mts').FixtureDatabase;
+  /** Reuse a prepared in-process eval session (the harness keeps the edge open). */
+  retainInProcess?: InProcessEval;
 }
 
 export interface RunEvalResult {
@@ -119,15 +126,19 @@ export async function prepareInProcessEval(options: {
   fixtureMode?: FixtureMode;
   allowedScopes?: string[];
   embeddingProfileId?: string;
+  ingestFixture?: import('./pglite-supabase.mts').FixtureDatabase;
 }): Promise<InProcessEval> {
-  const { corpusDir, deploymentMode, fixtureMode, allowedScopes = [], embeddingProfileId } = options;
-  const secret = crypto.randomBytes(24).toString('hex');
+  const { corpusDir, deploymentMode, fixtureMode, allowedScopes = [], embeddingProfileId, ingestFixture } = options;
+  const existingSecret = process.env.RAG_EVAL_SECRET ?? '';
+  const secret = existingSecret.length >= 32 ? existingSecret : crypto.randomBytes(24).toString('hex');
   const evalEnv = {
     RAG_EVAL_SECRET: secret,
     RAG_EVAL_ALLOWED_SCOPES: [`user:${FIXTURE_USER_ID}`, ...allowedScopes].join(','),
     ...(embeddingProfileId ? { RAG_EMBEDDING_PROFILES: 'on' } : {}),
   };
-  const fixture = await createFixtureDatabase({ deploymentMode, corpusDir, fixtureMode, processEnv: evalEnv });
+  const fixture =
+    ingestFixture ??
+    (await createFixtureDatabase({ deploymentMode, corpusDir, fixtureMode, processEnv: evalEnv }));
   let edge: FakeEdge | undefined;
   try {
     // The ingest mode ingests the corpus through its own edge and hands it over: a second edge would have another URL than the
@@ -143,10 +154,10 @@ export async function prepareInProcessEval(options: {
     edgeUrl: startedEdge.url,
     deploymentMode,
     extra: evalEnv,
-    vendorEmbeddingRoutes: !!embeddingProfileId,
+    vendorEmbeddingRoutes: !!(embeddingProfileId || ingestFixture),
   });
 
-  if (embeddingProfileId) {
+  if (embeddingProfileId && !ingestFixture) {
     const { fixtureAdminClient } = await import('./ingest-fakes.mts');
     const { runReembed } = await import('../../src/lib/rag/ingest/reembed/run.ts');
     const report = await runReembed({ db: fixtureAdminClient(startedEdge.url), profileId: embeddingProfileId, batchSize: 32 });
@@ -165,8 +176,10 @@ export async function prepareInProcessEval(options: {
     corpusSha256: fixture.corpusSha256,
     sqlSha256: fixture.sqlSha256,
     close: async () => {
-      await startedEdge.close();
-      await fixture.db.close().catch(() => undefined);
+      if (!ingestFixture) {
+        await startedEdge.close();
+        await fixture.db.close().catch(() => undefined);
+      }
     },
   };
 }
@@ -257,6 +270,8 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     generator,
     includeDrafts = false,
     embeddingProfileId,
+    ingestFixture,
+    retainInProcess,
   } = options;
   const requestOptions: EvalRequestOptions = { ...(options.requestOptions ?? {}) };
 
@@ -320,14 +335,19 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
         : requestOptions.user_id
           ? `user:${requestOptions.user_id}`
           : null;
-      const prepared = await prepareInProcessEval({
-        corpusDir,
-        deploymentMode,
-        fixtureMode,
-        allowedScopes: requestedScope ? [requestedScope] : [],
-        embeddingProfileId,
-      });
-      inProcess = prepared;
+      if (retainInProcess) {
+        inProcess = retainInProcess;
+      } else {
+        const prepared = await prepareInProcessEval({
+          corpusDir,
+          deploymentMode,
+          fixtureMode,
+          allowedScopes: requestedScope ? [requestedScope] : [],
+          embeddingProfileId,
+          ingestFixture,
+        });
+        inProcess = prepared;
+      }
       if (includeAnswer) {
         answerModule = await import('../../src/lib/rag-eval/answer.ts');
         if (generator === 'stub') {
@@ -338,12 +358,14 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
         }
       }
       send = async (payload) => {
+        if (!inProcess) throw new Error('[Eval Harness] in-process eval is not prepared');
         const req = new NextRequest(`http://localhost${ROUTE_PATH}`, {
           method: 'POST',
-          headers: { 'content-type': 'application/json', 'x-rag-eval-secret': prepared.secret },
+          headers: { 'content-type': 'application/json', 'x-rag-eval-secret': inProcess.secret },
           body: JSON.stringify(payload),
+          signal: AbortSignal.timeout(120_000),
         });
-        const res = await prepared.POST(req);
+        const res = await inProcess.POST(req);
         return { status: res.status, body: await res.json().catch(() => null) };
       };
     }
@@ -398,7 +420,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
   } finally {
     restoreConsole();
     answerModule?.setEvalLanguageModelFactory(null);
-    if (inProcess) await inProcess.close();
+    if (inProcess && !retainInProcess) await inProcess.close();
   }
 
   const effectiveDeploymentMode: DeploymentMode =
@@ -414,6 +436,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     user_id: requestOptions.user_id ?? null,
     embedding_profile: embeddingProfile,
     ...(requestOptions.degrade ? { degrade: requestOptions.degrade } : {}),
+    ...(requestOptions.disabled_stages?.length ? { disabled_stages: requestOptions.disabled_stages } : {}),
     ...(includeAnswer ? { generator_model: requestOptions.generator_model ?? null } : {}),
   };
   const embedder = baseUrl
