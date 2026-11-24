@@ -71,6 +71,26 @@ status: complete
 
 None — plan executed as written. Human-check steps (live Config UI against running app) were not run in this automated execution.
 
+## Design skills
+
+| Skill | Role | Outcome |
+|-------|------|---------|
+| frontend-design | n/a — incremental Config UI admin panels on existing DaisyUI patterns | n/a |
+| Impeccable | n/a — no new visual direction | n/a |
+| web-design-guidelines | `command.md` pass on `rag-panels/*.js`, RAG administration tab in `index.html`, `/api/rag` proxy block in `config-server.js` | pass (all findings resolved) |
+
+Under **web-design-guidelines**:
+
+- `scripts/config-ui/index.html:8418` — async status missing `aria-live` — fixed (`role="status" aria-live="polite"`)
+- `scripts/config-ui/index.html:8430` — async status missing `aria-live` — fixed
+- `scripts/config-ui/index.html:8439` — async status missing `aria-live` — fixed
+- `scripts/config-ui/index.html:8410` — heading Title Case — fixed (`RAG Administration`)
+- `scripts/config-ui/rag-panels/doc-types.js:142-179` — selects not linked to labels / missing `name` — fixed (`htmlFor`, `id`, `name`)
+- `scripts/config-ui/rag-panels/rag-fetch.js` — none
+- `scripts/config-ui/rag-panels/embedding-profiles.js` — none (status regions in HTML)
+- `scripts/config-ui/rag-panels/quarantine.js` — none
+- `scripts/config-server.js:3360-3438` — none (server proxy)
+
 ## Verification
 
 - `npx vitest run tests/ui/config-rag-panels.test.ts` — 14 passed
