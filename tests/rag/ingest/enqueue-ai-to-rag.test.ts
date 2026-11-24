@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { EnqueueResult, IngestInput, IngestResult } from '@/lib/rag/ingest';
+import type { EnqueueResult, IngestInput, IngestResult } from '@/lib/rag';
 import type { JobSettingsSnapshot } from '@/lib/rag-eval/contracts.generated';
 import { buildParserChain } from '@/lib/rag/ingest/parsers/chain';
 import { isTextLike, parsePlainText } from '@/lib/rag/ingest/parsers/plain-text';
@@ -286,13 +286,15 @@ describe('ai-to-rag native routing for text jobs', () => {
               Promise.resolve({ data: [JOB_ROW], error: null }).then(onFulfilled, onRejected),
           } as never;
         }
-        return base.rpc(fn, args);
+        return base.rpc(fn, args ?? {});
       },
     };
     fakes.installIngestDeps({
       db,
-      env: { RAG_INGEST_PIPELINE: 'unified', RAG_INGEST_ASYNC: 'on', RAG_PARSE_ROUTING: routing },
+      env: { RAG_INGEST_PIPELINE: 'unified' },
     });
+    vi.stubEnv('RAG_INGEST_ASYNC', 'on');
+    vi.stubEnv('RAG_PARSE_ROUTING', routing);
     const { submitIngest } = await import('@/lib/rag/ingest/enqueue');
     const { mintScope } = await import('@/lib/rag/tenant/scope');
     await submitIngest({
@@ -307,7 +309,7 @@ describe('ai-to-rag native routing for text jobs', () => {
     fakes.uninstallIngestDeps();
     expect(captured).not.toBeNull();
     expect(fakes.callsOf(calls, 'rag_begin_document_version')).toHaveLength(1);
-    return captured as JobSettingsSnapshot;
+    return captured!;
   }
 
   it.each(['fixed', 'tiered'] as const)('under %s routing the job snapshot keeps markdown on the native text path', async (routing) => {

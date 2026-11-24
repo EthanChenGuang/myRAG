@@ -4,16 +4,16 @@ import {
   embedText,
   ingest,
   loadIngestConfig,
+  queueConfigFromProcessEnv,
   repairOwnerMembership,
   resolveTenantScope,
+  scheduleIngestWake,
   submitIngest,
   type EnqueueResult,
   type IngestResult,
   type RagAdminDb,
   type TenantScope,
 } from '@/lib/rag';
-import { queueConfigFromProcessEnv } from '@/lib/rag/ingest/queue-config';
-import { scheduleIngestWake } from '@/lib/rag/ingest/wake';
 import { checkSingleTenantKbWrite } from '@/lib/kb-write-access';
 import { isMultiTenant } from '@/lib/deployment-mode';
 import { v4 as uuidv4 } from 'uuid';
