@@ -46,10 +46,28 @@
             "general",
             "colloquial",
             "ambiguous",
-            "typo"
+            "typo",
+            "cross_lingual"
           ],
           "title": "Category",
           "type": "string"
+        },
+        "evidence_language": {
+          "anyOf": [
+            {
+              "enum": [
+                "zh",
+                "en",
+                "it"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Evidence Language"
         },
         "first_hit_rank": {
           "anyOf": [
@@ -477,6 +495,13 @@
         "$ref": "#/$defs/SliceMetrics"
       },
       "title": "By Language Category",
+      "type": "object"
+    },
+    "by_language_pair": {
+      "additionalProperties": {
+        "$ref": "#/$defs/SliceMetrics"
+      },
+      "title": "By Language Pair",
       "type": "object"
     },
     "by_provenance": {

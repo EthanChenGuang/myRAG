@@ -28,6 +28,7 @@ class ItemResult(_Contract):
     item_id: str
     language: Language
     category: Category
+    evidence_language: Language | None = None
     split: Split
     provenance: Provenance
     answerable: bool
@@ -56,6 +57,7 @@ class EvalReport(_Contract):
     by_language: dict[str, SliceMetrics]
     by_category: dict[str, SliceMetrics]
     by_language_category: dict[str, SliceMetrics]
+    by_language_pair: dict[str, SliceMetrics] = Field(default_factory=dict)
     by_split: dict[str, SliceMetrics]
     by_provenance: dict[str, SliceMetrics] = Field(default_factory=dict)
     by_provenance_category: dict[str, SliceMetrics] = Field(default_factory=dict)

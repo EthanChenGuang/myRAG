@@ -150,6 +150,7 @@
           "answerable": true,
           "category": "general",
           "conversation": [],
+          "evidence_language": null,
           "expected_answer": "Twenty days per year.",
           "gold_evidence": [
             {
@@ -214,6 +215,30 @@
       },
       "by_language_category": {
         "en:general": {
+          "correct_refusal_rate": {
+            "n": 10,
+            "value": 0.5
+          },
+          "false_refusal_rate": {
+            "n": 10,
+            "value": 0.5
+          },
+          "mrr": {
+            "n": 10,
+            "value": 0.5
+          },
+          "recall_at_10": {
+            "n": 10,
+            "value": 0.5
+          },
+          "recall_at_5": {
+            "n": 10,
+            "value": 0.5
+          }
+        }
+      },
+      "by_language_pair": {
+        "en->zh": {
           "correct_refusal_rate": {
             "n": 10,
             "value": 0.5
@@ -325,6 +350,7 @@
         {
           "answerable": true,
           "category": "general",
+          "evidence_language": null,
           "first_hit_rank": 1,
           "item_id": "en-general-001",
           "language": "en",
@@ -444,6 +470,7 @@
           "role": "assistant"
         }
       ],
+      "evidence_language": null,
       "expected_answer": "Twenty days per year.",
       "gold_evidence": [
         {
@@ -1230,12 +1257,36 @@
     }
   },
   "variants": {
+    "GoldenItem:cross_lingual": {
+      "model": "GoldenItem",
+      "value": {
+        "answerable": true,
+        "category": "cross_lingual",
+        "conversation": [],
+        "evidence_language": "zh",
+        "expected_answer": "Five days per year.",
+        "gold_evidence": [
+          {
+            "document": "handbook.zh.md",
+            "quote": "每年 5 天",
+            "section": "Leave policy"
+          }
+        ],
+        "id": "xl-en-zh-01",
+        "language": "en",
+        "provenance": "synthetic_fixture",
+        "question": "How many days of annual leave does a new employee get?",
+        "review_status": "approved",
+        "split": "dev"
+      }
+    },
     "GoldenItem:no_answer_null_expected": {
       "model": "GoldenItem",
       "value": {
         "answerable": false,
         "category": "no_answer",
         "conversation": [],
+        "evidence_language": null,
         "expected_answer": null,
         "gold_evidence": [],
         "id": "en-no-answer-001",

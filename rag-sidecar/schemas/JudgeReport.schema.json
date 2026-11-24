@@ -14,7 +14,8 @@
             "general",
             "colloquial",
             "ambiguous",
-            "typo"
+            "typo",
+            "cross_lingual"
           ],
           "title": "Category",
           "type": "string"
