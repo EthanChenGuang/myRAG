@@ -721,3 +721,15 @@ def test_cli_usage_and_harness_errors_have_distinct_exit_codes(tmp_path, monkeyp
     monkeypatch.setattr(refusal_module, "_default_runner", failing)
     assert cli_main(["refusal", "--run-config", str(V2_RECOMMENDED), "--out", str(tmp_path / "d2"), "--golden", str(golden)]) == 3
     assert "harness" in capsys.readouterr().err
+
+
+def test_run_records_the_thresholds_path_relative_to_the_repo_root(tmp_path, monkeypatch):
+    import rag_eval.paths as paths
+
+    golden, _, scores = _world(tmp_path)
+    target = _existing_thresholds(tmp_path)
+    monkeypatch.setattr(paths, "REPO_ROOT", tmp_path)
+    result = _calibrate(tmp_path, _Runner(scores), golden, write=True, thresholds_path=target)
+    assert result.thresholds_path == "thresholds.json"
+    written = (tmp_path / "out" / "refusal-calibration-result.json").read_text(encoding="utf-8")
+    assert str(tmp_path) not in written

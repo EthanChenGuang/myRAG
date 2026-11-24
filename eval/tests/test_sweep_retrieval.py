@@ -498,3 +498,15 @@ def test_sweep_integration_two_real_cells_through_the_harness_with_v2_recommende
     assert manifest["run_config"]["overrides"]["candidate_pool_size"] == 75
     assert manifest["run_config"]["overrides"]["rerank_input_cap"] == 75
     assert manifest["golden_filter"]["gate_split"] == "dev"
+
+
+def test_sweep_records_cell_directories_relative_to_the_repo_root(tmp_path: Path, monkeypatch):
+    import rag_eval.paths as paths
+
+    config, golden = _fixture_inputs(tmp_path)
+    monkeypatch.setattr(paths, "REPO_ROOT", tmp_path)
+    stub = _SweepStub(gold_rank=lambda pool, k: 1)
+    result = run_retrieval_sweep(config, SweepGrid(pools=(50,), top_ks=(5,)), tmp_path / "out", runner=stub, golden=golden)
+    assert [cell.out_dir for cell in result.cells] == ["out/cells/pool-50_k-5"]
+    written = json.loads((tmp_path / "out" / "retrieval-sweep.json").read_text(encoding="utf-8"))
+    assert str(tmp_path) not in json.dumps(written)
