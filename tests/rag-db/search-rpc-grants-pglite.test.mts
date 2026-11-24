@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import type { PGlite } from '@electric-sql/pglite';
 import { createEmptyFixtureDatabase } from '../../eval/harness/pglite-supabase.mts';
 import { applyMigrationFiles, migrationFiles, type MigrationMode } from '../../eval/harness/migrations.mts';
-import { AUTHENTICATED_ALLOW_LIST } from '../helpers/security-definer-allow-list';
+import { allowListEntryFor, normalizeSignature } from '../helpers/security-definer-allow-list';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const REVOKE_MIGRATION = 'supabase/migrations/0409_search_rpc_revoke.sql';
@@ -123,7 +123,7 @@ function assertFullInventory(rows: DefinerRow[], mode: MigrationMode): void {
   }
   const problems: string[] = [];
   for (const row of rows) {
-    const allow = AUTHENTICATED_ALLOW_LIST[row.proname];
+    const allow = allowListEntryFor(row.sig);
     if (row.public_exec) problems.push(`${row.sig} executable by PUBLIC`);
     if (!row.service_role) problems.push(`${row.sig} not executable by service_role`);
     if (allow) {
@@ -137,7 +137,31 @@ function assertFullInventory(rows: DefinerRow[], mode: MigrationMode): void {
   assert.deepEqual(problems, []);
 }
 
+const OVERLOADS = `
+CREATE FUNCTION public.delete_folder(folder_uuid uuid) RETURNS boolean LANGUAGE sql SECURITY DEFINER SET search_path = pg_catalog, public AS $$ SELECT true $$;
+CREATE FUNCTION public.check_admin_status(who uuid) RETURNS boolean LANGUAGE sql SECURITY DEFINER SET search_path = pg_catalog, public AS $$ SELECT true $$;
+GRANT EXECUTE ON FUNCTION public.delete_folder(uuid), public.check_admin_status(uuid) TO anon, authenticated;
+`;
+
 for (const mode of ['multi-tenant', 'single-tenant'] as MigrationMode[]) {
+  describe(`allow-list signatures (${mode})`, () => {
+    test('regprocedure text normalises to the allow-list key format, and a new overload of an allow-listed name is flagged', async () => {
+      const fixture = await createEmptyFixtureDatabase({ deploymentMode: mode, supabaseFunctionDefaults: true });
+      try {
+        const rows = await definerInventory(fixture.db);
+        const allowed = rows.filter((row) => allowListEntryFor(row.sig) !== undefined);
+        assert.ok(allowed.length >= 8, `expected the allow-listed definers to resolve by signature, saw ${allowed.length}`);
+        assert.ok(rows.some((row) => normalizeSignature(row.sig) === 'delete_folder(uuid,boolean)'));
+
+        await fixture.db.exec(OVERLOADS);
+        const withOverloads = await definerInventory(fixture.db);
+        assert.throws(() => assertFullInventory(withOverloads, mode), /delete_folder\(uuid\).*executable by (anon|authenticated)/s);
+      } finally {
+        await fixture.db.close();
+      }
+    });
+  });
+
   describe(`0410_security_definer_rpc_grants (${mode})`, () => {
     test('a fresh install (folded setup file, then every migration, with hosted Supabase default function grants) leaves no SECURITY DEFINER function open to anon or PUBLIC', async () => {
       const fixture = await createEmptyFixtureDatabase({ deploymentMode: mode, supabaseFunctionDefaults: true });

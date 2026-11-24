@@ -19,3 +19,12 @@ export const AUTHENTICATED_ALLOW_LIST: Record<string, AllowListEntry> = {
   kb_writes_locked: { anon: false, reason: 'RLS helper in single-tenant knowledge-base write policies (TO authenticated)' },
   rag_ingest_realtime_topic_allowed: { anon: false, reason: 'RLS helper in the realtime.messages policy for ingestion job topics; reads auth.uid() and realtime.topic()' },
 };
+
+/** Lowercases and strips the schema, quotes and blanks from a `name(arg,arg)` signature, as `regprocedure::text` and `signatureKey` print it. */
+export function normalizeSignature(signature: string): string {
+  return signature.toLowerCase().replace(/"/g, '').replace(/\bpublic\./g, '').replace(/\s*,\s*/g, ',').replace(/\s+/g, ' ').trim();
+}
+
+export function allowListEntryFor(signature: string): AllowListEntry | undefined {
+  return AUTHENTICATED_ALLOW_LIST[normalizeSignature(signature).split('(')[0] as string];
+}

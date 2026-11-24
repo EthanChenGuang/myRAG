@@ -2,8 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { migrationFiles, type MigrationMode } from '../../eval/harness/migrations.mts';
-import { AUTHENTICATED_ALLOW_LIST } from '../helpers/security-definer-allow-list';
-import { aclViolation, simulateFunctionAcls } from '../helpers/sql-function-acl';
+import { AUTHENTICATED_ALLOW_LIST, allowListEntryFor } from '../helpers/security-definer-allow-list';
+import { aclViolation, signatureKey, simulateFunctionAcls } from '../helpers/sql-function-acl';
 
 const SQL = fs.readFileSync(path.resolve(__dirname, '../../supabase/multi-tenant-setup.sql'), 'utf8');
 const SINGLE = fs.readFileSync(path.resolve(__dirname, '../../supabase/single-tenant-setup.sql'), 'utf8');
@@ -95,25 +95,53 @@ describe('every SECURITY DEFINER function is service_role only unless allow-list
     const definers = [...acls.values()].filter((acl) => acl.definer);
     expect(definers.length).toBeGreaterThan(10);
     const violations = definers
-      .map((acl) => aclViolation(acl, AUTHENTICATED_ALLOW_LIST[acl.name]))
+      .map((acl) => aclViolation(acl, allowListEntryFor(signatureKey(acl.name, acl.args))))
       .filter((violation): violation is string => violation !== null);
     expect(violations).toEqual([]);
   });
 
-  test('the allow-list names only functions that exist as SECURITY DEFINER in the SQL, each with a reason', () => {
-    const names = new Set<string>();
+  test('the allow-list names only signatures that exist as SECURITY DEFINER in the SQL, each with a reason', () => {
+    const signatures = new Set<string>();
     for (const scenario of scenarios()) {
       for (const acl of simulateFunctionAcls(scenario.files.map(readRepo), { strictTargets: false }).values()) {
-        if (acl.definer) names.add(acl.name);
+        if (acl.definer) signatures.add(signatureKey(acl.name, acl.args));
       }
     }
-    for (const [name, entry] of Object.entries(AUTHENTICATED_ALLOW_LIST)) {
-      expect(names.has(name), `${name} is allow-listed but no SQL defines it as SECURITY DEFINER`).toBe(true);
+    for (const [signature, entry] of Object.entries(AUTHENTICATED_ALLOW_LIST)) {
+      expect(signatures.has(signature), `${signature} is allow-listed but no SQL defines it as SECURITY DEFINER`).toBe(true);
       expect(entry.reason.length).toBeGreaterThan(20);
     }
   });
 
+  test('allow-list keys are normalised full signatures, name and argument types', () => {
+    for (const key of Object.keys(AUTHENTICATED_ALLOW_LIST)) {
+      expect(key).toMatch(/^[a-z0-9_]+\([a-z0-9_ \[\],]*\)$/);
+      expect(key).not.toMatch(/,\s/);
+    }
+  });
+
+  test('a new overload that shares an allow-listed name is not approved', () => {
+    const overloads = `
+      CREATE FUNCTION public.delete_folder(folder_uuid uuid) RETURNS boolean LANGUAGE sql SECURITY DEFINER SET search_path = pg_catalog, public AS $$ SELECT true $$;
+      CREATE FUNCTION public.is_org_member(org uuid) RETURNS boolean LANGUAGE sql SECURITY DEFINER SET search_path = pg_catalog, public AS $$ SELECT true $$;
+      CREATE FUNCTION public.check_admin_status(who uuid) RETURNS boolean LANGUAGE sql SECURITY DEFINER SET search_path = pg_catalog, public AS $$ SELECT true $$;
+      REVOKE ALL ON FUNCTION public.delete_folder(uuid), public.is_org_member(uuid), public.check_admin_status(uuid) FROM PUBLIC;
+      GRANT EXECUTE ON FUNCTION public.delete_folder(uuid), public.is_org_member(uuid), public.check_admin_status(uuid) TO anon, authenticated, service_role;
+    `;
+    const acls = simulateFunctionAcls([SQL, overloads], { strictTargets: true });
+    const violations = ['delete_folder(uuid)', 'is_org_member(uuid)', 'check_admin_status(uuid)'].map((key) => {
+      const acl = acls.get(key);
+      expect(acl, `${key} was not parsed`).toBeDefined();
+      return aclViolation(acl as NonNullable<typeof acl>, allowListEntryFor(key));
+    });
+    expect(violations).toEqual([
+      'delete_folder(uuid) is executable by anon',
+      'is_org_member(uuid) is executable by anon',
+      'check_admin_status(uuid) is executable by anon',
+    ]);
+  });
+
   test('the four tenant search RPCs are never on the allow-list', () => {
-    for (const name of TENANT_ID_RPCS) expect(AUTHENTICATED_ALLOW_LIST[name]).toBeUndefined();
+    for (const key of Object.keys(AUTHENTICATED_ALLOW_LIST)) expect(TENANT_ID_RPCS).not.toContain(key.split('(')[0]);
   });
 });
