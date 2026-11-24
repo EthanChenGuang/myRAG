@@ -76,21 +76,16 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 
 **Wave 1 (4):** 04-01–04 **parallel**; **04-05 → 04-06 → 04-07** one executor tree (PGlite migration order).
 
-## Wave B (spawned)
+## Wave D (active)
 
 | Plan | bcId | Worktree |
 |------|------|----------|
-| 03.1-04 | [bc-4969184f](bc-4969184f-7107-55b3-a450-d63435dcb0a0) **resumed** (task 3) | wt/03.1-04 — locks on trunk `3e83978` |
-| 04-04 | [bc-66bbcf6a](bc-66bbcf6a-fea9-522c-9d57-3ef3695ca16a) **merged** | trunk `55fb76f` |
-| 03.1-05 | [bc-94d16ba7](bc-94d16ba7-3968-5075-9a7b-d09e071ca6e4) RUNNING | wt/03.1-05 |
-| 03.1-06 | [bc-cf431776](bc-cf431776-961d-5942-b066-822c3bec106b) RUNNING | wt/03.1-06 |
+| 04-06 | [bc-f05b8cec](bc-f05b8cec-070a-54b4-a156-96d6167bdbb7) RUNNING | `wt/04-06` |
+| 03.1-08 | [bc-97f53a60](bc-97f53a60-1976-53e8-a0e4-10113dc0a4bb) RUNNING | `wt/03.1-08` |
 
-## Wave C (queued — spawn when Active wave &lt; 4 executors)
+**Recently merged (no follow-up merge needed):** [03.1-04 Task 3](bc-4969184f-7107-55b3-a450-d63435dcb0a0), [03.1-07](bc-4a221b6f-f6a6-507b-8da0-d497c6662c2a), [04-05](bc-91985997-25a1-5b37-a987-32cb579c4746) → trunk `7d98d53`…`a06efce`.
 
-| Plan | Worktree | Blocked by |
-|------|----------|------------|
-| 03.1-05 | `wt/03.1-05` ready | concurrency cap (not 03.1-04) |
-| 03.1-06 | `wt/03.1-06` ready | concurrency cap |
+**04-05 smoke (orchestrator):** `npm run test-rag -- --out eval/out/p4-05` → `gate.json` `passed: true`, `paired.all_zero: true` (uv on VM).
 
 **Concurrent spawn (2026-11-24 ~13:05 Europe/Rome):** 5 `Task` calls in one turn — **4 succeeded** (gsd-executor ×4), **1 failed** (gsd-verifier + `claude-opus-5-5-medium`: *user exceeded selected model’s available usage*). No platform limit on concurrent subagents observed.
 
