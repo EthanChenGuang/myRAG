@@ -189,17 +189,21 @@ describe('match_chunks_by_profile on the two-tenant fixture', () => {
     await db.query(
       `INSERT INTO chunk_embeddings (chunk_id, profile_id, tenant_key, embedding, embedding_model, dims)
        SELECT c.id, $1, c.tenant_key,
-              CASE WHEN c.document_id = $2::uuid THEN ('[0.3,1,0,0,0,0,0,0]')::halfvec
-                   ELSE ('[1,' || round((random() * 0.05)::numeric, 4) || ',0,0,0,0,0,0]')::halfvec END,
+              (CASE WHEN c.document_id = $2::uuid
+                 THEN '[' || (0.5 + (random() - 0.5) * 0.3) || ',' || (0.9 + (random() - 0.5) * 0.3) || ','
+                      || array_to_string(ARRAY(SELECT ((random() - 0.5) * 0.4)::numeric(6,4) FROM generate_series(1, 6)), ',') || ']'
+                 ELSE '[' || (1 + (random() - 0.5) * 0.2) || ','
+                      || array_to_string(ARRAY(SELECT ((random() - 0.5) * 0.3)::numeric(6,4) FROM generate_series(1, 7)), ',') || ']' END)::halfvec,
               'test-model', 8
        FROM document_chunks c WHERE c.content LIKE 'bulk %'`,
       [SMALL_PROFILE, TWO_TENANT_IDS.docA],
     );
-    await db.exec('SET enable_seqscan = off; SET enable_bitmapscan = off');
+    await db.exec('BEGIN');
     try {
+      await db.exec('DROP INDEX chunk_embeddings_profile_tenant_idx; SET LOCAL enable_seqscan = off; SET LOCAL enable_bitmapscan = off');
       const tenantA = `u:${TWO_TENANT_IDS.userA}`;
       const query = '[1,0,0,0,0,0,0,0]';
-      await db.exec('SET hnsw.iterative_scan = off');
+      await db.exec('SET LOCAL hnsw.iterative_scan = off');
       const control = await db.query(
         `SELECT e.chunk_id FROM chunk_embeddings e WHERE e.profile_id = $1 AND e.tenant_key = $2
          ORDER BY (e.embedding::halfvec(8)) <=> $3::halfvec(8) LIMIT 15`,
@@ -214,7 +218,7 @@ describe('match_chunks_by_profile on the two-tenant fixture', () => {
       );
       assert.equal(result.rows.length, 15);
     } finally {
-      await db.exec('RESET enable_seqscan; RESET enable_bitmapscan; RESET hnsw.iterative_scan');
+      await db.exec('ROLLBACK');
     }
   });
 

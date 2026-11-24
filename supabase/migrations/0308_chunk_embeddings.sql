@@ -107,4 +107,68 @@ GRANT ALL ON TABLE chunk_embeddings TO service_role;
 GRANT ALL ON TABLE embedding_backfill_runs TO service_role;
 GRANT ALL ON TABLE embedding_backfill_gaps TO service_role;
 
+-- Profile-aware search. dims and status come from embedding_profiles; p_dims is only a cross-check, because halfvec(n) needs a literal n.
+-- The dynamic statement interpolates one registry integer (%1$s) and one quoted literal (%2$L); every caller value is bound with USING.
+-- The tenant predicate sits next to the index scan. Iterative scans keep filtered HNSW scans from under-filling on pgvector 0.8.0 and later.
+CREATE OR REPLACE FUNCTION match_chunks_by_profile(
+  p_tenant_key text,
+  p_profile_id text,
+  p_dims integer,
+  p_query halfvec,
+  p_match_count integer,
+  p_min_similarity double precision,
+  p_require_active boolean DEFAULT true
+)
+RETURNS TABLE (
+  id uuid,
+  document_id uuid,
+  content text,
+  similarity double precision,
+  metadata jsonb
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $fn$
+DECLARE
+  v_dims integer;
+  v_status text;
+  v_version text;
+BEGIN
+  SELECT p.dims, p.status INTO v_dims, v_status FROM embedding_profiles p WHERE p.id = p_profile_id;
+  IF v_dims IS NULL THEN
+    RAISE EXCEPTION 'embedding_profile_mismatch: unknown profile' USING ERRCODE = '22023';
+  END IF;
+  IF v_dims <> p_dims OR vector_dims(p_query) <> v_dims THEN
+    RAISE EXCEPTION 'embedding_profile_mismatch: dims' USING ERRCODE = '22000';
+  END IF;
+  IF p_require_active AND v_status <> 'active' THEN
+    RAISE EXCEPTION 'embedding_profile_mismatch: profile not active' USING ERRCODE = '22000';
+  END IF;
+
+  SELECT extversion INTO v_version FROM pg_extension WHERE extname = 'vector';
+  IF v_version IS NOT NULL AND (string_to_array(v_version, '.'))[1:2]::int[] >= ARRAY[0, 8] THEN
+    PERFORM set_config('hnsw.iterative_scan', 'relaxed_order', true);
+  END IF;
+
+  RETURN QUERY EXECUTE format($q$
+    SELECT c.id, c.document_id, c.content,
+           1 - ((e.embedding::halfvec(%1$s)) <=> $1::halfvec(%1$s)) AS similarity,
+           c.metadata
+    FROM chunk_embeddings e
+    JOIN document_chunks c ON c.id = e.chunk_id
+    WHERE e.profile_id = %2$L
+      AND e.tenant_key = $2
+      AND c.is_current AND c.status = 'ready'
+      AND 1 - ((e.embedding::halfvec(%1$s)) <=> $1::halfvec(%1$s)) > $3
+    ORDER BY (e.embedding::halfvec(%1$s)) <=> $1::halfvec(%1$s)
+    LIMIT $4
+  $q$, v_dims, p_profile_id)
+  USING p_query, p_tenant_key, p_min_similarity, p_match_count;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION match_chunks_by_profile(text, text, integer, halfvec, integer, double precision, boolean) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION match_chunks_by_profile(text, text, integer, halfvec, integer, double precision, boolean) TO service_role;
+
 COMMIT;
