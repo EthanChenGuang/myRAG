@@ -83,7 +83,7 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 | 04-11 | [bc-ff29f720](bc-ff29f720-c984-5a3b-82e5-ff26dea712ca) **merged** | exec/04-11 |
 | 04-14 | [bc-136b100d](bc-136b100d-6b2f-51bc-b0da-cf8849a609c2) **merged** | exec/04-14 — query 16 pass |
 | 04-13 | [bc-1df13648](bc-1df13648-cd9d-57fe-b726-181165f7ff56) **merged** | exec/04-13 |
-| 04-15 | [bc-2f4f0524](bc-2f4f0524-6984-5e57-a50a-249d0a960a27) RUNNING | exec/04-15 |
+| 04-15 | [bc-2f4f0524](bc-2f4f0524-6984-5e57-a50a-249d0a960a27) **merged** | exec/04-15 — hybrid 35 pass |
 | 04-12 | [bc-7e4cdf1c](bc-7e4cdf1c-68e8-51f1-92c1-f1c5b1bb0abc) **merged** | exec/04-12 |
 | 04-16 | [bc-d3b679cb](bc-d3b679cb-baac-50ce-8ff9-c0829a4fb24f) **merged** | exec/04-16 — relex 9+8 tests |
 | 04-14 | [bc-136b100d](bc-136b100d-6b2f-51bc-b0da-cf8849a609c2) **merged** | exec/04-14 |
@@ -113,7 +113,7 @@ ROADMAP checkboxes for 03-01..03-37 are stale (implemented); trust SUMMARY + tru
 |------|------|----------|-------|
 | 03.1-18 | [bc-34cb4e3b](bc-34cb4e3b-b843-5ba6-94da-c58cb5093dc2) RUNNING | `wt/03.1-18` | ingest ledger TS |
 | 03.1-17 | [bc-d27c0a4b](bc-d27c0a4b-accb-54b2-a27a-29c7aa443e15) RUNNING | `wt/03.1-17` | ingest HTTP clients |
-| 04-15 | [bc-2f4f0524](bc-2f4f0524-6984-5e57-a50a-249d0a960a27) RUNNING | `wt/04-15` | hybrid_search RPC |
+| 04-17 | [bc-c1e4ed28](bc-c1e4ed28-8308-557d-a69c-46ed9166e777) RUNNING | `wt/04-17` | pgvector backend + conformance |
 | 03.1-16 | [bc-572eafe6](bc-572eafe6-375e-5fac-b690-23e40f4403cd) RUNNING | `wt/03.1-16` | L1 preflight |
 
 **03-48 follow-ups (one executor per plan when a slot frees — do not duplicate running work):**

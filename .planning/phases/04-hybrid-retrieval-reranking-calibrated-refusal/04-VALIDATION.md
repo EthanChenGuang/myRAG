@@ -117,9 +117,9 @@ Requirements and threat references per plan are in `04-PLAN-INDEX.md`. Kind: tra
 | 04-13-02 | 2 | tdd | `npx vitest run tests/rag/refusal/floor.test.ts` | ⬜ pending |
 | 04-14-01 | 2 | tdd | `npx vitest run tests/rag/query/filters.test.ts` | ⬜ pending |
 | 04-14-02 | 2 | tdd | `npx vitest run tests/rag/query/timeframe.test.ts tests/rag/query/language.test.ts` | ⬜ pending |
-| 04-15-01 | 2 | tdd | `node --import tsx --test tests/rag-db/hybrid-search.test.mts tests/rag-db/hybrid-grants.test.mts` | ⬜ pending |
-| 04-15-02 | 2 | tdd | `node --import tsx --test tests/rag-db/hybrid-tenant.test.mts` (includes `legacy fallback stays inside the tenant`) | ⬜ pending |
-| 04-15-03 | 2 | tdd | `node --import tsx --test tests/rag-db/hybrid-filters.test.mts && npm run test-rag -- --out eval/out/p4-15 && jq -e '.paired.all_zero == true' eval/out/p4-15/gate.json` (includes `legacy fallback for a document missing from the active profile`) | ⬜ pending |
+| 04-15-01 | 2 | tdd | `node --import tsx --test tests/rag-db/hybrid-search.test.mts tests/rag-db/hybrid-grants.test.mts` | ✅ 35/35 trunk |
+| 04-15-02 | 2 | tdd | `node --import tsx --test tests/rag-db/hybrid-tenant.test.mts` (includes `legacy fallback stays inside the tenant`) | ✅ (same run) |
+| 04-15-03 | 2 | tdd | `node --import tsx --test tests/rag-db/hybrid-filters.test.mts && npm run test-rag -- --out eval/out/p4-15 && jq -e '.paired.all_zero == true' eval/out/p4-15/gate.json` (includes `legacy fallback for a document missing from the active profile`) | ✅ filters in suite; smoke deferred (uv) |
 | 04-16-01 | 2 | tdd | `node --import tsx --test tests/rag-db/relex.test.mts` | ✅ 9/9 trunk |
 | 04-16-02 | 2 | auto | `node --import tsx --test tests/rag-db/relex.test.mts tests/two-tenant-fixture.test.mts && npm run test-rag -- --out eval/out/p4-16 && jq -e '.passed == true and .paired.all_zero == true' eval/out/p4-16/gate.json` | ✅ 8/8 two-tenant; smoke deferred (uv ENOENT) |
 | 04-17-01 | 3 | tdd | `npx vitest run tests/rag/backend/pgvector-adapter.test.ts` | ⬜ pending |
