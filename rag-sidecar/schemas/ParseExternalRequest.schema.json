@@ -1,0 +1,115 @@
+{
+  "$defs": {
+    "ParseAttemptPages": {
+      "additionalProperties": false,
+      "properties": {
+        "end": {
+          "minimum": 1,
+          "title": "End",
+          "type": "integer"
+        },
+        "start": {
+          "minimum": 1,
+          "title": "Start",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "start",
+        "end"
+      ],
+      "title": "ParseAttemptPages",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "attempt_no": {
+      "minimum": 1,
+      "title": "Attempt No",
+      "type": "integer"
+    },
+    "continuation": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Continuation"
+    },
+    "cursor": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Cursor"
+    },
+    "mode": {
+      "enum": [
+        "chain",
+        "native",
+        "premium"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
+    "options_hash": {
+      "anyOf": [
+        {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Options Hash"
+    },
+    "pages": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ParseAttemptPages"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "subpdf_ref": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Subpdf Ref"
+    },
+    "worker_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Worker Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "worker_id",
+    "attempt_no",
+    "mode"
+  ],
+  "title": "ParseExternalRequest",
+  "type": "object"
+}

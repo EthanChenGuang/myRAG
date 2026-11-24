@@ -1,0 +1,150 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "cloud_allowed": {
+      "title": "Cloud Allowed",
+      "type": "boolean"
+    },
+    "doc_type": {
+      "enum": [
+        "general",
+        "financial_report",
+        "contract_legal",
+        "invoice_receipt",
+        "product_technical",
+        "scanned_image"
+      ],
+      "title": "Doc Type",
+      "type": "string"
+    },
+    "embed_mode": {
+      "enum": [
+        "sync",
+        "batch_api"
+      ],
+      "title": "Embed Mode",
+      "type": "string"
+    },
+    "escalation": {
+      "title": "Escalation",
+      "type": "boolean"
+    },
+    "max_tier": {
+      "anyOf": [
+        {
+          "enum": [
+            "native",
+            "fast",
+            "structured",
+            "premium"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Max Tier"
+    },
+    "min_tier": {
+      "anyOf": [
+        {
+          "enum": [
+            "native",
+            "fast",
+            "structured",
+            "premium"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Min Tier"
+    },
+    "ocr_languages": {
+      "items": {
+        "enum": [
+          "zh",
+          "en",
+          "it"
+        ],
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Ocr Languages",
+      "type": "array"
+    },
+    "premium_max_pages_per_doc": {
+      "minimum": 0,
+      "title": "Premium Max Pages Per Doc",
+      "type": "integer"
+    },
+    "premium_page_budget": {
+      "minimum": 0,
+      "title": "Premium Page Budget",
+      "type": "integer"
+    },
+    "profile_id": {
+      "title": "Profile Id",
+      "type": "string"
+    },
+    "profile_version": {
+      "minimum": 1,
+      "title": "Profile Version",
+      "type": "integer"
+    },
+    "progressive": {
+      "title": "Progressive",
+      "type": "boolean"
+    },
+    "routing": {
+      "enum": [
+        "fixed",
+        "tiered"
+      ],
+      "title": "Routing",
+      "type": "string"
+    },
+    "routing_config_version": {
+      "title": "Routing Config Version",
+      "type": "string"
+    },
+    "vlm_detect": {
+      "title": "Vlm Detect",
+      "type": "boolean"
+    },
+    "vlm_model": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Vlm Model"
+    }
+  },
+  "required": [
+    "routing",
+    "cloud_allowed",
+    "escalation",
+    "progressive",
+    "premium_max_pages_per_doc",
+    "premium_page_budget",
+    "vlm_detect",
+    "profile_id",
+    "profile_version",
+    "doc_type",
+    "embed_mode",
+    "ocr_languages",
+    "routing_config_version"
+  ],
+  "title": "JobSettingsSnapshot",
+  "type": "object"
+}

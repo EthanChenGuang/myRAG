@@ -1,0 +1,76 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "done": {
+      "title": "Done",
+      "type": "boolean"
+    },
+    "reason": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reason"
+    },
+    "stage": {
+      "title": "Stage",
+      "type": "string"
+    },
+    "status": {
+      "anyOf": [
+        {
+          "enum": [
+            "queued",
+            "preflight",
+            "parsing",
+            "checking",
+            "chunking",
+            "embedding",
+            "ready",
+            "failed",
+            "quarantined",
+            "needs_review",
+            "skipped_duplicate"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Status"
+    },
+    "wait_ms": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Wait Ms"
+    },
+    "worker_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Worker Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "worker_id",
+    "stage",
+    "done"
+  ],
+  "title": "AdvanceResponse",
+  "type": "object"
+}

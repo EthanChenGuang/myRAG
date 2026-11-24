@@ -11,6 +11,64 @@
       "recorded_at": "2026-11-24T12:00:00.000Z",
       "target_profile": "voyage-4-large-2048"
     },
+    "AdvanceRequest": {
+      "attempt_no": 1,
+      "cursor": null,
+      "deadline_ms": 10000,
+      "parse_cache_id": null,
+      "phase": "begin",
+      "worker_id": "worker-1"
+    },
+    "AdvanceResponse": {
+      "done": false,
+      "reason": null,
+      "stage": "identify",
+      "status": null,
+      "wait_ms": 0,
+      "worker_id": "worker-1"
+    },
+    "BackfillDryRunReport": {
+      "budget_usd": 10.0,
+      "class_shares": {
+        "text_pdf": 0.7
+      },
+      "duplicates": {
+        "already_existing": 2,
+        "in_inventory": 3
+      },
+      "embedding_cost_by_profile_usd": {
+        "general@1": 1.0
+      },
+      "fits_budget": true,
+      "inventory": {
+        "bytes": 50000000,
+        "files": 100,
+        "pages_estimated": 500
+      },
+      "projected_cost": {
+        "embeddings_usd": 1.0,
+        "premium_parse_usd": 2.0,
+        "total_usd": 3.5,
+        "vlm_usd": 0.5
+      },
+      "projected_l2_pages": 40,
+      "projected_l3_pages": 5,
+      "projected_pages_by_tier": {
+        "fast": 300,
+        "premium": 50,
+        "structured": 150
+      },
+      "projected_wall_time_s": 3600.0,
+      "sample_size_by_class": {
+        "text_pdf": 5
+      }
+    },
+    "BackfillManifestEntry": {
+      "doc_type": "general",
+      "path": "/data/doc-1.pdf",
+      "source_key": "kb/doc-1",
+      "url": null
+    },
     "Baseline": {
       "corpus_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       "deployment_mode": "single-tenant",
@@ -146,6 +204,34 @@
     "ConversationTurn": {
       "content": "Tell me about leave.",
       "role": "user"
+    },
+    "DetectVlmRequest": {
+      "attempt_no": 1,
+      "pages": [
+        {
+          "page": 1,
+          "png_base64": "iVBORwAAAAAAAAAA"
+        }
+      ],
+      "worker_id": "worker-1"
+    },
+    "DetectVlmResponse": {
+      "pages": [
+        {
+          "page": 1,
+          "refused": null,
+          "verdict": {
+            "complexity": "simple",
+            "confidence": 0.92,
+            "has_chart": false,
+            "has_formula": false,
+            "has_multi_column": false,
+            "has_table": false,
+            "is_scanned": false
+          }
+        }
+      ],
+      "worker_id": "worker-1"
     },
     "DocTypeDetection": {
       "confidence": 0.85,
@@ -1021,6 +1107,118 @@
       "rule": "sha256-first8hex-mod100-lt70-dev",
       "schema_version": 1
     },
+    "IngestionJob": {
+      "attempts": [
+        {
+          "attempt_no": 1,
+          "cache_hit": false,
+          "check": {
+            "pages": [
+              {
+                "failed": [],
+                "page": 1
+              }
+            ],
+            "partial": false,
+            "passed": true,
+            "score": 1.0
+          },
+          "est_cost_usd": 0.002,
+          "ms": 40,
+          "pages": {
+            "end": 1,
+            "start": 1
+          },
+          "parser": "docling",
+          "parser_version": "2.0",
+          "preset": "fast",
+          "reason": "initial",
+          "refused": false,
+          "tier": "fast"
+        }
+      ],
+      "batch_id": null,
+      "created_at": "2026-01-01T00:00:00Z",
+      "deleted_at": null,
+      "detect_counts": null,
+      "doc_class": null,
+      "document_id": null,
+      "embedding_profile": null,
+      "error_class": null,
+      "escalations": 0,
+      "est_cost_usd": null,
+      "file_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "filename": "sample.pdf",
+      "id": "00000000-0000-4000-8000-000000000001",
+      "kind": "ingest",
+      "lease_until": null,
+      "lineage_id": null,
+      "locked_by": null,
+      "max_retries": 3,
+      "mime_type": "application/pdf",
+      "needs_review_reason": null,
+      "original_ref": {
+        "bucket": "originals",
+        "path": "tenant-a/sample.pdf"
+      },
+      "page_ranges": [
+        {
+          "cache_id": null,
+          "end": 1,
+          "layer": "L1",
+          "parser": "docling",
+          "preset": "fast",
+          "signals": [],
+          "start": 1,
+          "status": "ok",
+          "tier": "fast"
+        }
+      ],
+      "pages": null,
+      "parser_used": null,
+      "parser_version": null,
+      "preflight_ref": null,
+      "priority": 100,
+      "provisional_published_at": null,
+      "retries": 0,
+      "routing_note": null,
+      "run_after": null,
+      "runner": null,
+      "settings": {
+        "cloud_allowed": true,
+        "doc_type": "general",
+        "embed_mode": "sync",
+        "escalation": true,
+        "max_tier": "premium",
+        "min_tier": "fast",
+        "ocr_languages": [
+          "en"
+        ],
+        "premium_max_pages_per_doc": 20,
+        "premium_page_budget": 0,
+        "profile_id": "general@1",
+        "profile_version": 1,
+        "progressive": false,
+        "routing": "tiered",
+        "routing_config_version": "1",
+        "vlm_detect": false,
+        "vlm_model": null
+      },
+      "source": "upload",
+      "source_key": "docs/sample.pdf",
+      "stage": null,
+      "stage_state": {},
+      "status": "queued",
+      "tenant_key": "tenant-a",
+      "tier": null,
+      "tier_page_counts": {
+        "fast": 1
+      },
+      "timings": {},
+      "trace_id": null,
+      "updated_at": "2026-01-01T00:00:00Z",
+      "version": null
+    },
     "InjectionRuleSet": {
       "rules": [
         {
@@ -1083,6 +1281,26 @@
         "tax_id_scheme": "cn_uscc"
       },
       "tax_total": "22.00"
+    },
+    "JobSettingsSnapshot": {
+      "cloud_allowed": true,
+      "doc_type": "general",
+      "embed_mode": "sync",
+      "escalation": true,
+      "max_tier": "premium",
+      "min_tier": "fast",
+      "ocr_languages": [
+        "en"
+      ],
+      "premium_max_pages_per_doc": 20,
+      "premium_page_budget": 0,
+      "profile_id": "general@1",
+      "profile_version": 1,
+      "progressive": false,
+      "routing": "tiered",
+      "routing_config_version": "1",
+      "vlm_detect": false,
+      "vlm_model": null
     },
     "JudgeConfig": {
       "base_url": "https://example.invalid/api/v1",
@@ -1186,6 +1404,90 @@
         "recall_at_5": "higher"
       },
       "schema_version": 1
+    },
+    "PageStructureVerdict": {
+      "complexity": "simple",
+      "confidence": 0.92,
+      "has_chart": false,
+      "has_formula": false,
+      "has_multi_column": false,
+      "has_table": false,
+      "is_scanned": false
+    },
+    "ParseAttempt": {
+      "attempt_no": 1,
+      "cache_hit": false,
+      "check": {
+        "pages": [
+          {
+            "failed": [],
+            "page": 1
+          }
+        ],
+        "partial": false,
+        "passed": true,
+        "score": 1.0
+      },
+      "est_cost_usd": 0.002,
+      "ms": 40,
+      "pages": {
+        "end": 1,
+        "start": 1
+      },
+      "parser": "docling",
+      "parser_version": "2.0",
+      "preset": "fast",
+      "reason": "initial",
+      "refused": false,
+      "tier": "fast"
+    },
+    "ParseExternalRequest": {
+      "attempt_no": 1,
+      "continuation": null,
+      "cursor": null,
+      "mode": "native",
+      "options_hash": null,
+      "pages": null,
+      "subpdf_ref": null,
+      "worker_id": "worker-1"
+    },
+    "ParseExternalResponse": {
+      "cache_id": "cache-1",
+      "continuation": null,
+      "error_class": null,
+      "pages": null,
+      "reason": null,
+      "result": null,
+      "retry_after_ms": null,
+      "status": "done",
+      "worker_id": "worker-1"
+    },
+    "ParseGateReport": {
+      "correct_refusal": [
+        {
+          "delta": 0.0,
+          "metric": "correct_refusal_rate",
+          "within_noise_band": true
+        }
+      ],
+      "fixed": {
+        "premium_page_share": 0.02,
+        "projected_cost_per_1000_pages_usd": 4.0
+      },
+      "noise_band_floor": 0.02,
+      "noise_band_k": 3.0,
+      "passed": true,
+      "recall_at_k": [
+        {
+          "delta": 0.01,
+          "metric": "recall_at_5",
+          "within_noise_band": true
+        }
+      ],
+      "tiered": {
+        "premium_page_share": 0.05,
+        "projected_cost_per_1000_pages_usd": 6.0
+      }
     },
     "ParseJobAccepted": {
       "job_id": "job-0123abcd"
@@ -1331,6 +1633,248 @@
       "warnings": [
         "synthetic sample"
       ]
+    },
+    "ParseRoutingConfig": {
+      "costs": {
+        "layer": {
+          "L1": {
+            "as_of": "2026-01-01",
+            "s_per_page": 0.8,
+            "source": "assumed until measured",
+            "usd_per_page": 0.001
+          },
+          "L2": {
+            "as_of": "2026-01-01",
+            "s_per_page": 0.8,
+            "source": "assumed until measured",
+            "usd_per_page": 0.001
+          },
+          "L3": {
+            "as_of": "2026-01-01",
+            "s_per_page": 5.0,
+            "source": "https://developers.llamaindex.ai",
+            "usd_per_page": 0.004
+          }
+        },
+        "tier": {
+          "fast": {
+            "as_of": "2026-01-01",
+            "s_per_page": 0.8,
+            "source": "assumed until measured",
+            "usd_per_page": 0.001
+          },
+          "native": {
+            "as_of": "2026-01-01",
+            "s_per_page": 0.8,
+            "source": "assumed until measured",
+            "usd_per_page": 0.001
+          },
+          "premium": {
+            "as_of": "2026-01-01",
+            "s_per_page": 5.0,
+            "source": "https://developers.llamaindex.ai",
+            "usd_per_page": 0.004
+          },
+          "structured": {
+            "as_of": "2026-01-01",
+            "s_per_page": 0.8,
+            "source": "assumed until measured",
+            "usd_per_page": 0.001
+          }
+        }
+      },
+      "escalation": {
+        "max_per_page": 2
+      },
+      "l1": {
+        "garbled_ratio": 0.05,
+        "min_ruling_paths": 4,
+        "thin_path_pt": 2.0
+      },
+      "l2": {
+        "uncertain_batch_pages": 8
+      },
+      "l3": {
+        "max_pages_per_doc": 20
+      },
+      "ladder": {
+        "pdf": [
+          "fast",
+          "structured",
+          "premium"
+        ]
+      },
+      "office_formats": {},
+      "presets": {
+        "fast": {
+          "force_full_page_ocr": null,
+          "heading_hierarchy": null,
+          "ocr": false,
+          "pdf_backend": "pypdfium2",
+          "table_mode": "off"
+        },
+        "native": {
+          "force_full_page_ocr": null,
+          "heading_hierarchy": null,
+          "ocr": null,
+          "pdf_backend": null,
+          "table_mode": null
+        },
+        "premium": null,
+        "structured_full": {
+          "force_full_page_ocr": null,
+          "heading_hierarchy": true,
+          "ocr": null,
+          "pdf_backend": null,
+          "table_mode": "accurate"
+        },
+        "structured_layout": {
+          "force_full_page_ocr": null,
+          "heading_hierarchy": true,
+          "ocr": false,
+          "pdf_backend": null,
+          "table_mode": "off"
+        },
+        "structured_ocr": {
+          "force_full_page_ocr": true,
+          "heading_hierarchy": null,
+          "ocr": true,
+          "pdf_backend": null,
+          "table_mode": "accurate"
+        }
+      },
+      "quality": {
+        "score_weights": {
+          "garbled": 0.3,
+          "language": 0.2,
+          "low_chars": 0.3,
+          "missing_table": 0.2
+        },
+        "thresholds": {
+          "language_min_chars": 200,
+          "low_char_ratio": 0.5,
+          "scanned_min_chars": 30
+        }
+      },
+      "ranges": {
+        "higher_preset_share": 0.6,
+        "lift_min_run": 2,
+        "max_pages_per_conversion": 24,
+        "max_ranges": 20
+      },
+      "thresholds_ref": null,
+      "timeouts": {
+        "advance_ms": 40000,
+        "parse_slice_ms": 40000,
+        "preflight_ms": 30000
+      },
+      "version": "1"
+    },
+    "ParserEvalReport": {
+      "by_tier": {
+        "fast": {
+          "cost_per_page": 0.001,
+          "headings_f1": 0.92,
+          "reading_order": 0.98,
+          "recall_at_k": 0.88,
+          "s_per_page": 0.8,
+          "table_cell_f1": 0.9,
+          "text_similarity": 0.95
+        }
+      },
+      "fixture_id": "digital-text",
+      "page_tier_accuracy": [
+        {
+          "layer_combo": "L1",
+          "pages_below_expected_tier": 0
+        }
+      ]
+    },
+    "ParserExpected": {
+      "fixture_id": "digital-text",
+      "headings": [
+        {
+          "level": 1,
+          "page": 1,
+          "text": "Overview"
+        }
+      ],
+      "language": "en",
+      "pages": [
+        {
+          "page": 1,
+          "preset": "fast",
+          "signals": [],
+          "tier": "fast"
+        }
+      ],
+      "reading_order": [
+        {
+          "order": 0,
+          "page": 1,
+          "text": "intro"
+        }
+      ],
+      "table_cells": [
+        {
+          "col": 0,
+          "row": 0,
+          "text": "A1"
+        }
+      ]
+    },
+    "PreflightResult": {
+      "detect_counts": {
+        "L1": 1,
+        "L2": 0,
+        "L3": 0,
+        "gated_share": 0.0
+      },
+      "doc_class": "text_pdf",
+      "encrypted": false,
+      "page_count": 1,
+      "pages": [
+        {
+          "aligned_number_rows": 0,
+          "chars": 120,
+          "continues_to_next": false,
+          "garbled_ratio": 0.01,
+          "has_figure": false,
+          "image_area_ratio": 0.0,
+          "layer": "L1",
+          "multi_column": false,
+          "page": 1,
+          "preset": "fast",
+          "ruled_tables": 0,
+          "scanned": false,
+          "signals": [],
+          "text_layer": true,
+          "tier": "fast"
+        }
+      ],
+      "probe_version": "2026.1",
+      "ranges": [
+        {
+          "cache_id": null,
+          "end": 1,
+          "layer": "L1",
+          "parser": "docling",
+          "preset": "fast",
+          "signals": [],
+          "start": 1,
+          "status": "ok",
+          "tier": "fast"
+        }
+      ],
+      "tier_page_counts": {
+        "fast": 1,
+        "native": 0,
+        "premium": 0,
+        "structured": 0
+      },
+      "timings_ms": {
+        "preflight": 10
+      }
     },
     "ProcessingProfileSet": {
       "profiles": [
@@ -1596,6 +2140,19 @@
         }
       ],
       "schema_version": 1
+    },
+    "QualityCheckResult": {
+      "pages": [
+        {
+          "failed": [
+            "low_chars"
+          ],
+          "page": 1
+        }
+      ],
+      "partial": false,
+      "passed": false,
+      "score": 0.45
     },
     "RagRunRequest": {
       "conversation": [
