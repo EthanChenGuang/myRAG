@@ -54,7 +54,7 @@ def _expand_contiguous_parts(parts: Sequence[DoclingDocument]) -> list[DoclingDo
         if not pages:
             raise MergeInvariantError("merge_invariant:empty_part")
         for run in _contiguous_runs(pages):
-            expanded.append(part if run == pages else part.filter(page_nrs=set(run)))
+            expanded.append(part if run == pages else slice_pages(part, run))
     return expanded
 
 
@@ -237,9 +237,13 @@ def premium_part(
 def slice_pages(doc: DoclingDocument, pages: Iterable[int]) -> DoclingDocument:
     """Return a document containing only items on the given pages, keeping page numbers.
 
-    Uses DoclingDocument.filter (docling-core 2.107.1).
+    Uses DoclingDocument.filter (docling-core 2.107.1), which numbers pages from the first page of the source document; the
+    numbers are moved back.
     """
-    return doc.filter(page_nrs=set(pages))
+    sliced = doc.filter(page_nrs=set(pages))
+    # DoclingDocument.filter numbers pages from the first page of the source document, not from page one of the file.
+    offset = min(doc.pages) - 1 if doc.pages else 0
+    return _shift_pages(sliced, offset) if offset else sliced
 
 
 def merge_dict_fingerprint(doc: DoclingDocument) -> bytes:
