@@ -175,13 +175,29 @@ describe('computeRetrievalConfigHash', () => {
       }),
       (i) => ({ ...i, reranker: { id: 'cohere', model: 'rerank-v5.0-fast' } }),
       (i) => ({ ...i, rerankTextVersion: i.rerankTextVersion + 1 }),
-      (i) => ({ ...i, thresholdsConfigHash: 'eeee'.repeat(16) }),
       (i) => ({ ...i, activeChunkingProfiles: { pdf: 'other' } }),
       (i) => ({ ...i, switches: { ...i.switches, lexicalSearch: !i.switches.lexicalSearch } }),
     ];
     for (const mutate of parts) {
       expect(computeRetrievalConfigHash(mutate(baseHashInput()))).not.toBe(base);
     }
+  });
+
+  it('counts the thresholds file only while the refusal threshold switch is on', () => {
+    const on = (i: RetrievalConfigHashInput): RetrievalConfigHashInput => ({
+      ...i,
+      switches: { ...i.switches, refusalThreshold: true },
+    });
+    const off = (i: RetrievalConfigHashInput): RetrievalConfigHashInput => ({
+      ...i,
+      switches: { ...i.switches, refusalThreshold: false },
+    });
+    const other = (i: RetrievalConfigHashInput): RetrievalConfigHashInput => ({ ...i, thresholdsConfigHash: 'eeee'.repeat(16) });
+    expect(computeRetrievalConfigHash(other(on(baseHashInput())))).not.toBe(computeRetrievalConfigHash(on(baseHashInput())));
+    expect(computeRetrievalConfigHash(other(off(baseHashInput())))).toBe(computeRetrievalConfigHash(off(baseHashInput())));
+    expect(computeRetrievalConfigHash({ ...off(baseHashInput()), thresholdsConfigHash: null })).toBe(
+      computeRetrievalConfigHash(off(baseHashInput())),
+    );
   });
 
   it('hashes unavailable chunking differently from an empty map', () => {
