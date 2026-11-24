@@ -1,7 +1,16 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import type { ParseResult } from '@/lib/rag-eval/contracts.generated';
 import type { RpcClient, RpcRequest, RpcResponse } from '@/lib/rag/backend/supabase-rpc';
+import { buildParserChain, parseWithFallback } from '@/lib/rag/ingest/parsers/chain';
+import { createLlamaParseParser, resetLlamaParseParserForTests, setLlamaParseParserForTests } from '@/lib/rag/ingest/parsers/llamaparse-v2';
+import { resetSidecarParserForTests, setSidecarParserForTests } from '@/lib/rag/ingest/parsers/sidecar-docling';
+import type { DocumentParser, ParseRequest } from '@/lib/rag/ingest/parsers/shared';
+import { getProcessingProfile } from '@/lib/rag/ingest/profiles/load';
+import { mintScope } from '@/lib/rag/tenant/scope';
+import { startFakeLlamaParse, type FakeLlamaParse } from '../../helpers/fake-llamaparse';
 import {
   CloudGuardError,
+  CloudRefused,
   assertCloudAllowed,
   readMonthlyUsage,
   release,
@@ -226,5 +235,162 @@ describe('settle, release and usage', () => {
     expect(db.calls[0]).toEqual({ fn: 'rag_parse_budget_month', args: { p_tenant_key: 's:default' } });
     await readMonthlyUsage();
     expect(db.calls[1]?.args).toEqual({ p_tenant_key: null });
+  });
+});
+
+const scope = mintScope('single', null, null);
+const PDF = new TextEncoder().encode('%PDF-1.4 cloud guard fixture');
+const SCAN = new TextEncoder().encode('%PDF-1.4 scanned pages only');
+
+function parseRequest(overrides: Partial<ParseRequest> = {}): ParseRequest {
+  return {
+    scope,
+    filename: 'report.pdf',
+    mimeType: 'application/pdf',
+    bytes: PDF,
+    profile: getProcessingProfile('general'),
+    signal: new AbortController().signal,
+    now: () => 0,
+    deadline: 10 ** 9,
+    pollUntil: 45_000,
+    resume: null,
+    onSubmitted: async () => undefined,
+    ...overrides,
+  };
+}
+
+function doclingStub(): DocumentParser & { calls: ParseRequest[] } {
+  const calls: ParseRequest[] = [];
+  return {
+    name: 'docling',
+    calls,
+    unavailableReason: () => null,
+    async parse(request) {
+      calls.push(request);
+      const result = {
+        markdown: '# Handbook\n\nThe night crew scans every pallet at the dock.',
+        chunks: [],
+        pictures: [],
+        page_count: 1,
+        language: 'en',
+        parser: 'docling',
+        parser_version: 'docling-test',
+        partial: false,
+        text_layer_page_share: null,
+        warnings: [],
+      } as ParseResult;
+      return { kind: 'done', result, artifacts: [], warnings: [] };
+    },
+  };
+}
+
+describe('LlamaParse entry and the chain with cloud parsing off', () => {
+  let fake: FakeLlamaParse;
+  let lines: string[];
+
+  beforeEach(async () => {
+    fake = await startFakeLlamaParse();
+    lines = [];
+    for (const method of ['log', 'info', 'warn', 'error'] as const) {
+      vi.spyOn(console, method).mockImplementation((...args: unknown[]) => void lines.push(JSON.stringify(args)));
+    }
+  });
+
+  afterEach(async () => {
+    resetLlamaParseParserForTests();
+    resetSidecarParserForTests();
+    await fake.close();
+  });
+
+  const llama = () => createLlamaParseParser({ baseUrl: fake.url, apiKey: fake.apiKey, tier: 'cost_effective' });
+  const chain = () => buildParserChain(getProcessingProfile('general'), { parser: 'llamaparse' }, { filename: 'a.pdf', mimeType: 'application/pdf' });
+
+  test('RAG_PARSER_ALLOW_CLOUD=false: a PDF and a scan reach Docling and the LlamaParse stub gets zero requests', async () => {
+    vi.stubEnv('RAG_PARSER_ALLOW_CLOUD', 'false');
+    const docling = doclingStub();
+    setLlamaParseParserForTests(llama());
+    setSidecarParserForTests(docling);
+    for (const bytes of [PDF, SCAN]) {
+      const outcome = await parseWithFallback(chain(), parseRequest({ bytes }));
+      expect(outcome.kind).toBe('done');
+      if (outcome.kind !== 'done') return;
+      expect(outcome.parser).toBe('docling');
+      expect(outcome.fallbacks).toEqual([{ parser: 'llamaparse', reason: 'cloud_not_allowed' }]);
+    }
+    expect(fake.calls).toEqual([]);
+    expect(fake.uploads).toEqual([]);
+    expect(docling.calls).toHaveLength(2);
+  });
+
+  test('a cloud-off run logs one [Ingest] line with the reason per document and no file name', async () => {
+    vi.stubEnv('RAG_PARSER_ALLOW_CLOUD', 'false');
+    setLlamaParseParserForTests(llama());
+    setSidecarParserForTests(doclingStub());
+    await parseWithFallback(chain(), parseRequest({ filename: 'quarterly-secret-plan.pdf' }));
+    const reasons = lines.filter((line) => line.includes('[Ingest]') && line.includes('cloud_not_allowed'));
+    expect(reasons).toHaveLength(1);
+    expect(lines.some((line) => line.includes('quarterly-secret-plan'))).toBe(false);
+  });
+
+  test('a direct call to the v2 client with cloud off throws CloudRefused before fetch is called', async () => {
+    vi.stubEnv('RAG_PARSER_ALLOW_CLOUD', 'false');
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    await expect(llama().parse(parseRequest())).rejects.toBeInstanceOf(CloudRefused);
+    await expect(llama().parse(parseRequest())).rejects.toMatchObject({ reason: 'cloud_not_allowed' });
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(fake.calls).toEqual([]);
+  });
+
+  test('the switch is live: turning it off after the parser was built still stops the upload', async () => {
+    const parser = llama();
+    vi.stubEnv('RAG_PARSER_ALLOW_CLOUD', 'false');
+    await expect(parser.parse(parseRequest())).rejects.toBeInstanceOf(CloudRefused);
+    expect(fake.uploads).toEqual([]);
+  });
+
+  test('cloud on (the default): the chain still uses LlamaParse first', async () => {
+    const docling = doclingStub();
+    setLlamaParseParserForTests(llama());
+    setSidecarParserForTests(docling);
+    const outcome = await parseWithFallback(chain(), parseRequest());
+    expect(outcome.kind).toBe('done');
+    if (outcome.kind !== 'done') return;
+    expect(outcome.parser).toBe('llamaparse');
+    expect(fake.uploads).toHaveLength(1);
+    expect(docling.calls).toHaveLength(0);
+  });
+
+  test('a queued tiered request reserves before the upload and hands the reservation to the caller', async () => {
+    const db = fakeDb({ rag_reserve_parse_budget: true });
+    setCloudGuardDepsForTests({ db: () => db.client });
+    const reservations: unknown[] = [];
+    const guarded = parseRequest({
+      guard: { context: queued(3), onReserved: async (handle) => void reservations.push(handle) },
+    });
+    const attempt = await llama().parse(guarded);
+    expect(attempt.kind).toBe('done');
+    expect(reservations).toEqual([{ jobId: JOB, attemptNo: 1, kind: 'parse', pages: 3 }]);
+    expect(db.calls.map((call) => call.fn)).toEqual(['rag_reserve_parse_budget', 'rag_reserve_batch_budget']);
+    expect(fake.uploads).toHaveLength(1);
+  });
+
+  test('a queued tiered request over the page cap or the budget is refused with zero requests at the stub', async () => {
+    const db = fakeDb({ rag_reserve_parse_budget: false });
+    setCloudGuardDepsForTests({ db: () => db.client });
+    await expect(llama().parse(parseRequest({ guard: { context: queued(500) } }))).rejects.toMatchObject({ reason: 'over_page_cap' });
+    await expect(llama().parse(parseRequest({ guard: { context: queued(5) } }))).rejects.toMatchObject({ reason: 'budget_exhausted' });
+    expect(fake.calls).toEqual([]);
+  });
+
+  test('a resumed job is not reserved again', async () => {
+    const db = fakeDb();
+    setCloudGuardDepsForTests({ db: () => db.client });
+    fake.enqueue({ statuses: ['COMPLETED'] });
+    const first = await llama().parse(parseRequest({ guard: { context: queued(3) } }));
+    expect(first.kind).toBe('done');
+    db.calls.length = 0;
+    const resume = { parser: 'llamaparse' as const, jobId: 'job-1', submittedAt: new Date(0).toISOString(), attempt: 1 };
+    await llama().parse(parseRequest({ resume, guard: { context: queued(3) } }));
+    expect(db.calls).toEqual([]);
   });
 });
