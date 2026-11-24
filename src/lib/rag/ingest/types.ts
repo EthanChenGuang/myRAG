@@ -148,6 +148,8 @@ export interface IngestWork {
   /** Docling's own chunks from the parse result; the chunk stage uses them when the profile allows. */
   parseChunks?: ParseResult['chunks'] | null;
   parserVersion: string | null;
+  /** Promoted document columns of this run (the invoice fields); the profile's embedding header template renders from them. */
+  templateRow?: Record<string, string | null> | null;
   chunks: ChunkDraft[];
   chunksWritten: number;
 }

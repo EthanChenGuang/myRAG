@@ -1,6 +1,8 @@
 import type { EnhancedMetadata } from '@/lib/temporal-metadata-extractor';
 import { extractDates, pickDocDate } from './dates';
+import type { StageContext } from '../types';
 import { computeEnhancedMetadata, extractFinancial } from './financial';
+import { invoiceExtractor } from './invoice';
 
 export { pickDocDate };
 
@@ -22,10 +24,19 @@ export interface ChunkExtraction {
 
 export type ChunkExtractor = (input: ChunkExtractorInput) => ChunkExtraction;
 
-/** Extractor names a processing profile may list, mapped to their implementation. `urls` is done by enrich; `invoice` arrives with plan 03-29. */
-export const EXTRACTORS: Readonly<Record<string, ChunkExtractor>> = {
+/** An extractor that reads the whole document once, after the chunk-level extractors, and writes through the stage context. */
+export interface DocumentExtractor {
+  level: 'document';
+  run(ctx: StageContext): Promise<void>;
+}
+
+export type Extractor = ChunkExtractor | DocumentExtractor;
+
+/** Extractor names a processing profile may list, mapped to their implementation. `urls` is done by enrich. */
+export const EXTRACTORS: Readonly<Record<string, Extractor>> = {
   dates: extractDates,
   financial: extractFinancial,
+  invoice: invoiceExtractor,
 };
 
 /** Keys storeDocument writes on every chunk whatever the document type, so legacy ranking sees them everywhere. */
@@ -53,7 +64,7 @@ export function runChunkExtractors(
     if (seen.has(name)) continue;
     seen.add(name);
     const extractor = Object.hasOwn(EXTRACTORS, name) ? EXTRACTORS[name] : undefined;
-    if (!extractor) continue;
+    if (typeof extractor !== 'function') continue;
     const result = extractor({ content: chunk.content, enhanced });
     Object.assign(metadata, result.metadata);
     if (result.dateCandidates) dateCandidates.push(...result.dateCandidates);
@@ -63,4 +74,17 @@ export function runChunkExtractors(
 
 export function hasExtractor(name: string): boolean {
   return Object.hasOwn(EXTRACTORS, name);
+}
+
+/** The document-level extractors among the listed names, in profile order. */
+export function documentExtractors(names: readonly string[]): DocumentExtractor[] {
+  const out: DocumentExtractor[] = [];
+  const seen = new Set<string>();
+  for (const name of names) {
+    if (seen.has(name)) continue;
+    seen.add(name);
+    const extractor = Object.hasOwn(EXTRACTORS, name) ? EXTRACTORS[name] : undefined;
+    if (extractor && typeof extractor !== 'function') out.push(extractor);
+  }
+  return out;
 }
