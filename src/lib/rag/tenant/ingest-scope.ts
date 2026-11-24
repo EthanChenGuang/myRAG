@@ -77,3 +77,23 @@ export function nangoOwnerScope(input: NangoOwnerScopeInput): IngestScopeResult 
   if (typeof owner !== 'string' || !UUID_RE.test(owner)) return refuse('nango owner scope', 503, 'invalid_owner');
   return { ok: true, scope: mintScope('personal', owner.toLowerCase(), null) };
 }
+
+export interface AdminDocumentScopeInput {
+  documentId: string;
+  adminUserId: string;
+  signal: AbortSignal;
+}
+
+export class AdminDocumentScopeError extends Error {
+  readonly reason: 'not_admin' | 'unavailable';
+
+  constructor(reason: 'not_admin' | 'unavailable') {
+    super(`[RAG Tenant] admin document scope failed (${reason})`);
+    this.name = 'AdminDocumentScopeError';
+    this.reason = reason;
+  }
+}
+
+export async function scopeForAdminDocument(_input: AdminDocumentScopeInput): Promise<TenantScope | null> {
+  return null;
+}
