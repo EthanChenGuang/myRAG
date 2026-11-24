@@ -373,3 +373,517 @@ describe('a resumed image upload', () => {
     expect(writtenChunks(calls)[0]).toMatchObject({ content: recorded.captions.logo, chunk_kind: 'image' });
   });
 });
+
+// ---------------------------------------------------------------------------------------------------------------------
+// The upload route: the unified branch after the session check, with scope resolution and after()
+// ---------------------------------------------------------------------------------------------------------------------
+
+const ADMIN_A = '00000000-0000-4000-8000-0000000000a1';
+const ADMIN_B = '00000000-0000-4000-8000-0000000000a2';
+const USER_B = '00000000-0000-4000-8000-0000000000b1';
+const ORG_O = '00000000-0000-4000-8000-0000000000c1';
+const PUBLIC_BASE = 'https://project.example.test';
+
+type Mode = 'single-tenant' | 'multi-tenant';
+type Pipeline = 'legacy' | 'unified';
+
+const route = {
+  mode: 'single-tenant' as Mode,
+  pipeline: 'legacy' as Pipeline,
+  configThrows: false,
+  session: null as { id: string } | null,
+  authThrows: false,
+  getUserCalls: 0,
+  uploads: [] as string[],
+  admins: [] as string[],
+  adminQueries: 0,
+  adminLookupFails: false,
+  members: [] as Array<{ organization_id: string; user_id: string }>,
+  readOnly: false,
+  processed: [] as Array<{ name: string; metadata: Record<string, unknown> }>,
+  ingested: [] as Array<Record<string, any>>,
+  afterCallbacks: [] as Array<() => unknown>,
+  tenantOverride: null as null | { ok: true; scope: null },
+  adminScopeCalls: [] as Array<Record<string, unknown>>,
+  tenantCalls: [] as Array<Record<string, unknown>>,
+};
+
+function routeAdmin() {
+  return {
+    auth: { getUser: async () => ({ data: { user: null }, error: { message: 'invalid' } }) },
+    from(table: string) {
+      const filters: Record<string, unknown> = {};
+      const query = {
+        select: () => query,
+        order: () => query,
+        limit: () => query,
+        abortSignal: () => query,
+        eq(column: string, value: unknown) {
+          filters[column] = value;
+          return query;
+        },
+        maybeSingle() {
+          if (table === 'organization_members') {
+            const row = route.members.find((member) => member.organization_id === filters.organization_id && member.user_id === filters.user_id);
+            return Promise.resolve({ data: row ? { organization_id: row.organization_id } : null, error: null });
+          }
+          if (table === 'admin_users') {
+            route.adminQueries += 1;
+            if (route.adminLookupFails) return Promise.resolve({ data: null, error: { message: 'down' } });
+            return Promise.resolve({ data: route.admins.includes(filters.id as string) ? { id: filters.id } : null, error: null });
+          }
+          if (table === 'admin_settings') return Promise.resolve({ data: { read_only_doc_dashboard: route.readOnly }, error: null });
+          return Promise.resolve({ data: null, error: null });
+        },
+      };
+      return query;
+    },
+    storage: {
+      from: () => ({
+        upload: async (path: string) => {
+          route.uploads.push(path);
+          return { data: { path }, error: null };
+        },
+      }),
+    },
+  };
+}
+
+async function loadUploadRoute() {
+  vi.resetModules();
+  vi.doMock('@/lib/deployment-mode', () => ({
+    isSingleTenant: () => route.mode === 'single-tenant',
+    isMultiTenant: () => route.mode === 'multi-tenant',
+    getDeploymentMode: () => route.mode,
+  }));
+  vi.doMock('@/lib/supabase/server', () => ({
+    createClient: async () => ({
+      auth: {
+        getUser: async () => {
+          route.getUserCalls += 1;
+          if (route.authThrows) throw new Error('auth down');
+          return { data: { user: route.session } };
+        },
+      },
+    }),
+  }));
+  vi.doMock('@/lib/supabase', () => ({ supabaseAdmin: routeAdmin(), getSupabaseAdmin: () => routeAdmin() }));
+  vi.doMock('@/lib/document-processor', () => ({
+    processImageDocument: async (name: string, _buffer: Buffer, metadata: Record<string, unknown>) => {
+      route.processed.push({ name, metadata });
+      return 'legacy-doc';
+    },
+  }));
+  vi.doMock('next/server', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('next/server')>()),
+    after: (callback: () => unknown) => {
+      route.afterCallbacks.push(callback);
+    },
+  }));
+  vi.doMock('@/lib/rag', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('@/lib/rag')>();
+    return {
+      ...actual,
+      ingest: async (input: Record<string, any>) => {
+        route.ingested.push(input);
+        return { status: 'ready', documentId: 'doc-1', version: 1, parserUsed: 'text', chunkCount: 1, warnings: [] };
+      },
+      resolveAdminWorkspaceScope: (input: Record<string, unknown>) => {
+        route.adminScopeCalls.push(input);
+        return (actual.resolveAdminWorkspaceScope as (i: unknown) => unknown)(input);
+      },
+      resolveTenantScope: (input: Record<string, unknown>) => {
+        route.tenantCalls.push(input);
+        return route.tenantOverride ?? (actual.resolveTenantScope as (i: unknown) => unknown)(input);
+      },
+    };
+  });
+  const { setRagDepsForTests } = await import('@/lib/rag/deps');
+  setRagDepsForTests({ adminClient: () => routeAdmin() as never });
+  const { setIngestDepsForTests } = await import('@/lib/rag/ingest/deps');
+  setIngestDepsForTests({
+    ingestEnv: () => {
+      if (route.configThrows) throw new Error('config unavailable');
+      return { RAG_INGEST_PIPELINE: route.pipeline };
+    },
+  });
+  const module = await import('@/app/api/upload/route');
+  const rag = await import('@/lib/rag');
+  const admin = await import('@/lib/admin-session');
+  return { POST: module.POST, rag, admin };
+}
+
+interface PostOptions {
+  cookie?: string;
+  fileName?: string;
+  fileType?: string;
+  file?: Uint8Array;
+}
+
+async function post(fields: Record<string, string> = {}, options: PostOptions = {}) {
+  const loaded = await loadUploadRoute();
+  const { NextRequest } = await import('next/server');
+  const form = new FormData();
+  form.append('files', new File([new Uint8Array(options.file ?? IMAGE)], options.fileName ?? 'photo.png', { type: options.fileType ?? 'image/png' }));
+  for (const [key, value] of Object.entries(fields)) form.append(key, value);
+  const request = new NextRequest('http://localhost/api/upload', {
+    method: 'POST',
+    body: form,
+    headers: options.cookie ? { cookie: options.cookie } : {},
+  });
+  return { response: await loaded.POST(request), ...loaded };
+}
+
+async function runAfter(): Promise<void> {
+  for (const callback of route.afterCallbacks) await callback();
+}
+
+function resetRoute(): void {
+  route.mode = 'single-tenant';
+  route.pipeline = 'legacy';
+  route.configThrows = false;
+  route.session = null;
+  route.authThrows = false;
+  route.getUserCalls = 0;
+  route.uploads = [];
+  route.admins = [];
+  route.adminQueries = 0;
+  route.adminLookupFails = false;
+  route.members = [];
+  route.readOnly = false;
+  route.processed = [];
+  route.ingested = [];
+  route.afterCallbacks = [];
+  route.tenantOverride = null;
+  route.adminScopeCalls = [];
+  route.tenantCalls = [];
+}
+
+function ingestedScopeKey(rag: { scopeKey: (scope: never) => string }): string {
+  expect(route.ingested).toHaveLength(1);
+  return rag.scopeKey(route.ingested[0]!.scope as never);
+}
+
+function nothingReached(): void {
+  expect(route.uploads).toEqual([]);
+  expect(route.processed).toEqual([]);
+  expect(route.ingested).toEqual([]);
+  expect(route.afterCallbacks).toEqual([]);
+  expect(route.adminScopeCalls).toEqual([]);
+  expect(route.tenantCalls).toEqual([]);
+}
+
+describe('upload route', () => {
+  beforeEach(() => {
+    resetRoute();
+  });
+
+  afterEach(async () => {
+    const { resetIngestDepsForTests } = await import('@/lib/rag/ingest/deps');
+    const { resetRagDepsForTests } = await import('@/lib/rag/deps');
+    resetIngestDepsForTests();
+    resetRagDepsForTests();
+    for (const id of ['@/lib/deployment-mode', '@/lib/supabase/server', '@/lib/supabase', '@/lib/document-processor', 'next/server', '@/lib/rag']) {
+      vi.doUnmock(id);
+    }
+  });
+
+  describe.each([
+    ['single-tenant', 'legacy'],
+    ['single-tenant', 'unified'],
+    ['multi-tenant', 'legacy'],
+    ['multi-tenant', 'unified'],
+  ] as const)('%s, %s pipeline, without a usable session', (mode, pipeline) => {
+    beforeEach(() => {
+      route.mode = mode;
+      route.pipeline = pipeline;
+    });
+
+    it('answers 401 with no session and reaches no storage, no legacy processing, no scope, no ingest and no after()', async () => {
+      const { response } = await post({ process_rag: 'true' });
+      expect(response.status).toBe(401);
+      expect(await response.json()).toEqual({ error: 'Authentication required' });
+      nothingReached();
+      expect(route.adminQueries).toBe(0);
+    });
+
+    it('answers 503 when the session lookup throws and reaches nothing', async () => {
+      route.authThrows = true;
+      const { response } = await post({ process_rag: 'true' });
+      expect(response.status).toBe(503);
+      nothingReached();
+    });
+
+    it('a valid signed admin cookie never stands in for the missing session: 401 and no admin_users lookup', async () => {
+      const probe = await loadUploadRoute();
+      const cookie = `admin_session=${probe.admin.mintAdminSessionValue(ADMIN_A)!}`;
+      route.admins = [ADMIN_A];
+      const { response } = await post({ process_rag: 'true', upload_source: 'config_upload' }, { cookie });
+      expect(response.status).toBe(401);
+      nothingReached();
+      expect(route.adminQueries).toBe(0);
+    });
+  });
+
+  describe('legacy pipeline', () => {
+    it('calls processImageDocument as today with the session user and the storage path, and never ingest or after()', async () => {
+      route.session = { id: ADMIN_A };
+      const { response } = await post({ process_rag: 'true', image_context: 'Ground floor plan', sessionId: 'someone-else' });
+      expect(response.status).toBe(200);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(route.processed).toHaveLength(1);
+      expect(route.processed[0]!.name).toBe('photo.png');
+      expect(route.processed[0]!.metadata).toMatchObject({
+        user_id: ADMIN_A,
+        source: 'upload',
+        image_type: 'image/png',
+        image_context: 'Ground floor plan',
+        source_file_id: route.uploads[0],
+      });
+      expect(String(route.processed[0]!.metadata.image_url)).toContain(`/chat-images/${ADMIN_A}/`);
+      expect(route.ingested).toEqual([]);
+      expect(route.afterCallbacks).toEqual([]);
+    });
+
+    it('ignores upload_source and never calls checkAdmin (multi-tenant)', async () => {
+      route.mode = 'multi-tenant';
+      route.session = { id: ADMIN_A };
+      route.admins = [ADMIN_A];
+      const { response } = await post({ process_rag: 'true', upload_source: 'config_upload' });
+      expect(response.status).toBe(200);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(route.adminQueries).toBe(0);
+      expect(route.adminScopeCalls).toEqual([]);
+      expect(route.tenantCalls).toEqual([]);
+      expect(route.processed).toHaveLength(1);
+      expect(route.ingested).toEqual([]);
+    });
+
+    it('falls back to the legacy path when the ingest switch cannot be read', async () => {
+      route.session = { id: ADMIN_A };
+      route.pipeline = 'unified';
+      route.configThrows = true;
+      const { response } = await post({ process_rag: 'true' });
+      expect(response.status).toBe(200);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(route.processed).toHaveLength(1);
+      expect(route.afterCallbacks).toEqual([]);
+    });
+  });
+
+  describe('unified pipeline, scope resolution', () => {
+    beforeEach(() => {
+      route.pipeline = 'unified';
+      route.session = { id: ADMIN_A };
+    });
+
+    it('multi-tenant, no organization: ingest gets the personal scope of the session user', async () => {
+      route.mode = 'multi-tenant';
+      const { response, rag } = await post({ process_rag: 'true' });
+      expect(response.status).toBe(200);
+      expect(route.afterCallbacks).toHaveLength(1);
+      await runAfter();
+      expect(ingestedScopeKey(rag)).toBe(`u:${ADMIN_A}`);
+    });
+
+    it('multi-tenant, a member organization: ingest gets the organization scope', async () => {
+      route.mode = 'multi-tenant';
+      route.members = [{ organization_id: ORG_O, user_id: ADMIN_A }];
+      const { response, rag } = await post({ process_rag: 'true', organization_id: ORG_O });
+      expect(response.status).toBe(200);
+      await runAfter();
+      expect(ingestedScopeKey(rag)).toBe(`o:${ORG_O}`);
+    });
+
+    it('multi-tenant, a non-member organization: 403 before any storage write, and nothing is scheduled', async () => {
+      route.mode = 'multi-tenant';
+      const { response } = await post({ process_rag: 'true', organization_id: ORG_O });
+      expect(response.status).toBe(403);
+      expect(route.uploads).toEqual([]);
+      expect(route.afterCallbacks).toEqual([]);
+      expect(route.ingested).toEqual([]);
+    });
+
+    it('single-tenant with a session: ingest gets s:default', async () => {
+      const { response, rag } = await post({ process_rag: 'true' });
+      expect(response.status).toBe(200);
+      await runAfter();
+      expect(ingestedScopeKey(rag)).toBe('s:default');
+    });
+
+    it('a null scope is a 401 before any storage write and schedules nothing', async () => {
+      route.mode = 'multi-tenant';
+      route.tenantOverride = { ok: true, scope: null };
+      const { response } = await post({ process_rag: 'true' });
+      expect(response.status).toBe(401);
+      expect(route.uploads).toEqual([]);
+      expect(route.afterCallbacks).toEqual([]);
+    });
+
+    it('looks the session up once for the scope: the verified user is passed on, not looked up again', async () => {
+      route.mode = 'multi-tenant';
+      const { response } = await post({ process_rag: 'true' });
+      expect(response.status).toBe(200);
+      expect(route.getUserCalls).toBe(1);
+    });
+  });
+
+  describe('unified pipeline, storage and background ingest', () => {
+    beforeEach(() => {
+      route.pipeline = 'unified';
+      route.session = { id: ADMIN_A };
+      route.mode = 'multi-tenant';
+    });
+
+    it('keeps the session-user storage prefix, ignores a client sessionId, and ingests the stored path with the public URL and the bytes', async () => {
+      const { response } = await post({ process_rag: 'true', image_context: 'Ground floor plan', sessionId: 'victim/../other' });
+      const body = await response.json();
+      expect(response.status).toBe(200);
+      expect(route.uploads).toHaveLength(1);
+      expect(route.uploads[0]!.startsWith(`${ADMIN_A}/`)).toBe(true);
+      expect(route.uploads[0]).not.toContain('victim');
+      expect(body.files[0].filePath).toBe(route.uploads[0]);
+
+      const getUserBefore = route.getUserCalls;
+      expect(route.afterCallbacks).toHaveLength(1);
+      expect(route.ingested).toEqual([]);
+      await runAfter();
+
+      expect(route.getUserCalls).toBe(getUserBefore);
+      expect(route.ingested).toHaveLength(1);
+      const input = route.ingested[0]!;
+      expect(input).toMatchObject({ source: 'image_upload', sourceKey: route.uploads[0], filename: 'photo.png', mimeType: 'image/png' });
+      expect(Array.from(input.file as Uint8Array)).toEqual(Array.from(IMAGE));
+      expect(input.options).toMatchObject({ imageUrl: body.files[0].downloadUrl, imageContext: 'Ground floor plan' });
+      expect(String(input.options.imageUrl)).toContain(`/chat-images/${ADMIN_A}/`);
+      expect(input.signal).toBeInstanceOf(AbortSignal);
+      expect(input.deadlineMs).toBeGreaterThan(0);
+      expect(input.deadlineMs).toBeLessThanOrEqual(60000);
+    });
+
+    it('schedules nothing when process_rag is not true, and nothing for a file that is not an image, and keeps the response shape', async () => {
+      const plain = await post({});
+      expect(plain.response.status).toBe(200);
+      expect(Object.keys(await plain.response.json()).sort()).toEqual(['files', 'success', 'total', 'uploaded']);
+      expect(route.afterCallbacks).toEqual([]);
+
+      const pdf = await post({ process_rag: 'true' }, { fileName: 'notes.pdf', fileType: 'application/pdf' });
+      expect(pdf.response.status).toBe(200);
+      expect(route.afterCallbacks).toEqual([]);
+      expect(route.ingested).toEqual([]);
+      expect(route.uploads).toHaveLength(2);
+    });
+
+    it('returns the same response shape as the legacy pipeline', async () => {
+      const { response } = await post({ process_rag: 'true' });
+      const body = await response.json();
+      expect(Object.keys(body).sort()).toEqual(['files', 'success', 'total', 'uploaded']);
+      expect(body).toMatchObject({ success: true, uploaded: 1, total: 1 });
+      expect(Object.keys(body.files[0]).sort()).toEqual(['downloadUrl', 'fileName', 'filePath', 'originalName', 'size', 'type', 'uploadedAt']);
+    });
+  });
+
+  describe('unified pipeline, Config UI uploads (upload_source=config_upload)', () => {
+    beforeEach(() => {
+      route.pipeline = 'unified';
+      route.mode = 'multi-tenant';
+      route.admins = [ADMIN_A, ADMIN_B];
+    });
+
+    async function cookieFor(adminId: string): Promise<string> {
+      const { mintAdminSessionValue } = await import('@/lib/admin-session');
+      return `admin_session=${mintAdminSessionValue(adminId)!}`;
+    }
+
+    it('admin A with a valid signed cookie for A and the session of A gets the admin workspace scope; the storage prefix stays the session user', async () => {
+      route.session = { id: ADMIN_A };
+      const { response, rag } = await post({ process_rag: 'true', upload_source: 'config_upload' }, { cookie: await cookieFor(ADMIN_A) });
+      expect(response.status).toBe(200);
+      expect(route.adminScopeCalls).toHaveLength(1);
+      expect(route.adminScopeCalls[0]).toMatchObject({ adminUserId: ADMIN_A });
+      expect(route.tenantCalls).toEqual([]);
+      expect(route.uploads[0]!.startsWith(`${ADMIN_A}/`)).toBe(true);
+      await runAfter();
+      expect(ingestedScopeKey(rag)).toBe(`u:${ADMIN_A}`);
+    });
+
+    it('the session of admin A alone, with no cookie, also gets the admin workspace scope', async () => {
+      route.session = { id: ADMIN_A };
+      const { response } = await post({ process_rag: 'true', upload_source: 'config_upload' });
+      expect(response.status).toBe(200);
+      expect(route.adminScopeCalls).toHaveLength(1);
+      expect(route.adminScopeCalls[0]).toMatchObject({ adminUserId: ADMIN_A });
+      expect(route.uploads[0]!.startsWith(`${ADMIN_A}/`)).toBe(true);
+    });
+
+    it('an admin workspace organization is honoured only after the membership check', async () => {
+      route.session = { id: ADMIN_A };
+      const refused = await post({ process_rag: 'true', upload_source: 'config_upload', organization_id: ORG_O });
+      expect(refused.response.status).toBe(403);
+      expect(route.uploads).toEqual([]);
+      expect(route.afterCallbacks).toEqual([]);
+
+      route.members = [{ organization_id: ORG_O, user_id: ADMIN_A }];
+      const allowed = await post({ process_rag: 'true', upload_source: 'config_upload', organization_id: ORG_O });
+      expect(allowed.response.status).toBe(200);
+      await runAfter();
+      expect(ingestedScopeKey(allowed.rag)).toBe(`o:${ORG_O}`);
+    });
+
+    it('a bare admin UUID and a cookie with a tampered signature, with a non-admin session, give the session scope and never the admin scope', async () => {
+      route.session = { id: USER_B };
+      const signed = (await cookieFor(ADMIN_A)).replace('admin_session=', '');
+      const [id, expiry, signature] = signed.split('.');
+      const flipped = `${signature!.slice(0, -1)}${signature!.endsWith('A') ? 'B' : 'A'}`;
+      for (const cookie of [`admin_session=${ADMIN_A}`, `admin_session=${id}.${expiry}.${flipped}`]) {
+        route.adminScopeCalls = [];
+        route.tenantCalls = [];
+        route.uploads = [];
+        const { response } = await post({ process_rag: 'true', upload_source: 'config_upload' }, { cookie });
+        expect(response.status).toBe(200);
+        expect(route.adminScopeCalls).toEqual([]);
+        expect(route.tenantCalls).toHaveLength(1);
+        expect(route.uploads[0]!.startsWith(`${USER_B}/`)).toBe(true);
+      }
+    });
+
+    it('a non-admin session sending upload_source=config_upload gets the session scope', async () => {
+      route.session = { id: USER_B };
+      const { response, rag } = await post({ process_rag: 'true', upload_source: 'config_upload' });
+      expect(response.status).toBe(200);
+      expect(route.adminScopeCalls).toEqual([]);
+      expect(route.tenantCalls).toHaveLength(1);
+      await runAfter();
+      expect(ingestedScopeKey(rag)).toBe(`u:${USER_B}`);
+    });
+
+    it('a valid cookie for admin A sent with the session of non-admin B gives B the session scope and B storage prefix', async () => {
+      route.session = { id: USER_B };
+      const { response, rag } = await post({ process_rag: 'true', upload_source: 'config_upload' }, { cookie: await cookieFor(ADMIN_A) });
+      expect(response.status).toBe(200);
+      expect(route.adminScopeCalls).toEqual([]);
+      expect(route.uploads[0]!.startsWith(`${USER_B}/`)).toBe(true);
+      await runAfter();
+      expect(ingestedScopeKey(rag)).toBe(`u:${USER_B}`);
+    });
+
+    it('a failing admin_users lookup answers 503 before any storage write, and nothing is ingested or scheduled', async () => {
+      route.session = { id: ADMIN_A };
+      route.adminLookupFails = true;
+      const { response } = await post({ process_rag: 'true', upload_source: 'config_upload' });
+      expect(response.status).toBe(503);
+      expect(route.uploads).toEqual([]);
+      expect(route.afterCallbacks).toEqual([]);
+      expect(route.ingested).toEqual([]);
+    });
+
+    it('an upload without upload_source never calls checkAdmin', async () => {
+      route.session = { id: ADMIN_A };
+      const { response } = await post({ process_rag: 'true' });
+      expect(response.status).toBe(200);
+      expect(route.adminQueries).toBe(0);
+      expect(route.adminScopeCalls).toEqual([]);
+      expect(route.tenantCalls).toHaveLength(1);
+    });
+  });
+});
