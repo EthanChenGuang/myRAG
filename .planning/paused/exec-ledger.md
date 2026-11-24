@@ -9,7 +9,7 @@
 | 03-44 | bc-cdb95a3d-1ebc-5b58-a6a1-46d7c48b8221 | duplicate | exec/03-44 | Same SHAs; do not spawn |
 | 03-44 | bc-9cd7df41-c92d-5032-a8a1-d1547071d01f | duplicate | exec/03-44 | Same SHAs; do not spawn |
 | 03-45 | (orchestrator) | **merged** | trunk | No subagent |
-| 03-46 | bc-88f166a9-cbf1-5906-851a-88b7b561593a | **running** | exec/03-46 (pending) | Only live 03-46 executor |
+| 03-46 | bc-88f166a9-cbf1-5906-851a-88b7b561593a | **stale** (no commits; orchestrator takeover) | exec/03-46 | Do not resume; orchestrator executes in wt/03-46 |
 | 03-47 | — | pending | — | Spawn only after 03-46 merged + ledger row |
 
 ## DUPLICATE EXECUTION (2026-11-24)
