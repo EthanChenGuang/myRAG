@@ -301,7 +301,10 @@ function emitFailureTrace(
  * (job, stage, cursor): a cursor that is not the job's position is a replay and changes nothing, and writes are the Phase 3
  * deterministic-id upserts with the final trim, so a repeated stage yields the same rows (D-25, F-4).
  */
-export async function handleAdvance(jobId: string, body: AdvanceRequest, options: { signal: AbortSignal }): Promise<Reply> {
+/** The advance body; `provisional` defaults to false when the caller leaves it out, as the request schema does. */
+export type AdvanceBody = Omit<AdvanceRequest, 'provisional'> & { provisional?: boolean };
+
+export async function handleAdvance(jobId: string, body: AdvanceBody, options: { signal: AbortSignal }): Promise<Reply> {
   const { signal } = options;
   const deps = getIngestDeps();
   try {
