@@ -2,6 +2,7 @@ import { z } from 'zod/v3';
 import { env } from '@/lib/env';
 import { ParseResultSchema, type ParseResult } from '@/lib/rag-eval/contracts.generated';
 import { isTenantScope } from '../../tenant/scope';
+import { CloudRefused, assertCloudAllowed, reservePremium } from '../guard/cloud-budget';
 import {
   MAX_ARTIFACT_BYTES,
   MAX_JOB_AGE_MS,
@@ -170,7 +171,22 @@ export function createLlamaParseParser(config: LlamaParseConfig): DocumentParser
   const timeoutFor = (request: ParseRequest): number => requestTimeoutMs(request, config.requestTimeoutMs ?? REQUEST_TIMEOUT_MS);
   const statusError = (status: number): ParserError => new ParserError('llamaparse', `http_${status}`);
 
+  /** The guard decides before any byte is read into a request; a refusal is thrown as CloudRefused (D-17, D-18). */
+  function requireCloud(): void {
+    const gate = assertCloudAllowed('parse');
+    if (!gate.ok) throw new CloudRefused(gate.reason);
+  }
+
+  async function reserveForUpload(request: ParseRequest): Promise<void> {
+    const guard = request.guard;
+    if (!guard) return;
+    const reserved = await reservePremium(guard.context, { signal: request.signal });
+    if (!reserved.ok) throw new CloudRefused(reserved.reason);
+    if (reserved.handle) await guard.onReserved?.(reserved.handle);
+  }
+
   async function submit(request: ParseRequest, attempt: number): Promise<PendingJob> {
+    requireCloud();
     const form = new FormData();
     const extension = extensionOf(request.filename);
     form.set('file', new Blob([request.bytes as unknown as BlobPart]), `document.${extension === '' ? 'bin' : extension}`);
@@ -285,11 +301,13 @@ export function createLlamaParseParser(config: LlamaParseConfig): DocumentParser
     name: 'llamaparse',
     unavailableReason: () => (apiKey === '' ? 'missing_key' : null),
     async parse(request) {
+      requireCloud();
       // The minted scope proves a verified caller; there is no way to spend LlamaParse credit without one.
       if (!isTenantScope(request.scope)) throw new ParserError('llamaparse', 'scope_unverified');
       if (apiKey === '') throw new ParserError('llamaparse', 'missing_key');
       request.signal.throwIfAborted();
 
+      if (!request.resume) await reserveForUpload(request);
       let job = request.resume ?? (await submit(request, 1));
       let poll = 0;
       let failures = 0;
@@ -305,7 +323,8 @@ export function createLlamaParseParser(config: LlamaParseConfig): DocumentParser
         failures = 0;
         if (state === null) {
           // The service no longer knows the job: submit again once, then give up.
-          if (job.attempt >= 2) throw new ParserError('llamaparse', 'job_lost');
+          // A metered request holds one reservation for one upload; a second upload would be unreserved.
+          if (job.attempt >= 2 || request.guard) throw new ParserError('llamaparse', 'job_lost');
           job = await submit(request, job.attempt + 1);
           continue;
         }
