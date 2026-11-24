@@ -1,5 +1,6 @@
 import hashlib
 import importlib.util
+import json
 import os
 import re
 import sys
@@ -8,6 +9,8 @@ from pathlib import Path
 import pytest
 
 from rag_eval.paths import REPO_ROOT
+from rag_sidecar.contracts import ParseResult
+from rag_sidecar.extract.invoice import extract_invoice
 from test_fixture_pii import phone_violations
 
 INGEST = REPO_ROOT / "eval/fixtures/ingest"
@@ -74,8 +77,6 @@ def _recorded_font() -> Path | None:
     build_info = PDF_DIR / "build-info.json"
     if not build_info.exists():
         return None
-    import json
-
     wanted = json.loads(build_info.read_text(encoding="utf-8"))["scan_font"]["sha256"]
     candidates = [os.environ.get("RAG_FIXTURE_CJK_FONT", ""), *FONT_CANDIDATES]
     for candidate in candidates:
@@ -177,8 +178,6 @@ def test_scans_regenerate_byte_for_byte_when_the_recorded_font_is_present(tmp_pa
     font = _recorded_font()
     if font is None:
         pytest.skip("notice: the CJK font recorded in pdf/build-info.json is not on this machine, scan bytes not compared")
-    import json
-
     info = json.loads((PDF_DIR / "build-info.json").read_text(encoding="utf-8"))
     written = generate.generate(tmp_path / "pdf", tmp_path / "text", cjk_font=font, font_index=info["scan_font"]["index"])
     assert SCANNED_IDS <= set(written)
@@ -189,8 +188,6 @@ def test_scans_regenerate_byte_for_byte_when_the_recorded_font_is_present(tmp_pa
 
 
 def test_build_info_records_the_scan_font_hash():
-    import json
-
     info = json.loads(_read(PDF_DIR / "build-info.json"))
     assert re.fullmatch(r"[0-9a-f]{64}", info["scan_font"]["sha256"])
     assert info["scan_font"]["family"]
@@ -209,3 +206,240 @@ def test_contract_and_injection_fixtures_are_also_written_as_markdown():
 def test_the_generator_writes_the_markdown_next_to_the_pdfs(tmp_path):
     generate.generate(tmp_path / "pdf", tmp_path / "text", cjk_font=None)
     assert {path.stem for path in (tmp_path / "text").glob("*.md")} == TEXT_IDS
+
+
+MANIFEST = INGEST / "manifest.json"
+RECORDED = INGEST / "recorded"
+SEPARATOR_ROW = re.compile(r"^\|[-: |]+\|$")
+PROFILE_BY_TYPE = {
+    "financial_report": "financial_report@1",
+    "contract_legal": "contract_legal@1",
+    "invoice_receipt": "invoice_receipt@1",
+    "product_technical": "product_technical@1",
+    "scanned_image": "scanned_image@1",
+    "general": "general@1",
+}
+
+
+def _manifest() -> dict:
+    return json.loads(_read(MANIFEST))
+
+
+def _entry(spec_id: str) -> dict:
+    entries = {entry["id"]: entry for entry in _manifest()["fixtures"]}
+    assert spec_id in entries, f"{spec_id} is not in the manifest"
+    return entries[spec_id]
+
+
+def _result(spec_id: str) -> ParseResult:
+    return ParseResult.model_validate_json(_read(INGEST / _entry(spec_id)["recorded"]["parse_result"]))
+
+
+def _table_chunks(result: ParseResult):
+    return [chunk for chunk in result.chunks if chunk.is_table]
+
+
+def _normalized(text: str) -> str:
+    return re.sub(r"\s+", "", text)
+
+
+def test_the_manifest_registers_every_fixture_with_its_hash_type_and_recordings():
+    manifest = _manifest()
+    assert manifest["schema_version"] == 1
+    assert len(manifest["fixtures"]) >= 12
+    assert {entry["id"] for entry in manifest["fixtures"]} == DIGITAL_IDS | SCANNED_IDS
+    for spec in specs.all_specs():
+        entry = _entry(spec.id)
+        assert entry["path"] == f"pdf/{spec.id}.pdf"
+        assert entry["mime"] == "application/pdf"
+        assert entry["language"] == spec.language
+        assert entry["doc_type"] == spec.doc_type
+        assert entry["profile_id"] == PROFILE_BY_TYPE[spec.doc_type]
+        assert entry["text_layer"] == spec.layer
+        assert entry["file_sha256"] == _sha256(_read(INGEST / entry["path"])), spec.id
+        assert (INGEST / entry["recorded"]["parse_result"]).is_file()
+        assert (INGEST / entry["recorded"]["docling"]).is_file()
+        for name, relative in entry["recorded"]["artifacts"].items():
+            assert (INGEST / relative).is_file(), f"{spec.id}: artifact {name}"
+
+
+def test_manifest_hashes_are_unique_per_fixture():
+    hashes = [entry["file_sha256"] for entry in _manifest()["fixtures"]]
+    assert len(set(hashes)) == len(hashes)
+
+
+def test_manifest_expected_facts_equal_the_specs():
+    for spec in specs.all_specs():
+        assert _entry(spec.id)["expected"] == json.loads(json.dumps(spec.facts)), spec.id
+
+
+def test_manifest_records_the_scan_font_and_generator_versions():
+    info = json.loads(_read(PDF_DIR / "build-info.json"))
+    manifest = _manifest()
+    assert manifest["scan_font"] == info["scan_font"]
+    assert manifest["generator"] == info["generator"]
+
+
+def test_manifest_lists_the_markdown_files_of_the_text_path_with_their_hashes():
+    entries = {entry["id"]: entry for entry in _manifest()["fixtures"]}
+    assert {spec_id for spec_id, entry in entries.items() if entry.get("text")} == TEXT_IDS
+    for spec_id in TEXT_IDS:
+        text = entries[spec_id]["text"]
+        assert text["mime"] == "text/markdown"
+        assert text["sha256"] == _sha256(_read(INGEST / text["path"]))
+
+
+def test_every_recorded_parse_result_validates_against_the_contract():
+    for spec in specs.all_specs():
+        result = _result(spec.id)
+        assert result.parser == "docling", spec.id
+        assert result.page_count == spec.facts["page_count"], spec.id
+        assert result.chunks, spec.id
+        assert result.language == spec.language, spec.id
+        assert result.text_layer_page_share == (0.0 if spec.layer == "scanned" else 1.0), spec.id
+
+
+def test_every_table_chunk_starts_with_its_header_and_separator_rows():
+    with_tables = 0
+    for spec in specs.all_specs():
+        for chunk in _table_chunks(_result(spec.id)):
+            lines = chunk.text.splitlines()
+            assert lines[0].startswith("|") and SEPARATOR_ROW.match(lines[1]), spec.id
+            assert chunk.table_header == "\n".join(lines[:2]), spec.id
+            with_tables += 1
+    assert with_tables >= 5
+
+
+def test_the_report_table_is_split_into_chunks_that_each_repeat_the_header():
+    chunks = _table_chunks(_result("report-zh-table"))
+    expected = specs.spec_by_id("report-zh-table").facts["table"]
+    assert len(chunks) >= 2
+    header_cells = [cell.strip() for cell in chunks[0].text.splitlines()[0].strip("|").split("|")]
+    assert header_cells == expected["header"]
+    body_rows: list[list[str]] = []
+    for chunk in chunks:
+        lines = chunk.text.splitlines()
+        assert lines[0] == chunks[0].text.splitlines()[0]
+        assert chunk.pages == [expected["page"]]
+        assert chunk.headings == expected["section_path"]
+        body_rows += [[cell.strip() for cell in line.strip("|").split("|")] for line in lines[2:] if line.startswith("|")]
+    assert len(body_rows) == expected["body_rows"]
+    assert [row[1] for row in body_rows] == [f"EXP-{index:03d}" for index in range(1, 41)]
+    for probe in expected["probe_rows"]:
+        assert probe in body_rows
+
+
+def test_scans_record_the_ocr_text_with_no_text_layer():
+    for spec_id in SCANNED_IDS:
+        result = _result(spec_id)
+        facts = specs.spec_by_id(spec_id).facts
+        assert result.text_layer_page_share == 0.0
+        flat = _normalized(result.markdown)
+        for phrase in facts["ocr_phrases"]:
+            assert _normalized(phrase) in flat, (spec_id, phrase)
+        for heading in facts["headings"]:
+            assert heading["text"] in result.markdown, (spec_id, heading["text"])
+
+
+def test_recorded_headings_follow_the_specs():
+    for spec in specs.all_specs():
+        result = _result(spec.id)
+        seen = {heading for chunk in result.chunks for heading in chunk.headings}
+        for heading in spec.facts["headings"]:
+            assert heading["text"] in seen, (spec.id, heading["text"])
+
+
+def test_invoice_recordings_yield_the_expected_fields_through_the_extractor():
+    for spec_id in ("invoice-zh", "invoice-en", "invoice-it"):
+        expected = specs.spec_by_id(spec_id).facts["invoice"]
+        fields = extract_invoice(_result(spec_id).markdown)
+        assert fields.errors == [] and fields.confidence == 1.0, spec_id
+        assert fields.invoice_number == expected["invoice_number"]
+        assert fields.issue_date.isoformat() == expected["issue_date"]
+        assert (fields.due_date.isoformat() if fields.due_date else None) == expected["due_date"]
+        for role in ("supplier", "buyer"):
+            party = getattr(fields, role)
+            assert (party.name, party.tax_id, party.tax_id_scheme) == (
+                expected[role]["name"],
+                expected[role]["tax_id"],
+                expected[role]["tax_id_scheme"],
+            )
+        assert fields.currency == expected["currency"]
+        assert (fields.net_total, fields.tax_total, fields.gross_total) == (
+            expected["net_total"],
+            expected["tax_total"],
+            expected["gross_total"],
+        )
+        assert len(fields.line_items) == expected["line_item_count"]
+
+
+def test_invoice_header_block_and_line_items_are_recorded_as_table_chunks_with_a_header():
+    for spec_id in ("invoice-zh", "invoice-en", "invoice-it"):
+        chunks = _table_chunks(_result(spec_id))
+        assert len(chunks) == 1, spec_id
+        assert chunks[0].table_header is not None
+
+
+def test_the_images_fixture_lists_pictures_on_pages_one_and_two_with_artifact_names():
+    result = _result("images-en")
+    expected = specs.spec_by_id("images-en").facts["pictures"]
+    assert [picture.page for picture in result.pictures] == [item["page"] for item in expected] == [1, 2]
+    assert [picture.image_ref for picture in result.pictures] == [item["image_ref"] for item in expected]
+    assert all(picture.page_area_share >= 0.02 for picture in result.pictures)
+    artifacts = _entry("images-en")["recorded"]["artifacts"]
+    assert set(artifacts) == {"docling.json", "picture-1.png", "picture-2.png"}
+    assert set(result.artifacts) == set(artifacts)
+    for name in ("picture-1.png", "picture-2.png"):
+        assert _read(INGEST / artifacts[name]).startswith(b"\x89PNG\r\n\x1a\n")
+
+
+def test_fixtures_without_pictures_record_none():
+    for spec in specs.all_specs():
+        if spec.id != "images-en":
+            assert _result(spec.id).pictures == [], spec.id
+
+
+def test_the_contract_recording_keeps_the_exception_lead_in_and_its_list_in_one_chunk():
+    result = _result("contract-zh")
+    clause = specs.spec_by_id("contract-zh").facts["clause"]
+    holders = [chunk for chunk in result.chunks if clause["lead_in"] in chunk.text]
+    assert len(holders) == 1
+    chunk = holders[0]
+    assert chunk.headings == clause["section_path"]
+    position = chunk.text.index(clause["lead_in"])
+    for item in clause["items"]:
+        found = chunk.text.index(_marker_free(item), position) if _marker_free(item) in chunk.text else -1
+        assert found >= position, item
+        position = found
+
+
+def _marker_free(item: str) -> str:
+    return re.sub(r"^（[一二三四]）", "", item)
+
+
+def test_injection_recordings_hold_the_phrase_once_inside_normal_text():
+    for spec_id in ("injection-zh", "injection-en", "injection-it"):
+        facts = specs.spec_by_id(spec_id).facts
+        markdown = _result(spec_id).markdown
+        assert markdown.count(facts["injection"]["phrase"]) == 1, spec_id
+        assert facts["normal_fact"] in markdown, spec_id
+
+
+def test_recorded_docling_json_is_valid_and_tagged_with_the_parser():
+    for spec in specs.all_specs():
+        entry = _entry(spec.id)
+        payload = json.loads(_read(INGEST / entry["recorded"]["docling"]))
+        assert payload["x_rag_sidecar"]["parser"] == "docling", spec.id
+        assert payload["x_rag_sidecar"]["parser_version"].startswith("docling-"), spec.id
+        assert payload["name"] == spec.id
+        assert len(payload["pages"]) == spec.facts["page_count"]
+        assert entry["recorded"]["artifacts"]["docling.json"] == entry["recorded"]["docling"]
+
+
+def test_the_recorded_directory_holds_only_files_the_manifest_names():
+    named = set()
+    for entry in _manifest()["fixtures"]:
+        named |= {Path(entry["recorded"]["parse_result"]).name, Path(entry["recorded"]["docling"]).name}
+        named |= {Path(path).name for path in entry["recorded"]["artifacts"].values()}
+    on_disk = {path.name for path in RECORDED.iterdir()} if RECORDED.is_dir() else set()
+    assert on_disk == named and len(named) >= 24
