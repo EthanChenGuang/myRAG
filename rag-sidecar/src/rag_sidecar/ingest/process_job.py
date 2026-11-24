@@ -11,6 +11,7 @@ import logging
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from rag_sidecar.contracts.queue import (
@@ -51,6 +52,17 @@ class WorkerDeps:
     worker_id: str
     sleep: Callable[[float], Awaitable[None]] = field(default=asyncio.sleep)
     clock: Callable[[], float] = field(default=time.monotonic)
+    # Tiered routing only (03.1-40); fixed routing never touches these.
+    storage: Any = None
+    pool: Any = None
+    converter: Any = None
+    converter_factory: Callable[[], Any] | None = None
+    routing_cfg: Any = None
+    preflight: Callable[..., Any] | None = None
+    office_converter: Callable[..., Any] | None = None
+    page_cap: int | None = None
+    work_dir: Path | None = None
+    document_timeout_s: float | None = None
 
 
 class _Stop(Exception):
