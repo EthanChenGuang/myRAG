@@ -253,3 +253,59 @@ def test_unknown_category_slang_rejected():
 def test_unknown_provenance_rejected():
     with pytest.raises(ValidationError):
         GoldenItem(**_item("general", provenance="crowd"))
+
+
+def _cross_lingual(**overrides):
+    base = _item(
+        "cross_lingual",
+        id="xl-en-zh-01",
+        question="How many days of annual leave does a new employee get?",
+        language="en",
+        evidence_language="zh",
+    )
+    base.update(overrides)
+    return base
+
+
+def test_cross_lingual_item_with_a_different_evidence_language_validates():
+    item = GoldenItem.model_validate(_cross_lingual())
+    assert item.category == "cross_lingual"
+    assert item.language == "en"
+    assert item.evidence_language == "zh"
+
+
+def test_cross_lingual_item_without_evidence_language_fails():
+    with pytest.raises(ValidationError, match="cross_lingual items need an evidence_language"):
+        GoldenItem.model_validate(_cross_lingual(evidence_language=None))
+
+
+def test_cross_lingual_item_with_evidence_language_equal_to_question_language_fails():
+    with pytest.raises(ValidationError, match="evidence_language must differ from the question language"):
+        GoldenItem.model_validate(_cross_lingual(evidence_language="en"))
+
+
+@pytest.mark.parametrize("evidence_language", [None, "en"])
+def test_evidence_language_on_other_categories_must_be_null_or_the_question_language(evidence_language):
+    item = GoldenItem.model_validate(_item("general", evidence_language=evidence_language))
+    assert item.evidence_language == evidence_language
+
+
+def test_evidence_language_on_another_category_in_a_different_language_fails():
+    with pytest.raises(ValidationError, match="evidence_language must equal the question language"):
+        GoldenItem.model_validate(_item("general", evidence_language="zh"))
+
+
+def test_evidence_language_defaults_to_none():
+    assert GoldenItem.model_validate(_item("general")).evidence_language is None
+
+
+def test_evidence_language_rejects_unknown_language():
+    with pytest.raises(ValidationError):
+        GoldenItem.model_validate(_cross_lingual(evidence_language="fr"))
+
+
+def test_drafted_batch_accepts_the_cross_lingual_category():
+    proposal = _proposal(category="cross_lingual", language="en", evidence_language="zh")
+    batch = DraftedItemBatch.model_validate({"items": [proposal]})
+    assert batch.items[0].category == "cross_lingual"
+    assert batch.items[0].evidence_language == "zh"
