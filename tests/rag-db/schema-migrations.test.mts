@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { PGlite } from '@electric-sql/pglite';
 import { createFixtureDatabase, type DeploymentMode, type FixtureDatabase } from '../../eval/harness/pglite-supabase.mts';
+import { assertNoClientCallableRagFunctions } from '../helpers/rag-client-grants.ts';
 import { embedText } from '../../eval/harness/fixture-embedder.mts';
 import { applyMigrationFiles, applyMigrations, migrationFiles } from '../../eval/harness/migrations.mts';
 import { TWO_TENANT_IDS, createTwoTenantDatabase } from '../../eval/harness/two-tenant.mts';
@@ -494,11 +495,7 @@ for (const mode of MODES) {
         );
         assert.equal(result.rows[0]?.tenant_key, result.rows[0]?.parent_key);
         assert.notEqual(result.rows[0]?.tenant_key, 'o:00000000-0000-4000-8000-000000000999');
-        const exposed = await fixture.db.query<{ proname: string }>(
-          `SELECT p.proname FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
-           WHERE n.nspname = 'public' AND p.proname LIKE 'rag\_%' AND (has_function_privilege('anon', p.oid, 'EXECUTE') OR has_function_privilege('authenticated', p.oid, 'EXECUTE'))`,
-        );
-        assert.deepEqual(exposed.rows, []);
+        await assertNoClientCallableRagFunctions(fixture.db);
         const defined = await fixture.db.query<{ proname: string }>("SELECT proname FROM pg_proc WHERE proname LIKE 'rag\_%' ORDER BY proname");
         const definedNames = defined.rows.map((row) => row.proname);
         for (const name of ['rag_chunks_legacy_defaults', 'rag_documents_legacy_defaults']) {
