@@ -40,6 +40,26 @@ async function runFileHashDedup(ctx: StageContext): Promise<StageOutcome> {
 async function runContentHashDedup(ctx: StageContext): Promise<StageOutcome> {
   const document = requireDocument(ctx, 'content_hash_dedup');
   const hash = contentHash(ctx.work.parseText ?? '');
+  const duplicateOf = await ctx.writer.findContentDuplicate(hash, document.id);
+  if (duplicateOf !== null) {
+    await ctx.writer.setFields(document.id, {
+      content_hash: hash,
+      status: 'deleted',
+      metadata: { duplicate_of: duplicateOf, content_hash_version: HASH_NORMALIZATION_VERSION },
+    });
+    return {
+      kind: 'done',
+      result: {
+        status: 'skipped_duplicate',
+        documentId: null,
+        version: null,
+        parserUsed: ctx.parserUsed,
+        chunkCount: 0,
+        warnings: ctx.warnings.slice(),
+        duplicateOf,
+      },
+    };
+  }
   await ctx.writer.setFields(document.id, {
     content_hash: hash,
     metadata: { content_hash_version: HASH_NORMALIZATION_VERSION },

@@ -30,7 +30,7 @@ async function run(ctx: StageContext): Promise<StageOutcome> {
   } else if (identity.bytes !== null && isTextLike(identity.filename, ctx.input.mimeType)) {
     text = new TextDecoder('utf-8').decode(identity.bytes);
   } else {
-    throw new Error('unsupported file type');
+    return { kind: 'fail', reason: 'parser_unavailable' };
   }
 
   ctx.work.parseText = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
