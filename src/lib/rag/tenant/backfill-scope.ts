@@ -3,19 +3,19 @@ import { getDeploymentMode, type DeploymentMode } from '@/lib/deployment-mode';
 import { parseTenantKey } from './embed';
 import { mintScope, type TenantScope } from './scope';
 
-export type BackfillScopeResult =
-  | { ok: true; scope: TenantScope }
-  | { ok: false; reason: 'invalid_tenant' | 'unknown_tenant' | 'unavailable' };
+export type BackfillScopeRefusal = 'invalid_tenant' | 'unknown_tenant' | 'unavailable';
+
+export type BackfillScopeResult = { ok: true; scope: TenantScope } | { ok: false; reason: BackfillScopeRefusal };
 
 export type BackfillScopeAdmin = Pick<SupabaseClient, 'from' | 'auth'>;
 
 export interface BackfillScopeDeps {
   deploymentMode?: DeploymentMode;
   admin?: BackfillScopeAdmin | null;
-  signal: AbortSignal;
+  signal?: AbortSignal;
 }
 
-function refuse(reason: BackfillScopeResult extends { ok: false } ? BackfillScopeResult['reason'] : never): BackfillScopeResult {
+function refuse(reason: BackfillScopeRefusal): BackfillScopeResult {
   console.warn('[Backfill] tenant scope refused', { reason });
   return { ok: false, reason };
 }
