@@ -319,6 +319,244 @@ BEGIN
 END
 $$;
 
+-- Upserts chunks of a version. A chunk id is a UUID taken from the first 16 bytes of sha256(document_id || ':' || chunk_index), so a retried
+-- call lands on the same rows. The denormalised columns come from the document and follow its status and currency; the promoted columns
+-- are mirrored into metadata next to the caller's keys. p_embeddings is an object keyed by profile id whose arrays line up with p_chunks;
+-- only the legacy profile (the embedding column, 1536 dimensions) is supported here, any other id raises embedding_profile_unsupported
+-- (the profile tables arrive with the profile write path). A rewrite replaces the row, so a chunk resent without a vector has none. On
+-- p_final the chunks of this document at chunk_index >= p_total are removed.
+CREATE OR REPLACE FUNCTION rag_write_chunks(
+  p_document_id uuid,
+  p_tenant_key text,
+  p_chunks jsonb,
+  p_embeddings jsonb,
+  p_final boolean,
+  p_total integer
+)
+RETURNS TABLE (chunks_written integer, chunks_deleted integer)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+#variable_conflict use_column
+DECLARE
+  legacy_profile constant text := 'openai-3-small-1536';
+  doc documents%ROWTYPE;
+  profile_id text;
+  chunk_count integer;
+  legacy_vectors jsonb;
+  written integer := 0;
+  deleted integer := 0;
+BEGIN
+  SELECT * INTO doc FROM documents d WHERE d.id = p_document_id AND d.tenant_key = p_tenant_key FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'tenant_mismatch' USING DETAIL = 'document not found in tenant';
+  END IF;
+  IF doc.status IN ('failed', 'deleted') THEN
+    RAISE EXCEPTION 'document_not_writable' USING DETAIL = 'status is ' || doc.status;
+  END IF;
+  IF p_chunks IS NULL OR jsonb_typeof(p_chunks) <> 'array' THEN
+    RAISE EXCEPTION 'invalid_chunks: p_chunks must be a JSON array';
+  END IF;
+  chunk_count := jsonb_array_length(p_chunks);
+  IF EXISTS (
+    SELECT 1 FROM jsonb_array_elements(p_chunks) AS e(value)
+    WHERE jsonb_typeof(e.value) <> 'object'
+       OR jsonb_typeof(e.value -> 'content') IS DISTINCT FROM 'string'
+       OR (e.value ? 'chunk_index' AND jsonb_typeof(e.value -> 'chunk_index') <> 'number')
+  ) THEN
+    RAISE EXCEPTION 'invalid_chunk: every chunk needs a string content and a numeric chunk_index when it has one';
+  END IF;
+  IF (SELECT count(DISTINCT COALESCE((e.value ->> 'chunk_index')::integer, (e.ord - 1)::integer))
+      FROM jsonb_array_elements(p_chunks) WITH ORDINALITY AS e(value, ord)) <> chunk_count THEN
+    RAISE EXCEPTION 'invalid_chunk: chunk_index values must be distinct';
+  END IF;
+  IF p_final AND (p_total IS NULL OR p_total < 0) THEN
+    RAISE EXCEPTION 'invalid_total: p_total is required with p_final';
+  END IF;
+
+  IF p_embeddings IS NOT NULL AND jsonb_typeof(p_embeddings) NOT IN ('object', 'null') THEN
+    RAISE EXCEPTION 'invalid_embeddings: p_embeddings must be a JSON object keyed by profile id';
+  END IF;
+  IF p_embeddings IS NOT NULL AND jsonb_typeof(p_embeddings) = 'object' THEN
+    FOR profile_id IN SELECT jsonb_object_keys(p_embeddings) LOOP
+      IF profile_id <> legacy_profile THEN
+        RAISE EXCEPTION 'embedding_profile_unsupported: %', profile_id;
+      END IF;
+    END LOOP;
+    legacy_vectors := p_embeddings -> legacy_profile;
+    IF legacy_vectors IS NOT NULL AND (jsonb_typeof(legacy_vectors) <> 'array' OR jsonb_array_length(legacy_vectors) <> chunk_count) THEN
+      RAISE EXCEPTION 'embedding_count_mismatch: expected % vectors', chunk_count;
+    END IF;
+  END IF;
+
+  WITH prepared AS (
+    SELECT
+      e.value AS spec,
+      (e.ord - 1)::integer AS position,
+      COALESCE((e.value ->> 'chunk_index')::integer, (e.ord - 1)::integer) AS chunk_index,
+      CASE WHEN legacy_vectors IS NOT NULL AND jsonb_typeof(legacy_vectors -> (e.ord - 1)::integer) = 'array'
+           THEN ((legacy_vectors -> (e.ord - 1)::integer)::text)::vector END AS embedding,
+      CASE WHEN jsonb_typeof(e.value -> 'section_path') = 'array'
+           THEN ARRAY(SELECT jsonb_array_elements_text(e.value -> 'section_path')) ELSE '{}'::text[] END AS section_path,
+      COALESCE(e.value ->> 'chunk_kind', 'text') AS chunk_kind,
+      COALESCE((e.value ->> 'embedding_text_version')::integer, 0) AS embedding_text_version,
+      (e.value ->> 'page_start')::integer AS page_start,
+      (e.value ->> 'page_end')::integer AS page_end,
+      e.value ->> 'content_hash' AS content_hash,
+      e.value ->> 'lexical_text' AS lexical_text
+    FROM jsonb_array_elements(p_chunks) WITH ORDINALITY AS e(value, ord)
+  )
+  INSERT INTO document_chunks AS dc (
+    id, document_id, content, embedding, chunk_index, metadata, organization_id, tenant_key, version, is_current, status,
+    doc_type, doc_date, language, source, page_start, page_end, section_path, content_hash, chunk_kind, parser_used,
+    embedding_text_version, lexical_text
+  )
+  SELECT
+    substr(encode(sha256(convert_to(p_document_id::text || ':' || p.chunk_index::text, 'UTF8')), 'hex'), 1, 32)::uuid,
+    p_document_id,
+    p.spec ->> 'content',
+    p.embedding,
+    p.chunk_index,
+    (CASE WHEN jsonb_typeof(p.spec -> 'metadata') = 'object' THEN p.spec -> 'metadata' ELSE '{}'::jsonb END)
+      || jsonb_build_object(
+        'chunk_index', p.chunk_index,
+        'section_path', to_jsonb(p.section_path),
+        'doc_type', doc.doc_type,
+        'language', doc.language,
+        'content_hash', p.content_hash,
+        'chunk_kind', p.chunk_kind,
+        'parser_used', doc.parser_used,
+        'embedding_text_version', p.embedding_text_version)
+      || CASE WHEN p.embedding IS NOT NULL
+              THEN jsonb_build_object('embedding_model', 'text-embedding-3-small', 'embedding_dims', 1536) ELSE '{}'::jsonb END
+      || jsonb_strip_nulls(jsonb_build_object('doc_date', doc.doc_date, 'source', doc.source, 'page_start', p.page_start, 'page_end', p.page_end)),
+    doc.organization_id,
+    doc.tenant_key,
+    doc.version,
+    doc.is_current,
+    doc.status,
+    doc.doc_type,
+    doc.doc_date,
+    doc.language,
+    doc.source,
+    p.page_start,
+    p.page_end,
+    p.section_path,
+    p.content_hash,
+    p.chunk_kind,
+    doc.parser_used,
+    p.embedding_text_version,
+    p.lexical_text
+  FROM prepared p
+  ON CONFLICT (id) DO UPDATE SET
+    content = EXCLUDED.content,
+    embedding = EXCLUDED.embedding,
+    chunk_index = EXCLUDED.chunk_index,
+    metadata = EXCLUDED.metadata,
+    organization_id = EXCLUDED.organization_id,
+    tenant_key = EXCLUDED.tenant_key,
+    version = EXCLUDED.version,
+    is_current = EXCLUDED.is_current,
+    status = EXCLUDED.status,
+    doc_type = EXCLUDED.doc_type,
+    doc_date = EXCLUDED.doc_date,
+    language = EXCLUDED.language,
+    source = EXCLUDED.source,
+    page_start = EXCLUDED.page_start,
+    page_end = EXCLUDED.page_end,
+    section_path = EXCLUDED.section_path,
+    content_hash = EXCLUDED.content_hash,
+    chunk_kind = EXCLUDED.chunk_kind,
+    parser_used = EXCLUDED.parser_used,
+    embedding_text_version = EXCLUDED.embedding_text_version,
+    lexical_text = EXCLUDED.lexical_text
+  WHERE dc.document_id = EXCLUDED.document_id;
+  GET DIAGNOSTICS written = ROW_COUNT;
+
+  IF p_final THEN
+    DELETE FROM document_chunks c WHERE c.document_id = p_document_id AND c.chunk_index >= p_total;
+    GET DIAGNOSTICS deleted = ROW_COUNT;
+  END IF;
+
+  RETURN QUERY SELECT written, deleted;
+END
+$$;
+
+-- The version swap (D-11), one transaction. A quarantined version is neither promoted nor allowed to demote the current one (a release
+-- publishes it later); a version that is already current and ready is left as it is. Order matters: the previous current row is demoted
+-- first because documents_lineage_identity_ux allows one current row per identity, its content_type and slug move to the new row because
+-- documents_org_type_slug_ux is unique, and its legacy vectors are set to NULL so superseded rows stop occupying HNSW candidates. The old
+-- documents and chunks keep their text, so a stored citation still resolves.
+CREATE OR REPLACE FUNCTION rag_publish_document_version(
+  p_document_id uuid,
+  p_tenant_key text
+)
+RETURNS TABLE (outcome text, document_id uuid, version integer, superseded_document_id uuid)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+#variable_conflict use_column
+DECLARE
+  doc documents%ROWTYPE;
+  previous documents%ROWTYPE;
+  has_slug boolean;
+  moved_type text;
+  moved_slug text;
+BEGIN
+  SELECT * INTO doc FROM documents d WHERE d.id = p_document_id AND d.tenant_key = p_tenant_key FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'tenant_mismatch' USING DETAIL = 'document not found in tenant';
+  END IF;
+  IF doc.status = 'quarantined' THEN
+    RETURN QUERY SELECT 'quarantined'::text, doc.id, doc.version, NULL::uuid;
+    RETURN;
+  END IF;
+  IF doc.status IN ('failed', 'deleted') THEN
+    RAISE EXCEPTION 'document_not_publishable' USING DETAIL = 'status is ' || doc.status;
+  END IF;
+  IF doc.is_current AND doc.status = 'ready' THEN
+    RETURN QUERY SELECT 'already_current'::text, doc.id, doc.version, NULL::uuid;
+    RETURN;
+  END IF;
+
+  PERFORM pg_advisory_xact_lock(hashtextextended(doc.tenant_key || '|' || doc.source || '|' || doc.source_key, 0));
+
+  has_slug := (
+    SELECT count(*) = 2 FROM pg_attribute
+    WHERE attrelid = 'public.documents'::regclass AND attname IN ('content_type', 'slug') AND NOT attisdropped
+  );
+
+  SELECT * INTO previous FROM documents d
+  WHERE d.tenant_key = p_tenant_key AND d.source = doc.source AND d.source_key = doc.source_key AND d.is_current AND d.id <> doc.id
+  FOR UPDATE;
+  IF FOUND THEN
+    IF has_slug THEN
+      EXECUTE 'SELECT content_type, slug FROM documents WHERE id = $1' INTO moved_type, moved_slug USING previous.id;
+    END IF;
+    UPDATE documents d SET is_current = false, superseded_by = doc.id WHERE d.id = previous.id;
+    IF has_slug THEN
+      EXECUTE 'UPDATE documents SET content_type = NULL, slug = NULL WHERE id = $1' USING previous.id;
+    END IF;
+    UPDATE document_chunks c SET is_current = false, embedding = NULL WHERE c.document_id = previous.id;
+  END IF;
+
+  UPDATE documents d SET is_current = true, status = 'ready' WHERE d.id = doc.id;
+  IF previous.id IS NOT NULL AND has_slug AND (moved_type IS NOT NULL OR moved_slug IS NOT NULL) THEN
+    EXECUTE 'UPDATE documents SET content_type = $2, slug = $3 WHERE id = $1' USING doc.id, moved_type, moved_slug;
+  END IF;
+  UPDATE document_chunks c SET is_current = true, status = 'ready' WHERE c.document_id = doc.id;
+
+  RETURN QUERY SELECT 'published'::text, doc.id, doc.version, previous.id;
+END
+$$;
+
+REVOKE ALL ON FUNCTION rag_write_chunks(uuid, text, jsonb, jsonb, boolean, integer) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION rag_publish_document_version(uuid, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION rag_write_chunks(uuid, text, jsonb, jsonb, boolean, integer) TO service_role;
+GRANT EXECUTE ON FUNCTION rag_publish_document_version(uuid, text) TO service_role;
+
 REVOKE ALL ON FUNCTION rag_begin_document_version(text, uuid, uuid, text, text, text, text, text, text, text, integer) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION rag_find_content_duplicate(text, text, uuid) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION rag_set_document_fields(uuid, text, jsonb) FROM PUBLIC, anon, authenticated;
