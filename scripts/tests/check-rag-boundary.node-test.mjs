@@ -429,6 +429,18 @@ test('cache-rpc: parse-cache RPCs fail outside parse-cache.ts', () => {
   assert.deepEqual(rulesFor({ 'src/lib/rag/ingest/parse-cache.ts': "await db.rpc('rag_parse_cache_put', args);\n" }), []);
 });
 
+test('rerank-http: vendor hosts and /rerank fetch fail outside src/lib/rag/rerank/', () => {
+  const cohere = "await fetch('https://api.cohere.com/v2/rerank', opts);\n";
+  const voyage = "await fetch('https://api.voyageai.com/v1/rerank', opts);\n";
+  const template = 'await fetch(`${base}/rerank`, opts);\n';
+  assert.deepEqual(rulesFor({ 'src/app/api/x/route.ts': cohere }), ['src/app/api/x/route.ts:rerank-http']);
+  assert.deepEqual(rulesFor({ 'scripts/tools/x.mjs': voyage }), ['scripts/tools/x.mjs:rerank-http']);
+  assert.deepEqual(rulesFor({ 'src/lib/a.ts': template }), ['src/lib/a.ts:rerank-http']);
+  assert.deepEqual(rulesFor({ 'src/lib/rag/rerank/cohere.ts': cohere }), []);
+  assert.deepEqual(rulesFor({ 'tests/fake/cohere.mts': cohere }), []);
+  assert.deepEqual(rulesFor({ 'eval/harness/fake-rerank.mts': voyage }), []);
+});
+
 test('backfill-rpc: batch RPCs fail outside src/lib/rag/ingest/backfill/', () => {
   const calls = [
     "await db.rpc('rag_enqueue_backfill_jobs', args);\n",
