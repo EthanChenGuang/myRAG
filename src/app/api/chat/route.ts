@@ -2143,15 +2143,11 @@ IMPORTANT:
       });
 
       if (strictWithoutWebSearch) {
-        const responseText = buildNoKnowledgeBaseResponse(fallbackLanguage);
-        ragTrace?.collector.setReviewContent({ answer: responseText, context });
         finishRagTrace();
+        const errorText = knowledgeBaseUnavailableMessage(fallbackLanguage);
         const stream = createUIMessageStream({
           execute: async ({ writer }) => {
-            const textId = `text-${Date.now()}`;
-            writer.write({ type: 'text-start', id: textId });
-            writer.write({ type: 'text-delta', id: textId, delta: responseText });
-            writer.write({ type: 'text-end', id: textId });
+            writer.write({ type: 'error', errorText });
           }
         });
 

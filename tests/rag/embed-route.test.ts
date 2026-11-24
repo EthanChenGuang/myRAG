@@ -273,4 +273,16 @@ describe('embed route tenant and status handling', () => {
     expect(body).not.toContain('rpc down');
     expect(h.capture.calls).toHaveLength(0);
   });
+
+  it('a disabled assemble stage streams the unavailable error and never reaches the model', async () => {
+    const response = await post(embedRequest(), `u:${userA}`, async () => {
+      const deps = await import('@/lib/rag/deps');
+      deps.setRagDepsForTests({ ragEnv: () => ({ RAG_DISABLED_STAGES: 'assemble' }) });
+    });
+    const body = await response.text();
+    expect(response.status).toBe(200);
+    expect(errorTextOf(body)).toBe(UNAVAILABLE_EN);
+    expect(body).not.toContain('Information Not Available');
+    expect(h.capture.calls).toHaveLength(0);
+  });
 });
