@@ -417,3 +417,15 @@ test('does not treat VOYAGER_* or a VOYAGE name without the underscore as a prov
     cleanup(root);
   }
 });
+
+test('cloud-off warning covers every value the runtime refuses, and not the allowed ones', async () => {
+  const { checkIngestionSwitches } = await import('./check-config.mjs');
+  const warns = (value) =>
+    checkIngestionSwitches({
+      RAG_PARSER_ALLOW_CLOUD: value,
+      RAG_INGEST_PIPELINE: 'legacy',
+      LLAMA_CLOUD_API_KEY: 'llx-test-placeholder-not-real',
+    }).warnings.length;
+  for (const value of ['false', '0', 'off', 'no', 'disabled', 'maybe']) assert.equal(warns(value), 1, value);
+  for (const value of ['true', '1', 'yes', 'on', 'ON', '']) assert.equal(warns(value), 0, value);
+});

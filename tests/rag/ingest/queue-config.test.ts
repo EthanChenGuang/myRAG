@@ -89,12 +89,23 @@ describe('vlm detect', () => {
 });
 
 describe('parser allow cloud', () => {
-  test('accepts true and false only; anything else is true', () => {
-    expect(loadQueueConfig({ RAG_PARSER_ALLOW_CLOUD: 'true' }).parserAllowCloud).toBe(true);
-    expect(loadQueueConfig({ RAG_PARSER_ALLOW_CLOUD: 'false' }).parserAllowCloud).toBe(false);
-    expect(loadQueueConfig({ RAG_PARSER_ALLOW_CLOUD: 'maybe' }).parserAllowCloud).toBe(true);
-    loadQueueConfig({ RAG_PARSER_ALLOW_CLOUD: 'maybe' });
-    loadQueueConfig({ RAG_PARSER_ALLOW_CLOUD: 'maybe' });
+  test.each(['true', '1', 'yes', 'on', 'TRUE', ' On ', 'Yes'])('explicit truthy value %j allows cloud', (value) => {
+    expect(loadQueueConfig({ RAG_PARSER_ALLOW_CLOUD: value }).parserAllowCloud).toBe(true);
+    expect(ingestWarnings().length).toBe(0);
+  });
+
+  test.each([undefined, '', '   '])('unset or empty (%j) keeps the documented default of allowed', (value) => {
+    expect(loadQueueConfig({ RAG_PARSER_ALLOW_CLOUD: value }).parserAllowCloud).toBe(true);
+    expect(ingestWarnings().length).toBe(0);
+  });
+
+  test.each(['false', '0', 'off', 'no', 'disabled', 'FALSE', 'Off', 'NO'])('%j refuses cloud', (value) => {
+    expect(loadQueueConfig({ RAG_PARSER_ALLOW_CLOUD: value }).parserAllowCloud).toBe(false);
+  });
+
+  test.each(['maybe', 'ture', 'enabled', '2', 'allow'])('unrecognised value %j fails closed with one warning', (value) => {
+    expect(loadQueueConfig({ RAG_PARSER_ALLOW_CLOUD: value }).parserAllowCloud).toBe(false);
+    loadQueueConfig({ RAG_PARSER_ALLOW_CLOUD: value });
     expect(ingestWarnings().length).toBe(1);
   });
 });
