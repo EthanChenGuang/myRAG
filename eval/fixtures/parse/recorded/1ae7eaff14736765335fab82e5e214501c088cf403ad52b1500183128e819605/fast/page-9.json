@@ -1,0 +1,102 @@
+{
+  "body": {
+    "children": [
+      {
+        "$ref": "#/texts/0"
+      },
+      {
+        "$ref": "#/texts/1"
+      }
+    ],
+    "content_layer": "body",
+    "label": "unspecified",
+    "name": "_root_",
+    "self_ref": "#/body"
+  },
+  "form_items": [],
+  "furniture": {
+    "children": [],
+    "content_layer": "furniture",
+    "label": "unspecified",
+    "name": "_root_",
+    "self_ref": "#/furniture"
+  },
+  "groups": [],
+  "key_value_items": [],
+  "name": "mixed-routing-p9",
+  "origin": {
+    "binary_hash": 9,
+    "filename": "mixed-routing-p9.pdf",
+    "mimetype": "application/pdf"
+  },
+  "pages": {
+    "1": {
+      "page_no": 1,
+      "size": {
+        "height": 841.89,
+        "width": 595.28
+      }
+    },
+    "2": {
+      "page_no": 2,
+      "size": {
+        "height": 841.89,
+        "width": 595.28
+      }
+    },
+    "3": {
+      "page_no": 3,
+      "size": {
+        "height": 841.89,
+        "width": 595.28
+      }
+    },
+    "4": {
+      "page_no": 4,
+      "size": {
+        "height": 841.89,
+        "width": 595.28
+      }
+    },
+    "5": {
+      "page_no": 5,
+      "size": {
+        "height": 841.89,
+        "width": 595.28
+      }
+    },
+    "6": {
+      "page_no": 6,
+      "size": {
+        "height": 841.89,
+        "width": 595.28
+      }
+    },
+    "7": {
+      "page_no": 7,
+      "size": {
+        "height": 841.89,
+        "width": 595.28
+      }
+    },
+    "8": {
+      "page_no": 8,
+      "size": {
+        "height": 841.89,
+        "width": 595.28
+      }
+    },
+    "9": {
+      "page_no": 9,
+      "size": {
+        "height": 841.89,
+        "width": 595.28
+      }
+    }
+  },
+  "pictures": [],
+  "schema_name": "DoclingDocument",
+  "tables": [],
+  "texts": [],
+  "version": "1.11.0"
+}

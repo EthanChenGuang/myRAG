@@ -36,6 +36,7 @@ def email_violations(text: str) -> list[str]:
 
 
 INGEST_FIXTURES = FIXTURES / "ingest"
+PARSE_FIXTURES = FIXTURES / "parse"
 INGEST_FILE_COUNT = 30
 
 
@@ -50,12 +51,24 @@ def _ingest_files():
     ]
 
 
+def _parse_files():
+    return [
+        PARSE_FIXTURES / "parse_specs.py",
+        PARSE_FIXTURES / "parse_expected.py",
+        PARSE_FIXTURES / "generate_parse.py",
+        PARSE_FIXTURES / "build_recorded.py",
+        *sorted((PARSE_FIXTURES / "expected").glob("*.json")),
+    ]
+
+
 def _fixture_files():
     corpus = sorted((FIXTURES / "corpus").rglob("*.md")) + [FIXTURES / "golden.jsonl", FIXTURES / "split-manifest.json"]
     assert len(corpus) == 15
     ingest = _ingest_files()
     assert len(ingest) == INGEST_FILE_COUNT
-    return corpus + ingest
+    parse_files = _parse_files()
+    assert len(parse_files) >= 13
+    return corpus + ingest + parse_files
 
 
 def test_fixture_text_has_only_reserved_phone_numbers():

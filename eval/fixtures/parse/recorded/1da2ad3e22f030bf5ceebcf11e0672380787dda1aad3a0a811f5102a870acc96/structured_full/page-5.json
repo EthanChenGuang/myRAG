@@ -1,0 +1,322 @@
+{
+  "body": {
+    "children": [
+      {
+        "$ref": "#/tables/0"
+      }
+    ],
+    "content_layer": "body",
+    "label": "unspecified",
+    "name": "_root_",
+    "self_ref": "#/body"
+  },
+  "form_items": [],
+  "furniture": {
+    "children": [],
+    "content_layer": "furniture",
+    "label": "unspecified",
+    "name": "_root_",
+    "self_ref": "#/furniture"
+  },
+  "groups": [],
+  "key_value_items": [],
+  "name": "cross-boundary-p5",
+  "origin": {
+    "binary_hash": 5,
+    "filename": "cross-boundary-p5.pdf",
+    "mimetype": "application/pdf"
+  },
+  "pages": {
+    "1": {
+      "page_no": 1,
+      "size": {
+        "height": 841.89,
+        "width": 595.28
+      }
+    },
+    "2": {
+      "page_no": 2,
+      "size": {
+        "height": 841.89,
+        "width": 595.28
+      }
+    },
+    "3": {
+      "page_no": 3,
+      "size": {
+        "height": 841.89,
+        "width": 595.28
+      }
+    },
+    "4": {
+      "page_no": 4,
+      "size": {
+        "height": 841.89,
+        "width": 595.28
+      }
+    },
+    "5": {
+      "page_no": 5,
+      "size": {
+        "height": 841.89,
+        "width": 595.28
+      }
+    }
+  },
+  "pictures": [],
+  "schema_name": "DoclingDocument",
+  "tables": [
+    {
+      "annotations": [],
+      "captions": [],
+      "children": [],
+      "content_layer": "body",
+      "data": {
+        "grid": [
+          [
+            {
+              "col_span": 1,
+              "column_header": true,
+              "end_col_offset_idx": 1,
+              "end_row_offset_idx": 1,
+              "fillable": false,
+              "row_header": false,
+              "row_section": false,
+              "row_span": 1,
+              "start_col_offset_idx": 0,
+              "start_row_offset_idx": 0,
+              "text": "Margin"
+            },
+            {
+              "col_span": 1,
+              "column_header": true,
+              "end_col_offset_idx": 2,
+              "end_row_offset_idx": 1,
+              "fillable": false,
+              "row_header": false,
+              "row_section": false,
+              "row_span": 1,
+              "start_col_offset_idx": 1,
+              "start_row_offset_idx": 0,
+              "text": "13"
+            },
+            {
+              "col_span": 1,
+              "column_header": true,
+              "end_col_offset_idx": 3,
+              "end_row_offset_idx": 1,
+              "fillable": false,
+              "row_header": false,
+              "row_section": false,
+              "row_span": 1,
+              "start_col_offset_idx": 2,
+              "start_row_offset_idx": 0,
+              "text": "14"
+            },
+            {
+              "col_span": 1,
+              "column_header": true,
+              "end_col_offset_idx": 4,
+              "end_row_offset_idx": 1,
+              "fillable": false,
+              "row_header": false,
+              "row_section": false,
+              "row_span": 1,
+              "start_col_offset_idx": 3,
+              "start_row_offset_idx": 0,
+              "text": "15"
+            }
+          ],
+          [
+            {
+              "col_span": 1,
+              "column_header": false,
+              "end_col_offset_idx": 1,
+              "end_row_offset_idx": 2,
+              "fillable": false,
+              "row_header": false,
+              "row_section": false,
+              "row_span": 1,
+              "start_col_offset_idx": 0,
+              "start_row_offset_idx": 1,
+              "text": "Notes"
+            },
+            {
+              "col_span": 1,
+              "column_header": false,
+              "end_col_offset_idx": 2,
+              "end_row_offset_idx": 2,
+              "fillable": false,
+              "row_header": false,
+              "row_section": false,
+              "row_span": 1,
+              "start_col_offset_idx": 1,
+              "start_row_offset_idx": 1,
+              "text": "steady"
+            },
+            {
+              "col_span": 1,
+              "column_header": false,
+              "end_col_offset_idx": 3,
+              "end_row_offset_idx": 2,
+              "fillable": false,
+              "row_header": false,
+              "row_section": false,
+              "row_span": 1,
+              "start_col_offset_idx": 2,
+              "start_row_offset_idx": 1,
+              "text": "up"
+            },
+            {
+              "col_span": 1,
+              "column_header": false,
+              "end_col_offset_idx": 4,
+              "end_row_offset_idx": 2,
+              "fillable": false,
+              "row_header": false,
+              "row_section": false,
+              "row_span": 1,
+              "start_col_offset_idx": 3,
+              "start_row_offset_idx": 1,
+              "text": "up"
+            }
+          ]
+        ],
+        "num_cols": 4,
+        "num_rows": 2,
+        "orientation": "rot_0",
+        "table_cells": [
+          {
+            "col_span": 1,
+            "column_header": true,
+            "end_col_offset_idx": 1,
+            "end_row_offset_idx": 1,
+            "fillable": false,
+            "row_header": false,
+            "row_section": false,
+            "row_span": 1,
+            "start_col_offset_idx": 0,
+            "start_row_offset_idx": 0,
+            "text": "Margin"
+          },
+          {
+            "col_span": 1,
+            "column_header": true,
+            "end_col_offset_idx": 2,
+            "end_row_offset_idx": 1,
+            "fillable": false,
+            "row_header": false,
+            "row_section": false,
+            "row_span": 1,
+            "start_col_offset_idx": 1,
+            "start_row_offset_idx": 0,
+            "text": "13"
+          },
+          {
+            "col_span": 1,
+            "column_header": true,
+            "end_col_offset_idx": 3,
+            "end_row_offset_idx": 1,
+            "fillable": false,
+            "row_header": false,
+            "row_section": false,
+            "row_span": 1,
+            "start_col_offset_idx": 2,
+            "start_row_offset_idx": 0,
+            "text": "14"
+          },
+          {
+            "col_span": 1,
+            "column_header": true,
+            "end_col_offset_idx": 4,
+            "end_row_offset_idx": 1,
+            "fillable": false,
+            "row_header": false,
+            "row_section": false,
+            "row_span": 1,
+            "start_col_offset_idx": 3,
+            "start_row_offset_idx": 0,
+            "text": "15"
+          },
+          {
+            "col_span": 1,
+            "column_header": false,
+            "end_col_offset_idx": 1,
+            "end_row_offset_idx": 2,
+            "fillable": false,
+            "row_header": false,
+            "row_section": false,
+            "row_span": 1,
+            "start_col_offset_idx": 0,
+            "start_row_offset_idx": 1,
+            "text": "Notes"
+          },
+          {
+            "col_span": 1,
+            "column_header": false,
+            "end_col_offset_idx": 2,
+            "end_row_offset_idx": 2,
+            "fillable": false,
+            "row_header": false,
+            "row_section": false,
+            "row_span": 1,
+            "start_col_offset_idx": 1,
+            "start_row_offset_idx": 1,
+            "text": "steady"
+          },
+          {
+            "col_span": 1,
+            "column_header": false,
+            "end_col_offset_idx": 3,
+            "end_row_offset_idx": 2,
+            "fillable": false,
+            "row_header": false,
+            "row_section": false,
+            "row_span": 1,
+            "start_col_offset_idx": 2,
+            "start_row_offset_idx": 1,
+            "text": "up"
+          },
+          {
+            "col_span": 1,
+            "column_header": false,
+            "end_col_offset_idx": 4,
+            "end_row_offset_idx": 2,
+            "fillable": false,
+            "row_header": false,
+            "row_section": false,
+            "row_span": 1,
+            "start_col_offset_idx": 3,
+            "start_row_offset_idx": 1,
+            "text": "up"
+          }
+        ]
+      },
+      "footnotes": [],
+      "label": "table",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 87.2,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 60.0
+          },
+          "charspan": [
+            0,
+            0
+          ],
+          "page_no": 5
+        }
+      ],
+      "references": [],
+      "self_ref": "#/tables/0"
+    }
+  ],
+  "texts": [],
+  "version": "1.11.0"
+}
