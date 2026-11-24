@@ -2,7 +2,7 @@ import { assertTenantScope, scopeKey, type TenantScope } from '../tenant/scope';
 import { loadIngestConfig } from './config';
 import { getIngestDeps } from './deps';
 import { ObjectStoreError } from './object-store';
-import { getProcessingProfile, type DocType, type ProcessingProfile } from './profiles/load';
+import { getProcessingProfile, profileFor, type DocType, type ProcessingProfile } from './profiles/load';
 import { INGEST_STAGES, REGISTERED_STAGES, nextStageAfter, rehydrateFromStore, runIngestStages } from './runner';
 import { createIngestTrace, finishIngestTrace } from './trace';
 import {
@@ -189,9 +189,9 @@ function settledResult(row: IngestDocumentRow, state: IngestState, documentId: s
   return null;
 }
 
-function profileOf(docType: string, warnings: string[]): { docType: DocType; profile: ProcessingProfile } {
+function profileOf(docType: string, source: IngestSource, warnings: string[]): { docType: DocType; profile: ProcessingProfile } {
   try {
-    return { docType: docType as DocType, profile: getProcessingProfile(docType as DocType) };
+    return { docType: docType as DocType, profile: profileFor(source, docType as DocType) };
   } catch {
     warnings.push('doc_type_invalid');
     return { docType: 'general', profile: getProcessingProfile('general') };
@@ -215,9 +215,10 @@ function resumeContext(
 ): StageContext {
   const deps = getIngestDeps();
   const warnings: string[] = [];
-  const { docType, profile } = profileOf(row.docType, warnings);
+  const source = sourceOf(origin?.source ?? null);
+  const { docType, profile } = profileOf(row.docType, source, warnings);
   return {
-    input: { scope, source: sourceOf(origin?.source ?? null), sourceKey: origin?.sourceKey ?? '', filename: row.filename, mimeType: '', file: new Uint8Array(0), signal },
+    input: { scope, source, sourceKey: origin?.sourceKey ?? '', filename: row.filename, mimeType: '', file: new Uint8Array(0), signal },
     deps,
     writer,
     config: loadIngestConfig(deps.ingestEnv()),

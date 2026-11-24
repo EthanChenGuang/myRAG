@@ -1,6 +1,7 @@
 import { assertTenantScope, scopeKey } from '../../tenant/scope';
 import { fileSha256 } from '../hash';
 import { normalizeFilename } from '../identity';
+import { profileFor } from '../profiles/load';
 import { resolveDocType } from '../profiles/resolve-doc-type';
 import { INGEST_SOURCES, IngestStageError, type StageContext, type StageOutcome, type StageSpec } from '../types';
 
@@ -44,7 +45,7 @@ async function run(ctx: StageContext): Promise<StageOutcome> {
     fileSha256: fileSha256(bytes ?? Buffer.from(input.text ?? '', 'utf8')),
     docType: resolved.docType,
     docTypeOrigin: resolved.origin,
-    profile: resolved.profile,
+    profile: profileFor(input.source, resolved.docType),
     bytes,
   };
   return { kind: 'next' };

@@ -45,10 +45,11 @@ function stageContext(docType: Parameters<typeof getProcessingProfile>[0], work:
 }
 
 describe('chunker dispatch', () => {
-  it('registers markdown_sections, table_aware, legal_clauses and invoice and leaves image_caption to a later plan', () => {
-    expect(Object.keys(CHUNKERS).sort()).toEqual(['invoice', 'legal_clauses', 'markdown_sections', 'table_aware']);
+  it('registers markdown_sections, table_aware, legal_clauses, invoice and image_caption, and refuses a kind nothing registers', () => {
+    expect(Object.keys(CHUNKERS).sort()).toEqual(['image_caption', 'invoice', 'legal_clauses', 'markdown_sections', 'table_aware']);
     expect(chunkDocument(config('invoice_receipt'), { markdown: MARKDOWN }).chunks.length).toBeGreaterThan(0);
-    expect(() => chunkDocument({ ...config('general'), kind: 'image_caption' }, { markdown: MARKDOWN })).toThrow(ChunkerUnavailableError);
+    expect(chunkDocument({ ...config('general'), kind: 'image_caption' }, { markdown: MARKDOWN })).toEqual({ chunks: [], warnings: [], captionOnly: true });
+    expect(() => chunkDocument({ ...config('general'), kind: 'future_kind' as never }, { markdown: MARKDOWN })).toThrow(ChunkerUnavailableError);
   });
 
   it('dispatches on the chunker kind of the profile data', () => {
@@ -112,9 +113,9 @@ describe('chunk stage', () => {
     ]);
   });
 
-  it('fails with chunker_unavailable for a kind no plan has added yet and writes no chunks', async () => {
+  it('fails with chunker_unavailable for a kind nothing registers and writes no chunks', async () => {
     const ctx = stageContext('general', { parseText: MARKDOWN });
-    ctx.identity!.profile = { ...ctx.identity!.profile, chunker: { ...ctx.identity!.profile.chunker, kind: 'image_caption' } };
+    ctx.identity!.profile = { ...ctx.identity!.profile, chunker: { ...ctx.identity!.profile.chunker, kind: 'future_kind' as never } };
     expect(await chunkStage.run(ctx)).toEqual({ kind: 'fail', reason: 'chunker_unavailable' });
     expect(ctx.work.chunks).toEqual([]);
     expect(ctx.warnings).toEqual([]);

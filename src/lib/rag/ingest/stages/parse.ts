@@ -1,8 +1,9 @@
 import type { ParseResult } from '@/lib/rag-eval/contracts.generated';
-import { DOCLING_ARTIFACT, PARSE_ARTIFACT, PARSE_CHUNKS_ARTIFACT, isArtifactName, saveArtifact } from '../artifacts';
+import { DOCLING_ARTIFACT, PARSE_ARTIFACT, PARSE_CHUNKS_ARTIFACT, isArtifactName, originalName, saveArtifact } from '../artifacts';
+import { imageContextOf, validImageUrl } from '../image-options';
 import { buildParserChain, parseWithFallback, type ChainOutcome } from '../parsers/chain';
 import type { ParseArtifact, PendingJob } from '../parsers/shared';
-import { getProcessingProfile } from '../profiles/load';
+import { profileFor } from '../profiles/load';
 import { refineDocTypeAfterParse } from '../profiles/resolve-doc-type';
 import {
   IngestStageError,
@@ -53,6 +54,45 @@ function textResult(markdown: string): ParseResult {
     text_layer_page_share: null,
     warnings: [],
   };
+}
+
+/** A whole image: no text, one picture that is the stored original, parsed by nothing (parser text, version image). */
+function imageResult(imageRef: string): ParseResult {
+  return {
+    markdown: '',
+    chunks: [],
+    pictures: [{ bbox: [0, 0, 1, 1], image_ref: imageRef, page: 1, page_area_share: 1 }],
+    page_count: 1,
+    language: null,
+    parser: 'text',
+    parser_version: 'image',
+    partial: false,
+    text_layer_page_share: null,
+    warnings: [],
+  };
+}
+
+/**
+ * The parse of a document whose profile chunks from a caption (an image upload): the file must be an image and carry a usable
+ * public URL. What the images stage needs without the upload (URL, context, media type) goes into the images slice of the state,
+ * which survives a resume; an earlier slot supplies the URL when a resumed run parses the stored original again.
+ */
+function wholeImage(ctx: StageContext, bytes: Uint8Array | null): { parsed: Parsed } | { reason: string } {
+  const identity = requireIdentity(ctx, 'parse');
+  const mimeType = ctx.input.mimeType.split(';')[0]?.trim().toLowerCase() ?? '';
+  if (ctx.input.text !== undefined || bytes === null || !mimeType.startsWith('image/')) return { reason: 'not_an_image' };
+  const slot = ctx.state.images;
+  const imageUrl = validImageUrl(ctx.input.options?.imageUrl) ?? validImageUrl(slot?.imageUrl);
+  if (imageUrl === null) return { reason: 'image_url_invalid' };
+  const imageContext = imageContextOf(ctx.input.options?.imageContext) ?? imageContextOf(slot?.imageContext);
+  ctx.state.images = {
+    nextIndex: slot?.nextIndex ?? 0,
+    captioned: slot?.captioned ?? 0,
+    imageUrl,
+    ...(imageContext !== null ? { imageContext } : {}),
+    mimeType,
+  };
+  return { parsed: { result: imageResult(originalName(identity.filename)), artifacts: [], warnings: [] } };
 }
 
 /** The job a previous call saved in processing_state, when it has the shape this code wrote. */
@@ -108,6 +148,7 @@ async function applyResult(ctx: StageContext, parsed: Parsed): Promise<void> {
   ctx.state.parseJob = null;
   ctx.work.parseText = stripBom(result.markdown);
   ctx.work.parseChunks = result.chunks.length > 0 ? result.chunks : null;
+  ctx.work.pictures = result.pictures.length > 0 ? result.pictures : null;
   ctx.work.parserVersion = result.parser_version;
   ctx.parserUsed = result.parser;
   for (const code of [...(result.warnings ?? []), ...parsed.warnings]) warn(ctx, code);
@@ -138,12 +179,16 @@ async function run(ctx: StageContext): Promise<StageOutcome> {
   const refinedType = ctx.state.docTypeDetection?.refined ?? null;
   if (refinedType !== null && identity.docTypeOrigin === 'auto') {
     identity.docType = refinedType;
-    identity.profile = getProcessingProfile(refinedType);
+    identity.profile = profileFor(ctx.input.source, refinedType);
   }
 
   let parsed: Parsed;
   const bytes = identity.bytes;
-  if (ctx.input.text !== undefined) {
+  if (identity.profile.chunker.kind === 'image_caption') {
+    const image = wholeImage(ctx, bytes);
+    if ('reason' in image) return { kind: 'fail', reason: image.reason };
+    parsed = image.parsed;
+  } else if (ctx.input.text !== undefined) {
     parsed = { result: textResult(stripBom(ctx.input.text)), artifacts: [], warnings: [] };
   } else {
     if (bytes === null) return { kind: 'fail', reason: 'no_parser_available' };

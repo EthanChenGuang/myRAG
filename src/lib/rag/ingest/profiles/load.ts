@@ -1,5 +1,6 @@
 import type { z } from 'zod/v3';
 import { ProcessingProfileSetSchema } from '@/lib/rag-eval/contracts.generated';
+import type { IngestSource } from '../types';
 import rawProfiles from '../../../../../config/rag/processing-profiles.json';
 
 export type ProcessingProfileSet = z.infer<typeof ProcessingProfileSetSchema>;
@@ -85,6 +86,19 @@ export function loadProcessingProfiles(): ProcessingProfileSet {
 
 export function getProcessingProfile(docType: DocType): ProcessingProfile {
   return current().byType.get(docType) ?? fail(`unknown doc type ${String(docType)}`);
+}
+
+/** Sources whose documents are one picture and are always chunked from its caption, whatever type they resolve to. */
+const IMAGE_CAPTION_SOURCES: ReadonlySet<IngestSource> = new Set<IngestSource>(['image_upload']);
+
+/**
+ * The profile a document of this source and type runs with: the profile of its type, except that an image
+ * upload keeps the image_caption chunker whatever the type (a source rule, so no stage compares a doc type).
+ */
+export function profileFor(source: IngestSource, docType: DocType): ProcessingProfile {
+  const profile = getProcessingProfile(docType);
+  if (!IMAGE_CAPTION_SOURCES.has(source) || profile.chunker.kind === 'image_caption') return profile;
+  return { ...profile, chunker: { ...profile.chunker, kind: 'image_caption' } };
 }
 
 export function getClausePatterns(docType: DocType): readonly RegExp[] {
