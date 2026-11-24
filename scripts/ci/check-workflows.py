@@ -211,6 +211,7 @@ def check_pr(errors: list[str]) -> None:
         for needle in (
             "npx vitest run",
             "node --import tsx --test",
+            "tests/rag-db/",
             "node scripts/check-config.mjs",
             "scripts/check-config.test.mjs",
             "scripts/tests/gen-zod.node-test.mjs",

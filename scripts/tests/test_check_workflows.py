@@ -60,5 +60,30 @@ class TsxCoverageTest(unittest.TestCase):
         self.assertEqual(errors, [])
 
 
+class DbTestsStepTest(unittest.TestCase):
+    def pr_errors(self, text: str) -> list[str]:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "pr-smoke.yml"
+            path.write_text(text, encoding="utf-8")
+            original = check_workflows.PR
+            check_workflows.PR = path
+            try:
+                errors: list[str] = []
+                check_workflows.check_pr(errors)
+                return errors
+            finally:
+                check_workflows.PR = original
+
+    def test_repository_workflow_runs_the_database_tests(self):
+        text = check_workflows.PR.read_text(encoding="utf-8")
+        self.assertTrue("tests/rag-db/*.test.mts" in text, "pr-smoke.yml does not run tests/rag-db")
+        self.assertEqual([e for e in self.pr_errors(text) if "rag-db" in e], [])
+
+    def test_missing_database_tests_step_is_reported(self):
+        text = check_workflows.PR.read_text(encoding="utf-8").replace("tests/rag-db/*.test.mts", "tests/other/*.test.mts")
+        errors = self.pr_errors(text)
+        self.assertTrue(any("tests/rag-db/" in e for e in errors), errors)
+
+
 if __name__ == "__main__":
     unittest.main()

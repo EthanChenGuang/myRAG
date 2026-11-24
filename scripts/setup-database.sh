@@ -12,6 +12,40 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+# Ordered migration files for a deployment mode: common files and the files of that mode, sorted by migration name
+# (the file name without the mode suffix), a common file before its mode variant. eval/harness/migrations.mts uses the same order.
+migration_files() {
+    local mode="$1" file name stem variant rank
+    for file in supabase/migrations/*.sql; do
+        [ -e "$file" ] || continue
+        name=$(basename "$file")
+        case "$name" in
+            *.single-tenant.sql) variant="single-tenant"; stem="${name%.single-tenant.sql}" ;;
+            *.multi-tenant.sql) variant="multi-tenant"; stem="${name%.multi-tenant.sql}" ;;
+            *) variant=""; stem="${name%.sql}" ;;
+        esac
+        if [ -n "$variant" ] && [ "$variant" != "$mode" ]; then
+            continue
+        fi
+        if [ -z "$variant" ]; then rank=0; else rank=1; fi
+        printf '%s\t%s\t%s\n' "$stem" "$rank" "$file"
+    done | LC_ALL=C sort -t "$(printf '\t')" -k1,1 -k2,2n | cut -f3
+}
+
+# --list-migrations <mode>: print the ordered migration files and exit; needs no environment.
+if [ "${1:-}" = "--list-migrations" ]; then
+    case "${2:-}" in
+        single-tenant|multi-tenant)
+            migration_files "$2"
+            exit 0
+            ;;
+        *)
+            echo "Usage: $0 --list-migrations <single-tenant|multi-tenant>" >&2
+            exit 2
+            ;;
+    esac
+fi
+
 # Print header
 echo -e "${BLUE}"
 echo "╔════════════════════════════════════════════════════════════╗"
@@ -55,6 +89,10 @@ if [ ! -f "$SQL_FILE" ]; then
 fi
 
 echo -e "${GREEN}✓${NC} Found schema file: ${SQL_FILE}"
+
+MIGRATION_LIST=$(migration_files "$MODE")
+MIGRATION_COUNT=$(printf '%s\n' "$MIGRATION_LIST" | grep -c . || true)
+echo -e "${GREEN}✓${NC} Found ${MIGRATION_COUNT} migration file(s) in supabase/migrations/"
 echo ""
 
 # Get file info
@@ -82,20 +120,37 @@ DB_URL="postgresql://postgres:[PASSWORD]@db.${PROJECT_REF}.supabase.co:5432/post
 
 echo -e "${YELLOW}⚠️  Database Connection Setup${NC}"
 echo ""
-echo "To apply the schema, you have two options:"
+echo "To apply the schema, you have two options. After the setup file, run each migration below in this order (each file is idempotent):"
+echo "${MIGRATION_LIST}" | sed 's/^/   /'
 echo ""
 echo "1. ${BLUE}Via Supabase Dashboard (Recommended):${NC}"
 echo "   a. Go to: https://supabase.com/dashboard/project/${PROJECT_REF}/sql/new"
-echo "   b. Copy and paste the contents of: ${SQL_FILE}"
-echo "   c. Click 'Run' to execute the schema"
+echo "   b. Copy and paste the contents of: ${SQL_FILE}, then each migration file listed above, and click 'Run' for each"
 echo ""
 echo "2. ${BLUE}Via psql command line:${NC}"
 echo "   If you have database password set up:"
-echo "   psql \"${DB_URL}\" -f \"${SQL_FILE}\""
+echo "   psql \"${DB_URL}\" -v ON_ERROR_STOP=1 -f \"${SQL_FILE}\""
+echo "${MIGRATION_LIST}" | sed "s|^|   psql \"${DB_URL}\" -v ON_ERROR_STOP=1 -f |"
 echo ""
 echo "3. ${BLUE}Via Supabase CLI:${NC}"
 echo "   supabase db push --db-url \"${DB_URL}\""
 echo ""
+
+# With DATABASE_URL and psql available, offer to apply the setup file and the migrations directly
+if [ -n "${DATABASE_URL:-}" ] && command -v psql &> /dev/null; then
+    read -p "Apply ${SQL_FILE} and the migrations with psql using DATABASE_URL now? (y/N): " -n 1 -r
+    echo ""
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$SQL_FILE"
+        while IFS= read -r migration; do
+            [ -n "$migration" ] || continue
+            echo -e "${BLUE}Applying:${NC} ${migration}"
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$migration"
+        done <<< "$MIGRATION_LIST"
+        echo -e "${GREEN}✓${NC} Schema and migrations applied"
+        echo ""
+    fi
+fi
 
 # Ask user which method they want to use
 read -p "Would you like to open the Supabase dashboard now? (y/N): " -n 1 -r
@@ -120,6 +175,7 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
     echo "1. Copy the contents of: ${SQL_FILE}"
     echo "2. Paste into the SQL editor"
     echo "3. Click 'Run'"
+    echo "4. Repeat for each migration file listed above, in order"
     echo ""
 fi
 
@@ -134,6 +190,7 @@ echo ""
 echo -e "${BLUE}Deployment Mode:${NC} ${MODE}"
 echo -e "${BLUE}Schema File:${NC} ${SQL_FILE}"
 echo -e "${BLUE}Lines:${NC} ${FILE_SIZE}"
+echo -e "${BLUE}Migrations:${NC} ${MIGRATION_COUNT} (supabase/migrations/)"
 echo ""
 
 if [ "$MODE" = "multi-tenant" ]; then
