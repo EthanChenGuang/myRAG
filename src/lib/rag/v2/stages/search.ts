@@ -24,6 +24,8 @@ export interface SearchStagesInput {
   collector: TraceCollector;
   stageOverrides?: StageOverrides;
   variants?: QueryVariant[];
+  /** Index-aligned with variants; a missing entry falls back to the embedding of the original. */
+  variantEmbeddings?: QueryEmbedding[];
   filters?: RetrievalFilters;
 }
 

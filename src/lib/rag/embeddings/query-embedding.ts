@@ -82,6 +82,18 @@ export async function embedQueryForEvalProfile(text: string, signal: AbortSignal
   return embedWithProfile(text, signal, profile, getRagDeps());
 }
 
+export async function embedQueriesForEvalProfile(
+  _texts: string[],
+  _signal: AbortSignal,
+  _profile: EmbeddingProfile,
+): Promise<QueryEmbedding[]> {
+  return [];
+}
+
+export async function embedQueries(_texts: string[], _signal: AbortSignal): Promise<QueryEmbedding[]> {
+  return [];
+}
+
 export async function embedQuery(text: string, signal: AbortSignal): Promise<QueryEmbedding> {
   const deps = getRagDeps();
   if (!isEmbeddingProfilesEnabled()) return { vector: await deps.embedder(text, { signal }), profile: null };

@@ -19,6 +19,11 @@ export interface RagDeps {
   embedder: (text: string, opts: { signal: AbortSignal }) => Promise<number[]>;
   /** Used for a non-legacy active profile only: the profile's provider embeds the query at the profile's dims. */
   profileEmbedder: (text: string, opts: { signal: AbortSignal; profile: EmbeddingProfile }) => Promise<ProfileQueryEmbedding>;
+  /** Optional: embeds several queries in one provider call. Null means the provider offers none and the caller embeds them in parallel. */
+  profileBatchEmbedder?: (
+    texts: string[],
+    opts: { signal: AbortSignal; profile: EmbeddingProfile },
+  ) => Promise<ProfileQueryEmbedding[] | null>;
   now: () => number;
   randomId: () => string;
   ragEnv: () => RagEnvInput;
