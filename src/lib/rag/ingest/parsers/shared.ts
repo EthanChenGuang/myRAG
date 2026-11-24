@@ -101,9 +101,9 @@ export const realSleep: Sleep = (ms, signal) =>
     signal.addEventListener('abort', onAbort, { once: true });
   });
 
-/** The time one request may take: the request timeout, shortened to what is left of the deadline, never under one second. */
+/** The time one request may take: the request timeout, shortened to what is left of the deadline, never under one second (or the ceiling when that is lower). */
 export function requestTimeoutMs(request: Pick<ParseRequest, 'now' | 'deadline'>, ceiling = REQUEST_TIMEOUT_MS): number {
-  return Math.max(1000, Math.min(ceiling, request.deadline - request.now() - 1000));
+  return Math.max(Math.min(1000, ceiling), Math.min(ceiling, request.deadline - request.now() - 1000));
 }
 
 /**

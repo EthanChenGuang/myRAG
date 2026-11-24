@@ -185,7 +185,7 @@ describe('LlamaParse v2 adapter', () => {
   });
 
   test('a resume polls the saved job without a new upload; a 404 resubmits exactly once and a second 404 gives up', async () => {
-    fake.enqueue({ statuses: ['RUNNING', 'RUNNING'] });
+    fake.enqueue({ statuses: ['RUNNING', 'RUNNING', 'COMPLETED'] });
     const first = await parser().parse(request({ pollUntil: 0 }));
     expect(first.kind).toBe('pending');
     if (first.kind !== 'pending') return;

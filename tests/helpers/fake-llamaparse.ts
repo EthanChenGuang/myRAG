@@ -125,7 +125,7 @@ export async function startFakeLlamaParse(options: { apiKey?: string } = {}): Pr
 
       if (request.method === 'POST' && url.pathname === '/api/v2/parse/upload') {
         const body = await readBody(request);
-        const form = await new Response(body, { headers: { 'content-type': String(request.headers['content-type'] ?? '') } }).formData();
+        const form = await new Response(new Uint8Array(body), { headers: { 'content-type': String(request.headers['content-type'] ?? '') } }).formData();
         const file = form.get('file');
         const configuration = form.get('configuration');
         uploads.push({
