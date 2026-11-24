@@ -9,10 +9,10 @@ import { MockLanguageModelV3 } from 'ai/test';
 import type { LanguageModel } from 'ai';
 import { GoldenItemSchema, RagTraceSchema, RunManifestSchema, type GoldenItem, type RagRunRequest, type RagTrace, type RunManifest } from '../../src/lib/rag-eval/contracts.generated.ts';
 import { canonicalJson, configHash } from '../../src/lib/rag-eval/trace.ts';
-import { loadPinnedEvalEnv } from './eval-env.mts';
 import { EMBEDDER_ID, EMBEDDER_VERSION, embedderSourceSha256 } from './fixture-embedder.mts';
-import { createFixtureDatabase, type DeploymentMode } from './pglite-supabase.mts';
+import { createFixtureDatabase, type DeploymentMode, type FixtureMode } from './pglite-supabase.mts';
 import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from './fake-edge.mts';
+import { applyFixtureProcessEnv } from './process-env.mts';
 
 export type EvalTier = 'smoke' | 'nightly' | 'live';
 
@@ -51,6 +51,7 @@ export interface RunEvalOptions {
   corpusDir: string;
   outDir: string;
   deploymentMode: DeploymentMode;
+  fixtureMode?: FixtureMode;
   requestOptions?: EvalRequestOptions;
   tier?: EvalTier;
   baseUrl?: string;
@@ -114,13 +115,16 @@ type MutableEnv = Record<string, string | undefined>;
 export async function prepareInProcessEval(options: {
   corpusDir: string;
   deploymentMode: DeploymentMode;
+  fixtureMode?: FixtureMode;
   allowedScopes?: string[];
 }): Promise<InProcessEval> {
-  const { corpusDir, deploymentMode, allowedScopes = [] } = options;
-  const fixture = await createFixtureDatabase({ deploymentMode, corpusDir });
+  const { corpusDir, deploymentMode, fixtureMode, allowedScopes = [] } = options;
+  const fixture = await createFixtureDatabase({ deploymentMode, corpusDir, fixtureMode });
   let edge: FakeEdge | undefined;
   try {
-    edge = await startFakeEdge({ db: fixture.db });
+    // The ingest mode ingests the corpus through its own edge and hands it over: a second edge would have another URL than the
+    // one the app modules saw when they were first imported.
+    edge = fixture.edge ?? (await startFakeEdge({ db: fixture.db }));
   } catch (error) {
     await fixture.db.close().catch(() => undefined);
     throw error;
@@ -128,15 +132,8 @@ export async function prepareInProcessEval(options: {
   const startedEdge = edge;
 
   const env = process.env as MutableEnv;
-  for (const name of Object.keys(env)) {
-    if (name.startsWith('RAG_') || name.startsWith('NEXT_PUBLIC_RAG_')) delete env[name];
-  }
-  Object.assign(env, loadPinnedEvalEnv());
-  Object.assign(env, fixtureProcessEnv(startedEdge.url));
+  applyFixtureProcessEnv({ edgeUrl: startedEdge.url, deploymentMode });
   const secret = crypto.randomBytes(24).toString('hex');
-  env.NODE_ENV = 'test';
-  env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE = deploymentMode;
-  env.OPENAI_EMBEDDING_MODEL = 'text-embedding-3-small';
   env.RAG_EVAL_SECRET = secret;
   env.RAG_EVAL_ALLOWED_SCOPES = [`user:${fixture.fixtureUserId}`, ...allowedScopes].join(',');
 
@@ -230,7 +227,7 @@ function redirectConsole(logPath: string): () => void {
 }
 
 export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
-  const { goldenPath, corpusDir, outDir, deploymentMode, tier = 'smoke', baseUrl, includeAnswer = false, generator, includeDrafts = false } = options;
+  const { goldenPath, corpusDir, outDir, deploymentMode, fixtureMode, tier = 'smoke', baseUrl, includeAnswer = false, generator, includeDrafts = false } = options;
   const requestOptions: EvalRequestOptions = { ...(options.requestOptions ?? {}) };
 
   let liveApiKey = '';
@@ -293,7 +290,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
         : requestOptions.user_id
           ? `user:${requestOptions.user_id}`
           : null;
-      const prepared = await prepareInProcessEval({ corpusDir, deploymentMode, allowedScopes: requestedScope ? [requestedScope] : [] });
+      const prepared = await prepareInProcessEval({ corpusDir, deploymentMode, fixtureMode, allowedScopes: requestedScope ? [requestedScope] : [] });
       inProcess = prepared;
       if (includeAnswer) {
         answerModule = await import('../../src/lib/rag-eval/answer.ts');
