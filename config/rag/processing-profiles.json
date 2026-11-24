@@ -10,14 +10,16 @@
           "configured"
         ],
         "docling": {
-          "ocr": false,
+          "ocr": true,
           "force_full_page_ocr": false,
           "table_mode": "fast",
           "heading_hierarchy": true,
-          "generate_picture_images": false
+          "generate_picture_images": true
         },
         "ocr_languages": [
-          "en"
+          "zh",
+          "en",
+          "it"
         ]
       },
       "chunker": {
@@ -30,13 +32,17 @@
         "lead_in_phrases": []
       },
       "extractors": [
-        "dates"
+        "dates",
+        "urls"
       ],
       "embedding_text_template": {
         "version": 1,
         "header": null
       },
-      "scan_injection": false
+      "scan_injection": true,
+      "min_tier": null,
+      "max_tier": null,
+      "parent_child": null
     },
     {
       "id": "financial_report@1",
@@ -47,33 +53,39 @@
           "configured"
         ],
         "docling": {
-          "ocr": false,
+          "ocr": true,
           "force_full_page_ocr": false,
-          "table_mode": "fast",
+          "table_mode": "accurate",
           "heading_hierarchy": true,
-          "generate_picture_images": false
+          "generate_picture_images": true
         },
         "ocr_languages": [
-          "en"
+          "zh",
+          "en",
+          "it"
         ]
       },
       "chunker": {
-        "kind": "markdown_sections",
+        "kind": "table_aware",
         "max_tokens": 512,
         "overlap_tokens": 64,
-        "repeat_table_header": false,
+        "repeat_table_header": true,
         "min_chunk_tokens": 32,
         "clause_patterns": [],
         "lead_in_phrases": []
       },
       "extractors": [
-        "dates"
+        "dates",
+        "financial"
       ],
       "embedding_text_template": {
         "version": 1,
         "header": null
       },
-      "scan_injection": false
+      "scan_injection": true,
+      "min_tier": null,
+      "max_tier": null,
+      "parent_child": null
     },
     {
       "id": "contract_legal@1",
@@ -84,24 +96,37 @@
           "configured"
         ],
         "docling": {
-          "ocr": false,
+          "ocr": true,
           "force_full_page_ocr": false,
           "table_mode": "fast",
           "heading_hierarchy": true,
           "generate_picture_images": false
         },
         "ocr_languages": [
-          "en"
+          "zh",
+          "en",
+          "it"
         ]
       },
       "chunker": {
-        "kind": "markdown_sections",
-        "max_tokens": 512,
-        "overlap_tokens": 64,
+        "kind": "legal_clauses",
+        "max_tokens": 768,
+        "overlap_tokens": 0,
         "repeat_table_header": false,
         "min_chunk_tokens": 32,
-        "clause_patterns": [],
-        "lead_in_phrases": []
+        "clause_patterns": [
+          "第[一二三四五六七八九十百零〇\\d]+条",
+          "^\\d+(\\.\\d+)*[.)]?\\s",
+          "^[（(][一二三四五六七八九十]+[)）]",
+          "^Art\\.?\\s*\\d+",
+          "^Articolo\\s+\\d+",
+          "^Article\\s+\\d+"
+        ],
+        "lead_in_phrases": [
+          "但以下情况除外",
+          "except as follows",
+          "salvo quanto segue"
+        ]
       },
       "extractors": [
         "dates"
@@ -110,7 +135,10 @@
         "version": 1,
         "header": null
       },
-      "scan_injection": false
+      "scan_injection": true,
+      "min_tier": null,
+      "max_tier": null,
+      "parent_child": null
     },
     {
       "id": "invoice_receipt@1",
@@ -118,36 +146,42 @@
       "doc_type": "invoice_receipt",
       "parser": {
         "preference": [
+          "docling",
           "configured"
         ],
         "docling": {
-          "ocr": false,
+          "ocr": true,
           "force_full_page_ocr": false,
-          "table_mode": "fast",
+          "table_mode": "accurate",
           "heading_hierarchy": true,
           "generate_picture_images": false
         },
         "ocr_languages": [
-          "en"
+          "zh",
+          "en",
+          "it"
         ]
       },
       "chunker": {
-        "kind": "markdown_sections",
-        "max_tokens": 512,
-        "overlap_tokens": 64,
-        "repeat_table_header": false,
-        "min_chunk_tokens": 32,
+        "kind": "invoice",
+        "max_tokens": 1024,
+        "overlap_tokens": 0,
+        "repeat_table_header": true,
+        "min_chunk_tokens": 0,
         "clause_patterns": [],
         "lead_in_phrases": []
       },
       "extractors": [
-        "dates"
+        "invoice"
       ],
       "embedding_text_template": {
         "version": 1,
-        "header": null
+        "header": "Invoice {invoice_number} | {supplier_name} | {supplier_tax_id}"
       },
-      "scan_injection": false
+      "scan_injection": true,
+      "min_tier": null,
+      "max_tier": null,
+      "parent_child": null
     },
     {
       "id": "product_technical@1",
@@ -158,14 +192,16 @@
           "configured"
         ],
         "docling": {
-          "ocr": false,
+          "ocr": true,
           "force_full_page_ocr": false,
           "table_mode": "fast",
           "heading_hierarchy": true,
-          "generate_picture_images": false
+          "generate_picture_images": true
         },
         "ocr_languages": [
-          "en"
+          "zh",
+          "en",
+          "it"
         ]
       },
       "chunker": {
@@ -178,13 +214,16 @@
         "lead_in_phrases": []
       },
       "extractors": [
-        "dates"
+        "urls"
       ],
       "embedding_text_template": {
         "version": 1,
         "header": null
       },
-      "scan_injection": false
+      "scan_injection": true,
+      "min_tier": null,
+      "max_tier": null,
+      "parent_child": null
     },
     {
       "id": "scanned_image@1",
@@ -192,17 +231,19 @@
       "doc_type": "scanned_image",
       "parser": {
         "preference": [
-          "configured"
+          "docling"
         ],
         "docling": {
-          "ocr": false,
-          "force_full_page_ocr": false,
+          "ocr": true,
+          "force_full_page_ocr": true,
           "table_mode": "fast",
           "heading_hierarchy": true,
-          "generate_picture_images": false
+          "generate_picture_images": true
         },
         "ocr_languages": [
-          "en"
+          "zh",
+          "en",
+          "it"
         ]
       },
       "chunker": {
@@ -221,7 +262,10 @@
         "version": 1,
         "header": null
       },
-      "scan_injection": false
+      "scan_injection": true,
+      "min_tier": null,
+      "max_tier": null,
+      "parent_child": null
     }
   ]
 }
