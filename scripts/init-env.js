@@ -391,6 +391,35 @@ RAG_INJECTION_SCAN=off
 RAG_EMBEDDING_PROFILES=off
 # Fallback host when the Qwen embedding provider is unavailable: openrouter | none
 RAG_QWEN_EMBED_FALLBACK=openrouter
+
+# -----------------------------
+# INGESTION (Phase 3.1 queue)
+# -----------------------------
+# Parse routing: fixed | tiered (tiered needs unified pipeline and async ingest)
+RAG_PARSE_ROUTING=fixed
+# Allow cloud parsers (LlamaParse and premium): true | false
+RAG_PARSER_ALLOW_CLOUD=true
+# Premium page budget per month for tiered routing (0 = unlimited reporting only)
+RAG_PARSE_PREMIUM_PAGE_BUDGET=0
+# Maximum premium pages per document under tiered routing
+RAG_PARSE_PREMIUM_MAX_PAGES_PER_DOC=200
+# Escalate failing page ranges one tier: on | off
+RAG_PARSE_ESCALATION=on
+# Vision-model page detection under tiered routing: true | false
+RAG_PARSE_VLM_DETECT=false
+# Vision model override (empty = image captioning model)
+RAG_PARSE_VLM_MODEL=
+# Queue ingestion jobs instead of inline processing: off | on (on needs unified pipeline)
+RAG_INGEST_ASYNC=off
+# Concurrent worker jobs (sidecar)
+RAG_INGEST_WORKER_CONCURRENCY=2
+# Publish chunks incrementally while parsing: true | false
+RAG_PARSE_PROGRESSIVE=false
+# Embedding batch mode for backfill: sync | batch_api
+RAG_EMBED_BATCH_MODE=sync
+# Browser realtime job updates (Supabase broadcast): true | false
+NEXT_PUBLIC_RAG_INGEST_REALTIME=false
+
 # Voyage embeddings
 VOYAGE_API_KEY=
 VOYAGE_BASE_URL=https://api.voyageai.com/v1

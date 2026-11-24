@@ -129,6 +129,11 @@
       ]
     },
     {
+      "name": "NEXT_PUBLIC_RAG_INGEST_REALTIME",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "NEXT_PUBLIC_RAG_MODE",
       "status": "legacy",
       "knownGaps": [
@@ -253,6 +258,11 @@
       "knownGaps": []
     },
     {
+      "name": "RAG_EMBED_BATCH_MODE",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "RAG_EMBEDDING_PROFILES",
       "status": "managed",
       "knownGaps": []
@@ -369,7 +379,17 @@
       ]
     },
     {
+      "name": "RAG_INGEST_ASYNC",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "RAG_INGEST_PIPELINE",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_INGEST_WORKER_CONCURRENCY",
       "status": "managed",
       "knownGaps": []
     },
@@ -456,7 +476,47 @@
       "knownGaps": []
     },
     {
+      "name": "RAG_PARSER_ALLOW_CLOUD",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_PARSE_ESCALATION",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "RAG_PARSE_POLL_BUDGET_MS",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_PARSE_PREMIUM_MAX_PAGES_PER_DOC",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_PARSE_PREMIUM_PAGE_BUDGET",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_PARSE_PROGRESSIVE",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_PARSE_ROUTING",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_PARSE_VLM_DETECT",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_PARSE_VLM_MODEL",
       "status": "managed",
       "knownGaps": []
     },

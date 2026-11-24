@@ -343,6 +343,51 @@ test('reports a managed VOYAGE variable missing from init-env while present in e
   }
 });
 
+test('fails when RAG_PARSE_ROUTING=tiered with legacy pipeline', () => {
+  const root = copyRealTree();
+  try {
+    const base = fs.readFileSync(path.join(REPO, 'scripts/init-env.js'), 'utf8');
+    write(root, '.env.local', `${base}\nRAG_PARSE_ROUTING=tiered\nRAG_INGEST_PIPELINE=legacy\n`);
+    const { code, out } = run(root);
+    assert.equal(code, 1);
+    assert.match(out, /D-10.*tiered.*unified/i);
+    assert.doesNotMatch(out, /llx-/);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('fails when RAG_INGEST_ASYNC=on with legacy pipeline', () => {
+  const root = copyRealTree();
+  try {
+    const base = fs.readFileSync(path.join(REPO, 'scripts/init-env.js'), 'utf8');
+    write(root, '.env.local', `${base}\nRAG_INGEST_ASYNC=on\nRAG_INGEST_PIPELINE=legacy\n`);
+    const { code, out } = run(root);
+    assert.equal(code, 1);
+    assert.match(out, /D-22.*RAG_INGEST_ASYNC=on.*unified/i);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('warns on cloud-off with legacy when Llama key is set, without printing the key', () => {
+  const root = copyRealTree();
+  try {
+    const base = fs.readFileSync(path.join(REPO, 'scripts/init-env.js'), 'utf8');
+    write(
+      root,
+      '.env.local',
+      `${base}\nRAG_PARSER_ALLOW_CLOUD=false\nRAG_INGEST_PIPELINE=legacy\nLLAMA_CLOUD_API_KEY=llx-test-placeholder-not-real\n`,
+    );
+    const { code, out } = run(root);
+    assert.equal(code, 0, out);
+    assert.match(out, /A-2.*LLAMA_CLOUD_API_KEY is set/i);
+    assert.doesNotMatch(out, /llx-test-placeholder/);
+  } finally {
+    cleanup(root);
+  }
+});
+
 test('does not treat VOYAGER_* or a VOYAGE name without the underscore as a provider variable', () => {
   const root = syntheticTree({
     files: { 'scripts/init-env.js': 'VOYAGER_X=1\nVOYAGEX=2\nXVOYAGE_KEY=3\nDEEPINFRAX=4\n' },
