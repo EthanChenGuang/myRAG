@@ -4,11 +4,17 @@ import { getSupabaseAdmin } from '@/lib/supabase';
 import { isHttpUrl, normalizeScrapedUrl } from '@/lib/scrapers/url-utils';
 import { isSingleTenant } from '@/lib/deployment-mode';
 import { verifyUserOrganizationAccess } from '@/lib/auth/organization-handler';
+import { requireSessionUser } from '@/lib/session-auth';
 
 export const runtime = 'nodejs';
 
 export async function GET(request: NextRequest) {
   try {
+    if (isSingleTenant()) {
+      const session = await requireSessionUser('[Scraper Status API]');
+      if ('response' in session) return session.response;
+    }
+
     const { searchParams } = new URL(request.url);
     const url = searchParams.get('url');
     const organizationId = searchParams.get('organization_id');
