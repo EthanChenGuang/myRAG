@@ -331,3 +331,18 @@ Out of scope:
 
 *Phase: 06-query-layer-llamaindex-langchain*
 *Context gathered: 2026-11-24*
+
+## Adjustments after research (orchestrator, 2026-11-24)
+
+Standing user instruction: follow the recommendations. These override the matching locked decisions.
+
+- **A-1 (F-1, narrows D-09):** the router uses `classifyQuery` only for `tool_required` with `needsMcp` (no transforms) and `multi_step` (adds the decompose hint). `conversational`, `complex` and `document_search` are ignored; the gate rules decide. `NEXT_PUBLIC_MCP_SYSTEM_ENABLED` is pinned in `eval/config/rag-eval-env.json`.
+- **A-2 (F-3, narrows D-28):** query-layer stages are soft. With zero results the status stays `empty` when every core stage and the original-query search succeeded; a skipped transform with results marks `degraded`. `semantic_cache` never affects status. Strict-mode "information not available" behaviour (PIPE-06, Phase 2 D-06) is preserved.
+- **A-3 (F-4, narrows D-32/D-33):** the semantic cache stores only no-history turns whose raw message equals the standalone query; `key_hash` includes the entry profile (chat or embed) and the system-prompt hash; the store runs after the Phase 5 groundedness result (never for answers flagged unreliable); ghost/incognito chats are never stored; embed is check-only by default.
+- **A-4 (F-2):** the LangChain adapter gives each document its chunk id as `pageContent` and uses one retriever per variant × leg, so fusion is one RRF over the same lists as native. Tie order is a reported framework difference.
+- **A-5:** no LlamaIndex package; prompts vendored (MIT) with attribution. HyDE variants hit the dense leg only. Use `generateText` + `Output.object`, `maxRetries: 0` on both frameworks; LLM-output models have all fields required (nullable). The gate model is named `RewriteGateResult`.
+- **A-6:** Phase 4's variant cap and `original | translated` type are widened; `hybrid_search_chunks` gains `p_include_undated` by dropping the old signature first. Cache invalidation uses three single-event triggers on `documents`; filter by embedding profile before computing distance.
+- **A-7:** the parallel-group deadline is anchored at the gate start so chat query stages fit the 1.2 s p95 budget.
+- **A-8:** default `RAG_QUERY_LLM_MODEL=openai/gpt-4.1-nano`; mistral-small-3.2-24b-instruct and gpt-4o-mini are the live-comparison alternates.
+- **A-9 (packages, human checkpoint):** `@langchain/core@1.5.0`, `@langchain/classic@1.0.62`, `@langchain/openai@1.8.5` installed with `npm install --save-exact --before=<cutoff>` no earlier than 2026-12-04 (fallback 1.4.1 / 1.0.61 / 1.8.4; never classic ≤1.0.60). Optional sidecar `cache` extra `redisvl==0.32.0`, `redis==8.1.0`, locked with an exclude-newer cutoff. RedisVL uses a stub `CustomVectorizer`, `refresh_ttl_on_hit=False`, one index per embedding profile.
+- **A-10:** remaining assumptions (HyDE protected-token exemption, Phase 3 ready status value, RedisVL import paths, `serverExternalPackages`, LangChain cold-import time) are resolved by the planner per the research recommendations with a test each.
