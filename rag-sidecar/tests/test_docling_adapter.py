@@ -525,3 +525,19 @@ def test_real_docling_converts_a_scanned_png_through_the_image_option(tmp_path):
     assert result.parser == "docling"
     assert result.page_count == 1
     assert result.text_layer_page_share is None
+
+
+def test_table_header_is_found_when_the_table_starts_after_the_first_six_lines_of_the_chunk():
+    lead = "\n".join(f"Invoice field {index}: value {index}" for index in range(8))
+    text = f"{lead}\n| Description | Amount |\n| --- | --- |\n| Probe | 800.00 |"
+    assert docling_adapter._table_header(text) == "| Description | Amount |\n| --- | --- |"
+
+
+def test_table_header_still_reads_a_table_at_the_start_and_returns_none_without_one():
+    assert docling_adapter._table_header("| a | b |\n| --- | --- |\n| 1 | 2 |") == "| a | b |\n| --- | --- |"
+    assert docling_adapter._table_header("a\n\nb\n| not a table row\nc") is None
+
+
+def test_table_header_of_a_chunk_with_two_tables_is_the_first_one():
+    text = "x\n" * 9 + "| a | b |\n| --- | --- |\n| 1 | 2 |\ny\n| c | d |\n| --- | --- |"
+    assert docling_adapter._table_header(text) == "| a | b |\n| --- | --- |"
