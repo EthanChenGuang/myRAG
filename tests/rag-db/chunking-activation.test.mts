@@ -11,6 +11,7 @@ const FUNCTIONS = [
   'rag_activate_chunking_profile(text,text,text)',
   'rag_rollback_chunking_profile(text,text)',
   'rag_chunking_coverage()',
+  'rag_chunking_profile_state()',
 ];
 
 for (const mode of MODES) {
@@ -65,6 +66,7 @@ for (const mode of MODES) {
             `SELECT * FROM rag_activate_chunking_profile('legacy', NULL, 'general')`,
             `SELECT * FROM rag_rollback_chunking_profile('general', NULL)`,
             'SELECT * FROM rag_chunking_coverage()',
+            'SELECT * FROM rag_chunking_profile_state()',
           ]) {
             const error = await h.errorOf(sql);
             assert.equal(error?.code, '42501', `${role} ran ${sql}: ${error?.message ?? 'no error'}`);
