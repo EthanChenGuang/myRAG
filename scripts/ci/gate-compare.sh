@@ -1,30 +1,41 @@
 #!/usr/bin/env bash
 # Parse LOCAL GATE SUMMARY from a gate log; compare to baseline file.
 set -euo pipefail
-parse_summary() {
-  local log="$1"
-  awk '/^=== LOCAL GATE SUMMARY ===/{p=1;next} p && /^FAIL count:/{print;exit} p && NF>=2{print $1, $2}' "$log" 2>/dev/null || true
-}
-
 compare() {
   local baseline="$1" candidate="$2"
-  python3 - <<'PY'
+  python3 - "$baseline" "$candidate" <<'PY'
 import sys
 from pathlib import Path
 
 def load(path):
+    text = Path(path).read_text(errors="replace")
+    if "LOCAL GATE SUMMARY" not in text and "FAIL count" not in text:
+        tail = text.splitlines()[-40:]
+        text = "\n".join(tail)
     jobs = {}
-    for line in Path(path).read_text().splitlines():
+    in_summary = False
+    for line in text.splitlines():
+        if "LOCAL GATE SUMMARY" in line:
+            in_summary = True
+            continue
         if line.startswith("FAIL count:"):
             jobs["_fail_count"] = line.split()[-1]
             continue
+        if not in_summary:
+            continue
         parts = line.split()
-        if len(parts) >= 2 and parts[0] not in ("JOB", "==="):
+        if len(parts) >= 2 and parts[0] not in ("JOB",) and parts[1] in ("PASS", "FAIL", "SKIP"):
             jobs[parts[0]] = parts[1]
     return jobs
 
 base = load(sys.argv[1])
 cand = load(sys.argv[2])
+if not base or "_fail_count" not in base and len(base) < 3:
+    print(f"BAD_BASELINE: {sys.argv[1]}", file=sys.stderr)
+    sys.exit(2)
+if not cand or len(cand) < 3:
+    print(f"BAD_CANDIDATE: {sys.argv[2]}", file=sys.stderr)
+    sys.exit(2)
 new_fails = []
 regressions = []
 for k, v in cand.items():
