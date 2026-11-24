@@ -120,7 +120,9 @@ DB_URL="postgresql://postgres:[PASSWORD]@db.${PROJECT_REF}.supabase.co:5432/post
 
 echo -e "${YELLOW}⚠️  Database Connection Setup${NC}"
 echo ""
-echo "To apply the schema, you have two options. After the setup file, run each migration below in this order (each file is idempotent):"
+echo "Apply the folded setup file only on a new project, or to repair a failed first apply (the setup SQL is idempotent on the same baseline). Upgrades on an existing database should use the ordered migrations below, not a full setup re-apply."
+echo ""
+echo "After the setup file, run each migration below in this order (each file is idempotent):"
 echo "${MIGRATION_LIST}" | sed 's/^/   /'
 echo ""
 echo "1. ${BLUE}Via Supabase Dashboard (Recommended):${NC}"
