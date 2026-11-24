@@ -264,6 +264,42 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_record_parse_attempt(uuid, text, jsonb) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_record_parse_attempt(uuid, text, jsonb) TO service_role;
   END IF;
+  IF to_regprocedure('public.rag_rechunk_advance(uuid, uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_rechunk_advance(uuid, uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_rechunk_advance(uuid, uuid) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_rechunk_documents(text, text, text, uuid, integer)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_rechunk_documents(text, text, text, uuid, integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_rechunk_documents(text, text, text, uuid, integer) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_rechunk_finish_run(uuid, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_rechunk_finish_run(uuid, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_rechunk_finish_run(uuid, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_rechunk_gaps(uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_rechunk_gaps(uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_rechunk_gaps(uuid) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_rechunk_get_run(uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_rechunk_get_run(uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_rechunk_get_run(uuid) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_rechunk_missing(text, text, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_rechunk_missing(text, text, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_rechunk_missing(text, text, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_rechunk_record_gap(uuid, uuid, text, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_rechunk_record_gap(uuid, uuid, text, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_rechunk_record_gap(uuid, uuid, text, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_rechunk_resume_run(uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_rechunk_resume_run(uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_rechunk_resume_run(uuid) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_rechunk_start_run(text, text, text, boolean)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_rechunk_start_run(text, text, text, boolean) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_rechunk_start_run(text, text, text, boolean) TO service_role;
+  END IF;
   IF to_regprocedure('public.rag_reembed_count(text, text)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_reembed_count(text, text) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_reembed_count(text, text) TO service_role;

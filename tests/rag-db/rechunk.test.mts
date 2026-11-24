@@ -619,6 +619,27 @@ describe('rechunk job (src/lib/rag/ingest/rechunk)', () => {
     assert.equal(scripts['rag:rechunk'], 'tsx src/lib/rag/ingest/rechunk/cli.ts');
   });
 
+  test('every rag_rechunk function is SECURITY DEFINER with a fixed search_path and executable by service_role only', async () => {
+    const functions = await rows(
+      `SELECT p.oid::regprocedure::text AS signature, p.prosecdef AS definer, p.proconfig::text AS config,
+              has_function_privilege('anon', p.oid, 'EXECUTE') AS anon,
+              has_function_privilege('authenticated', p.oid, 'EXECUTE') AS authenticated,
+              has_function_privilege('service_role', p.oid, 'EXECUTE') AS service_role
+       FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace AND n.nspname = 'public'
+       WHERE p.proname LIKE 'rag\\_rechunk\\_%' ORDER BY 1`,
+    );
+    assert.equal(functions.length, 9);
+    for (const fn of functions) {
+      assert.equal(fn.definer, true, String(fn.signature));
+      assert.match(String(fn.config), /search_path=pg_catalog, public/, String(fn.signature));
+      assert.deepEqual([fn.anon, fn.authenticated, fn.service_role], [false, false, true], String(fn.signature));
+    }
+    for (const table of ['chunking_build_runs', 'chunking_build_gaps']) {
+      const grants = await rows(`SELECT has_table_privilege('anon', $1, 'SELECT') AS anon, has_table_privilege('authenticated', $1, 'SELECT') AS authenticated`, [table]);
+      assert.deepEqual([grants[0]?.anon, grants[0]?.authenticated], [false, false], table);
+    }
+  });
+
   test('the job modules import no parser, sidecar, LlamaParse client or OpenAI client', () => {
     for (const file of ['run.ts', 'cost.ts', 'cli.ts']) {
       const source = fs.readFileSync(`src/lib/rag/ingest/rechunk/${file}`, 'utf8');
