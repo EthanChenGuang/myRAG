@@ -4,34 +4,47 @@
 
 ## Execution order and cross-phase dependencies
 
-- Every plan runs after Phase 4 and Phase 5 are complete. Plans name the Phase 3, 3.1, 4 or 5 plan that last edits a file they change, for example 04-02 (config), 04-15 (hybrid_search_chunks), 04-19 to 04-24 (v2 stages, variant seam), 04-28 (voice under v2, v2/pipeline.ts, v2/result.ts), 04-30 (calibrate dispatcher), 04-34 and 04-36 (admin guard, Config UI panels), 04-40 (phase_compare), 04-41 (two-tenant matrix), 04-42 (setup-file fold), 04-44 (params and config hash).
+- Every plan runs after Phase 4, Phase 5 and Phase 5.1 are complete. Plans name the Phase 3, 3.1, 4, 5 or 5.1 plan that last edits a file they change, for example 04-02 (config), 04-15 (hybrid_search_chunks), 04-19 to 04-24 (v2 stages, variant seam), 04-28 (voice under v2, v2/pipeline.ts, v2/result.ts), 04-30 (calibrate dispatcher), 04-34 and 04-36 (admin guard, Config UI panels), 04-40 (phase_compare), 04-41 (two-tenant matrix), 04-42 (setup-file fold), 04-44 (params and config hash).
 - **Phase 5 and Phase 5.1 run before Phase 6** (ROADMAP order 5, 5.1, 6). Phase 5's 26 plans are final (05-PLAN-INDEX.md, plan check passed), so Phase 6 now names real Phase 5 ids. For every file a Phase 6 plan changes, the last Phase 3, 3.1, 4 or 5 plan that edits it is an ancestor through `depends_on` (checked by script). Direct Phase 5 edges:
   - file last-editors: 06-01 (05-01 `contracts/__init__.py`, 05-07 `eval_run.py`), 06-02 (05-02 manifest, 05-10 the five env locations and `check-config.test.mjs`), 06-05 (05-07 samples and generated files), 06-13 (05-04 `types.ts`, 05-22 eval route), 06-22 (05-05 `package.json`, lockfiles, `pyproject.toml`, `test_dependency_boundary.py`), 06-27 (05-16 chat route, 05-21 `index.ts`), 06-29 (05-22 `run-eval.mts`, `run-smoke.mts`), 06-30 (05-12 sidecar `main.py`, `settings.py`), 06-33 (05-22 `rag-eval/answer.ts`), 06-34 (05-07 `latency.py`, `report.py`; 05-24 `latency-budgets.json`, `eval/src/rag_eval/report.py`), 06-41 (05-19 `calibrate/__main__.py`), 06-44 and 06-45 (05-25 `phase_compare.py`, setup files, `schema-equality.test.mts`, `AGENTS.md`);
   - contract seams: 06-09 and 06-17 (05-01 CitationRecord and AnswerGroundedness labels), 06-33 (05-08 `decorateSystemPrompt`, which appends the citation instruction to the output of `createEnhancedRAGPrompt`; Phase 5 does not edit `prompt.ts`), 06-36 (05-13 answerId and `scheduleAnswerFinish`, 05-18 the post-stream groundedness label).
   The 06-09 and 06-36 `<precondition>` lines now name those plans.
 - Older last-editor ids that were only named in prose are now in `depends_on` as well: 06-09 (03-11 `test_golden_contract.py`), 06-21 (03-13 publish stage, 03.1-39 soft-delete module).
-- **Pending 5.1 edges (deferred by the orchestrator until the Phase 5.1 plan ids are final).** Phase 5.1 planning is in progress (`05.1-01-PLAN.md` exists). Plan-check pass 1 (W3, 06-PLAN-CHECK.md) lists the 16 Phase 6 plans that are the first Phase 6 editor of a file Phase 5.1 also names; each will gain a `depends_on` edge to the Phase 5.1 plan that last edits that file. Later Phase 6 editors of the same files inherit it through the chain. Until the edges land, the ROADMAP order (5.1 before 6) is the only guard.
+- **Phase 5.1 edges (revision pass 2, added).** Phase 5.1's 23 plans have fixed ids. These edges, as computed by the Phase 5.1 checker, are now in the `depends_on` of 30 Phase 6 plans. Each names the last Phase 5.1 plan that edits a file the Phase 6 plan changes. My own last-editor script gives the same set, apart from two additions that are already covered: for 06-37, 05.1-06 is an ancestor of 05.1-14, and for 06-38 and 06-39, 05.1-09 is an ancestor of 05.1-17. Phase 5.1 runs entirely before Phase 6, so these edges do not change Phase 6 wave numbers. The two files added in pass 1, `scripts/config-server-security.js` (06-02) and `rag-sidecar/.env.example` (06-30), appear in no Phase 5.1 plan's `files_modified`, so they need no edge. No Phase 5.1 plan edits `src/lib/rag/generation/prompt.ts`, `src/app/api/embed/chat/route.ts`, `src/lib/rag/index.ts`, the setup files or `schema-equality.test.mts`.
 
-  | Phase 6 plan | Shared file(s) named by Phase 5.1 |
-  |--------------|------------------------------------|
-  | 06-01 | `rag-sidecar/src/rag_sidecar/contracts/__init__.py`, `contracts/eval_run.py` |
-  | 06-02 | the five env locations, `scripts/rag/env-manifest.json` |
-  | 06-05 | `rag-sidecar/src/rag_sidecar/export_schemas.py` |
-  | 06-09 | `rag-sidecar/src/rag_sidecar/contracts/golden.py` |
-  | 06-10 | `src/lib/rag/config.ts`, `src/lib/rag/deps.ts` |
-  | 06-13 | `src/lib/rag/types.ts` |
-  | 06-19 | `src/lib/rag/v2/pipeline.ts` |
-  | 06-22 | `next.config.js`, `rag-sidecar/pyproject.toml` |
-  | 06-27 | `src/lib/rag/index.ts`, `src/app/api/chat/route.ts` |
-  | 06-28 | `src/app/api/internal/voice-rag/route.ts` |
-  | 06-30 | `rag-sidecar/src/rag_sidecar/main.py` |
-  | 06-31 | `voice-agent/src/voice_agent.ts`, `voice-agent/src/rag_client.ts` |
-  | 06-33 | `src/lib/rag/generation/prompt.ts` |
-  | 06-34 | `eval/src/rag_eval/report.py` |
-  | 06-38 | `eval/fixtures/golden.jsonl` |
-  | 06-45 | `AGENTS.md` |
+  | Phase 6 plan | Phase 5.1 edge(s) added to depends_on | Shared file(s) |
+  |--------------|----------------------------------------|----------------|
+  | 06-01 | 05.1-03 | `rag-sidecar/src/rag_sidecar/contracts/eval_run.py`, `rag-sidecar/src/rag_sidecar/contracts/__init__.py` |
+  | 06-02 | 05.1-04, 05.1-12 | `scripts/rag/env-manifest.json`, `src/lib/env.ts`, `scripts/init-env.js`, `eval/config/rag-eval-env.json`, `scripts/config-server.js`, `scripts/config-ui/index.html` |
+  | 06-05 | 05.1-03 | `rag-sidecar/src/rag_sidecar/contracts/samples.py`, `rag-sidecar/src/rag_sidecar/export_schemas.py`, `rag-sidecar/schemas/RagRunRequest.schema.json`, `rag-sidecar/schemas/RagTrace.schema.json`, `src/lib/rag-eval/contracts.generated.ts`, `tests/fixtures/contracts/samples.json` |
+  | 06-09 | 05.1-03 | `rag-sidecar/src/rag_sidecar/contracts/__init__.py`, `rag-sidecar/src/rag_sidecar/contracts/golden.py` |
+  | 06-10 | 05.1-06, 05.1-21 | `src/lib/rag/config.ts`, `tests/rag/config.test.ts`, `src/lib/rag/deps.ts` |
+  | 06-11 | 05.1-03 | `rag-sidecar/src/rag_sidecar/contracts/samples.py`, `rag-sidecar/src/rag_sidecar/export_schemas.py`, `rag-sidecar/schemas/GoldenItem.schema.json`, `src/lib/rag-eval/contracts.generated.ts`, `tests/fixtures/contracts/samples.json` |
+  | 06-13 | 05.1-06, 05.1-14, 05.1-19 | `src/lib/rag/types.ts`, `src/lib/rag/v2/result.ts`, `src/app/api/internal/rag/run/route.ts` |
+  | 06-18 | 05.1-08 | `scripts/ci/check-rag-boundary.mjs`, `scripts/tests/check-rag-boundary.node-test.mjs` |
+  | 06-19 | 05.1-14 | `src/lib/rag/v2/pipeline.ts`, `src/lib/rag/v2/result.ts` |
+  | 06-20 | 05.1-06 | `src/lib/rag/types.ts` |
+  | 06-21 | 05.1-21 | `src/lib/rag/deps.ts` |
+  | 06-22 | 05.1-18, 05.1-19 | `.github/workflows/pr-smoke.yml`, `scripts/ci/check-workflows.py`, `rag-sidecar/pyproject.toml`, `rag-sidecar/uv.lock`, `rag-sidecar/tests/test_dependency_boundary.py` |
+  | 06-27 | 05.1-15 | `src/app/api/chat/route.ts` |
+  | 06-28 | 05.1-20 | `src/app/api/internal/voice-rag/route.ts`, `tests/rag/voice-rag-route.test.ts` |
+  | 06-29 | 05.1-19 | `src/app/api/internal/rag/run/route.ts`, `eval/harness/run-eval.mts`, `eval/harness/run-smoke.mts` |
+  | 06-30 | 05.1-07 | `rag-sidecar/src/rag_sidecar/main.py`, `rag-sidecar/src/rag_sidecar/settings.py` |
+  | 06-31 | 05.1-20 | `voice-agent/src/rag_client.ts`, `voice-agent/test/rag_client.test.ts` |
+  | 06-32 | 05.1-06, 05.1-14 | `src/lib/rag/types.ts`, `src/lib/rag/v2/config-hash.ts`, `src/lib/rag/v2/pipeline.ts`, `src/lib/rag/v2/result.ts` |
+  | 06-33 | 05.1-15 | `src/app/api/chat/route.ts` |
+  | 06-34 | 05.1-03, 05.1-10, 05.1-19 | `eval/config/latency-budgets.json`, `rag-sidecar/src/rag_sidecar/contracts/report.py`, `rag-sidecar/src/rag_sidecar/contracts/samples.py`, `rag-sidecar/schemas/EvalReport.schema.json`, `src/lib/rag-eval/contracts.generated.ts`, `tests/fixtures/contracts/samples.json`, `eval/src/rag_eval/report.py` |
+  | 06-36 | 05.1-15 | `src/app/api/chat/route.ts` |
+  | 06-37 | 05.1-14 | `src/lib/rag/v2/pipeline.ts`, `src/lib/rag/config.ts`, `tests/rag/config.test.ts` |
+  | 06-38 | 05.1-17 | `eval/fixtures/golden.jsonl`, `eval/fixtures/split-manifest.json`, `eval/baselines/fixture-baseline.json`, `eval/baselines/fixture-ingest-baseline.json` |
+  | 06-39 | 05.1-17 | `eval/fixtures/golden.jsonl`, `eval/fixtures/split-manifest.json`, `eval/baselines/fixture-baseline.json`, `eval/baselines/fixture-ingest-baseline.json` |
+  | 06-40 | 05.1-12 | `scripts/config-server.js`, `scripts/config-ui/index.html` |
+  | 06-41 | 05.1-19 | `src/app/api/internal/rag/run/route.ts`, `eval/harness/run-eval.mts` |
+  | 06-43 | 05.1-19 | `.github/workflows/pr-smoke.yml`, `scripts/ci/check-workflows.py` |
+  | 06-44 | 05.1-22 | `eval/src/rag_eval/phase_compare.py`, `eval/tests/test_phase_compare.py` |
+  | 06-45 | 05.1-22 | `AGENTS.md` |
+  | 06-46 | 05.1-19 | `eval/config/latency-budgets.json` |
 
-  Revision pass 1 also gave 06-02 a new file, `scripts/config-server-security.js`. When the 5.1 ids arrive, check it and the 06-30 addition `rag-sidecar/.env.example` against the final Phase 5.1 plans too.
 - Migration numbers 0601 to 0603 follow Phase 4's 0401 to 0409; Phase 5 and 5.1 use 05xx numbers, so ordering by filename stays correct.
 - PGlite note: 06-04 (wave 1), 06-08 (wave 2) and 06-12 (wave 3) each add a migration that every PGlite test applies; they are in different waves and chained by `depends_on`; with `workflow.use_worktrees` false, never run two of them at once.
 
@@ -174,10 +187,25 @@ Switches and two-tenant coverage (completion revision):
 | W6 hit answer record | 06-09, 06-12, 06-32, 06-36 | A hit writes the Phase 5 answer record through `scheduleAnswerFinish`, with citations re-resolved against the current sources by the new `rag_cache_resolve_sources` function (unresolved means miss) and the cached AnswerGroundedness object, which `CachedAnswer` now stores whole |
 | W7 fragile baselines | 06-21, 06-12 | Preconditions re-measure the `publish.ts` and `soft-delete.ts` gates, and the ingestion suites, at the start |
 | W8 research | 06-RESEARCH.md | Open Questions marked RESOLVED with pointers to A-1, A-2, A-3, A-4, A-6, A-7, A-9 and A-10 |
-| W3 Phase 5.1 edges | 06-PLAN-INDEX.md | Deferred by the orchestrator; the 16 plans are listed above as pending 5.1 edges |
+| W3 Phase 5.1 edges | 30 plans (revision pass 2) | Deferred in pass 1; added in pass 2 from the Phase 5.1 checker's table (see "Phase 5.1 edges" above) |
 | W9 06-41 size | none | Not in the coordinator's fix list; 06-41 keeps 4 auto tasks |
 
+## Revision pass 2 (coordinator follow-up)
+
+| Item | Plans changed | Change |
+|------|---------------|--------|
+| Phase 5.1 edges | 06-01, 06-02, 06-05, 06-09, 06-10, 06-11, 06-13, 06-18, 06-19, 06-20, 06-21, 06-22, 06-27, 06-28, 06-29, 06-30, 06-31, 06-32, 06-33, 06-34, 06-36, 06-37, 06-38, 06-39, 06-40, 06-41, 06-43, 06-44, 06-45, 06-46 | `depends_on` gains the Phase 5.1 ids in the table above, and each objective names them with the shared files; 06-27, 06-33 and 06-45 replace their pending notes. No renumbering, no wave change |
+| W-A tenant guard | 06-12 | The guard gate is split by task: `>= 2` after Task 1 (check, store) and `>= 5` after Task 2 (plus invalidate, sources_current, resolve_sources). Task 2 also gains malformed and wrong-mode key cases (22023) for `rag_cache_resolve_sources` |
+| W-B live grants | 06-46 | Task 1 checks the anon key and an authenticated JWT against every new function (language shares, hybrid search, and the five cache functions check, store, invalidate, sources_current and resolve_sources). It also checks reads and writes on `rag_semantic_cache`, plus `has_table_privilege` and `has_function_privilege` |
+| W-C history binding | 06-28, 06-31 | The threat and truth text say the binding prevents accidental cross-session mixing, does not authenticate history, and that isolation comes from the verified scope token. After a token refresh mid-session, earlier turns are dropped and condensing falls back to the original query; tested on the server (06-28) and in the agent (06-31) |
+
 ## Checks run
+
+Revision pass 2 (2026-11-24, current working tree; git not run):
+
+- `frontmatter.validate --schema plan`: 46 of 46 valid. `verify.plan-structure`: 46 of 46 valid, exit 0, no errors, the same 4 one-way warnings. `check.decision-coverage-plan`: passed, 88 of 88.
+- Every `depends_on` id exists, including the 23 Phase 5.1 ids. Waves are unchanged (cross-phase edges do not count). The last-editor script now includes Phase 5.1 and reports 0 gaps: every file in a Phase 6 plan has its last Phase 3, 3.1, 4, 5 or 5.1 editor as an ancestor.
+- Acceptance baselines: 172 grep and test gates re-run, all matching their recorded HEAD values.
 
 Revision pass 1 (2026-11-24, current working tree; git not run):
 
