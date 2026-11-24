@@ -29,7 +29,7 @@ export interface Candidate {
   language?: string | null;
 }
 
-export type StageRunStatus = 'ok' | 'skipped' | 'disabled' | 'error' | 'timeout' | 'aborted';
+export type StageRunStatus = 'ok' | 'skipped' | 'disabled' | 'degraded' | 'error' | 'timeout' | 'aborted';
 
 export type StageFailureReason = 'failed' | 'timeout' | 'aborted';
 
