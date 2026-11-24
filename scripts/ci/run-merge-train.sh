@@ -53,6 +53,12 @@ while read -r pr branch; do
   if [[ ! -f "$cand" ]]; then
     grep -A22 'LOCAL GATE SUMMARY' "$ROOT/.merge-train-gates/pr${pr}/full.log" >"$cand" || true
   fi
+  if ! ./scripts/ci/merge-train-verify.sh "$pr"; then
+    git checkout "$TRUNK"
+    echo "{\"pr\":$pr,\"branch\":\"$branch\",\"status\":\"skip\",\"reason\":\"extra verification failed\"}" >>"$RESULTS"
+    git branch -D "train/${branch#exec/}" 2>/dev/null || true
+    continue
+  fi
   git checkout "$TRUNK"
   if ./scripts/ci/gate-compare.sh "$BASELINE" "$cand"; then
     git merge --no-ff "train/${branch#exec/}" -m "merge: PR #${pr} ${branch}"
