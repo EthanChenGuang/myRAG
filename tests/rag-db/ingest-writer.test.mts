@@ -698,13 +698,14 @@ for (const mode of MODES) {
       assert.equal('embedding_model' in ((rows[0] as Row).metadata as Row), false);
     });
 
-    it('an embedding entry for another profile raises embedding_profile_unsupported and writes nothing', async () => {
+    it('an embedding entry for an unknown profile raises embedding_profile_unsupported and a wrong-length vector for a registered one raises embedding_profile_mismatch, both writing nothing', async () => {
       const row = await begin(ctx, { sourceKey: uniqueKey('chunks-profile') });
       const vector = embedText('profile check');
-      const message = await writeError(ctx, row.document_id, ctx.a.key, chunkSpecs(1, {}), { [LEGACY_PROFILE]: [vector], 'voyage-4-large-2048': [vector] });
+      const message = await writeError(ctx, row.document_id, ctx.a.key, chunkSpecs(1, {}), { [LEGACY_PROFILE]: [vector], 'no-such-profile-512': [vector] });
       assert.match(message ?? '', /embedding_profile_unsupported/);
       assert.deepEqual(await chunkRows(ctx, row.document_id), []);
-      assert.match((await writeError(ctx, row.document_id, ctx.a.key, chunkSpecs(1, {}), { 'voyage-4-large-2048': [vector] })) ?? '', /embedding_profile_unsupported/);
+      assert.match((await writeError(ctx, row.document_id, ctx.a.key, chunkSpecs(1, {}), { 'voyage-4-large-2048': [vector] })) ?? '', /embedding_profile_mismatch/);
+      assert.deepEqual(await chunkRows(ctx, row.document_id), []);
     });
 
     it('an embedding list that does not line up with the chunks, a final write without a total and a chunk without content are rejected', async () => {
