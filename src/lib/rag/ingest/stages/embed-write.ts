@@ -1,16 +1,20 @@
+import { loadRagConfig } from '../../config';
+import { getRagDeps } from '../../deps';
 import { EmbeddingProfileMismatch } from '../../embeddings/mrl';
 import { ProfileUnavailableError, type EmbeddingProfile } from '../../embeddings/active-profile';
 import { canonicalModelId, getEmbeddingProvider } from '../../embeddings/registry';
 import { resolveEmbeddingTargets, type EmbeddingTarget } from '../embedding-targets';
+import { buildProfileChunks, liveProfilesByDocType, writeProfileChunks } from '../profile-chunks';
 import { buildEmbeddingText, EMBEDDING_TEXT_VERSION, templateHeaderFor } from '../text/embedding-text';
 import {
   IngestStageError,
   requireDocument,
+  requireIdentity,
   type StageContext,
   type StageOutcome,
   type StageSpec,
 } from '../types';
-import { chunkIdFor, type ChunkWrite, type ProfileVectors } from '../writer';
+import { IngestWriterError, chunkIdFor, profileRowIdFor, type ChunkWrite, type ProfileVectors } from '../writer';
 
 const MAX_BATCH_BYTES = 1_000_000;
 const BYTES_PER_VECTOR_DIM = 20;
@@ -117,6 +121,102 @@ function logTargetFailure(target: EmbeddingTarget, failure: TargetFailure): void
   });
 }
 
+const PROFILE_EMBED_GROUP = 100;
+
+/** Embeds the texts of a profile's children for one target in groups, so one provider request never carries a whole long document. */
+async function embedGroups(ctx: StageContext, target: EmbeddingTarget, texts: string[]): Promise<TargetVectors> {
+  const vectors: number[][] = [];
+  let host: string | null = null;
+  for (let start = 0; start < texts.length; start += PROFILE_EMBED_GROUP) {
+    ctx.signal.throwIfAborted();
+    const part = await embedForTarget(ctx, target, texts.slice(start, start + PROFILE_EMBED_GROUP));
+    vectors.push(...part.vectors);
+    host ??= part.host;
+  }
+  return { vectors, host };
+}
+
+function logProfileFailure(step: string, error: unknown): void {
+  console.warn('[Ingest] chunking profile dual-write failed', {
+    step,
+    ...(error instanceof Error ? { error: error.name } : {}),
+    ...(error instanceof IngestWriterError ? { rpc: error.rpc, code: error.code } : {}),
+  });
+}
+
+/**
+ * Under RAG_PIPELINE=v2 only (D-23): every non-legacy chunking profile of the document's type that is building, ready or active gets the
+ * parents and children of this version, embedded for the same targets as the legacy chunks, so a new upload is complete in every built profile
+ * before it is published (D-21). A failing active embedding target or a failing profile write fails the run, so no half-built version is
+ * published; a failing other target leaves its vectors out and records a gap like the legacy chunks do.
+ */
+async function dualWriteProfiles(ctx: StageContext, documentId: string, targets: EmbeddingTarget[], failed: Map<string, TargetFailure>, templateHeader: string): Promise<void> {
+  const identity = requireIdentity(ctx, 'embed');
+  let rows;
+  try {
+    rows = await ctx.writer.listChunkingProfiles();
+  } catch (error) {
+    if (ctx.signal.aborted) throw error;
+    logProfileFailure('list', error);
+    throw new IngestStageError('embed', 'chunking_profiles_unavailable');
+  }
+  const profiles = liveProfilesByDocType(rows).get(identity.docType) ?? [];
+
+  for (const profile of profiles) {
+    ctx.signal.throwIfAborted();
+    const built = buildProfileChunks({ filename: identity.filename, chunker: identity.profile.chunker, templateHeader }, ctx.work.parseText ?? '', profile);
+    if (built.children.length === 0) continue;
+
+    const outcomes = await Promise.all(
+      targets.map(async (target) => {
+        const earlier = failed.get(target.profile.id);
+        if (earlier) return { target, failure: earlier, result: null };
+        try {
+          return { target, failure: null, result: await embedGroups(ctx, target, built.embeddingTexts) };
+        } catch (error) {
+          if (!(error instanceof TargetFailure)) throw error;
+          return { target, failure: error, result: null };
+        }
+      }),
+    );
+    ctx.signal.throwIfAborted();
+
+    const embeddings: Record<string, ProfileVectors> = {};
+    const missing: Array<{ target: EmbeddingTarget; reason: GapReason }> = [];
+    for (const { target, failure, result } of outcomes) {
+      if (failure || !result) {
+        if (target.role === 'active') {
+          logTargetFailure(target, failure as TargetFailure);
+          throw new IngestStageError('embed', failure?.reason === 'embedding_profile_mismatch' ? 'embedding_profile_mismatch' : 'embed_failed');
+        }
+        if (!failed.has(target.profile.id)) logTargetFailure(target, failure as TargetFailure);
+        failed.set(target.profile.id, failure as TargetFailure);
+        missing.push({ target, reason: (failure as TargetFailure).reason });
+        continue;
+      }
+      embeddings[target.profile.id] = target.profile.storage === 'legacy_column' ? result.vectors : { vectors: result.vectors, host: result.host };
+    }
+
+    try {
+      await writeProfileChunks(ctx.writer, documentId, profile.id, built, embeddings);
+    } catch (error) {
+      if (ctx.signal.aborted) throw error;
+      logProfileFailure('write', error);
+      throw new IngestStageError('embed', 'profile_write_failed');
+    }
+
+    for (const { target, reason } of missing) {
+      if (target.runId === null) continue;
+      await ctx.writer.recordBackfillGap({
+        runId: target.runId,
+        chunkIds: built.children.map((child) => profileRowIdFor(documentId, profile.id, 'child', child.chunk_index)),
+        profileId: target.profile.id,
+        reason,
+      });
+    }
+  }
+}
+
 /**
  * Embeds each batch once per target (active, backfilling, previous active) from the same embedding text and writes the vectors in one call.
  * A failing active target fails the run (embed_failed, or embedding_profile_mismatch for a wrong model or dimensions); a failing other target
@@ -125,6 +225,7 @@ function logTargetFailure(target: EmbeddingTarget, failure: TargetFailure): void
  */
 async function runEmbed(ctx: StageContext): Promise<StageOutcome> {
   const document = requireDocument(ctx, 'embed');
+  const dualWrite = loadRagConfig(getRagDeps().ragEnv()).pipeline === 'v2';
   let targets: EmbeddingTarget[];
   try {
     targets = await resolveEmbeddingTargets(ctx.writer);
@@ -192,6 +293,8 @@ async function runEmbed(ctx: StageContext): Promise<StageOutcome> {
       }
     }
   }
+
+  if (dualWrite) await dualWriteProfiles(ctx, document.id, targets, failed, templateHeader);
 
   ctx.work.chunksWritten = written;
   ctx.state.embeddingTargets = targets.map((target) => target.profile.id);

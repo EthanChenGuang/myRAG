@@ -40,6 +40,10 @@ export interface FakeIngestDbOptions {
   origin?: FakeIngestOriginRow | null;
   documentId?: string;
   failures?: Record<string, { code: string; message: string }>;
+  /** Rows answered by rag_list_chunking_profiles; absent answers no rows. */
+  chunkingProfiles?: Row[];
+  /** Rows answered by rag_latest_backfill_runs; absent answers no rows. */
+  backfillRuns?: Row[];
   /** Runs after a call is recorded and before it is answered. */
   onCall?: (call: RecordedRpc) => void;
 }
@@ -61,6 +65,21 @@ function answer(fn: string, args: Record<string, unknown>, options: FakeIngestDb
       return options.origin ? [options.origin as unknown as Row] : [];
     case 'rag_write_chunks':
       return [{ chunks_written: (args.p_chunks as unknown[]).length, chunks_deleted: 0 }];
+    case 'rag_latest_backfill_runs':
+      return options.backfillRuns ?? [];
+    case 'rag_record_backfill_gap':
+      return [{ gaps_recorded: (args.p_chunk_ids as unknown[]).length }];
+    case 'rag_list_chunking_profiles':
+      return options.chunkingProfiles ?? [];
+    case 'rag_write_profile_chunks':
+      return [
+        {
+          parents_written: (args.p_parents as unknown[] | null)?.length ?? 0,
+          children_written: (args.p_children as unknown[]).length,
+          parents_deleted: 0,
+          children_deleted: 0,
+        },
+      ];
     case 'rag_publish_document_version':
       return [{ outcome: quarantined ? 'quarantined' : 'published', document_id: args.p_document_id, version: 1, superseded_document_id: null }];
     case 'rag_mark_document_failed':

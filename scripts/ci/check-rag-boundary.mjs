@@ -35,6 +35,7 @@ export const AI_SDK_BANNED_EXPORTS = ['embed', 'embedMany', 'rerank'];
 export const WRITER_RPCS = [
   'rag_begin_document_version',
   'rag_write_chunks',
+  'rag_write_profile_chunks',
   'rag_publish_document_version',
   'rag_set_document_fields',
   'rag_save_ingest_state',
