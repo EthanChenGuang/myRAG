@@ -1,0 +1,660 @@
+{
+  "excluded_fixtures": [
+    "bench-100"
+  ],
+  "fixtures": [
+    {
+      "by_tier": {
+        "fast": {
+          "cost_per_page": 0.001,
+          "headings_f1": 1.0,
+          "reading_order": 1.0,
+          "recall_at_k": 0.0,
+          "s_per_page": 0.8,
+          "table_cell_f1": 0.0,
+          "text_similarity": 1.0
+        },
+        "structured_full": {
+          "cost_per_page": 0.001,
+          "headings_f1": 1.0,
+          "reading_order": 1.0,
+          "recall_at_k": 0.0,
+          "s_per_page": 0.8,
+          "table_cell_f1": 1.0,
+          "text_similarity": 1.0
+        },
+        "structured_layout": {
+          "cost_per_page": 0.001,
+          "headings_f1": 1.0,
+          "reading_order": 1.0,
+          "recall_at_k": 0.0,
+          "s_per_page": 0.8,
+          "table_cell_f1": 0.0,
+          "text_similarity": 1.0
+        },
+        "structured_ocr": {
+          "cost_per_page": 0.001,
+          "headings_f1": 1.0,
+          "reading_order": 1.0,
+          "recall_at_k": 0.0,
+          "s_per_page": 0.8,
+          "table_cell_f1": 1.0,
+          "text_similarity": 1.0
+        }
+      },
+      "fixture_id": "cross-boundary",
+      "page_tier_accuracy": [
+        {
+          "layer_combo": "L1",
+          "pages_below_expected_tier": 0
+        },
+        {
+          "layer_combo": "L1+L2",
+          "pages_below_expected_tier": 0
+        },
+        {
+          "layer_combo": "L1+L2+L3",
+          "pages_below_expected_tier": 0
+        }
+      ]
+    },
+    {
+      "by_tier": {
+        "fast": {
+          "cost_per_page": 0.001,
+          "headings_f1": 1.0,
+          "reading_order": 1.0,
+          "recall_at_k": 0.0,
+          "s_per_page": 0.8,
+          "table_cell_f1": 1.0,
+          "text_similarity": 1.0
+        },
+        "structured_full": {
+          "cost_per_page": 0.001,
+          "headings_f1": 1.0,
+          "reading_order": 1.0,
+          "recall_at_k": 0.0,
+          "s_per_page": 0.8,
+          "table_cell_f1": 1.0,
+          "text_similarity": 1.0
+        },
+        "structured_layout": {
+          "cost_per_page": 0.001,
+          "headings_f1": 1.0,
+          "reading_order": 1.0,
+          "recall_at_k": 0.0,
+          "s_per_page": 0.8,
+          "table_cell_f1": 1.0,
+          "text_similarity": 1.0
+        },
+        "structured_ocr": {
+          "cost_per_page": 0.001,
+          "headings_f1": 1.0,
+          "reading_order": 1.0,
+          "recall_at_k": 0.0,
+          "s_per_page": 0.8,
+          "table_cell_f1": 1.0,
+          "text_similarity": 1.0
+        }
+      },
+      "fixture_id": "digital-text",
+      "page_tier_accuracy": [
+        {
+          "layer_combo": "L1",
+          "pages_below_expected_tier": 0
+        },
+        {
+          "layer_combo": "L1+L2",
+          "pages_below_expected_tier": 0
+        },
+        {
+          "layer_combo": "L1+L2+L3",
+          "pages_below_expected_tier": 0
+        }
+      ]
+    },
+    {
+      "by_tier": {
+        "fast": {
+          "cost_per_page": 0.001,
+          "headings_f1": 1.0,
+          "reading_order": 1.0,
+          "recall_at_k": 0.0,
+          "s_per_page": 0.8,
+          "table_cell_f1": 0.0,
+          "text_similarity": 1.0
+        },
+        "premium": {
+          "cost_per_page": 0.004,
+          "headings_f1": 0.0,
+          "reading_order": 1.0,
+          "recall_at_k": 0.0,
+          "s_per_page": 5.0,
+          "table_cell_f1": 0.0,
+          "text_similarity": 1.0
+        },
+        "structured_full": {
+          "cost_per_page": 0.001,
+          "headings_f1": 1.0,
+          "reading_order": 1.0,
+          "recall_at_k": 0.0,
+          "s_per_page": 0.8,
+          "table_cell_f1": 1.0,
+          "text_similarity": 1.0
+        },
+        "structured_layout": {
+          "cost_per_page": 0.001,
+          "headings_f1": 1.0,
+          "reading_order": 1.0,
+          "recall_at_k": 0.0,
+          "s_per_page": 0.8,
+          "table_cell_f1": 0.0,
+          "text_similarity": 1.0
+        },
+        "structured_ocr": {
+          "cost_per_page": 0.001,
+          "headings_f1": 1.0,
+          "reading_order": 1.0,
+          "recall_at_k": 0.0,
+          "s_per_page": 0.8,
+          "table_cell_f1": 1.0,
+          "text_similarity": 1.0
+        }
+      },
+      "fixture_id": "invoice-en",
+      "page_tier_accuracy": [
+        {
+          "layer_combo": "L1",
+          "pages_below_expected_tier": 0
+        },
+        {
+          "layer_combo": "L1+L2",
+          "pages_below_expected_tier": 0
+        },
+        {
+          "layer_combo": "L1+L2+L3",
+          "pages_below_expected_tier": 0
+        }
+      ]
+    },
+    {
+      "by_tier": {
+        "fast": {
+          "cost_per_page": 0.001,
+          "headings_f1": 0.36363636363636365,
+          "reading_order": 0.7843137254901961,
+          "recall_at_k": 0.0,
+          "s_per_page": 0.8,
+          "table_cell_f1": 0.0,
+          "text_similarity": 0.8351063829787234
+        },
+        "structured_full": {
+          "cost_per_page": 0.001,
+          "headings_f1": 0.3333333333333333,
+          "reading_order": 1.0,
+          "recall_at_k": 0.0,
+          "s_per_page": 0.8,
+          "table_cell_f1": 1.0,
+          "text_similarity": 1.0
+        },
+        "structured_layout": {
+          "cost_per_page": 0.001,
+          "headings_f1": 0.3333333333333333,
+          "reading_order": 1.0,
+          "recall_at_k": 0.0,
+          "s_per_page": 0.8,
+          "table_cell_f1": 0.0,
+          "text_similarity": 1.0
+        },
+        "structured_ocr": {
+          "cost_per_page": 0.001,
+          "headings_f1": 0.3333333333333333,
+          "reading_order": 1.0,
+          "recall_at_k": 0.0,
+          "s_per_page": 0.8,
+          "table_cell_f1": 1.0,
+          "text_similarity": 1.0
+        }
+      },
+      "fixture_id": "mixed-routing",
+      "page_tier_accuracy": [
+        {
+          "layer_combo": "L1",
+          "pages_below_expected_tier": 0
+        },
+        {
+          "layer_combo": "L1+L2",
+          "pages_below_expected_tier": 0
+        },
+        {
+          "layer_combo": "L1+L2+L3",
+          "pages_below_expected_tier": 0
+        }
+      ]
+    },
+    {
+      "by_tier": {
+        "fast": {
+          "cost_per_page": 0.001,
+          "headings_f1": 1.0,
+          "reading_order": 0.3,
+          "recall_at_k": 0.0,
+          "s_per_page": 0.8,
+          "table_cell_f1": 1.0,
+          "text_similarity": 0.3769230769230769
+        },
+        "structured_full": {
+          "cost_per_page": 0.001,
+          "headings_f1": 1.0,
+          "reading_order": 0.3,
+          "recall_at_k": 0.0,
+          "s_per_page": 0.8,
+          "table_cell_f1": 1.0,
+          "text_similarity": 0.3769230769230769
+        },
+        "structured_layout": {
+          "cost_per_page": 0.001,
+          "headings_f1": 1.0,
+          "reading_order": 0.3,
+          "recall_at_k": 0.0,
+          "s_per_page": 0.8,
+          "table_cell_f1": 1.0,
+          "text_similarity": 0.3769230769230769
+        },
+        "structured_ocr": {
+          "cost_per_page": 0.001,
+          "headings_f1": 1.0,
+          "reading_order": 0.3,
+          "recall_at_k": 0.0,
+          "s_per_page": 0.8,
+          "table_cell_f1": 1.0,
+          "text_similarity": 0.3769230769230769
+        }
+      },
+      "fixture_id": "multi-column-en",
+      "page_tier_accuracy": [
+        {
+          "layer_combo": "L1",
+          "pages_below_expected_tier": 0
+        },
+        {
+          "layer_combo": "L1+L2",
+          "pages_below_expected_tier": 0
+        },
+        {
+          "layer_combo": "L1+L2+L3",
+          "pages_below_expected_tier": 0
+        }
+      ]
+    },
+    {
+      "by_tier": {
+        "fast": {
+          "cost_per_page": 0.001,
+          "headings_f1": 0.0,
+          "reading_order": 0.0,
+          "recall_at_k": 0.0,
+          "s_per_page": 0.8,
+          "table_cell_f1": 1.0,
+          "text_similarity": 0.0
+        },
+        "premium": {
+          "cost_per_page": 0.004,
+          "headings_f1": 0.0,
+          "reading_order": 1.0,
+          "recall_at_k": 0.0,
+          "s_per_page": 5.0,
+          "table_cell_f1": 1.0,
+          "text_similarity": 1.0
+        },
+        "structured_full": {
+          "cost_per_page": 0.001,
+          "headings_f1": 1.0,
+          "reading_order": 1.0,
+          "recall_at_k": 0.0,
+          "s_per_page": 0.8,
+          "table_cell_f1": 1.0,
+          "text_similarity": 1.0
+        },
+        "structured_layout": {
+          "cost_per_page": 0.001,
+          "headings_f1": 1.0,
+          "reading_order": 1.0,
+          "recall_at_k": 0.0,
+          "s_per_page": 0.8,
+          "table_cell_f1": 1.0,
+          "text_similarity": 1.0
+        },
+        "structured_ocr": {
+          "cost_per_page": 0.001,
+          "headings_f1": 1.0,
+          "reading_order": 1.0,
+          "recall_at_k": 0.0,
+          "s_per_page": 0.8,
+          "table_cell_f1": 1.0,
+          "text_similarity": 1.0
+        }
+      },
+      "fixture_id": "scan-en",
+      "page_tier_accuracy": [
+        {
+          "layer_combo": "L1",
+          "pages_below_expected_tier": 0
+        },
+        {
+          "layer_combo": "L1+L2",
+          "pages_below_expected_tier": 0
+        },
+        {
+          "layer_combo": "L1+L2+L3",
+          "pages_below_expected_tier": 0
+        }
+      ]
+    },
+    {
+      "by_tier": {
+        "fast": {
+          "cost_per_page": 0.001,
+          "headings_f1": 0.0,
+          "reading_order": 0.0,
+          "recall_at_k": 0.0,
+          "s_per_page": 0.8,
+          "table_cell_f1": 1.0,
+          "text_similarity": 0.0
+        },
+        "premium": {
+          "cost_per_page": 0.004,
+          "headings_f1": 0.0,
+          "reading_order": 1.0,
+          "recall_at_k": 0.0,
+          "s_per_page": 5.0,
+          "table_cell_f1": 1.0,
+          "text_similarity": 1.0
+        },
+        "structured_full": {
+          "cost_per_page": 0.001,
+          "headings_f1": 1.0,
+          "reading_order": 1.0,
+          "recall_at_k": 0.0,
+          "s_per_page": 0.8,
+          "table_cell_f1": 1.0,
+          "text_similarity": 1.0
+        },
+        "structured_layout": {
+          "cost_per_page": 0.001,
+          "headings_f1": 1.0,
+          "reading_order": 1.0,
+          "recall_at_k": 0.0,
+          "s_per_page": 0.8,
+          "table_cell_f1": 1.0,
+          "text_similarity": 1.0
+        },
+        "structured_ocr": {
+          "cost_per_page": 0.001,
+          "headings_f1": 1.0,
+          "reading_order": 1.0,
+          "recall_at_k": 0.0,
+          "s_per_page": 0.8,
+          "table_cell_f1": 1.0,
+          "text_similarity": 1.0
+        }
+      },
+      "fixture_id": "scan-it",
+      "page_tier_accuracy": [
+        {
+          "layer_combo": "L1",
+          "pages_below_expected_tier": 0
+        },
+        {
+          "layer_combo": "L1+L2",
+          "pages_below_expected_tier": 0
+        },
+        {
+          "layer_combo": "L1+L2+L3",
+          "pages_below_expected_tier": 0
+        }
+      ]
+    },
+    {
+      "by_tier": {
+        "fast": {
+          "cost_per_page": 0.001,
+          "headings_f1": 0.0,
+          "reading_order": 0.0,
+          "recall_at_k": 0.0,
+          "s_per_page": 0.8,
+          "table_cell_f1": 1.0,
+          "text_similarity": 0.0
+        },
+        "premium": {
+          "cost_per_page": 0.004,
+          "headings_f1": 0.0,
+          "reading_order": 1.0,
+          "recall_at_k": 0.0,
+          "s_per_page": 5.0,
+          "table_cell_f1": 1.0,
+          "text_similarity": 1.0
+        },
+        "structured_full": {
+          "cost_per_page": 0.001,
+          "headings_f1": 1.0,
+          "reading_order": 1.0,
+          "recall_at_k": 0.0,
+          "s_per_page": 0.8,
+          "table_cell_f1": 1.0,
+          "text_similarity": 1.0
+        },
+        "structured_layout": {
+          "cost_per_page": 0.001,
+          "headings_f1": 1.0,
+          "reading_order": 1.0,
+          "recall_at_k": 0.0,
+          "s_per_page": 0.8,
+          "table_cell_f1": 1.0,
+          "text_similarity": 1.0
+        },
+        "structured_ocr": {
+          "cost_per_page": 0.001,
+          "headings_f1": 1.0,
+          "reading_order": 1.0,
+          "recall_at_k": 0.0,
+          "s_per_page": 0.8,
+          "table_cell_f1": 1.0,
+          "text_similarity": 1.0
+        }
+      },
+      "fixture_id": "scan-zh",
+      "page_tier_accuracy": [
+        {
+          "layer_combo": "L1",
+          "pages_below_expected_tier": 0
+        },
+        {
+          "layer_combo": "L1+L2",
+          "pages_below_expected_tier": 0
+        },
+        {
+          "layer_combo": "L1+L2+L3",
+          "pages_below_expected_tier": 0
+        }
+      ]
+    },
+    {
+      "by_tier": {
+        "fast": {
+          "cost_per_page": 0.001,
+          "headings_f1": 1.0,
+          "reading_order": 1.0,
+          "recall_at_k": 0.0,
+          "s_per_page": 0.8,
+          "table_cell_f1": 0.0,
+          "text_similarity": 1.0
+        },
+        "structured_full": {
+          "cost_per_page": 0.001,
+          "headings_f1": 1.0,
+          "reading_order": 1.0,
+          "recall_at_k": 0.0,
+          "s_per_page": 0.8,
+          "table_cell_f1": 1.0,
+          "text_similarity": 1.0
+        },
+        "structured_layout": {
+          "cost_per_page": 0.001,
+          "headings_f1": 1.0,
+          "reading_order": 1.0,
+          "recall_at_k": 0.0,
+          "s_per_page": 0.8,
+          "table_cell_f1": 0.0,
+          "text_similarity": 1.0
+        },
+        "structured_ocr": {
+          "cost_per_page": 0.001,
+          "headings_f1": 1.0,
+          "reading_order": 1.0,
+          "recall_at_k": 0.0,
+          "s_per_page": 0.8,
+          "table_cell_f1": 1.0,
+          "text_similarity": 1.0
+        }
+      },
+      "fixture_id": "table-en",
+      "page_tier_accuracy": [
+        {
+          "layer_combo": "L1",
+          "pages_below_expected_tier": 0
+        },
+        {
+          "layer_combo": "L1+L2",
+          "pages_below_expected_tier": 0
+        },
+        {
+          "layer_combo": "L1+L2+L3",
+          "pages_below_expected_tier": 0
+        }
+      ]
+    }
+  ],
+  "page_tier": [
+    {
+      "above_expected_tier": 0,
+      "below_expected": [],
+      "layer_combo": "L1",
+      "pages": 26,
+      "preset_accuracy": 1.0,
+      "preset_correct": 26,
+      "tier_accuracy": 1.0,
+      "tier_correct": 26
+    },
+    {
+      "above_expected_tier": 0,
+      "below_expected": [],
+      "layer_combo": "L1+L2",
+      "pages": 26,
+      "preset_accuracy": 1.0,
+      "preset_correct": 26,
+      "tier_accuracy": 1.0,
+      "tier_correct": 26
+    },
+    {
+      "above_expected_tier": 0,
+      "below_expected": [],
+      "layer_combo": "L1+L2+L3",
+      "pages": 26,
+      "preset_accuracy": 1.0,
+      "preset_correct": 26,
+      "tier_accuracy": 1.0,
+      "tier_correct": 26
+    }
+  ],
+  "recall_at_k_measured": false,
+  "routing_config_version": "1",
+  "routing_probe_version": "2026.1",
+  "tiers": [
+    {
+      "cost_as_of": "2026-01-01",
+      "cost_source": "assumed until measured",
+      "cost_tier": "fast",
+      "fixtures": [
+        "cross-boundary",
+        "digital-text",
+        "invoice-en",
+        "mixed-routing",
+        "multi-column-en",
+        "scan-en",
+        "scan-it",
+        "scan-zh",
+        "table-en"
+      ],
+      "pages": 26,
+      "tier": "fast"
+    },
+    {
+      "cost_as_of": "2026-01-01",
+      "cost_source": "assumed until measured",
+      "cost_tier": "structured",
+      "fixtures": [
+        "cross-boundary",
+        "digital-text",
+        "invoice-en",
+        "mixed-routing",
+        "multi-column-en",
+        "scan-en",
+        "scan-it",
+        "scan-zh",
+        "table-en"
+      ],
+      "pages": 26,
+      "tier": "structured_layout"
+    },
+    {
+      "cost_as_of": "2026-01-01",
+      "cost_source": "assumed until measured",
+      "cost_tier": "structured",
+      "fixtures": [
+        "cross-boundary",
+        "digital-text",
+        "invoice-en",
+        "mixed-routing",
+        "multi-column-en",
+        "scan-en",
+        "scan-it",
+        "scan-zh",
+        "table-en"
+      ],
+      "pages": 26,
+      "tier": "structured_full"
+    },
+    {
+      "cost_as_of": "2026-01-01",
+      "cost_source": "assumed until measured",
+      "cost_tier": "structured",
+      "fixtures": [
+        "cross-boundary",
+        "digital-text",
+        "invoice-en",
+        "mixed-routing",
+        "multi-column-en",
+        "scan-en",
+        "scan-it",
+        "scan-zh",
+        "table-en"
+      ],
+      "pages": 26,
+      "tier": "structured_ocr"
+    },
+    {
+      "cost_as_of": "2026-01-01",
+      "cost_source": "https://developers.llamaindex.ai",
+      "cost_tier": "premium",
+      "fixtures": [
+        "invoice-en",
+        "scan-en",
+        "scan-it",
+        "scan-zh"
+      ],
+      "pages": 4,
+      "tier": "premium"
+    }
+  ]
+}
