@@ -4,6 +4,7 @@ import type { TraceCollector } from '../trace/collector';
 import type { IngestConfig } from './config';
 import type { IngestDeps } from './deps';
 import type { DocType, ProcessingProfile } from './profiles/load';
+import type { StateStore } from './state-store';
 import type { IngestWriter } from './writer';
 
 export type { DocType, ProcessingProfile };
@@ -209,6 +210,8 @@ export interface StageContext {
   /** Absolute time in deps.now() units by which the request must have returned. */
   readonly deadline: number;
   readonly state: IngestState;
+  /** Where the resumable state is kept. Unset: the document row, as every inline run does. A queued job uses the ledger (D-01). */
+  readonly store?: StateStore;
   readonly warnings: string[];
   identity: IngestIdentity | null;
   document: IngestDocumentRef | null;
