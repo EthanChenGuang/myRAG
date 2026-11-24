@@ -92,3 +92,16 @@ node --import tsx --test tests/rag-db/search-rpc-grants-pglite.test.mts
 npx vitest run tests/rag/search-rpc-grants.test.ts   # 1 fail until sec-rpc-2
 node scripts/ci/check-rag-boundary.mjs
 ```
+
+## Plan 03.1-55 (exec/03.1-55 → claude/ecstatic-hamilton-86gtwv)
+
+**Status:** complete (automated)
+
+| Item | Detail |
+|------|--------|
+| Branch | `exec/03.1-55` |
+| Commits | `34888dc5` (callback route vitest), `2a134fb2` (wake.ts), `c3a56a75` (logger signature) |
+| Artifacts | `tests/rag/ingest/internal-callbacks.test.ts`, `src/lib/rag/ingest/wake.ts`, `tests/rag/ingest/wake.test.ts` |
+| Gates | Plan vitest **19/19**; `tsc` OK; boundary/workflows/config OK; full vitest **5** pre-existing fails on trunk |
+
+SUMMARY: `.planning/phases/03.1-tiered-parsing-incremental-queue-bulk-backfill/03.1-55-SUMMARY.md`
