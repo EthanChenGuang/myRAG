@@ -4,10 +4,13 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createCohereReranker } from '@/lib/rag/rerank/cohere';
 import { RerankError } from '@/lib/rag/rerank/scores';
+import { createVoyageReranker } from '@/lib/rag/rerank/voyage';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURES = path.join(HERE, '../../fixtures/rerank');
 const COHERE_KEY = 'test-cohere-key-placeholder-0123456789';
+const VOYAGE_KEY = 'test-voyage-key-placeholder-0123456789';
+const VOYAGE_BASE = 'https://api.voyageai.com/v1';
 
 function readFixture(name: string): unknown {
   return JSON.parse(fs.readFileSync(path.join(FIXTURES, name), 'utf8'));
@@ -186,5 +189,88 @@ describe('Cohere rerank adapter', () => {
       signal: signal(),
     });
     expect(fetchFn.calls[0].url).toBe('https://api.cohere.com/v2/rerank');
+  });
+});
+
+function voyageReranker(
+  fetchFn: RecordedFetch,
+  opts: { apiKey?: string; baseUrl?: string; model?: string } = {},
+) {
+  return createVoyageReranker({
+    fetch: fetchFn,
+    apiKey: opts.apiKey ?? VOYAGE_KEY,
+    baseUrl: opts.baseUrl ?? VOYAGE_BASE,
+    model: opts.model ?? 'rerank-3',
+  });
+}
+
+describe('Voyage rerank adapter', () => {
+  it('parses HTTP data[] and reports usage.total_tokens', async () => {
+    const body = readFixture('voyage-basic.json');
+    const fetchFn = recordingFetch(async () =>
+      new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } }),
+    );
+    const docs = ['fixture doc one', 'fixture doc two', 'fixture doc three'];
+    const out = await voyageReranker(fetchFn).rerank('fixture query', docs, { signal: signal() });
+    expect(out.scores.map((s) => s.index)).toEqual([0, 1, 2]);
+    expect(out.scores.map((s) => s.score)).toEqual([0.62, 0.87, 0.11]);
+    expect(out.usage).toEqual({ total_tokens: 42 });
+  });
+
+  it('POSTs truncation and return_documents with no top_k', async () => {
+    const fetchFn = recordingFetch(async () =>
+      new Response(JSON.stringify(readFixture('voyage-basic.json')), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    const docs = ['fixture doc one', 'fixture doc two', 'fixture doc three'];
+    await voyageReranker(fetchFn).rerank('fixture query', docs, { signal: signal() });
+    expect(fetchFn.calls[0].url).toBe(`${VOYAGE_BASE}/rerank`);
+    const reqBody = JSON.parse(String(fetchFn.calls[0].init.body));
+    expect(reqBody).toMatchObject({
+      model: 'rerank-3',
+      query: 'fixture query',
+      documents: docs,
+      truncation: true,
+      return_documents: false,
+    });
+    expect(reqBody).not.toHaveProperty('top_k');
+    expect((fetchFn.calls[0].init.headers as Record<string, string>).authorization).toBe(`Bearer ${VOYAGE_KEY}`);
+  });
+
+  it('maps 422 to RerankError without leaking detail', async () => {
+    const body = readFixture('voyage-422.json');
+    const fetchFn = recordingFetch(async () =>
+      new Response(JSON.stringify(body), { status: 422, headers: { 'content-type': 'application/json' } }),
+    );
+    let caught: unknown;
+    try {
+      await voyageReranker(fetchFn).rerank('q', ['fixture doc one'], { signal: signal() });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(RerankError);
+    const err = caught as RerankError;
+    expect(err.provider).toBe('voyage');
+    expect(err.status).toBe(422);
+    expect(err.message).toBe('[RAG Rerank] voyage failed (422)');
+    expect(err.message).not.toContain('validation');
+    expect(err.message).not.toContain(VOYAGE_KEY);
+  });
+
+  it('rejects SDK results shape without data[]', async () => {
+    const fetchFn = recordingFetch(async () =>
+      new Response(
+        JSON.stringify({
+          results: [{ index: 0, relevance_score: 0.5 }],
+        }),
+        { status: 200,
+        headers: { 'content-type': 'application/json' } },
+      ),
+    );
+    await expect(voyageReranker(fetchFn).rerank('q', ['fixture doc one'], { signal: signal() })).rejects.toThrow(
+      /SDK results shape/,
+    );
   });
 });
