@@ -20,7 +20,7 @@ interface Unit {
   tableHeader?: string;
 }
 
-interface Section {
+export interface Section {
   path: string[];
   lines: string[];
 }
@@ -30,17 +30,17 @@ interface PackedChunk {
   newStart: number;
 }
 
-const HEADING = /^ {0,3}(#{1,6})[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*$/;
-const FENCE = /^ {0,3}(```|~~~)/;
+export const HEADING = /^ {0,3}(#{1,6})[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*$/;
+export const FENCE = /^ {0,3}(```|~~~)/;
 const LIST_ITEM = /^ {0,6}(?:[-*+]|\d{1,9}[.)])[ \t]+\S/;
 const TABLE_SEPARATOR = /^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)*\|?\s*$/;
-const SENTENCE_END = /(?<=[.!?;。！？；])\s+|(?<=[。！？；])/u;
-const CJK_SENTENCE_END = /[。！？；]$/u;
+export const SENTENCE_END = /(?<=[.!?;。！？；])\s+|(?<=[。！？；])/u;
+export const CJK_SENTENCE_END = /[。！？；]$/u;
 const MAX_ATOMIC_TOKENS = 4000;
 
 const isTableRow = (line: string): boolean => line.trim().startsWith('|');
 
-function splitSections(markdown: string): Section[] {
+export function splitSections(markdown: string): Section[] {
   const sections: Section[] = [{ path: [], lines: [] }];
   const stack: Array<{ level: number; title: string }> = [];
   let fence: string | null = null;
@@ -140,7 +140,7 @@ function toUnits(lines: string[]): Unit[] {
   return units;
 }
 
-function hardSplit(text: string, budget: number): string[] {
+export function hardSplit(text: string, budget: number): string[] {
   const pieces: string[] = [];
   let rest = text;
   while (rest !== '') {
@@ -157,111 +157,114 @@ function hardSplit(text: string, budget: number): string[] {
 
 export function chunkMarkdownSections(markdown: string, options: MarkdownChunkOptions): ChunkDraft[] {
   const drafts: ChunkDraft[] = [];
+  for (const section of splitSections(markdown)) drafts.push(...chunkSection(section.path, section.lines, options));
+  return drafts;
+}
 
-  for (const section of splitSections(markdown)) {
-    const units = toUnits(section.lines);
-    if (units.length === 0) continue;
-    const path = section.path;
-    const prefixTokens = countTokens(buildEmbeddingText({ section_path: path, content: '' }));
-    const contentBudget = Math.max(1, options.maxTokens - prefixTokens);
+/** Chunks the body lines of one section under a fixed section path. */
+export function chunkSection(path: string[], lines: string[], options: MarkdownChunkOptions): ChunkDraft[] {
+  const drafts: ChunkDraft[] = [];
+  const units = toUnits(lines);
+  if (units.length === 0) return drafts;
+  const prefixTokens = countTokens(buildEmbeddingText({ section_path: path, content: '' }));
+  const contentBudget = Math.max(1, options.maxTokens - prefixTokens);
 
-    const render = (list: Unit[]): string => {
-      let out = '';
-      list.forEach((unit, index) => {
-        out += index === 0 ? unit.text : `${unit.sep}${unit.text}`;
-      });
-      const first = list[0];
-      if (options.repeatTableHeader && first?.tableHeader !== undefined && !first.text.startsWith(first.tableHeader)) {
-        out = `${first.tableHeader}\n${out}`;
-      }
-      return out;
+  const render = (list: Unit[]): string => {
+    let out = '';
+    list.forEach((unit, index) => {
+      out += index === 0 ? unit.text : `${unit.sep}${unit.text}`;
+    });
+    const first = list[0];
+    if (options.repeatTableHeader && first?.tableHeader !== undefined && !first.text.startsWith(first.tableHeader)) {
+      out = `${first.tableHeader}\n${out}`;
+    }
+    return out;
+  };
+  const fits = (list: Unit[]): boolean =>
+    countTokens(buildEmbeddingText({ section_path: path, content: render(list) })) <= options.maxTokens;
+
+  const expand = (unit: Unit): Unit[] => {
+    if (fits([unit])) return [unit];
+    const tokens = countTokens(unit.text);
+    if ((unit.kind === 'list' || unit.kind === 'row') && tokens <= MAX_ATOMIC_TOKENS) return [unit];
+    const parts =
+      unit.kind === 'fence'
+        ? unit.text.split('\n')
+        : unit.kind === 'paragraph'
+          ? unit.text.split(SENTENCE_END).filter((part) => part !== '')
+          : [unit.text];
+    const joinerAfter = (previous: string): string =>
+      unit.kind === 'fence' ? '\n' : CJK_SENTENCE_END.test(previous) ? '' : ' ';
+    const pieces: Unit[] = [];
+    let current = '';
+    const flush = (): void => {
+      if (current !== '') pieces.push({ text: current, kind: unit.kind, sep: pieces.length === 0 ? unit.sep : joinerAfter(pieces[pieces.length - 1]?.text ?? '') });
+      current = '';
     };
-    const fits = (list: Unit[]): boolean =>
-      countTokens(buildEmbeddingText({ section_path: path, content: render(list) })) <= options.maxTokens;
-
-    const expand = (unit: Unit): Unit[] => {
-      if (fits([unit])) return [unit];
-      const tokens = countTokens(unit.text);
-      if ((unit.kind === 'list' || unit.kind === 'row') && tokens <= MAX_ATOMIC_TOKENS) return [unit];
-      const parts =
-        unit.kind === 'fence'
-          ? unit.text.split('\n')
-          : unit.kind === 'paragraph'
-            ? unit.text.split(SENTENCE_END).filter((part) => part !== '')
-            : [unit.text];
-      const joinerAfter = (previous: string): string =>
-        unit.kind === 'fence' ? '\n' : CJK_SENTENCE_END.test(previous) ? '' : ' ';
-      const pieces: Unit[] = [];
-      let current = '';
-      const flush = (): void => {
-        if (current !== '') pieces.push({ text: current, kind: unit.kind, sep: pieces.length === 0 ? unit.sep : joinerAfter(pieces[pieces.length - 1]?.text ?? '') });
-        current = '';
-      };
-      for (const part of parts) {
-        const candidate = current === '' ? part : `${current}${joinerAfter(current)}${part}`;
-        if (countTokens(candidate) <= contentBudget) {
-          current = candidate;
-          continue;
-        }
-        flush();
-        if (countTokens(part) <= contentBudget) current = part;
-        else for (const piece of hardSplit(part, contentBudget)) pieces.push({ text: piece, kind: unit.kind, sep: pieces.length === 0 ? unit.sep : '' });
+    for (const part of parts) {
+      const candidate = current === '' ? part : `${current}${joinerAfter(current)}${part}`;
+      if (countTokens(candidate) <= contentBudget) {
+        current = candidate;
+        continue;
       }
       flush();
-      return pieces;
-    };
-
-    const packed: PackedChunk[] = [];
-    let current: Unit[] = [];
-    let newStart = 0;
-    for (const unit of units.flatMap(expand)) {
-      if (current.length === 0) {
-        current = [unit];
-        newStart = 0;
-        continue;
-      }
-      if (fits([...current, unit])) {
-        current.push(unit);
-        continue;
-      }
-      packed.push({ units: current, newStart });
-      let overlap: Unit[] = [];
-      if (options.overlapTokens > 0) {
-        for (let k = current.length - 1; k > newStart - 1 && k >= 0; k -= 1) {
-          const candidate = current.slice(k);
-          if (countTokens(render(candidate)) > options.overlapTokens) break;
-          overlap = candidate;
-        }
-        if (overlap.length === current.length) overlap = overlap.slice(1);
-      }
-      if (overlap.length > 0 && !fits([...overlap, unit])) overlap = [];
-      current = [...overlap, unit];
-      newStart = overlap.length;
+      if (countTokens(part) <= contentBudget) current = part;
+      else for (const piece of hardSplit(part, contentBudget)) pieces.push({ text: piece, kind: unit.kind, sep: pieces.length === 0 ? unit.sep : '' });
     }
-    if (current.length > 0) packed.push({ units: current, newStart });
+    flush();
+    return pieces;
+  };
 
-    const last = packed[packed.length - 1];
-    const before = packed[packed.length - 2];
-    if (last && before && countTokens(render(last.units.slice(last.newStart))) < options.minChunkTokens) {
-      const merged = [...before.units, ...last.units.slice(last.newStart)];
-      if (fits(merged)) {
-        packed.splice(packed.length - 2, 2, { units: merged, newStart: before.newStart });
+  const packed: PackedChunk[] = [];
+  let current: Unit[] = [];
+  let newStart = 0;
+  for (const unit of units.flatMap(expand)) {
+    if (current.length === 0) {
+      current = [unit];
+      newStart = 0;
+      continue;
+    }
+    if (fits([...current, unit])) {
+      current.push(unit);
+      continue;
+    }
+    packed.push({ units: current, newStart });
+    let overlap: Unit[] = [];
+    if (options.overlapTokens > 0) {
+      for (let k = current.length - 1; k > newStart - 1 && k >= 0; k -= 1) {
+        const candidate = current.slice(k);
+        if (countTokens(render(candidate)) > options.overlapTokens) break;
+        overlap = candidate;
       }
+      if (overlap.length === current.length) overlap = overlap.slice(1);
     }
+    if (overlap.length > 0 && !fits([...overlap, unit])) overlap = [];
+    current = [...overlap, unit];
+    newStart = overlap.length;
+  }
+  if (current.length > 0) packed.push({ units: current, newStart });
 
-    for (const chunk of packed) {
-      const content = render(chunk.units).trim();
-      if (content === '') continue;
-      const added = chunk.units.slice(chunk.newStart);
-      drafts.push({
-        content,
-        section_path: path.slice(),
-        chunk_kind: added.length > 0 && added.every((unit) => unit.kind === 'row') ? 'table' : 'text',
-        page_start: null,
-        page_end: null,
-        metadata: {},
-      });
+  const last = packed[packed.length - 1];
+  const before = packed[packed.length - 2];
+  if (last && before && countTokens(render(last.units.slice(last.newStart))) < options.minChunkTokens) {
+    const merged = [...before.units, ...last.units.slice(last.newStart)];
+    if (fits(merged)) {
+      packed.splice(packed.length - 2, 2, { units: merged, newStart: before.newStart });
     }
+  }
+
+  for (const chunk of packed) {
+    const content = render(chunk.units).trim();
+    if (content === '') continue;
+    const added = chunk.units.slice(chunk.newStart);
+    drafts.push({
+      content,
+      section_path: path.slice(),
+      chunk_kind: added.length > 0 && added.every((unit) => unit.kind === 'row') ? 'table' : 'text',
+      page_start: null,
+      page_end: null,
+      metadata: {},
+    });
   }
   return drafts;
 }

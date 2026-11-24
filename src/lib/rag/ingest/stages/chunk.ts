@@ -1,34 +1,24 @@
-import { chunkMarkdownSections } from '../chunkers/markdown-sections';
-import type { ProcessingProfile } from '../profiles/load';
-import {
-  requireIdentity,
-  type ChunkDraft,
-  type StageContext,
-  type StageOutcome,
-  type StageSpec,
-} from '../types';
-
-type ChunkerKind = ProcessingProfile['chunker']['kind'];
-type Chunker = (text: string, profile: ProcessingProfile) => ChunkDraft[];
-
-/** Chunkers by profile chunker kind; plans that add a chunker register it here. */
-const CHUNKERS: Partial<Record<ChunkerKind, Chunker>> = {
-  markdown_sections: (text, profile) =>
-    chunkMarkdownSections(text, {
-      maxTokens: profile.chunker.max_tokens,
-      overlapTokens: profile.chunker.overlap_tokens,
-      minChunkTokens: profile.chunker.min_chunk_tokens,
-      repeatTableHeader: profile.chunker.repeat_table_header,
-    }),
-};
+import { ChunkerUnavailableError, chunkDocument } from '../chunkers';
+import { requireIdentity, type StageContext, type StageOutcome, type StageSpec } from '../types';
 
 async function run(ctx: StageContext): Promise<StageOutcome> {
   const identity = requireIdentity(ctx, 'chunk');
-  const kind = identity.profile.chunker.kind;
-  const chunker = CHUNKERS[kind];
-  if (!chunker) ctx.warnings.push(`chunker_fallback:${kind}`);
 
-  const drafts = (chunker ?? CHUNKERS.markdown_sections)?.(ctx.work.parseText ?? '', identity.profile) ?? [];
+  let result;
+  try {
+    result = chunkDocument(identity.profile.chunker, {
+      markdown: ctx.work.parseText ?? '',
+      chunks: ctx.work.parseChunks ?? null,
+    });
+  } catch (error) {
+    if (error instanceof ChunkerUnavailableError) return { kind: 'fail', reason: 'chunker_unavailable' };
+    throw error;
+  }
+
+  const { chunks: drafts, warnings } = result;
+  for (const warning of warnings) {
+    if (!ctx.warnings.includes(warning)) ctx.warnings.push(warning);
+  }
   if (drafts.length === 0) return { kind: 'fail', reason: 'no_chunks' };
 
   drafts.forEach((draft, index) => {
