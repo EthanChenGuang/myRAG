@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadCorpus } from '../eval/harness/corpus.mts';
 import { EMBEDDER_ID, EMBEDDER_VERSION, embedText, embedderSourceSha256 } from '../eval/harness/fixture-embedder.mts';
+import { LEXICAL_VERSION } from '@/lib/rag/lexical/chunk-text';
 import { FIXTURE_USER_ID, createFixtureDatabase } from '../eval/harness/pglite-supabase.mts';
 import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from '../eval/harness/fake-edge.mts';
 import { TWO_TENANT_IDS, createTwoTenantDatabase, type TwoTenantDatabase } from '../eval/harness/two-tenant.mts';
@@ -14,6 +15,7 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 const REAL_CORPUS = path.join(REPO_ROOT, 'eval/fixtures/corpus');
 const TRACER_QUESTION = 'What is the refund window for annual plans?';
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const fixtureSqlKeys = (setupSql: string) => [setupSql, `lexical_version:${LEXICAL_VERSION}`];
 
 function makeTempCorpus(files: Record<string, string>): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fixture-corpus-'));
@@ -144,7 +146,7 @@ describe('fixture database loaded with the repo SQL', () => {
   test('single-tenant: loads supabase/single-tenant-setup.sql and inserts every corpus chunk', async () => {
     const single = await getSingle();
     const sql = fs.readFileSync(path.join(REPO_ROOT, 'supabase/single-tenant-setup.sql'));
-    assert.deepEqual(Object.keys(single.sqlSha256), ['supabase/single-tenant-setup.sql']);
+    assert.deepEqual(Object.keys(single.sqlSha256).sort(), fixtureSqlKeys('supabase/single-tenant-setup.sql').sort());
     assert.equal(single.corpusSha256, loadCorpus(REAL_CORPUS).corpusSha256);
     assert.match(single.sqlSha256['supabase/single-tenant-setup.sql'], /^[0-9a-f]{64}$/);
     assert.ok(sql.length > 0);
@@ -162,7 +164,7 @@ describe('fixture database loaded with the repo SQL', () => {
 
   test('multi-tenant: loads multi-tenant-setup.sql and sets documents.user_id to FIXTURE_USER_ID', async () => {
     const multi = await getMulti();
-    assert.deepEqual(Object.keys(multi.sqlSha256), ['supabase/multi-tenant-setup.sql']);
+    assert.deepEqual(Object.keys(multi.sqlSha256).sort(), fixtureSqlKeys('supabase/multi-tenant-setup.sql').sort());
     assert.equal(multi.fixtureUserId, FIXTURE_USER_ID);
     const owners = await multi.db.query<{ user_id: string }>('SELECT DISTINCT user_id FROM documents');
     assert.deepEqual(owners.rows.map((r) => r.user_id), [FIXTURE_USER_ID]);
