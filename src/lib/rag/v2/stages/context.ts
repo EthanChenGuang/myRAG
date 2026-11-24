@@ -1,17 +1,26 @@
 import {
   buildContext,
   filterCandidates,
+  IMAGE_EXTENSIONS,
   type AssembleInput,
   type AssembleOutput,
   type AssemblyDocumentRow,
 } from '../../context/assemble';
+import { selectWithinBudget, type BudgetCandidate } from '../../context/budget';
+import { edgeOrder } from '../../context/edge-order';
 import type { AssemblyRows } from '../../context/fetch-rows';
+import { mergeAdjacent, type AdjacentChunk } from '../../context/merge-adjacent';
 import type { FusedHit } from '../../fusion/rrf';
 import type { RagConfig, StageName } from '../../config';
 import { runStage, stageSpec, type StageSpec } from '../../pipeline';
 import type { TraceCollector } from '../../trace/collector';
-import type { Candidate, Profile, ReferencedState, RunRetrievalInput, StageOverrides } from '../../types';
+import type { Candidate, KeptBy, Profile, ReferencedState, RunRetrievalInput, StageOverrides } from '../../types';
+import { v2ProfileSettings } from '../profiles';
 import type { RetrievalParams } from '@/lib/rag-eval/contracts.generated';
+
+export interface ContextRerankInput {
+  ran: boolean;
+}
 
 export interface ContextStagesInput {
   input: RunRetrievalInput;
@@ -23,6 +32,7 @@ export interface ContextStagesInput {
   signal: AbortSignal;
   collector: TraceCollector;
   stageOverrides?: StageOverrides;
+  rerank?: ContextRerankInput;
 }
 
 export interface ContextStagesOutput {
@@ -69,42 +79,131 @@ function fusedToCandidate(row: FusedHit): Candidate {
   };
 }
 
+function isImageFilename(filename: string): boolean {
+  const lower = filename.toLowerCase();
+  return IMAGE_EXTENSIONS.some((ext) => lower.endsWith(ext));
+}
+
+/** A null chunk index never touches a neighbour: each gets its own far-off slot. */
+function chunkIndexOf(hit: FusedHit['hit'], rank: number): number {
+  return hit.chunkIndex ?? -1_000_000 - rank * 2;
+}
+
+interface AssembleStageValue {
+  output: AssembleOutput<Candidate>;
+  selected: Candidate[];
+  groupOrder: string[];
+  budgetTokens: number;
+  usedTokens: number;
+  groups: number;
+}
+
 export async function runContextStages(ctx: ContextStagesInput): Promise<ContextStagesOutput> {
-  const { input, config, profile, params, fusedHits, referenced, signal, collector, stageOverrides } = ctx;
+  const { input, config, profile, params, fusedHits, referenced, signal, collector, stageOverrides, rerank } = ctx;
   const spec = (name: StageName, onFail: StageSpec['onFail']) => stageSpec(config, profile, name, onFail, stageOverrides);
+  const settings = v2ProfileSettings(profile, config);
   const topHits = fusedHits.slice(0, params.final_top_k);
   const candidates = topHits.map(fusedToCandidate);
   const rows = assemblyRowsFromHits(topHits);
+  const hitById = new Map(topHits.map((row) => [row.hit.chunkId, row.hit]));
+  const rankById = new Map(candidates.map((candidate, index) => [candidate.chunk_id, index + 1]));
+  const keptBy: KeptBy = rerank?.ran ? 'rerank' : 'fused';
+  const isGPTModel = input.options?.isGPTModel ?? false;
 
-  const assemblyInput = (): AssembleInput<Candidate> => ({
+  const assemblyInput = (list: Candidate[], groupOrder: string[]): AssembleInput<Candidate> => ({
     queryText: input.query,
-    candidates,
+    candidates: list,
     documents: rows.documents,
     chunkMetadata: rows.chunkMetadata,
     referenced,
-    isGPTModel: input.options?.isGPTModel ?? false,
+    isGPTModel,
     ragMode: input.options?.ragMode ?? 'strict',
     webSearchEnabled: input.options?.webSearchEnabled ?? false,
     applyRelevanceFilter: false,
-    keptByOverride: 'fused',
+    groupOrder,
+    keptByOverride: keptBy,
   });
+
+  const render = (list: Candidate[], groupOrder: string[]): AssembleOutput<Candidate> => {
+    const rendered = assemblyInput(list, groupOrder);
+    return buildContext(filterCandidates(rendered), rendered);
+  };
+
+  const filenameOf = (documentId: string) => rows.documents.get(documentId)?.filename ?? 'Unknown Document';
 
   const assembled = await runStage(
     spec('assemble', 'skip'),
     signal,
-    () => {
-      const filtered = filterCandidates(assemblyInput());
-      return buildContext(filtered, assemblyInput());
+    (): AssembleStageValue => {
+      const budgetInput: BudgetCandidate[] = candidates.map((candidate, index) => ({
+        rank: index + 1,
+        chunk_id: candidate.chunk_id,
+        document_id: candidate.document_id,
+        document_filename: filenameOf(candidate.document_id),
+        content: candidate.content,
+      }));
+      const selection = selectWithinBudget(
+        budgetInput,
+        settings.tokenBudget,
+        (candidate, { addsDocumentHeader }) => {
+          const header = addsDocumentHeader ? `\n--- Document: ${candidate.document_filename} (1 relevant chunks) ---\n\n` : '';
+          const label = isGPTModel ? `[Source: ${candidate.document_filename}]\n` : '';
+          return `${header}${label}${candidate.content}`;
+        },
+        { imageExtensions: IMAGE_EXTENSIONS },
+      );
+
+      const selectedIds = new Set(selection.selected.map((chosen) => chosen.chunk_id));
+      const selected = candidates
+        .filter((candidate) => selectedIds.has(candidate.chunk_id))
+        .map((candidate) => {
+          const truncated = selection.contentOverrides.get(candidate.chunk_id);
+          return truncated === undefined ? candidate : { ...candidate, content: truncated };
+        });
+
+      const adjacent: AdjacentChunk[] = selected
+        .filter((candidate) => !isImageFilename(filenameOf(candidate.document_id)))
+        .map((candidate) => {
+          const rank = rankById.get(candidate.chunk_id) ?? 0;
+          const source = hitById.get(candidate.chunk_id);
+          return {
+            chunk_id: candidate.chunk_id,
+            document_id: candidate.document_id,
+            chunk_index: source ? chunkIndexOf(source, rank) : -1_000_000 - rank * 2,
+            parent_id: candidate.parent_id ?? null,
+            rank,
+          };
+        });
+      const groupIds = mergeAdjacent(adjacent).map((group) => group.documentId);
+      const groupOrder = config.v2.edgeOrder ? edgeOrder(groupIds) : groupIds;
+
+      const output = render(selected, groupOrder);
+      const kept = output.kept.map((row) => ({ ...row, rank: rankById.get(row.chunk_id) ?? row.rank }));
+      return {
+        output: { ...output, kept },
+        selected,
+        groupOrder,
+        budgetTokens: settings.tokenBudget,
+        usedTokens: selection.usedTokens,
+        groups: groupIds.length,
+      };
     },
     collector,
     {
       candidatesIn: candidates.length,
-      candidatesOut: (value) => value.usedDocuments.length,
+      candidatesOut: (value) => value.output.usedDocuments.length,
+      counts: (value) => ({
+        selected: value.selected.length,
+        budget_tokens: value.budgetTokens,
+        used_tokens: value.usedTokens,
+        groups: value.groups,
+      }),
     },
   );
 
-  return {
-    assembly: assembled.skipped ? null : assembled.value,
-    candidates,
-  };
+  if (assembled.skipped) {
+    return { assembly: null, candidates };
+  }
+
+  return { assembly: assembled.value.output, candidates };
 }
