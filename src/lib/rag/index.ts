@@ -101,3 +101,4 @@ export type {
   IngestStatusView,
   ResumeIngestOptions,
 } from './ingest';
+export { loadIngestConfig } from './ingest/config';

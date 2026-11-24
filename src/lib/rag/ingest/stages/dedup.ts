@@ -1,4 +1,5 @@
 import { removeArtifacts } from '../artifacts';
+import { callerDocumentMetadata } from '../document-metadata';
 import { HASH_NORMALIZATION_VERSION, contentHash } from '../hash';
 import {
   requireDocument,
@@ -35,6 +36,9 @@ async function runFileHashDedup(ctx: StageContext): Promise<StageOutcome> {
     };
   }
   ctx.document = { id: begun.documentId, version: begun.version, lineageId: begun.lineageId, resumed: begun.outcome === 'resumed' };
+  // Written first so every later stage that writes system metadata wins over a caller key.
+  const callerMetadata = callerDocumentMetadata(ctx.input.options);
+  if (callerMetadata) await ctx.writer.setFields(begun.documentId, { metadata: callerMetadata });
   return { kind: 'next' };
 }
 

@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { embedText, repairOwnerMembership, resolveTenantScope, type RagAdminDb } from '@/lib/rag';
+import { embedText, ingest, loadIngestConfig, repairOwnerMembership, resolveTenantScope, type RagAdminDb, type TenantScope } from '@/lib/rag';
 import { checkSingleTenantKbWrite } from '@/lib/kb-write-access';
 import { isMultiTenant } from '@/lib/deployment-mode';
 import { v4 as uuidv4 } from 'uuid';
 import { env } from '@/lib/env';
 import OpenAI from 'openai';
+import { z } from 'zod/v3';
 
 // Initialize Supabase admin client
 const supabaseAdmin = createClient(
@@ -189,6 +190,94 @@ async function storeAIResponseAsDocument(
   }
 }
 
+const MAX_FILENAME_TITLE_LENGTH = 120;
+
+const unifiedSaveSchema = z.object({
+  messageId: z.string().trim().min(1).max(200).regex(/^[^\p{Cc}]*$/u),
+  chatId: z.string().trim().min(1).max(200).regex(/^[^\p{Cc}]*$/u).nullish(),
+});
+
+function filenameFromTitle(title: string): string {
+  const cleaned = title
+    .replace(/[\\/]+/g, '-')
+    .replace(/\p{Cc}+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, MAX_FILENAME_TITLE_LENGTH)
+    .trim();
+  return `${cleaned === '' ? 'AI Response' : cleaned}.md`;
+}
+
+// Runs only after the session, body user, organization and write-access checks of POST have passed.
+async function saveThroughIngest(input: {
+  content: string;
+  body: Record<string, unknown>;
+  scope: TenantScope;
+  signal: AbortSignal;
+}): Promise<NextResponse> {
+  const parsed = unifiedSaveSchema.safeParse({
+    messageId: input.body.messageId,
+    chatId: input.body.chatId === '' ? undefined : input.body.chatId,
+  });
+  if (!parsed.success) {
+    console.warn('[AI to RAG] Invalid request data', { paths: parsed.error.errors.map((issue) => issue.path.join('.')) });
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'Invalid request data',
+        details: parsed.error.errors.map((issue) => ({ path: issue.path.join('.'), message: issue.message })),
+      },
+      { status: 400 },
+    );
+  }
+  const { messageId, chatId } = parsed.data;
+
+  console.log('[AI to RAG] Processing AI response', { contentLength: input.content.length });
+  const title = await generateTitle(input.content);
+  const filename = filenameFromTitle(title);
+
+  const result = await ingest({
+    scope: input.scope,
+    source: 'ai_to_rag',
+    sourceKey: `chat:${chatId ?? 'none'}/message:${messageId}`,
+    text: input.content,
+    filename,
+    mimeType: 'text/markdown',
+    options: {
+      documentMetadata: {
+        source: 'ai_response',
+        messageId,
+        ...(chatId ? { chatId } : {}),
+        generatedAt: new Date().toISOString(),
+      },
+    },
+    signal: input.signal,
+  });
+  console.log('[AI to RAG] Ingested AI response', {
+    status: result.status,
+    documentId: result.documentId ?? result.duplicateOf ?? null,
+    chunks: result.chunkCount,
+    ...(result.reason ? { reason: result.reason } : {}),
+  });
+
+  if (result.status === 'failed') {
+    return NextResponse.json({ success: false, error: 'Failed to save to the knowledge base', status: result.status }, { status: 500 });
+  }
+  return NextResponse.json(
+    {
+      success: true,
+      documentId: result.documentId ?? result.duplicateOf ?? null,
+      filename,
+      title,
+      status: result.status,
+      version: result.version,
+      chunksStored: result.chunkCount,
+      totalChunks: result.chunkCount,
+    },
+    { status: result.status === 'processing' ? 202 : 200 },
+  );
+}
+
 export async function POST(req: Request) {
   try {
     let sessionUserPromise: Promise<{ id: string } | null> | null = null;
@@ -260,6 +349,10 @@ export async function POST(req: Request) {
       if (!access.ok) {
         return NextResponse.json({ error: access.error }, { status: access.status });
       }
+    }
+
+    if (loadIngestConfig({ RAG_INGEST_PIPELINE: env.RAG_INGEST_PIPELINE }).pipeline === 'unified') {
+      return await saveThroughIngest({ content, body, scope: tenant.scope, signal: req.signal });
     }
 
     const owner = {
