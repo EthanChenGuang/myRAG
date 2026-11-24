@@ -27,7 +27,10 @@ function makeClient(kind: ClientKind = 'user') {
         sessionCalls += 1;
         return { data: { session: identity ? { user: identity } : null } };
       },
-      admin: { listUsers: async () => ({ data: { users: [] } }) },
+      admin: {
+        listUsers: async () => ({ data: { users: [] } }),
+        getUserById: async (id: string) => ({ data: { user: { id, email: `${id}@example.invalid` } }, error: null }),
+      },
     },
     from(table: string) {
       const filters: Record<string, unknown> = {};

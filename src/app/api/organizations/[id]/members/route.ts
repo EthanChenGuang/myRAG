@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { getSupabaseAdmin } from '@/lib/supabase';
 import { requireMultiTenant } from '@/lib/deployment-mode';
 import { isPersonalOrganization } from '@/lib/auth/organization-handler';
 import { logger } from '@/lib/logger';
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * GET /api/organizations/[id]/members
@@ -27,8 +30,15 @@ export async function GET(
     // Await params before accessing properties (Next.js 15+ requirement)
     const { id } = await params;
 
-    // Verify user has access to this organization
-    const { data: userMembership } = await supabase
+    // Membership rows are hidden from non-owners by RLS, so the membership check and the list read use the
+    // service role once the caller has been verified through getUser.
+    const db = getSupabaseAdmin();
+    if (!db) {
+      logger.error('API', 'Database client is not available');
+      return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    }
+
+    const { data: userMembership } = await db
       .from('organization_members')
       .select('role')
       .eq('organization_id', id)
@@ -42,39 +52,42 @@ export async function GET(
       );
     }
 
-    // Get all members
-    const { data: members, error } = await supabase
+    const { data: members, error } = await db
       .from('organization_members')
-      .select(`
-        id,
-        role,
-        created_at,
-        user_id,
-        users:user_id (
-          id,
-          email,
-          raw_user_meta_data
-        )
-      `)
+      .select('id, role, created_at, user_id')
       .eq('organization_id', id);
 
-    if (error) {
-      logger.error('API', `Error fetching members: ${error.message}`);
+    if (error || !members) {
+      logger.error('API', `Error fetching members: ${error?.message}`);
       return NextResponse.json(
         { error: 'Failed to fetch members' },
         { status: 500 }
       );
     }
 
+    const profiles = await Promise.all(
+      members.map(async (m: { user_id: string }) => {
+        try {
+          const { data } = await db.auth.admin.getUserById(m.user_id);
+          return data?.user ?? null;
+        } catch {
+          return null;
+        }
+      })
+    );
+
     // Format response
-    const formattedMembers = members.map((m: any) => ({
-      id: m.id,
-      user_id: m.user_id,
-      role: m.role,
-      email: m.users?.email,
-      name: m.users?.raw_user_meta_data?.full_name || m.users?.raw_user_meta_data?.name,
-      created_at: m.created_at,
-    }));
+    const formattedMembers = members.map((m: any, index: number) => {
+      const profile = profiles[index];
+      return {
+        id: m.id,
+        user_id: m.user_id,
+        role: m.role,
+        email: profile?.email,
+        name: profile?.user_metadata?.full_name || profile?.user_metadata?.name,
+        created_at: m.created_at,
+      };
+    });
 
     return NextResponse.json(formattedMembers);
   } catch (error: any) {
@@ -117,19 +130,26 @@ export async function POST(
     // Await params before accessing properties (Next.js 15+ requirement)
     const { id } = await params;
 
-    const body = await request.json();
-    const { user_id, role = 'member' } = body;
+    let body: { user_id?: unknown; role?: unknown };
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    }
+    const { user_id, role = 'member' } = body ?? {};
 
-    // Validate role
+    if (typeof user_id !== 'string' || !UUID_PATTERN.test(user_id)) {
+      return NextResponse.json({ error: 'user_id must be a valid user id' }, { status: 400 });
+    }
+
     const validRoles = ['owner', 'admin', 'member', 'viewer'];
-    if (!validRoles.includes(role)) {
+    if (typeof role !== 'string' || !validRoles.includes(role)) {
       return NextResponse.json(
         { error: 'Invalid role. Must be one of: owner, admin, member, viewer' },
         { status: 400 }
       );
     }
 
-    // Check if personal organization (optional restriction)
     const isPersonal = await isPersonalOrganization(id);
     if (isPersonal) {
       return NextResponse.json(
@@ -138,8 +158,15 @@ export async function POST(
       );
     }
 
-    // Verify requester is admin or owner
-    const { data: requesterMembership } = await supabase
+    // Membership rows are hidden from non-owners by RLS and member INSERT is owner-only, so the role check
+    // and the write use the service role once the caller has been verified through getUser.
+    const db = getSupabaseAdmin();
+    if (!db) {
+      logger.error('API', 'Database client is not available');
+      return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    }
+
+    const { data: requesterMembership } = await db
       .from('organization_members')
       .select('role')
       .eq('organization_id', id)
@@ -160,15 +187,33 @@ export async function POST(
       );
     }
 
-    // Check organization member limits
-    const { data: org } = await supabase
+    const { data: targetUser, error: targetUserError } = await db.auth.admin.getUserById(user_id);
+    if (targetUserError || !targetUser?.user) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    const { data: existingMember } = await db
+      .from('organization_members')
+      .select('role')
+      .eq('organization_id', id)
+      .eq('user_id', user_id)
+      .single();
+
+    if (existingMember) {
+      return NextResponse.json(
+        { error: 'User is already a member of this organization' },
+        { status: 409 }
+      );
+    }
+
+    const { data: org } = await db
       .from('organizations')
       .select('max_team_members')
       .eq('id', id)
       .single();
 
     if (org) {
-      const { count } = await supabase
+      const { count } = await db
         .from('organization_members')
         .select('*', { count: 'exact', head: true })
         .eq('organization_id', id);
@@ -181,8 +226,7 @@ export async function POST(
       }
     }
 
-    // Add member
-    const { data: member, error: memberError } = await supabase
+    const { data: member, error: memberError } = await db
       .from('organization_members')
       .insert({
         organization_id: id,
