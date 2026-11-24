@@ -4,27 +4,39 @@
 
 ## Execution order and cross-phase dependencies
 
-- The backend half (07-01 to 07-16, 07-28, 07-34) functionally needs only Phases 3, 3.1 and 4 (CONTEXT "Dependencies"); the closeout half (07-17 to 07-27, 07-29 to 07-33) needs Phases 5, 5.1 and 6, and each of those plans carries a precondition that halts before any edit unless `05-VERIFICATION.md`, `05.1-VERIFICATION.md` and `06-VERIFICATION.md` say `passed` or `human_needed`.
+- The backend half (07-01 to 07-16, 07-28, 07-34) functionally needs only Phases 3, 3.1 and 4 (CONTEXT "Dependencies"); the closeout half (07-17 to 07-27, 07-29 to 07-33) needs Phases 5, 5.1 and 6, and each of those plans depends on 05-25, 05.1-22 and 06-45 (the closing automated plans of Phases 5, 5.1 and 6) and keeps, as a second check, a precondition that halts before any edit unless `05-VERIFICATION.md`, `05.1-VERIFICATION.md` and `06-VERIFICATION.md` say `passed` or `human_needed`.
 - Cross-phase ids name the plan that last edits a shared file (for example 04-42 for the boundary check and Phase 4 close, 05-05 and 06-22 for package.json, 05-10 and 06-40 for the five config locations, 05-07 and 06-34 for the contract registry, 05-04 and 06-32 for the search stage and pipeline, 05-21 and 06-40 for `src/lib/rag/index.ts`, 06-43 for pr-smoke.yml) or the closing automated plan of a phase (05-25, 06-45). They are file-order constraints and do not change wave numbers. Phases 1 and 2 are executed, so their ids appear only where a draft cites the owner of a module.
-- Phase 5.1's plan ids are not final; see "Pending 5.1 edges" below.
+- Phase 5.1 edges are real `depends_on` ids since revision 2: 05.1-22 (the 5.1 close, which depends on 05.1-01 to 05.1-21) on 17 plans, and 05.1-08 on 07-01; see "Phase 5.1 edges" below. 05.1-23 (the 5.1 live checks) shares no file with Phase 7 and is not a dependency.
 - Migrations 0701 to 0707 are common files (no mode variants): 0701 to 0703 in 07-02, 0704 and 0705 in 07-06, 0706 in 07-10, 0707 in 07-11; folded into both setup files by 07-31. `supabase/optional/vector-sync-schedule.sql` (07-13) is an operator recipe, never a migration.
-- PGlite note: every PGlite test applies every file in `supabase/migrations/`. With `workflow.use_worktrees` false, run 07-10 to completion before the PGlite-backed tasks of 07-07 and 07-08 in wave 3, and 07-11 before 07-12 in wave 4 (each plan carries the note).
-- 07-10 sits in wave 3 and 07-17 and 07-18 in wave 7 although their dependencies would allow earlier waves: 07-10 must not share a wave with the tracer's migrations, and 07-17 and 07-18 open the closeout half after the backend half (D-26 order). The same-wave migration pairs (07-10 with 07-07 and 07-08; 07-11 with 07-12) are declared in `coupling_justified`: both orders give a correct tree, and the execution notes forbid running them at the same instant.
+- PGlite note: every PGlite test applies every file in `supabase/migrations/`. 07-10 depends on 07-07 and 07-08, so their PGlite-backed conformance seeding finishes before migration 0706 exists. In wave 4, with `workflow.use_worktrees` false, run 07-10, then 07-11 (migration 0707), before 07-12 runs any PGlite-backed test; each of the three plans carries the note.
+- 07-17 and 07-18 sit in wave 7 although their dependencies would allow earlier waves: they open the closeout half after the backend half (D-26 order). 07-10 sits in wave 4 because it depends on 07-07 and 07-08 (revision 2, replacing an execution-note ordering); 07-13 and 07-14 already depended on it in wave 5, so no other wave moved. The remaining same-wave migration pairs in wave 4 (07-10 with 07-11 and 07-12; 07-11 with 07-12) write different files that define unrelated functions, are declared in `coupling_justified`, and are kept apart by the execution notes.
 - 07-34 (voice and embed canaries) reuses 07-14's factory, so it runs in wave 6 next to 07-16 rather than in 07-14's wave; 07-28 builds its voice and embed cache cases on 07-34's drivers and runs in wave 7.
 
-## Pending 5.1 edges
+## Phase 5.1 edges
 
-Phase 5.1 was being planned in a concurrent session (draft files 05.1-01 to 05.1-12, no plan index, ROADMAP still "planning not started"), so no 5.1 plan id appears in any `depends_on`. Until the final ids arrive, each closeout plan halts on its `05.1-VERIFICATION.md` precondition. When the coordinator sends them, add the closing 5.1 plan id (and, for shared files, the last 5.1 editor) to:
+Added in revision 2, from the coordinator's final 5.1 ids and a grep of the 5.1 plans' `files_modified`. 05.1-22 is the 5.1 close and depends on 05.1-01 to 05.1-21, so one edge to it orders a plan after every earlier 5.1 editor of a shared file. The `05.1-VERIFICATION.md` precondition stays in the closeout plans as a second check.
 
-| Plan | Why it needs a 5.1 edge |
-|------|-------------------------|
-| 07-04 | the five config locations, the manifest and the eval pin (5.1 adds RAG_CONTEXT_TAGGING, RAG_INJECTION_CHECK and the Lakera and Prompt Guard settings) |
-| 07-05 | the contract registry, eval_run.py and the generated Zod (5.1 adds injection trace fields) |
-| 07-12 | the pipeline and the v2 search and context stages (5.1 tags and filters retrieved chunks) |
-| 07-25 | the eval route and run-eval.mts overlay (the injection slice and the 5.1 switches in the ablation) |
-| 07-17 to 07-27, 07-29, 07-30 | the closeout half, which documents, configures, inventories and regresses every 5.1 switch and vendor |
+| Plan | Edge added | Shared files with 5.1 (5.1 editors) |
+|------|------------|--------------------------------------|
+| 07-01 | 05.1-08 (specific; 07-01 has no 05.1-22 edge) | scripts/ci/check-rag-boundary.mjs, scripts/tests/check-rag-boundary.node-test.mjs (05.1-08) |
+| 07-04 | 05.1-22 | src/lib/env.ts, scripts/init-env.js, scripts/config-server.js, scripts/config-ui/index.html, scripts/rag/env-manifest.json, eval/config/rag-eval-env.json (05.1-04, 05.1-12); src/lib/rag/config.ts, tests/rag/config.test.ts (05.1-06) |
+| 07-05 | 05.1-22 | the contract registry, samples, export_schemas.py, eval_run.py, RagRunRequest and RagTrace schemas, contracts.generated.ts, samples.json (05.1-03) |
+| 07-12 | 05.1-22 | src/lib/rag/pipeline.ts, src/lib/rag/types.ts (05.1-06); src/lib/rag/trace/log.ts (05.1-13); src/lib/rag-eval/trace.ts, src/lib/rag/v2/config-hash.ts (05.1-14) |
+| 07-17 | 05.1-22 | the contract registry, samples, export_schemas.py, contracts.generated.ts, samples.json (05.1-03) |
+| 07-18 | 05.1-22 | scripts/rag/env-manifest.json (05.1-04) |
+| 07-19 | 05.1-22 | rag-sidecar/src/rag_sidecar/main.py (05.1-07) |
+| 07-20 | 05.1-22 | scripts/config-server.js, scripts/config-ui/index.html (05.1-04, 05.1-12) |
+| 07-21 | 05.1-22 | .github/workflows/pr-smoke.yml (05.1-19) |
+| 07-22 | 05.1-22 | none (phase edge for the 5.1 attack-success result it reads) |
+| 07-23 | 05.1-22 | none (phase edge) |
+| 07-24 | 05.1-22 | none (phase edge for the 5.1 switches in the ablation) |
+| 07-25 | 05.1-22 | eval/harness/run-eval.mts (05.1-19) |
+| 07-26 | 05.1-22 | .github/workflows/nightly.yml, scripts/ci/check-workflows.py (05.1-19) |
+| 07-27 | 05.1-22 | scripts/init-env.js (05.1-04); AGENTS.md, tests/rag/agents-guide.test.ts (05.1-22) |
+| 07-29 | 05.1-22 | scripts/config-server.js, scripts/config-ui/index.html (05.1-04, 05.1-12) |
+| 07-30 | 05.1-22 | .github/workflows/pr-smoke.yml (05.1-19) |
 
-07-31 to 07-34 inherit the edge through these plans.
+Covered without a new edge (through a Phase 7 ancestor that has the 05.1-22 edge): 07-16 shares pr-smoke.yml and check-workflows.py with 05.1-19 (through 07-14, which depends on 07-12); 07-33 shares the config locations with 05.1-04 and 05.1-12 (through 07-32 and 07-31). 07-28, 07-31, 07-32 and 07-34 share no file with 5.1.
 
 ## Waves
 
@@ -32,8 +44,8 @@ Phase 5.1 was being planned in a concurrent session (draft files 05.1-01 to 05.1
 |------|-------|-------|
 | 1 | 07-01, 07-02, 07-03, 07-04, 07-05 | Package checkpoint, the orchestrator-run exact-pinned install, the pin check, the vector-store boundary rule and digest-pinned compose (autonomous: false); outbox, sync targets, index state, statement triggers and claim RPCs; canonical lower-case tenant key and the Qdrant scoped-request wrapper; the ten D-24 env names and RagConfig.backend; sync, reconcile and trace contracts |
 | 2 | 07-06 | **Tracer** (one chunk out to an external store and back, re-validated); rag_validate_chunks and the servable view; sync read RPCs; the VectorStore interface, fake store and external-backend core |
-| 3 | 07-07, 07-08, 07-09, 07-10 | Qdrant adapter, store, collection and conformance; Weaviate adapter, store, collection and conformance (two-tenant tests on both); full drain engine with paging, expansion, retries and the `[Vector Sync]` line; activation gate for enabled backends |
-| 4 | 07-11, 07-12 | Reconcile with bucketed checksums, index state and outbox pruning; readiness, the backend factory with fallback, timeout and race, span fields and the config hash |
+| 3 | 07-07, 07-08, 07-09 | Qdrant adapter, store, collection and conformance; Weaviate adapter, store, collection and conformance (two-tenant tests on both); full drain engine with paging, expansion, retries and the `[Vector Sync]` line |
+| 4 | 07-10, 07-11, 07-12 | Activation gate for enabled backends (after 07-07 and 07-08); reconcile with bucketed checksums, index state and outbox pruning; readiness, the backend factory with fallback, timeout and race, span fields and the config hash |
 | 5 | 07-13, 07-14 | Drain route (POST and GET), after() kick, CLI and the pg_cron recipe; the cross-tenant canary suite with the planted foreign point |
 | 6 | 07-15, 07-16, 07-34 | Index-compat and sync-target admin routes; the backend-canary CI job and real-store drift; voice-scope (with RAG_RETRIEVAL_BACKEND_VOICE) and embed-scope canaries on every backend with filter-ignoring negative controls |
 | 7 | 07-17, 07-18, 07-19, 07-28 | Closeout contracts (DefaultsDecision, RegressionPlan, VendorDataFlow, ReviewPromotion, FailureReport); manifest metadata and check-config rules; Test-connection probes and the sidecar probe (no key, URL or host in any response); the semantic-cache canary for chat, embed and voice on every backend |
@@ -64,7 +76,7 @@ Phase 5.1 was being planned in a concurrent session (draft files 05.1-01 to 05.1
 | 14 regression runner and the fixture defaults record | 07-17, 07-24, 07-25, 07-30 |
 | 15 live defaults checkpoint | 07-32, 07-33 |
 
-Deviations from the literal order, all from interface-first dependencies: the D-24 env names (step 9) come first in 07-04 because every backend plan reads them; the tracer (07-06) runs steps 2 and 5 on one thin path before either vendor adapter; the activation gate (step 8) runs in wave 3 because it needs only the tables of step 1.
+Deviations from the literal order, all from interface-first dependencies: the D-24 env names (step 9) come first in 07-04 because every backend plan reads them; the tracer (07-06) runs steps 2 and 5 on one thin path before either vendor adapter; the activation gate (step 8) runs in wave 4, after the two adapters (07-07, 07-08) whose PGlite seeding must run before its migration 0706 lands.
 
 ## Requirement coverage
 
@@ -136,9 +148,21 @@ Deferred ideas (legacy path removal, per-tenant vendor opt-out, native backend f
 | 07-10, 07-11 | INFO 2: `coupling_justified` for the same-wave migration pairs |
 | 07-33 | unchanged at 4 tasks (accepted by the coordinator) |
 
+## Revision 2
+
+| Plan | Change |
+|------|--------|
+| 07-01 | `depends_on` + 05.1-08 (the only 5.1 plan that shares the boundary check, not reached through 05.1-22) |
+| 07-04, 07-05, 07-12 | `depends_on` + 05.1-22, with the shared 5.1 editors named in the objective |
+| 07-17 to 07-27, 07-29, 07-30 | `depends_on` + 05.1-22; the precondition-only wording replaced, the 05.1-VERIFICATION.md precondition kept as a second check |
+| 07-29 | the authorize route sends no Access-Control-Allow-Origin (or other Access-Control-*) header on any status, including requests with a foreign Origin, and has no OPTIONS handler; test, grep gate and threat T-07-119 |
+| 07-10 | `depends_on` + 07-07 and 07-08 (real edge replacing the execution-note ordering); wave 3 to 4; `coupling_justified` now names 07-11 and 07-12; execution note updated |
+| 07-07, 07-08 | execution note about 07-10 replaced by an ordering note (07-10 now depends on them) |
+| 07-11, 07-12 | execution notes updated for 07-10 in wave 4 |
+
 ## Threat register
 
-T-07-01 to T-07-118 are unique across the phase (no reuse), plus the reserved T-07-SC in every plan. The package gate's T-07-SC is `mitigate` in 07-01 and `accept` (no install) elsewhere.
+T-07-01 to T-07-119 are unique across the phase (no reuse), plus the reserved T-07-SC in every plan. The package gate's T-07-SC is `mitigate` in 07-01 and `accept` (no install) elsewhere.
 
 ## Checks run
 

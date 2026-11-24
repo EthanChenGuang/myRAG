@@ -104,8 +104,8 @@ Requirements and threat references per plan are in each plan and in `07-PLAN-IND
 | 07-09-01 | 3 | tdd | `npx vitest run tests/rag/sync/servable.test.ts` | ⬜ pending |
 | 07-09-02 | 3 | tdd | `npx vitest run tests/rag/sync/drain.test.ts` | ⬜ pending |
 | 07-09-03 | 3 | tdd | `npx vitest run tests/rag/sync/log.test.ts tests/rag/sync/drain.test.ts` | ⬜ pending |
-| 07-10-01 | 3 | tdd | `node --import tsx --test tests/rag-db/activation-gate-external.test.mts` | ⬜ pending |
-| 07-10-02 | 3 | tdd | `npx vitest run tests/rag/embeddings/profile-ops-external.test.ts tests/rag/embeddings` | ⬜ pending |
+| 07-10-01 | 4 | tdd | `node --import tsx --test tests/rag-db/activation-gate-external.test.mts` | ⬜ pending |
+| 07-10-02 | 4 | tdd | `npx vitest run tests/rag/embeddings/profile-ops-external.test.ts tests/rag/embeddings` | ⬜ pending |
 | 07-11-01 | 4 | tdd | `node --import tsx --test tests/rag-db/vector-sync-reconcile.test.mts` | ⬜ pending |
 | 07-11-02 | 4 | tdd | `npx vitest run tests/rag/sync/reconcile.test.ts` | ⬜ pending |
 | 07-12-01 | 4 | tdd | `npx vitest run tests/rag/backend/readiness.test.ts` | ⬜ pending |

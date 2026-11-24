@@ -387,7 +387,7 @@ Plans:
 - [ ] 07-07-PLAN.md — Implement the Qdrant retrieval adapter, its sync store and collection setup, and run the unchanged Phase… (wave 3)
 - [ ] 07-08-PLAN.md — Implement the Weaviate retrieval adapter, its sync store and collection setup with one tenant per… (wave 3)
 - [ ] 07-09-PLAN.md — Expand the tracer's thin drain into the full sync engine: claim wrappers, a pure servable planner,… (wave 3)
-- [ ] 07-10-PLAN.md — Extend the Phase 3 D-40 embedding-profile activation gate so a profile cannot become active while an… (wave 3)
+- [ ] 07-10-PLAN.md — Extend the Phase 3 D-40 embedding-profile activation gate so a profile cannot become active while an… (wave 4)
 - [ ] 07-11-PLAN.md — Build reconcile: detect and repair drift between Supabase's servable rows and each external store,… (wave 4)
 - [ ] 07-12-PLAN.md — Make the backend switch real: per-entry-point selection, index-ready checks, the pgvector fallback with… (wave 4)
 - [ ] 07-13-PLAN.md — Expose the sync engine to its three triggers: the authenticated drain route (scheduler), the… (wave 5)
