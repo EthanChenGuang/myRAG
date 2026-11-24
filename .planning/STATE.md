@@ -4,8 +4,8 @@ milestone: v5.0
 current_phase: 02
 current_phase_name: Unified Retrieval Pipeline & Tenant Scope
 status: executing
-stopped_at: Phase 03 plans 43+45 merged on trunk; 03-44/46/47 in flight
-last_updated: "2026-11-24T10:10:00.000Z"
+stopped_at: Wave A — 03-47 + 03.1-01/02 + 04-01/03 executors; 03-43..46 merged
+last_updated: "2026-11-24T11:15:00.000Z"
 last_activity: 2026-11-23
 last_activity_desc: Phase 02 plans 11, 12, 16, 17, 18, 22 merged
 state_head: 3facf75a846e7a13be2716bdf7768179dca6018b
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-11-22)
 ## Current Position
 
 Phase: 03 (Unified Ingestion & Embedding Profiles) — EXECUTING
-Plan: 48 of 50 merged on trunk (through 03-44, 03-43, 03-45); remaining 03-46, 03-47 + Guang live 03-48
+Plan: 03-43..03-46, 03-45 merged; in flight 03-47; skip 03-48 (Guang live). Wave A early 3.1 + Phase 4 parallel.
 Status: Phase 2 complete (human_needed live checks). All remaining phases planned and plan-checked PASS: 3.1 (55), 4 (45), 5 (26), 5.1 (25), 6 (46), 7 (34).
 Last activity: 2026-11-24 — merged 03-40, 03-38, 03-39, 03-42; gates vitest 2459, node 145, test-rag both modes PASS; Sonnet executor quota → orchestrator/Composer for 03-39 task 3 and 03-42
 

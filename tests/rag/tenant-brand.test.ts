@@ -58,6 +58,34 @@ describe('runtime brand check', () => {
   });
 });
 
+describe('mintScope upper-case UUID normalisation (D-33)', () => {
+  test('org scope with upper-case organisationId mints the same scopeKey as lower-case', () => {
+    const upper = ORG_O.toUpperCase();
+    const fromUpper = mintScope('org', null, upper);
+    const fromLower = mintScope('org', null, ORG_O);
+    expect(scopeKey(fromUpper)).toBe(`o:${ORG_O}`);
+    expect(scopeKey(fromUpper)).toBe(scopeKey(fromLower));
+    expect(fromUpper.organizationId).toBe(ORG_O);
+  });
+
+  test('personal scope with upper-case userId mints u:<lower>', () => {
+    const upper = USER_A.toUpperCase();
+    const scope = mintScope('personal', upper, null);
+    expect(scopeKey(scope)).toBe(`u:${USER_A}`);
+    expect(scope.userId).toBe(USER_A);
+    expect(isTenantScope(scope)).toBe(true);
+    expect(Object.isFrozen(scope)).toBe(true);
+  });
+
+  test('org scope with upper-case userId stores the id lower-cased', () => {
+    const upperUser = USER_A.toUpperCase();
+    const scope = mintScope('org', upperUser, ORG_O);
+    expect(scope.userId).toBe(USER_A);
+    expect(scope.organizationId).toBe(ORG_O);
+    expect(scopeKey(scope)).toBe(`o:${ORG_O}`);
+  });
+});
+
 describe('evalScope', () => {
   const base = { organizationId: null, userId: null, allowedScopes: '' };
 
