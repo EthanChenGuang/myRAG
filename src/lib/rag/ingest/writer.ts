@@ -20,6 +20,9 @@ const KNOWN_REASONS = new Set([
   'invalid_chunk',
   'invalid_total',
   'invalid_embeddings',
+  'invalid_parents',
+  'invalid_profile',
+  'chunking_profile_unsupported',
   'embedding_profile_unsupported',
   'embedding_profile_mismatch',
   'run_not_found',
@@ -117,6 +120,43 @@ export interface WriteChunksResult {
   chunksDeleted: number;
 }
 
+/** A child of a chunking profile as rag_write_profile_chunks takes it: a chunk plus the index of the parent it belongs to. */
+export interface ProfileChildWrite extends ChunkWrite {
+  parent_index: number | null;
+}
+
+export interface ProfileParentWrite {
+  parent_index: number;
+  section_path: string[];
+  content: string;
+  token_count: number;
+}
+
+export interface WriteProfileChunksArgs {
+  profileId: string;
+  parents: ProfileParentWrite[];
+  children: ProfileChildWrite[];
+  /** Vectors keyed by embedding profile id, lined up with the children. */
+  embeddings: Record<string, ProfileVectors> | null;
+}
+
+export interface WriteProfileChunksResult {
+  parentsWritten: number;
+  childrenWritten: number;
+  parentsDeleted: number;
+  childrenDeleted: number;
+}
+
+/** A row of the chunking profile registry. */
+export interface ChunkingProfileRow {
+  id: string;
+  docType: string;
+  childTokens: number;
+  parentMode: 'none' | 'structure' | 'fixed';
+  parentTokens: number | null;
+  status: 'building' | 'ready' | 'active' | 'retired';
+}
+
 export type PublishOutcome = 'published' | 'already_current' | 'quarantined';
 
 export interface PublishResult {
@@ -159,6 +199,12 @@ export interface BackfillGapArgs {
   reason: string;
 }
 
+/** The id rag_write_profile_chunks gives a parent or child: the first 16 bytes of sha256(document id : profile id : kind : index) as a UUID. */
+export function profileRowIdFor(documentId: string, profileId: string, kind: 'parent' | 'child', index: number): string {
+  const hex = createHash('sha256').update(`${documentId}:${profileId}:${kind}:${index}`, 'utf8').digest('hex').slice(0, 32);
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+}
+
 /** The id rag_write_chunks gives a chunk: the first 16 bytes of sha256(document id : chunk index) as a UUID. */
 export function chunkIdFor(documentId: string, chunkIndex: number): string {
   const hex = createHash('sha256').update(`${documentId}:${chunkIndex}`, 'utf8').digest('hex').slice(0, 32);
@@ -174,6 +220,10 @@ export interface IngestWriter {
   /** Where the version came from and where its original is stored; null for another tenant's or an unknown id. */
   getOrigin(documentId: string): Promise<IngestOriginRow | null>;
   writeChunks(documentId: string, chunks: ChunkWrite[], options: WriteChunksOptions): Promise<WriteChunksResult>;
+  /** Parents and children of one chunking profile for this version, in one transaction; the document must belong to the scope's tenant. */
+  writeProfileChunks(documentId: string, args: WriteProfileChunksArgs): Promise<WriteProfileChunksResult>;
+  /** The chunking profile registry (every doc type, every status). */
+  listChunkingProfiles(): Promise<ChunkingProfileRow[]>;
   publish(documentId: string): Promise<PublishResult>;
   /** Per profile the newest backfill run that applies to this tenant, a running one first. */
   findBackfillRuns(): Promise<BackfillRunRow[]>;
@@ -381,6 +431,43 @@ export function createIngestWriter(input: CreateIngestWriterInput): IngestWriter
         p_total: options.total,
       });
       return { chunksWritten: integer(row, 'chunks_written') ?? 0, chunksDeleted: integer(row, 'chunks_deleted') ?? 0 };
+    },
+
+    async writeProfileChunks(documentId, args) {
+      const row = await callOne('rag_write_profile_chunks', {
+        p_document_id: documentId,
+        p_tenant_key: identity().tenantKey,
+        p_profile_id: args.profileId,
+        p_parents: args.parents,
+        p_children: args.children,
+        p_embeddings: args.embeddings,
+        p_final: true,
+        p_total: args.children.length,
+      });
+      return {
+        parentsWritten: integer(row, 'parents_written') ?? 0,
+        childrenWritten: integer(row, 'children_written') ?? 0,
+        parentsDeleted: integer(row, 'parents_deleted') ?? 0,
+        childrenDeleted: integer(row, 'children_deleted') ?? 0,
+      };
+    },
+
+    async listChunkingProfiles() {
+      identity();
+      const rows = await call('rag_list_chunking_profiles', {});
+      const profiles: ChunkingProfileRow[] = [];
+      for (const row of rows) {
+        const id = text(row, 'id');
+        const typeKey = text(row, 'doc_type');
+        const parentMode = text(row, 'parent_mode');
+        const status = text(row, 'status');
+        const childTokens = integer(row, 'child_tokens');
+        if (id === null || typeKey === null || childTokens === null) continue;
+        if (parentMode !== 'none' && parentMode !== 'structure' && parentMode !== 'fixed') continue;
+        if (status !== 'building' && status !== 'ready' && status !== 'active' && status !== 'retired') continue;
+        profiles.push({ id, docType: typeKey, childTokens, parentMode, parentTokens: integer(row, 'parent_tokens'), status });
+      }
+      return profiles;
     },
 
     async publish(documentId) {

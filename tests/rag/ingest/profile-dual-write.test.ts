@@ -8,6 +8,7 @@ import type { EmbeddingProvider } from '@/lib/rag/embeddings/types';
 import { ingest } from '@/lib/rag/ingest';
 import { chunkParentChild } from '@/lib/rag/ingest/chunkers/parent-child';
 import { buildProfileChunks, type ChunkingProfileRow } from '@/lib/rag/ingest/profile-chunks';
+import { profileRowIdFor } from '@/lib/rag/ingest/writer';
 import { getProcessingProfile } from '@/lib/rag/ingest/profiles/load';
 import { buildEmbeddingText } from '@/lib/rag/ingest/text/embedding-text';
 import { chunkLexicalText } from '@/lib/rag/lexical/chunk-text';
@@ -262,11 +263,18 @@ describe('ingestion dual-write of chunking profiles', () => {
 
     uninstallIngestDeps();
     voyageFails = true;
-    const failing = fakeIngestDb({ chunkingProfiles: [LEGACY_CONTRACT, chunkingRow('p256', 'contract_legal', 'building')] });
+    const failing = fakeIngestDb({
+      chunkingProfiles: [LEGACY_CONTRACT, chunkingRow('p256', 'contract_legal', 'building')],
+      backfillRuns: [{ profile_id: VOYAGE, run_id: 'run-voyage', status: 'running' }],
+    });
     installIngestDeps({ db: failing.db, env: { RAG_EMBEDDING_PROFILES: 'on' } });
     const second = await upload();
     expect(second.status).toBe('ready');
     const secondWrite = callsOf(failing.calls, 'rag_write_profile_chunks')[0]?.args as Record<string, unknown>;
     expect(Object.keys(secondWrite.p_embeddings as Record<string, unknown>)).toEqual([LEGACY_EMBEDDING]);
+    const firstChild = profileRowIdFor(FAKE_DOCUMENT_ID, 'p256', 'child', 0);
+    const gaps = callsOf(failing.calls, 'rag_record_backfill_gap').filter((call) => (call.args.p_chunk_ids as string[]).includes(firstChild));
+    expect(gaps.map((call) => [call.args.p_run_id, call.args.p_profile_id, call.args.p_reason])).toEqual([['run-voyage', VOYAGE, 'provider_failed']]);
+    expect(gaps[0]?.args.p_chunk_ids).toEqual((secondWrite.p_children as Array<{ chunk_index: number }>).map((child) => profileRowIdFor(FAKE_DOCUMENT_ID, 'p256', 'child', child.chunk_index)));
   });
 });
