@@ -54,6 +54,7 @@ export interface RagEnvInput {
   RAG_PIPELINE?: string;
   RAG_DISABLED_STAGES?: string;
   RAG_STAGE_TIMEOUTS?: string;
+  RAG_EXACT_ID_LOOKUP?: string;
 }
 
 export interface RagConfig {

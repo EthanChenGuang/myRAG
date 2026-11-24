@@ -1,5 +1,12 @@
-import { describe, expect, it } from 'vitest';
-import { extractExactIds } from '@/lib/rag/retrieval/exact-id';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { runRetrieval } from '@/lib/rag';
+import type { RpcClient, RpcRequest, RpcResponse } from '@/lib/rag/backend/supabase-rpc';
+import type { RagEnvInput } from '@/lib/rag/config';
+import { legacyRank } from '@/lib/rag/legacy/enhanced-retrieval';
+import { exactIdLookup, extractExactIds, mergeExactCandidates, type ExactIdRow } from '@/lib/rag/retrieval/exact-id';
+import { mintScope } from '@/lib/rag/tenant/scope';
+import type { Candidate } from '@/lib/rag/types';
+import { fakeEmbedder, installDeps, rows, uninstallDeps, type FakeRow } from './helpers/pipeline-fakes';
 
 const values = (query: string) => extractExactIds(query).map((token) => `${token.kind}:${token.value}`);
 
@@ -66,5 +73,259 @@ describe('extractExactIds (D-28)', () => {
     expect(extractExactIds('a1-'.repeat(200000)).length).toBeLessThanOrEqual(8);
     expect(extractExactIds('1 '.repeat(200000)).length).toBe(0);
     expect(Date.now() - started).toBeLessThan(1000);
+  });
+});
+
+const EXACT_RPC = 'rag_exact_id_documents';
+const ORG_ID = '00000000-0000-4000-8000-0000000000c1';
+const USER_ID = '00000000-0000-4000-8000-0000000000a1';
+const INVOICE_QUESTION = 'What is the total of invoice FT-2025-00417?';
+
+function candidate(id: string, finalScore: number, overrides: Partial<Candidate> = {}): Candidate {
+  return {
+    chunk_id: id,
+    document_id: `doc-of-${id}`,
+    content: `body of ${id}`,
+    similarity: 0.8,
+    metadata: { page: 1 },
+    temporal_score: 0,
+    financial_score: 0,
+    final_score: finalScore,
+    match_reason: 'similarity: 0.800',
+    ...overrides,
+  };
+}
+
+function exactRow(id: string, overrides: Partial<ExactIdRow> = {}): ExactIdRow {
+  return {
+    chunk_id: id,
+    document_id: `doc-of-${id}`,
+    content: `invoice body of ${id}`,
+    metadata: { chunk_kind: 'invoice_header' },
+    matched_field: 'invoice_number',
+    ...overrides,
+  };
+}
+
+interface RoutedCall {
+  fn: string;
+  args: Record<string, unknown>;
+}
+
+function routedRpc(options: { vector?: FakeRow[]; exact?: ExactIdRow[]; exactError?: { message: string; code?: string }; exactDelayMs?: number }) {
+  const calls: RoutedCall[] = [];
+  const client: RpcClient = {
+    rpc(fn, args): RpcRequest {
+      let signal: AbortSignal | undefined;
+      const respond = (): RpcResponse => {
+        if (fn === EXACT_RPC) return options.exactError ? { data: null, error: options.exactError } : { data: options.exact ?? [], error: null };
+        return { data: options.vector ?? [], error: null };
+      };
+      const request: RpcRequest = {
+        abortSignal(next) {
+          signal = next;
+          return request;
+        },
+        then(onFulfilled, onRejected) {
+          calls.push({ fn, args });
+          const delay = fn === EXACT_RPC ? (options.exactDelayMs ?? 0) : 0;
+          const settled = new Promise<RpcResponse>((resolve) => {
+            const timer = setTimeout(() => resolve(respond()), delay);
+            signal?.addEventListener(
+              'abort',
+              () => {
+                clearTimeout(timer);
+                resolve({ data: null, error: { message: 'aborted' } });
+              },
+              { once: true },
+            );
+          });
+          return settled.then(onFulfilled, onRejected);
+        },
+      };
+      return request;
+    },
+  };
+  return { client, calls, exactCalls: () => calls.filter((call) => call.fn === EXACT_RPC) };
+}
+
+describe('mergeExactCandidates', () => {
+  it('puts the exact chunks first with match_reason exact_id and keeps the vector order after them', () => {
+    const merged = mergeExactCandidates([candidate('v1', 0.9), candidate('v2', 0.8)], [exactRow('e1')], 25);
+    expect(merged.map((item) => item.chunk_id)).toEqual(['e1', 'v1', 'v2']);
+    expect(merged[0]).toMatchObject({ match_reason: 'exact_id', document_id: 'doc-of-e1', content: 'invoice body of e1', similarity: 1 });
+    expect(merged[1]?.match_reason).toBe('similarity: 0.800');
+  });
+
+  it('lists a chunk found by both routes once, as an exact match, keeping what the vector route knew', () => {
+    const merged = mergeExactCandidates([candidate('v1', 0.9), candidate('both', 0.7, { metadata: { page: 7 } })], [exactRow('both')], 25);
+    expect(merged.map((item) => item.chunk_id)).toEqual(['both', 'v1']);
+    expect(merged[0]).toMatchObject({ match_reason: 'exact_id', metadata: { page: 7 } });
+  });
+
+  it('scores exact chunks at least as high as every vector chunk, so the legacy ranking keeps them first', () => {
+    const merged = mergeExactCandidates([candidate('v1', 1.4), candidate('v2', 0.6)], [exactRow('e1'), exactRow('e2')], 25);
+    expect(legacyRank(merged, null as never).map((item) => item.chunk_id)).toEqual(['e1', 'e2', 'v1', 'v2']);
+  });
+
+  it('never grows the list past the caller limit unless the exact chunks alone exceed it', () => {
+    const vector = Array.from({ length: 5 }, (_, index) => candidate(`v${index}`, 0.9 - index / 100));
+    expect(mergeExactCandidates(vector, [exactRow('e1'), exactRow('e2')], 5).map((item) => item.chunk_id)).toEqual(['e1', 'e2', 'v0', 'v1', 'v2']);
+    expect(mergeExactCandidates(vector, [exactRow('e1'), exactRow('e2')], 1).map((item) => item.chunk_id)).toEqual(['e1', 'e2']);
+  });
+
+  it('returns the vector list unchanged for no exact rows', () => {
+    const vector = [candidate('v1', 0.9)];
+    expect(mergeExactCandidates(vector, [], 25)).toEqual(vector);
+  });
+});
+
+describe('exactIdLookup', () => {
+  const scope = mintScope('org', USER_ID, ORG_ID);
+
+  it('sends the tenant key of the scope, the tokens as one array and a limit, and nothing else', async () => {
+    const rpc = routedRpc({ exact: [exactRow('e1')] });
+    const found = await exactIdLookup(scope, extractExactIds("x'; DROP TABLE documents; -- 发票 FT-2025-00417 IT99999999990"), {
+      client: rpc.client,
+      signal: new AbortController().signal,
+    });
+    expect(found.map((row) => row.chunk_id)).toEqual(['e1']);
+    const [call] = rpc.exactCalls();
+    expect(Object.keys(call?.args ?? {}).sort()).toEqual(['p_limit', 'p_tenant_key', 'p_tokens']);
+    expect(call?.args.p_tenant_key).toBe(`o:${ORG_ID}`);
+    expect(call?.args.p_tokens).toEqual(['FT-2025-00417', 'IT99999999990', '99999999990']);
+    expect(call?.args.p_limit).toBe(10);
+  });
+
+  it('makes no call for no tokens and throws on a backend error', async () => {
+    const quiet = routedRpc({});
+    expect(await exactIdLookup(scope, [], { client: quiet.client, signal: new AbortController().signal })).toEqual([]);
+    expect(quiet.calls).toEqual([]);
+    const failing = routedRpc({ exactError: { message: 'boom', code: 'XX000' } });
+    await expect(exactIdLookup(scope, extractExactIds(INVOICE_QUESTION), { client: failing.client, signal: new AbortController().signal })).rejects.toThrow(
+      /rag_exact_id_documents/,
+    );
+  });
+
+  it('refuses a scope that was not minted', async () => {
+    const rpc = routedRpc({});
+    await expect(
+      exactIdLookup({ kind: 'org', userId: null, organizationId: ORG_ID } as never, extractExactIds(INVOICE_QUESTION), {
+        client: rpc.client,
+        signal: new AbortController().signal,
+      }),
+    ).rejects.toThrow(/unminted/);
+    expect(rpc.calls).toEqual([]);
+  });
+});
+
+describe('the exact_id_lookup stage in runRetrieval', () => {
+  const scope = mintScope('single', null, null);
+
+  function install(options: Parameters<typeof routedRpc>[0], env: RagEnvInput) {
+    const rpc = routedRpc(options);
+    installDeps({ searchRpc: rpc.client, embedder: fakeEmbedder().embedder, ragEnv: () => env });
+    return rpc;
+  }
+
+  const run = (query = INVOICE_QUESTION) => runRetrieval({ scope, query, profile: 'eval', signal: new AbortController().signal });
+
+  beforeEach(() => uninstallDeps());
+  afterEach(() => uninstallDeps());
+
+  it('with the switch off the stage is not run or recorded, even for a question that holds an invoice number', async () => {
+    const rpc = install({ vector: rows(3), exact: [exactRow('e1')] }, {});
+    const result = await run();
+    expect(rpc.exactCalls()).toEqual([]);
+    expect(result.stages.map((stage) => stage.name)).toEqual(['analyze', 'embed', 'search', 'legacy_rank', 'post_filter', 'assemble']);
+    expect(result.candidates.map((item) => item.chunk_id)).toEqual(['chunk-1', 'chunk-2', 'chunk-3']);
+    expect(result.status).toBe('ok');
+  });
+
+  it('an invalid switch value is off', async () => {
+    const rpc = install({ vector: rows(3), exact: [exactRow('e1')] }, { RAG_EXACT_ID_LOOKUP: 'yes' });
+    const result = await run();
+    expect(rpc.exactCalls()).toEqual([]);
+    expect(result.stages.some((stage) => stage.name === 'exact_id_lookup')).toBe(false);
+  });
+
+  it('with the switch on the stage runs between search and legacy_rank and puts the exact chunk first', async () => {
+    const rpc = install({ vector: rows(3), exact: [exactRow('chunk-2'), exactRow('e1')] }, { RAG_EXACT_ID_LOOKUP: 'true' });
+    const result = await run();
+    expect(result.stages.map((stage) => [stage.name, stage.status])).toEqual([
+      ['analyze', 'ok'],
+      ['embed', 'ok'],
+      ['search', 'ok'],
+      ['exact_id_lookup', 'ok'],
+      ['legacy_rank', 'ok'],
+      ['post_filter', 'ok'],
+      ['assemble', 'ok'],
+    ]);
+    expect(result.candidates.map((item) => [item.chunk_id, item.match_reason])).toEqual([
+      ['chunk-2', 'exact_id'],
+      ['e1', 'exact_id'],
+      ['chunk-1', 'similarity: 0.900'],
+      ['chunk-3', 'similarity: 0.800'],
+    ]);
+    expect(rpc.exactCalls()).toHaveLength(1);
+    expect(rpc.exactCalls()[0]?.args).toMatchObject({ p_tenant_key: 's:default', p_tokens: ['FT-2025-00417'] });
+    expect(result.status).toBe('ok');
+    expect(result.stages.find((stage) => stage.name === 'exact_id_lookup')).toMatchObject({ candidates_in: 3, candidates_out: 2 });
+  });
+
+  it('records the stage as ok without a call for a question with no identifier', async () => {
+    const rpc = install({ vector: rows(3), exact: [exactRow('e1')] }, { RAG_EXACT_ID_LOOKUP: 'true' });
+    const result = await run('tell me about the onboarding process');
+    expect(rpc.exactCalls()).toEqual([]);
+    expect(result.stages.find((stage) => stage.name === 'exact_id_lookup')).toMatchObject({ status: 'ok', candidates_out: 0 });
+    expect(result.candidates.map((item) => item.chunk_id)).toEqual(['chunk-1', 'chunk-2', 'chunk-3']);
+  });
+
+  it('a failing lookup is skipped, the result is degraded and the vector results are intact', async () => {
+    install({ vector: rows(3), exactError: { message: 'boom', code: 'XX000' } }, { RAG_EXACT_ID_LOOKUP: 'true' });
+    const result = await run();
+    expect(result.status).toBe('degraded');
+    expect(result.reason).toBe('exact_id_lookup_failed');
+    expect(result.stages.find((stage) => stage.name === 'exact_id_lookup')).toMatchObject({ status: 'skipped', reason: 'failed' });
+    expect(result.candidates.map((item) => item.chunk_id)).toEqual(['chunk-1', 'chunk-2', 'chunk-3']);
+  });
+
+  it('a slow lookup is skipped at its timeout and the result is degraded', async () => {
+    install({ vector: rows(3), exact: [exactRow('e1')], exactDelayMs: 400 }, { RAG_EXACT_ID_LOOKUP: 'true', RAG_STAGE_TIMEOUTS: 'exact_id_lookup=25' });
+    const result = await run();
+    expect(result.status).toBe('degraded');
+    expect(result.reason).toBe('exact_id_lookup_timeout');
+    expect(result.candidates.map((item) => item.chunk_id)).toEqual(['chunk-1', 'chunk-2', 'chunk-3']);
+  });
+
+  it('RAG_DISABLED_STAGES turns the stage off for good: recorded as disabled, no call', async () => {
+    const rpc = install({ vector: rows(3), exact: [exactRow('e1')] }, { RAG_EXACT_ID_LOOKUP: 'true', RAG_DISABLED_STAGES: 'exact_id_lookup' });
+    const result = await run();
+    expect(rpc.exactCalls()).toEqual([]);
+    expect(result.stages.find((stage) => stage.name === 'exact_id_lookup')).toMatchObject({ status: 'disabled' });
+    expect(result.candidates.map((item) => item.chunk_id)).toEqual(['chunk-1', 'chunk-2', 'chunk-3']);
+  });
+
+  it('an exact chunk survives the post filter and reaches the assembled documents even when no vector chunk is found', async () => {
+    install({ vector: [], exact: [exactRow('e1')] }, { RAG_EXACT_ID_LOOKUP: 'true' });
+    const result = await run();
+    expect(result.candidates.map((item) => item.chunk_id)).toEqual(['e1']);
+    expect(result.relevantChunks.map((item) => item.chunk_id)).toEqual(['e1']);
+    expect(result.status).toBe('ok');
+  });
+
+  it('chat and embed profiles run the stage, media and voice do not', async () => {
+    for (const profile of ['chat', 'embed'] as const) {
+      const rpc = install({ vector: rows(2), exact: [exactRow('e1')] }, { RAG_EXACT_ID_LOOKUP: 'true' });
+      await runRetrieval({ scope, query: INVOICE_QUESTION, profile, signal: new AbortController().signal });
+      expect(rpc.exactCalls(), profile).toHaveLength(1);
+      uninstallDeps();
+    }
+    for (const profile of ['media', 'voice'] as const) {
+      const rpc = install({ vector: rows(2), exact: [exactRow('e1')] }, { RAG_EXACT_ID_LOOKUP: 'true' });
+      await runRetrieval({ scope, query: INVOICE_QUESTION, profile, signal: new AbortController().signal });
+      expect(rpc.exactCalls(), profile).toEqual([]);
+      uninstallDeps();
+    }
   });
 });

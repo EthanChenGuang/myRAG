@@ -1,5 +1,8 @@
+import type { RpcClient } from '../backend/supabase-rpc';
 import { IDENTIFIER_PATTERN } from '../ids/shapes';
 import { classifyTaxId, type TaxIdScheme } from '../ids/tax-ids';
+import type { TenantScope } from '../tenant/scope';
+import type { Candidate } from '../types';
 
 export type ExactIdKind = 'invoice' | 'tax_id' | 'model';
 
@@ -82,4 +85,28 @@ export function extractExactIds(query: string): ExactIdToken[] {
     if (out.length >= MAX_EXACT_ID_TOKENS) break;
   }
   return out;
+}
+
+export const EXACT_ID_LIMIT = 10;
+
+export interface ExactIdRow {
+  chunk_id: string;
+  document_id: string;
+  content: string;
+  metadata: Record<string, unknown> | null;
+  matched_field: string;
+}
+
+export interface ExactIdLookupOptions {
+  client: RpcClient;
+  signal: AbortSignal;
+  limit?: number;
+}
+
+export async function exactIdLookup(_scope: TenantScope, _tokens: ExactIdToken[], _options: ExactIdLookupOptions): Promise<ExactIdRow[]> {
+  return [];
+}
+
+export function mergeExactCandidates(vector: Candidate[], _rows: ExactIdRow[], _maxResults: number): Candidate[] {
+  return vector;
 }
