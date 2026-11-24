@@ -1,3 +1,27 @@
+# HANDOFF — exec/03.1-34 (Cloud Agent)
+
+**Branch:** `exec/03.1-34` → base `claude/ecstatic-hamilton-86gtwv`
+
+## Done
+
+- Plan **03.1-34**: `parse-external` **native** and **premium** modes.
+- Files: `src/lib/rag/ingest/callbacks/{native,premium,premium-continuation}.ts`, `parse-external.ts`, `tests/rag/ingest/parse-external.test.ts`.
+
+## Next
+
+- **03.1-40**: worker premium calls with `cursor` JSON and sub-PDF under `{tenant}/_parse-cache/{sha}/`.
+- Deferred: batch USD refund on failed premium (`ingestion_batches.spent_usd`).
+
+## Verify
+
+```bash
+npx vitest run tests/rag/ingest/parse-external.test.ts tests/rag/ingest/cloud-guard.test.ts
+npx next typegen && npx tsc --noEmit -p tsconfig.json
+node scripts/ci/check-rag-boundary.mjs && python3 scripts/ci/check-workflows.py && node scripts/check-config.mjs
+```
+
+---
+
 # HANDOFF — Phase 3 (PAUSE-96 → Claude Code)
 
 **Branch:** `claude/ecstatic-hamilton-86gtwv` (push only; no PR)  
