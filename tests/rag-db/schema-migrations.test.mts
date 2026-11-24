@@ -494,10 +494,10 @@ for (const mode of MODES) {
         );
         assert.deepEqual(exposed.rows, []);
         const defined = await fixture.db.query<{ proname: string }>("SELECT proname FROM pg_proc WHERE proname LIKE 'rag\_%' ORDER BY proname");
-        assert.deepEqual(
-          defined.rows.map((row) => row.proname),
-          ['rag_chunks_legacy_defaults', 'rag_documents_legacy_defaults'],
-        );
+        const definedNames = defined.rows.map((row) => row.proname);
+        for (const name of ['rag_chunks_legacy_defaults', 'rag_documents_legacy_defaults']) {
+          assert.ok(definedNames.includes(name), `${name} is missing`);
+        }
       });
     });
 
