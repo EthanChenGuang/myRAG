@@ -85,5 +85,42 @@ class DbTestsStepTest(unittest.TestCase):
         self.assertTrue(any("tests/rag-db/" in e for e in errors), errors)
 
 
+class RealDoclingJobTest(unittest.TestCase):
+    def nightly(self) -> dict:
+        return check_workflows.load(check_workflows.NIGHTLY)[0]
+
+    def errors_for(self, data: dict) -> list[str]:
+        errors: list[str] = []
+        check_workflows.check_real_docling(data, errors)
+        return errors
+
+    def test_repository_nightly_has_a_valid_real_docling_job(self):
+        self.assertEqual(self.errors_for(self.nightly()), [])
+
+    def test_missing_job_is_reported(self):
+        data = self.nightly()
+        del data["jobs"]["real-docling"]
+        self.assertTrue(any("'real-docling' missing" in e for e in self.errors_for(data)))
+
+    def test_install_failure_must_skip_with_a_notice(self):
+        data = self.nightly()
+        for step in data["jobs"]["real-docling"]["steps"]:
+            if step.get("id") == "docling":
+                step["run"] = step["run"].replace(check_workflows.DOCLING_SKIP_NOTICE, "echo skipping")
+        self.assertTrue(any("skips with a notice" in e for e in self.errors_for(data)))
+
+    def test_a_step_after_the_install_without_the_ready_condition_is_reported(self):
+        data = self.nightly()
+        steps = data["jobs"]["real-docling"]["steps"]
+        steps[-2].pop("if")
+        self.assertTrue(any("must be conditioned" in e for e in self.errors_for(data)))
+
+    def test_the_real_docling_pytest_run_is_required(self):
+        data = self.nightly()
+        for step in data["jobs"]["real-docling"]["steps"]:
+            step["run"] = str(step.get("run", "")).replace("-m real_docling", "")
+        self.assertTrue(any("-m real_docling" in e for e in self.errors_for(data)))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -28,6 +28,8 @@ VERSION_COMMENT_RE = re.compile(r"^\s+#\s*v\d+(\.\d+){0,2}\s*$")
 UV_IMAGE_RE = re.compile(r"ghcr\.io/astral-sh/uv:(?P<version>\d+\.\d+\.\d+)")
 SKIP_NOTICE = "::notice::judge key not configured, skipping"
 ONLINE_SKIP_NOTICE = "::notice::langfuse keys not configured, skipping online judge"
+DOCLING_SKIP_NOTICE = "::notice::docling extra not installable, skipping"
+DOCLING_READY = "steps.docling.outputs.ready == 'true'"
 TELEMETRY = {
     "DEEPEVAL_TELEMETRY_OPT_OUT": "1",
     "DEEPEVAL_UPDATE_WARNING_OPT_IN": "0",
@@ -328,6 +330,44 @@ def check_online_judge(data: dict, errors: list[str]) -> None:
             errors.append("nightly: an online-judge step appears to echo a key")
 
 
+def check_real_docling(data: dict, errors: list[str]) -> None:
+    job = (data.get("jobs") or {}).get("real-docling")
+    if job is None:
+        errors.append("nightly: job 'real-docling' missing")
+        return
+    steps = all_steps(job)
+    env_text = " ".join(str(step.get("env", "")) for step in steps)
+    body = step_text(job) + "\n" + env_text
+    needles = (
+        "fonts-noto-cjk",
+        "uv sync --directory rag-sidecar --locked --extra docling",
+        DOCLING_SKIP_NOTICE,
+        "uv sync --directory eval --locked --extra fixtures",
+        "--target docling",
+        "/opt/docling-models",
+        "generate_pdfs.py",
+        "--cjk-font",
+        "-m real_docling",
+        "--extra docling pytest",
+        "RAG_SIDECAR_DOCLING_ARTIFACTS",
+        "RAG_FIXTURE_PDF_DIR",
+        "HF_HUB_OFFLINE",
+    )
+    for needle in needles:
+        if needle not in body:
+            errors.append(f"nightly: real-docling job is missing '{needle}'")
+    if "secrets." in str(job):
+        errors.append("nightly: real-docling needs no secrets and must not reference any")
+    sync = next((step for step in steps if step.get("id") == "docling"), None)
+    run = str((sync or {}).get("run", ""))
+    if sync is None or DOCLING_SKIP_NOTICE not in run or "ready=true" not in run or "ready=false" not in run or "exit 1" in run:
+        errors.append("nightly: real-docling must sync the docling extra in a step with id 'docling' that skips with a notice instead of failing")
+        return
+    for step in steps[steps.index(sync) + 1 :]:
+        if DOCLING_READY not in str(step.get("if", "")):
+            errors.append(f"nightly: real-docling step '{step.get('name', step.get('uses', '?'))}' must be conditioned on {DOCLING_READY}")
+
+
 def check_nightly(errors: list[str]) -> None:
     data, text = load(NIGHTLY)
     check_common("nightly", data, text, errors)
@@ -347,6 +387,7 @@ def check_nightly(errors: list[str]) -> None:
     if "CONFIDENT_API_KEY" in text:
         errors.append("nightly: CONFIDENT_API_KEY must never be set")
     check_online_judge(data, errors)
+    check_real_docling(data, errors)
     job = (data.get("jobs") or {}).get("judge")
     if job is None:
         errors.append("nightly: job 'judge' missing")
