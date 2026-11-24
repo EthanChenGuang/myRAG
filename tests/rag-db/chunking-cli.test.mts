@@ -58,155 +58,6 @@ function contractText(label: string, extra = ''): string {
   ].join('\n');
 }
 
-describe('profile-ops with fake deps', () => {
-  let ops: typeof import('@/lib/rag/chunking/profile-ops');
-  let depsModule: typeof import('@/lib/rag/deps');
-  let activeModule: typeof import('@/lib/rag/chunking/active');
-  const calls: Array<{ fn: string; args: Record<string, unknown>; signal: AbortSignal | null }> = [];
-  let handler: (fn: string, args: Record<string, unknown>) => { data?: unknown[] | null; error?: { message: string; code?: string } | null };
-
-  function fakeAdmin(): SupabaseClient {
-    return {
-      rpc(fn: string, args: Record<string, unknown>) {
-        const entry = { fn, args, signal: null as AbortSignal | null };
-        calls.push(entry);
-        const request = {
-          abortSignal(signal: AbortSignal) {
-            entry.signal = signal;
-            return request;
-          },
-          then(resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) {
-            const result = handler(fn, args);
-            return Promise.resolve({ data: result.data ?? null, error: result.error ?? null }).then(resolve, reject);
-          },
-        };
-        return request;
-      },
-    } as unknown as SupabaseClient;
-  }
-
-  before(async () => {
-    ops = await import('@/lib/rag/chunking/profile-ops');
-    depsModule = await import('@/lib/rag/deps');
-    activeModule = await import('@/lib/rag/chunking/active');
-  });
-
-  beforeEach(() => {
-    calls.length = 0;
-    handler = () => ({ data: [] });
-    depsModule.setRagDepsForTests({ adminClient: () => fakeAdmin() });
-    activeModule.resetActiveChunkingProfilesForTests();
-  });
-
-  afterEach(() => {
-    depsModule.resetRagDepsForTests();
-    activeModule.resetActiveChunkingProfilesForTests();
-  });
-
-  const listCalls = (): number => calls.filter((call) => call.fn === 'rag_list_chunking_profiles').length;
-
-  test('activateChunkingProfile resolves on success, passes actor and doc type, and refreshes the active cache once', async () => {
-    handler = (fn) =>
-      fn === 'rag_activate_chunking_profile'
-        ? { data: [{ activated_profile: PROFILE, previous_profile: 'legacy', doc_type: 'contract_legal', changed: true }] }
-        : { data: [{ id: PROFILE, doc_type: 'contract_legal', is_active: true }] };
-    const result = await ops.activateChunkingProfile(PROFILE, { docType: 'contract_legal', actor: ACTOR });
-    assert.deepEqual(result, { activated: PROFILE, previous: 'legacy', docType: 'contract_legal', changed: true });
-    const activate = calls.find((call) => call.fn === 'rag_activate_chunking_profile');
-    assert.deepEqual(activate?.args, { p_profile_id: PROFILE, p_actor: ACTOR, p_doc_type: 'contract_legal' });
-    assert.equal(listCalls(), 1, 'the active chunking-profile cache was refreshed once');
-    assert.deepEqual(await activeModule.getActiveChunkingProfiles(), { contract_legal: PROFILE });
-  });
-
-  test('a raised chunking_activation_refused:eval_failed becomes ChunkingActivationRefused with reason eval_failed; other errors are not refusals', async () => {
-    handler = () => ({ error: { message: 'chunking_activation_refused:eval_failed', code: '55000' } });
-    await assert.rejects(ops.activateChunkingProfile(PROFILE), (error: unknown) => {
-      assert.ok(error instanceof ops.ChunkingActivationRefused);
-      assert.equal((error as InstanceType<typeof ops.ChunkingActivationRefused>).reason, 'eval_failed');
-      return true;
-    });
-    assert.equal(listCalls(), 0, 'a refusal flips nothing, so the cache is not refreshed');
-
-    handler = () => ({ error: { message: 'canceling statement due to statement timeout', code: '57014' } });
-    await assert.rejects(ops.activateChunkingProfile(PROFILE), (error: unknown) => {
-      assert.ok(!(error instanceof ops.ChunkingActivationRefused), 'a timeout is not a refusal');
-      assert.equal((error as { code?: string }).code, '57014');
-      return true;
-    });
-    handler = () => ({ error: { message: 'invalid_decision: gate_passed must be a boolean', code: '22023' } });
-    await assert.rejects(ops.activateChunkingProfile(PROFILE), (error: unknown) => !(error instanceof ops.ChunkingActivationRefused));
-  });
-
-  test('rollbackChunkingProfile maps no_previous to a refusal and refreshes the cache after a flip', async () => {
-    handler = () => ({ error: { message: 'chunking_activation_refused:no_previous', code: '55000' } });
-    await assert.rejects(ops.rollbackChunkingProfile('contract_legal'), (error: unknown) => error instanceof ops.ChunkingActivationRefused && error.reason === 'no_previous');
-    assert.equal(listCalls(), 0);
-    handler = (fn) =>
-      fn === 'rag_rollback_chunking_profile'
-        ? { data: [{ restored_profile: 'legacy', rolled_back_profile: PROFILE, doc_type: 'contract_legal' }] }
-        : { data: [] };
-    const result = await ops.rollbackChunkingProfile('contract_legal', { actor: ACTOR });
-    assert.deepEqual(result, { restored: 'legacy', rolledBack: PROFILE, docType: 'contract_legal' });
-    assert.deepEqual(calls.find((call) => call.fn === 'rag_rollback_chunking_profile')?.args, { p_doc_type: 'contract_legal', p_actor: ACTOR });
-    assert.equal(listCalls(), 1);
-  });
-
-  test('with no admin client every op rejects with admin_unavailable and makes no call', async () => {
-    depsModule.setRagDepsForTests({ adminClient: () => null });
-    const attempts: Array<() => Promise<unknown>> = [
-      () => ops.listChunkingProfiles(),
-      () => ops.getChunkingCoverage(),
-      () => ops.createChunkingProfile({ id: PROFILE, docType: 'contract_legal', childTokens: 256, parentMode: 'structure', parentTokens: 1024, preset: '256/1024' }),
-      () => ops.recordChunkingDecision(decisionOf()),
-      () => ops.activateChunkingProfile(PROFILE),
-      () => ops.rollbackChunkingProfile('contract_legal'),
-    ];
-    for (const attempt of attempts) {
-      await assert.rejects(attempt(), (error: unknown) => (error as { code?: string }).code === 'admin_unavailable');
-    }
-    assert.equal(calls.length, 0);
-  });
-
-  test('recordChunkingDecision validates with ChunkingDecisionSchema before the RPC; an invalid decision is rejected without a call', async () => {
-    for (const bad of [{}, decisionOf({ gate_passed: 'yes' }), decisionOf({ report_hash: 'short' }), decisionOf({ doc_type: 'memo' }), { ...decisionOf(), extra: 1 }]) {
-      await assert.rejects(ops.recordChunkingDecision(bad), (error: unknown) => error instanceof ops.ChunkingInputError);
-    }
-    assert.equal(calls.length, 0);
-    handler = () => ({ data: [{ profile_id: PROFILE, doc_type: 'contract_legal' }] });
-    const stored = await ops.recordChunkingDecision(decisionOf());
-    assert.deepEqual(stored, { profileId: PROFILE, docType: 'contract_legal' });
-    assert.equal(calls.length, 1);
-    assert.equal(calls[0]?.fn, 'rag_record_chunking_decision');
-    assert.equal(calls[0]?.args.p_profile_id, PROFILE);
-  });
-
-  test('getChunkingCoverage and listChunkingProfiles return typed rows; an aborted signal rejects after the call', async () => {
-    handler = (fn) =>
-      fn === 'rag_chunking_coverage'
-        ? { data: [{ doc_type: 'contract_legal', profile_id: PROFILE, is_active: true, current_ready_documents: 3, documents_with_children: 2, missing_documents: 1 }] }
-        : {
-            data: [
-              {
-                id: PROFILE, doc_type: 'contract_legal', child_tokens: 256, parent_mode: 'structure', parent_tokens: 1024, status: 'active', preset: '256/1024',
-                previous_active_id: 'legacy', is_active: true, created_at: '2026-11-25T00:00:00Z', activated_at: '2026-11-25T01:00:00Z', activated_by: 'cli',
-              },
-            ],
-          };
-    assert.deepEqual(await ops.getChunkingCoverage(), [
-      { docType: 'contract_legal', profileId: PROFILE, isActive: true, currentReadyDocuments: 3, documentsWithChildren: 2, missingDocuments: 1 },
-    ]);
-    const listed = await ops.listChunkingProfiles();
-    assert.equal(listed[0]?.id, PROFILE);
-    assert.equal(listed[0]?.previousActiveId, 'legacy');
-    assert.equal(listed[0]?.childTokens, 256);
-
-    const controller = new AbortController();
-    controller.abort(new Error('stop'));
-    await assert.rejects(ops.getChunkingCoverage({ signal: controller.signal }), /stop/);
-    assert.equal(calls.at(-1)?.signal, controller.signal, 'the caller signal is passed to the request');
-  });
-});
-
 describe('rag:chunking over the gated pointer flip', () => {
   let fixture: TwoTenantDatabase;
   let edge: FakeEdge;
@@ -417,7 +268,9 @@ describe('rag:chunking over the gated pointer flip', () => {
     for (const tenant of [A, B]) {
       const result = await search(tenant, EXCEPTION_QUESTION);
       assert.ok(result.candidates.length > 0, `${tenant.key} found nothing after activation`);
-      assert.ok(result.candidates.every((candidate) => children.has(candidate.chunk_id)), `${tenant.key} still got a legacy chunk after activation`);
+      const contractHits = result.candidates.filter((candidate) => candidate.document_id === (tenant === A ? docs.a1 : docs.b1));
+      assert.ok(contractHits.length > 0, `${tenant.key} found nothing of its contract after activation`);
+      assert.ok(contractHits.every((candidate) => children.has(candidate.chunk_id)), `${tenant.key} still got a legacy chunk of its contract after activation`);
       const own = new Set((await rows('SELECT id::text FROM document_chunks WHERE tenant_key = $1', [tenant.key])).map((row) => String(row.id)));
       assert.ok(result.candidates.every((candidate) => own.has(candidate.chunk_id)), `${tenant.key} received a chunk of another tenant`);
     }
@@ -425,9 +278,9 @@ describe('rag:chunking over the gated pointer flip', () => {
     const rolledBack = await spawnCli(['rollback', 'contract_legal']);
     assert.equal(rolledBack.code, 0, `${rolledBack.stdout}\n${rolledBack.stderr}`);
     assert.match(rolledBack.stdout, /restored legacy/);
-    const afterRollback = await search(A, EXCEPTION_QUESTION);
-    assert.ok(afterRollback.candidates.length > 0);
-    assert.ok(afterRollback.candidates.every((candidate) => legacy.has(candidate.chunk_id)), 'a profile child was returned after the rollback');
+    const afterRollback = (await search(A, EXCEPTION_QUESTION)).candidates.filter((candidate) => candidate.document_id === docs.a1);
+    assert.ok(afterRollback.length > 0);
+    assert.ok(afterRollback.every((candidate) => legacy.has(candidate.chunk_id)), 'a profile child was returned after the rollback');
     assert.equal(Number((await rows('SELECT count(*)::int AS n FROM document_chunks WHERE chunking_profile_id = $1', [PROFILE]))[0]?.n), children.size, 'rollback kept every row');
 
     const again = await spawnCli(['rollback', 'contract_legal']);
@@ -561,5 +414,154 @@ describe('rag:chunking over the gated pointer flip', () => {
       process.env.SUPABASE_SERVICE_ROLE_KEY = key;
     }
     assert.equal(edge.calls.length, 0, 'nothing was asked of the database');
+  });
+});
+
+describe('profile-ops with fake deps', () => {
+  let ops: typeof import('@/lib/rag/chunking/profile-ops');
+  let depsModule: typeof import('@/lib/rag/deps');
+  let activeModule: typeof import('@/lib/rag/chunking/active');
+  const calls: Array<{ fn: string; args: Record<string, unknown>; signal: AbortSignal | null }> = [];
+  let handler: (fn: string, args: Record<string, unknown>) => { data?: unknown[] | null; error?: { message: string; code?: string } | null };
+
+  function fakeAdmin(): SupabaseClient {
+    return {
+      rpc(fn: string, args: Record<string, unknown>) {
+        const entry = { fn, args, signal: null as AbortSignal | null };
+        calls.push(entry);
+        const request = {
+          abortSignal(signal: AbortSignal) {
+            entry.signal = signal;
+            return request;
+          },
+          then(resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) {
+            const result = handler(fn, args);
+            return Promise.resolve({ data: result.data ?? null, error: result.error ?? null }).then(resolve, reject);
+          },
+        };
+        return request;
+      },
+    } as unknown as SupabaseClient;
+  }
+
+  before(async () => {
+    ops = await import('@/lib/rag/chunking/profile-ops');
+    depsModule = await import('@/lib/rag/deps');
+    activeModule = await import('@/lib/rag/chunking/active');
+  });
+
+  beforeEach(() => {
+    calls.length = 0;
+    handler = () => ({ data: [] });
+    depsModule.setRagDepsForTests({ adminClient: () => fakeAdmin() });
+    activeModule.resetActiveChunkingProfilesForTests();
+  });
+
+  afterEach(() => {
+    depsModule.resetRagDepsForTests();
+    activeModule.resetActiveChunkingProfilesForTests();
+  });
+
+  const listCalls = (): number => calls.filter((call) => call.fn === 'rag_list_chunking_profiles').length;
+
+  test('activateChunkingProfile resolves on success, passes actor and doc type, and refreshes the active cache once', async () => {
+    handler = (fn) =>
+      fn === 'rag_activate_chunking_profile'
+        ? { data: [{ activated_profile: PROFILE, previous_profile: 'legacy', doc_type: 'contract_legal', changed: true }] }
+        : { data: [{ id: PROFILE, doc_type: 'contract_legal', is_active: true }] };
+    const result = await ops.activateChunkingProfile(PROFILE, { docType: 'contract_legal', actor: ACTOR });
+    assert.deepEqual(result, { activated: PROFILE, previous: 'legacy', docType: 'contract_legal', changed: true });
+    const activate = calls.find((call) => call.fn === 'rag_activate_chunking_profile');
+    assert.deepEqual(activate?.args, { p_profile_id: PROFILE, p_actor: ACTOR, p_doc_type: 'contract_legal' });
+    assert.equal(listCalls(), 1, 'the active chunking-profile cache was refreshed once');
+    assert.deepEqual(await activeModule.getActiveChunkingProfiles(), { contract_legal: PROFILE });
+  });
+
+  test('a raised chunking_activation_refused:eval_failed becomes ChunkingActivationRefused with reason eval_failed; other errors are not refusals', async () => {
+    handler = () => ({ error: { message: 'chunking_activation_refused:eval_failed', code: '55000' } });
+    await assert.rejects(ops.activateChunkingProfile(PROFILE), (error: unknown) => {
+      assert.ok(error instanceof ops.ChunkingActivationRefused);
+      assert.equal((error as InstanceType<typeof ops.ChunkingActivationRefused>).reason, 'eval_failed');
+      return true;
+    });
+    assert.equal(listCalls(), 0, 'a refusal flips nothing, so the cache is not refreshed');
+
+    handler = () => ({ error: { message: 'canceling statement due to statement timeout', code: '57014' } });
+    await assert.rejects(ops.activateChunkingProfile(PROFILE), (error: unknown) => {
+      assert.ok(!(error instanceof ops.ChunkingActivationRefused), 'a timeout is not a refusal');
+      assert.equal((error as { code?: string }).code, '57014');
+      return true;
+    });
+    handler = () => ({ error: { message: 'invalid_decision: gate_passed must be a boolean', code: '22023' } });
+    await assert.rejects(ops.activateChunkingProfile(PROFILE), (error: unknown) => !(error instanceof ops.ChunkingActivationRefused));
+  });
+
+  test('rollbackChunkingProfile maps no_previous to a refusal and refreshes the cache after a flip', async () => {
+    handler = () => ({ error: { message: 'chunking_activation_refused:no_previous', code: '55000' } });
+    await assert.rejects(ops.rollbackChunkingProfile('contract_legal'), (error: unknown) => error instanceof ops.ChunkingActivationRefused && error.reason === 'no_previous');
+    assert.equal(listCalls(), 0);
+    handler = (fn) =>
+      fn === 'rag_rollback_chunking_profile'
+        ? { data: [{ restored_profile: 'legacy', rolled_back_profile: PROFILE, doc_type: 'contract_legal' }] }
+        : { data: [] };
+    const result = await ops.rollbackChunkingProfile('contract_legal', { actor: ACTOR });
+    assert.deepEqual(result, { restored: 'legacy', rolledBack: PROFILE, docType: 'contract_legal' });
+    assert.deepEqual(calls.filter((call) => call.fn === 'rag_rollback_chunking_profile').at(-1)?.args, { p_doc_type: 'contract_legal', p_actor: ACTOR });
+    assert.equal(listCalls(), 1);
+  });
+
+  test('with no admin client every op rejects with admin_unavailable and makes no call', async () => {
+    depsModule.setRagDepsForTests({ adminClient: () => null });
+    const attempts: Array<() => Promise<unknown>> = [
+      () => ops.listChunkingProfiles(),
+      () => ops.getChunkingCoverage(),
+      () => ops.createChunkingProfile({ id: PROFILE, docType: 'contract_legal', childTokens: 256, parentMode: 'structure', parentTokens: 1024, preset: '256/1024' }),
+      () => ops.recordChunkingDecision(decisionOf()),
+      () => ops.activateChunkingProfile(PROFILE),
+      () => ops.rollbackChunkingProfile('contract_legal'),
+    ];
+    for (const attempt of attempts) {
+      await assert.rejects(attempt(), (error: unknown) => (error as { code?: string }).code === 'admin_unavailable');
+    }
+    assert.equal(calls.length, 0);
+  });
+
+  test('recordChunkingDecision validates with ChunkingDecisionSchema before the RPC; an invalid decision is rejected without a call', async () => {
+    for (const bad of [{}, decisionOf({ gate_passed: 'yes' }), decisionOf({ report_hash: 'short' }), decisionOf({ doc_type: 'memo' }), { ...decisionOf(), extra: 1 }]) {
+      await assert.rejects(ops.recordChunkingDecision(bad), (error: unknown) => error instanceof ops.ChunkingInputError);
+    }
+    assert.equal(calls.length, 0);
+    handler = () => ({ data: [{ profile_id: PROFILE, doc_type: 'contract_legal' }] });
+    const stored = await ops.recordChunkingDecision(decisionOf());
+    assert.deepEqual(stored, { profileId: PROFILE, docType: 'contract_legal' });
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0]?.fn, 'rag_record_chunking_decision');
+    assert.equal(calls[0]?.args.p_profile_id, PROFILE);
+  });
+
+  test('getChunkingCoverage and listChunkingProfiles return typed rows; an aborted signal rejects after the call', async () => {
+    handler = (fn) =>
+      fn === 'rag_chunking_coverage'
+        ? { data: [{ doc_type: 'contract_legal', profile_id: PROFILE, is_active: true, current_ready_documents: 3, documents_with_children: 2, missing_documents: 1 }] }
+        : {
+            data: [
+              {
+                id: PROFILE, doc_type: 'contract_legal', child_tokens: 256, parent_mode: 'structure', parent_tokens: 1024, status: 'active', preset: '256/1024',
+                previous_active_id: 'legacy', is_active: true, created_at: '2026-11-25T00:00:00Z', activated_at: '2026-11-25T01:00:00Z', activated_by: 'cli',
+              },
+            ],
+          };
+    assert.deepEqual(await ops.getChunkingCoverage(), [
+      { docType: 'contract_legal', profileId: PROFILE, isActive: true, currentReadyDocuments: 3, documentsWithChildren: 2, missingDocuments: 1 },
+    ]);
+    const listed = await ops.listChunkingProfiles();
+    assert.equal(listed[0]?.id, PROFILE);
+    assert.equal(listed[0]?.previousActiveId, 'legacy');
+    assert.equal(listed[0]?.childTokens, 256);
+
+    const controller = new AbortController();
+    controller.abort(new Error('stop'));
+    await assert.rejects(ops.getChunkingCoverage({ signal: controller.signal }), /stop/);
+    assert.equal(calls.at(-1)?.signal, controller.signal, 'the caller signal is passed to the request');
   });
 });

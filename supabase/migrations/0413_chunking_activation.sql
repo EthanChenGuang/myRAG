@@ -11,8 +11,9 @@
 -- profile changes nothing; activating `legacy` needs no evidence. rag_rollback_chunking_profile restores previous_active_id (legacy when null or
 -- retired), returns the rolled-back profile to ready with every row kept, and refuses `no_previous` only when legacy is already active.
 -- rag_chunking_coverage counts, per doc type and profile, the current ready documents, those with current chunks in the profile and those
--- missing (counts only: no ids, names or tenant keys). Pointer flips never touch chunk rows, so legacy readers are unaffected.
--- These five functions are SECURITY INVOKER with an empty search_path and schema-qualified names; only service_role may execute them.
+-- missing (counts only: no ids, names or tenant keys). rag_chunking_profile_state adds, per profile, the open gaps of its latest build run and
+-- whether the recorded decision passed (for rag:chunking status). Pointer flips never touch chunk rows, so legacy readers are unaffected.
+-- These six functions are SECURITY INVOKER with an empty search_path and schema-qualified names; only service_role may execute them.
 --
 -- Parent currency (round G MEDIUM-3). document_parents.is_current was written true and never updated, so a superseded, unpublished or
 -- quarantined version kept current parents. It now follows the document row: a BEFORE trigger keeps a parent non-current while its document
@@ -599,6 +600,37 @@ AS $$
   ORDER BY p.doc_type, p.id
 $$;
 
+-- Per profile: the gaps of the latest build run that still matter (their document is current and ready) and whether the recorded decision
+-- passed. Counts and words only; rag:chunking status prints it.
+CREATE OR REPLACE FUNCTION public.rag_chunking_profile_state()
+RETURNS TABLE (doc_type text, profile_id text, open_gaps integer, evidence text)
+LANGUAGE sql
+STABLE
+SECURITY INVOKER
+SET search_path = ''
+AS $$
+  SELECT
+    p.doc_type,
+    p.id,
+    COALESCE((
+      SELECT count(*)::integer
+      FROM public.chunking_build_gaps g
+      JOIN public.documents d ON d.id = g.document_id AND d.is_current AND d.status = 'ready'
+      WHERE g.run_id = (
+        SELECT r.id FROM public.chunking_build_runs r
+        WHERE r.profile_id = p.id AND r.doc_type = p.doc_type
+        ORDER BY r.started_at DESC, r.id DESC
+        LIMIT 1)
+    ), 0),
+    CASE
+      WHEN p.eval_evidence IS NULL OR jsonb_typeof(p.eval_evidence) <> 'object' THEN 'none'
+      WHEN (p.eval_evidence -> 'gate_passed') = 'true'::jsonb THEN 'passed'
+      ELSE 'failed'
+    END
+  FROM public.chunking_profiles p
+  ORDER BY p.doc_type, p.id
+$$;
+
 REVOKE ALL ON FUNCTION public.rag_parent_currency_from_document() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.rag_sync_parent_currency() FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.rag_sync_parent_currency() TO service_role;
@@ -620,11 +652,13 @@ REVOKE ALL ON FUNCTION public.rag_record_chunking_decision(text, jsonb) FROM PUB
 REVOKE ALL ON FUNCTION public.rag_activate_chunking_profile(text, text, text) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.rag_rollback_chunking_profile(text, text) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.rag_chunking_coverage() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_chunking_profile_state() FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.rag_create_chunking_profile(text, text, integer, text, integer, text) TO service_role;
 GRANT EXECUTE ON FUNCTION public.rag_record_chunking_decision(text, jsonb) TO service_role;
 GRANT EXECUTE ON FUNCTION public.rag_activate_chunking_profile(text, text, text) TO service_role;
 GRANT EXECUTE ON FUNCTION public.rag_rollback_chunking_profile(text, text) TO service_role;
 GRANT EXECUTE ON FUNCTION public.rag_chunking_coverage() TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_chunking_profile_state() TO service_role;
 
 NOTIFY pgrst, 'reload schema';
 
