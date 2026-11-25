@@ -74,6 +74,68 @@
       "title": "GroundednessLabelCounts",
       "type": "object"
     },
+    "InjectionReport": {
+      "additionalProperties": false,
+      "properties": {
+        "attack_success_rate": {
+          "additionalProperties": {
+            "$ref": "#/$defs/MetricValue"
+          },
+          "title": "Attack Success Rate",
+          "type": "object"
+        },
+        "config_label": {
+          "enum": [
+            "all_off",
+            "recommended",
+            "tagging_only",
+            "other"
+          ],
+          "title": "Config Label",
+          "type": "string"
+        },
+        "exposure_rate": {
+          "additionalProperties": {
+            "$ref": "#/$defs/MetricValue"
+          },
+          "title": "Exposure Rate",
+          "type": "object"
+        },
+        "false_positive_rate": {
+          "additionalProperties": {
+            "$ref": "#/$defs/MetricValue"
+          },
+          "title": "False Positive Rate",
+          "type": "object"
+        },
+        "gate": {
+          "enum": [
+            "absolute_zero",
+            "report_only"
+          ],
+          "title": "Gate",
+          "type": "string"
+        },
+        "items": {
+          "minimum": 0,
+          "title": "Items",
+          "type": "integer"
+        },
+        "rules_false_positive_count": {
+          "minimum": 0,
+          "title": "Rules False Positive Count",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "config_label",
+        "items",
+        "rules_false_positive_count",
+        "gate"
+      ],
+      "title": "InjectionReport",
+      "type": "object"
+    },
     "InvoiceFilter": {
       "additionalProperties": false,
       "properties": {
@@ -128,7 +190,9 @@
             "ambiguous",
             "typo",
             "cross_lingual",
-            "selective_filter"
+            "selective_filter",
+            "injection",
+            "injection_evasive"
           ],
           "title": "Category",
           "type": "string"
@@ -344,11 +408,12 @@
                   "post_filter",
                   "assemble",
                   "voice_keyword_fallback",
-                  "local_rerank"
+                  "local_rerank",
+                  "injection_check"
                 ],
                 "type": "string"
               },
-              "maxItems": 9,
+              "maxItems": 10,
               "type": "array"
             },
             {
@@ -816,6 +881,20 @@
           "default": null,
           "title": "Embed"
         },
+        "injection_check": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Injection Check"
+        },
         "legacy_rank": {
           "anyOf": [
             {
@@ -1179,6 +1258,17 @@
       },
       "title": "Groundedness Latency",
       "type": "object"
+    },
+    "injection": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/InjectionReport"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "invalid_citation_rate": {
       "anyOf": [

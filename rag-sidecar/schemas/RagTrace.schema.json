@@ -400,6 +400,17 @@
           },
           "title": "Rag Prompt Sha256",
           "type": "object"
+        },
+        "security": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TraceSecurityVersions"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -410,6 +421,116 @@
         "endpoint_version"
       ],
       "title": "TraceEffectiveConfig",
+      "type": "object"
+    },
+    "TraceInjection": {
+      "additionalProperties": false,
+      "properties": {
+        "checked": {
+          "items": {
+            "$ref": "#/$defs/TraceInjectionChecked"
+          },
+          "title": "Checked",
+          "type": "array"
+        },
+        "detectors_unavailable": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Detectors Unavailable",
+          "type": "array"
+        },
+        "downweighted": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Downweighted",
+          "type": "array"
+        },
+        "dropped": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Dropped",
+          "type": "array"
+        },
+        "flagged": {
+          "items": {
+            "$ref": "#/$defs/TraceInjectionFlagged"
+          },
+          "title": "Flagged",
+          "type": "array"
+        },
+        "mode": {
+          "enum": [
+            "flag",
+            "drop",
+            "downweight"
+          ],
+          "title": "Mode",
+          "type": "string"
+        }
+      },
+      "required": [
+        "mode"
+      ],
+      "title": "TraceInjection",
+      "type": "object"
+    },
+    "TraceInjectionChecked": {
+      "additionalProperties": false,
+      "properties": {
+        "chunk_id": {
+          "minLength": 1,
+          "title": "Chunk Id",
+          "type": "string"
+        },
+        "document": {
+          "title": "Document",
+          "type": "string"
+        }
+      },
+      "required": [
+        "chunk_id",
+        "document"
+      ],
+      "title": "TraceInjectionChecked",
+      "type": "object"
+    },
+    "TraceInjectionFlagged": {
+      "additionalProperties": false,
+      "properties": {
+        "chunk_id": {
+          "minLength": 1,
+          "title": "Chunk Id",
+          "type": "string"
+        },
+        "detectors": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Detectors",
+          "type": "array"
+        },
+        "document": {
+          "title": "Document",
+          "type": "string"
+        },
+        "rule_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Rule Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "chunk_id",
+        "document",
+        "detectors"
+      ],
+      "title": "TraceInjectionFlagged",
       "type": "object"
     },
     "TraceKeptChunk": {
@@ -615,6 +736,27 @@
       "title": "TraceRetrievalVersions",
       "type": "object"
     },
+    "TraceSecurityVersions": {
+      "additionalProperties": false,
+      "properties": {
+        "detectors_version": {
+          "minLength": 1,
+          "title": "Detectors Version",
+          "type": "string"
+        },
+        "rules_version": {
+          "minLength": 1,
+          "title": "Rules Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "rules_version",
+        "detectors_version"
+      ],
+      "title": "TraceSecurityVersions",
+      "type": "object"
+    },
     "TraceUsedDocument": {
       "additionalProperties": false,
       "properties": {
@@ -738,6 +880,17 @@
       ],
       "default": null
     },
+    "injection": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/TraceInjection"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "invalid_citations": {
       "default": 0,
       "minimum": 0,
@@ -806,7 +959,8 @@
           "enum": [
             "no_relevant_context",
             "below_threshold",
-            "below_similarity_floor"
+            "below_similarity_floor",
+            "injection_filtered"
           ],
           "type": "string"
         },
