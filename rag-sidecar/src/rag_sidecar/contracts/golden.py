@@ -1,3 +1,4 @@
+import unicodedata
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -19,7 +20,10 @@ Category = Literal[
     "typo",
     "cross_lingual",
     "selective_filter",
+    "injection",
+    "injection_evasive",
 ]
+INJECTION_CATEGORIES = frozenset({"injection", "injection_evasive"})
 ReviewStatus = Literal["draft", "approved", "rejected"]
 Provenance = Literal["synthetic_fixture", "claude_draft", "ragas_generated", "human", "production"]
 Split = Literal["dev", "test"]
@@ -33,6 +37,24 @@ class GoldSpan(_Contract):
     document: str
     section: str
     quote: str = Field(min_length=2)
+
+
+def _fold(text: str) -> str:
+    return unicodedata.normalize("NFKC", text).casefold()
+
+
+class AttackSpec(_Contract):
+    canary: str = Field(min_length=6, max_length=128, pattern=r"^[A-Za-z0-9._:-]+$")
+    injected_quotes: list[GoldSpan] = Field(min_length=1)
+    forbidden_claims: list[str] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _check_attack(self) -> "AttackSpec":
+        if any(not claim.strip() for claim in self.forbidden_claims):
+            raise ValueError("forbidden_claims must be non-empty literal strings")
+        if any("<" in span.quote or ">" in span.quote for span in self.injected_quotes):
+            raise ValueError("injected quotes must not contain < or >")
+        return self
 
 
 class GoldenItem(_Contract):
@@ -50,9 +72,12 @@ class GoldenItem(_Contract):
     split: Split
     retrieval_filters: RetrievalFilters | None = None
     tags: list[str] = Field(default_factory=list)
+    attack: AttackSpec | None = None
 
     @model_validator(mode="after")
     def _check_rules(self) -> "GoldenItem":
+        if self.category in INJECTION_CATEGORIES and not self.answerable:
+            raise ValueError("injection items must be answerable")
         if (self.category == "no_answer") == self.answerable:
             raise ValueError("category no_answer if and only if answerable is false")
         if self.answerable:
@@ -73,7 +98,22 @@ class GoldenItem(_Contract):
                 raise ValueError("cross_lingual evidence_language must differ from the question language")
         elif self.evidence_language is not None and self.evidence_language != self.language:
             raise ValueError("evidence_language must equal the question language outside cross_lingual items")
+        self._check_attack()
         return self
+
+    def _check_attack(self) -> None:
+        if (self.category in INJECTION_CATEGORIES) != (self.attack is not None):
+            raise ValueError("attack is required exactly for injection and injection_evasive items")
+        if self.attack is None:
+            return
+        canary = _fold(self.attack.canary)
+        if canary in _fold(self.expected_answer or ""):
+            raise ValueError("attack canary must not appear in expected_answer")
+        if any(canary in _fold(span.quote) for span in self.gold_evidence):
+            raise ValueError("attack canary must not appear in any gold_evidence quote")
+        gold_documents = {span.document for span in self.gold_evidence}
+        if any(span.document in gold_documents for span in self.attack.injected_quotes):
+            raise ValueError("injected documents must not be gold documents")
 
 
 class GoldenSplitManifest(_Contract):

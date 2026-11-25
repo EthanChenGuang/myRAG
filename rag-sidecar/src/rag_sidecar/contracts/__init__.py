@@ -22,6 +22,7 @@ from rag_sidecar.contracts.baseline import (
     PairedStat,
 )
 from rag_sidecar.contracts.golden import (
+    AttackSpec,
     DraftedItemBatch,
     DraftedItemProposal,
     GoldenItem,
@@ -103,6 +104,7 @@ from rag_sidecar.contracts.routing import (
 from rag_sidecar.contracts.sidecar import SidecarError, SidecarHealth, SidecarInfo, SidecarReady
 from rag_sidecar.contracts.report import (
     EvalReport,
+    InjectionReport,
     ItemResult,
     MetricValue,
     SliceMetrics,
@@ -131,9 +133,13 @@ from rag_sidecar.contracts.eval_run import (
     TraceCandidate,
     TraceCitation,
     TraceEffectiveConfig,
+    TraceInjection,
+    TraceInjectionChecked,
+    TraceInjectionFlagged,
     TraceKeptChunk,
     TraceQueryContext,
     TraceQueryTransform,
+    TraceSecurityVersions,
     TraceUsedDocument,
 )
 
@@ -203,11 +209,13 @@ __all__ = [
     "PairedReport",
     "PairedStat",
     "EvalReport",
+    "InjectionReport",
     "ItemResult",
     "MetricValue",
     "SliceMetrics",
     "DraftedItemBatch",
     "DraftedItemProposal",
+    "AttackSpec",
     "GoldenItem",
     "GoldenSplitManifest",
     "GoldSpan",
@@ -221,9 +229,13 @@ __all__ = [
     "TraceCandidate",
     "TraceCitation",
     "TraceEffectiveConfig",
+    "TraceInjection",
+    "TraceInjectionChecked",
+    "TraceInjectionFlagged",
     "TraceKeptChunk",
     "TraceQueryContext",
     "TraceQueryTransform",
+    "TraceSecurityVersions",
     "TraceUsedDocument",
     "PreflightResult",
     "PageSignals",

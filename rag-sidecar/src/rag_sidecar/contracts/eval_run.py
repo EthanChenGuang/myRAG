@@ -25,6 +25,7 @@ StageName = Literal[
     "assemble",
     "voice_keyword_fallback",
     "local_rerank",
+    "injection_check",
 ]
 
 _TimeoutMs = Annotated[int, Field(ge=1, le=60000)]
@@ -40,6 +41,7 @@ class StageTimeoutsMs(_Contract):
     assemble: _TimeoutMs | None = None
     voice_keyword_fallback: _TimeoutMs | None = None
     local_rerank: _TimeoutMs | None = None
+    injection_check: _TimeoutMs | None = None
 
 
 class RagRunOptions(_Contract):
@@ -48,7 +50,7 @@ class RagRunOptions(_Contract):
     user_id: str | None = None
     generator_model: str | None = None
     degrade: Literal["drop_top_candidate"] | None = None
-    disabled_stages: list[StageName] | None = Field(default=None, max_length=9)
+    disabled_stages: list[StageName] | None = Field(default=None, max_length=10)
     stage_timeouts_ms: StageTimeoutsMs | None = None
     embedding_profile: str | None = None
     retrieval_overrides: RetrievalOverrides | None = None
@@ -131,6 +133,11 @@ class TraceRefusal(_Contract):
     cell_key: str | None = None
 
 
+class TraceSecurityVersions(_Contract):
+    rules_version: str = Field(min_length=1)
+    detectors_version: str = Field(min_length=1)
+
+
 class TraceEffectiveConfig(_Contract):
     rag_env: dict[str, str]
     rag_prompt_sha256: dict[str, str]
@@ -138,6 +145,34 @@ class TraceEffectiveConfig(_Contract):
     embedding_model: str
     endpoint_version: str
     generator_model: str | None = None
+    security: TraceSecurityVersions | None = None
+
+
+InjectionCheckMode = Literal["flag", "drop", "downweight"]
+
+
+class TraceInjectionChecked(_Contract):
+    chunk_id: str = Field(min_length=1)
+    document: str
+
+
+class TraceInjectionFlagged(_Contract):
+    chunk_id: str = Field(min_length=1)
+    document: str
+    detectors: list[str] = Field(min_length=1)
+    rule_ids: list[str] = Field(default_factory=list)
+
+
+class TraceInjection(_Contract):
+    mode: InjectionCheckMode
+    checked: list[TraceInjectionChecked] = Field(default_factory=list)
+    flagged: list[TraceInjectionFlagged] = Field(default_factory=list)
+    dropped: list[str] = Field(default_factory=list)
+    downweighted: list[str] = Field(default_factory=list)
+    detectors_unavailable: list[str] = Field(default_factory=list)
+
+
+RefusalReason = Literal["no_relevant_context", "below_threshold", "below_similarity_floor", "injection_filtered"]
 
 
 class RagTrace(_Contract):
@@ -152,7 +187,7 @@ class RagTrace(_Contract):
     used_documents: list[TraceUsedDocument]
     context: str
     refused: bool
-    refusal_reason: Literal["no_relevant_context", "below_threshold", "below_similarity_floor"] | None = None
+    refusal_reason: RefusalReason | None = None
     query_language: str | None = None
     retrieval_versions: TraceRetrievalVersions | None = None
     refusal: TraceRefusal | None = None
@@ -164,6 +199,7 @@ class RagTrace(_Contract):
     citation_strategy: CitationStrategy | None = None
     invalid_citations: int = Field(default=0, ge=0)
     groundedness: AnswerGroundedness | None = None
+    injection: TraceInjection | None = None
     stage_latency_ms: dict[str, float]
     stage_status: dict[str, str] = Field(default_factory=dict)
     effective_config: TraceEffectiveConfig
