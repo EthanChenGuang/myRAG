@@ -22,7 +22,7 @@ vi.mock('ai', async (importOriginal) => ({
   ...(await importOriginal<typeof import('ai')>()),
   streamText: async (params: Record<string, unknown>) => {
     const result = await h.capture.streamText(params);
-    return { ...result, toUIMessageStreamResponse: result.toUIMessageStreamResponse ?? (() => new Response('ok')) };
+    return { ...result, toUIMessageStreamResponse: () => new Response('ok') };
   },
 }));
 vi.mock('@/lib/supabase/server', () => ({ createClient: async () => h.ssr }));
