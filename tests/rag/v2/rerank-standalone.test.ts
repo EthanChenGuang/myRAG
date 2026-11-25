@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { loadRagConfig } from '@/lib/rag/config';
+import { runRetrieval } from '@/lib/rag';
+import { resetRetrievalBackendForTests, setRetrievalBackendForTests } from '@/lib/rag/backend/registry';
+import type { BackendLegs } from '@/lib/rag/backend/types';
+import { loadRagConfig, resetRagConfigForTests } from '@/lib/rag/config';
 import type { FusedHit } from '@/lib/rag/fusion/rrf';
 import { buildQueryPlan, planToVariants } from '@/lib/rag/query/plan';
 import type { GateResult } from '@/lib/rag/query/rewrite-gate';
@@ -10,8 +13,15 @@ import { createTraceCollector } from '@/lib/rag/trace/collector';
 import type { QueryVariant } from '@/lib/rag/types';
 import type { QueryPlan } from '@/lib/rag-eval/contracts.generated';
 import { runRankStages, type RankStagesInput } from '@/lib/rag/v2/stages/rank';
+import { resetV2StartupForTests, verifyV2Startup } from '@/lib/rag/v2/startup';
 import { hit } from '../fusion/helpers';
-import { installDeps, uninstallDeps } from '../helpers/pipeline-fakes';
+import { adminWithRpc, fakeAssemblyAdmin, fakeRpcClient, installDeps, uninstallDeps } from '../helpers/pipeline-fakes';
+
+const layer = vi.hoisted(() => ({ outcome: null as unknown }));
+
+vi.mock('@/lib/rag/query/run-layer', () => ({
+  runQueryLayer: async () => layer.outcome,
+}));
 
 const scope = mintScope('single', null, null);
 const ORIGINAL = 'and the second one';
@@ -188,5 +198,76 @@ describe('rank stage under the query layer (D-06, D-07)', () => {
     expect(ids(out.survivors)).toEqual(['c0', 'c1']);
     const counts = phase4.collector.stages().find((stage) => stage.name === 'refusal')?.counts ?? {};
     expect(Object.keys(counts)).not.toContain('subq_reserved');
+  });
+});
+
+describe('v2 pipeline passes the plan and coverage to the rank stage', () => {
+  beforeEach(() => {
+    uninstallDeps();
+    resetRetrievalBackendForTests();
+    resetV2StartupForTests();
+    resetRagConfigForTests();
+    resetRerankerFactoryForTests();
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    uninstallDeps();
+    resetRetrievalBackendForTests();
+    resetV2StartupForTests();
+    resetRagConfigForTests();
+    resetRerankerFactoryForTests();
+    vi.restoreAllMocks();
+  });
+
+  it('reranks on the standalone query and keeps the second sub-question in the final context', async () => {
+    const queryPlan = plan({ subQuestions: ['first part', 'second part'] });
+    const variants = planToVariants(queryPlan);
+    layer.outcome = { plan: queryPlan, variants, dateRange: null, handledTranslate: false, shortCircuit: null };
+    const vectorOf = new Map(variants.map((variant, index) => [variant.text, [index + 1, 0, 0]]));
+    const secondPart = variants.findIndex((variant) => variant.subQuestionIndex === 1);
+    setRetrievalBackendForTests({
+      id: 'pgvector',
+      async search(req) {
+        const index = (req.denseVector?.[0] ?? 0) - 1;
+        const dense =
+          index === secondPart
+            ? [hit('second-part-only', { rank: 1, similarity: 0.9, documentId: 'doc-second' })]
+            : Array.from({ length: 10 }, (_, rank) =>
+                hit(`main-${rank}`, { rank: rank + 1, similarity: 0.9, documentId: `doc-main-${rank}` }),
+              );
+        return { dense, lexical: [] } satisfies BackendLegs;
+      },
+      health: async () => ({ ok: true }),
+      isReady: async () => true,
+    });
+    const { reranker, calls } = recordingReranker();
+    setRerankerFactoryForTests(() => reranker);
+    const env = { ...RERANK_ENV, RAG_QUERY_LAYER: 'true' };
+    installDeps({
+      adminClient: adminWithRpc(fakeRpcClient().client, fakeAssemblyAdmin()),
+      embedder: async (text) => vectorOf.get(text) ?? [0, 0, 1],
+      ragEnv: () => env,
+    });
+    await verifyV2Startup();
+
+    const trace = createTraceCollector({ profile: 'eval', tenantKey: 's:default' });
+    const result = await runRetrieval({
+      scope,
+      trace,
+      query: ORIGINAL,
+      profile: 'eval',
+      options: { ragMode: 'strict', webSearchEnabled: false },
+      signal: new AbortController().signal,
+    });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.query).toBe(STANDALONE);
+    expect(result.candidates.map((candidate) => candidate.chunk_id)).toContain('second-part-only');
+    expect(result.candidates).toHaveLength(8);
+    const refusal = trace.stages().find((stage) => stage.name === 'refusal');
+    expect(refusal?.counts).toMatchObject({ subq_reserved: 1 });
   });
 });
