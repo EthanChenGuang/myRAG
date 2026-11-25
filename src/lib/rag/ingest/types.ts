@@ -71,6 +71,11 @@ interface IngestInputBase {
   mimeType: string;
   /** The type picked for the file, or 'auto' to detect it. Absent: the admin defaults decide. */
   docType?: DocType | 'auto';
+  /**
+   * Scope tags the uploader chose (dimension:value, D-40), already checked by validateUploadScopes in the route. Stored on the document
+   * once its row exists and before any chunk is written. Absent: no tag is written, as today.
+   */
+  scopes?: string[];
   options?: IngestOptions;
   signal: AbortSignal;
   trace?: TraceCollector;

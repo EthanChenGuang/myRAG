@@ -51,6 +51,7 @@ export function queuedInputRecordOf(input: IngestInput, ctx: StageContext): Queu
     mimeType: input.mimeType,
     kind: input.text !== undefined ? 'text' : 'file',
     ...(input.docType ? { docType: input.docType } : {}),
+    ...(input.scopes && input.scopes.length > 0 ? { scopes: [...input.scopes] } : {}),
     ...(input.options !== undefined ? { options: input.options } : {}),
     ...(input.typeChange !== undefined ? { typeChange: input.typeChange } : {}),
     // What the earlier stages decided and the ledger has no column for; the position (lastCompleted) is the ledger's own.

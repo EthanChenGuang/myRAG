@@ -191,10 +191,25 @@ export async function POST(request: NextRequest) {
       const { legacyApprovalRefusal } = await import('@/lib/rag');
       return legacyApprovalRefusal();
     }
+    const requestedScopes = formData.getAll('scopes');
+    let uploadScopes: string[] | undefined;
     if (pipeline === 'unified') {
       const resolved = await resolveUploadScope(request, formData, sessionUser);
       if ('response' in resolved) return resolved.response;
       ingestScope = resolved.scope;
+      // D-40: the uploader's tags, checked against the workspace's active vocabulary before any file is stored.
+      const { validateUploadScopes } = await import('@/lib/rag');
+      const scopeCheck = await validateUploadScopes(ingestScope, requestedScopes, { signal: request.signal });
+      if (!scopeCheck.ok) {
+        console.warn('[Ingest] upload scope tags refused', { reason: scopeCheck.reason });
+        return scopeCheck.reason === 'unavailable'
+          ? NextResponse.json({ error: 'scope_tags_unavailable' }, { status: 503 })
+          : NextResponse.json({ success: false, error: scopeCheck.reason }, { status: 400 });
+      }
+      uploadScopes = scopeCheck.scopes;
+    } else if (requestedScopes.length > 0) {
+      // Tags count only where the unified pipeline ingests; the legacy path loads nothing new for them.
+      console.warn('[Ingest] upload scope tags ignored', { count: requestedScopes.length, reason: processRag ? 'legacy_pipeline' : 'not_ingested' });
     }
     const pendingImages: PendingImage[] = [];
 
@@ -289,7 +304,7 @@ export async function POST(request: NextRequest) {
 
     let queuedIngest: EnqueueResult[] | null = null;
     if (ingestScope && pendingImages.length > 0) {
-      queuedIngest = await scheduleImageIngest(ingestScope, sessionUser.id, pendingImages, imageContext || undefined, startedAt);
+      queuedIngest = await scheduleImageIngest(ingestScope, sessionUser.id, pendingImages, imageContext || undefined, startedAt, uploadScopes);
     }
 
     (async () => {
@@ -386,6 +401,7 @@ async function scheduleImageIngest(
   images: PendingImage[],
   imageContext: string | undefined,
   startedAt: number,
+  scopes?: string[],
 ): Promise<EnqueueResult[] | null> {
   const deadlineAt = startedAt + INGEST_BUDGET_MS;
 
@@ -394,6 +410,7 @@ async function scheduleImageIngest(
     source: 'image_upload' as const,
     sourceKey: image.filePath,
     uploaderId,
+    ...(scopes ? { scopes } : {}),
     file: image.bytes,
     filename: image.name,
     mimeType: image.type,

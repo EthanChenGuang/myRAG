@@ -22,6 +22,8 @@ import {
   repairOwnerMembership,
   resolveAdminWorkspaceScope,
   resolveTenantScope,
+  validateUploadScopes,
+  warnUploadScopesIgnored,
   type EnqueueResult,
   type IngestResult,
   type RagAdminDb,
@@ -673,7 +675,7 @@ function scopeRefusal(status: 401 | 403 | 503): NextResponse {
 
 async function uploadThroughIngest(input: {
   req: Request;
-  formData: { get(name: string): FormDataEntryValue | null };
+  formData: { get(name: string): FormDataEntryValue | null; getAll(name: string): FormDataEntryValue[] };
   file: File;
   userId: string | null;
   orgIdFromForm: string | null;
@@ -742,6 +744,16 @@ async function uploadThroughIngest(input: {
     scope = tenant.scope;
   }
 
+  // D-40: the uploader's tags, checked against the workspace's active vocabulary before anything is stored; ignored with one warning
+  // while RAG_SCOPE_TAGS is off or the pipeline is legacy.
+  const scopeCheck = await validateUploadScopes(scope, input.formData.getAll('scopes'), { signal: req.signal });
+  if (!scopeCheck.ok) {
+    console.warn('[ProcessDocument] upload scope tags refused', { reason: scopeCheck.reason });
+    return scopeCheck.reason === 'unavailable'
+      ? NextResponse.json({ error: 'scope_tags_unavailable' }, { status: 503 })
+      : NextResponse.json({ success: false, error: scopeCheck.reason }, { status: 400 });
+  }
+
   const bytes = new Uint8Array(await file.arrayBuffer());
   const deadlineMs = Math.max(MIN_INGEST_BUDGET_MS, UPLOAD_BUDGET_MS - (Date.now() - input.startedAt));
 
@@ -754,6 +766,7 @@ async function uploadThroughIngest(input: {
     filename: file.name,
     mimeType,
     ...(form.doc_type ? { docType: form.doc_type } : {}),
+    ...(scopeCheck.scopes ? { scopes: scopeCheck.scopes } : {}),
     signal: req.signal,
     deadlineMs,
   };
@@ -965,6 +978,7 @@ export async function POST(req: Request) {
       }
     }
 
+    warnUploadScopesIgnored(formData.getAll('scopes').length, isTemporary ? 'not_ingested' : 'legacy_pipeline');
     console.log('Processing file', isTemporary ? '(temporary)' : '(permanent)');
     const buffer = Buffer.from(await file.arrayBuffer());
     const extension = file.name.split('.').pop()?.toLowerCase();
