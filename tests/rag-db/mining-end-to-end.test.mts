@@ -48,7 +48,15 @@ function emptyResult(): RetrievalResult {
  */
 function hybridClient(edgeClient: SupabaseClient, db: PGlite): SupabaseClient {
   return {
-    rpc: (name: string, args: Record<string, unknown>) => edgeClient.rpc(name, args),
+    // The fake edge answers a scalar function as [{ fn: value }]; PostgREST answers the bare value.
+    async rpc(name: string, args: Record<string, unknown>) {
+      const response = await edgeClient.rpc(name, args);
+      const rows = response.data as unknown;
+      if (Array.isArray(rows) && rows.length === 1 && rows[0] && typeof rows[0] === 'object' && Object.keys(rows[0]).join() === name) {
+        return { ...response, data: (rows[0] as Record<string, unknown>)[name] };
+      }
+      return response;
+    },
     from(table: string) {
       assert.equal(table, 'rag_review_items');
       const where: string[] = [];
@@ -216,6 +224,25 @@ describe('weekly mining end to end (two tenants, fake edge)', () => {
     for (const tenant of second.tenants ?? []) assert.equal(tenant.inserted, 0);
     assert.equal((await db.query('SELECT 1 FROM rag_review_items')).rows.length, 13);
     assert.deepEqual(edge.errors, []);
+  });
+
+  test('the report function is SECURITY INVOKER with an empty search_path, and only the service role may execute it', async () => {
+    const proc = (
+      await db.query<{ prosecdef: boolean; proconfig: string[] | null }>(
+        "SELECT prosecdef, proconfig FROM pg_proc WHERE oid = 'public.rag_mine_failed_queries_report(timestamptz, timestamptz, jsonb)'::regprocedure",
+      )
+    ).rows[0];
+    assert.equal(proc?.prosecdef, false);
+    assert.ok(proc?.proconfig?.some((entry) => entry === 'search_path=""' || entry === 'search_path='));
+    for (const role of ['anon', 'authenticated', 'service_role']) {
+      const allowed = (
+        await db.query<{ ok: boolean }>(
+          "SELECT has_function_privilege($1, 'public.rag_mine_failed_queries_report(timestamptz, timestamptz, jsonb)', 'EXECUTE') AS ok",
+          [role],
+        )
+      ).rows[0]?.ok;
+      assert.equal(allowed, role === 'service_role', role);
+    }
   });
 
   test('anon cannot run the mining function through the edge', async () => {
