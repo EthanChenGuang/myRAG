@@ -65,7 +65,7 @@ const CHUNKING_LABELS = {
       'Documents missing from the active profile {id}: {count}. Until the profile is rebuilt, questions about them are answered from legacy chunks. Select Build missing documents to add them.',
     'coverage.unknown': 'The documents missing from the active profile {id} could not be counted. Select Refresh profiles.',
     'help.decision':
-      "Activation needs a passing sweep decision recorded in the database. The decision shown here is the one in this deployment's files, and the two can differ. After a sweep, record the decision with {command}.",
+      "Activation needs a passing sweep decision recorded in the database. The decision shown here is the one in this deployment’s files, and the two can differ. After a sweep, record the decision with {command}.",
     'decision.line': 'Sweep decision: {profile}, {gate}, {source}, {date}',
     'decision.none': 'No decision recorded',
     'decision.unavailable': 'Sweep decisions are unavailable right now. Open Sweep report for details.',
@@ -85,7 +85,7 @@ const CHUNKING_LABELS = {
     'form.presetLocked': 'Set by the preset. Choose Custom to change it.',
     'form.number': 'Enter a whole number of 1 or more.',
     'form.idInvalid': 'Use lower-case letters, digits, dots, hyphens and underscores, starting with a letter or a digit.',
-    'form.idReserved': 'The ID "legacy" is reserved. Enter another ID.',
+    'form.idReserved': 'The ID “legacy” is reserved. Enter another ID.',
     'form.checking': 'Checking with the server…',
     'form.serverUnchecked':
       'These values could not be checked with the server. You can still create the profile; the server checks them again.',
@@ -159,7 +159,7 @@ const CHUNKING_LABELS = {
       'Not activated. The recorded sweep decision is older than the latest build of {id}. Run the chunking sweep again and record the new decision with {command}.',
     'gate.not_ready': 'Not activated. {id} is still building. Finish its build, then activate again.',
     'gate.ambiguous_profile':
-      "Not activated. More than one document type has a profile with this ID. Select Reload panel, then activate it from its own document type's table.",
+      "Not activated. More than one document type has a profile with this ID. Select Reload panel, then activate it from its own document type’s table.",
     'gate.no_previous': 'Nothing to roll back. {type} already uses legacy chunks.',
     'gate.other':
       'Not changed. The server refused with the code {code}. Select Reload panel and try again. If it repeats, check the app log for [RAG Admin].',
@@ -472,7 +472,7 @@ const CHUNKING_LABELS = {
       'Documenti mancanti dal profilo attivo {id}: {count}. Finché il profilo non viene ricostruito, le domande su questi documenti ricevono risposta dai chunk originali. Seleziona «Costruisci documenti mancanti» per aggiungerli.',
     'coverage.unknown': 'Non è stato possibile contare i documenti mancanti dal profilo attivo {id}. Seleziona «Aggiorna profili».',
     'help.decision':
-      "L'attivazione richiede una decisione di confronto superata e registrata nel database. Quella mostrata qui è nei file di questa installazione e può essere diversa. Dopo un confronto, registra la decisione con {command}.",
+      "L’attivazione richiede una decisione di confronto superata e registrata nel database. Quella mostrata qui è nei file di questa installazione e può essere diversa. Dopo un confronto, registra la decisione con {command}.",
     'decision.line': 'Decisione del confronto: {profile}, {gate}, {source}, {date}',
     'decision.none': 'Nessuna decisione registrata',
     'decision.unavailable': 'Le decisioni del confronto non sono disponibili al momento. Apri «Report di confronto» per i dettagli.',
@@ -488,11 +488,11 @@ const CHUNKING_LABELS = {
     'form.mode.fixed': 'Dimensione fissa',
     'form.id': 'ID profilo',
     'form.idHelp':
-      "Lettere minuscole, cifre, punti, trattini e trattini bassi, fino a 64 caratteri. L'ID suggerito corrisponde al report di confronto, così una decisione registrata trova questo profilo.",
+      "Lettere minuscole, cifre, punti, trattini e trattini bassi, fino a 64 caratteri. L’ID suggerito corrisponde al report di confronto, così una decisione registrata trova questo profilo.",
     'form.presetLocked': 'Impostato dal preset. Scegli «Personalizzato» per modificarlo.',
     'form.number': 'Inserisci un numero intero pari o superiore a 1.',
     'form.idInvalid': 'Usa lettere minuscole, cifre, punti, trattini e trattini bassi, iniziando con una lettera o una cifra.',
-    'form.idReserved': "L'ID «legacy» è riservato. Inseriscine un altro.",
+    'form.idReserved': "L’ID «legacy» è riservato. Inseriscine un altro.",
     'form.checking': 'Verifica con il server…',
     'form.serverUnchecked':
       'Non è stato possibile verificare questi valori con il server. Puoi comunque creare il profilo: il server li controlla di nuovo.',
@@ -502,20 +502,20 @@ const CHUNKING_LABELS = {
       'La dimensione del chunk figlio supera il limite del modello di embedding. Inserisci un valore più piccolo.',
     'finding.parent_below_twice_child': 'La dimensione del padre deve essere almeno il doppio del figlio: {min} o più.',
     'finding.parent_tokens_required': 'Inserisci la dimensione del padre.',
-    'finding.ratio_outside_4_8': "Il padre è {ratio} volte il figlio. L'intervallo provato va da 4 a 8 volte. Puoi comunque creare il profilo.",
+    'finding.ratio_outside_4_8': "Il padre è {ratio} volte il figlio. L’intervallo provato va da 4 a 8 volte. Puoi comunque creare il profilo.",
     'finding.top_k_parent_over_budget':
       'Con questa dimensione, i chunk padre recuperati possono superare il budget di token del contesto, che viene tagliato per rientrarvi. Puoi comunque creare il profilo: il report di confronto mostra i token di contesto misurati.',
     'finding.invalid_shape': 'Alcuni valori mancano o non sono numeri interi. Controlla ogni campo.',
     'error.listUnavailable': 'I profili di chunking non sono disponibili al momento. Seleziona «Ricarica pannello» tra poco.',
     'error.createUnavailable':
       'Il profilo non è stato creato perché il servizio non è disponibile. I valori sono ancora nel modulo. Seleziona di nuovo «Crea profilo» tra poco.',
-    'error.profileExists': "Esiste già un profilo con questo ID per questo tipo di documento. Cambia l'ID del profilo.",
-    'error.rejected': "Il database non ha accettato questi valori. Controlla le dimensioni e l'ID del profilo, poi seleziona di nuovo «Crea profilo».",
+    'error.profileExists': "Esiste già un profilo con questo ID per questo tipo di documento. Cambia l’ID del profilo.",
+    'error.rejected': "Il database non ha accettato questi valori. Controlla le dimensioni e l’ID del profilo, poi seleziona di nuovo «Crea profilo».",
     'error.invalidField': 'Controlla {field}: il server non ha accettato il valore.',
     'error.invalid': 'La richiesta non è stata accettata. Seleziona «Ricarica pannello» e riprova.',
-    'error.profileGone': "Questo profilo non esiste più. L'elenco è stato aggiornato.",
+    'error.profileGone': "Questo profilo non esiste più. L’elenco è stato aggiornato.",
     'error.changeUnknown':
-      "Il server non ha confermato la modifica: potrebbe essere stata applicata oppure no. L'elenco è stato aggiornato e mostra il profilo attivo ora.",
+      "Il server non ha confermato la modifica: potrebbe essere stata applicata oppure no. L’elenco è stato aggiornato e mostra il profilo attivo ora.",
     'build.barLabel': 'Avanzamento della costruzione di {id}',
     'build.region': 'Costruzione di {id}',
     'build.starting': 'Avvio della costruzione…',
@@ -532,17 +532,17 @@ const CHUNKING_LABELS = {
     'build.incomplete':
       'Costruzione terminata, ma alcuni documenti sono rimasti fuori: {count}. {id} non può essere attivato finché non vengono costruiti.',
     'gap.no_parse_output':
-      "Senza output di parsing salvato: {count}. Questi documenti sono stati caricati prima che l'output di parsing venisse conservato. Sul server esegui {command} per elencarli, caricali di nuovo, poi seleziona «Continua costruzione».",
-    'gap.failed': "Chunking non riuscito: {count}. Cerca [RAG Rechunk] nel log dell'app, risolvi la causa, poi seleziona «Continua costruzione».",
-    'gap.other': "Esclusi con il codice {code}: {count}. Cerca [RAG Rechunk] nel log dell'app.",
+      "Senza output di parsing salvato: {count}. Questi documenti sono stati caricati prima che l’output di parsing venisse conservato. Sul server esegui {command} per elencarli, caricali di nuovo, poi seleziona «Continua costruzione».",
+    'gap.failed': "Chunking non riuscito: {count}. Cerca [RAG Rechunk] nel log dell’app, risolvi la causa, poi seleziona «Continua costruzione».",
+    'gap.other': "Esclusi con il codice {code}: {count}. Cerca [RAG Rechunk] nel log dell’app.",
     'build.failed':
-      "La costruzione si è fermata a {done} di {total} documenti. L'avanzamento è salvato. Seleziona «Continua costruzione». Se si ferma di nuovo, cerca [RAG Rechunk] nel log dell'app.",
-    'build.stalled': "La costruzione non avanza. L'avanzamento è salvato. Attendi un minuto, poi seleziona «Continua costruzione».",
+      "La costruzione si è fermata a {done} di {total} documenti. L’avanzamento è salvato. Seleziona «Continua costruzione». Se si ferma di nuovo, cerca [RAG Rechunk] nel log dell’app.",
+    'build.stalled': "La costruzione non avanza. L’avanzamento è salvato. Attendi un minuto, poi seleziona «Continua costruzione».",
     'build.unavailable':
-      "Il servizio di costruzione non è disponibile al momento. L'avanzamento è salvato. Seleziona «Continua costruzione» tra poco.",
+      "Il servizio di costruzione non è disponibile al momento. L’avanzamento è salvato. Seleziona «Continua costruzione» tra poco.",
     'build.network':
-      "La connessione è caduta durante la costruzione. L'avanzamento è salvato. Verifica che il server della Config UI sia in esecuzione, poi seleziona «Continua costruzione».",
-    'build.saved': "L'avanzamento è salvato.",
+      "La connessione è caduta durante la costruzione. L’avanzamento è salvato. Verifica che il server della Config UI sia in esecuzione, poi seleziona «Continua costruzione».",
+    'build.saved': "L’avanzamento è salvato.",
     'build.refused.profile_retired': 'Questo profilo è ritirato e non può essere costruito. Crea un nuovo profilo.',
     'build.refused.other': 'La costruzione è stata rifiutata con il codice {code}. Seleziona «Ricarica pannello» e riprova.',
     'confirm.activate.title': 'Attivare {id} per {type}?',
@@ -561,19 +561,19 @@ const CHUNKING_LABELS = {
     'gate.incomplete':
       'Non attivato. Alcuni documenti di tipo {type} non hanno ancora chunk in {id}. Seleziona «Costruisci documenti mancanti» su quel profilo, poi attiva di nuovo.',
     'gate.open_gaps':
-      "Non attivato. L'ultima costruzione di {id} ha lasciato fuori documenti che non è riuscita a costruire. Costruisci di nuovo il profilo e risolvi ciò che segnala, poi attiva di nuovo.",
+      "Non attivato. L’ultima costruzione di {id} ha lasciato fuori documenti che non è riuscita a costruire. Costruisci di nuovo il profilo e risolvi ciò che segnala, poi attiva di nuovo.",
     'gate.no_evidence':
       'Non attivato. Nel database non è registrata alcuna decisione di confronto per {id}. Esegui il confronto dei profili, registra la decisione con {command}, poi attiva di nuovo.',
     'gate.eval_failed':
       'Non attivato. La decisione registrata per {id} non ha superato il confronto con i chunk originali. Apri «Report di confronto», confronta i profili e attivane uno che l\'ha superato.',
     'gate.stale_evidence':
-      "Non attivato. La decisione registrata è precedente all'ultima costruzione di {id}. Esegui di nuovo il confronto e registra la nuova decisione con {command}.",
+      "Non attivato. La decisione registrata è precedente all’ultima costruzione di {id}. Esegui di nuovo il confronto e registra la nuova decisione con {command}.",
     'gate.not_ready': 'Non attivato. {id} è ancora in costruzione. Completa la costruzione, poi attiva di nuovo.',
     'gate.ambiguous_profile':
       'Non attivato. Più tipi di documento hanno un profilo con questo ID. Seleziona «Ricarica pannello», poi attivalo dalla tabella del suo tipo di documento.',
     'gate.no_previous': 'Niente da ripristinare. {type} usa già i chunk originali.',
     'gate.other':
-      "Nessuna modifica. Il server ha rifiutato con il codice {code}. Seleziona «Ricarica pannello» e riprova. Se si ripete, cerca [RAG Admin] nel log dell'app.",
+      "Nessuna modifica. Il server ha rifiutato con il codice {code}. Seleziona «Ricarica pannello» e riprova. Se si ripete, cerca [RAG Admin] nel log dell’app.",
     'report.loading': 'Caricamento del report di confronto…',
     'report.fixture':
       'Questo report proviene dai dati di prova integrati. Dimostra che il confronto funziona, non misura i tuoi documenti. Esegui il confronto reale prima di scegliere un profilo.',
@@ -1221,8 +1221,8 @@ function chunkingSpinner() {
 function chunkingAppendMessage(el, message) {
   for (const segment of message.segments) {
     if (segment.text !== undefined) el.appendChild(document.createTextNode(segment.text));
-    else if (segment.code !== undefined) el.appendChild(chunkingEl('code', { cls: 'font-mono text-xs break-all', text: segment.code }));
-    else if (segment.mono !== undefined) el.appendChild(chunkingEl('span', { cls: 'font-mono break-all', text: segment.mono }));
+    else if (segment.code !== undefined) el.appendChild(chunkingEl('code', { cls: 'font-mono text-xs break-words', text: segment.code, attrs: { translate: 'no' } }));
+    else if (segment.mono !== undefined) el.appendChild(chunkingEl('span', { cls: 'font-mono break-all', text: segment.mono, attrs: { translate: 'no' } }));
     else if (segment.time) el.appendChild(chunkingEl('time', { text: segment.time.text, attrs: { datetime: segment.time.iso } }));
   }
   return el;
@@ -1235,7 +1235,7 @@ function chunkingMessageEl(tag, cls, message) {
 /** An alert with a leading icon and a message; extra nodes go under the message. */
 function chunkingAlert(tone, icon, message, opts) {
   const o = opts || {};
-  const body = chunkingEl('div', { cls: 'flex flex-col gap-2 items-start max-w-prose' }, [chunkingMessageEl('p', 'text-sm', message)]);
+  const body = chunkingEl('div', { cls: 'flex flex-col gap-2 items-start min-w-0 max-w-prose' }, [chunkingMessageEl('p', 'text-sm', message)]);
   for (const node of o.extra || []) if (node) body.appendChild(node);
   return chunkingEl('div', { cls: 'alert alert-' + tone + ' items-start text-left', attrs: { role: o.role || null } }, [chunkingIcon(icon, 'mt-0.5'), body]);
 }
@@ -1619,7 +1619,7 @@ class ChunkingProfilesPanel {
     const headingId = 'chunking-type-' + group.docType;
     const block = chunkingEl('div', { cls: 'py-4', attrs: { role: 'group', 'aria-labelledby': headingId } });
 
-    const left = chunkingEl('div', { cls: 'flex flex-col gap-1 min-w-0' }, [chunkingEl('h4', { cls: 'text-base font-semibold', text: type, attrs: { id: headingId } })]);
+    const left = chunkingEl('div', { cls: 'flex flex-col gap-1 min-w-0' }, [chunkingEl('h4', { cls: 'text-base font-semibold text-balance', text: type, attrs: { id: headingId } })]);
     const activeLine = chunkingEl('p', { cls: 'text-sm' });
     const activeProfile = group.activeId === 'legacy' ? this.t('legacy.name') : { mono: group.activeId };
     chunkingAppendMessage(activeLine, this.m('group.active', { profile: activeProfile }));
@@ -1727,24 +1727,24 @@ class ChunkingProfilesPanel {
 
   statusBadge(status) {
     if (status === 'active') {
-      return chunkingEl('span', { cls: 'badge badge-success badge-sm gap-1' }, [chunkingIcon('bi-check-circle-fill'), this.t('status.active')]);
+      return chunkingEl('span', { cls: 'badge badge-success badge-sm gap-1 h-auto whitespace-nowrap' }, [chunkingIcon('bi-check-circle-fill'), this.t('status.active')]);
     }
     const cls = status === 'building' ? 'badge badge-info badge-outline badge-sm' : status === 'retired' ? 'badge badge-ghost badge-sm' : 'badge badge-outline badge-sm';
-    return chunkingEl('span', { cls, text: this.t('status.' + status) });
+    return chunkingEl('span', { cls: cls + ' h-auto whitespace-nowrap', text: this.t('status.' + status) });
   }
 
   renderRow(group, row, type, decision) {
     const key = chunkingRowKey(group.docType, row.id);
     const sizes = this.sizesText(row);
-    const head = chunkingEl('th', { cls: 'font-normal align-top', attrs: { scope: 'row' } });
+    const head = chunkingEl('th', { cls: 'font-normal align-top min-w-40', attrs: { scope: 'row' } });
     if (row.isLegacy) {
       head.appendChild(chunkingEl('div', { cls: 'text-sm', text: this.t('legacy.name') }));
-      head.appendChild(chunkingEl('div', { cls: 'text-xs text-base-content/70 font-mono', text: 'legacy' }));
+      head.appendChild(chunkingEl('div', { cls: 'text-xs text-base-content/70 font-mono', text: 'legacy', attrs: { translate: 'no' } }));
     } else {
-      head.appendChild(chunkingEl('div', { cls: 'font-mono text-sm break-all', text: row.id }));
+      head.appendChild(chunkingEl('div', { cls: 'font-mono text-sm break-all', text: row.id, attrs: { translate: 'no' } }));
     }
     if (decision && decision.profile_id === row.id) {
-      head.appendChild(chunkingEl('span', { cls: 'badge badge-outline badge-sm mt-1', text: this.t('badge.decision') }));
+      head.appendChild(chunkingEl('span', { cls: 'badge badge-outline badge-sm mt-1 h-auto whitespace-nowrap', text: this.t('badge.decision') }));
     }
     head.appendChild(chunkingEl('div', { cls: 'text-xs text-base-content/70 md:hidden mt-1', text: sizes.pair }));
 
@@ -1762,7 +1762,12 @@ class ChunkingProfilesPanel {
         }),
       );
       if (row.completeness.missing > 0) {
-        docs.appendChild(chunkingEl('div', { cls: 'text-xs text-warning', text: this.t('docs.missing', { missing: chunkingNumber(row.completeness.missing, this.locale) }) }));
+        docs.appendChild(
+          chunkingEl('div', { cls: 'flex items-center justify-end gap-1 text-xs' }, [
+            chunkingIcon('bi-exclamation-triangle-fill', 'text-warning'),
+            this.t('docs.missing', { missing: chunkingNumber(row.completeness.missing, this.locale) }),
+          ]),
+        );
       }
     }
 
@@ -1819,7 +1824,7 @@ class ChunkingProfilesPanel {
     const label = (forId, key) => chunkingEl('label', { cls: 'label', attrs: { for: forId } }, [chunkingEl('span', { cls: 'label-text', text: this.t(key) })]);
     const help = (id) => chunkingEl('span', { cls: 'label-text-alt text-base-content/70 mt-1', attrs: { id } });
 
-    els.docType = chunkingEl('select', { cls: 'select select-bordered select-sm w-full', attrs: { id: 'chunking-form-doctype' } });
+    els.docType = chunkingEl('select', { cls: 'select select-bordered select-sm w-full', attrs: { id: 'chunking-form-doctype', name: 'chunking-doc-type' } });
     for (const docType of CHUNKING_DOC_TYPE_ORDER) els.docType.appendChild(chunkingEl('option', { text: this.typeName(docType), attrs: { value: docType } }));
     els.docType.addEventListener('change', () => this.formChanged('docType'));
 
@@ -1838,7 +1843,7 @@ class ChunkingProfilesPanel {
     }
 
     const numberInput = (id, field) => {
-      const input = chunkingEl('input', { cls: 'input input-bordered input-sm w-full tabular-nums', attrs: { id, type: 'number', inputmode: 'numeric', min: '1', step: '1' } });
+      const input = chunkingEl('input', { cls: 'input input-bordered input-sm w-full tabular-nums', attrs: { id, name: id, type: 'number', inputmode: 'numeric', min: '1', step: '1', autocomplete: 'off' } });
       input.addEventListener('input', () => this.formChanged(field));
       return input;
     };
@@ -1864,7 +1869,7 @@ class ChunkingProfilesPanel {
 
     els.id = chunkingEl('input', {
       cls: 'input input-bordered input-sm w-full font-mono',
-      attrs: { id: 'chunking-form-id', type: 'text', maxlength: '64', autocomplete: 'off', spellcheck: 'false', autocapitalize: 'off' },
+      attrs: { id: 'chunking-form-id', name: 'chunking-profile-id', type: 'text', maxlength: '64', autocomplete: 'off', spellcheck: 'false', autocapitalize: 'off', translate: 'no' },
     });
     els.id.addEventListener('input', () => this.formChanged('id'));
     els.idHelp = help('chunking-form-id-help');
@@ -2014,8 +2019,8 @@ class ChunkingProfilesPanel {
     const addLine = (code, tone) => {
       const id = 'chunking-finding-' + code;
       els.findings.appendChild(
-        chunkingEl('p', { cls: 'flex items-start gap-1 text-sm ' + (tone === 'error' ? 'text-error' : 'text-warning'), attrs: { id } }, [
-          chunkingIcon(tone === 'error' ? 'bi-exclamation-circle' : 'bi-exclamation-triangle', 'mt-0.5'),
+        chunkingEl('p', { cls: 'flex items-start gap-1 text-sm ' + (tone === 'error' ? 'text-error' : ''), attrs: { id } }, [
+          chunkingIcon(tone === 'error' ? 'bi-exclamation-circle' : 'bi-exclamation-triangle-fill text-warning', 'mt-0.5'),
           chunkingMessageEl('span', '', chunkingFindingMessage(code, this.locale, sizes)),
         ]),
       );
@@ -2173,7 +2178,7 @@ class ChunkingProfilesPanel {
     const bar = chunkingEl('progress', { cls: 'progress progress-primary w-full', attrs: { 'aria-label': this.t('build.barLabel', { id: profileId }) } });
     const count = chunkingEl('p', { cls: 'text-sm tabular-nums', text: this.t('build.starting') });
     const pause = chunkingEl('button', { cls: 'btn btn-outline btn-sm', text: this.t('action.pause'), attrs: { type: 'button' } });
-    const gaps = chunkingEl('p', { cls: 'text-xs text-warning' });
+    const gaps = chunkingEl('p', { cls: 'text-xs' });
     gaps.hidden = true;
     pause.addEventListener('click', () => {
       if (!this.build) return;
@@ -2334,8 +2339,8 @@ class ChunkingProfilesPanel {
     const confirm = chunkingEl('button', { cls: 'btn btn-primary', text: this.t(kind === 'activate' ? 'action.activate' : 'action.rollback'), attrs: { type: 'button' } });
     const backdropButton = chunkingEl('button', { text: this.t('action.keep'), attrs: { type: 'submit', 'aria-label': this.t('action.keep'), tabindex: '-1' } });
     dialog.appendChild(
-      chunkingEl('div', { cls: 'modal-box' }, [
-        chunkingEl('h4', { cls: 'text-base font-semibold break-words', text: title, attrs: { id: 'chunking-dialog-title' } }),
+      chunkingEl('div', { cls: 'modal-box overscroll-contain' }, [
+        chunkingEl('h4', { cls: 'text-base font-semibold break-words text-balance', text: title, attrs: { id: 'chunking-dialog-title' } }),
         chunkingEl('p', { cls: 'text-sm mt-2 break-words', text: body, attrs: { id: 'chunking-dialog-body' } }),
         chunkingEl('div', { cls: 'modal-action flex-wrap' }, [keep, confirm]),
       ]),
@@ -2463,7 +2468,7 @@ class ChunkingProfilesPanel {
           chunkingEl('td', null, [
             d.profile_id === 'legacy'
               ? chunkingEl('span', { cls: 'text-sm', text: this.t('legacy.name') })
-              : chunkingEl('span', { cls: 'font-mono text-sm break-all', text: d.profile_id }),
+              : chunkingEl('span', { cls: 'font-mono text-sm break-all', text: d.profile_id, attrs: { translate: 'no' } }),
           ]),
         );
         cells.push(
@@ -2517,7 +2522,7 @@ class ChunkingProfilesPanel {
   renderSliceSelect(report) {
     const slices = chunkingReportSlices(report);
     if (!slices.some((s) => s.value === this.slice)) this.slice = 'overall';
-    const select = chunkingEl('select', { cls: 'select select-bordered select-sm', attrs: { id: 'chunking-report-slice' } });
+    const select = chunkingEl('select', { cls: 'select select-bordered select-sm', attrs: { id: 'chunking-report-slice', name: 'chunking-report-slice' } });
     select.appendChild(chunkingEl('option', { text: this.t('slice.overall'), attrs: { value: 'overall' } }));
     const groups = { docType: 'slice.group.docType', language: 'slice.group.language', kind: 'slice.group.kind' };
     for (const [group, labelKey] of Object.entries(groups)) {
@@ -2565,8 +2570,8 @@ class ChunkingProfilesPanel {
       const registeredId = docTypeSlice ? (row.isLegacy ? 'legacy' : row.profileId + '-' + docTypeSlice) : null;
       const registered = registry ? registry.rows.find((r) => r.id === registeredId) : null;
       const chosen = Boolean(decision && registeredId && decision.profile_id === registeredId);
-      const head = chunkingEl('th', { cls: 'font-normal align-top', attrs: { scope: 'row' } }, [
-        row.isLegacy ? chunkingEl('div', { cls: 'text-sm', text: this.t('legacy.name') }) : chunkingEl('div', { cls: 'font-mono text-sm break-all', text: row.profileId }),
+      const head = chunkingEl('th', { cls: 'font-normal align-top min-w-32', attrs: { scope: 'row' } }, [
+        row.isLegacy ? chunkingEl('div', { cls: 'text-sm', text: this.t('legacy.name') }) : chunkingEl('div', { cls: 'font-mono text-sm break-all', text: row.profileId, attrs: { translate: 'no' } }),
       ]);
       if (registered && !row.isLegacy) {
         head.appendChild(
@@ -2576,7 +2581,7 @@ class ChunkingProfilesPanel {
           }),
         );
       }
-      if (chosen) head.appendChild(chunkingEl('span', { cls: 'badge badge-outline badge-sm mt-1', text: this.t('badge.decision') }));
+      if (chosen) head.appendChild(chunkingEl('span', { cls: 'badge badge-outline badge-sm mt-1 h-auto whitespace-nowrap', text: this.t('badge.decision') }));
 
       const gateCell = chunkingEl('td', { cls: 'align-top' });
       if (row.gate.kind === 'baseline') gateCell.appendChild(chunkingEl('span', { cls: 'text-sm', text: this.t('gate.baseline') }));

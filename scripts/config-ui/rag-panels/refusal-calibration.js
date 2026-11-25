@@ -24,7 +24,7 @@ const REFUSAL_LABELS = {
     'reranker.local_bm25': 'Local BM25',
     'summary.scores': 'Score type',
     'scores.calibrated': 'Comparable across questions',
-    'scores.relative': "Relative to each question's candidates",
+    'scores.relative': "Relative to each question’s candidates",
     'scores.none': 'No reranker',
     'models.caption': 'Reranker model by use and question language',
     'use.chat': 'Chat ({tier})',
@@ -189,7 +189,7 @@ const REFUSAL_LABELS = {
   it: {
     'panel.title': 'Calibrazione del rifiuto',
     'panel.description':
-      "Sola lettura. Mostra quali soglie di rifiuto l'app può usare e come si sono comportate in calibrazione. Le soglie cambiano solo tramite lo strumento di calibrazione e una pull request. Vale per tutti gli spazi di lavoro di questa installazione.",
+      "Sola lettura. Mostra quali soglie di rifiuto l’app può usare e come si sono comportate in calibrazione. Le soglie cambiano solo tramite lo strumento di calibrazione e una pull request. Vale per tutti gli spazi di lavoro di questa installazione.",
     'action.refresh': 'Aggiorna stato',
     'action.reload': 'Ricarica pannello',
     'status.loading': 'Caricamento della calibrazione del rifiuto…',
@@ -217,15 +217,15 @@ const REFUSAL_LABELS = {
     'note.legacyPipeline': 'È selezionata la pipeline legacy. Il rifiuto a soglia funziona solo con la pipeline v2 (RAG Modes, Retrieval pipeline).',
     'note.refusalOff':
       'Il rifiuto a soglia è disattivo: nessuna delle soglie qui sotto viene applicata alle risposte reali. Attivalo in RAG Modes, Retrieval pipeline.',
-    'note.pending': "Nelle impostazioni il rifiuto a soglia è {draft}; l'app usa {live} finché non viene riavviata con il valore salvato.",
-    'note.pendingReranker': "Nelle impostazioni il reranker è {draft}; l'app usa {live} finché non viene riavviata con il valore salvato.",
+    'note.pending': "Nelle impostazioni il rifiuto a soglia è {draft}; l’app usa {live} finché non viene riavviata con il valore salvato.",
+    'note.pendingReranker': "Nelle impostazioni il reranker è {draft}; l’app usa {live} finché non viene riavviata con il valore salvato.",
     'warnings.heading': 'Avvisi',
     'warnings.none': 'Nessun avviso per le impostazioni attuali.',
     'warning.refusal_on_without_calibrated_cell':
-      "Il rifiuto a soglia è attivo, ma con il reranker attuale non esiste una soglia reale calibrata per le domande in {languages}. Per queste domande decide la soglia minima di similarità. Per usare le soglie, esegui {command} sull'app reale per i modelli elencati qui sotto, salva il risultato nel repository e ridistribuisci.",
+      "Il rifiuto a soglia è attivo, ma con il reranker attuale non esiste una soglia reale calibrata per le domande in {languages}. Per queste domande decide la soglia minima di similarità. Per usare le soglie, esegui {command} sull’app reale per i modelli elencati qui sotto, salva il risultato nel repository e ridistribuisci.",
     'warning.missingItem': '{use}: {model}, {language}',
     'warning.fixture_cells_only':
-      "Tutte le soglie qui sotto provengono dai dati di prova. Dimostrano che lo strumento di calibrazione funziona e sono usate solo nella valutazione, mai per le risposte reali. Esegui {command} sull'app reale per ottenere soglie per i tuoi dati.",
+      "Tutte le soglie qui sotto provengono dai dati di prova. Dimostrano che lo strumento di calibrazione funziona e sono usate solo nella valutazione, mai per le risposte reali. Esegui {command} sull’app reale per ottenere soglie per i tuoi dati.",
     'warning.stale_cells':
       'Soglie calibrate con una versione precedente del tokenizer o del testo di reranking: {count}. Qui sotto sono contrassegnate come «Obsoleta» e non vengono usate. Esegui di nuovo {command}, salva il risultato nel repository e ridistribuisci.',
     'warning.relative_reranker':
@@ -238,7 +238,7 @@ const REFUSAL_LABELS = {
       'I rifiuti errati sono domande a cui si poteva rispondere e che sono state rifiutate. I rifiuti corretti sono domande senza risposta nella base di conoscenza e rifiutate. Il limite superiore al 95% è il tasso di rifiuti errati più alto ancora compatibile con i dati; con pochi elementi è molto più alto della stima puntuale.',
     'cells.empty.title': 'Nessuna soglia',
     'cells.empty.body':
-      "In questa installazione non c'è alcun risultato di calibrazione: il rifiuto a soglia non si applica e decide la soglia minima di similarità. Esegui {command}, salva il risultato nel repository e ridistribuisci.",
+      "In questa installazione non c’è alcun risultato di calibrazione: il rifiuto a soglia non si applica e decide la soglia minima di similarità. Esegui {command}, salva il risultato nel repository e ridistribuisci.",
     'cells.noThreshold': 'Nessuna',
     'col.model': 'Modello di reranking',
     'col.language': 'Lingua della domanda',
@@ -275,7 +275,7 @@ const REFUSAL_LABELS = {
       'Obsoleta: calibrata con una versione del tokenizer o del testo di reranking diversa da quella in uso. Non viene usata finché non è ricalibrata.',
     'error.unavailable': 'La calibrazione del rifiuto non è disponibile al momento. Seleziona «Ricarica pannello» tra poco.',
     'error.statusUnreadable':
-      "Non è stato possibile leggere lo stato della calibrazione. Seleziona «Ricarica pannello». Se si ripete, cerca [RAG Admin] nel log dell'app.",
+      "Non è stato possibile leggere lo stato della calibrazione. Seleziona «Ricarica pannello». Se si ripete, cerca [RAG Admin] nel log dell’app.",
     'pointer.text': 'Lo stato della calibrazione e gli avvisi sono in RAG administration, Calibrazione del rifiuto.',
     'pointer.open': 'Apri calibrazione del rifiuto',
     'lang.zh': 'Cinese',
@@ -620,8 +620,8 @@ function refusalSpinner() {
 function refusalAppendMessage(el, message) {
   for (const segment of message.segments) {
     if (segment.text !== undefined) el.appendChild(document.createTextNode(segment.text));
-    else if (segment.code !== undefined) el.appendChild(refusalEl('code', { cls: 'font-mono text-xs break-all', text: segment.code }));
-    else if (segment.mono !== undefined) el.appendChild(refusalEl('span', { cls: 'font-mono break-all', text: segment.mono }));
+    else if (segment.code !== undefined) el.appendChild(refusalEl('code', { cls: 'font-mono text-xs break-words', text: segment.code, attrs: { translate: 'no' } }));
+    else if (segment.mono !== undefined) el.appendChild(refusalEl('span', { cls: 'font-mono break-all', text: segment.mono, attrs: { translate: 'no' } }));
     else if (segment.time) el.appendChild(refusalEl('time', { text: segment.time.text, attrs: { datetime: segment.time.iso } }));
   }
   return el;
@@ -634,7 +634,7 @@ function refusalMessageEl(tag, cls, message) {
 function refusalAlert(tone, icon, message, extra, lang) {
   const text = refusalMessageEl('p', 'text-sm', message);
   if (lang) text.setAttribute('lang', lang);
-  const body = refusalEl('div', { cls: 'flex flex-col gap-2 items-start max-w-prose' }, [text]);
+  const body = refusalEl('div', { cls: 'flex flex-col gap-2 items-start min-w-0 max-w-prose' }, [text]);
   for (const node of extra || []) if (node) body.appendChild(node);
   return refusalEl('div', { cls: 'alert alert-' + tone + ' items-start text-left' }, [refusalIcon(icon, 'mt-0.5'), body]);
 }
@@ -809,7 +809,7 @@ class RefusalCalibrationPanel {
       const tbody = refusalEl('tbody');
       for (const row of summary.models) {
         const cells = [refusalEl('th', { cls: 'font-normal text-sm', text: row.use, attrs: { scope: 'row' } })];
-        for (const model of row.models) cells.push(refusalEl('td', { cls: 'font-mono text-xs break-all', text: model }));
+        for (const model of row.models) cells.push(refusalEl('td', { cls: 'font-mono text-xs break-all', text: model, attrs: { translate: 'no' } }));
         tbody.appendChild(refusalEl('tr', null, cells));
       }
       const head = refusalEl('tr', null, [refusalEl('td')]);
@@ -898,21 +898,21 @@ class RefusalCalibrationPanel {
           : row.statusKey === 'failed_holdout'
             ? 'badge badge-warning badge-sm'
             : 'badge badge-ghost badge-sm';
-      const badges = refusalEl('div', { cls: 'flex flex-wrap gap-1' }, [refusalEl('span', { cls: statusCls, text: row.statusLabel })]);
-      if (row.fixture) badges.appendChild(refusalEl('span', { cls: 'badge badge-info badge-outline badge-sm', text: row.fixtureLabel }));
-      if (row.stale) badges.appendChild(refusalEl('span', { cls: 'badge badge-warning badge-outline badge-sm', text: row.staleLabel }));
+      const badges = refusalEl('div', { cls: 'flex flex-wrap gap-1' }, [refusalEl('span', { cls: statusCls + ' h-auto whitespace-nowrap', text: row.statusLabel })]);
+      if (row.fixture) badges.appendChild(refusalEl('span', { cls: 'badge badge-info badge-outline badge-sm h-auto whitespace-nowrap', text: row.fixtureLabel }));
+      if (row.stale) badges.appendChild(refusalEl('span', { cls: 'badge badge-warning badge-outline badge-sm h-auto whitespace-nowrap', text: row.staleLabel }));
       tbody.appendChild(
         refusalEl('tr', null, [
-          refusalEl('th', { cls: 'font-normal align-top', attrs: { scope: 'row' } }, [
+          refusalEl('th', { cls: 'font-normal align-top min-w-32', attrs: { scope: 'row' } }, [
             refusalEl('div', { cls: 'text-sm', text: row.provider }),
-            refusalEl('div', { cls: 'font-mono text-xs break-all', text: row.model }),
+            refusalEl('div', { cls: 'font-mono text-xs break-all', text: row.model, attrs: { translate: 'no' } }),
           ]),
           refusalEl('td', { cls: 'align-top' }, [
             refusalEl('div', { cls: 'text-sm', text: row.language }),
             refusalEl('div', { cls: 'text-xs text-base-content/70 md:hidden', text: row.pairing }),
           ]),
           refusalEl('td', { cls: 'align-top text-sm hidden md:table-cell', text: row.pairing }),
-          refusalEl('td', { cls: 'align-top' }, [badges, refusalEl('div', { cls: 'text-xs text-base-content/70 mt-1', text: row.statusHint })]),
+          refusalEl('td', { cls: 'align-top min-w-40' }, [badges, refusalEl('div', { cls: 'text-xs text-base-content/70 mt-1', text: row.statusHint })]),
           refusalEl('td', { cls: 'align-top text-right tabular-nums text-sm', text: row.threshold }),
           refusalEl('td', { cls: 'align-top' }, [refusalRateCell(row.dev.falseRefusal, this.locale)]),
           refusalEl('td', { cls: 'align-top hidden lg:table-cell' }, [refusalCorrectCell(row.dev.correctRefusal, this.locale)]),
