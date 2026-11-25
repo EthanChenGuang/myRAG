@@ -28,6 +28,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 04.1: Hybrid retrieval and rerank on by default, proven by eval** (INSERTED) - v2 with hybrid search, `RAG_RERANKER=auto` and threshold refusal become the defaults after a pre-registered eval gate passes; `RAG_PIPELINE=legacy` restores today exactly
 - [ ] **Phase 04.1.1: Domain terminology dictionary: expert-maintained synonyms, query expansion, index-time synonyms, log mining** (INSERTED) - Versioned, audited shared and per-tenant dictionary, down-weighted query-time expansion, CSV import/export, mined candidates for expert review; index-time synonyms recorded as not built
 - [ ] **Phase 4.2: Retrieval Tuning Additions** (INSERTED) - Rerank pool floor 25 and nDCG, tenant tokenizer dictionary and eval-gated Italian stemming, version-aware retrieval, structured table lookup, near-duplicate clusters and result diversity, TTFT tracing and CI gate
+- [ ] **Phase 4.3: Document Access Groups** (INSERTED) - Access groups inside a tenant enforced before ranking on every leg and backend, in the cache, logs and citations, synced from connectors, with same-tenant canaries
 - [ ] **Phase 5: Verified Citations & Groundedness** - Claude Citations, validated chunk-ID citations for other models, one persisted citation record and a post-stream groundedness badge
 - [ ] **Phase 5.1: Prompt Injection Defense** (INSERTED) - Tagged, instruction-free context, runtime injection detection and an injection eval gated at 0
 - [ ] **Phase 05.1.1: Feedback Loop & Real Domain Test Set** (INSERTED) - Tenant-safe retrieval log, refusal and embed feedback, weekly failure mining into an expert-labelled queue, dictionary and training exports, and a real domain test set that gates releases
@@ -448,6 +449,20 @@ Plans:
 **Live verification**: Re-run the pool sweep with real rerankers including the 25 pool; measure real TTFT against the budget.
 **Plans**: TBD
 
+### Phase 4.3: Document Access Groups (INSERTED)
+**Goal**: Inside one tenant, a member can only retrieve, be answered from, or see cached or logged content of documents their access groups allow, and this is enforced in code before ranking, never by the prompt
+**Depends on**: Phase 4, Phase 3.2 (upload and admin surfaces), Phase 4.2 (all retrieval legs, including duplicate clusters and table rows)
+**Requirements**: SEC-12, SEC-13, DATA-22, EVAL-21
+**Success Criteria** (what must be TRUE):
+  1. With `RAG_DOC_ACCESS_GROUPS` off, retrieval, cache and logs match the baseline and every document is in group `all`; with it on, a document restricted to HR never appears in the retrieval candidates, context, citations, cache entries or logs of a non-HR member, on every leg (dense, lexical, exact-id, parents, translations, table rows) and on pgvector, and the filter runs before ranking.
+  2. Groups come only from the verified session or signed scope token; a request body naming another group changes nothing; embedded chat sees only `all` documents unless its configuration names a group; voice uses the token's identity.
+  3. The semantic cache never serves an answer across different group sets; the post-generation citation check drops a citation to a chunk the caller may not see and records a security event.
+  4. A Google Drive, Notion or Dropbox document shared with a group is mapped to the matching access group on sync and re-mapped after a sharing change; an unmappable permission leaves it visible only to the uploader and admins.
+  5. The same-tenant cross-group canaries (EVAL-21) pass in CI as a release gate, including after group changes and re-uploads; no other slice drops beyond the noise band.
+**Live verification**: Sync a real shared Drive folder with restricted files and check the mapped groups; run the canaries against a real Supabase project in both deployment modes.
+**Plans**: TBD
+**UI hint**: yes
+
 ### Phase 5: Verified Citations & Groundedness
 **Goal**: Every RAG answer cites only chunks that were actually sent to the model, its citations survive later document changes, and users can see whether the answer was checked for groundedness
 **Depends on**: Phase 4
@@ -695,7 +710,7 @@ Plans:
 
 ### Phase 7: External Backends & Release Defaults
 **Goal**: Admins can switch retrieval to Weaviate or Qdrant without any cross-tenant leakage, every new provider and switch is configurable in the Config UI, and the shipped defaults are backed by a full regression
-**Depends on**: Phase 5, Phase 5.1, Phase 6, Phase 3.1.1, Phase 4.1, Phase 4.1.1, Phase 5.1.1, Phase 6.1, Phase 3.2, Phase 4.2, Phase 5.2, Phase 6.2
+**Depends on**: Phase 5, Phase 5.1, Phase 6, Phase 3.1.1, Phase 4.1, Phase 4.1.1, Phase 5.1.1, Phase 6.1, Phase 3.2, Phase 4.2, Phase 5.2, Phase 6.2, Phase 4.3 (the Weaviate and Qdrant adapters must inject the access-group filter on every query and prefetch)
 **Requirements**: RET-05, RET-06, RET-07, RET-08, RET-09, ADM-01, ADM-02, ADM-03, ADM-04, LANG-10, LANG-11, SEC-11 (plus the ADM-02 delta; EVAL-17 moved to Phase 5.1.1 on 2026-11-24)
 **Success Criteria** (what must be TRUE):
   1. Tests against Weaviate and Qdrant containers in CI show that inserts, updates, deletes (including cascade deletes), version replacements and re-embeds in Supabase reach both stores through the outbox and drain worker, and that the reconcile job detects and repairs injected drift. Weaviate uses one tenant per workspace; Qdrant uses a shared collection per embedding profile with an `is_tenant` index and a tenant filter injected on every query and prefetch.
@@ -749,7 +764,7 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 3.1 → 3.1.1 → 4 → 4.1 → 4.1.1 → 5 → 5.1 → 5.1.1 → 6 → 6.1 → 7. Phase 6 depends on Phase 5 (its plans build on Phase 5 contracts) and runs after Phase 5.1, which touches the same files. Phase 7's backend and sync work needs only Phases 3 and 4; its regression and closeout need Phases 5 and 6. Inserted 2026-11-24: 3.1.1 follows 3.1 (and needs Phase 4's v2 search on trunk); 4.1 follows Phase 4's automated close (04-42) and flips the retrieval defaults that every later phase runs on; 4.1.1 follows 4.1; 5.1.1 follows 5.1 (plan 05.1.1-24 also needs 4.1.1), takes over EVAL-17 from Phase 7, and Phase 6 plans sharing its files depend on 05.1.1-22; 6.1 needs Phases 6, 3.1.1 and 5.1.1. Phases 3.2, 4.2, 5.2 and 6.2 were inserted on 2026-11-25 so that no plan of a phase already executing changes; Phase 7 had 2 of 34 plans executed and gains requirements through a plan revision. Phase 6 depends on Phase 5 (its plans build on Phase 5 contracts) and runs after Phase 5.1, which touches the same files. Phase 7's backend and sync work needs only Phases 3 and 4; its regression and closeout need Phases 5 and 6.
+Phases execute in numeric order: 1 → 2 → 3 → 3.1 → 3.1.1 → 3.2 → 4 → 4.1 → 4.1.1 → 4.2 → 4.3 → 5 → 5.1 → 5.1.1 → 5.2 → 6 → 6.1 → 6.2 → 7. Phase 6 depends on Phase 5 (its plans build on Phase 5 contracts) and runs after Phase 5.1, which touches the same files. Phase 7's backend and sync work needs only Phases 3 and 4; its regression and closeout need Phases 5 and 6. Inserted 2026-11-24: 3.1.1 follows 3.1 (and needs Phase 4's v2 search on trunk); 4.1 follows Phase 4's automated close (04-42) and flips the retrieval defaults that every later phase runs on; 4.1.1 follows 4.1; 5.1.1 follows 5.1 (plan 05.1.1-24 also needs 4.1.1), takes over EVAL-17 from Phase 7, and Phase 6 plans sharing its files depend on 05.1.1-22; 6.1 needs Phases 6, 3.1.1 and 5.1.1. Phases 3.2, 4.2, 5.2 and 6.2 were inserted on 2026-11-25 so that no plan of a phase already executing changes; Phase 7 had 2 of 34 plans executed and gains requirements through a plan revision. Phase 6 depends on Phase 5 (its plans build on Phase 5 contracts) and runs after Phase 5.1, which touches the same files. Phase 7's backend and sync work needs only Phases 3 and 4; its regression and closeout need Phases 5 and 6.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -763,6 +778,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 3.1 → 3.1.1 → 4 → 4.1 �
 | 4.1. Hybrid Retrieval & Rerank On by Default (INSERTED) | 0/12 | Planned (plan-check PASS) | - |
 | 4.1.1. Domain Terminology Dictionary (INSERTED) | 0/16 | Planned (plan-check PASS) | - |
 | 4.2. Retrieval Tuning Additions (INSERTED) | 0/TBD | Not planned | - |
+| 4.3. Document Access Groups (INSERTED) | 0/TBD | Not planned | - |
 | 5. Verified Citations & Groundedness | 18/26 | In Progress | - |
 | 5.1. Prompt Injection Defense (INSERTED) | 10/25 | In Progress | - |
 | 5.1.1. Feedback Loop & Real Domain Test Set (INSERTED) | 0/25 | Planned (plan-check PASS) | - |
