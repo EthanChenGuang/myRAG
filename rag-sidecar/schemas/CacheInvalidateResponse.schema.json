@@ -1,0 +1,15 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "deleted": {
+      "minimum": 0,
+      "title": "Deleted",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "deleted"
+  ],
+  "title": "CacheInvalidateResponse",
+  "type": "object"
+}
