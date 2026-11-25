@@ -11,7 +11,8 @@ import { resetRetrievalBackendForTests, setRetrievalBackendForTests } from '@/li
 import { deriveStatus, StageError } from '@/lib/rag/pipeline';
 import type { RetrievalPort, SearchDelegate } from '@/lib/rag/query/port-types';
 import { createTraceCollector, type TraceCollector } from '@/lib/rag/trace/collector';
-import { runSearchStages } from '@/lib/rag/v2/stages/search';
+import { delegatedFusion, runSearchStages } from '@/lib/rag/v2/stages/search';
+import { rankedList } from '../fusion/helpers';
 import { resetV2StartupForTests, verifyV2Startup } from '@/lib/rag/v2/startup';
 import { installDeps, uninstallDeps } from '../helpers/pipeline-fakes';
 
@@ -389,5 +390,83 @@ describe('runSearchStages with a search delegate (D-02, D-18, A-4)', () => {
     await expect(runSearch(recorder(), { searchDelegate: delegate, collector, icu: false })).rejects.toBeInstanceOf(StageError);
     expect(collector.stages().find((record) => record.name === 'search')).toMatchObject({ status: 'error', detail: 'search_delegate_error' });
     expect(deriveStatus(collector.stages(), 0)).toBe('error');
+  });
+});
+
+describe('delegatedFusion with legs the delegate cannot see', () => {
+  afterEach(() => {
+    resetRagConfigForTests();
+    vi.restoreAllMocks();
+  });
+
+  it('returns the delegate order unchanged when there are no extra lists', async () => {
+    const { handle } = makePort(recorder());
+    await handle.port.searchVariant(0);
+    expect(delegatedFusion({ handle, order: ['shared', 'd0-a'] }, [], 60).map((row) => row.hit.chunkId)).toEqual(['shared', 'd0-a']);
+  });
+
+  it('fuses an exact-id list with the delegate order and keeps the collected leg ranks', async () => {
+    const { handle } = makePort(recorder());
+    await handle.port.searchVariant(0);
+    const exact = rankedList('exact_id', ['l0-a', 'only-exact']);
+    const fused = delegatedFusion({ handle, order: ['d0-a', 'shared', 'l0-a'] }, [exact], 60);
+    expect(fused.map((row) => row.hit.chunkId)).toEqual(['l0-a', 'd0-a', 'only-exact', 'shared']);
+    const byId = new Map(fused.map((row) => [row.hit.chunkId, row]));
+    expect(byId.get('l0-a')!.ranks).toEqual({ 'lexical:0': 2, exact_id: 1 });
+    expect(byId.get('only-exact')!.ranks).toEqual({ exact_id: 2 });
+    expect(byId.get('shared')!.ranks).toEqual({ 'dense:0': 2, 'lexical:0': 1 });
+    expect(fused.every((row) => !('delegate' in row.ranks))).toBe(true);
+  });
+});
+
+describe('a search delegate under abort', () => {
+  beforeEach(() => {
+    uninstallDeps();
+    resetRetrievalBackendForTests();
+    resetV2StartupForTests();
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    uninstallDeps();
+    resetRetrievalBackendForTests();
+    resetV2StartupForTests();
+    resetRagConfigForTests();
+    vi.restoreAllMocks();
+  });
+
+  it('reports an abort during the delegate as aborted, not as a delegate error', async () => {
+    const rec = recorder();
+    setRetrievalBackendForTests(tieFreeBackend(rec));
+    installDeps({ ragEnv: () => ({ RAG_PIPELINE: 'v2', RAG_LEXICAL_SEARCH: 'true' }) });
+    await verifyV2Startup();
+    resetRagConfigForTests();
+    const config = loadRagConfig({ RAG_PIPELINE: 'v2', RAG_LEXICAL_SEARCH: 'true' });
+    const controller = new AbortController();
+    const collector = createTraceCollector({ profile: 'eval', tenantKey: scopeKey(TENANT_A) });
+    const delegate: SearchDelegate = async (port) => {
+      await port.searchVariant(0);
+      controller.abort();
+      return [...(await port.searchVariant(1)).dense];
+    };
+    await expect(
+      runSearchStages({
+        input: { scope: TENANT_A, query: VARIANTS[0]!.text, profile: 'eval', signal: controller.signal },
+        scope: TENANT_A,
+        config,
+        profile: 'eval',
+        params: effectiveRetrievalParams('eval', config, null),
+        embedding: { vector: vectorFor(0), profile: null },
+        variantEmbeddings: VARIANTS.map((_variant, index) => ({ vector: vectorFor(index), profile: null })),
+        variants: VARIANTS,
+        signal: controller.signal,
+        collector,
+        searchDelegate: delegate,
+      }),
+    ).rejects.toMatchObject({ reason: 'aborted' });
+    const search = collector.stages().find((record) => record.name === 'search');
+    expect(search?.status).toBe('aborted');
+    expect(search?.detail).toBeUndefined();
+    expect(rec.calls).toHaveLength(1);
   });
 });

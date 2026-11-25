@@ -8,14 +8,14 @@ import { getRagDeps, type RagDeps } from '../../deps';
 import { dedupeAndCap, type DedupeCounts, type DedupeResult } from '../../fusion/dedupe';
 import { rrf, type FusedHit, type RankedList } from '../../fusion/rrf';
 import type { QueryEmbedding } from '../../embeddings/query-embedding';
-import { requireValue, runStage, stageSpec, type StageSpec } from '../../pipeline';
+import { requireValue, runStage, StageError, stageSpec, type StageSpec } from '../../pipeline';
 import { exactIdStage, type ExactIdRow } from '../../retrieval/exact-id';
 import type { TenantScope } from '../../tenant/scope';
 import type { TraceCollector } from '../../trace/collector';
 import type { Profile, QueryVariant, RunRetrievalInput, StageOverrides } from '../../types';
 import { getV2StartupVerdict } from '../startup';
 import { evalChunkingOverride } from '../overrides';
-import { listsFromLegs, variantSearchRequest } from '../port';
+import { createRetrievalPort, listsFromLegs, variantSearchRequest, type RetrievalPortHandle } from '../port';
 import { bindingFailureDetail, hasBindingWork, runBindingLegs, type BindingEmbed, type BindingLegsOutput, type BindingLegsPlan } from './binding-legs';
 import type { RetrievalParams } from '@/lib/rag-eval/contracts.generated';
 import type { SearchDelegate } from '../../query/port-types';
@@ -40,6 +40,23 @@ export interface SearchStagesInput {
   bindings?: { plan: BindingLegsPlan; embeds: readonly Promise<BindingEmbed>[] };
   /** A query framework fusing the variant lists through a scope-bound port (D-18); absent means native RRF. */
   searchDelegate?: SearchDelegate;
+}
+
+export const SEARCH_DELEGATE_ERROR = 'search_delegate_error';
+
+/** A search delegate threw or returned something other than a list of chunk ids. */
+export class SearchDelegateError extends Error {
+  readonly original: unknown;
+
+  constructor(original: unknown) {
+    super('[RAG Search] search delegate failed');
+    this.name = 'SearchDelegateError';
+    this.original = original;
+  }
+}
+
+function delegateFailureDetail(error: unknown): string | undefined {
+  return error instanceof SearchDelegateError ? SEARCH_DELEGATE_ERROR : undefined;
 }
 
 /** Keeps a binding leg's backend call inside the search stage budget so a slow leg can never time the stage out. */
@@ -180,6 +197,33 @@ function withStandaloneSimilarity(fused: FusedHit[], variants: readonly QueryVar
   return fused.map((row) => ({ ...row, standaloneSimilarity: similarity.get(row.hit.chunkId) ?? 0 }));
 }
 
+export interface DelegatedFusion {
+  handle: RetrievalPortHandle;
+  order: string[];
+}
+
+const DELEGATE_LIST_ID = 'delegate';
+
+/**
+ * The delegate's order over the variant legs, scored by native RRF over the same lists. Exact-id and binding legs are
+ * not visible to the delegate; when present they are fused natively with the delegate order as one ranked list.
+ */
+export function delegatedFusion(delegated: DelegatedFusion, extraLists: RankedList[], k: number): FusedHit[] {
+  const ordered = delegated.handle.fusedHits(delegated.order);
+  if (extraLists.length === 0) return ordered;
+  const byId = new Map(ordered.map((row) => [row.hit.chunkId, row]));
+  const delegateList: RankedList = {
+    id: DELEGATE_LIST_ID,
+    weight: 1,
+    hits: ordered.map((row, index) => ({ ...row.hit, rank: index + 1 })),
+  };
+  return rrf([delegateList, ...extraLists], k).map((row) => {
+    const extraRanks = Object.fromEntries(Object.entries(row.ranks).filter(([listId]) => listId !== DELEGATE_LIST_ID));
+    const known = byId.get(row.hit.chunkId);
+    return known ? { hit: known.hit, score: row.score, ranks: { ...known.ranks, ...extraRanks } } : { ...row, ranks: extraRanks };
+  });
+}
+
 function sliceCap(fused: FusedHit[], cap: number): DedupeResult {
   const hits = fused.slice(0, cap);
   return {
@@ -227,7 +271,42 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
         })
       : Promise.resolve(null);
 
+  const runDelegatedSearch = async (stageSignal: AbortSignal, delegate: SearchDelegate) => {
+    const domainPending = runDomainLegs(stageSignal);
+    const handle = createRetrievalPort({
+      scope,
+      backend,
+      variants,
+      filters,
+      params,
+      signal: stageSignal,
+      // The embed stage already embedded every variant in one batch; the port reuses those vectors.
+      embed: async () => variants.map((_variant, index) => ctx.variantEmbeddings?.[index] ?? embedding),
+      lexicalEnabled: lexicalEnabled && verdict.icuAvailable,
+      ...(chunkingOverride ? { chunkingProfileOverride: chunkingOverride } : {}),
+    });
+    let order: unknown;
+    try {
+      order = await delegate(handle.port);
+    } catch (error) {
+      throw new SearchDelegateError(error);
+    }
+    if (!Array.isArray(order) || order.some((id) => typeof id !== 'string')) {
+      throw new SearchDelegateError(new TypeError('search delegate must return chunk ids'));
+    }
+    const legsByVariant = handle.collectedLegs();
+    const domain = await domainPending;
+    return {
+      legsByVariant,
+      denseTotal: legsByVariant.reduce((total, legs) => total + legs.dense.length, 0),
+      lexicalTotal: legsByVariant.reduce((total, legs) => total + legs.lexical.length, 0),
+      domain,
+      delegated: { handle, order: order as string[] } as DelegatedFusion | null,
+    };
+  };
+
   const runBackendSearch = async (stageSignal: AbortSignal) => {
+    if (ctx.searchDelegate) return runDelegatedSearch(stageSignal, ctx.searchDelegate);
     let denseTotal = 0;
     let lexicalTotal = 0;
     const domainPending = runDomainLegs(stageSignal);
@@ -251,7 +330,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
       }),
     );
     const domain = await domainPending;
-    return { legsByVariant, denseTotal, lexicalTotal, domain };
+    return { legsByVariant, denseTotal, lexicalTotal, domain, delegated: null as DelegatedFusion | null };
   };
 
   type SearchResult = Awaited<ReturnType<typeof runBackendSearch>>;
@@ -264,11 +343,27 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
 
   let searchValue: Awaited<ReturnType<typeof runBackendSearch>>['legsByVariant'];
   let domainLists: RankedList[] = [];
+  let delegated: DelegatedFusion | null = null;
   if (icuSkipLexical) {
     const startedAt = collector.now();
-    const searched = await runAgainstSignal(signal, runBackendSearch);
+    let searched: SearchResult;
+    try {
+      searched = await runAgainstSignal(signal, runBackendSearch);
+    } catch (error) {
+      if (!(error instanceof SearchDelegateError) || signal.aborted) throw error;
+      collector.record({
+        name: 'search',
+        status: 'error',
+        reason: 'failed',
+        startedAt,
+        endedAt: collector.now(),
+        detail: SEARCH_DELEGATE_ERROR,
+      });
+      throw new StageError('search', 'failed', error);
+    }
     searchValue = searched.legsByVariant;
     domainLists = searched.domain?.lists ?? [];
+    delegated = searched.delegated;
     collector.record({
       name: 'search',
       status: 'degraded',
@@ -288,6 +383,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
         {
           candidatesOut: (value) => value.denseTotal + value.lexicalTotal,
           counts: searchCounts,
+          ...(ctx.searchDelegate ? { failureDetail: delegateFailureDetail } : {}),
           ...(bindings
             ? {
                 // D-19: a dropped binding leg degrades the stage; the global legs and the answer continue.
@@ -301,6 +397,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
     );
     searchValue = searched.legsByVariant;
     domainLists = searched.domain?.lists ?? [];
+    delegated = searched.delegated;
   }
 
   let exactList: RankedList | null = null;
@@ -329,10 +426,15 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
       spec('fuse', 'throw'),
       signal,
       () => {
-        const lists = searchValue.flatMap((legs, index) => listsFromLegs(index, legs.dense, legs.lexical, params));
-        if (exactList) lists.push(exactList);
-        lists.push(...domainLists);
-        const fusedHits = rrf(lists, params.rrf_k);
+        const extraLists = [...(exactList ? [exactList] : []), ...domainLists];
+        let fusedHits: FusedHit[];
+        if (delegated) {
+          fusedHits = delegatedFusion(delegated, extraLists, params.rrf_k);
+        } else {
+          const lists = searchValue.flatMap((legs, index) => listsFromLegs(index, legs.dense, legs.lexical, params));
+          lists.push(...extraLists);
+          fusedHits = rrf(lists, params.rrf_k);
+        }
         return ctx.trackStandalone ? withStandaloneSimilarity(fusedHits, variants, searchValue) : fusedHits;
       },
       collector,
