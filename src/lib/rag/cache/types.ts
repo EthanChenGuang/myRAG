@@ -26,6 +26,14 @@ export interface CacheQuery extends CacheKeyParts {
   standalone: string;
   vector: number[];
   embeddingProfileId: string;
+  /** Cosine-distance threshold for check: the configured or calibrated value. Unset: the backend's configured default. */
+  maxDistance?: number;
+  /** The request's signal; the fail-open wrapper adds the 150 ms deadline. */
+  signal?: AbortSignal;
+}
+
+export interface CacheCallOptions {
+  signal?: AbortSignal;
 }
 
 export interface CacheHit {
@@ -37,5 +45,5 @@ export interface CacheHit {
 export interface SemanticCache {
   check(q: CacheQuery): Promise<CacheHit | null>;
   store(q: CacheQuery, answer: CachedAnswer): Promise<void>;
-  invalidateTenant(scope: TenantScope, documentIds?: string[]): Promise<number>;
+  invalidateTenant(scope: TenantScope, documentIds?: string[], opts?: CacheCallOptions): Promise<number>;
 }

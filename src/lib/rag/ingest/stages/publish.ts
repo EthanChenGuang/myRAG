@@ -1,3 +1,5 @@
+import { redisvlInvalidationTarget } from '../../cache/emit';
+import { scheduleAfterResponse } from '../../trace/schedule';
 import { scopeKey } from '../../tenant/scope';
 import { afterPublish } from '../post-publish';
 import { requireDocument, type IngestResult, type IngestStatus, type StageContext, type StageOutcome, type StageSpec } from '../types';
@@ -45,6 +47,14 @@ async function run(ctx: StageContext): Promise<StageOutcome> {
   if (batchHold) await ctx.writer.setFields(document.id, { metadata: { publish_hold: { batch_id: batchHold.batchId } } });
 
   const published = await ctx.writer.publish(document.id);
+  const cache = redisvlInvalidationTarget();
+  if (cache) {
+    const scope = ctx.input.scope;
+    const documentIds = [published.documentId, published.supersededDocumentId].filter((id): id is string => typeof id === 'string');
+    scheduleAfterResponse(async () => {
+      await cache.invalidateTenant(scope, documentIds);
+    });
+  }
   switch (published.outcome) {
     case 'quarantined':
       return result(ctx, 'quarantined', published.documentId, published.version);

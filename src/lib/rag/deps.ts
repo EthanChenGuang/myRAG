@@ -15,6 +15,9 @@ import type { PromptGuardClassifier } from './security/injection-check';
 import { createLakeraDetector, lakeraSettingsFrom } from './security/lakera';
 import { classifyWithPromptGuard } from './security/prompt-guard-client';
 import { createQueryLlm, type QueryLlm } from './query/llm';
+import type { RpcClient } from './backend/supabase-rpc';
+import { getSemanticCache } from './cache/index';
+import type { SemanticCache } from './cache/types';
 
 export interface ProfileQueryEmbedding {
   vector: number[];
@@ -51,6 +54,8 @@ export interface RagDeps {
    * seam, and the resolver then applies no language fallback of its own.
    */
   languagesConfigured: () => boolean | null;
+  /** The semantic answer cache for RAG_SEMANTIC_CACHE, wrapped fail-open; null when the cache is off (D-34, D-35). */
+  semanticCache: () => SemanticCache | null;
 }
 
 function readRagEnvInput(): RagEnvInput {
@@ -146,6 +151,15 @@ const defaults: RagDeps = {
   fetch: globalThis.fetch.bind(globalThis),
   rawPipelineEnv: () => ({ RAG_PIPELINE: process.env.RAG_PIPELINE, RAG_INGEST_PIPELINE: process.env.RAG_INGEST_PIPELINE }),
   languagesConfigured: () => null,
+  semanticCache: () => {
+    const deps = getRagDeps();
+    return getSemanticCache(loadRagConfig(deps.ragEnv()).semanticCache, {
+      adminClient: () => deps.adminClient() as unknown as RpcClient | null,
+      fetch: (input, init) => deps.fetch(input, init),
+      sidecarUrl: process.env.RAG_SIDECAR_URL ?? env.RAG_SIDECAR_URL ?? '',
+      sidecarSecret: process.env.RAG_SIDECAR_SECRET ?? env.RAG_SIDECAR_SECRET ?? '',
+    });
+  },
 };
 
 let overrides: Partial<RagDeps> = {};
