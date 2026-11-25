@@ -420,6 +420,18 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_save_ingest_state(uuid, text, text, jsonb) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_save_ingest_state(uuid, text, text, jsonb) TO service_role;
   END IF;
+  IF to_regprocedure('public.rag_semantic_cache_on_documents_delete()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_semantic_cache_on_documents_delete() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_semantic_cache_on_documents_delete() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_semantic_cache_on_documents_insert()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_semantic_cache_on_documents_insert() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_semantic_cache_on_documents_insert() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_semantic_cache_on_documents_update()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_semantic_cache_on_documents_update() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_semantic_cache_on_documents_update() TO service_role;
+  END IF;
   IF to_regprocedure('public.rag_set_doc_type_default(text, text, text, text, text)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_set_doc_type_default(text, text, text, text, text) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_set_doc_type_default(text, text, text, text, text) TO service_role;

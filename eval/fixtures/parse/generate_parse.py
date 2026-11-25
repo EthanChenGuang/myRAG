@@ -14,7 +14,6 @@ from xml.sax.saxutils import escape
 HERE = Path(__file__).resolve().parent
 PARSE_PDF = HERE / "pdf"
 PARSE_EXPECTED = HERE / "expected"
-MANIFEST = HERE / "manifest.json"
 COLUMN_GAP = 24.0
 
 
@@ -212,13 +211,16 @@ def build_pdf(spec: Any, ingest_specs: Any, gen: Any, font_path: Path | None, fo
     return _build_digital(spec, ingest_specs, font_path, font_index)
 
 
-def generate(font_path: Path | None, font_index: int = 0) -> None:
+def generate(font_path: Path | None, font_index: int = 0, out_dir: Path | None = None) -> None:
+    root = HERE if out_dir is None else out_dir
+    pdf_dir = root / "pdf"
+    expected_dir = root / "expected"
     expected_mod = _parse_expected_mod()
     ingest = _ingest_specs()
     parse_mod = _parse_specs()
     gen = _load_generate()
-    PARSE_PDF.mkdir(parents=True, exist_ok=True)
-    PARSE_EXPECTED.mkdir(parents=True, exist_ok=True)
+    pdf_dir.mkdir(parents=True, exist_ok=True)
+    expected_dir.mkdir(parents=True, exist_ok=True)
     entries: list[dict[str, Any]] = []
     for item in parse_mod.all_specs():
         if isinstance(item, parse_mod.BenchSpec):
@@ -248,10 +250,9 @@ def generate(font_path: Path | None, font_index: int = 0) -> None:
             data = build_pdf(item, ingest, gen, font_path, font_index)
             expected_spec = item
         digest = sha256_hex(data)
-        (PARSE_PDF / f"{spec_id}.pdf").write_bytes(data)
+        (pdf_dir / f"{spec_id}.pdf").write_bytes(data)
         expected = expected_mod.parser_expected(expected_spec, ingest)
-        expected_path = PARSE_EXPECTED / f"{spec_id}.json"
-        expected_path.write_text(json.dumps(expected, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        (expected_dir / f"{spec_id}.json").write_text(json.dumps(expected, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         entries.append(
             {
                 "id": spec_id,
@@ -259,8 +260,8 @@ def generate(font_path: Path | None, font_index: int = 0) -> None:
                 "language": language,
                 "sha256": digest,
                 "page_count": page_count,
-                "expected_path": str(expected_path.relative_to(HERE.parents[1])),
+                "expected_path": str((PARSE_EXPECTED / f"{spec_id}.json").relative_to(HERE.parents[1])),
                 "pdf_path": str((PARSE_PDF / f"{spec_id}.pdf").relative_to(HERE.parents[1])),
             }
         )
-    MANIFEST.write_text(json.dumps({"fixtures": sorted(entries, key=lambda row: row["id"])}, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    (root / "manifest.json").write_text(json.dumps({"fixtures": sorted(entries, key=lambda row: row["id"])}, indent=2, sort_keys=True) + "\n", encoding="utf-8")

@@ -96,3 +96,24 @@ caption uploaded as `text/markdown` under `floor.png` is recorded with `doc_clas
 correct since 03.1-51 (native mode uses the text input), but the ledger row and the backfill dry-run projection (which prices an
 image at `IMAGE_TOKENS`) see an image. Fix: a text MIME type wins over an image extension in `classify_input`, with a failing test
 first.
+
+## 11. (03.1-52) eval's PDF determinism test rewrites the committed parse fixtures in place
+
+`eval/tests/test_parse_fixtures.py::test_generation_is_deterministic` takes `tmp_path` but runs
+`eval/fixtures/ingest/generate_pdfs.py --target parse` against the repository, so on a host whose CJK font differs from the one the
+fixtures were made with it overwrites `eval/fixtures/parse/manifest.json` and the four scanned/mixed PDFs. Three parse-fixture tests and
+two parser-eval tests then fail in the same run, and any tiered node test running at the same time fails with `recorded_miss`
+(seen in the 03.1-52 full run; all pass again after `git checkout -- eval/fixtures/parse`). Fix: generate into `tmp_path`, with a failing
+test first; never commit the rewritten files.
+
+## 12. (03.1-52) Phase 3.1 definers use `SET search_path = public`
+
+The SECURITY DEFINER functions of 0351-0356 (and the 0353 topic rules) pin `search_path = public`, which satisfies the 0411 check but is
+not the `''` with schema-qualified names that 0357-0359 and 0424 use. The fold copies them verbatim, so a hardening needs a new migration
+that redefines each function (and the setup sections refreshed with it), not an edit of the setup files.
+
+## 13. (03.1-52) parse-gate-details.json item counts are stale
+
+`npm run eval:parse-gate` on the 03.1-52 tree passes (26 paired metrics within the noise band) but rewrites
+`eval/reports/phase-03.1/parse-gate-details.json` with larger `n` per category (the golden set grew in merged plans). The committed file was
+left unchanged to avoid conflicts; refresh it when the phase report is regenerated.

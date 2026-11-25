@@ -73,6 +73,16 @@ status: complete
 2. **Five-location env sync** — Defaults in `env.ts`, `init-env.js`, `config-server.js` (three templates), Config UI (selects/checkboxes/password), and eval pin regeneration.
 3. **`loadRagConfig` v2** — `fuse` core stage; six v2 optional stages; `V2Config`; switch-off → `disabledStages`; `voice.rerank=200` style timeouts; `RAG_RETRIEVAL_PARAMS_OVERRIDE` parsing; memo on full `RagEnvInput` with secret booleans; `deps.fetch` seam.
 
+## Design skills
+
+Recorded retroactively by plan 04-47 (verification gap 1). The UI change of this plan is commit 3236cc7e in `scripts/config-ui/index.html`: the RAG_PIPELINE select, the Phase 4 retrieval switch group inside the existing Retrieval pipeline card, and the legacy notes on four older toggles.
+
+| Skill | Outcome | What it found and changed |
+|-------|---------|---------------------------|
+| frontend-design | n/a: controls inside existing panels, no new interface | The controls sit in the existing Retrieval pipeline card and reuse its DaisyUI form-control, select, input and checkbox patterns. No page, layout or visual direction was added. |
+| Impeccable | n/a: controls inside existing panels, no new interface | Same scope: standard form controls in an existing card, no new interface to critique or polish. |
+| web-design-guidelines (pinned `references/command.md`, the 3236cc7e hunks as they stand at 04-47) | all findings resolved | Found and fixed in 04-47 commit 1c5832b6, covered by `tests/ui/config-phase4-switches.test.ts`: labels of 11 selects and inputs not tied to their control (`for` added); no `name` on any of the 17 controls (added); text, secret, URL and number fields without `autocomplete="off"` (added) and code-like fields without `spellcheck="false"` (added); Cohere base URL as `type="text"` (now `url`); number fields without `inputmode="numeric"` (added); example placeholders without an ellipsis (`zh=rerank-2.5…`, `pool=50,cap=60,topk=10…`, and the Cohere key placeholder is now "Paste your Cohere API key…"); the Cohere key reveal button had no accessible name and no `type` (now `type="button"` with `aria-label` "Show or hide the Cohere API key"; the shared handler swaps only the emoji); help text not tied to its control (`aria-describedby` on RAG_PIPELINE and the Voyage model field); env names and option values without `translate="no"` (added on the five selects, RAG_LEXICAL_SEARCH and the four `RAG_PIPELINE=v2` notes); group heading without balanced wrapping (`text-balance`); key input in a flex row without `min-w-0` (added). Kept by decision, not defects: sentence-case labels (04-UI-SPEC copy contract, section 12); placeholders that show the value used when the field is empty (`6000`, `0`, `https://api.cohere.com`) keep no ellipsis; native selects take background and text colour from the DaisyUI theme. |
+
 ## Deviations from Plan
 
 ### Auto-fixed Issues

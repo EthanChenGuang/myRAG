@@ -172,6 +172,17 @@ for (const mode of ['multi-tenant', 'single-tenant'] as MigrationMode[]) {
       }
     });
 
+    test('the folded setup file alone, with hosted Supabase default function grants, leaves no SECURITY DEFINER function open to anon or PUBLIC', async () => {
+      const fixture = await createEmptyFixtureDatabase({ deploymentMode: mode, migrations: false, supabaseFunctionDefaults: true });
+      try {
+        const rows = await definerInventory(fixture.db);
+        assert.ok(rows.some((row) => row.proname === 'rag_claim_ingestion_jobs'), 'the Phase 3.1 definers are in the setup file');
+        assertFullInventory(rows, mode);
+      } finally {
+        await fixture.db.close();
+      }
+    });
+
     test('an upgraded database whose functions all kept their old open grants is locked by 0409 and 0410, and both re-apply cleanly', async () => {
       assert.ok(fs.existsSync(path.join(REPO_ROOT, GRANTS_MIGRATION)), `${GRANTS_MIGRATION} missing`);
       const fixture = await createEmptyFixtureDatabase({ deploymentMode: mode, migrations: false, supabaseFunctionDefaults: true });

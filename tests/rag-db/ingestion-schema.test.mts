@@ -258,10 +258,15 @@ for (const mode of MODES) {
       assert.equal((await db.query<{ status: string }>('SELECT status FROM documents WHERE id = $1', [id])).rows[0]?.status, 'deleted');
     });
 
-    test('applying 0351 twice leaves the catalog unchanged', async () => {
+    // 0425 later replaces 0351's functions with an empty search_path, so a re-run of 0351 is followed by 0425, as in migration order.
+    test('applying 0351 twice (then 0425, which supersedes its functions) leaves the catalog unchanged', async () => {
       const once = await createFixtureDatabase({ deploymentMode: mode, corpusDir: REAL_CORPUS, migrations: true, supabaseGrants: true });
       const before = await catalogDump(once.db);
-      await once.db.exec((await import('node:fs')).readFileSync(path.join(REPO_ROOT, MIGRATION_0351), 'utf8'));
+      const fs = await import('node:fs');
+      await once.db.exec(fs.readFileSync(path.join(REPO_ROOT, MIGRATION_0351), 'utf8'));
+      for (const file of migrationFiles(mode).filter((relpath) => relpath.startsWith('supabase/migrations/0425_'))) {
+        await once.db.exec(fs.readFileSync(path.join(REPO_ROOT, file), 'utf8'));
+      }
       const after = await catalogDump(once.db);
       assert.deepEqual(catalogDifferences(before, after), []);
       await once.db.close();

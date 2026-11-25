@@ -658,10 +658,10 @@ describe('re-embed job (src/lib/rag/ingest/reembed)', () => {
     targetsModule = await import('@/lib/rag/ingest/embedding-targets');
     await fixture.db.exec(`
       CREATE TABLE IF NOT EXISTS test_embedding_writes (chunk_id uuid NOT NULL, profile_id text NOT NULL, n integer NOT NULL DEFAULT 0, PRIMARY KEY (chunk_id, profile_id));
-      CREATE OR REPLACE FUNCTION test_count_embedding_write() RETURNS trigger LANGUAGE plpgsql AS $fn$
+      CREATE OR REPLACE FUNCTION test_count_embedding_write() RETURNS trigger LANGUAGE plpgsql SET search_path = '' AS $fn$
       BEGIN
-        INSERT INTO test_embedding_writes (chunk_id, profile_id, n) VALUES (NEW.chunk_id, NEW.profile_id, 1)
-        ON CONFLICT (chunk_id, profile_id) DO UPDATE SET n = test_embedding_writes.n + 1;
+        INSERT INTO public.test_embedding_writes AS w (chunk_id, profile_id, n) VALUES (NEW.chunk_id, NEW.profile_id, 1)
+        ON CONFLICT (chunk_id, profile_id) DO UPDATE SET n = w.n + 1;
         RETURN NEW;
       END $fn$;
       DROP TRIGGER IF EXISTS test_count_embedding_write ON chunk_embeddings;

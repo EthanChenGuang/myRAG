@@ -256,7 +256,7 @@ def generate(out_dir: Path, text_dir: Path, cjk_font: Path | None, font_index: i
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--target", choices=("ingest", "parse"), default="ingest", help="fixture set to generate")
-    parser.add_argument("--out", type=Path, default=None, help="directory for the PDFs (required for ingest target)")
+    parser.add_argument("--out", type=Path, default=None, help="output directory (required for ingest target; parse target defaults to fixtures/parse)")
     parser.add_argument("--text-out", type=Path, default=None, help="directory for the Markdown files (default: ../text next to --out)")
     parser.add_argument("--cjk-font", type=Path, default=None, help="CJK font file used to render the scanned fixtures")
     parser.add_argument("--cjk-font-index", type=int, default=0, help="face index inside a font collection")
@@ -271,7 +271,7 @@ def main(argv: list[str] | None = None) -> int:
         parse_generate.loader.exec_module(module)
         if args.cjk_font is not None and not args.cjk_font.is_file():
             parser.error(f"--cjk-font {args.cjk_font} is not a file")
-        module.generate(args.cjk_font, args.cjk_font_index)
+        module.generate(args.cjk_font, args.cjk_font_index, args.out)
         return 0
     if args.out is None:
         parser.error("--out is required for ingest target")

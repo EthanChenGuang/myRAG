@@ -27,8 +27,8 @@ async function lexicalVersions(db: PGlite): Promise<{ total: number; relexed: nu
 for (const mode of MODES) {
   describe(`fixture relex follows the migrations option (${mode})`, () => {
     for (const setup of [
-      { label: 'folded setup', sqlKey: `supabase/${mode}-setup.sql` },
-      { label: 'frozen pre-Phase-3 setup', sqlKey: frozenSetup(mode), setupSqlPath: frozenSetup(mode) },
+      { label: 'folded setup', sqlKey: `supabase/${mode}-setup.sql`, hasRelexRpc: true },
+      { label: 'frozen pre-Phase-3 setup', sqlKey: frozenSetup(mode), setupSqlPath: frozenSetup(mode), hasRelexRpc: false },
     ]) {
       test(`a migrations:false fixture on the ${setup.label} builds as the pre-migration database and runs no relex`, async () => {
         const fixture = await createFixtureDatabase({
@@ -39,7 +39,8 @@ for (const mode of MODES) {
         });
         try {
           const relexFn = await fixture.db.query<{ fn: string | null }>(`SELECT to_regproc('public.rag_relex_candidates')::text AS fn`);
-          assert.equal(relexFn.rows[0]?.fn, null, 'rag_relex_candidates comes from migration 0402, not from the setup file');
+          if (setup.hasRelexRpc) assert.notEqual(relexFn.rows[0]?.fn, null, 'the folded setup file carries 0402 (plan 04-42)');
+          else assert.equal(relexFn.rows[0]?.fn, null, 'rag_relex_candidates comes from migration 0402, not from the frozen setup file');
           assert.deepEqual(Object.keys(fixture.sqlSha256), [setup.sqlKey], 'no lexical_version fingerprint without a relex');
           await applyMigrations(fixture.db, mode);
           const before = await lexicalVersions(fixture.db);
@@ -68,7 +69,8 @@ for (const mode of MODES) {
 
     test('relex requested before the migrations fails with the RPC SQLSTATE visible', async () => {
       await assert.rejects(
-        () => createFixtureDatabase({ deploymentMode: mode, corpusDir: REAL_CORPUS, migrations: false, relex: true }),
+        () =>
+          createFixtureDatabase({ deploymentMode: mode, corpusDir: REAL_CORPUS, migrations: false, relex: true, setupSqlPath: frozenSetup(mode) }),
         (error: unknown) => {
           assert.ok(error instanceof RelexInputError, `expected RelexInputError, got ${String(error)}`);
           assert.equal(error.code, 'rpc_failed:rag_relex_candidates');

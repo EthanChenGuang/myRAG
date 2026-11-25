@@ -89,27 +89,55 @@ def test_pdfs_match_manifest_hashes():
         assert _sha256(data) == row["sha256"]
 
 
-@requires_reportlab
-def test_generation_is_deterministic(tmp_path: Path):
-    font = _font()
-    if font is None:
-        pytest.skip("no CJK font available for scanned parse fixtures")
+def _snapshot(root: Path) -> dict[str, tuple[str, int]]:
+    return {
+        str(path.relative_to(root)): (_sha256(path.read_bytes()), path.stat().st_mtime_ns)
+        for path in sorted(root.rglob("*"))
+        if path.is_file()
+    }
+
+
+def _generate_parse(out: Path, font: Path) -> subprocess.CompletedProcess[str]:
     cmd = [
         sys.executable,
         str(REPO_ROOT / "eval/fixtures/ingest/generate_pdfs.py"),
         "--target",
         "parse",
+        "--out",
+        str(out),
         "--cjk-font",
         str(font),
     ]
-    env = os.environ.copy()
-    first = subprocess.run(cmd, cwd=REPO_ROOT, capture_output=True, text=True, env=env, check=True)
-    digest_first = {path.name: _sha256(path.read_bytes()) for path in sorted(PDF_DIR.glob("*.pdf"))}
-    second = subprocess.run(cmd, cwd=REPO_ROOT, capture_output=True, text=True, env=env, check=True)
-    assert second.returncode == 0
-    digest_second = {path.name: _sha256(path.read_bytes()) for path in sorted(PDF_DIR.glob("*.pdf"))}
-    assert digest_first == digest_second
+    return subprocess.run(cmd, cwd=REPO_ROOT, capture_output=True, text=True, env=os.environ.copy(), check=True)
+
+
+def _generated_digests(out: Path) -> dict[str, str]:
+    return {str(path.relative_to(out)): _sha256(path.read_bytes()) for path in sorted(out.rglob("*")) if path.is_file()}
+
+
+@requires_reportlab
+def test_generation_is_deterministic(tmp_path: Path):
+    font = _font()
+    if font is None:
+        pytest.skip("no CJK font available for scanned parse fixtures")
+    first = _generate_parse(tmp_path / "first", font)
+    second = _generate_parse(tmp_path / "second", font)
+    digest_first = _generated_digests(tmp_path / "first")
+    assert "manifest.json" in digest_first
+    assert len([name for name in digest_first if name.startswith("pdf/")]) == len(_manifest_rows())
+    assert digest_first == _generated_digests(tmp_path / "second")
     assert first.stderr == second.stderr
+
+
+@requires_reportlab
+def test_generation_leaves_committed_fixtures_untouched(tmp_path: Path):
+    font = _font()
+    if font is None:
+        pytest.skip("no CJK font available for scanned parse fixtures")
+    before = _snapshot(PARSE)
+    _generate_parse(tmp_path / "out", font)
+    assert _snapshot(PARSE) == before
+    assert (tmp_path / "out" / "manifest.json").is_file()
 
 
 def test_expected_files_validate():

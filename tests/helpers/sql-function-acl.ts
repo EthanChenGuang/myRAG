@@ -176,6 +176,34 @@ function parseRoles(text: string): AclRole[] {
   return roles;
 }
 
+const SIGNATURE_LITERAL = /'((?:public\.)?[A-Za-z0-9_]+\([^')]*\))'/g;
+const GUARD_CALL = /(\bNOT\s*\(?\s*)?(?:pg_catalog\.)?to_regprocedure\s*\(\s*('(?:[^']|'')*'|[^()']*?)\s*\)(\s*IS\s+(NOT\s+)?NULL\b)?/gi;
+
+/**
+ * Signatures a DO block requires to exist: checked as `to_regprocedure(...) IS NULL` with a RAISE EXCEPTION after it. A literal argument
+ * names the signature; a non-literal one (0425's `to_regprocedure(s.sig) IS NULL` over unnest) takes every signature literal of the block
+ * that is not itself the argument of another to_regprocedure call. IS NOT NULL and NOT ... IS NULL raise when the function exists instead.
+ */
+function requiredSignatures(statement: string): string[] {
+  const code = statement.replace(/--[^\n]*/g, ' ');
+  const required: string[] = [];
+  const direct = new Set<string>();
+  let listed = false;
+  for (const match of code.matchAll(GUARD_CALL)) {
+    const [whole, negated, argument, isNull, isNotNull] = match as unknown as [string, string | undefined, string, string | undefined, string | undefined];
+    const literal = /^'([\s\S]*)'$/.exec(argument)?.[1];
+    if (literal !== undefined) direct.add(literal);
+    const checksMissing = isNull !== undefined && isNotNull === undefined && negated === undefined;
+    if (!checksMissing || !/\bRAISE\s+EXCEPTION\b/i.test(code.slice((match.index ?? 0) + whole.length))) continue;
+    if (literal !== undefined) required.push(literal);
+    else listed = true;
+  }
+  if (listed) {
+    for (const match of code.matchAll(SIGNATURE_LITERAL)) if (!direct.has(match[1] as string)) required.push(match[1] as string);
+  }
+  return required;
+}
+
 const ACL_STATEMENT =
   /^(GRANT|REVOKE)\s+(?:EXECUTE|ALL(?:\s+PRIVILEGES)?)\s+ON\s+(ALL\s+FUNCTIONS\s+IN\s+SCHEMA|FUNCTION)\s+([\s\S]+?)\s+(TO|FROM)\s+([\s\S]+)$/i;
 
@@ -188,10 +216,14 @@ export interface SimulationOptions {
  * Replays CREATE/DROP FUNCTION, GRANT and REVOKE statements in order and returns the final EXECUTE
  * privileges per function signature. CREATE OR REPLACE keeps the existing ACL (as PostgreSQL does);
  * a function the files never created is treated as new, i.e. fully exposed, which is how an upgraded
- * database that only runs the migrations sees a function a migration replaces.
+ * database that only runs the migrations sees a function a migration replaces. The exception is a function
+ * a DO block first requires to exist (`to_regprocedure(...) IS NULL` on its signature, then RAISE EXCEPTION, as 0425 does):
+ * the file cannot create it, so its CREATE OR REPLACE keeps an ACL these files do not show and it is not tracked.
+ * A plain CREATE, or any CREATE after DROP FUNCTION of the signature, makes a new function and is tracked again.
  */
 export function simulateFunctionAcls(files: string[], options: SimulationOptions = {}): Map<string, FunctionAcl> {
   const functions = new Map<string, FunctionAcl>();
+  const required = new Set<string>();
 
   const applyAcl = (statement: string, guarded: boolean): void => {
     const match = ACL_STATEMENT.exec(statement.replace(/\s+/g, ' ').trim());
@@ -227,13 +259,19 @@ export function simulateFunctionAcls(files: string[], options: SimulationOptions
         const definer = /\bSECURITY\s+DEFINER\b/i.test(flat);
         const key = signatureKey(name, args);
         const existing = functions.get(key);
+        const replace = /^CREATE\s+OR\s+REPLACE\b/i.test(flat);
         if (existing) existing.definer = definer;
+        else if (replace && required.has(key)) continue;
         else functions.set(key, { name, args, definer, exec: new Set(ALL_ROLES), guarded: false });
         continue;
       }
       const drop = /^DROP\s+FUNCTION\s+(?:IF\s+EXISTS\s+)?([\s\S]+?)(?:\s+(?:CASCADE|RESTRICT))?$/i.exec(flat);
       if (drop) {
-        for (const ref of parseFunctionRefs(drop[1] as string)) functions.delete(signatureKey(ref.name, ref.args));
+        for (const ref of parseFunctionRefs(drop[1] as string)) {
+          const key = signatureKey(ref.name, ref.args);
+          functions.delete(key);
+          required.delete(key);
+        }
         continue;
       }
       if (/^(GRANT|REVOKE)\b/i.test(flat)) {
@@ -241,6 +279,9 @@ export function simulateFunctionAcls(files: string[], options: SimulationOptions
         continue;
       }
       if (/^DO\b/i.test(flat)) {
+        for (const signature of requiredSignatures(statement)) {
+          for (const ref of parseFunctionRefs(signature)) required.add(signatureKey(ref.name, ref.args));
+        }
         for (const inner of statement.match(/\b(?:GRANT|REVOKE)\s+(?:EXECUTE|ALL)[^;]*/gi) ?? []) applyAcl(inner, true);
       }
     }

@@ -78,10 +78,26 @@ myrag/
 
 ### Unified ingestion
 - Unified path entry point: `ingest()` and `resumeIngest()` in `src/lib/rag/ingest/` (13 stages: identify → file_hash_dedup → store_original → parse → content_hash_dedup → scan_injection → chunk → enrich → extract → images → embed → write → publish).
-- Fresh projects run `supabase/single-tenant-setup.sql` or `supabase/multi-tenant-setup.sql`, then apply ordered files under `supabase/migrations/` (common file first, then `.single-tenant.sql` / `.multi-tenant.sql` for that mode). Folded setup files already include Phase 3 (0301–0319); migrations remain the upgrade path and must be idempotent on top.
+- Fresh projects run `supabase/single-tenant-setup.sql` or `supabase/multi-tenant-setup.sql`, then apply ordered files under `supabase/migrations/` (common file first, then `.single-tenant.sql` / `.multi-tenant.sql` for that mode). Folded setup files already include Phase 3 (0301–0320), Phase 3.1 (0351–0359, 0420–0424) and Phase 4 (0401–0413); Phase 6 migrations are not folded yet; migrations remain the upgrade path and must be idempotent on top. pgvector must stay in schema `public`: 0425 stops with 55000 otherwise, so do not act on Supabase lint 0014 (`extension_in_public`) for `vector`.
 - Switches (defaults in `src/lib/env.ts`): `RAG_INGEST_PIPELINE=legacy` (legacy writers vs unified pipeline), `RAG_EMBEDDING_PROFILES=off`, `RAG_INJECTION_SCAN=off`, `RAG_EXACT_ID_LOOKUP=false`, `RAG_PDF_IMAGE_CHUNKS=false`.
 - Originals land in the private **`rag-originals`** storage bucket; quarantined documents stay out of retrieval (D-08 filter on current, ready rows—no env switch).
 - Writer and search RPCs (`rag_*`, `match_chunks_by_profile`) are **service_role** only; tests assert anon/authenticated cannot execute them.
+
+### Ingestion queue (Phase 3.1)
+- Write paths call `submitIngest()`: inline `ingest()` with `RAG_INGEST_ASYNC=off`, the `ingestion_jobs` ledger with it on (unified pipeline only). Defaults reproduce Phase 3 and write no ledger, cache or budget row (`tests/rag-e2e/defaults-equal-phase3.test.mts`).
+- Switches (defaults in `src/lib/env.ts`, read by `src/lib/rag/ingest/queue-config.ts`): `RAG_PARSE_ROUTING=fixed`, `RAG_PARSER_ALLOW_CLOUD=true`, `RAG_PARSE_PREMIUM_PAGE_BUDGET=0`, `RAG_PARSE_PREMIUM_MAX_PAGES_PER_DOC=200`, `RAG_PARSE_ESCALATION=on`, `RAG_PARSE_VLM_DETECT=false`, `RAG_PARSE_VLM_MODEL=` (empty: the captioning model), `RAG_INGEST_ASYNC=off`, `RAG_INGEST_WORKER_CONCURRENCY=2`, `RAG_PARSE_PROGRESSIVE=false`, `RAG_EMBED_BATCH_MODE=sync`, `NEXT_PUBLIC_RAG_INGEST_REALTIME=false`. `tiered` routing needs `RAG_INGEST_PIPELINE=unified` and `RAG_INGEST_ASYNC=on`; an invalid combination falls back to Phase 3 behaviour with a warning.
+- The worker runs in the sidecar: `RAG_INGEST_WORKER=on` (default off: the sidecar starts no worker) with `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `RAG_APP_INTERNAL_URL` and `RAG_SIDECAR_SECRET`; it calls back into `/api/internal/rag/ingest/jobs/[id]/*`.
+- Bulk import: `npm run rag:backfill -- --tenant <key> --source <folder|bucket|manifest>:<ref> --budget <USD>`. The sample dry run always runs first; without `--budget`, or with `--dry-run`, the command stops after the report (exit 2). `--resume <batch_id>` continues a batch.
+- `RAG_PARSER_ALLOW_CLOUD=false` applies in every pipeline: no request reaches LlamaParse or the vision model; the legacy knowledge-base PDF upload answers 503 `cloud_parsing_disabled`, the unified chain parses locally.
+- Tier routing thresholds and presets live in `config/rag/parse-routing.json` (read by the app and the sidecar).
+
+### Hybrid retrieval (Phase 4)
+- `RAG_PIPELINE=legacy` (default) runs none of Phase 4. `RAG_PIPELINE=v2` runs the v2 stage graph; with every sub-switch off it is dense-only search through `hybrid_search_chunks`, then RRF over one leg and the Phase 2 assembly.
+- Sub-switches (defaults in `src/lib/env.ts`, all off): `RAG_LEXICAL_SEARCH=false`, `RAG_RERANKER=none` (`cohere | voyage | local_bm25`), `RAG_RERANK_TIER_CHAT=quality`, `RAG_RERANK_TIER_VOICE=fast`, `RAG_RERANK_VOYAGE_MODEL_BY_LANG=`, `COHERE_API_KEY=`, `COHERE_BASE_URL=`, `RAG_REFUSAL_THRESHOLD=false`, `RAG_CONTEXT_EDGE_ORDER=false`, `RAG_CONTEXT_COMPRESSION=false`, `RAG_CONTEXT_TOKEN_BUDGET=6000`, `RAG_PARENT_CHILD=false`, `RAG_HNSW_ITERATIVE_SCAN=off`, `RAG_EXACT_SCAN_CUTOFF=0`, `RAG_LEXICAL_TRANSLATION=false`.
+- `hybrid_search_chunks`, `rag_fetch_parents`, `rag_assert_tenant_key` and the relex, chunk-writer, rechunk and chunking-profile functions are **service_role** only. The app calls them on the admin client with `scopeKey` as the only tenant input; the SQL guard rejects a tenant key of the other deployment mode.
+- Commands: `npm run rag:relex` (rebuild lexical text), `npm run rag:rechunk` (build a chunking profile), `npm run rag:chunking` (status, activate, rollback), `python -m rag_eval.sweep retrieval|chunking|chunking-decide` and `python -m rag_eval.calibrate refusal` (from `eval/`).
+- Only those tools write `eval/config/retrieval-params.json`, `eval/config/refusal-thresholds.json` and the chunking decisions; do not edit them by hand. Fixture-fitted cells and the fixture similarity floor (`RAG_EVAL_RETRIEVAL_MIN_SIMILARITY`) apply only in eval, never in production.
+- Chunking profiles: documents uploaded while `RAG_PIPELINE=legacy` are not written into non-legacy profiles; under v2 they are answered from their legacy chunks and counted as missing (v2 startup warning, admin list, Config UI), and `npm run rag:rechunk -- --profile <id>` repairs an active profile in place.
 
 ---
 
@@ -174,6 +190,7 @@ Unified OAuth for Google Drive, Notion, Dropbox:
 ## 14. Behaviour to Preserve
 - Strict RAG now allows safe tool results: when `webSearch` is enabled, strict mode may use Exa-powered web search rather than legacy `:online` model suffixes.
 - When strict RAG returns a verified `empty` retrieval status and web search is disabled, the chat API returns a structured "information not available" response instead of letting the model answer from general knowledge. A knowledge-base failure (`error`, or `degraded` with no documents) is never reported as "information not available": strict mode with web search off streams a localized "knowledge base temporarily unavailable" message; with web search on, or in balanced/flexible mode, the answer continues without knowledge-base context and the trace is flagged `degraded`.
+- Under `RAG_PIPELINE=v2` strict mode still answers "information not available" with the default `RAG_RERANKER=none`: without a calibrated rerank threshold the refusal stage applies the embedding profile's similarity floor (legacy 0.65 when the profile has no calibration).
 - Source extraction now preserves `webSearch` tool results, document sources, and `source_images` through streaming and final message persistence; keep sidebar toggle click handling intact.
 - Voice work recently focused on UI timing and audio reliability: the overlay keeps the three-dot state until text and word timings are ready, the agent dynamically resamples incoming audio for VAD/STT, and Resemble timestamp failures fall back to estimated timings.
 

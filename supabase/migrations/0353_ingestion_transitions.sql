@@ -528,24 +528,7 @@ AS $$
    OFFSET GREATEST(COALESCE(p_offset, 0), 0);
 $$;
 
--- ---------------------------------------------------------------------------
--- Realtime read policy (no-op when realtime.messages is absent)
--- ---------------------------------------------------------------------------
-
-DO $policy$
-BEGIN
-  IF to_regclass('realtime.messages') IS NULL THEN
-    RETURN;
-  END IF;
-  DROP POLICY IF EXISTS rag_ingest_broadcast_read ON realtime.messages;
-  CREATE POLICY rag_ingest_broadcast_read ON realtime.messages
-    FOR SELECT TO authenticated
-    USING (
-      extension = 'broadcast'
-      AND public.rag_ingest_realtime_topic_allowed((SELECT realtime.topic()))
-    );
-END
-$policy$;
+-- The Realtime read policy (rag_ingest_broadcast_read) is created by the mode file, right after the topic rule it calls.
 
 REVOKE ALL ON FUNCTION rag_ingest_job_status_for_stage(text) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION rag_ingest_mirror_processing_status(text) FROM PUBLIC, anon, authenticated;
