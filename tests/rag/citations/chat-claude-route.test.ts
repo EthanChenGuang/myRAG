@@ -13,7 +13,6 @@ const CLAUDE_MODEL = 'anthropic/claude-sonnet-5.5';
 const UNMAPPED_CLAUDE = 'anthropic/claude-sonnet-4.5';
 const CITED_TEXT = 'The blue lantern festival moved to May this year.';
 const QUESTION = 'What is the refund window for annual plans?';
-const IMAGE_QUESTION = 'Which aisles hold thermal probes according to the floor plan?';
 
 const h = await vi.hoisted(async () => {
   const fakes = await import('../../helpers/chat-route-fakes');
@@ -77,6 +76,19 @@ vi.mock('@/lib/rag/generation/citations/fallback', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/rag/generation/citations/fallback')>()),
   CLAUDE_FIRST_TOKEN_TIMEOUT_MS: 400,
 }));
+
+const IMAGE_BLOCK = {
+  documentId: 'doc-floorplan',
+  documentName: 'warehouse-floorplan.png',
+  documentVersion: 1,
+  chunkIds: ['chunk-floorplan'],
+  page: null,
+  sectionPath: null,
+  title: 'warehouse-floorplan.png',
+  text: 'Image caption: thermal probes sit in aisle 7.',
+  isImage: true,
+  alias: null,
+};
 
 type FakeMode =
   | { kind: 'sse'; sse: string }
@@ -359,18 +371,41 @@ describe('chat route on the direct Claude Citations path (D-09, D-10)', () => {
   });
 
   it('still writes source_images and the metadata part first on the direct path', async () => {
-    const { chunks } = await post(claudeTurn(), [{ role: 'user', content: IMAGE_QUESTION }]);
+    vi.doMock('@/lib/rag/pipeline', async () => {
+      const actual = await vi.importActual<typeof import('@/lib/rag/pipeline')>('@/lib/rag/pipeline');
+      return {
+        ...actual,
+        runRetrieval: async (...args: Parameters<typeof actual.runRetrieval>) => {
+          const result = await actual.runRetrieval(...args);
+          return {
+            ...result,
+            blocks: [...(result.blocks ?? []), IMAGE_BLOCK],
+            sourceImages: [{ name: 'warehouse-floorplan.png', size: 0, type: 'image/jpeg', url: 'https://example.com/fixtures/warehouse-floorplan.png' }],
+          };
+        },
+      };
+    });
+    let chunks: SseChunk[];
+    try {
+      ({ chunks } = await post(claudeTurn()));
+    } finally {
+      vi.doUnmock('@/lib/rag/pipeline');
+    }
 
     expect(fake.requests).toHaveLength(1);
     expect(h.calls).toHaveLength(0);
     const types = chunks.map((chunk) => chunk.type);
-    const imageIndex = types.indexOf('data-source_images');
+    const imageIndex = types.indexOf('source_images');
     const firstText = types.indexOf('text-delta');
     expect(imageIndex).toBeGreaterThan(-1);
-    expect(types.indexOf('data-metadata')).toBeGreaterThan(imageIndex);
-    expect(firstText).toBeGreaterThan(types.indexOf('data-metadata'));
+    expect(types.indexOf('metadata')).toBeGreaterThan(imageIndex);
+    expect(firstText).toBeGreaterThan(types.indexOf('metadata'));
     expect(chunks.filter((chunk) => chunk.type === 'start')).toHaveLength(0);
     expect(metadataOf(chunks, 'finish')?.citationStrategy).toBe('claude-citations');
     expect(typeof metadataOf(chunks, 'finish')?.answerId).toBe('string');
+    const system = JSON.stringify(fake.requests[0].body.system);
+    expect(system).toContain('Image caption: thermal probes sit in aisle 7.');
+    const documents = lastUserContent(fake.requests[0]).filter((part) => part.type === 'document');
+    expect(documents.some((document) => String(document.source.data).includes('aisle 7'))).toBe(false);
   });
 });

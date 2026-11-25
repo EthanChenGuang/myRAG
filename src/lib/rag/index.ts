@@ -134,6 +134,7 @@ export type {
   CitationFinishMetadata,
   CitationSession,
   CitationSessionInput,
+  ClaudeStartInput,
   HistoryMessage,
 } from './generation/citations/session';
 export { mintAnswerId, scheduleAnswerFinish, shouldPersistAnswer } from './generation/answer-finish';
@@ -147,6 +148,8 @@ export type {
   ScoreAnswerGroundednessInput,
 } from './generation/groundedness';
 export { claudeTurnEligibility, preRetrievalCitations, selectCitationStrategy } from './generation/citations/strategy';
+export { CLAUDE_FIRST_TOKEN_TIMEOUT_MS, errorStatusOf, fallbackReasonFor, firstTokenGate } from './generation/citations/fallback';
+export type { FallbackReason, FirstTokenGateResult } from './generation/citations/fallback';
 export type {
   CitationRagMode,
   CitationStrategyId,
