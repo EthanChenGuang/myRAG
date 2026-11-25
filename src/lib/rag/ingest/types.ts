@@ -130,6 +130,8 @@ export interface IngestState {
   approval?: UploadApproval;
   /** A job of a batch with hold_publish (D-12): publish records the hold on the document instead of making it current. */
   publishHold?: { batchId: string };
+  /** The parser version of this version's parse, kept so a resumed run can still name it in the ingestion fingerprint (D-10). */
+  parserVersion?: string;
 }
 
 export function emptyIngestState(): IngestState {
