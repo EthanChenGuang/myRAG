@@ -5,6 +5,9 @@ import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
 
 const FIXTURES = join(process.cwd(), 'eval/fixtures/ingest');
+/** What the Phase 3 chain returns for the parse fixtures (eval/fixtures/parse/record_chain_results.py), paths relative to eval/fixtures/parse. */
+const PARSE_FIXTURES = join(process.cwd(), 'eval/fixtures/parse');
+const PARSE_CHAIN_MANIFEST = join(PARSE_FIXTURES, 'chain/manifest.json');
 
 interface ManifestEntry {
   id: string;
@@ -66,6 +69,19 @@ export function loadManifest(): FakeSidecarManifest {
   return JSON.parse(readFileSync(join(FIXTURES, 'manifest.json'), 'utf8')) as FakeSidecarManifest;
 }
 
+interface RecordedSource {
+  base: string;
+  entry: Pick<ManifestEntry, 'file_sha256' | 'recorded'>;
+}
+
+function recordedSources(): RecordedSource[] {
+  const chain = JSON.parse(readFileSync(PARSE_CHAIN_MANIFEST, 'utf8')) as FakeSidecarManifest;
+  return [
+    ...loadManifest().fixtures.map((entry) => ({ base: FIXTURES, entry })),
+    ...chain.fixtures.map((entry) => ({ base: PARSE_FIXTURES, entry })),
+  ];
+}
+
 export function fixtureBytes(id: string): Uint8Array {
   const entry = loadManifest().fixtures.find((fixture) => fixture.id === id);
   if (!entry) throw new Error(`no fixture ${id}`);
@@ -106,12 +122,12 @@ function sendJson(response: ServerResponse, status: number, body: unknown): void
 }
 
 /**
- * A local stand-in for the sidecar's /v1/parse/jobs routes. A file whose sha256 is in eval/fixtures/ingest/manifest.json is answered
- * with its recorded ParseResult and artifacts; any other file gets a small default result.
+ * A local stand-in for the sidecar's /v1/parse/jobs routes. A file whose sha256 is in eval/fixtures/ingest/manifest.json or
+ * eval/fixtures/parse/chain/manifest.json is answered with its recorded ParseResult and artifacts; any other file gets a small default result.
  */
 export async function startFakeSidecar(options: { secret?: string } = {}): Promise<FakeSidecar> {
   const secret = options.secret ?? 'sidecar-secret-for-tests-000000000000';
-  const manifest = loadManifest();
+  const sources = recordedSources();
   const calls: FakeSidecarCall[] = [];
   const uploads: FakeSidecarUpload[] = [];
   const deleted: string[] = [];
@@ -143,12 +159,13 @@ export async function startFakeSidecar(options: { secret?: string } = {}): Promi
         const bytes = file instanceof Blob ? Buffer.from(await file.arrayBuffer()) : Buffer.alloc(0);
         const sha = createHash('sha256').update(bytes).digest('hex');
         uploads.push({ fileSha256: sha, fileBytes: bytes.byteLength, request: JSON.parse(typeof requestField === 'string' ? requestField : '{}') as Record<string, unknown> });
-        const known = manifest.fixtures.find((fixture) => fixture.file_sha256 === sha);
+        const known = sources.find((source) => source.entry.file_sha256 === sha);
         let result: Record<string, unknown> = { ...DEFAULT_RESULT };
         const artifacts: Record<string, Buffer> = {};
         if (known) {
-          result = JSON.parse(readFileSync(join(FIXTURES, known.recorded.parse_result), 'utf8')) as Record<string, unknown>;
-          for (const [name, path] of Object.entries(known.recorded.artifacts)) artifacts[name] = readFileSync(join(FIXTURES, path));
+          const { base, entry } = known;
+          result = JSON.parse(readFileSync(join(base, entry.recorded.parse_result), 'utf8')) as Record<string, unknown>;
+          for (const [name, path] of Object.entries(entry.recorded.artifacts)) artifacts[name] = readFileSync(join(base, path));
         }
         if (spec.result !== undefined) result = spec.result as Record<string, unknown>;
         const id = `job${submits}`;

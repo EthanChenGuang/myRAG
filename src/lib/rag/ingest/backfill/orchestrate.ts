@@ -3,13 +3,31 @@ import type { BackfillDryRunReport } from '@/lib/rag-eval/contracts.generated';
 import type { RpcClient } from '@/lib/rag/backend/supabase-rpc';
 import { scopeKey, type TenantScope } from '@/lib/rag/tenant/scope';
 import { getRagDeps } from '../../deps';
+import { estimateCostUsd } from '../../embeddings/prices';
+import { canonicalModelId, getEmbeddingProvider } from '../../embeddings/registry';
+import type { EmbeddingProviderId } from '../../embeddings/types';
+import { publishDeferred } from '../callbacks/advance';
 import { getIngestDeps } from '../deps';
-import { resolveEmbeddingTargets } from '../embedding-targets';
+import { resolveEmbeddingTargets, type EmbeddingTarget } from '../embedding-targets';
+import { getProcessingProfile, type DocType } from '../profiles/load';
+import { buildEmbeddingText, templateHeaderFor } from '../text/embedding-text';
+import { countTokens } from '../text/tokens';
+import { createIngestWriter } from '../writer';
+import {
+  MAX_BATCH_INPUTS,
+  batchCustomId,
+  createBatchApiClient,
+  embedViaBatchApi,
+  type BatchApiClient,
+  type BatchChunk,
+  type BatchClock,
+  type BatchLimits,
+} from './batch-api';
 import { queueConfigFromProcessEnv, type QueueConfig } from '../queue-config';
 import { loadRoutingConfig } from '../routing/config';
 import { inventory, type BackfillBatchRef } from './inventory';
 import { buildReport, embeddingLowerBoundUsd, formatReport, sampleJobFromRow, type ProjectionProfile, type ProjectionSnapshot, type SampleJob } from './report';
-import { endReport, enqueueRun, monitor, releaseStagedOriginals, type BackfillEndReport, type BatchProgress, type RunEntry } from './run';
+import { deferredJobs, endReport, enqueueRun, monitor, releaseStagedOriginals, type BackfillEndReport, type BatchProgress, type RunEntry } from './run';
 import { startRunner as defaultStartRunner, type RunnerHandle, type RunnerIo, type RunnerName } from './runners';
 import { selectSample } from './sample';
 import { listSource, type BackfillSourceDeps, type BackfillStorageBucket, type SourceItem, type SourceKind } from './sources';
@@ -41,6 +59,37 @@ export interface OrchestrateDeps {
   startRunner?: (runner: RunnerName, batchId: string) => RunnerHandle;
   monitorIntervalMs?: number;
   monitorTimeoutMs?: number;
+  /** The OpenAI Batch API client and its pacing for deferred embeddings (D-35); defaults to the real client and a 60 s poll. */
+  embedBatch?: EmbedBatchOptions;
+}
+
+export interface EmbedBatchOptions {
+  client?: BatchApiClient;
+  clock?: BatchClock;
+  pollIntervalMs?: number;
+  limits?: BatchLimits;
+  openLimit?: number;
+  maxAttempts?: number;
+}
+
+/** Embedding work done for one profile by the rag:backfill process (D-36: the report shows the cost per profile). */
+export interface ProfileEmbedding {
+  profileId: string;
+  provider: string;
+  role: EmbeddingTarget['role'];
+  mode: 'batch_api' | 'sync';
+  chunks: number;
+  tokens: number;
+  usd: number;
+  batchesSubmitted: number;
+  unresolved: number;
+}
+
+export interface DeferredEmbedResult {
+  profiles: ProfileEmbedding[];
+  published: number;
+  /** Jobs still at embed_deferred, by refusal reason (vectors_incomplete when a vector is missing). */
+  remaining: Record<string, number>;
 }
 
 export interface BackfillOutcome {
@@ -48,6 +97,7 @@ export interface BackfillOutcome {
   batchId: string | null;
   report: BackfillDryRunReport | null;
   end: BackfillEndReport | null;
+  embeddings?: DeferredEmbedResult | null;
 }
 
 /** A refusal the operator can fix by changing the command line (exit 64). */
@@ -284,6 +334,229 @@ async function runAndMonitor(ctx: RunContext): Promise<BatchProgress> {
   }
 }
 
+const DEFERRED_PAGE = 1_000;
+/** Chunks held in memory per Batch API round: enough for the default number of open batches at the provider's input limit. */
+const DEFERRED_GROUP = MAX_BATCH_INPUTS * 2;
+const SYNC_EMBED_GROUP = 100;
+const VECTOR_WRITE_BYTES = 1_000_000;
+const BYTES_PER_VECTOR_DIM = 20;
+const BATCH_PRICE_FACTOR = 0.5;
+const PRICED_PROVIDERS: ReadonlySet<string> = new Set(['openai', 'voyage', 'qwen3']);
+
+interface DeferredChunk extends BatchChunk {
+  tokens: number;
+}
+
+function textOf(value: unknown): string | null {
+  return typeof value === 'string' && value !== '' ? value : null;
+}
+
+/** The text ingest embeds for a chunk, rebuilt from stored columns exactly as the re-embed job does (section path, profile header, content). */
+function deferredText(row: JobRow): string {
+  const sectionPath = Array.isArray(row.section_path) ? row.section_path.filter((entry): entry is string => typeof entry === 'string') : [];
+  const templateRow: Record<string, string | null> = {};
+  if (row.template_row && typeof row.template_row === 'object' && !Array.isArray(row.template_row)) {
+    for (const [key, value] of Object.entries(row.template_row as JobRow)) templateRow[key] = typeof value === 'string' ? value : null;
+  }
+  let header = '';
+  const stored = textOf(row.doc_type);
+  if (stored) {
+    try {
+      header = templateHeaderFor(getProcessingProfile(stored as DocType).embedding_text_template, templateRow);
+    } catch {
+      header = '';
+    }
+  }
+  return buildEmbeddingText({ section_path: sectionPath, content: typeof row.content === 'string' ? row.content : '', template_header: header });
+}
+
+/** The chunks of the batch's deferred jobs that still lack a vector of the profile, in groups, keyset by chunk id so each is read once per pass. */
+async function* deferredGroups(rpc: RpcClient, batchId: string, profileId: string, signal: AbortSignal): AsyncGenerator<DeferredChunk[]> {
+  let after: string | null = null;
+  let group: DeferredChunk[] = [];
+  for (;;) {
+    const data = await call(rpc, 'rag_deferred_embed_chunks', { p_batch_id: batchId, p_profile_id: profileId, p_after: after, p_limit: DEFERRED_PAGE }, signal);
+    const page = (Array.isArray(data) ? data : []) as JobRow[];
+    for (const row of page) {
+      if (typeof row.id !== 'string') continue;
+      const text = deferredText(row);
+      group.push({ chunkId: row.id, embeddingTextVersion: numberOf(row.embedding_text_version) ?? 0, text, tokens: countTokens(text) });
+      if (group.length >= DEFERRED_GROUP) {
+        yield group;
+        group = [];
+      }
+    }
+    if (page.length < DEFERRED_PAGE) break;
+    const last = page[page.length - 1]?.id;
+    if (typeof last !== 'string') break;
+    after = last;
+  }
+  if (group.length > 0) yield group;
+}
+
+/** Writes vectors by chunk id through the database, which takes only chunks of this batch's deferred jobs at the text version sent. */
+async function writeDeferredVectors(
+  rpc: RpcClient,
+  batchId: string,
+  profile: EmbeddingTarget['profile'],
+  rows: Array<{ chunk: BatchChunk; vector: number[] }>,
+  host: string,
+  signal: AbortSignal,
+): Promise<number> {
+  const perCall = Math.max(1, Math.floor(VECTOR_WRITE_BYTES / (profile.dims * BYTES_PER_VECTOR_DIM)));
+  let written = 0;
+  for (let start = 0; start < rows.length; start += perCall) {
+    const payload = rows.slice(start, start + perCall).map(({ chunk, vector }) => ({
+      chunk_id: chunk.chunkId,
+      embedding_text_version: chunk.embeddingTextVersion,
+      embedding: vector,
+      host,
+    }));
+    const data = await call(rpc, 'rag_write_deferred_vectors', { p_batch_id: batchId, p_profile_id: profile.id, p_rows: payload }, signal);
+    const row = (Array.isArray(data) ? data[0] : data) as JobRow | undefined;
+    written += numberOf(row?.written) ?? 0;
+  }
+  return written;
+}
+
+function priceUsd(provider: string, tokens: number, mode: ProfileEmbedding['mode']): number {
+  if (!PRICED_PROVIDERS.has(provider)) return 0;
+  const usd = estimateCostUsd(provider as EmbeddingProviderId, tokens).usd;
+  return mode === 'batch_api' ? usd * BATCH_PRICE_FACTOR : usd;
+}
+
+/**
+ * D-35 for one OpenAI profile: the chunks go through the Batch API (submitBatch, poll, collect by custom_id and resubmit the missing ones,
+ * all inside embedViaBatchApi), at most 50,000 inputs per batch; each batch's vectors are written before its row is closed, so a kill
+ * loses nothing and --resume polls the batches still open instead of submitting them again.
+ */
+async function embedThroughBatchApi(ctx: RunContext, target: EmbeddingTarget, client: BatchApiClient, entry: ProfileEmbedding): Promise<void> {
+  const { rpc, batch, deps } = ctx;
+  const options = deps.embedBatch ?? {};
+  for await (const group of deferredGroups(rpc, batch.id, target.profile.id, deps.signal)) {
+    const byId = new Map(group.map((chunk) => [batchCustomId(chunk), chunk] as const));
+    const result = await embedViaBatchApi(
+      {
+        rpc,
+        client,
+        signal: deps.signal,
+        ...(options.clock ? { clock: options.clock } : {}),
+        ...(options.pollIntervalMs !== undefined ? { pollIntervalMs: options.pollIntervalMs } : {}),
+      },
+      {
+        batchId: batch.id,
+        profile: target.profile,
+        chunks: group,
+        ...(options.openLimit !== undefined ? { openLimit: options.openLimit } : {}),
+        ...(options.maxAttempts !== undefined ? { maxAttempts: options.maxAttempts } : {}),
+        ...(options.limits ? { limits: options.limits } : {}),
+        onVectors: async (vectors) => {
+          const rows: Array<{ chunk: DeferredChunk; vector: number[] }> = [];
+          for (const [id, vector] of vectors) {
+            const chunk = byId.get(id);
+            if (chunk) rows.push({ chunk, vector });
+          }
+          await writeDeferredVectors(rpc, batch.id, target.profile, rows, 'openai-batch', deps.signal);
+          entry.chunks += rows.length;
+          entry.tokens += rows.reduce((sum, row) => sum + row.chunk.tokens, 0);
+        },
+      },
+    );
+    entry.batchesSubmitted += result.batchesSubmitted;
+    entry.unresolved += result.unresolved.length;
+  }
+}
+
+/** A profile without a batch API (a backfilling Voyage or Qwen3 profile, D-36) is embedded synchronously, exactly as the write stage would. */
+async function embedSynchronously(ctx: RunContext, target: EmbeddingTarget, entry: ProfileEmbedding): Promise<void> {
+  const { rpc, batch, deps } = ctx;
+  const { profile } = target;
+  for await (const group of deferredGroups(rpc, batch.id, profile.id, deps.signal)) {
+    for (let start = 0; start < group.length; start += SYNC_EMBED_GROUP) {
+      const part = group.slice(start, start + SYNC_EMBED_GROUP);
+      try {
+        const provider = getEmbeddingProvider(profile.provider);
+        const output = await provider.embedDocuments(
+          part.map((chunk) => chunk.text),
+          { dims: profile.dims, signal: deps.signal },
+        );
+        if (canonicalModelId(output.model) !== canonicalModelId(profile.model) || output.vectors.length !== part.length) {
+          throw new Error('embedding_profile_mismatch');
+        }
+        const rows = part.map((chunk, index) => ({ chunk, vector: output.vectors[index] as number[] }));
+        await writeDeferredVectors(rpc, batch.id, profile, rows, output.host, deps.signal);
+        entry.chunks += part.length;
+        entry.tokens += part.reduce((sum, chunk) => sum + chunk.tokens, 0);
+      } catch (error) {
+        if (deps.signal.aborted) throw error;
+        entry.unresolved += part.length;
+        console.warn('[Backfill] deferred embedding failed for a profile', { profile: profile.id, error: error instanceof Error ? error.name : 'unknown' });
+      }
+    }
+  }
+}
+
+/** Publishes every deferred job of the batch whose vectors are complete; the others stay at embed_deferred for --resume. */
+async function publishDeferredJobs(ctx: RunContext, result: DeferredEmbedResult): Promise<void> {
+  for (const row of await listJobs(ctx.rpc, ctx.batch.id, ctx.deps.signal)) {
+    if (row.kind !== 'ingest' || row.status !== 'embedding' || row.stage !== 'embed_deferred' || typeof row.id !== 'string') continue;
+    const outcome = await publishDeferred(row.id, { signal: ctx.deps.signal });
+    if (outcome.kind === 'published') result.published += 1;
+    else result.remaining[outcome.reason] = (result.remaining[outcome.reason] ?? 0) + 1;
+  }
+}
+
+/**
+ * D-35 and D-36: the jobs parked at embed_deferred get their vectors for every profile a new chunk is written for (the active one,
+ * backfilling ones and the previous one: P3 dual-write), through the Batch API for OpenAI profiles and synchronously for the others,
+ * then each job is published once its active-profile vectors are complete. Reading the registry only; nothing is activated.
+ */
+async function embedDeferredJobs(ctx: RunContext): Promise<DeferredEmbedResult> {
+  const { rpc, batch, deps } = ctx;
+  const writer = createIngestWriter({ db: rpc, scope: batch.scope, signal: deps.signal });
+  const targets = await resolveEmbeddingTargets(writer);
+  const result: DeferredEmbedResult = { profiles: [], published: 0, remaining: {} };
+  let client: BatchApiClient | null = deps.embedBatch?.client ?? null;
+  for (const target of targets) {
+    const mode: ProfileEmbedding['mode'] = target.profile.provider === 'openai' ? 'batch_api' : 'sync';
+    const entry: ProfileEmbedding = {
+      profileId: target.profile.id,
+      provider: target.profile.provider,
+      role: target.role,
+      mode,
+      chunks: 0,
+      tokens: 0,
+      usd: 0,
+      batchesSubmitted: 0,
+      unresolved: 0,
+    };
+    if (mode === 'batch_api') {
+      client ??= createBatchApiClient();
+      await embedThroughBatchApi(ctx, target, client, entry);
+    } else {
+      await embedSynchronously(ctx, target, entry);
+    }
+    entry.usd = priceUsd(entry.provider, entry.tokens, mode);
+    result.profiles.push(entry);
+  }
+  await publishDeferredJobs(ctx, result);
+  return result;
+}
+
+export function formatEmbeddingReport(result: DeferredEmbedResult): string[] {
+  const lines = result.profiles.map(
+    (entry) =>
+      `[Backfill] embeddings ${entry.profileId} (${entry.role}, ${entry.mode === 'batch_api' ? 'Batch API' : 'sync'}): ${entry.chunks} chunks, ${entry.tokens} tokens, ${money(entry.usd)} USD${
+        entry.batchesSubmitted > 0 ? `, ${entry.batchesSubmitted} batches` : ''
+      }${entry.unresolved > 0 ? `, ${entry.unresolved} without a vector` : ''}`,
+  );
+  const remaining = Object.entries(result.remaining)
+    .map(([reason, n]) => `${reason} ${n}`)
+    .join(', ');
+  lines.push(`[Backfill] deferred jobs published ${result.published}${remaining ? `; still deferred: ${remaining}` : ''}`);
+  return lines;
+}
+
 function sampleQueueConfig(config: QueueConfig): QueueConfig {
   // Dry runs need per-page tiers, which only tiered routing produces (the worker refuses a fixed dry run).
   return { ...config, parseRouting: 'tiered' };
@@ -489,7 +762,20 @@ export async function runBackfill(request: BackfillRequest, deps: OrchestrateDep
     .map(([reason, n]) => `${reason} ${n}`)
     .join(', ');
   io.out(`[Backfill] run: ${enqueued.enqueued} jobs enqueued, ${enqueued.existing} already in the batch${refused ? `, refused: ${refused}` : ''}`);
-  await runAndMonitor(ctx);
+  const progress = await runAndMonitor(ctx);
+
+  // D-35: jobs parked at embed_deferred get their vectors through the Batch API here, then are published. A job that cannot be published
+  // yet keeps the batch running, so --resume picks up its open batches.
+  let embeddings: DeferredEmbedResult | null = null;
+  if (deferredJobs(progress) > 0) {
+    io.out(`[Backfill] ${deferredJobs(progress)} jobs wait for their embeddings`);
+    embeddings = await embedDeferredJobs(ctx);
+    for (const line of formatEmbeddingReport(embeddings)) io.out(line);
+    if (Object.keys(embeddings.remaining).length > 0) {
+      io.err(`[Backfill] some jobs could not be published yet; run again with --resume ${row.id}`);
+      return { exitCode: EXIT.failed, batchId: row.id, report: null, end: null, embeddings };
+    }
+  }
   const end = await finishBatch(batch, { rpc, signal, io });
-  return { exitCode: EXIT.ok, batchId: row.id, report: null, end };
+  return { exitCode: EXIT.ok, batchId: row.id, report: null, end, embeddings };
 }

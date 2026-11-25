@@ -119,3 +119,15 @@ def test_probe_text_layer_share_unchanged(cfg):
     assert probe.text_layer_page_share(path) == 1.0
     mixed = FIXTURE_PDFS["mixed-routing"]
     assert probe.text_layer_page_share(mixed) == 0.9
+
+def test_the_scanned_character_limit_comes_from_the_routing_config(cfg):
+    path = FIXTURE_PDFS["mixed-routing"]
+    assert _page_map(l1_signals(path, cfg))[9].scanned is True
+    no_scans = cfg.model_copy(update={"l1": cfg.l1.model_copy(update={"scanned_max_chars": 0})})
+    by_page = _page_map(l1_signals(path, no_scans))
+    assert by_page[9].scanned is False
+    assert "scanned" not in by_page[9].signals
+
+
+def test_the_default_scanned_character_limit_is_unchanged(cfg):
+    assert cfg.l1.scanned_max_chars == 30

@@ -52,8 +52,10 @@ def base_page_payload(spec: Any, page: int, ingest: Any, recorder: Any) -> dict[
 def tune_payload(payload: dict[str, Any], preset: str, scanned: bool, has_table: bool) -> dict[str, Any]:
     tuned = copy.deepcopy(payload)
     if scanned and preset == "fast":
+        # A fast pass has no OCR: the page has no items, so the body must not point at any.
         tuned["texts"] = []
         tuned["tables"] = []
+        tuned["body"]["children"] = []
         return tuned
     if scanned and preset == "structured_ocr":
         return tuned

@@ -1,5 +1,6 @@
 import type { AdvanceRequest, AdvanceResponse, IngestionJob } from '@/lib/rag-eval/contracts.generated';
 import type { RpcClient } from '../../backend/supabase-rpc';
+import { getActiveProfile } from '../../embeddings/active-profile';
 import { backfillDocumentScope } from '../../tenant/backfill-scope';
 import { scopeFromIngestionJob } from '../../tenant/ingestion-job';
 import { scopeKey } from '../../tenant/scope';
@@ -8,7 +9,7 @@ import { getIngestDeps } from '../deps';
 import { callerDocumentMetadata } from '../document-metadata';
 import { enqueueStageContext, queuedInputRecordOf, runEnqueueStages } from '../enqueue';
 import { fileSha256 } from '../hash';
-import { advanceJob, beginProgressiveFinal, clearProvisional, failJob, getJobInternal, markProvisional } from '../ledger';
+import { IngestLedgerError, advanceJob, beginProgressiveFinal, clearProvisional, deferEmbedding, failJob, getJobInternal, markProvisional, publishDeferredJob } from '../ledger';
 import { ORIGINALS_BUCKET, assertObjectKey, getObjectStore } from '../object-store';
 import { originFields } from '../origin';
 import { getProcessingProfile, profileFor, type DocType } from '../profiles/load';
@@ -17,6 +18,7 @@ import { readParseResultForJob } from '../parse-cache';
 import { QUEUED_INPUT_ARTIFACT, buildQueuedContext, decodeQueuedInput, encodeQueuedInput } from '../queued-context';
 import { INGEST_STAGES, REGISTERED_STAGES, rehydrateFromStore, runIngestStages } from '../runner';
 import { chunkStage } from '../stages/chunk';
+import { deferredEmbedStage } from '../stages/embed-write';
 import { versionContentHash } from '../stages/dedup';
 import { applyParseResult, stripBom } from '../stages/parse';
 import { createLedgerStateStore, saveContextState } from '../state-store';
@@ -103,9 +105,10 @@ function annotateChunkParsers(ctx: StageContext, job: IngestionJob): void {
  * the deadline check (the runner yields when the time left is below minMsNeeded, and a spent budget is negative), so a 1 ms budget
  * still moves the job one stage instead of yielding for ever.
  */
-function sliceStages(last: StageName | null, job: IngestionJob): StageSpec[] {
+function sliceStages(last: StageName | null, job: IngestionJob, deferred = false): StageSpec[] {
   const firstToRun = last === null ? 0 : INGEST_STAGES.indexOf(last) + 1;
-  return REGISTERED_STAGES.map((stage, index) => {
+  return REGISTERED_STAGES.map((registered, index) => {
+    const stage = deferred ? (DEFERRED_STAGES.get(registered.name) ?? registered) : registered;
     const spec = index === firstToRun ? { ...stage, minMsNeeded: Number.NEGATIVE_INFINITY } : stage;
     if (stage.name !== 'chunk') return spec;
     return {
@@ -117,6 +120,36 @@ function sliceStages(last: StageName | null, job: IngestionJob): StageSpec[] {
       },
     };
   });
+}
+
+/** The stage a Batch API backfill job stops at: chunks written without vectors, not published, lease released (D-35). */
+export const EMBED_DEFERRED_STAGE = 'embed_deferred';
+
+/** In batch_api mode publish does not run in advance; the rag:backfill process publishes once the vectors are written. */
+const deferredPublishStage: StageSpec = {
+  name: 'publish',
+  minMsNeeded: 0,
+  async run() {
+    return { kind: 'yield', reason: EMBED_DEFERRED_STAGE };
+  },
+};
+
+const DEFERRED_STAGES: ReadonlyMap<StageName, StageSpec> = new Map([
+  ['embed', deferredEmbedStage],
+  ['publish', deferredPublishStage],
+]);
+
+/**
+ * D-35: only a backfill ingest job whose snapshot says batch_api, and only while the active profile is an OpenAI one, defers its
+ * embeddings. Incremental jobs, sync snapshots and other providers embed in the Phase 3 order; a registry that cannot be read means sync.
+ */
+async function defersEmbedding(job: IngestionJob): Promise<boolean> {
+  if (job.kind !== 'ingest' || !job.batch_id || job.settings.embed_mode !== 'batch_api') return false;
+  try {
+    return (await getActiveProfile()).provider === 'openai';
+  } catch {
+    return false;
+  }
 }
 
 function terminalStatusOf(result: IngestResult): 'ready' | 'quarantined' | 'skipped_duplicate' | null {
@@ -154,6 +187,21 @@ async function finish(
   );
   if (scope) finishQueueIngestTrace({ scope, job: updated, status: ledgerStatus });
   return reply(workerId, { stage: ledgerStatus, done: true, status: ledgerStatus });
+}
+
+/** Records the write stage's state and parser fields, then parks the job at embed_deferred with its lease released. */
+async function parkDeferred(job: IngestionJob, jobId: string, workerId: string, ctx: StageContext, signal: AbortSignal): Promise<Reply> {
+  const fields: Record<string, unknown> = {};
+  const parsers = parsersOf(job);
+  if (parsers.length > 1) fields.parser_used = 'mixed';
+  else if (ctx.parserUsed) fields.parser_used = ctx.parserUsed;
+  if (ctx.work.parserVersion) fields.parser_version = ctx.work.parserVersion;
+  await advanceJob(
+    { jobId, worker: workerId, stage: 'write', status: 'embedding', stageState: { ...ctx.state, cursor: ctx.state.lastCompleted }, fields },
+    { signal },
+  );
+  await deferEmbedding(jobId, workerId, { signal });
+  return reply(workerId, { stage: EMBED_DEFERRED_STAGE, done: true });
 }
 
 async function finishNeedsReviewEmpty(
@@ -481,7 +529,11 @@ export async function handleAdvance(jobId: string, body: AdvanceBody, options: {
       return await finishNeedsReviewEmpty(job, jobId, body.worker_id, ctx, scope, signal);
     }
 
-    const result = await runIngestStages(ctx, sliceStages(ctx.state.lastCompleted, job));
+    const deferred = !provisionalRun && (await defersEmbedding(job));
+    const result = await runIngestStages(ctx, sliceStages(ctx.state.lastCompleted, job, deferred));
+    if (deferred && result.status === 'processing' && result.reason === EMBED_DEFERRED_STAGE) {
+      return await parkDeferred(job, jobId, body.worker_id, ctx, signal);
+    }
     const terminal = terminalStatusOf(result);
     if (terminal === 'ready' && provisionalRun) return await completeProvisional(jobId, body.worker_id, signal);
     if (terminal) return await finish(job, jobId, body.worker_id, ctx, scope, terminal, signal);
@@ -495,4 +547,29 @@ export async function handleAdvance(jobId: string, body: AdvanceBody, options: {
   } catch (error) {
     return mapError('advance', error);
   }
+}
+export type DeferredPublishOutcome =
+  | { kind: 'published'; status: 'ready' | 'quarantined' | 'needs_review' }
+  | { kind: 'refused'; reason: string };
+
+/**
+ * Phase publish of a deferred job (D-35), called by the rag:backfill process once the Batch API vectors are written: the database checks
+ * that every chunk has its active-profile vector (rag_vectors_complete) and swaps the version in, all in one transaction. A version with a
+ * missing vector is refused (vectors_incomplete), the job stays at embed_deferred and the previous version stays current.
+ */
+export async function publishDeferred(jobId: string, options: { signal: AbortSignal }): Promise<DeferredPublishOutcome> {
+  const { signal } = options;
+  const active = await getActiveProfile();
+  let job: IngestionJob;
+  try {
+    job = await publishDeferredJob(jobId, active.id, { signal });
+  } catch (error) {
+    if (error instanceof IngestLedgerError && error.code) return { kind: 'refused', reason: error.reason ?? error.code };
+    throw error;
+  }
+  const status = job.status;
+  if (status !== 'ready' && status !== 'quarantined' && status !== 'needs_review') return { kind: 'refused', reason: 'not_published' };
+  const scope = await scopeFromIngestionJob(jobId, { db: getIngestDeps().db, signal }).catch(() => null);
+  if (scope) finishQueueIngestTrace({ scope, job, status });
+  return { kind: 'published', status };
 }

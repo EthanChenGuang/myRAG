@@ -308,6 +308,39 @@ async function runEmbed(ctx: StageContext): Promise<StageOutcome> {
   return { kind: 'next', ...note };
 }
 
+/**
+ * D-35, Batch API backfill: the embed stage writes the chunks without vectors and leaves the embedding to the rag:backfill process, which
+ * fills every target profile by chunk id before the job is published. Children of chunking profiles (RAG_PIPELINE=v2) are still embedded
+ * here, because the Batch API path fills document_chunks only.
+ */
+async function runDeferredEmbed(ctx: StageContext): Promise<StageOutcome> {
+  const document = requireDocument(ctx, 'embed');
+  const dualWrite = loadRagConfig(getRagDeps().ragEnv()).pipeline === 'v2';
+  let targets: EmbeddingTarget[];
+  try {
+    targets = await resolveEmbeddingTargets(ctx.writer);
+  } catch (error) {
+    if (error instanceof ProfileUnavailableError) throw new IngestStageError('embed', 'embedding_profile_unavailable');
+    throw error;
+  }
+  const writes = toWrites(ctx);
+  const batches = batchByBytes(writes, 0);
+  let written = 0;
+  for (const [position, batch] of batches.entries()) {
+    ctx.signal.throwIfAborted();
+    const result = await ctx.writer.writeChunks(document.id, batch, { embeddings: null, final: position === batches.length - 1, total: writes.length });
+    written += result.chunksWritten;
+  }
+  if (dualWrite) {
+    const templateHeader = templateHeaderFor(ctx.identity?.profile.embedding_text_template, ctx.work.templateRow);
+    await dualWriteProfiles(ctx, document.id, targets, new Map(), templateHeader);
+  }
+  ctx.work.chunksWritten = written;
+  ctx.state.embeddingTargets = targets.map((target) => target.profile.id);
+  ctx.state.embeddingGaps = [];
+  return { kind: 'next', outcome: 'deferred' };
+}
+
 async function runWrite(ctx: StageContext): Promise<StageOutcome> {
   if (ctx.work.chunksWritten !== ctx.work.chunks.length) return { kind: 'fail', reason: 'write_incomplete' };
   // The text the chunker consumed (after the injection scan, which never changes it), stored once per version for the readers of documents.content.
@@ -321,3 +354,5 @@ const EMBED_MIN_MS = 5000;
 
 export const embedStage: StageSpec = { name: 'embed', minMsNeeded: EMBED_MIN_MS, run: runEmbed };
 export const writeStage: StageSpec = { name: 'write', minMsNeeded: 0, run: runWrite };
+/** The embed stage of a Batch API backfill job (D-35): chunks are written without vectors. */
+export const deferredEmbedStage: StageSpec = { name: 'embed', minMsNeeded: 0, run: runDeferredEmbed };

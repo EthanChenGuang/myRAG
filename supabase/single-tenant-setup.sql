@@ -3667,7 +3667,7 @@ BEGIN
       ELSE
         vectors := payload;
       END IF;
-      IF vectors IS NULL OR jsonb_typeof(vectors) <> 'array' OR jsonb_array_length(vectors) <> chunk_count THEN
+      IF COALESCE(CASE WHEN jsonb_typeof(vectors) = 'array' THEN jsonb_array_length(vectors) END, -1) <> chunk_count THEN
         RAISE EXCEPTION 'embedding_count_mismatch: expected % vectors', chunk_count;
       END IF;
       IF EXISTS (SELECT 1 FROM jsonb_array_elements(vectors) AS v(value) WHERE jsonb_typeof(v.value) NOT IN ('array', 'null')) THEN
@@ -3675,7 +3675,7 @@ BEGIN
       END IF;
       IF EXISTS (
         SELECT 1 FROM jsonb_array_elements(vectors) AS v(value)
-        WHERE jsonb_typeof(v.value) = 'array' AND jsonb_array_length(v.value) <> profile_row.dims
+        WHERE CASE WHEN jsonb_typeof(v.value) = 'array' THEN jsonb_array_length(v.value) END <> profile_row.dims
       ) THEN
         RAISE EXCEPTION 'embedding_profile_mismatch: dims' USING ERRCODE = '22000';
       END IF;

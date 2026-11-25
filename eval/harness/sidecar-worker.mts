@@ -69,7 +69,7 @@ export function spawnSidecarModule(
   }
   const child = spawn(launch.command, [...launch.argsPrefix, '-m', moduleName, ...args], {
     cwd: launch.cwd,
-    env: childEnv,
+    env: childEnv as NodeJS.ProcessEnv,
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: true,
   });

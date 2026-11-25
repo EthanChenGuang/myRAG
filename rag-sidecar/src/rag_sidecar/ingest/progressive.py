@@ -73,11 +73,11 @@ async def publish_provisional(run: _Run, result: PreflightResult) -> None:
         status="pending",
     )
     outcome = await tiered._parse_docling_range(
-        run, result, whole, None, reason=PROGRESSIVE_REASON
+        run, result, whole, tiered._table_before(None, 1), reason=PROGRESSIVE_REASON
     )
     cache_id = await tiered._merged_entry(
         run,
-        [outcome],
+        [tiered._Part(outcome, 1, result.page_count)],
         tiered.load_profile(run.job.settings.profile_id),
         page_count=result.page_count,
         text_layer_share=tiered.text_layer_share(result),

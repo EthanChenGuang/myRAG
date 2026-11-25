@@ -2,8 +2,10 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from rag_sidecar.contracts.answers import CitationStrategy
 from rag_sidecar.contracts.eval_run import GoldenFilter, RagRunOptions
 from rag_sidecar.contracts.golden import Category, Language, Provenance, Split
+from rag_sidecar.contracts.groundedness import GroundednessScorer
 from rag_sidecar.contracts.latency import StageLatency
 
 
@@ -47,6 +49,26 @@ class ItemResult(_Contract):
     lexical_hit_at_10: bool | None = None
 
 
+StrategyKey = CitationStrategy | Literal["none"]
+ScoringScorer = Literal["hhem_2_3_vectara", "hhem_2_1_open"]
+
+
+class GroundednessLabelCounts(_Contract):
+    verified: int = Field(default=0, ge=0)
+    possibly_unreliable: int = Field(default=0, ge=0)
+    not_checked: int = Field(default=0, ge=0)
+
+
+class StrategySlice(_Contract):
+    items: int = Field(ge=0)
+    invalid_citation_rate: MetricValue | None = None
+    citation_coverage: MetricValue | None = None
+    cited_gold_hit: MetricValue | None = None
+    raw_invalid_markers: int | None = Field(default=None, ge=0)
+    generation_latency: StageLatency | None = None
+    faithfulness: MetricValue | None = None
+
+
 class EvalReport(_Contract):
     schema_version: Literal[1] = 1
     run_id: str
@@ -76,4 +98,11 @@ class EvalReport(_Contract):
     lexical_leg_hit_rate_at_10: MetricValue | None = None
     items: list[ItemResult]
     latency: dict[str, StageLatency] | None = None
+    invalid_citation_rate: MetricValue | None = None
+    citation_coverage: MetricValue | None = None
+    cited_gold_hit: MetricValue | None = None
+    raw_invalid_markers: int | None = Field(default=None, ge=0)
+    groundedness_labels: dict[GroundednessScorer, dict[str, GroundednessLabelCounts]] = Field(default_factory=dict)
+    groundedness_latency: dict[ScoringScorer, StageLatency] = Field(default_factory=dict)
+    by_strategy: dict[StrategyKey, StrategySlice] = Field(default_factory=dict)
     notes: list[str] = Field(default_factory=list)

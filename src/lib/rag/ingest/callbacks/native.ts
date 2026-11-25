@@ -4,6 +4,7 @@ import { captionImage } from '../captioner';
 import { isTextLike, parsePlainText } from '../parsers/plain-text';
 import { PARSE_RESULT_OBJECT, lookupParseCache, putParseResult, type ParseCacheRow } from '../parse-cache';
 import { getObjectStore } from '../object-store';
+import { stripBom } from '../stages/parse';
 import type { StageContext } from '../types';
 import type { CallbackResult } from './common';
 
@@ -30,6 +31,10 @@ async function nativeParseResult(ctx: StageContext): Promise<ParseResult> {
   if (!identity?.bytes) throw new Error('original_unavailable');
   const { filename, bytes } = identity;
   const mimeType = input.mimeType;
+  // A text upload is its text whatever the filename says (an image caption keeps the image's name), as in the Phase 3 chain.
+  if (input.text !== undefined) {
+    return textInputResult(stripBom(input.text));
+  }
   if (isUnsupportedNative(filename, mimeType)) throw new UnsupportedNativeMode('unsupported_mode');
   if (imageMime(filename, mimeType)) {
     const caption = await captionImage(bytes, mimeType, { signal: ctx.signal });
@@ -49,6 +54,21 @@ async function nativeParseResult(ctx: StageContext): Promise<ParseResult> {
   if (!isTextLike(filename, mimeType)) throw new UnsupportedNativeMode('unsupported_mode');
   const parsed = parsePlainText({ filename, mimeType, bytes });
   return { ...parsed, page_count: 1 };
+}
+
+function textInputResult(markdown: string): ParseResult {
+  return {
+    markdown,
+    chunks: [],
+    pictures: [],
+    page_count: 1,
+    language: null,
+    parser: 'text',
+    parser_version: 'native',
+    partial: false,
+    text_layer_page_share: null,
+    warnings: [],
+  };
 }
 
 export class UnsupportedNativeMode extends Error {

@@ -224,6 +224,18 @@ export async function beginProgressiveFinal(jobId: string, worker: string, docum
   return parseJobRow('rag_begin_progressive_final', row);
 }
 
+/** D-35: parks a batch_api backfill job whose chunks are written without vectors at embed_deferred and releases its lease. */
+export async function deferEmbedding(jobId: string, worker: string, options: LedgerCallOptions): Promise<IngestionJob> {
+  const row = await callOne('rag_defer_ingestion_embed', { p_job_id: jobId, p_worker: worker }, options);
+  return parseJobRow('rag_defer_ingestion_embed', row);
+}
+
+/** D-35: publishes a deferred job once every chunk has its vector of `profileId` (the active profile); vectors_incomplete otherwise. */
+export async function publishDeferredJob(jobId: string, profileId: string, options: LedgerCallOptions): Promise<IngestionJob> {
+  const row = await callOne('rag_publish_deferred_ingestion_job', { p_job_id: jobId, p_profile_id: profileId }, options);
+  return parseJobRow('rag_publish_deferred_ingestion_job', row);
+}
+
 /** Progressive mode (A-9): the routed text equals the provisional text; clears the flags of the current version in place. */
 export async function clearProvisional(jobId: string, options: LedgerCallOptions): Promise<{ documentId: string; version: number }> {
   const row = await callOne('rag_clear_provisional', { p_job_id: jobId }, options);

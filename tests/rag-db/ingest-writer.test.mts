@@ -733,6 +733,51 @@ for (const mode of MODES) {
       assert.deepEqual(await chunkRows(ctx, row.document_id), []);
     });
 
+    it('a null vector entry writes that chunk without a vector, a scalar entry is rejected with invalid_embeddings, and a wrong length next to a null is still refused', async () => {
+      const halfvecProfile = 'voyage-4-large-1024';
+      const legacy = embedText(chunkText('writer', 0));
+      const half = Array.from({ length: 1024 }, (_unused, index) => (index === 1 ? 1 : 0));
+      const row = await begin(ctx, { sourceKey: uniqueKey('chunks-null-vector') });
+      const id = row.document_id;
+      const written = await call(ctx.db, WRITE_SQL, [
+        id,
+        ctx.a.key,
+        JSON.stringify(chunkSpecs(2, {})),
+        JSON.stringify({ [LEGACY_PROFILE]: [legacy, null], [halfvecProfile]: { vectors: [null, half], host: 'fixture' } }),
+        false,
+        null,
+      ]);
+      assert.equal(written[0]?.chunks_written, 2);
+      assert.deepEqual(
+        (await chunkRows(ctx, id)).map((chunk) => chunk.has_embedding),
+        [true, false],
+      );
+      const halfRows = await call(ctx.db, 'SELECT chunk_id::text AS chunk_id, dims FROM chunk_embeddings WHERE profile_id = $1 AND chunk_id IN ($2::uuid, $3::uuid)', [
+        halfvecProfile,
+        expectedChunkId(id, 0),
+        expectedChunkId(id, 1),
+      ]);
+      assert.deepEqual(halfRows, [{ chunk_id: expectedChunkId(id, 1), dims: 1024 }]);
+
+      const allNull = await begin(ctx, { sourceKey: uniqueKey('chunks-all-null') });
+      await call(ctx.db, WRITE_SQL, [allNull.document_id, ctx.a.key, JSON.stringify(chunkSpecs(2, {})), JSON.stringify({ [LEGACY_PROFILE]: [null, null] }), false, null]);
+      assert.deepEqual(
+        (await chunkRows(ctx, allNull.document_id)).map((chunk) => chunk.has_embedding),
+        [false, false],
+      );
+
+      const refused = await begin(ctx, { sourceKey: uniqueKey('chunks-scalar-vector') });
+      for (const scalar of [42, 'not a vector', true, { values: [] }]) {
+        const message = await writeError(ctx, refused.document_id, ctx.a.key, chunkSpecs(2, {}), { [LEGACY_PROFILE]: [legacy, scalar] });
+        assert.match(message ?? 'no error', /invalid_embeddings/, JSON.stringify(scalar));
+      }
+      const shortVector = await writeError(ctx, refused.document_id, ctx.a.key, chunkSpecs(2, {}), { [LEGACY_PROFILE]: [null, legacy.slice(0, 100)] });
+      assert.match(shortVector ?? 'no error', /embedding_profile_mismatch/);
+      const shortHalf = await writeError(ctx, refused.document_id, ctx.a.key, chunkSpecs(2, {}), { [halfvecProfile]: [half.slice(0, 1000), null] });
+      assert.match(shortHalf ?? 'no error', /embedding_profile_mismatch/);
+      assert.deepEqual(await chunkRows(ctx, refused.document_id), []);
+    });
+
     it('an embedding list that does not line up with the chunks, a final write without a total and a chunk without content are rejected', async () => {
       const row = await begin(ctx, { sourceKey: uniqueKey('chunks-invalid') });
       const vector = embedText('alignment');

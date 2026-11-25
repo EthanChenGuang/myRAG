@@ -135,6 +135,7 @@ const SAMPLE = IngestionJobSchema.parse({
 const ledger = vi.hoisted(() => ({
   job: null as IngestionJob | null,
   advanceFields: null as Record<string, unknown> | null,
+  deferEmbedding: vi.fn(),
 }));
 
 vi.mock('@/lib/rag/ingest/ledger', async (importOriginal) => {
@@ -147,6 +148,16 @@ vi.mock('@/lib/rag/ingest/ledger', async (importOriginal) => {
       return { ...(ledger.job as IngestionJob), status: args.status as IngestionJob['status'] };
     }),
     failJob: vi.fn(async (_id, _w, errorClass: string) => ({ ...(ledger.job as IngestionJob), status: 'failed' as const, error_class: errorClass })),
+    deferEmbedding: ledger.deferEmbedding,
+  };
+});
+
+const activeProfile = vi.hoisted(() => ({ provider: null as string | null }));
+vi.mock('@/lib/rag/embeddings/active-profile', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/rag/embeddings/active-profile')>();
+  return {
+    ...actual,
+    getActiveProfile: vi.fn(async () => (activeProfile.provider ? { ...actual.LEGACY_PROFILE, id: 'voyage-4-large-1024', provider: activeProfile.provider, storage: 'halfvec', dims: 1024 } : actual.LEGACY_PROFILE)),
   };
 });
 
@@ -227,6 +238,7 @@ vi.mock('@/lib/rag/ingest/deps', () => ({
   getIngestDeps: () => ({
     db: () => ({ rpc: () => ({ abortSignal: () => ({ then: (ok: (v: unknown) => void) => Promise.resolve({ data: [], error: null }).then(ok) }) }) }),
     now: () => Date.now(),
+    ingestEnv: () => ({}),
   }),
 }));
 
@@ -260,6 +272,9 @@ const defaultCache = async (): Promise<ParseCacheContent> => ({
 beforeEach(async () => {
   ledger.job = { ...SAMPLE, needs_review_reason: null, locked_by: WORKER, lease_until: new Date(Date.now() + 60_000).toISOString() };
   ledger.advanceFields = null;
+  ledger.deferEmbedding.mockReset();
+  ledger.deferEmbedding.mockImplementation(async () => ({ ...(ledger.job as IngestionJob), status: 'embedding', stage: 'embed_deferred', locked_by: null, lease_until: null }));
+  activeProfile.provider = null;
   runStages.mockReset();
   const { readParseResultForJob } = await import('@/lib/rag/ingest/parse-cache');
   vi.mocked(readParseResultForJob).mockImplementation(defaultCache);
@@ -422,5 +437,117 @@ describe('queue ingestion trace from the ledger', () => {
     buildQueueIngestTrace(SAMPLE, trace);
     finishIngestTrace(trace, { status: 'failed', documentId: DOC_ID, version: 1, parserUsed: null, chunkCount: 0, warnings: [], reason: 'embed_failed' });
     expect(log.mock.calls.some((call) => String(call[0]).includes('[Ingest Trace]'))).toBe(true);
+  });
+});
+const BATCH_ID = '33333333-3333-4333-8333-333333333333';
+type WriteChunksSpy = (id: string, batch: unknown[], options: { embeddings: unknown; final: boolean; total: number }) => Promise<{ chunksWritten: number; chunksDeleted: number }>;
+
+function deferredCtx(spies: { writeChunks: ReturnType<typeof vi.fn>; publish: ReturnType<typeof vi.fn>; embedDocuments: ReturnType<typeof vi.fn> }): StageContext {
+  return {
+    input: { scope },
+    deps: { now: () => Date.now(), embedDocuments: spies.embedDocuments },
+    writer: {
+      setFields: vi.fn(async () => undefined),
+      markFailed: vi.fn(async () => undefined),
+      getDocument: vi.fn(async () => null),
+      writeChunks: spies.writeChunks,
+      publish: spies.publish,
+      findBackfillRuns: vi.fn(async () => []),
+      listChunkingProfiles: vi.fn(async () => []),
+    },
+    config: { injectionScan: 'off' },
+    signal: new AbortController().signal,
+    deadline: Date.now() + 40_000,
+    state: { lastCompleted: 'images', chunkCount: null, docTypeOrigin: null, parseJob: null, artifacts: {}, docTypeDetection: null, quarantine: null, invoice: null, images: { nextIndex: 0, captioned: 0 } },
+    warnings: [],
+    identity: { tenantKey: 's:default', filename: 'sample.pdf', fileSha256: 'aa', docType: 'general', docTypeOrigin: 'fallback', profile: { id: 'general@1', version: 1, chunker: 'markdown_sections' }, bytes: null },
+    document: { id: DOC_ID, version: 1, lineageId: 'lineage', resumed: false },
+    parserUsed: 'docling',
+    work: {
+      parseText: 'first chunk\n\nsecond chunk',
+      parseChunks: null,
+      pictures: null,
+      parserVersion: '2',
+      templateRow: null,
+      chunks: [
+        { content: 'first chunk', section_path: ['A'], chunk_kind: 'text', page_start: 1, page_end: 1, metadata: {} },
+        { content: 'second chunk', section_path: ['B'], chunk_kind: 'text', page_start: 2, page_end: 2, metadata: {} },
+      ],
+      chunksWritten: 0,
+    },
+  } as unknown as StageContext;
+}
+
+const ADVANCE_BODY = { worker_id: WORKER, attempt_no: 1, phase: 'post_parse' as const, parse_cache_id: CACHE_ID, deadline_ms: 40_000, cursor: 'images' };
+
+describe('deferred embedding for Batch API backfill jobs (D-35)', () => {
+  async function runWithRealStages(job: IngestionJob) {
+    const spies = {
+      writeChunks: vi.fn<WriteChunksSpy>(async (_id, batch) => ({ chunksWritten: batch.length, chunksDeleted: 0 })),
+      publish: vi.fn(async () => ({ outcome: 'published' as const, documentId: DOC_ID, version: 1, supersededDocumentId: null })),
+      embedDocuments: vi.fn(async (texts: string[]) => texts.map(() => Array.from({ length: 1536 }, () => 0.01))),
+    };
+    const { buildQueuedContext } = await import('@/lib/rag/ingest/queued-context');
+    vi.mocked(buildQueuedContext).mockResolvedValueOnce({ ok: true, ctx: deferredCtx(spies) } as never);
+    const actual = await vi.importActual<typeof import('@/lib/rag/ingest/runner')>('@/lib/rag/ingest/runner');
+    const seen: string[][] = [];
+    runStages.mockImplementation(async (ctx: StageContext, stages: Array<{ name: string }>) => {
+      seen.push(stages.map((stage) => stage.name));
+      return actual.runIngestStages(ctx, stages as never);
+    });
+    ledger.job = { ...job, stage_state: { cursor: 'images' }, status: 'chunking', stage: 'images' };
+    const response = await handleAdvance(JOB_ID, ADVANCE_BODY, { signal: new AbortController().signal });
+    return { response, spies, seen };
+  }
+
+  const backfillJob = (embedMode: 'sync' | 'batch_api', batchId: string | null = BATCH_ID): IngestionJob => ({
+    ...SAMPLE,
+    batch_id: batchId,
+    settings: { ...SAMPLE.settings, embed_mode: embedMode },
+  });
+
+  test('batch_api backfill job on an OpenAI profile: chunks are written without vectors, nothing is published, the job parks at embed_deferred', async () => {
+    const { response, spies } = await runWithRealStages(backfillJob('batch_api'));
+    expect(response.body, JSON.stringify(response.body)).toMatchObject({ stage: 'embed_deferred', done: true });
+    expect(response.body).not.toHaveProperty('status');
+    expect(spies.embedDocuments).not.toHaveBeenCalled();
+    expect(spies.writeChunks).toHaveBeenCalledTimes(1);
+    expect(spies.writeChunks.mock.calls[0]?.[2]).toMatchObject({ embeddings: null, final: true, total: 2 });
+    expect(spies.publish).not.toHaveBeenCalled();
+    expect(ledger.deferEmbedding).toHaveBeenCalledWith(JOB_ID, WORKER, expect.anything());
+  });
+
+  test('sync mode: the same backfill job embeds and publishes in the Phase 3 order', async () => {
+    const { response, spies } = await runWithRealStages(backfillJob('sync'));
+    expect(response.body, JSON.stringify(response.body)).toMatchObject({ done: true, status: 'ready' });
+    expect(spies.embedDocuments).toHaveBeenCalledTimes(1);
+    expect(spies.writeChunks.mock.calls[0]?.[2].embeddings).toHaveProperty('openai-3-small-1536');
+    expect(spies.publish).toHaveBeenCalledTimes(1);
+    expect(ledger.deferEmbedding).not.toHaveBeenCalled();
+  });
+
+  test('an incremental job never defers, whatever its snapshot says', async () => {
+    const { response, spies } = await runWithRealStages(backfillJob('batch_api', null));
+    expect(response.body).toMatchObject({ done: true, status: 'ready' });
+    expect(spies.embedDocuments).toHaveBeenCalledTimes(1);
+    expect(spies.publish).toHaveBeenCalledTimes(1);
+    expect(ledger.deferEmbedding).not.toHaveBeenCalled();
+  });
+
+  test('a backfill job whose active profile is not OpenAI embeds synchronously', async () => {
+    activeProfile.provider = 'voyage';
+    const { embedStage } = await import('@/lib/rag/ingest/stages/embed-write');
+    const { publishStage } = await import('@/lib/rag/ingest/stages/publish');
+    let stagesSeen: Array<{ name: string }> = [];
+    runStages.mockImplementation(async (_ctx: StageContext, stages: Array<{ name: string }>) => {
+      stagesSeen = stages;
+      return { status: 'ready', documentId: DOC_ID, version: 1, parserUsed: 'docling', chunkCount: 2, warnings: [] };
+    });
+    ledger.job = { ...backfillJob('batch_api'), stage_state: { cursor: 'images' }, status: 'chunking', stage: 'images' };
+    const response = await handleAdvance(JOB_ID, ADVANCE_BODY, { signal: new AbortController().signal });
+    expect(response.body).toMatchObject({ done: true, status: 'ready' });
+    expect((stagesSeen.find((stage) => stage.name === 'embed') as typeof embedStage | undefined)?.run).toBe(embedStage.run);
+    expect((stagesSeen.find((stage) => stage.name === 'publish') as typeof publishStage | undefined)?.run).toBe(publishStage.run);
+    expect(ledger.deferEmbedding).not.toHaveBeenCalled();
   });
 });

@@ -41,7 +41,8 @@
   "l1": {
     "garbled_ratio": 0.05,
     "min_ruling_paths": 4,
-    "thin_path_pt": 2.0
+    "thin_path_pt": 2.0,
+    "scanned_max_chars": 30
   },
   "l2": {
     "uncertain_batch_pages": 8
@@ -126,7 +127,7 @@
   "escalation": {
     "max_per_page": 2
   },
-  "thresholds_ref": null,
+  "thresholds_ref": "eval/reports/phase-03.1/threshold-sweep.json",
   "timeouts": {
     "preflight_ms": 30000,
     "parse_slice_ms": 40000,

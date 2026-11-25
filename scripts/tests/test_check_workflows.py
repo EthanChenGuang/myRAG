@@ -173,5 +173,49 @@ class RealDoclingJobTest(unittest.TestCase):
         self.assertTrue(any("-m real_docling" in e for e in self.errors_for(data)))
 
 
+class RayOptionalJobTest(unittest.TestCase):
+    def text(self) -> str:
+        return check_workflows.RAY_OPTIONAL.read_text(encoding="utf-8")
+
+    def errors_for(self, text: str) -> list[str]:
+        import yaml
+
+        errors: list[str] = []
+        check_workflows.check_ray_optional(yaml.safe_load(text), text, errors)
+        return errors
+
+    def test_repository_workflow_is_valid(self):
+        self.assertEqual(self.errors_for(self.text()), [])
+
+    def test_a_pull_request_trigger_is_reported(self):
+        text = self.text().replace("  workflow_dispatch:\n", "  workflow_dispatch:\n  pull_request:\n")
+        self.assertTrue(any("'pull_request' must not be used" in e for e in self.errors_for(text)))
+
+    def test_a_secret_is_reported(self):
+        text = self.text().replace("UV_FROZEN: '1'", "UV_FROZEN: '1'\n          TOKEN: ${{ secrets.GITHUB_TOKEN }}")
+        self.assertTrue(any("must not reference secrets" in e for e in self.errors_for(text)))
+
+    def test_the_equality_step_must_opt_in(self):
+        text = self.text().replace("RAG_TEST_RAY: '1'", "RAG_TEST_RAY: '0'")
+        self.assertTrue(any("RAG_TEST_RAY" in e for e in self.errors_for(text)))
+
+    def test_the_ray_extra_must_be_synced_from_the_lock(self):
+        text = self.text().replace(check_workflows.RAY_SYNC, "uv sync --directory rag-sidecar --extra ray")
+        self.assertTrue(any(check_workflows.RAY_SYNC in e for e in self.errors_for(text)))
+
+    def test_an_unpinned_action_is_reported(self):
+        text = self.text().replace("actions/checkout@11d5960a326750d5838078e36cf38b85af677262", "actions/checkout@v4")
+        self.assertTrue(any("40-hex commit sha" in e for e in self.errors_for(text)))
+
+    def test_the_default_workflows_never_install_the_ray_extra(self):
+        for path in (check_workflows.PR, check_workflows.NIGHTLY):
+            errors: list[str] = []
+            check_workflows.check_no_ray_extra(path.stem, path.read_text(encoding="utf-8"), errors)
+            self.assertEqual(errors, [], path.name)
+        errors = []
+        check_workflows.check_no_ray_extra("pr-smoke", "run: uv sync --directory rag-sidecar --locked --extra ray", errors)
+        self.assertEqual(len(errors), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

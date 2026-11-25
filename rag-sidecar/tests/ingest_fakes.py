@@ -188,7 +188,8 @@ class FakeLedger:
       number = len(attempts) + 1
       payload = {**attempt, "attempt_no": number}
       attempts.append(ParseAttempt.model_validate(payload))
-      job = job.model_copy(update={"attempts": attempts})
+      escalations = job.escalations + (1 if attempt.get("reason") == "escalation" else 0)
+      job = job.model_copy(update={"attempts": attempts, "escalations": escalations})
       self.jobs[job_id] = job
       return number
 
