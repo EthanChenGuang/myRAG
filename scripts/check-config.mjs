@@ -13,7 +13,7 @@ export const TRACKED = {
 export const TRACKED_LOCATIONS = Object.keys(TRACKED);
 const MANIFEST_PATH = 'scripts/rag/env-manifest.json';
 const ENV_LOCAL = '.env.local';
-const NAME_PATTERN = '(?:NEXT_PUBLIC_)?RAG_[A-Z0-9_]+|LLAMACLOUD_[A-Z0-9_]+|LANGFUSE_[A-Z0-9_]+|VOYAGE_[A-Z0-9_]+|DEEPINFRA_[A-Z0-9_]+|COHERE_[A-Z0-9_]+|OPENAI_EMBEDDING_MODEL';
+const NAME_PATTERN = '(?:NEXT_PUBLIC_)?RAG_[A-Z0-9_]+|LLAMACLOUD_[A-Z0-9_]+|LANGFUSE_[A-Z0-9_]+|VOYAGE_[A-Z0-9_]+|DEEPINFRA_[A-Z0-9_]+|COHERE_[A-Z0-9_]+|ANTHROPIC_[A-Z0-9_]+|OPENAI_EMBEDDING_MODEL';
 const SRC_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.mjs']);
 
 function presenceRegex(name) {
