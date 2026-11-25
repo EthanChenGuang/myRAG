@@ -160,7 +160,7 @@ describe('getReviewItem', () => {
       'Synthetic chat',
       JSON.stringify(messages.map((m) => JSON.parse(JSON.stringify(m).replaceAll('__TRACE__', traceId)))),
     ]);
-    const { chat_owner: _owner, ...rest } = over;
+    const rest = Object.fromEntries(Object.entries(over).filter(([key]) => key !== 'chat_owner'));
     const id = await insertItem({ chat_id: chatId, user_id: ASKER, trace_id: traceId, ...rest });
     return { id, traceId };
   }

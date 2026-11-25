@@ -28,7 +28,7 @@ const TEXT_A_SUPERSEDED = 'Tenant alpha superseded sentence from an older versio
 const TEXT_B = 'Tenant bravo private sentence that tenant alpha must never read.';
 
 let db: PGlite;
-let calls: string[] = [];
+const calls: string[] = [];
 const session: { userId: string | null } = { userId: null };
 let itemA: string;
 let itemB: string;
