@@ -45,13 +45,22 @@ export const EXIT_COST_NOT_CONFIRMED = 4;
 
 class UsageError extends Error {}
 
+export const DOMAIN_GOLDEN = 'eval/fixtures/domain/golden.jsonl';
+export const DEFAULT_BASELINE_RUNS = 3;
+
 export interface BindingCompareArgs {
-  docType: (typeof DOC_TYPES)[number];
+  /** Null only in the baseline modes, which run the baseline arm alone. */
+  docType: (typeof DOC_TYPES)[number] | null;
   candidates: string[] | null;
   golden: string | null;
   outDir: string;
   live: boolean;
   confirmCost: boolean;
+  /** Run only the baseline arm and write <out>/baseline/report.json (one run of --record-baseline). */
+  baselineOnly: boolean;
+  /** Record the domain-pack baseline (D-24): this many --baseline-only runs in separate processes, then rag_eval.baseline record-reports. */
+  recordBaseline: string | null;
+  runs: number;
 }
 
 export function parseBindingCompareArgs(argv: string[]): BindingCompareArgs {
@@ -66,6 +75,9 @@ export function parseBindingCompareArgs(argv: string[]): BindingCompareArgs {
         out: { type: 'string' },
         live: { type: 'boolean', default: false },
         'confirm-cost': { type: 'boolean', default: false },
+        'baseline-only': { type: 'boolean', default: false },
+        'record-baseline': { type: 'string' },
+        runs: { type: 'string' },
       },
       strict: true,
     });
@@ -73,10 +85,17 @@ export function parseBindingCompareArgs(argv: string[]): BindingCompareArgs {
     throw new UsageError(error instanceof Error ? error.message : String(error));
   }
   const { values } = parsed;
+  const baselineOnly = values['baseline-only'] === true;
+  const recordBaseline = values['record-baseline'] ? path.resolve(values['record-baseline']) : null;
+  const baselineMode = baselineOnly || recordBaseline !== null;
+  if (baselineOnly && recordBaseline !== null) throw new UsageError('--baseline-only and --record-baseline are exclusive');
   const docType = values['doc-type']?.trim() ?? '';
-  if (!(DOC_TYPES as readonly string[]).includes(docType)) {
+  if (!(DOC_TYPES as readonly string[]).includes(docType) && !(baselineMode && docType === '')) {
     throw new UsageError(`--doc-type is required and must be one of ${DOC_TYPES.join(', ')}`);
   }
+  if (baselineMode && (values.live || values.candidates)) throw new UsageError('the baseline modes take neither --live nor --candidates');
+  const runs = values.runs === undefined ? DEFAULT_BASELINE_RUNS : Number(values.runs);
+  if (!Number.isInteger(runs) || runs < DEFAULT_BASELINE_RUNS) throw new UsageError(`--runs must be an integer >= ${DEFAULT_BASELINE_RUNS}`);
   const candidates = values.candidates
     ? values.candidates
         .split(',')
@@ -85,12 +104,15 @@ export function parseBindingCompareArgs(argv: string[]): BindingCompareArgs {
     : null;
   if (candidates !== null && candidates.length === 0) throw new UsageError('--candidates names no profile');
   return {
-    docType: docType as BindingCompareArgs['docType'],
+    docType: docType === '' ? null : (docType as BindingCompareArgs['docType'] & string),
     candidates,
     golden: values.golden ? path.resolve(values.golden) : null,
-    outDir: path.resolve(values.out ?? path.join('eval/out/binding-compare', docType)),
+    outDir: path.resolve(values.out ?? path.join('eval/out/binding-compare', docType || 'domain-baseline')),
     live: values.live === true,
     confirmCost: values['confirm-cost'] === true,
+    baselineOnly,
+    recordBaseline,
+    runs,
   };
 }
 
@@ -228,9 +250,30 @@ async function stageBinding(db: Db, docType: string, profileId: string, status: 
   return bindingId;
 }
 
+/** --record-baseline: N separate processes of --baseline-only, so the recorded spread proves determinism across processes. */
+function recordDomainBaseline(args: BindingCompareArgs, out: string): number {
+  const reports: string[] = [];
+  for (let index = 1; index <= args.runs; index += 1) {
+    const runDir = path.join(args.outDir, `run-${index}`);
+    const child = spawnSync(
+      'npx',
+      ['tsx', fileURLToPath(import.meta.url), '--baseline-only', '--out', runDir, ...(args.golden ? ['--golden', args.golden] : [])],
+      { cwd: REPO_ROOT, stdio: ['ignore', 'ignore', 'inherit'], env: process.env },
+    );
+    if (child.status !== 0) {
+      console.error(`[Binding Compare] baseline run ${index} exited with code ${child.status ?? 'null'}`);
+      return EXIT_FAILED;
+    }
+    reports.push(path.join(runDir, 'baseline', 'report.json'));
+    console.log(`[Binding Compare] baseline run ${index}/${args.runs} done`);
+  }
+  return runPython('rag_eval.baseline', ['record-reports', ...reports.flatMap((report) => ['--report', report]), '--out', out]);
+}
+
 async function main(argv: string[]): Promise<number> {
   const args = parseBindingCompareArgs(argv);
   fs.mkdirSync(args.outDir, { recursive: true });
+  if (args.recordBaseline !== null) return recordDomainBaseline(args, args.recordBaseline);
 
   // Live mode only: the key must be present. Its value is kept in memory and never printed; fake mode never reads it.
   let liveVoyageKey: string | null = null;
@@ -288,6 +331,9 @@ async function main(argv: string[]): Promise<number> {
   const deps = await import('../../src/lib/rag/deps');
   const edge = full.buildState.edge;
   const db = full.db as unknown as Db;
+  // Reports carry the hash of everything ingested: the main ingest corpus and the domain pack.
+  const corpusSha256 = sha256(full.corpusSha256 ?? '', domain.sha256);
+  (full as { corpusSha256?: string }).corpusSha256 = corpusSha256;
 
   let inProcess: Awaited<ReturnType<(typeof import('./run-eval.mts'))['prepareInProcessEval']>> | undefined;
   try {
@@ -301,7 +347,8 @@ async function main(argv: string[]): Promise<number> {
     if (!args.live) await installFixtureEmbedders();
     deps.resetRagDepsForTests();
 
-    const candidates = await scopedCandidates(db, args.docType, args.candidates);
+    const docType = args.docType;
+    const candidates = docType === null ? [] : await scopedCandidates(db, docType, args.candidates);
     const { EMBEDDING_CATALOG_VERSION, catalogEntry } = await import('../../src/lib/rag/embeddings/catalog');
     const catalog: Record<string, { model: string; usd_per_million_tokens: number; supported_languages: string[] }> = {};
     for (const candidate of candidates) {
@@ -334,7 +381,7 @@ async function main(argv: string[]): Promise<number> {
 
     const runIds: string[] = [];
     for (const candidate of candidates) {
-      const bindingId = await stageBinding(db, args.docType, candidate.id, 'backfilling');
+      const bindingId = await stageBinding(db, docType as string, candidate.id, 'backfilling');
       const report = await reembed.runReembed({
         db: fixtureAdminClient(edge.url),
         profileId: candidate.id,
@@ -357,7 +404,11 @@ async function main(argv: string[]): Promise<number> {
     }
     deps.resetRagDepsForTests();
 
-    const goldenPath = args.golden ?? defaultGolden(args.outDir, mergeGoldenFiles, ingestModeGoldenPaths, partitionIngestModeItems);
+    const goldenPath =
+      args.golden ??
+      (args.baselineOnly
+        ? path.join(REPO_ROOT, DOMAIN_GOLDEN)
+        : defaultGolden(args.outDir, mergeGoldenFiles, ingestModeGoldenPaths, partitionIngestModeItems));
 
     const runEvalModule = await import('./run-eval.mts');
     inProcess = await runEvalModule.prepareInProcessEval({
@@ -406,10 +457,11 @@ async function main(argv: string[]): Promise<number> {
     };
 
     const baselineReport = await scoreArm('baseline', {});
-    const controlReport = await scoreArm('control', { domain_control_leg: args.docType });
+    if (args.baselineOnly || docType === null) return EXIT_WRITTEN;
+    const controlReport = await scoreArm('control', { domain_control_leg: docType });
     const candidateReports: string[] = [];
     for (const candidate of candidates) {
-      const report = await scoreArm(`candidate-${candidate.id}`, { embedding_bindings: { [args.docType]: candidate.id } });
+      const report = await scoreArm(`candidate-${candidate.id}`, { embedding_bindings: { [docType]: candidate.id } });
       candidateReports.push(`${candidate.id}=${path.relative(REPO_ROOT, report)}`);
     }
 
@@ -422,7 +474,7 @@ async function main(argv: string[]): Promise<number> {
       hashesPath,
       `${JSON.stringify(
         {
-          corpus_sha256: sha256(full.corpusSha256, domain.sha256),
+          corpus_sha256: corpusSha256,
           golden_sha256: fileSha256(goldenPath),
           noise_sha256: fileSha256(NOISE_PATH),
           retrieval_params_hash: fileSha256(RETRIEVAL_PARAMS_PATH),
@@ -437,7 +489,7 @@ async function main(argv: string[]): Promise<number> {
 
     return runPython('rag_eval.binding_compare_cli', [
       '--doc-type',
-      args.docType,
+      docType,
       '--baseline-profile',
       baselineProfile,
       '--baseline',
