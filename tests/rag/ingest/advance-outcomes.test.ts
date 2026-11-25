@@ -440,6 +440,7 @@ describe('queue ingestion trace from the ledger', () => {
   });
 });
 const BATCH_ID = '33333333-3333-4333-8333-333333333333';
+type WriteChunksSpy = (id: string, batch: unknown[], options: { embeddings: unknown; final: boolean; total: number }) => Promise<{ chunksWritten: number; chunksDeleted: number }>;
 
 function deferredCtx(spies: { writeChunks: ReturnType<typeof vi.fn>; publish: ReturnType<typeof vi.fn>; embedDocuments: ReturnType<typeof vi.fn> }): StageContext {
   return {
@@ -482,7 +483,7 @@ const ADVANCE_BODY = { worker_id: WORKER, attempt_no: 1, phase: 'post_parse' as 
 describe('deferred embedding for Batch API backfill jobs (D-35)', () => {
   async function runWithRealStages(job: IngestionJob) {
     const spies = {
-      writeChunks: vi.fn(async (_id: string, batch: unknown[], _options: { embeddings: unknown; final: boolean; total: number }) => ({ chunksWritten: batch.length, chunksDeleted: 0 })),
+      writeChunks: vi.fn<WriteChunksSpy>(async (_id, batch) => ({ chunksWritten: batch.length, chunksDeleted: 0 })),
       publish: vi.fn(async () => ({ outcome: 'published' as const, documentId: DOC_ID, version: 1, supersededDocumentId: null })),
       embedDocuments: vi.fn(async (texts: string[]) => texts.map(() => Array.from({ length: 1536 }, () => 0.01))),
     };
