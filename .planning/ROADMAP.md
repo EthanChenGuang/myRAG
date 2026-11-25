@@ -37,6 +37,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 6: Query Layer (LlamaIndex & LangChain)** - History rewrite, multi-query fusion, HyDE and sub-questions with a router and budgets, in two switchable frameworks compared in eval
 - [ ] **Phase 06.1: Embedding fine-tuning pipeline: synthetic queries, hard negatives, MNRL training, re-embed and switch** (INSERTED) - Consent-gated per-tenant export, synthetic and mined pairs, hard negatives, CachedMNRL training, offline proof, fine-tune slots switched through the EMB-05 gate or 3.1.1 bindings
 - [ ] **Phase 6.2: Query Layer Additions** (INSERTED) - Complete decomposition, per-sub-question filters, comparison answers, translation glossary, query-language confidence, voice cross-language, speculative retrieval and Auto model routing behind switches
+- [ ] **Phase 6.3: Source Deletion Sync & Purge** (INSERTED) - Change-feed deletions, scheduled reconciliation with alerts, purge across every store, source-of-truth recheck at retrieval, SharePoint/OneDrive connector
 - [ ] **Phase 7: External Backends & Release Defaults** - Weaviate and Qdrant synced from Supabase behind tenant canaries; a full regression sets the defaults; Config UI and docs complete
 
 ## Phase Details
@@ -732,10 +733,24 @@ Plans:
 **Live verification**: Run the multi-part fixtures and real comparison questions with real LLM keys; measure the speculative-retrieval and routing latency gains.
 **Plans**: TBD
 
+### Phase 6.3: Source Deletion Sync & Purge (INSERTED)
+**Goal**: A document deleted or withdrawn at its source stops being retrieved, cited or served from cache within one sync, withdrawn content can be purged from every store, and SharePoint and OneDrive libraries can be connected
+**Depends on**: Phase 6 (semantic cache), Phase 4.2 (table rows, duplicate clusters), Phase 4.3 (access groups for connector permissions), Phase 5.3 (golden-set lifecycle), Phase 3.2 (translations)
+**Requirements**: DATA-23, DATA-24, DATA-25, RET-14, EVAL-31
+**Success Criteria** (what must be TRUE):
+  1. A file deleted at the source that the connector reports as deleted is removed or soft-deleted in the next webhook or sync run without waiting for a full listing; the scheduled reconciliation removes files that no change feed reported; a connection without a completed reconciliation for more than the configured age raises an alert, and a listing that would remove more than the configured share pauses for admin confirmation.
+  2. Purging a document leaves no chunk, parent, vector in any profile, table row, cluster membership, translation, parse-cache entry, original, external-backend vector or cache entry of its lineage; past citations show the withdrawn marker; the audit row names actor and reason; golden items on it are stale.
+  3. With `RAG_SOURCE_RECHECK` on, a chunk whose document was deleted directly in the index is dropped before rerank and counted on the trace; on Weaviate and Qdrant the recheck is always on.
+  4. With the SharePoint switch on, a fixture drive (recorded Graph delta responses) syncs added, changed and deleted items with stored delta tokens and maps item permissions to access groups; with it off nothing changes.
+  5. The deletion canaries pass in CI for `soft` and `purge`; with every new switch off and connections in `soft` mode, behaviour matches the Phase 6.2 baseline.
+**Live verification**: Connect a real SharePoint test site, delete and restore a file, and confirm the answer stops and resumes; purge a document and run the verification query against the live database.
+**Plans**: TBD
+**UI hint**: yes
+
 ### Phase 7: External Backends & Release Defaults
 **Goal**: Admins can switch retrieval to Weaviate or Qdrant without any cross-tenant leakage, every new provider and switch is configurable in the Config UI, and the shipped defaults are backed by a full regression
-**Depends on**: Phase 5, Phase 5.1, Phase 6, Phase 3.1.1, Phase 4.1, Phase 4.1.1, Phase 5.1.1, Phase 6.1, Phase 3.2, Phase 4.2, Phase 5.2, Phase 5.3, Phase 6.2, Phase 4.3 (the Weaviate and Qdrant adapters must inject the access-group filter on every query and prefetch)
-**Requirements**: RET-05, RET-06, RET-07, RET-08, RET-09, ADM-01, ADM-02, ADM-03, ADM-04, LANG-10, LANG-11, SEC-11 (plus the ADM-02 delta; EVAL-17 moved to Phase 5.1.1 on 2026-11-24)
+**Depends on**: Phase 5, Phase 5.1, Phase 6, Phase 3.1.1, Phase 4.1, Phase 4.1.1, Phase 5.1.1, Phase 6.1, Phase 3.2, Phase 4.2, Phase 5.2, Phase 5.3, Phase 6.2, Phase 6.3, Phase 4.3 (the Weaviate and Qdrant adapters must inject the access-group filter on every query and prefetch)
+**Requirements**: RET-05, RET-06, RET-07, RET-08, RET-09, ADM-01, ADM-02, ADM-03, ADM-04, LANG-10, LANG-11, SEC-11 (plus the ADM-02 delta and the RET-05 delta: the outbox carries DATA-24 purges and RET-14 is always on for Weaviate and Qdrant; EVAL-17 moved to Phase 5.1.1 on 2026-11-24)
 **Success Criteria** (what must be TRUE):
   1. Tests against Weaviate and Qdrant containers in CI show that inserts, updates, deletes (including cascade deletes), version replacements and re-embeds in Supabase reach both stores through the outbox and drain worker, and that the reconcile job detects and repairs injected drift. Weaviate uses one tenant per workspace; Qdrant uses a shared collection per embedding profile with an `is_tenant` index and a tenant filter injected on every query and prefetch.
   2. The cross-tenant canary suite (personal vs organization, null organization, removed member, after delete, after version replace, after re-embed) passes on pgvector, Weaviate and Qdrant in CI and blocks release on failure; chunk IDs from an external backend that fail re-validation against Supabase under the caller's scope are dropped.
@@ -788,7 +803,7 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 3.1 → 3.1.1 → 3.2 → 4 → 4.1 → 4.1.1 → 4.2 → 4.3 → 5 → 5.1 → 5.1.1 → 5.2 → 5.3 → 6 → 6.1 → 6.2 → 7. Phase 6 depends on Phase 5 (its plans build on Phase 5 contracts) and runs after Phase 5.1, which touches the same files. Phase 7's backend and sync work needs only Phases 3 and 4; its regression and closeout need Phases 5 and 6. Inserted 2026-11-24: 3.1.1 follows 3.1 (and needs Phase 4's v2 search on trunk); 4.1 follows Phase 4's automated close (04-42) and flips the retrieval defaults that every later phase runs on; 4.1.1 follows 4.1; 5.1.1 follows 5.1 (plan 05.1.1-24 also needs 4.1.1), takes over EVAL-17 from Phase 7, and Phase 6 plans sharing its files depend on 05.1.1-22; 6.1 needs Phases 6, 3.1.1 and 5.1.1. Phases 3.2, 4.2, 5.2 and 6.2 were inserted on 2026-11-25 so that no plan of a phase already executing changes, and 5.3 (evaluation gates and online monitoring) follows 5.2 without holding up Phase 6; Phase 7 had 2 of 34 plans executed and gains requirements through a plan revision. Phase 6 depends on Phase 5 (its plans build on Phase 5 contracts) and runs after Phase 5.1, which touches the same files. Phase 7's backend and sync work needs only Phases 3 and 4; its regression and closeout need Phases 5 and 6.
+Phases execute in numeric order: 1 → 2 → 3 → 3.1 → 3.1.1 → 3.2 → 4 → 4.1 → 4.1.1 → 4.2 → 4.3 → 5 → 5.1 → 5.1.1 → 5.2 → 5.3 → 6 → 6.1 → 6.2 → 6.3 → 7. Phase 6 depends on Phase 5 (its plans build on Phase 5 contracts) and runs after Phase 5.1, which touches the same files. Phase 7's backend and sync work needs only Phases 3 and 4; its regression and closeout need Phases 5 and 6. Inserted 2026-11-24: 3.1.1 follows 3.1 (and needs Phase 4's v2 search on trunk); 4.1 follows Phase 4's automated close (04-42) and flips the retrieval defaults that every later phase runs on; 4.1.1 follows 4.1; 5.1.1 follows 5.1 (plan 05.1.1-24 also needs 4.1.1), takes over EVAL-17 from Phase 7, and Phase 6 plans sharing its files depend on 05.1.1-22; 6.1 needs Phases 6, 3.1.1 and 5.1.1. Phases 3.2, 4.2, 5.2 and 6.2 were inserted on 2026-11-25 so that no plan of a phase already executing changes, and 5.3 (evaluation gates and online monitoring) follows 5.2 without holding up Phase 6; 6.3 (source deletion sync and purge) follows 6.2, and Phase 7's outbox must carry its purges; Phase 7 had 2 of 34 plans executed and gains requirements through a plan revision. Phase 6 depends on Phase 5 (its plans build on Phase 5 contracts) and runs after Phase 5.1, which touches the same files. Phase 7's backend and sync work needs only Phases 3 and 4; its regression and closeout need Phases 5 and 6.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -811,4 +826,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 3.1 → 3.1.1 → 3.2 → 4 �
 | 6. Query Layer (LlamaIndex & LangChain) | 12/46 | In Progress | - |
 | 6.1. Embedding Fine-tuning Pipeline (INSERTED) | 0/20 | Planned (plan-check PASS) | - |
 | 6.2. Query Layer Additions (INSERTED) | 0/TBD | Not planned | - |
+| 6.3. Source Deletion Sync & Purge (INSERTED) | 0/TBD | Not planned | - |
 | 7. External Backends & Release Defaults | 2/34 | In Progress (needs plan revision for LANG-10, LANG-11, SEC-11) | - |
