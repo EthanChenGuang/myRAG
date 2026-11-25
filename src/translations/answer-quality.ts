@@ -1,10 +1,23 @@
-/** Phase 5 answer-quality UI strings (citation chips and the sources panel). Locales other than en, zh and it use en. */
+/** Phase 5 answer-quality UI strings (citation chips, the sources panel, the groundedness badge and answer feedback). Locales other than en, zh and it use en. */
 export interface AnswerQualityStrings {
   citationsHeading: string;
   citedLabel: string;
   documentUpdatedOrRemoved: string;
   chipAriaLabel: (n: number) => string;
   pageLabel: (page: number) => string;
+  badgeLabels: Record<'verified' | 'possibly_unreliable' | 'not_checked', string>;
+  badgeTooltips: Record<'verified' | 'possibly_unreliable' | 'not_checked', string>;
+  helpfulLabel: string;
+  notHelpfulLabel: string;
+  feedbackReasons: Record<'wrong' | 'incomplete' | 'not_from_documents' | 'bad_citation', string>;
+  feedbackReasonHeading: string;
+  feedbackCommentLabel: string;
+  feedbackCommentPlaceholder: string;
+  feedbackCharactersLeft: (n: number) => string;
+  feedbackSubmit: string;
+  feedbackCancel: string;
+  feedbackSaved: string;
+  feedbackFailed: string;
 }
 
 const STRINGS: Record<string, AnswerQualityStrings> = {
