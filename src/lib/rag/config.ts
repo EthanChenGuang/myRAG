@@ -351,6 +351,9 @@ function parseList(value: string | undefined): string[] {
 /** The pipeline an unset RAG_PIPELINE runs (the shipped default). */
 export const DEFAULT_PIPELINE: 'legacy' | 'v2' = 'legacy';
 
+/** Test-only: change the shipped default (stub). */
+export function setDefaultPipelineForTests(_next: 'legacy' | 'v2' | null): void {}
+
 function parsePipeline(raw: string | undefined, warnings: string[]): 'legacy' | 'v2' {
   const value = (raw ?? '').trim();
   if (value === '') return DEFAULT_PIPELINE;
