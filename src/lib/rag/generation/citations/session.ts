@@ -1,5 +1,6 @@
 import type { StreamTextTransform, ToolSet } from 'ai';
 import { z } from 'zod/v3';
+import { stripCitationMarkers } from '@/lib/citations/marker-grammar';
 import { CitationRecordSchema, type CitationRecord } from '@/lib/rag-eval/contracts.generated';
 import type { CitationLabeler, ContextBlock } from '../../types';
 import type { GenerationConfig } from '../config';
@@ -28,6 +29,11 @@ export interface CitationFinishMetadata {
   invalidCitations?: number;
 }
 
+export interface HistoryMessage {
+  role: string;
+  content: unknown;
+}
+
 export interface CitationSession {
   /** Passed to runRetrieval; undefined when citations cannot apply to this turn. */
   readonly labeler: CitationLabeler | undefined;
@@ -35,12 +41,24 @@ export interface CitationSession {
   /** Binds the final context blocks that were sent to the model; null when no context was sent. */
   attach(result: { blocks?: ContextBlock[] } | null): void;
   decorateSystemPrompt(prompt: string): string;
+  /** Removes markers from earlier assistant turns; aliases belong to the request that made them. */
+  stripHistory<T extends HistoryMessage>(messages: T[]): T[];
   transforms(): Array<StreamTextTransform<ToolSet>>;
   finishMetadata(): CitationFinishMetadata;
   answerText(): string;
 }
 
 const CitationListSchema = z.array(CitationRecordSchema);
+
+function stripContent(content: unknown): unknown {
+  if (typeof content === 'string') return stripCitationMarkers(content);
+  if (!Array.isArray(content)) return content;
+  return content.map((part) =>
+    part && typeof part === 'object' && (part as { type?: unknown }).type === 'text' && typeof (part as { text?: unknown }).text === 'string'
+      ? { ...part, text: stripCitationMarkers((part as { text: string }).text) }
+      : part,
+  );
+}
 
 function logFailure(reason: string, counts: Record<string, number>): void {
   console.warn('[Citations] Citation validation skipped:', { reason, ...counts });
@@ -107,6 +125,10 @@ export function createCitationSession(input: CitationSessionInput): CitationSess
     decorateSystemPrompt(prompt) {
       if (strategy !== 'chunk-alias') return prompt;
       return `${prompt}\n\n${citationInstruction(input.language)}`;
+    },
+    stripHistory(messages) {
+      void stripContent;
+      return messages;
     },
     transforms() {
       if (strategy !== 'chunk-alias' || !parser) return [];

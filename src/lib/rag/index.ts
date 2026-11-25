@@ -130,6 +130,7 @@ export type {
   CitationFinishMetadata,
   CitationSession,
   CitationSessionInput,
+  HistoryMessage,
 } from './generation/citations/session';
 export { selectCitationStrategy } from './generation/citations/strategy';
 export type { CitationRagMode, CitationStrategyId, CitationTurn } from './generation/citations/strategy';

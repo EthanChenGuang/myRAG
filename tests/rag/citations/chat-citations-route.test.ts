@@ -80,6 +80,10 @@ function parseSse(body: string): SseChunk[] {
   return chunks;
 }
 
+function normalizeIds(body: string): string {
+  return body.replace(/"(id|messageId|toolCallId|ragTraceId)":"[^"]*"/g, '"$1":"<id>"');
+}
+
 function streamedText(chunks: SseChunk[]): string {
   return chunks.filter((chunk) => chunk.type === 'text-delta').map((chunk) => chunk.delta ?? '').join('');
 }
@@ -168,5 +172,66 @@ describe('chat route with chunk-alias citations (tracer)', () => {
     expect(finishMetadata(withCapability) ?? {}).not.toHaveProperty('citations');
     expect(finishMetadata(withoutCapability) ?? {}).not.toHaveProperty('citations');
     expect(streamedText(withCapability)).toBe('Answer [S1].');
+  });
+
+  it('with RAG_CITATIONS=true and no capabilities (the WhatsApp body) sends the same prompt and SSE body as with the switch off', async () => {
+    h.state.deltas = ['Answer [S1].'];
+    const body = { ragMode: 'strict', settings: { model, webSearch: false } };
+    const run = async () => {
+      const { POST } = await fixture.loadRoute('chat');
+      const response = await POST(chatRequest({ messages: [{ role: 'user', content: QUESTION }], data: body }));
+      return { sse: normalizeIds(await response.text()), system: systemPrompt() };
+    };
+    process.env.RAG_CITATIONS = 'false';
+    const off = await run();
+    process.env.RAG_CITATIONS = 'true';
+    const on = await run();
+    expect(on.system).toBe(off.system);
+    expect(on.sse).toBe(off.sse);
+    expect(on.sse).not.toContain('citationStrategy');
+  });
+
+  it('still sends citations for a ghost chat id', async () => {
+    process.env.RAG_CITATIONS = 'true';
+    h.state.deltas = ['Ghost answer [S1].'];
+    const chunks = await post({
+      chatId: 'ghost-1234',
+      ragMode: 'strict',
+      settings: { model, webSearch: false },
+      capabilities: { citations: true },
+    });
+    const metadata = finishMetadata(chunks);
+    expect(z.array(CitationRecordSchema).parse(metadata?.citations).map((c) => c.alias)).toEqual(['S1']);
+  });
+
+  it('treats an invalid capabilities value as absent', async () => {
+    process.env.RAG_CITATIONS = 'true';
+    h.state.deltas = ['Answer [S1].'];
+    const chunks = await post({ ragMode: 'strict', settings: { model, webSearch: false }, capabilities: { citations: 'yes' } });
+    expect(systemPrompt()).not.toMatch(/^\[S1\] /m);
+    expect(finishMetadata(chunks) ?? {}).not.toHaveProperty('citations');
+  });
+
+  it('strips markers from earlier assistant turns before the model sees them when citations are active', async () => {
+    const messages = [
+      { role: 'user', content: 'Tell me about refunds.' },
+      { role: 'assistant', content: 'Refunds are possible [S2] within a window [S4].' },
+      { role: 'user', content: QUESTION },
+    ];
+    const assistantText = () =>
+      (h.calls.at(-1)?.prompt ?? [])
+        .filter((message) => message.role === 'assistant')
+        .map((message) => JSON.stringify(message.content))
+        .join('\n');
+    const { POST } = await fixture.loadRoute('chat');
+
+    process.env.RAG_CITATIONS = 'true';
+    await (await POST(chatRequest({ messages, data: { ragMode: 'strict', settings: { model, webSearch: false }, capabilities: { citations: true } } }))).text();
+    expect(assistantText()).toContain('Refunds are possible within a window.');
+    expect(assistantText()).not.toContain('[S2]');
+
+    process.env.RAG_CITATIONS = 'false';
+    await (await POST(chatRequest({ messages, data: { ragMode: 'strict', settings: { model, webSearch: false }, capabilities: { citations: true } } }))).text();
+    expect(assistantText()).toContain('Refunds are possible [S2] within a window [S4].');
   });
 });

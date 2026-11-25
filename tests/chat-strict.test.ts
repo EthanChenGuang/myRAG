@@ -144,4 +144,31 @@ describe('chat route strict mode with no knowledge-base context', () => {
     expect(body).toContain('Información no disponible');
     expect(h.capture.streamText).not.toHaveBeenCalled();
   });
+
+  it.each([
+    { language: 'en', snippet: 'Information Not Available' },
+    { language: 'es', snippet: 'Información no disponible' },
+  ])('with RAG_CITATIONS=true and the citations capability streams the same $language refusal', async ({ language, snippet }) => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+    const request = () =>
+      chatRequest({
+        messages: [{ role: 'user', content: 'What is the refund policy for annual plans?' }],
+        data: { ragMode: 'strict', settings: { webSearch: false, language }, capabilities: { citations: true } },
+      });
+    try {
+      process.env.RAG_CITATIONS = 'false';
+      const offBody = await readSse(await (await loadRoute()).POST(request()));
+      process.env.RAG_CITATIONS = 'true';
+      const onBody = await readSse(await (await loadRoute()).POST(request()));
+
+      expect(onBody).toContain(snippet);
+      expect(onBody).toBe(offBody);
+      expect(onBody).not.toContain('citations');
+      expect(h.capture.streamText).not.toHaveBeenCalled();
+    } finally {
+      delete process.env.RAG_CITATIONS;
+      vi.useRealTimers();
+    }
+  });
 });

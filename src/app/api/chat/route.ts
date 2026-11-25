@@ -2634,7 +2634,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
       gmailGeneralSystemMessage,
       gmailAttachmentSystemMessage,
       mediaUploadSystemMessage,
-      ...convertedMessages,
+      ...citationSession.stripHistory(convertedMessages),
     ];
 
     const messagesForModel = messagesForModelExtended.map(toMessage);
