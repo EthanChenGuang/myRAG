@@ -246,15 +246,18 @@ export function createLlamaParseParser(config: LlamaParseConfig): DocumentParser
     const pages = [...(job.markdown?.pages ?? [])].sort((a, b) => a.page_number - b.page_number);
     const itemPages = new Map((job.items?.pages ?? []).map((page) => [page.page_number, page]));
     const parts: string[] = [];
+    const pageTexts: Array<{ page: number; text: string }> = [];
     let partial = false;
     for (const page of pages) {
       if (!page.success) {
         partial = true;
         if (warnings.length < MAX_PAGE_WARNINGS) warnings.push(`llamaparse_page_failed:${page.page_number}`);
+        pageTexts.push({ page: page.page_number, text: '' });
         continue;
       }
       const items = (itemPages.get(page.page_number)?.items ?? []) as Item[];
       const text = applyTables(applyHeadings(page.markdown ?? '', items), items);
+      pageTexts.push({ page: page.page_number, text: text.trim() });
       if (text.trim() !== '') parts.push(text.trim());
     }
     if (pages.length === 0 || parts.length === 0) throw new ParserError('llamaparse', 'empty_result');
@@ -294,7 +297,7 @@ export function createLlamaParseParser(config: LlamaParseConfig): DocumentParser
     };
     const checked = ParseResultSchema.safeParse(candidate);
     if (!checked.success) throw new ParserError('llamaparse', 'invalid_response');
-    return { kind: 'done', result: checked.data, artifacts, warnings: [] };
+    return { kind: 'done', result: checked.data, artifacts, warnings: [], pages: pageTexts };
   }
 
   return {

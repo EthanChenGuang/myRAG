@@ -63,7 +63,14 @@ export interface ParseRequest {
 }
 
 export type ParseAttempt =
-  | { kind: 'done'; result: ParseResult; artifacts: ParseArtifact[]; warnings: string[] }
+  | {
+      kind: 'done';
+      result: ParseResult;
+      artifacts: ParseArtifact[];
+      warnings: string[];
+      /** Per-page text of a page-aware parser (LlamaParse), in page order; a failed page has empty text. */
+      pages?: Array<{ page: number; text: string }>;
+    }
   | { kind: 'pending'; job: PendingJob };
 
 export interface DocumentParser {
