@@ -35,7 +35,7 @@ from pydantic import SecretStr
 
 from rag_sidecar.contracts.queue import IngestionJob
 from rag_sidecar.ingest.app_client import AppClient, TokenBucket
-from rag_sidecar.ingest.ledger_client import LeaseLost, LedgerClient
+from rag_sidecar.ingest.ledger_client import BatchJobRef, LeaseLost, LedgerClient
 from rag_sidecar.ingest.process_job import TERMINAL_SUCCESS, JobOutcome, WorkerDeps, process_job
 from rag_sidecar.ingest.storage_client import StorageClient
 from rag_sidecar.ingest.worker import _PERMANENT, classify_ingest_error
@@ -124,12 +124,15 @@ def parse_args(argv: list[str] | None = None) -> RunnerOptions:
 # --- which jobs a pass offers ------------------------------------------------------------------------------------------
 
 
-def open_jobs(jobs: Iterable[IngestionJob]) -> list[IngestionJob]:
+JobRef = BatchJobRef | IngestionJob
+
+
+def open_jobs(jobs: Iterable[JobRef]) -> list[JobRef]:
     """Jobs a runner can still finish: claimable kinds that are not terminal."""
     return [job for job in jobs if job.kind in CLAIMABLE_KINDS and job.status not in TERMINAL]
 
 
-def claimable(jobs: Iterable[IngestionJob], now: datetime) -> list[str]:
+def claimable(jobs: Iterable[JobRef], now: datetime) -> list[str]:
     """Ids the claim function could hand out now: queued and due, or working with an expired lease. The claim decides."""
     ids: list[str] = []
     for job in open_jobs(jobs):
