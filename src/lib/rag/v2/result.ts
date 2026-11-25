@@ -8,7 +8,7 @@ import type { FusedHit } from '../fusion/rrf';
 import type { ChunkWithScore } from '../rerank/local-hybrid';
 import { assembleDisabledStatus, degradedReason, deriveStatus, failure } from '../pipeline';
 import type { VoiceResults } from '../context/voice';
-import { evalRetrievalOverrides } from './overrides';
+import { evalRetrievalOverrides, hashedChunkingProfiles } from './overrides';
 import { loadThresholds } from '../refusal/thresholds';
 import type { RefusalRecord } from '../refusal/types';
 import { describeReranker } from '../rerank/select';
@@ -122,7 +122,7 @@ export async function buildV2Result(ctx: BuildV2ResultInput): Promise<RetrievalR
     params: effectiveRetrievalParams(profile, config, evalRetrievalOverrides(profile, input.stageOverrides?.retrievalOverrides)),
     reranker: describeReranker(config, profile, queryLanguage ?? '', input.stageOverrides?.retrievalOverrides),
     thresholdsConfigHash,
-    activeChunkingProfiles: chunking,
+    activeChunkingProfiles: hashedChunkingProfiles(profile, chunking, input.stageOverrides?.retrievalOverrides),
     switches: {
       lexicalSearch: config.v2.lexicalSearch,
       refusalThreshold: config.v2.refusalThreshold,

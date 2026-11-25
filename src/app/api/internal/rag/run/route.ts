@@ -37,6 +37,9 @@ function toRetrievalOverrides(input: RetrievalOverridesInput | undefined): Retri
     out.legWeights = { dense: input.leg_weights.dense, lexical: input.leg_weights.lexical, exactId: input.leg_weights.exact_id };
   }
   if (input.rerank_model != null) out.rerankModel = input.rerank_model;
+  if (input.chunking_profile_by_doc_type && Object.keys(input.chunking_profile_by_doc_type).length > 0) {
+    out.chunkingProfileByDocType = { ...input.chunking_profile_by_doc_type };
+  }
   return Object.keys(out).length > 0 ? out : undefined;
 }
 

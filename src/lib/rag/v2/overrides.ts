@@ -22,10 +22,23 @@ export function evalRetrievalOverrides(
   };
   return mapped;
 }
+/** The eval-only chunking override as the backend takes it; every other profile searches the active pointers. */
+export function evalChunkingOverride(
+  profile: Profile,
+  overrides?: StageOverrides['retrievalOverrides'],
+): Record<string, string> | undefined {
+  if (profile !== 'eval') return undefined;
+  const map = overrides?.chunkingProfileByDocType;
+  return map && Object.keys(map).length > 0 ? map : undefined;
+}
+
+/** The chunking profiles a run actually searched, for the retrieval config hash: active pointers with the eval override on top. */
 export function hashedChunkingProfiles(
-  _profile: Profile,
+  profile: Profile,
   active: Record<string, string> | null,
-  _overrides?: StageOverrides['retrievalOverrides'],
+  overrides?: StageOverrides['retrievalOverrides'],
 ): Record<string, string> | null {
-  return active;
+  const override = evalChunkingOverride(profile, overrides);
+  if (!override) return active;
+  return { ...(active ?? {}), ...override };
 }

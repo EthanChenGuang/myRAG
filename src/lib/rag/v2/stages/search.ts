@@ -16,6 +16,7 @@ import type { TenantScope } from '../../tenant/scope';
 import type { TraceCollector } from '../../trace/collector';
 import type { Profile, QueryVariant, RunRetrievalInput, StageOverrides } from '../../types';
 import { getV2StartupVerdict } from '../startup';
+import { evalChunkingOverride } from '../overrides';
 import type { RetrievalParams } from '@/lib/rag-eval/contracts.generated';
 
 export interface SearchStagesInput {
@@ -184,6 +185,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
   const lexicalEnabled = config.v2.lexicalSearch;
   const verdict = getV2StartupVerdict();
   const icuSkipLexical = lexicalEnabled && !verdict.icuAvailable;
+  const chunkingOverride = evalChunkingOverride(profile, stageOverrides?.retrievalOverrides);
 
   const runBackendSearch = async (stageSignal: AbortSignal) => {
     let denseTotal = 0;
@@ -203,6 +205,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
           denseLimit: pool,
           lexicalLimit: pool,
           signal: stageSignal,
+          ...(chunkingOverride ? { chunkingProfileOverride: chunkingOverride } : {}),
         });
         denseTotal += legs.dense.length;
         lexicalTotal += legs.lexical.length;
