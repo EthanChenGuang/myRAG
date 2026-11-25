@@ -110,6 +110,14 @@ from rag_sidecar.contracts.query import (
     SubQuestions,
 )
 from rag_sidecar.contracts.review import ReviewQueueItem
+from rag_sidecar.contracts.ingest_security import (
+    HiddenTextQuarantineReason,
+    InjectionRuleQuarantineReason,
+    InvoiceExtractionQuarantineReason,
+    QuarantineReason,
+    QuarantineSpan,
+    UntrustedLinkQuarantineReason,
+)
 from rag_sidecar.contracts.parse_eval import (
     BackfillDryRunReport,
     BackfillManifestEntry,
@@ -181,6 +189,12 @@ from rag_sidecar.contracts.eval_run import (
 )
 
 __all__ = [
+    "HiddenTextQuarantineReason",
+    "InjectionRuleQuarantineReason",
+    "InvoiceExtractionQuarantineReason",
+    "QuarantineReason",
+    "QuarantineSpan",
+    "UntrustedLinkQuarantineReason",
     "CacheCheckRequest",
     "CacheCheckResponse",
     "CachedAnswer",

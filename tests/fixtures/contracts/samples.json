@@ -3893,6 +3893,24 @@
       "passed": false,
       "score": 0.45
     },
+    "QuarantineReason": {
+      "checker_version": "hidden-text@1",
+      "detail": "2 hidden spans",
+      "kind": "hidden_text",
+      "spans": [
+        {
+          "page": 1,
+          "reason": "color_near_background",
+          "text": "Synthetic hidden sentence one."
+        },
+        {
+          "page": null,
+          "reason": "zero_width",
+          "text": "Synthetic hidden sentence two."
+        }
+      ],
+      "unlocated": 1
+    },
     "QueryParams": {
       "config_hash": null,
       "group_deadline_ms": 900,
@@ -5058,6 +5076,57 @@
         "job_id": "job-0123abcd",
         "result": null,
         "status": "running"
+      }
+    },
+    "QuarantineReason:hidden_text": {
+      "model": "QuarantineReason",
+      "value": {
+        "checker_version": "hidden-text@1",
+        "detail": "2 hidden spans",
+        "kind": "hidden_text",
+        "spans": [
+          {
+            "page": 1,
+            "reason": "color_near_background",
+            "text": "Synthetic hidden sentence one."
+          },
+          {
+            "page": null,
+            "reason": "zero_width",
+            "text": "Synthetic hidden sentence two."
+          }
+        ],
+        "unlocated": 1
+      }
+    },
+    "QuarantineReason:injection_rule": {
+      "model": "QuarantineReason",
+      "value": {
+        "checker_version": "injection-rules@1",
+        "detail": "1 injection rule matched",
+        "kind": "injection_rule",
+        "unlocated": 0
+      }
+    },
+    "QuarantineReason:invoice_extraction": {
+      "model": "QuarantineReason",
+      "value": {
+        "checker_version": "invoice-extract@1",
+        "detail": "invoice fields failed validation",
+        "kind": "invoice_extraction",
+        "unlocated": 0
+      }
+    },
+    "QuarantineReason:untrusted_link": {
+      "model": "QuarantineReason",
+      "value": {
+        "checker_version": "link-check@1",
+        "detail": "1 target outside the allowlist",
+        "kind": "untrusted_link",
+        "targets": [
+          "https://outside.example.net/page"
+        ],
+        "unlocated": 0
       }
     },
     "RagRunRequest:query_only": {

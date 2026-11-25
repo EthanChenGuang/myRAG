@@ -134,6 +134,7 @@ from rag_sidecar.contracts.cache import (
     SemanticCacheCalibration,
     SemanticCacheProfileCalibration,
 )
+from rag_sidecar.contracts.ingest_security import QuarantineReason
 from rag_sidecar.contracts.languages import LANGUAGE_CODES, load_language_registry
 from rag_sidecar.contracts.latency import GroundednessBudgets, ScorerBudget
 from rag_sidecar.contracts.parse_eval import (
@@ -1551,6 +1552,52 @@ def _models() -> dict[str, Any]:
         **_phase31_contract_samples(),
         **_query_contract_samples(),
         **_cache_contract_samples(),
+        **_phase32_ingest_contract_samples(),
+    }
+
+
+def _quarantine_reasons() -> dict[str, QuarantineReason]:
+    values: list[dict[str, Any]] = [
+        {
+            "kind": "injection_rule",
+            "detail": "1 injection rule matched",
+            "checker_version": "injection-rules@1",
+        },
+        {
+            "kind": "hidden_text",
+            "detail": "2 hidden spans",
+            "spans": [
+                {"page": 1, "text": "Synthetic hidden sentence one.", "reason": "color_near_background"},
+                {"page": None, "text": "Synthetic hidden sentence two.", "reason": "zero_width"},
+            ],
+            "checker_version": "hidden-text@1",
+            "unlocated": 1,
+        },
+        {
+            "kind": "untrusted_link",
+            "detail": "1 target outside the allowlist",
+            "targets": ["https://outside.example.net/page"],
+            "checker_version": "link-check@1",
+        },
+        {
+            "kind": "invoice_extraction",
+            "detail": "invoice fields failed validation",
+            "checker_version": "invoice-extract@1",
+        },
+    ]
+    return {value["kind"]: QuarantineReason.model_validate(value) for value in values}
+
+
+def _phase32_ingest_contract_samples() -> dict[str, Any]:
+    return {
+        "QuarantineReason": _quarantine_reasons()["hidden_text"],
+    }
+
+
+def _phase32_ingest_contract_variants() -> dict[str, dict[str, Any]]:
+    return {
+        f"QuarantineReason:{kind}": {"model": "QuarantineReason", "value": reason.model_dump(mode="json")}
+        for kind, reason in _quarantine_reasons().items()
     }
 
 
@@ -1646,4 +1693,5 @@ def build_samples() -> dict[str, dict[str, Any]]:
             "value": InvoiceFields(confidence=0.0, errors=["no invoice number found"]).model_dump(mode="json"),
         },
     }
+    variants.update(_phase32_ingest_contract_variants())
     return {"samples": samples, "variants": variants}

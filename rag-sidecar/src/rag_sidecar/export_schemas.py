@@ -94,6 +94,7 @@ from rag_sidecar.contracts import (
     ParseRoutingConfig,
     PreflightResult,
     QualityCheckResult,
+    QuarantineReason,
 )
 from rag_sidecar.contracts.samples import build_samples
 
@@ -191,6 +192,7 @@ CONTRACTS: list[tuple[type[BaseModel], Mode]] = [
     (CacheInvalidateRequest, "validation"),
     (CacheInvalidateResponse, "serialization"),
     (SemanticCacheCalibration, "serialization"),
+    (QuarantineReason, "validation"),
 ]
 
 
