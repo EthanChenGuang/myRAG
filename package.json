@@ -29,6 +29,7 @@
     "db:seed": "echo 'No seed script configured yet'"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "3.0.143",
     "@ai-sdk/fal": "^1.0.17",
     "@ai-sdk/mcp": "^1.0.1",
     "@ai-sdk/openai": "^3.0.1",
