@@ -467,6 +467,15 @@ describe('document list with tags (multi-tenant)', () => {
     assert.deepEqual(ids([...page, ...(await list(O_ADMIN, KEY_O, { limit: 2, offset: 2 })), ...(await list(O_ADMIN, KEY_O, { limit: 50, offset: 4 }))]), ids(all));
   });
 
+  test("the purge hook clears the tags of a lineage's documents and chunks in that tenant only", async () => {
+    const lineage = String((await rows(db, 'SELECT lineage_id FROM documents WHERE id = $1', [both]))[0]?.lineage_id);
+    assert.equal(Number((await rows(db, 'SELECT rag_purge_hook_scope_tags($1, $2::uuid, NULL) AS n', [KEY_P, lineage]))[0]?.n), 0);
+    assert.deepEqual((await documentScopes(db, both)).document, ['department:d1', 'region:a2']);
+    assert.equal(Number((await rows(db, 'SELECT rag_purge_hook_scope_tags($1, $2::uuid, NULL) AS n', [KEY_O, lineage]))[0]?.n), 3);
+    assert.deepEqual(await documentScopes(db, both), { document: [], chunks: [[], []] });
+    assert.deepEqual((await documentScopes(db, tagged)).document, ['region:a1']);
+  });
+
   test('a document that is no longer current is not listed', async () => {
     await rows(db, 'UPDATE documents SET is_current = false WHERE id = $1', [untagged]);
     assert.ok(!ids(await list(O_ADMIN, KEY_O)).includes(untagged));
