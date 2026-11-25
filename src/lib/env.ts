@@ -160,6 +160,7 @@ class EnvironmentConfig {
 
       // RAG settings
       RAG_BEHAVIOR_MODE: process.env.RAG_BEHAVIOR_MODE || 'strict',
+      RAG_ANSWER_STYLE: process.env.RAG_ANSWER_STYLE || 'classic',
       RAG_INITIAL_MATCH_COUNT: process.env.RAG_INITIAL_MATCH_COUNT,
       RAG_SIMILARITY_THRESHOLD: process.env.RAG_SIMILARITY_THRESHOLD,
       LLAMACLOUD_MULTIMODAL_PARSING: process.env.LLAMACLOUD_MULTIMODAL_PARSING || 'true',

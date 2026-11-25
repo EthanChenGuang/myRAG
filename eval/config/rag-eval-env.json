@@ -6,6 +6,7 @@
   "RAG_ADJACENCY_WINDOW": "2",
   "RAG_ADJACENT_CHUNKS": "true",
   "RAG_ANSWER_FEEDBACK": "false",
+  "RAG_ANSWER_STYLE": "classic",
   "RAG_BEHAVIOR_MODE": "strict",
   "RAG_BGE_M3_SERVING": "hosted",
   "RAG_CACHE_ENABLED": "true",

@@ -1,4 +1,6 @@
 import { streamText, tool, type ToolSet, convertToModelMessages, createUIMessageStream, createUIMessageStreamResponse, UIMessage, stepCountIs } from 'ai';
+import { buildCtaInstruction } from '@/lib/chat/cta-instruction';
+import { buildFormattingInstruction, resolveAnswerStyle } from '@/lib/chat/answer-style';
 import { z } from 'zod/v3';
 // Use the dedicated OpenRouter provider
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
@@ -1753,33 +1755,11 @@ export async function POST(req: Request) {
     }
 
     // Add system messages with unique IDs
+    const answerStyle = resolveAnswerStyle(env.RAG_ANSWER_STYLE);
     const formattingSystemMessage: ExtendedMessage = {
       id: 'system-format-instruction',
       role: 'system',
-      content: `Always format your responses using this exact markdown structure:
-
-1. Start with a single clear H1 heading using # (not ##)
-2. Use ## for section headings (H2)
-3. Use hyphen (-) not bullet character (•) for all bullet points
-4. Never use asterisks (**) in headings or section titles
-5. Keep whitespace between sections for readability
-6. Always end your response with a short paragraph (2-3 sentences) that encourages the user to continue the conversation with you. This should include 2-3 specific follow-up questions the user might want to ask related to the topic.
-
-Example format:
-# Main Title
-
-## First Section
-- First bullet point
-- Second bullet point
-- Third bullet point
-
-## Second Section
-- First bullet point
-- Second bullet point
-
-Would you like to know more about specific aspects of this topic? I can explain how to implement this solution in practice, discuss common challenges you might face, or share some examples of successful applications.
-
-Follow this format consistently for all responses.`
+      content: buildFormattingInstruction(answerStyle),
     };
 
     // 🚨 CRITICAL: Tool usage priority system message
@@ -1817,19 +1797,7 @@ Follow this format consistently for all responses.`
     const ctaSystemMessage: ExtendedMessage = {
       id: 'system-cta-instruction',
       role: 'system',
-      content: `It is absolutely critical that you end EVERY response with a conversational call-to-action that encourages continued dialogue.
-      
-Your closing paragraph should:
-1. Be friendly and inviting, using a warm tone
-2. Include 2-3 specific follow-up questions related to the topic just discussed
-3. Suggest deeper explorations of aspects you haven't covered yet
-4. Be phrased in a way that makes it easy for the user to continue the conversation
-5. NOT use bullet points or a "Next Steps" heading - just a natural paragraph
-
-For example:
-"Would you like me to elaborate on any of these points? I can provide more details about implementing this approach, explain how it compares to alternatives, or share some real-world examples of how others have used it successfully."
-
-This conversational prompt is essential for keeping the dialogue flowing naturally and encouraging users to continue exploring the topic with you.`
+      content: buildCtaInstruction(ragMode, answerStyle),
     };
     const documentReferenceSystemMessage: ExtendedMessage = {
       id: 'system-docref-instruction',
