@@ -148,7 +148,16 @@ describe('drop', () => {
     expect(result.candidates.map((candidate) => candidate.chunk_id)).toEqual(['a1', 'a3']);
     expect(result.status).toBe('ok');
     expect(result.injection).toMatchObject({ mode: 'drop', droppedChunkIds: ['a2', 'b1'] });
-    expect(result.stages.find((entry) => entry.name === 'injection_check')?.counts).toEqual({ checked: 4, flagged: 2, dropped: 2, downweighted: 0 });
+    expect(result.stages.find((entry) => entry.name === 'injection_check')?.counts).toEqual({
+      checked: 4,
+      flagged: 2,
+      dropped: 2,
+      downweighted: 0,
+      rules_checked: 4,
+      rules_flagged: 2,
+      rules_dropped: 2,
+      rules_downweighted: 0,
+    });
   });
 
   test('an image chunk whose caption is flagged is absent from sourceImages and usedDocuments', async () => {

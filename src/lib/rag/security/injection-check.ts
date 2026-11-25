@@ -148,7 +148,7 @@ export interface InjectionApplied<C extends ItemCandidate> {
   candidates: C[];
   referenced: ReferencedState | null;
   summary: InjectionSummary;
-  /** Stage counts: items checked, flagged, dropped and downweighted. */
+  /** Stage counts: items checked, flagged, dropped and downweighted, in total and per detector (`rules_*`). */
   counts: Record<string, number>;
   /** Set for downweight only. */
   marks: InjectionMarks | null;
@@ -227,6 +227,10 @@ export function applyInjectionAction<C extends ItemCandidate>(input: {
       flagged: flaggedItems,
       dropped: dropCount,
       downweighted: downweightCount,
+      rules_checked: items.length,
+      rules_flagged: flaggedItems,
+      rules_dropped: dropCount,
+      rules_downweighted: downweightCount,
     },
     summary: {
       mode,
