@@ -51,6 +51,10 @@ describe('renderCitationMarkers, final phase', () => {
     expect(final('[S9] Rome.\n[S9] Milan.')).toBe('Rome.\nMilan.');
   });
 
+  test('a removed marker after inline code keeps the space before the next word', () => {
+    expect(final('`x` [S9] y')).toBe('`x` y');
+  });
+
   test('with an empty validated list every marker is removed', () => {
     expect(final('a [S1] b [S2].', [])).toBe('a b.');
   });
