@@ -84,7 +84,7 @@ function assemblyRowsFromHits(hits: FusedHit[]): AssemblyRows {
   return { documents, chunkMetadata };
 }
 
-function fusedToCandidate(row: FusedHit, rerankScore?: number): Candidate {
+export function fusedToCandidate(row: FusedHit, rerankScore?: number): Candidate {
   const similarity = row.hit.similarity ?? 0;
   const legs = Object.fromEntries(Object.entries(row.ranks).map(([key, rank]) => [key, rank]));
   return {

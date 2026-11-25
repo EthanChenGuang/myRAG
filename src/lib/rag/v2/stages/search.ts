@@ -34,6 +34,8 @@ export interface SearchStagesInput {
   /** Index-aligned with variants; a missing entry falls back to the embedding of the original. */
   variantEmbeddings?: QueryEmbedding[];
   filters?: RetrievalFilters;
+  /** Query layer on: record each hit's dense similarity under the standalone variant (condensed, else original). */
+  trackStandalone?: boolean;
   /** Planned binding legs and their embeds, started before the global embed stage (D-18). */
   bindings?: { plan: BindingLegsPlan; embeds: readonly Promise<BindingEmbed>[] };
 }

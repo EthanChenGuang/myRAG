@@ -128,3 +128,8 @@ export function buildQueryVariants(
 ): QueryVariant[] {
   return buildQueryVariantSet(query, language, translated, provided, limits).variants;
 }
+
+/** The texts the embed stage sends, index-aligned with the variants (D-06: one batch). */
+export function variantDenseTexts(variants: readonly QueryVariant[]): string[] {
+  return variants.map((variant) => variant.text);
+}

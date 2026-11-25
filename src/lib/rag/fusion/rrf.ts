@@ -10,6 +10,8 @@ export interface FusedHit {
   hit: RankedHit;
   score: number;
   ranks: Record<string, number>;
+  /** Set by the search stage with the query layer on: the dense similarity under the standalone variant (0 when absent). */
+  standaloneSimilarity?: number;
 }
 
 export function rrf(lists: RankedList[], k = 60): FusedHit[] {
