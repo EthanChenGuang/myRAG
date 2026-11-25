@@ -481,3 +481,61 @@ describe('effective-date routes: organization admin (multi-tenant)', () => {
     expect(dateCalls()).toEqual([]);
   });
 });
+
+describe('recordExtractedEffectiveDates (pipeline path)', () => {
+  const NOW = new Date('2026-11-25T12:00:00.000Z');
+
+  beforeEach(() => {
+    resetState();
+    for (const method of ['warn', 'error', 'log', 'info'] as const) vi.spyOn(console, method).mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.resetModules();
+    delete process.env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE;
+  });
+
+  async function record(proposal: { from: string | null; to: string | null; confidence: number; evidenceQuote?: string | null }, origin: 'admin' | 'extracted' | null = null) {
+    await load();
+    const service = await import('@/lib/rag/ingest/versions/effective-dates');
+    return service.recordExtractedEffectiveDates({ documentId: DOC_ID, tenantKey: 's:default', proposal, current: { origin }, now: NOW });
+  }
+
+  it('applies a usable window at confidence 0.8 or more through the service path with origin extracted', async () => {
+    state.outcomes.rag_set_document_effective_dates = setRow({ effective_dates_origin: 'extracted' });
+    expect(await record({ from: '2026-01-01', to: null, confidence: 0.8 })).toEqual({ ok: true, decision: 'apply', outcome: 'applied' });
+    expect(dateCalls()).toEqual([
+      {
+        fn: 'rag_set_document_effective_dates',
+        args: { p_document_id: DOC_ID, p_tenant_key: 's:default', p_from: '2026-01-01', p_to: null, p_origin: 'extracted', p_confidence: 0.8, p_actor: null },
+      },
+    ]);
+  });
+
+  it('stores a window that would hide the document as awaiting confirmation and never applies it', async () => {
+    state.outcomes.rag_propose_document_effective_dates = { data: [{ outcome: 'stored', document_id: DOC_ID }], error: null };
+    expect(await record({ from: '2026-12-01', to: null, confidence: 0.99, evidenceQuote: QUOTE })).toEqual({ ok: true, decision: 'await_confirmation', outcome: 'stored' });
+    expect(dateCalls().map((call) => call.fn)).toEqual(['rag_propose_document_effective_dates']);
+    expect(dateCalls()[0]?.args).toMatchObject({ p_status: 'awaiting_confirmation', p_evidence_quote: QUOTE, p_from: '2026-12-01' });
+  });
+
+  it('stores a low-confidence usable window as low_confidence', async () => {
+    state.outcomes.rag_propose_document_effective_dates = { data: [{ outcome: 'stored', document_id: DOC_ID }], error: null };
+    expect(await record({ from: '2026-01-01', to: null, confidence: 0.79 })).toEqual({ ok: true, decision: 'ignore', outcome: 'stored' });
+    expect(dateCalls()[0]?.args).toMatchObject({ p_status: 'low_confidence' });
+  });
+
+  it('changes nothing over admin-set dates, and accepts the SQL kept_admin answer when an admin won a race', async () => {
+    expect(await record({ from: '2026-01-01', to: null, confidence: 1 }, 'admin')).toEqual({ ok: true, decision: 'keep_admin', outcome: 'kept_admin' });
+    expect(dateCalls()).toEqual([]);
+    state.outcomes.rag_set_document_effective_dates = setRow({ outcome: 'kept_admin' });
+    expect(await record({ from: '2026-01-01', to: null, confidence: 1 })).toEqual({ ok: true, decision: 'keep_admin', outcome: 'kept_admin' });
+  });
+
+  it('skips a proposal with no date or an inverted window without any call', async () => {
+    expect(await record({ from: null, to: null, confidence: 0.9 })).toEqual({ ok: true, decision: 'ignore', outcome: 'skipped' });
+    expect(await record({ from: '2026-12-01', to: '2026-01-01', confidence: 0.9 })).toEqual({ ok: true, decision: 'ignore', outcome: 'skipped' });
+    expect(dateCalls()).toEqual([]);
+  });
+});

@@ -249,6 +249,28 @@ export type {
   UploadExemption,
   UserDisplay,
 } from './ingest/approval/admin';
+export {
+  AUTO_APPLY_MIN_CONFIDENCE,
+  MAX_QUERY_LENGTH as MAX_EFFECTIVE_DATES_QUERY_LENGTH,
+  applyEffectiveDates,
+  decideEffectiveDateProposal,
+  dismissEffectiveDateProposal,
+  listEffectiveDateProposals,
+  recordExtractedEffectiveDates,
+  todayUtc as effectiveDatesTodayUtc,
+} from './ingest/versions/effective-dates';
+export type {
+  ApplyEffectiveDatesResult,
+  CurrentEffectiveDates,
+  DismissEffectiveDateProposalResult,
+  EffectiveDateDecision,
+  EffectiveDateProposalInput,
+  EffectiveDatesFailure,
+  EffectiveDatesItem,
+  ListEffectiveDateProposalsResult,
+  RecordExtractedEffectiveDatesResult,
+  StoredEffectiveDateProposal,
+} from './ingest/versions/effective-dates';
 export { docTypePickerEnabled, resolvePickerDefault, listDocTypeDefaults, setDocTypeDefault, DocTypeDefaultsError, DOC_TYPE_DEFAULT_SOURCE_KINDS, DOC_TYPE_IDS, DOC_TYPE_CHOICES } from './ingest/profiles/doc-type-defaults';
 export type { DocTypeChoice, DocTypeDefaultRow, DocTypeDefaultSourceKind, PickerDefault, SetDocTypeDefaultInput } from './ingest/profiles/doc-type-defaults';
 export { getEmbeddingProfileCompleteness } from './embeddings/profile-ops';
