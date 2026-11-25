@@ -1,14 +1,16 @@
 import { after, before, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFile, execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 import { migrationFiles } from '../../eval/harness/migrations.mts';
 import { SUPABASE_GRANTS_SQL, SUPABASE_SHIM_SQL } from '../../eval/harness/pglite-supabase.mts';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const execFileAsync = promisify(execFile);
 
 function findPgCtl(): string | null {
   const fromPath = spawnSync('which', ['pg_ctl'], { encoding: 'utf8' });
@@ -109,36 +111,37 @@ describe('ingestion ledger claim on real PostgreSQL (optional)', () => {
         { stdio: 'pipe' },
       );
     }
-    const workers = Array.from({ length: 8 }, (_, w) =>
-      execFileSync(
-        psql,
-        [
-          '-h',
-          '127.0.0.1',
-          '-p',
-          String(port),
-          '-d',
-          'myrag_claim',
-          '-v',
-          'ON_ERROR_STOP=1',
-          '-t',
-          '-A',
-          '-c',
-          `WITH RECURSIVE claim_loop AS (
-             SELECT id FROM rag_claim_ingestion_jobs('pg-worker-${w}', 50, true, 'worker') LIMIT 1
-             UNION ALL
-             SELECT c.id FROM claim_loop prev
-             JOIN LATERAL (SELECT id FROM rag_claim_ingestion_jobs('pg-worker-${w}', 1, true, 'worker') LIMIT 1) c ON true
-             WHERE c.id IS NOT NULL
-           )
-           SELECT string_agg(id::text, ',') FROM (SELECT DISTINCT id FROM claim_loop WHERE id IS NOT NULL) s;`,
-        ],
-        { encoding: 'utf8' },
-      ),
-    );
+    /** One worker claims in batches of 50, each batch in its own psql session, until the queue is empty. */
+    const drain = async (w: number): Promise<string[]> => {
+      const ids: string[] = [];
+      for (;;) {
+        const { stdout } = await execFileAsync(
+          psql,
+          [
+            '-h',
+            '127.0.0.1',
+            '-p',
+            String(port),
+            '-d',
+            'myrag_claim',
+            '-v',
+            'ON_ERROR_STOP=1',
+            '-t',
+            '-A',
+            '-c',
+            `SELECT coalesce(string_agg(id::text, ','), '') FROM rag_claim_ingestion_jobs('pg-worker-${w}', 50, true, 'worker');`,
+          ],
+          { encoding: 'utf8' },
+        );
+        const batch = stdout.trim().split(',').filter(Boolean);
+        if (batch.length === 0) return ids;
+        ids.push(...batch);
+      }
+    };
+    const workers = await Promise.all(Array.from({ length: 8 }, (_, w) => drain(w)));
     const claimed = new Set<string>();
-    for (const out of workers) {
-      for (const id of out.stdout.trim().split(',').filter(Boolean)) {
+    for (const ids of workers) {
+      for (const id of ids) {
         assert.ok(!claimed.has(id), `duplicate claim ${id}`);
         claimed.add(id);
       }
