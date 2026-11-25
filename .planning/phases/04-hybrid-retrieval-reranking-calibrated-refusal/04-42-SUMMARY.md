@@ -119,7 +119,7 @@ Each mode runs these cases:
 - `eval/tests/test_parse_fixtures.py::test_generation_is_deterministic` regenerates `eval/fixtures/parse/pdf/*.pdf` and `manifest.json` in place. In this environment the bytes differ, so the three later `recorded` tests fail. The files were restored with `git checkout -- <file>` and nothing under `eval/fixtures/parse/` was committed. The test should write to `tmp_path`. This is pre-existing and was not fixed.
 - The rag-sidecar `chunking` extra lacks `pypdfium2` (preflight extra), so 21 sidecar tests fail at import. This is pre-existing; no package was installed.
 - `0424_write_chunks_null_vector.sql` (exec/fix-write-chunks-null) and Phase 6 `0602` are not on this base. The equality design applies them as unfolded migrations, so they need no change here. Whoever folds 042x or Phase 6 extends `FOLDED_MIGRATION`.
-- `node scripts/ci/check-frontend-design-summary.mjs` was not required (no UI surface) and was not run; the known 40-summary "## Design skills" gap is unchanged.
+- `node scripts/ci/check-frontend-design-summary.mjs` was not required (no UI surface) and was not run; the known gap of about 40 summaries without a design-skills table is unchanged (plan 04-47 narrows the gate to UI plans).
 - XLG-03 and the strict refusal improvement stay open for 04-43, as recorded by 04-46. XLG-03 is not in `requirements-completed`.
 
 ## Self-Check: PASSED
