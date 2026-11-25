@@ -26,6 +26,16 @@ import { useLanguage } from "@/components/providers/language-provider"
 import { PortalTooltip } from "./portal-tooltip"
 import { useOrganizationStore } from "@/lib/stores/organization-store"
 import { isMultiTenant } from "@/lib/deployment-mode"
+import { useShallow } from "zustand/react/shallow"
+import type { IngestJobState } from "@/lib/hooks/use-ingest-job-status"
+import { IngestStatusBadge, TrackedIngestStatusBadge } from "@/components/ui/ingest-status-badge"
+import {
+  attachQueuedJob,
+  classifyUploadResponse,
+  failStalledProcessingRows,
+  mergeRefreshedDocuments,
+  settleQueuedRow,
+} from "@/components/ui/ingest-document-rows"
 import { ConnectorGrid } from "@/components/ui/nango"
 import { useConnectorConfig } from "@/lib/hooks/use-connector-config"
 import { useFirecrawlConfig } from "@/lib/hooks/use-firecrawl-config"
@@ -56,6 +66,9 @@ export interface ProcessedDocument {
   source?: string
   source_provider?: string
   source_file_id?: string
+  jobId?: string
+  jobOrganizationId?: string | null
+  ingest?: IngestJobState
 }
 
 export interface DocumentDashboardProps {
@@ -112,8 +125,6 @@ const mapApiDocumentToProcessed = (doc: ApiDocumentRecord): ProcessedDocument =>
   source_provider: doc.source_provider,
   source_file_id: doc.source_file_id
 })
-
-const getUploadTimestamp = (doc: ProcessedDocument) => doc.uploadedAt?.getTime() ?? 0
 
 // Smart column width calculation utility with responsive breakpoints
 const calculateOptimalColumnWidths = (containerWidth: number, readOnly: boolean = false) => {
@@ -302,7 +313,9 @@ export function DocumentDashboard({
   const { config: connectorConfig } = useConnectorConfig();
 
   // Get current workspace context for multi-tenant document uploads
-  const { currentOrganization, isPersonalMode } = useOrganizationStore();
+  const { currentOrganization, isPersonalMode } = useOrganizationStore(
+    useShallow((s) => ({ currentOrganization: s.currentOrganization, isPersonalMode: s.isPersonalMode })),
+  );
 
   // Track visibility of the dashboard so we can ignore bogus ResizeObserver events
   const [isVisible, setIsVisible] = React.useState(true)
@@ -542,13 +555,8 @@ export function DocumentDashboard({
       processingTimeoutRef.current = setTimeout(() => {
         setIsProcessing(false);
         // Update any documents still in processing state to failed
-        setStoredDocuments(prev =>
-          prev.map(doc =>
-            doc.status === 'processing'
-              ? { ...doc, status: 'failed' }
-              : doc
-          )
-        );
+        // Queued uploads that carry a jobId keep polling their job and are not failed here
+        setStoredDocuments(prev => failStalledProcessingRows(prev));
       }, 45 * 60 * 1000); // 45 minutes timeout
     } else if (processingTimeoutRef.current) {
       // Clear timeout if we're no longer processing
@@ -590,32 +598,7 @@ export function DocumentDashboard({
 
         // Only replace documents that aren't currently processing
         // This prevents removing "processing" documents when data is refreshed
-        setStoredDocuments(prev => {
-          const processingDocs = prev.filter(doc => doc.status === 'processing');
-          const newDocs = data.documents.map(mapApiDocumentToProcessed);
-
-          // Keep all processing docs - they'll either complete or timeout
-          // Only update processing docs that now appear in the database
-          const updatedProcessingDocs = processingDocs.map(pDoc => {
-            const matchingNewDoc = newDocs.find((nDoc: { name: string }) => nDoc.name === pDoc.name);
-            if (matchingNewDoc) {
-              // Document has been processed successfully
-              return matchingNewDoc;
-            }
-            // Keep as processing - let timeout handle failure
-            return pDoc;
-          });
-
-          // Filter out newDocs that were already in processing
-          const genuinelyNewDocs = newDocs.filter(
-            nDoc => !processingDocs.some(pDoc => pDoc.name === nDoc.name)
-          );
-
-          // Combine and sort by date
-          return [...updatedProcessingDocs, ...genuinelyNewDocs].sort(
-            (a, b) => getUploadTimestamp(b) - getUploadTimestamp(a)
-          );
-        });
+        setStoredDocuments(prev => mergeRefreshedDocuments(prev, data.documents.map(mapApiDocumentToProcessed)));
       } catch (error) {
         console.error('Error fetching documents:', error)
         if (isMounted) { // Only call callback if mounted
@@ -652,32 +635,7 @@ export function DocumentDashboard({
       const data: DocumentsApiResponse = await response.json();
 
       // Same logic as in useEffect but as a callback
-      setStoredDocuments(prev => {
-        const processingDocs = prev.filter(doc => doc.status === 'processing');
-        const newDocs = data.documents.map(mapApiDocumentToProcessed);
-
-        // Keep all processing docs - they'll either complete or timeout
-        // Only update processing docs that now appear in the database
-        const updatedProcessingDocs = processingDocs.map(pDoc => {
-          const matchingNewDoc = newDocs.find((nDoc: { name: string }) => nDoc.name === pDoc.name);
-          if (matchingNewDoc) {
-            // Document has been processed successfully
-            return matchingNewDoc;
-          }
-          // Keep as processing - let timeout handle failure
-          return pDoc;
-        });
-
-        // Filter out newDocs that were already in processing
-        const genuinelyNewDocs = newDocs.filter(
-          nDoc => !processingDocs.some(pDoc => pDoc.name === nDoc.name)
-        );
-
-        // Combine and sort by date
-        return [...updatedProcessingDocs, ...genuinelyNewDocs].sort(
-          (a, b) => getUploadTimestamp(b) - getUploadTimestamp(a)
-        );
-      });
+      setStoredDocuments(prev => mergeRefreshedDocuments(prev, data.documents.map(mapApiDocumentToProcessed)));
     } catch (error) {
       console.error('Error refreshing documents:', error);
       onProcessingError?.(error as Error);
@@ -771,6 +729,21 @@ export function DocumentDashboard({
     })
   }
 
+  const settledJobsRef = React.useRef<Set<string>>(new Set())
+
+  const handleIngestSettled = React.useCallback((jobId: string, state: IngestJobState) => {
+    if (settledJobsRef.current.has(jobId)) return;
+    settledJobsRef.current.add(jobId);
+    const queuedDoc = storedDocuments.find(d => d.jobId === jobId);
+    setStoredDocuments(prev => settleQueuedRow(prev, jobId, state));
+    if (state.status === 'ready' || state.status === 'skipped_duplicate' || state.status === 'needs_review') {
+      void refreshDocuments();
+      if (queuedDoc) onProcessingComplete?.({ ...queuedDoc, status: 'ready', ingest: state });
+      return;
+    }
+    onProcessingError?.(new Error(state.reason ?? 'Document processing failed'));
+  }, [storedDocuments, refreshDocuments, onProcessingComplete, onProcessingError]);
+
   const handleUpload = React.useCallback(async () => {
     console.log('[DocumentDashboard] handleUpload called, files:', files.length);
     console.log('[DocumentDashboard] isMultiTenant:', isMultiTenant());
@@ -852,8 +825,17 @@ export function DocumentDashboard({
 
         const resolvedId = (result.id ?? result.documentId) as string | undefined;
         let ingestStatus: string = typeof result.status === 'string' ? result.status : 'ready';
+        const outcome = classifyUploadResponse(response.status, result);
 
-        if (response.status === 202 && resolvedId) {
+        if (outcome.kind === 'queued') {
+          // The row keeps its status badge until the job is ready; the next file starts right away
+          setStoredDocuments(prev =>
+            attachQueuedJob(prev, doc.id, { jobId: outcome.jobId, documentId: outcome.documentId, organizationId })
+          );
+          continue;
+        }
+
+        if (outcome.kind === 'poll' && resolvedId) {
           const polled = await pollIngestUntilTerminal(resolvedId, {
             fetchStatus: async (documentId) => {
               const statusUrl = `/api/rag/ingest/${documentId}${workspaceQuery}`;
@@ -1638,34 +1620,49 @@ export function DocumentDashboard({
                                     </div>
                                   </TableCell>
                                   <TableCell className="pl-2 pr-2 whitespace-nowrap" style={{ width: '80px' }}>
-                                    <div className="flex items-center gap-1.5 overflow-hidden">
-                                      <div className="flex -space-x-1 overflow-hidden flex-shrink-0">
-                                        {doc.status === "processing" && (
-                                          <div className="h-2.5 w-2.5 rounded-full bg-[#38BDF8] dark:bg-blue-500 animate-pulse" />
-                                        )}
-                                        {doc.status === "failed" && (
-                                          <div className="h-2.5 w-2.5 rounded-full bg-[#F87171] dark:bg-red-500" />
-                                        )}
-                                        {doc.status === "ready" && (
-                                          <>
-                                            <div className="h-2.5 w-2.5 rounded-full bg-[#4ADE80] dark:bg-green-500" />
-                                            {doc.partialSuccess && (
-                                              <div className="h-2.5 w-2.5 rounded-full bg-[#FACC15] dark:bg-yellow-500 ml-0.5" title={t('documentProcessedWithPartialChunkSuccess')} />
-                                            )}
-                                          </>
+                                    {doc.jobId ? (
+                                      <div className="flex items-center overflow-hidden">
+                                        {doc.ingest ? (
+                                          <IngestStatusBadge state={doc.ingest} language={language} />
+                                        ) : (
+                                          <TrackedIngestStatusBadge
+                                            jobId={doc.jobId}
+                                            organizationId={doc.jobOrganizationId}
+                                            language={language}
+                                            onSettled={(state) => handleIngestSettled(doc.jobId as string, state)}
+                                          />
                                         )}
                                       </div>
-                                      <span className="text-xs font-medium capitalize text-gray-600 dark:text-gray-400 truncate">
-                                        {doc.status === "ready"
-                                          ? t('readyStatus')
-                                          : doc.status === "processing"
-                                            ? t('processingStatus')
-                                            : doc.status === "failed"
-                                              ? t('failedStatus')
-                                              : t('partialStatus')}
-                                        {doc.partialSuccess && doc.status === "ready" && " (" + t('partialStatus') + ")"}
-                                      </span>
-                                    </div>
+                                    ) : (
+                                      <div className="flex items-center gap-1.5 overflow-hidden">
+                                        <div className="flex -space-x-1 overflow-hidden flex-shrink-0">
+                                          {doc.status === "processing" && (
+                                            <div className="h-2.5 w-2.5 rounded-full bg-[#38BDF8] dark:bg-blue-500 animate-pulse" />
+                                          )}
+                                          {doc.status === "failed" && (
+                                            <div className="h-2.5 w-2.5 rounded-full bg-[#F87171] dark:bg-red-500" />
+                                          )}
+                                          {doc.status === "ready" && (
+                                            <>
+                                              <div className="h-2.5 w-2.5 rounded-full bg-[#4ADE80] dark:bg-green-500" />
+                                              {doc.partialSuccess && (
+                                                <div className="h-2.5 w-2.5 rounded-full bg-[#FACC15] dark:bg-yellow-500 ml-0.5" title={t('documentProcessedWithPartialChunkSuccess')} />
+                                              )}
+                                            </>
+                                          )}
+                                        </div>
+                                        <span className="text-xs font-medium capitalize text-gray-600 dark:text-gray-400 truncate">
+                                          {doc.status === "ready"
+                                            ? t('readyStatus')
+                                            : doc.status === "processing"
+                                              ? t('processingStatus')
+                                              : doc.status === "failed"
+                                                ? t('failedStatus')
+                                                : t('partialStatus')}
+                                          {doc.partialSuccess && doc.status === "ready" && " (" + t('partialStatus') + ")"}
+                                        </span>
+                                      </div>
+                                    )}
                                   </TableCell>
                                   {!readOnly && (
                                     <TableCell className="text-center px-1" style={{ width: '90px' }}>
