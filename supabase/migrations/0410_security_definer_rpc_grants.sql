@@ -248,6 +248,10 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_feedback_loop_on_chat_delete() FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_feedback_loop_on_chat_delete() TO service_role;
   END IF;
+  IF to_regprocedure('public.rag_mine_failed_queries(timestamptz, timestamptz, jsonb)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_mine_failed_queries(timestamptz, timestamptz, jsonb) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_mine_failed_queries(timestamptz, timestamptz, jsonb) TO service_role;
+  END IF;
   IF to_regprocedure('public.rag_find_content_duplicate(text, text, uuid)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_find_content_duplicate(text, text, uuid) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_find_content_duplicate(text, text, uuid) TO service_role;
@@ -684,6 +688,10 @@ BEGIN
   IF to_regprocedure('public.move_chats_to_folder(uuid[], uuid)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.move_chats_to_folder(uuid[], uuid) FROM PUBLIC, anon;
     GRANT EXECUTE ON FUNCTION public.move_chats_to_folder(uuid[], uuid) TO authenticated, service_role;
+  END IF;
+  IF to_regprocedure('public.rag_is_domain_expert(text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_is_domain_expert(text) FROM PUBLIC, anon;
+    GRANT EXECUTE ON FUNCTION public.rag_is_domain_expert(text) TO authenticated, service_role;
   END IF;
   IF to_regprocedure('public.rag_ingest_realtime_topic_allowed(text)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_ingest_realtime_topic_allowed(text) FROM PUBLIC, anon;
