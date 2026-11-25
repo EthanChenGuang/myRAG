@@ -6,9 +6,12 @@ import {
 } from '@/lib/rag-eval/contracts.generated';
 import { canonicalJson } from '@/lib/rag-eval/trace';
 import { rpcRows, type RpcClient } from '../../backend/supabase-rpc';
+import { getLanguageSettings } from '../../lang/settings';
+import { loadIngestConfig, type IngestEnvInput } from '../config';
 import { getIngestDeps } from '../deps';
-import { expectedFingerprintFor, getSettingsClassification, ingestionKeysOf, type RebuildMechanism } from '../fingerprint';
+import { expectedFingerprintFor, getSettingsClassification, ingestionKeysOf, switchesOf, type RebuildMechanism } from '../fingerprint';
 import { loadProcessingProfiles } from '../profiles/load';
+import { queueConfigFromProcessEnv } from '../queue-config';
 import { isTenantKey } from '../writer';
 
 export type ImpactDocType = FingerprintImpact['by_mechanism'][number]['doc_type'];
@@ -18,6 +21,14 @@ export const REBUILD_MECHANISMS: readonly RebuildMechanism[] = ['reparse', 'rech
 const DOC_TYPES: readonly ImpactDocType[] = FingerprintImpactSchema.shape.by_mechanism.element.shape.doc_type.options;
 const RPC_GROUPS = 'rag_fingerprint_groups';
 
+/** The variables whose saved values the fingerprint records (D-10): the four switches and the language set. */
+const FINGERPRINT_VARIABLES = [
+  'RAG_LANGUAGE_AWARE_INGEST',
+  'RAG_TABLE_HEADER_REPEAT',
+  'RAG_TABLE_ROW_SERIALIZATION',
+  'RAG_CAPTION_LANGUAGE',
+  'RAG_SUPPORTED_LANGUAGES',
+] as const;
 /** Query-side, but it travels with RAG_SUPPORTED_LANGUAGES when the language set is recomputed. */
 const LANGUAGE_COMPANION = 'RAG_PRIMARY_LANGUAGE';
 
@@ -193,4 +204,99 @@ export async function computeFingerprintImpact(proposed: Record<string, string>,
 /** A setting the impact route accepts: a classified RAG_* variable of the env manifest (D-09). */
 export function isSettingName(name: string): boolean {
   return getSettingsClassification().entries.some((entry) => entry.name === name);
+}
+
+/** The saved values of the variables the fingerprint records, as the running app reads them. */
+export function savedFingerprintValues(env: IngestEnvInput = process.env as IngestEnvInput): Record<string, string> {
+  const switches = switchesOf(loadIngestConfig(env));
+  const languages = getLanguageSettings();
+  const values: Record<string, string> = {
+    RAG_LANGUAGE_AWARE_INGEST: switches.language_aware_ingest,
+    RAG_TABLE_HEADER_REPEAT: switches.table_header_repeat,
+    RAG_TABLE_ROW_SERIALIZATION: switches.table_row_serialization,
+    RAG_CAPTION_LANGUAGE: switches.caption_language,
+    RAG_SUPPORTED_LANGUAGES: languages.configured ? languages.languages.join(',') : '',
+  };
+  if (languages.configured && languages.primary) values[LANGUAGE_COMPANION] = languages.primary;
+  return values;
+}
+
+export type RebuildStart = 'ui' | 'cli' | 'needs_async';
+
+/** Fixed commands, built from mechanism names only and never from request input. */
+export const MECHANISM_COMMANDS: Readonly<Record<RebuildMechanism, string>> = Object.freeze({
+  reparse: 'npm run rag:rebuild -- start --mechanism reparse',
+  rechunk: 'npm run rag:rebuild -- start --mechanism rechunk',
+  relex: 'npm run rag:relex',
+  reembed: 'npm run rag:rebuild -- start --mechanism reembed',
+  recaption: 'npm run rag:rebuild -- start --mechanism recaption',
+  retranslate: 'npm run rag:translate',
+  rescan: 'npm run rag:rebuild -- rescan',
+});
+
+export const BACKFILL_COMMAND = 'npm run rag:fingerprint -- backfill';
+
+/**
+ * How each rebuild starts (UI-SPEC finding 5, D-11): rechunk and recaption build a chunking profile through the existing build route; reparse
+ * needs the queue (RAG_INGEST_ASYNC=on); re-embed, relex, retranslate and the security rescan are commands.
+ */
+export function startOf(mechanism: RebuildMechanism, ingestAsync: boolean): RebuildStart {
+  switch (mechanism) {
+    case 'rechunk':
+    case 'recaption':
+      return 'ui';
+    case 'reparse':
+      return ingestAsync ? 'ui' : 'needs_async';
+    default:
+      return 'cli';
+  }
+}
+
+export interface PendingRebuild {
+  mechanism: RebuildMechanism;
+  affected: number;
+  by_doc_type: Record<ImpactDocType, number>;
+  start: RebuildStart;
+  command: string;
+}
+
+export interface FingerprintCoverage {
+  pending: PendingRebuild[];
+  without_fingerprint: { count: number; command: string };
+  total_current: number;
+}
+
+/** GET /api/rag/admin/ingest-fingerprint: documents left on previous settings per mechanism, under the saved values. */
+export function coverageFromGroups(
+  groups: readonly FingerprintGroup[],
+  saved: Record<string, string>,
+  ingestAsync: boolean,
+): FingerprintCoverage {
+  const counts = countImpact(groups, pick(saved, [...FINGERPRINT_VARIABLES, LANGUAGE_COMPANION]));
+  const pending = REBUILD_MECHANISMS.map((mechanism): PendingRebuild => {
+    const byDocType = Object.fromEntries(DOC_TYPES.map((docType) => [docType, counts.affected.get(mechanism)?.get(docType) ?? 0])) as Record<
+      ImpactDocType,
+      number
+    >;
+    return {
+      mechanism,
+      affected: Object.values(byDocType).reduce((sum, value) => sum + value, 0),
+      by_doc_type: byDocType,
+      start: startOf(mechanism, ingestAsync),
+      command: MECHANISM_COMMANDS[mechanism],
+    };
+  });
+  return {
+    pending,
+    without_fingerprint: { count: counts.withoutFingerprint, command: BACKFILL_COMMAND },
+    total_current: counts.totalCurrent,
+  };
+}
+
+export async function computeFingerprintCoverage(
+  options: FingerprintReadOptions & { saved?: Record<string, string>; ingestAsync?: boolean } = {},
+): Promise<FingerprintCoverage> {
+  const groups = await loadFingerprintGroups(options);
+  const ingestAsync = options.ingestAsync ?? queueConfigFromProcessEnv().ingestAsync;
+  return coverageFromGroups(groups, options.saved ?? savedFingerprintValues(), ingestAsync);
 }
