@@ -1,21 +1,22 @@
 import { countTokens, truncateToTokens } from '../ingest/text/tokens';
 import { detectLanguage } from './detect';
 import { getLanguagePack } from './registry';
+import { getLanguageSettings } from './settings';
 
 /** How a block of text is cut into sentences and how pieces of it are put back together. */
 export interface SentenceSplitter {
   /** The registry language whose sentence ends this splitter uses; null for the legacy shared set. */
   readonly language: string | null;
   /** The sentences of a text, in order; never an empty piece. */
-  split(text: string): string[];
+  split(_text: string): string[];
   /** The separator placed after `previous` when the next piece follows it. */
-  join(previous: string): string;
+  join(_previous: string): string;
   /** Cuts a text longer than `budget` tokens (cl100k_base) into pieces of at most `budget` tokens. */
-  hardSplit(text: string, budget: number): string[];
+  hardSplit(_text: string, _budget: number): string[];
 }
 
 /** The splitter for one block of text (a paragraph, a clause item), chosen from that block's text. */
-export type BlockSplitter = (blockText: string) => SentenceSplitter;
+export type BlockSplitter = (_blockText: string) => SentenceSplitter;
 
 /** Today's shared set (Phase 3): Latin and CJK sentence ends plus semicolons. Used unchanged with RAG_LANGUAGE_AWARE_INGEST=off. */
 export const SENTENCE_END = /(?<=[.!?;。！？；])\s+|(?<=[。！？；])/u;
@@ -128,7 +129,7 @@ const splitterCache = new Map<string, SentenceSplitter>();
  */
 export function splitterFor(code: string): SentenceSplitter {
   const pack = getLanguagePack(code);
-  if (!pack || pack) return legacySplitter;
+  if (!pack) return legacySplitter;
   const key = `${pack.code}\u0000${pack.sentence_end}\u0000${pack.script}`;
   let splitter = splitterCache.get(key);
   if (!splitter) {
@@ -217,4 +218,10 @@ export function languageAwareBlockSplitter(settings: LanguageAwareSettings): Blo
   if (primary === null || languages.length === 0) return legacyBlockSplitter;
   const candidates = [...languages];
   return (blockText) => splitterFor(detectLanguage(blockText, candidates) ?? primary);
+}
+
+/** The block splitter for RAG_LANGUAGE_AWARE_INGEST: legacy when off (the language settings are not read), per block language when on. */
+export function blockSplitterForIngest(mode: 'off' | 'on' | undefined): BlockSplitter {
+  if (mode !== 'on') return legacyBlockSplitter;
+  return languageAwareBlockSplitter(getLanguageSettings());
 }
