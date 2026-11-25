@@ -2,7 +2,7 @@
 
 > Full coverage by default. Opt-outs are explicit, reasoned decisions.
 >
-> Scope: the permission-related capabilities that DATA-22 needs (CONTEXT D-20 to D-22, A-10; RESEARCH section 8). Every call goes through `nango.proxy` on the connection the document was synced with. The app only reads sharing; it never changes it. File listing, download and content calls already exist and are not listed. Plans: `04.3-31` (Google Drive mapper, fail-closed rule, connector service), `04.3-32` (Dropbox and Notion mappers, the five sync loops), `04.3-33` (admin mapping and sharing rules).
+> Scope: the permission-related capabilities that DATA-22 needs (CONTEXT D-20 to D-22, A-10; RESEARCH section 8). Every provider call goes through `nango.proxy` on the connection the document was synced with; the Notion workspace id is read from the Nango connection record itself (`getConnection`, see the notion workspace row). The app only reads sharing; it never changes it. File listing, download and content calls already exist and are not listed. Plans: `04.3-31` (Google Drive mapper, fail-closed rule, connector service), `04.3-32` (Dropbox and Notion mappers, the five sync loops), `04.3-33` (admin mapping and sharing rules).
 >
 > Confidence carried from research: Google Drive and Notion are read from the official reference; the Dropbox endpoints and the `sharing.read` scope come from secondary sources and are confirmed by the executor against the official reference before the mapper is written (plan 32, task 1). Any call that fails, including a missing scope, makes the document visible to its uploader and the tenant admins only.
 
@@ -29,7 +29,7 @@
 | dropbox.team group membership expansion | OPT-OUT | explicitly out of scope: needs team-admin scopes; groups map through the admin-maintained table |
 | dropbox.sharing add, update, remove member | OPT-OUT | explicitly out of scope: the sync is read-only |
 | notion.page public_url (published to the web, sharing rule set by an admin) | INTEGRATE | |
-| notion workspace identity of the connection (workspace mapped to an access group by an admin) | INTEGRATE | |
+| notion workspace identity of the connection (workspace mapped to an access group by an admin), read from `workspace_id` of the Notion OAuth token response (`POST /v1/oauth/token`, a required field, developers.notion.com/docs/authorization), which Nango keeps in the connection's raw OAuth2 credentials: `getNango().getConnection('notion', connectionId)` then `credentials.raw.workspace_id` (the same call `file-fetcher.ts` uses for Dropbox); a missing or non-string value fails closed (source_error, owner and admins only); plan 32 confirms the path against the installed `@nangohq/node` types and updates this row if it differs | INTEGRATE | |
 | notion per-page member or permission listing | OPT-OUT | not available: the public API exposes no sharing or permission field on a page and no permission-listing capability (D-21) |
 | notion teamspace membership | OPT-OUT | not available: the public API has no teamspace endpoint; D-21 maps the workspace instead |
 | notion.users.list for address matching | OPT-OUT | not needed: with no per-page sharing there is nothing to match users against |
