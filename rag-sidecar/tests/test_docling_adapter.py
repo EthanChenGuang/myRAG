@@ -579,3 +579,149 @@ def test_table_header_still_reads_a_table_at_the_start_and_returns_none_without_
 def test_table_header_of_a_chunk_with_two_tables_is_the_first_one():
     text = "x\n" * 9 + "| a | b |\n| --- | --- |\n| 1 | 2 |\ny\n| c | d |\n| --- | --- |"
     assert docling_adapter._table_header(text) == "| a | b |\n| --- | --- |"
+
+
+# Phase 3.2 plan 23 (D-15, D-55): language-aware segment() override on the Docling path.
+
+_ZH_ENDS = "。！？"
+_ZH_NUMBERS = "一二三四五六七八九十"
+_ZH_PARAGRAPH = "".join(
+    f"第{_ZH_NUMBERS[index % 10]}个部分说明了这个系统怎样读取输入的数据并且按照顺序给出清楚的结果{_ZH_ENDS[index % 3]}"
+    for index in range(18)
+)
+_EN_PARAGRAPH = " ".join(
+    f"Part {index} explains how the system reads its input data; it then returns a clear result in order."
+    for index in range(14)
+)
+
+
+def _language_request(**overrides) -> ParseJobRequest:
+    values = {
+        "docling": DoclingOptions(
+            ocr=False,
+            force_full_page_ocr=False,
+            table_mode="off",
+            heading_hierarchy=False,
+            generate_picture_images=False,
+        ),
+        "ocr_languages": ["zh"],
+        "max_tokens": 64,
+    }
+    values.update(overrides)
+    return _request(**values)
+
+
+_LANGUAGE_AWARE = {"language_aware": True, "languages": ["zh", "en"], "primary_language": "zh"}
+
+
+def _paragraph_document(*paragraphs: str, heading: str | None = None) -> DoclingDocument:
+    from docling_core.types.doc import DocItemLabel
+
+    doc = DoclingDocument(name="paragraphs")
+    if heading is not None:
+        doc.add_heading(text=heading, level=1)
+    for paragraph in paragraphs:
+        doc.add_text(label=DocItemLabel.TEXT, text=paragraph)
+    return doc
+
+
+def _trunk_chunks(doc: DoclingDocument, request: ParseJobRequest) -> list[str]:
+    tokenizer = OpenAITokenizer(tokenizer=tiktoken.get_encoding("cl100k_base"), max_tokens=request.max_tokens)
+    chunker = HybridChunker(
+        tokenizer=tokenizer,
+        repeat_table_header=request.repeat_table_header,
+        serializer_provider=docling_adapter.MarkdownTableProvider(),
+    )
+    return [chunk.text for chunk in chunker.chunk(dl_doc=doc) if chunk.text.strip()]
+
+
+def test_a_language_aware_request_cuts_an_over_long_chinese_paragraph_only_at_sentence_ends(tmp_path):
+    assert _token_count(_ZH_PARAGRAPH) > 4 * 64
+    request = _language_request(**_LANGUAGE_AWARE)
+    result = docling_adapter.to_parse_result(_paragraph_document(_ZH_PARAGRAPH), request, tmp_path)
+    texts = [chunk.text for chunk in result.chunks]
+    assert len(texts) > 1
+    for text in texts[:-1]:
+        assert text[-1] in _ZH_ENDS, text
+    for chunk in result.chunks:
+        assert _token_count(chunk.text) <= 64
+        assert _token_count(chunk.contextualized_text) <= 64
+    assert "".join(texts) == _ZH_PARAGRAPH
+
+
+def test_the_language_aware_chunker_is_chosen_only_for_a_language_aware_request():
+    from rag_sidecar.parse.language_chunker import LanguageAwareHybridChunker
+
+    plain = docling_adapter.build_chunker(_language_request())
+    aware = docling_adapter.build_chunker(_language_request(**_LANGUAGE_AWARE))
+    assert type(plain) is HybridChunker
+    assert isinstance(aware, LanguageAwareHybridChunker)
+    assert aware.languages == ["zh", "en"] and aware.primary_language == "zh"
+
+
+def test_a_request_without_language_aware_gives_exactly_the_trunk_chunks(tmp_path):
+    doc = _paragraph_document(_ZH_PARAGRAPH, _EN_PARAGRAPH, heading="说明")
+    request = _language_request()
+    result = docling_adapter.to_parse_result(doc, request, tmp_path)
+    assert [chunk.text for chunk in result.chunks] == _trunk_chunks(doc, request)
+
+
+def test_language_aware_chunks_keep_source_order_under_a_heading(tmp_path):
+    doc = _paragraph_document(_ZH_PARAGRAPH, _EN_PARAGRAPH, heading="说明")
+    result = docling_adapter.to_parse_result(doc, _language_request(**_LANGUAGE_AWARE), tmp_path)
+    texts = [chunk.text for chunk in result.chunks]
+    zh = [text for text in texts if "部分" in text]
+    en = [text for text in texts if "Part" in text]
+    assert len(zh) + len(en) == len(texts)
+    assert texts == zh + en
+    assert "".join(zh) == _ZH_PARAGRAPH
+    for text in en[:-1]:
+        assert text.endswith("."), text
+    assert " ".join(en) == _EN_PARAGRAPH
+    for chunk in result.chunks:
+        assert chunk.headings == ["说明"]
+        assert _token_count(chunk.contextualized_text) <= 64
+
+
+def test_an_english_paragraph_is_never_cut_at_a_semicolon(tmp_path):
+    result = docling_adapter.to_parse_result(
+        _paragraph_document(_EN_PARAGRAPH), _language_request(**_LANGUAGE_AWARE), tmp_path
+    )
+    texts = [chunk.text for chunk in result.chunks]
+    assert len(texts) > 1
+    for text in texts[:-1]:
+        assert text.endswith("."), text
+        assert not text.endswith(";")
+
+
+def test_a_single_over_long_sentence_is_hard_split_within_the_budget(tmp_path):
+    sentence = "这个句子没有结束的标点并且一直在重复同样的内容" * 12 + "。"
+    result = docling_adapter.to_parse_result(
+        _paragraph_document(sentence), _language_request(**_LANGUAGE_AWARE), tmp_path
+    )
+    texts = [chunk.text for chunk in result.chunks]
+    assert len(texts) > 1
+    assert "".join(texts) == sentence
+    for chunk in result.chunks:
+        assert _token_count(chunk.contextualized_text) <= 64
+
+
+def test_a_language_aware_request_without_a_primary_language_keeps_the_trunk_chunks(tmp_path):
+    doc = _paragraph_document(_ZH_PARAGRAPH)
+    request = _language_request(language_aware=True)
+    result = docling_adapter.to_parse_result(doc, request, tmp_path)
+    assert [chunk.text for chunk in result.chunks] == _trunk_chunks(doc, request)
+
+
+def test_table_chunks_go_through_the_parent_table_branch_with_their_header(tmp_path):
+    doc = _load("table-report")
+    (tmp_path / "plain").mkdir()
+    (tmp_path / "aware").mkdir()
+    plain = _convert("table-report", tmp_path / "plain")
+    aware = docling_adapter.to_parse_result(doc, _request(**_LANGUAGE_AWARE), tmp_path / "aware")
+    plain_tables = [(chunk.text, chunk.table_header) for chunk in plain.chunks if chunk.is_table]
+    aware_tables = [(chunk.text, chunk.table_header) for chunk in aware.chunks if chunk.is_table]
+    assert len(aware_tables) > 1
+    assert aware_tables == plain_tables
+    for text, header in aware_tables:
+        assert header is not None and text.find(header) >= 0

@@ -20,6 +20,7 @@ from rag_sidecar.contracts.ingest import ParserUsed
 from rag_sidecar.contracts.languages import get_language_pack, language_codes, load_language_registry
 from rag_sidecar.parse import probe
 from rag_sidecar.parse.converter import ConfigurationError, ConversionError, PageCapExceeded
+from rag_sidecar.parse.language_chunker import LanguageAwareHybridChunker
 from rag_sidecar.preflight.config import load_routing_config
 from rag_sidecar.settings import SidecarSettings, load_settings
 
@@ -91,13 +92,26 @@ def _table_header(text: str) -> str | None:
     return None
 
 
-def _chunks(doc: DoclingDocument, request: ParseJobRequest) -> list[ParseChunk]:
+def build_chunker(request: ParseJobRequest) -> HybridChunker:
+    """HybridChunker as before; LanguageAwareHybridChunker only when the request is language-aware (D-15, D-55)."""
     tokenizer = OpenAITokenizer(tokenizer=tiktoken.get_encoding(request.tokenizer), max_tokens=request.max_tokens)
-    chunker = HybridChunker(
+    if request.language_aware:
+        return LanguageAwareHybridChunker(
+            tokenizer=tokenizer,
+            repeat_table_header=request.repeat_table_header,
+            serializer_provider=MarkdownTableProvider(),
+            languages=list(request.languages),
+            primary_language=request.primary_language,
+        )
+    return HybridChunker(
         tokenizer=tokenizer,
         repeat_table_header=request.repeat_table_header,
         serializer_provider=MarkdownTableProvider(),
     )
+
+
+def _chunks(doc: DoclingDocument, request: ParseJobRequest) -> list[ParseChunk]:
+    chunker = build_chunker(request)
     chunks: list[ParseChunk] = []
     for raw in chunker.chunk(dl_doc=doc):
         if not raw.text.strip():
