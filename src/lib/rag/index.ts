@@ -219,6 +219,28 @@ export { docTypePickerEnabled, resolvePickerDefault, listDocTypeDefaults, setDoc
 export type { DocTypeChoice, DocTypeDefaultRow, DocTypeDefaultSourceKind, PickerDefault, SetDocTypeDefaultInput } from './ingest/profiles/doc-type-defaults';
 export { getEmbeddingProfileCompleteness } from './embeddings/profile-ops';
 export type { ProfileCompleteness } from './embeddings/profile-ops';
+export {
+  listBindings,
+  createBinding,
+  setBindingStatus,
+  activateBinding,
+  rollbackBinding,
+  deactivateBinding,
+  getBindingCompleteness,
+} from './embeddings/binding-ops';
+export type {
+  ActivateBindingResult,
+  BindingCompleteness,
+  BindingListEntry,
+  BindingRefusal,
+  CreateBindingResult,
+  DeactivateBindingResult,
+  RollbackBindingResult,
+  SetBindingStatusResult,
+} from './embeddings/binding-ops';
+export { isDomainEmbeddingsEnabled, listProfileScopes, BINDING_DOC_TYPES } from './embeddings/bindings';
+export type { BindingStatus } from './embeddings/bindings';
+export { listEmbeddingProfiles } from './embeddings/active-profile';
 export { INGEST_SOURCES } from './ingest/types';
 export { changeDocumentType } from './ingest/change-doc-type';
 export { enqueueIngest, submitIngest } from './ingest/enqueue';
