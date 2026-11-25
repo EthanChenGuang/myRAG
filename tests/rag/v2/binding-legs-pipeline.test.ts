@@ -224,8 +224,9 @@ describe('v2 pipeline binding legs', () => {
     expect(result.reason).toBe('embedding_profile_mismatch');
     expect(result.candidates).toEqual([]);
     expect(requests).toHaveLength(0);
-    const record = result.stages.find((stage) => stage.reason === 'embedding_profile_mismatch');
+    const record = result.stages.find((stage) => stage.name === 'embed');
     expect(record?.status).toBe('error');
+    expect(record?.reason).toBe('failed');
     expect(record?.detail).toBe('unknown_profile:contract_legal');
   });
 

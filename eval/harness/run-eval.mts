@@ -28,6 +28,8 @@ export interface EvalRequestOptions {
   generator_model?: string | null;
   degrade?: 'drop_top_candidate' | null;
   embedding_profile?: string | null;
+  embedding_bindings?: NonNullable<RagRunRequest['options']>['embedding_bindings'];
+  domain_control_leg?: NonNullable<RagRunRequest['options']>['domain_control_leg'];
   retrieval_overrides?: NonNullable<RagRunRequest['options']>['retrieval_overrides'];
   retrieval_filters?: NonNullable<RagRunRequest['options']>['retrieval_filters'];
   disabled_stages?: Array<
@@ -593,6 +595,10 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     user_id: requestOptions.user_id ?? null,
     embedding_profile: embeddingProfile,
     ...(requestOptions.degrade ? { degrade: requestOptions.degrade } : {}),
+    ...(requestOptions.embedding_bindings && Object.keys(requestOptions.embedding_bindings).length > 0
+      ? { embedding_bindings: requestOptions.embedding_bindings }
+      : {}),
+    ...(requestOptions.domain_control_leg ? { domain_control_leg: requestOptions.domain_control_leg } : {}),
     ...(requestOptions.retrieval_overrides ? { retrieval_overrides: requestOptions.retrieval_overrides } : {}),
     ...(requestOptions.disabled_stages?.length ? { disabled_stages: requestOptions.disabled_stages } : {}),
     ...(includeAnswer ? { generator_model: requestOptions.generator_model ?? null } : {}),
