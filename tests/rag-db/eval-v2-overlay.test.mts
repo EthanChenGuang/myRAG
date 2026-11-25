@@ -17,7 +17,8 @@ const RUNS_DIR = path.join(REPO_ROOT, 'eval/config/runs');
 const GOLDEN_PATH = path.join(REPO_ROOT, 'eval/fixtures/golden.jsonl');
 const CORPUS_DIR = path.join(REPO_ROOT, 'eval/fixtures/corpus');
 const TRACER_ITEM_ID = 'en-general-001';
-const REJECT_MESSAGE = '[Eval Harness] run-config may only set RAG_PIPELINE, Phase 4 RAG_* switches and the Phase 5.1 SEC switches';
+const REJECT_MESSAGE =
+  '[Eval Harness] run-config may only set RAG_PIPELINE, Phase 4 RAG_* switches, the Phase 5.1 SEC switches and the Phase 6 query-layer and semantic-cache switches';
 const DOC_ID = '11111111-1111-4111-8111-111111111111';
 
 const tmpDirs: string[] = [];
@@ -111,7 +112,7 @@ describe('Phase 4.1 defaults-gate run configs', () => {
 });
 
 describe('run-config validation', () => {
-  test('the allow-list is RAG_PIPELINE, the Phase 4 RAG_ switches, the refusal floor, the value-constrained vendor settings and the five Phase 5.1 SEC switches', () => {
+  test('the allow-list is RAG_PIPELINE, the Phase 4 RAG_ switches, the refusal floor, the value-constrained vendor settings, the five Phase 5.1 SEC switches and the 16 Phase 6 names', () => {
     assert.deepEqual([...RUN_CONFIG_ENV_ALLOWLIST].sort(), [
       'COHERE_API_KEY',
       'COHERE_BASE_URL',
@@ -128,12 +129,28 @@ describe('run-config validation', () => {
       'RAG_LEXICAL_TRANSLATION',
       'RAG_PARENT_CHILD',
       'RAG_PIPELINE',
+      'RAG_QUERY_CONDENSE',
+      'RAG_QUERY_DATE_NORMALIZE',
+      'RAG_QUERY_DECOMPOSE',
+      'RAG_QUERY_EXPAND',
+      'RAG_QUERY_FRAMEWORK',
+      'RAG_QUERY_HYDE',
+      'RAG_QUERY_LAYER',
+      'RAG_QUERY_LLM_MODEL',
+      'RAG_QUERY_TRANSLATE',
+      'RAG_QUERY_TRANSLATE_DISABLED_PROFILES',
+      'RAG_QUERY_VOICE_TRANSFORMS',
       'RAG_REFUSAL_FLOOR',
       'RAG_REFUSAL_THRESHOLD',
       'RAG_RERANKER',
       'RAG_RERANK_TIER_CHAT',
       'RAG_RERANK_TIER_VOICE',
       'RAG_RERANK_VOYAGE_MODEL_BY_LANG',
+      'RAG_SEMANTIC_CACHE',
+      'RAG_SEMANTIC_CACHE_EMBED_STORE',
+      'RAG_SEMANTIC_CACHE_MAX_DISTANCE',
+      'RAG_SEMANTIC_CACHE_REFUSAL_TTL',
+      'RAG_SEMANTIC_CACHE_TTL',
       'RAG_TOOL_RESULT_GUARD',
       'VOYAGE_API_KEY',
       'VOYAGE_BASE_URL',

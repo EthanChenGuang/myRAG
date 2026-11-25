@@ -64,6 +64,7 @@ export interface InProcessEval {
   fixtureUserId: string;
   corpusSha256: string;
   sqlSha256: Record<string, string>;
+  fakeQueryLlm?: import('./fake-query-llm.mts').FakeQueryLlm;
   close: () => Promise<void>;
 }
 
@@ -175,6 +176,10 @@ function switchIsOn(value: string | undefined, expected: string): boolean {
 /** The fixture translator serves v2 runs whose overlay turns RAG_LEXICAL_TRANSLATION on; legacy runs never get it. */
 export function shouldInstallFixtureTranslator(env: Record<string, string> | undefined): boolean {
   return switchIsOn(env?.RAG_PIPELINE, 'v2') && switchIsOn(env?.RAG_LEXICAL_TRANSLATION, 'true');
+}
+
+export function shouldInstallFakeQueryLlm(_env: Record<string, string | undefined> | undefined, _options: { queryLayer?: boolean } = {}): boolean {
+  return false;
 }
 
 export async function prepareInProcessEval(options: {
