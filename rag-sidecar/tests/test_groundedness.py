@@ -1,9 +1,23 @@
+import asyncio
+import os
+import subprocess
+import sys
+import threading
+
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
 from rag_sidecar.contracts import GroundednessResult, SidecarError, SidecarReady
-from rag_sidecar.groundedness import LOCAL_SCORER, VECTARA_SCORER, ScorerBusy, ScorerUnavailable, StubScorer
+from rag_sidecar.groundedness import (
+    LOCAL_SCORER,
+    VECTARA_SCORER,
+    ScorerBusy,
+    ScorerUnavailable,
+    StubScorer,
+    build_scorers,
+)
+from rag_sidecar.groundedness.local_hhem import HHEM_MODEL_ID, LocalHhemScorer
 from rag_sidecar.main import create_app
 from rag_sidecar.settings import SidecarSettings
 
@@ -269,3 +283,153 @@ def test_router_never_logs_request_text(caplog):
     joined = "\n".join(record.getMessage() + repr(record.__dict__) for record in caplog.records)
     assert "SECRET-PREMISE-TEXT" not in joined
     assert "SECRET-HYPOTHESIS-TEXT" not in joined
+
+
+# Local HHEM-2.1-Open scorer (D-12): injected loaders only, no weights, no torch.
+
+class _FakeModel:
+    def __init__(self, value: float = 0.91, gate: threading.Event | None = None, started=None):
+        self.value = value
+        self.gate = gate
+        self.started = started
+        self.pairs: list = []
+
+    def predict(self, pairs):
+        self.pairs.append(pairs)
+        if self.started is not None:
+            self.started.set()
+        if self.gate is not None:
+            self.gate.wait(5)
+        return [self.value]
+
+
+class _FakeLoader:
+    def __init__(self, model):
+        self.model = model
+        self.calls: list[tuple[tuple, dict]] = []
+
+    def __call__(self, *args, **kwargs):
+        self.calls.append((args, kwargs))
+        return self.model
+
+
+def test_importing_local_hhem_does_not_import_torch_or_transformers(tmp_path):
+    code = (
+        "import sys\n"
+        "import rag_sidecar.groundedness.local_hhem as m\n"
+        "from rag_sidecar.settings import SidecarSettings\n"
+        "s = m.LocalHhemScorer(SidecarSettings())\n"
+        "print(s.available(), 'torch' in sys.modules, 'transformers' in sys.modules)\n"
+    )
+    env = {**os.environ, "HF_HOME": str(tmp_path), "HF_HUB_CACHE": str(tmp_path / "hub")}
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=env, check=True)
+    assert out.stdout.split() == ["False", "False", "False"]
+
+
+def test_local_scorer_unavailable_without_weights(monkeypatch, tmp_path):
+    monkeypatch.setenv("HF_HUB_CACHE", str(tmp_path))
+    scorer = LocalHhemScorer(SidecarSettings())
+    assert scorer.available() is False
+    assert LOCAL_SCORER not in build_scorers(SidecarSettings())
+
+
+def test_local_scorer_unavailable_when_packages_missing_even_with_weights(monkeypatch, tmp_path):
+    revision = SidecarSettings().hhem_model_revision
+    (tmp_path / "models--vectara--hallucination_evaluation_model" / "snapshots" / revision).mkdir(parents=True)
+    monkeypatch.setenv("HF_HUB_CACHE", str(tmp_path))
+    monkeypatch.setattr("rag_sidecar.groundedness.local_hhem._packages_installed", lambda: False)
+    assert LocalHhemScorer(SidecarSettings()).available() is False
+
+
+def test_local_scorer_available_with_packages_and_pinned_snapshot(monkeypatch, tmp_path):
+    revision = SidecarSettings().hhem_model_revision
+    monkeypatch.setenv("HF_HUB_CACHE", str(tmp_path))
+    monkeypatch.setattr("rag_sidecar.groundedness.local_hhem._packages_installed", lambda: True)
+    assert LocalHhemScorer(SidecarSettings()).available() is False
+    (tmp_path / "models--vectara--hallucination_evaluation_model" / "snapshots" / revision).mkdir(parents=True)
+    assert LocalHhemScorer(SidecarSettings()).available() is True
+
+
+def test_local_scorer_scores_and_loads_once():
+    loader = _FakeLoader(_FakeModel(0.91))
+    scorer = LocalHhemScorer(SidecarSettings(), loader=loader)
+    assert scorer.available() is True
+
+    async def run():
+        return [await scorer.score(["p1", "p2"], "h") for _ in range(3)]
+
+    assert asyncio.run(run()) == [pytest.approx(0.91)] * 3
+    assert len(loader.calls) == 1
+    assert loader.model.pairs[0] == [("p1\n\np2", "h")]
+
+
+def test_loader_receives_pinned_revision_and_offline_flags():
+    settings = SidecarSettings(hhem_model_revision="0123456789abcdef0123456789abcdef01234567")
+    loader = _FakeLoader(_FakeModel(0.5))
+    asyncio.run(LocalHhemScorer(settings, loader=loader).score(["p"], "h"))
+    args, kwargs = loader.calls[0]
+    assert args == (HHEM_MODEL_ID,)
+    assert HHEM_MODEL_ID == "vectara/hallucination_evaluation_model"
+    assert kwargs == {
+        "revision": "0123456789abcdef0123456789abcdef01234567",
+        "trust_remote_code": True,
+        "local_files_only": True,
+    }
+
+
+def test_second_concurrent_call_is_busy():
+    gate = threading.Event()
+    started = threading.Event()
+    model = _FakeModel(0.7, gate=gate, started=started)
+    scorer = LocalHhemScorer(SidecarSettings(), loader=_FakeLoader(model), queue_wait_s=0.05)
+
+    async def run():
+        first = asyncio.create_task(scorer.score(["p"], "h"))
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + 2.0
+        while not started.is_set() and loop.time() < deadline:
+            await asyncio.sleep(0.005)
+        assert started.is_set(), "first inference never started"
+        with pytest.raises(ScorerBusy):
+            await scorer.score(["p"], "h")
+        gate.set()
+        return await first
+
+    assert asyncio.run(run()) == pytest.approx(0.7)
+    assert len(model.pairs) == 1
+
+
+def test_loader_failure_is_unavailable_and_not_retried():
+    calls = []
+
+    def broken_loader(*args, **kwargs):
+        calls.append(1)
+        raise OSError("missing files")
+
+    scorer = LocalHhemScorer(SidecarSettings(), loader=broken_loader)
+
+    async def run():
+        for _ in range(2):
+            with pytest.raises(ScorerUnavailable):
+                await scorer.score(["p"], "h")
+
+    asyncio.run(run())
+    assert len(calls) == 1
+    assert scorer.available() is False
+
+
+def test_inference_error_is_unavailable():
+    class Broken:
+        def predict(self, pairs):
+            raise RuntimeError("oom")
+
+    scorer = LocalHhemScorer(SidecarSettings(), loader=_FakeLoader(Broken()))
+    with pytest.raises(ScorerUnavailable):
+        asyncio.run(scorer.score(["p"], "h"))
+
+
+def test_local_scorer_through_the_endpoint():
+    scorer = LocalHhemScorer(SidecarSettings(), loader=_FakeLoader(_FakeModel(0.88)))
+    result = _result(_post({LOCAL_SCORER: scorer}, _body("en", False)))
+    assert (result.status, result.scorer) == ("scored", "hhem_2_1_open")
+    assert result.score == pytest.approx(0.88)
