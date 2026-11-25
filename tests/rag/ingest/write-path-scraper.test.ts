@@ -29,6 +29,11 @@ async function loadAdapter() {
   vi.doMock('@/lib/scrapers/firecrawl-client', () => ({ scrapeUrl, crawlWebsite }));
   vi.doMock('@/lib/document-processor', () => ({ processDocument }));
   vi.doMock('@/lib/rag', () => ({
+    // Upload approval off (D-56): the legacy writers are not refused.
+    assertLegacyWriteAllowed: () => undefined,
+    legacyWriteRefused: () => false,
+    legacyApprovalRefusal: () => new Response(null, { status: 503 }),
+    UploadApprovalRequiresUnifiedError: class UploadApprovalRequiresUnifiedError extends Error {},
     ingest,
     buildSourceKey: identity.buildSourceKey,
     currentIngestConfig: () => {
@@ -42,6 +47,11 @@ async function loadAdapter() {
 async function loadSwitch() {
   vi.resetModules();
   vi.doMock('@/lib/rag', () => ({
+    // Upload approval off (D-56): the legacy writers are not refused.
+    assertLegacyWriteAllowed: () => undefined,
+    legacyWriteRefused: () => false,
+    legacyApprovalRefusal: () => new Response(null, { status: 503 }),
+    UploadApprovalRequiresUnifiedError: class UploadApprovalRequiresUnifiedError extends Error {},
     currentIngestConfig: () => {
       if (state.configThrows) throw new Error('config unavailable');
       return { pipeline: state.pipeline };
