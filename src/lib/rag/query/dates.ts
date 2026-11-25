@@ -205,6 +205,11 @@ function matchedLabel(match: RelativeTimeMatch): string {
   return typeof match.n === 'number' ? match.term.replace('N', String(match.n)) : match.term;
 }
 
+/** D-11: the absolute dates appended to the dense-leg query text; the lexical text never carries them. */
+export function denseDateSuffix(from: string, to: string): string {
+  return `(${from} to ${to})`;
+}
+
 /**
  * Gate rule R2 (D-11): relative time expressions in zh, en and it become one absolute inclusive date
  * range in the request's time zone (UTC when the zone is missing or invalid). Several expressions give
@@ -233,5 +238,5 @@ export function normalizeRelativeDates(q: string, opts: NormalizeDatesOptions): 
   if (matched.length === 0) return none;
 
   const range: RelativeDateRange = { from: isoDate(from), to: isoDate(to), includeUndated: true, timeZone };
-  return { range, denseSuffix: `(${range.from} to ${range.to})`, matched, timeZone };
+  return { range, denseSuffix: denseDateSuffix(range.from, range.to), matched, timeZone };
 }

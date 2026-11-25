@@ -1,6 +1,7 @@
 import type { QueryPlan } from '@/lib/rag-eval/contracts.generated';
 import type { QueryFramework } from '../config';
 import type { QueryVariant } from '../types';
+import { denseDateSuffix } from './dates';
 import type { GateResult } from './rewrite-gate';
 
 export type SkippedTransform = NonNullable<QueryPlan['skipped']>[number];
@@ -86,8 +87,13 @@ export function buildQueryPlan(input: BuildQueryPlanInput): QueryPlan {
   };
 }
 
-/** The plan's variants in plan order, in the shape of the Phase 4 queryVariants seam; HyDE searches the dense leg only (P-6). */
+/**
+ * The plan's variants in plan order, in the shape of the Phase 4 queryVariants seam; HyDE searches the dense leg only (P-6).
+ * D-11: with a relative-date range the original and condensed variants embed their text plus the absolute dates; text, and
+ * so the lexical tokens, stays unchanged.
+ */
 export function planToVariants(plan: QueryPlan): QueryVariant[] {
+  const suffix = plan.date_range ? denseDateSuffix(plan.date_range.from_date, plan.date_range.to_date) : null;
   return (plan.variants ?? []).map((variant) => ({
     text: variant.text,
     language: variant.language,
@@ -96,5 +102,6 @@ export function planToVariants(plan: QueryPlan): QueryVariant[] {
     ...(variant.sub_question_index !== null && variant.sub_question_index !== undefined
       ? { subQuestionIndex: variant.sub_question_index }
       : {}),
+    ...(suffix && (variant.kind === 'original' || variant.kind === 'condensed') ? { denseText: `${variant.text} ${suffix}` } : {}),
   }));
 }

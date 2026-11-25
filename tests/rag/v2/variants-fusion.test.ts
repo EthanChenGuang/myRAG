@@ -177,6 +177,48 @@ describe('planToVariants', () => {
   });
 });
 
+describe('planToVariants with a relative-date range (D-11)', () => {
+  const RANGE = { from_date: '2025-01-01', to_date: '2025-12-31', include_undated: true, time_zone: 'UTC' };
+
+  function datedPlan(): QueryPlan {
+    const plan = buildQueryPlan({ original: ORIGINAL, gate: gate(), framework: 'llamaindex', condensed: CONDENSED, dateRange: RANGE });
+    plan.variants = [
+      ...(plan.variants ?? []),
+      { text: 'Synthetic expansion', language: 'en', kind: 'expanded', sub_question_index: null, protected_ok: true },
+      { text: 'Synthetic sub question', language: 'en', kind: 'sub_question', sub_question_index: 0, protected_ok: true },
+      { text: 'A synthetic passage.', language: 'en', kind: 'hyde', sub_question_index: null, protected_ok: true },
+    ];
+    return plan;
+  }
+
+  it('appends the absolute dates to the dense text of the original and condensed variants only', () => {
+    const variants = planToVariants(datedPlan());
+    expect(variants).toEqual([
+      { text: ORIGINAL, language: 'en', kind: 'original', legs: 'both', denseText: `${ORIGINAL} (2025-01-01 to 2025-12-31)` },
+      { text: CONDENSED, language: 'en', kind: 'condensed', legs: 'both', denseText: `${CONDENSED} (2025-01-01 to 2025-12-31)` },
+      { text: 'Synthetic expansion', language: 'en', kind: 'expanded', legs: 'both' },
+      { text: 'Synthetic sub question', language: 'en', kind: 'sub_question', legs: 'both', subQuestionIndex: 0 },
+      { text: 'A synthetic passage.', language: 'en', kind: 'hyde', legs: 'dense' },
+    ]);
+    expect(variantDenseTexts(variants)).toEqual([
+      `${ORIGINAL} (2025-01-01 to 2025-12-31)`,
+      `${CONDENSED} (2025-01-01 to 2025-12-31)`,
+      'Synthetic expansion',
+      'Synthetic sub question',
+      'A synthetic passage.',
+    ]);
+  });
+
+  it('keeps the lexical text unchanged: text never carries the suffix', () => {
+    for (const variant of planToVariants(datedPlan())) expect(variant.text).not.toContain('2025-01-01');
+  });
+
+  it('sets no dense text without a range', () => {
+    const plan = buildQueryPlan({ original: ORIGINAL, gate: gate(), framework: 'llamaindex', condensed: CONDENSED });
+    for (const variant of planToVariants(plan)) expect(Object.keys(variant)).not.toContain('denseText');
+  });
+});
+
 describe('runQueryStages with the query layer on', () => {
   const scope = mintScope('single', null, null);
 
