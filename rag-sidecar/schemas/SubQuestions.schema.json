@@ -1,0 +1,18 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "questions": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 4,
+      "title": "Questions",
+      "type": "array"
+    }
+  },
+  "required": [
+    "questions"
+  ],
+  "title": "SubQuestions",
+  "type": "object"
+}

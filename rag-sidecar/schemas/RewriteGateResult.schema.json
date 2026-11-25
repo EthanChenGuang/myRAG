@@ -1,0 +1,63 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "lang": {
+      "enum": [
+        "zh",
+        "en",
+        "it"
+      ],
+      "title": "Lang",
+      "type": "string"
+    },
+    "protected_tokens": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 64,
+      "title": "Protected Tokens",
+      "type": "array"
+    },
+    "reasons": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 32,
+      "title": "Reasons",
+      "type": "array"
+    },
+    "rewrite": {
+      "title": "Rewrite",
+      "type": "boolean"
+    },
+    "skip_retrieval": {
+      "default": false,
+      "title": "Skip Retrieval",
+      "type": "boolean"
+    },
+    "transforms": {
+      "items": {
+        "enum": [
+          "condense_history",
+          "normalize_dates",
+          "decompose",
+          "expand",
+          "translate"
+        ],
+        "type": "string"
+      },
+      "maxItems": 5,
+      "title": "Transforms",
+      "type": "array"
+    }
+  },
+  "required": [
+    "rewrite",
+    "transforms",
+    "reasons",
+    "lang",
+    "protected_tokens"
+  ],
+  "title": "RewriteGateResult",
+  "type": "object"
+}

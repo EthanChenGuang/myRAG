@@ -1,0 +1,146 @@
+{
+  "$defs": {
+    "ConfigProvenance": {
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "enum": [
+            "defaults",
+            "sweep",
+            "calibration",
+            "fixture",
+            "live"
+          ],
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "title": "ConfigProvenance",
+      "type": "object"
+    },
+    "QueryBudgetMs": {
+      "additionalProperties": false,
+      "properties": {
+        "chat": {
+          "default": 1200,
+          "maximum": 60000,
+          "minimum": 1,
+          "title": "Chat",
+          "type": "integer"
+        },
+        "embed": {
+          "default": 1200,
+          "maximum": 60000,
+          "minimum": 1,
+          "title": "Embed",
+          "type": "integer"
+        },
+        "voice": {
+          "default": 300,
+          "maximum": 60000,
+          "minimum": 1,
+          "title": "Voice",
+          "type": "integer"
+        }
+      },
+      "title": "QueryBudgetMs",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "config_hash": {
+      "anyOf": [
+        {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Config Hash"
+    },
+    "group_deadline_ms": {
+      "default": 900,
+      "maximum": 60000,
+      "minimum": 1,
+      "title": "Group Deadline Ms",
+      "type": "integer"
+    },
+    "history_turn_chars": {
+      "default": 1000,
+      "maximum": 4000,
+      "minimum": 1,
+      "title": "History Turn Chars",
+      "type": "integer"
+    },
+    "history_turns": {
+      "default": 6,
+      "maximum": 20,
+      "minimum": 0,
+      "title": "History Turns",
+      "type": "integer"
+    },
+    "max_llm_variants": {
+      "default": 2,
+      "maximum": 2,
+      "minimum": 0,
+      "title": "Max Llm Variants",
+      "type": "integer"
+    },
+    "max_searches": {
+      "default": 8,
+      "maximum": 8,
+      "minimum": 1,
+      "title": "Max Searches",
+      "type": "integer"
+    },
+    "max_sub_questions": {
+      "default": 4,
+      "maximum": 4,
+      "minimum": 0,
+      "title": "Max Sub Questions",
+      "type": "integer"
+    },
+    "max_translations": {
+      "default": 2,
+      "maximum": 2,
+      "minimum": 0,
+      "title": "Max Translations",
+      "type": "integer"
+    },
+    "provenance": {
+      "$ref": "#/$defs/ConfigProvenance"
+    },
+    "query_budget_ms": {
+      "$ref": "#/$defs/QueryBudgetMs"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "variant_max_chars": {
+      "default": 500,
+      "maximum": 4000,
+      "minimum": 1,
+      "title": "Variant Max Chars",
+      "type": "integer"
+    },
+    "variant_max_ratio": {
+      "default": 4.0,
+      "exclusiveMinimum": 0,
+      "maximum": 20,
+      "title": "Variant Max Ratio",
+      "type": "number"
+    }
+  },
+  "title": "QueryParams",
+  "type": "object"
+}
