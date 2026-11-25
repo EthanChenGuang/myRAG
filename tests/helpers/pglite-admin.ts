@@ -3,8 +3,15 @@ import type { PGlite } from '@electric-sql/pglite';
 type Row = Record<string, unknown>;
 type Result = { data: unknown; error: { code: string; message: string } | null; count?: number | null };
 
+export interface PgliteAdminOptions {
+  /** Columns bound as jsonb on writes (defaults to metadata and processing_state). */
+  jsonColumns?: string[];
+  /** Run every statement as this authenticated user inside its own transaction, so RLS applies (a session-client stand-in). */
+  asUser?: string;
+}
+
 const IDENTIFIER_RE = /^[a-z_][a-z0-9_]*$/;
-const JSON_COLUMNS = new Set(['metadata', 'processing_state']);
+const DEFAULT_JSON_COLUMNS = ['metadata', 'processing_state'];
 
 function identifier(name: string): string {
   if (!IDENTIFIER_RE.test(name)) throw new Error(`[pglite-admin] bad identifier: ${name}`);
@@ -20,8 +27,18 @@ function plain(rows: unknown[]): Row[] {
  * generated columns and triggers (the fake edge serves reads and RPCs only). It supports exactly the calls
  * the document, image and scraper routes make and refuses anything else, so an unsupported call fails loudly.
  */
-export function createPgliteAdmin(db: PGlite) {
+export function createPgliteAdmin(db: PGlite, options: PgliteAdminOptions = {}) {
   const queries: Array<{ sql: string; params: unknown[] }> = [];
+  const JSON_COLUMNS = new Set(options.jsonColumns ?? DEFAULT_JSON_COLUMNS);
+  const execute = async (sql: string, params: unknown[]) => {
+    if (!options.asUser) return db.query(sql, params);
+    const userId = options.asUser;
+    return db.transaction(async (tx) => {
+      await tx.query("SELECT set_config('request.jwt.claim.sub', $1, true)", [userId]);
+      await tx.exec('SET LOCAL ROLE authenticated');
+      return tx.query(sql, params);
+    });
+  };
 
   const admin = {
     queries,
@@ -32,7 +49,10 @@ export function createPgliteAdmin(db: PGlite) {
       const tableSql = identifier(table);
       const where: string[] = [];
       const params: unknown[] = [];
-      let op: 'select' | 'delete' | 'update' = 'select';
+      let op: 'select' | 'delete' | 'update' | 'insert' = 'select';
+      let returning = false;
+      let conflict: { onConflict: string; ignoreDuplicates: boolean } | null = null;
+      let insertRows: Row[] = [];
       let columns = '*';
       let head = false;
       let count = false;
@@ -47,13 +67,40 @@ export function createPgliteAdmin(db: PGlite) {
 
       const run = async (single: boolean): Promise<Result> => {
         let sql: string;
-        if (op === 'delete') {
-          sql = `DELETE FROM ${tableSql}${where.length ? ` WHERE ${where.join(' AND ')}` : ''}`;
+        const bindValue = (column: string, value: unknown): string =>
+          JSON_COLUMNS.has(column) && value !== null && value !== undefined ? bind(JSON.stringify(value), '::jsonb') : bind(value);
+        const returningSql =
+          returning && op !== 'select'
+            ? ` RETURNING ${
+                columns === '*'
+                  ? '*'
+                  : columns
+                      .split(',')
+                      .map((column) => identifier(column.trim()))
+                      .join(', ')
+              }`
+            : '';
+        if (op === 'insert') {
+          const insertColumns = [...new Set(insertRows.flatMap((row) => Object.keys(row)))];
+          const values = insertRows.map((row) => `(${insertColumns.map((column) => (column in row ? bindValue(column, row[column]) : 'DEFAULT')).join(', ')})`);
+          const conflictSql = conflict
+            ? ` ON CONFLICT (${conflict.onConflict
+                .split(',')
+                .map((column) => identifier(column.trim()))
+                .join(', ')}) ${
+                conflict.ignoreDuplicates
+                  ? 'DO NOTHING'
+                  : `DO UPDATE SET ${insertColumns.map((column) => `${identifier(column)} = EXCLUDED.${identifier(column)}`).join(', ')}`
+              }`
+            : '';
+          sql = `INSERT INTO ${tableSql} (${insertColumns.map(identifier).join(', ')}) VALUES ${values.join(', ')}${conflictSql}${returningSql}`;
+        } else if (op === 'delete') {
+          sql = `DELETE FROM ${tableSql}${where.length ? ` WHERE ${where.join(' AND ')}` : ''}${returningSql}`;
         } else if (op === 'update') {
           const sets = Object.entries(payload).map(([column, value]) =>
             JSON_COLUMNS.has(column) ? `${identifier(column)} = ${bind(JSON.stringify(value), '::jsonb')}` : `${identifier(column)} = ${bind(value)}`,
           );
-          sql = `UPDATE ${tableSql} SET ${sets.join(', ')}${where.length ? ` WHERE ${where.join(' AND ')}` : ''}`;
+          sql = `UPDATE ${tableSql} SET ${sets.join(', ')}${where.length ? ` WHERE ${where.join(' AND ')}` : ''}${returningSql}`;
         } else if (head && count) {
           sql = `SELECT count(*)::int AS n FROM ${tableSql}${where.length ? ` WHERE ${where.join(' AND ')}` : ''}`;
         } else {
@@ -68,8 +115,8 @@ export function createPgliteAdmin(db: PGlite) {
         }
         queries.push({ sql, params: [...params] });
         try {
-          const result = await db.query(sql, params);
-          if (op !== 'select') return { data: null, error: null };
+          const result = await execute(sql, params);
+          if (op !== 'select' && !returning) return { data: null, error: null };
           if (head && count) return { data: null, error: null, count: Number((result.rows[0] as { n: number }).n) };
           const rows = plain(result.rows);
           if (single) {
@@ -86,6 +133,7 @@ export function createPgliteAdmin(db: PGlite) {
 
       const builder = {
         select(next = '*', options?: { count?: 'exact'; head?: boolean }) {
+          if (op !== 'select') returning = true;
           columns = next;
           head = options?.head === true;
           count = options?.count === 'exact';
@@ -98,6 +146,17 @@ export function createPgliteAdmin(db: PGlite) {
         update(next: Row) {
           op = 'update';
           payload = next;
+          return builder;
+        },
+        insert(next: Row | Row[]) {
+          op = 'insert';
+          insertRows = Array.isArray(next) ? next : [next];
+          return builder;
+        },
+        upsert(next: Row | Row[], upsertOptions?: { onConflict?: string; ignoreDuplicates?: boolean }) {
+          op = 'insert';
+          insertRows = Array.isArray(next) ? next : [next];
+          conflict = { onConflict: upsertOptions?.onConflict ?? 'id', ignoreDuplicates: upsertOptions?.ignoreDuplicates === true };
           return builder;
         },
         eq(column: string, value: unknown) {
