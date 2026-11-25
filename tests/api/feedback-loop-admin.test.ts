@@ -182,3 +182,41 @@ describe('tenant-settings route (D-06)', () => {
     expect((await ok.json()).settings).toMatchObject({ tenant_key: 's:default', retrieval_log: 'off' });
   });
 });
+
+async function loadPurgeRoute() {
+  await loadSettingsRoute();
+  return import('@/app/api/rag/admin/feedback-loop/purge/route');
+}
+
+function purgeReq(headers: Record<string, string> = {}) {
+  return new NextRequest('http://localhost/api/rag/admin/feedback-loop/purge', { method: 'POST', headers });
+}
+
+describe('purge route (D-06)', () => {
+  it('runs the admin guard first: 401, forged cookie 401, 403, 503, and calls nothing before it', async () => {
+    const route = await loadPurgeRoute();
+    expect((await route.POST(purgeReq())).status).toBe(401);
+    expect((await route.POST(purgeReq({ cookie: 'admin_session=forged-value' }))).status).toBe(401);
+    state.session = { id: USER_ID };
+    expect((await route.POST(purgeReq())).status).toBe(403);
+    state.session = { id: ADMIN_ID };
+    state.lookupFails = true;
+    expect((await route.POST(purgeReq())).status).toBe(503);
+    state.session = null;
+    state.lookupFails = false;
+    state.authThrows = true;
+    expect((await route.POST(purgeReq())).status).toBe(503);
+    expect(state.dataCalls).toEqual([]);
+  });
+
+  it('an admin POST purges with RAG_RETRIEVAL_LOG_RETENTION_DAYS and returns the counts', async () => {
+    vi.stubEnv('RAG_RETRIEVAL_LOG_RETENTION_DAYS', '21');
+    state.session = { id: ADMIN_ID };
+    const route = await loadPurgeRoute();
+    const response = await route.POST(purgeReq());
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(await response.json()).toEqual({ success: true, retentionDays: 21, logRows: 0, reviewItems: 0 });
+    expect(state.dataCalls).toEqual(['rpc:rag_purge_retrieval_log', 'rag_review_items']);
+  });
+});
