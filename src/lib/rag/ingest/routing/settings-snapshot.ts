@@ -70,6 +70,13 @@ export function buildJobSettings(input: BuildJobSettingsInput): JobSettingsSnaps
     ...(holdPublish && isBackfill ? { hold_publish: true } : {}),
     // Each field below is dropped by omitDefaultFields while it holds its default (D-17, research Pitfall 17).
     ocr_primary_language: effective.ocrPrimaryLanguage,
+    language_aware: effective.languageAware,
+    languages: effective.languages as JobSettingsSnapshotWire['languages'],
+    primary_language: effective.primaryLanguage as JobSettingsSnapshotWire['primary_language'],
+    // null leaves the flag to the profile (profile mode); a forced flag is recorded (D-19, D-22, research F-13).
+    repeat_table_header_effective: effective.repeatTableHeaderForced ? effective.repeatTableHeader : null,
+    carry_table_header: effective.carryTableHeader,
+    row_serialization: effective.rowSerialization,
   };
 
   return omitDefaultFields(JobSettingsSnapshotSchema.parse(snapshot), JOB_SETTINGS_PHASE32_DEFAULTS);

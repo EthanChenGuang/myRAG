@@ -104,6 +104,11 @@ export function createSidecarParser(config: SidecarConfig): DocumentParser {
       max_tokens: request.profile.chunker.max_tokens,
       repeat_table_header: effective?.repeatTableHeader ?? request.profile.chunker.repeat_table_header,
       page_cap: null,
+      // Dropped by omitDefaultFields at their defaults, so a sidecar deployed before them still accepts the body (research Pitfall 17).
+      language_aware: effective?.languageAware ?? false,
+      languages: effective?.languages ?? [],
+      primary_language: effective?.primaryLanguage ?? null,
+      carry_table_header: effective?.carryTableHeader ?? false,
     });
     if (!parsedRequest.success) throw new ParserError('docling', 'invalid_request');
     const form = new FormData();
