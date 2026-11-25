@@ -477,3 +477,14 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 5.1 → 6 → 7. 
 | 5.1. Prompt Injection Defense (INSERTED) | 0/25 | Planned (revision pass 1) | - |
 | 6. Query Layer (LlamaIndex & LangChain) | 0/46 | Planned (plan-check pending) | - |
 | 7. External Backends & Release Defaults | 0/34 | Planned (34 plans, 13 waves; revised after plan-check pass 1) | - |
+
+## Backlog
+
+### Phase 999.1: WhatsApp server-side link preview as an exfiltration channel (security follow-up from Phase 5.1) (BACKLOG)
+
+**Goal:** The Baileys WhatsApp service fetches link previews server-side for any URL in a reply (`generateHighQualityLinkPreview: true` in `baileys-whatsapp/server.ts`), so an injected answer can trigger a zero-click fetch of an attacker URL that carries data in its query string. Fix: disable server-side link previews, or allowlist the hosts they may fetch.
+**Requirements:** TBD
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (promote with /gsd-review-backlog when ready)
