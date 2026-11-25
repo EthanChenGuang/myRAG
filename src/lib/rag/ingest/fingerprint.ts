@@ -55,7 +55,7 @@ function unique(values: string[]): string[] {
 }
 
 /** The languages whose OCR codes the parser actually used: RapidOCR reads the first language only (research F-4), LlamaParse all. */
-function ocrLanguagesUsed(parserUsed: string, ocrLanguages: readonly string[]): string[] {
+export function ocrLanguagesUsed(parserUsed: string, ocrLanguages: readonly string[]): string[] {
   const first = ocrLanguages.slice(0, 1);
   switch (parserUsed) {
     case 'docling':
@@ -89,7 +89,7 @@ export function ocrEngineCodes(parserUsed: string, ocrLanguages: readonly string
  * The packs this document was processed with: the languages behind its OCR codes, and with RAG_LANGUAGE_AWARE_INGEST=on every configured
  * language (per-chunk detection and sentence splitting read them all). A pack missing from the registry is left out.
  */
-function languagePackVersions(ocrLanguages: string[], settings: LanguageSettings, languageAware: Switches['language_aware_ingest']): Record<string, number> {
+export function languagePackVersions(ocrLanguages: string[], settings: LanguageSettings, languageAware: Switches['language_aware_ingest']): Record<string, number> {
   const codes = new Set(ocrLanguages);
   if (languageAware === 'on' && settings.configured) for (const code of settings.languages) codes.add(code);
   const versions: Record<string, number> = {};
@@ -100,7 +100,7 @@ function languagePackVersions(ocrLanguages: string[], settings: LanguageSettings
   return versions;
 }
 
-function switchesOf(config: Pick<IngestConfig, 'languageAwareIngest' | 'tableHeaderRepeat' | 'tableRowSerialization' | 'captionLanguage'>): Switches {
+export function switchesOf(config: Pick<IngestConfig, 'languageAwareIngest' | 'tableHeaderRepeat' | 'tableRowSerialization' | 'captionLanguage'>): Switches {
   return {
     language_aware_ingest: config.languageAwareIngest,
     table_header_repeat: config.tableHeaderRepeat,
