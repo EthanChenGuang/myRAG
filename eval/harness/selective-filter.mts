@@ -73,7 +73,7 @@ function unitVector(seed: number): number[] {
 
 
 function chunkIdForSeed(seed: number): string {
-  const suffix = (BigInt(seed) + 0x100000000000n).toString(16).padStart(12, '0').slice(-12);
+  const suffix = (BigInt(seed) + BigInt(0x100000000000)).toString(16).padStart(12, '0').slice(-12);
   return `00000000-0000-4000-8000-${suffix}`;
 }
 
