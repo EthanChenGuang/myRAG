@@ -1145,6 +1145,10 @@ def classify_input(job: IngestionJob, cfg: ParseRoutingConfig) -> tuple[str, str
     ext = name.rsplit(".", 1)[-1] if "." in name else ""
     ext = "html" if ext == "htm" else ext
     mime = (job.mime_type or "").split(";")[0].strip().lower()
+    mime_ext = _MIME_EXTENSIONS.get(mime, "")
+    if mime_ext in _TEXT_EXTENSIONS:
+        # A text MIME wins over the name: a Config UI image caption is text/markdown under the image's filename.
+        return "native_text", ext if ext in _TEXT_EXTENSIONS else mime_ext
     kind = _kind_of_extension(ext, cfg)
     if kind is None and mime:
         ext = "image" if mime.startswith("image/") else _MIME_EXTENSIONS.get(mime, "")

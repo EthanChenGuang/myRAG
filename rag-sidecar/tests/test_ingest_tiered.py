@@ -703,6 +703,37 @@ def test_a_tiered_image_goes_to_native_captioning(tmp_path, filename, mime):
     assert env.job.doc_class == "image"
 
 
+@pytest.mark.parametrize(
+    "filename,mime,expected",
+    [
+        ("warehouse-floorplan.png", "text/markdown", ("native_text", "md")),
+        ("scan.JPG", "text/plain; charset=utf-8", ("native_text", "txt")),
+        ("figures.webp", "text/csv", ("native_text", "csv")),
+        ("notes.csv", "text/plain", ("native_text", "csv")),
+        ("scan.png", "image/png", ("image", "png")),
+        ("scan.png", None, ("image", "png")),
+        ("scan.png", "application/octet-stream", ("image", "png")),
+    ],
+)
+def test_classify_input_lets_a_text_mime_win_over_the_extension(filename, mime, expected):
+    job = _job(sha="c" * 64, filename=filename, mime=mime)
+
+    assert tiered.classify_input(job, load_routing_config()) == expected
+
+
+def test_a_text_upload_named_like_an_image_is_parsed_and_labelled_native(tmp_path):
+    env = _plain_env(tmp_path, "warehouse-floorplan.png", "text/markdown")
+    env.app.script("parse_external", [AppScript(response=_native_done())])
+
+    outcome = _process(env)
+
+    assert outcome == JobOutcome(status="ready")
+    assert [call[2]["mode"] for call in env.app.calls if call[0] == "parse_external"] == ["native"]
+    (attempt,) = env.job.attempts
+    assert (attempt.tier, attempt.parser, attempt.parser_version) == ("native", "plain_text", "native")
+    assert env.job.doc_class == "native"
+
+
 @pytest.mark.parametrize("filename,mime,pages", [("report.docx", _DOCX, 2), ("page.html", "text/html", 1)])
 def test_tiered_docx_and_html_are_converted_in_process_as_one_native_range(tmp_path, filename, mime, pages):
     office = OfficeConverter(pages)

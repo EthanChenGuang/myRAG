@@ -292,6 +292,14 @@ describe('projection report (D-33 step 3)', () => {
       'the pre-sample bound counts text files only',
     );
   });
+
+  test('report: a file named like an image that the worker parsed as native text is priced by its bytes, not as a caption', () => {
+    const captions = Array.from({ length: 10 }, (_, index) => ({ sourceKey: `c/${index}-floorplan.png`, ext: 'png', size: 40_000 }));
+    const sampleJobs = [job(captions[0] as SampleCandidate, { docClass: 'native', pages: 1, tierPageCounts: { native: 1 }, l2Pages: 0, l3Pages: 0 })];
+    const report = buildReport({ budgetUsd: null, spentUsd: 0 }, sampleJobs, { entries: captions, duplicates: NO_DUPLICATES }, snapshot());
+    assert.equal(report.embedding_cost_by_profile_usd['openai-3-small-1536'], Number(((10 * 10_000 * 0.02) / 1e6).toFixed(6)));
+    assert.deepEqual(report.sample_size_by_class, { native: 1 });
+  });
 });
 
 // ---------------------------------------------------------------------------------------------------------------------------------
