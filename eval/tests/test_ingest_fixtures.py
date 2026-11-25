@@ -456,3 +456,167 @@ def test_the_recorded_directory_holds_only_files_the_manifest_names():
         named |= {Path(path).name for path in entry["recorded"]["artifacts"].values()}
     on_disk = {path.name for path in RECORDED.iterdir()} if RECORDED.is_dir() else set()
     assert on_disk == named and len(named) >= 24
+
+
+LONG_TABLE_PLAIN = ["long-table-en"]
+LONG_TABLE_CONTINUED: list[str] = []
+LONG_TABLE_IDS = LONG_TABLE_PLAIN + LONG_TABLE_CONTINUED
+LONG_TABLE_BODY_ROWS = 60
+PROFILES = REPO_ROOT / "config/rag/processing-profiles.json"
+OFF_SUBJECT_WORDS = (
+    "hotel", "lodging", "travel", "trip", "per diem", "salary", "leave day", "vacation", "restaurant", "meal", "vpn", "password",
+    "branch", "albergo", "trasferta", "viaggio", "stipendio", "ferie", "ristorante", "酒店", "住宿", "差旅", "出差", "工资", "薪资", "年假", "餐", "密码", "分行",
+)
+
+
+def _long_specs() -> dict:
+    return {spec.id: spec for spec in getattr(specs, "long_table_specs", lambda: ())()}
+
+
+def _long_spec(spec_id: str):
+    found = _long_specs()
+    assert spec_id in found, f"{spec_id} has no spec"
+    return found[spec_id]
+
+
+def _long_entry(spec_id: str) -> dict:
+    entries = {entry["id"]: entry for entry in _manifest().get("long_table_fixtures", [])}
+    assert spec_id in entries, f"{spec_id} is not in the manifest's long_table_fixtures"
+    return entries[spec_id]
+
+
+def _long_tables(spec) -> list:
+    return [block for block in spec.blocks if isinstance(block, specs.Table)]
+
+
+def _long_header_and_body(spec) -> tuple[tuple[str, ...], list[tuple[str, ...]]]:
+    tables = _long_tables(spec)
+    header = tables[0].rows[0]
+    body = list(tables[0].rows[1:])
+    for table in tables[1:]:
+        body += list(table.rows if not table.header else table.rows[1:])
+    return header, body
+
+
+def _number(cell: str) -> float:
+    assert re.fullmatch(r"\d+[.,]\d+", cell), cell
+    return float(cell.replace(",", "."))
+
+
+def _roles(spec) -> dict:
+    return spec.facts["long_table"]
+
+
+def _markdown_row(row) -> str:
+    return "| " + " | ".join(row) + " |"
+
+
+@pytest.mark.parametrize("spec_id", LONG_TABLE_IDS)
+def test_long_tables_are_in_the_manifest_but_not_among_the_loaded_fixtures(spec_id):
+    entry = _long_entry(spec_id)
+    assert spec_id not in {item["id"] for item in _manifest()["fixtures"]}
+    spec = _long_spec(spec_id)
+    assert entry["language"] == spec.language and entry["doc_type"] == spec.doc_type
+    assert entry["profile_id"] == PROFILE_BY_TYPE[spec.doc_type]
+    assert entry["file_sha256"] == _sha256(_read(INGEST / entry["path"]))
+    assert entry["expected"] == json.loads(json.dumps(spec.facts))
+    assert entry["text"]["sha256"] == _sha256(_read(INGEST / entry["text"]["path"]))
+
+
+@pytest.mark.parametrize("spec_id", LONG_TABLE_IDS)
+def test_long_table_specs_declare_two_keys_two_values_and_one_category(spec_id):
+    spec = _long_spec(spec_id)
+    roles = _roles(spec)
+    header, body = _long_header_and_body(spec)
+    assert len(header) == 5 and list(header) == roles["header"]
+    assert len(roles["key_columns"]) == 2 and len(roles["value_columns"]) == 2
+    named = [*roles["key_columns"], *roles["value_columns"], roles["category_column"]]
+    assert sorted(named) == sorted(header)
+    assert len(body) == roles["body_rows"] == LONG_TABLE_BODY_ROWS
+    keys = [tuple(row[header.index(name)] for name in roles["key_columns"]) for row in body]
+    assert len(set(keys)) == LONG_TABLE_BODY_ROWS, "the two key columns must identify a row"
+    for row in body:
+        for name in roles["value_columns"]:
+            _number(row[header.index(name)])
+    categories = {row[header.index(roles["category_column"])] for row in body}
+    assert 2 <= len(categories) <= 6
+    assert not any(re.fullmatch(r"[\d.,]+", value) for value in categories)
+
+
+@pytest.mark.parametrize("spec_id", LONG_TABLE_IDS)
+def test_the_target_row_lies_late_and_its_values_are_unambiguous(spec_id):
+    spec = _long_spec(spec_id)
+    roles = _roles(spec)
+    header, body = _long_header_and_body(spec)
+    target = roles["target_row"]
+    assert 30 <= target < LONG_TABLE_BODY_ROWS - 1
+    assert roles["target_values"] == list(body[target])
+    columns = [header.index(name) for name in roles["value_columns"]]
+    values = [_number(body[target][column]) for column in columns]
+    assert values[0] != values[1]
+    neighbours = {_number(body[index][column]) for index in (target - 1, target + 1) for column in columns}
+    assert not set(values) & neighbours
+
+
+@pytest.mark.parametrize("spec_id", LONG_TABLE_IDS)
+def test_the_target_row_lies_beyond_the_first_chunk_of_every_profile(spec_id, monkeypatch):
+    monkeypatch.setenv("TIKTOKEN_CACHE_DIR", os.environ.get("TIKTOKEN_CACHE_DIR") or str(REPO_ROOT / ".cache" / "tiktoken"))
+    tiktoken = pytest.importorskip("tiktoken")
+    encoding = tiktoken.get_encoding("cl100k_base")
+    largest = max(profile["chunker"]["max_tokens"] for profile in json.loads(_read(PROFILES))["profiles"])
+    assert len(json.loads(_read(PROFILES))["profiles"]) == 6
+    spec = _long_spec(spec_id)
+    header, body = _long_header_and_body(spec)
+    before = [_markdown_row(header), "| " + " | ".join("---" for _ in header) + " |"]
+    before += [_markdown_row(row) for row in body[: _roles(spec)["target_row"]]]
+    assert len(encoding.encode("\n".join(before))) > largest
+
+
+@pytest.mark.parametrize("spec_id", LONG_TABLE_IDS)
+def test_long_table_text_reuses_no_off_subject_wording(spec_id):
+    text = (specs.render_markdown(_long_spec(spec_id)) + json.dumps(_long_spec(spec_id).facts, ensure_ascii=False)).lower()
+    assert [word for word in OFF_SUBJECT_WORDS if word in text] == []
+    assert phone_violations(text) == []
+
+
+def test_each_language_has_its_own_subject():
+    subjects = {}
+    for spec_id in LONG_TABLE_PLAIN:
+        spec = _long_spec(spec_id)
+        subjects[spec.language] = _roles(spec)["subject"]
+    assert len(set(subjects.values())) == len(subjects)
+
+
+@requires_reportlab
+def test_long_table_pdfs_regenerate_to_the_committed_bytes(tmp_path):
+    written = generate.generate(tmp_path / "pdf", tmp_path / "text", cjk_font=None)
+    for spec_id in LONG_TABLE_IDS:
+        assert spec_id in written, spec_id
+        assert _sha256(_read(PDF_DIR / f"{spec_id}.pdf")) == written[spec_id], f"{spec_id}.pdf differs from the generator output"
+        assert _text_operator_count(_read(PDF_DIR / f"{spec_id}.pdf")) > 0
+        assert (tmp_path / "text" / f"{spec_id}.md").read_text(encoding="utf-8") == _read(TEXT_DIR / f"{spec_id}.md").decode("utf-8")
+
+
+@pytest.mark.parametrize("spec_id", LONG_TABLE_IDS)
+def test_long_table_text_artifacts_equal_the_rendered_specs(spec_id):
+    assert _read(TEXT_DIR / f"{spec_id}.md").decode("utf-8") == specs.render_markdown(_long_spec(spec_id))
+
+
+@pytest.mark.parametrize("spec_id", LONG_TABLE_PLAIN)
+def test_the_plain_long_table_is_recorded_as_one_table_of_61_rows_starting_with_its_header(spec_id):
+    entry = _long_entry(spec_id)
+    spec = _long_spec(spec_id)
+    docling = json.loads(_read(INGEST / entry["recorded"]["docling"]))
+    assert len(docling["tables"]) == 1
+    table = docling["tables"][0]
+    assert table["data"]["num_rows"] == LONG_TABLE_BODY_ROWS + 1
+    assert sorted({prov["page_no"] for prov in table["prov"]}) == list(range(1, spec.page_count + 1))
+    header_cells = [cell for cell in table["data"]["table_cells"] if cell["start_row_offset_idx"] == 0]
+    assert all(cell["column_header"] for cell in header_cells)
+    result = ParseResult.model_validate_json(_read(INGEST / entry["recorded"]["parse_result"]))
+    assert result.page_count == spec.page_count == 2
+    assert result.language == spec.language
+    table_lines = [line for line in result.markdown.splitlines() if line.startswith("|")]
+    assert _normalized(table_lines[0]) == _normalized(_markdown_row(_roles(spec)["header"]))
+    assert SEPARATOR_ROW.match(table_lines[1])
+    assert len(table_lines) == LONG_TABLE_BODY_ROWS + 2
