@@ -15,6 +15,7 @@ import type { PromptGuardClassifier } from './security/injection-check';
 import { createLakeraDetector, lakeraSettingsFrom } from './security/lakera';
 import { classifyWithPromptGuard } from './security/prompt-guard-client';
 import { createQueryLlm, type QueryLlm } from './query/llm';
+import type { SemanticCache } from './cache/types';
 
 export interface ProfileQueryEmbedding {
   vector: number[];
@@ -46,6 +47,8 @@ export interface RagDeps {
   fetch: typeof fetch;
   /** The two pipeline variables exactly as the process has them (undefined when unset), for the D-02 startup check. */
   rawPipelineEnv: () => RawPipelineEnv;
+  /** The semantic answer cache for RAG_SEMANTIC_CACHE, wrapped fail-open; null when the cache is off (D-34, D-35). */
+  semanticCache: () => SemanticCache | null;
 }
 
 function readRagEnvInput(): RagEnvInput {
@@ -139,6 +142,7 @@ const defaults: RagDeps = {
   queryLlm: defaultQueryLlmClient,
   fetch: globalThis.fetch.bind(globalThis),
   rawPipelineEnv: () => ({ RAG_PIPELINE: process.env.RAG_PIPELINE, RAG_INGEST_PIPELINE: process.env.RAG_INGEST_PIPELINE }),
+  semanticCache: () => null,
 };
 
 let overrides: Partial<RagDeps> = {};
