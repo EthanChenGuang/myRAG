@@ -64,6 +64,7 @@ Set these in your Koyeb service configuration:
 - `PORT` - Server port (Koyeb provides this automatically)
 - `USE_PAIRING_CODE` - Set to `true` to use pairing code instead of QR
 - `PHONE_NUMBER` - Your phone number for pairing code authentication
+- `WHATSAPP_LINK_PREVIEW_HOSTS` - Optional. Comma-separated exact hostnames (for example `docs.example.com`) whose links get a preview. Leave empty (the default) so the service never fetches a URL found in a reply
 
 ## Authentication
 
