@@ -38,6 +38,8 @@ from rag_sidecar.contracts import (
     InvoiceFields,
     JudgeConfig,
     JudgeReport,
+    LanguagePack,
+    LanguageRegistry,
     LatencyBudgets,
     ActivationEvidence,
     EmbeddingProfileComparison,
@@ -99,6 +101,8 @@ Mode = Literal["validation", "serialization"]
 CONTRACTS: list[tuple[type[BaseModel], Mode]] = [
     (ConversationTurn, "validation"),
     (ProcessingProfileSet, "validation"),
+    (LanguagePack, "validation"),
+    (LanguageRegistry, "validation"),
     (DocTypeDetection, "validation"),
     (InjectionRuleSet, "validation"),
     (ParseJobRequest, "validation"),

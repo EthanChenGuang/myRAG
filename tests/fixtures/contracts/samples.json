@@ -1987,6 +1987,511 @@
       "run_id": "run-001",
       "schema_version": 1
     },
+    "LanguagePack": {
+      "code": "zh",
+      "effective_date_patterns": [
+        "自\\s*(?:19|20)\\d{2}\\s*年\\s*\\d{1,2}\\s*月\\s*\\d{1,2}\\s*日\\s*起\\s*(?:施行|生效|实施|执行)"
+      ],
+      "fixtures": {
+        "corpus": true,
+        "golden_slices": true
+      },
+      "folding": {
+        "accents": true,
+        "elision_prefixes": [],
+        "elision_suffixes": []
+      },
+      "groundedness": "hhem_2_3",
+      "list_separator": "，",
+      "name": "Chinese",
+      "native_name": "中文",
+      "ocr_codes": {
+        "docling": {
+          "rapidocr": "ch"
+        },
+        "llamaparse": "ch_sim"
+      },
+      "pack_version": 1,
+      "rewrite_gate_lexicon": "zh",
+      "script": "Hani",
+      "segmentation": "intl_segmenter_han_bigrams",
+      "sentence_end": "。！？",
+      "stemmer": null,
+      "stopwords": {
+        "detection": [],
+        "lexical": [
+          "的",
+          "了",
+          "在",
+          "是",
+          "我",
+          "有",
+          "和",
+          "就",
+          "不",
+          "人",
+          "都",
+          "一",
+          "一个",
+          "上",
+          "也",
+          "很",
+          "到",
+          "说",
+          "要",
+          "去",
+          "你",
+          "会",
+          "着",
+          "没有",
+          "看",
+          "好",
+          "自己",
+          "这"
+        ]
+      },
+      "texts": {
+        "attached_documents": "与本问题相关的参考文档已附在对话中。",
+        "citation_instruction": "请使用 [S<编号>] 标记引用你所依据的来源，编号只能取自上方带标签的来源，例如 [S1] 或 [S1][S3]。不要引用标签中不存在的编号。",
+        "groundedness_badges": {
+          "not_checked": "未核验",
+          "possibly_unreliable": "可能不可靠",
+          "verified": "已核验"
+        },
+        "groundedness_tooltips": {
+          "not_checked": "这条回答无法与你的文档进行核对。",
+          "possibly_unreliable": "自动检查发现这条回答的部分内容可能没有文档支持。",
+          "verified": "自动检查认为这条回答有你的文档支持。"
+        },
+        "knowledge_base_unavailable": "知识库暂时无法访问，请稍后再试。",
+        "strict_refusal": "# Information Not Available\n\n## Knowledge Base Status\n- I couldn’t find this information in your knowledge base.\n- Web search is turned off, so I can’t look it up online.\n\nWould you like me to turn on web search and check? Do you want to upload a document that contains this information? Is there a specific detail you want me to focus on?"
+      },
+      "version_markers": [
+        "(?:19|20)\\d{2}\\s*年?",
+        "第[一二三四五六七八九十百\\d]+版",
+        "修订(?:版|稿)?",
+        "[vV]\\d+(?:\\.\\d+)*"
+      ]
+    },
+    "LanguageRegistry": {
+      "packs": [
+        {
+          "code": "zh",
+          "effective_date_patterns": [
+            "自\\s*(?:19|20)\\d{2}\\s*年\\s*\\d{1,2}\\s*月\\s*\\d{1,2}\\s*日\\s*起\\s*(?:施行|生效|实施|执行)"
+          ],
+          "fixtures": {
+            "corpus": true,
+            "golden_slices": true
+          },
+          "folding": {
+            "accents": true,
+            "elision_prefixes": [],
+            "elision_suffixes": []
+          },
+          "groundedness": "hhem_2_3",
+          "list_separator": "，",
+          "name": "Chinese",
+          "native_name": "中文",
+          "ocr_codes": {
+            "docling": {
+              "rapidocr": "ch"
+            },
+            "llamaparse": "ch_sim"
+          },
+          "pack_version": 1,
+          "rewrite_gate_lexicon": "zh",
+          "script": "Hani",
+          "segmentation": "intl_segmenter_han_bigrams",
+          "sentence_end": "。！？",
+          "stemmer": null,
+          "stopwords": {
+            "detection": [],
+            "lexical": [
+              "的",
+              "了",
+              "在",
+              "是",
+              "我",
+              "有",
+              "和",
+              "就",
+              "不",
+              "人",
+              "都",
+              "一",
+              "一个",
+              "上",
+              "也",
+              "很",
+              "到",
+              "说",
+              "要",
+              "去",
+              "你",
+              "会",
+              "着",
+              "没有",
+              "看",
+              "好",
+              "自己",
+              "这"
+            ]
+          },
+          "texts": {
+            "attached_documents": "与本问题相关的参考文档已附在对话中。",
+            "citation_instruction": "请使用 [S<编号>] 标记引用你所依据的来源，编号只能取自上方带标签的来源，例如 [S1] 或 [S1][S3]。不要引用标签中不存在的编号。",
+            "groundedness_badges": {
+              "not_checked": "未核验",
+              "possibly_unreliable": "可能不可靠",
+              "verified": "已核验"
+            },
+            "groundedness_tooltips": {
+              "not_checked": "这条回答无法与你的文档进行核对。",
+              "possibly_unreliable": "自动检查发现这条回答的部分内容可能没有文档支持。",
+              "verified": "自动检查认为这条回答有你的文档支持。"
+            },
+            "knowledge_base_unavailable": "知识库暂时无法访问，请稍后再试。",
+            "strict_refusal": "# Information Not Available\n\n## Knowledge Base Status\n- I couldn’t find this information in your knowledge base.\n- Web search is turned off, so I can’t look it up online.\n\nWould you like me to turn on web search and check? Do you want to upload a document that contains this information? Is there a specific detail you want me to focus on?"
+          },
+          "version_markers": [
+            "(?:19|20)\\d{2}\\s*年?",
+            "第[一二三四五六七八九十百\\d]+版",
+            "修订(?:版|稿)?",
+            "[vV]\\d+(?:\\.\\d+)*"
+          ]
+        },
+        {
+          "code": "en",
+          "effective_date_patterns": [
+            "\\beffective\\s+(?:from|as\\s+of|on)\\b",
+            "\\bin\\s+(?:force|effect)\\s+(?:from|as\\s+of)\\b"
+          ],
+          "fixtures": {
+            "corpus": true,
+            "golden_slices": true
+          },
+          "folding": {
+            "accents": true,
+            "elision_prefixes": [],
+            "elision_suffixes": [
+              "'s"
+            ]
+          },
+          "groundedness": "hhem_2_1_open",
+          "list_separator": ", ",
+          "name": "English",
+          "native_name": "English",
+          "ocr_codes": {
+            "docling": {
+              "rapidocr": "en"
+            },
+            "llamaparse": "en"
+          },
+          "pack_version": 1,
+          "rewrite_gate_lexicon": "en",
+          "script": "Latn",
+          "segmentation": "whitespace",
+          "sentence_end": ".!?",
+          "stemmer": null,
+          "stopwords": {
+            "detection": [
+              "the",
+              "and",
+              "of",
+              "to",
+              "is",
+              "are",
+              "was",
+              "were",
+              "be",
+              "been",
+              "for",
+              "with",
+              "that",
+              "this",
+              "it",
+              "as",
+              "on",
+              "at",
+              "by",
+              "from",
+              "or",
+              "not",
+              "have",
+              "has",
+              "will",
+              "can",
+              "if",
+              "within",
+              "you",
+              "your",
+              "we",
+              "our",
+              "an",
+              "which",
+              "any",
+              "all",
+              "such",
+              "than",
+              "their",
+              "its"
+            ],
+            "lexical": [
+              "a",
+              "an",
+              "the",
+              "and",
+              "or",
+              "but",
+              "in",
+              "on",
+              "at",
+              "to",
+              "for",
+              "of",
+              "as",
+              "by",
+              "with",
+              "from",
+              "is",
+              "are",
+              "was",
+              "were",
+              "be",
+              "been",
+              "being",
+              "have",
+              "has",
+              "had",
+              "do",
+              "does",
+              "did",
+              "will",
+              "would",
+              "could",
+              "should",
+              "may",
+              "might",
+              "what",
+              "which",
+              "who",
+              "whom",
+              "this",
+              "that",
+              "these",
+              "those",
+              "it",
+              "its",
+              "he",
+              "she",
+              "they",
+              "we",
+              "you",
+              "i",
+              "me",
+              "my",
+              "your",
+              "his",
+              "her",
+              "their",
+              "our"
+            ]
+          },
+          "texts": {
+            "attached_documents": "The reference documents for this question are attached to the conversation.",
+            "citation_instruction": "Cite the sources you use with [S<number>] markers taken only from the labelled sources above, for example [S1] or [S1][S3]. Never cite a number that is not in a label.",
+            "groundedness_badges": {
+              "not_checked": "Not Checked",
+              "possibly_unreliable": "Possibly Unreliable",
+              "verified": "Verified"
+            },
+            "groundedness_tooltips": {
+              "not_checked": "This answer could not be checked against your documents.",
+              "possibly_unreliable": "An automatic check found parts of this answer that your documents may not support.",
+              "verified": "An automatic check found this answer supported by your documents."
+            },
+            "knowledge_base_unavailable": "The knowledge base is temporarily unavailable. Please try again in a moment.",
+            "strict_refusal": "# Information Not Available\n\n## Knowledge Base Status\n- I couldn’t find this information in your knowledge base.\n- Web search is turned off, so I can’t look it up online.\n\nWould you like me to turn on web search and check? Do you want to upload a document that contains this information? Is there a specific detail you want me to focus on?"
+          },
+          "version_markers": [
+            "\\b(?:19|20)\\d{2}\\b",
+            "\\b[vV]\\d+(?:\\.\\d+)*\\b",
+            "\\brev\\.\\s*\\d*",
+            "\\brevised\\b",
+            "\\b\\d+(?:st|nd|rd|th)\\s+edition\\b"
+          ]
+        },
+        {
+          "code": "it",
+          "effective_date_patterns": [
+            "\\bin\\s+vigore\\s+dal\\b",
+            "\\ba\\s+decorrere\\s+dal\\b",
+            "\\befficace\\s+dal\\b"
+          ],
+          "fixtures": {
+            "corpus": true,
+            "golden_slices": true
+          },
+          "folding": {
+            "accents": true,
+            "elision_prefixes": [
+              "dell'",
+              "nell'",
+              "sull'",
+              "all'",
+              "dall'",
+              "quell'",
+              "un'",
+              "l'",
+              "d'",
+              "c'",
+              "s'"
+            ],
+            "elision_suffixes": []
+          },
+          "groundedness": "none",
+          "list_separator": ", ",
+          "name": "Italian",
+          "native_name": "Italiano",
+          "ocr_codes": {
+            "docling": {
+              "rapidocr": "it"
+            },
+            "llamaparse": "it"
+          },
+          "pack_version": 1,
+          "rewrite_gate_lexicon": "it",
+          "script": "Latn",
+          "segmentation": "whitespace",
+          "sentence_end": ".!?",
+          "stemmer": null,
+          "stopwords": {
+            "detection": [
+              "il",
+              "lo",
+              "la",
+              "le",
+              "gli",
+              "un",
+              "una",
+              "uno",
+              "di",
+              "del",
+              "della",
+              "dei",
+              "delle",
+              "degli",
+              "che",
+              "è",
+              "per",
+              "con",
+              "su",
+              "sono",
+              "non",
+              "nel",
+              "nella",
+              "alla",
+              "al",
+              "dal",
+              "dalla",
+              "si",
+              "come",
+              "più",
+              "anche",
+              "questo",
+              "questa",
+              "se",
+              "ha",
+              "hanno",
+              "entro",
+              "nei",
+              "sul",
+              "tra",
+              "fra",
+              "ogni"
+            ],
+            "lexical": [
+              "il",
+              "lo",
+              "la",
+              "i",
+              "gli",
+              "le",
+              "un",
+              "una",
+              "uno",
+              "di",
+              "a",
+              "da",
+              "in",
+              "con",
+              "su",
+              "per",
+              "tra",
+              "fra",
+              "e",
+              "ed",
+              "o",
+              "od",
+              "che",
+              "non",
+              "è",
+              "sono",
+              "del",
+              "della",
+              "dei",
+              "delle",
+              "al",
+              "allo",
+              "alla",
+              "agli",
+              "alle",
+              "dal",
+              "dallo",
+              "dalla",
+              "dai",
+              "dalle",
+              "nel",
+              "nello",
+              "nella",
+              "nei",
+              "nelle",
+              "sul",
+              "sullo",
+              "sulla",
+              "sui",
+              "sulle"
+            ]
+          },
+          "texts": {
+            "attached_documents": "I documenti di riferimento per questa domanda sono allegati alla conversazione.",
+            "citation_instruction": "Cita le fonti che usi con i marcatori [S<numero>] presi solo dalle fonti etichettate qui sopra, per esempio [S1] o [S1][S3]. Non citare mai un numero che non compare in un'etichetta.",
+            "groundedness_badges": {
+              "not_checked": "Non verificata",
+              "possibly_unreliable": "Forse inaffidabile",
+              "verified": "Verificata"
+            },
+            "groundedness_tooltips": {
+              "not_checked": "Non è stato possibile verificare questa risposta sui tuoi documenti.",
+              "possibly_unreliable": "Un controllo automatico ha trovato parti di questa risposta che i tuoi documenti potrebbero non supportare.",
+              "verified": "Un controllo automatico ha trovato questa risposta supportata dai tuoi documenti."
+            },
+            "knowledge_base_unavailable": "La base di conoscenza non è al momento disponibile. Riprova tra poco.",
+            "strict_refusal": "# Information Not Available\n\n## Knowledge Base Status\n- I couldn’t find this information in your knowledge base.\n- Web search is turned off, so I can’t look it up online.\n\nWould you like me to turn on web search and check? Do you want to upload a document that contains this information? Is there a specific detail you want me to focus on?"
+          },
+          "version_markers": [
+            "\\b(?:19|20)\\d{2}\\b",
+            "\\b[vV]\\d+(?:\\.\\d+)*\\b",
+            "\\brev\\.\\s*\\d*",
+            "\\b\\d+[ªa]?\\s+edizione\\b",
+            "\\bedizione\\b",
+            "\\brevisione\\b"
+          ]
+        }
+      ],
+      "schema_version": 1
+    },
     "LatencyBudgets": {
       "groundedness": {
         "hhem_2_1_open": {

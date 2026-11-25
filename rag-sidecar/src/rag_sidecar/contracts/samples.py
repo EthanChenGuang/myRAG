@@ -128,6 +128,7 @@ from rag_sidecar.contracts.cache import (
     SemanticCacheCalibration,
     SemanticCacheProfileCalibration,
 )
+from rag_sidecar.contracts.languages import load_language_registry
 from rag_sidecar.contracts.latency import GroundednessBudgets, ScorerBudget
 from rag_sidecar.contracts.parse_eval import (
     DuplicateCounts,
@@ -1293,6 +1294,8 @@ def _models() -> dict[str, Any]:
         "InjectionDetectorConfig": _injection_detector_config(),
         "ConversationTurn": ConversationTurn(role="user", content="Tell me about leave."),
         "ProcessingProfileSet": ProcessingProfileSet(profiles=[_processing_profile(name) for name in _DOC_TYPES]),
+        "LanguageRegistry": load_language_registry(),
+        "LanguagePack": load_language_registry().packs[0],
         "DocTypeDetection": DocTypeDetection(
             doc_type="invoice_receipt", confidence=0.85, signals=["keyword:invoice", "pattern:invoice_number"], method="rules"
         ),
