@@ -55,15 +55,16 @@ describe('computeCacheKeyHash', () => {
   });
 
   it('requires every part at the type level', () => {
-    const { systemPromptHash: _omit, ...partial } = BASE;
+    const partial: Omit<CacheKeyParts, 'systemPromptHash'> = { ...BASE };
     // @ts-expect-error systemPromptHash is required
     const missing: CacheKeyParts = partial;
     expect(missing).toBeDefined();
   });
 
   it('rejects a part missing at runtime', () => {
-    const { entryProfile: _omit, ...partial } = BASE;
-    expect(() => computeCacheKeyHash(partial as unknown as CacheKeyParts)).toThrow();
+    const partial: Partial<CacheKeyParts> = { ...BASE };
+    delete partial.entryProfile;
+    expect(() => computeCacheKeyHash(partial as CacheKeyParts)).toThrow();
   });
 });
 
