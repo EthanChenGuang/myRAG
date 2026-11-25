@@ -72,6 +72,8 @@ import { citationSourcesFor } from '@/components/providers/sources-provider'
 import { citeAliasFromHref, isCitationAware, renderCitationMarkers, type CitationMarkerTarget, type CitationRenderPhase } from '@/lib/chat/citation-markers'
 import { pickAnswerMetadata } from '@/lib/chat/answer-metadata'
 import { useAnswerRecordsStore } from '@/lib/stores/answer-records-store'
+import { GroundednessBadge } from './groundedness-badge'
+import { AnswerFeedback } from './answer-feedback'
 
 // Define DocumentContent type that was missing
 type DocumentContent = {
@@ -4834,11 +4836,13 @@ ChatMessage = function ({
                           isLastMessage ? "opacity-100" : (isHovered ? "opacity-100" : "opacity-0")
                         )}
                       >
+                        {answerId && <GroundednessBadge answerId={answerId} fallback={answerMetadata?.groundedness} className="mr-1" />}
                         <CopyButton
                           onClick={handleCopy}
                           isCopied={isCopied}
                           tooltipText={t('copyTooltip')}
                         />
+                        {answerId && <AnswerFeedback answerId={answerId} />}
 
                         {/* Speak button - only show if TTS is not disabled (allow showing while loading settings to reserve space) */}
                         {(audioSettings.loading || !audioSettings.ttsDisabled) && (
