@@ -294,7 +294,6 @@ describe('enqueueIngest with a batch id (03.1-43 follow-up)', () => {
 });
 
 describe('backfill run: enqueue, monitor, end report and resume after a kill (D-25, D-33, D-34, D-36)', () => {
-  const TERMINAL = new Set(['ready', 'failed', 'quarantined', 'needs_review', 'skipped_duplicate']);
   let run: typeof import('@/lib/rag/ingest/backfill/run');
   let rpc: import('@/lib/rag/backend/supabase-rpc').RpcClient;
   let serviceKey: string;
