@@ -383,6 +383,7 @@ export {
 export type { TenantFeedbackSettingsRow, TenantRetrievalLog } from './feedback-loop/settings';
 export { purgeRetrievalLog, PurgeError } from './feedback-loop/purge';
 export type { PurgeCounts } from './feedback-loop/purge';
+export { isMiningWindowError, miningDisabledReason, MiningError, parseMiningDate, runMining } from './feedback-loop/mining';
 export {
   getReviewItem,
   getReviewItemChunks,
