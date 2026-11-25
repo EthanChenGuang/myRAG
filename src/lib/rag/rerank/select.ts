@@ -5,7 +5,16 @@ import { createLocalBm25Reranker } from './local-bm25';
 import type { Reranker } from './types';
 import { createVoyageReranker } from './voyage';
 
-export type ResolveRerankerReason = 'disabled' | 'missing_key';
+export type ResolveRerankerReason = 'disabled' | 'missing_key' | 'auto_fallback';
+
+/** Profiles that use Cohere under RAG_RERANKER=auto when COHERE_API_KEY is set; the rest take the no-key fallback. */
+export const AUTO_HOSTED_PROFILES: readonly Profile[] = ['chat', 'embed', 'eval', 'voice'];
+
+/** What RAG_RERANKER=auto runs without a Cohere key (or for a profile outside AUTO_HOSTED_PROFILES). */
+export const AUTO_NO_KEY_FALLBACK: 'local_bm25' | 'none' = 'local_bm25';
+
+let autoHostedProfiles: readonly Profile[] = AUTO_HOSTED_PROFILES;
+let autoNoKeyFallback: 'local_bm25' | 'none' = AUTO_NO_KEY_FALLBACK;
 
 export interface ResolveRerankerResult {
   reranker: Reranker | null;
@@ -13,6 +22,8 @@ export interface ResolveRerankerResult {
   model: string | null;
   tier: RerankTier;
   reason?: ResolveRerankerReason;
+  /** Set when RAG_RERANKER=auto chose the provider. */
+  auto?: true;
 }
 
 type FetchFn = typeof globalThis.fetch;
@@ -111,9 +122,19 @@ export function setRerankerFactoryForTests(factory: RerankerFactory): void {
   customFactory = factory;
 }
 
+export function setAutoHostedProfilesForTests(profiles: readonly Profile[]): void {
+  autoHostedProfiles = profiles;
+}
+
+export function setAutoNoKeyFallbackForTests(fallback: 'local_bm25' | 'none'): void {
+  autoNoKeyFallback = fallback;
+}
+
 export function resetRerankerFactoryForTests(): void {
   customFactory = null;
   warnedMissingKeys.clear();
+  autoHostedProfiles = AUTO_HOSTED_PROFILES;
+  autoNoKeyFallback = AUTO_NO_KEY_FALLBACK;
 }
 
 export function resolveReranker(
