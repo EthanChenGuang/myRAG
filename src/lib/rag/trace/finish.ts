@@ -1,4 +1,5 @@
-import type { RetrievalResult } from '../types';
+import { readFeedbackLoopConfig } from '../feedback-loop/config';
+import type { LogContext, RetrievalResult } from '../types';
 import type { TraceCollector } from './collector';
 import { isLangfuseUsable, readLangfuseConfig, type LangfuseConfig } from './config';
 import type { CollectedTrace } from './langfuse';
@@ -12,6 +13,42 @@ export interface FinishTraceOptions {
   query?: string;
   config?: LangfuseConfig;
   flushTimeoutMs?: number;
+  /** Who asked and through which channel; without a channel no retrieval log row is written. */
+  logContext?: LogContext;
+}
+
+const LOGGED_PROFILES: ReadonlySet<string> = new Set(['chat', 'embed', 'voice']);
+
+function totalLatency(collector: TraceCollector): number {
+  const endedAt = collector.stages().reduce((latest, stage) => Math.max(latest, stage.endedAt), collector.startedAt);
+  return Math.max(0, endedAt - collector.startedAt);
+}
+
+/** D-05: only user questions with a channel, never ghost chats; the row is built in the task so the route's outcome is final. */
+function scheduleRetrievalLog(collector: TraceCollector, result: RetrievalResult, options: FinishTraceOptions): void {
+  const context = options.logContext;
+  if (!context || context.skip === true || !context.channel) return;
+  if (!LOGGED_PROFILES.has(collector.profile)) return;
+  if (typeof context.chatId === 'string' && context.chatId.startsWith('ghost-')) return;
+  const mode = readFeedbackLoopConfig().retrievalLog;
+  if (mode === 'off') return;
+  scheduleAfterResponse(async () => {
+    try {
+      const { buildRetrievalLogRow, writeRetrievalLog } = await import('../feedback-loop/retrieval-log');
+      const row = buildRetrievalLogRow({
+        result,
+        tenantKey: collector.tenantKey,
+        stageLatency: collector.toStageLatency(),
+        latencyMs: totalLatency(collector),
+        logContext: context,
+        mode,
+        query: options.query,
+      });
+      await writeRetrievalLog(row, { expectedTenantKey: collector.tenantKey });
+    } catch {
+      // the retrieval log must never affect the request or the trace
+    }
+  });
 }
 
 const BASE_TAGS = ['rag-pipeline'];
@@ -54,6 +91,11 @@ function collect(
 
 /** Sampled requests are replayed to Langfuse after the response; everything else, and any export failure, writes the single `[RAG Trace]` line. Never throws. */
 export function finishTrace(collector: TraceCollector, result: RetrievalResult, options: FinishTraceOptions = {}): void {
+  try {
+    scheduleRetrievalLog(collector, result, options);
+  } catch {
+    // the retrieval log must never affect the request or the trace
+  }
   try {
     const config = options.config ?? readLangfuseConfig();
     const traceSampled = isSampled(collector.traceId, config.sampleRate, 'trace');

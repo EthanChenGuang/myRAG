@@ -62,12 +62,13 @@ import { exactIdStage, mergeExactCandidates } from './retrieval/exact-id';
 import { hybridRerank } from './rerank/local-hybrid';
 import { assertTenantScope, scopeKey, type TenantScope } from './tenant/scope';
 import { createTraceCollector, sanitizeStageCounts, type TraceCollector } from './trace/collector';
-import { finishTrace } from './trace/finish';
+import { finishTrace, type FinishTraceOptions } from './trace/finish';
 import { resolveEffectivePipeline, V2_UNAVAILABLE, type PipelineFallback } from './v2/readiness';
 import { voiceKeywordFallback, type VoiceChunk } from './voice/keyword-fallback';
 import type {
   Candidate,
   InjectionSummary,
+  LogOutcome,
   Profile,
   ReferencedState,
   RetrievalOptions,
@@ -414,7 +415,17 @@ export function failure(
     stages: collector.stages(),
     traceId: collector.traceId,
     queryContext,
+    logOutcome: newLogOutcome(),
   };
+}
+
+function newLogOutcome(): LogOutcome {
+  return { value: 'unknown', answerLanguage: null };
+}
+
+/** D-07: every result leaves runRetrieval with its own holder, tagged with the pipeline that produced it. */
+function withLogOutcome(result: RetrievalResult, pipeline: NonNullable<LogOutcome['pipeline']>): RetrievalResult {
+  return { ...result, logOutcome: { ...newLogOutcome(), pipeline } };
 }
 
 export function assembleDisabledStatus(
@@ -760,13 +771,17 @@ export async function runRetrieval(input: RunRetrievalInput): Promise<RetrievalR
   const config = loadRagConfig(deps.ragEnv());
   if (config.pipelineBlocked) {
     // D-02: an explicit RAG_PIPELINE=v2 without chosen languages is a knowledge-base outage, never a refusal.
-    const blocked = failure(collector, 'error', config.pipelineBlocked, null);
-    if (ownsTrace) finishTrace(collector, blocked, { query: input.query });
+    const blocked = withLogOutcome(failure(collector, 'error', config.pipelineBlocked, null), 'v2');
+    if (ownsTrace) finishTrace(collector, blocked, traceOptions(input));
     return blocked;
   }
   const result = await dispatchRetrieval(input, collector);
-  if (ownsTrace) finishTrace(collector, result, { query: input.query });
+  if (ownsTrace) finishTrace(collector, result, traceOptions(input));
   return result;
+}
+
+function traceOptions(input: RunRetrievalInput): FinishTraceOptions {
+  return { query: input.query, ...(input.logContext !== undefined ? { logContext: input.logContext } : {}) };
 }
 
 const V2_PROFILES: readonly Profile[] = ['chat', 'embed', 'eval', 'voice'];
@@ -830,17 +845,17 @@ async function dispatchRetrieval(input: RunRetrievalInput, collector: TraceColle
   if (evalBindingOverride && (!eligible || !loadRagConfig(getRagDeps().ragEnv()).v2.domainEmbeddings.enabled)) {
     return failure(collector, 'error', DOMAIN_EMBEDDINGS_DISABLED, null);
   }
-  if (!eligible) return runLegacyPipeline(input, collector);
+  if (!eligible) return withLogOutcome(await runLegacyPipeline(input, collector), 'legacy');
 
   const effective = resolveEffectivePipeline();
   if (evalBindingOverride && effective.pipeline === 'legacy') return failure(collector, 'error', DOMAIN_EMBEDDINGS_DISABLED, null);
   if (effective.pipeline === 'legacy') {
     if (effective.fallback !== 'none') recordPipelineFallback(collector, effective.fallback);
-    return runLegacyPipeline(input, collector);
+    return withLogOutcome(await runLegacyPipeline(input, collector), 'legacy');
   }
 
   const { runV2Pipeline } = await import('./v2/pipeline');
-  if (effective.source === 'explicit') return runV2Pipeline(input, collector);
+  if (effective.source === 'explicit') return withLogOutcome(await runV2Pipeline(input, collector), 'v2');
 
   // A defaulted v2 may find the Phase 4 functions missing: that attempt is discarded and the same input re-runs on legacy.
   const attempt = bufferedCollector(collector);
@@ -851,10 +866,10 @@ async function dispatchRetrieval(input: RunRetrievalInput, collector: TraceColle
       return failure(collector, 'error', DOMAIN_EMBEDDINGS_DISABLED, null);
     }
     recordPipelineFallback(collector, V2_UNAVAILABLE);
-    return runLegacyPipeline(input, collector);
+    return withLogOutcome(await runLegacyPipeline(input, collector), 'legacy');
   }
   attempt.commit();
-  return { ...result, stages: collector.stages() };
+  return withLogOutcome({ ...result, stages: collector.stages() }, 'v2');
 }
 
 async function runPipeline(input: RunRetrievalInput, collector: TraceCollector): Promise<RetrievalResult> {
