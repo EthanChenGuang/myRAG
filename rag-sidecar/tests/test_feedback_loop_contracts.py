@@ -536,6 +536,39 @@ def test_report_contracts_have_no_text_fields(model):
     assert "tenant_key" not in names
 
 
+def test_every_new_contract_forbids_unknown_fields_and_is_frozen():
+    samples = build_samples()["samples"]
+    for model in (
+        RetrievalLogCandidate,
+        RetrievalLogEntry,
+        RefusalFeedbackRequest,
+        EmbedFeedbackRequest,
+        SourceSignalRequest,
+        ReviewItem,
+        ReviewItemListResponse,
+        ExpertLabel,
+        ExpertEvidenceSpan,
+        DictionaryTerm,
+        DictionaryCandidate,
+        TrainingPair,
+        TrainingPositive,
+        TrainingNegative,
+        FeedbackMiningConfig,
+        MiningRunResult,
+        FeedbackLoopStats,
+        WeeklyReport,
+        FailureReport,
+        FailureEntry,
+        GatePopulationConfig,
+        ShipCheckResult,
+    ):
+        sample = samples[model.__name__]
+        instance = model.model_validate(sample)
+        assert instance.model_dump(mode="json") == sample
+        with pytest.raises(ValidationError):
+            model.model_validate({**sample, "unexpected_key": 1})
+
+
 # --- Existing contracts ------------------------------------------------------------------------
 
 
@@ -652,3 +685,44 @@ def test_committed_golden_items_keep_their_bytes():
         dumped = item.model_dump(mode="json")
         assert all("document_id" not in span for span in dumped["gold_evidence"])
         assert dumped["gold_evidence"] == raw.get("gold_evidence", [])
+
+
+def test_new_models_are_registered_for_export():
+    from rag_sidecar.export_schemas import CONTRACTS
+
+    registered = {model.__name__ for model, _ in CONTRACTS}
+    assert {
+        "RetrievalLogCandidate",
+        "RetrievalLogEntry",
+        "RefusalFeedbackRequest",
+        "EmbedFeedbackRequest",
+        "SourceSignalRequest",
+        "ReviewItem",
+        "ReviewItemListResponse",
+        "ExpertLabel",
+        "ExpertEvidenceSpan",
+        "DictionaryTerm",
+        "DictionaryCandidate",
+        "TrainingPair",
+        "TrainingPositive",
+        "TrainingNegative",
+        "FeedbackMiningConfig",
+        "MiningRunResult",
+        "FeedbackLoopStats",
+        "WeeklyReport",
+        "FailureReport",
+        "FailureEntry",
+        "GatePopulationConfig",
+        "ShipCheckResult",
+    } <= registered
+
+
+def test_samples_use_codes_and_placeholders():
+    samples = build_samples()["samples"]
+    entry = samples["RetrievalLogEntry"]
+    assert entry["query_language"] and entry["answer_language"] and entry["chunk_languages"]
+    assert entry["query_language_confidence"] is not None
+    item = samples["ReviewItem"]
+    assert len(item["tags"]) == 1
+    assert item["chunk_languages"] and item["query_language"]
+    assert all("document_id" not in span for span in samples["GoldenItem"]["gold_evidence"])
