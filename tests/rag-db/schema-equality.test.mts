@@ -315,7 +315,7 @@ async function assertAnswerRecordsSecured(db: PGlite, mode: DeploymentMode): Pro
      WHERE a.attrelid = 'public.rag_answer_records'::regclass AND a.attname = 'tenant_key'`,
   );
   assert.equal(tenantKey.rows[0]?.generated, 's', 'tenant_key is a stored generated column');
-  assert.match(String(tenantKey.rows[0]?.expr), ANSWER_RECORD_TENANT_KEY[mode], `tenant_key uses the ${mode} expression`);
+  assert.match(String(tenantKey.rows[0]?.expr).replace(/\s+/g, ' ').trim(), ANSWER_RECORD_TENANT_KEY[mode], `tenant_key uses the ${mode} expression`);
   const privileges = ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER'];
   const held = await db.query<{ role: string; privilege: string }>(
     `SELECT r.role, p.privilege FROM unnest(ARRAY['anon', 'authenticated', 'service_role']) AS r(role), unnest($1::text[]) AS p(privilege)
