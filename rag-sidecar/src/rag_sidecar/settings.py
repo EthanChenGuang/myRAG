@@ -24,6 +24,8 @@ APP_INTERNAL_URL_ENV_VAR = "RAG_APP_INTERNAL_URL"
 VECTARA_API_KEY_ENV_VAR = "VECTARA_API_KEY"
 VECTARA_BASE_URL_ENV_VAR = "VECTARA_BASE_URL"
 HHEM_MODEL_REVISION_ENV_VAR = "HHEM_MODEL_REVISION"
+PROMPT_GUARD_ENABLED_ENV_VAR = "PROMPT_GUARD_ENABLED"
+PROMPT_GUARD_MODEL_DIR_ENV_VAR = "PROMPT_GUARD_MODEL_DIR"
 DEFAULT_VECTARA_BASE_URL = "https://api.vectara.io"
 DEFAULT_HHEM_MODEL_REVISION = "de9a5e6ba9ba49531a022dba17e35ffeb2a6fad8"
 
@@ -181,4 +183,7 @@ def load_settings() -> SidecarSettings:
     values["vectara_base_url"] = vectara_base or DEFAULT_VECTARA_BASE_URL
     revision = (os.environ.get(HHEM_MODEL_REVISION_ENV_VAR) or "").strip()
     values["hhem_model_revision"] = revision or DEFAULT_HHEM_MODEL_REVISION
+    values["prompt_guard_enabled"] = (os.environ.get(PROMPT_GUARD_ENABLED_ENV_VAR) or "").strip().lower() == "true"
+    model_dir = (os.environ.get(PROMPT_GUARD_MODEL_DIR_ENV_VAR) or "").strip()
+    values["prompt_guard_model_dir"] = model_dir or None
     return SidecarSettings(**values)
