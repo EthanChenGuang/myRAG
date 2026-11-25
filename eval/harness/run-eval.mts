@@ -61,6 +61,8 @@ export interface InProcessEval {
   fixtureDb: import('@electric-sql/pglite').PGlite;
   /** Set when the session was prepared for table_split items (ingest mode only). */
   tableSplitTenants?: TableSplitTenant[];
+  /** Ingest mode only: golden corpus document id to the id of the document the build wrote from the same file. */
+  ingestDocumentIds?: ReadonlyMap<string, string>;
   fixtureUserId: string;
   corpusSha256: string;
   sqlSha256: Record<string, string>;
@@ -124,15 +126,33 @@ export class UnmappedFilterDocumentIdError extends Error {
   }
 }
 
+/**
+ * The request options of one item. With `ingestDocumentIds` (ingest mode), every `retrieval_filters.document_ids` value is replaced by
+ * the id of the document ingest mode wrote from the same corpus file; an id without one throws, so a filter is never dropped and an item
+ * never runs unfiltered. Without it (prechunked mode) the golden ids are sent unchanged.
+ */
 export function itemRequestOptions(
   base: EvalRequestOptions,
   item: GoldenItem,
-  _ingestDocumentIds?: ReadonlyMap<string, string>,
+  ingestDocumentIds?: ReadonlyMap<string, string>,
 ): EvalRequestOptions {
   const options: EvalRequestOptions = { ...base };
-  if (item.retrieval_filters) options.retrieval_filters = item.retrieval_filters;
+  const filters = item.retrieval_filters;
+  if (!filters) return options;
+  if (ingestDocumentIds === undefined || !filters.document_ids) {
+    options.retrieval_filters = filters;
+    return options;
+  }
+  const documentIds = filters.document_ids.map((id) => {
+    const mapped = ingestDocumentIds.get(id);
+    if (mapped === undefined) throw new UnmappedFilterDocumentIdError(item.id, id);
+    return mapped;
+  });
+  options.retrieval_filters = { ...filters, document_ids: documentIds };
   return options;
 }
+
+const NO_INGEST_DOCUMENT_IDS: ReadonlyMap<string, string> = new Map();
 
 const INJECTION_CATEGORIES: ReadonlySet<string> = new Set(['injection', 'injection_evasive']);
 
@@ -305,6 +325,7 @@ export async function prepareInProcessEval(options: {
     edge: startedEdge,
     fixtureDb: fixture.db,
     ...(fixture.tableSplitTenants ? { tableSplitTenants: fixture.tableSplitTenants } : {}),
+    ...(fixtureMode === 'ingest' ? { ingestDocumentIds: new Map(Object.entries(fixture.ingestDocumentIds ?? {})) } : {}),
     fixtureUserId: fixture.fixtureUserId,
     corpusSha256: fixture.corpusSha256,
     sqlSha256: fixture.sqlSha256,
@@ -575,7 +596,14 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     }
     // Ingest mode routes by category: the other items first, exactly as before, then each table_split item against its tenant.
     for (const item of [...routed.main, ...routed.tableSplit]) {
-      const options = itemRequestOptions(requestOptions, item);
+      // Ingest mode: filter ids name the documents the build wrote; the table_split tenants have no map, so their filters fail closed.
+      const documentIds =
+        fixtureMode === 'ingest'
+          ? isTableSplitItem(item)
+            ? NO_INGEST_DOCUMENT_IDS
+            : (inProcess?.ingestDocumentIds ?? NO_INGEST_DOCUMENT_IDS)
+          : undefined;
+      const options = itemRequestOptions(requestOptions, item, documentIds);
       if (inProcess && deploymentMode === 'multi-tenant' && !options.user_id) {
         options.user_id = inProcess.fixtureUserId;
       }
