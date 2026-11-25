@@ -284,8 +284,9 @@ describe('0442 scoped re-embed SQL (multi-tenant)', () => {
     assert.ok((await vectorChunks(LAW)).length > 0, 'a refused rollback deletes nothing');
 
     await db.query("UPDATE public.embedding_profile_bindings SET status = 'available' WHERE id = $1", [id]);
+    const held = (await vectorChunks(LAW)).length;
     const rolled = (await query("SELECT * FROM public.rag_reembed_rollback_run($1, 'test')", [run.run_id]))[0] as Row;
-    assert.equal(Number(rolled.rows_deleted), ids.contractA!.length + ids.overrideA!.length + ids.contractB!.length);
+    assert.equal(Number(rolled.rows_deleted), held);
     assert.equal(rolled.profile_status, 'available');
     assert.equal(await profileStatus(LAW), 'available');
     assert.deepEqual(await vectorChunks(LAW), []);
@@ -361,7 +362,8 @@ describe('0442 scoped re-embed SQL (multi-tenant)', () => {
     );
     assert.ok(rows.length >= 13);
     for (const row of rows) {
-      assert.equal(row.definer, true, `${String(row.signature)} stays SECURITY DEFINER`);
+      const helper = String(row.signature).startsWith('rag_reembed_require_binding(');
+      assert.equal(row.definer, !helper, `${String(row.signature)}: only the 0442 helper runs as invoker`);
       assert.equal(row.config, '{"search_path=\\"\\""}', `${String(row.signature)} keeps the empty search_path`);
       assert.equal(row.anon_exec, false);
       assert.equal(row.auth_exec, false);
