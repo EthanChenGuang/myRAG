@@ -138,6 +138,8 @@ class SidecarScorer:
         if not base_url:
             raise CalibrationError(f"the sidecar scorer needs a base URL (--sidecar-url or {URL_ENV_VAR})")
         resolved = secret if secret is not None else os.environ.get(SECRET_ENV_VAR, "")
+        if not resolved:
+            raise CalibrationError(f"the sidecar scorer needs {SECRET_ENV_VAR} in the environment")
         self.allow_vectara = allow_vectara
         self._client = httpx.Client(
             base_url=base_url.rstrip("/"),
@@ -153,6 +155,8 @@ class SidecarScorer:
             response = self._client.post(SIDECAR_PATH, json=request.model_dump(mode="json"))
         except httpx.HTTPError as exc:
             raise CalibrationError(f"sidecar request {request.request_id} failed: {type(exc).__name__}") from exc
+        if response.status_code != 200:
+            raise CalibrationError(f"sidecar returned HTTP {response.status_code} for {request.request_id}")
         try:
             return GroundednessResult.model_validate(response.json())
         except (ValueError, ValidationError) as exc:
@@ -316,7 +320,7 @@ def calibrate_cells(rows: Sequence[ScoredRow], *, now: str) -> list[CellRecord]:
             records.append(CellRecord(status=fit.status, cell=_default_cell(*key), dev=fit.dev))
             continue
         holdout = holdout_check(fit, test_rows)
-        if False:
+        if holdout.status == "calibrated":
             cell = GroundednessThresholdCell(
                 scorer=fit.scorer,  # type: ignore[arg-type]
                 language=fit.language,
@@ -444,9 +448,13 @@ def run_groundedness_calibration(
 ) -> GroundednessCalibrationResult:
     pairs_path = Path(pairs)
     out_dir = Path(out)
+    _check_out_dir(out_dir)
     fixture = is_fixture_pairs(pairs_path)
     if write is not None:
-        pass
+        if not scorer.live:
+            raise CalibrationError("refusing to write thresholds from an offline stub scorer; run with --scorer sidecar")
+        if fixture:
+            raise CalibrationError("refusing to write thresholds from the synthetic fixture pairs; pass a real labelled pairs file")
     existing = GroundednessThresholds(cells=[])
     if write is not None and Path(write).is_file():
         try:
