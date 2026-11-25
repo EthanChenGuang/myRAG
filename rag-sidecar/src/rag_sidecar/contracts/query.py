@@ -3,8 +3,7 @@ from typing import Literal
 
 from pydantic import Field, model_validator
 
-from rag_sidecar.contracts.golden import _Contract
-from rag_sidecar.contracts.retrieval import ConfigProvenance
+from rag_sidecar.contracts.retrieval import ConfigProvenance, _Contract
 
 Lang = Literal["zh", "en", "it"]
 Transform = Literal["condense_history", "normalize_dates", "decompose", "expand", "translate"]

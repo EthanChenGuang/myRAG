@@ -1,8 +1,9 @@
-from typing import Annotated, Literal
+from typing import Annotated, Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from rag_sidecar.contracts.answers import AnswerGroundedness, CitationRecord, CitationStrategy
+from rag_sidecar.contracts.query import QueryFramework, QueryParamsOverride, QueryPlan, QueryTransformToggles
 from rag_sidecar.contracts.retrieval import ChunkingProfile, RetrievalFilters, RetrievalOverrides
 
 
@@ -26,7 +27,18 @@ StageName = Literal[
     "voice_keyword_fallback",
     "local_rerank",
     "injection_check",
+    "query_gate",
+    "condense",
+    "normalize_dates",
+    "expand",
+    "hyde",
+    "decompose",
+    "semantic_cache",
 ]
+
+STAGE_COUNT = len(get_args(StageName))
+
+SemanticCacheBackend = Literal["off", "pgvector", "redisvl"]
 
 _TimeoutMs = Annotated[int, Field(ge=1, le=60000)]
 
@@ -42,6 +54,13 @@ class StageTimeoutsMs(_Contract):
     voice_keyword_fallback: _TimeoutMs | None = None
     local_rerank: _TimeoutMs | None = None
     injection_check: _TimeoutMs | None = None
+    query_gate: _TimeoutMs | None = None
+    condense: _TimeoutMs | None = None
+    normalize_dates: _TimeoutMs | None = None
+    expand: _TimeoutMs | None = None
+    hyde: _TimeoutMs | None = None
+    decompose: _TimeoutMs | None = None
+    semantic_cache: _TimeoutMs | None = None
 
 
 class RagRunOptions(_Contract):
@@ -50,13 +69,19 @@ class RagRunOptions(_Contract):
     user_id: str | None = None
     generator_model: str | None = None
     degrade: Literal["drop_top_candidate"] | None = None
-    disabled_stages: list[StageName] | None = Field(default=None, max_length=10)
+    disabled_stages: list[StageName] | None = Field(default=None, max_length=STAGE_COUNT)
     stage_timeouts_ms: StageTimeoutsMs | None = None
     embedding_profile: str | None = None
     retrieval_overrides: RetrievalOverrides | None = None
     retrieval_filters: RetrievalFilters | None = None
     citations: bool = False
     groundedness: bool = False
+    query_framework: QueryFramework | None = None
+    query_layer: bool | None = None
+    query_transforms: QueryTransformToggles | None = None
+    semantic_cache: SemanticCacheBackend | None = None
+    query_params: QueryParamsOverride | None = None
+    cache_seed_answer: str | None = Field(default=None, min_length=1, max_length=4000)
 
 
 class RagRunRequest(_Contract):
@@ -182,6 +207,7 @@ class RagTrace(_Contract):
     query_context: TraceQueryContext
     retrieval_strategy: str
     query_transforms: list[TraceQueryTransform] = Field(default_factory=list)
+    query_plan: QueryPlan | None = None
     candidates: list[TraceCandidate]
     kept: list[TraceKeptChunk]
     used_documents: list[TraceUsedDocument]

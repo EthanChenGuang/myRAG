@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Callable, TypeVar
 
 from pydantic import BaseModel, ValidationError
+from rag_sidecar.contracts.query import QueryParams
 from rag_sidecar.contracts.retrieval import (
     ChunkingSweepReport,
     ConfigProvenance,
@@ -24,6 +25,7 @@ T = TypeVar("T", bound=BaseModel)
 
 CONFIG_TARGETS: list[tuple[str, type[BaseModel], Callable[[], BaseModel]]] = [
     ("eval/config/retrieval-params.json", RetrievalParams, RetrievalParams),
+    ("eval/config/query-params.json", QueryParams, QueryParams),
     ("eval/config/refusal-thresholds.json", RefusalThresholds, lambda: RefusalThresholds(cells=[])),
     ("eval/config/refusal-calibration.json", RefusalCalibrationConfig, RefusalCalibrationConfig),
     (
@@ -89,7 +91,7 @@ def init_configs() -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="rag_eval.config_files", description="myRAG eval config writers")
     commands = parser.add_subparsers(dest="command", required=True)
-    commands.add_parser("init", help="write the default Phase 4 config files when missing or still at defaults")
+    commands.add_parser("init", help="write the default Phase 4 and Phase 6 config files when missing or still at defaults")
     args = parser.parse_args(argv)
     if args.command == "init":
         return init_configs()

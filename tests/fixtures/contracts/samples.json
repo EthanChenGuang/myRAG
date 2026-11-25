@@ -180,6 +180,7 @@
         }
       },
       "request_options": {
+        "cache_seed_answer": null,
         "citations": false,
         "degrade": null,
         "disabled_stages": null,
@@ -188,8 +189,13 @@
         "groundedness": false,
         "max_results": 10,
         "organization_id": null,
+        "query_framework": null,
+        "query_layer": null,
+        "query_params": null,
+        "query_transforms": null,
         "retrieval_filters": null,
         "retrieval_overrides": null,
+        "semantic_cache": null,
         "stage_timeouts_ms": null,
         "user_id": null
       },
@@ -1285,6 +1291,7 @@
       },
       "raw_invalid_markers": 1,
       "request_options": {
+        "cache_seed_answer": null,
         "citations": false,
         "degrade": null,
         "disabled_stages": null,
@@ -1293,8 +1300,13 @@
         "groundedness": false,
         "max_results": 10,
         "organization_id": null,
+        "query_framework": null,
+        "query_layer": null,
+        "query_params": null,
+        "query_transforms": null,
         "retrieval_filters": null,
         "retrieval_overrides": null,
+        "semantic_cache": null,
         "stage_timeouts_ms": null,
         "user_id": null
       },
@@ -2576,6 +2588,7 @@
       "include_answer": true,
       "item_id": "en-general-001",
       "options": {
+        "cache_seed_answer": null,
         "citations": false,
         "degrade": "drop_top_candidate",
         "disabled_stages": null,
@@ -2584,8 +2597,13 @@
         "groundedness": false,
         "max_results": 10,
         "organization_id": null,
+        "query_framework": null,
+        "query_layer": null,
+        "query_params": null,
+        "query_transforms": null,
         "retrieval_filters": null,
         "retrieval_overrides": null,
+        "semantic_cache": null,
         "stage_timeouts_ms": null,
         "user_id": null
       },
@@ -2686,6 +2704,7 @@
         "suggested_threshold": 0.3
       },
       "query_language": null,
+      "query_plan": null,
       "query_transforms": [
         {
           "kind": "rewrite",
@@ -2794,7 +2813,8 @@
       },
       "rerank_input_cap": 75,
       "rrf_k": 60,
-      "schema_version": 1
+      "schema_version": 1,
+      "sub_question_coverage": true
     },
     "ReviewQueueItem": {
       "answer_masked": "Twenty days per year.",
@@ -2836,6 +2856,7 @@
       "golden_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
       "item_count": 1,
       "request_options": {
+        "cache_seed_answer": null,
         "citations": false,
         "degrade": null,
         "disabled_stages": null,
@@ -2844,8 +2865,13 @@
         "groundedness": false,
         "max_results": 10,
         "organization_id": null,
+        "query_framework": null,
+        "query_layer": null,
+        "query_params": null,
+        "query_transforms": null,
         "retrieval_filters": null,
         "retrieval_overrides": null,
+        "semantic_cache": null,
         "stage_timeouts_ms": null,
         "user_id": null
       },
@@ -3311,6 +3337,7 @@
         },
         "raw_invalid_markers": 1,
         "request_options": {
+          "cache_seed_answer": null,
           "citations": false,
           "degrade": null,
           "disabled_stages": null,
@@ -3319,8 +3346,13 @@
           "groundedness": false,
           "max_results": 10,
           "organization_id": null,
+          "query_framework": null,
+          "query_layer": null,
+          "query_params": null,
+          "query_transforms": null,
           "retrieval_filters": null,
           "retrieval_overrides": null,
+          "semantic_cache": null,
           "stage_timeouts_ms": null,
           "user_id": null
         },
@@ -3617,6 +3649,7 @@
           "suggested_threshold": 0.3
         },
         "query_language": null,
+        "query_plan": null,
         "query_transforms": [
           {
             "kind": "rewrite",
@@ -3781,6 +3814,7 @@
           "suggested_threshold": 0.3
         },
         "query_language": null,
+        "query_plan": null,
         "query_transforms": [
           {
             "kind": "rewrite",
