@@ -1,10 +1,14 @@
 import { after, before, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { PGlite } from '@electric-sql/pglite';
 import { embedText } from '../../eval/harness/fixture-embedder.mts';
 import { TWO_TENANT_IDS, createTwoTenantDatabase, type TwoTenantDatabase } from '../../eval/harness/two-tenant.mts';
 
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const LEGACY = 'openai-3-small-1536';
 
 type Row = Record<string, unknown>;
@@ -302,5 +306,109 @@ describe('hybrid_search_chunks filters (D-05, DATA-08, DATA-09)', () => {
     });
     assert.ok(dated.some((row) => row.chunk_id === c2legacy));
     assert.ok(!dated.some((row) => row.document_id === c1));
+  });
+});
+describe('hybrid_search_chunks und language rule (0802, D-14)', () => {
+  let fixture: TwoTenantDatabase;
+  let db: TwoTenantDatabase['db'];
+  const tenant = `u:${TWO_TENANT_IDS.userA}`;
+  const ids = { itChunk: crypto.randomUUID(), undChunk: crypto.randomUUID(), nullChunk: crypto.randomUUID(), enChunk: crypto.randomUUID() };
+
+  before(async () => {
+    fixture = await createTwoTenantDatabase();
+    db = fixture.db;
+    const itDoc = crypto.randomUUID();
+    const nullDoc = crypto.randomUUID();
+    const enDoc = crypto.randomUUID();
+    const body = 'filter-term undrule shared sentence';
+    for (const [docId, language] of [
+      [itDoc, 'it'],
+      [nullDoc, null],
+      [enDoc, 'en'],
+    ] as const) {
+      await db.query('INSERT INTO documents (id, filename, content, user_id, language, is_current, status) VALUES ($1, $2, $3, $4, $5, true, $6)', [
+        docId,
+        `${docId}.md`,
+        body,
+        TWO_TENANT_IDS.userA,
+        language,
+        'ready',
+      ]);
+    }
+    for (const [chunkId, docId, language, text] of [
+      [ids.itChunk, itDoc, 'it', `${body} alpha`],
+      [ids.undChunk, itDoc, 'und', `${body} 101 202 303`],
+      [ids.nullChunk, nullDoc, null, `${body} beta`],
+      [ids.enChunk, enDoc, 'und', `${body} 404 505`],
+    ] as const) {
+      await db.query(
+        `INSERT INTO document_chunks (id, document_id, content, embedding, lexical_text, tenant_key, language, is_current, status)
+         VALUES ($1, $2, $3, $4::vector, $3, $5, $6, true, 'ready')`,
+        [chunkId, docId, text, vec(text), tenant, language],
+      );
+    }
+  });
+
+  after(async () => {
+    await db.close();
+  });
+
+  const legIds = (rows: Row[], leg: string): string[] => rows.filter((row) => row.leg === leg).map((row) => String(row.chunk_id));
+
+  test('dense leg: p_languages it returns the it chunk and the und chunk of an it document, not the null or the und chunk of an en document', async () => {
+    const got = legIds(await search(db, { tenantKey: tenant, tokens: ['undrule'], lexicalLimit: 0, p_languages: ['it'] }), 'dense');
+    assert.ok(got.includes(ids.itChunk), 'it chunk');
+    assert.ok(got.includes(ids.undChunk), 'und chunk of the it document');
+    assert.ok(!got.includes(ids.nullChunk), 'null-language chunk');
+    assert.ok(!got.includes(ids.enChunk), 'und chunk of the en document');
+  });
+
+  test('lexical leg: p_languages it applies the same rule', async () => {
+    const got = legIds(await search(db, { tenantKey: tenant, tokens: ['undrule'], denseLimit: 0, p_languages: ['it'] }), 'lexical');
+    assert.deepEqual(new Set(got), new Set([ids.itChunk, ids.undChunk]));
+  });
+
+  test('lexical leg: p_lexical_languages it applies the same rule and leaves the dense leg alone', async () => {
+    const rows = await search(db, { tenantKey: tenant, tokens: ['undrule'], p_lexical_languages: ['it'] });
+    assert.deepEqual(new Set(legIds(rows, 'lexical')), new Set([ids.itChunk, ids.undChunk]));
+    const dense = legIds(rows, 'dense');
+    assert.ok(dense.includes(ids.nullChunk) && dense.includes(ids.enChunk), 'dense leg unfiltered');
+  });
+
+  test('a null-language chunk matches no languages filter', async () => {
+    for (const languages of [['it'], ['en'], ['und'], ['it', 'en', 'zh']]) {
+      const rows = await search(db, { tenantKey: tenant, tokens: ['undrule'], p_languages: languages, p_lexical_languages: languages });
+      assert.ok(!rows.some((row) => row.chunk_id === ids.nullChunk), languages.join(','));
+    }
+  });
+
+  test('the 21 named arguments of 0602 return exactly what the 0602 function returns', async () => {
+    const calls: SearchOpts[] = [
+      { tenantKey: tenant },
+      { tenantKey: tenant, tokens: ['undrule'] },
+      { tenantKey: tenant, tokens: ['undrule'], p_languages: ['en'] },
+      { tenantKey: tenant, tokens: ['filter-term'], p_lexical_languages: ['en'], p_date_from: '2024-01-01' },
+      { tenantKey: `u:${TWO_TENANT_IDS.userB}`, tokens: ['filter-term'] },
+    ];
+    await db.query(`UPDATE document_chunks SET language = 'en' WHERE language = 'und'`);
+    try {
+      const current: Row[][] = [];
+      for (const call of calls) current.push(await search(db, call));
+      await db.exec(
+        'DROP FUNCTION public.hybrid_search_chunks(text, text, vector, text[], integer, integer, date, date, text[], uuid[], text[], text[], text, integer, text[], text, numeric, numeric, text, jsonb, boolean, text[], boolean, date)',
+      );
+      await db.exec(fs.readFileSync(path.join(REPO_ROOT, 'supabase/migrations/0602_hybrid_include_undated.sql'), 'utf8'));
+      try {
+        for (const [index, call] of calls.entries()) {
+          assert.deepEqual(await search(db, call), current[index], `call ${index}`);
+        }
+      } finally {
+        await db.exec(fs.readFileSync(path.join(REPO_ROOT, 'supabase/migrations/0802_hybrid_search_scopes_dates_und.sql'), 'utf8'));
+      }
+    } finally {
+      await db.query(`UPDATE document_chunks SET language = 'und' WHERE id = ANY($1::uuid[])`, [[ids.undChunk, ids.enChunk]]);
+    }
+    const count = await db.query<{ n: number }>("SELECT count(*)::int AS n FROM pg_proc WHERE proname = 'hybrid_search_chunks'");
+    assert.equal(count.rows[0]?.n, 1, 're-applying 0802 on top of 0602 leaves one function');
   });
 });

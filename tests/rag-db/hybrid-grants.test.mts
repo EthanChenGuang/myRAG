@@ -13,7 +13,11 @@ const ANON_KEY = 'fixture-anon-key-placeholder';
 const SERVICE_KEY = 'fixture-service-role-key-placeholder';
 const LEGACY = 'openai-3-small-1536';
 const SIGNATURE =
-  'public.hybrid_search_chunks(text, text, public.vector, text[], integer, integer, date, date, text[], uuid[], text[], text[], text, integer, text[], text, numeric, numeric, text, jsonb, boolean)';
+  'public.hybrid_search_chunks(text, text, public.vector, text[], integer, integer, date, date, text[], uuid[], text[], text[], text, integer, text[], text, numeric, numeric, text, jsonb, boolean, text[], boolean, date)';
+const OLD_SIGNATURES = [
+  'public.hybrid_search_chunks(text, text, public.vector, text[], integer, integer, date, date, text[], uuid[], text[], text[], text, integer, text[], text, numeric, numeric, text, jsonb)',
+  'public.hybrid_search_chunks(text, text, public.vector, text[], integer, integer, date, date, text[], uuid[], text[], text[], text, integer, text[], text, numeric, numeric, text, jsonb, boolean)',
+];
 const CALL =
   'SELECT 1 FROM hybrid_search_chunks(p_tenant_key => $1, p_profile_id => $2, p_query_embedding => $3::vector, p_lexical_tokens => $4::text[], p_dense_limit => 1, p_lexical_limit => 1, p_date_from => $5::date, p_date_to => $6::date, p_include_undated => true)';
 
@@ -84,9 +88,13 @@ for (const mode of ['multi-tenant', 'single-tenant'] as DeploymentMode[]) {
       assert.ok(Array.isArray(res.body));
     });
 
-    test('the 0602 signature is the only overload; only service_role may execute it', async () => {
+    test('the 0802 signature is the only overload; only service_role may execute it', async () => {
       const overloads = await db.query<{ n: number }>("SELECT count(*)::int AS n FROM pg_proc WHERE proname = 'hybrid_search_chunks'");
       assert.equal(overloads.rows[0]?.n, 1);
+      for (const old of OLD_SIGNATURES) {
+        const gone = await db.query<{ oid: string | null }>('SELECT to_regprocedure($1)::text AS oid', [old]);
+        assert.equal(gone.rows[0]?.oid, null, `${old} is dropped`);
+      }
       const privileges = await db.query<{ role: string; allowed: boolean }>(
         `SELECT r.role, has_function_privilege(r.role, $1, 'EXECUTE') AS allowed
          FROM unnest(ARRAY['anon', 'authenticated', 'service_role']) AS r(role)`,
@@ -100,7 +108,7 @@ for (const mode of ['multi-tenant', 'single-tenant'] as DeploymentMode[]) {
       assert.ok(!/(^|[{,])=X/.test(acl.rows[0]?.acl ?? ''), 'no PUBLIC execute');
     });
 
-    test('SET ROLE anon and authenticated get 42501 on the 0602 signature; service_role succeeds', async () => {
+    test('SET ROLE anon and authenticated get 42501 on the 0802 signature; service_role succeeds', async () => {
       const params = [tenant, LEGACY, vec(), ['refund'], '2024-01-01', '2024-12-31'];
       for (const role of ['anon', 'authenticated'] as const) {
         await db.exec(`SET ROLE ${role}`);
