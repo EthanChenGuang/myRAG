@@ -13,7 +13,7 @@ import { buildQueryPlan, planToVariants, type SkippedTransform } from './plan';
 import { effectiveQueryParams } from './query-params';
 import { needsRewrite, type GateResult } from './rewrite-gate';
 import { routeTransforms, type RoutedTransform, type RoutedTransforms } from './router';
-import { getQueryTransformer, type DecomposeResult, type ExpandResult, type HydeResult, type QueryTransformer } from './transformer';
+import { getQueryTransformer, type CondenseResult, type DecomposeResult, type ExpandResult, type HydeResult, type QueryTransformer } from './transformer';
 
 export type QueryLayerShortCircuit = { kind: 'small_talk' } | { kind: 'cache_hit' };
 
@@ -257,7 +257,7 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
 
   let condensed: string | null = null;
   if (routed.has('condense')) {
-    const outcome = await runTransform(
+    const outcome = await runTransform<CondenseResult>(
       {
         spec: transformSpec('condense'),
         request: signal,
