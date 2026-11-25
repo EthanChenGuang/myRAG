@@ -102,3 +102,43 @@ describe('optional and defaulted fields', () => {
     expect(schemaFor('RagRunRequest').safeParse({ query: '' }).success).toBe(false);
   });
 });
+
+describe('Phase 3.2 scope filter and translation leg weight (plan 03.2-06)', () => {
+  const filters = () => schemaFor('RetrievalFilters');
+
+  it('the generated filter schema accepts a scopes filter with includeUntagged', () => {
+    const result = filters().safeParse({
+      ...fixture.samples.RetrievalFilters,
+      scopes: { region: ['north'], legal_entity: ['unit-a'], department: ['unit-b'] },
+      include_untagged: true,
+    });
+    expect(result.success).toBe(true);
+    expect(result.data.scopes).toEqual({ region: ['north'], legal_entity: ['unit-a'], department: ['unit-b'] });
+    expect(result.data.include_untagged).toBe(true);
+  });
+
+  it('the generated filter schema rejects a fourth dimension and a non-slug value', () => {
+    expect(filters().safeParse({ scopes: { region: ['north'], project: ['north'] } }).success).toBe(false);
+    expect(filters().safeParse({ scopes: { region: ['North'] } }).success).toBe(false);
+  });
+
+  it('a filter without scopes parses without adding scope keys', () => {
+    const result = filters().safeParse(fixture.samples.RetrievalFilters);
+    expect(result.success).toBe(true);
+    expect(result.data).not.toHaveProperty('scopes');
+    expect(result.data).not.toHaveProperty('include_untagged');
+  });
+
+  it('leg weights accept an optional translation weight and omit it by default', () => {
+    const params = schemaFor('RetrievalParams');
+    const withTranslation = params.safeParse({
+      ...fixture.samples.RetrievalParams,
+      leg_weights: { dense: 1, lexical: 1, exact_id: 1, translation: 0.5 },
+    });
+    expect(withTranslation.success).toBe(true);
+    expect(withTranslation.data.leg_weights.translation).toBe(0.5);
+    const plain = params.safeParse(fixture.samples.RetrievalParams);
+    expect(plain.data.leg_weights).not.toHaveProperty('translation');
+    expect(fixture.variants['RetrievalFilters:scopes']?.model).toBe('RetrievalFilters');
+  });
+});
