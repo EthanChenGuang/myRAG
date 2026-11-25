@@ -11,7 +11,9 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validat
 
 from rag_sidecar.contracts.ingest import DocType
 
-FilterLanguage = Literal["zh", "en", "it"]
+from .languages import Language
+
+FilterLanguage = Language
 
 Pairing = Literal["same", "cross"]
 RefusalCellStatus = Literal["calibrated", "uncalibrated", "insufficient_data", "failed_holdout"]
@@ -158,7 +160,7 @@ class RetrievalFilters(_Contract):
 
     @field_validator("languages", mode="after")
     @classmethod
-    def _non_empty_languages(cls, value: list[Language] | None) -> list[Language] | None:
+    def _non_empty_languages(cls, value: list[FilterLanguage] | None) -> list[FilterLanguage] | None:
         return _reject_empty_list(value, "languages")  # type: ignore[return-value]
 
 
