@@ -347,3 +347,213 @@ describe('runSearchStages', () => {
     expect(dedupe?.counts?.rerank_input).toBe(75);
   });
 });
+describe('runSearchStages binding legs', () => {
+  const LAW = 'voyage-law-2-1024';
+  const lawProfile = {
+    id: LAW,
+    provider: 'voyage',
+    model: 'voyage-law-2',
+    dims: 3,
+    storage: 'halfvec' as const,
+    status: 'available' as const,
+    queryInstruction: null,
+    scoreCalibration: {},
+    activatedAt: null,
+    activatedBy: null,
+    previousActiveId: null,
+    hasEvidence: true,
+  };
+
+  interface Call {
+    profile: string;
+    docTypes: string[] | undefined;
+    lexicalLimit: number;
+    lexicalTokens: string[];
+    denseLimit: number;
+    tenant: unknown;
+  }
+
+  function routedBackend(calls: Call[]): RetrievalBackend {
+    return {
+      id: 'pgvector',
+      async search(req) {
+        calls.push({
+          profile: req.embeddingProfileId,
+          docTypes: req.filters.docTypes,
+          lexicalLimit: req.lexicalLimit,
+          lexicalTokens: req.lexicalTokens,
+          denseLimit: req.denseLimit,
+          tenant: req.scope,
+        });
+        if (req.embeddingProfileId === LAW) {
+          return { dense: [hit('b', { rank: 1, similarity: 0.41 }), hit('z', { rank: 2, similarity: 0.4 })], lexical: [] };
+        }
+        return denseLexical(['a', 'b', 'c'], ['c', 'd']);
+      },
+      health: async () => ({ ok: true }),
+      isReady: async () => true,
+    };
+  }
+
+  async function run(bindings?: Parameters<typeof runSearchStages>[0]['bindings']) {
+    const cfg = config();
+    const params = effectiveRetrievalParams('chat', cfg, null);
+    const calls: Call[] = [];
+    setRetrievalBackendForTests(routedBackend(calls));
+    const { embedder } = fakeEmbedder();
+    installDeps({ embedder, ragEnv: () => ({ RAG_PIPELINE: 'v2', RAG_LEXICAL_SEARCH: 'true' }) });
+    await verifyV2Startup();
+    const collector = createTraceCollector({ profile: 'chat', tenantKey: 's:default' });
+    const output = await runSearchStages({
+      input: { scope, query: 'neutral sample question', profile: 'chat', signal: new AbortController().signal },
+      scope,
+      config: cfg,
+      profile: 'chat',
+      params,
+      embedding: { vector: [0.1, 0.2, 0.3], profile: null },
+      signal: new AbortController().signal,
+      collector,
+      ...(bindings ? { bindings } : {}),
+    });
+    const stages = collector.stages().map((row) => ({
+      name: row.name,
+      status: row.status,
+      counts: row.counts,
+      detail: row.detail,
+      candidatesOut: row.candidatesOut,
+    }));
+    const fused = output.fusedHits.map((row) => ({ id: row.hit.chunkId, score: row.score, similarity: row.hit.similarity, ranks: row.ranks }));
+    return { calls: calls.map(({ tenant: _tenant, ...rest }) => rest), tenants: calls.map((call) => call.tenant), fused, stages };
+  }
+
+  it('with no binding work the calls, fused output and trace match the recorded pre-binding snapshot', async () => {
+    const off = await run();
+    expect(off).toMatchInlineSnapshot(`
+      {
+        "calls": [
+          {
+            "denseLimit": 75,
+            "docTypes": undefined,
+            "lexicalLimit": 75,
+            "lexicalTokens": [
+              "neutral",
+              "sample",
+              "question",
+            ],
+            "profile": "openai-3-small-1536",
+          },
+        ],
+        "fused": [
+          {
+            "id": "c",
+            "ranks": {
+              "dense:0": 3,
+              "lexical:0": 1,
+            },
+            "score": 0.032266458495966696,
+            "similarity": 0.88,
+          },
+          {
+            "id": "a",
+            "ranks": {
+              "dense:0": 1,
+            },
+            "score": 0.01639344262295082,
+            "similarity": 0.9,
+          },
+          {
+            "id": "b",
+            "ranks": {
+              "dense:0": 2,
+            },
+            "score": 0.016129032258064516,
+            "similarity": 0.89,
+          },
+          {
+            "id": "d",
+            "ranks": {
+              "lexical:0": 2,
+            },
+            "score": 0.016129032258064516,
+            "similarity": null,
+          },
+        ],
+        "stages": [
+          {
+            "candidatesOut": undefined,
+            "counts": {
+              "dense": 3,
+              "lexical": 2,
+            },
+            "detail": undefined,
+            "name": "search",
+            "status": "ok",
+          },
+          {
+            "candidatesOut": undefined,
+            "counts": undefined,
+            "detail": undefined,
+            "name": "fuse",
+            "status": "ok",
+          },
+          {
+            "candidatesOut": undefined,
+            "counts": {
+              "candidates_in": 4,
+              "capped_from": 4,
+              "deduped": 0,
+              "rerank_input": 4,
+            },
+            "detail": undefined,
+            "name": "dedupe",
+            "status": "ok",
+          },
+        ],
+        "tenants": [
+          {
+            "kind": "single",
+            "organizationId": null,
+            "userId": null,
+          },
+        ],
+      }
+    `);
+    const emptyPlan = await run({ plan: { legs: [], controlLeg: null, failures: [] }, embeds: [] });
+    expect(emptyPlan).toEqual(off);
+  });
+
+  it('a fresh binding adds one backend call and a dense_domain list; shared chunks keep the global similarity', async () => {
+    const off = await run();
+    const on = await run({
+      plan: { legs: [{ docType: 'contract_legal', profileId: LAW, profile: lawProfile, source: 'binding' }], controlLeg: null, failures: [] },
+      embeds: [Promise.resolve({ vector: [0.3, 0.2, 0.1] })],
+    });
+    expect(on.calls).toHaveLength(off.calls.length + 1);
+    expect(on.calls.at(-1)).toEqual({ profile: LAW, docTypes: ['contract_legal'], lexicalLimit: 0, lexicalTokens: [], denseLimit: expect.any(Number) });
+    expect(on.tenants.every((tenant) => tenant === scope)).toBe(true);
+    const z = on.fused.find((row) => row.id === 'z');
+    expect(z?.similarity).toBeNull();
+    expect(z?.ranks).toEqual({ 'dense_domain:contract_legal': 2 });
+    const b = on.fused.find((row) => row.id === 'b');
+    const offB = off.fused.find((row) => row.id === 'b');
+    expect(b?.similarity).toBe(offB?.similarity);
+    expect(b?.ranks['dense_domain:contract_legal']).toBe(1);
+    const search = on.stages.find((row) => row.name === 'search');
+    expect(search?.status).toBe('ok');
+    expect(search?.counts).toMatchObject({ domain: 2 });
+  });
+
+  it('a binding embed timeout degrades the search stage and leaves the fused output as with no binding', async () => {
+    const off = await run();
+    const timedOut = await run({
+      plan: { legs: [{ docType: 'contract_legal', profileId: LAW, profile: lawProfile, source: 'binding' }], controlLeg: null, failures: [] },
+      embeds: [Promise.resolve({ failure: 'timeout' })],
+    });
+    expect(timedOut.fused).toEqual(off.fused);
+    expect(timedOut.calls).toEqual(off.calls);
+    const search = timedOut.stages.find((row) => row.name === 'search');
+    expect(search?.status).toBe('degraded');
+    expect(search?.detail).toBe('binding_leg_timeout:contract_legal');
+    expect(search?.counts).toMatchObject({ domain: 0 });
+  });
+});
