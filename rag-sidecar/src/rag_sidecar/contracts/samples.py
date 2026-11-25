@@ -134,7 +134,7 @@ from rag_sidecar.contracts.cache import (
     SemanticCacheCalibration,
     SemanticCacheProfileCalibration,
 )
-from rag_sidecar.contracts.languages import load_language_registry
+from rag_sidecar.contracts.languages import LANGUAGE_CODES, load_language_registry
 from rag_sidecar.contracts.latency import GroundednessBudgets, ScorerBudget
 from rag_sidecar.contracts.parse_eval import (
     DuplicateCounts,
@@ -523,7 +523,7 @@ def _processing_profile(doc_type: str) -> ProcessingProfile:
                     "heading_hierarchy": True,
                     "generate_picture_images": True,
                 },
-                "ocr_languages": ["zh", "en", "it"],
+                "ocr_languages": list(LANGUAGE_CODES),
             },
             "chunker": {
                 "kind": "legal_clauses" if legal else "markdown_sections",
@@ -1396,7 +1396,7 @@ def _models() -> dict[str, Any]:
                 heading_hierarchy=True,
                 generate_picture_images=True,
             ),
-            ocr_languages=["zh", "en", "it"],
+            ocr_languages=list(LANGUAGE_CODES),
             tokenizer="cl100k_base",
             max_tokens=512,
             repeat_table_header=True,

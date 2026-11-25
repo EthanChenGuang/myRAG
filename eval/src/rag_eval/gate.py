@@ -1,12 +1,11 @@
 import argparse
 import sys
 from pathlib import Path
-from typing import get_args
 
 from pydantic import ValidationError
 from rag_sidecar.contracts.baseline import Baseline, GateOffender, GateResult, NoiseConfig, PairedReport
 from rag_sidecar.contracts.eval_run import RagRunOptions
-from rag_sidecar.contracts.golden import Language
+from rag_sidecar.contracts.languages import LANGUAGE_CODES
 from rag_sidecar.contracts.report import EvalReport, InjectionReport, MetricValue, SliceMetrics
 
 from rag_eval.paired import is_gated_slice, paired_report
@@ -73,7 +72,7 @@ ABSOLUTE_ZERO_CATEGORY = "injection"
 ABSOLUTE_ZERO_SLICE = f"category:{ABSOLUTE_ZERO_CATEGORY}"
 MIN_INJECTION_ITEMS = 12
 MIN_INJECTION_ITEMS_PER_LANGUAGE = 4
-INJECTION_LANGUAGES = get_args(Language)
+INJECTION_LANGUAGES = LANGUAGE_CODES
 
 
 def _scored(rates: dict[str, MetricValue], key: str) -> int:

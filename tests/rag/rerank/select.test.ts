@@ -150,6 +150,7 @@ describe('resolveReranker keys and eval overrides', () => {
       id: 'cohere',
       model: 'stub-model',
       scoreSemantics: 'calibrated',
+      supportedLanguages: [],
       rerank: async () => ({ scores: [] }),
     };
     setRerankerFactoryForTests(() => stub);

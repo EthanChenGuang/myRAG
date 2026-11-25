@@ -5,7 +5,9 @@ from pydantic import Field, model_validator
 
 from rag_sidecar.contracts.retrieval import ConfigProvenance, _Contract
 
-Lang = Literal["zh", "en", "it"]
+from .languages import Language
+
+Lang = Language
 Transform = Literal["condense_history", "normalize_dates", "decompose", "expand", "translate"]
 QueryFramework = Literal["llamaindex", "langchain"]
 VariantKind = Literal["original", "condensed", "expanded", "hyde", "sub_question", "translated"]

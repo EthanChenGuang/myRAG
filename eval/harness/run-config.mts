@@ -24,7 +24,19 @@ export interface RunConfig {
   chunkingProfiles?: ChunkingProfile[];
 }
 
-/** RAG_PIPELINE plus the Phase 4 D-23 switch names. Keys, base URLs and every other variable stay out of reach of a run config. */
+/** The Phase 5.1 SEC switches (D-14) and the values each accepts; keys, acks, regions and endpoints are never among them. */
+const SEC_SWITCH_VALUES: Readonly<Record<string, readonly string[]>> = {
+  RAG_CONTEXT_TAGGING: ['true', 'false'],
+  RAG_INJECTION_CHECK: ['off', 'flag', 'drop', 'downweight'],
+  RAG_INJECTION_PROMPT_GUARD: ['true', 'false'],
+  RAG_INJECTION_LAKERA: ['true', 'false'],
+  RAG_TOOL_RESULT_GUARD: ['off', 'tag', 'tag_and_flag'],
+};
+
+/**
+ * RAG_PIPELINE, the Phase 4 D-23 switch names and the five Phase 5.1 SEC switches. Keys, base URLs and every other variable stay
+ * out of reach of a run config.
+ */
 export const RUN_CONFIG_ENV_ALLOWLIST: readonly string[] = [
   'RAG_PIPELINE',
   'RAG_LEXICAL_SEARCH',
@@ -40,9 +52,10 @@ export const RUN_CONFIG_ENV_ALLOWLIST: readonly string[] = [
   'RAG_HNSW_ITERATIVE_SCAN',
   'RAG_EXACT_SCAN_CUTOFF',
   'RAG_LEXICAL_TRANSLATION',
+  ...Object.keys(SEC_SWITCH_VALUES),
 ];
 
-export const RUN_CONFIG_REJECT_MESSAGE = '[Eval Harness] run-config may only set RAG_PIPELINE and Phase 4 RAG_* switches';
+export const RUN_CONFIG_REJECT_MESSAGE = '[Eval Harness] run-config may only set RAG_PIPELINE, Phase 4 RAG_* switches and the Phase 5.1 SEC switches';
 
 const TOP_LEVEL_KEYS = new Set(['name', 'env', 'overrides', 'chunking_profiles']);
 const NAME_RE = /^[a-z0-9][a-z0-9._-]{0,63}$/;
@@ -81,6 +94,12 @@ export function parseRunConfig(raw: unknown, source: string): RunConfig {
   }
   if (env.RAG_PIPELINE !== undefined && !PIPELINE_VALUES.has(env.RAG_PIPELINE)) {
     throw new RunConfigError(`[Eval Harness] run-config ${source} RAG_PIPELINE must be legacy or v2`);
+  }
+  for (const [name, allowed] of Object.entries(SEC_SWITCH_VALUES)) {
+    // A malformed SEC value would silently fall back to off in the app; the run config fails instead (the value is never echoed).
+    if (env[name] !== undefined && !allowed.includes(env[name])) {
+      throw new RunConfigError(`[Eval Harness] run-config ${source} ${name} must be one of ${allowed.join(', ')}`);
+    }
   }
 
   let overrides: RetrievalOverrides | null = null;

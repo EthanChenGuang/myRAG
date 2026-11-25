@@ -2,7 +2,7 @@ import { loadRagConfig } from '../../config';
 import { getRagDeps } from '../../deps';
 import { EmbeddingProfileMismatch } from '../../embeddings/mrl';
 import { ProfileUnavailableError, type EmbeddingProfile } from '../../embeddings/active-profile';
-import { canonicalModelId, getEmbeddingProvider } from '../../embeddings/registry';
+import { canonicalModelId, getEmbeddingProviderFor } from '../../embeddings/registry';
 import { resolveEmbeddingTargets, type EmbeddingTarget } from '../embedding-targets';
 import { buildProfileChunks, liveProfilesByDocType, writeProfileChunks } from '../profile-chunks';
 import { buildEmbeddingText, EMBEDDING_TEXT_VERSION, templateHeaderFor } from '../text/embedding-text';
@@ -81,7 +81,7 @@ function assertShape(profile: EmbeddingProfile, vectors: number[][], count: numb
 function assertProviderFits(profile: EmbeddingProfile): void {
   let provider;
   try {
-    provider = getEmbeddingProvider(profile.provider);
+    provider = getEmbeddingProviderFor(profile.provider, profile.model);
   } catch (error) {
     throw new TargetFailure('provider_failed', error);
   }
@@ -100,7 +100,7 @@ async function embedForTarget(ctx: StageContext, target: EmbeddingTarget, texts:
       return { vectors, host: null };
     }
     assertProviderFits(profile);
-    const output = await getEmbeddingProvider(profile.provider).embedDocuments(texts, { dims: profile.dims, signal: ctx.signal });
+    const output = await getEmbeddingProviderFor(profile.provider, profile.model).embedDocuments(texts, { dims: profile.dims, signal: ctx.signal });
     if (canonicalModelId(output.model) !== canonicalModelId(profile.model)) throw new TargetFailure('embedding_profile_mismatch');
     assertShape(profile, output.vectors, texts.length);
     return { vectors: output.vectors, host: output.host };
