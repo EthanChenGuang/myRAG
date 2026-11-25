@@ -112,7 +112,23 @@ export interface RunEvalResult {
   manifest: RunManifest;
 }
 
-export function itemRequestOptions(base: EvalRequestOptions, item: GoldenItem): EvalRequestOptions {
+/** An item filter names a document id that ingest mode did not write from any corpus file: the run stops instead of dropping it. */
+export class UnmappedFilterDocumentIdError extends Error {
+  readonly itemId: string;
+  readonly documentId: string;
+  constructor(itemId: string, documentId: string) {
+    super(`[Eval Harness] item ${itemId}: retrieval filter document id ${documentId} has no document written by ingest mode`);
+    this.name = 'UnmappedFilterDocumentIdError';
+    this.itemId = itemId;
+    this.documentId = documentId;
+  }
+}
+
+export function itemRequestOptions(
+  base: EvalRequestOptions,
+  item: GoldenItem,
+  _ingestDocumentIds?: ReadonlyMap<string, string>,
+): EvalRequestOptions {
   const options: EvalRequestOptions = { ...base };
   if (item.retrieval_filters) options.retrieval_filters = item.retrieval_filters;
   return options;
