@@ -255,11 +255,21 @@
       "knownGaps": []
     },
     {
+      "name": "RAG_BGE_M3_SERVING",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "RAG_CACHE_ENABLED",
       "status": "legacy",
       "knownGaps": [
         "env-ts"
       ]
+    },
+    {
+      "name": "RAG_CAPTION_LANGUAGE",
+      "status": "managed",
+      "knownGaps": []
     },
     {
       "name": "RAG_CITATIONS",
@@ -313,6 +323,16 @@
       ]
     },
     {
+      "name": "RAG_DOC_TRANSLATION",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_DOC_TRANSLATION_MODEL",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "RAG_DOC_TYPE_LLM_DETECT",
       "status": "managed",
       "knownGaps": []
@@ -326,6 +346,16 @@
         "env-ts",
         "init-env"
       ]
+    },
+    {
+      "name": "RAG_EFFECTIVE_DATES",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_EFFECTIVE_DATE_LLM_EXTRACT",
+      "status": "managed",
+      "knownGaps": []
     },
     {
       "name": "RAG_EMBED_BATCH_MODE",
@@ -472,6 +502,11 @@
       "knownGaps": []
     },
     {
+      "name": "RAG_HIDDEN_TEXT_CHECK",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "RAG_HIGH_THRESHOLD",
       "status": "legacy",
       "knownGaps": [
@@ -485,6 +520,11 @@
     },
     {
       "name": "RAG_INGEST_ASYNC",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_INGEST_LINK_CHECK",
       "status": "managed",
       "knownGaps": []
     },
@@ -626,6 +666,11 @@
       ]
     },
     {
+      "name": "RAG_OUTPUT_LINK_ALLOWLIST",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "RAG_PARENT_CHILD",
       "status": "managed",
       "knownGaps": []
@@ -706,6 +751,11 @@
     {
       "name": "RAG_PRE_CONTEXT",
       "status": "legacy",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_PRIMARY_LANGUAGE",
+      "status": "managed",
       "knownGaps": []
     },
     {
@@ -832,6 +882,16 @@
       "knownGaps": []
     },
     {
+      "name": "RAG_SCOPE_TAGS",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_SCOPE_TAG_SUGGEST",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "RAG_SEMANTIC_CACHE",
       "status": "managed",
       "knownGaps": [],
@@ -892,6 +952,16 @@
       "knownGaps": []
     },
     {
+      "name": "RAG_SUPERSESSION_DETECT",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_SUPPORTED_LANGUAGES",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "RAG_SYSTEM_PROMPT",
       "status": "legacy",
       "knownGaps": [
@@ -899,6 +969,16 @@
         "config-ui",
         "init-env"
       ]
+    },
+    {
+      "name": "RAG_TABLE_HEADER_REPEAT",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_TABLE_ROW_SERIALIZATION",
+      "status": "managed",
+      "knownGaps": []
     },
     {
       "name": "RAG_TEMPORAL_BOOST",
@@ -924,6 +1004,11 @@
     },
     {
       "name": "RAG_TOOL_RESULT_GUARD",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_UPLOAD_APPROVAL",
       "status": "managed",
       "knownGaps": []
     },

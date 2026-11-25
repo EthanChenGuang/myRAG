@@ -115,6 +115,7 @@ const PROFILES = Object.keys(PROFILE_STAGE_DEFAULTS) as Profile[];
 export type RerankerKind = 'none' | 'cohere' | 'voyage' | 'local_bm25';
 export type RerankTier = 'quality' | 'fast';
 export type IterativeScanMode = 'off' | 'relaxed_order' | 'strict_order';
+export type BgeM3Serving = 'hosted' | 'sidecar';
 
 export interface RetrievalParamsOverride {
   candidate_pool_size?: number;
@@ -164,6 +165,11 @@ export interface RagEnvInput {
   RAG_RETRIEVAL_PARAMS_OVERRIDE?: string;
   VOYAGE_API_KEY?: string;
   VOYAGE_BASE_URL?: string;
+  RAG_EFFECTIVE_DATES?: string;
+  RAG_SCOPE_TAGS?: string;
+  RAG_DOC_TRANSLATION?: string;
+  RAG_BGE_M3_SERVING?: string;
+  RAG_OUTPUT_LINK_ALLOWLIST?: string;
 }
 
 export interface RagConfig {
@@ -172,6 +178,12 @@ export interface RagConfig {
   timeouts: Record<Profile, StageTimeouts>;
   exactIdLookup: boolean;
   v2: V2Config;
+  effectiveDates: boolean;
+  scopeTags: boolean;
+  docTranslation: 'off' | 'on';
+  bgeM3Serving: BgeM3Serving;
+  /** Raw comma-separated domains; the output link filter parses it. */
+  outputLinkAllowlist: string;
   warnings: string[];
 }
 
@@ -216,6 +228,25 @@ function parseBooleanSwitch(raw: string | undefined, defaultValue: boolean, warn
   if (normalised === 'false') return false;
   problem(warnings, warnKey, `Unsupported switch value, using default ${defaultValue}`, { value });
   return defaultValue;
+}
+
+function parseNamedFlag(name: string, raw: string | undefined, warnings: string[]): boolean {
+  const value = (raw ?? '').trim();
+  if (value === '') return false;
+  const normalised = value.toLowerCase();
+  if (normalised === 'true') return true;
+  if (normalised === 'false') return false;
+  problem(warnings, `${name}:${value}`, `Unsupported ${name} value, expected true or false, using false`, { value });
+  return false;
+}
+
+function parseNamedChoice<T extends string>(name: string, raw: string | undefined, allowed: readonly T[], fallback: T, warnings: string[]): T {
+  const value = (raw ?? '').trim();
+  if (value === '') return fallback;
+  const match = allowed.find((candidate) => candidate === value.toLowerCase());
+  if (match !== undefined) return match;
+  problem(warnings, `${name}:${value}`, `Unsupported ${name} value, using ${fallback}`, { value });
+  return fallback;
 }
 
 function parseExactIdSwitch(raw: string | undefined, warnings: string[]): boolean {
@@ -423,6 +454,11 @@ function memoKey(env: RagEnvInput): string {
     env.RAG_RETRIEVAL_PARAMS_OVERRIDE ?? '',
     (env.VOYAGE_API_KEY ?? '').trim() !== '',
     env.VOYAGE_BASE_URL ?? '',
+    env.RAG_EFFECTIVE_DATES ?? '',
+    env.RAG_SCOPE_TAGS ?? '',
+    env.RAG_DOC_TRANSLATION ?? '',
+    env.RAG_BGE_M3_SERVING ?? '',
+    env.RAG_OUTPUT_LINK_ALLOWLIST ?? '',
   ]);
 }
 
@@ -466,7 +502,19 @@ export function loadRagConfig(env: RagEnvInput): RagConfig {
 
   applyV2DisabledStages(v2, disabledStages);
 
-  const config: RagConfig = { pipeline, disabledStages, timeouts, exactIdLookup, v2, warnings };
+  const config: RagConfig = {
+    pipeline,
+    disabledStages,
+    timeouts,
+    exactIdLookup,
+    v2,
+    effectiveDates: parseNamedFlag('RAG_EFFECTIVE_DATES', env.RAG_EFFECTIVE_DATES, warnings),
+    scopeTags: parseNamedFlag('RAG_SCOPE_TAGS', env.RAG_SCOPE_TAGS, warnings),
+    docTranslation: parseNamedChoice('RAG_DOC_TRANSLATION', env.RAG_DOC_TRANSLATION, ['off', 'on'], 'off', warnings),
+    bgeM3Serving: parseNamedChoice('RAG_BGE_M3_SERVING', env.RAG_BGE_M3_SERVING, ['hosted', 'sidecar'], 'hosted', warnings),
+    outputLinkAllowlist: (env.RAG_OUTPUT_LINK_ALLOWLIST ?? '').trim(),
+    warnings,
+  };
   memo.set(snapshot, config);
   return config;
 }
