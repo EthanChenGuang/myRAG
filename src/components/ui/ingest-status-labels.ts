@@ -1,4 +1,5 @@
 import type { IngestJobState } from '@/lib/hooks/use-ingest-job-status';
+import type { Language } from '@/lib/rag';
 
 export type IngestStatusTone = 'pending' | 'info' | 'success' | 'warning' | 'error' | 'neutral';
 
@@ -7,7 +8,7 @@ export interface IngestStatusDescription {
   tone: IngestStatusTone;
 }
 
-export type IngestStatusLocale = 'zh' | 'en' | 'it';
+export type IngestStatusLocale = Language;
 
 type LabelKey =
   | 'queued'
@@ -25,7 +26,7 @@ type LabelKey =
   | 'unavailable'
   | 'provisional';
 
-const LABELS: Record<IngestStatusLocale, Record<LabelKey, string>> = {
+const LABELS: { en: Record<LabelKey, string> } & Partial<Record<IngestStatusLocale, Record<LabelKey, string>>> = {
   en: {
     queued: 'Queued',
     preflight: 'Preparing…',
@@ -92,9 +93,9 @@ const TONES: Record<Exclude<LabelKey, 'provisional'>, IngestStatusTone> = {
   unavailable: 'neutral',
 };
 
-function normalizeLocale(language: string): IngestStatusLocale {
-  if (language === 'zh' || language === 'it') return language;
-  return 'en';
+function localeLabels(language: string): Record<LabelKey, string> {
+  const own = Object.prototype.hasOwnProperty.call(LABELS, language) ? LABELS[language as IngestStatusLocale] : undefined;
+  return own ?? LABELS.en;
 }
 
 function isLabelKey(status: string): status is Exclude<LabelKey, 'provisional'> {
@@ -103,7 +104,7 @@ function isLabelKey(status: string): status is Exclude<LabelKey, 'provisional'> 
 
 /** Localized label and tone for a job state; unknown UI languages fall back to en. A running job with a published provisional version reads "searchable, still improving". */
 export function describeIngestStatus(state: IngestJobState, language: string): IngestStatusDescription {
-  const labels = LABELS[normalizeLocale(language)];
+  const labels = localeLabels(language);
   const status = state.status;
   if (!isLabelKey(status)) return { label: labels.unavailable, tone: 'neutral' };
   if (state.provisional && TONES[status] === 'pending') return { label: labels.provisional, tone: 'info' };
