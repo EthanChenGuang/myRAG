@@ -179,8 +179,7 @@ describe('checkSubQuestions', () => {
 });
 
 describe('post-check outputs carry query text and skip records only (D-15)', () => {
-  const FORBIDDEN = ['scope', 'filters', 'mode', 'tools', 'tenant', 'tenantKey'] as const;
-  type Forbidden = (typeof FORBIDDEN)[number];
+  type Forbidden = 'scope' | 'filters' | 'mode' | 'tools' | 'tenant' | 'tenantKey';
   type Keys<T> = T extends unknown ? keyof T : never;
 
   it('result types have no scope, filters, mode or tools key', () => {

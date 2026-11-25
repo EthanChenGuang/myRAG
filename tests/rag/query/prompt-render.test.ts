@@ -34,8 +34,10 @@ describe('loadPrompt', () => {
   });
 
   it('rejects a file without source or license', () => {
-    const { source: _s, ...noSource } = BASE;
-    const { license: _l, ...noLicense } = BASE;
+    const noSource: Partial<PromptFile> = { ...BASE };
+    delete noSource.source;
+    const noLicense: Partial<PromptFile> = { ...BASE };
+    delete noLicense.license;
     expect(() => loadPrompt('x', { x: noSource })).toThrow(/source/);
     expect(() => loadPrompt('x', { x: noLicense })).toThrow(/license/);
     expect(() => loadPrompt('x', { x: { ...BASE, license: '' } })).toThrow(/license/);

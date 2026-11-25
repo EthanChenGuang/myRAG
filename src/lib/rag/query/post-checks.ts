@@ -34,9 +34,7 @@ export type CondensedInput = { text: string; input: string; protectedTokens: rea
 export type SubQuestionsInput = { questions: readonly string[]; input: string; protectedTokens: readonly string[] };
 
 function charCount(text: string): number {
-  let n = 0;
-  for (const _ of text) n += 1;
-  return n;
+  return Array.from(text).length;
 }
 
 function normalizeForCompare(text: string): string {
