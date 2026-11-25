@@ -44,15 +44,19 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     if (!admin) return reviewUnavailable();
     const result = await validateAndSaveLabel(session.ssr, admin, id, parsed.data, session.userId);
     if (result.ok) {
-      const { ok: _ok, ...body } = result;
-      return NextResponse.json(body, { headers: REVIEW_NO_STORE });
+      const { item_id, status, triage, label, labelled_at } = result;
+      return NextResponse.json({ item_id, status, triage, label, labelled_at }, { headers: REVIEW_NO_STORE });
     }
-    if (result.reason === 'not_found') return reviewNotFound();
-    if (result.reason === 'exported') {
-      return NextResponse.json({ error: 'Review item already exported' }, { status: 409, headers: REVIEW_NO_STORE });
+    switch (result.reason) {
+      case 'invalid_evidence':
+        return badRequest({ error: 'invalid_evidence', span: result.span, reason: result.detail });
+      case 'invalid_not_relevant':
+        return badRequest({ error: 'invalid_not_relevant', index: result.index, reason: 'not_in_snapshot' });
+      case 'exported':
+        return NextResponse.json({ error: 'Review item already exported' }, { status: 409, headers: REVIEW_NO_STORE });
+      default:
+        return reviewNotFound();
     }
-    if (result.reason === 'invalid_evidence') return badRequest({ error: 'invalid_evidence', span: result.span, reason: result.detail });
-    return badRequest({ error: 'invalid_not_relevant', index: result.index, reason: 'not_in_snapshot' });
   } catch {
     console.error('[Review] label failed');
     return reviewUnavailable();

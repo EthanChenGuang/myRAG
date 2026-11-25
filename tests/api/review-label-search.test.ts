@@ -40,7 +40,7 @@ vi.mock('@/lib/rag/feedback-loop/retrieval-log', async (importOriginal) => {
 
 import { runRetrieval } from '@/lib/rag/pipeline';
 import { searchForReviewItem } from '@/lib/rag/feedback-loop/review-search';
-import { mintScope, scopeKey } from '@/lib/rag/tenant/scope';
+import { mintScope } from '@/lib/rag/tenant/scope';
 import { pgliteClient } from '../helpers/pglite-rest-client';
 import {
   CHUNK_A,
@@ -188,7 +188,7 @@ describe('label and search routes with two tenants (multi-tenant)', () => {
 
     expect(h.retrievalCalls).toHaveLength(1);
     const input = h.retrievalCalls[0]!;
-    expect(input.scope && scopeKey(input.scope)).toBe(TENANT_A);
+    expect(input.scope).toMatchObject({ kind: 'personal', userId: TENANT_A.slice(2), organizationId: null });
     expect(input).toMatchObject({ query: QUERY, profile: 'chat', options: { ragMode: 'flexible', maxResults: 30 }, logContext: { skip: true } });
     expect(input.trace).toBeDefined();
 
