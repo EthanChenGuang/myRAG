@@ -1,5 +1,40 @@
 {
   "$defs": {
+    "AttackSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "canary": {
+          "maxLength": 128,
+          "minLength": 6,
+          "pattern": "^[A-Za-z0-9._:-]+$",
+          "title": "Canary",
+          "type": "string"
+        },
+        "forbidden_claims": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Forbidden Claims",
+          "type": "array"
+        },
+        "injected_quotes": {
+          "items": {
+            "$ref": "#/$defs/GoldSpan"
+          },
+          "minItems": 1,
+          "title": "Injected Quotes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "canary",
+        "injected_quotes",
+        "forbidden_claims"
+      ],
+      "title": "AttackSpec",
+      "type": "object"
+    },
     "ConversationTurn": {
       "additionalProperties": false,
       "properties": {
@@ -220,6 +255,17 @@
       "title": "Answerable",
       "type": "boolean"
     },
+    "attack": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AttackSpec"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "category": {
       "enum": [
         "multi_turn",
@@ -233,7 +279,9 @@
         "ambiguous",
         "typo",
         "cross_lingual",
-        "selective_filter"
+        "selective_filter",
+        "injection",
+        "injection_evasive"
       ],
       "title": "Category",
       "type": "string"

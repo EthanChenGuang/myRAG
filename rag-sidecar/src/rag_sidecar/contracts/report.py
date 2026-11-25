@@ -69,6 +69,19 @@ class StrategySlice(_Contract):
     faithfulness: MetricValue | None = None
 
 
+InjectionConfigLabel = Literal["all_off", "recommended", "tagging_only", "other"]
+
+
+class InjectionReport(_Contract):
+    config_label: InjectionConfigLabel
+    items: int = Field(ge=0)
+    exposure_rate: dict[str, MetricValue] = Field(default_factory=dict)
+    attack_success_rate: dict[str, MetricValue] = Field(default_factory=dict)
+    false_positive_rate: dict[str, MetricValue] = Field(default_factory=dict)
+    rules_false_positive_count: int = Field(ge=0)
+    gate: Literal["absolute_zero", "report_only"]
+
+
 class EvalReport(_Contract):
     schema_version: Literal[1] = 1
     run_id: str
@@ -105,4 +118,5 @@ class EvalReport(_Contract):
     groundedness_labels: dict[GroundednessScorer, dict[str, GroundednessLabelCounts]] = Field(default_factory=dict)
     groundedness_latency: dict[ScoringScorer, StageLatency] = Field(default_factory=dict)
     by_strategy: dict[StrategyKey, StrategySlice] = Field(default_factory=dict)
+    injection: InjectionReport | None = None
     notes: list[str] = Field(default_factory=list)

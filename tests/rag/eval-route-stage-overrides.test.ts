@@ -99,6 +99,18 @@ describe('eval route per-request stage overrides', () => {
     expect(trace.stage_status.assemble).toBe('disabled');
   });
 
+  it('accepts injection_check in disabled_stages and forwards only stages the pipeline registers', async () => {
+    const { CORE_STAGES, OPTIONAL_STAGES } = await import('@/lib/rag');
+    const registered = new Set<string>([...CORE_STAGES, ...OPTIONAL_STAGES]);
+    const route = await loadRoute();
+    const response = await route.POST(evalRequest({ disabled_stages: ['assemble', 'injection_check'] }));
+
+    expect(response.status).toBe(200);
+    expect(h.runSpy.mock.calls[0][0].stageOverrides).toEqual({
+      disabledStages: ['assemble', 'injection_check'].filter((name) => registered.has(name)),
+    });
+  });
+
   it('passes no overrides when the options name none', async () => {
     const route = await loadRoute();
     const response = await route.POST(evalRequest({ max_results: 5 }));

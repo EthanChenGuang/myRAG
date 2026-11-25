@@ -113,11 +113,12 @@
                   "post_filter",
                   "assemble",
                   "voice_keyword_fallback",
-                  "local_rerank"
+                  "local_rerank",
+                  "injection_check"
                 ],
                 "type": "string"
               },
-              "maxItems": 9,
+              "maxItems": 10,
               "type": "array"
             },
             {
@@ -514,6 +515,20 @@
           ],
           "default": null,
           "title": "Embed"
+        },
+        "injection_check": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Injection Check"
         },
         "legacy_rank": {
           "anyOf": [
