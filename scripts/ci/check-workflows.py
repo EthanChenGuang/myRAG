@@ -292,7 +292,16 @@ def check_pr(errors: list[str]) -> None:
     docker = jobs.get("docker-build")
     if docker is not None:
         body = step_text(docker)
-        for needle in ("docker build -t rag-sidecar:ci rag-sidecar", "/health", "/ready", "/v1/info", "RAG_SIDECAR_SECRET"):
+        for needle in (
+            "docker build -t rag-sidecar:ci rag-sidecar",
+            "/app/config/rag/",
+            "load_routing_config()",
+            "load_processing_profiles()",
+            "/health",
+            "/ready",
+            "/v1/info",
+            "RAG_SIDECAR_SECRET",
+        ):
             if needle not in body:
                 errors.append(f"pr-smoke: job docker-build is missing '{needle}'")
 
@@ -375,6 +384,7 @@ def check_real_docling(data: dict, errors: list[str]) -> None:
         DOCLING_SKIP_NOTICE,
         "uv sync --directory eval --locked --extra fixtures",
         "--target docling",
+        'load_profile("general@1")',
         "/opt/docling-models",
         "generate_pdfs.py",
         "--cjk-font",

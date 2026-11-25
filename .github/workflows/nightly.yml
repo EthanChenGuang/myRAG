@@ -136,6 +136,12 @@ jobs:
           docker cp "$container:/opt/docling-models" "$RUNNER_TEMP/baked/docling-models"
           docker cp "$container:/opt/tiktoken" "$RUNNER_TEMP/baked/tiktoken"
           docker rm "$container"
+      - name: The docling image loads its routing data and a processing profile
+        if: steps.docling.outputs.ready == 'true'
+        run: >-
+          docker run --rm rag-sidecar:docling python -c
+          'from rag_sidecar.ingest.tiered import load_profile; from rag_sidecar.preflight.config import load_routing_config;
+          load_routing_config(); load_profile("general@1")'
       - name: Regenerate the fixture PDFs with the runner CJK font
         if: steps.docling.outputs.ready == 'true'
         run: >-

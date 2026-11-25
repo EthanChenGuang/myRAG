@@ -1,0 +1,142 @@
+{
+  "version": "1",
+  "presets": {
+    "native": {
+      "pdf_backend": null,
+      "ocr": null,
+      "force_full_page_ocr": null,
+      "table_mode": null,
+      "heading_hierarchy": null
+    },
+    "fast": {
+      "pdf_backend": "pypdfium2",
+      "ocr": false,
+      "force_full_page_ocr": null,
+      "table_mode": "off",
+      "heading_hierarchy": null
+    },
+    "structured_layout": {
+      "pdf_backend": null,
+      "ocr": false,
+      "force_full_page_ocr": null,
+      "table_mode": "off",
+      "heading_hierarchy": true
+    },
+    "structured_full": {
+      "pdf_backend": null,
+      "ocr": null,
+      "force_full_page_ocr": null,
+      "table_mode": "accurate",
+      "heading_hierarchy": true
+    },
+    "structured_ocr": {
+      "pdf_backend": null,
+      "ocr": true,
+      "force_full_page_ocr": true,
+      "table_mode": "accurate",
+      "heading_hierarchy": null
+    },
+    "premium": null
+  },
+  "l1": {
+    "garbled_ratio": 0.05,
+    "min_ruling_paths": 4,
+    "thin_path_pt": 2.0,
+    "scanned_max_chars": 30
+  },
+  "l2": {
+    "uncertain_batch_pages": 8
+  },
+  "l3": {
+    "max_pages_per_doc": 20
+  },
+  "ranges": {
+    "lift_min_run": 2,
+    "max_ranges": 20,
+    "higher_preset_share": 0.6,
+    "max_pages_per_conversion": 24
+  },
+  "quality": {
+    "thresholds": {
+      "low_char_ratio": 0.5,
+      "scanned_min_chars": 30,
+      "language_min_chars": 200
+    },
+    "score_weights": {
+      "garbled": 0.3,
+      "low_chars": 0.3,
+      "missing_table": 0.2,
+      "language": 0.2
+    }
+  },
+  "ladder": {
+    "pdf": [
+      "fast",
+      "structured",
+      "premium"
+    ]
+  },
+  "costs": {
+    "tier": {
+      "native": {
+        "usd_per_page": 0.001,
+        "s_per_page": 0.8,
+        "source": "assumed until measured",
+        "as_of": "2026-01-01"
+      },
+      "fast": {
+        "usd_per_page": 0.001,
+        "s_per_page": 0.8,
+        "source": "assumed until measured",
+        "as_of": "2026-01-01"
+      },
+      "structured": {
+        "usd_per_page": 0.001,
+        "s_per_page": 0.8,
+        "source": "assumed until measured",
+        "as_of": "2026-01-01"
+      },
+      "premium": {
+        "usd_per_page": 0.004,
+        "s_per_page": 5.0,
+        "source": "https://developers.llamaindex.ai",
+        "as_of": "2026-01-01"
+      }
+    },
+    "layer": {
+      "L1": {
+        "usd_per_page": 0.001,
+        "s_per_page": 0.8,
+        "source": "assumed until measured",
+        "as_of": "2026-01-01"
+      },
+      "L2": {
+        "usd_per_page": 0.001,
+        "s_per_page": 0.8,
+        "source": "assumed until measured",
+        "as_of": "2026-01-01"
+      },
+      "L3": {
+        "usd_per_page": 0.004,
+        "s_per_page": 5.0,
+        "source": "https://developers.llamaindex.ai",
+        "as_of": "2026-01-01"
+      }
+    }
+  },
+  "escalation": {
+    "max_per_page": 2
+  },
+  "thresholds_ref": "eval/reports/phase-03.1/threshold-sweep.json",
+  "timeouts": {
+    "preflight_ms": 30000,
+    "parse_slice_ms": 40000,
+    "advance_ms": 40000
+  },
+  "office_formats": {
+    "docx": "native",
+    "html": "native",
+    "pptx": "structured",
+    "xlsx": "structured"
+  }
+}

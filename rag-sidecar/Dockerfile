@@ -22,6 +22,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 COPY pyproject.toml uv.lock ./
 COPY src ./src
+COPY config ./config
 
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-dev --extra docling
@@ -62,6 +63,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 COPY pyproject.toml uv.lock ./
 COPY src ./src
+COPY config ./config
 
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-dev
