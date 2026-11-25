@@ -170,6 +170,9 @@ export function parseRetrievalFilters(
   return { ok: true, filters };
 }
 
+/** An id no document has: an empty intersection of two document lists must match nothing, and an empty list reads as no filter downstream. */
+const NO_DOCUMENT_ID = '00000000-0000-0000-0000-000000000000';
+
 export function buildRetrievalFilters(input: {
   explicit?: RetrievalFilterInput;
   referencedDocumentIds: string[];
@@ -191,7 +194,7 @@ export function buildRetrievalFilters(input: {
   if (explicitIds && explicitIds.length > 0 && referenced.length > 0) {
     const refSet = new Set(referenced);
     const narrowed = explicitIds.filter((id) => refSet.has(id));
-    if (narrowed.length > 0) result.documentIds = narrowed;
+    result.documentIds = narrowed.length > 0 ? narrowed : [NO_DOCUMENT_ID];
   } else if (referenced.length > 0) {
     result.documentIds = [...referenced];
   } else if (explicitIds && explicitIds.length > 0) {
