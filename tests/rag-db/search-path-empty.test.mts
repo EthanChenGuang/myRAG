@@ -82,6 +82,8 @@ async function functionRows(db: PGlite, legacy: string[]): Promise<FunctionRow[]
 interface PublicNames {
   relations: Set<string>;
   functions: Set<string>;
+  /** pg_catalog tables and views: under an empty search_path pg_temp is still searched first for relations, so these need pg_catalog. too. */
+  catalogRelations: Set<string>;
 }
 
 async function publicNames(db: PGlite): Promise<PublicNames> {
@@ -93,7 +95,14 @@ async function publicNames(db: PGlite): Promise<PublicNames> {
     `SELECT DISTINCT p.proname AS name FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace
         AND NOT EXISTS (SELECT 1 FROM pg_proc c WHERE c.pronamespace = 'pg_catalog'::regnamespace AND c.proname = p.proname)`,
   );
-  return { relations: new Set(relations.rows.map((row) => row.name)), functions: new Set(functions.rows.map((row) => row.name)) };
+  const catalog = await db.query<{ name: string }>(
+    `SELECT c.relname AS name FROM pg_class c WHERE c.relnamespace = 'pg_catalog'::regnamespace AND c.relkind IN ('r', 'v', 'm', 'p', 'f')`,
+  );
+  return {
+    relations: new Set(relations.rows.map((row) => row.name)),
+    functions: new Set(functions.rows.map((row) => row.name)),
+    catalogRelations: new Set(catalog.rows.map((row) => row.name)),
+  };
 }
 
 const VECTOR_OPERATOR = /(<=>|<->|<#>|<\+>|<~>|<%>)/g;
@@ -119,11 +128,19 @@ function unqualifiedReferences(source: string, names: PublicNames): string[] {
     if (names.functions.has(match[1]!.toLowerCase())) found.add(`function ${match[1]}`);
   }
   for (const match of code.replace(/OPERATOR\(public\.[^)]*\)/g, ' ').matchAll(VECTOR_OPERATOR)) found.add(`operator ${match[1]}`);
+  // Any position, so comma joins and subqueries count; a name followed by '.' is a column qualifier and one followed by '(' is a call.
+  for (const match of code.matchAll(/(?<![.\w"])(pg_[a-z0-9_]+)\b(?!\s*[.(])/gi)) {
+    if (names.catalogRelations.has(match[1]!.toLowerCase())) found.add(`catalog relation ${match[1]}`);
+  }
   return [...found].sort();
 }
 
 describe('the unqualified-reference scanner', () => {
-  const names: PublicNames = { relations: new Set(['documents', 'chunk_embeddings']), functions: new Set(['rag_assert_tenant_key', 'vector_dims']) };
+  const names: PublicNames = {
+    relations: new Set(['documents', 'chunk_embeddings']),
+    functions: new Set(['rag_assert_tenant_key', 'vector_dims']),
+    catalogRelations: new Set(['pg_attribute', 'pg_class', 'pg_extension', 'pg_namespace']),
+  };
 
   test('flags unqualified relations, row types, vector casts and operators, public-only calls and dynamic SQL', () => {
     const source = `
@@ -156,6 +173,52 @@ describe('the unqualified-reference scanner', () => {
         PERFORM e.embedding OPERATOR(public.<=>) $1::public.vector FROM public.chunk_embeddings e;
       END`;
     assert.deepEqual(unqualifiedReferences(source, names), []);
+  });
+
+  test('flags unqualified pg_catalog relations in FROM, JOIN, comma joins and subqueries, and accepts pg_catalog. and column qualifiers', () => {
+    const flagged = `
+      BEGIN
+        SELECT extversion INTO v FROM pg_extension WHERE extname = 'vector';
+        PERFORM 1 FROM pg_catalog.pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace, pg_attribute a WHERE a.attrelid = c.oid;
+      END`;
+    assert.deepEqual(unqualifiedReferences(flagged, names), ['catalog relation pg_attribute', 'catalog relation pg_extension', 'catalog relation pg_namespace']);
+    const qualified = `
+      BEGIN
+        multi := EXISTS (SELECT 1 FROM pg_catalog.pg_attribute WHERE pg_attribute.attrelid = 'public.documents'::regclass);
+        PERFORM pg_catalog.pg_notify('t', 'pg_class in a message');
+        PERFORM pg_advisory_xact_lock(1);
+      END`;
+    assert.deepEqual(unqualifiedReferences(qualified, names), []);
+  });
+});
+
+// Under SET search_path = '' PostgreSQL still searches the session's pg_temp first for relations and types (it is implicit and comes before
+// pg_catalog unless listed), so a temporary table named after a catalog table must not change what a definer or guard reads.
+describe('a temporary table named like a catalog table (multi-tenant, service_role)', () => {
+  let db: PGlite;
+
+  before(async () => {
+    ({ db } = await createEmptyFixtureDatabase({ deploymentMode: 'multi-tenant' }));
+    await db.exec(`GRANT TEMPORARY ON DATABASE postgres TO service_role`);
+  });
+
+  after(async () => {
+    await db?.close();
+  });
+
+  test('rag_ingest_assert_tenant_key still rejects the single-tenant key with pg_attribute shadowed', async () => {
+    await db.exec(`SET ROLE service_role`);
+    try {
+      await db.exec(`CREATE TEMP TABLE pg_attribute (attrelid regclass, attname name, attnotnull boolean, attisdropped boolean)`);
+      await db.exec(`CREATE TEMP TABLE pg_extension (extname name, extversion text)`);
+      await assert.rejects(
+        db.query(`SELECT public.rag_ingest_assert_tenant_key('s:default')`),
+        (error: { code?: string; message?: string }) => error.code === '22023' && /invalid_tenant_key/.test(error.message ?? ''),
+      );
+    } finally {
+      await db.exec(`DROP TABLE IF EXISTS pg_temp.pg_attribute, pg_temp.pg_extension`);
+      await db.exec(`RESET ROLE`);
+    }
   });
 });
 
