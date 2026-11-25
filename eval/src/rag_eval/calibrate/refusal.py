@@ -412,6 +412,39 @@ class CrossComparison(BaseModel):
     note: str = ""
 
 
+FLOOR_PATH = REPO_ROOT / "eval" / "config" / "fixture-score-calibration.json"
+IMAGE_FLOOR = 0.25
+
+
+class SimilarityFloorFit(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    status: Literal["calibrated", "uncalibrated", "insufficient_data"] = "uncalibrated"
+    context_threshold: float | None = None
+    target_false_refusal: float = 0.05
+    dev: RefusalMetricBlock | None = None
+    excluded_no_similarity: int = 0
+
+
+class FixtureScoreCalibration(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal[1] = 1
+    source: Literal["fixture"] = "fixture"
+    fixture_mode: Literal["prechunked", "ingest"] = "prechunked"
+    status: Literal["calibrated", "uncalibrated", "insufficient_data"] = "uncalibrated"
+    score_calibration: dict[str, float] = {}
+    target_false_refusal: float = 0.05
+    dev: RefusalMetricBlock | None = None
+    golden_sha256: str = ""
+
+
+def fit_similarity_floor(
+    traces: Sequence[RagTrace], golden: Sequence[GoldenItem], config: RefusalCalibrationConfig, *, environment: str
+) -> SimilarityFloorFit:
+    return SimilarityFloorFit()
+
+
 class CalibrationResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -433,6 +466,9 @@ class CalibrationResult(BaseModel):
     cross_vs_same: list[CrossComparison] = []
     thresholds_written: bool = False
     thresholds_path: str | None = None
+    similarity_floor: SimilarityFloorFit | None = None
+    floor_written: bool = False
+    floor_path: str | None = None
     notes: list[str] = []
 
 
@@ -781,6 +817,7 @@ def run_refusal_calibration(
     calibration_path: Path | None = None,
     noise_path: Path | None = None,
     now: str | None = None,
+    floor_path: Path | None = None,
 ) -> CalibrationResult:
     out_dir = Path(out)
     golden_path = Path(golden) if golden else DEFAULT_GOLDEN
