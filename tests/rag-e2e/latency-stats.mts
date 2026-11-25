@@ -34,3 +34,57 @@ export function perStage(timings: ReadonlyArray<Readonly<Record<string, unknown>
   for (const [stage, samples] of byStage) stats[stage] = summarize(samples);
   return stats;
 }
+
+/** One upload: route time to the 202, 202 to the first non-queued status read, 202 to the ready read, and the ledger timings. */
+export interface LatencyRun {
+  routeMs: number;
+  pickupMs: number;
+  totalMs: number;
+  timings: Readonly<Record<string, unknown>>;
+}
+
+/** The steps of the RESEARCH "Latency Budget" table, with the p95 budget each one was given. */
+export const LATENCY_BUDGET_STEPS = [
+  { key: 'route', name: 'Route: identify, hash, store original, enqueue, 202', budget: '3 s' },
+  { key: 'pickup', name: 'Pickup (wake, else poll 2 s + jitter)', budget: '3 s' },
+  { key: 'preflight', name: 'Preflight L1', budget: '0.5 s' },
+  { key: 'parse', name: 'Parse', budget: '25 s real / ~0 s fake' },
+  { key: 'check', name: 'Check + merge + cache write', budget: '2 s' },
+  { key: 'advance', name: 'advance calls (dedup ... publish)', budget: '15 s real / <= 5 s fake' },
+  { key: 'total', name: 'Total, 202 to ready status read', budget: '60 s target' },
+] as const;
+
+const OWN_STEPS = new Set(['preflight', 'parse', 'check']);
+
+/** Groups one run under the budget steps; every other ledger stage is an advance call. A step the run never had is left out. */
+export function budgetSteps(run: LatencyRun): Record<string, number> {
+  const steps: Record<string, number> = { route: run.routeMs, pickup: run.pickupMs };
+  let advance: number | null = null;
+  for (const [stage, value] of Object.entries(run.timings)) {
+    if (typeof value !== 'number' || !Number.isFinite(value)) continue;
+    if (OWN_STEPS.has(stage)) steps[stage] = value;
+    else advance = (advance ?? 0) + value;
+  }
+  if (advance !== null) steps.advance = advance;
+  steps.total = run.totalMs;
+  return steps;
+}
+
+function ms(value: number): string {
+  return `${Math.round(value)} ms`;
+}
+
+export function formatLatencyReport(title: string, runs: readonly LatencyRun[]): string {
+  const steps = perStage(runs.map(budgetSteps));
+  const stages = perStage(runs.map((run) => run.timings));
+  const lines = [title, '  step | n | p50 | p95 | budget p95'];
+  for (const step of LATENCY_BUDGET_STEPS) {
+    const stats = steps[step.key];
+    if (stats) lines.push(`  ${step.name} | ${stats.n} | ${ms(stats.p50)} | ${ms(stats.p95)} | ${step.budget}`);
+  }
+  lines.push('  ledger stage (ingestion_jobs.timings) | n | p50 | p95');
+  for (const [stage, stats] of Object.entries(stages).sort(([a], [b]) => a.localeCompare(b))) {
+    lines.push(`  ${stage} | ${stats.n} | ${ms(stats.p50)} | ${ms(stats.p95)}`);
+  }
+  return lines.join('\n');
+}
