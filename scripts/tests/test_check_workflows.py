@@ -172,6 +172,12 @@ class RealDoclingJobTest(unittest.TestCase):
             step["run"] = str(step.get("run", "")).replace("-m real_docling", "")
         self.assertTrue(any("-m real_docling" in e for e in self.errors_for(data)))
 
+    def test_the_docling_image_must_load_a_processing_profile(self):
+        data = self.nightly()
+        for step in data["jobs"]["real-docling"]["steps"]:
+            step["run"] = str(step.get("run", "")).replace('load_profile("general@1")', "")
+        self.assertTrue(any('load_profile("general@1")' in e for e in self.errors_for(data)))
+
 
 class RayOptionalJobTest(unittest.TestCase):
     def text(self) -> str:

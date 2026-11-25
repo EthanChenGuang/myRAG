@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, Any
 
 from docling_core.types.doc import DoclingDocument, Size
 
-from rag_sidecar.contracts.ingest import ParseJobRequest, ParseResult, ProcessingProfile, ProcessingProfileSet
+from rag_sidecar.contracts.ingest import ParseJobRequest, ParseResult, ProcessingProfile
 from rag_sidecar.contracts.queue import IngestionJob, ParseAttemptPages, ParseExternalRequest
 from rag_sidecar.contracts.routing import (
     PageRange,
@@ -38,7 +38,7 @@ from rag_sidecar.ingest.merge import MergeInvariantError, join_page_parts, merge
 from rag_sidecar.ingest.pool import UPLOAD_PRIORITY, PoolCrashed
 from rag_sidecar.parse import docling_adapter
 from rag_sidecar.parse.converter import ConversionError
-from rag_sidecar.preflight.config import load_routing_config
+from rag_sidecar.preflight.config import RagConfigMissing, load_processing_profiles, load_routing_config
 
 if TYPE_CHECKING:
     from rag_sidecar.ingest.process_job import JobOutcome, WorkerDeps
@@ -61,7 +61,6 @@ _TIER_RANK = {"native": 0, "fast": 1, "structured": 2, "premium": 3}
 _DEFAULT_LADDER = ["fast", "structured", "premium"]
 _PRESET_RANK = {"native": 0, "fast": 1, "structured_layout": 2, "structured_full": 3, "structured_ocr": 4, "premium": 5}
 _MAX_PREMIUM_POLLS = 400
-_PROFILES_PATH = Path(__file__).resolve().parents[4] / "config" / "rag" / "processing-profiles.json"
 _PERMANENT_ERRORS = frozenset(
     {
         "encrypted_pdf",
@@ -179,8 +178,10 @@ def load_profile(profile_id: str) -> ProcessingProfile:
     global _profiles
     if _profiles is None:
         try:
-            raw = json.loads(_PROFILES_PATH.read_text(encoding="utf-8"))
-            profile_set = ProcessingProfileSet.model_validate(raw)
+            profile_set = load_processing_profiles()
+        except RagConfigMissing as exc:
+            logger.error("[RAG Ingest] processing profiles missing: %s", exc)
+            raise TieredFailure("profile_unavailable") from exc
         except (OSError, ValueError) as exc:
             raise TieredFailure("profile_unavailable") from exc
         _profiles = {profile.id: profile for profile in profile_set.profiles}
