@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { env } from '@/lib/env';
 import { getSupabaseAdmin } from '@/lib/supabase';
-import type { RagEnvInput } from './config';
+import { loadRagConfig, type RagEnvInput } from './config';
 import type { EmbeddingProfile } from './embeddings/active-profile';
 import { EmbeddingProfileMismatch } from './embeddings/mrl';
 import { embedText } from './embeddings/openai';
@@ -13,6 +13,7 @@ import { loadInjectionDetectorConfig, type Detector } from './security/detectors
 import type { PromptGuardClassifier } from './security/injection-check';
 import { createLakeraDetector, lakeraSettingsFrom } from './security/lakera';
 import { classifyWithPromptGuard } from './security/prompt-guard-client';
+import { createQueryLlm, type QueryLlm } from './query/llm';
 
 export interface ProfileQueryEmbedding {
   vector: number[];
@@ -39,6 +40,8 @@ export interface RagDeps {
   lakeraDetector: () => Detector;
   /** The sidecar Prompt Guard client; answers not_configured without RAG_SIDECAR_URL and RAG_SIDECAR_SECRET. */
   promptGuardClassifier: PromptGuardClassifier;
+  /** The only way pipeline code reaches the query LLM (D-13); tests and eval inject the deterministic fake. */
+  queryLlm: () => QueryLlm;
   fetch: typeof fetch;
 }
 
@@ -94,6 +97,15 @@ function readRagEnvInput(): RagEnvInput {
   };
 }
 
+let defaultQueryLlm: QueryLlm | null = null;
+
+/** Built on first use for the configured RAG_QUERY_LLM_MODEL; the provider module itself loads on the first call. */
+function defaultQueryLlmClient(): QueryLlm {
+  const model = loadRagConfig(getRagDeps().ragEnv()).queryLayer.model;
+  if (!defaultQueryLlm || defaultQueryLlm.model !== model) defaultQueryLlm = createQueryLlm({ model });
+  return defaultQueryLlm;
+}
+
 const defaults: RagDeps = {
   adminClient: () => getSupabaseAdmin() as SupabaseClient | null,
   embedder: embedText,
@@ -120,6 +132,7 @@ const defaults: RagDeps = {
       gate: () => lakeraSettingsFrom(getRagDeps().securityConfig(), isMultiTenant()),
     }),
   promptGuardClassifier: (items, opts) => classifyWithPromptGuard(items, { ...opts, fetch: getRagDeps().fetch }),
+  queryLlm: defaultQueryLlmClient,
   fetch: globalThis.fetch.bind(globalThis),
 };
 
@@ -135,4 +148,5 @@ export function setRagDepsForTests(partial: Partial<RagDeps>): void {
 
 export function resetRagDepsForTests(): void {
   overrides = {};
+  defaultQueryLlm = null;
 }
