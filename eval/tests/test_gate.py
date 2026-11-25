@@ -181,7 +181,7 @@ def test_data_mismatch_exits_2_but_config_difference_does_not(tmp_path):
     assert run(_report(embedder_source_sha256="s" * 64)) == 2
     assert run(_report(request_options={"organization_id": "11111111-1111-4111-8111-111111111111"})) == 2
     assert run(_report(request_options={"user_id": "33333333-3333-4333-8333-333333333333", "max_results": 1})) == 2
-    assert run(_report(request_options={"generator_model": "openai/gpt-4.1-mini"})) == 2
+    assert run(_report(request_options={"generator_model": "openai/gpt-4.1-mini"})) == 0
 
 
 def test_degrade_difference_is_judged_by_metrics_not_rejected_as_a_mismatch(tmp_path):
@@ -207,7 +207,20 @@ def test_identity_label_names_both_excluded_fields():
     report = _report(golden_sha256="x" * 64, request_options={"organization_id": "11111111-1111-4111-8111-111111111111"})
     result = evaluate_gate(report, _baseline(), _noise())
     label = next(problem for problem in result.mismatches if problem.startswith("request_options"))
-    assert label.startswith("request_options (excluding max_results and degrade) differs")
+    assert label.startswith(
+        "request_options (excluding max_results, degrade and the answer-only generator_model, citations, groundedness) differs"
+    )
+
+
+def test_answer_only_options_are_compared_by_metrics_not_rejected_as_a_mismatch(tmp_path):
+    answer_only = {"generator_model": "fake/citation-alias-v1", "citations": True, "groundedness": True}
+    assert evaluate_gate(_report(request_options=answer_only), _baseline(), _noise()).mismatches == []
+    assert evaluate_gate(_report(request_options=answer_only), _baseline(), _noise()).passed is True
+    regressed = evaluate_gate(_report(request_options=answer_only, overall=_slice_values(mrr=0.4)), _baseline(), _noise())
+    assert regressed.passed is False
+    assert regressed.offenders
+    scoped = {**answer_only, "organization_id": "11111111-1111-4111-8111-111111111111"}
+    assert evaluate_gate(_report(request_options=scoped), _baseline(), _noise()).mismatches != []
 
 
 def test_invalid_input_exits_2(tmp_path):
