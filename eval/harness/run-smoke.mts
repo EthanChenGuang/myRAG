@@ -45,6 +45,8 @@ async function main(): Promise<number> {
       user: { type: 'string' },
       routing: { type: 'string' },
       'force-tier': { type: 'string' },
+      citations: { type: 'boolean', default: false },
+      groundedness: { type: 'boolean', default: false },
     },
     strict: true,
   });
@@ -138,6 +140,9 @@ async function main(): Promise<number> {
     embeddingProfileId,
     ...(ingestRouting ? { ingestRouting } : {}),
     ...(runConfig ? { runConfig } : {}),
+    // Either flag implies include_answer; fixture runs answer with the fake citation generator and score against the fake sidecar.
+    ...(values.citations ? { citations: true } : {}),
+    ...(values.groundedness ? { groundedness: true } : {}),
   });
 
   console.log(`[Eval Harness] wrote ${result.itemCount} trace(s) to ${result.tracesPath} (${result.skippedCount} golden item(s) not approved, skipped)`);

@@ -15,6 +15,8 @@ import { ingestModeRetrievalEnv } from './ingest-mode.mts';
 import { createFixtureDatabase, FIXTURE_USER_ID, type DeploymentMode, type FixtureMode } from './pglite-supabase.mts';
 import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from './fake-edge.mts';
 import { applyFixtureProcessEnv } from './process-env.mts';
+import { FAKE_CITATION_GENERATOR_MODEL, installFakeCitationGenerator } from './fake-citation-generator.mts';
+import { startFakeGroundedness, type FakeGroundedness } from './fake-groundedness.mts';
 import { CHUNKING_PROFILES_NEED_INGEST, RunConfigError, type RunConfig } from './run-config.mts';
 
 export type EvalTier = 'smoke' | 'nightly' | 'live';
@@ -31,9 +33,12 @@ export interface EvalRequestOptions {
   disabled_stages?: Array<
     'refs' | 'analyze' | 'embed' | 'search' | 'legacy_rank' | 'post_filter' | 'assemble' | 'voice_keyword_fallback' | 'local_rerank'
   >;
+  citations?: boolean;
+  groundedness?: boolean;
 }
 
-export type EvalGenerator = 'stub' | 'live';
+/** 'fake' is the deterministic citation generator (D-24); it serves fixture runs with --citations or --groundedness. */
+export type EvalGenerator = 'stub' | 'live' | 'fake';
 
 export const STUB_GENERATOR_MODEL = 'stub/extractive-v1';
 export const LIVE_KEY_MISSING_NOTICE = '[RAG Eval] OPENROUTER_API_KEY not set; live generation skipped';
@@ -77,6 +82,10 @@ export interface RunEvalOptions {
   retainInProcess?: InProcessEval;
   /** Named configuration: an env overlay (in-process only) and eval overrides sent with every request. */
   runConfig?: RunConfig;
+  /** Sets options.citations on every request; implies includeAnswer. */
+  citations?: boolean;
+  /** Sets options.groundedness on every request; implies includeAnswer. In-process runs score against the fake sidecar. */
+  groundedness?: boolean;
 }
 
 export interface RunEvalResult {
@@ -332,8 +341,6 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     fixtureMode,
     tier = 'smoke',
     baseUrl,
-    includeAnswer = false,
-    generator,
     includeDrafts = false,
     embeddingProfileId,
     ingestFixture,
@@ -342,6 +349,18 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     runConfig,
   } = options;
   const requestOptions: EvalRequestOptions = { ...(options.requestOptions ?? {}) };
+  const citations = options.citations === true;
+  const groundedness = options.groundedness === true;
+  const answerFeatures = citations || groundedness;
+  if (citations) requestOptions.citations = true;
+  if (groundedness) requestOptions.groundedness = true;
+  // Citations and groundedness need an answer: a fixture run answers with the fake citation generator unless a live one is asked for.
+  const includeAnswer = options.includeAnswer === true || answerFeatures;
+  let generator = options.generator;
+  if (answerFeatures) {
+    if (baseUrl) generator ??= 'live';
+    else if (generator === undefined || generator === 'stub') generator = 'fake';
+  }
   if (runConfig) {
     if (baseUrl && Object.keys(runConfig.env).length > 0) {
       throw new RunConfigError('[Eval Harness] a run-config env overlay applies to in-process runs only; omit --base-url or drop its env');
@@ -365,11 +384,11 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
 
   let liveApiKey = '';
   if (includeAnswer) {
-    if (generator !== 'stub' && generator !== 'live') {
-      throw new Error("[Eval Harness] includeAnswer requires generator 'stub' or 'live'");
+    if (generator !== 'stub' && generator !== 'live' && generator !== 'fake') {
+      throw new Error("[Eval Harness] includeAnswer requires generator 'stub', 'fake' or 'live'");
     }
-    if (baseUrl && generator === 'stub') {
-      throw new Error('[Eval Harness] the stub generator cannot be used with --base-url');
+    if (baseUrl && generator !== 'live') {
+      throw new Error(`[Eval Harness] the ${generator} generator cannot be used with --base-url`);
     }
     if (generator === 'live') {
       liveApiKey = (process.env.OPENROUTER_API_KEY ?? '').trim();
@@ -377,6 +396,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
       if (!baseUrl && liveApiKey === '') throw new LiveGenerationKeyMissingError();
     }
     if (generator === 'stub' && !requestOptions.generator_model) requestOptions.generator_model = STUB_GENERATOR_MODEL;
+    if (generator === 'fake' && !requestOptions.generator_model) requestOptions.generator_model = FAKE_CITATION_GENERATOR_MODEL;
   }
 
   const goldenFilter = goldenFilterFor(includeDrafts);
@@ -401,6 +421,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
   const restoreConsole = redirectConsole(logPath);
   let inProcess: InProcessEval | undefined;
   let answerModule: typeof import('../../src/lib/rag-eval/answer.ts') | undefined;
+  let fakeGroundedness: FakeGroundedness | undefined;
   let edgeErrors = 0;
   let firstEffectiveConfig: RagTrace['effective_config'] | null = null;
   let manifestInputs: { corpusSha256: string | null; sqlSha256: Record<string, string> } = { corpusSha256: null, sqlSha256: {} };
@@ -443,10 +464,22 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
         answerModule = await import('../../src/lib/rag-eval/answer.ts');
         if (generator === 'stub') {
           answerModule.setEvalLanguageModelFactory(() => createStubLanguageModel());
+        } else if (generator === 'fake') {
+          answerModule.setEvalLanguageModelFactory(installFakeCitationGenerator());
         } else {
           const provider = createOpenRouter({ apiKey: liveApiKey, baseURL: 'https://openrouter.ai/api/v1' });
           answerModule.setEvalLanguageModelFactory((modelId) => provider(modelId) as unknown as LanguageModel);
         }
+      }
+      if (groundedness) {
+        // The eval route posts to this fake instead of RAG_SIDECAR_URL; the real client keeps the secret header and the contract.
+        const fake = await startFakeGroundedness();
+        fakeGroundedness = fake;
+        const { requestGroundedness } = await import('../../src/lib/rag/generation/groundedness-client.ts');
+        answerModule ??= await import('../../src/lib/rag-eval/answer.ts');
+        answerModule.setEvalGroundednessRequest((request, callOptions) =>
+          requestGroundedness(request, { ...callOptions, url: fake.url, secret: fake.secret }),
+        );
       }
       send = async (payload) => {
         if (!inProcess) throw new Error('[Eval Harness] in-process eval is not prepared');
@@ -511,6 +544,8 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
   } finally {
     restoreConsole();
     answerModule?.setEvalLanguageModelFactory(null);
+    answerModule?.setEvalGroundednessRequest(null);
+    await fakeGroundedness?.close();
     if (inProcess && !retainInProcess) await inProcess.close();
   }
 
@@ -530,6 +565,8 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     ...(requestOptions.retrieval_overrides ? { retrieval_overrides: requestOptions.retrieval_overrides } : {}),
     ...(requestOptions.disabled_stages?.length ? { disabled_stages: requestOptions.disabled_stages } : {}),
     ...(includeAnswer ? { generator_model: requestOptions.generator_model ?? null } : {}),
+    ...(citations ? { citations: true } : {}),
+    ...(groundedness ? { groundedness: true } : {}),
   };
   const embedder = baseUrl
     ? null
