@@ -429,3 +429,66 @@ test('cloud-off warning covers every value the runtime refuses, and not the allo
   for (const value of ['false', '0', 'off', 'no', 'disabled', 'maybe']) assert.equal(warns(value), 1, value);
   for (const value of ['true', '1', 'yes', 'on', 'ON', '']) assert.equal(warns(value), 0, value);
 });
+
+test('fails when src reads an ANTHROPIC variable that is not in the manifest', () => {
+  const root = syntheticTree({
+    manifest: {
+      schemaVersion: 1,
+      vars: [{ name: 'RAG_PLACEHOLDER', status: 'legacy', knownGaps: ['config-server', 'config-ui', 'env-ts', 'init-env'] }],
+    },
+  });
+  try {
+    write(root, 'src/lib/probe.ts', 'export const probe = process.env.ANTHROPIC_API_KEY;\n');
+    const { code, out } = run(root);
+    assert.equal(code, 1);
+    assert.match(out, /ANTHROPIC_API_KEY \[manifest\] used in src\/ or a tracked file but not in the manifest/);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('fails when a managed ANTHROPIC variable is missing from config-ui', () => {
+  const present = 'ANTHROPIC_API_KEY=\n';
+  const root = syntheticTree({
+    files: {
+      'scripts/init-env.js': present,
+      'src/lib/env.ts': present,
+      'scripts/config-server.js': present,
+    },
+    manifest: {
+      schemaVersion: 1,
+      vars: [{ name: 'RAG_PLACEHOLDER', status: 'legacy', knownGaps: ['config-server', 'config-ui', 'env-ts', 'init-env'] }],
+    },
+  });
+  try {
+    const first = run(root);
+    assert.equal(first.code, 1);
+    assert.match(first.out, /ANTHROPIC_API_KEY \[manifest\] used in src\/ or a tracked file but not in the manifest/);
+    editManifest(root, (manifest) => {
+      manifest.vars = [{ name: 'ANTHROPIC_API_KEY', status: 'managed', knownGaps: [] }];
+    });
+    const { code, out } = run(root);
+    assert.equal(code, 1);
+    assert.match(out, /ANTHROPIC_API_KEY \[config-ui\] missing from this location/);
+    assert.doesNotMatch(out, /not in the manifest/);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('does not discover an ANTHROPIC name embedded in a longer identifier', () => {
+  const root = syntheticTree({
+    files: { 'scripts/init-env.js': 'MY_ANTHROPIC_API_KEY_X=1\nXANTHROPIC_KEY=2\n' },
+    manifest: {
+      schemaVersion: 1,
+      vars: [{ name: 'RAG_PLACEHOLDER', status: 'legacy', knownGaps: ['config-server', 'config-ui', 'env-ts', 'init-env'] }],
+    },
+  });
+  try {
+    write(root, 'src/lib/probe.ts', 'export const probe = process.env.MY_ANTHROPIC_API_KEY_X;\n');
+    const { code, out } = run(root);
+    assert.equal(code, 0, out);
+  } finally {
+    cleanup(root);
+  }
+});
