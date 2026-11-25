@@ -163,6 +163,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
           spec: spec('injection_check', 'skip'),
           signal,
           collector,
+          scope,
           profile,
           security,
           mode: security.injectionCheck,
