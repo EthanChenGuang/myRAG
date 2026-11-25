@@ -78,7 +78,7 @@ describe('language-pack registry', () => {
 
   it('every pattern compiles in Python-compatible and JS unicode mode', () => {
     for (const pack of getLanguageRegistry().packs) {
-      for (const pattern of [...pack.effective_date_patterns, ...pack.version_markers]) {
+      for (const pattern of [...pack.effective_date_patterns, ...pack.effective_date_end_patterns, ...pack.version_markers]) {
         expect(() => new RegExp(pattern, 'u')).not.toThrow();
       }
     }

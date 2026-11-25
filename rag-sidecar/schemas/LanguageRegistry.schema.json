@@ -127,6 +127,13 @@
           "title": "Code",
           "type": "string"
         },
+        "effective_date_end_patterns": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Effective Date End Patterns",
+          "type": "array"
+        },
         "effective_date_patterns": {
           "items": {
             "type": "string"
