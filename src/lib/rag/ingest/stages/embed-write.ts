@@ -5,6 +5,7 @@ import { canonicalModelId, getEmbeddingProviderFor } from '../../embeddings/regi
 import { resolveEmbeddingTargets, type EmbeddingTarget } from '../embedding-targets';
 import { buildProfileChunks, liveProfilesByDocType, writeProfileChunks } from '../profile-chunks';
 import { buildEmbeddingText, EMBEDDING_TEXT_VERSION, templateHeaderFor } from '../text/embedding-text';
+import { effectiveEmbeddingTextVersion } from '../text/table-rows';
 import {
   IngestStageError,
   requireDocument,
@@ -24,7 +25,7 @@ export function toWrites(ctx: Pick<StageContext, 'work'>): ChunkWrite[] {
     chunk_index: index,
     section_path: draft.section_path,
     chunk_kind: draft.chunk_kind,
-    embedding_text_version: EMBEDDING_TEXT_VERSION,
+    embedding_text_version: effectiveEmbeddingTextVersion(EMBEDDING_TEXT_VERSION, draft.table_row_separator !== undefined),
     page_start: draft.page_start,
     page_end: draft.page_end,
     content_hash: draft.content_hash ?? null,
@@ -254,7 +255,14 @@ async function runEmbed(ctx: StageContext): Promise<StageOutcome> {
 
   for (const [position, batch] of batches.entries()) {
     ctx.signal.throwIfAborted();
-    const texts = batch.map((write) => buildEmbeddingText({ section_path: write.section_path, content: write.content, template_header: templateHeader }));
+    const texts = batch.map((write) =>
+      buildEmbeddingText({
+        section_path: write.section_path,
+        content: write.content,
+        template_header: templateHeader,
+        table_row_separator: ctx.work.chunks[write.chunk_index]?.table_row_separator ?? null,
+      }),
+    );
     const outcomes = await Promise.all(
       targets.map(async (target) => {
         const earlier = failed.get(target.profile.id);
