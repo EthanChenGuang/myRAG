@@ -19,7 +19,7 @@ import { IngestWriterError, chunkIdFor, profileRowIdFor, type ChunkWrite, type P
 const MAX_BATCH_BYTES = 1_000_000;
 const BYTES_PER_VECTOR_DIM = 20;
 
-function toWrites(ctx: StageContext): ChunkWrite[] {
+export function toWrites(ctx: Pick<StageContext, 'work'>): ChunkWrite[] {
   return ctx.work.chunks.map((draft, index) => ({
     content: draft.content,
     chunk_index: index,
@@ -30,6 +30,8 @@ function toWrites(ctx: StageContext): ChunkWrite[] {
     page_end: draft.page_end,
     content_hash: draft.content_hash ?? null,
     lexical_text: draft.lexical_text ?? null,
+    ...(draft.language !== undefined ? { language: draft.language } : {}),
+    ...(draft.language_confidence !== undefined ? { language_confidence: draft.language_confidence } : {}),
     metadata: draft.metadata,
   }));
 }
