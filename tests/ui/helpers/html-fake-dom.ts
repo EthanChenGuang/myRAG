@@ -60,6 +60,7 @@ interface SimpleSelector {
   id?: string;
   classes: string[];
   attrs: Array<{ name: string; value?: string }>;
+  pseudo: string[];
 }
 
 function unescapeCss(text: string): string {
@@ -67,8 +68,8 @@ function unescapeCss(text: string): string {
 }
 
 function parseCompound(text: string): SimpleSelector {
-  const sel: SimpleSelector = { classes: [], attrs: [] };
-  const re = /([a-z][a-z0-9-]*)|#((?:\\.|[\w-])+)|\.((?:\\.|[\w-])+)|\[([\w-]+)(?:="([^"]*)")?\]|(\*)/giy;
+  const sel: SimpleSelector = { classes: [], attrs: [], pseudo: [] };
+  const re = /([a-z][a-z0-9-]*)|#((?:\\.|[\w-])+)|\.((?:\\.|[\w-])+)|\[([\w-]+)(?:="([^"]*)")?\]|(\*)|:(first-child|last-child)/giy;
   let index = 0;
   while (index < text.length) {
     re.lastIndex = index;
@@ -78,6 +79,7 @@ function parseCompound(text: string): SimpleSelector {
     else if (m[2]) sel.id = unescapeCss(m[2]);
     else if (m[3]) sel.classes.push(unescapeCss(m[3]));
     else if (m[4]) sel.attrs.push({ name: m[4], value: m[5] });
+    else if (m[7]) sel.pseudo.push(m[7].toLowerCase());
     index = re.lastIndex;
   }
   return sel;
@@ -91,6 +93,11 @@ function matchesCompound(el: FakeElement, sel: SimpleSelector): boolean {
   for (const attr of sel.attrs) {
     if (!el.hasAttribute(attr.name)) return false;
     if (attr.value !== undefined && el.getAttribute(attr.name) !== attr.value) return false;
+  }
+  for (const pseudo of sel.pseudo) {
+    const siblings = el.parentNode ? el.parentNode.children : [el];
+    if (pseudo === 'first-child' && siblings[0] !== el) return false;
+    if (pseudo === 'last-child' && siblings[siblings.length - 1] !== el) return false;
   }
   return true;
 }
