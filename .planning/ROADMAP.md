@@ -22,9 +22,9 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Unified Retrieval Pipeline & Tenant Scope** - Text chat, embedded chat and voice run through one `src/lib/rag/` pipeline that only searches a server-verified tenant, reproducing the baseline
 - [ ] **Phase 3: Unified Ingestion & Embedding Profiles** - One `ingest()` for every upload path with document types, Docling fallback, dedup, versioning, switchable embeddings and rollbackable re-embedding
 - [ ] **Phase 3.1: Tiered Parsing, Incremental Queue & Bulk Backfill** (INSERTED) - Cheapest-tier-that-passes parse routing with escalation, cloud and budget constraints, an ingestion ledger and parse cache, an async upload queue and a budgeted, resumable backfill. **2026-11-24 pause:** trunk merge train at `56b0349d` (#10 #9 #4 #5 merged); resume per `.planning/phases/03.1-tiered-parsing-incremental-queue-bulk-backfill/.continue-here.md`.
-- [ ] **Phase 3.2: Language Support & Ingestion Hardening** (INSERTED) - Deployment-level supported languages chosen at setup, a language-pack registry, chunk languages, scope tags, captions and document translation in the document's language, BGE-M3 fallback, hidden-text and link checks, optional upload approval
+- [ ] **Phase 3.2: Language Support & Ingestion Hardening** (INSERTED) - Deployment-level supported languages chosen at setup, a language-pack registry, chunk languages, scope tags, captions and document translation in the document's language, BGE-M3 fallback, table headers in every profile and row serialization, hidden-text and link checks, optional upload approval
 - [ ] **Phase 4: Hybrid Retrieval, Reranking & Calibrated Refusal** - Filtered hybrid search on pgvector, switchable rerankers, edge-ordered context and refusal from calibrated rerank scores
-- [ ] **Phase 4.2: Retrieval Tuning Additions** (INSERTED) - Rerank pool floor 25 and nDCG, tenant tokenizer dictionary and eval-gated Italian stemming, version-aware retrieval, TTFT tracing and CI gate
+- [ ] **Phase 4.2: Retrieval Tuning Additions** (INSERTED) - Rerank pool floor 25 and nDCG, tenant tokenizer dictionary and eval-gated Italian stemming, version-aware retrieval, structured table lookup, TTFT tracing and CI gate
 - [ ] **Phase 5: Verified Citations & Groundedness** - Claude Citations, validated chunk-ID citations for other models, one persisted citation record and a post-stream groundedness badge
 - [ ] **Phase 5.1: Prompt Injection Defense** (INSERTED) - Tagged, instruction-free context, runtime injection detection and an injection eval gated at 0
 - [ ] **Phase 5.2: Grounded Answers & Output Safety** (INSERTED) - Partial-answer rule, a citation per factual sentence, claim-level grounding marks, LLM-judge groundedness for unsupported languages, output-length cap, per-language refusal texts, output link and credential guard, uploader tracing
@@ -237,7 +237,7 @@ Plans:
 ### Phase 3.2: Language Support & Ingestion Hardening (INSERTED)
 **Goal**: The deployment supports exactly the languages chosen at setup, every ingestion step works per language, and documents with hidden text, untrusted links or unapproved uploads never reach retrieval
 **Depends on**: Phase 3, Phase 3.1
-**Requirements**: LANG-01, LANG-02, LANG-03, LANG-04, LANG-05, LANG-06, XLG-04, XLG-06, EMB-11, SEC-07, SEC-08, SEC-09, DATA-18 (plus the DATA-05 and XLG-02 deltas)
+**Requirements**: LANG-01, LANG-02, LANG-03, LANG-04, LANG-05, LANG-06, XLG-04, XLG-06, EMB-11, SEC-07, SEC-08, SEC-09, DATA-18, CHK-06, CHK-07, EVAL-18 (plus the DATA-05 and XLG-02 deltas)
 **Success Criteria** (what must be TRUE):
   1. First-run setup asks for the supported languages (single or multi-select, plus a primary language) in an interactive `scripts/init-env.js` run and in the Config UI, and writes them to `.env.local` and the five config locations; with them unset, `RAG_PIPELINE=legacy` behaves as today and the new pipeline refuses to start with a message pointing to the picker; choosing one language turns off detection, translation and the cross-lingual slices.
   2. The language-pack registry is Pydantic data with generated Zod; the golden contract, eval corpus, drafting tools and `src/lib/rag/lang/detect.ts` validate against it, a CI check fails on a hard-coded `zh|en|it` literal outside the registry and fixtures, and saving a set with an incomplete pack or an unsupported embedding profile or reranker fails.
@@ -246,6 +246,7 @@ Plans:
   5. BGE-M3 runs as an embedding profile through the hosted API and the sidecar with identical vectors, passes the EMB-05 activation gate and is compared on every slice with cost.
   6. Fixture documents with white-on-white text, tiny fonts, off-page text, zero-width characters and hidden Word runs, and documents containing links outside the allowlist, are quarantined with the reason shown to the admin; with `RAG_UPLOAD_APPROVAL` on, a member's upload stays out of retrieval and the cache until approved; scope tags filter retrieval to documents tagged for the Italian branch.
   7. With every new switch off, the characterization tests pass and no slice drops beyond the noise band; machine-translated zh/it golden items count only after native-speaker review.
+  8. In every processing profile, a 60-row fixture table cut into several chunks repeats its header in each chunk and a page-continued table carries the header forward; the `table_split` items ("米兰的 P5 员工住宿上限是多少？" and its en/it versions) are answered with the lodging limit, not another column; with `RAG_TABLE_ROW_SERIALIZATION` on, table chunks embed "column = value" lines while the LLM still sees the Markdown table.
 **Live verification**: Run OCR on real scanned Chinese and Italian documents; call the hosted BGE-M3 API; review a sample of quarantined real documents.
 **Plans**: TBD
 **UI hint**: yes
@@ -317,12 +318,13 @@ Plans:
 ### Phase 4.2: Retrieval Tuning Additions (INSERTED)
 **Goal**: Retrieval keeps the smallest rerank pool that works, matches company terms as single words, can answer questions about earlier policy versions, and its time to first token is gated
 **Depends on**: Phase 4, Phase 3.2
-**Requirements**: LAT-04, LANG-07, RET-11 (plus the RNK-02 and LAT-01 deltas)
+**Requirements**: LAT-04, LANG-07, RET-11, RET-12 (plus the RNK-02 and LAT-01 deltas)
 **Success Criteria** (what must be TRUE):
   1. The sweep grid includes a pool of 25, the rerank input cap accepts 25, and the sweep report adds nDCG@k with k equal to the chunks sent to the LLM.
   2. A tenant dictionary term such as 年假 matches as one lexical term after `rag:relex`; Italian stemming makes dipendente and dipendenti match and is turned on only if the it slice gains Recall with no other slice dropping.
   3. With `versions: all` or a period range, a fixture question comparing two versions of one policy retrieves chunks of both, superseded chunks carry their version and dates, and the default still returns current versions only; the semantic cache bypasses these queries.
   4. TTFT p50/p95 is on the trace for text, embed and voice, cache hits and misses are reported separately, and an injected pre-generation delay makes the CI latency gate fail.
+  5. With `RAG_TABLE_LOOKUP` on, a question naming a city and a grade retrieves the matching table row through the lookup leg as an extra RRF list within the verified tenant, the row reaches the context with its header, no LLM-written SQL exists anywhere, and the cross-tenant canary includes the row store.
 **Live verification**: Re-run the pool sweep with real rerankers including the 25 pool; measure real TTFT against the budget.
 **Plans**: TBD
 
