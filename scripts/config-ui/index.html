@@ -6734,7 +6734,7 @@
                                             <div class="form-control">
                                                 <label class="label" for="REDIS_URL"><span class="label-text">Redis URL</span></label>
                                                 <div class="flex gap-2">
-                                                    <input type="password" id="REDIS_URL" name="REDIS_URL" placeholder="Empty until configured" autocomplete="off" spellcheck="false"
+                                                    <input type="password" id="REDIS_URL" name="REDIS_URL" placeholder="redis://localhost:6379…" autocomplete="off" spellcheck="false"
                                                         aria-describedby="rag-redis-url-help" class="input input-bordered flex-1 w-full">
                                                     <button type="button" class="btn btn-square btn-outline" data-for="REDIS_URL" aria-label="Show or hide the Redis URL">👁️</button>
                                                 </div>
@@ -6745,17 +6745,17 @@
                                             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                                                 <div class="form-control">
                                                     <label class="label" for="RAG_SEMANTIC_CACHE_TTL"><span class="label-text">Answer lifetime (seconds)</span></label>
-                                                    <input type="number" min="0" step="1" inputmode="numeric" id="RAG_SEMANTIC_CACHE_TTL" name="RAG_SEMANTIC_CACHE_TTL" placeholder="3600"
+                                                    <input type="number" min="0" step="1" inputmode="numeric" id="RAG_SEMANTIC_CACHE_TTL" name="RAG_SEMANTIC_CACHE_TTL" placeholder="3600…" autocomplete="off"
                                                         class="input input-bordered w-full">
                                                 </div>
                                                 <div class="form-control">
                                                     <label class="label" for="RAG_SEMANTIC_CACHE_REFUSAL_TTL"><span class="label-text">Refusal lifetime (seconds)</span></label>
-                                                    <input type="number" min="0" step="1" inputmode="numeric" id="RAG_SEMANTIC_CACHE_REFUSAL_TTL" name="RAG_SEMANTIC_CACHE_REFUSAL_TTL" placeholder="600"
+                                                    <input type="number" min="0" step="1" inputmode="numeric" id="RAG_SEMANTIC_CACHE_REFUSAL_TTL" name="RAG_SEMANTIC_CACHE_REFUSAL_TTL" placeholder="600…" autocomplete="off"
                                                         class="input input-bordered w-full">
                                                 </div>
                                                 <div class="form-control">
                                                     <label class="label" for="RAG_SEMANTIC_CACHE_MAX_DISTANCE"><span class="label-text">Max hit distance</span></label>
-                                                    <input type="number" min="0" max="2" step="0.01" inputmode="decimal" id="RAG_SEMANTIC_CACHE_MAX_DISTANCE" name="RAG_SEMANTIC_CACHE_MAX_DISTANCE" placeholder="0.05"
+                                                    <input type="number" min="0" max="2" step="0.01" inputmode="decimal" id="RAG_SEMANTIC_CACHE_MAX_DISTANCE" name="RAG_SEMANTIC_CACHE_MAX_DISTANCE" placeholder="0.05…" autocomplete="off"
                                                         class="input input-bordered w-full">
                                                 </div>
                                             </div>
