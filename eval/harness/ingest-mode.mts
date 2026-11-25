@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { loadCorpus } from './corpus.mts';
 import { startFakeEdge, type FakeEdge } from './fake-edge.mts';
-import { createEmptyFixtureDatabase, type DeploymentMode, type FixtureDatabase } from './pglite-supabase.mts';
+import { createEmptyFixtureDatabase, prechunkedWriter, relexFixtureChunks, type DeploymentMode, type FixtureDatabase } from './pglite-supabase.mts';
 import { applyFixtureProcessEnv } from './process-env.mts';
 import { RunConfigError } from './run-config.mts';
 import type { ChunkingProfile } from '../../src/lib/rag-eval/contracts.generated.ts';
@@ -22,6 +22,15 @@ const QUEUE_SIDECAR_SECRET = 'ingest-mode-queue-sidecar-secret-0000';
 const FORCED_PREMIUM_BUDGET = 1000;
 const FORCED_PREMIUM_MAX_PAGES_PER_DOC = 200;
 const WORKER_TIMEOUT_MS = 180_000;
+/**
+ * The sec-attacks documents simulate legacy or pre-scan content (D-13): ingest() would quarantine them, so ingest mode writes them as
+ * ready pre-chunked rows through the prechunked writer, and every other corpus document goes through ingest().
+ */
+const PRECHUNKED_ONLY_RE = /^sec-attacks\.[a-z]{2}\.md$/;
+
+export function isPrechunkedOnlyDocument(relpath: string): boolean {
+  return PRECHUNKED_ONLY_RE.test(path.posix.basename(relpath));
+}
 
 interface ManifestFixture {
   id: string;
@@ -418,7 +427,7 @@ export async function buildIngestFixtureDatabase(options: {
     const tenant = scope;
 
     const corpusWork = (docs: typeof corpusSlice): IngestWork[] =>
-      docs.map((doc) => ({
+      docs.filter((doc) => !isPrechunkedOnlyDocument(doc.relpath)).map((doc) => ({
         label: doc.relpath,
         expected: 'ready',
         input: {
@@ -493,14 +502,29 @@ export async function buildIngestFixtureDatabase(options: {
       queuedSummary = queued.summary;
     }
 
-    for (const item of corpusWork(corpusSlice)) await run(item);
+    const writePrechunked = await prechunkedWriter(empty.db, deploymentMode);
+    const fillCorpus = async (docs: typeof corpusSlice): Promise<void> => {
+      const prechunkedIds = new Set<string>();
+      for (const doc of docs) {
+        if (isPrechunkedOnlyDocument(doc.relpath)) {
+          await writePrechunked(doc);
+          for (const chunk of doc.chunks) prechunkedIds.add(chunk.id);
+        } else {
+          for (const item of corpusWork([doc])) await run(item);
+        }
+      }
+      // Lexical text for the pre-chunked rows only, as prechunked mode builds it; the rows ingest() wrote stay as written.
+      if (prechunkedIds.size > 0 && options.migrations !== false) await relexFixtureChunks(empty.db, prechunkedIds);
+    };
+
+    await fillCorpus(corpusSlice);
 
     if (options.onAfterCorpusSlice && edge !== undefined) {
       const partialFixture = { ...empty, corpusSha256 } as FixtureDatabase;
       await options.onAfterCorpusSlice({ fixture: partialFixture, edge, scope });
     }
 
-    for (const item of corpusWork(corpusTail)) await run(item);
+    await fillCorpus(corpusTail);
 
     const ingestTyped = includeTyped && (splitAt === undefined || corpusTail.length > 0);
     if (ingestTyped) {

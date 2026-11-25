@@ -6,9 +6,10 @@ import { PGlite } from '@electric-sql/pglite';
 import { pg_trgm } from '@electric-sql/pglite/contrib/pg_trgm';
 import { vector } from '@electric-sql/pglite-pgvector';
 import type { RpcClient, RpcRequest, RpcResponse } from '@/lib/rag/backend/supabase-rpc';
-import { LEXICAL_VERSION } from '@/lib/rag/lexical/chunk-text';
+import { detectLanguage } from '@/lib/rag/lang/detect';
+import { LEXICAL_VERSION, chunkLexicalText } from '@/lib/rag/lexical/chunk-text';
 import { runRelex } from '@/lib/rag/ingest/relex/run';
-import { loadCorpus } from './corpus.mts';
+import { loadCorpus, type CorpusDocument } from './corpus.mts';
 import type { FakeEdge } from './fake-edge.mts';
 import { applyMigrations } from './migrations.mts';
 import { embedText } from './fixture-embedder.mts';
@@ -100,6 +101,48 @@ export async function runFixtureRelex(db: PGlite): Promise<void> {
   await runRelex({ db: pgliteRpcClient(db), batchSize: 500 });
 }
 
+/**
+ * Relex for the given chunk ids only, with the inputs and RPCs runRelex uses: a database ingest() filled keeps its own rows exactly as
+ * written, including any it left without the current lexical version.
+ */
+export async function relexFixtureChunks(db: PGlite, chunkIds: ReadonlySet<string>): Promise<number> {
+  const rpc = pgliteRpcClient(db);
+  const rows: Array<{ id: string; lexical_text: string; language?: string }> = [];
+  let after: string | null = null;
+  for (;;) {
+    const page: RpcResponse = await rpc.rpc('rag_relex_candidates', { p_after: after, p_version: LEXICAL_VERSION, p_limit: 1000, p_tenant_key: null });
+    if (page.error) throw new Error(`[Fixture DB] rag_relex_candidates failed (${page.error.code ?? 'unknown'})`);
+    const candidates = (page.data ?? []) as RelexRow[];
+    for (const candidate of candidates) {
+      const id = String(candidate.id);
+      if (!chunkIds.has(id)) continue;
+      const content = typeof candidate.content === 'string' ? candidate.content : '';
+      const metadata = candidate.metadata;
+      const row: { id: string; lexical_text: string; language?: string } = {
+        id,
+        lexical_text: chunkLexicalText({
+          sectionPath: Array.isArray(candidate.section_path) ? candidate.section_path.map((entry) => String(entry)) : [],
+          content,
+          chunkKind: typeof candidate.chunk_kind === 'string' ? candidate.chunk_kind : null,
+          metadata: metadata && typeof metadata === 'object' && !Array.isArray(metadata) ? (metadata as Record<string, unknown>) : null,
+          documentFilename: typeof candidate.document_filename === 'string' ? candidate.document_filename : '',
+        }),
+      };
+      if (typeof candidate.language !== 'string') {
+        const detected = detectLanguage(content);
+        if (detected !== null) row.language = detected;
+      }
+      rows.push(row);
+    }
+    if (candidates.length < 1000) break;
+    after = String(candidates[candidates.length - 1].id);
+  }
+  if (rows.length === 0) return 0;
+  const written: RpcResponse = await rpc.rpc('rag_relex_batch', { p_rows: rows, p_version: LEXICAL_VERSION });
+  if (written.error) throw new Error(`[Fixture DB] rag_relex_batch failed (${written.error.code ?? 'unknown'})`);
+  return rows.length;
+}
+
 export interface EmptyFixtureDatabase {
   db: PGlite;
   fixtureUserId: string;
@@ -158,6 +201,49 @@ async function hasPublicColumn(db: PGlite, table: string, column: string): Promi
   return result.rows[0]?.present === true;
 }
 
+/**
+ * The prechunked writer: inserts one corpus document and its pre-cut chunks as ready rows of the fixture tenant, bypassing ingest()
+ * and its quarantine. Ingest mode uses it for the documents that simulate legacy or pre-scan content (D-13).
+ */
+export async function prechunkedWriter(db: PGlite, deploymentMode: DeploymentMode): Promise<(doc: CorpusDocument) => Promise<void>> {
+  const multiTenant = deploymentMode === 'multi-tenant';
+  // A setup from before Phase 3 (the frozen pre-Phase-3 files, migrations:false) has no doc_type columns; 0301 and 0304 add them as 'general' on upgrade.
+  const documentsDocType = await hasPublicColumn(db, 'documents', 'doc_type');
+  const chunksDocType = await hasPublicColumn(db, 'document_chunks', 'doc_type');
+  return async (doc) => {
+    await insertRow(db, 'documents', [
+      ['id', doc.id],
+      ['filename', doc.filename],
+      ['content', doc.content],
+      ['metadata', JSON.stringify({ relpath: doc.relpath, language: doc.language }), 'jsonb'],
+      ...(multiTenant ? [['user_id', FIXTURE_USER_ID] satisfies InsertColumn] : []),
+      ...(documentsDocType ? [['doc_type', doc.docType] satisfies InsertColumn] : []),
+      ['created_at', doc.createdAt],
+    ]);
+
+    for (const chunk of doc.chunks) {
+      const metadata = {
+        document_title: doc.filename,
+        chunk_index: chunk.index,
+        chunk_position: chunk.index + 1,
+        total_chunks: doc.chunks.length,
+        section: chunk.section,
+        ...(doc.imageUrl ? { image_url: doc.imageUrl } : {}),
+      };
+      await insertRow(db, 'document_chunks', [
+        ['id', chunk.id],
+        ['document_id', doc.id],
+        ['content', chunk.stored],
+        ['embedding', vectorLiteral(embedText(chunk.text)), 'vector'],
+        ...(multiTenant ? [['chunk_index', chunk.index] satisfies InsertColumn] : []),
+        ['metadata', JSON.stringify(metadata), 'jsonb'],
+        ...(chunksDocType ? [['doc_type', doc.docType] satisfies InsertColumn] : []),
+        ['created_at', doc.createdAt],
+      ]);
+    }
+  };
+}
+
 export async function createFixtureDatabase(options: {
   deploymentMode: DeploymentMode;
   corpusDir: string;
@@ -202,42 +288,8 @@ export async function createFixtureDatabase(options: {
   const corpus = loadCorpus(corpusDir);
   const { db, sqlSha256 } = await createEmptyFixtureDatabase(options);
   try {
-    const multiTenant = deploymentMode === 'multi-tenant';
-    // A setup from before Phase 3 (the frozen pre-Phase-3 files, migrations:false) has no doc_type columns; 0301 and 0304 add them as 'general' on upgrade.
-    const documentsDocType = await hasPublicColumn(db, 'documents', 'doc_type');
-    const chunksDocType = await hasPublicColumn(db, 'document_chunks', 'doc_type');
-    for (const doc of corpus.documents) {
-      await insertRow(db, 'documents', [
-        ['id', doc.id],
-        ['filename', doc.filename],
-        ['content', doc.content],
-        ['metadata', JSON.stringify({ relpath: doc.relpath, language: doc.language }), 'jsonb'],
-        ...(multiTenant ? [['user_id', FIXTURE_USER_ID] satisfies InsertColumn] : []),
-        ...(documentsDocType ? [['doc_type', doc.docType] satisfies InsertColumn] : []),
-        ['created_at', doc.createdAt],
-      ]);
-
-      for (const chunk of doc.chunks) {
-        const metadata = {
-          document_title: doc.filename,
-          chunk_index: chunk.index,
-          chunk_position: chunk.index + 1,
-          total_chunks: doc.chunks.length,
-          section: chunk.section,
-          ...(doc.imageUrl ? { image_url: doc.imageUrl } : {}),
-        };
-        await insertRow(db, 'document_chunks', [
-          ['id', chunk.id],
-          ['document_id', doc.id],
-          ['content', chunk.stored],
-          ['embedding', vectorLiteral(embedText(chunk.text)), 'vector'],
-          ...(multiTenant ? [['chunk_index', chunk.index] satisfies InsertColumn] : []),
-          ['metadata', JSON.stringify(metadata), 'jsonb'],
-          ...(chunksDocType ? [['doc_type', doc.docType] satisfies InsertColumn] : []),
-          ['created_at', doc.createdAt],
-        ]);
-      }
-    }
+    const writer = await prechunkedWriter(db, deploymentMode);
+    for (const doc of corpus.documents) await writer(doc);
     if (options.relex ?? (options.migrations !== false)) {
       await runFixtureRelex(db);
       sqlSha256[LEXICAL_SHA_KEY] = crypto.createHash('sha256').update(String(LEXICAL_VERSION)).digest('hex');

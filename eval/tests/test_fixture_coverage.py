@@ -20,6 +20,8 @@ PAIRS = (("en", "zh"), ("it", "zh"), ("zh", "en"), ("it", "en"), ("zh", "it"), (
 PER_PAIR_MINIMUM = 4
 NO_ANSWER_ADDED_BY_PLAN_04_38 = 18
 CROSS_LINGUAL_ADDED_BY_PLAN_04_38 = 2
+# Plan 05.1-17: four injection and two injection_evasive items per language.
+INJECTION_PER_LANGUAGE_05_1_17 = 6
 PER_LANGUAGE_CATEGORY = {
     "general": 6,
     "multi_turn": 3,
@@ -46,11 +48,12 @@ def items():
     return load_golden(GOLDEN_PATH)
 
 
-def test_corpus_has_thirteen_documents_per_language():
+def test_corpus_has_nineteen_documents_per_language():
+    """Thirteen documents plus the sec-topics and sec-attacks pair per language from plan 05.1-09."""
     documents = load_corpus(CORPUS_DIR)
     counts = collections.Counter(doc.language for doc in documents)
-    assert len(documents) == 13
-    assert (counts["zh"], counts["en"], counts["it"]) == (4, 5, 4)
+    assert len(documents) == 19
+    assert (counts["zh"], counts["en"], counts["it"]) == (6, 7, 6)
 
 
 def test_corpus_has_one_image_caption_document():
@@ -61,13 +64,14 @@ def test_corpus_has_one_image_caption_document():
 def test_single_language_items_forty_per_language(items):
     single = [item for item in items if item.category != "cross_lingual"]
     counts = collections.Counter(item.language for item in single)
-    assert len(single) == 102 + NO_ANSWER_ADDED_BY_PLAN_04_38
-    assert {language: counts[language] for language in LANGUAGES} == {"zh": 40, "en": 40, "it": 40}
+    assert len(single) == 102 + NO_ANSWER_ADDED_BY_PLAN_04_38 + INJECTION_PER_LANGUAGE_05_1_17 * len(LANGUAGES)
+    expected = 40 + INJECTION_PER_LANGUAGE_05_1_17
+    assert {language: counts[language] for language in LANGUAGES} == {"zh": expected, "en": expected, "it": expected}
 
 
 def test_twenty_six_cross_lingual_items_at_least_four_per_pair(items):
     cross = [item for item in items if item.category == "cross_lingual"]
-    assert len(items) == 102 + NO_ANSWER_ADDED_BY_PLAN_04_38 + len(cross)
+    assert len(items) == 102 + NO_ANSWER_ADDED_BY_PLAN_04_38 + INJECTION_PER_LANGUAGE_05_1_17 * len(LANGUAGES) + len(cross)
     assert len(cross) == PER_PAIR_MINIMUM * len(PAIRS) + CROSS_LINGUAL_ADDED_BY_PLAN_04_38
     counts = collections.Counter((item.language, item.evidence_language) for item in cross)
     for pair in PAIRS:

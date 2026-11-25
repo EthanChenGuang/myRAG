@@ -16,6 +16,8 @@ export interface FakeEdgeCall {
   method: string;
   path: string;
   model?: string;
+  /** The query string of a table read, so tests can assert which ids a request named. */
+  query?: string;
 }
 
 export interface FakeEdge {
@@ -660,7 +662,7 @@ function createHandlers(
       limitSql = ` LIMIT ${Number(limitRaw)}`;
     }
 
-    calls.push({ method: 'GET', path: `/rest/v1/${table}` });
+    calls.push({ method: 'GET', path: `/rest/v1/${table}`, query: params.toString() });
     const orderColumn = allowedColumns.includes('id') ? 'id' : allowedColumns[0];
     const sql = `SELECT ${columns.map((column) => `"${column}"`).join(', ')} FROM ${table}${where.length ? ` WHERE ${where.join(' AND ')}` : ''} ORDER BY "${orderColumn}"${limitSql}`;
     let rows: unknown[];

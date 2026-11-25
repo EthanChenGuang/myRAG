@@ -45,10 +45,24 @@ class ConfigProvenance(_Contract):
     source: ConfigProvenanceSource
 
 
+def _optional_positive_number_schema(schema: dict[str, Any]) -> None:
+    schema.pop("default", None)
+    branches = schema.pop("anyOf", None) or []
+    for branch in branches:
+        if branch.get("type") == "number":
+            schema.update(branch)
+
+
 class RetrievalLegWeights(_Contract):
     dense: float = Field(default=1.0, gt=0)
     lexical: float = Field(default=1.0, gt=0)
     exact_id: float = Field(default=1.0, gt=0)
+    domain: float | None = Field(
+        default=None,
+        gt=0,
+        exclude_if=lambda value: value is None,
+        json_schema_extra=_optional_positive_number_schema,
+    )
 
 
 def _stable_json(payload: object) -> str:

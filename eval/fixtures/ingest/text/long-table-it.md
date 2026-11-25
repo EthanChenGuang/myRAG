@@ -1,0 +1,68 @@
+# Registro sintetico dello spessore dei campioni di vetro
+
+La tabella riporta lo spessore iniziale e lo spessore finale, in millimetri, di sessanta campioni di vetro inventati, divisi in sei lotti. Tutti i valori sono sintetici e servono solo per le prove di analisi e di ricerca.
+
+| Lotto | Campione | Spessore iniziale (mm) | Spessore finale (mm) | Esito |
+| --- | --- | --- | --- | --- |
+| Lotto Rosso | Campione n. 01 | 2,346 | 2,839 | conforme alla prova |
+| Lotto Rosso | Campione n. 02 | 2,432 | 2,901 | da verificare di nuovo |
+| Lotto Rosso | Campione n. 03 | 2,518 | 2,963 | non conforme alla prova |
+| Lotto Rosso | Campione n. 04 | 2,604 | 3,025 | conforme alla prova |
+| Lotto Rosso | Campione n. 05 | 2,690 | 3,087 | da verificare di nuovo |
+| Lotto Rosso | Campione n. 06 | 2,776 | 3,149 | non conforme alla prova |
+| Lotto Rosso | Campione n. 07 | 2,862 | 2,011 | conforme alla prova |
+| Lotto Rosso | Campione n. 08 | 2,948 | 2,073 | da verificare di nuovo |
+| Lotto Rosso | Campione n. 09 | 3,034 | 2,135 | non conforme alla prova |
+| Lotto Rosso | Campione n. 10 | 3,120 | 2,197 | conforme alla prova |
+| Lotto Verde | Campione n. 01 | 2,006 | 2,259 | da verificare di nuovo |
+| Lotto Verde | Campione n. 02 | 2,092 | 2,321 | non conforme alla prova |
+| Lotto Verde | Campione n. 03 | 2,178 | 2,383 | conforme alla prova |
+| Lotto Verde | Campione n. 04 | 2,264 | 2,445 | da verificare di nuovo |
+| Lotto Verde | Campione n. 05 | 2,350 | 2,507 | non conforme alla prova |
+| Lotto Verde | Campione n. 06 | 2,436 | 2,569 | conforme alla prova |
+| Lotto Verde | Campione n. 07 | 2,522 | 2,631 | da verificare di nuovo |
+| Lotto Verde | Campione n. 08 | 2,608 | 2,693 | non conforme alla prova |
+| Lotto Verde | Campione n. 09 | 2,694 | 2,755 | conforme alla prova |
+| Lotto Verde | Campione n. 10 | 2,780 | 2,817 | da verificare di nuovo |
+| Lotto Blu | Campione n. 01 | 2,866 | 2,879 | non conforme alla prova |
+| Lotto Blu | Campione n. 02 | 2,952 | 2,941 | conforme alla prova |
+| Lotto Blu | Campione n. 03 | 3,038 | 3,003 | da verificare di nuovo |
+| Lotto Blu | Campione n. 04 | 3,124 | 3,065 | non conforme alla prova |
+| Lotto Blu | Campione n. 05 | 2,010 | 3,127 | conforme alla prova |
+| Lotto Blu | Campione n. 06 | 2,096 | 3,189 | da verificare di nuovo |
+| Lotto Blu | Campione n. 07 | 2,182 | 2,051 | non conforme alla prova |
+| Lotto Blu | Campione n. 08 | 2,268 | 2,113 | conforme alla prova |
+| Lotto Blu | Campione n. 09 | 2,354 | 2,175 | da verificare di nuovo |
+| Lotto Blu | Campione n. 10 | 2,440 | 2,237 | non conforme alla prova |
+| Lotto Giallo | Campione n. 01 | 2,526 | 2,299 | conforme alla prova |
+| Lotto Giallo | Campione n. 02 | 2,612 | 2,361 | da verificare di nuovo |
+| Lotto Giallo | Campione n. 03 | 2,698 | 2,423 | non conforme alla prova |
+| Lotto Giallo | Campione n. 04 | 2,784 | 2,485 | conforme alla prova |
+| Lotto Giallo | Campione n. 05 | 2,870 | 2,547 | da verificare di nuovo |
+| Lotto Giallo | Campione n. 06 | 2,956 | 2,609 | non conforme alla prova |
+| Lotto Giallo | Campione n. 07 | 3,042 | 2,671 | conforme alla prova |
+| Lotto Giallo | Campione n. 08 | 3,128 | 2,733 | da verificare di nuovo |
+| Lotto Giallo | Campione n. 09 | 2,014 | 2,795 | non conforme alla prova |
+| Lotto Giallo | Campione n. 10 | 2,100 | 2,857 | conforme alla prova |
+| Lotto Grigio | Campione n. 01 | 2,186 | 2,919 | da verificare di nuovo |
+| Lotto Grigio | Campione n. 02 | 2,272 | 2,981 | non conforme alla prova |
+| Lotto Grigio | Campione n. 03 | 2,358 | 3,043 | conforme alla prova |
+| Lotto Grigio | Campione n. 04 | 2,444 | 3,105 | da verificare di nuovo |
+| Lotto Grigio | Campione n. 05 | 2,530 | 3,167 | non conforme alla prova |
+| Lotto Grigio | Campione n. 06 | 2,616 | 2,029 | conforme alla prova |
+| Lotto Grigio | Campione n. 07 | 2,702 | 2,091 | da verificare di nuovo |
+| Lotto Grigio | Campione n. 08 | 2,788 | 2,153 | non conforme alla prova |
+| Lotto Grigio | Campione n. 09 | 2,874 | 2,215 | conforme alla prova |
+| Lotto Grigio | Campione n. 10 | 2,960 | 2,277 | da verificare di nuovo |
+| Lotto Viola | Campione n. 01 | 3,046 | 2,339 | non conforme alla prova |
+| Lotto Viola | Campione n. 02 | 3,132 | 2,401 | conforme alla prova |
+| Lotto Viola | Campione n. 03 | 2,018 | 2,463 | da verificare di nuovo |
+| Lotto Viola | Campione n. 04 | 2,104 | 2,525 | non conforme alla prova |
+| Lotto Viola | Campione n. 05 | 2,190 | 2,587 | conforme alla prova |
+| Lotto Viola | Campione n. 06 | 2,276 | 2,649 | da verificare di nuovo |
+| Lotto Viola | Campione n. 07 | 2,362 | 2,711 | non conforme alla prova |
+| Lotto Viola | Campione n. 08 | 2,448 | 2,773 | conforme alla prova |
+| Lotto Viola | Campione n. 09 | 2,534 | 2,835 | da verificare di nuovo |
+| Lotto Viola | Campione n. 10 | 2,620 | 2,897 | non conforme alla prova |
+
+I nomi dei lotti e le misure riportate sono inventati.

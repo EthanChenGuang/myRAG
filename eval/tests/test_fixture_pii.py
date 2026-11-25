@@ -37,7 +37,7 @@ def email_violations(text: str) -> list[str]:
 
 INGEST_FIXTURES = FIXTURES / "ingest"
 PARSE_FIXTURES = FIXTURES / "parse"
-INGEST_FILE_COUNT = 30
+INGEST_FILE_COUNT = 48
 
 
 def _ingest_files():
@@ -63,7 +63,7 @@ def _parse_files():
 
 def _fixture_files():
     corpus = sorted((FIXTURES / "corpus").rglob("*.md")) + [FIXTURES / "golden.jsonl", FIXTURES / "split-manifest.json"]
-    assert len(corpus) == 15
+    assert len(corpus) == 21
     ingest = _ingest_files()
     assert len(ingest) == INGEST_FILE_COUNT
     parse_files = _parse_files()
