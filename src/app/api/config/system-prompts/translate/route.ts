@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAdminOrDeny } from '@/lib/admin-route-auth';
 
 export async function POST(request: NextRequest) {
+  const denied = await requireAdminOrDeny(request);
+  if (denied) return denied;
   try {
     const { templateKey, targetLanguage, provider = 'openai', preContext, postContext } = await request.json();
     

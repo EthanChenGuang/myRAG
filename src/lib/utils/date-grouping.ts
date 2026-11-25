@@ -10,7 +10,7 @@ const MAX_CACHE_SIZE = 500;
 function clearCacheIfNeeded<T>(cache: Map<string, T>) {
   if (cache.size >= MAX_CACHE_SIZE) {
     const firstKey = cache.keys().next().value;
-    cache.delete(firstKey);
+    if (firstKey !== undefined) cache.delete(firstKey);
   }
 }
 

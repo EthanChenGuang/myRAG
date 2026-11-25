@@ -14,6 +14,29 @@ describe('pinned eval env', () => {
     expect(pinned).toEqual(derived);
   });
 
+  test('pins the MCP system flag next to the deployment mode so eval classifies queries like production', () => {
+    const derived = derivePinnedEvalEnv('');
+    expect(derived.NEXT_PUBLIC_MCP_SYSTEM_ENABLED).toBe('true');
+    expect(derived.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE).toBe('single-tenant');
+    const pinned = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'eval/config/rag-eval-env.json'), 'utf8'));
+    expect(pinned.NEXT_PUBLIC_MCP_SYSTEM_ENABLED).toBe('true');
+  });
+
+  test('pins the Phase 6 query-layer and cache defaults with both switches off', () => {
+    const pinned = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'eval/config/rag-eval-env.json'), 'utf8'));
+    expect(pinned).toMatchObject({
+      RAG_QUERY_LAYER: 'false',
+      RAG_QUERY_FRAMEWORK: 'llamaindex',
+      RAG_QUERY_LLM_MODEL: 'openai/gpt-4.1-nano',
+      RAG_QUERY_HYDE: 'false',
+      RAG_QUERY_VOICE_TRANSFORMS: 'condense_history,normalize_dates',
+      RAG_SEMANTIC_CACHE: 'off',
+      RAG_SEMANTIC_CACHE_MAX_DISTANCE: '0.05',
+      RAG_SEMANTIC_CACHE_EMBED_STORE: 'false',
+    });
+    expect(pinned).not.toHaveProperty('REDIS_URL');
+  });
+
   test('eval-env --check exits 0', () => {
     const result = spawnSync('npx', ['tsx', 'eval/harness/eval-env.mts', '--check'], { cwd: REPO_ROOT, encoding: 'utf8' });
     expect(result.status).toBe(0);

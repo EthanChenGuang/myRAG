@@ -241,6 +241,21 @@ The voice agent runs as a separate Node.js service. See the main [deployment doc
 - [ ] `MYRAG_INTERNAL_API_KEY` matches between main app and voice-agent
 - [ ] Voice agent deployed on same network or with public endpoint
 - [ ] Environment variables set for chosen LLM provider
+- [ ] `RAG_VOICE_TOKEN_SECRET` set on the main app (see "Voice RAG token" below)
+
+### Voice RAG token
+
+Voice retrieval is tenant-scoped by a signed token instead of a bare user id.
+
+- **What it is:** each voice session gets its own LiveKit room, `myrag-voice-<32 hex characters>`, created by `/api/livekit/token`. The room metadata carries the owner identity and the signed scope token (`{"v":1,"participant_identity":"user-...","rag_scope_token":"..."}`). The browser's join token is valid for 10 minutes and only for that room. The agent polls LiveKit every second for `myrag-voice-*` rooms, joins each new room, serves only the identity named in the metadata, and removes any other participant. It forwards the scope token as the `x-rag-scope-token` header, next to `x-api-key`, to `/api/internal/voice-rag` and `/api/internal/voice-chat`. A room allows two participants (the user and the agent).
+- **Configuration (main app):** `RAG_VOICE_TOKEN_SECRET` (32 or more characters; never give it to the voice agent), `RAG_VOICE_TOKEN_TTL_SECONDS` (default 3600) and `VOICE_MAX_ACTIVE_ROOMS` (default 4).
+- **Configuration (voice agent):** `LIVEKIT_URL`, `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` (the agent now lists and deletes rooms and removes participants) and `VOICE_AGENT_MAX_SESSIONS` (default 4).
+- **Concurrency limit:** the app answers 409 `voice_busy` when `VOICE_MAX_ACTIVE_ROOMS` `myrag-voice-*` rooms already exist. The agent serves at most `VOICE_AGENT_MAX_SESSIONS` rooms at once. Keep the two values equal: if the app limit is higher, the extra rooms are never served; if it is lower, the agent has idle capacity.
+- **Deploy order:** the app and the voice agent ship together, in either order, and expect a short voice outage while they differ. The two versions are not compatible in either direction: the new agent ignores the old fixed room `myrag-voice` (a room name needs a suffix after `myrag-voice-`), and the old agent never joins per-session rooms.
+- **Rollback:** roll back the app and the agent together, for the same reason.
+- **Expiry:** tokens last `RAG_VOICE_TOKEN_TTL_SECONDS` and are not refreshed. A session longer than that loses knowledge-base access: the agent says "I can't reach the knowledge base right now. Please try again in a moment." instead of answering without context. Token refresh is deferred.
+- **Failures are spoken:** a 401/403 (token rejected), 503 (knowledge base unavailable) or network error from the app makes the agent speak that line for the turn rather than answering from general knowledge.
+- **Tests:** `cd voice-agent && npm test` (also run by the `voice-agent` job in `pr-smoke`).
 
 ---
 

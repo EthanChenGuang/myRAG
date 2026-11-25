@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { supabaseAuth } from '@/lib/supabase-auth';
+import { createClient } from '@/lib/supabase/client';
 
 export function useShareChat() {
   const [isLoading, setIsLoading] = useState(false);
@@ -11,7 +11,7 @@ export function useShareChat() {
 
     try {
       // First check if we have an active session
-      const { data: { session } } = await supabaseAuth.auth.getSession();
+      const { data: { session } } = await createClient().auth.getSession();
       
       if (!session) {
         throw new Error('You must be logged in to share a chat');

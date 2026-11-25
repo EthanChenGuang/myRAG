@@ -1,0 +1,42 @@
+{
+  "normalization_version": 1,
+  "note": "expected values computed independently with Python unicodedata and hashlib, not with the TypeScript implementation",
+  "vectors": [
+    {
+      "name": "zh",
+      "text": "第三章　合同条款\r\n\r\n第５条  适用范围：本合同适用于甲乙双方。 \r\n",
+      "normalized": "第三章 合同条款\n第5条 适用范围:本合同适用于甲乙双方。",
+      "sha256": "05a69bc44c2dea46efd0d725df23b81af1aca808a6b22057075134652dce6d42"
+    },
+    {
+      "name": "zh-invoice",
+      "text": "发票号码FP-2025-0042\t金额１，２００元\r税号 91000000MA0000000N  ",
+      "normalized": "发票号码FP-2025-0042 金额1,200元\n税号 91000000MA0000000N",
+      "sha256": "53c7c65f858545d5a0f3a2707c32e03d7cf17b63202a2713dc01fb8a46714226"
+    },
+    {
+      "name": "en",
+      "text": "Refund Policy\r\n\r\n  Annual plans:\t refunds are issued   within 15 business days.\n\n\nContact: finance@example.com \n",
+      "normalized": "Refund Policy\nAnnual plans: refunds are issued within 15 business days.\nContact: finance@example.com",
+      "sha256": "41fada78a489115188327cec611f4dfebd134877d38ead19cb797ca19550e513"
+    },
+    {
+      "name": "it",
+      "text": "Fattura N. FT-2025-00417\r\nSocietà   Città   del 15/03/2025\n",
+      "normalized": "Fattura N. FT-2025-00417\nSocietà Città del 15/03/2025",
+      "sha256": "dbd40814b7d1fb646dc6bbf329c92bae14d054a8bed471cbeb454fe52a31737f"
+    },
+    {
+      "name": "it-decomposed",
+      "text": "Città e Società",
+      "normalized": "Città e Società",
+      "sha256": "65a0b7df616e56fa65d3e130118d0579fad3f5a2e3c69d28c6816fd9b1a24809"
+    },
+    {
+      "name": "mixed-case",
+      "text": "ABC abc Abc",
+      "normalized": "ABC abc Abc",
+      "sha256": "6b01dc26c770cd2e1db651c8589831e3875b810db9db88e0ee8e2ddb6baa202e"
+    }
+  ]
+}

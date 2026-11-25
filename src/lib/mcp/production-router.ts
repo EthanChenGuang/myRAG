@@ -1,4 +1,4 @@
-import { CoreTool, tool } from 'ai';
+import { type Tool, tool } from 'ai';
 import { z } from 'zod/v3';
 import { universalMcpDiscovery } from './universal-discovery';
 import { smartMcpRouter } from './smart-router';
@@ -9,6 +9,12 @@ import { smartMcpRouter } from './smart-router';
  * for immediate deployment in the chatbot
  */
 
+// Discovered tools may still carry the pre-AI-SDK-6 `parameters` Zod schema or a raw MCP JSON-schema `inputSchema`.
+type DiscoveredTool = Omit<Tool, 'inputSchema'> & {
+  parameters?: z.ZodTypeAny;
+  inputSchema?: { type?: string; properties?: Record<string, unknown> };
+};
+
 export interface ProductionRouterConfig {
   enableHealthMonitoring: boolean;
   maxConcurrentRequests: number;
@@ -17,8 +23,11 @@ export interface ProductionRouterConfig {
   debugMode: boolean;
 }
 
+// Chat API consumers still read the legacy `parameters` Zod schema off routed tools.
+export type RoutedTool = Tool & { parameters?: z.ZodTypeAny };
+
 export interface EnhancedMcpTools {
-  tools: Record<string, CoreTool>;
+  tools: Record<string, RoutedTool>;
   serverHealth: Array<{
     serverId: string;
     name: string;
@@ -147,7 +156,7 @@ export class ProductionMcpRouter {
    * Now accepts actual MCP tools from the chat API discovery
    * Includes conversation history for context-aware tool selection
    */
-  async getEnhancedMcpTools(userQuery: string, actualMcpTools?: Record<string, CoreTool>, conversationHistory?: any[], sessionId?: string): Promise<EnhancedMcpTools> {
+  async getEnhancedMcpTools(userQuery: string, actualMcpTools?: Record<string, Tool>, conversationHistory?: any[], sessionId?: string): Promise<EnhancedMcpTools> {
     const startTime = Date.now();
     
     try {
@@ -256,7 +265,7 @@ export class ProductionMcpRouter {
    * Analyze query and route to best tools from actual available tools
    * Now includes conversation context for better tool selection
    */
-  private async analyzeQueryAndRoute(userQuery: string, availableTools: Record<string, CoreTool>, conversationHistory?: any[]): Promise<any> {
+  private async analyzeQueryAndRoute(userQuery: string, availableTools: Record<string, Tool>, conversationHistory?: any[]): Promise<any> {
     const lowerQuery = userQuery.toLowerCase();
     
     // Analyze conversation context for better tool selection
@@ -352,7 +361,7 @@ export class ProductionMcpRouter {
           // Extract sender names (common patterns: "from John", "From: John", etc.)
           const senderMatches = content.match(/(?:from|From:?)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/g);
           if (senderMatches) {
-            senderMatches.forEach(match => {
+            senderMatches.forEach((match: string) => {
               const name = match.replace(/(?:from|From:?)\s+/i, '').trim();
               if (name && !context.recentEmailSenders.includes(name)) {
                 context.recentEmailSenders.push(name);
@@ -363,7 +372,7 @@ export class ProductionMcpRouter {
           // Extract subjects
           const subjectMatches = content.match(/(?:subject|Subject:?|Re:)\s+"([^"]+)"/g);
           if (subjectMatches) {
-            subjectMatches.forEach(match => {
+            subjectMatches.forEach((match: string) => {
               const subject = match.match(/"([^"]+)"/)?.[1];
               if (subject && !context.recentEmailSubjects.includes(subject)) {
                 context.recentEmailSubjects.push(subject);
@@ -493,7 +502,7 @@ export class ProductionMcpRouter {
   /**
    * Score tools based on query relevance with context awareness
    */
-  private scoreToolsForQuery(availableTools: Record<string, CoreTool>, intent: any, userQuery: string, conversationContext?: any): Array<{toolName: string, score: number, reasoningText: string[]}> {
+  private scoreToolsForQuery(availableTools: Record<string, Tool>, intent: any, userQuery: string, conversationContext?: any): Array<{toolName: string, score: number, reasoningText: string[]}> {
     const scores: Array<{toolName: string, score: number, reasoningText: string[]}> = [];
     const lowerQuery = userQuery.toLowerCase();
 
@@ -812,7 +821,7 @@ export class ProductionMcpRouter {
   /**
    * Discover available tools when actual tools not provided
    */
-  private async discoverAvailableTools(): Promise<Record<string, CoreTool>> {
+  private async discoverAvailableTools(): Promise<Record<string, Tool>> {
     try {
       // Fall back to smart router discovery
       return await smartMcpRouter.getEnhancedTools('general query');
@@ -825,8 +834,8 @@ export class ProductionMcpRouter {
   /**
    * Create enhanced tools specifically for chat API integration
    */
-  private async createEnhancedToolsForChat(userQuery: string, routeDecision: any, availableTools: Record<string, CoreTool>): Promise<Record<string, CoreTool>> {
-    const enhancedTools: Record<string, CoreTool> = {};
+  private async createEnhancedToolsForChat(userQuery: string, routeDecision: any, availableTools: Record<string, Tool>): Promise<Record<string, Tool>> {
+    const enhancedTools: Record<string, Tool> = {};
     
     try {
       // Use the selected tools from route decision
@@ -836,7 +845,7 @@ export class ProductionMcpRouter {
       
       // Transform selected tools for chat API approval pattern
       for (const toolName of selectedToolNames) {
-        const originalTool = availableTools[toolName];
+        const originalTool = availableTools[toolName] as unknown as DiscoveredTool | undefined;
         if (!originalTool) {
           this.log(`[Production Router] Warning: Tool ${toolName} not found in available tools`);
           continue;
@@ -875,8 +884,8 @@ export class ProductionMcpRouter {
           // Log the conversion result for Gmail tools
           if (toolName.includes('gmail')) {
             this.log(`[Production Router] Converted schema for ${toolName}:`, {
-              schemaType: zodSchema._def?.typeName,
-              shape: zodSchema._def?.shape ? Object.keys(zodSchema._def.shape).length : 0
+              schemaType: zodSchema.constructor.name,
+              shape: zodSchema instanceof z.ZodObject ? Object.keys(zodSchema.shape).length : 0
             });
           }
         }
@@ -907,7 +916,7 @@ export class ProductionMcpRouter {
       // Fallback: create basic tools from available tools
       const fallbackToolNames = Object.keys(availableTools).slice(0, 5);
       for (const toolName of fallbackToolNames) {
-        const originalTool = availableTools[toolName];
+        const originalTool = availableTools[toolName] as unknown as DiscoveredTool | undefined;
         if (originalTool) {
           // Convert MCP inputSchema to Zod schema if needed
           let zodSchema = null;
@@ -1032,8 +1041,8 @@ export class ProductionMcpRouter {
   /**
    * Create fallback tools when main system fails
    */
-  private async createFallbackTools(userQuery: string, actualMcpTools?: Record<string, CoreTool>): Promise<Record<string, CoreTool>> {
-    const fallbackTools: Record<string, CoreTool> = {};
+  private async createFallbackTools(userQuery: string, actualMcpTools?: Record<string, Tool>): Promise<Record<string, Tool>> {
+    const fallbackTools: Record<string, Tool> = {};
     
     // Create a basic response tool
     fallbackTools['fallback_response'] = tool({

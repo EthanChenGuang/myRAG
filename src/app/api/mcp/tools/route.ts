@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { discoverAllTools } from '@/lib/mcp/universal-client';
 import { logger } from '@/lib/logger';
+import { requireSessionUser } from '@/lib/session-auth';
+import { requireAdminOrDeny } from '@/lib/admin-route-auth';
+import { redactUrls } from '@/lib/mcp/server-redact';
 
 export const runtime = 'nodejs';
 
@@ -11,6 +14,9 @@ export const runtime = 'nodejs';
  * MCP servers without requiring hardcoded tool definitions.
  */
 export async function GET(request: NextRequest) {
+  const auth = await requireSessionUser('[MCP-Tools-API]');
+  if ('response' in auth) return auth.response;
+
   const startTime = Date.now();
   
   try {
@@ -61,9 +67,10 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     const executionTime = Date.now() - startTime;
     
+    const safeMessage = redactUrls(String(error?.message ?? error));
+
     logger.error('MCP-Tools-API', 'Error discovering MCP tools', {
-      error: error.message,
-      stack: error.stack,
+      error: safeMessage,
       executionTime
     });
     
@@ -71,7 +78,7 @@ export async function GET(request: NextRequest) {
       success: false,
       error: {
         code: 'DISCOVERY_FAILED',
-        message: `Failed to discover MCP tools: ${error.message}`
+        message: `Failed to discover MCP tools: ${safeMessage}`
       },
       metadata: {
         totalTools: 0,
@@ -87,6 +94,9 @@ export async function GET(request: NextRequest) {
  * Refresh the tool cache (force rediscovery)
  */
 export async function POST(request: NextRequest) {
+  const denied = await requireAdminOrDeny(request);
+  if (denied) return denied;
+
   try {
     const { clearUniversalCache } = await import('@/lib/mcp/universal-client');
     
@@ -107,13 +117,14 @@ export async function POST(request: NextRequest) {
     });
     
   } catch (error: any) {
-    logger.error('MCP-Tools-API', 'Error refreshing MCP tools cache', error);
+    const safeMessage = redactUrls(String(error?.message ?? error));
+    logger.error('MCP-Tools-API', 'Error refreshing MCP tools cache', { error: safeMessage });
     
     return NextResponse.json({
       success: false,
       error: {
         code: 'REFRESH_FAILED',
-        message: `Failed to refresh tools cache: ${error.message}`
+        message: `Failed to refresh tools cache: ${safeMessage}`
       }
     }, { status: 500 });
   }

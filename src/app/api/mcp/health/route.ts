@@ -1,11 +1,16 @@
 import { NextResponse } from 'next/server';
 import { env } from '@/lib/env';
 import { UniversalMcpClient } from '@/lib/mcp/universal-client';
+import { requireAdminOrDeny } from '@/lib/admin-route-auth';
+import { hostOf, redactUrls } from '@/lib/mcp/server-redact';
 
 /**
  * Enhanced MCP Health Check API with detailed diagnostics
  */
-export async function GET() {
+export async function GET(request: Request) {
+  const denied = await requireAdminOrDeny(request);
+  if (denied) return denied;
+
   console.log('🔍 [MCP HEALTH API] Starting comprehensive health check');
   
   const healthResults = {
@@ -38,11 +43,11 @@ export async function GET() {
   // Check Zapier configuration
   if (env.MCP_ZAPIER_ENDPOINT) {
     healthResults.zapier.configured = true;
-    healthResults.zapier.endpoint = env.MCP_ZAPIER_ENDPOINT;
+    healthResults.zapier.endpoint = hostOf(env.MCP_ZAPIER_ENDPOINT);
     
     try {
       const startTime = Date.now();
-      console.log('🔍 [MCP HEALTH API] Testing Zapier endpoint:', env.MCP_ZAPIER_ENDPOINT);
+      console.log('🔍 [MCP HEALTH API] Testing Zapier endpoint:', hostOf(env.MCP_ZAPIER_ENDPOINT));
       
       // Test basic connectivity
       const response = await fetch(env.MCP_ZAPIER_ENDPOINT, {
@@ -66,12 +71,22 @@ export async function GET() {
         // Test MCP client connection
         try {
           const client = UniversalMcpClient.getInstance();
-          await client.connect();
+
+          // Tool discovery connects every configured server, so health details are read afterwards
+          const tools = await client.discoverAllTools();
           
           // Get enhanced health details if available
           if (typeof client.getConnectionHealth === 'function') {
             const healthDetails = await client.getConnectionHealth();
-            healthResults.universalClient.healthDetails = healthDetails;
+            healthResults.universalClient.healthDetails = healthDetails.map(detail => ({
+              ...detail,
+              endpoint: hostOf(detail.endpoint),
+              lastError: detail.lastError ? redactUrls(String(detail.lastError)) : detail.lastError,
+              diagnostics: {
+                ...detail.diagnostics,
+                errorDetails: detail.diagnostics.errorDetails ? redactUrls(String(detail.diagnostics.errorDetails)) : undefined,
+              },
+            }));
             
             // Find Zapier in health details
             const zapierHealth = healthDetails.find(h => h.server.toLowerCase().includes('zapier'));
@@ -79,13 +94,11 @@ export async function GET() {
               healthResults.zapier.diagnostics.canListTools = zapierHealth.diagnostics.canListTools;
               healthResults.zapier.diagnostics.toolCount = zapierHealth.diagnostics.toolCount;
               if (zapierHealth.lastError) {
-                healthResults.zapier.diagnostics.lastError = zapierHealth.lastError;
+                healthResults.zapier.diagnostics.lastError = redactUrls(String(zapierHealth.lastError));
               }
             }
           }
           
-          // Test tool discovery
-          const tools = await client.discoverAllTools();
           healthResults.zapier.diagnostics.canListTools = true;
           healthResults.zapier.diagnostics.toolCount = tools.length;
           
@@ -96,13 +109,13 @@ export async function GET() {
           
         } catch (clientError) {
           console.error('🔍 [MCP HEALTH API] Client connection failed:', clientError);
-          healthResults.zapier.diagnostics.lastError = clientError instanceof Error ? clientError.message : 'Client connection failed';
+          healthResults.zapier.diagnostics.lastError = clientError instanceof Error ? redactUrls(clientError.message) : 'Client connection failed';
         }
       }
       
     } catch (error) {
       console.error('🔍 [MCP HEALTH API] Zapier connectivity test failed:', error);
-      healthResults.zapier.diagnostics.lastError = error instanceof Error ? error.message : 'Connection test failed';
+      healthResults.zapier.diagnostics.lastError = error instanceof Error ? redactUrls(error.message) : 'Connection test failed';
     }
   } else {
     console.log('🔍 [MCP HEALTH API] Zapier endpoint not configured');

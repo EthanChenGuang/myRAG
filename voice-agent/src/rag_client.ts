@@ -24,6 +24,17 @@ export interface RAGResponse {
     source_images: SourceImage[];
 }
 
+export type RAGFailureReason = 'unauthorized' | 'unavailable' | 'error';
+
+export type RAGQueryResult = ({ ok: true } & RAGResponse) | { ok: false; reason: RAGFailureReason };
+
+function classifyFailure(error: unknown): RAGFailureReason {
+    const status = axios.isAxiosError(error) ? error.response?.status : undefined;
+    if (status === 401 || status === 403) return 'unauthorized';
+    if (status === 503) return 'unavailable';
+    return 'error';
+}
+
 export class RAGClient {
     private apiUrl: string;
     private apiKey: string;
@@ -33,9 +44,17 @@ export class RAGClient {
         this.apiKey = apiKey;
     }
 
-    async query(userQuery: string, userId?: string): Promise<RAGResponse> {
+    async query(userQuery: string, scopeToken?: string, userId?: string): Promise<RAGQueryResult> {
         try {
             console.log(`[RAG] Querying internal API: "${userQuery}"`);
+
+            const headers: Record<string, string> = {
+                'x-api-key': this.apiKey,
+                'Content-Type': 'application/json'
+            };
+            if (scopeToken) {
+                headers['x-rag-scope-token'] = scopeToken;
+            }
 
             const response = await axios.post(
                 this.apiUrl,
@@ -44,12 +63,7 @@ export class RAGClient {
                     userId: userId,
                     matchCount: 5
                 },
-                {
-                    headers: {
-                        'x-api-key': this.apiKey,
-                        'Content-Type': 'application/json'
-                    }
-                }
+                { headers }
             );
 
             const results: RAGResult[] = response.data.results || [];
@@ -59,7 +73,7 @@ export class RAGClient {
                 // DEBUG: Print what we DID get
                 console.log(`[RAG] Response keys: ${Object.keys(response.data).join(', ')}`);
                 console.log(`[RAG] API URL used: ${this.apiUrl}`);
-                return { context: '', sources: [], source_images: [] };
+                return { ok: true, context: '', sources: [], source_images: [] };
             }
 
             // DEBUG: Inspect raw response for images
@@ -97,14 +111,17 @@ export class RAGClient {
             const uniqueSources = Array.from(new Map(sources.map(s => [s.id, s])).values());
 
             return {
+                ok: true,
                 context: contextText,
                 sources: uniqueSources,
                 source_images: sourceImages
             };
 
         } catch (error) {
-            console.error('[RAG] Error querying internal API:', error);
-            return { context: '', sources: [], source_images: [] }; // Fail gracefully
+            const reason = classifyFailure(error);
+            const status = axios.isAxiosError(error) ? error.response?.status : undefined;
+            console.error('[RAG] Error querying internal API:', { reason, status, message: error instanceof Error ? error.message : String(error) });
+            return { ok: false, reason };
         }
     }
 }

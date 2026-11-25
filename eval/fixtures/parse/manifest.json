@@ -1,0 +1,94 @@
+{
+  "fixtures": [
+    {
+      "class": "bench",
+      "expected_path": "fixtures/parse/expected/bench-100.json",
+      "id": "bench-100",
+      "language": "en",
+      "page_count": 100,
+      "pdf_path": "fixtures/parse/pdf/bench-100.pdf",
+      "sha256": "5eb4e6a776e11143174d088f3bc9f1048cae8bd6792778e08b0b9ec8a4c0ee0c"
+    },
+    {
+      "class": "cross_boundary",
+      "expected_path": "fixtures/parse/expected/cross-boundary.json",
+      "id": "cross-boundary",
+      "language": "en",
+      "page_count": 6,
+      "pdf_path": "fixtures/parse/pdf/cross-boundary.pdf",
+      "sha256": "1da2ad3e22f030bf5ceebcf11e0672380787dda1aad3a0a811f5102a870acc96"
+    },
+    {
+      "class": "digital_text",
+      "expected_path": "fixtures/parse/expected/digital-text.json",
+      "id": "digital-text",
+      "language": "en",
+      "page_count": 2,
+      "pdf_path": "fixtures/parse/pdf/digital-text.pdf",
+      "sha256": "3caccd68b549aad06a0413d7d9355d7102feaf2bde6078e2c03ab9f428d32590"
+    },
+    {
+      "class": "invoice",
+      "expected_path": "fixtures/parse/expected/invoice-en.json",
+      "id": "invoice-en",
+      "language": "en",
+      "page_count": 1,
+      "pdf_path": "fixtures/parse/pdf/invoice-en.pdf",
+      "sha256": "b0b0d45d476c16baf2c2257b459f318eda5aa469fb2a755362b6be91d32347de"
+    },
+    {
+      "class": "mixed",
+      "expected_path": "fixtures/parse/expected/mixed-routing.json",
+      "id": "mixed-routing",
+      "language": "en",
+      "page_count": 10,
+      "pdf_path": "fixtures/parse/pdf/mixed-routing.pdf",
+      "sha256": "1ae7eaff14736765335fab82e5e214501c088cf403ad52b1500183128e819605"
+    },
+    {
+      "class": "multi_column",
+      "expected_path": "fixtures/parse/expected/multi-column-en.json",
+      "id": "multi-column-en",
+      "language": "en",
+      "page_count": 2,
+      "pdf_path": "fixtures/parse/pdf/multi-column-en.pdf",
+      "sha256": "70ab25776a5d090c9367458ea947e64c846686f3580c138ea0c6808fff211983"
+    },
+    {
+      "class": "scanned_en",
+      "expected_path": "fixtures/parse/expected/scan-en.json",
+      "id": "scan-en",
+      "language": "en",
+      "page_count": 1,
+      "pdf_path": "fixtures/parse/pdf/scan-en.pdf",
+      "sha256": "01a39e099b820ce5131bd172506de7593714a733ac3a3c9285869a1231b3c178"
+    },
+    {
+      "class": "scanned_it",
+      "expected_path": "fixtures/parse/expected/scan-it.json",
+      "id": "scan-it",
+      "language": "it",
+      "page_count": 1,
+      "pdf_path": "fixtures/parse/pdf/scan-it.pdf",
+      "sha256": "c855808f1364b6016406e2359c5dc114a5c33eab0c0b2575cc9d7fd0a1994ad8"
+    },
+    {
+      "class": "scanned_zh",
+      "expected_path": "fixtures/parse/expected/scan-zh.json",
+      "id": "scan-zh",
+      "language": "zh",
+      "page_count": 1,
+      "pdf_path": "fixtures/parse/pdf/scan-zh.pdf",
+      "sha256": "34db8c840cb74f72864ea8b2ccdb0aa5a37024d65252c66f2845927358c61724"
+    },
+    {
+      "class": "table",
+      "expected_path": "fixtures/parse/expected/table-en.json",
+      "id": "table-en",
+      "language": "en",
+      "page_count": 2,
+      "pdf_path": "fixtures/parse/pdf/table-en.pdf",
+      "sha256": "5bcd8b32b8143c2d5e62f1521f4f32bc89d4088cf9ad628f53da628ac62b2416"
+    }
+  ]
+}

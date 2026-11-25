@@ -10,6 +10,7 @@ export const en = {
   logout: "Log out",
   modelSelector: "Select AI model",
   textSize: "Text Size",
+  textSettings: "Text Settings",
   themeToggle: "Toggle theme",
   shareChat: "Share chat",
   uploadDocument: "Upload document",
@@ -574,5 +575,11 @@ export const en = {
   whatsAppHours: "hours",
   whatsAppDay: "day",
   whatsAppDays: "days",
+  whatsAppConnectionLost: "WhatsApp connection lost. Please reconnect.",
+  whatsAppLastSeen: "Last seen",
+  whatsAppVerifying: "Verifying...",
+  whatsAppRefreshStatus: "Refresh Status",
+  whatsAppDisconnected: "Disconnected",
+  whatsAppReconnectMessage: "Connection lost. Please disconnect and reconnect WhatsApp to resume messaging.",
 
 };

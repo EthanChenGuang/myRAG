@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import util from 'node:util';
 import { NextRequest } from 'next/server';
 import { spawnSync } from 'node:child_process';
@@ -9,10 +10,12 @@ import { MockLanguageModelV3 } from 'ai/test';
 import type { LanguageModel } from 'ai';
 import { GoldenItemSchema, RagTraceSchema, RunManifestSchema, type GoldenItem, type RagRunRequest, type RagTrace, type RunManifest } from '../../src/lib/rag-eval/contracts.generated.ts';
 import { canonicalJson, configHash } from '../../src/lib/rag-eval/trace.ts';
-import { loadPinnedEvalEnv } from './eval-env.mts';
 import { EMBEDDER_ID, EMBEDDER_VERSION, embedderSourceSha256 } from './fixture-embedder.mts';
-import { createFixtureDatabase, type DeploymentMode } from './pglite-supabase.mts';
+import { ingestModeRetrievalEnv } from './ingest-mode.mts';
+import { createFixtureDatabase, FIXTURE_USER_ID, type DeploymentMode, type FixtureMode } from './pglite-supabase.mts';
 import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from './fake-edge.mts';
+import { applyFixtureProcessEnv } from './process-env.mts';
+import { CHUNKING_PROFILES_NEED_INGEST, RunConfigError, type RunConfig } from './run-config.mts';
 
 export type EvalTier = 'smoke' | 'nightly' | 'live';
 
@@ -21,6 +24,13 @@ export interface EvalRequestOptions {
   organization_id?: string | null;
   user_id?: string | null;
   generator_model?: string | null;
+  degrade?: 'drop_top_candidate' | null;
+  embedding_profile?: string | null;
+  retrieval_overrides?: NonNullable<RagRunRequest['options']>['retrieval_overrides'];
+  retrieval_filters?: NonNullable<RagRunRequest['options']>['retrieval_filters'];
+  disabled_stages?: Array<
+    'refs' | 'analyze' | 'embed' | 'search' | 'legacy_rank' | 'post_filter' | 'assemble' | 'voice_keyword_fallback' | 'local_rerank'
+  >;
 }
 
 export type EvalGenerator = 'stub' | 'live';
@@ -50,12 +60,23 @@ export interface RunEvalOptions {
   corpusDir: string;
   outDir: string;
   deploymentMode: DeploymentMode;
+  fixtureMode?: FixtureMode;
   requestOptions?: EvalRequestOptions;
   tier?: EvalTier;
   baseUrl?: string;
   includeAnswer?: boolean;
   generator?: EvalGenerator;
   includeDrafts?: boolean;
+  /** When set (in-process smoke only), backfill this profile via runReembed before traces are collected. */
+  embeddingProfileId?: string;
+  /** Reuse an ingest-mode fixture database instead of building a new one. */
+  ingestFixture?: import('./pglite-supabase.mts').FixtureDatabase;
+  /** Ingest mode only: fill the database through the queue per routing mode or forced tier (D-40). */
+  ingestRouting?: import('./ingest-mode.mts').IngestRoutingOptions;
+  /** Reuse a prepared in-process eval session (the harness keeps the edge open). */
+  retainInProcess?: InProcessEval;
+  /** Named configuration: an env overlay (in-process only) and eval overrides sent with every request. */
+  runConfig?: RunConfig;
 }
 
 export interface RunEvalResult {
@@ -68,6 +89,12 @@ export interface RunEvalResult {
   edgeErrors: number;
   runPath: string;
   manifest: RunManifest;
+}
+
+export function itemRequestOptions(base: EvalRequestOptions, item: GoldenItem): EvalRequestOptions {
+  const options: EvalRequestOptions = { ...base };
+  if (item.retrieval_filters) options.retrieval_filters = item.retrieval_filters;
+  return options;
 }
 
 const ROUTE_PATH = '/api/internal/rag/run';
@@ -108,38 +135,104 @@ function createStubLanguageModel(): LanguageModel {
   }) as unknown as LanguageModel;
 }
 
-type MutableEnv = Record<string, string | undefined>;
+const TRANSLATION_TABLE_PATH = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../fixtures/translation-table.json');
+
+function switchIsOn(value: string | undefined, expected: string): boolean {
+  return (value ?? '').trim().toLowerCase() === expected;
+}
+
+/** The fixture translator serves v2 runs whose overlay turns RAG_LEXICAL_TRANSLATION on; legacy runs never get it. */
+export function shouldInstallFixtureTranslator(env: Record<string, string> | undefined): boolean {
+  return switchIsOn(env?.RAG_PIPELINE, 'v2') && switchIsOn(env?.RAG_LEXICAL_TRANSLATION, 'true');
+}
 
 export async function prepareInProcessEval(options: {
   corpusDir: string;
   deploymentMode: DeploymentMode;
+  fixtureMode?: FixtureMode;
   allowedScopes?: string[];
+  embeddingProfileId?: string;
+  ingestFixture?: import('./pglite-supabase.mts').FixtureDatabase;
+  ingestRouting?: import('./ingest-mode.mts').IngestRoutingOptions;
+  /** Applied after the pinned eval env, before the eval route is imported. */
+  envOverrides?: Record<string, string>;
+  /** Ingest mode: seeded before the first document; the env overlay is then applied to the build too, so dual-write runs under v2. */
+  chunkingProfiles?: import('../../src/lib/rag-eval/contracts.generated.ts').ChunkingProfile[];
 }): Promise<InProcessEval> {
-  const { corpusDir, deploymentMode, allowedScopes = [] } = options;
-  const fixture = await createFixtureDatabase({ deploymentMode, corpusDir });
+  const {
+    corpusDir,
+    deploymentMode,
+    fixtureMode,
+    allowedScopes = [],
+    embeddingProfileId,
+    ingestFixture,
+    envOverrides,
+    chunkingProfiles,
+    ingestRouting,
+  } = options;
+  if (ingestRouting && fixtureMode !== 'ingest') throw new Error('[Eval Harness] routing and forced tiers need --fixture-mode ingest');
+  const existingSecret = process.env.RAG_EVAL_SECRET ?? '';
+  const secret = existingSecret.length >= 32 ? existingSecret : crypto.randomBytes(24).toString('hex');
+  const evalEnv = {
+    RAG_EVAL_SECRET: secret,
+    RAG_EVAL_ALLOWED_SCOPES: [`user:${FIXTURE_USER_ID}`, ...allowedScopes].join(','),
+    ...(embeddingProfileId ? { RAG_EMBEDDING_PROFILES: 'on' } : {}),
+  };
+  const seeding = !ingestFixture && (chunkingProfiles?.length ?? 0) > 0;
+  const fixture =
+    ingestFixture ??
+    (await createFixtureDatabase({
+      deploymentMode,
+      corpusDir,
+      fixtureMode,
+      processEnv: seeding ? { ...evalEnv, ...envOverrides } : evalEnv,
+      ...(seeding ? { chunkingProfiles } : {}),
+      ...(ingestRouting ? { ingestRouting } : {}),
+    }));
   let edge: FakeEdge | undefined;
   try {
-    edge = await startFakeEdge({ db: fixture.db });
+    // The ingest mode ingests the corpus through its own edge and hands it over: a second edge would have another URL than the
+    // one the app modules saw when they were first imported.
+    edge = fixture.edge ?? (await startFakeEdge({ db: fixture.db }));
   } catch (error) {
     await fixture.db.close().catch(() => undefined);
     throw error;
   }
   const startedEdge = edge;
+  // The caller closes what it passed in (the ingest fixture's database, and its edge when it brought one); close() releases the rest.
+  const ownsDb = !ingestFixture;
+  const ownsEdge = !ingestFixture?.edge;
 
-  const env = process.env as MutableEnv;
-  for (const name of Object.keys(env)) {
-    if (name.startsWith('RAG_') || name.startsWith('NEXT_PUBLIC_RAG_')) delete env[name];
+  const retrievalEnv =
+    fixtureMode === 'ingest' ? { ...ingestModeRetrievalEnv(), ...envOverrides } : envOverrides;
+  applyFixtureProcessEnv({
+    edgeUrl: startedEdge.url,
+    deploymentMode,
+    extra: { ...evalEnv, ...retrievalEnv },
+    vendorEmbeddingRoutes: !!(embeddingProfileId || ingestFixture),
+  });
+
+  if (embeddingProfileId && !ingestFixture) {
+    const { fixtureAdminClient } = await import('./ingest-fakes.mts');
+    const { runReembed } = await import('../../src/lib/rag/ingest/reembed/run.ts');
+    const report = await runReembed({ db: fixtureAdminClient(startedEdge.url), profileId: embeddingProfileId, batchSize: 32 });
+    if (report.status !== 'completed') {
+      throw new Error(`[Eval Harness] re-embed for profile ${embeddingProfileId} failed: ${report.reason ?? 'unknown'}`);
+    }
   }
-  Object.assign(env, loadPinnedEvalEnv());
-  Object.assign(env, fixtureProcessEnv(startedEdge.url));
-  const secret = crypto.randomBytes(24).toString('hex');
-  env.NODE_ENV = 'test';
-  env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE = deploymentMode;
-  env.OPENAI_EMBEDDING_MODEL = 'text-embedding-3-small';
-  env.RAG_EVAL_SECRET = secret;
-  env.RAG_EVAL_ALLOWED_SCOPES = [`user:${fixture.fixtureUserId}`, ...allowedScopes].join(',');
 
   const route = await import('../../src/app/api/internal/rag/run/route.ts');
+
+  let translatorModule: typeof import('../../src/lib/rag/query/translate.ts') | null = null;
+  if (shouldInstallFixtureTranslator(envOverrides)) {
+    translatorModule = await import('../../src/lib/rag/query/translate.ts');
+    const table = JSON.parse(fs.readFileSync(TRANSLATION_TABLE_PATH, 'utf8')) as import('../../src/lib/rag/query/translate.ts').TranslationTable;
+    translatorModule.setTranslatorForTests(translatorModule.createFixtureTranslator(table));
+  }
+
+  const floorModule = await import('../../src/lib/rag/refusal/floor.ts');
+  const { loadFixtureScoreCalibration } = await import('./fixture-floor.mts');
+  floorModule.setEvalScoreCalibration(loadFixtureScoreCalibration(fixtureMode === 'ingest' ? 'ingest' : 'prechunked'));
 
   return {
     POST: route.POST as unknown as InProcessEval['POST'],
@@ -149,8 +242,10 @@ export async function prepareInProcessEval(options: {
     corpusSha256: fixture.corpusSha256,
     sqlSha256: fixture.sqlSha256,
     close: async () => {
-      await startedEdge.close();
-      await fixture.db.close().catch(() => undefined);
+      translatorModule?.resetTranslatorForTests();
+      floorModule.resetEvalScoreCalibration();
+      if (ownsEdge) await startedEdge.close();
+      if (ownsDb) await fixture.db.close().catch(() => undefined);
     },
   };
 }
@@ -229,8 +324,44 @@ function redirectConsole(logPath: string): () => void {
 }
 
 export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
-  const { goldenPath, corpusDir, outDir, deploymentMode, tier = 'smoke', baseUrl, includeAnswer = false, generator, includeDrafts = false } = options;
+  const {
+    goldenPath,
+    corpusDir,
+    outDir,
+    deploymentMode,
+    fixtureMode,
+    tier = 'smoke',
+    baseUrl,
+    includeAnswer = false,
+    generator,
+    includeDrafts = false,
+    embeddingProfileId,
+    ingestFixture,
+    ingestRouting,
+    retainInProcess,
+    runConfig,
+  } = options;
   const requestOptions: EvalRequestOptions = { ...(options.requestOptions ?? {}) };
+  if (runConfig) {
+    if (baseUrl && Object.keys(runConfig.env).length > 0) {
+      throw new RunConfigError('[Eval Harness] a run-config env overlay applies to in-process runs only; omit --base-url or drop its env');
+    }
+    if (retainInProcess && Object.keys(runConfig.env).length > 0) {
+      throw new RunConfigError('[Eval Harness] a run-config env overlay must be applied when the in-process session is prepared');
+    }
+    if (runConfig.overrides) requestOptions.retrieval_overrides = runConfig.overrides;
+    if (runConfig.chunkingProfiles?.length) {
+      if (baseUrl) throw new RunConfigError('[Eval Harness] chunking_profiles seed the fixture database only; a --base-url run cannot use them');
+      if (fixtureMode !== 'ingest') throw new RunConfigError(CHUNKING_PROFILES_NEED_INGEST);
+      if (ingestFixture) {
+        const built = new Set(ingestFixture.seededChunkingProfiles ?? []);
+        const missing = runConfig.chunkingProfiles.filter((profile) => !built.has(profile.id)).map((profile) => profile.id);
+        if (missing.length > 0) {
+          throw new RunConfigError(`[Eval Harness] the ingest fixture was not built with chunking profile(s) ${missing.join(', ')}`);
+        }
+      }
+    }
+  }
 
   let liveApiKey = '';
   if (includeAnswer) {
@@ -292,8 +423,22 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
         : requestOptions.user_id
           ? `user:${requestOptions.user_id}`
           : null;
-      const prepared = await prepareInProcessEval({ corpusDir, deploymentMode, allowedScopes: requestedScope ? [requestedScope] : [] });
-      inProcess = prepared;
+      if (retainInProcess) {
+        inProcess = retainInProcess;
+      } else {
+        const prepared = await prepareInProcessEval({
+          corpusDir,
+          deploymentMode,
+          fixtureMode,
+          allowedScopes: requestedScope ? [requestedScope] : [],
+          embeddingProfileId,
+          ingestFixture,
+          ...(ingestRouting ? { ingestRouting } : {}),
+          ...(runConfig && Object.keys(runConfig.env).length > 0 ? { envOverrides: runConfig.env } : {}),
+          ...(runConfig?.chunkingProfiles?.length ? { chunkingProfiles: runConfig.chunkingProfiles } : {}),
+        });
+        inProcess = prepared;
+      }
       if (includeAnswer) {
         answerModule = await import('../../src/lib/rag-eval/answer.ts');
         if (generator === 'stub') {
@@ -304,18 +449,20 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
         }
       }
       send = async (payload) => {
+        if (!inProcess) throw new Error('[Eval Harness] in-process eval is not prepared');
         const req = new NextRequest(`http://localhost${ROUTE_PATH}`, {
           method: 'POST',
-          headers: { 'content-type': 'application/json', 'x-rag-eval-secret': prepared.secret },
+          headers: { 'content-type': 'application/json', 'x-rag-eval-secret': inProcess.secret },
           body: JSON.stringify(payload),
+          signal: AbortSignal.timeout(120_000),
         });
-        const res = await prepared.POST(req);
+        const res = await inProcess.POST(req);
         return { status: res.status, body: await res.json().catch(() => null) };
       };
     }
 
     for (const item of items) {
-      const options: EvalRequestOptions = { ...requestOptions };
+      const options = itemRequestOptions(requestOptions, item);
       if (inProcess && deploymentMode === 'multi-tenant' && !options.user_id) {
         options.user_id = inProcess.fixtureUserId;
       }
@@ -364,7 +511,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
   } finally {
     restoreConsole();
     answerModule?.setEvalLanguageModelFactory(null);
-    if (inProcess) await inProcess.close();
+    if (inProcess && !retainInProcess) await inProcess.close();
   }
 
   const effectiveDeploymentMode: DeploymentMode =
@@ -373,16 +520,29 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     console.warn(`[Eval Harness] server deployment_mode ${effectiveDeploymentMode} overrides --deployment-mode ${deploymentMode}`);
   }
 
+  const embeddingProfile = requestOptions.embedding_profile ?? embeddingProfileId ?? null;
   const normalizedOptions = {
     max_results: requestOptions.max_results ?? null,
     organization_id: requestOptions.organization_id ?? null,
     user_id: requestOptions.user_id ?? null,
+    embedding_profile: embeddingProfile,
+    ...(requestOptions.degrade ? { degrade: requestOptions.degrade } : {}),
+    ...(requestOptions.retrieval_overrides ? { retrieval_overrides: requestOptions.retrieval_overrides } : {}),
+    ...(requestOptions.disabled_stages?.length ? { disabled_stages: requestOptions.disabled_stages } : {}),
     ...(includeAnswer ? { generator_model: requestOptions.generator_model ?? null } : {}),
   };
   const embedder = baseUrl
     ? null
     : { id: EMBEDDER_ID, version: String(EMBEDDER_VERSION), source_sha256: embedderSourceSha256() };
   const goldenSha256 = sha256File(goldenPath);
+  const runConfigRecord = runConfig
+    ? {
+        name: runConfig.name,
+        env: runConfig.env,
+        overrides: runConfig.overrides,
+        ...(runConfig.chunkingProfiles?.length ? { chunking_profiles: runConfig.chunkingProfiles } : {}),
+      }
+    : null;
   const effectiveConfigHash = configHash(firstEffectiveConfig);
   const runConfigHash = crypto
     .createHash('sha256')
@@ -396,6 +556,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
         sql_sha256: manifestInputs.sqlSha256,
         request_options: normalizedOptions,
         deployment_mode: effectiveDeploymentMode,
+        ...(runConfigRecord ? { run_config: runConfigRecord } : {}),
       }),
       'utf8',
     )
@@ -415,10 +576,12 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     golden_filter: goldenFilter,
     sql_sha256: manifestInputs.sqlSha256,
     request_options: normalizedOptions,
+    embedding_profile: embeddingProfile,
     effective_config_hash: effectiveConfigHash,
     run_config_hash: runConfigHash,
     item_count: items.length,
     edge_errors: edgeErrors,
+    ...(runConfigRecord ? { run_config: runConfigRecord } : {}),
   });
   const runPath = path.join(outDir, 'run.json');
   fs.writeFileSync(runPath, `${JSON.stringify(manifest, null, 2)}\n`);

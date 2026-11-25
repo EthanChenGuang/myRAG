@@ -1,0 +1,44 @@
+From 2cff21ecf5ce30848db580ec0429eec1dec9a187 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 24 Nov 2026 22:35:20 +0000
+Subject: [PATCH 8/8] test(04-38): translation table entries for the two new
+ cross-lingual items
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01X342shLsAZx6PYph2vA7hc
+---
+ eval/fixtures/translation-table.json | 18 ++++++++++++++++++
+ 1 file changed, 18 insertions(+)
+
+diff --git a/eval/fixtures/translation-table.json b/eval/fixtures/translation-table.json
+index 24e7eff..f25e8c7 100644
+--- a/eval/fixtures/translation-table.json
++++ b/eval/fixtures/translation-table.json
+@@ -216,6 +216,24 @@
+           "text": "Se lo strumento viene sostituito, come si calcola la scadenza della garanzia del nuovo strumento?"
+         }
+       ]
++    },
++    {
++      "question": "How many months are consumable accessories such as batteries covered by the warranty?",
++      "translations": [
++        {
++          "language": "it",
++          "text": "Per quanti mesi la garanzia copre gli accessori di consumo come le batterie?"
++        }
++      ]
++    },
++    {
++      "question": "Entro quanti giorni dalla consegna bisogna segnalare un pacco danneggiato?",
++      "translations": [
++        {
++          "language": "en",
++          "text": "Within how many days of delivery must a damaged parcel be reported?"
++        }
++      ]
+     }
+   ]
+ }
+-- 
+2.43.0
+

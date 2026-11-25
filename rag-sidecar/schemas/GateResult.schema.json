@@ -42,6 +42,99 @@
       ],
       "title": "GateOffender",
       "type": "object"
+    },
+    "PairedReport": {
+      "additionalProperties": false,
+      "properties": {
+        "all_zero": {
+          "title": "All Zero",
+          "type": "boolean"
+        },
+        "resamples": {
+          "minimum": 1,
+          "title": "Resamples",
+          "type": "integer"
+        },
+        "seed": {
+          "title": "Seed",
+          "type": "integer"
+        },
+        "slices": {
+          "additionalProperties": {
+            "additionalProperties": {
+              "$ref": "#/$defs/PairedStat"
+            },
+            "type": "object"
+          },
+          "title": "Slices",
+          "type": "object"
+        }
+      },
+      "required": [
+        "seed",
+        "resamples",
+        "all_zero",
+        "slices"
+      ],
+      "title": "PairedReport",
+      "type": "object"
+    },
+    "PairedStat": {
+      "additionalProperties": false,
+      "properties": {
+        "ci_high": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Ci High"
+        },
+        "ci_low": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Ci Low"
+        },
+        "mean_d": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Mean D"
+        },
+        "n": {
+          "minimum": 0,
+          "title": "N",
+          "type": "integer"
+        },
+        "n_nonzero": {
+          "minimum": 0,
+          "title": "N Nonzero",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "n",
+        "n_nonzero",
+        "mean_d",
+        "ci_low",
+        "ci_high"
+      ],
+      "title": "PairedStat",
+      "type": "object"
     }
   },
   "additionalProperties": false,
@@ -59,6 +152,17 @@
       },
       "title": "Offenders",
       "type": "array"
+    },
+    "paired": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PairedReport"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "passed": {
       "title": "Passed",

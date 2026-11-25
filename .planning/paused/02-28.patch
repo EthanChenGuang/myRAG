@@ -1,0 +1,287 @@
+diff --git a/eval/config/judge.json b/eval/config/judge.json
+index cb01670..2cefcfd 100644
+--- a/eval/config/judge.json
++++ b/eval/config/judge.json
+@@ -4,6 +4,12 @@
+   "judge_family": "openai",
+   "judge_model": "openai/gpt-5-mini",
+   "max_concurrency": 4,
++  "online_judge": {
++    "judge_family": "google",
++    "judge_model": "google/gemini-3.8-flash",
++    "sample_rate": 0.2,
++    "seed": 20261123
++  },
+   "provider": "openrouter",
+   "temperature": 0
+ }
+diff --git a/eval/tests/test_judge_config.py b/eval/tests/test_judge_config.py
+index 8d03906..9810e1f 100644
+--- a/eval/tests/test_judge_config.py
++++ b/eval/tests/test_judge_config.py
+@@ -176,3 +176,61 @@ def test_unprefixed_or_routed_openai_generators_cannot_be_judged_by_the_openai_j
+     for generator in ("gpt-4o", "openrouter/auto", "o4-mini"):
+         with pytest.raises(JudgeFamilyError):
+             assert_judge_family_differs(config, generator)
++
++
++def test_online_judge_block_is_loaded_from_judge_json() -> None:
++    from rag_eval.judge.config import load_judge_config
++
++    config = load_judge_config()
++    online = getattr(config, "online_judge", None)
++    assert online is not None
++    assert online.sample_rate == 0.2
++    assert online.seed == 20261123
++    assert online.judge_family == "google"
++    assert online.judge_model.startswith("google/")
++    raw = json.loads(JUDGE_JSON.read_text(encoding="utf-8"))
++    assert raw["online_judge"]["judge_model"] == online.judge_model
++
++
++def test_config_without_online_judge_still_loads(tmp_path: Path) -> None:
++    from rag_eval.judge.config import load_judge_config
++
++    raw = json.loads(JUDGE_JSON.read_text(encoding="utf-8"))
++    raw.pop("online_judge", None)
++    path = tmp_path / "judge.json"
++    path.write_text(json.dumps(raw), encoding="utf-8")
++    config = load_judge_config(path)
++    assert getattr(config, "online_judge", "missing") is None
++
++
++@pytest.mark.parametrize("mutation", [{"sample_rate": 1.5}, {"sample_rate": -0.1}, {"seed": None}])
++def test_online_judge_rejects_bad_sample_rate_and_missing_seed(tmp_path: Path, mutation: dict[str, object]) -> None:
++    from pydantic import ValidationError
++
++    from rag_eval.judge.config import load_judge_config
++
++    raw = json.loads(JUDGE_JSON.read_text(encoding="utf-8"))
++    assert "online_judge" in raw
++    block = dict(raw["online_judge"])
++    for key, value in mutation.items():
++        if value is None:
++            block.pop(key, None)
++        else:
++            block[key] = value
++    raw["online_judge"] = block
++    path = tmp_path / "judge.json"
++    path.write_text(json.dumps(raw), encoding="utf-8")
++    with pytest.raises(ValidationError):
++        load_judge_config(path)
++
++
++def test_online_judge_family_differs_from_openai_generators_and_is_not_claude() -> None:
++    from rag_eval.judge.config import assert_judge_family_differs, load_judge_config
++
++    config = load_judge_config()
++    online = getattr(config, "online_judge", None)
++    assert online is not None
++    assert "claude" not in online.judge_model.lower()
++    assert online.judge_family != "openai"
++    as_judge = config.model_copy(update={"judge_model": online.judge_model, "judge_family": online.judge_family})
++    assert_judge_family_differs(as_judge, "openai/gpt-5-mini")
+diff --git a/rag-sidecar/schemas/JudgeConfig.schema.json b/rag-sidecar/schemas/JudgeConfig.schema.json
+index ba230ec..9692f25 100644
+--- a/rag-sidecar/schemas/JudgeConfig.schema.json
++++ b/rag-sidecar/schemas/JudgeConfig.schema.json
+@@ -1,4 +1,37 @@
+ {
++  "$defs": {
++    "OnlineJudgeConfig": {
++      "additionalProperties": false,
++      "properties": {
++        "judge_family": {
++          "title": "Judge Family",
++          "type": "string"
++        },
++        "judge_model": {
++          "title": "Judge Model",
++          "type": "string"
++        },
++        "sample_rate": {
++          "maximum": 1.0,
++          "minimum": 0.0,
++          "title": "Sample Rate",
++          "type": "number"
++        },
++        "seed": {
++          "title": "Seed",
++          "type": "integer"
++        }
++      },
++      "required": [
++        "sample_rate",
++        "seed",
++        "judge_model",
++        "judge_family"
++      ],
++      "title": "OnlineJudgeConfig",
++      "type": "object"
++    }
++  },
+   "additionalProperties": false,
+   "properties": {
+     "base_url": {
+@@ -23,6 +56,17 @@
+       "title": "Max Concurrency",
+       "type": "integer"
+     },
++    "online_judge": {
++      "anyOf": [
++        {
++          "$ref": "#/$defs/OnlineJudgeConfig"
++        },
++        {
++          "type": "null"
++        }
++      ],
++      "default": null
++    },
+     "provider": {
+       "const": "openrouter",
+       "title": "Provider",
+diff --git a/rag-sidecar/src/rag_sidecar/contracts/__init__.py b/rag-sidecar/src/rag_sidecar/contracts/__init__.py
+index a94172d..d875a8b 100644
+--- a/rag-sidecar/src/rag_sidecar/contracts/__init__.py
++++ b/rag-sidecar/src/rag_sidecar/contracts/__init__.py
+@@ -15,7 +15,7 @@ from rag_sidecar.contracts.golden import (
+     GoldenSplitManifest,
+     GoldSpan,
+ )
+-from rag_sidecar.contracts.judge import JudgeConfig, JudgeItemScore, JudgeReport
++from rag_sidecar.contracts.judge import JudgeConfig, JudgeItemScore, JudgeReport, OnlineJudgeConfig
+ from rag_sidecar.contracts.latency import LatencyBudgets, ProfileBudget, StageLatency
+ from rag_sidecar.contracts.review import ReviewQueueItem
+ from rag_sidecar.contracts.sidecar import SidecarError, SidecarHealth, SidecarInfo, SidecarReady
+@@ -49,6 +49,7 @@ __all__ = [
+     "JudgeConfig",
+     "JudgeItemScore",
+     "JudgeReport",
++    "OnlineJudgeConfig",
+     "ReviewQueueItem",
+     "SidecarError",
+     "SidecarHealth",
+diff --git a/rag-sidecar/src/rag_sidecar/contracts/judge.py b/rag-sidecar/src/rag_sidecar/contracts/judge.py
+index 75cfe2f..d395cc6 100644
+--- a/rag-sidecar/src/rag_sidecar/contracts/judge.py
++++ b/rag-sidecar/src/rag_sidecar/contracts/judge.py
+@@ -10,6 +10,13 @@ class _Contract(BaseModel):
+     model_config = ConfigDict(extra="forbid", frozen=True)
+ 
+ 
++class OnlineJudgeConfig(_Contract):
++    sample_rate: float = Field(ge=0.0, le=1.0)
++    seed: int
++    judge_model: str
++    judge_family: str
++
++
+ class JudgeConfig(_Contract):
+     judge_model: str
+     judge_family: str
+@@ -18,6 +25,7 @@ class JudgeConfig(_Contract):
+     temperature: float = Field(ge=0.0, le=0.0)
+     embedding_model: str
+     max_concurrency: int = Field(default=4, ge=1)
++    online_judge: OnlineJudgeConfig | None = None
+ 
+ 
+ class JudgeItemScore(_Contract):
+diff --git a/rag-sidecar/src/rag_sidecar/contracts/samples.py b/rag-sidecar/src/rag_sidecar/contracts/samples.py
+index f697bfa..773070f 100644
+--- a/rag-sidecar/src/rag_sidecar/contracts/samples.py
++++ b/rag-sidecar/src/rag_sidecar/contracts/samples.py
+@@ -21,6 +21,7 @@ from rag_sidecar.contracts import (
+     LatencyBudgets,
+     MetricValue,
+     NoiseConfig,
++    OnlineJudgeConfig,
+     PairedReport,
+     PairedStat,
+     ProfileBudget,
+@@ -384,6 +385,12 @@ def _models() -> dict[str, Any]:
+             base_url="https://example.invalid/api/v1",
+             temperature=0.0,
+             embedding_model="embed/model-c",
++            online_judge=OnlineJudgeConfig(
++                sample_rate=0.2,
++                seed=1,
++                judge_model="online-judge/model-d",
++                judge_family="online-judge-family",
++            ),
+         ),
+         "JudgeReport": _judge_report(),
+         "ReviewQueueItem": ReviewQueueItem(
+diff --git a/rag-sidecar/tests/test_contract_models.py b/rag-sidecar/tests/test_contract_models.py
+index e662188..a802337 100644
+--- a/rag-sidecar/tests/test_contract_models.py
++++ b/rag-sidecar/tests/test_contract_models.py
+@@ -357,6 +357,37 @@ class TestJudgeConfig:
+         with pytest.raises(ValidationError):
+             config.judge_model = "other"
+ 
++    def test_online_judge_is_optional_and_defaults_to_none(self):
++        assert JudgeConfig(**_judge_config()).online_judge is None
++
++    def test_online_judge_block_validates(self):
++        block = {"sample_rate": 0.2, "seed": 7, "judge_model": "other/online-model", "judge_family": "other"}
++        config = JudgeConfig(**_judge_config(online_judge=block))
++        assert config.online_judge is not None
++        assert config.online_judge.sample_rate == 0.2
++        assert config.online_judge.seed == 7
++        assert config.online_judge.judge_model == "other/online-model"
++        assert config.online_judge.judge_family == "other"
++
++    @pytest.mark.parametrize("rate", [-0.01, 1.5])
++    def test_online_judge_sample_rate_out_of_range_rejected(self, rate):
++        block = {"sample_rate": rate, "seed": 7, "judge_model": "other/online-model", "judge_family": "other"}
++        with pytest.raises(ValidationError) as caught:
++            JudgeConfig(**_judge_config(online_judge=block))
++        assert "sample_rate" in str(caught.value)
++
++    def test_online_judge_requires_a_seed(self):
++        block = {"sample_rate": 0.2, "judge_model": "other/online-model", "judge_family": "other"}
++        with pytest.raises(ValidationError) as caught:
++            JudgeConfig(**_judge_config(online_judge=block))
++        assert "seed" in str(caught.value)
++
++    def test_online_judge_unknown_key_rejected(self):
++        block = {"sample_rate": 0.2, "seed": 7, "judge_model": "o/m", "judge_family": "o", "temperature": 1}
++        with pytest.raises(ValidationError) as caught:
++            JudgeConfig(**_judge_config(online_judge=block))
++        assert "temperature" in str(caught.value)
++
+ 
+ class TestJudgeScores:
+     def test_score_in_range_and_skipped_item_accepted(self):
+diff --git a/src/lib/rag-eval/contracts.generated.ts b/src/lib/rag-eval/contracts.generated.ts
+index 16f3f02..76310fc 100644
+--- a/src/lib/rag-eval/contracts.generated.ts
++++ b/src/lib/rag-eval/contracts.generated.ts
+@@ -22,7 +22,7 @@ export type GoldenItem = z.infer<typeof GoldenItemSchema>
+ export const GoldenSplitManifestSchema = z.object({ "assignments": z.record(z.string(), z.enum(["dev","test"])), "rule": z.literal("sha256-first8hex-mod100-lt70-dev"), "schema_version": z.literal(1).default(1) }).strict()
+ export type GoldenSplitManifest = z.infer<typeof GoldenSplitManifestSchema>
+ 
+-export const JudgeConfigSchema = z.object({ "base_url": z.string(), "embedding_model": z.string(), "judge_family": z.string(), "judge_model": z.string(), "max_concurrency": z.number().int().gte(1).default(4), "provider": z.literal("openrouter"), "temperature": z.number().gte(0).lte(0) }).strict()
++export const JudgeConfigSchema = z.object({ "base_url": z.string(), "embedding_model": z.string(), "judge_family": z.string(), "judge_model": z.string(), "max_concurrency": z.number().int().gte(1).default(4), "online_judge": z.union([z.object({ "judge_family": z.string(), "judge_model": z.string(), "sample_rate": z.number().gte(0).lte(1), "seed": z.number().int() }).strict(), z.null()]).default(null), "provider": z.literal("openrouter"), "temperature": z.number().gte(0).lte(0) }).strict()
+ export type JudgeConfig = z.infer<typeof JudgeConfigSchema>
+ 
+ export const JudgeReportSchema = z.object({ "by_category": z.record(z.string(), z.record(z.string(), z.object({ "n": z.number().int().gte(0), "value": z.union([z.number(), z.null()]) }).strict())), "by_language": z.record(z.string(), z.record(z.string(), z.object({ "n": z.number().int().gte(0), "value": z.union([z.number(), z.null()]) }).strict())), "generator_family": z.string(), "generator_model": z.string(), "items": z.array(z.object({ "category": z.enum(["multi_turn","compound","exact_term","table","scanned","no_answer","general","colloquial","ambiguous","typo"]), "item_id": z.string(), "language": z.enum(["zh","en","it"]), "library": z.enum(["deepeval","ragas"]), "metric": z.enum(["faithfulness","answer_relevance","context_recall"]), "score": z.union([z.number().gte(0).lte(1), z.null()]).default(null), "skipped_reason": z.union([z.string(), z.null()]).default(null) }).strict()), "judge_family": z.string(), "judge_model": z.string(), "overall": z.record(z.string(), z.object({ "n": z.number().int().gte(0), "value": z.union([z.number(), z.null()]) }).strict()), "run_config_hash": z.string(), "run_id": z.string(), "schema_version": z.literal(1).default(1) }).strict()
+diff --git a/tests/fixtures/contracts/samples.json b/tests/fixtures/contracts/samples.json
+index 6e2330f..9f7398e 100644
+--- a/tests/fixtures/contracts/samples.json
++++ b/tests/fixtures/contracts/samples.json
+@@ -460,6 +460,12 @@
+       "judge_family": "judge-family",
+       "judge_model": "judge/model-a",
+       "max_concurrency": 4,
++      "online_judge": {
++        "judge_family": "online-judge-family",
++        "judge_model": "online-judge/model-d",
++        "sample_rate": 0.2,
++        "seed": 1
++      },
+       "provider": "openrouter",
+       "temperature": 0.0
+     },

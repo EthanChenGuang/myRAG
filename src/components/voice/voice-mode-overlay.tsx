@@ -16,6 +16,8 @@ import { Loader2 } from 'lucide-react';
 // Dynamically import OglOrb to avoid SSR issues
 const OglOrb = dynamic(() => import('./ogl-orb'), { ssr: false });
 import { useVoiceStore } from '@/lib/stores/voice-store';
+import { useOrganizationStore } from '@/lib/stores/organization-store';
+import { isMultiTenant } from '@/lib/deployment-mode';
 
 interface VoiceModeOverlayProps {
     isActive: boolean;
@@ -74,24 +76,21 @@ export default function VoiceModeOverlay({ isActive, onEnd }: VoiceModeOverlayPr
                 setIsConnecting(true);
                 ensureAudioContext();
 
-                let userId = 'anon';
-                try {
-                    const { createClient } = await import('@/lib/supabase/client');
-                    const supabase = createClient();
-                    const { data: { session } } = await supabase.auth.getSession();
-                    if (session?.user?.id) {
-                        userId = session.user.id;
+                let organizationQuery = '';
+                if (isMultiTenant()) {
+                    const { currentOrganization, isPersonalMode } = useOrganizationStore.getState();
+                    if (!isPersonalMode && currentOrganization?.id) {
+                        organizationQuery = `?organizationId=${encodeURIComponent(currentOrganization.id)}`;
                     }
-                } catch (err) {
-                    console.error('[VoiceModeOverlay] Error fetching session:', err);
                 }
-
-                const identity = `user-${userId}-${Math.floor(Math.random() * 1000)}`;
-                const resp = await fetch(`/api/livekit/token?room=myrag-voice&username=${identity}`);
+                const resp = await fetch(`/api/livekit/token${organizationQuery}`);
                 const data = await resp.json();
 
                 if (data.error) {
                     console.error('[VoiceModeOverlay] Failed to get token:', data.error);
+                    if (data.error === 'voice_busy') {
+                        setError(new Error('Voice is busy, try again in a moment'));
+                    }
                     return;
                 }
 

@@ -29,7 +29,12 @@ interface CaseConfig {
   allowedScopes?: string;
 }
 
-async function post(config: CaseConfig, headers: Record<string, string>, body: unknown) {
+async function post(
+  config: CaseConfig,
+  headers: Record<string, string>,
+  body: unknown,
+  setup?: (deps: typeof import('@/lib/rag/deps')) => void,
+) {
   for (const name of ENV_NAMES) delete env[name];
   if (config.secret !== undefined) env.RAG_EVAL_SECRET = config.secret;
   env.NODE_ENV = config.nodeEnv ?? 'test';
@@ -38,6 +43,7 @@ async function post(config: CaseConfig, headers: Record<string, string>, body: u
   if (config.allowedScopes !== undefined) env.RAG_EVAL_ALLOWED_SCOPES = config.allowedScopes;
 
   vi.resetModules();
+  if (setup) setup(await import('@/lib/rag/deps'));
   const route = await import('@/app/api/internal/rag/run/route');
   const req = new NextRequest(ROUTE_URL, {
     method: 'POST',
@@ -158,30 +164,92 @@ describe('eval route error responses', () => {
     saved = Object.fromEntries(ENV_NAMES.map((name) => [name, env[name]]));
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     for (const name of ENV_NAMES) {
       if (saved[name] === undefined) delete env[name];
       else env[name] = saved[name];
     }
-    vi.doUnmock('@/lib/enhanced-rag-retrieval');
+    const deps = await import('@/lib/rag/deps');
+    deps.resetRagDepsForTests();
     vi.resetModules();
   });
 
-  test('a retrieval failure returns the error name, never the raw message', async () => {
+  test('a retrieval failure returns the stage reason, never the raw message', async () => {
     const leaky = 'Incorrect API key provided: sk-proj-abcd1234 at db.internal.example:5432';
-    vi.doMock('@/lib/enhanced-rag-retrieval', () => ({
-      enhancedRetrieveChunks: async () => {
-        throw new TypeError(leaky);
-      },
-    }));
+    const embedder = vi.fn(async () => {
+      throw new TypeError(leaky);
+    });
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     try {
-      const res = await post({ secret: SECRET }, { 'x-rag-eval-secret': SECRET }, VALID_BODY);
+      const res = await post({ secret: SECRET }, { 'x-rag-eval-secret': SECRET }, VALID_BODY, (deps) => {
+        deps.setRagDepsForTests({ embedder });
+      });
+      expect(embedder).toHaveBeenCalledTimes(1);
       expect(res.status).toBe(500);
-      expect(res.json.error).toBe('retrieval failed: TypeError');
+      expect(res.json).toEqual({ error: 'retrieval failed', reason: 'embed_failed' });
       expect(JSON.stringify(res.json)).not.toContain('sk-proj');
     } finally {
       errorSpy.mockRestore();
+      warnSpy.mockRestore();
+    }
+  });
+
+  test('a backend error is a 500, never a refusal', async () => {
+    const rpc = vi.fn(() => {
+      const request = {
+        abortSignal: () => request,
+        then: (onFulfilled: (value: unknown) => unknown, onRejected?: (reason: unknown) => unknown) =>
+          Promise.resolve({ data: null, error: { message: 'boom', code: 'XX000' } }).then(onFulfilled, onRejected),
+      };
+      return request;
+    });
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const res = await post({ secret: SECRET }, { 'x-rag-eval-secret': SECRET }, VALID_BODY, (deps) => {
+        deps.setRagDepsForTests({
+          embedder: async () => [0.1, 0.2, 0.3],
+          adminClient: () => ({ rpc, from: () => ({}) }) as never,
+        });
+      });
+      expect(rpc).toHaveBeenCalled();
+      expect(res.status).toBe(500);
+      expect(res.json).toEqual({ error: 'retrieval failed', reason: 'backend_error' });
+    } finally {
+      errorSpy.mockRestore();
+      warnSpy.mockRestore();
+    }
+  });
+
+  test('an empty corpus yields a strict refusal trace with stage names and statuses', async () => {
+    const rpc = vi.fn(() => {
+      const request = {
+        abortSignal: () => request,
+        then: (onFulfilled: (value: unknown) => unknown, onRejected?: (reason: unknown) => unknown) =>
+          Promise.resolve({ data: [], error: null }).then(onFulfilled, onRejected),
+      };
+      return request;
+    });
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    try {
+      const res = await post({ secret: SECRET }, { 'x-rag-eval-secret': SECRET }, VALID_BODY, (deps) => {
+        deps.setRagDepsForTests({
+          embedder: async () => [0.1, 0.2, 0.3],
+          adminClient: () => ({ rpc, from: () => ({}) }) as never,
+        });
+      });
+      expect(rpc).toHaveBeenCalled();
+      expect(res.status).toBe(200);
+      expect(res.json.refused).toBe(true);
+      expect(res.json.refusal_reason).toBe('no_relevant_context');
+      expect(Object.keys(res.json.stage_latency_ms as object)).toEqual(
+        expect.arrayContaining(['analyze', 'embed', 'search', 'legacy_rank', 'post_filter', 'assemble']),
+      );
+      expect(res.json.stage_latency_ms).not.toHaveProperty('retrieval');
+      expect(res.json.stage_status).toMatchObject({ analyze: 'ok', embed: 'ok', search: 'ok', assemble: 'ok' });
+    } finally {
+      logSpy.mockRestore();
     }
   });
 });

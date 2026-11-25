@@ -1,0 +1,188 @@
+{
+  "$defs": {
+    "PageCheck": {
+      "additionalProperties": false,
+      "properties": {
+        "failed": {
+          "items": {
+            "enum": [
+              "empty_text",
+              "low_chars",
+              "garbled",
+              "language_mismatch",
+              "missing_table",
+              "partial_conversion",
+              "table_boundary"
+            ],
+            "type": "string"
+          },
+          "title": "Failed",
+          "type": "array"
+        },
+        "page": {
+          "minimum": 1,
+          "title": "Page",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "page",
+        "failed"
+      ],
+      "title": "PageCheck",
+      "type": "object"
+    },
+    "ParseAttemptPages": {
+      "additionalProperties": false,
+      "properties": {
+        "end": {
+          "minimum": 1,
+          "title": "End",
+          "type": "integer"
+        },
+        "start": {
+          "minimum": 1,
+          "title": "Start",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "start",
+        "end"
+      ],
+      "title": "ParseAttemptPages",
+      "type": "object"
+    },
+    "QualityCheckResult": {
+      "additionalProperties": false,
+      "properties": {
+        "pages": {
+          "items": {
+            "$ref": "#/$defs/PageCheck"
+          },
+          "title": "Pages",
+          "type": "array"
+        },
+        "partial": {
+          "title": "Partial",
+          "type": "boolean"
+        },
+        "passed": {
+          "title": "Passed",
+          "type": "boolean"
+        },
+        "score": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Score",
+          "type": "number"
+        }
+      },
+      "required": [
+        "passed",
+        "pages",
+        "score",
+        "partial"
+      ],
+      "title": "QualityCheckResult",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "attempt_no": {
+      "minimum": 1,
+      "title": "Attempt No",
+      "type": "integer"
+    },
+    "cache_hit": {
+      "title": "Cache Hit",
+      "type": "boolean"
+    },
+    "check": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/QualityCheckResult"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "est_cost_usd": {
+      "minimum": 0,
+      "title": "Est Cost Usd",
+      "type": "number"
+    },
+    "ms": {
+      "minimum": 0,
+      "title": "Ms",
+      "type": "integer"
+    },
+    "pages": {
+      "$ref": "#/$defs/ParseAttemptPages"
+    },
+    "parser": {
+      "title": "Parser",
+      "type": "string"
+    },
+    "parser_version": {
+      "title": "Parser Version",
+      "type": "string"
+    },
+    "preset": {
+      "enum": [
+        "native",
+        "fast",
+        "structured_layout",
+        "structured_full",
+        "structured_ocr",
+        "premium"
+      ],
+      "title": "Preset",
+      "type": "string"
+    },
+    "reason": {
+      "enum": [
+        "initial",
+        "escalation",
+        "table_boundary",
+        "progressive_fast",
+        "fixed_chain",
+        "native"
+      ],
+      "title": "Reason",
+      "type": "string"
+    },
+    "refused": {
+      "title": "Refused",
+      "type": "boolean"
+    },
+    "tier": {
+      "enum": [
+        "native",
+        "fast",
+        "structured",
+        "premium"
+      ],
+      "title": "Tier",
+      "type": "string"
+    }
+  },
+  "required": [
+    "attempt_no",
+    "tier",
+    "preset",
+    "parser",
+    "parser_version",
+    "pages",
+    "reason",
+    "ms",
+    "est_cost_usd",
+    "cache_hit",
+    "refused"
+  ],
+  "title": "ParseAttempt",
+  "type": "object"
+}

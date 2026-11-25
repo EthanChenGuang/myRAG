@@ -4,18 +4,32 @@ import { getWhatsAppClient } from '@/lib/whatsapp/client-factory';
 import { KoyebWebhookPayload } from '@/lib/whatsapp/types';
 import { logger } from '@/lib/logger';
 import { env } from '@/lib/env';
+import { isWebhookTimestampFresh, rememberWebhookSignature } from '@/lib/whatsapp/webhook-replay';
 
 export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
   try {
-    // Validate webhook signature
+    const secretConfigured = !!env.WHATSAPP_WEBHOOK_SECRET;
+    const unsignedAllowed =
+      !secretConfigured && process.env.NODE_ENV !== 'production' && env.WHATSAPP_WEBHOOK_ALLOW_UNSIGNED === 'true';
+
+    if (!secretConfigured && !unsignedAllowed) {
+      logger.error('WhatsApp Webhook', 'WHATSAPP_WEBHOOK_SECRET is not configured; rejecting webhook');
+      return NextResponse.json(
+        { error: 'Webhook verification is not configured' },
+        { status: 503 }
+      );
+    }
+
     const signature = request.headers.get('x-webhook-signature');
     const rawBody = await request.text();
 
-    if (env.WHATSAPP_WEBHOOK_SECRET) {
+    if (unsignedAllowed) {
+      logger.warn('WhatsApp Webhook', 'WHATSAPP_WEBHOOK_ALLOW_UNSIGNED is set; accepting unverified webhook (development only)');
+    } else {
       const whatsappClient = getWhatsAppClient();
-      const isValid = !!signature && whatsappClient.verifyWebhookSignature(rawBody, signature);
+      const isValid = !!signature && whatsappClient.validateWebhookSignature(signature, rawBody);
 
       if (!isValid) {
         logger.warn('WhatsApp Webhook', 'Invalid webhook signature');
@@ -38,12 +52,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    logger.info('WhatsApp Webhook', `Received webhook event: ${payload.event}`);
-    
-    // Log the full payload for debugging message structure
-    if (payload.event === 'message') {
-      logger.info('WhatsApp Webhook', 'Message payload:', JSON.stringify(payload, null, 2));
+    if (!unsignedAllowed) {
+      if (!isWebhookTimestampFresh((payload as { timestamp?: unknown }).timestamp)) {
+        logger.warn('WhatsApp Webhook', 'Rejected webhook with a missing or out-of-window timestamp');
+        return NextResponse.json({ error: 'Stale or missing timestamp' }, { status: 401 });
+      }
+      if (!rememberWebhookSignature(signature!)) {
+        logger.warn('WhatsApp Webhook', 'Ignored replayed webhook');
+        return NextResponse.json({ success: true, received: true, duplicate: true });
+      }
     }
+
+    logger.info('WhatsApp Webhook', `Received webhook event: ${payload.event}`, {
+      messageId: payload.data?.key?.id ?? payload.data?.messageId,
+    });
 
     // Process webhook
     const webhookHandler = getWebhookHandler();

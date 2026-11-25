@@ -1,0 +1,186 @@
+From 6b2b49d5dd90dcab76223bf369ca533cdd2c6847 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 24 Nov 2026 22:23:29 +0000
+Subject: [PATCH 1/8] test(04-38): calibration cell minimums and near-miss
+ topic checks (RED)
+
+- cells by language, pairing and split read minimums from refusal-calibration.json
+- near-miss topics declared per item and checked against the corpus languages
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01X342shLsAZx6PYph2vA7hc
+---
+ eval/tests/test_golden_phase4.py | 161 +++++++++++++++++++++++++++++++
+ 1 file changed, 161 insertions(+)
+ create mode 100644 eval/tests/test_golden_phase4.py
+
+diff --git a/eval/tests/test_golden_phase4.py b/eval/tests/test_golden_phase4.py
+new file mode 100644
+index 0000000..691d430
+--- /dev/null
++++ b/eval/tests/test_golden_phase4.py
+@@ -0,0 +1,161 @@
++"""Calibration cell minimums for the refusal calibration (plan 04-38, D-18, D-26, D-32, F-20).
++
++Stratification rule: a cell is (question language, pairing, split). The pairing of an answerable item comes from
++evidence_language (same when it is absent or equal to the question language, cross otherwise); the pairing of a
++no-answer item comes from the cross_language tag. New items were given ids whose assign_split lands in the split a
++short cell needed. That is allowed because the split is a pure function of the id and no outcome, score or retrieval
++result was used to pick an id or a question (A15). Every minimum is read from eval/config/refusal-calibration.json.
++"""
++
++import collections
++import json
++
++import pytest
++
++from rag_eval.corpus import load_corpus
++from rag_eval.golden_io import load_golden
++from rag_eval.paths import REPO_ROOT
++from rag_eval.split import assign_split
++
++CORPUS_DIR = REPO_ROOT / "eval/fixtures/corpus"
++GOLDEN_PATH = REPO_ROOT / "eval/fixtures/golden.jsonl"
++CONFIG_PATH = REPO_ROOT / "eval/config/refusal-calibration.json"
++
++LANGUAGES = ("zh", "en", "it")
++PAIRINGS = ("same", "cross")
++MIN_NO_ANSWER_PER_LANGUAGE = 8
++MIN_CROSS_NEAR_MISS_PER_LANGUAGE = 4
++MIN_SAME_NEAR_MISS_PER_LANGUAGE = 2
++MIN_ENGLISH_ANSWERABLE_TEST = 4
++NEAR_MISS = "near_miss"
++CROSS_LANGUAGE = "cross_language"
++
++# item id -> (document holding the topic, keyword in that document, terms that must not appear in any document of
++# the question language). The topic exists only in a document of another language.
++CROSS_NEAR_MISS_TOPICS = {
++    "en-no-answer-006": ("employee-handbook.zh.md", "年假", ("paternity", "annual leave", "vacation")),
++    "en-no-answer-007": ("employee-handbook.zh.md", "出差住宿标准", ("business trip", "hotel", "per night")),
++    "en-no-answer-008": ("scanned-contract.zh.md", "维护服务合", ("maintenance service", "service contract", "terminate")),
++    "en-no-answer-009": ("warranty-terms.it.md", "centro di assistenza", ("service centre", "service center", "loan")),
++    "it-no-answer-007": ("employee-handbook.zh.md", "年假", ("congedo", "ferie", "paternità")),
++    "it-no-answer-008": ("employee-handbook.zh.md", "差旅与报销", ("trasferta", "trasferte", "pasti")),
++    "it-no-answer-009": ("shipping-handbook.en.md", "Pallet shipments", ("pallet",)),
++    "it-no-answer-010": ("warehouse-floorplan.en.md", "main office", ("magazzino", "ufficio principale")),
++    "zh-no-answer-006": ("shipping-handbook.en.md", "import duties", ("关税", "海关")),
++    "zh-no-answer-007": ("warranty-terms.it.md", "Estensione di garanzia", ("延长保修", "延保")),
++    "zh-no-answer-008": ("warehouse-floorplan.en.md", "main office", ("平面图", "办公室")),
++    "zh-no-answer-009": ("shipping-handbook.en.md", "Damaged or lost parcels", ("包裹", "丢失")),
++}
++
++# item id -> (keyword that exists in a same-language document, terms that must not appear in any document of the language).
++SAME_NEAR_MISS_TOPICS = {
++    "en-no-answer-005": ("Express delivery", ("beyond the neighbouring region",)),
++    "en-no-answer-010": ("XR-4410", ("battery life",)),
++    "it-no-answer-005": ("VS-210", ("autonomia",)),
++    "it-no-answer-006": ("punto vendita", ("sabato", "orari di apertura")),
++    "zh-no-answer-005": ("GT-300", ("续航", "连续使用")),
++    "zh-no-answer-010": ("差旅与报销", ("舱位", "机票")),
++}
++
++
++@pytest.fixture(scope="module")
++def items():
++    return load_golden(GOLDEN_PATH)
++
++
++@pytest.fixture(scope="module")
++def documents():
++    return load_corpus(CORPUS_DIR)
++
++
++@pytest.fixture(scope="module")
++def minimums():
++    config = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
++    return config["dev_minimums"]["fixture"], config["holdout_minimums"]["fixture"]
++
++
++def _pairing(item) -> str:
++    if item.answerable:
++        return "cross" if item.evidence_language not in (None, item.language) else "same"
++    return "cross" if CROSS_LANGUAGE in item.tags else "same"
++
++
++def _cells(items):
++    counts: collections.Counter = collections.Counter()
++    for item in items:
++        kind = "answerable" if item.answerable else "no_answer"
++        counts[(item.language, _pairing(item), item.split, kind)] += 1
++    return counts
++
++
++def _text(document) -> str:
++    return "\n".join(chunk.text for chunk in document.chunks).casefold()
++
++
++def test_every_calibration_cell_reaches_the_fixture_minimums(items, minimums):
++    dev_min, holdout_min = minimums
++    counts = _cells(items)
++    short = []
++    for language in LANGUAGES:
++        for pairing in PAIRINGS:
++            for split, floor in (("dev", dev_min), ("test", holdout_min)):
++                for kind in ("answerable", "no_answer"):
++                    have = counts[(language, pairing, split, kind)]
++                    if have < floor[kind]:
++                        short.append((language, pairing, split, kind, have, floor[kind]))
++    assert not short, short
++
++
++def test_each_language_has_enough_no_answer_and_near_miss_items(items):
++    for language in LANGUAGES:
++        no_answer = [i for i in items if i.language == language and not i.answerable]
++        cross = [i for i in no_answer if NEAR_MISS in i.tags and CROSS_LANGUAGE in i.tags]
++        same = [i for i in no_answer if NEAR_MISS in i.tags and CROSS_LANGUAGE not in i.tags]
++        assert len(no_answer) >= MIN_NO_ANSWER_PER_LANGUAGE, language
++        assert len(cross) >= MIN_CROSS_NEAR_MISS_PER_LANGUAGE, language
++        assert len(same) >= MIN_SAME_NEAR_MISS_PER_LANGUAGE, language
++
++
++def test_english_has_enough_answerable_test_items(items):
++    english = [i for i in items if i.language == "en" and i.answerable and i.split == "test"]
++    assert len(english) >= MIN_ENGLISH_ANSWERABLE_TEST
++
++
++def test_near_miss_tags_are_only_on_no_answer_items_and_declared_here(items):
++    tagged = {i.id for i in items if NEAR_MISS in i.tags or CROSS_LANGUAGE in i.tags}
++    assert tagged == set(CROSS_NEAR_MISS_TOPICS) | set(SAME_NEAR_MISS_TOPICS)
++    for item in items:
++        if item.id in CROSS_NEAR_MISS_TOPICS:
++            assert set(item.tags) == {NEAR_MISS, CROSS_LANGUAGE}, item.id
++        elif item.id in SAME_NEAR_MISS_TOPICS:
++            assert set(item.tags) == {NEAR_MISS}, item.id
++        if item.tags:
++            assert not item.answerable and item.category == "no_answer", item.id
++
++
++def test_cross_language_topic_exists_only_in_a_document_of_another_language(items, documents):
++    by_name = {doc.filename: doc for doc in documents}
++    by_id = {item.id: item for item in items}
++    for item_id, (document, keyword, absent_terms) in CROSS_NEAR_MISS_TOPICS.items():
++        item = by_id[item_id]
++        holder = by_name[document]
++        assert holder.language != item.language, item_id
++        assert keyword.casefold() in _text(holder), (item_id, keyword)
++        same_language = [doc for doc in documents if doc.language == item.language]
++        for term in absent_terms:
++            assert all(term.casefold() not in _text(doc) for doc in same_language), (item_id, term)
++
++
++def test_same_language_near_miss_topic_is_in_the_corpus_but_the_asked_fact_is_not(items, documents):
++    by_id = {item.id: item for item in items}
++    for item_id, (keyword, absent_terms) in SAME_NEAR_MISS_TOPICS.items():
++        item = by_id[item_id]
++        same_language = [doc for doc in documents if doc.language == item.language]
++        assert any(keyword.casefold() in _text(doc) for doc in same_language), (item_id, keyword)
++        for term in absent_terms:
++            assert all(term.casefold() not in _text(doc) for doc in documents), (item_id, term)
++
++
++def test_every_item_split_is_the_pure_function_of_its_id(items):
++    for item in items:
++        assert item.split == assign_split(item.id), item.id
+-- 
+2.43.0
+

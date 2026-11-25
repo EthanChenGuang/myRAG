@@ -1,0 +1,148 @@
+From 841bf70d0eac9d2431a6a516b26382ea18522a9e Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 24 Nov 2026 22:27:12 +0000
+Subject: [PATCH 6/6] docs(05-03): summary for citation marker grammar and
+ parser
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01X342shLsAZx6PYph2vA7hc
+---
+ .../05-03-SUMMARY.md                          | 126 ++++++++++++++++++
+ 1 file changed, 126 insertions(+)
+ create mode 100644 .planning/phases/05-verified-citations-groundedness/05-03-SUMMARY.md
+
+diff --git a/.planning/phases/05-verified-citations-groundedness/05-03-SUMMARY.md b/.planning/phases/05-verified-citations-groundedness/05-03-SUMMARY.md
+new file mode 100644
+index 0000000..5fa1168
+--- /dev/null
++++ b/.planning/phases/05-verified-citations-groundedness/05-03-SUMMARY.md
+@@ -0,0 +1,126 @@
++---
++phase: 05-verified-citations-groundedness
++plan: 03
++subsystem: rag
++tags: [citations, parser, grammar, streaming, typescript]
++status: complete
++
++requires: []
++provides:
++  - "Shared citation marker grammar (server and client): findCitationMarkers, stripCitationMarkers, neutralizeCitationMarkers, MAX_MARKER_HOLD_CHARS"
++  - "Split-safe incremental marker parser with per-request alias validation: createMarkerParser, parseAnswerMarkers, MarkerParseResult"
++affects: [05-08, 05-20, 05-22]
++
++actuals:
++  tokens: 4900
++  tasks: 2
++  commits: 5
++plan_head_before: 045ae01
++plan_head_after: 949fa67e7e837da5ff010578e76e6bd161322155
++
++tech-stack:
++  added: []
++  patterns:
++    - "Hand-written bounded scanner instead of a regex, with a three-way result (match / partial / none) so the stream parser and the one-shot finder cannot disagree"
++
++key-files:
++  created:
++    - src/lib/citations/marker-grammar.ts
++    - src/lib/rag/generation/citations/marker-parser.ts
++    - tests/lib/marker-grammar.test.ts
++    - tests/rag/citations/marker-parser.test.ts
++  modified: []
++
++key-decisions:
++  - "A marker's inner text (between opener and closer) is at most MAX_MARKER_HOLD_CHARS = 16 characters, enforced in the grammar itself, so the hold-back rule and the one-shot grammar accept exactly the same markers"
++  - "Spaces are allowed only next to a separator; [ S3], [S3 ] and [S 3] are not markers"
++
++requirements-completed: [GEN-02, GEN-04]
++
++coverage:
++  - id: D1
++    description: "One marker grammar for server and client (bracket, full-width bracket, mixed bracket; comma, full-width comma, enumeration comma)"
++    requirement: "GEN-02"
++    verification:
++      - kind: unit
++        ref: "tests/lib/marker-grammar.test.ts"
++        status: pass
++  - id: D2
++    description: "Split-safe incremental parser, per text id, alias validation, invalid count"
++    requirement: "GEN-02"
++    verification:
++      - kind: unit
++        ref: "tests/rag/citations/marker-parser.test.ts"
++        status: pass
++  - id: D3
++    description: "stripCitationMarkers and neutralizeCitationMarkers for prior assistant turns and block text"
++    requirement: "GEN-04"
++    verification:
++      - kind: unit
++        ref: "tests/lib/marker-grammar.test.ts#stripCitationMarkers, #neutralizeCitationMarkers"
++        status: pass
++---
++
++# Phase 5 Plan 03: Citation marker grammar and parser Summary
++
++Pure TypeScript marker grammar (`[S3]`, `[S3, S5]`, `[S3][S5]`, `【S3】`, `［S3］`, `[S3，S5]`, `[S3、S5]`) in one shared module, plus an incremental parser that finds and validates the same markers whatever the token boundaries.
++
++## What was built
++
++- `src/lib/citations/marker-grammar.ts` (no imports): `matchMarkerAt` is a small state machine returning `match`, `partial` (valid prefix, more input could complete it) or `none`. `findCitationMarkers` runs it over the text. `stripCitationMarkers` removes every marker and the spaces or tabs before it. `neutralizeCitationMarkers` inserts U+200B between `S` and the digits of every marker, and returns the identical string when there is no marker.
++- `src/lib/rag/generation/citations/marker-parser.ts` (imports only the grammar): `createMarkerParser({aliases})` returns `{feed(textId, delta), end(textId), finish()}`. It keeps one tail buffer per text id (at most 17 characters, the opener plus 16) and scans `tail + delta`. `finish()` returns `{valid, invalidCitations, invalidAliases}`; valid aliases are listed once in first-appearance order, every invalid occurrence is counted, `invalidAliases` is the distinct list. `parseAnswerMarkers(text, aliases)` is the one-shot form.
++
++## Task commits
++
++| Task | Commit | Subject |
++| ---- | ------ | ------- |
++| 1 RED | c22486b | test(05-03): failing tests for the shared citation marker grammar |
++| 1 GREEN | 44753fa | feat(05-03): shared citation marker grammar |
++| 1 fix | 1f8b28d | fix(05-03): use the escape sequence for the zero-width space |
++| 2 RED | cf3f392 | test(05-03): failing tests for the split-safe citation marker parser |
++| 2 GREEN | 949fa67 | feat(05-03): split-safe incremental citation marker parser with alias validation |
++
++(The Task 1 RED commit was amended once, before anything was pushed, to correct its attribution trailer.)
++
++## Verification
++
++- `npx vitest run tests/rag/citations/marker-parser.test.ts tests/lib/marker-grammar.test.ts`: 2 files, 51 tests passed (29 grammar, 22 parser).
++- RED runs failed on assertions (13 of 29 and 12 of 22) against stub modules, not on missing modules.
++- Property tests: every single split and every pair of splits of marker-heavy text; one character at a time; 3000 random strings and 2000 token-assembled strings under random chunking, each compared with an oracle built from `findCitationMarkers` on the full text.
++- Adversarial input (200,000 characters: opener floods, unclosed alias lists, digit runs, space runs, mixed brackets, separators; and 20,000 characters fed one character at a time): all within a 20 s budget; the whole file runs in under a second.
++- `node scripts/ci/check-rag-boundary.mjs`: ok, 1043 files scanned, no violations.
++- `npx tsc --noEmit -p tsconfig.json`: 0 errors.
++- `npm run typecheck:new`: 44 diagnostic lines, none in the files of this plan; they are in `eval/harness/*` and `tests/rag-db/*` and `tests/fixture-edge-storage.test.mts`, which this plan does not touch (pre-existing on the base).
++- Acceptance greps: `export function findCitationMarkers` = 1; `200B` in the grammar >= 1; `export function createMarkerParser` = 1; `ai` / `@ai-sdk/` imports in the parser = 0.
++
++## Deviations from Plan
++
++None in behaviour. Two implementation notes:
++
++- **[Rule 1 - Bug] literal zero-width character.** The first GREEN commit contained an invisible literal U+200B in the source and in the test instead of the `\u200B` escape (the acceptance grep for `200B` returned 0). Fixed in 1f8b28d.
++- The brief asked for trailers naming one model; the session's own attribution reminder names the model that actually ran, so all five commits carry `Co-Authored-By: Claude Sonnet 5.5`.
++
++## Known limitations and open questions
++
++- A single marker listing many sources, for example `[S1, S2, S3, S4, S5, S6]` (22 inner characters), is not recognised because of the 16-character cap the plan sets. The text stays visible in the answer and no alias is validated from it. If models do this in practice, raising `MAX_MARKER_HOLD_CHARS` is a one-line change but delays release of a stray opener in the stream by the same amount. Product owner to confirm 16 is enough once plan 05-08 prompts are measured.
++- Digits are not capped inside an alias, so `[S1234567890123]` is a marker whose alias is simply unknown to the request set and is counted as invalid.
++
++## Known Stubs
++
++None.
++
++## Threat Flags
++
++None. Mitigations T-05-07 (alias validation against the request set), T-05-08 (`neutralizeCitationMarkers`, to be applied by plan 05-08) and T-05-09 (hold-back capped at 16 characters) are implemented and tested here.
++
++## Design skills
++
++| Skill | Status | Notes |
++| ----- | ------ | ----- |
++| frontend-design | n/a | no UI file touched |
++| Impeccable | n/a | no UI file touched |
++| web-design-guidelines | none | no UI file touched |
++
++## Deferred
++
++Wiring the parser into a `streamText` transform, applying `neutralizeCitationMarkers` to block text, and stripping markers from prior assistant turns belong to plans 05-08 and later.
+-- 
+2.43.0
+

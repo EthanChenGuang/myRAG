@@ -1,4 +1,4 @@
-import { CoreTool, tool } from 'ai';
+import { type Tool, tool } from 'ai';
 import { z } from 'zod/v3';
 import { universalMcpDiscovery, type QueryIntent, type ToolMatch, type McpServerHealth } from './universal-discovery';
 import { devLog } from '@/lib/dev-logger';
@@ -187,7 +187,7 @@ export class SmartMcpRouter {
   /**
    * Get enhanced tools for AI model with smart descriptions
    */
-  async getEnhancedTools(query: string): Promise<Record<string, CoreTool>> {
+  async getEnhancedTools(query: string): Promise<Record<string, Tool>> {
     devLog.verbose(`[Smart Router] Creating enhanced tools for query: "${query}"`);
     
     const decision = await this.analyzeAndRoute(query);
@@ -195,7 +195,7 @@ export class SmartMcpRouter {
     
     // Discover available tools
     const toolMatches = await universalMcpDiscovery.findBestTools(intent);
-    const enhancedTools: Record<string, CoreTool> = {};
+    const enhancedTools: Record<string, Tool> = {};
     
     // Create enhanced tools with smart descriptions and priority ordering
     const sortedMatches = toolMatches.sort((a, b) => b.matchScore - a.matchScore);

@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 // PUT /api/folders/[id] - Update a folder
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createClient();
@@ -15,7 +15,7 @@ export async function PUT(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const folderId = params.id;
+    const { id: folderId } = await params;
     const body = await request.json();
     const { name, color, pinned } = body;
 
@@ -50,7 +50,7 @@ export async function PUT(
 // DELETE /api/folders/[id] - Delete a folder
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createClient();
@@ -61,7 +61,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const folderId = params.id;
+    const { id: folderId } = await params;
     
     // Get query params
     const searchParams = request.nextUrl.searchParams;
@@ -92,7 +92,7 @@ export async function DELETE(
 // PATCH /api/folders/[id]/pin - Toggle folder pin status
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createClient();
@@ -103,7 +103,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const folderId = params.id;
+    const { id: folderId } = await params;
 
     // First, get the current pinned status
     const { data: folder, error: fetchError } = await supabase

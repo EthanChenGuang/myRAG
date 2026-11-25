@@ -1,10 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
 import { storeDocument } from './supabase';
 import { env } from './env';
-import OpenAI from 'openai';
+import { embedText, embedBatch, CloudRefused, assertCloudAllowed } from '@/lib/rag';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { randomUUID } from 'crypto';
 import { promisify } from 'util';
 import type { ChunkWithEmbedding } from './types';
 import FormData from 'form-data';
@@ -19,19 +20,10 @@ const unlink = promisify(fs.unlink);
 
 const LLAMA_CLOUD_API_BASE = 'https://api.cloud.llamaindex.ai/api';
 
-// Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: env.OPENAI_API_KEY,
-});
-
-// Simple embedding functions to replace the deleted embedding-optimizer
+// Embeddings go through the retrieval pipeline module
 async function createEmbedding(text: string): Promise<number[]> {
   try {
-    const response = await openai.embeddings.create({
-      model: env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small',
-      input: text,
-    });
-    return response.data[0].embedding;
+    return await embedText(text, { signal: new AbortController().signal });
   } catch (error) {
     console.error('Error creating embedding:', error);
     throw error;
@@ -45,30 +37,19 @@ async function createBatchEmbeddings(chunks: string[]): Promise<{
   cached: boolean[];
 }> {
   try {
-    // Process in batches of 100 to avoid API limits
-    const batchSize = 100;
-    const allEmbeddings: number[][] = [];
     let totalTokens = 0;
-
-    for (let i = 0; i < chunks.length; i += batchSize) {
-      const batch = chunks.slice(i, i + batchSize);
-      const response = await openai.embeddings.create({
-        model: env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small',
-        input: batch,
-      });
-
-      for (const data of response.data) {
-        allEmbeddings.push(data.embedding);
-      }
-
-      totalTokens += response.usage?.total_tokens || 0;
-    }
+    const embeddings = await embedBatch(chunks, {
+      signal: new AbortController().signal,
+      onUsage: tokens => {
+        totalTokens += tokens;
+      },
+    });
 
     // Simple cost estimation (text-embedding-3-small: $0.00002 per 1K tokens)
     const cost = (totalTokens / 1000) * 0.00002;
 
     return {
-      embeddings: allEmbeddings,
+      embeddings,
       cost,
       tokensUsed: totalTokens,
       cached: new Array(chunks.length).fill(false), // No caching in simple implementation
@@ -95,10 +76,6 @@ function estimateCost(chunks: string[]): { cost: number; tokens: number } {
 // Legacy function for backward compatibility
 async function generateEmbedding(text: string): Promise<number[]> {
   return createEmbedding(text);
-}
-
-async function getQueryEmbedding(query: string): Promise<number[]> {
-  return createEmbedding(query);
 }
 
 // Estimate tokens based on characters (rough approximation)
@@ -186,7 +163,16 @@ function createTokenBasedChunks(text: string, maxTokens: number = 600, overlapTo
   return chunks;
 }
 
+/** The legacy parser has no Docling fallback, so a refused call fails the file; Nango stores this message as the failure reason. */
+function requireCloudParsing(): void {
+  if (assertCloudAllowed('parse').ok) return;
+  const refusal = new CloudRefused('cloud_not_allowed');
+  refusal.message = 'cloud_parsing_disabled';
+  throw refusal;
+}
+
 async function uploadAndParseDocument(filePath: string): Promise<{ chunks: string[] }> {
+  requireCloudParsing();
   const formData = new FormData();
   formData.append('file', fs.createReadStream(filePath));
 
@@ -399,18 +385,32 @@ interface ProcessDocumentMetadata {
   [key: string]: any;
 }
 
+/**
+ * A path inside tempDir for a provider-supplied file name: a random name plus the name's own extension when it is plain. The directory part
+ * of the name (`../`, `/`, `\\`) is never used, so a shared file cannot be written outside the temp directory.
+ */
+function tempPathFor(tempDir: string, filename: string): string {
+  const base = path.basename(String(filename).replace(/\\/g, '/'));
+  const ext = path.extname(base).toLowerCase();
+  return path.join(tempDir, `${randomUUID()}${/^\.[a-z0-9]{1,8}$/.test(ext) ? ext : ''}`);
+}
+
 async function processDocument(
   filename: string,
   buffer: Buffer,
   metadata: ProcessDocumentMetadata
 ): Promise<string> {
-  console.log(`Processing document: ${filename}`);
+  console.log('Processing document');
+  let tempFilePath: string | null = null;
 
   try {
+    // Refuse before the bytes are written to disk; Markdown is parsed locally and needs no cloud.
+    if (!filename.toLowerCase().endsWith('.md')) requireCloudParsing();
+
     // Create a temporary file to store the buffer
     const tempDir = path.join(os.tmpdir(), 'myrag');
     await mkdir(tempDir, { recursive: true });
-    const tempFilePath = path.join(tempDir, filename);
+    tempFilePath = tempPathFor(tempDir, filename);
     await writeFile(tempFilePath, buffer);
 
     let chunks: string[];
@@ -428,8 +428,8 @@ async function processDocument(
       chunks = result.chunks;
     }
 
-    // Clean up temp file
     await unlink(tempFilePath);
+    tempFilePath = null;
 
     if (!chunks || chunks.length === 0) {
       throw new Error('No chunks returned from LlamaParse');
@@ -458,6 +458,8 @@ async function processDocument(
   } catch (error) {
     console.error('Error processing document:', error);
     throw error;
+  } finally {
+    if (tempFilePath) await unlink(tempFilePath).catch(() => undefined);
   }
 }
 
@@ -521,5 +523,5 @@ async function processImageDocument(
   }
 }
 
-export { processDocument, processImageDocument, getQueryEmbedding };
+export { processDocument, processImageDocument, tempPathFor };
 export type { ProcessDocumentMetadata };

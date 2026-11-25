@@ -63,7 +63,7 @@ export default async function Page({
     notFound();
   }
   
-  let safeChat: { title: string | null; messages: unknown[]; created_at: string; updated_at: string } | null = null;
+  let safeChat: { title: string; messages: unknown[]; created_at: string; updated_at: string } | null = null;
 
   try {
     // Use getSupabaseAdmin() to get the admin client
@@ -93,6 +93,7 @@ export default async function Page({
     // Ensure messages is always an array
     safeChat = {
       ...chat,
+      title: chat.title ?? 'Shared Chat',
       messages: Array.isArray(chat.messages) ? chat.messages : []
     };
 

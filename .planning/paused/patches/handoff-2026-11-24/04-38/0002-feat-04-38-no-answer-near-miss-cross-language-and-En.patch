@@ -1,0 +1,257 @@
+From f3b99091611c124013fb1ec7d42519e3e73d7a73 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 24 Nov 2026 22:24:38 +0000
+Subject: [PATCH 2/8] feat(04-38): no-answer near-miss, cross-language and
+ English test golden items
+
+- 6 same-language and 12 cross-language no-answer near-miss items (tags near_miss, cross_language)
+- one cross-lingual answerable item each for en (dev) and it (test) to fill calibration cells
+- ids chosen by assign_split only; fixture coverage counts updated
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01X342shLsAZx6PYph2vA7hc
+---
+ eval/fixtures/golden.jsonl          | 20 +++++++++++++
+ eval/fixtures/split-manifest.json   | 46 +++++++++++++++++++++--------
+ eval/tests/test_fixture_coverage.py | 21 ++++++++-----
+ eval/tests/test_golden_phase4.py    |  4 +--
+ 4 files changed, 69 insertions(+), 22 deletions(-)
+
+diff --git a/eval/fixtures/golden.jsonl b/eval/fixtures/golden.jsonl
+index 8e39a63..4616a31 100644
+--- a/eval/fixtures/golden.jsonl
++++ b/eval/fixtures/golden.jsonl
+@@ -21,6 +21,12 @@
+ {"answerable":false,"category":"no_answer","conversation":[],"evidence_language":null,"expected_answer":null,"gold_evidence":[],"id":"en-no-answer-002","language":"en","provenance":"synthetic_fixture","question":"What is the measurement range of the XR-6000 thermal probe?","review_status":"approved","split":"dev"}
+ {"answerable":false,"category":"no_answer","conversation":[],"evidence_language":null,"expected_answer":null,"gold_evidence":[],"id":"en-no-answer-003","language":"en","provenance":"synthetic_fixture","question":"Who won the football world cup in 2018?","review_status":"approved","split":"dev"}
+ {"answerable":false,"category":"no_answer","conversation":[],"evidence_language":null,"expected_answer":null,"gold_evidence":[],"id":"en-no-answer-004","language":"en","provenance":"synthetic_fixture","question":"What is the capital city of Australia?","review_status":"approved","split":"test"}
++{"answerable": false, "category": "no_answer", "conversation": [], "evidence_language": null, "expected_answer": null, "gold_evidence": [], "id": "en-no-answer-005", "language": "en", "provenance": "synthetic_fixture", "question": "How many business days does express delivery take to destinations beyond the neighbouring region?", "review_status": "approved", "split": "dev", "tags": ["near_miss"]}
++{"answerable": false, "category": "no_answer", "conversation": [], "evidence_language": null, "expected_answer": null, "gold_evidence": [], "id": "en-no-answer-006", "language": "en", "provenance": "synthetic_fixture", "question": "How many days of paternity leave do employees get?", "review_status": "approved", "split": "test", "tags": ["near_miss", "cross_language"]}
++{"answerable": false, "category": "no_answer", "conversation": [], "evidence_language": null, "expected_answer": null, "gold_evidence": [], "id": "en-no-answer-007", "language": "en", "provenance": "synthetic_fixture", "question": "What is the maximum hotel rate per night for business trips to foreign countries?", "review_status": "approved", "split": "dev", "tags": ["near_miss", "cross_language"]}
++{"answerable": false, "category": "no_answer", "conversation": [], "evidence_language": null, "expected_answer": null, "gold_evidence": [], "id": "en-no-answer-008", "language": "en", "provenance": "synthetic_fixture", "question": "How many days of notice are required to terminate the equipment maintenance service contract early?", "review_status": "approved", "split": "dev", "tags": ["near_miss", "cross_language"]}
++{"answerable": false, "category": "no_answer", "conversation": [], "evidence_language": null, "expected_answer": null, "gold_evidence": [], "id": "en-no-answer-009", "language": "en", "provenance": "synthetic_fixture", "question": "Does the service centre lend a replacement instrument while a warranty repair is in progress?", "review_status": "approved", "split": "dev", "tags": ["near_miss", "cross_language"]}
++{"answerable": false, "category": "no_answer", "conversation": [], "evidence_language": null, "expected_answer": null, "gold_evidence": [], "id": "en-no-answer-010", "language": "en", "provenance": "synthetic_fixture", "question": "How many hours of battery life does the XR-4410 thermal probe give on one set of batteries?", "review_status": "approved", "split": "dev", "tags": ["near_miss"]}
+ {"answerable":true,"category":"scanned","conversation":[],"evidence_language":null,"expected_answer":"The total due is 1449.36.","gold_evidence":[{"document":"scanned-invoice.en.md","quote":"Tota1 due 1449.36","section":"Totals"}],"id":"en-scanned-001","language":"en","provenance":"synthetic_fixture","question":"What is the total due on invoice INV-24-00381?","review_status":"approved","split":"dev"}
+ {"answerable":true,"category":"scanned","conversation":[],"evidence_language":null,"expected_answer":"Payment is due within 45 days of the date of issue.","gold_evidence":[{"document":"scanned-invoice.en.md","quote":"Payment is due w1thin 45 days of the date of issue","section":"Payment terms"}],"id":"en-scanned-002","language":"en","provenance":"synthetic_fixture","question":"Within how many days of the date of issue is payment due on the invoice?","review_status":"approved","split":"dev"}
+ {"answerable":true,"category":"table","conversation":[],"evidence_language":null,"expected_answer":"The DL-220 data logger costs 65.00 dollars per unit for 50 or more units.","gold_evidence":[{"document":"product-specs.en.md","quote":"LV-90-0415 | DL-220 data logger | 79.00 | 72.00 | 65.00","section":"Pricing table"}],"id":"en-table-001","language":"en","provenance":"synthetic_fixture","question":"What is the price of the DL-220 data logger for 50 or more units?","review_status":"approved","split":"dev"}
+@@ -51,6 +57,12 @@
+ {"answerable":false,"category":"no_answer","conversation":[],"evidence_language":null,"expected_answer":null,"gold_evidence":[],"id":"it-no-answer-002","language":"it","provenance":"synthetic_fixture","question":"Qual è l'intervallo di misura del termometro a sonda VS-230?","review_status":"approved","split":"dev"}
+ {"answerable":false,"category":"no_answer","conversation":[],"evidence_language":null,"expected_answer":null,"gold_evidence":[],"id":"it-no-answer-003","language":"it","provenance":"synthetic_fixture","question":"Chi ha vinto i mondiali di calcio del 2018?","review_status":"approved","split":"dev"}
+ {"answerable":false,"category":"no_answer","conversation":[],"evidence_language":null,"expected_answer":null,"gold_evidence":[],"id":"it-no-answer-004","language":"it","provenance":"synthetic_fixture","question":"Qual è la capitale dell'Australia?","review_status":"approved","split":"test"}
++{"answerable": false, "category": "no_answer", "conversation": [], "evidence_language": null, "expected_answer": null, "gold_evidence": [], "id": "it-no-answer-005", "language": "it", "provenance": "synthetic_fixture", "question": "Per quante ore dura la batteria del termometro a sonda VS-210?", "review_status": "approved", "split": "test", "tags": ["near_miss"]}
++{"answerable": false, "category": "no_answer", "conversation": [], "evidence_language": null, "expected_answer": null, "gold_evidence": [], "id": "it-no-answer-006", "language": "it", "provenance": "synthetic_fixture", "question": "A che ora chiude il punto vendita di Citta Esempio il sabato?", "review_status": "approved", "split": "test", "tags": ["near_miss"]}
++{"answerable": false, "category": "no_answer", "conversation": [], "evidence_language": null, "expected_answer": null, "gold_evidence": [], "id": "it-no-answer-007", "language": "it", "provenance": "synthetic_fixture", "question": "Quanti giorni di congedo di paternità spettano ai dipendenti?", "review_status": "approved", "split": "dev", "tags": ["near_miss", "cross_language"]}
++{"answerable": false, "category": "no_answer", "conversation": [], "evidence_language": null, "expected_answer": null, "gold_evidence": [], "id": "it-no-answer-008", "language": "it", "provenance": "synthetic_fixture", "question": "Qual è il limite di spesa per i pasti durante le trasferte di lavoro?", "review_status": "approved", "split": "dev", "tags": ["near_miss", "cross_language"]}
++{"answerable": false, "category": "no_answer", "conversation": [], "evidence_language": null, "expected_answer": null, "gold_evidence": [], "id": "it-no-answer-009", "language": "it", "provenance": "synthetic_fixture", "question": "Qual è il peso massimo consentito per un singolo pallet in spedizione?", "review_status": "approved", "split": "dev", "tags": ["near_miss", "cross_language"]}
++{"answerable": false, "category": "no_answer", "conversation": [], "evidence_language": null, "expected_answer": null, "gold_evidence": [], "id": "it-no-answer-010", "language": "it", "provenance": "synthetic_fixture", "question": "Qual è la superficie in metri quadrati dell'ufficio principale del magazzino?", "review_status": "approved", "split": "test", "tags": ["near_miss", "cross_language"]}
+ {"answerable":true,"category":"scanned","conversation":[],"evidence_language":null,"expected_answer":"Il totale complessivo è 294,63.","gold_evidence":[{"document":"scanned-receipt.it.md","quote":"TOTALE COMPLESSIVO 294,63","section":"Totali"}],"id":"it-scanned-001","language":"it","provenance":"synthetic_fixture","question":"Qual è il totale complessivo dello scontrino?","review_status":"approved","split":"test"}
+ {"answerable":true,"category":"scanned","conversation":[],"evidence_language":null,"expected_answer":"Il reso è possibile entro 14 giorni dalla data dello scontrino.","gold_evidence":[{"document":"scanned-receipt.it.md","quote":"I1 reso e possibi1e entro 14 giorni dalla data dello scontrino","section":"Condizioni di reso"}],"id":"it-scanned-002","language":"it","provenance":"synthetic_fixture","question":"Entro quanti giorni è possibile il reso, secondo lo scontrino?","review_status":"approved","split":"test"}
+ {"answerable":true,"category":"table","conversation":[],"evidence_language":null,"expected_answer":"Il registratore VL-15 costa 46,00 euro a pezzo da 50 pezzi in su.","gold_evidence":[{"document":"product-specs.it.md","quote":"VV-48-0905 | Registratore VL-15 | 56,00 | 51,00 | 46,00","section":"Tabella dei prezzi"}],"id":"it-table-001","language":"it","provenance":"synthetic_fixture","question":"Quanto costa il registratore VL-15 da 50 pezzi in su?","review_status":"approved","split":"dev"}
+@@ -62,6 +74,7 @@
+ {"answerable":true,"category":"cross_lingual","conversation":[],"evidence_language":"it","expected_answer":"Yes, the IVA at 22% amounts to 53.13.","gold_evidence":[{"document":"scanned-receipt.it.md","quote":"IVA 22 % 53,13","section":"Totali"}],"id":"xl-en-it-02","language":"en","provenance":"synthetic_fixture","question":"Is the IVA at 22% on the receipt 53.13?","review_status":"approved","split":"dev"}
+ {"answerable":true,"category":"cross_lingual","conversation":[],"evidence_language":"it","expected_answer":"No, damage from drops and from immersion beyond the stated protection rating is excluded.","gold_evidence":[{"document":"warranty-terms.it.md","quote":"Sono esclusi i danni da caduta, da immersione oltre il grado di protezione indicato","section":"Cosa non è coperto"}],"id":"xl-en-it-03","language":"en","provenance":"synthetic_fixture","question":"Does the warranty cover an instrument that was dropped or submerged in water?","review_status":"approved","split":"dev"}
+ {"answerable":true,"category":"cross_lingual","conversation":[],"evidence_language":"it","expected_answer":"The new unit inherits the expiry date of the original warranty.","gold_evidence":[{"document":"warranty-terms.it.md","quote":"Se lo strumento viene sostituito, il nuovo esemplare eredita la scadenza della garanzia originale","section":"Cosa è coperto"}],"id":"xl-en-it-04","language":"en","provenance":"synthetic_fixture","question":"If a unit is replaced under warranty, which expiry date does the new unit get?","review_status":"approved","split":"test"}
++{"answerable": true, "category": "cross_lingual", "conversation": [], "evidence_language": "it", "expected_answer": "Consumable accessories such as batteries and protective sleeves are covered for 6 months.", "gold_evidence": [{"document": "warranty-terms.it.md", "quote": "Gli accessori di consumo, come batterie e guaine protettive, sono coperti per 6 mesi", "section": "Durata della garanzia"}], "id": "xl-en-it-05", "language": "en", "provenance": "synthetic_fixture", "question": "How many months are consumable accessories such as batteries covered by the warranty?", "review_status": "approved", "split": "dev"}
+ {"answerable":true,"category":"cross_lingual","conversation":[],"evidence_language":"zh","expected_answer":"They signed it on 18 June 2024.","gold_evidence":[{"document":"scanned-contract.zh.md","quote":"签订日期：2O24 年 6 月 18 日","section":"设备维护服务合 同"}],"id":"xl-en-zh-01","language":"en","provenance":"synthetic_fixture","question":"On what date did 示例化工有限公司 and 绿谷仪器股份有限公司 sign service contract GV-MS-2024-0057?","review_status":"approved","split":"test"}
+ {"answerable":true,"category":"cross_lingual","conversation":[],"evidence_language":"zh","expected_answer":"At most 2 days per week.","gold_evidence":[{"document":"employee-handbook.zh.md","quote":"经主管同意，员工每周最多可以有 2 天在家办公","section":"远程办公"}],"id":"xl-en-zh-02","language":"en","provenance":"synthetic_fixture","question":"How often can an employee work from home in a week once the manager agrees?","review_status":"approved","split":"test"}
+ {"answerable":true,"category":"cross_lingual","conversation":[],"evidence_language":"zh","expected_answer":"Yes, the signature page gives service@example.net as the contact email.","gold_evidence":[{"document":"scanned-contract.zh.md","quote":"联系邮箱：service@example.net","section":"签章页"}],"id":"xl-en-zh-03","language":"en","provenance":"synthetic_fixture","question":"Is service@example.net the contact email on the signature page of the contract between 示例化工有限公司 and 绿谷仪器股份有限公司?","review_status":"approved","split":"dev"}
+@@ -70,6 +83,7 @@
+ {"answerable":true,"category":"cross_lingual","conversation":[],"evidence_language":"en","expected_answer":"L'ordine di riferimento è PO-7731.","gold_evidence":[{"document":"scanned-invoice.en.md","quote":"Order reference: PO-7731","section":"lnvoice header"}],"id":"xl-it-en-02","language":"it","provenance":"synthetic_fixture","question":"A quale ordine di riferimento corrisponde la fattura INV-24-00381 del cliente Harbor Light Laboratories?","review_status":"approved","split":"dev"}
+ {"answerable":true,"category":"cross_lingual","conversation":[],"evidence_language":"en","expected_answer":"I pacchi di peso superiore a 20 chilogrammi vengono spediti su bancale.","gold_evidence":[{"document":"shipping-handbook.en.md","quote":"Packages that weigh more than 20 kilograms are shipped on a pallet","section":"Packaging rules"}],"id":"xl-it-en-03","language":"it","provenance":"synthetic_fixture","question":"Con quale modalità vengono spediti i pacchi molto pesanti?","review_status":"approved","split":"test"}
+ {"answerable":true,"category":"cross_lingual","conversation":[],"evidence_language":"en","expected_answer":"Sì, gli ordini verso destinazioni fuori dal paese d'origine possono essere soggetti a dazi e imposte all'importazione, riscossi dalla dogana di destinazione.","gold_evidence":[{"document":"shipping-handbook.en.md","quote":"Orders to destinations outside the home country may be subject to import duties and taxes","section":"Customs and import duties"}],"id":"xl-it-en-04","language":"it","provenance":"synthetic_fixture","question":"Gli ordini spediti all'estero possono essere soggetti a dazi doganali?","review_status":"approved","split":"dev"}
++{"answerable": true, "category": "cross_lingual", "conversation": [], "evidence_language": "en", "expected_answer": "Un pacco danneggiato va segnalato entro 5 giorni dalla consegna.", "gold_evidence": [{"document": "shipping-handbook.en.md", "quote": "Report a damaged parcel within 5 days of delivery", "section": "Damaged or lost parcels"}], "id": "xl-it-en-05", "language": "it", "provenance": "synthetic_fixture", "question": "Entro quanti giorni dalla consegna bisogna segnalare un pacco danneggiato?", "review_status": "approved", "split": "test"}
+ {"answerable":true,"category":"cross_lingual","conversation":[],"evidence_language":"zh","expected_answer":"Lo hanno firmato il 18 giugno 2024.","gold_evidence":[{"document":"scanned-contract.zh.md","quote":"签订日期：2O24 年 6 月 18 日","section":"设备维护服务合 同"}],"id":"xl-it-zh-01","language":"it","provenance":"synthetic_fixture","question":"In quale data 示例化工有限公司 e 绿谷仪器股份有限公司 hanno firmato il contratto di servizio GV-MS-2024-0057?","review_status":"approved","split":"dev"}
+ {"answerable":true,"category":"cross_lingual","conversation":[],"evidence_language":"zh","expected_answer":"Sì, nella pagina delle firme l'email di contatto è service@example.net.","gold_evidence":[{"document":"scanned-contract.zh.md","quote":"联系邮箱：service@example.net","section":"签章页"}],"id":"xl-it-zh-02","language":"it","provenance":"synthetic_fixture","question":"service@example.net è l'email di contatto nella pagina delle firme del contratto tra 示例化工有限公司 e 绿谷仪器股份有限公司?","review_status":"approved","split":"dev"}
+ {"answerable":true,"category":"cross_lingual","conversation":[],"evidence_language":"zh","expected_answer":"Al massimo 2 giorni a settimana.","gold_evidence":[{"document":"employee-handbook.zh.md","quote":"经主管同意，员工每周最多可以有 2 天在家办公","section":"远程办公"}],"id":"xl-it-zh-03","language":"it","provenance":"synthetic_fixture","question":"Quante volte alla settimana può lavorare da casa un dipendente, se il responsabile è d'accordo?","review_status":"approved","split":"dev"}
+@@ -105,6 +119,12 @@
+ {"answerable":false,"category":"no_answer","conversation":[],"evidence_language":null,"expected_answer":null,"gold_evidence":[],"id":"zh-no-answer-002","language":"zh","provenance":"synthetic_fixture","question":"GT-700 温度记录仪的测温范围是多少？","review_status":"approved","split":"dev"}
+ {"answerable":false,"category":"no_answer","conversation":[],"evidence_language":null,"expected_answer":null,"gold_evidence":[],"id":"zh-no-answer-003","language":"zh","provenance":"synthetic_fixture","question":"2018 年足球世界杯的冠军是哪支球队？","review_status":"approved","split":"test"}
+ {"answerable":false,"category":"no_answer","conversation":[],"evidence_language":null,"expected_answer":null,"gold_evidence":[],"id":"zh-no-answer-004","language":"zh","provenance":"synthetic_fixture","question":"珠穆朗玛峰的海拔高度是多少米？","review_status":"approved","split":"dev"}
++{"answerable": false, "category": "no_answer", "conversation": [], "evidence_language": null, "expected_answer": null, "gold_evidence": [], "id": "zh-no-answer-005", "language": "zh", "provenance": "synthetic_fixture", "question": "GT-300 温度记录仪的电池可以连续使用多少个月？", "review_status": "approved", "split": "test", "tags": ["near_miss"]}
++{"answerable": false, "category": "no_answer", "conversation": [], "evidence_language": null, "expected_answer": null, "gold_evidence": [], "id": "zh-no-answer-006", "language": "zh", "provenance": "synthetic_fixture", "question": "运往海外的订单，进口关税的税率是多少？", "review_status": "approved", "split": "dev", "tags": ["near_miss", "cross_language"]}
++{"answerable": false, "category": "no_answer", "conversation": [], "evidence_language": null, "expected_answer": null, "gold_evidence": [], "id": "zh-no-answer-007", "language": "zh", "provenance": "synthetic_fixture", "question": "延长保修的服务可以转让给其他客户吗？", "review_status": "approved", "split": "test", "tags": ["near_miss", "cross_language"]}
++{"answerable": false, "category": "no_answer", "conversation": [], "evidence_language": null, "expected_answer": null, "gold_evidence": [], "id": "zh-no-answer-008", "language": "zh", "provenance": "synthetic_fixture", "question": "仓库平面图里办公室的面积是多少平方米？", "review_status": "approved", "split": "dev", "tags": ["near_miss", "cross_language"]}
++{"answerable": false, "category": "no_answer", "conversation": [], "evidence_language": null, "expected_answer": null, "gold_evidence": [], "id": "zh-no-answer-009", "language": "zh", "provenance": "synthetic_fixture", "question": "快递包裹丢失后，赔偿上限是多少元？", "review_status": "approved", "split": "dev", "tags": ["near_miss", "cross_language"]}
++{"answerable": false, "category": "no_answer", "conversation": [], "evidence_language": null, "expected_answer": null, "gold_evidence": [], "id": "zh-no-answer-010", "language": "zh", "provenance": "synthetic_fixture", "question": "出差乘坐飞机时，舱位标准是什么？", "review_status": "approved", "split": "dev", "tags": ["near_miss"]}
+ {"answerable":true,"category":"scanned","conversation":[],"evidence_language":null,"expected_answer":"乙方应在每次巡检结束后 5 个工作日内向甲方提交书面巡检报告。","gold_evidence":[{"document":"scanned-contract.zh.md","quote":"每次巡检结束后乙方应在 5 个工作日内向甲方提交书面巡检报告","section":"第一条 服务范围"}],"id":"zh-scanned-001","language":"zh","provenance":"synthetic_fixture","question":"设备维护服务合同中，每次巡检结束后要在几个工作日内提交书面巡检报告？","review_status":"approved","split":"dev"}
+ {"answerable":true,"category":"scanned","conversation":[],"evidence_language":null,"expected_answer":"本合同年度服务费合计为人民币 36000 元（不含税）。","gold_evidence":[{"document":"scanned-contract.zh.md","quote":"本合同年度服务费合计为人民币 36OOO 元（不含税）","section":"第二条 费用与付款"}],"id":"zh-scanned-002","language":"zh","provenance":"synthetic_fixture","question":"设备维护服务合同的年度服务费合计是多少元？","review_status":"approved","split":"dev"}
+ {"answerable":true,"category":"table","conversation":[],"evidence_language":null,"expected_answer":"HM-90 湿度记录仪买 50 台及以上时单价为 198.00 元。","gold_evidence":[{"document":"product-specs.zh.md","quote":"GV-52-0731 | HM-90 湿度记录仪 | 238.00 | 218.00 | 198.00","section":"价格表"}],"id":"zh-table-001","language":"zh","provenance":"synthetic_fixture","question":"HM-90 湿度记录仪买 50 台及以上时单价是多少？","review_status":"approved","split":"dev"}
+diff --git a/eval/fixtures/split-manifest.json b/eval/fixtures/split-manifest.json
+index de7ebb1..fe4f153 100644
+--- a/eval/fixtures/split-manifest.json
++++ b/eval/fixtures/split-manifest.json
+@@ -23,8 +23,18 @@
+     "en-no-answer-002": "dev",
+     "en-no-answer-003": "dev",
+     "en-no-answer-004": "test",
++    "en-no-answer-005": "dev",
++    "en-no-answer-006": "test",
++    "en-no-answer-007": "dev",
++    "en-no-answer-008": "dev",
++    "en-no-answer-009": "dev",
++    "en-no-answer-010": "dev",
+     "en-scanned-001": "dev",
+     "en-scanned-002": "dev",
++    "en-selective-filter-001": "dev",
++    "en-selective-filter-002": "test",
++    "en-selective-filter-003": "dev",
++    "en-selective-filter-004": "test",
+     "en-table-001": "dev",
+     "en-table-002": "dev",
+     "en-table-003": "dev",
+@@ -53,8 +63,18 @@
+     "it-no-answer-002": "dev",
+     "it-no-answer-003": "dev",
+     "it-no-answer-004": "test",
++    "it-no-answer-005": "test",
++    "it-no-answer-006": "test",
++    "it-no-answer-007": "dev",
++    "it-no-answer-008": "dev",
++    "it-no-answer-009": "dev",
++    "it-no-answer-010": "test",
+     "it-scanned-001": "test",
+     "it-scanned-002": "test",
++    "it-selective-filter-001": "test",
++    "it-selective-filter-002": "test",
++    "it-selective-filter-003": "dev",
++    "it-selective-filter-004": "dev",
+     "it-table-001": "dev",
+     "it-table-002": "dev",
+     "it-table-003": "dev",
+@@ -64,6 +84,7 @@
+     "xl-en-it-02": "dev",
+     "xl-en-it-03": "dev",
+     "xl-en-it-04": "test",
++    "xl-en-it-05": "dev",
+     "xl-en-zh-01": "test",
+     "xl-en-zh-02": "test",
+     "xl-en-zh-03": "dev",
+@@ -72,6 +93,7 @@
+     "xl-it-en-02": "dev",
+     "xl-it-en-03": "test",
+     "xl-it-en-04": "dev",
++    "xl-it-en-05": "test",
+     "xl-it-zh-01": "dev",
+     "xl-it-zh-02": "dev",
+     "xl-it-zh-03": "dev",
+@@ -107,25 +129,23 @@
+     "zh-no-answer-002": "dev",
+     "zh-no-answer-003": "test",
+     "zh-no-answer-004": "dev",
++    "zh-no-answer-005": "test",
++    "zh-no-answer-006": "dev",
++    "zh-no-answer-007": "test",
++    "zh-no-answer-008": "dev",
++    "zh-no-answer-009": "dev",
++    "zh-no-answer-010": "dev",
+     "zh-scanned-001": "dev",
+     "zh-scanned-002": "dev",
++    "zh-selective-filter-001": "dev",
++    "zh-selective-filter-002": "dev",
++    "zh-selective-filter-003": "dev",
++    "zh-selective-filter-004": "dev",
+     "zh-table-001": "dev",
+     "zh-table-002": "dev",
+     "zh-table-003": "test",
+     "zh-typo-001": "dev",
+-    "zh-typo-002": "test",
+-    "en-selective-filter-001": "dev",
+-    "en-selective-filter-002": "test",
+-    "en-selective-filter-003": "dev",
+-    "en-selective-filter-004": "test",
+-    "it-selective-filter-001": "test",
+-    "it-selective-filter-002": "test",
+-    "it-selective-filter-003": "dev",
+-    "it-selective-filter-004": "dev",
+-    "zh-selective-filter-001": "dev",
+-    "zh-selective-filter-002": "dev",
+-    "zh-selective-filter-003": "dev",
+-    "zh-selective-filter-004": "dev"
++    "zh-typo-002": "test"
+   },
+   "rule": "sha256-first8hex-mod100-lt70-dev",
+   "schema_version": 1
+diff --git a/eval/tests/test_fixture_coverage.py b/eval/tests/test_fixture_coverage.py
+index f018bc8..9a1b704 100644
+--- a/eval/tests/test_fixture_coverage.py
++++ b/eval/tests/test_fixture_coverage.py
+@@ -18,6 +18,8 @@ MANIFEST_PATH = REPO_ROOT / "eval/fixtures/split-manifest.json"
+ LANGUAGES = ("zh", "en", "it")
+ PAIRS = (("en", "zh"), ("it", "zh"), ("zh", "en"), ("it", "en"), ("zh", "it"), ("en", "it"))
+ PER_PAIR_MINIMUM = 4
++CROSS_LINGUAL_ITEMS = 26
++SINGLE_LANGUAGE_ITEMS_PER_LANGUAGE = 40
+ PER_LANGUAGE_CATEGORY = {
+     "general": 6,
+     "multi_turn": 3,
+@@ -25,13 +27,14 @@ PER_LANGUAGE_CATEGORY = {
+     "exact_term": 3,
+     "table": 3,
+     "scanned": 2,
+-    "no_answer": 4,
++    "no_answer": 10,
+     "colloquial": 2,
+     "ambiguous": 2,
+     "typo": 2,
+     "cross_lingual": 8,
+     "selective_filter": 4,
+ }
++CROSS_LINGUAL_EXTRA = {"en": 1, "it": 1, "zh": 0}
+ # Tightest selective_filter in this corpus pins a single document (4–6 chunk rows of 71).
+ FIXTURE_MAX_SELECTIVE_ROW_SHARE = 6 / 71
+ RELATIVE_DATE_LATIN = ("today", "yesterday", "last week", "this month", "oggi", "ieri")
+@@ -55,17 +58,19 @@ def test_corpus_has_one_image_caption_document():
+     assert [doc.filename for doc in documents if doc.image_url] == ["warehouse-floorplan.png"]
+ 
+ 
+-def test_single_language_items_thirty_four_per_language(items):
++def test_single_language_items_forty_per_language(items):
+     single = [item for item in items if item.category != "cross_lingual"]
+     counts = collections.Counter(item.language for item in single)
+-    assert len(single) == 102
+-    assert {language: counts[language] for language in LANGUAGES} == {"zh": 34, "en": 34, "it": 34}
++    assert len(single) == SINGLE_LANGUAGE_ITEMS_PER_LANGUAGE * len(LANGUAGES)
++    assert {language: counts[language] for language in LANGUAGES} == {
++        language: SINGLE_LANGUAGE_ITEMS_PER_LANGUAGE for language in LANGUAGES
++    }
+ 
+ 
+-def test_twenty_four_cross_lingual_items_four_per_pair(items):
++def test_twenty_six_cross_lingual_items_at_least_four_per_pair(items):
+     cross = [item for item in items if item.category == "cross_lingual"]
+-    assert len(items) == 102 + len(cross)
+-    assert len(cross) == PER_PAIR_MINIMUM * len(PAIRS)
++    assert len(items) == SINGLE_LANGUAGE_ITEMS_PER_LANGUAGE * len(LANGUAGES) + len(cross)
++    assert len(cross) == CROSS_LINGUAL_ITEMS
+     counts = collections.Counter((item.language, item.evidence_language) for item in cross)
+     for pair in PAIRS:
+         assert counts[pair] >= PER_PAIR_MINIMUM, pair
+@@ -76,6 +81,8 @@ def test_every_language_category_cell_has_the_planned_count_and_at_least_two(ite
+     cells = collections.Counter((item.language, item.category) for item in items)
+     for language in LANGUAGES:
+         for category, expected in PER_LANGUAGE_CATEGORY.items():
++            if category == "cross_lingual":
++                expected += CROSS_LINGUAL_EXTRA[language]
+             assert cells[(language, category)] == expected, (language, category)
+             assert cells[(language, category)] >= 2
+ 
+diff --git a/eval/tests/test_golden_phase4.py b/eval/tests/test_golden_phase4.py
+index 691d430..1a23898 100644
+--- a/eval/tests/test_golden_phase4.py
++++ b/eval/tests/test_golden_phase4.py
+@@ -40,10 +40,10 @@ CROSS_NEAR_MISS_TOPICS = {
+     "it-no-answer-007": ("employee-handbook.zh.md", "年假", ("congedo", "ferie", "paternità")),
+     "it-no-answer-008": ("employee-handbook.zh.md", "差旅与报销", ("trasferta", "trasferte", "pasti")),
+     "it-no-answer-009": ("shipping-handbook.en.md", "Pallet shipments", ("pallet",)),
+-    "it-no-answer-010": ("warehouse-floorplan.en.md", "main office", ("magazzino", "ufficio principale")),
++    "it-no-answer-010": ("warehouse-floorplan.png", "main office", ("magazzino", "ufficio principale")),
+     "zh-no-answer-006": ("shipping-handbook.en.md", "import duties", ("关税", "海关")),
+     "zh-no-answer-007": ("warranty-terms.it.md", "Estensione di garanzia", ("延长保修", "延保")),
+-    "zh-no-answer-008": ("warehouse-floorplan.en.md", "main office", ("平面图", "办公室")),
++    "zh-no-answer-008": ("warehouse-floorplan.png", "main office", ("平面图", "办公室")),
+     "zh-no-answer-009": ("shipping-handbook.en.md", "Damaged or lost parcels", ("包裹", "丢失")),
+ }
+ 
+-- 
+2.43.0
+

@@ -1,12 +1,13 @@
-import type { ToolCallPart } from 'ai';
+import { readToolCallInput, type AnyToolCallPart } from './chat-utils';
 
 /**
  * Generates descriptive titles from tool call data
  * @param toolCall The tool call part from the AI SDK
  * @returns A human-readable title describing the tool action
  */
-export function generateChatTitleFromToolCall(toolCall: ToolCallPart): string {
-  const { toolName, args } = toolCall;
+export function generateChatTitleFromToolCall(toolCall: AnyToolCallPart): string {
+  const { toolName } = toolCall;
+  const args = readToolCallInput(toolCall);
   let parsedArgs: any = {};
 
   try {

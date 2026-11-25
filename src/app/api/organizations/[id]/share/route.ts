@@ -14,21 +14,21 @@ import { logger } from '@/lib/logger';
  */
 export async function POST(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     requireMultiTenant();
 
     const supabase = await createClient();
     const {
-      data: { session },
-    } = await supabase.auth.getSession();
+      data: { user: authUser },
+    } = await supabase.auth.getUser();
 
-    if (!session) {
+    if (!authUser) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const orgId = params.id;
+    const { id: orgId } = await params;
 
     // Validate organization ID
     if (!orgId || typeof orgId !== 'string') {
@@ -43,7 +43,7 @@ export async function POST(
       .from('organizations')
       .select('id, name, is_personal, owner_id')
       .eq('id', orgId)
-      .eq('owner_id', session.user.id)
+      .eq('owner_id', authUser.id)
       .single();
 
     if (fetchError || !org) {

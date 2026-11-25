@@ -1,0 +1,171 @@
+{
+  "$defs": {
+    "DateRangeFilter": {
+      "additionalProperties": false,
+      "properties": {
+        "from": {
+          "format": "date",
+          "title": "From",
+          "type": "string"
+        },
+        "include_undated": {
+          "default": false,
+          "title": "Include Undated",
+          "type": "boolean"
+        },
+        "to": {
+          "format": "date",
+          "title": "To",
+          "type": "string"
+        }
+      },
+      "required": [
+        "from",
+        "to"
+      ],
+      "title": "DateRangeFilter",
+      "type": "object"
+    },
+    "InvoiceFilter": {
+      "additionalProperties": false,
+      "properties": {
+        "amount_max": {
+          "pattern": "^-?\\d+(\\.\\d{1,4})?$",
+          "title": "Amount Max",
+          "type": "string"
+        },
+        "amount_min": {
+          "pattern": "^-?\\d+(\\.\\d{1,4})?$",
+          "title": "Amount Min",
+          "type": "string"
+        },
+        "currency": {
+          "maxLength": 3,
+          "minLength": 3,
+          "title": "Currency",
+          "type": "string"
+        },
+        "supplier": {
+          "minLength": 1,
+          "title": "Supplier",
+          "type": "string"
+        }
+      },
+      "required": [
+        "supplier",
+        "amount_min",
+        "amount_max",
+        "currency"
+      ],
+      "title": "InvoiceFilter",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "current_only": {
+      "const": true,
+      "default": true,
+      "title": "Current Only",
+      "type": "boolean"
+    },
+    "date_range": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DateRangeFilter"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "doc_types": {
+      "anyOf": [
+        {
+          "items": {
+            "enum": [
+              "general",
+              "financial_report",
+              "contract_legal",
+              "invoice_receipt",
+              "product_technical",
+              "scanned_image"
+            ],
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Doc Types"
+    },
+    "document_ids": {
+      "anyOf": [
+        {
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Document Ids"
+    },
+    "invoice": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/InvoiceFilter"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "languages": {
+      "anyOf": [
+        {
+          "items": {
+            "enum": [
+              "zh",
+              "en",
+              "it"
+            ],
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Languages"
+    },
+    "sources": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Sources"
+    }
+  },
+  "title": "RetrievalFilters",
+  "type": "object"
+}

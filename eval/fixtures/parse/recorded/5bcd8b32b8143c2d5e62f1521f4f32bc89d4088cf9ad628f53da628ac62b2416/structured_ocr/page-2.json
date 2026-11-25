@@ -1,0 +1,1161 @@
+{
+  "body": {
+    "children": [
+      {
+        "$ref": "#/texts/0"
+      },
+      {
+        "$ref": "#/tables/0"
+      }
+    ],
+    "content_layer": "body",
+    "label": "unspecified",
+    "name": "_root_",
+    "self_ref": "#/body"
+  },
+  "form_items": [],
+  "furniture": {
+    "children": [],
+    "content_layer": "furniture",
+    "label": "unspecified",
+    "name": "_root_",
+    "self_ref": "#/furniture"
+  },
+  "groups": [],
+  "key_value_items": [],
+  "name": "table-en-p2",
+  "origin": {
+    "binary_hash": 2,
+    "filename": "table-en-p2.pdf",
+    "mimetype": "application/pdf"
+  },
+  "pages": {
+    "1": {
+      "page_no": 1,
+      "size": {
+        "height": 841.89,
+        "width": 595.28
+      }
+    },
+    "2": {
+      "page_no": 2,
+      "size": {
+        "height": 841.89,
+        "width": 595.28
+      }
+    }
+  },
+  "pictures": [],
+  "schema_name": "DoclingDocument",
+  "tables": [
+    {
+      "annotations": [],
+      "captions": [],
+      "children": [],
+      "content_layer": "body",
+      "data": {
+        "grid": [
+          [
+            {
+              "col_span": 1,
+              "column_header": true,
+              "end_col_offset_idx": 1,
+              "end_row_offset_idx": 1,
+              "fillable": false,
+              "row_header": false,
+              "row_section": false,
+              "row_span": 1,
+              "start_col_offset_idx": 0,
+              "start_row_offset_idx": 0,
+              "text": "Item"
+            },
+            {
+              "col_span": 1,
+              "column_header": true,
+              "end_col_offset_idx": 2,
+              "end_row_offset_idx": 1,
+              "fillable": false,
+              "row_header": false,
+              "row_section": false,
+              "row_span": 1,
+              "start_col_offset_idx": 1,
+              "start_row_offset_idx": 0,
+              "text": "Qty"
+            },
+            {
+              "col_span": 1,
+              "column_header": true,
+              "end_col_offset_idx": 3,
+              "end_row_offset_idx": 1,
+              "fillable": false,
+              "row_header": false,
+              "row_section": false,
+              "row_span": 1,
+              "start_col_offset_idx": 2,
+              "start_row_offset_idx": 0,
+              "text": "Unit"
+            }
+          ],
+          [
+            {
+              "col_span": 1,
+              "column_header": false,
+              "end_col_offset_idx": 1,
+              "end_row_offset_idx": 2,
+              "fillable": false,
+              "row_header": false,
+              "row_section": false,
+              "row_span": 1,
+              "start_col_offset_idx": 0,
+              "start_row_offset_idx": 1,
+              "text": "Row-01"
+            },
+            {
+              "col_span": 1,
+              "column_header": false,
+              "end_col_offset_idx": 2,
+              "end_row_offset_idx": 2,
+              "fillable": false,
+              "row_header": false,
+              "row_section": false,
+              "row_span": 1,
+              "start_col_offset_idx": 1,
+              "start_row_offset_idx": 1,
+              "text": "1"
+            },
+            {
+              "col_span": 1,
+              "column_header": false,
+              "end_col_offset_idx": 3,
+              "end_row_offset_idx": 2,
+              "fillable": false,
+              "row_header": false,
+              "row_section": false,
+              "row_span": 1,
+              "start_col_offset_idx": 2,
+              "start_row_offset_idx": 1,
+              "text": "2.50"
+            }
+          ],
+          [
+            {
+              "col_span": 1,
+              "column_header": false,
+              "end_col_offset_idx": 1,
+              "end_row_offset_idx": 3,
+              "fillable": false,
+              "row_header": false,
+              "row_section": false,
+              "row_span": 1,
+              "start_col_offset_idx": 0,
+              "start_row_offset_idx": 2,
+              "text": "Row-02"
+            },
+            {
+              "col_span": 1,
+              "column_header": false,
+              "end_col_offset_idx": 2,
+              "end_row_offset_idx": 3,
+              "fillable": false,
+              "row_header": false,
+              "row_section": false,
+              "row_span": 1,
+              "start_col_offset_idx": 1,
+              "start_row_offset_idx": 2,
+              "text": "2"
+            },
+            {
+              "col_span": 1,
+              "column_header": false,
+              "end_col_offset_idx": 3,
+              "end_row_offset_idx": 3,
+              "fillable": false,
+              "row_header": false,
+              "row_section": false,
+              "row_span": 1,
+              "start_col_offset_idx": 2,
+              "start_row_offset_idx": 2,
+              "text": "4.50"
+            }
+          ],
+          [
+            {
+              "col_span": 1,
+              "column_header": false,
+              "end_col_offset_idx": 1,
+              "end_row_offset_idx": 4,
+              "fillable": false,
+              "row_header": false,
+              "row_section": false,
+              "row_span": 1,
+              "start_col_offset_idx": 0,
+              "start_row_offset_idx": 3,
+              "text": "Row-03"
+            },
+            {
+              "col_span": 1,
+              "column_header": false,
+              "end_col_offset_idx": 2,
+              "end_row_offset_idx": 4,
+              "fillable": false,
+              "row_header": false,
+              "row_section": false,
+              "row_span": 1,
+              "start_col_offset_idx": 1,
+              "start_row_offset_idx": 3,
+              "text": "3"
+            },
+            {
+              "col_span": 1,
+              "column_header": false,
+              "end_col_offset_idx": 3,
+              "end_row_offset_idx": 4,
+              "fillable": false,
+              "row_header": false,
+              "row_section": false,
+              "row_span": 1,
+              "start_col_offset_idx": 2,
+              "start_row_offset_idx": 3,
+              "text": "6.50"
+            }
+          ],
+          [
+            {
+              "col_span": 1,
+              "column_header": false,
+              "end_col_offset_idx": 1,
+              "end_row_offset_idx": 5,
+              "fillable": false,
+              "row_header": false,
+              "row_section": false,
+              "row_span": 1,
+              "start_col_offset_idx": 0,
+              "start_row_offset_idx": 4,
+              "text": "Row-04"
+            },
+            {
+              "col_span": 1,
+              "column_header": false,
+              "end_col_offset_idx": 2,
+              "end_row_offset_idx": 5,
+              "fillable": false,
+              "row_header": false,
+              "row_section": false,
+              "row_span": 1,
+              "start_col_offset_idx": 1,
+              "start_row_offset_idx": 4,
+              "text": "4"
+            },
+            {
+              "col_span": 1,
+              "column_header": false,
+              "end_col_offset_idx": 3,
+              "end_row_offset_idx": 5,
+              "fillable": false,
+              "row_header": false,
+              "row_section": false,
+              "row_span": 1,
+              "start_col_offset_idx": 2,
+              "start_row_offset_idx": 4,
+              "text": "8.50"
+            }
+          ],
+          [
+            {
+              "col_span": 1,
+              "column_header": false,
+              "end_col_offset_idx": 1,
+              "end_row_offset_idx": 6,
+              "fillable": false,
+              "row_header": false,
+              "row_section": false,
+              "row_span": 1,
+              "start_col_offset_idx": 0,
+              "start_row_offset_idx": 5,
+              "text": "Row-05"
+            },
+            {
+              "col_span": 1,
+              "column_header": false,
+              "end_col_offset_idx": 2,
+              "end_row_offset_idx": 6,
+              "fillable": false,
+              "row_header": false,
+              "row_section": false,
+              "row_span": 1,
+              "start_col_offset_idx": 1,
+              "start_row_offset_idx": 5,
+              "text": "5"
+            },
+            {
+              "col_span": 1,
+              "column_header": false,
+              "end_col_offset_idx": 3,
+              "end_row_offset_idx": 6,
+              "fillable": false,
+              "row_header": false,
+              "row_section": false,
+              "row_span": 1,
+              "start_col_offset_idx": 2,
+              "start_row_offset_idx": 5,
+              "text": "10.50"
+            }
+          ],
+          [
+            {
+              "col_span": 1,
+              "column_header": false,
+              "end_col_offset_idx": 1,
+              "end_row_offset_idx": 7,
+              "fillable": false,
+              "row_header": false,
+              "row_section": false,
+              "row_span": 1,
+              "start_col_offset_idx": 0,
+              "start_row_offset_idx": 6,
+              "text": "Row-06"
+            },
+            {
+              "col_span": 1,
+              "column_header": false,
+              "end_col_offset_idx": 2,
+              "end_row_offset_idx": 7,
+              "fillable": false,
+              "row_header": false,
+              "row_section": false,
+              "row_span": 1,
+              "start_col_offset_idx": 1,
+              "start_row_offset_idx": 6,
+              "text": "6"
+            },
+            {
+              "col_span": 1,
+              "column_header": false,
+              "end_col_offset_idx": 3,
+              "end_row_offset_idx": 7,
+              "fillable": false,
+              "row_header": false,
+              "row_section": false,
+              "row_span": 1,
+              "start_col_offset_idx": 2,
+              "start_row_offset_idx": 6,
+              "text": "12.50"
+            }
+          ],
+          [
+            {
+              "col_span": 1,
+              "column_header": false,
+              "end_col_offset_idx": 1,
+              "end_row_offset_idx": 8,
+              "fillable": false,
+              "row_header": false,
+              "row_section": false,
+              "row_span": 1,
+              "start_col_offset_idx": 0,
+              "start_row_offset_idx": 7,
+              "text": "Row-07"
+            },
+            {
+              "col_span": 1,
+              "column_header": false,
+              "end_col_offset_idx": 2,
+              "end_row_offset_idx": 8,
+              "fillable": false,
+              "row_header": false,
+              "row_section": false,
+              "row_span": 1,
+              "start_col_offset_idx": 1,
+              "start_row_offset_idx": 7,
+              "text": "7"
+            },
+            {
+              "col_span": 1,
+              "column_header": false,
+              "end_col_offset_idx": 3,
+              "end_row_offset_idx": 8,
+              "fillable": false,
+              "row_header": false,
+              "row_section": false,
+              "row_span": 1,
+              "start_col_offset_idx": 2,
+              "start_row_offset_idx": 7,
+              "text": "14.50"
+            }
+          ],
+          [
+            {
+              "col_span": 1,
+              "column_header": false,
+              "end_col_offset_idx": 1,
+              "end_row_offset_idx": 9,
+              "fillable": false,
+              "row_header": false,
+              "row_section": false,
+              "row_span": 1,
+              "start_col_offset_idx": 0,
+              "start_row_offset_idx": 8,
+              "text": "Row-08"
+            },
+            {
+              "col_span": 1,
+              "column_header": false,
+              "end_col_offset_idx": 2,
+              "end_row_offset_idx": 9,
+              "fillable": false,
+              "row_header": false,
+              "row_section": false,
+              "row_span": 1,
+              "start_col_offset_idx": 1,
+              "start_row_offset_idx": 8,
+              "text": "8"
+            },
+            {
+              "col_span": 1,
+              "column_header": false,
+              "end_col_offset_idx": 3,
+              "end_row_offset_idx": 9,
+              "fillable": false,
+              "row_header": false,
+              "row_section": false,
+              "row_span": 1,
+              "start_col_offset_idx": 2,
+              "start_row_offset_idx": 8,
+              "text": "16.50"
+            }
+          ],
+          [
+            {
+              "col_span": 1,
+              "column_header": false,
+              "end_col_offset_idx": 1,
+              "end_row_offset_idx": 10,
+              "fillable": false,
+              "row_header": false,
+              "row_section": false,
+              "row_span": 1,
+              "start_col_offset_idx": 0,
+              "start_row_offset_idx": 9,
+              "text": "Row-09"
+            },
+            {
+              "col_span": 1,
+              "column_header": false,
+              "end_col_offset_idx": 2,
+              "end_row_offset_idx": 10,
+              "fillable": false,
+              "row_header": false,
+              "row_section": false,
+              "row_span": 1,
+              "start_col_offset_idx": 1,
+              "start_row_offset_idx": 9,
+              "text": "9"
+            },
+            {
+              "col_span": 1,
+              "column_header": false,
+              "end_col_offset_idx": 3,
+              "end_row_offset_idx": 10,
+              "fillable": false,
+              "row_header": false,
+              "row_section": false,
+              "row_span": 1,
+              "start_col_offset_idx": 2,
+              "start_row_offset_idx": 9,
+              "text": "18.50"
+            }
+          ],
+          [
+            {
+              "col_span": 1,
+              "column_header": false,
+              "end_col_offset_idx": 1,
+              "end_row_offset_idx": 11,
+              "fillable": false,
+              "row_header": false,
+              "row_section": false,
+              "row_span": 1,
+              "start_col_offset_idx": 0,
+              "start_row_offset_idx": 10,
+              "text": "Row-10"
+            },
+            {
+              "col_span": 1,
+              "column_header": false,
+              "end_col_offset_idx": 2,
+              "end_row_offset_idx": 11,
+              "fillable": false,
+              "row_header": false,
+              "row_section": false,
+              "row_span": 1,
+              "start_col_offset_idx": 1,
+              "start_row_offset_idx": 10,
+              "text": "10"
+            },
+            {
+              "col_span": 1,
+              "column_header": false,
+              "end_col_offset_idx": 3,
+              "end_row_offset_idx": 11,
+              "fillable": false,
+              "row_header": false,
+              "row_section": false,
+              "row_span": 1,
+              "start_col_offset_idx": 2,
+              "start_row_offset_idx": 10,
+              "text": "20.50"
+            }
+          ],
+          [
+            {
+              "col_span": 1,
+              "column_header": false,
+              "end_col_offset_idx": 1,
+              "end_row_offset_idx": 12,
+              "fillable": false,
+              "row_header": false,
+              "row_section": false,
+              "row_span": 1,
+              "start_col_offset_idx": 0,
+              "start_row_offset_idx": 11,
+              "text": "Row-11"
+            },
+            {
+              "col_span": 1,
+              "column_header": false,
+              "end_col_offset_idx": 2,
+              "end_row_offset_idx": 12,
+              "fillable": false,
+              "row_header": false,
+              "row_section": false,
+              "row_span": 1,
+              "start_col_offset_idx": 1,
+              "start_row_offset_idx": 11,
+              "text": "11"
+            },
+            {
+              "col_span": 1,
+              "column_header": false,
+              "end_col_offset_idx": 3,
+              "end_row_offset_idx": 12,
+              "fillable": false,
+              "row_header": false,
+              "row_section": false,
+              "row_span": 1,
+              "start_col_offset_idx": 2,
+              "start_row_offset_idx": 11,
+              "text": "22.50"
+            }
+          ],
+          [
+            {
+              "col_span": 1,
+              "column_header": false,
+              "end_col_offset_idx": 1,
+              "end_row_offset_idx": 13,
+              "fillable": false,
+              "row_header": false,
+              "row_section": false,
+              "row_span": 1,
+              "start_col_offset_idx": 0,
+              "start_row_offset_idx": 12,
+              "text": "Row-12"
+            },
+            {
+              "col_span": 1,
+              "column_header": false,
+              "end_col_offset_idx": 2,
+              "end_row_offset_idx": 13,
+              "fillable": false,
+              "row_header": false,
+              "row_section": false,
+              "row_span": 1,
+              "start_col_offset_idx": 1,
+              "start_row_offset_idx": 12,
+              "text": "12"
+            },
+            {
+              "col_span": 1,
+              "column_header": false,
+              "end_col_offset_idx": 3,
+              "end_row_offset_idx": 13,
+              "fillable": false,
+              "row_header": false,
+              "row_section": false,
+              "row_span": 1,
+              "start_col_offset_idx": 2,
+              "start_row_offset_idx": 12,
+              "text": "24.50"
+            }
+          ]
+        ],
+        "num_cols": 3,
+        "num_rows": 13,
+        "orientation": "rot_0",
+        "table_cells": [
+          {
+            "col_span": 1,
+            "column_header": true,
+            "end_col_offset_idx": 1,
+            "end_row_offset_idx": 1,
+            "fillable": false,
+            "row_header": false,
+            "row_section": false,
+            "row_span": 1,
+            "start_col_offset_idx": 0,
+            "start_row_offset_idx": 0,
+            "text": "Item"
+          },
+          {
+            "col_span": 1,
+            "column_header": true,
+            "end_col_offset_idx": 2,
+            "end_row_offset_idx": 1,
+            "fillable": false,
+            "row_header": false,
+            "row_section": false,
+            "row_span": 1,
+            "start_col_offset_idx": 1,
+            "start_row_offset_idx": 0,
+            "text": "Qty"
+          },
+          {
+            "col_span": 1,
+            "column_header": true,
+            "end_col_offset_idx": 3,
+            "end_row_offset_idx": 1,
+            "fillable": false,
+            "row_header": false,
+            "row_section": false,
+            "row_span": 1,
+            "start_col_offset_idx": 2,
+            "start_row_offset_idx": 0,
+            "text": "Unit"
+          },
+          {
+            "col_span": 1,
+            "column_header": false,
+            "end_col_offset_idx": 1,
+            "end_row_offset_idx": 2,
+            "fillable": false,
+            "row_header": false,
+            "row_section": false,
+            "row_span": 1,
+            "start_col_offset_idx": 0,
+            "start_row_offset_idx": 1,
+            "text": "Row-01"
+          },
+          {
+            "col_span": 1,
+            "column_header": false,
+            "end_col_offset_idx": 2,
+            "end_row_offset_idx": 2,
+            "fillable": false,
+            "row_header": false,
+            "row_section": false,
+            "row_span": 1,
+            "start_col_offset_idx": 1,
+            "start_row_offset_idx": 1,
+            "text": "1"
+          },
+          {
+            "col_span": 1,
+            "column_header": false,
+            "end_col_offset_idx": 3,
+            "end_row_offset_idx": 2,
+            "fillable": false,
+            "row_header": false,
+            "row_section": false,
+            "row_span": 1,
+            "start_col_offset_idx": 2,
+            "start_row_offset_idx": 1,
+            "text": "2.50"
+          },
+          {
+            "col_span": 1,
+            "column_header": false,
+            "end_col_offset_idx": 1,
+            "end_row_offset_idx": 3,
+            "fillable": false,
+            "row_header": false,
+            "row_section": false,
+            "row_span": 1,
+            "start_col_offset_idx": 0,
+            "start_row_offset_idx": 2,
+            "text": "Row-02"
+          },
+          {
+            "col_span": 1,
+            "column_header": false,
+            "end_col_offset_idx": 2,
+            "end_row_offset_idx": 3,
+            "fillable": false,
+            "row_header": false,
+            "row_section": false,
+            "row_span": 1,
+            "start_col_offset_idx": 1,
+            "start_row_offset_idx": 2,
+            "text": "2"
+          },
+          {
+            "col_span": 1,
+            "column_header": false,
+            "end_col_offset_idx": 3,
+            "end_row_offset_idx": 3,
+            "fillable": false,
+            "row_header": false,
+            "row_section": false,
+            "row_span": 1,
+            "start_col_offset_idx": 2,
+            "start_row_offset_idx": 2,
+            "text": "4.50"
+          },
+          {
+            "col_span": 1,
+            "column_header": false,
+            "end_col_offset_idx": 1,
+            "end_row_offset_idx": 4,
+            "fillable": false,
+            "row_header": false,
+            "row_section": false,
+            "row_span": 1,
+            "start_col_offset_idx": 0,
+            "start_row_offset_idx": 3,
+            "text": "Row-03"
+          },
+          {
+            "col_span": 1,
+            "column_header": false,
+            "end_col_offset_idx": 2,
+            "end_row_offset_idx": 4,
+            "fillable": false,
+            "row_header": false,
+            "row_section": false,
+            "row_span": 1,
+            "start_col_offset_idx": 1,
+            "start_row_offset_idx": 3,
+            "text": "3"
+          },
+          {
+            "col_span": 1,
+            "column_header": false,
+            "end_col_offset_idx": 3,
+            "end_row_offset_idx": 4,
+            "fillable": false,
+            "row_header": false,
+            "row_section": false,
+            "row_span": 1,
+            "start_col_offset_idx": 2,
+            "start_row_offset_idx": 3,
+            "text": "6.50"
+          },
+          {
+            "col_span": 1,
+            "column_header": false,
+            "end_col_offset_idx": 1,
+            "end_row_offset_idx": 5,
+            "fillable": false,
+            "row_header": false,
+            "row_section": false,
+            "row_span": 1,
+            "start_col_offset_idx": 0,
+            "start_row_offset_idx": 4,
+            "text": "Row-04"
+          },
+          {
+            "col_span": 1,
+            "column_header": false,
+            "end_col_offset_idx": 2,
+            "end_row_offset_idx": 5,
+            "fillable": false,
+            "row_header": false,
+            "row_section": false,
+            "row_span": 1,
+            "start_col_offset_idx": 1,
+            "start_row_offset_idx": 4,
+            "text": "4"
+          },
+          {
+            "col_span": 1,
+            "column_header": false,
+            "end_col_offset_idx": 3,
+            "end_row_offset_idx": 5,
+            "fillable": false,
+            "row_header": false,
+            "row_section": false,
+            "row_span": 1,
+            "start_col_offset_idx": 2,
+            "start_row_offset_idx": 4,
+            "text": "8.50"
+          },
+          {
+            "col_span": 1,
+            "column_header": false,
+            "end_col_offset_idx": 1,
+            "end_row_offset_idx": 6,
+            "fillable": false,
+            "row_header": false,
+            "row_section": false,
+            "row_span": 1,
+            "start_col_offset_idx": 0,
+            "start_row_offset_idx": 5,
+            "text": "Row-05"
+          },
+          {
+            "col_span": 1,
+            "column_header": false,
+            "end_col_offset_idx": 2,
+            "end_row_offset_idx": 6,
+            "fillable": false,
+            "row_header": false,
+            "row_section": false,
+            "row_span": 1,
+            "start_col_offset_idx": 1,
+            "start_row_offset_idx": 5,
+            "text": "5"
+          },
+          {
+            "col_span": 1,
+            "column_header": false,
+            "end_col_offset_idx": 3,
+            "end_row_offset_idx": 6,
+            "fillable": false,
+            "row_header": false,
+            "row_section": false,
+            "row_span": 1,
+            "start_col_offset_idx": 2,
+            "start_row_offset_idx": 5,
+            "text": "10.50"
+          },
+          {
+            "col_span": 1,
+            "column_header": false,
+            "end_col_offset_idx": 1,
+            "end_row_offset_idx": 7,
+            "fillable": false,
+            "row_header": false,
+            "row_section": false,
+            "row_span": 1,
+            "start_col_offset_idx": 0,
+            "start_row_offset_idx": 6,
+            "text": "Row-06"
+          },
+          {
+            "col_span": 1,
+            "column_header": false,
+            "end_col_offset_idx": 2,
+            "end_row_offset_idx": 7,
+            "fillable": false,
+            "row_header": false,
+            "row_section": false,
+            "row_span": 1,
+            "start_col_offset_idx": 1,
+            "start_row_offset_idx": 6,
+            "text": "6"
+          },
+          {
+            "col_span": 1,
+            "column_header": false,
+            "end_col_offset_idx": 3,
+            "end_row_offset_idx": 7,
+            "fillable": false,
+            "row_header": false,
+            "row_section": false,
+            "row_span": 1,
+            "start_col_offset_idx": 2,
+            "start_row_offset_idx": 6,
+            "text": "12.50"
+          },
+          {
+            "col_span": 1,
+            "column_header": false,
+            "end_col_offset_idx": 1,
+            "end_row_offset_idx": 8,
+            "fillable": false,
+            "row_header": false,
+            "row_section": false,
+            "row_span": 1,
+            "start_col_offset_idx": 0,
+            "start_row_offset_idx": 7,
+            "text": "Row-07"
+          },
+          {
+            "col_span": 1,
+            "column_header": false,
+            "end_col_offset_idx": 2,
+            "end_row_offset_idx": 8,
+            "fillable": false,
+            "row_header": false,
+            "row_section": false,
+            "row_span": 1,
+            "start_col_offset_idx": 1,
+            "start_row_offset_idx": 7,
+            "text": "7"
+          },
+          {
+            "col_span": 1,
+            "column_header": false,
+            "end_col_offset_idx": 3,
+            "end_row_offset_idx": 8,
+            "fillable": false,
+            "row_header": false,
+            "row_section": false,
+            "row_span": 1,
+            "start_col_offset_idx": 2,
+            "start_row_offset_idx": 7,
+            "text": "14.50"
+          },
+          {
+            "col_span": 1,
+            "column_header": false,
+            "end_col_offset_idx": 1,
+            "end_row_offset_idx": 9,
+            "fillable": false,
+            "row_header": false,
+            "row_section": false,
+            "row_span": 1,
+            "start_col_offset_idx": 0,
+            "start_row_offset_idx": 8,
+            "text": "Row-08"
+          },
+          {
+            "col_span": 1,
+            "column_header": false,
+            "end_col_offset_idx": 2,
+            "end_row_offset_idx": 9,
+            "fillable": false,
+            "row_header": false,
+            "row_section": false,
+            "row_span": 1,
+            "start_col_offset_idx": 1,
+            "start_row_offset_idx": 8,
+            "text": "8"
+          },
+          {
+            "col_span": 1,
+            "column_header": false,
+            "end_col_offset_idx": 3,
+            "end_row_offset_idx": 9,
+            "fillable": false,
+            "row_header": false,
+            "row_section": false,
+            "row_span": 1,
+            "start_col_offset_idx": 2,
+            "start_row_offset_idx": 8,
+            "text": "16.50"
+          },
+          {
+            "col_span": 1,
+            "column_header": false,
+            "end_col_offset_idx": 1,
+            "end_row_offset_idx": 10,
+            "fillable": false,
+            "row_header": false,
+            "row_section": false,
+            "row_span": 1,
+            "start_col_offset_idx": 0,
+            "start_row_offset_idx": 9,
+            "text": "Row-09"
+          },
+          {
+            "col_span": 1,
+            "column_header": false,
+            "end_col_offset_idx": 2,
+            "end_row_offset_idx": 10,
+            "fillable": false,
+            "row_header": false,
+            "row_section": false,
+            "row_span": 1,
+            "start_col_offset_idx": 1,
+            "start_row_offset_idx": 9,
+            "text": "9"
+          },
+          {
+            "col_span": 1,
+            "column_header": false,
+            "end_col_offset_idx": 3,
+            "end_row_offset_idx": 10,
+            "fillable": false,
+            "row_header": false,
+            "row_section": false,
+            "row_span": 1,
+            "start_col_offset_idx": 2,
+            "start_row_offset_idx": 9,
+            "text": "18.50"
+          },
+          {
+            "col_span": 1,
+            "column_header": false,
+            "end_col_offset_idx": 1,
+            "end_row_offset_idx": 11,
+            "fillable": false,
+            "row_header": false,
+            "row_section": false,
+            "row_span": 1,
+            "start_col_offset_idx": 0,
+            "start_row_offset_idx": 10,
+            "text": "Row-10"
+          },
+          {
+            "col_span": 1,
+            "column_header": false,
+            "end_col_offset_idx": 2,
+            "end_row_offset_idx": 11,
+            "fillable": false,
+            "row_header": false,
+            "row_section": false,
+            "row_span": 1,
+            "start_col_offset_idx": 1,
+            "start_row_offset_idx": 10,
+            "text": "10"
+          },
+          {
+            "col_span": 1,
+            "column_header": false,
+            "end_col_offset_idx": 3,
+            "end_row_offset_idx": 11,
+            "fillable": false,
+            "row_header": false,
+            "row_section": false,
+            "row_span": 1,
+            "start_col_offset_idx": 2,
+            "start_row_offset_idx": 10,
+            "text": "20.50"
+          },
+          {
+            "col_span": 1,
+            "column_header": false,
+            "end_col_offset_idx": 1,
+            "end_row_offset_idx": 12,
+            "fillable": false,
+            "row_header": false,
+            "row_section": false,
+            "row_span": 1,
+            "start_col_offset_idx": 0,
+            "start_row_offset_idx": 11,
+            "text": "Row-11"
+          },
+          {
+            "col_span": 1,
+            "column_header": false,
+            "end_col_offset_idx": 2,
+            "end_row_offset_idx": 12,
+            "fillable": false,
+            "row_header": false,
+            "row_section": false,
+            "row_span": 1,
+            "start_col_offset_idx": 1,
+            "start_row_offset_idx": 11,
+            "text": "11"
+          },
+          {
+            "col_span": 1,
+            "column_header": false,
+            "end_col_offset_idx": 3,
+            "end_row_offset_idx": 12,
+            "fillable": false,
+            "row_header": false,
+            "row_section": false,
+            "row_span": 1,
+            "start_col_offset_idx": 2,
+            "start_row_offset_idx": 11,
+            "text": "22.50"
+          },
+          {
+            "col_span": 1,
+            "column_header": false,
+            "end_col_offset_idx": 1,
+            "end_row_offset_idx": 13,
+            "fillable": false,
+            "row_header": false,
+            "row_section": false,
+            "row_span": 1,
+            "start_col_offset_idx": 0,
+            "start_row_offset_idx": 12,
+            "text": "Row-12"
+          },
+          {
+            "col_span": 1,
+            "column_header": false,
+            "end_col_offset_idx": 2,
+            "end_row_offset_idx": 13,
+            "fillable": false,
+            "row_header": false,
+            "row_section": false,
+            "row_span": 1,
+            "start_col_offset_idx": 1,
+            "start_row_offset_idx": 12,
+            "text": "12"
+          },
+          {
+            "col_span": 1,
+            "column_header": false,
+            "end_col_offset_idx": 3,
+            "end_row_offset_idx": 13,
+            "fillable": false,
+            "row_header": false,
+            "row_section": false,
+            "row_span": 1,
+            "start_col_offset_idx": 2,
+            "start_row_offset_idx": 12,
+            "text": "24.50"
+          }
+        ]
+      },
+      "footnotes": [],
+      "label": "table",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 272.79999999999995,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 96.0
+          },
+          "charspan": [
+            0,
+            0
+          ],
+          "page_no": 2
+        }
+      ],
+      "references": [],
+      "self_ref": "#/tables/0"
+    }
+  ],
+  "texts": [
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "section_header",
+      "level": 2,
+      "orig": "Inventory",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 86.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 60.0
+          },
+          "charspan": [
+            0,
+            9
+          ],
+          "page_no": 2
+        }
+      ],
+      "self_ref": "#/texts/0",
+      "text": "Inventory"
+    }
+  ],
+  "version": "1.11.0"
+}

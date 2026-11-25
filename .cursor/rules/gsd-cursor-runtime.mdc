@@ -1,0 +1,21 @@
+---
+description: GSD Core (Cursor runtime) — use the project-local .cursor install
+alwaysApply: true
+---
+
+# GSD Core for Cursor
+
+This repo has a project-local GSD Core install for Cursor in `.cursor/`
+(skills in `.cursor/skills/gsd-*`, agents in `.cursor/agents/`, workflows in
+`.cursor/gsd-core/`). Version: see `.cursor/gsd-core/VERSION`.
+
+- Invoke GSD by mentioning the skill name, e.g. `gsd-resume-work`,
+  `gsd-progress`, `gsd-pause-work`, `gsd-execute-phase`.
+- The GSD shell snippets look for `gsd-tools.cjs` under `$RUNTIME_DIR` (or the
+  repo root), then `.claude/gsd-core`. They do not check `.cursor/gsd-core`, so
+  without `RUNTIME_DIR` they would pick up the Claude Code copy in `.claude/`,
+  which can be an older version. Before running any GSD workflow shell block,
+  run `export RUNTIME_DIR="$(git rev-parse --show-toplevel)/.cursor"` in the
+  same shell, or put it at the start of the command.
+- `.planning/` is shared with the Claude Code GSD install. Never delete or
+  reset it; it holds the paused Phase 2/3 state (`.continue-here.md`).

@@ -1,0 +1,529 @@
+From fadeb9f0144c6e4a19e84fc01e86cad5d7babe62 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 24 Nov 2026 22:26:01 +0000
+Subject: [PATCH 1/5] test(04-33): activation gates, rollback and coverage for
+ chunking profiles (red)
+
+- two-mode PGlite suite: grants, create limits, decision recording, ordered refusals, pointer flip, rollback, coverage counts
+- legacy picture captions stay retrievable while a profile is active
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01X342shLsAZx6PYph2vA7hc
+---
+ tests/rag-db/chunking-activation.test.mts | 504 ++++++++++++++++++++++
+ 1 file changed, 504 insertions(+)
+ create mode 100644 tests/rag-db/chunking-activation.test.mts
+
+diff --git a/tests/rag-db/chunking-activation.test.mts b/tests/rag-db/chunking-activation.test.mts
+new file mode 100644
+index 0000000..cdef481
+--- /dev/null
++++ b/tests/rag-db/chunking-activation.test.mts
+@@ -0,0 +1,504 @@
++import { after, before, describe, test } from 'node:test';
++import assert from 'node:assert/strict';
++import crypto from 'node:crypto';
++import fs from 'node:fs';
++import os from 'node:os';
++import path from 'node:path';
++import { createFixtureDatabase, type DeploymentMode, type FixtureDatabase } from '../../eval/harness/pglite-supabase.mts';
++import { TWO_TENANT_IDS, createTwoTenantDatabase } from '../../eval/harness/two-tenant.mts';
++
++const MODES: DeploymentMode[] = ['single-tenant', 'multi-tenant'];
++const LEGACY_EMBEDDING = 'openai-3-small-1536';
++const P256 = 'p256';
++const P128 = 'p128';
++const IMAGE_URL = 'https://example.invalid/figure-1.png';
++const FUNCTIONS = [
++  'rag_create_chunking_profile(text,text,integer,text,integer,text)',
++  'rag_record_chunking_decision(text,jsonb)',
++  'rag_activate_chunking_profile(text,text,text)',
++  'rag_rollback_chunking_profile(text,text)',
++  'rag_chunking_coverage()',
++];
++
++type Row = Record<string, unknown>;
++
++interface Tenant {
++  key: string;
++  userId: string | null;
++}
++
++interface DocRef {
++  id: string;
++  label: string;
++  tenant: Tenant;
++}
++
++function messageOf(error: unknown): string {
++  return error instanceof Error ? error.message : String(error);
++}
++
++function vector(dims: number, hot: number): number[] {
++  return Array.from({ length: dims }, (_, index) => (index === hot % dims ? 1 : 0));
++}
++
++function emptyCorpus(): string {
++  return fs.mkdtempSync(path.join(os.tmpdir(), 'chunking-activation-corpus-'));
++}
++
++for (const mode of MODES) {
++  describe(`chunking activation gates and coverage (${mode})`, () => {
++    let fixture: FixtureDatabase;
++    let a: Tenant;
++    let b: Tenant;
++    let sequence = 0;
++    const docs: Record<'c1' | 'c2' | 'c3' | 'general', DocRef> = {} as Record<'c1' | 'c2' | 'c3' | 'general', DocRef>;
++
++    before(async () => {
++      const corpus = emptyCorpus();
++      try {
++        if (mode === 'multi-tenant') {
++          fixture = await createTwoTenantDatabase({ corpusDir: corpus });
++          a = { key: `u:${TWO_TENANT_IDS.userA}`, userId: TWO_TENANT_IDS.userA };
++          b = { key: `u:${TWO_TENANT_IDS.userB}`, userId: TWO_TENANT_IDS.userB };
++        } else {
++          fixture = await createFixtureDatabase({ deploymentMode: mode, corpusDir: corpus });
++          a = { key: 's:default', userId: null };
++          b = a;
++        }
++      } finally {
++        fs.rmdirSync(corpus);
++      }
++      // The two-tenant fixture seeds a document of its own for each tenant; only the documents this suite writes are counted.
++      await fixture.db.exec(`UPDATE documents SET status = 'deleted' WHERE doc_type = 'contract_legal'`);
++    });
++
++    after(async () => {
++      await fixture?.db.close();
++    });
++
++    const query = async (sql: string, params: unknown[] = []): Promise<Row[]> => {
++      try {
++        return (await fixture.db.query<Row>(sql, params)).rows;
++      } catch (error) {
++        return assert.fail(`${sql.slice(0, 80).replace(/\s+/g, ' ')} failed: ${messageOf(error)}`);
++      }
++    };
++
++    async function errorOf(sql: string, params: unknown[] = []): Promise<string | null> {
++      try {
++        await fixture.db.query(sql, params);
++        return null;
++      } catch (error) {
++        return messageOf(error);
++      }
++    }
++
++    async function begin(tenant: Tenant, label: string, docType: string): Promise<string> {
++      sequence += 1;
++      const sourceKey = `activation-${mode}-${label}-${sequence}.md`;
++      const rows = await query(
++        `SELECT * FROM rag_begin_document_version(
++           p_tenant_key => $1, p_user_id => $2::uuid, p_org_id => NULL, p_source => 'config_upload', p_source_key => $3, p_filename => $3,
++           p_file_sha256 => $4, p_doc_type => $5, p_doc_type_origin => 'fallback', p_profile_id => 'contract_legal@1', p_profile_version => 1)`,
++        [tenant.key, tenant.userId, sourceKey, crypto.createHash('sha256').update(`${sourceKey}:${sequence}`).digest('hex'), docType],
++      );
++      assert.equal(rows[0]?.outcome, 'created');
++      const documentId = String(rows[0]?.document_id);
++      await query(`SELECT * FROM rag_set_document_fields(p_document_id => $1, p_tenant_key => $2, p_fields => '{"language":"en"}'::jsonb)`, [documentId, tenant.key]);
++      return documentId;
++    }
++
++    /** A published document with legacy rows: one clause and, when asked, one picture caption (the legacy-only kind). */
++    async function makeDocument(tenant: Tenant, label: string, docType: string, withImage: boolean): Promise<DocRef> {
++      const id = await begin(tenant, label, docType);
++      const chunks: Row[] = [
++        {
++          content: `${label} legacy clause canaryclause warranty`,
++          chunk_index: 0,
++          section_path: ['Contract'],
++          chunk_kind: 'text',
++          embedding_text_version: 1,
++          lexical_text: `${label} legacy clause canaryclause warranty`,
++          metadata: {},
++        },
++      ];
++      if (withImage) {
++        chunks.push({
++          content: `${label} figure caption canaryfigure`,
++          chunk_index: 1,
++          section_path: [],
++          chunk_kind: 'image',
++          embedding_text_version: 1,
++          lexical_text: `${label} figure caption canaryfigure`,
++          metadata: { image_url: IMAGE_URL },
++        });
++      }
++      await query('SELECT * FROM rag_write_chunks(p_document_id => $1, p_tenant_key => $2, p_chunks => $3::jsonb, p_embeddings => $4::jsonb, p_final => true, p_total => $5)', [
++        id,
++        tenant.key,
++        JSON.stringify(chunks),
++        JSON.stringify({ [LEGACY_EMBEDDING]: chunks.map((_, index) => vector(1536, index)) }),
++        chunks.length,
++      ]);
++      await query('SELECT * FROM rag_publish_document_version(p_document_id => $1, p_tenant_key => $2)', [id, tenant.key]);
++      return { id, label, tenant };
++    }
++
++    async function writeChildren(doc: DocRef, profileId: string, options: { imageChild?: boolean } = {}): Promise<void> {
++      const children: Row[] = [0, 1].map((index) => ({
++        chunk_index: index,
++        parent_index: 0,
++        content: `${doc.label} ${profileId} child ${index} canaryclause warranty`,
++        section_path: ['Contract', 'Clause 1'],
++        chunk_kind: 'text',
++        embedding_text_version: 1,
++        content_hash: `hash-${doc.label}-${profileId}-${index}`,
++        lexical_text: `${doc.label} ${profileId} child${index} canaryclause warranty`,
++        metadata: {},
++      }));
++      if (options.imageChild) {
++        children.push({
++          chunk_index: 2,
++          parent_index: 0,
++          content: `${doc.label} ${profileId} figure caption canaryfigure`,
++          section_path: [],
++          chunk_kind: 'image',
++          embedding_text_version: 1,
++          content_hash: `hash-${doc.label}-${profileId}-image`,
++          lexical_text: `${doc.label} ${profileId} figure caption canaryfigure`,
++          metadata: { image_url: IMAGE_URL },
++        });
++      }
++      const parents = [{ parent_index: 0, section_path: ['Contract', 'Clause 1'], content: `${doc.label} clause 1 governs delivery and warranty. `.repeat(3), token_count: 40 }];
++      await query(
++        `SELECT * FROM rag_write_profile_chunks(p_document_id => $1, p_tenant_key => $2, p_profile_id => $3, p_parents => $4::jsonb, p_children => $5::jsonb,
++           p_embeddings => $6::jsonb, p_final => true, p_total => $7)`,
++        [
++          doc.id,
++          doc.tenant.key,
++          profileId,
++          JSON.stringify(parents),
++          JSON.stringify(children),
++          JSON.stringify({ [LEGACY_EMBEDDING]: children.map((_, index) => vector(1536, index + 10)) }),
++          children.length,
++        ],
++      );
++    }
++
++    async function dropProfile(id: string): Promise<void> {
++      await query('DELETE FROM document_chunks WHERE chunking_profile_id = $1', [id]);
++      await query('DELETE FROM document_parents WHERE chunking_profile_id = $1', [id]);
++      await query('DELETE FROM chunking_profiles WHERE id = $1', [id]);
++    }
++
++    const createProfile = (id: string, docType = 'contract_legal') =>
++      query(`SELECT * FROM rag_create_chunking_profile($1, $2, 256, 'structure', 1024, '256/1024')`, [id, docType]);
++
++    const decisionOf = (profileId: string, overrides: Record<string, unknown> = {}, docType = 'contract_legal') => ({
++      profile_id: profileId,
++      doc_type: docType,
++      gate_passed: true,
++      build_run_id: null,
++      chosen_on: { recall_at_8: 0.9 },
++      decided_by: 'tester',
++      recorded_at: '2026-11-24T00:00:00.000Z',
++      report_hash: 'a'.repeat(64),
++      source: 'fixture',
++      ...overrides,
++    });
++
++    const record = (profileId: string, decision: unknown) => query('SELECT * FROM rag_record_chunking_decision($1, $2::jsonb)', [profileId, JSON.stringify(decision)]);
++    const recordError = (profileId: string, decision: unknown) => errorOf('SELECT * FROM rag_record_chunking_decision($1, $2::jsonb)', [profileId, JSON.stringify(decision)]);
++    const activate = (profileId: string, actor: string | null = 'operator-1', docType = 'contract_legal') =>
++      query('SELECT * FROM rag_activate_chunking_profile($1, $2, $3)', [profileId, actor, docType]);
++    const activateError = (profileId: string, actor: string | null = 'operator-1', docType = 'contract_legal') =>
++      errorOf('SELECT * FROM rag_activate_chunking_profile($1, $2, $3)', [profileId, actor, docType]);
++    const rollback = (docType = 'contract_legal', actor: string | null = 'operator-1') => query('SELECT * FROM rag_rollback_chunking_profile($1, $2)', [docType, actor]);
++    const profileRow = async (id: string, docType = 'contract_legal'): Promise<Row> =>
++      (await query('SELECT * FROM chunking_profiles WHERE id = $1 AND doc_type = $2', [id, docType]))[0] as Row;
++    const activeOf = async (docType = 'contract_legal'): Promise<string> =>
++      String((await query(`SELECT id FROM chunking_profiles WHERE doc_type = $1 AND status = 'active'`, [docType]))[0]?.id);
++    const setStatus = (id: string, status: string, docType = 'contract_legal') =>
++      query('UPDATE chunking_profiles SET status = $2 WHERE id = $1 AND doc_type = $3', [id, status, docType]);
++
++    async function search(tenant: Tenant, tokens: string[], override: Record<string, string> | null = null): Promise<string[]> {
++      const rows = await query(
++        `SELECT h.chunk_id::text AS chunk_id, c.chunking_profile_id, c.chunk_kind, c.document_id::text AS document_id
++         FROM hybrid_search_chunks(
++           p_tenant_key => $1, p_profile_id => $2, p_query_embedding => $3::vector, p_lexical_tokens => $4::text[],
++           p_dense_limit => 0, p_lexical_limit => 50, p_chunking_override => $5::jsonb) h
++         JOIN document_chunks c ON c.id = h.chunk_id`,
++        [tenant.key, LEGACY_EMBEDDING, `[${vector(1536, 0).join(',')}]`, tokens, override === null ? null : JSON.stringify(override)],
++      );
++      const labels = new Map(Object.values(docs).map((doc) => [doc.id, doc.label]));
++      return rows.map((row) => `${labels.get(String(row.document_id)) ?? 'foreign'}:${row.chunking_profile_id}:${row.chunk_kind}`).sort();
++    }
++
++    async function legacySnapshot(): Promise<string[]> {
++      if (mode === 'multi-tenant') {
++        const rows = await query('SELECT document_id::text AS id FROM match_documents_by_workspace($1::vector, 1000, -1, NULL, $2::uuid) ORDER BY 1', [
++          `[${vector(1536, 0).join(',')}]`,
++          TWO_TENANT_IDS.userA,
++        ]);
++        return rows.map((row) => String(row.id));
++      }
++      const rows = await query('SELECT chunk_id::text AS id FROM match_document_chunks($1::vector, -1, 1000) ORDER BY 1', [`[${vector(1536, 0).join(',')}]`]);
++      return rows.map((row) => String(row.id));
++    }
++
++    const chunkRowsSnapshot = async (): Promise<string> =>
++      JSON.stringify(await query('SELECT id::text, chunking_profile_id, status, is_current, content FROM document_chunks ORDER BY id'));
++
++    test('the five functions exist and only service_role may execute them', async () => {
++      for (const signature of FUNCTIONS) {
++        const acl = await query(
++          `SELECT has_function_privilege('anon', p.oid, 'EXECUTE') AS anon,
++                  has_function_privilege('authenticated', p.oid, 'EXECUTE') AS authenticated,
++                  has_function_privilege('service_role', p.oid, 'EXECUTE') AS service_role,
++                  COALESCE((SELECT bool_or(g.grantee = 0) FROM aclexplode(p.proacl) g WHERE g.privilege_type = 'EXECUTE'), true) AS public_exec
++           FROM pg_proc p WHERE p.oid = to_regprocedure($1)`,
++          [signature],
++        );
++        assert.deepEqual(acl[0], { anon: false, authenticated: false, service_role: true, public_exec: false }, signature);
++      }
++      for (const role of ['anon', 'authenticated']) {
++        await fixture.db.exec(`SET ROLE ${role}`);
++        try {
++          for (const call of [
++            `SELECT * FROM rag_create_chunking_profile('px', 'general', 256, 'none', NULL, '256/1024')`,
++            `SELECT * FROM rag_activate_chunking_profile('px', 'x', 'general')`,
++            `SELECT * FROM rag_rollback_chunking_profile('general', 'x')`,
++            `SELECT * FROM rag_chunking_coverage()`,
++          ]) {
++            assert.match((await errorOf(call)) ?? 'no error', /permission denied/, `${role}: ${call.slice(0, 40)}`);
++          }
++        } finally {
++          await fixture.db.exec('RESET ROLE');
++        }
++      }
++    });
++
++    test('create inserts a building profile; a reserved, upper-case, unknown or too-small profile raises 22023 and writes nothing', async () => {
++      const before = await query('SELECT count(*)::int AS n FROM chunking_profiles');
++      const created = await query(`SELECT * FROM rag_create_chunking_profile('p256-1024', 'contract_legal', 256, 'structure', 1024, '256/1024')`);
++      assert.equal(created[0]?.id, 'p256-1024');
++      const row = await profileRow('p256-1024');
++      assert.equal(row.status, 'building');
++      assert.equal(row.child_tokens, 256);
++      assert.equal(row.parent_tokens, 1024);
++      assert.equal(row.eval_evidence, null);
++      await query(`DELETE FROM chunking_profiles WHERE id = 'p256-1024'`);
++
++      const bad: [string, string][] = [
++        [`SELECT * FROM rag_create_chunking_profile('legacy', 'contract_legal', 256, 'structure', 1024, '256/1024')`, 'legacy is reserved'],
++        [`SELECT * FROM rag_create_chunking_profile('P256', 'contract_legal', 256, 'structure', 1024, '256/1024')`, 'upper case'],
++        [`SELECT * FROM rag_create_chunking_profile('p-x', 'memo', 256, 'structure', 1024, '256/1024')`, 'unknown doc type'],
++        [`SELECT * FROM rag_create_chunking_profile('p-x', 'contract_legal', 256, 'structure', 400, '256/1024')`, 'parent below twice the child'],
++        [`SELECT * FROM rag_create_chunking_profile('p-x', 'contract_legal', 256, 'fixed', NULL, '256/1024')`, 'fixed without parent tokens'],
++        [`SELECT * FROM rag_create_chunking_profile('p-x', 'contract_legal', 0, 'none', NULL, '256/1024')`, 'zero child'],
++        [`SELECT * FROM rag_create_chunking_profile('p-x', 'contract_legal', 256, 'weird', 1024, '256/1024')`, 'unknown parent mode'],
++        [`SELECT * FROM rag_create_chunking_profile('p-x', 'contract_legal', 256, 'structure', 1024, '999/999')`, 'unknown preset'],
++      ];
++      for (const [sql, why] of bad) {
++        const error = await errorOf(sql);
++        assert.ok(error, `${why} was accepted`);
++        const code = await fixture.db.query(sql).then(() => '', (e: { code?: string }) => e.code ?? '');
++        assert.equal(code, '22023', `${why}: ${error}`);
++      }
++      assert.deepEqual(await query('SELECT count(*)::int AS n FROM chunking_profiles'), before);
++    });
++
++    test('documents of the suite exist: three current ready contracts (one without profile children) and a general one', async () => {
++      docs.c1 = await makeDocument(a, 'c1', 'contract_legal', true);
++      docs.c2 = await makeDocument(b, 'c2', 'contract_legal', false);
++      docs.c3 = await makeDocument(a, 'c3', 'contract_legal', false);
++      docs.general = await makeDocument(a, 'gen', 'general', false);
++      const current = await query(`SELECT count(*)::int AS n FROM documents WHERE doc_type = 'contract_legal' AND is_current AND status = 'ready'`);
++      assert.equal(current[0]?.n, 3);
++    });
++
++    test('record-decision checks the profile, the doc type and a boolean gate_passed, then stores the decision', async () => {
++      await createProfile(P256);
++      assert.match((await recordError('no-such', decisionOf('no-such'))) ?? 'no error', /unknown_profile/);
++      assert.match((await recordError('legacy', decisionOf('legacy'))) ?? 'no error', /unknown_profile/);
++      assert.match((await recordError(P256, decisionOf('other-id'))) ?? 'no error', /profile_mismatch/);
++      assert.match((await recordError(P256, decisionOf(P256, {}, 'general'))) ?? 'no error', /doc_type_mismatch/);
++      assert.match((await recordError(P256, decisionOf(P256, { gate_passed: 'yes' }))) ?? 'no error', /invalid_decision/);
++      assert.match((await recordError(P256, [1, 2, 3])) ?? 'no error', /invalid_decision/);
++      assert.equal((await profileRow(P256)).eval_evidence, null, 'a refused decision stores nothing');
++
++      await record(P256, decisionOf(P256));
++      const stored = (await profileRow(P256)).eval_evidence as Row;
++      assert.equal(stored.profile_id, P256);
++      assert.equal(stored.gate_passed, true);
++      await query('UPDATE chunking_profiles SET eval_evidence = NULL WHERE id = $1', [P256]);
++    });
++
++    test('activate names every refusal in order and changes nothing while refusing', async () => {
++      const unchanged = async (): Promise<void> => {
++        assert.equal(await activeOf(), 'legacy');
++        assert.equal((await profileRow(P256)).previous_active_id, null);
++      };
++
++      assert.match((await activateError('no-such')) ?? 'no error', /^.*chunking_activation_refused:unknown_profile/);
++
++      assert.match((await activateError(P256)) ?? 'no error', /chunking_activation_refused:not_ready/);
++      await unchanged();
++
++      // Two documents have children, c3 has only legacy rows.
++      await writeChildren(docs.c1, P256);
++      await writeChildren(docs.c2, P256);
++      await setStatus(P256, 'ready');
++      assert.match((await activateError(P256)) ?? 'no error', /chunking_activation_refused:incomplete/);
++      await unchanged();
++
++      await writeChildren(docs.c3, P256);
++
++      // c1 has a legacy picture caption; a profile that declares it keeps no legacy kinds must carry it.
++      await query(`UPDATE chunking_profiles SET legacy_kinds_kept = '{}' WHERE id = $1 AND doc_type = 'contract_legal'`, [P256]);
++      assert.match((await activateError(P256)) ?? 'no error', /chunking_activation_refused:legacy_kinds_dropped/);
++      await query(`UPDATE chunking_profiles SET legacy_kinds_kept = DEFAULT WHERE id = $1 AND doc_type = 'contract_legal'`, [P256]);
++      await unchanged();
++
++      const failedRun = crypto.randomUUID();
++      await query(`INSERT INTO chunking_build_runs (id, profile_id, doc_type, status, started_at) VALUES ($1, $2, 'contract_legal', 'incomplete', now() - interval '2 hours')`, [failedRun, P256]);
++      await query(`INSERT INTO chunking_build_gaps (run_id, document_id, reason) VALUES ($1, $2, 'failed')`, [failedRun, docs.c3.id]);
++      assert.match((await activateError(P256)) ?? 'no error', /chunking_activation_refused:open_gaps/);
++      await unchanged();
++
++      const completedRun = crypto.randomUUID();
++      await query(`INSERT INTO chunking_build_runs (id, profile_id, doc_type, status, started_at) VALUES ($1, $2, 'contract_legal', 'completed', now() - interval '1 hour')`, [completedRun, P256]);
++      assert.match((await activateError(P256)) ?? 'no error', /chunking_activation_refused:no_evidence/);
++
++      await record(P256, decisionOf(P256, { gate_passed: false, build_run_id: completedRun }));
++      assert.match((await activateError(P256)) ?? 'no error', /chunking_activation_refused:eval_failed/);
++
++      await record(P256, decisionOf(P256, { build_run_id: crypto.randomUUID() }));
++      assert.match((await activateError(P256)) ?? 'no error', /chunking_activation_refused:stale_evidence/);
++      await record(P256, decisionOf(P256, { build_run_id: null }));
++      assert.match((await activateError(P256)) ?? 'no error', /chunking_activation_refused:stale_evidence/, 'a null run id does not match a completed run');
++      await unchanged();
++
++      await record(P256, decisionOf(P256, { build_run_id: completedRun }));
++    });
++
++    test('a profile that has no completed build run accepts evidence that has no run id (filled by ingestion dual-write)', async () => {
++      await createProfile(P128);
++      await setStatus(P128, 'ready');
++      for (const doc of [docs.c1, docs.c2, docs.c3]) await writeChildren(doc, P128, { imageChild: doc === docs.c1 });
++      await query(`UPDATE chunking_profiles SET legacy_kinds_kept = '{}' WHERE id = $1 AND doc_type = 'contract_legal'`, [P128]);
++      await record(P128, decisionOf(P128, { build_run_id: null }));
++      const result = await activate(P128);
++      assert.equal(result[0]?.activated_profile, P128, 'a picture caption carried as a profile child satisfies the gate');
++      assert.equal(await activeOf(), P128);
++      await rollback();
++      assert.equal(await activeOf(), 'legacy');
++      await dropProfile(P128);
++    });
++
++    test('rag_chunking_coverage counts the documents missing from each profile and exposes no ids or names', async () => {
++      await query(`DELETE FROM document_chunks WHERE document_id = $1 AND chunking_profile_id = $2`, [docs.c3.id, P256]);
++      await query(`DELETE FROM document_parents WHERE document_id = $1 AND chunking_profile_id = $2`, [docs.c3.id, P256]);
++      const coverage = await query(`SELECT * FROM rag_chunking_coverage() WHERE doc_type = 'contract_legal' ORDER BY profile_id`);
++      assert.deepEqual(
++        Object.keys(coverage[0] as Row).sort(),
++        ['current_ready_documents', 'doc_type', 'documents_with_children', 'is_active', 'missing_documents', 'profile_id'],
++      );
++      const p256 = coverage.find((row) => row.profile_id === P256) as Row;
++      assert.deepEqual(
++        [p256.is_active, p256.current_ready_documents, p256.documents_with_children, p256.missing_documents],
++        [false, 3, 2, 1],
++      );
++      const legacy = coverage.find((row) => row.profile_id === 'legacy') as Row;
++      assert.deepEqual([legacy.is_active, legacy.current_ready_documents, legacy.documents_with_children, legacy.missing_documents], [true, 3, 3, 0]);
++
++      const general = await query(`SELECT * FROM rag_chunking_coverage() WHERE doc_type = 'general' AND profile_id = 'legacy'`);
++      assert.equal(general[0]?.current_ready_documents, 1, 'a document of another type is counted under its own type');
++
++      await query(`UPDATE documents SET is_current = false WHERE id = $1`, [docs.c3.id]);
++      const superseded = (await query(`SELECT * FROM rag_chunking_coverage() WHERE doc_type = 'contract_legal' AND profile_id = $1`, [P256]))[0] as Row;
++      assert.deepEqual([superseded.current_ready_documents, superseded.missing_documents], [2, 0], 'a superseded document is not counted');
++      await query(`UPDATE documents SET is_current = true, status = 'processing' WHERE id = $1`, [docs.c3.id]);
++      const notReady = (await query(`SELECT * FROM rag_chunking_coverage() WHERE doc_type = 'contract_legal' AND profile_id = $1`, [P256]))[0] as Row;
++      assert.deepEqual([notReady.current_ready_documents, notReady.missing_documents], [2, 0], 'a document that is not ready is not counted');
++      await query(`UPDATE documents SET status = 'ready' WHERE id = $1`, [docs.c3.id]);
++      await writeChildren(docs.c3, P256);
++    });
++
++    test('a passing activation flips the pointer once: previous_active_id, activated_by and the one-active index; legacy readers and chunk rows are untouched', async () => {
++      const legacyBefore = await legacySnapshot();
++      const rowsBefore = await chunkRowsSnapshot();
++
++      const result = await activate(P256, 'operator-7');
++      assert.deepEqual([result[0]?.activated_profile, result[0]?.previous_profile, result[0]?.doc_type], [P256, 'legacy', 'contract_legal']);
++      assert.equal(await activeOf(), P256);
++      const row = await profileRow(P256);
++      assert.equal(row.status, 'active');
++      assert.equal(row.previous_active_id, 'legacy');
++      assert.equal(row.activated_by, 'operator-7');
++      assert.ok(row.activated_at);
++      assert.equal((await profileRow('legacy')).status, 'ready');
++      assert.equal(await activeOf('general'), 'legacy', 'other doc types keep their pointer');
++
++      const listed = await query(`SELECT id, is_active FROM rag_list_chunking_profiles() WHERE doc_type = 'contract_legal' ORDER BY id`);
++      assert.deepEqual(listed.map((entry) => [entry.id, entry.is_active]), [['legacy', false], [P256, true]]);
++
++      const second = await errorOf(`UPDATE chunking_profiles SET status = 'active' WHERE id = 'legacy' AND doc_type = 'contract_legal'`);
++      assert.match(second ?? 'no error', /chunking_profiles_single_active|duplicate key/);
++      assert.match((await activateError(P256)) ?? 'no error', /chunking_activation_refused:already_active/);
++
++      assert.deepEqual(await legacySnapshot(), legacyBefore, 'legacy RPC rows changed after activation');
++      assert.equal(await chunkRowsSnapshot(), rowsBefore, 'the pointer flip touched chunk rows');
++    });
++
++    test('hybrid search follows the pointer: profile children for the type, legacy rows for other types, the picture caption kept, every tenant isolated', async () => {
++      const own = await search(a, ['canaryclause']);
++      assert.ok(own.includes(`c1:${P256}:text`) && own.includes(`c3:${P256}:text`), `tenant A lacks its p256 children: ${own.join(', ')}`);
++      assert.ok(own.every((entry) => !entry.endsWith(':legacy:text') || entry.startsWith('gen:')), `legacy text rows of a document with p256 children are served: ${own.join(', ')}`);
++      assert.ok(own.includes('gen:legacy:text'), 'a document of a type on legacy is served from legacy rows');
++      assert.deepEqual((await search(a, ['canaryfigure'])).filter((entry) => entry.startsWith('c1:')), ['c1:legacy:image'], 'the legacy picture caption is still served');
++
++      if (mode === 'multi-tenant') {
++        const foreign = await search(b, ['canaryclause']);
++        assert.deepEqual(foreign.sort(), [`c2:${P256}:text`, `c2:${P256}:text`], 'tenant B sees only its own p256 children');
++        assert.ok(own.every((entry) => !entry.startsWith('c2:')), 'tenant A sees a tenant B document');
++      }
++    });
++
++    test('rollback restores the previous pointer, keeps every row, and retrieval reads legacy rows again; legacy rows are served in all three states', async () => {
++      const legacyBefore = await legacySnapshot();
++      const rowsBefore = await chunkRowsSnapshot();
++      const result = await rollback();
++      assert.deepEqual([result[0]?.restored_profile, result[0]?.rolled_back_profile, result[0]?.doc_type], ['legacy', P256, 'contract_legal']);
++      assert.equal(await activeOf(), 'legacy');
++      assert.equal((await profileRow(P256)).status, 'ready');
++      assert.equal((await profileRow('legacy')).activated_by, 'operator-1');
++      assert.equal(await chunkRowsSnapshot(), rowsBefore, 'rollback deleted or changed chunk rows');
++      assert.deepEqual(await legacySnapshot(), legacyBefore);
++
++      const after = await search(a, ['canaryclause']);
++      assert.ok(after.every((entry) => entry.includes(':legacy:')), `p256 children are served after rollback: ${after.join(', ')}`);
++      assert.ok(after.includes('c1:legacy:text'));
++
++      assert.match((await errorOf('SELECT * FROM rag_rollback_chunking_profile($1, $2)', ['contract_legal', 'operator-1'])) ?? 'no error', /chunking_rollback_refused:no_previous/);
++    });
++
++    test('rollback goes back to the previous non-legacy profile; activating legacy directly always succeeds', async () => {
++      await createProfile(P128);
++      await setStatus(P128, 'ready');
++      for (const doc of [docs.c1, docs.c2, docs.c3]) await writeChildren(doc, P128);
++      await record(P128, decisionOf(P128));
++      await activate(P256);
++      await activate(P128);
++      assert.equal(await activeOf(), P128);
++      assert.equal((await profileRow(P128)).previous_active_id, P256);
++      const back = await rollback();
++      assert.equal(back[0]?.restored_profile, P256);
++      assert.equal(await activeOf(), P256);
++      const direct = await activate('legacy', 'operator-2');
++      assert.deepEqual([direct[0]?.activated_profile, direct[0]?.previous_profile], ['legacy', P256]);
++      assert.equal(await activeOf(), 'legacy');
++      assert.match((await errorOf('SELECT * FROM rag_activate_chunking_profile($1, $2)', ['legacy', 'x'])) ?? 'no error', /ambiguous_profile/, 'legacy exists for every type and needs the doc type');
++    });
++  });
++}
+-- 
+2.43.0
+

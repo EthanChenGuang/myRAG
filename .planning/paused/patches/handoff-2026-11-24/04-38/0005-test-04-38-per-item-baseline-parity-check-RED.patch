@@ -1,0 +1,65 @@
+From 27dbaefe4ef3df161219f541dd75c034bc1c7a3e Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 24 Nov 2026 22:27:16 +0000
+Subject: [PATCH 5/8] test(04-38): per-item baseline parity check (RED)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01X342shLsAZx6PYph2vA7hc
+---
+ eval/tests/test_item_parity.py | 44 ++++++++++++++++++++++++++++++++++
+ 1 file changed, 44 insertions(+)
+ create mode 100644 eval/tests/test_item_parity.py
+
+diff --git a/eval/tests/test_item_parity.py b/eval/tests/test_item_parity.py
+new file mode 100644
+index 0000000..9b821c1
+--- /dev/null
++++ b/eval/tests/test_item_parity.py
+@@ -0,0 +1,44 @@
++import json
++
++from rag_eval.item_parity import compare_items, main
++
++
++def _baseline(items: dict) -> dict:
++    return {"items": items}
++
++
++def _cell(value: float) -> dict:
++    return {"recall_at_10": [value, value, value], "mrr": [value, value, value]}
++
++
++def test_identical_old_items_and_added_new_items_have_no_difference():
++    before = _baseline({"a": _cell(1.0), "b": _cell(0.0)})
++    after = _baseline({"a": _cell(1.0), "b": _cell(0.0), "c": _cell(0.5)})
++    result = compare_items(before, after)
++    assert result.changed == [] and result.missing == [] and result.added == ["c"]
++    assert result.all_zero
++
++
++def test_a_changed_old_item_is_reported():
++    before = _baseline({"a": _cell(1.0), "b": _cell(0.0)})
++    after = _baseline({"a": _cell(1.0), "b": _cell(1.0)})
++    result = compare_items(before, after)
++    assert result.changed == ["b"] and not result.all_zero
++
++
++def test_a_dropped_old_item_is_reported():
++    before = _baseline({"a": _cell(1.0), "b": _cell(0.0)})
++    after = _baseline({"a": _cell(1.0)})
++    result = compare_items(before, after)
++    assert result.missing == ["b"] and not result.all_zero
++
++
++def test_cli_exit_codes(tmp_path):
++    before = tmp_path / "before.json"
++    same = tmp_path / "same.json"
++    other = tmp_path / "other.json"
++    before.write_text(json.dumps(_baseline({"a": _cell(1.0)})), encoding="utf-8")
++    same.write_text(json.dumps(_baseline({"a": _cell(1.0), "z": _cell(0.2)})), encoding="utf-8")
++    other.write_text(json.dumps(_baseline({"a": _cell(0.5)})), encoding="utf-8")
++    assert main([str(before), str(same)]) == 0
++    assert main([str(before), str(other)]) == 1
+-- 
+2.43.0
+

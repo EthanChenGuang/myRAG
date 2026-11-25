@@ -1,19 +1,25 @@
 ---
 gsd_state_version: "1.0"
 milestone: v5.0
-current_phase: 01
-current_phase_name: Evaluation Harness & Baseline
-status: verifying
-stopped_at: Completed 01-22-PLAN.md
-last_updated: "2026-11-23T11:17:48.775Z"
-last_activity: 2026-11-23
-last_activity_desc: Phase 01 execution started
-state_head: f9dcb8a08fcb9a34e9cbd1d529d442f3cab3d093
+current_phase: "05"
+current_phase_name: Verified Citations & Groundedness (Phases 5, 5.1, 6, 7 in parallel)
+status: executing
+stopped_at: "Merge trains 1-6 merged (PRs #23-#28); train 7 building; blocked on human checkpoints 03.1-53/54, 04-43, 05-05"
+last_updated: "2026-11-25T07:35:00.000Z"
+state_head: 01b43787
+package_legitimacy_03_1_04:
+  approved_at: "2026-11-24"
+  lock_commit: 3e83978e482f67da5ce6d463f39251f3e21e8bf4
+  pdfplumber: "0.11.11"
+  pdfminer_six: "20260107"
+  ray_data: "2.60.1"
+last_activity: 2026-11-25
+last_activity_desc: Merge trains 1-6 merged to trunk; Phase 3.1 and Phase 4 code complete except live checkpoints
 progress:
-  total_phases: 8
+  total_phases: 9
   completed_phases: 0
-  total_plans: 22
-  completed_plans: 22
+  total_plans: 58
+  completed_plans: 44
 ---
 
 # Project State
@@ -23,16 +29,17 @@ progress:
 See: .planning/PROJECT.md (updated 2026-11-22)
 
 **Core value:** Questions the knowledge base can answer get correct answers with accurate citations; questions it cannot answer get an explicit "I don't know". Both are proven by eval scores.
-**Current focus:** Phase 01 — Evaluation Harness & Baseline
+**Current focus:** Phase 02 — Unified Retrieval Pipeline & Tenant Scope (Phase 01 code complete; its human verification items remain open)
 
 ## Current Position
 
-Phase: 01 (Evaluation Harness & Baseline) — EXECUTING
-Plan: 22 of 22
-Status: Phase complete — ready for verification
-Last activity: 2026-11-23 — Phase 01 execution started
+Trunk: `claude/ecstatic-hamilton-86gtwv` @ `01b43787` (2026-11-25). Merge trains 1–6 merged via PRs #23–#28, each with all 8 pr-smoke checks green.
 
-Progress: [░░░░░░░░░░] 0%
+- **Phase 3.1:** code complete through 03.1-52 (setup fold). Live checkpoints 03.1-53 and 03.1-54 open (human).
+- **Phase 4:** code complete through 04-47 (gap closures 04-46 refusal criterion, 04-47 search_path hardening, migration 0425). 04-VERIFICATION gaps closed; 04-43 live calibration open (human).
+- **Phases 5, 5.1, 6, 7:** executing in parallel cloud sessions. On trunk: 05-01..09, 05-12..14, 05-19, 05.1-01..03, 05.1-05, 05.1-24, 06-01, 06-03..09, 06-11, 06-12, 07-02, 07-03. Finished, awaiting train 7: 05-15, 05-18, 05-20, 06-17. Running: 05-10 (option-a decided), 05-21.
+- **Blocked on humans:** 05-05 (packages APPROVED 2026-11-25, "approved, no sentencepiece"; still waits for precondition 03.1-54 + 04-43), 03.1-53/54, 04-43. Most remaining Phase 5–7 plans depend on these.
+- **Live DB order for operators:** migrations through 0425 (pgvector must be in `public`; run 0425's header dry-run query first), then 0501–0502, 0601–0603 (re-run 0410 after 0603), 0701–0703.
 
 ## Performance Metrics
 
@@ -78,6 +85,11 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P20 | 20min | 2 tasks | 9 files |
 | Phase 01 P21 | 6min | 2 tasks | 6 files |
 | Phase 01 P22 | 12min | 2 tasks | 7 files |
+| Phase 02 P01 | 25 min | 3 tasks | 9 files |
+| Phase 02 P03 | 9 min | 2 tasks | 9 files |
+| Phase 02 P05 | 5 min | 2 tasks | 6 files |
+| Phase 02 P02 | 12 min | 2 tasks | 13 files |
+| Phase 02 P04 | 8 min | 2 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -85,6 +97,26 @@ Progress: [░░░░░░░░░░] 0%
 
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
+- [02-11] Eval refusal is `refusalCandidate` with reason `no_relevant_context`; a route that passes `trace` owns `finishTrace`; `stage_status` is part of RagTrace; pipeline error or incomplete assembly in eval is HTTP 500.
+- [02-12] Chat route resolves scope before the stream (403/503 JSON); retrieval error or degraded-without-documents streams a localized "knowledge base temporarily unavailable" error part; org owner without a member row is backfilled by `repairOwnerMembership` only when `organizations.owner_id` matches.
+- [02-14] Embed tenant comes only from `RAG_EMBED_TENANT`; a body naming another workspace gets 403; unconfigured/unknown/unavailable tenant or retrieval error streams the localized unavailable part (language from Accept-Language); embed context now uses the chat assembly format (snapshot regenerated, differences listed in 02-14-SUMMARY).
+- [02-16] Voice payload travels in `RetrievalResult.voice`; voice-rag maps error/degraded-without-results to 503, empty to `{results: []}`; scope doc lookup capped at 500, chunk queries batched by 100. Gap fix: single-tenant tokens carry a signed `act` claim and voice-chat saves under it; body user ids are ignored.
+- [02-17] Voice agent sends `x-rag-scope-token`; one active user per agent (guard covers connect/disconnect handlers); a failed KB turn is spoken but not stored.
+- [02-18] Media profile = embed, search (k=10, threshold 0.3, admin client), assemble, scoped by `resolveTenantScope`; `rag_status` added to media responses.
+- [02-13] `refs` is an optional stage (5000 ms, skip on failure = degraded); out-of-scope and nonexistent document ids are both ignored and logged under `[RAG Tenant]`; the no-query overview fallback searches only the caller's scope; retired legacy imports are gone from the chat route.
+- [02-19] Eleven retired retrieval modules and `searchSimilarChunks` deleted; ingestion embeds through `@/lib/rag` until Phase 3; old-vs-new proofs run against frozen JSON fixtures; tsc baseline total 216.
+- [02-23] Review candidates sampled by `LANGFUSE_REVIEW_SAMPLE_RATE` (default 0, 'review' prefix) carry masked query/answer on the root observation and masked context/model in metadata, tagged `review_candidate`; chat messages carry `ragTraceId` metadata through DB round trip; embed finishes its trace in `onFinish`.
+- [02-20] `scripts/ci/check-rag-boundary.mjs` runs in pr-smoke; rules are an appendable `RULES` array (03-04 adds the single-writer rule); mint-scope rule restricts only the `mintScope` binding outside `src/lib/rag/tenant/`.
+- [02-29] Chat route has 0 tsc errors; reads AI SDK v6 tool fields (`input`/`output`/`providerMetadata`); custom chunks go through `writeCustomChunk`; tool-argument logs carry key names and sizes only.
+- [security] `/api/ai-to-rag` and `/api/documents/[id]` derive the user from the session and verify the tenant scope; another tenant's document id returns 404; anonymous single-tenant delete now gets 401 (deliberate).
+- [02-21] `degrade` is honoured only for the eval profile and excluded from the gate's options-identity check; written to the manifest only when set; CI runs a degrade negative control with an MRR margin assertion.
+- [safety] The Gmail draft→send redirect is removed from the chat and approve routes: the tool that runs is the tool the user approved. The approve-route redirect was live in the shipped app (deliberate behaviour change).
+- [02-24] Latency budgets (D-21) live in `eval/config/latency-budgets.json` and are report-only; `generation` is reported but excluded from `retrieval_total`; nearest-rank p50/p95 per stage in report.md.
+- [02-25] Reports slice by provenance; when approved production items of the gated split exist, `overall`/`by_language`/`by_category` use them (`gate_population`); a gate_population mismatch with the baseline is exit 2.
+- [02-26] Golden set is 90 items (70 dev / 20 test) with 18 synthetic colloquial/ambiguous/typo items; baseline re-recorded (3 runs, zero variance); paired check on the 72 old items is all zero; both it/typo items fall in the test split by the frozen rule.
+- [02-27] Review queue pulls `review_candidate` observations with content; a promoted item is a production `no_answer` draft (`prod-<lang>-<10 hex>`) the reviewer must complete; exit codes 0/2/4/6; Python twin of the fake Langfuse at `eval/tests/fake_langfuse.py`.
+- [security] All seven audit batches S1–S6 merged except S7 (config/mcp servers); see 02-API-AUTH-AUDIT.md. Migrations to apply: `tool_execution_states.user_id`, `nango_connections` UNIQUE(connection_id). Admins must log in again (signed cookie).
+- [02-22] Langfuse via OTel replay after response; tenantKey on every span; sampling hashes request id with a per-purpose prefix; masking order e-mail, IBAN, CN ID, IT CF, Luhn card, phones.
 
 - [Roadmap]: Research's 9 phases compressed to 7 for standard granularity: ingestion + embeddings merged (Phase 3); external backends + closeout merged (Phase 7)
 - [Roadmap]: Query layer ships two switchable frameworks (`RAG_QUERY_FRAMEWORK=llamaindex|langchain`, default `llamaindex`); LangChain is confined to one adapter that wraps `src/lib/rag/` as a retriever, with zod 4 isolated from the app's zod 3 (user scope change, QRY-08)
@@ -119,6 +151,26 @@ Recent decisions affecting current work:
 - [Phase 01]: 01-21: null and default cases live as named variants in samples.json so Pydantic and Zod validate the same Python-built values
 - [Phase 01]: 01-22: gh could not resolve action releases; pinned checkout@v4, setup-node@v4, setup-uv@v5, upload-artifact@v4 (confirm on first GitHub run)
 - [Phase 01]: 01-22: every CI job running eval pytest or the harness syncs eval with --locked --all-extras, enforced by scripts/ci/check-workflows.py
+- [Phase 02]: Root tsconfig excludes voice-agent and baileys-whatsapp and allows .mts import extensions; a per-file tsc ratchet (baseline 231 with route types) is the interim gate until plan 02-36
+- [Phase 02]: voice-agent and baileys-whatsapp both install cleanly and type-check at 0 errors; both are ratcheted in the sibling-types CI job (baileys via Corepack Yarn 4 --immutable --mode=skip-build)
+- [Phase 02]: RAG_VOICE_TOKEN_ prefix and RAG_EMBED_TENANT excluded from eval pins; RAG_PIPELINE, RAG_DISABLED_STAGES, RAG_STAGE_TIMEOUTS pinned at legacy/empty for parity runs
+- [Phase 02]: check-config NAME_PATTERN covers LANGFUSE_*; new Phase 2 env vars land in all five places in plan 02-03 so later plans only read env.X
+- [Phase 02]: 02-05: Fake edge operators are opt-in per table and column; tenant filters on documents only, or/image_url on document_chunks only
+- [Phase 02]: 02-05: match_documents_by_workspace does not check membership, so (O, B) returns O chunks; the application layer must enforce the organization_members gate
+- [Phase 02]: 02-06: characterization snapshots (embed/voice/chat) change only via UPDATE_CHARACTERIZATION=1; switch plans list every snapshot diff as intended; frozen chat assembly oracle verbatim from 172c2ad
+- [Phase 02]: 02-30: RoutedTool is the exported type for routed MCP tools; transport headers go through requestInit; discovery/health/approve runtime bugs fixed
+- [Phase 02]: 02-31: WhatsApp webhook uses validateWebhookSignature (401 on bad signature); signature compare must become constant-time in code review
+- [Phase 02]: 02-32: embed window body built by toEmbedRequestBody on the v6 useChat
+- [Phase 02]: 02-35: dynamic route handlers await Promise params; PATCH /api/user/preferences returns 401 with no user; Stripe version pinned by typed cast
+- [Phase 02]: 02-07: runRetrieval equals enhancedRetrieveChunks on all 72 golden questions; scopeKey s:default|u:<id>|o:<id>; RPC errors raise RetrievalBackendError in the re-homed search; 02-20 must forbid importing mintScope outside src/lib/rag/tenant/ and tests
+- [Phase 02]: 02-33: Folder imported from @/types/folder; SidebarState.searchQuery added for UPDATE_SEARCH_QUERY
+- [Phase 02]: 02-34: semantic chunker maxTokens ReferenceError fixed (Phase 3 must re-measure chunking on oversized branches); v6 tool-part envelopes unwrapped with legacy fallback; Chat.folder_id is string | null
+- [Phase 02]: 02-08: config-disabled stages are `disabled`, never degrade the result; RPC errors keep reason `backend_error`; whoever creates the trace collector calls finishTrace; RagDeps.ragEnv() is the injectable config source
+- [Phase 02]: 02-09: post_filter and assemble run for chat, embed and eval (not voice or media); status `empty` with candidates present uses reason `no_relevant_context`; strict refusal needs refusalCandidate AND status empty; PostgREST URL length for 100 ids still a live check
+- [Phase 02]: 02-10: resolvers lowercase ids after the UUID check (mintScope unchanged); embed scope from server config, raw body compared before schema strip; voice org tokens must carry uid; org owners without an organization_members row get 403 — 02-12 must backfill or repair first
+- [Phase 02]: 02-15: LiveKit identity and room (myrag-voice) are server-assigned; any other `user-` participant means 409 voice_busy; deploy voice agent (02-17) before the app
+- [Phase 02]: Node engines pinned to ^22.12.0 (not >=) so Vercel stays on Node 22
+- [Phase 02]: Paired statistics take slice membership from gate-split report items and one fixed-seed RNG per (slice, metric) cell; all_zero needs at least one cell with data
 
 ### Pending Todos
 
@@ -145,6 +197,23 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-23T11:17:48.714Z
-Stopped at: Completed 01-22-PLAN.md
-Resume file: None
+Last session: 2026-11-24
+Stopped at: Claude Code resume — 04-18, 04-20, 03-48-setup-idempotent, 03.1-25 and 03-48-sec-rpc-2 merged on trunk (see .planning/paused/exec-ledger.md). Next: 04-21+, 03.1-26+ per plan indices; live promotion of 0409/0410 is Guang/box only.
+Resume file: .planning/phases/03-unified-ingestion-embedding-profiles/.continue-here.md
+
+## Pending Human Actions (session 2026-11-23b)
+
+- Apply on existing multi-tenant databases (or re-run `supabase/multi-tenant-setup.sql`): REVOKE EXECUTE on `match_documents_by_workspace`, `match_document_chunks_by_org`, `get_documents_by_type_slug`, `get_documents_by_type_slug_workspace` FROM PUBLIC, anon, authenticated; GRANT TO service_role. Deploy code first; every server running chat/embed retrieval needs `SUPABASE_SERVICE_ROLE_KEY`.
+- Voice rollout: deploy voice-agent (Fly.io) first, then the app; roll back app first. Voice is briefly unavailable between the two.
+- Production must set `WHATSAPP_WEBHOOK_SECRET`; Baileys and app clocks within 5 minutes.
+- `POLAR_WEBHOOK_SECRET` must be set before the Polar webhook is used (503 until then).
+- Anonymous single-tenant users lose AI titles, name extraction, TTS/STT, temporary document processing, image/video/3D generation (now require login).
+- Config UI on port 3333: operator must be signed in as admin on the main app in the same browser (same host).
+- Package legitimacy approval: Phase 3 (03-05: nine packages plus huggingface_hub) and Phase 3.1 (pdfplumber 0.11.11, ray[data] 2.60.1).
+- Phase 3.1 sidecar worker hosting decision (default assumption: always-on, >=4 GB RAM, 2 vCPU).
+
+- `VOICE_MAX_ACTIVE_ROOMS` (app) must equal `VOICE_AGENT_MAX_SESSIONS` (voice agent); deploy app and voice agent together (G4).
+- Multi-tenant DB: apply `supabase/patches/2026-11-search-rpc-revoke-multi-tenant.sql` after the Phase 2 app deploy (G4).
+- Phase 3.1 plan 04: pdfplumber 0.11.11 (+ pdfminer.six) and ray[data] 2.60.1 APPROVED by the user 2026-11-24 (fallback ray 2.60.0 only if 2.60.1 fails to resolve); plans 53/54 are live checkpoints (worker host, migrations 0351-0359, Batch API job).
+- Phase 2 live checks (02-VERIFICATION.md, 11 items), new: multi-tenant upgrade dry run on a DB copy applying the patches in order; UI check that strict mode shows the "unavailable" bubble in chat and embed.
+- Phase 3 plan 03-05: the user approved the ten Python packages on 2026-11-24 ("3.5 批准", the recommended option): docling 2.150.1 and docling-core 2.107.1 (each at least a week old, replacing 2.152.0 / 2.108.0), rapidocr 3.10.0, onnxruntime 1.32.0, tiktoken 0.14.0, python-multipart 0.0.34, pypdfium2 5.15.2, python-stdnum 2.2, reportlab 5.1.0, huggingface_hub 2.4.0. docling 2.150.1 pulls docling-slim 2.150.1 (same release).

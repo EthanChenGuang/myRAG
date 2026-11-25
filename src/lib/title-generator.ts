@@ -1382,7 +1382,8 @@ function extractRAGContext(messages: DBMessage[]): { docName?: string; userTopic
           break;
         }
         if (part.type === 'tool_result' && part.tool === 'query_documents') {
-          const docs = part.result?.documents || [];
+          const result = part.result as { documents?: Array<{ filename?: string; name?: string }> } | undefined;
+          const docs = result?.documents || [];
           if (docs.length > 0) {
             docName = docs[0].filename || docs[0].name;
             break;

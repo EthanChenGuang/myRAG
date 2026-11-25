@@ -1,0 +1,27 @@
+From 04a6c46d85ecaf74cd0e3e7cfbc65b94aea5a980 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 24 Nov 2026 22:34:02 +0000
+Subject: [PATCH 3/5] fix(03.1-40): include heading_hierarchy in the conversion
+ option keys
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01X342shLsAZx6PYph2vA7hc
+---
+ rag-sidecar/src/rag_sidecar/ingest/cache_keys.py | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/rag-sidecar/src/rag_sidecar/ingest/cache_keys.py b/rag-sidecar/src/rag_sidecar/ingest/cache_keys.py
+index 790698f..055b0a2 100644
+--- a/rag-sidecar/src/rag_sidecar/ingest/cache_keys.py
++++ b/rag-sidecar/src/rag_sidecar/ingest/cache_keys.py
+@@ -15,6 +15,7 @@ _ALLOWED_CONVERSION_KEYS = frozenset(
+         "ocr_languages",
+         "do_table_structure",
+         "table_mode",
++        "heading_hierarchy",
+         "pages",
+         "input_format",
+     }
+-- 
+2.43.0
+

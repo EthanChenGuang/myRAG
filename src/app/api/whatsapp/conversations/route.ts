@@ -5,10 +5,26 @@ import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs';
 
+interface ConversationMessage {
+  role: string;
+  content: string | Array<{ text?: string }>;
+  createdAt?: string;
+}
+
+interface ConversationRow {
+  id: string;
+  chat_id: string;
+  phone_number: string;
+  contact_name: string | null;
+  created_at: string;
+  updated_at: string;
+  chats: { messages: ConversationMessage[] | null };
+}
+
 export async function GET(request: NextRequest) {
   try {
     // Check authentication
-    const supabaseClient = createClient();
+    const supabaseClient = await createClient();
     const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
 
     if (authError || !user) {
@@ -48,7 +64,7 @@ export async function GET(request: NextRequest) {
 
     // Get last message for each conversation
     const conversationsWithLastMessage = await Promise.all(
-      conversations.map(async (conv) => {
+      (conversations as ConversationRow[]).map(async (conv) => {
         // Get last message from chat
         const messages = conv.chats.messages || [];
         const lastMessage = messages[messages.length - 1];
@@ -96,7 +112,7 @@ export async function GET(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     // Check authentication
-    const supabaseClient = createClient();
+    const supabaseClient = await createClient();
     const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
 
     if (authError || !user) {
@@ -120,7 +136,7 @@ export async function DELETE(request: NextRequest) {
     logger.info('WhatsApp Conversations', `Deleting conversation: ${conversationId}`);
 
     // Verify ownership and delete
-    const { error } = await supabase
+    const { error } = await supabaseClient
       .from('whatsapp_conversations')
       .delete()
       .eq('id', conversationId)

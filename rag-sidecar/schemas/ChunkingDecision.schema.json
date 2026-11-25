@@ -1,0 +1,116 @@
+{
+  "$defs": {
+    "ChunkingGateRegression": {
+      "additionalProperties": false,
+      "properties": {
+        "band": {
+          "title": "Band",
+          "type": "number"
+        },
+        "diff": {
+          "title": "Diff",
+          "type": "number"
+        },
+        "metric": {
+          "title": "Metric",
+          "type": "string"
+        },
+        "slice": {
+          "title": "Slice",
+          "type": "string"
+        }
+      },
+      "required": [
+        "slice",
+        "metric",
+        "diff",
+        "band"
+      ],
+      "title": "ChunkingGateRegression",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "build_run_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Build Run Id"
+    },
+    "chosen_on": {
+      "additionalProperties": {
+        "type": "number"
+      },
+      "title": "Chosen On",
+      "type": "object"
+    },
+    "decided_by": {
+      "minLength": 1,
+      "title": "Decided By",
+      "type": "string"
+    },
+    "doc_type": {
+      "enum": [
+        "general",
+        "financial_report",
+        "contract_legal",
+        "invoice_receipt",
+        "product_technical",
+        "scanned_image"
+      ],
+      "title": "Doc Type",
+      "type": "string"
+    },
+    "gate_passed": {
+      "title": "Gate Passed",
+      "type": "boolean"
+    },
+    "profile_id": {
+      "title": "Profile Id",
+      "type": "string"
+    },
+    "recorded_at": {
+      "title": "Recorded At",
+      "type": "string"
+    },
+    "regressions": {
+      "items": {
+        "$ref": "#/$defs/ChunkingGateRegression"
+      },
+      "title": "Regressions",
+      "type": "array"
+    },
+    "report_hash": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Report Hash",
+      "type": "string"
+    },
+    "source": {
+      "enum": [
+        "fixture",
+        "live"
+      ],
+      "title": "Source",
+      "type": "string"
+    }
+  },
+  "required": [
+    "doc_type",
+    "profile_id",
+    "chosen_on",
+    "gate_passed",
+    "report_hash",
+    "decided_by",
+    "recorded_at",
+    "source"
+  ],
+  "title": "ChunkingDecision",
+  "type": "object"
+}

@@ -1,0 +1,67 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "attempt_no": {
+      "minimum": 1,
+      "title": "Attempt No",
+      "type": "integer"
+    },
+    "cursor": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Cursor"
+    },
+    "deadline_ms": {
+      "maximum": 40000,
+      "minimum": 1,
+      "title": "Deadline Ms",
+      "type": "integer"
+    },
+    "parse_cache_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Parse Cache Id"
+    },
+    "phase": {
+      "enum": [
+        "begin",
+        "post_parse"
+      ],
+      "title": "Phase",
+      "type": "string"
+    },
+    "provisional": {
+      "default": false,
+      "title": "Provisional",
+      "type": "boolean"
+    },
+    "worker_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Worker Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "worker_id",
+    "attempt_no",
+    "phase",
+    "deadline_ms"
+  ],
+  "title": "AdvanceRequest",
+  "type": "object"
+}

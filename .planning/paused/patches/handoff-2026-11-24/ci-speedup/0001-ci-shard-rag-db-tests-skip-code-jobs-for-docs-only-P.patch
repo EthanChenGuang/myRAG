@@ -1,0 +1,603 @@
+From 054960c68926d38d866db5f95e60b94be1f97d1e Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 24 Nov 2026 22:23:10 +0000
+Subject: [PATCH] ci: shard rag-db tests, skip code jobs for docs-only PRs, add
+ timeouts and trunk push trigger
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01X342shLsAZx6PYph2vA7hc
+---
+ .github/workflows/pr-smoke.yml         | 124 ++++++++++++++++++++++++-
+ scripts/ci/check-workflows.py          |  67 ++++++++++++-
+ scripts/ci/classify-changes.mjs        |  33 +++++++
+ scripts/ci/local-pr-smoke.sh           |   4 +-
+ scripts/ci/shard-tests.mjs             |  67 +++++++++++++
+ scripts/tests/ci-scripts.node-test.mjs |  33 +++++++
+ scripts/tests/test_check_workflows.py  |  27 ++++++
+ 7 files changed, 346 insertions(+), 9 deletions(-)
+ create mode 100644 scripts/ci/classify-changes.mjs
+ create mode 100644 scripts/ci/shard-tests.mjs
+ create mode 100644 scripts/tests/ci-scripts.node-test.mjs
+
+diff --git a/.github/workflows/pr-smoke.yml b/.github/workflows/pr-smoke.yml
+index 40fc76c..066b05c 100644
+--- a/.github/workflows/pr-smoke.yml
++++ b/.github/workflows/pr-smoke.yml
+@@ -3,7 +3,7 @@ name: pr-smoke
+ on:
+   pull_request:
+   push:
+-    branches: [main]
++    branches: [main, claude/ecstatic-hamilton-86gtwv]
+ 
+ permissions:
+   contents: read
+@@ -18,9 +18,30 @@ env:
+   RAGAS_DO_NOT_TRACK: 'true'
+ 
+ jobs:
++  changes:
++    runs-on: ubuntu-latest
++    timeout-minutes: 5
++    outputs:
++      code: ${{ steps.classify.outputs.code }}
++    steps:
++      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
++        with:
++          fetch-depth: 2
++      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
++        with:
++          node-version: '22'
++      - id: classify
++        name: Decide whether code jobs are needed
++        timeout-minutes: 2
++        env:
++          EVENT_NAME: ${{ github.event_name }}
++        run: node scripts/ci/classify-changes.mjs
++
+   ts:
++    needs: changes
++    if: needs.changes.outputs.code == 'true'
+     runs-on: ubuntu-latest
+-    timeout-minutes: 25
++    timeout-minutes: 20
+     steps:
+       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+         with:
+@@ -41,13 +62,14 @@ jobs:
+       - run: uv sync --directory rag-sidecar --locked
+       - run: uv sync --directory eval --locked --all-extras
+       - name: Vitest suite
++        timeout-minutes: 12
+         run: npx vitest run
+       - name: tsx tests
++        timeout-minutes: 8
+         run: node --import tsx --test tests/*.test.mts
+-      - name: tsx DB tests
+-        run: node --import tsx --test tests/rag-db/*.test.mts
+       - name: tsx rag-e2e tests
+         shell: bash
++        timeout-minutes: 8
+         run: |
+           shopt -s nullglob
+           files=(tests/rag-e2e/*.test.mts)
+@@ -61,21 +83,70 @@ jobs:
+           node scripts/ci/check-rag-boundary.mjs
+           node --test scripts/tests/check-rag-boundary.node-test.mjs
+       - name: Config check and type-check self-tests
+-        run: node --test scripts/check-config.test.mjs scripts/typecheck-new.test.mjs scripts/tests/tsc-ratchet.node-test.mjs scripts/tests/check-node-runtime.node-test.mjs
++        run: node --test scripts/check-config.test.mjs scripts/typecheck-new.test.mjs scripts/tests/tsc-ratchet.node-test.mjs scripts/tests/check-node-runtime.node-test.mjs scripts/tests/ci-scripts.node-test.mjs
+       - name: Zod generator self-test
+         run: node --test scripts/tests/gen-zod.node-test.mjs
+       - name: New-code type-check
++        timeout-minutes: 10
+         run: npm run typecheck:new
+       - name: Generate route types
++        timeout-minutes: 5
+         run: npx next typegen
+       - name: Type-check
++        timeout-minutes: 10
+         run: npx tsc --noEmit -p tsconfig.json
+       - name: Workflow structure check
+         run: |
+           uv run --directory eval python ../scripts/ci/check-workflows.py
+           uv run --directory eval python -m unittest discover -s ../scripts/tests -p 'test_check_workflows.py'
+ 
++  rag-db:
++    needs: changes
++    if: needs.changes.outputs.code == 'true'
++    name: rag-db (${{ matrix.shard }}/4)
++    runs-on: ubuntu-latest
++    timeout-minutes: 20
++    strategy:
++      fail-fast: false
++      matrix:
++        shard: [1, 2, 3, 4]
++    steps:
++      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
++      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
++        with:
++          node-version: '22'
++          cache: npm
++      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
++        with:
++          version: '0.11.32'
++          python-version: '3.12'
++          enable-cache: true
++          cache-dependency-glob: '**/uv.lock'
++      - run: npm ci --ignore-scripts
++      - run: uv sync --directory rag-sidecar --locked
++      - run: uv sync --directory eval --locked --all-extras
++      - name: Shards cover every DB test exactly once
++        shell: bash
++        timeout-minutes: 2
++        run: |
++          set -euo pipefail
++          shopt -s nullglob
++          all=(tests/rag-db/*.test.mts)
++          ((${#all[@]} > 0))
++          node scripts/ci/shard-tests.mjs --dir tests/rag-db --total 4 --check | tee /tmp/shard-check.txt
++          grep -qx "shard-tests: ${#all[@]} files covered exactly once across 4 shards" /tmp/shard-check.txt
++      - name: tsx DB tests (shard ${{ matrix.shard }} of 4)
++        shell: bash
++        timeout-minutes: 15
++        run: |
++          set -euo pipefail
++          mapfile -t files < <(node scripts/ci/shard-tests.mjs --dir tests/rag-db --total 4 --shard ${{ matrix.shard }})
++          echo "running ${#files[@]} files"
++          node --import tsx --test "${files[@]}"
++
+   sibling-types:
++    needs: changes
++    if: needs.changes.outputs.code == 'true'
+     runs-on: ubuntu-latest
+     timeout-minutes: 20
+     steps:
+@@ -83,6 +154,8 @@ jobs:
+       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+         with:
+           node-version: '22'
++          cache: npm
++          cache-dependency-path: voice-agent/package-lock.json
+       - name: Install voice-agent from its lockfile
+         run: npm ci --ignore-scripts --prefix voice-agent
+       - name: Install baileys-whatsapp from its lockfile
+@@ -98,6 +171,8 @@ jobs:
+         run: node scripts/ci/tsc-ratchet.mjs --cwd baileys-whatsapp --baseline scripts/ci/sibling-tsc-baseline.json --key baileys-whatsapp
+ 
+   voice-agent:
++    needs: changes
++    if: needs.changes.outputs.code == 'true'
+     runs-on: ubuntu-latest
+     timeout-minutes: 15
+     steps:
+@@ -111,12 +186,15 @@ jobs:
+         working-directory: voice-agent
+         run: npm ci --ignore-scripts
+       - name: voice-agent tests
++        timeout-minutes: 8
+         working-directory: voice-agent
+         run: npm test
+       - name: voice-agent type-error ratchet
+         run: node scripts/ci/tsc-ratchet.mjs --cwd voice-agent --baseline scripts/ci/sibling-tsc-baseline.json --key voice-agent
+ 
+   schema-parity:
++    needs: changes
++    if: needs.changes.outputs.code == 'true'
+     runs-on: ubuntu-latest
+     timeout-minutes: 15
+     steps:
+@@ -139,6 +217,8 @@ jobs:
+         run: git diff --exit-code -- rag-sidecar/schemas src/lib/rag-eval/contracts.generated.ts tests/fixtures/contracts/samples.json
+ 
+   python:
++    needs: changes
++    if: needs.changes.outputs.code == 'true'
+     runs-on: ubuntu-latest
+     timeout-minutes: 20
+     steps:
+@@ -153,11 +233,15 @@ jobs:
+       - run: uv sync --directory rag-sidecar --locked --extra preflight
+       - run: uv sync --directory eval --locked --all-extras
+       - name: rag-sidecar pytest
++        timeout-minutes: 10
+         run: uv run --directory rag-sidecar --extra chunking pytest -q
+       - name: eval pytest
++        timeout-minutes: 10
+         run: uv run --directory eval pytest -q
+ 
+   eval-smoke:
++    needs: changes
++    if: needs.changes.outputs.code == 'true'
+     runs-on: ubuntu-latest
+     timeout-minutes: 25
+     steps:
+@@ -176,8 +260,10 @@ jobs:
+       - run: uv sync --directory rag-sidecar --locked
+       - run: uv sync --directory eval --locked --all-extras
+       - name: Smoke tier against the committed baseline
++        timeout-minutes: 10
+         run: npm run test-rag -- --out eval/out/smoke
+       - name: Ingest-mode smoke tier against the ingest baseline
++        timeout-minutes: 10
+         run: npm run test-rag -- --fixture-mode ingest --out eval/out/smoke-ingest
+       - name: Upload smoke output
+         if: always()
+@@ -190,6 +276,8 @@ jobs:
+           if-no-files-found: warn
+ 
+   gate-negative-control:
++    needs: changes
++    if: needs.changes.outputs.code == 'true'
+     runs-on: ubuntu-latest
+     timeout-minutes: 25
+     steps:
+@@ -209,6 +297,7 @@ jobs:
+       - run: uv sync --directory eval --locked --all-extras
+       - name: Dropping the top candidate must be rejected by the gate with a clear MRR margin
+         shell: bash
++        timeout-minutes: 10
+         run: |
+           set +e
+           npm run test-rag -- --degrade drop_top_candidate --out eval/out/negative-degrade
+@@ -220,6 +309,7 @@ jobs:
+           jq -e '[.offenders[] | select(.slice == "overall" and .metric == "mrr") | (.threshold - .observed)] | (length == 1 and .[0] >= 0.05)' eval/out/negative-degrade/gate.json
+       - name: Thin control, a degraded run must be rejected by the gate with the regression exit code 10
+         shell: bash
++        timeout-minutes: 10
+         run: |
+           set +e
+           npm run test-rag -- --max-results 1 --out eval/out/negative
+@@ -239,11 +329,14 @@ jobs:
+           if-no-files-found: warn
+ 
+   docker-build:
++    needs: changes
++    if: needs.changes.outputs.code == 'true'
+     runs-on: ubuntu-latest
+     timeout-minutes: 20
+     steps:
+       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+       - name: Build the sidecar image
++        timeout-minutes: 12
+         run: docker build -t rag-sidecar:ci rag-sidecar
+       - name: Probes without a secret (fail closed)
+         shell: bash
+@@ -274,3 +367,24 @@ jobs:
+           test "$ready" = "200"
+           test "$anon" = "401"
+           test "$authed" = "200"
++
++  pr-smoke-gate:
++    needs: [changes, ts, rag-db, sibling-types, voice-agent, schema-parity, python, eval-smoke, gate-negative-control, docker-build]
++    if: always()
++    runs-on: ubuntu-latest
++    timeout-minutes: 5
++    steps:
++      - name: Every job passed, or all were skipped for a docs-only change
++        shell: bash
++        env:
++          RESULTS: ${{ toJSON(needs) }}
++          CODE: ${{ needs.changes.outputs.code }}
++        run: |
++          set -euo pipefail
++          echo "$RESULTS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
++          test "$(echo "$RESULTS" | jq -r '.changes.result')" = "success"
++          if [ "$CODE" = "true" ]; then
++            echo "$RESULTS" | jq -e '[to_entries[].value.result] | all(. == "success")' >/dev/null
++          else
++            echo "$RESULTS" | jq -e '[to_entries[] | select(.key != "changes") | .value.result] | all(. == "skipped")' >/dev/null
++          fi
+diff --git a/scripts/ci/check-workflows.py b/scripts/ci/check-workflows.py
+index 7a56ee4..2994535 100644
+--- a/scripts/ci/check-workflows.py
++++ b/scripts/ci/check-workflows.py
+@@ -21,7 +21,7 @@ TESTS_DIR = ROOT / "tests"
+ TSX_GLOB = "tests/*.test.mts"
+ TSX_COMMAND_RE = re.compile(r"node\s+--import\s+tsx\s+--test\b(?P<args>[^\n]*)")
+ 
+-PR_JOBS = ["ts", "sibling-types", "voice-agent", "schema-parity", "python", "eval-smoke", "gate-negative-control", "docker-build"]
++PR_JOBS = ["changes", "ts", "rag-db", "pr-smoke-gate", "sibling-types", "voice-agent", "schema-parity", "python", "eval-smoke", "gate-negative-control", "docker-build"]
+ SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+ USES_LINE_RE = re.compile(r"^\s*(?:-\s+)?uses:\s*(?P<ref>\S+)(?P<rest>.*)$")
+ VERSION_COMMENT_RE = re.compile(r"^\s+#\s*v\d+(\.\d+){0,2}\s*$")
+@@ -214,7 +214,6 @@ def check_pr(errors: list[str]) -> None:
+         for needle in (
+             "npx vitest run",
+             "node --import tsx --test",
+-            "tests/rag-db/",
+             "tests/rag-e2e/*.test.mts",
+             "nullglob",
+             "node scripts/check-config.mjs",
+@@ -232,11 +231,14 @@ def check_pr(errors: list[str]) -> None:
+         ):
+             if needle not in body:
+                 errors.append(f"pr-smoke: job ts is missing '{needle}'")
++        if "tests/rag-db" in body:
++            errors.append("pr-smoke: job ts must not run tests/rag-db; the sharded rag-db job owns them")
+         if "scripts/ci/tsc-baseline.json" in body or re.search(r"tsc-ratchet\.mjs(?![^\n]*--cwd)", body):
+             errors.append("pr-smoke: job ts must run plain tsc, not the root tsc ratchet or its baseline")
+     for jname, job in jobs.items():
+         if re.search(r"tsc-ratchet\.mjs[^\n]*--write", step_text(job)):
+             errors.append(f"pr-smoke: job {jname} must not run the tsc ratchet with --write")
++    check_speedup(data, text, errors)
+     sibling = jobs.get("sibling-types")
+     if sibling is not None:
+         body = step_text(sibling)
+@@ -294,6 +296,67 @@ def check_pr(errors: list[str]) -> None:
+                 errors.append(f"pr-smoke: job docker-build is missing '{needle}'")
+ 
+ 
++def check_speedup(data: dict, text: str, errors: list[str]) -> None:
++    jobs = data.get("jobs") or {}
++    trig = triggers(data)
++    push_branches = ((trig.get("push") or {}).get("branches")) or []
++    for branch in ("main", "claude/ecstatic-hamilton-86gtwv"):
++        if branch not in push_branches:
++            errors.append(f"pr-smoke: push trigger must include branch '{branch}'")
++    if "paths-ignore" in text or re.search(r"^\s+paths:", text, re.MULTILINE):
++        errors.append("pr-smoke: do not path-filter the workflow; decide in the 'changes' job so required checks always report")
++    if "continue-on-error" in text:
++        errors.append("pr-smoke: continue-on-error must not be used")
++    for jname, job in jobs.items():
++        timeout = job.get("timeout-minutes")
++        if not isinstance(timeout, int) or timeout <= 0:
++            errors.append(f"pr-smoke: job {jname} needs a positive integer timeout-minutes")
++    changes = jobs.get("changes")
++    if changes is not None:
++        body = step_text(changes)
++        if "scripts/ci/classify-changes.mjs" not in body:
++            errors.append("pr-smoke: job changes must run scripts/ci/classify-changes.mjs")
++    heavy = [name for name in jobs if name not in ("changes", "pr-smoke-gate")]
++    for jname in heavy:
++        job = jobs[jname]
++        needs = job.get("needs")
++        needs = [needs] if isinstance(needs, str) else (needs or [])
++        if "changes" not in needs or "needs.changes.outputs.code == 'true'" not in str(job.get("if", "")):
++            errors.append(f"pr-smoke: job {jname} must need 'changes' and run only when its code output is 'true'")
++    gate = jobs.get("pr-smoke-gate")
++    if gate is not None:
++        needs = gate.get("needs") or []
++        for name in jobs:
++            if name != "pr-smoke-gate" and name not in needs:
++                errors.append(f"pr-smoke: pr-smoke-gate must need job '{name}'")
++        if "always()" not in str(gate.get("if", "")):
++            errors.append("pr-smoke: pr-smoke-gate must run with if: always()")
++    db = jobs.get("rag-db")
++    if db is not None:
++        matrix = ((db.get("strategy") or {}).get("matrix") or {}).get("shard") or []
++        body = step_text(db)
++        total = len(matrix)
++        if total < 2 or sorted(matrix) != list(range(1, total + 1)):
++            errors.append("pr-smoke: rag-db matrix shard must list 1..N with N >= 2")
++        if (db.get("strategy") or {}).get("fail-fast") is not False:
++            errors.append("pr-smoke: rag-db must set fail-fast: false")
++        for needle in (
++            "node --import tsx --test",
++            "scripts/ci/shard-tests.mjs --dir tests/rag-db",
++            "--check",
++            "tests/rag-db/*.test.mts",
++            "npm ci",
++            "uv sync --directory eval --locked --all-extras",
++        ):
++            if needle not in body:
++                errors.append(f"pr-smoke: job rag-db is missing '{needle}'")
++        if total and body.count(f"--total {total}") < 2:
++            errors.append(f"pr-smoke: rag-db must pass --total {total} to both the coverage check and the shard run")
++        for step in all_steps(db):
++            if "run" in step and not isinstance(step.get("timeout-minutes"), int) and "npm ci" not in str(step["run"]) and "uv sync" not in str(step["run"]):
++                errors.append(f"pr-smoke: rag-db step '{step.get('name', step['run'])[:40]}' needs timeout-minutes")
++
++
+ def check_eval_smoke(job: dict | None, errors: list[str]) -> None:
+     if job is None:
+         return
+diff --git a/scripts/ci/classify-changes.mjs b/scripts/ci/classify-changes.mjs
+new file mode 100644
+index 0000000..f069cfb
+--- /dev/null
++++ b/scripts/ci/classify-changes.mjs
+@@ -0,0 +1,33 @@
++import { appendFileSync } from 'node:fs';
++import { spawnSync } from 'node:child_process';
++import { pathToFileURL } from 'node:url';
++
++// Paths no test or build step reads. Markdown elsewhere (AGENTS.md, CLAUDE.md,
++// README_*.md, supabase/README.md, eval fixtures) is test input, so it counts as code.
++const DOCS_PREFIXES = ['.planning/'];
++const DOCS_FILES = new Set(['CONTRIBUTING.md', 'HANDOFF.md', 'SECURITY.md', 'TRADEMARKS.md', 'THIRD_PARTY_NOTICES.md', 'LICENSE']);
++
++export function isDocsPath(file) {
++  return DOCS_FILES.has(file) || DOCS_PREFIXES.some((prefix) => file.startsWith(prefix));
++}
++
++export function needsCodeJobs(files) {
++  const changed = files.map((f) => f.trim()).filter(Boolean);
++  if (changed.length === 0) return true;
++  return changed.some((file) => !isDocsPath(file));
++}
++
++function decide(env) {
++  if (env.EVENT_NAME !== 'pull_request') return { code: true, reason: `event ${env.EVENT_NAME || 'unknown'} always runs everything` };
++  const diff = spawnSync('git', ['diff', '--name-only', 'HEAD^1', 'HEAD'], { encoding: 'utf8' });
++  if (diff.status !== 0) return { code: true, reason: 'git diff failed, running everything' };
++  const files = diff.stdout.split('\n').filter(Boolean);
++  const code = needsCodeJobs(files);
++  return { code, reason: `${files.length} changed file(s), ${code ? 'code present' : 'docs only'}` };
++}
++
++if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
++  const { code, reason } = decide(process.env);
++  console.log(`classify-changes: code=${code} (${reason})`);
++  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `code=${code}\n`);
++}
+diff --git a/scripts/ci/local-pr-smoke.sh b/scripts/ci/local-pr-smoke.sh
+index 16fa793..adf3fb9 100755
+--- a/scripts/ci/local-pr-smoke.sh
++++ b/scripts/ci/local-pr-smoke.sh
+@@ -32,10 +32,10 @@ echo "=== local pr-smoke (repo: $ROOT) ==="
+ 
+ run_job ts-vitest npx vitest run
+ run_job ts-root-mts node --import tsx --test tests/*.test.mts
+-run_job ts-rag-db node --import tsx --test tests/rag-db/*.test.mts
++run_job ts-rag-db bash -c 'node scripts/ci/shard-tests.mjs --dir tests/rag-db --total 4 --check && node --import tsx --test tests/rag-db/*.test.mts'
+ run_job ts-config node scripts/check-config.mjs
+ run_job ts-boundary bash -c 'node scripts/ci/check-rag-boundary.mjs && node --test scripts/tests/check-rag-boundary.node-test.mjs'
+-run_job ts-config-selftest node --test scripts/check-config.test.mjs scripts/typecheck-new.test.mjs scripts/tests/tsc-ratchet.node-test.mjs scripts/tests/check-node-runtime.node-test.mjs
++run_job ts-config-selftest node --test scripts/check-config.test.mjs scripts/typecheck-new.test.mjs scripts/tests/tsc-ratchet.node-test.mjs scripts/tests/check-node-runtime.node-test.mjs scripts/tests/ci-scripts.node-test.mjs
+ run_job ts-gen-zod node --test scripts/tests/gen-zod.node-test.mjs
+ run_job ts-typecheck-new npm run typecheck:new
+ run_job ts-next-typegen npx next typegen
+diff --git a/scripts/ci/shard-tests.mjs b/scripts/ci/shard-tests.mjs
+new file mode 100644
+index 0000000..4a7dd97
+--- /dev/null
++++ b/scripts/ci/shard-tests.mjs
+@@ -0,0 +1,67 @@
++import { readdirSync } from 'node:fs';
++import { join } from 'node:path';
++
++// Usage:
++//   node scripts/ci/shard-tests.mjs --dir tests/rag-db --total 4 --shard 2   (print one shard, one path per line)
++//   node scripts/ci/shard-tests.mjs --dir tests/rag-db --total 4 --check     (assert the shards partition the directory)
++
++export function listTests(dir) {
++  return readdirSync(dir)
++    .filter((name) => name.endsWith('.test.mts'))
++    .sort()
++    .map((name) => join(dir, name));
++}
++
++export function shardOf(files, shard, total) {
++  return files.filter((_, index) => index % total === shard - 1);
++}
++
++export function checkPartition(files, total) {
++  const seen = new Map();
++  for (let shard = 1; shard <= total; shard += 1) {
++    for (const file of shardOf(files, shard, total)) seen.set(file, (seen.get(file) ?? 0) + 1);
++  }
++  const problems = [];
++  for (const file of files) if (seen.get(file) !== 1) problems.push(`${file} runs ${seen.get(file) ?? 0} times`);
++  for (const file of seen.keys()) if (!files.includes(file)) problems.push(`${file} is not in the directory`);
++  return problems;
++}
++
++function arg(name) {
++  const index = process.argv.indexOf(`--${name}`);
++  return index === -1 ? undefined : process.argv[index + 1];
++}
++
++if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
++  const dir = arg('dir');
++  const total = Number(arg('total'));
++  if (!dir || !Number.isInteger(total) || total < 1) {
++    console.error('shard-tests: --dir and a positive integer --total are required');
++    process.exit(2);
++  }
++  const files = listTests(dir);
++  if (files.length === 0) {
++    console.error(`shard-tests: no *.test.mts files in ${dir}`);
++    process.exit(1);
++  }
++  if (process.argv.includes('--check')) {
++    const problems = checkPartition(files, total);
++    if (problems.length) {
++      console.error(`shard-tests: FAILED\n${problems.join('\n')}`);
++      process.exit(1);
++    }
++    console.log(`shard-tests: ${files.length} files covered exactly once across ${total} shards`);
++  } else {
++    const shard = Number(arg('shard'));
++    if (!Number.isInteger(shard) || shard < 1 || shard > total) {
++      console.error('shard-tests: --shard must be between 1 and --total');
++      process.exit(2);
++    }
++    const mine = shardOf(files, shard, total);
++    if (mine.length === 0) {
++      console.error(`shard-tests: shard ${shard}/${total} is empty`);
++      process.exit(1);
++    }
++    console.log(mine.join('\n'));
++  }
++}
+diff --git a/scripts/tests/ci-scripts.node-test.mjs b/scripts/tests/ci-scripts.node-test.mjs
+new file mode 100644
+index 0000000..7c3cd40
+--- /dev/null
++++ b/scripts/tests/ci-scripts.node-test.mjs
+@@ -0,0 +1,33 @@
++import assert from 'node:assert/strict';
++import { test } from 'node:test';
++import { needsCodeJobs } from '../ci/classify-changes.mjs';
++import { checkPartition, shardOf } from '../ci/shard-tests.mjs';
++
++test('docs-only changes skip the code jobs', () => {
++  assert.equal(needsCodeJobs(['.planning/STATE.md', '.planning/phases/x/PLAN.md']), false);
++  assert.equal(needsCodeJobs(['HANDOFF.md', 'LICENSE']), false);
++});
++
++test('anything else, including markdown read by tests, runs the code jobs', () => {
++  assert.equal(needsCodeJobs(['.planning/a.md', 'src/a.ts']), true);
++  assert.equal(needsCodeJobs(['AGENTS.md']), true);
++  assert.equal(needsCodeJobs(['CLAUDE.md']), true);
++  assert.equal(needsCodeJobs(['README_VOICE_INTEGRATION.md']), true);
++  assert.equal(needsCodeJobs(['supabase/README.md']), true);
++  assert.equal(needsCodeJobs(['eval/fixtures/ingest/text/contract-zh.md']), true);
++  assert.equal(needsCodeJobs(['.github/workflows/pr-smoke.yml']), true);
++  assert.equal(needsCodeJobs(['.planning-evil/x.md']), true);
++});
++
++test('an empty change list runs everything', () => {
++  assert.equal(needsCodeJobs([]), true);
++});
++
++test('shards partition the file list exactly once', () => {
++  const files = Array.from({ length: 23 }, (_, i) => `t/${String(i).padStart(2, '0')}.test.mts`);
++  for (const total of [1, 3, 4, 7]) {
++    assert.deepEqual(checkPartition(files, total), []);
++    const union = Array.from({ length: total }, (_, i) => shardOf(files, i + 1, total)).flat().sort();
++    assert.deepEqual(union, files);
++  }
++});
+diff --git a/scripts/tests/test_check_workflows.py b/scripts/tests/test_check_workflows.py
+index ad89660..395534c 100644
+--- a/scripts/tests/test_check_workflows.py
++++ b/scripts/tests/test_check_workflows.py
+@@ -79,6 +79,33 @@ class DbTestsStepTest(unittest.TestCase):
+         self.assertTrue("tests/rag-db/*.test.mts" in text, "pr-smoke.yml does not run tests/rag-db")
+         self.assertEqual([e for e in self.pr_errors(text) if "rag-db" in e], [])
+ 
++    def test_shard_total_mismatch_is_reported(self):
++        text = check_workflows.PR.read_text(encoding="utf-8").replace("--total 4 --shard", "--total 3 --shard")
++        self.assertTrue(any("--total" in e for e in self.pr_errors(text)))
++
++    def test_dropping_a_shard_from_the_matrix_is_reported(self):
++        text = check_workflows.PR.read_text(encoding="utf-8").replace("shard: [1, 2, 3, 4]", "shard: [1, 2, 4]")
++        self.assertTrue(any("matrix shard" in e for e in self.pr_errors(text)))
++
++    def test_db_tests_back_in_the_ts_job_are_reported(self):
++        text = check_workflows.PR.read_text(encoding="utf-8").replace(
++            "      - name: Config drift check", "      - run: node --import tsx --test tests/rag-db/x.test.mts\n      - name: Config drift check"
++        )
++        self.assertTrue(any("job ts must not run tests/rag-db" in e for e in self.pr_errors(text)))
++
++    def test_continue_on_error_and_path_filters_are_reported(self):
++        base = check_workflows.PR.read_text(encoding="utf-8")
++        self.assertTrue(any("continue-on-error" in e for e in self.pr_errors(base.replace("    timeout-minutes: 5\n    outputs", "    timeout-minutes: 5\n    continue-on-error: true\n    outputs"))))
++        self.assertTrue(any("path-filter" in e for e in self.pr_errors(base.replace("  pull_request:\n", "  pull_request:\n    paths-ignore: ['x']\n"))))
++
++    def test_a_job_without_a_timeout_is_reported(self):
++        text = check_workflows.PR.read_text(encoding="utf-8").replace("    timeout-minutes: 15\n    steps:\n      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0\n      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0\n        with:\n          node-version: '22'\n          cache: npm\n          cache-dependency-path: voice-agent", "    steps:\n      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0\n      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0\n        with:\n          node-version: '22'\n          cache: npm\n          cache-dependency-path: voice-agent", 1)
++        self.assertTrue(any("timeout-minutes" in e for e in self.pr_errors(text)))
++
++    def test_a_heavy_job_that_ignores_the_changes_decision_is_reported(self):
++        text = check_workflows.PR.read_text(encoding="utf-8").replace("    if: needs.changes.outputs.code == 'true'\n    runs-on: ubuntu-latest\n    timeout-minutes: 20\n    steps:\n      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0\n      - uses: astral-sh", "    runs-on: ubuntu-latest\n    timeout-minutes: 20\n    steps:\n      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0\n      - uses: astral-sh", 1)
++        self.assertTrue(any("must need 'changes'" in e for e in self.pr_errors(text)))
++
+     def test_missing_database_tests_step_is_reported(self):
+         text = check_workflows.PR.read_text(encoding="utf-8").replace("tests/rag-db/*.test.mts", "tests/other/*.test.mts")
+         errors = self.pr_errors(text)
+-- 
+2.43.0
+

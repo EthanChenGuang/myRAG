@@ -2,6 +2,23 @@ import { NextRequest, NextResponse } from 'next/server';
 import { SystemPromptManager } from '@/lib/system-prompt-manager';
 import { translations, Language } from '@/translations';
 
+interface PromptTemplateShape {
+  preContext: string;
+  postContext?: string;
+}
+
+function readSystemPrompts(lang: Language): Record<string, unknown> | undefined {
+  const prompts = (translations[lang] as { systemPrompts?: Record<string, unknown> }).systemPrompts;
+  return prompts;
+}
+
+function isPromptTemplate(value: unknown): value is PromptTemplateShape {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Record<string, unknown>;
+  return typeof candidate.preContext === 'string'
+    && (candidate.postContext === undefined || typeof candidate.postContext === 'string');
+}
+
 export async function POST(request: NextRequest) {
   try {
     const { prompt, checkAllLanguages } = await request.json();
@@ -25,16 +42,21 @@ export async function POST(request: NextRequest) {
     
     // Check all language translations for {{context}} placeholder
     if (checkAllLanguages) {
-      const validationResults: Record<string, any> = {};
+      const validationResults: Record<string, {
+        hasSystemPrompts: boolean;
+        templateCount: number;
+        templates: Record<string, boolean>;
+        allValid: boolean;
+      }> = {};
       const languages = Object.keys(translations) as Language[];
       
       for (const lang of languages) {
-        const langTranslation = translations[lang];
-        const templates = langTranslation.systemPrompts || {};
+        const langPrompts = readSystemPrompts(lang);
+        const templates = langPrompts || {};
         const templateResults: Record<string, boolean> = {};
         
         for (const [templateKey, template] of Object.entries(templates)) {
-          if (template && typeof template === 'object' && 'preContext' in template && 'postContext' in template) {
+          if (isPromptTemplate(template) && typeof template.postContext === 'string') {
             const assembledPrompt = SystemPromptManager.assemblePrompt(
               template.preContext,
               template.postContext
@@ -44,7 +66,7 @@ export async function POST(request: NextRequest) {
         }
         
         validationResults[lang] = {
-          hasSystemPrompts: !!langTranslation.systemPrompts,
+          hasSystemPrompts: !!langPrompts,
           templateCount: Object.keys(templates).length,
           templates: templateResults,
           allValid: Object.values(templateResults).every(v => v === true)
@@ -83,15 +105,14 @@ export async function GET() {
     const issues: string[] = [];
     
     for (const lang of languages) {
-      const langTranslation = translations[lang];
-      if (!langTranslation.systemPrompts) {
+      const templates = readSystemPrompts(lang);
+      if (!templates) {
         issues.push(`${lang}: Missing systemPrompts object`);
         continue;
       }
       
-      const templates = langTranslation.systemPrompts;
       for (const [templateKey, template] of Object.entries(templates)) {
-        if (template && typeof template === 'object' && 'preContext' in template) {
+        if (isPromptTemplate(template)) {
           const assembledPrompt = SystemPromptManager.assemblePrompt(
             template.preContext,
             template.postContext || ''

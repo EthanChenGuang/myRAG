@@ -1,0 +1,348 @@
+From a014002ac1f6e33a7508ca925441bc30575f1f2d Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 24 Nov 2026 22:23:57 +0000
+Subject: [PATCH 1/5] test(05-04): failing tests for context blocks, labeler
+ hook and referenced sections
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01X342shLsAZx6PYph2vA7hc
+---
+ tests/rag/context/context-blocks.test.ts | 326 +++++++++++++++++++++++
+ 1 file changed, 326 insertions(+)
+ create mode 100644 tests/rag/context/context-blocks.test.ts
+
+diff --git a/tests/rag/context/context-blocks.test.ts b/tests/rag/context/context-blocks.test.ts
+new file mode 100644
+index 0000000..d6ee0a2
+--- /dev/null
++++ b/tests/rag/context/context-blocks.test.ts
+@@ -0,0 +1,326 @@
++import type { SupabaseClient } from '@supabase/supabase-js';
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
++import { runRetrieval } from '@/lib/rag';
++import {
++  assembleContext,
++  type AssembleInput,
++  type AssemblyCandidate,
++  type AssemblyDocumentRow,
++} from '@/lib/rag/context/assemble';
++import { resolveDocumentRefs } from '@/lib/rag/refs/resolve';
++import { mintScope } from '@/lib/rag/tenant/scope';
++import type { CitationLabeler, ContextBlock, ReferencedState } from '@/lib/rag/types';
++import { SEMANTIC_QUERY, fakeEmbedder, fakeRpcClient, installDeps, rows, uninstallDeps } from '../helpers/pipeline-fakes';
++
++const HEADER = '\n\n=== RELEVANT INFORMATION FROM DOCUMENTS ===';
++const FOOTER = '=== END OF RELEVANT INFORMATION ===\n';
++
++function candidate(id: string, documentId: string, similarity: number, extra: Partial<AssemblyCandidate> = {}): AssemblyCandidate {
++  return { chunk_id: id, document_id: documentId, content: `content of ${id}`, similarity, ...extra };
++}
++
++function row(id: string, filename: string, extra: Partial<AssemblyDocumentRow> = {}): AssemblyDocumentRow {
++  return { id, filename, created_at: '2026-01-01T00:00:00Z', content: null, metadata: null, ...extra };
++}
++
++function run(
++  candidates: AssemblyCandidate[],
++  documents: AssemblyDocumentRow[],
++  overrides: Partial<AssembleInput> = {},
++  chunkMetadata: Map<string, Record<string, any> | null> = new Map(),
++) {
++  return assembleContext({
++    queryText: 'widgets pricing',
++    candidates,
++    documents: new Map(documents.map((doc) => [doc.id, doc])),
++    chunkMetadata,
++    referenced: null,
++    isGPTModel: false,
++    ragMode: 'balanced',
++    webSearchEnabled: false,
++    applyRelevanceFilter: false,
++    ...overrides,
++  });
++}
++
++function upperLabeler(calls: Array<Omit<ContextBlock, 'alias'>> = []): CitationLabeler {
++  return (block, ordinal) => {
++    calls.push(block);
++    return { alias: `S${ordinal}`, header: `[S${ordinal}] ${block.title}`, text: block.text.toUpperCase() };
++  };
++}
++
++const DOCS = [row('doc-A', 'alpha.pdf'), row('doc-B', 'beta.pdf')];
++const CHUNKS = [candidate('c1', 'doc-A', 0.9), candidate('c2', 'doc-B', 0.8), candidate('c3', 'doc-A', 0.7)];
++
++describe('assembleContext blocks (legacy, D-02)', () => {
++  it('without a labeler keeps the exact context and returns one block per rendered chunk in render order', () => {
++    const out = run(CHUNKS, DOCS);
++    expect(out.context).toBe(
++      [
++        HEADER,
++        '\n--- Document: alpha.pdf (2 relevant chunks) ---',
++        'content of c1',
++        'content of c3',
++        '\n--- Document: beta.pdf (1 relevant chunks) ---',
++        'content of c2',
++        FOOTER,
++      ].join('\n\n'),
++    );
++    expect(out.blocks.map((block) => block.chunkIds)).toEqual([['c1'], ['c3'], ['c2']]);
++    expect(out.blocks.map((block) => block.text)).toEqual(['content of c1', 'content of c3', 'content of c2']);
++    expect(out.blocks.map((block) => block.documentName)).toEqual(['alpha.pdf', 'alpha.pdf', 'beta.pdf']);
++    expect(out.blocks.map((block) => block.documentId)).toEqual(['doc-A', 'doc-A', 'doc-B']);
++    expect(out.blocks.every((block) => block.alias === null && block.isImage === false)).toBe(true);
++  });
++
++  it('keeps the GPT form and puts the content after the Source line into the block text', () => {
++    const gpt = [
++      candidate('g1', 'doc-A', 0.9, { content: 'Document: alpha.pdf. Chunk 1 of 2. Content: first body' }),
++      candidate('g2', 'doc-A', 0.8, { content: 'Document: alpha.pdf. Chunk 2 of 2. Content: second body' }),
++    ];
++    const out = run(gpt, DOCS, { isGPTModel: true });
++    expect(out.context).toContain('[Source: alpha.pdf]\nfirst body');
++    expect(out.context).toContain('[Source: alpha.pdf]\nsecond body');
++    expect(out.blocks.map((block) => block.text)).toEqual(['first body', 'second body']);
++  });
++
++  it('follows groupOrder in the block list', () => {
++    const out = run(CHUNKS, DOCS, { groupOrder: ['doc-B', 'doc-A'] });
++    expect(out.blocks.map((block) => block.chunkIds)).toEqual([['c2'], ['c1'], ['c3']]);
++  });
++
++  it('with a labeler writes each header before the transformed text and numbers blocks in render order', () => {
++    const seen: Array<Omit<ContextBlock, 'alias'>> = [];
++    const out = run(CHUNKS, DOCS, { citationLabeler: upperLabeler(seen) });
++    expect(out.context).toBe(
++      [
++        HEADER,
++        '\n--- Document: alpha.pdf (2 relevant chunks) ---',
++        '[S1] alpha.pdf\nCONTENT OF C1',
++        '[S2] alpha.pdf\nCONTENT OF C3',
++        '\n--- Document: beta.pdf (1 relevant chunks) ---',
++        '[S3] beta.pdf\nCONTENT OF C2',
++        FOOTER,
++      ].join('\n\n'),
++    );
++    expect(seen).toHaveLength(3);
++    expect(out.blocks.map((block) => block.alias)).toEqual(['S1', 'S2', 'S3']);
++    expect(out.blocks.map((block) => block.text)).toEqual(['CONTENT OF C1', 'CONTENT OF C3', 'CONTENT OF C2']);
++  });
++
++  it('keeps the Source line in the GPT form when labelling', () => {
++    const gpt = [candidate('g1', 'doc-A', 0.9, { content: 'Document: alpha.pdf. Chunk 1 of 2. Content: first body' })];
++    const out = run(gpt, DOCS, { isGPTModel: true, citationLabeler: upperLabeler() });
++    expect(out.context).toContain('[S1] alpha.pdf\n[Source: alpha.pdf]\nFIRST BODY');
++  });
++
++  it('never passes an image chunk to the labeler and renders it unchanged', () => {
++    const chunks = [
++      candidate('t1', 'doc-A', 0.9),
++      candidate('i1', 'doc-A', 0.8, { content: 'a figure caption', metadata: { image_url: 'https://example.invalid/fig.png' } }),
++      candidate('t2', 'doc-A', 0.7),
++    ];
++    const plain = run(chunks, DOCS);
++    const seen: Array<Omit<ContextBlock, 'alias'>> = [];
++    const out = run(chunks, DOCS, { citationLabeler: upperLabeler(seen) });
++
++    expect(seen.map((block) => block.chunkIds)).toEqual([['t1'], ['t2']]);
++    expect(out.blocks.map((block) => [block.chunkIds[0], block.isImage, block.alias])).toEqual([
++      ['t1', false, 'S1'],
++      ['i1', true, null],
++      ['t2', false, 'S2'],
++    ]);
++    expect(out.context).toContain('\n\na figure caption\n\n');
++    expect(plain.blocks.find((block) => block.isImage)?.text).toBe('a figure caption');
++    expect(out.sourceImages).toEqual(plain.sourceImages);
++    expect(out.usedDocuments).toEqual(plain.usedDocuments);
++    expect(out.kept).toEqual(plain.kept);
++  });
++
++  it('detects an image chunk through the fetched chunk metadata as well', () => {
++    const out = run([candidate('i1', 'doc-A', 0.8, { content: 'caption' })], DOCS, {}, new Map([['i1', { image_url: 'https://example.invalid/x.png' }]]));
++    expect(out.blocks).toHaveLength(1);
++    expect(out.blocks[0]).toMatchObject({ isImage: true, alias: null });
++  });
++
++  it('reads version, page and section path from the fetched rows and falls back to null', () => {
++    const chunkMetadata = new Map<string, Record<string, any> | null>([
++      ['c1', { page_start: 4, section_path: ['Pricing', 'Plans'] }],
++    ]);
++    const out = run(CHUNKS, [row('doc-A', 'alpha.pdf', { version: 3 }), row('doc-B', 'beta.pdf')], {}, chunkMetadata);
++    const byId = new Map(out.blocks.map((block) => [block.chunkIds[0], block]));
++    expect(byId.get('c1')).toMatchObject({
++      documentVersion: 3,
++      page: 4,
++      sectionPath: ['Pricing', 'Plans'],
++      title: 'alpha.pdf, p.4 / Pricing > Plans',
++    });
++    expect(byId.get('c2')).toMatchObject({ documentVersion: null, page: null, sectionPath: null, title: 'beta.pdf' });
++  });
++});
++
++describe('referenced document blocks (D-02, open question 2)', () => {
++  const refContext = '\n\n=== DOCUMENT: "Ref.md" ===\nref body one\n\nref body two\n=== END OF DOCUMENT ===\n';
++  const referenced: ReferencedState = {
++    usedDocuments: [{ id: 'doc-R', name: 'Ref.md', filename: 'Ref.md', explicitly_referenced: true }],
++    context: refContext,
++    sections: [{ documentId: 'doc-R', documentName: 'Ref.md', chunkIds: ['r1', 'r2'], text: 'ref body one\n\nref body two' }],
++  };
++
++  it('without a labeler the referenced context stays as it was and the section is the first block', () => {
++    const out = run(CHUNKS, DOCS, { referenced });
++    expect(out.context.startsWith(refContext)).toBe(true);
++    expect(out.blocks[0]).toMatchObject({
++      documentId: 'doc-R',
++      documentName: 'Ref.md',
++      chunkIds: ['r1', 'r2'],
++      text: 'ref body one\n\nref body two',
++      alias: null,
++      isImage: false,
++    });
++    expect(out.blocks.slice(1).map((block) => block.chunkIds)).toEqual([['c1'], ['c3'], ['c2']]);
++  });
++
++  it('with a labeler the references come first and the ordinals continue into the retrieved chunks', () => {
++    const out = run(CHUNKS, DOCS, { referenced, citationLabeler: upperLabeler() });
++    expect(out.context.startsWith('\n\n[S1] Ref.md\n=== DOCUMENT: "Ref.md" ===\nREF BODY ONE\n\nREF BODY TWO\n=== END OF DOCUMENT ===\n')).toBe(true);
++    expect(out.blocks.map((block) => block.alias)).toEqual(['S1', 'S2', 'S3', 'S4']);
++    expect(out.blocks[0]?.text).toBe('REF BODY ONE\n\nREF BODY TWO');
++    expect(out.context).toContain('[S2] alpha.pdf\nCONTENT OF C1');
++  });
++
++  it('a referenced state without sections keeps its context and adds no block', () => {
++    const out = run(CHUNKS, DOCS, { referenced: { ...referenced, sections: undefined }, citationLabeler: upperLabeler() });
++    expect(out.context.startsWith(refContext)).toBe(true);
++    expect(out.blocks.map((block) => block.alias)).toEqual(['S1', 'S2', 'S3']);
++  });
++});
++
++const USER_A = '00000000-0000-4000-8000-0000000000a1';
++const DOC_A = '00000000-0000-4000-8000-0000000000d1';
++const DOC_FULL = '00000000-0000-4000-8000-0000000000d2';
++
++function fakeRefAdmin() {
++  const tables: Record<string, Array<Record<string, unknown>>> = {
++    documents: [
++      { id: DOC_A, filename: 'alpha.md', created_at: null, content: 'alpha text', user_id: USER_A, organization_id: null, metadata: {}, is_current: true, status: 'ready' },
++      { id: DOC_FULL, filename: 'full.md', created_at: null, content: 'full document text', text: 'full document text', user_id: USER_A, organization_id: null, metadata: {}, is_current: true, status: 'ready' },
++    ],
++    document_chunks: [
++      { id: 'chunk-a1', document_id: DOC_A, content: 'alpha one', is_current: true, status: 'ready' },
++      { id: 'chunk-a2', document_id: DOC_A, content: 'alpha two', is_current: true, status: 'ready' },
++    ],
++  };
++  const admin = {
++    from(table: string) {
++      const predicates: Array<(r: Record<string, unknown>) => boolean> = [];
++      let columns: string[] | null = null;
++      let single = false;
++      const builder: Record<string, unknown> = {};
++      builder.select = (list: string) => {
++        columns = list === '*' ? null : list.split(',').map((c) => c.trim());
++        return builder;
++      };
++      builder.eq = (column: string, value: unknown) => {
++        predicates.push((r) => r[column] === value);
++        return builder;
++      };
++      builder.is = (column: string, value: unknown) => {
++        predicates.push((r) => (r[column] ?? null) === value);
++        return builder;
++      };
++      builder.ilike = () => builder;
++      builder.limit = () => builder;
++      builder.single = () => {
++        single = true;
++        return builder;
++      };
++      builder.abortSignal = () => builder;
++      builder.then = (ok: (v: unknown) => unknown, bad?: (e: unknown) => unknown) => {
++        const matched = (tables[table] ?? []).filter((r) => predicates.every((p) => p(r)));
++        const projected = matched.map((r) => (columns ? Object.fromEntries(columns.map((c) => [c, r[c]])) : { ...r }));
++        const response = single
++          ? projected.length === 1
++            ? { data: projected[0], error: null }
++            : { data: null, error: { message: 'no row', code: 'PGRST116' } }
++          : { data: projected, error: null };
++        return Promise.resolve(response).then(ok, bad);
++      };
++      return builder;
++    },
++  };
++  return admin as unknown as SupabaseClient;
++}
++
++describe('resolveDocumentRefs sections', () => {
++  beforeEach(() => {
++    vi.spyOn(console, 'log').mockImplementation(() => undefined);
++  });
++  afterEach(() => {
++    vi.restoreAllMocks();
++  });
++
++  it('returns the unchanged context plus one section per rendered document in render order', async () => {
++    const result = await resolveDocumentRefs({
++      scope: mintScope('personal', USER_A, null),
++      mentions: [],
++      documentParts: [{ id: DOC_A, name: 'alpha.md' }],
++      admin: fakeRefAdmin(),
++      signal: new AbortController().signal,
++    });
++    expect(result.context).toBe('\n\n=== DOCUMENT: "alpha.md" ===\nalpha one\n\nalpha two\n=== END OF DOCUMENT ===\n');
++    expect(result.sections).toEqual([
++      { documentId: DOC_A, documentName: 'alpha.md', chunkIds: ['chunk-a1', 'chunk-a2'], text: 'alpha one\n\nalpha two' },
++    ]);
++  });
++
++  it('lists no chunk ids when the full document text was used', async () => {
++    const result = await resolveDocumentRefs({
++      scope: mintScope('personal', USER_A, null),
++      mentions: [],
++      documentParts: [{ id: DOC_FULL, name: 'full.md' }],
++      admin: fakeRefAdmin(),
++      signal: new AbortController().signal,
++    });
++    expect(result.context).toBe('\n\n=== DOCUMENT: "full.md" ===\nfull document text\n=== END OF DOCUMENT ===\n');
++    expect(result.sections).toEqual([{ documentId: DOC_FULL, documentName: 'full.md', chunkIds: [], text: 'full document text' }]);
++  });
++});
++
++describe('runRetrieval under RAG_PIPELINE=legacy with a labeler', () => {
++  const scope = mintScope('single', null, null);
++
++  beforeEach(() => {
++    uninstallDeps();
++    vi.spyOn(console, 'log').mockImplementation(() => undefined);
++    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
++    installDeps({ searchRpc: fakeRpcClient({ rows: rows(3) }).client, embedder: fakeEmbedder().embedder, ragEnv: () => ({}) });
++  });
++
++  afterEach(() => {
++    vi.restoreAllMocks();
++    uninstallDeps();
++  });
++
++  function retrieve(extra: Record<string, unknown> = {}) {
++    return runRetrieval({ scope, query: SEMANTIC_QUERY, profile: 'chat', signal: new AbortController().signal, ...extra });
++  }
++
++  it('returns a labelled context and the blocks, and leaves everything else as without a labeler', async () => {
++    const plain = await retrieve();
++    const labelled = await retrieve({ citationLabeler: upperLabeler() });
++
++    expect(plain.blocks?.map((block) => block.chunkIds)).toEqual([['chunk-1'], ['chunk-2'], ['chunk-3']]);
++    expect(plain.blocks?.every((block) => block.alias === null)).toBe(true);
++    expect(plain.context).not.toContain('[S1]');
++
++    expect(labelled.context).toContain('[S1] doc-1.md\nFIXTURE CHUNK BODY 1');
++    expect(labelled.blocks?.map((block) => block.alias)).toEqual(['S1', 'S2', 'S3']);
++    expect(labelled.blocks?.map((block) => block.text)).toEqual(['FIXTURE CHUNK BODY 1', 'FIXTURE CHUNK BODY 2', 'FIXTURE CHUNK BODY 3']);
++    expect(labelled.usedDocuments).toEqual(plain.usedDocuments);
++    expect(labelled.kept).toEqual(plain.kept);
++    expect(labelled.sourceImages).toEqual(plain.sourceImages);
++    expect(labelled.links).toEqual(plain.links);
++  });
++});
+-- 
+2.43.0
+

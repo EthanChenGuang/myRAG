@@ -1,0 +1,289 @@
+From e90d9cdada4fcb2132e2fe3a85d803d7e39c7e50 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 24 Nov 2026 19:33:19 +0000
+Subject: [PATCH 1/7] docs(roadmap): insert phases 3.1.1, 4.1, 4.1.1, 5.1.1,
+ 6.1 for the recall layer
+
+Domain embedding model candidates, hybrid+rerank on by default (eval-proven),
+domain terminology dictionary, feedback loop with a real domain test set, and
+an embedding fine-tuning pipeline. Requested by Guang 2026-11-24.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01X342shLsAZx6PYph2vA7hc
+---
+ .planning/ROADMAP.md                          | 55 +++++++++++++++++++
+ .planning/STATE.md                            | 36 +++++++-----
+ .../.gitkeep                                  |  1 +
+ .../.gitkeep                                  |  1 +
+ .../.gitkeep                                  |  1 +
+ .../.gitkeep                                  |  1 +
+ .../.gitkeep                                  |  1 +
+ .planning/state.json                          | 25 ++++-----
+ 8 files changed, 94 insertions(+), 27 deletions(-)
+ create mode 100644 .planning/phases/03.1.1-domain-embedding-model-candidates-and-per-doc-type-model-sel/.gitkeep
+ create mode 100644 .planning/phases/04.1-hybrid-retrieval-and-rerank-on-by-default-proven-by-eval/.gitkeep
+ create mode 100644 .planning/phases/04.1.1-domain-terminology-dictionary-expert-maintained-synonyms-que/.gitkeep
+ create mode 100644 .planning/phases/05.1.1-feedback-loop-and-real-domain-test-set-thumbs-failed-query-m/.gitkeep
+ create mode 100644 .planning/phases/06.1-embedding-fine-tuning-pipeline-synthetic-queries-hard-negati/.gitkeep
+
+diff --git a/.planning/ROADMAP.md b/.planning/ROADMAP.md
+index c233441..edcb59c 100644
+--- a/.planning/ROADMAP.md
++++ b/.planning/ROADMAP.md
+@@ -22,10 +22,15 @@ Decimal phases appear between their surrounding integers in numeric order.
+ - [x] **Phase 2: Unified Retrieval Pipeline & Tenant Scope** - Text chat, embedded chat and voice run through one `src/lib/rag/` pipeline that only searches a server-verified tenant, reproducing the baseline
+ - [ ] **Phase 3: Unified Ingestion & Embedding Profiles** - One `ingest()` for every upload path with document types, Docling fallback, dedup, versioning, switchable embeddings and rollbackable re-embedding
+ - [ ] **Phase 3.1: Tiered Parsing, Incremental Queue & Bulk Backfill** (INSERTED) - Cheapest-tier-that-passes parse routing with escalation, cloud and budget constraints, an ingestion ledger and parse cache, an async upload queue and a budgeted, resumable backfill. **2026-11-24 pause:** trunk merge train at `56b0349d` (#10 #9 #4 #5 merged); resume per `.planning/phases/03.1-tiered-parsing-incremental-queue-bulk-backfill/.continue-here.md`.
++- [ ] **Phase 03.1.1: Domain embedding model candidates and per-doc-type model selection**
+ - [ ] **Phase 4: Hybrid Retrieval, Reranking & Calibrated Refusal** - Filtered hybrid search on pgvector, switchable rerankers, edge-ordered context and refusal from calibrated rerank scores
++- [ ] **Phase 04.1: Hybrid retrieval and rerank on by default, proven by eval**
++- [ ] **Phase 04.1.1: Domain terminology dictionary: expert-maintained synonyms, query expansion, index-time synonyms, log mining**
+ - [ ] **Phase 5: Verified Citations & Groundedness** - Claude Citations, validated chunk-ID citations for other models, one persisted citation record and a post-stream groundedness badge
+ - [ ] **Phase 5.1: Prompt Injection Defense** (INSERTED) - Tagged, instruction-free context, runtime injection detection and an injection eval gated at 0
++- [ ] **Phase 05.1.1: Feedback loop and real domain test set: thumbs, failed-query mining, dictionary/training/golden refresh**
+ - [ ] **Phase 6: Query Layer (LlamaIndex & LangChain)** - History rewrite, multi-query fusion, HyDE and sub-questions with a router and budgets, in two switchable frameworks compared in eval
++- [ ] **Phase 06.1: Embedding fine-tuning pipeline: synthetic queries, hard negatives, MNRL training, re-embed and switch**
+ - [ ] **Phase 7: External Backends & Release Defaults** - Weaviate and Qdrant synced from Supabase behind tenant canaries; a full regression sets the defaults; Config UI and docs complete
+ 
+ ## Phase Details
+@@ -229,6 +234,16 @@ Plans:
+ **Plans**: 54 plans in 14 waves — see `phases/03.1-tiered-parsing-incremental-queue-bulk-backfill/03.1-PLAN-INDEX.md`
+ **UI hint**: yes
+ 
++### Phase 03.1.1: Domain embedding model candidates and per-doc-type model selection (INSERTED)
++
++**Goal:** [Urgent work - to be planned]
++**Requirements**: TBD
++**Depends on:** Phase 3.1
++**Plans:** 0 plans
++
++Plans:
++- [ ] TBD (run /gsd-plan-phase 03.1.1 to break down)
++
+ ### Phase 4: Hybrid Retrieval, Reranking & Calibrated Refusal
+ **Goal**: On pgvector, questions in Chinese, English and Italian find the right chunks through filtered hybrid search and reranking, and the system refuses when the best reranked evidence is too weak
+ **Depends on**: Phase 3
+@@ -292,6 +307,26 @@ Plans:
+ - [ ] 04-44-PLAN.md
+ - [ ] 04-45-PLAN.md
+ 
++### Phase 04.1: Hybrid retrieval and rerank on by default, proven by eval (INSERTED)
++
++**Goal:** [Urgent work - to be planned]
++**Requirements**: TBD
++**Depends on:** Phase 4
++**Plans:** 0 plans
++
++Plans:
++- [ ] TBD (run /gsd-plan-phase 04.1 to break down)
++
++### Phase 04.1.1: Domain terminology dictionary: expert-maintained synonyms, query expansion, index-time synonyms, log mining (INSERTED)
++
++**Goal:** [Urgent work - to be planned]
++**Requirements**: TBD
++**Depends on:** Phase 4.1
++**Plans:** 0 plans
++
++Plans:
++- [ ] TBD (run /gsd-plan-phase 04.1.1 to break down)
++
+ ### Phase 5: Verified Citations & Groundedness
+ **Goal**: Every RAG answer cites only chunks that were actually sent to the model, its citations survive later document changes, and users can see whether the answer was checked for groundedness
+ **Depends on**: Phase 4
+@@ -346,6 +381,16 @@ Plans:
+ - [ ] 05.1-24-PLAN.md — Golden attack field and injection categories, eval run, trace and report contract changes with regenerated Zod (wave 2)
+ - [ ] 05.1-25-PLAN.md — Prompt Guard scorer, bake step and promptguard image target on the orchestrator-locked environment (wave 4)
+ 
++### Phase 05.1.1: Feedback loop and real domain test set: thumbs, failed-query mining, dictionary/training/golden refresh (INSERTED)
++
++**Goal:** [Urgent work - to be planned]
++**Requirements**: TBD
++**Depends on:** Phase 5.1
++**Plans:** 0 plans
++
++Plans:
++- [ ] TBD (run /gsd-plan-phase 05.1.1 to break down)
++
+ ### Phase 6: Query Layer (LlamaIndex & LangChain)
+ **Goal**: Follow-up, vague and compound questions retrieve as well as standalone ones under either query framework, within their latency budgets, and voice stays fast
+ **Depends on**: Phase 5, Phase 5.1 (plans require Phase 5 complete and share files with Phase 5.1)
+@@ -410,6 +455,16 @@ Plans:
+ - [ ] 06-46-PLAN.md — W13: live verification checkpoints (autonomous: false)
+ **UI hint**: yes
+ 
++### Phase 06.1: Embedding fine-tuning pipeline: synthetic queries, hard negatives, MNRL training, re-embed and switch (INSERTED)
++
++**Goal:** [Urgent work - to be planned]
++**Requirements**: TBD
++**Depends on:** Phase 6
++**Plans:** 0 plans
++
++Plans:
++- [ ] TBD (run /gsd-plan-phase 06.1 to break down)
++
+ ### Phase 7: External Backends & Release Defaults
+ **Goal**: Admins can switch retrieval to Weaviate or Qdrant without any cross-tenant leakage, every new provider and switch is configurable in the Config UI, and the shipped defaults are backed by a full regression
+ **Depends on**: Phase 5, Phase 5.1, Phase 6
+diff --git a/.planning/STATE.md b/.planning/STATE.md
+index 5e7c9e0..3b78ae9 100644
+--- a/.planning/STATE.md
++++ b/.planning/STATE.md
+@@ -1,25 +1,25 @@
+ ---
+ gsd_state_version: "1.0"
+ milestone: v5.0
+-current_phase: 03.1
++current_phase: "03.1"
+ current_phase_name: Tiered Parsing, Incremental Queue & Bulk Backfill
+ status: paused
+-stopped_at: PAUSE merge-train handback to Claude Code; trunk 56b0349d; merged PRs #10 #9 #4 #5; tmux merge-train stopped
+-last_updated: "2026-11-24T19:10:00.000Z"
+-state_head: 56b0349d6307b757e4df1eab897878f11e4b8d81
++stopped_at: PAUSE merge-train handback to Claude Code; trunk 56b0349d; merged PRs
++last_updated: "2026-11-24T19:33:19.507Z"
++state_head: bbad74e8746322b9402d9d1f385a2cd2a2785768
++progress:
++  total_phases: 14
++  completed_phases: 1
++  total_plans: 342
++  completed_plans: 172
+ package_legitimacy_03_1_04:
+-  approved_at: "2026-11-24"
++  approved_at: 2026-11-24
+   lock_commit: 3e83978e482f67da5ce6d463f39251f3e21e8bf4
+-  pdfplumber: "0.11.11"
+-  pdfminer_six: "20260107"
+-  ray_data: "2.60.1"
++  pdfplumber: 0.11.11
++  pdfminer_six: 20260107
++  ray_data: 2.60.1
+ last_activity: 2026-11-24
+-last_activity_desc: Trunk merge train paused at 56b0349d; PRs #10 #9 #4 #5 merged; queue #6+
+-progress:
+-  total_phases: 9
+-  completed_phases: 0
+-  total_plans: 58
+-  completed_plans: 44
++last_activity_desc: Trunk merge train paused at 56b0349d; PRs
+ ---
+ 
+ # Project State
+@@ -186,6 +186,14 @@ None yet.
+ - [Phase 6]: `@langchain/core` zod 4 isolation from the app's zod 3; LangChain HyDE has no stock retriever and is a port.
+ - [Phase 7]: Weaviate hybrid inside a tenant and Chinese tokenizer availability on Cloud; Qdrant per-prefetch filters; drain worker under the 60 s cap.
+ 
++### Roadmap Evolution
++
++- Phase 3.1.1 inserted after Phase 3.1: Domain embedding model candidates (voyage-law-2/finance-2 etc.) compared on our test set; per-doc-type model selection
++- Phase 4.1 inserted after Phase 4: Hybrid retrieval + rerank default on, only after calibrated refusal and a no-regression eval (Guang 2026-11-24)
++- Phase 4.1.1 inserted after Phase 4.1: Domain terminology dictionary in DB, expert-maintained; query expansion, index-time synonyms, zero-result log mining
++- Phase 5.1.1 inserted after Phase 5.1: Feedback loop + real domain test set (pulls EVAL-16/EVAL-17 forward): thumbs, failed-query mining into dictionary, training data and golden set
++- Phase 6.1 inserted after Phase 6: Embedding fine-tuning: synthetic queries, filtering, hard negatives, MNRL, document-level split, re-embed + profile switch
++
+ ## Deferred Items
+ 
+ Items acknowledged and deferred at milestone close, most recent first:
+diff --git a/.planning/phases/03.1.1-domain-embedding-model-candidates-and-per-doc-type-model-sel/.gitkeep b/.planning/phases/03.1.1-domain-embedding-model-candidates-and-per-doc-type-model-sel/.gitkeep
+new file mode 100644
+index 0000000..8b13789
+--- /dev/null
++++ b/.planning/phases/03.1.1-domain-embedding-model-candidates-and-per-doc-type-model-sel/.gitkeep
+@@ -0,0 +1 @@
++
+diff --git a/.planning/phases/04.1-hybrid-retrieval-and-rerank-on-by-default-proven-by-eval/.gitkeep b/.planning/phases/04.1-hybrid-retrieval-and-rerank-on-by-default-proven-by-eval/.gitkeep
+new file mode 100644
+index 0000000..8b13789
+--- /dev/null
++++ b/.planning/phases/04.1-hybrid-retrieval-and-rerank-on-by-default-proven-by-eval/.gitkeep
+@@ -0,0 +1 @@
++
+diff --git a/.planning/phases/04.1.1-domain-terminology-dictionary-expert-maintained-synonyms-que/.gitkeep b/.planning/phases/04.1.1-domain-terminology-dictionary-expert-maintained-synonyms-que/.gitkeep
+new file mode 100644
+index 0000000..8b13789
+--- /dev/null
++++ b/.planning/phases/04.1.1-domain-terminology-dictionary-expert-maintained-synonyms-que/.gitkeep
+@@ -0,0 +1 @@
++
+diff --git a/.planning/phases/05.1.1-feedback-loop-and-real-domain-test-set-thumbs-failed-query-m/.gitkeep b/.planning/phases/05.1.1-feedback-loop-and-real-domain-test-set-thumbs-failed-query-m/.gitkeep
+new file mode 100644
+index 0000000..8b13789
+--- /dev/null
++++ b/.planning/phases/05.1.1-feedback-loop-and-real-domain-test-set-thumbs-failed-query-m/.gitkeep
+@@ -0,0 +1 @@
++
+diff --git a/.planning/phases/06.1-embedding-fine-tuning-pipeline-synthetic-queries-hard-negati/.gitkeep b/.planning/phases/06.1-embedding-fine-tuning-pipeline-synthetic-queries-hard-negati/.gitkeep
+new file mode 100644
+index 0000000..8b13789
+--- /dev/null
++++ b/.planning/phases/06.1-embedding-fine-tuning-pipeline-synthetic-queries-hard-negati/.gitkeep
+@@ -0,0 +1 @@
++
+diff --git a/.planning/state.json b/.planning/state.json
+index b23d4f2..75a8b2a 100644
+--- a/.planning/state.json
++++ b/.planning/state.json
+@@ -11,49 +11,48 @@
+     {
+       "number": "2",
+       "name": "Unified Retrieval Pipeline & Tenant Scope",
+-      "status": "in_progress"
++      "status": "complete"
+     },
+     {
+       "number": "3",
+       "name": "Unified Ingestion & Embedding Profiles",
+-      "status": "pending"
++      "status": "in_progress"
+     },
+     {
+       "number": "3.1",
+       "name": "Tiered Parsing, Incremental Queue & Bulk Backfill (INSERTED)",
+-      "status": "pending"
++      "status": "in_progress"
+     },
+     {
+       "number": "4",
+       "name": "Hybrid Retrieval, Reranking & Calibrated Refusal",
+-      "status": "pending"
++      "status": "in_progress"
+     },
+     {
+       "number": "5",
+       "name": "Verified Citations & Groundedness",
+-      "status": "pending"
++      "status": "in_progress"
+     },
+     {
+       "number": "5.1",
+       "name": "Prompt Injection Defense (INSERTED)",
+-      "status": "pending"
++      "status": "in_progress"
+     },
+     {
+       "number": "6",
+       "name": "Query Layer (LlamaIndex & LangChain)",
+-      "status": "pending"
++      "status": "in_progress"
+     },
+     {
+       "number": "7",
+       "name": "External Backends & Release Defaults",
+-      "status": "pending"
++      "status": "in_progress"
+     }
+   ],
+   "next": {
+-    "command": "/gsd-resume-work",
+-    "label": "Resume merge train from #6",
+-    "reason": "Paused at trunk 56b0349d; local merge train #10 #9 #4 #5 merged"
++    "command": "/gsd-progress",
++    "label": "Show progress",
++    "reason": "Unsure of state — showing progress"
+   },
+-  "updated_at": "2026-11-24T19:10:00.000Z",
+-  "trunk_sha": "56b0349d6307b757e4df1eab897878f11e4b8d81"
++  "updated_at": "2026-11-24T19:32:56.118Z"
+ }
+-- 
+2.43.0
+

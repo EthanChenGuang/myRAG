@@ -1,0 +1,44 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "embedding_profile_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+      "title": "Embedding Profile Id",
+      "type": "string"
+    },
+    "key_hash": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Key Hash",
+      "type": "string"
+    },
+    "max_distance": {
+      "maximum": 0.2,
+      "minimum": 0,
+      "title": "Max Distance",
+      "type": "number"
+    },
+    "tenant_key": {
+      "pattern": "^(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
+      "title": "Tenant Key",
+      "type": "string"
+    },
+    "vector": {
+      "items": {
+        "type": "number"
+      },
+      "maxItems": 4096,
+      "minItems": 1,
+      "title": "Vector",
+      "type": "array"
+    }
+  },
+  "required": [
+    "tenant_key",
+    "key_hash",
+    "embedding_profile_id",
+    "vector",
+    "max_distance"
+  ],
+  "title": "CacheCheckRequest",
+  "type": "object"
+}

@@ -2,9 +2,10 @@ import argparse
 import sys
 from pathlib import Path
 
+from rag_eval.corpus import load_corpus
 from rag_eval.golden_io import load_golden, select_golden
 from rag_eval.metrics import score_items
-from rag_eval.paths import resolve_cli_path
+from rag_eval.paths import REPO_ROOT, resolve_cli_path
 from rag_eval.report import build_report, write_report
 from rag_eval.traces import load_manifest, load_traces
 
@@ -29,6 +30,17 @@ def _cross_check(golden_ids: list[str], trace_ids: list[str | None]) -> list[str
     return problems
 
 
+DEFAULT_CORPUS_DIR = REPO_ROOT / "eval" / "fixtures" / "corpus"
+
+
+def _doc_types(corpus_dir: Path | None, corpus_sha256: str | None) -> dict[str, str] | None:
+    if corpus_dir is None:
+        if corpus_sha256 is None or not DEFAULT_CORPUS_DIR.is_dir():
+            return None
+        corpus_dir = DEFAULT_CORPUS_DIR
+    return {doc.filename.casefold(): doc.doc_type for doc in load_corpus(corpus_dir) if doc.doc_type}
+
+
 def _rate(label: str, metric) -> str:
     shown = "n/a" if metric.value is None else f"{round(metric.value, 3):.3f}"
     return f"{label}={shown} (n={metric.n})"
@@ -51,8 +63,13 @@ def _score(args: argparse.Namespace) -> int:
             print(f"  {problem}", file=sys.stderr)
         return 2
 
-    results = score_items(traces, golden)
-    report = build_report(manifest, results, golden)
+    try:
+        doc_types = _doc_types(resolve_cli_path(args.corpus) if args.corpus else None, manifest.corpus_sha256)
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    results = score_items(traces, golden, rank_field=args.rank_source, doc_types=doc_types)
+    report = build_report(manifest, results, golden, traces)
     write_report(report, resolve_cli_path(args.out))
     overall = report.overall
     print(
@@ -80,6 +97,19 @@ def main(argv: list[str] | None = None) -> int:
     score.add_argument("--golden", required=True, type=Path)
     score.add_argument("--manifest", required=True, type=Path)
     score.add_argument("--out", required=True, type=Path)
+    score.add_argument(
+        "--rank-source",
+        choices=("kept", "candidates"),
+        default="kept",
+        help="rank list used for recall (candidates = threshold-free RPC list)",
+    )
+    score.add_argument(
+        "--corpus",
+        type=Path,
+        default=None,
+        help="corpus directory whose fixture-meta doc_type keys feed by_doc_type "
+        "(default: the fixture corpus when the manifest records a corpus hash, else every item is general)",
+    )
     score.set_defaults(handler=_score)
     args = parser.parse_args(argv)
     return args.handler(args)

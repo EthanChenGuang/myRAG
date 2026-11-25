@@ -27,16 +27,16 @@ All requirements are written so they can be checked. "Behind a switch" means an 
 
 ### Pipeline & Tenancy (PIPE)
 
-- [ ] **PIPE-01**: One retrieval pipeline module (`src/lib/rag/`) is the only code that calls embedding providers, retrieval backends and rerankers; text chat, embedded chat and voice all call it
-- [ ] **PIPE-02**: Every retrieval call requires a branded `TenantScope` that only `resolveTenantScope()` can create, after verifying workspace or organization membership server-side; an `organizationId` from the request body is never trusted directly
-- [ ] **PIPE-03**: Embedded chat resolves its tenant from the embed widget's server-side configuration (the owning workspace), never from the caller
-- [ ] **PIPE-04**: Voice retrieval resolves its tenant from a signed, expiring token minted by the app, not from a bare caller-supplied `userId`, and never falls back to a global search
-- [ ] **PIPE-05**: Context assembly (dedupe, grouping, source labels, links section, image handling) lives in the pipeline and is shared by all three entry points, without per-chunk N+1 lookups
-- [ ] **PIPE-06**: The pipeline returns a discriminated status (`ok | empty | error | degraded`); only a verified `empty` result may trigger the "information not available" refusal, and errors are logged and surfaced as errors
-- [ ] **PIPE-07**: Each pipeline stage has its own switch, timeout and degrade-to-skip path; an `AbortSignal` flows through all stages
-- [ ] **PIPE-08**: Unused retrieval modules (`retrieval-strategies.ts`, `optimized-search.ts`, `adaptive-retrieval.ts`, `reranker-adapter.ts`, never-called parts of `thinking-rag-enhancer.ts`) are removed; still-used logic is re-homed under `src/lib/rag/`
-- [ ] **PIPE-09**: With all new switches off (`RAG_PIPELINE=legacy`), the eval results reproduce the baseline within its noise band
-- [ ] **PIPE-10**: Node.js 22 is the documented and enforced runtime (`engines`, docs, CI), as required by the Weaviate and Qdrant clients
+- [x] **PIPE-01**: One retrieval pipeline module (`src/lib/rag/`) is the only code that calls embedding providers, retrieval backends and rerankers; text chat, embedded chat and voice all call it
+- [x] **PIPE-02**: Every retrieval call requires a branded `TenantScope` that only `resolveTenantScope()` can create, after verifying workspace or organization membership server-side; an `organizationId` from the request body is never trusted directly
+- [x] **PIPE-03**: Embedded chat resolves its tenant from the embed widget's server-side configuration (the owning workspace), never from the caller
+- [x] **PIPE-04**: Voice retrieval resolves its tenant from a signed, expiring token minted by the app, not from a bare caller-supplied `userId`, and never falls back to a global search
+- [x] **PIPE-05**: Context assembly (dedupe, grouping, source labels, links section, image handling) lives in the pipeline and is shared by all three entry points, without per-chunk N+1 lookups
+- [x] **PIPE-06**: The pipeline returns a discriminated status (`ok | empty | error | degraded`); only a verified `empty` result may trigger the "information not available" refusal, and errors are logged and surfaced as errors
+- [x] **PIPE-07**: Each pipeline stage has its own switch, timeout and degrade-to-skip path; an `AbortSignal` flows through all stages
+- [x] **PIPE-08**: Unused retrieval modules (`retrieval-strategies.ts`, `optimized-search.ts`, `adaptive-retrieval.ts`, `reranker-adapter.ts`, never-called parts of `thinking-rag-enhancer.ts`) are removed; still-used logic is re-homed under `src/lib/rag/`
+- [x] **PIPE-09**: With all new switches off (`RAG_PIPELINE=legacy`), the eval results reproduce the baseline within its noise band
+- [x] **PIPE-10**: Node.js 22 is the documented and enforced runtime (`engines`, docs, CI), as required by the Weaviate and Qdrant clients
 
 ### Data Layer (DATA)
 
@@ -50,6 +50,12 @@ All requirements are written so they can be checked. "Behind a switch" means an 
 - [ ] **DATA-09**: An `invoice` document type extracts invoice fields into structured metadata defined by a Pydantic model (invoice number, issue and due dates, supplier and buyer names and VAT/tax IDs, currency, net, tax and gross totals, line items), keeps line-item tables intact in one chunk with their header, treats invoice numbers and tax IDs as exact terms, and makes supplier, date range and amount range filterable; extraction failures leave the document searchable as plain text and are reported
 - [ ] **DATA-10**: Admins set default document types in the Config UI: a tenant-wide default (a fixed type or "auto-detect") and optional per-source defaults (chat upload, Config UI upload, each Nango connection or folder, scrapers, image upload); precedence is the type picked for the file, then the source default, then the tenant default, then `general`; admins can also change the type of an existing document, which re-processes it through the shared `ingest()` path as a new version
 - [ ] **DATA-11**: PDFs that contain images (charts, photos, scanned pages inside a digital PDF) have those images extracted with their page number, captioned through the existing image-RAG captioning, and stored as image chunks linked to the document and page, so they are retrievable and appear as `source_images` like uploaded images
+- [ ] **DATA-12**: Tiered parse routing (`RAG_PARSE_ROUTING=fixed|tiered`, default `fixed` = Phase 3 behavior): a sidecar preflight probe classifies each **page** with cheap rules (L1: pypdfium2 + pdfplumber — text layer, chars, image ratio, ruled tables, multi-column), sends only uncertain pages to the Docling layout model (L2) and, when `RAG_PARSE_VLM_DETECT=true` and cloud is allowed, to a VLM (L3), and routes each page range to the cheapest tier that fits, merging the ranges back in page order — `native` (existing extractors for txt/md/csv/html/docx), `fast` (Docling on pypdfium2, OCR and table structure off), `structured` (Docling full with TableFormer and zh/en/it OCR) or `premium` (LlamaParse) — within the document-type profile's `min_tier`/`max_tier`; a post-parse quality check (empty text, low chars per page, garbled-character ratio, language mismatch, tables hinted but missing, partial conversion) escalates one tier at a time, at most twice, and every attempt with its reason is recorded (spec: `.planning/specs/ingestion-routing.md`)
+- [ ] **DATA-13**: Hard constraints come before quality, cost and speed: `RAG_PARSER_ALLOW_CLOUD=false` guarantees no file is sent to a cloud parser; a monthly premium-page budget per tenant and a per-document page cap stop tier-3 use when exceeded; a document that cannot reach the tier its check asks for keeps its best result and is marked `needs_review`; budget use is shown in the Config UI
+- [ ] **DATA-14**: An `ingestion_jobs` ledger (RLS, server role only) records per document its status (queued … ready, failed, quarantined, needs_review, skipped_duplicate), class, tier, parser and version, attempts, pages, estimated cost, embedding profile, retries, error and per-stage timings; every stage is idempotent; parser output is cached per tenant by file hash, parser version and options, so re-chunking, the CHK-05 sweep and retries make zero parser calls
+- [ ] **DATA-15**: Incremental ingestion is asynchronous: upload and sync routes return 202 with a job id at once; jobs are claimed from the ledger with `FOR UPDATE SKIP LOCKED` and a lease by a worker in the sidecar (no Redis/Celery); documents have a stable identity (tenant, source, source key) so an unchanged hash is skipped, a changed hash becomes a new version (DATA-07) and a deletion at the source (Nango) soft-deletes the current version; retries back off exponentially up to 3 times and failed jobs are listed in the Config UI with retry; the UI shows status until "ready"; a ≤ 20-page digital PDF is ready within 60 s p95 with fake providers; optional `RAG_PARSE_PROGRESSIVE` publishes a provisional fast-tier version first and replaces it with the routed tier
+- [ ] **DATA-16**: Bulk backfill (`npm run rag:backfill`): hashes and deduplicates within the tenant before parsing; a required dry run on a 1% sample (at least 20 files) reports class shares, projected pages per tier, cost and wall time, and the run refuses to start without `--budget`; jobs run at low priority with a `batch_id` and bounded concurrency so uploads are not starved; chunk rows are written in batches; a killed run resumes by skipping ready jobs; `RAG_EMBED_BATCH_MODE=batch_api` sends backfill embeddings through the OpenAI Batch API (≤ 50,000 inputs per batch, polled and resumable); a backfill into a new embedding profile goes live only through the EMB-05 gate; an optional `--runner ray` (Ray Data, off by default, optional sidecar dependency group) distributes the same per-document stages across a Ray cluster while the ledger, budget, dedup, priority and resume rules stay identical, and the default `--runner worker` needs no Ray
+- [ ] **DATA-17**: A parser test set (digital text, table, multi-column, scanned zh/en/it, invoice fixtures with expected table grids, reading order and headings) scores each tier on text similarity, table cell F1, structure accuracy, seconds per page and cost per page, and golden items on those documents report Recall@k per tier; routing thresholds are chosen on the dev split, and `tiered` must not lower Recall@k or correct-refusal against `fixed` beyond the noise band while the report shows premium page share and projected cost per 1,000 pages
 - [ ] **DATA-08**: Retrieval can filter by date range, source, document, document type and language
 
 ### Embeddings (EMB)
@@ -58,19 +64,21 @@ All requirements are written so they can be checked. "Behind a switch" means an 
 - [ ] **EMB-02**: Each embedding profile (model + dimension) is stored side by side (`halfvec` where needed, partial HNSW index per profile), and switching the active profile is a pointer flip that can be rolled back
 - [ ] **EMB-03**: The query-time embedding model is derived from the active index profile, and a model or dimension mismatch fails loudly at startup and per request
 - [ ] **EMB-04**: A re-embedding job reads stored chunk text only (never re-parses), runs in batches, resumes from where it stopped, supports dry-run, and can roll back (extends `scripts/rag/reprocess-documents.js`)
-- [ ] **EMB-05**: BGE-M3 (BAAI, MIT licence, 1024 dimensions, 8192-token input) is an open-source fallback embedding profile next to the EMB-01 profiles, so the knowledge base is not tied to one vendor: by default it runs through a hosted inference API (DeepInfra), and the same profile can instead be served by the Python sidecar on CPU for deployments that must keep text in-house; both serving modes return identical dense vectors for the same input (checked in CI on fixture text), so switching between them needs no re-embedding; only the dense output is used, because the lexical path (RET-03) already covers sparse matching; it is compared with the other profiles on every slice, including `cross_lingual` per language pair, and the report includes ingestion throughput, query latency and cost of both serving modes
+- [ ] **EMB-05**: A new embedding profile can only be activated when it is complete and proven: (a) during a re-embed, every new or replaced document is written to both the active and the target profile (dual-write), so documents uploaded mid-migration are not missing; (b) activation refuses unless 100% of current chunks have a vector in the target profile — a query never searches a mix of old- and new-model vectors; (c) activation refuses unless the eval run on the target profile shows no regression beyond the noise band versus the active profile, with Recall@k reported separately for documents ingested before the migration; (d) every vector row records its `embedding_model` and dimension, and a same-dimension model mismatch (which pgvector would not reject) fails the EMB-03 check
+- [ ] **EMB-11**: BGE-M3 (BAAI, MIT licence, 1024 dimensions, 8192-token input) is an open-source fallback embedding profile next to the EMB-01 profiles, so the knowledge base is not tied to one vendor: by default it runs through a hosted inference API (DeepInfra), and the same profile can instead be served by the Python sidecar on CPU for deployments that must keep text in-house; both serving modes return identical dense vectors for the same input (checked in CI on fixture text), so switching between them needs no re-embedding; only the dense output is used, because the lexical path (RET-03) already covers sparse matching; it is compared with the other profiles on every slice, including `cross_lingual` per language pair, and the report includes ingestion throughput, query latency and cost of both serving modes
 
 ### Retrieval (RET)
 
 - [ ] **RET-01**: Retrieval backends are switchable — pgvector (kept permanently, default), Weaviate and Qdrant — behind one `RetrievalBackend` interface that only accepts a `TenantScope`
 - [ ] **RET-02**: Each backend runs hybrid retrieval (lexical + vector, filters applied before search) and the results are fused with reciprocal rank fusion
-- [ ] **RET-03**: Lexical search works for Chinese, English and Italian on all three backends using one shared application tokenizer that writes a `lexical_text` field; a Chinese exact-term test (model numbers, IDs, names) passes on every backend
+- [x] **RET-03**: Lexical search works for Chinese, English and Italian on all three backends using one shared application tokenizer that writes a `lexical_text` field; a Chinese exact-term test (model numbers, IDs, names) passes on every backend
 - [ ] **RET-04**: The pgvector hybrid function is callable only by the server role, never by `anon`
 - [ ] **RET-05**: Supabase stays the only source of truth; a trigger-fed outbox and a drain worker sync inserts, updates, deletes (including cascade deletes) and re-embeds to Weaviate and Qdrant, and a reconcile job detects and repairs drift
 - [ ] **RET-06**: Weaviate uses one tenant per workspace; Qdrant uses a shared collection per embedding profile with an `is_tenant` index and a tenant filter injected by the adapter on every query and prefetch
 - [ ] **RET-07**: Chunk IDs returned by Weaviate or Qdrant are re-validated against Supabase under the caller's scope before use
 - [ ] **RET-08**: A cross-tenant canary test suite (personal vs organization, null organization, removed member, after delete, after version replace, after re-embed) runs against every backend in CI and is a release gate
 - [ ] **RET-09**: Each tenant and backend has an index-ready state; if an external backend is not ready or fails, retrieval falls back to pgvector and reports `degraded`
+- [ ] **RET-10**: Filtered vector search does not lose results when the filter is selective (tenant, document type, date, `documentRefs`): pgvector runs with `hnsw.iterative_scan` (pgvector ≥ 0.8) so a filtered HNSW scan keeps going until it has k matching rows; when the filter matches fewer rows than a configurable cutoff, retrieval does an exact (brute-force) scan over the matching rows instead of the graph; Qdrant creates its payload indexes (tenant, doc type) before data is loaded and uses ACORN for combined strict filters; Weaviate keeps its default ACORN with `flatSearchCutoff`; the eval adds a `selective_filter` category (a small tenant or a rare document type, ≤ 3% of rows) whose Recall@k must match the unfiltered exact-search answer
 
 ### Rerank & Context (RNK)
 
@@ -111,8 +119,8 @@ All requirements are written so they can be checked. "Behind a switch" means an 
 
 ### Observability & Latency (OBS, LAT)
 
-- [ ] **OBS-01**: Every pipeline stage (query transforms incl. the rewrite gate, each retrieval path, fusion, rerank, context assembly, generation, groundedness) is traced with Langfuse (user decision 2026-11-23): one trace per request with a span per stage carrying latency, candidate count and the rule IDs/transforms chosen, linked by `traceId` to the chat message; starting on the free Langfuse Cloud Hobby plan (default `LANGFUSE_BASE_URL=https://cloud.langfuse.com`, sample rate configurable to stay within its monthly unit quota), switchable to self-hosted by changing only the base URL and keys, via `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` / `LANGFUSE_BASE_URL` (mirrored to the five config locations), switchable, sampled, flushed asynchronously so it never blocks or delays the response, tagged with tenant ID but with query/chunk text masked unless explicitly enabled; when Langfuse is off or unreachable a structured `[RAG Trace]` log line with the same fields is the fallback; span fields match the eval trace `stage_latency_ms`
-- [ ] **OBS-02**: Text chat and voice each have an end-to-end latency budget (p50/p95); eval reports show per-stage latency distributions, and later phases must stay within budget
+- [x] **OBS-01**: Every pipeline stage (query transforms incl. the rewrite gate, each retrieval path, fusion, rerank, context assembly, generation, groundedness) is traced with Langfuse (user decision 2026-11-23): one trace per request with a span per stage carrying latency, candidate count and the rule IDs/transforms chosen, linked by `traceId` to the chat message; starting on the free Langfuse Cloud Hobby plan (default `LANGFUSE_BASE_URL=https://cloud.langfuse.com`, sample rate configurable to stay within its monthly unit quota), switchable to self-hosted by changing only the base URL and keys, via `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` / `LANGFUSE_BASE_URL` (mirrored to the five config locations), switchable, sampled, flushed asynchronously so it never blocks or delays the response, tagged with tenant ID but with query/chunk text masked unless explicitly enabled; when Langfuse is off or unreachable a structured `[RAG Trace]` log line with the same fields is the fallback; span fields match the eval trace `stage_latency_ms`
+- [x] **OBS-02**: Text chat and voice each have an end-to-end latency budget (p50/p95); eval reports show per-stage latency distributions, and later phases must stay within budget
 - [ ] **LAT-01**: Retrieval paths (query variants, vector and lexical) run in parallel; candidates are deduplicated by chunk ID (and parent ID) before rerank, and the rerank input is capped (default chosen by the RNK-02 sweep, between 20 and 100: the smallest pool whose quality stays within the noise band of the best pool wins, because rerank time grows with the number of candidates)
 - [ ] **LAT-02**: Rerank has a fast and a quality tier (Cohere `rerank-v5.0-fast` / Voyage `rerank-3-lite` vs the pro models), chosen per entry point (text chat vs voice)
 - [ ] **LAT-03**: Query rewriting runs only when a rule-based gate (no LLM, < 1 ms, zh/en/it) says it is needed, as locked in `.planning/specs/query-rewrite-gate.md` (user rules R0–R4: too short, pronouns with history, relative time, comparison, exact codes kept verbatim; added rules R5–R12: elliptical follow-ups, compound questions, protected literals, language mismatch, keyword-only, vague, long-complete, small talk); the gate returns all fired rules and maps them to transforms, relative dates are normalized deterministically, every rewritten query must keep the protected tokens verbatim or is discarded, rewriting uses a small fast model, and at most two variants are produced by default
@@ -159,8 +167,8 @@ All requirements are written so they can be checked. "Behind a switch" means an 
 - [ ] **XLG-01**: The query language (script ratio plus zh/en/it stopword scores, mixed-language queries classified by dominant script) and the languages of the tenant knowledge base (share per language from the DATA-02 `language` field) are detected; when the query language is not a knowledge-base language above a 20% share, the query is translated by a small fast model into up to two knowledge-base languages, keeping protected tokens verbatim (rewrite-gate R7/R8); original and translated queries are retrieved in parallel and fused with RRF; the answer is written in the asker's language while cited quotes stay in the source language; translation has its own switch, timeout and budget, and can be turned off per embedding profile when the eval shows the multilingual embedding alone is enough; supported under both query frameworks (former RQ-04)
 - [ ] **CHK-04**: Parent-child sizes are configurable in the Config UI per document-type profile: child size (tokens), parent mode (document structure — whole clause or section — with a token cap, or fixed size) and parent size, starting from child 256 / parent 1024 with presets 128/512, 256/1024 and 256/2048 plus custom values; the UI validates the choice — child must fit the active embedding profile's maximum input (hard error), parent must be at least twice the child (hard error), a parent/child ratio outside 4–8 and top-k × parent size above the RNK-03 context budget are warnings; a size change creates a new chunking profile that is re-chunked and re-embedded side by side from stored document text and activated by a pointer flip that can be rolled back (same mechanism as EMB-02/EMB-04)
 - [ ] **CHK-05**: A chunk-size sweep runs the golden set against each candidate chunking profile and reports Recall@k, MRR, refusal rates, judge answer correctness, context tokens sent and latency, overall and per document type, language and question category (fact lookups versus context-heavy questions); the admin sees the comparison in the Config UI and picks the profile per document type, and the decision is recorded with its numbers
-- [ ] **EVAL-14**: The golden set also covers how real users ask: new categories `colloquial` (wording that differs from the document's terms), `ambiguous` (short or underspecified) and `typo` (misspellings, missing accents, mixed scripts), next to the existing ones; every report also splits results by provenance (`production`, `human`, `claude_draft`, `ragas_generated`, `synthetic_fixture`), and once real-user items exist the gate is computed on them, with synthetic items reported for coverage only
-- [ ] **EVAL-15**: A configurable share of production requests (sampled, PII-masked, tenant-tagged) is pulled from their Langfuse traces into a review queue, and an online judge scores a sample of them (faithfulness, answer relevance) with the scores attached to the Langfuse trace, so quality is measured after release and not only before it
+- [x] **EVAL-14**: The golden set also covers how real users ask: new categories `colloquial` (wording that differs from the document's terms), `ambiguous` (short or underspecified) and `typo` (misspellings, missing accents, mixed scripts), next to the existing ones; every report also splits results by provenance (`production`, `human`, `claude_draft`, `ragas_generated`, `synthetic_fixture`), and once real-user items exist the gate is computed on them, with synthetic items reported for coverage only
+- [x] **EVAL-15**: A configurable share of production requests (sampled, PII-masked, tenant-tagged) is pulled from their Langfuse traces into a review queue, and an online judge scores a sample of them (faithfulness, answer relevance) with the scores attached to the Langfuse trace, so quality is measured after release and not only before it
 - [ ] **EVAL-16**: Every RAG answer has a helpful / not helpful control (with an optional reason); the vote is stored with the message and sent to Langfuse as a score, and "not helpful" votes and "possibly unreliable" groundedness results automatically enter the review queue
 - [ ] **EVAL-17**: Admins work the review queue in the Config UI: they see the question, answer, retrieved chunks and trace, write the expected answer and span evidence, and promote the case into the golden set with provenance `production` (stored only in the gitignored private path, split assigned by the frozen hash rule, near-duplicates detected); promoted cases are never removed, so every production failure becomes a permanent regression test; a periodic report lists new failures by layer and category
 - [ ] **XLG-02**: The fixture golden set gains a `cross_lingual` category: questions in English and Italian about Chinese documents, in Chinese and Italian about English documents, and in Chinese and English about Italian documents (at least 4 per direction pair, with span gold evidence in the source document; items drafted or machine-translated into Chinese or Italian are reviewed by a native speaker before they count, recorded in their review status); the slice is scored under today's configuration (`RAG_PIPELINE=legacy`) to record its baseline, reported per query-language/document-language pair, and gated like the language slices from then on
@@ -227,16 +235,16 @@ Which phases cover which requirements. Updated during roadmap creation.
 | EVAL-11 | Phase 1 | Complete |
 | EVAL-12 | Phase 1 | Complete |
 | EVAL-13 | Phase 1 | Complete |
-| PIPE-01 | Phase 2 | Pending |
-| PIPE-02 | Phase 2 | Pending |
-| PIPE-03 | Phase 2 | Pending |
-| PIPE-04 | Phase 2 | Pending |
-| PIPE-05 | Phase 2 | Pending |
-| PIPE-06 | Phase 2 | Pending |
-| PIPE-07 | Phase 2 | Pending |
-| PIPE-08 | Phase 2 | Pending |
-| PIPE-09 | Phase 2 | Pending |
-| PIPE-10 | Phase 2 | Pending |
+| PIPE-01 | Phase 2 | Complete |
+| PIPE-02 | Phase 2 | Complete |
+| PIPE-03 | Phase 2 | Complete |
+| PIPE-04 | Phase 2 | Complete |
+| PIPE-05 | Phase 2 | Complete (override: voice keeps its own result list per the 02-CONTEXT D-16 adjustment) |
+| PIPE-06 | Phase 2 | Complete |
+| PIPE-07 | Phase 2 | Complete |
+| PIPE-08 | Phase 2 | Complete |
+| PIPE-09 | Phase 2 | Complete |
+| PIPE-10 | Phase 2 | Complete |
 | DATA-01 | Phase 3 | Pending |
 | DATA-02 | Phase 3 | Pending |
 | DATA-03 | Phase 3 | Pending |
@@ -250,10 +258,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | EMB-03 | Phase 3 | Pending |
 | EMB-04 | Phase 3 | Pending |
 | EMB-05 | Phase 3 | Pending |
+| EMB-11 | Phase 3 | Pending |
 | RET-01 | Phase 4 | Pending |
 | RET-02 | Phase 4 | Pending |
-| RET-03 | Phase 4 | Pending |
+| RET-03 | Phase 4 | Complete |
 | RET-04 | Phase 4 | Pending |
+| RET-10 | Phase 4 | Pending |
 | RET-05 | Phase 7 | Pending |
 | RET-06 | Phase 7 | Pending |
 | RET-07 | Phase 7 | Pending |
@@ -284,8 +294,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ADM-02 | Phase 7 | Pending |
 | ADM-03 | Phase 7 | Pending |
 | ADM-04 | Phase 7 | Pending |
-| OBS-01 | Phase 2 | Pending |
-| OBS-02 | Phase 2 | Pending |
+| OBS-01 | Phase 2 | Complete |
+| OBS-02 | Phase 2 | Complete |
 | CHK-01 | Phase 3 | Pending |
 | CHK-02 | Phase 3 | Pending |
 | SEC-01 | Phase 3 | Pending |
@@ -304,11 +314,17 @@ Which phases cover which requirements. Updated during roadmap creation.
 | LAT-03 | Phase 6 | Pending |
 | XLG-01 | Phase 6 | Pending |
 | CACHE-01 | Phase 6 | Pending |
-| EVAL-14 | Phase 2 | Pending |
-| EVAL-15 | Phase 2 | Pending |
+| EVAL-14 | Phase 2 | Complete |
+| EVAL-15 | Phase 2 | Complete |
 | EVAL-16 | Phase 5 | Pending |
 | EVAL-17 | Phase 7 | Pending |
 | XLG-02 | Phase 3 | Pending |
+| DATA-12 | Phase 3.1 | Pending |
+| DATA-13 | Phase 3.1 | Pending |
+| DATA-14 | Phase 3.1 | Pending |
+| DATA-15 | Phase 3.1 | Pending |
+| DATA-16 | Phase 3.1 | Pending |
+| DATA-17 | Phase 3.1 | Pending |
 | DATA-09 | Phase 3 | Pending |
 | DATA-10 | Phase 3 | Pending |
 | DATA-11 | Phase 3 | Pending |
@@ -336,14 +352,16 @@ Which phases cover which requirements. Updated during roadmap creation.
 | LAT-07 | Phase 6 | Pending |
 
 **Coverage:**
-- v1 requirements: 120 total
-- Mapped to phases: 120
+- v1 requirements: 128 total
+- Mapped to phases: 128
 - Unmapped: 0 ✓
 
 **Mapping notes:**
 - RET-01, RET-02 and RET-03 are mapped to Phase 4, which builds the retrieval adapter contract, the pgvector hybrid search, the shared tokenizer and backend-agnostic conformance tests. Their "every backend" clauses for Weaviate and Qdrant are verified in Phase 7 (success criterion 3).
 - DATA-08 (metadata filters) is mapped to Phase 4 because filters are applied inside the hybrid search function built there; the metadata it filters on comes from Phase 3.
 - QRY-08 adds a switchable LangChain implementation of the query layer (`RAG_QUERY_FRAMEWORK=llamaindex|langchain`, default `llamaindex`). The former Out of Scope row "LangChain (any layer)" was removed and QRY-06 reworded accordingly.
+- DATA-12..DATA-17 (tiered parse routing, hard constraints and budget, ingestion ledger and parse cache, async incremental queue, bulk backfill, parser eval) were added 2026-11-23 as inserted Phase 3.1, which builds on Phase 3's single `ingest()` path; design in `.planning/specs/ingestion-routing.md`.
+- EMB-11 (BGE-M3 open-source fallback profile) was added on `main` on 2026-11-25 under the ID EMB-05 while trunk had already used EMB-05 for the embedding-profile activation gate (dual-write, completeness and eval checks), which Phase 3 plans and code reference. The merge of trunk into `main` kept the activation gate as EMB-05 and moved the BGE-M3 requirement to EMB-11, the first ID not reserved by the paused Phase 3.1.1 plans (EMB-06..EMB-10); its wording is unchanged.
 
 ---
 *Requirements defined: 2026-11-22*

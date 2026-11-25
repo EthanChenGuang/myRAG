@@ -8,6 +8,7 @@ import {
   isDataUIPart,
   isToolUIPart,
 } from 'ai';
+import { pickAnswerMetadata, type AnswerMessageMetadata } from '@/lib/chat/answer-metadata';
 
 type AppDataTypes = {
   'content-part': ContentPart;
@@ -174,6 +175,7 @@ export interface DBMessage {
   name?: string;
   createdAt?: Date;
   attachments?: Attachment[];
+  metadata?: { ragTraceId?: string } & AnswerMessageMetadata;
 }
 
 interface AppMessageMetadata {
@@ -208,21 +210,38 @@ export function toMessages(messages: ExtendedMessage[]): UIMessage<AppMessageMet
   return messages.map(toMessage);
 }
 
+function ragTraceIdOf(metadata: Record<string, unknown> | undefined): string | undefined {
+  const value = metadata?.ragTraceId;
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function persistedMetadataOf(metadata: Record<string, unknown> | undefined): DBMessage['metadata'] | undefined {
+  const ragTraceId = ragTraceIdOf(metadata);
+  const answer = pickAnswerMetadata(metadata);
+  if (!ragTraceId && Object.keys(answer).length === 0) return undefined;
+  return { ...(ragTraceId ? { ragTraceId } : {}), ...answer };
+}
+
 export function toDBMessages(messages: ExtendedMessage[]): DBMessage[] {
-  return messages.map((msg) => ({
-    id: msg.id,
-    role: msg.role === 'system' ? 'data' : (msg.role as 'user' | 'assistant' | 'data'),
-    content: msg.content,
-    createdAt: msg.createdAt,
-    ...(msg.name && { name: msg.name }),
-    ...(msg.attachments && msg.attachments.length > 0
-      ? { attachments: msg.attachments }
-      : {}),
-  }));
+  return messages.map((msg) => {
+    const metadata = persistedMetadataOf(msg.metadata);
+    return {
+      id: msg.id,
+      role: msg.role === 'system' ? 'data' : (msg.role as 'user' | 'assistant' | 'data'),
+      content: msg.content,
+      createdAt: msg.createdAt,
+      ...(msg.name && { name: msg.name }),
+      ...(msg.attachments && msg.attachments.length > 0
+        ? { attachments: msg.attachments }
+        : {}),
+      ...(metadata ? { metadata } : {}),
+    };
+  });
 }
 
 export function toExtendedMessage(message: DBMessage): ExtendedMessage {
   const role = message.role === 'data' ? 'system' : (message.role as 'user' | 'assistant' | 'system');
+  const metadata = persistedMetadataOf(message.metadata);
 
   return {
     id: message.id,
@@ -233,6 +252,7 @@ export function toExtendedMessage(message: DBMessage): ExtendedMessage {
     ...(message.attachments && message.attachments.length > 0
       ? { attachments: message.attachments }
       : {}),
+    ...(metadata ? { metadata } : {}),
   };
 }
 

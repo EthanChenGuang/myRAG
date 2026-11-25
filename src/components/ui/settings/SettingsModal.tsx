@@ -7,6 +7,7 @@ import { Settings, Shield, X, Building2, Briefcase } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/components/theme-provider';
 import { useLanguage } from '@/components/providers/language-provider';
+import type { TranslationKeys } from '@/translations';
 import { useSettingsModal } from './hooks/useSettingsModal';
 import { usePerformanceMonitor, usePerformanceObserver } from './hooks/usePerformanceMonitor';
 import { useOrganizationStore } from '@/lib/stores/organization-store';
@@ -47,7 +48,7 @@ interface SettingsModalProps {
 
 // Memoized tabs configuration
 const getTabs = () => {
-  const baseTabs = [
+  const baseTabs: Array<{ id: string; label: TranslationKeys; icon: typeof Settings; Component: typeof GeneralTab }> = [
     { id: 'general', label: 'general', icon: Settings, Component: GeneralTab },
     { id: 'admin', label: 'admin', icon: Shield, Component: AdminTab },
   ];
@@ -171,7 +172,7 @@ export const SettingsModal = memo(function SettingsModal({ isOpen, onOpenChange 
               {tabs.map((tab) => {
                 // Dynamic icon and label for workspace tab
                 let Icon = tab.icon;
-                let label = tab.label;
+                let label: TranslationKeys = tab.label;
 
                 if (tab.id === 'workspace') {
                   // Show workspace icon and label based on context

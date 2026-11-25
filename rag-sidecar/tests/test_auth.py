@@ -39,12 +39,23 @@ def test_non_ascii_header_value_is_401_not_500():
     assert response.status_code == 401
 
 
+def test_ingest_wake_requires_auth():
+    response = TestClient(_app()).post("/v1/ingest/wake")
+    assert response.status_code == 401
+
+
+def test_ingest_wake_without_worker_returns_woken_false():
+    response = TestClient(_app()).post("/v1/ingest/wake", headers={HEADER: SECRET})
+    assert response.status_code == 202
+    assert response.json() == {"woken": False}
+
+
 def test_correct_header_returns_sidecar_info():
     response = TestClient(_app()).get("/v1/info", headers={HEADER: SECRET})
     assert response.status_code == 200
     info = SidecarInfo.model_validate(response.json())
     assert info.service == "rag-sidecar"
-    assert info.contracts_schema_version == 1
+    assert info.contracts_schema_version == 2
     assert info.version
 
 

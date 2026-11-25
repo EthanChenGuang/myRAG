@@ -6,7 +6,35 @@
  * 1. Delete all existing chunks
  * 2. Re-chunk all documents using the configured strategy
  * 3. Generate new embeddings for all chunks
+ *
+ * `--reembed ...` runs the safe re-embed job instead (src/lib/rag/ingest/reembed): it reads stored chunk text only, deletes nothing and is
+ * resumable. See `npm run rag:reembed`. The mode above refuses to run once documents have versions or another embedding profile is in use,
+ * because it deletes chunk ids that citations point at.
  */
+
+const { spawnSync } = require('node:child_process');
+const path = require('node:path');
+
+const REFUSED_EXIT_CODE = 3;
+
+if (process.argv.slice(2).includes('--reembed')) {
+  const repoRoot = path.resolve(__dirname, '..', '..');
+  const forwarded = process.argv.slice(2).filter((arg) => arg !== '--reembed');
+  const job = spawnSync(
+    process.execPath,
+    ['--import', 'tsx', path.join('src', 'lib', 'rag', 'ingest', 'reembed', 'cli.ts'), ...forwarded],
+    { cwd: repoRoot, stdio: 'inherit', env: process.env }
+  );
+  if (job.error) {
+    console.error('[Re-embed] could not start the TypeScript job:', job.error.message);
+    process.exit(1);
+  }
+  if (job.status === null) {
+    console.error(`[Re-embed] the TypeScript job ended on signal ${job.signal}`);
+    process.exit(1);
+  }
+  process.exit(job.status);
+}
 
 require('dotenv').config({ path: '.env.local' });
 const { createClient } = require('@supabase/supabase-js');
@@ -26,7 +54,7 @@ const openai = new OpenAI({
 const CHUNK_SIZE = parseInt(process.env.LLAMACLOUD_CHUNK_SIZE || '1500');
 const CHUNK_OVERLAP = parseInt(process.env.LLAMACLOUD_CHUNK_OVERLAP || '100');
 const CHUNK_STRATEGY = process.env.LLAMACLOUD_CHUNK_STRATEGY || 'sentence';
-const EMBEDDING_MODEL = process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-ada-002';
+const EMBEDDING_MODEL = process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small';
 const BATCH_SIZE = 5;
 
 console.log('Reprocessing configuration:');
@@ -281,7 +309,60 @@ async function processDocumentChunks(document) {
   return { success: true, successfulChunks, totalChunks };
 }
 
+function refuse(reason) {
+  console.error(`Refusing to run the destructive legacy reprocess: ${reason}`);
+  console.error('It deletes every chunk of every document, including chunk ids that stored citations point at.');
+  console.error('Use `npm run rag:reembed -- --profile <id>` (or this script with --reembed) instead: it reads stored text only and deletes nothing.');
+  process.exit(REFUSED_EXIT_CODE);
+}
+
+const MISSING_FUNCTION_CODES = new Set(['PGRST202', '42883']);
+const LEGACY_PROFILE_ID = 'openai-3-small-1536';
+
+// Without the 0315 function the same two questions are asked with what an older schema has. Only a schema that cannot hold versions or
+// profiles at all counts as safe; any other failure refuses, because a destroyed citation cannot be restored.
+async function fallbackGuard() {
+  const versions = await supabase.from('documents').select('id').gt('version', 1).limit(1);
+  if (versions.error) {
+    if (versions.error.code !== '42703') refuse('the database could not be asked whether documents have versions');
+  } else if ((versions.data || []).length > 0) {
+    refuse('at least one document has version above 1');
+  }
+  const profiles = await supabase.rpc('rag_list_embedding_profiles');
+  if (profiles.error) {
+    if (!MISSING_FUNCTION_CODES.has(profiles.error.code)) refuse('the database could not be asked which embedding profiles are in use');
+    return;
+  }
+  const inUse = (profiles.data || [])
+    .filter((profile) => profile.id !== LEGACY_PROFILE_ID && (profile.status === 'backfilling' || profile.status === 'active'))
+    .map((profile) => profile.id);
+  if (inUse.length > 0) refuse(`embedding profile(s) in use: ${inUse.join(', ')}`);
+}
+
+async function assertLegacyModeIsSafe() {
+  let response;
+  try {
+    response = await supabase.rpc('rag_reembed_legacy_guard');
+  } catch (error) {
+    refuse('the database could not be asked whether documents have versions or other embedding profiles are in use');
+  }
+  if (response.error) {
+    if (MISSING_FUNCTION_CODES.has(response.error.code)) return fallbackGuard();
+    refuse('the database could not be asked whether documents have versions or other embedding profiles are in use');
+  }
+  const guard = Array.isArray(response.data) ? response.data[0] : response.data;
+  if (!guard) refuse('the database gave no answer to the safety check');
+  if (Number(guard.versioned_documents) > 0) {
+    refuse(`${guard.versioned_documents} document(s) have version above 1`);
+  }
+  const inUse = Array.isArray(guard.profiles_in_use) ? guard.profiles_in_use : [];
+  if (inUse.length > 0) {
+    refuse(`embedding profile(s) in use or holding vectors: ${inUse.join(', ')}`);
+  }
+}
+
 async function main() {
+  await assertLegacyModeIsSafe();
   console.log('Starting document reprocessing...\n');
   
   // Fetch all documents

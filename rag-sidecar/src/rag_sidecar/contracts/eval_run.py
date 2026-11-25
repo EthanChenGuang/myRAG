@@ -1,6 +1,10 @@
-from typing import Literal
+from typing import Annotated, Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from rag_sidecar.contracts.answers import AnswerGroundedness, CitationRecord, CitationStrategy
+from rag_sidecar.contracts.query import QueryFramework, QueryParamsOverride, QueryPlan, QueryTransformToggles
+from rag_sidecar.contracts.retrieval import ChunkingProfile, RetrievalFilters, RetrievalOverrides
 
 
 class _Contract(BaseModel):
@@ -12,11 +16,72 @@ class ConversationTurn(_Contract):
     content: str = Field(min_length=1)
 
 
+StageName = Literal[
+    "refs",
+    "analyze",
+    "embed",
+    "search",
+    "legacy_rank",
+    "post_filter",
+    "assemble",
+    "voice_keyword_fallback",
+    "local_rerank",
+    "injection_check",
+    "query_gate",
+    "condense",
+    "normalize_dates",
+    "expand",
+    "hyde",
+    "decompose",
+    "semantic_cache",
+]
+
+STAGE_COUNT = len(get_args(StageName))
+
+SemanticCacheBackend = Literal["off", "pgvector", "redisvl"]
+
+_TimeoutMs = Annotated[int, Field(ge=1, le=60000)]
+
+
+class StageTimeoutsMs(_Contract):
+    refs: _TimeoutMs | None = None
+    analyze: _TimeoutMs | None = None
+    embed: _TimeoutMs | None = None
+    search: _TimeoutMs | None = None
+    legacy_rank: _TimeoutMs | None = None
+    post_filter: _TimeoutMs | None = None
+    assemble: _TimeoutMs | None = None
+    voice_keyword_fallback: _TimeoutMs | None = None
+    local_rerank: _TimeoutMs | None = None
+    injection_check: _TimeoutMs | None = None
+    query_gate: _TimeoutMs | None = None
+    condense: _TimeoutMs | None = None
+    normalize_dates: _TimeoutMs | None = None
+    expand: _TimeoutMs | None = None
+    hyde: _TimeoutMs | None = None
+    decompose: _TimeoutMs | None = None
+    semantic_cache: _TimeoutMs | None = None
+
+
 class RagRunOptions(_Contract):
     max_results: int | None = Field(default=None, ge=1, le=100)
     organization_id: str | None = None
     user_id: str | None = None
     generator_model: str | None = None
+    degrade: Literal["drop_top_candidate"] | None = None
+    disabled_stages: list[StageName] | None = Field(default=None, max_length=STAGE_COUNT)
+    stage_timeouts_ms: StageTimeoutsMs | None = None
+    embedding_profile: str | None = None
+    retrieval_overrides: RetrievalOverrides | None = None
+    retrieval_filters: RetrievalFilters | None = None
+    citations: bool = False
+    groundedness: bool = False
+    query_framework: QueryFramework | None = None
+    query_layer: bool | None = None
+    query_transforms: QueryTransformToggles | None = None
+    semantic_cache: SemanticCacheBackend | None = None
+    query_params: QueryParamsOverride | None = None
+    cache_seed_answer: str | None = Field(default=None, min_length=1, max_length=4000)
 
 
 class RagRunRequest(_Contract):
@@ -48,6 +113,10 @@ class TraceCandidate(_Contract):
     final_score: float | None = None
     match_reason: str | None = None
     has_image: bool
+    rerank_score: float | None = None
+    fused_score: float | None = None
+    language: str | None = None
+    legs: dict[str, int] = Field(default_factory=dict)
 
 
 class TraceKeptChunk(_Contract):
@@ -57,7 +126,7 @@ class TraceKeptChunk(_Contract):
     document_name: str
     content: str
     similarity: float
-    kept_by: Literal["similarity", "name", "image"]
+    kept_by: Literal["similarity", "name", "image", "rerank", "fused"]
 
 
 class TraceUsedDocument(_Contract):
@@ -72,9 +141,26 @@ class TraceQueryTransform(_Contract):
     text: str
 
 
-class TraceCitation(_Contract):
-    document_id: str
-    chunk_id: str | None = None
+TraceCitation = CitationRecord
+
+
+class TraceRetrievalVersions(_Contract):
+    lexical: int = Field(ge=0)
+    rerank_text: int = Field(ge=0)
+
+
+class TraceRefusal(_Contract):
+    decision: Literal["refuse", "answer", "not_applied"]
+    basis: str
+    reason: str
+    top_score: float | None = None
+    threshold: float | None = None
+    cell_key: str | None = None
+
+
+class TraceSecurityVersions(_Contract):
+    rules_version: str = Field(min_length=1)
+    detectors_version: str = Field(min_length=1)
 
 
 class TraceEffectiveConfig(_Contract):
@@ -84,6 +170,34 @@ class TraceEffectiveConfig(_Contract):
     embedding_model: str
     endpoint_version: str
     generator_model: str | None = None
+    security: TraceSecurityVersions | None = None
+
+
+InjectionCheckMode = Literal["flag", "drop", "downweight"]
+
+
+class TraceInjectionChecked(_Contract):
+    chunk_id: str = Field(min_length=1)
+    document: str
+
+
+class TraceInjectionFlagged(_Contract):
+    chunk_id: str = Field(min_length=1)
+    document: str
+    detectors: list[str] = Field(min_length=1)
+    rule_ids: list[str] = Field(default_factory=list)
+
+
+class TraceInjection(_Contract):
+    mode: InjectionCheckMode
+    checked: list[TraceInjectionChecked] = Field(default_factory=list)
+    flagged: list[TraceInjectionFlagged] = Field(default_factory=list)
+    dropped: list[str] = Field(default_factory=list)
+    downweighted: list[str] = Field(default_factory=list)
+    detectors_unavailable: list[str] = Field(default_factory=list)
+
+
+RefusalReason = Literal["no_relevant_context", "below_threshold", "below_similarity_floor", "injection_filtered"]
 
 
 class RagTrace(_Contract):
@@ -93,15 +207,27 @@ class RagTrace(_Contract):
     query_context: TraceQueryContext
     retrieval_strategy: str
     query_transforms: list[TraceQueryTransform] = Field(default_factory=list)
+    query_plan: QueryPlan | None = None
     candidates: list[TraceCandidate]
     kept: list[TraceKeptChunk]
     used_documents: list[TraceUsedDocument]
     context: str
     refused: bool
-    refusal_reason: Literal["no_relevant_context"] | None = None
+    refusal_reason: RefusalReason | None = None
+    query_language: str | None = None
+    retrieval_versions: TraceRetrievalVersions | None = None
+    refusal: TraceRefusal | None = None
+    retrieval_config_hash: str | None = None
+    context_tokens: int | None = Field(default=None, ge=0)
+    stage_counts: dict[str, dict[str, float]] = Field(default_factory=dict)
     answer: str | None = None
-    citations: list[TraceCitation]
+    citations: list[CitationRecord]
+    citation_strategy: CitationStrategy | None = None
+    invalid_citations: int = Field(default=0, ge=0)
+    groundedness: AnswerGroundedness | None = None
+    injection: TraceInjection | None = None
     stage_latency_ms: dict[str, float]
+    stage_status: dict[str, str] = Field(default_factory=dict)
     effective_config: TraceEffectiveConfig
     config_hash: str
 
@@ -115,6 +241,13 @@ class RunEmbedder(_Contract):
 class GoldenFilter(_Contract):
     review_statuses: list[Literal["approved", "draft"]] = Field(min_length=1)
     gate_split: Literal["dev"]
+
+
+class RunConfigRecord(_Contract):
+    name: str = Field(min_length=1)
+    env: dict[str, str] = Field(default_factory=dict)
+    overrides: RetrievalOverrides | None = None
+    chunking_profiles: list[ChunkingProfile] = Field(default_factory=list)
 
 
 class RunManifest(_Contract):
@@ -131,7 +264,9 @@ class RunManifest(_Contract):
     golden_filter: GoldenFilter
     sql_sha256: dict[str, str]
     request_options: RagRunOptions
+    embedding_profile: str | None = None
     effective_config_hash: str
     run_config_hash: str
     item_count: int = Field(ge=0)
     edge_errors: int = Field(ge=0)
+    run_config: RunConfigRecord | None = None

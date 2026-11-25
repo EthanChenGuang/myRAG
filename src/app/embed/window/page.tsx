@@ -1,14 +1,29 @@
 'use client';
 
 import { useChat } from '@ai-sdk/react';
+import { DefaultChatTransport, type UIMessage } from 'ai';
 import { useState, useRef, useEffect } from 'react';
+import { toEmbedRequestBody } from './embed-request';
+
+const EMBED_MODEL = 'openai/gpt-4o-mini';
+
+const embedTransport = new DefaultChatTransport<UIMessage>({
+  api: '/api/embed/chat',
+  prepareSendMessagesRequest: ({ messages }) => ({
+    body: toEmbedRequestBody(messages, EMBED_MODEL),
+  }),
+});
+
+function messageText(message: UIMessage): string {
+  return message.parts.map((part) => (part.type === 'text' ? part.text : '')).join('');
+}
 
 /**
  * Lightweight markdown renderer for embed widget
  * Handles links, bold, italic, and line breaks
  */
-function renderMarkdown(text: string): JSX.Element {
-  const parts: (string | JSX.Element)[] = [];
+function renderMarkdown(text: string): React.JSX.Element {
+  const parts: (string | React.JSX.Element)[] = [];
   let lastIndex = 0;
   let keyCounter = 0;
 
@@ -58,8 +73,8 @@ function renderMarkdown(text: string): JSX.Element {
 /**
  * Process inline formatting like bold and italic
  */
-function processInlineFormatting(text: string, baseKey: number): JSX.Element {
-  const parts: (string | JSX.Element)[] = [];
+function processInlineFormatting(text: string, baseKey: number): React.JSX.Element {
+  const parts: (string | React.JSX.Element)[] = [];
   const current = text;
 
   // Handle bold **text**
@@ -107,20 +122,19 @@ export default function EmbedWindow() {
   const [loading, setLoading] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Initialize with empty messages - we'll add the greeting later
-  const {
-    messages,
-    input,
-    handleInputChange,
-    handleSubmit,
-    isLoading,
-    setMessages
-  } = useChat({
-    body: {
-      model: 'openai/gpt-4o-mini'
-    },
-    api: '/api/embed/chat'
+  const [input, setInput] = useState('');
+  const { messages, sendMessage, status, setMessages } = useChat({
+    transport: embedTransport,
   });
+  const isLoading = status === 'submitted' || status === 'streaming';
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const text = input.trim();
+    if (!text || isLoading) return;
+    setInput('');
+    sendMessage({ text });
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -158,7 +172,7 @@ export default function EmbedWindow() {
           setMessages([{
             id: 'greeting',
             role: 'assistant',
-            content: data.config.welcomeMessage,
+            parts: [{ type: 'text', text: data.config.welcomeMessage }],
           }]);
         }
         
@@ -245,7 +259,7 @@ export default function EmbedWindow() {
               }}
             >
               <div className="text-sm leading-relaxed whitespace-pre-wrap break-words">
-                {renderMarkdown(message.content)}
+                {renderMarkdown(messageText(message))}
               </div>
             </div>
           </div>
@@ -270,7 +284,7 @@ export default function EmbedWindow() {
         <form onSubmit={handleSubmit} className="flex space-x-2">
           <input
             value={input}
-            onChange={handleInputChange}
+            onChange={(e) => setInput(e.target.value)}
             placeholder="Type your message..."
             disabled={isLoading}
             className="flex-1 px-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-opacity-50"

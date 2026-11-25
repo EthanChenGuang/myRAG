@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { startGlobalMonitoring, stopGlobalMonitoring, getConnectionMonitor } from '@/lib/whatsapp/connection-monitor';
+import { requireUser, requireOwnedSession } from '@/lib/whatsapp/route-auth';
+import { requireAdminOrDeny } from '@/lib/admin-route-auth';
 import { logger } from '@/lib/logger';
 import { env } from '@/lib/env';
 
@@ -9,6 +11,9 @@ import { env } from '@/lib/env';
 
 export async function GET() {
   try {
+    const auth = await requireUser('WhatsAppMonitor');
+    if ('response' in auth) return auth.response;
+
     // Check if WhatsApp is enabled
     if (env.NEXT_PUBLIC_WHATSAPP_ENABLED !== 'true') {
       return NextResponse.json({
@@ -17,7 +22,7 @@ export async function GET() {
       });
     }
 
-    const monitor = getConnectionMonitor();
+    getConnectionMonitor();
     return NextResponse.json({
       enabled: true,
       status: 'running',
@@ -34,8 +39,31 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
+    let body: Record<string, any>;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    }
     const { action } = body;
+
+    if (action === 'start' || action === 'stop') {
+      const denied = await requireAdminOrDeny(request);
+      if (denied) return denied;
+    } else {
+      const auth = await requireUser('WhatsAppMonitor');
+      if ('response' in auth) return auth.response;
+
+      if (action !== 'force_reconnect') {
+        return NextResponse.json(
+          { error: 'Invalid action. Use "start", "stop", or "force_reconnect"' },
+          { status: 400 }
+        );
+      }
+
+      const owned = await requireOwnedSession('WhatsAppMonitor', auth.user.id, body.sessionId);
+      if (owned) return owned.response;
+    }
 
     // Check if WhatsApp is enabled
     if (env.NEXT_PUBLIC_WHATSAPP_ENABLED !== 'true') {
@@ -52,26 +80,22 @@ export async function POST(request: Request) {
         status: 'started',
         message: 'WhatsApp connection monitoring started'
       });
-    } else if (action === 'stop') {
+    }
+
+    if (action === 'stop') {
       stopGlobalMonitoring();
       logger.info('WhatsAppMonitor', 'Stopped global monitoring');
       return NextResponse.json({
         status: 'stopped',
         message: 'WhatsApp connection monitoring stopped'
       });
-    } else if (action === 'force_reconnect' && body.sessionId) {
-      const monitor = getConnectionMonitor();
-      await monitor.forceReconnect(body.sessionId);
-      return NextResponse.json({
-        status: 'reconnecting',
-        message: `Force reconnecting session: ${body.sessionId}`
-      });
-    } else {
-      return NextResponse.json(
-        { error: 'Invalid action. Use "start", "stop", or "force_reconnect"' },
-        { status: 400 }
-      );
     }
+
+    await getConnectionMonitor().forceReconnect(body.sessionId);
+    return NextResponse.json({
+      status: 'reconnecting',
+      message: `Force reconnecting session: ${body.sessionId}`
+    });
   } catch (error) {
     logger.error('WhatsAppMonitor', 'Monitor control error:', error);
     return NextResponse.json(

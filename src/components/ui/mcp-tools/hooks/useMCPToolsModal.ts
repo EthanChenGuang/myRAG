@@ -88,7 +88,7 @@ interface ToolsCache {
 
 export function useMCPToolsModal(isOpen: boolean, onClose: () => void) {
   const [state, dispatch] = useReducer(mcpToolsReducer, initialState);
-  const closeTimeoutRef = useRef<NodeJS.Timeout>();
+  const closeTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
   
   // Cache with 5 minute TTL
   const toolsCache = useRef<ToolsCache>({

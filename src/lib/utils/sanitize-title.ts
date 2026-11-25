@@ -127,7 +127,7 @@ export function sanitizeTitleCached(title: string): string {
   // Implement simple LRU-like behavior by clearing cache if it gets too large
   if (titleCache.size >= MAX_CACHE_SIZE) {
     const firstKey = titleCache.keys().next().value;
-    titleCache.delete(firstKey);
+    if (firstKey !== undefined) titleCache.delete(firstKey);
   }
   
   titleCache.set(title, sanitized);

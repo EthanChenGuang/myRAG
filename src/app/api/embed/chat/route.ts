@@ -1,16 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { env } from '@/lib/env';
 import { checkRateLimit, getRateLimitIdentifier } from '@/lib/embed-rate-limit';
-import { getSupabaseAdmin } from '@/lib/supabase';
-import { streamText } from 'ai';
+import { createUIMessageStream, createUIMessageStreamResponse, streamText, type ModelMessage } from 'ai';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { z } from 'zod/v3';
-import { ExtendedMessage, toAPIMessage } from '@/types/chat';
-import { enhancedRetrieveChunks } from '@/lib/enhanced-rag-retrieval';
-// Import URL extraction utilities
-import { formatURLsForContext, createLinkUsageInstructions, type ExtractedURL } from '@/lib/url-extractor';
-// Import enhanced RAG prompt for strict RAG-only behavior
-import { createEnhancedRAGPrompt } from '@/lib/thinking-rag-enhancer';
+import { createLinkUsageInstructions } from '@/lib/url-extractor';
+import {
+  createEnhancedRAGPrompt,
+  createTraceCollector,
+  finishTrace,
+  isV2Pipeline,
+  knowledgeBaseUnavailableMessage,
+  parseRetrievalFilters,
+  resolveEmbedScope,
+  runRetrieval,
+  scopeKey,
+  type RetrievalFilterInput,
+  type RetrievalResult,
+  type TraceCollector,
+} from '@/lib/rag';
 
 // Use Node.js runtime instead of Edge
 export const runtime = 'nodejs';
@@ -34,8 +42,35 @@ const embedChatSchema = z.object({
     role: z.enum(['user', 'assistant', 'system']),
     content: z.string()
   })),
-  model: z.string().optional().default('openai/gpt-4o-mini')
+  model: z.string().optional()
 });
+
+const FALLBACK_EMBED_MODEL = 'openai/gpt-4o-mini';
+
+function defaultEmbedModel(): string {
+  return process.env.NEXT_PUBLIC_EMBED_MODEL || env.NEXT_PUBLIC_EMBED_MODEL || FALLBACK_EMBED_MODEL;
+}
+
+function allowedEmbedModels(): Set<string> {
+  const allowed = new Set<string>([defaultEmbedModel()]);
+  try {
+    const configured: unknown = JSON.parse(env.NEXT_PUBLIC_OPENROUTER_MODELS || '[]');
+    if (Array.isArray(configured)) {
+      for (const entry of configured) {
+        const id = (entry as { id?: unknown } | null)?.id;
+        if (typeof id === 'string' && id) allowed.add(id);
+      }
+    }
+  } catch {
+    console.warn('[Embed API] NEXT_PUBLIC_OPENROUTER_MODELS is not valid JSON, only the default embed model is allowed');
+  }
+  return allowed;
+}
+
+function resolveEmbedModel(requested: string | undefined): string {
+  if (requested && allowedEmbedModels().has(requested)) return requested;
+  return defaultEmbedModel();
+}
 
 // Helper function to create a proper AI message for errors (same as main chat API)
 function createErrorResponse(message: string) {
@@ -58,7 +93,37 @@ function createErrorResponse(message: string) {
   );
 }
 
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST',
+  'Access-Control-Allow-Headers': 'Content-Type',
+};
+
+function preferredLanguage(request: NextRequest): string {
+  const header = request.headers.get('accept-language') || '';
+  const primary = header.split(',')[0]?.split(';')[0]?.trim().split('-')[0]?.toLowerCase();
+  return primary || 'en';
+}
+
+function knowledgeBaseUnavailableResponse(request: NextRequest) {
+  const errorText = knowledgeBaseUnavailableMessage(preferredLanguage(request));
+  const stream = createUIMessageStream({
+    execute: async ({ writer }) => {
+      writer.write({ type: 'error', errorText });
+    },
+  });
+  return createUIMessageStreamResponse({ stream, headers: CORS_HEADERS });
+}
+
 export async function POST(request: NextRequest) {
+  let pendingTrace: { collector: TraceCollector; result: RetrievalResult } | null = null;
+  const finishPendingTrace = () => {
+    if (!pendingTrace) return;
+    const pending = pendingTrace;
+    pendingTrace = null;
+    finishTrace(pending.collector, pending.result);
+  };
+
   console.log('EMBED API: POST request received');
   console.log('EMBED API: Environment check:', {
     EMBED_ENABLED: env.NEXT_PUBLIC_EMBED_ENABLED,
@@ -111,118 +176,83 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Parse and validate request body
+    // The workspace check reads the raw body because schema parsing strips unknown keys
     const body = await request.json();
-    console.log('EMBED API: Request body:', { messagesCount: body.messages?.length, model: body.model });
-    const { messages, model } = embedChatSchema.parse(body);
+    console.log('EMBED API: Request body:', { messagesCount: body?.messages?.length, model: body?.model });
 
-    // --- RAG RETRIEVAL: Get relevant documents from knowledge base ---
-    console.log('[EMBED RAG] Starting document retrieval...');
-    let context = '';
+    // Only the v2 pipeline reads this field; under legacy the body is handled exactly as before
+    let retrievalFilters: RetrievalFilterInput | undefined;
+    if (isV2Pipeline()) {
+      const filtersParsed = parseRetrievalFilters(body?.retrievalFilters);
+      if (!filtersParsed.ok) {
+        return NextResponse.json(
+          { success: false, error: 'Invalid request data', details: filtersParsed.details },
+          { status: 400, headers: CORS_HEADERS }
+        );
+      }
+      retrievalFilters = filtersParsed.filters;
+    }
 
-    // Get the last user message as the query
+    const embedScope = await resolveEmbedScope({
+      rawBody: body,
+      configuredTenant: env.RAG_EMBED_TENANT,
+      signal: request.signal,
+    });
+    if (!embedScope.ok && embedScope.status === 403) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers: CORS_HEADERS });
+    }
+    if (!embedScope.ok) {
+      console.error('[Document Search] Embed knowledge base unavailable:', { status: embedScope.status, reason: embedScope.reason });
+      return knowledgeBaseUnavailableResponse(request);
+    }
+
+    const parsed = embedChatSchema.parse(body);
+    const messages = parsed.messages.filter(message => message.role !== 'system');
+    const model = resolveEmbedModel(parsed.model);
+
     const userMessages = messages.filter(m => m.role === 'user');
     const lastUserMessage = userMessages[userMessages.length - 1];
     const queryText = lastUserMessage?.content || '';
 
-    if (queryText && queryText.trim().length > 0) {
-      try {
-        console.log('[EMBED RAG] Query:', queryText);
+    let context = '';
 
-        // Retrieve relevant chunks using enhanced RAG
-        const enhancedResult = await enhancedRetrieveChunks(queryText, {
+    if (queryText.trim().length > 0) {
+      const isGPTModel = model.includes('gpt-4') || model.includes('o1') || model.includes('chatgpt');
+      const collector = createTraceCollector({ profile: 'embed', tenantKey: scopeKey(embedScope.scope) });
+      const result = await runRetrieval({
+        scope: embedScope.scope,
+        query: queryText,
+        profile: 'embed',
+        options: {
           maxResults: parseInt(env.RAG_FINAL_RESULT_COUNT || '25'),
-          enableTemporalBoost: true,
-          enableFinancialBoost: true,
-          requireTemporalMatch: false,
-          fallbackToLowerThreshold: true
-        });
+          fallbackToLowerThreshold: true,
+          isGPTModel,
+          ragMode: 'balanced',
+          webSearchEnabled: false,
+        },
+        signal: request.signal,
+        trace: collector,
+        ...(retrievalFilters ? { retrievalFilters } : {}),
+      });
+      collector.setReviewContent({ query: queryText, context: result.context, model });
+      pendingTrace = { collector, result };
 
-        console.log(`[EMBED RAG] Retrieved ${enhancedResult.chunks.length} chunks using ${enhancedResult.retrievalStrategy}`);
+      console.log('[Document Search] Embed retrieval finished:', {
+        status: result.status,
+        reason: result.reason,
+        candidates: result.candidates.length,
+        documents: result.usedDocuments.length,
+      });
 
-        if (enhancedResult.chunks.length > 0) {
-          // Format chunks into context
-          const contextParts: string[] = ["\n\n=== RELEVANT INFORMATION FROM DOCUMENTS ==="];
-
-          // Group chunks by document
-          const chunksByDocument = new Map<string, Array<{ content: string, similarity: number }>>();
-
-          // Collect URLs from chunk metadata
-          const collectedURLs: ExtractedURL[] = [];
-
-          // Cache document names to avoid repeated queries
-          const docNameCache = new Map<string, string>();
-
-          for (const chunk of enhancedResult.chunks) {
-            // Fetch chunk metadata to extract URLs and document info
-            const supabase = getSupabaseAdmin();
-
-            // Get document name from cache or fetch from database
-            let docName = docNameCache.get(chunk.document_id);
-            if (!docName) {
-              const { data: docData } = await supabase
-                .from('documents')
-                .select('filename')
-                .eq('id', chunk.document_id)
-                .single();
-              docName = docData?.filename || 'Unknown Document';
-              docNameCache.set(chunk.document_id, docName);
-            }
-
-            if (!chunksByDocument.has(docName)) {
-              chunksByDocument.set(docName, []);
-            }
-            chunksByDocument.get(docName)!.push({
-              content: chunk.content,
-              similarity: chunk.similarity
-            });
-
-            // Fetch chunk metadata to extract URLs
-            const { data: chunkData } = await supabase
-              .from('document_chunks')
-              .select('metadata')
-              .eq('id', chunk.chunk_id)
-              .single();
-
-            if (chunkData?.metadata?.urls && Array.isArray(chunkData.metadata.urls)) {
-              collectedURLs.push(...chunkData.metadata.urls);
-            }
-          }
-
-          // Add organized chunks to context
-          for (const [docName, chunks] of chunksByDocument) {
-            contextParts.push(`\n--- Document: ${docName} (${chunks.length} relevant chunks) ---`);
-            const formattedChunks = chunks.map(c => c.content);
-            contextParts.push(...formattedChunks);
-          }
-          contextParts.push("=== END OF RELEVANT INFORMATION ===\n");
-
-          // Add collected URLs to context if any were found
-          if (collectedURLs.length > 0) {
-            // Remove duplicates based on URL
-            const uniqueURLs = Array.from(
-              new Map(collectedURLs.map(url => [url.url, url])).values()
-            );
-
-            const urlSection = formatURLsForContext(uniqueURLs);
-            if (urlSection) {
-              contextParts.push(urlSection);
-              console.log(`[EMBED RAG] Added ${uniqueURLs.length} unique URLs from chunks to context`);
-            }
-          }
-
-          context = contextParts.join('\n\n');
-          console.log(`[EMBED RAG] Built context with ${context.length} characters from ${chunksByDocument.size} documents`);
-        } else {
-          console.log('[EMBED RAG] No relevant chunks found');
-          context = 'No relevant information found in the knowledge base for this query.';
-        }
-      } catch (error) {
-        console.error('[EMBED RAG] Error during retrieval:', error);
-        context = 'No relevant information found in the knowledge base for this query.';
+      if (result.status === 'error' || (result.status === 'degraded' && result.usedDocuments.length === 0)) {
+        console.error('[Document Search] Embed knowledge base unavailable:', { status: result.status, reason: result.reason });
+        finishPendingTrace();
+        return knowledgeBaseUnavailableResponse(request);
       }
+
+      context = result.context;
     } else {
-      console.log('[EMBED RAG] No query text provided, skipping retrieval');
+      console.log('[Document Search] Embed request has no query text, skipping retrieval');
     }
 
     // Use the same system prompt format as the main chat API
@@ -285,21 +315,10 @@ Context:
     console.log('[EMBED RAG] Final system prompt preview (first 300 chars):', finalSystemPrompt.substring(0, 300));
     console.log('[EMBED RAG] Using enhanced RAG prompt:', context.length > 0);
 
-    const systemMessage: ExtendedMessage = {
-      id: 'embed-system-context',
-      role: 'system',
-      content: finalSystemPrompt
-    };
-
-    const userAndAssistantMessages: ExtendedMessage[] = messages.map((message, index) => ({
-      id: `embed-${index}`,
-      role: message.role,
-      content: message.content
-    }));
-
-    const messagesForModelExtended: ExtendedMessage[] = [systemMessage, ...userAndAssistantMessages];
-    // Convert to API message format (CoreMessage) for streamText, not UIMessage
-    const messagesForModel = messagesForModelExtended.map(toAPIMessage);
+    const messagesForModel: ModelMessage[] = [
+      { role: 'system', content: finalSystemPrompt },
+      ...messages.map((message): ModelMessage => ({ role: message.role, content: message.content })),
+    ];
 
     // Stream the response using OpenRouter (SAME AS MAIN CHAT API)
     console.log('EMBED API: Calling streamText with model:', model);
@@ -315,6 +334,7 @@ Context:
     const modelProvider = openrouterProvider(safeModelId);
 
     if (!modelProvider) {
+      finishPendingTrace();
       console.error('EMBED API: Failed to get model provider from OpenRouter');
       return createErrorResponse("I'm having trouble connecting to the AI service. The model provider could not be initialized.");
     }
@@ -328,6 +348,12 @@ Context:
         temperature: 0.1, // Use same temperature as main chat
         maxOutputTokens: 2000,
         // Don't include tools for embed API to keep it simple
+        onFinish: (event) => {
+          pendingTrace?.collector.setReviewContent({ answer: event.text ?? '' });
+          finishPendingTrace();
+        },
+        onAbort: () => finishPendingTrace(),
+        onError: () => finishPendingTrace(),
       });
 
       console.log('EMBED API: streamText call successful, streaming to client');
@@ -351,6 +377,7 @@ Context:
       });
 
     } catch (streamError) {
+      finishPendingTrace();
       console.error('=== EMBED API: STREAM ERROR ===');
       console.error('EMBED API: streamText failed:', streamError);
       console.error('EMBED API: streamText error message:', (streamError as Error).message);
@@ -376,6 +403,7 @@ Context:
     }
 
   } catch (error) {
+    finishPendingTrace();
     console.error('=== EMBED API: MAIN CATCH BLOCK ===');
     console.error('EMBED API: Error occurred:', error);
     console.error('EMBED API: Error type:', error?.constructor?.name);

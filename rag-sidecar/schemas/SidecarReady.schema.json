@@ -13,6 +13,18 @@
       "default": null,
       "title": "Reason"
     },
+    "scorers": {
+      "items": {
+        "enum": [
+          "hhem_2_3_vectara",
+          "hhem_2_1_open"
+        ],
+        "type": "string"
+      },
+      "title": "Scorers",
+      "type": "array",
+      "uniqueItems": true
+    },
     "status": {
       "enum": [
         "ready",

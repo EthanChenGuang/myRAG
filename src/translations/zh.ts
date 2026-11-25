@@ -532,5 +532,11 @@ export const zh = {
   whatsAppHours: "小时",
   whatsAppDay: "天",
   whatsAppDays: "天",
+  whatsAppConnectionLost: "WhatsApp 连接已断开，请重新连接。",
+  whatsAppLastSeen: "最后在线",
+  whatsAppVerifying: "验证中...",
+  whatsAppRefreshStatus: "刷新状态",
+  whatsAppDisconnected: "已断开",
+  whatsAppReconnectMessage: "连接已断开。请断开并重新连接 WhatsApp 以恢复消息功能。",
   
 };

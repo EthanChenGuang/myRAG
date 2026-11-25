@@ -1,0 +1,292 @@
+From e403dc91d8397836f309c18b0822f2064571b5da Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 24 Nov 2026 22:22:29 +0000
+Subject: [PATCH 2/4] feat(05-01): answer and groundedness contract models
+
+CitationRecord, AnswerGroundedness, AnswerFeedback(Request), AnswerRecord,
+GroundednessRequest/Result/Thresholds with the D-01/D-11/D-13 rules, plus the
+default 0.5 thresholds file. Registration tests follow in the next commit.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01X342shLsAZx6PYph2vA7hc
+---
+ eval/config/groundedness-thresholds.json      |  23 ++++
+ .../src/rag_sidecar/contracts/answers.py      | 126 +++++++++++++-----
+ .../src/rag_sidecar/contracts/groundedness.py |  61 ++++++---
+ 3 files changed, 160 insertions(+), 50 deletions(-)
+ create mode 100644 eval/config/groundedness-thresholds.json
+
+diff --git a/eval/config/groundedness-thresholds.json b/eval/config/groundedness-thresholds.json
+new file mode 100644
+index 0000000..54816c2
+--- /dev/null
++++ b/eval/config/groundedness-thresholds.json
+@@ -0,0 +1,23 @@
++{
++  "cells": [
++    {
++      "language": "en",
++      "scorer": "hhem_2_1_open",
++      "source": "default",
++      "threshold": 0.5
++    },
++    {
++      "language": "en",
++      "scorer": "hhem_2_3_vectara",
++      "source": "default",
++      "threshold": 0.5
++    },
++    {
++      "language": "zh-Hans",
++      "scorer": "hhem_2_3_vectara",
++      "source": "default",
++      "threshold": 0.5
++    }
++  ],
++  "schema_version": 1
++}
+diff --git a/rag-sidecar/src/rag_sidecar/contracts/answers.py b/rag-sidecar/src/rag_sidecar/contracts/answers.py
+index eb020e0..611f06f 100644
+--- a/rag-sidecar/src/rag_sidecar/contracts/answers.py
++++ b/rag-sidecar/src/rag_sidecar/contracts/answers.py
+@@ -1,62 +1,118 @@
+-from typing import Any
++from datetime import datetime
++from typing import Annotated, Literal
++from uuid import UUID
++
++from pydantic import Field, model_validator
+ 
+ from rag_sidecar.contracts.golden import _Contract
+ 
++CitationStrategy = Literal["claude-citations", "chunk-alias"]
++GroundednessScorer = Literal["hhem_2_3_vectara", "hhem_2_1_open", "none"]
++GroundednessStatus = Literal["pending", "scored", "not_checked"]
++GroundednessLabel = Literal["verified", "possibly_unreliable", "not_checked"]
++ThresholdSource = Literal["default", "calibrated"]
++FeedbackVote = Literal["helpful", "not_helpful"]
++FeedbackReason = Literal["wrong", "incomplete", "not_from_documents", "bad_citation"]
++DocumentAvailability = Literal["current", "unavailable"]
++
++_ShortCode = Annotated[str, Field(min_length=1, max_length=64)]
++_Reasons = Annotated[list[FeedbackReason], Field(max_length=4)]
++_Comment = Annotated[str, Field(max_length=500)]
++
++
++def _unique_reasons(reasons: list[FeedbackReason]) -> list[FeedbackReason]:
++    if len(set(reasons)) != len(reasons):
++        raise ValueError("reasons must not repeat")
++    return reasons
++
+ 
+ class CitationRecord(_Contract):
+-    n: int
+-    alias: str
++    n: int = Field(ge=1)
++    alias: str = Field(pattern=r"^S[1-9][0-9]*$")
+     chunkIds: list[str]
+-    documentId: str
+-    documentName: str
++    documentId: str = Field(min_length=1)
++    documentName: str = Field(min_length=1)
+     documentVersion: int | None = None
+     page: int | None = None
+     sectionPath: list[str] | None = None
+-    quote: str
+-    quoteHash: str
+-    strategy: str
++    quote: str = Field(min_length=1)
++    quoteHash: str = Field(pattern=r"^[0-9a-f]{64}$")
++    strategy: CitationStrategy
+ 
+ 
+ class AnswerGroundedness(_Contract):
+-    status: str
+-    scorer: str | None = None
+-    score: float | None = None
+-    label: str | None = None
+-    threshold: float | None = None
+-    thresholdSource: str | None = None
+-    reason: str | None = None
++    status: GroundednessStatus
++    scorer: GroundednessScorer | None = None
++    score: float | None = Field(default=None, ge=0, le=1)
++    label: GroundednessLabel | None = None
++    threshold: float | None = Field(default=None, ge=0, le=1)
++    thresholdSource: ThresholdSource | None = None
++    reason: _ShortCode | None = None
+     truncated: bool = False
+-    latencyMs: int | None = None
+-    checkedAt: str | None = None
++    latencyMs: int | None = Field(default=None, ge=0)
++    checkedAt: datetime | None = None
++
++    @model_validator(mode="after")
++    def _per_status(self) -> "AnswerGroundedness":
++        if self.status == "pending":
++            if self.label is not None or self.score is not None or self.scorer is not None:
++                raise ValueError("a pending groundedness carries no scorer, label or score")
++        elif self.status == "scored":
++            if self.scorer is None or self.scorer == "none":
++                raise ValueError("a scored groundedness needs a real scorer")
++            if self.score is None:
++                raise ValueError("a scored groundedness needs a score")
++            if self.label not in ("verified", "possibly_unreliable"):
++                raise ValueError("a scored groundedness is verified or possibly_unreliable")
++            if self.threshold is None or self.thresholdSource is None:
++                raise ValueError("a scored groundedness needs its threshold and threshold source")
++        else:
++            if self.label != "not_checked":
++                raise ValueError("a not_checked groundedness has label not_checked")
++            if self.score is not None:
++                raise ValueError("a not_checked groundedness carries no score")
++            if self.reason is None:
++                raise ValueError("a not_checked groundedness needs a reason")
++        return self
+ 
+ 
+ class AnswerFeedback(_Contract):
+-    vote: str
+-    reasons: list[str]
+-    comment: str | None = None
+-    updatedAt: str
++    vote: FeedbackVote
++    reasons: _Reasons = Field(default_factory=list)
++    comment: _Comment | None = None
++    updatedAt: datetime
++
++    @model_validator(mode="after")
++    def _unique(self) -> "AnswerFeedback":
++        _unique_reasons(self.reasons)
++        return self
+ 
+ 
+ class AnswerFeedbackRequest(_Contract):
+-    vote: str
+-    reasons: list[str] = []
+-    comment: str | None = None
+-    chatId: str | None = None
++    vote: FeedbackVote
++    reasons: _Reasons = Field(default_factory=list)
++    comment: _Comment | None = None
++    chatId: UUID | None = None
++
++    @model_validator(mode="after")
++    def _unique(self) -> "AnswerFeedbackRequest":
++        _unique_reasons(self.reasons)
++        return self
+ 
+ 
+ class AnswerRecord(_Contract):
+-    answerId: str
+-    chatId: str | None = None
+-    traceId: str
+-    modelId: str
+-    citationStrategy: str | None = None
+-    ragMode: str
++    answerId: UUID
++    chatId: UUID | None = None
++    traceId: str = Field(min_length=1)
++    modelId: str = Field(min_length=1)
++    citationStrategy: CitationStrategy | None = None
++    ragMode: str = Field(min_length=1)
+     answerLanguage: str | None = None
+-    invalidCitations: int = 0
++    invalidCitations: int = Field(default=0, ge=0)
+     citations: list[CitationRecord]
+     groundedness: AnswerGroundedness
+     feedback: AnswerFeedback | None = None
+-    documents: dict[str, Any] = {}
++    documents: dict[str, DocumentAvailability] = Field(default_factory=dict)
+     feedbackEnabled: bool = False
+-    createdAt: str
+-    updatedAt: str
++    createdAt: datetime
++    updatedAt: datetime
+diff --git a/rag-sidecar/src/rag_sidecar/contracts/groundedness.py b/rag-sidecar/src/rag_sidecar/contracts/groundedness.py
+index 685c232..037eeec 100644
+--- a/rag-sidecar/src/rag_sidecar/contracts/groundedness.py
++++ b/rag-sidecar/src/rag_sidecar/contracts/groundedness.py
+@@ -1,33 +1,64 @@
++from datetime import datetime
++from typing import Annotated, Literal
++
++from pydantic import Field, model_validator
++
+ from rag_sidecar.contracts.golden import _Contract
+ 
++GroundednessScorerName = Literal["hhem_2_3_vectara", "hhem_2_1_open"]
++ThresholdCellSource = Literal["default", "calibrated"]
++
++_Text = Annotated[str, Field(min_length=1)]
++
+ 
+ class GroundednessRequest(_Contract):
+-    request_id: str
+-    language: str
+-    premise_texts: list[str]
+-    hypothesis: str
++    request_id: _Text
++    language: _Text
++    premise_texts: list[_Text] = Field(min_length=1)
++    hypothesis: _Text
+     allow_vectara: bool
+ 
+ 
+ class GroundednessResult(_Contract):
+-    status: str
+-    scorer: str
+-    score: float | None = None
+-    reason: str | None = None
++    status: Literal["scored", "not_checked"]
++    scorer: Literal["hhem_2_3_vectara", "hhem_2_1_open", "none"]
++    score: float | None = Field(default=None, ge=0, le=1)
++    reason: str | None = Field(default=None, min_length=1, max_length=64)
+     truncated: bool = False
+-    latency_ms: int
++    latency_ms: int = Field(ge=0)
++
++    @model_validator(mode="after")
++    def _per_status(self) -> "GroundednessResult":
++        if self.status == "scored":
++            if self.score is None:
++                raise ValueError("a scored result needs a score")
++            if self.scorer == "none":
++                raise ValueError("a scored result needs a real scorer")
++        else:
++            if self.score is not None:
++                raise ValueError("a not_checked result carries no score")
++            if self.reason is None:
++                raise ValueError("a not_checked result needs a reason")
++        return self
+ 
+ 
+ class GroundednessThresholdCell(_Contract):
+-    scorer: str
+-    language: str
+-    threshold: float
+-    source: str
+-    fitted_at: str | None = None
++    scorer: GroundednessScorerName
++    language: _Text
++    threshold: float = Field(ge=0, le=1)
++    source: ThresholdCellSource
++    fitted_at: datetime | None = None
+     dev: dict[str, float] | None = None
+     holdout: dict[str, float] | None = None
+ 
+ 
+ class GroundednessThresholds(_Contract):
+-    schema_version: int = 1
++    schema_version: Literal[1] = 1
+     cells: list[GroundednessThresholdCell]
++
++    @model_validator(mode="after")
++    def _unique_cells(self) -> "GroundednessThresholds":
++        pairs = [(cell.scorer, cell.language) for cell in self.cells]
++        if len(set(pairs)) != len(pairs):
++            raise ValueError("each (scorer, language) pair may appear once")
++        return self
+-- 
+2.43.0
+

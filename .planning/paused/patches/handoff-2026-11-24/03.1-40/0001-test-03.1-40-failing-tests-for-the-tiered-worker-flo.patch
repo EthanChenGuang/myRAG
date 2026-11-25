@@ -1,0 +1,602 @@
+From 19369a7d00627499b9222c3ecb81b0dea2244d79 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 24 Nov 2026 22:29:21 +0000
+Subject: [PATCH 1/5] test(03.1-40): failing tests for the tiered worker flow
+
+- run_tiered skeleton and optional WorkerDeps fields for storage, converter, pool and routing data
+- ranges, cache reuse, attempts, merge, native and office types, dry runs
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01X342shLsAZx6PYph2vA7hc
+---
+ .../src/rag_sidecar/ingest/process_job.py     |  11 +
+ rag-sidecar/src/rag_sidecar/ingest/tiered.py  |  10 +
+ rag-sidecar/tests/test_ingest_tiered.py       | 530 ++++++++++++++++++
+ 3 files changed, 551 insertions(+)
+ create mode 100644 rag-sidecar/src/rag_sidecar/ingest/tiered.py
+ create mode 100644 rag-sidecar/tests/test_ingest_tiered.py
+
+diff --git a/rag-sidecar/src/rag_sidecar/ingest/process_job.py b/rag-sidecar/src/rag_sidecar/ingest/process_job.py
+index 4aa3ed4..1d999b2 100644
+--- a/rag-sidecar/src/rag_sidecar/ingest/process_job.py
++++ b/rag-sidecar/src/rag_sidecar/ingest/process_job.py
+@@ -11,6 +11,7 @@ import logging
+ import time
+ from collections.abc import Awaitable, Callable
+ from dataclasses import dataclass, field
++from pathlib import Path
+ from typing import Any
+ 
+ from rag_sidecar.contracts.queue import (
+@@ -51,6 +52,16 @@ class WorkerDeps:
+     worker_id: str
+     sleep: Callable[[float], Awaitable[None]] = field(default=asyncio.sleep)
+     clock: Callable[[], float] = field(default=time.monotonic)
++    # Tiered routing only (D-12, D-15): the original store, the range converter, the priority pool and the routing data.
++    storage: Any = None
++    converter: Any = None
++    pool: Any = None
++    routing_cfg: Any = None
++    preflight_fn: Callable[..., Any] | None = None
++    whole_converter: Callable[..., Any] | None = None
++    page_cap: int = 300
++    document_timeout_s: float = 1800.0
++    work_dir: Path | None = None
+ 
+ 
+ class _Stop(Exception):
+diff --git a/rag-sidecar/src/rag_sidecar/ingest/tiered.py b/rag-sidecar/src/rag_sidecar/ingest/tiered.py
+new file mode 100644
+index 0000000..e4efc72
+--- /dev/null
++++ b/rag-sidecar/src/rag_sidecar/ingest/tiered.py
+@@ -0,0 +1,10 @@
++"""Tiered routing in the worker: preflight, range parsing, checks, merge and hand-off to advance (D-15, D-53, D-56)."""
++
++from __future__ import annotations
++
++from rag_sidecar.contracts.queue import IngestionJob
++from rag_sidecar.ingest.process_job import JobOutcome, WorkerDeps
++
++
++async def run_tiered(job: IngestionJob, deps: WorkerDeps, *, dry_run: bool = False) -> JobOutcome:
++    return JobOutcome(status="not_implemented")
+diff --git a/rag-sidecar/tests/test_ingest_tiered.py b/rag-sidecar/tests/test_ingest_tiered.py
+new file mode 100644
+index 0000000..6eaf294
+--- /dev/null
++++ b/rag-sidecar/tests/test_ingest_tiered.py
+@@ -0,0 +1,530 @@
++"""Tiered flow of the worker: ranges, cache, quality check, attempts, merge, native and office types, dry runs (plan 03.1-40)."""
++
++from __future__ import annotations
++
++import asyncio
++import json
++import tempfile
++from datetime import datetime, timedelta, timezone
++from pathlib import Path
++from typing import Any
++
++import pytest
++
++from ingest_fakes import AppScript, FakeApp, FakeLedger, FakeStorage
++from rag_sidecar.contracts.queue import IngestionJob, OriginalRef
++from rag_sidecar.contracts.ingest import ParseResult
++from rag_sidecar.contracts.routing import PageRange, PreflightResult
++from rag_sidecar.ingest import converters
++from rag_sidecar.ingest.ledger_client import LeaseLost
++from rag_sidecar.ingest.process_job import JobOutcome, WorkerDeps, process_job
++from rag_sidecar.ingest.storage_client import StorageError
++from rag_sidecar.ingest.tiered import run_tiered
++from rag_sidecar.preflight.config import load_routing_config
++
++REPO_ROOT = Path(__file__).resolve().parents[2]
++PARSE_ROOT = REPO_ROOT / "eval" / "fixtures" / "parse"
++RECORDED = PARSE_ROOT / "recorded"
++ENC = Path(__file__).parent / "fixtures" / "preflight"
++MANIFEST = {entry["id"]: entry for entry in json.loads((PARSE_ROOT / "manifest.json").read_text(encoding="utf-8"))["fixtures"]}
++
++_JOB_ID = "00000000-0000-4000-8000-000000000040"
++_TENANT = "u:00000000-0000-4000-8000-0000000000a1"
++_OTHER_TENANT = "u:00000000-0000-4000-8000-0000000000b1"
++_NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
++_WORKER = "worker-tiered"
++_NATIVE_CACHE_ID = "00000000-0000-4000-8000-0000000000d1"
++_BUCKET = "rag-originals"
++
++
++def _fixture_bytes(fixture_id: str) -> tuple[bytes, str]:
++    entry = MANIFEST[fixture_id]
++    return (REPO_ROOT / "eval" / entry["pdf_path"]).read_bytes(), entry["sha256"]
++
++
++def _settings(**overrides: Any) -> dict[str, Any]:
++    base = {
++        "routing": "tiered",
++        "cloud_allowed": True,
++        "escalation": True,
++        "progressive": False,
++        "premium_max_pages_per_doc": 50,
++        "premium_page_budget": 0,
++        "vlm_detect": False,
++        "profile_id": "general@1",
++        "profile_version": 1,
++        "doc_type": "general",
++        "min_tier": "fast",
++        "max_tier": "premium",
++        "embed_mode": "sync",
++        "ocr_languages": ["en"],
++        "routing_config_version": "1",
++    }
++    base.update(overrides)
++    return base
++
++
++def _job(
++    *,
++    sha: str,
++    mime: str = "application/pdf",
++    name: str = "original.pdf",
++    kind: str = "ingest",
++    priority: int = 100,
++    settings: dict[str, Any] | None = None,
++) -> IngestionJob:
++    return IngestionJob.model_validate(
++        {
++            "id": _JOB_ID,
++            "kind": kind,
++            "status": "preflight",
++            "tenant_key": _TENANT,
++            "source": "config_upload",
++            "source_key": f"root/{name}",
++            "file_sha256": sha,
++            "filename": name,
++            "mime_type": mime,
++            "original_ref": {"bucket": _BUCKET, "path": f"{_TENANT}/lineage/1/{name}"},
++            "priority": priority,
++            "settings": settings or _settings(),
++            "locked_by": _WORKER,
++            "lease_until": (_NOW + timedelta(hours=1)).isoformat(),
++            "created_at": _NOW.isoformat(),
++            "updated_at": _NOW.isoformat(),
++        }
++    )
++
++
++class TieredStorage(FakeStorage):
++    """FakeStorage with the real client's download (a path) and get_bytes."""
++
++    def __init__(self, files: dict[str, bytes] | None = None) -> None:
++        super().__init__()
++        self.files = files or {}
++        self._dirs: list[tempfile.TemporaryDirectory[str]] = []
++
++    async def download(self, original_ref: OriginalRef, *, dest_dir: Path | None = None) -> Path:  # type: ignore[override]
++        self.calls.append(("download", original_ref.bucket, original_ref.path))
++        target = dest_dir
++        if target is None:
++            holder = tempfile.TemporaryDirectory()
++            self._dirs.append(holder)
++            target = Path(holder.name)
++        out = target / Path(original_ref.path).name
++        out.write_bytes(self.files[original_ref.path])
++        return out
++
++    async def get_bytes(self, bucket: str, path: str) -> bytes:
++        self.calls.append(("get_bytes", bucket, path))
++        found = self.objects.get((bucket, path))
++        if found is None:
++            raise StorageError("storage read returned 404")
++        return found
++
++    def keys(self) -> list[str]:
++        return sorted(path for _bucket, path in self.objects)
++
++
++class TrackingLedger(FakeLedger):
++    """Records every advance with its fields and applies the fields to the row like rag_advance_ingestion_job does."""
++
++    def __init__(self) -> None:
++        super().__init__()
++        self.advances: list[dict[str, Any]] = []
++        self.lose_lease_on_cache_put: str | None = None
++
++    async def advance(self, job_id, worker, *, stage, status, stage_state=None, timing_ms=None, fields=None):  # type: ignore[override]
++        self.advances.append({"stage": stage, "status": status, "timing_ms": timing_ms, "fields": dict(fields or {})})
++        job = await super().advance(
++            job_id, worker, stage=stage, status=status, stage_state=stage_state, timing_ms=timing_ms, fields=fields
++        )
++        if fields:
++            merged = IngestionJob.model_validate({**job.model_dump(mode="json"), **fields})
++            self.jobs[job_id] = merged
++            return merged
++        return job
++
++    async def cache_put(self, job_id, parser, parser_version, options_hash, object_prefix, **kwargs):  # type: ignore[override]
++        if self.lose_lease_on_cache_put == parser:
++            raise LeaseLost("lease_lost")
++        return await super().cache_put(job_id, parser, parser_version, options_hash, object_prefix, **kwargs)
++
++    def parsers_cached(self) -> list[str]:
++        return [key[2] for key in self.cache]
++
++
++class TickClock:
++    def __init__(self, step: float = 0.25) -> None:
++        self.now = 0.0
++        self.step = step
++
++    def __call__(self) -> float:
++        self.now += self.step
++        return self.now
++
++
++class PoolSpy:
++    """Runs every submission at once and keeps what was asked of the pool."""
++
++    def __init__(self) -> None:
++        self.submitted: list[tuple[str, int]] = []
++
++    def submit(self, fn, args, *, priority, deadline_s):
++        self.submitted.append((getattr(fn, "__name__", "fn"), priority))
++        future: asyncio.Future[Any] = asyncio.get_running_loop().create_future()
++        try:
++            future.set_result(fn(*args))
++        except Exception as error:  # noqa: BLE001
++            future.set_exception(error)
++        return future
++
++
++class SpyConverter(converters.RecordedRangeConverter):
++    def __init__(self, root: Path) -> None:
++        super().__init__(root)
++        self.calls: list[tuple[str, int, int, int]] = []
++
++    def convert(self, path, file_sha256, preset, start, end, priority):
++        self.calls.append((preset, start, end, priority))
++        return super().convert(path, file_sha256, preset, start, end, priority)
++
++
++class Env:
++    def __init__(self, fixture_id: str = "mixed-routing", **job_kwargs: Any) -> None:
++        data, self.sha = _fixture_bytes(fixture_id)
++        self.job = _job(sha=self.sha, **job_kwargs)
++        self.ledger = TrackingLedger()
++        self.ledger.seed(self.job)
++        self.claim()
++        self.app = FakeApp()
++        self.app.script("advance", [AppScript(response=_advance_done())])
++        self.storage = TieredStorage({self.job.original_ref.path: data})  # type: ignore[union-attr]
++        self.converter = SpyConverter(RECORDED)
++        self.cfg = load_routing_config()
++        self.extra: dict[str, Any] = {}
++
++    def claim(self) -> IngestionJob:
++        current = self.ledger.jobs[_JOB_ID]
++        self.ledger.jobs[_JOB_ID] = current.model_copy(
++            update={"locked_by": _WORKER, "lease_until": self.ledger.clock.now() + timedelta(hours=1)}
++        )
++        return self.ledger.jobs[_JOB_ID]
++
++    def deps(self, **overrides: Any) -> WorkerDeps:
++        async def no_sleep(_seconds: float) -> None:
++            return None
++
++        values: dict[str, Any] = {
++            "ledger": self.ledger,
++            "app": self.app,
++            "worker_id": _WORKER,
++            "sleep": no_sleep,
++            "clock": TickClock(),
++            "storage": self.storage,
++            "converter": self.converter,
++            "routing_cfg": self.cfg,
++        }
++        values.update(self.extra)
++        values.update(overrides)
++        return WorkerDeps(**values)
++
++    def run_tiered(self, **kwargs: Any) -> JobOutcome:
++        deps = kwargs.pop("deps", None) or self.deps()
++        return asyncio.run(run_tiered(self.ledger.jobs[_JOB_ID], deps, **kwargs))
++
++    def process(self, **kwargs: Any) -> JobOutcome:
++        deps = kwargs.pop("deps", None) or self.deps()
++        return asyncio.run(process_job(self.ledger.jobs[_JOB_ID], deps))
++
++    def attempts(self):
++        return self.ledger.jobs[_JOB_ID].attempts
++
++    def calls(self, name: str) -> list[dict[str, Any]]:
++        return [call[2] for call in self.app.calls if call[0] == name]
++
++
++def _advance_done() -> dict[str, Any]:
++    return {"worker_id": _WORKER, "stage": "ready", "done": True, "status": "ready"}
++
++
++@pytest.fixture(autouse=True)
++def _counter():
++    converters.reset_conversion_counter()
++    yield
++    converters.reset_conversion_counter()
++
++
++def _summary(attempt) -> tuple[str, str, int, int, str]:
++    return attempt.tier, attempt.preset, attempt.pages.start, attempt.pages.end, attempt.reason
++
++
++# --- Task 1: ranges, cache, attempts, merge -------------------------------------------------------------------------
++
++
++def test_mixed_fixture_parses_each_range_records_attempts_caches_and_hands_the_merged_entry_to_advance():
++    env = Env()
++    outcome = env.run_tiered()
++
++    assert outcome == JobOutcome(status="ready")
++    assert [_summary(a) for a in env.attempts()] == [
++        ("fast", "fast", 1, 6, "initial"),
++        ("structured", "structured_full", 7, 8, "initial"),
++        ("structured", "structured_ocr", 9, 10, "initial"),
++    ]
++    for attempt in env.attempts():
++        pages = attempt.pages.end - attempt.pages.start + 1
++        per_page = getattr(env.cfg.costs.tier, attempt.tier).usd_per_page
++        assert attempt.est_cost_usd == pytest.approx(pages * per_page)
++        assert attempt.ms > 0
++        assert attempt.cache_hit is False and attempt.refused is False
++        assert attempt.check is not None
++        assert attempt.parser == "docling"
++
++    job = env.ledger.jobs[_JOB_ID]
++    prefix_root = f"{_TENANT}/_parse-cache/{env.sha}/"
++    assert job.preflight_ref is not None and job.preflight_ref.startswith(prefix_root)
++    stored = env.storage.objects[(_BUCKET, job.preflight_ref)]
++    assert PreflightResult.model_validate_json(stored).page_count == 10
++
++    merged = [entry for key, entry in env.ledger.cache.items() if key[2] == "merged"]
++    assert len(merged) == 1
++    assert merged[0].object_prefix.startswith(prefix_root)
++    result = ParseResult.model_validate_json(env.storage.objects[(_BUCKET, f"{merged[0].object_prefix}result.json")])
++    assert result.page_count == 10
++    first_pages = [min(chunk.pages) for chunk in result.chunks if chunk.pages]
++    assert first_pages == sorted(first_pages) and min(first_pages) >= 1 and max(first_pages) <= 10
++
++    advance_calls = env.calls("advance")
++    assert len(advance_calls) == 1
++    assert advance_calls[0]["phase"] == "post_parse"
++    assert advance_calls[0]["parse_cache_id"] == merged[0].id
++    assert advance_calls[0]["attempt_no"] == 3
++    assert env.calls("parse_external") == []
++
++    stages = [step["stage"] for step in env.ledger.advances]
++    assert stages.index("preflight") < stages.index("parse") < stages.index("check")
++    parse_fields = next(step["fields"] for step in env.ledger.advances if step["stage"] == "parse")
++    assert parse_fields["doc_class"] == "mixed"
++    assert [(r["start"], r["end"], r["preset"]) for r in parse_fields["page_ranges"]] == [
++        (1, 6, "fast"),
++        (7, 8, "structured_full"),
++        (9, 10, "structured_ocr"),
++    ]
++    assert parse_fields["tier_page_counts"]["structured"] == 3
++    assert parse_fields["detect_counts"]["L1"] == 10
++    final_ranges = next(step["fields"] for step in env.ledger.advances if step["stage"] == "check")["page_ranges"]
++    assert all(r["status"] in {"ok", "needs_review"} and r["cache_id"] for r in final_ranges)
++
++
++def test_a_reclaimed_job_reuses_the_cache_for_every_finished_range():
++    env = Env()
++    env.ledger.lose_lease_on_cache_put = "merged"
++    with pytest.raises(LeaseLost):
++        env.run_tiered()
++    converted = converters.conversion_counter
++    assert converted > 0
++    assert env.ledger.parsers_cached().count("docling") >= 3
++    assert env.ledger.jobs[_JOB_ID].preflight_ref is not None
++
++    env.ledger.lose_lease_on_cache_put = None
++    env.claim()
++    before = len(env.attempts())
++    assert env.run_tiered() == JobOutcome(status="ready")
++
++    assert converters.conversion_counter == converted
++    second_run = env.attempts()[before:]
++    assert [a.cache_hit for a in second_run] == [True, True, True]
++    assert all(a.est_cost_usd == 0 for a in second_run)
++    assert len(env.calls("advance")) == 1
++
++
++def test_the_l2_conversion_of_an_uncertain_plain_page_is_not_converted_again():
++    env = Env("multi-column-en")
++    assert env.run_tiered() == JobOutcome(status="ready")
++    fast_calls = [call for call in env.converter.calls if call[0] == "fast"]
++    pages_converted_fast = [page for _preset, start, end, _p in fast_calls for page in range(start, end + 1)]
++    assert len(pages_converted_fast) == len(set(pages_converted_fast)), "no page is converted twice at the fast preset"
++    assert any(key[2] == "docling" for key in env.ledger.cache), "the L2 result is cached as a fast range entry"
++
++
++def test_a_low_priority_range_is_submitted_to_the_pool_in_sub_ranges_and_cached_as_one_entry():
++    env = Env("bench-100", priority=10)
++    pool = PoolSpy()
++
++    def preflight_fn(path, settings, cfg, converter, *, file_sha=None):
++        from rag_sidecar.preflight.run import PreflightOutput, run_preflight
++
++        output = run_preflight(path, settings, cfg, converter, file_sha=file_sha)
++        first = output.result.ranges[0]
++        ranges = [
++            PageRange(start=1, end=60, tier="fast", preset="fast", parser="docling", layer=first.layer, signals=[], status="pending"),
++            PageRange(start=61, end=100, tier="fast", preset="fast", parser="docling", layer=first.layer, signals=[], status="pending"),
++        ]
++        return PreflightOutput(result=output.result.model_copy(update={"ranges": ranges}), reusable_fast={})
++
++    outcome = env.run_tiered(deps=env.deps(pool=pool, preflight_fn=preflight_fn))
++    assert outcome == JobOutcome(status="ready")
++    assert [(start, end) for preset, start, end, _p in env.converter.calls if preset == "fast"] == [
++        (1, 24),
++        (25, 48),
++        (49, 60),
++        (61, 84),
++        (85, 100),
++    ]
++    assert all(priority == 10 for _name, priority in pool.submitted)
++    entries = [key for key in env.ledger.cache if key[2] == "docling"]
++    assert len(entries) == 2, "one cache entry per range, not per sub-range"
++
++
++def test_a_cache_entry_under_another_tenant_prefix_is_never_read():
++    env = Env()
++    original = env.ledger.cache_lookup
++
++    async def foreign_lookup(job_id, parser, parser_version, options_hash):
++        rows = await original(job_id, parser, parser_version, options_hash)
++        return [row.model_copy(update={"object_prefix": f"{_OTHER_TENANT}/_parse-cache/{env.sha}/x/"}) for row in rows]
++
++    env.ledger.cache_lookup = foreign_lookup  # type: ignore[method-assign]
++    assert env.run_tiered() == JobOutcome(status="ready")
++    foreign_reads = [call for call in env.storage.calls if call[0] == "get_bytes" and _OTHER_TENANT in call[2]]
++    assert foreign_reads == []
++
++
++def test_pages_that_do_not_tile_the_document_fail_the_job_with_merge_invariant():
++    env = Env()
++
++    class DroppingConverter(SpyConverter):
++        def convert(self, path, file_sha256, preset, start, end, priority):
++            document, meta = super().convert(path, file_sha256, preset, start, end, priority)
++            if preset == "structured_full":
++                from rag_sidecar.ingest.merge import slice_pages
++
++                document = slice_pages(document, {start})
++            return document, meta
++
++    env.converter = DroppingConverter(RECORDED)
++    outcome = env.run_tiered()
++    assert outcome == JobOutcome(status="failed", error_class="merge_invariant")
++    assert env.calls("advance") == []
++
++
++# --- Task 2: dispatch by routing and type, dry runs -----------------------------------------------------------------
++
++
++def _native_response(text: str = "# Title\n\nBody text of the note.") -> dict[str, Any]:
++    return {
++        "worker_id": _WORKER,
++        "status": "done",
++        "cache_id": _NATIVE_CACHE_ID,
++        "pages": [{"page": 1, "text": text, "has_table": False}],
++    }
++
++
++def _plain_env(mime: str, name: str, **kwargs: Any) -> Env:
++    env = Env(mime=mime, name=name, **kwargs)
++    env.storage.files[env.job.original_ref.path] = b"x"  # type: ignore[union-attr]
++    return env
++
++
++def test_markdown_goes_to_parse_external_native_without_downloading_anything():
++    env = _plain_env("text/markdown", "note.md")
++    env.app.script("parse_external", [AppScript(response=_native_response())])
++    assert env.process() == JobOutcome(status="ready")
++
++    call = env.calls("parse_external")[0]
++    assert call["mode"] == "native" and len(call["options_hash"]) == 64 and call["pages"] is None
++    assert env.storage.calls == []
++    assert [_summary(a) for a in env.attempts()] == [("native", "native", 1, 1, "native")]
++    assert env.attempts()[0].parser == "plain_text"
++    assert env.calls("advance")[0]["parse_cache_id"] == _NATIVE_CACHE_ID
++
++
++def test_a_png_goes_to_native_captioning_and_is_classed_image():
++    env = _plain_env("image/png", "scan.png")
++    env.app.script("parse_external", [AppScript(response=_native_response("A caption of the picture."))])
++    assert env.process() == JobOutcome(status="ready")
++    assert env.calls("parse_external")[0]["mode"] == "native"
++    parse_fields = next(step["fields"] for step in env.ledger.advances if step["stage"] == "parse")
++    assert parse_fields["doc_class"] == "image"
++
++
++def _one_page_document():
++    data, sha = _fixture_bytes("mixed-routing")
++    del data
++    document, _meta = converters.RecordedRangeConverter(RECORDED).convert(Path("unused"), sha, "fast", 1, 1, 100)
++    converters.reset_conversion_counter()
++    return document
++
++
++@pytest.mark.parametrize(
++    ("mime", "name", "expected_preset", "expected_tier"),
++    [
++        ("application/vnd.openxmlformats-officedocument.wordprocessingml.document", "report.docx", "fast", "native"),
++        ("text/html", "page.html", "fast", "native"),
++        ("application/vnd.openxmlformats-officedocument.presentationml.presentation", "deck.pptx", "structured_layout", "structured"),
++    ],
++)
++def test_office_and_html_files_are_converted_in_process_as_one_range(mime, name, expected_preset, expected_tier):
++    env = _plain_env(mime, name)
++    seen: list[tuple[str, str]] = []
++
++    def whole(path, preset, languages):
++        seen.append((Path(path).name, preset))
++        return _one_page_document()
++
++    outcome = env.process(deps=env.deps(whole_converter=whole))
++    assert outcome == JobOutcome(status="ready")
++    assert seen == [(name, expected_preset)]
++    assert env.calls("parse_external") == []
++    attempt = env.attempts()[0]
++    assert len(env.attempts()) == 1 and attempt.tier == expected_tier and attempt.parser == "docling"
++    assert any(key[2] == "merged" for key in env.ledger.cache)
++    assert len(env.calls("advance")) == 1
++
++
++def test_an_encrypted_pdf_fails_at_once_and_is_not_retried():
++    env = Env()
++    env.storage.files[env.job.original_ref.path] = (ENC / "user-password.pdf").read_bytes()  # type: ignore[union-attr]
++    outcome = env.process()
++    assert outcome == JobOutcome(status="failed", error_class="encrypted_pdf")
++    assert env.ledger.jobs[_JOB_ID].status == "failed"
++    assert env.calls("advance") == [] and env.attempts() == []
++
++
++def test_tiered_routing_dispatches_a_pdf_to_the_tiered_flow():
++    env = Env()
++    assert env.process() == JobOutcome(status="ready")
++    assert env.calls("parse_external") == []
++    assert len(env.attempts()) == 3
++
++
++def test_a_type_without_a_tiered_path_keeps_the_chain_path():
++    env = _plain_env("application/zip", "bundle.zip")
++    env.app.script("parse_external", [AppScript(response={"worker_id": _WORKER, "status": "done", "cache_id": _NATIVE_CACHE_ID})])
++    assert env.process() == JobOutcome(status="ready")
++    assert env.calls("parse_external")[0]["mode"] == "chain"
++    assert [a.reason for a in env.attempts()] == ["fixed_chain"]
++
++
++def test_a_tiered_job_on_a_worker_without_storage_fails_without_calling_the_app():
++    env = Env()
++    outcome = env.process(deps=env.deps(storage=None))
++    assert outcome == JobOutcome(status="failed", error_class="tiered_unavailable")
++    assert env.app.calls == []
++
++
++def test_a_dry_run_stops_after_checking_records_attempts_and_publishes_nothing():
++    env = Env(kind="dry_run")
++    outcome = env.process()
++
++    assert outcome == JobOutcome(status="ready")
++    job = env.ledger.jobs[_JOB_ID]
++    assert job.status == "ready"
++    assert env.calls("advance") == []
++    assert len(job.attempts) == 3
++    assert not any(key[2] == "merged" for key in env.ledger.cache)
++    assert sum(1 for key in env.ledger.cache if key[2] == "docling") == 3
++    last = env.ledger.advances[-1]
++    assert last["status"] == "ready"
++    assert [(r["start"], r["end"]) for r in last["fields"]["page_ranges"]] == [(1, 6), (7, 8), (9, 10)]
++    assert job.document_id is None
+-- 
+2.43.0
+

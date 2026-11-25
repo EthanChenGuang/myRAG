@@ -8,7 +8,7 @@ const ENV_PATH = path.join(REPO_ROOT, '.env.local');
 // Default model configurations
 const DEFAULT_OPENAI_MODELS = '[{"id":"gpt-4.1-mini","displayName":"GPT-4.1 Mini"},{"id":"gpt-4.1","displayName":"GPT-4.1"},{"id":"o3","displayName":"o3"},{"id":"o4-mini","displayName":"o4 Mini"}]';
 
-const DEFAULT_OPENROUTER_MODELS = '[{"id":"anthropic/claude-sonnet-4.5","displayName":"Claude Sonnet 4.5","isDefault":true},{"id":"openai/gpt-5.2-chat","displayName":"GPT-5.2"},{"id":"openai/gpt-4.1-mini","displayName":"GPT-4.1 Mini"},{"id":"openai/gpt-4.1","displayName":"GPT-4.1"},{"id":"anthropic/claude-opus-4.1","displayName":"Claude Opus 4.1"},{"id":"google/gemini-2.5-flash-lite","displayName":"Gemini 2.5 Flash Lite"},{"id":"google/gemini-2.5-flash","displayName":"Gemini 2.5 Flash"},{"id":"meta-llama/llama-4-maverick","displayName":"Llama 4 Maverick","isOpenSource":true},{"id":"cognitivecomputations/dolphin-mistral-24b-venice-edition:free","displayName":"Venice: Uncensored","isFree":true,"isOpenSource":true,"isUncensored":true}]';
+const DEFAULT_OPENROUTER_MODELS = '[{"id":"anthropic/claude-sonnet-4.5","displayName":"Claude Sonnet 4.5","isDefault":true},{"id":"openai/gpt-5.2-chat","displayName":"GPT-5.2"},{"id":"openai/gpt-4.1-mini","displayName":"GPT-4.1 Mini"},{"id":"openai/gpt-4.1","displayName":"GPT-4.1"},{"id":"anthropic/claude-opus-4.1","displayName":"Claude Opus 4.1"},{"id":"anthropic/claude-opus-5.5","displayName":"Claude Opus 5.5","anthropicId":"claude-opus-5-5","supportsReasoning":true,"reasoningMethod":"effort","contextLength":1000000},{"id":"anthropic/claude-sonnet-5.5","displayName":"Claude Sonnet 5.5","anthropicId":"claude-sonnet-5-5","supportsReasoning":true,"reasoningMethod":"effort","contextLength":1000000},{"id":"anthropic/claude-haiku-5.5","displayName":"Claude Haiku 5.5","anthropicId":"claude-haiku-5-5","supportsReasoning":true,"reasoningMethod":"effort","contextLength":1000000},{"id":"google/gemini-2.5-flash-lite","displayName":"Gemini 2.5 Flash Lite"},{"id":"google/gemini-2.5-flash","displayName":"Gemini 2.5 Flash"},{"id":"meta-llama/llama-4-maverick","displayName":"Llama 4 Maverick","isOpenSource":true},{"id":"cognitivecomputations/dolphin-mistral-24b-venice-edition:free","displayName":"Venice: Uncensored","isFree":true,"isOpenSource":true,"isUncensored":true}]';
 
 // Groq free tier has strict rate limits - only Llama 3.3 70B works reliably with RAG contexts
 // Users with paid Groq tiers can add more models: llama-3.1-8b-instant, mixtral-8x7b-32768, gemma2-9b-it
@@ -57,7 +57,10 @@ FLYIO_API_KEY=
 KOYEB_BAILEYS_URL=
 KOYEB_API_KEY=
 WHATSAPP_WEBHOOK_URL=
+# Required in production (webhook returns 503 without it). Must match WEBHOOK_SECRET in the Baileys service.
 WHATSAPP_WEBHOOK_SECRET=
+# Development only: accept unsigned webhooks when no secret is set. Ignored in production.
+WHATSAPP_WEBHOOK_ALLOW_UNSIGNED=
 WHATSAPP_ENABLE_MCP=false
 WHATSAPP_ENABLE_WEB_SEARCH=false
 WHATSAPP_DEFAULT_MODEL=openai/gpt-4o-mini
@@ -331,6 +334,204 @@ RAG_EVAL_ALLOWED_SCOPES=
 RAG_SIDECAR_URL=
 # Shared secret for the sidecar (at least 32 characters)
 RAG_SIDECAR_SECRET=
+
+# -----------------------------
+# RETRIEVAL PIPELINE
+# -----------------------------
+# legacy keeps today's retrieval path; unified switches to the staged pipeline
+RAG_PIPELINE=legacy
+# Stages to skip, comma-separated (empty runs every stage)
+RAG_DISABLED_STAGES=
+# Per-stage time budgets as stage=ms,stage=ms (empty uses the built-in budgets)
+RAG_STAGE_TIMEOUTS=
+
+# -----------------------------
+# RETRIEVAL V2 (Phase 4 switches — off by default)
+# -----------------------------
+# Lexical hybrid search leg
+RAG_LEXICAL_SEARCH=false
+# Reranker: none | cohere | voyage | local_bm25
+RAG_RERANKER=none
+RAG_RERANK_TIER_CHAT=quality
+RAG_RERANK_TIER_VOICE=fast
+# Per-language Voyage rerank model, e.g. zh=rerank-2.5
+RAG_RERANK_VOYAGE_MODEL_BY_LANG=
+COHERE_API_KEY=
+COHERE_BASE_URL=
+# Refusal and context assembly
+RAG_REFUSAL_THRESHOLD=false
+RAG_CONTEXT_EDGE_ORDER=false
+RAG_CONTEXT_COMPRESSION=false
+RAG_CONTEXT_TOKEN_BUDGET=6000
+# Parent chunks and pgvector scan
+RAG_PARENT_CHILD=false
+RAG_HNSW_ITERATIVE_SCAN=off
+RAG_EXACT_SCAN_CUTOFF=0
+# Query translation before lexical tokenization
+RAG_LEXICAL_TRANSLATION=false
+# Emergency override for pool/cap/topk (operator only)
+RAG_RETRIEVAL_PARAMS_OVERRIDE=
+# Tenant for embedded chat: s:default | o:<uuid> | u:<uuid> (empty means s:default in single-tenant, fails closed in multi-tenant)
+RAG_EMBED_TENANT=
+# Signing secret for voice retrieval tokens (at least 32 characters)
+RAG_VOICE_TOKEN_SECRET=
+# Lifetime of a voice retrieval token in seconds
+RAG_VOICE_TOKEN_TTL_SECONDS=3600
+# Concurrent voice rooms the app allows (409 voice_busy beyond it); must equal VOICE_AGENT_MAX_SESSIONS on the voice agent
+VOICE_MAX_ACTIVE_ROOMS=4
+
+# -----------------------------
+# LANGFUSE TRACING
+# -----------------------------
+LANGFUSE_ENABLED=false
+LANGFUSE_PUBLIC_KEY=
+# Secret key (at least 32 characters)
+LANGFUSE_SECRET_KEY=
+LANGFUSE_BASE_URL=https://cloud.langfuse.com
+# Share of requests traced, 0 to 1
+LANGFUSE_SAMPLE_RATE=0.1
+# Send prompt and answer text to Langfuse (off keeps only metadata)
+LANGFUSE_CAPTURE_CONTENT=false
+# Share of traces queued for human review, 0 to 1
+LANGFUSE_REVIEW_SAMPLE_RATE=0
+
+# -----------------------------
+# VERIFIED CITATIONS AND GROUNDEDNESS
+# -----------------------------
+# Inline citations on knowledge-base answers
+RAG_CITATIONS=false
+# Route Claude models to the Anthropic API with Claude Citations
+RAG_CLAUDE_CITATIONS=false
+# Anthropic API key for Claude Citations (never logged)
+ANTHROPIC_API_KEY=
+# Anthropic API base URL; empty uses https://api.anthropic.com/v1 (set only for tests and recorded streams)
+ANTHROPIC_BASE_URL=
+# Score answers for groundedness after the stream (sidecar)
+RAG_GROUNDEDNESS=false
+# Allow the Vectara hosted groundedness scorer
+RAG_GROUNDEDNESS_VECTARA_OPT_IN=false
+# Groundedness scoring timeout in milliseconds
+RAG_GROUNDEDNESS_TIMEOUT_MS=20000
+# Premise sent to the scorer, in cl100k tokens
+RAG_GROUNDEDNESS_MAX_PREMISE_TOKENS=3000
+# Thumbs up/down feedback on answers
+RAG_ANSWER_FEEDBACK=false
+# Multi-tenant only: set after the Vectara data-retention terms were recorded in live verification
+RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK=false
+
+# -----------------------------
+# PROMPT-INJECTION DEFENSE
+# -----------------------------
+# Wrap retrieved chunks in tagged <doc> blocks with an untrusted-content notice
+RAG_CONTEXT_TAGGING=false
+# Retrieval-time injection check: off | flag | drop | downweight (drop is recommended; downweight is weaker than drop)
+RAG_INJECTION_CHECK=off
+# Prompt Guard 2 detector in the sidecar (optional; en and it only)
+RAG_INJECTION_PROMPT_GUARD=false
+# Lakera Guard hosted detector (sends chunk text to Lakera, a third party)
+RAG_INJECTION_LAKERA=false
+# Lakera Guard API key (never logged)
+LAKERA_GUARD_API_KEY=
+# Lakera Guard base URL; empty uses the default Lakera host (regional hosts such as the EU one are allowed)
+LAKERA_GUARD_BASE_URL=
+# Multi-tenant only: set after the Lakera data-retention terms were recorded in live verification
+RAG_INJECTION_LAKERA_MULTI_TENANT_ACK=false
+# Tool results (web search, MCP) in the model context: off | tag | tag_and_flag
+RAG_TOOL_RESULT_GUARD=off
+# Render markdown images in answers only from allowed hosts (inlined at build time; needs a rebuild)
+NEXT_PUBLIC_RAG_IMAGE_ALLOWLIST=false
+
+# -----------------------------
+# QUERY LAYER
+# -----------------------------
+# Query rewriting before retrieval; false keeps today's behaviour and every switch below is inert while it is false
+RAG_QUERY_LAYER=false
+RAG_QUERY_FRAMEWORK=llamaindex
+RAG_QUERY_LLM_MODEL=openai/gpt-4.1-nano
+RAG_QUERY_CONDENSE=true
+RAG_QUERY_EXPAND=true
+RAG_QUERY_DECOMPOSE=true
+RAG_QUERY_TRANSLATE=true
+RAG_QUERY_DATE_NORMALIZE=true
+RAG_QUERY_HYDE=false
+RAG_QUERY_TRANSLATE_DISABLED_PROFILES=
+RAG_QUERY_VOICE_TRANSFORMS=condense_history,normalize_dates
+
+# -----------------------------
+# SEMANTIC CACHE
+# -----------------------------
+# Answer cache backend: off | pgvector | redisvl (REDIS_URL is read by the sidecar for redisvl only)
+RAG_SEMANTIC_CACHE=off
+RAG_SEMANTIC_CACHE_TTL=3600
+RAG_SEMANTIC_CACHE_REFUSAL_TTL=600
+RAG_SEMANTIC_CACHE_MAX_DISTANCE=0.05
+RAG_SEMANTIC_CACHE_EMBED_STORE=false
+REDIS_URL=
+
+# -----------------------------
+# INGESTION AND EMBEDDING PROFILES
+# -----------------------------
+# legacy keeps today's document writers; unified switches to the single ingest pipeline
+RAG_INGEST_PIPELINE=legacy
+# Document parser: llamaparse | docling
+RAG_PARSER=llamaparse
+# Time one request may wait for a sidecar parse job, in milliseconds (1000 to 55000)
+RAG_PARSE_POLL_BUDGET_MS=45000
+# Ask a model to detect the document type when rules are unsure: true | false
+RAG_DOC_TYPE_LLM_DETECT=false
+# Ask a model to extract invoice fields when rules find none: true | false
+RAG_INVOICE_LLM_EXTRACT=false
+# Look up exact identifiers (invoice numbers, contract ids) before vector search: true | false
+RAG_EXACT_ID_LOOKUP=false
+# Create image chunks from PDF pages: true | false
+RAG_PDF_IMAGE_CHUNKS=false
+# Prompt injection scan on ingested text: off | quarantine
+RAG_INJECTION_SCAN=off
+# Embedding profile registry: off | on (off keeps the single configured embedding model)
+RAG_EMBEDDING_PROFILES=off
+# Fallback host when the Qwen embedding provider is unavailable: openrouter | none
+RAG_QWEN_EMBED_FALLBACK=openrouter
+
+# -----------------------------
+# INGESTION (Phase 3.1 queue)
+# -----------------------------
+# Parse routing: fixed | tiered (tiered needs unified pipeline and async ingest)
+RAG_PARSE_ROUTING=fixed
+# Allow cloud parsers (LlamaParse and premium): true | false
+RAG_PARSER_ALLOW_CLOUD=true
+# Premium page budget per month for tiered routing (0 = unlimited reporting only)
+RAG_PARSE_PREMIUM_PAGE_BUDGET=0
+# Maximum premium pages per document under tiered routing
+RAG_PARSE_PREMIUM_MAX_PAGES_PER_DOC=200
+# Escalate failing page ranges one tier: on | off
+RAG_PARSE_ESCALATION=on
+# Vision-model page detection under tiered routing: true | false
+RAG_PARSE_VLM_DETECT=false
+# Vision model override (empty = image captioning model)
+RAG_PARSE_VLM_MODEL=
+# Queue ingestion jobs instead of inline processing: off | on (on needs unified pipeline)
+RAG_INGEST_ASYNC=off
+# Concurrent worker jobs (sidecar)
+RAG_INGEST_WORKER_CONCURRENCY=2
+# Terminal ingestion jobs older than this many days are archived and purged (maintenance task)
+RAG_INGEST_JOB_RETENTION_DAYS=90
+# Sidecar maintenance loop interval (seconds); off via RAG_INGEST_MAINTENANCE=off
+RAG_INGEST_MAINTENANCE_INTERVAL_SECONDS=3600
+RAG_INGEST_MAINTENANCE=on
+# Publish chunks incrementally while parsing: true | false
+RAG_PARSE_PROGRESSIVE=false
+# Embedding batch mode for backfill: sync | batch_api
+RAG_EMBED_BATCH_MODE=sync
+# Browser realtime job updates (Supabase broadcast): true | false
+NEXT_PUBLIC_RAG_INGEST_REALTIME=false
+# Ledger workers and the app must use the Supabase project HTTPS URL (PostgREST), never a direct Postgres DSN.
+
+# Voyage embeddings
+VOYAGE_API_KEY=
+VOYAGE_BASE_URL=https://api.voyageai.com/v1
+# DeepInfra embeddings (OpenAI-compatible)
+DEEPINFRA_API_KEY=
+DEEPINFRA_BASE_URL=https://api.deepinfra.com/v1/openai
 
 # -----------------------------
 # RAG CONFIGURATION (Unified Optimized System)

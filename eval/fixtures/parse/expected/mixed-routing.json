@@ -1,0 +1,298 @@
+{
+  "fixture_id": "mixed-routing",
+  "headings": [
+    {
+      "level": 1,
+      "page": 1,
+      "text": "Section 1"
+    },
+    {
+      "level": 2,
+      "page": 10,
+      "text": "Closing note"
+    }
+  ],
+  "language": "en",
+  "pages": [
+    {
+      "page": 1,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 2,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 3,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 4,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 5,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 6,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 7,
+      "preset": "structured_full",
+      "signals": [
+        "tables"
+      ],
+      "tier": "structured"
+    },
+    {
+      "page": 8,
+      "preset": "structured_full",
+      "signals": [
+        "tables"
+      ],
+      "tier": "structured"
+    },
+    {
+      "page": 9,
+      "preset": "structured_ocr",
+      "signals": [
+        "scanned"
+      ],
+      "tier": "structured"
+    },
+    {
+      "page": 10,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    }
+  ],
+  "reading_order": [
+    {
+      "order": 0,
+      "page": 1,
+      "text": "Section 1"
+    },
+    {
+      "order": 1,
+      "page": 1,
+      "text": "Digital narrative on page 1 for mixed routing coverage."
+    },
+    {
+      "order": 2,
+      "page": 2,
+      "text": "Section 2"
+    },
+    {
+      "order": 3,
+      "page": 2,
+      "text": "Digital narrative on page 2 for mixed routing coverage."
+    },
+    {
+      "order": 4,
+      "page": 3,
+      "text": "Section 3"
+    },
+    {
+      "order": 5,
+      "page": 3,
+      "text": "Digital narrative on page 3 for mixed routing coverage."
+    },
+    {
+      "order": 6,
+      "page": 4,
+      "text": "Section 4"
+    },
+    {
+      "order": 7,
+      "page": 4,
+      "text": "Digital narrative on page 4 for mixed routing coverage."
+    },
+    {
+      "order": 8,
+      "page": 5,
+      "text": "Section 5"
+    },
+    {
+      "order": 9,
+      "page": 5,
+      "text": "Digital narrative on page 5 for mixed routing coverage."
+    },
+    {
+      "order": 10,
+      "page": 6,
+      "text": "Section 6"
+    },
+    {
+      "order": 11,
+      "page": 6,
+      "text": "Digital narrative on page 6 for mixed routing coverage."
+    },
+    {
+      "order": 12,
+      "page": 7,
+      "text": "Table block 7"
+    },
+    {
+      "order": 13,
+      "page": 8,
+      "text": "Table block 8"
+    },
+    {
+      "order": 14,
+      "page": 9,
+      "text": "Embedded scan slip"
+    },
+    {
+      "order": 15,
+      "page": 9,
+      "text": "This image-only page should route to structured_ocr in the mixed document."
+    },
+    {
+      "order": 16,
+      "page": 10,
+      "text": "Closing note"
+    },
+    {
+      "order": 17,
+      "page": 10,
+      "text": "Final digital page after the scanned page."
+    }
+  ],
+  "table_cells": [
+    {
+      "col": 0,
+      "row": 0,
+      "text": "Lane"
+    },
+    {
+      "col": 1,
+      "row": 0,
+      "text": "Value"
+    },
+    {
+      "col": 2,
+      "row": 0,
+      "text": "Status"
+    },
+    {
+      "col": 0,
+      "row": 1,
+      "text": "A"
+    },
+    {
+      "col": 1,
+      "row": 1,
+      "text": "10"
+    },
+    {
+      "col": 2,
+      "row": 1,
+      "text": "ok"
+    },
+    {
+      "col": 0,
+      "row": 2,
+      "text": "B"
+    },
+    {
+      "col": 1,
+      "row": 2,
+      "text": "20"
+    },
+    {
+      "col": 2,
+      "row": 2,
+      "text": "ok"
+    },
+    {
+      "col": 0,
+      "row": 3,
+      "text": "C"
+    },
+    {
+      "col": 1,
+      "row": 3,
+      "text": "30"
+    },
+    {
+      "col": 2,
+      "row": 3,
+      "text": "hold"
+    },
+    {
+      "col": 0,
+      "row": 0,
+      "text": "Lane"
+    },
+    {
+      "col": 1,
+      "row": 0,
+      "text": "Value"
+    },
+    {
+      "col": 2,
+      "row": 0,
+      "text": "Status"
+    },
+    {
+      "col": 0,
+      "row": 1,
+      "text": "A"
+    },
+    {
+      "col": 1,
+      "row": 1,
+      "text": "10"
+    },
+    {
+      "col": 2,
+      "row": 1,
+      "text": "ok"
+    },
+    {
+      "col": 0,
+      "row": 2,
+      "text": "B"
+    },
+    {
+      "col": 1,
+      "row": 2,
+      "text": "20"
+    },
+    {
+      "col": 2,
+      "row": 2,
+      "text": "ok"
+    },
+    {
+      "col": 0,
+      "row": 3,
+      "text": "C"
+    },
+    {
+      "col": 1,
+      "row": 3,
+      "text": "30"
+    },
+    {
+      "col": 2,
+      "row": 3,
+      "text": "hold"
+    }
+  ]
+}

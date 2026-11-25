@@ -3,9 +3,14 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import { writeFile } from 'fs/promises';
 import { updateEnvFile } from '@/lib/env-utils';
+import { requireAdminOrDeny } from '@/lib/admin-route-auth';
+import { MAX_IMAGE_UPLOAD_BYTES, validateImageUpload } from '@/lib/image-upload';
 
 // This route is used by the config UI to upload logo files
 export async function POST(request: NextRequest) {
+  const denied = await requireAdminOrDeny(request);
+  if (denied) return denied;
+
   try {
     const formData = await request.formData();
     const logoFile = formData.get('logoFile') as File;
@@ -26,15 +31,23 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // Validate file type
-    const fileType = logoFile.name.split('.').pop()?.toLowerCase();
-    if (fileType !== 'svg' && fileType !== 'png') {
+    if (logoFile.size > MAX_IMAGE_UPLOAD_BYTES) {
       return NextResponse.json(
-        { success: false, error: 'Only SVG and PNG files are allowed' },
+        { success: false, error: 'Image must be between 1 byte and 5 MB' },
         { status: 400 }
       );
     }
-    
+
+    const fileBuffer = Buffer.from(await logoFile.arrayBuffer());
+    const validation = validateImageUpload(logoFile.name, fileBuffer);
+    if (!validation.ok) {
+      return NextResponse.json(
+        { success: false, error: validation.error },
+        { status: 400 }
+      );
+    }
+    const fileType = validation.extension;
+
     // Create a unique filename
     const timestamp = new Date().getTime();
     const fileName = `${logoType}-logo-${timestamp}.${fileType}`;
@@ -53,7 +66,6 @@ export async function POST(request: NextRequest) {
     }
     
     // Save the file
-    const fileBuffer = Buffer.from(await logoFile.arrayBuffer());
     await writeFile(filePath, fileBuffer);
     
     // Create the public URL for the file

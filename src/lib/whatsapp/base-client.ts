@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import {
   KoyebSessionRequest,
   KoyebSessionResponse,
@@ -5,6 +6,10 @@ import {
   WhatsAppMediaUploadResponse,
   WhatsAppError
 } from './types';
+
+export function toBlobPart(file: Buffer | ArrayBuffer): Uint8Array<ArrayBuffer> {
+  return Uint8Array.from(file instanceof ArrayBuffer ? new Uint8Array(file) : file);
+}
 
 /**
  * Base interface for WhatsApp client implementations
@@ -19,6 +24,18 @@ export abstract class BaseWhatsAppClient {
     this.baseUrl = baseUrl;
     this.apiKey = apiKey;
     this.webhookSecret = webhookSecret || '';
+  }
+
+  protected hmacSignatureMatches(signature: string, payload: string): boolean {
+    if (!this.webhookSecret || typeof signature !== 'string' || !signature) {
+      return false;
+    }
+
+    const expected = crypto.createHmac('sha256', this.webhookSecret).update(payload).digest('hex');
+    const expectedDigest = crypto.createHash('sha256').update(expected).digest();
+    const receivedDigest = crypto.createHash('sha256').update(signature).digest();
+
+    return crypto.timingSafeEqual(expectedDigest, receivedDigest);
   }
 
   /**
@@ -65,7 +82,7 @@ export abstract class BaseWhatsAppClient {
     sessionId: string,
     to: string,
     text: string
-  ): Promise<{ messageId: string }>;
+  ): Promise<{ messageId: string; status: string }>;
 
   /**
    * Send a media message

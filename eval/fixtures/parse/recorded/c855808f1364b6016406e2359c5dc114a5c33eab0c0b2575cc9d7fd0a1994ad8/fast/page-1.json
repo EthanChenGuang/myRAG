@@ -1,0 +1,39 @@
+{
+  "body": {
+    "children": [],
+    "content_layer": "body",
+    "label": "unspecified",
+    "name": "_root_",
+    "self_ref": "#/body"
+  },
+  "form_items": [],
+  "furniture": {
+    "children": [],
+    "content_layer": "furniture",
+    "label": "unspecified",
+    "name": "_root_",
+    "self_ref": "#/furniture"
+  },
+  "groups": [],
+  "key_value_items": [],
+  "name": "scan-it-p1",
+  "origin": {
+    "binary_hash": 1,
+    "filename": "scan-it-p1.pdf",
+    "mimetype": "application/pdf"
+  },
+  "pages": {
+    "1": {
+      "page_no": 1,
+      "size": {
+        "height": 841.89,
+        "width": 595.28
+      }
+    }
+  },
+  "pictures": [],
+  "schema_name": "DoclingDocument",
+  "tables": [],
+  "texts": [],
+  "version": "1.11.0"
+}

@@ -1,223 +1,218 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
-import { isSingleTenant } from '@/lib/deployment-mode';
+import { removeDocumentObjects, repairOwnerMembership, resolveTenantScope, type RagAdminDb } from '@/lib/rag';
+import { checkSingleTenantKbWrite } from '@/lib/kb-write-access';
 
 export const runtime = 'nodejs';
 
-// GET: List all images in the knowledge base
-export async function GET(request: NextRequest) {
-    try {
-        const supabaseAdmin = getSupabaseAdmin();
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg'];
 
-        if (!supabaseAdmin) {
-            throw new Error('Supabase admin client not initialized');
-        }
+type Predicate =
+  | { kind: 'none' }
+  | { kind: 'org'; organizationId: string }
+  | { kind: 'personal'; userId: string }
+  | { kind: 'owner'; userId: string };
 
-        const imageExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg'];
-
-        let documents = [];
-
-        if (isSingleTenant()) {
-            // SINGLE-TENANT: Get all image documents
-            const { data, error: docError } = await supabaseAdmin
-                .from('documents')
-                .select('id, filename, created_at')
-                .order('created_at', { ascending: false });
-
-            if (docError) {
-                console.error('Error fetching image documents:', docError);
-                throw new Error(`Error fetching image documents: ${docError.message}`);
-            }
-            documents = data;
-        } else {
-            // MULTI-TENANT: Get user's image documents
-            const supabase = await createClient();
-            const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-            if (authError || !user) {
-                return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
-            }
-
-            // Get organization_id from query params (null = personal workspace)
-            const { searchParams } = new URL(request.url);
-            const orgIdParam = searchParams.get('organization_id');
-
-            let query = supabaseAdmin
-                .from('documents')
-                .select('id, filename, created_at, organization_id, user_id')
-                .order('created_at', { ascending: false });
-
-            if (orgIdParam === 'null' || orgIdParam === null || orgIdParam === undefined) {
-                // Personal Workspace: filter by user_id AND no organization_id
-                query = query.eq('user_id', user.id).is('organization_id', null);
-            } else {
-                // Organization Workspace: filter by organization_id
-                // Note: In a real app we should also verify the user belongs to this org
-                query = query.eq('organization_id', orgIdParam);
-            }
-
-            const { data, error: docError } = await query;
-
-            if (docError) {
-                console.error('Error fetching image documents (MT):', docError);
-                throw new Error(`Error fetching image documents: ${docError.message}`);
-            }
-            documents = data;
-        }
-
-        // Filter for image documents only
-        const imageDocuments = documents.filter((doc: any) => {
-            const filename = doc.filename?.toLowerCase() || '';
-            return imageExtensions.some(ext => filename.endsWith(ext));
-        });
-
-        // Get the image URLs from document_chunks metadata
-        const imagesWithUrls = await Promise.all(
-            imageDocuments.map(async (doc: any) => {
-                // Get the first chunk for this document to retrieve image_url from metadata
-                const { data: chunks, error: chunkError } = await supabaseAdmin
-                    .from('document_chunks')
-                    .select('metadata')
-                    .eq('document_id', doc.id)
-                    .limit(1);
-
-                if (chunkError || !chunks || chunks.length === 0) {
-                    return null;
-                }
-
-                const metadata = chunks[0].metadata;
-                const imageUrl = metadata?.image_url;
-
-                if (!imageUrl) {
-                    return null; // Skip if no image_url in metadata
-                }
-
-                return {
-                    id: doc.id,
-                    name: doc.filename,
-                    url: imageUrl,
-                    created_at: doc.created_at
-                };
-            })
-        );
-
-        // Filter out null values (images without URLs)
-        const validImages = imagesWithUrls.filter(img => img !== null);
-
-        console.log(`[Images API] Found ${validImages.length} images with URLs`);
-
-        return NextResponse.json({
-            images: validImages
-        });
-
-    } catch (error) {
-        console.error("Error listing images:", error);
-        return NextResponse.json({
-            error: "Failed to list images",
-            details: error instanceof Error ? error.message : String(error)
-        }, { status: 500 });
-    }
+interface Scopable<Q> {
+  eq(column: string, value: string): Q;
+  is(column: string, value: null): Q;
 }
 
-// DELETE: Remove an image from the knowledge base
-export async function DELETE(request: NextRequest) {
-    try {
-        const supabaseAdmin = getSupabaseAdmin();
-        if (!supabaseAdmin) {
-            throw new Error('Supabase admin client not initialized');
-        }
+interface Authorized {
+  admin: NonNullable<ReturnType<typeof getSupabaseAdmin>>;
+  predicate: Predicate;
+}
 
-        const { searchParams } = new URL(request.url);
-        const id = searchParams.get('id');
+type AuthResult = { ok: true; value: Authorized } | { ok: false; response: Response };
 
-        if (!id) {
-            return NextResponse.json({ error: 'Image ID is required' }, { status: 400 });
-        }
+function fail(status: number, error: string): Response {
+  return NextResponse.json({ error }, { status });
+}
 
-        // AUTHENTICATION CHECK
-        if (!isSingleTenant()) {
-            const supabase = await createClient();
-            const { data: { user }, error: authError } = await supabase.auth.getUser();
+function applyPredicate<Q extends Scopable<Q>>(query: Q, predicate: Predicate): Q {
+  if (predicate.kind === 'org') return query.eq('organization_id', predicate.organizationId);
+  if (predicate.kind === 'personal') return query.is('organization_id', null).eq('user_id', predicate.userId);
+  if (predicate.kind === 'owner') return query.eq('user_id', predicate.userId);
+  return query;
+}
 
-            if (authError || !user) {
-                return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
-            }
+function isImageFilename(filename: unknown): boolean {
+  if (typeof filename !== 'string') return false;
+  const lower = filename.toLowerCase();
+  return IMAGE_EXTENSIONS.some((ext) => lower.endsWith(ext));
+}
 
-            // Verify ownership before deleting
-            const { data: doc, error: docError } = await supabaseAdmin
-                .from('documents')
-                .select('user_id, organization_id')
-                .eq('id', id)
-                .single();
+function requestedOrganization(request: NextRequest): string | null {
+  const params = new URL(request.url).searchParams;
+  return params.get('organization_id') ?? params.get('organizationId');
+}
 
-            if (docError || !doc) {
-                return NextResponse.json({ error: 'Document not found' }, { status: 404 });
-            }
+async function authorize(request: NextRequest, requestedOrganizationId: unknown, write: boolean): Promise<AuthResult> {
+  let sessionUserPromise: Promise<{ id: string } | null> | null = null;
+  const getSessionUser = () => {
+    sessionUserPromise ??= (async () => {
+      const { createClient } = await import('@/lib/supabase/server');
+      const sbSSR = await createClient();
+      const { data: userRes } = await sbSSR.auth.getUser();
+      return userRes?.user?.id ? { id: userRes.user.id } : null;
+    })();
+    return sessionUserPromise;
+  };
 
-            // Check if user owns the document or has access via organization
-            // TODO: Implement more granular organization permissions if needed
-            if (doc.user_id !== user.id) {
-                // If organizations are enabled, we might check org access here
-                // For now, strict user ownership for simplicity unless explicitly shared
-                // console.log('Checking org access...');
-            }
-        }
+  let sessionUser: { id: string } | null;
+  try {
+    sessionUser = await getSessionUser();
+  } catch {
+    console.error('[Images API] Session lookup failed');
+    return { ok: false, response: fail(503, 'Authentication unavailable') };
+  }
+  if (!sessionUser) return { ok: false, response: fail(401, 'Unauthorized') };
 
-        console.log(`[Images API] Deleting image document ${id}`);
+  const admin = getSupabaseAdmin();
+  if (!admin) {
+    console.error('[Images API] Database client is not available');
+    return { ok: false, response: fail(500, 'Internal server error') };
+  }
 
-        // 1. Get the image URL from chunks to delete from storage (optional but good hygiene)
-        const { data: chunks } = await supabaseAdmin
-            .from('document_chunks')
-            .select('metadata')
-            .eq('document_id', id)
-            .limit(1);
+  await repairOwnerMembership({ requestedOrganizationId, getUser: getSessionUser });
+  const tenant = await resolveTenantScope({
+    requestedOrganizationId: typeof requestedOrganizationId === 'string' ? requestedOrganizationId : null,
+    getUser: getSessionUser,
+    signal: request.signal,
+  });
+  if (!tenant.ok) {
+    const error =
+      tenant.status === 403 ? 'Forbidden' : tenant.status === 401 ? 'Unauthorized' : 'Workspace verification unavailable';
+    return { ok: false, response: fail(tenant.status, error) };
+  }
+  const scope = tenant.scope;
+  if (!scope) return { ok: false, response: fail(401, 'Unauthorized') };
 
-        if (chunks && chunks.length > 0) {
-            const imageUrl = chunks[0].metadata?.image_url;
-            if (imageUrl) {
-                try {
-                    // Extract filename from URL to delete from storage
-                    // URL format: .../storage/v1/object/public/chat-images/filename.jpg
-                    const parts = imageUrl.split('/chat-images/');
-                    if (parts.length > 1) {
-                        let filename = parts[1];
-                        // Remove any query params like ?download
-                        filename = filename.split('?')[0];
+  let predicate: Predicate = { kind: 'none' };
+  if (write && scope.kind === 'single') {
+    const access = await checkSingleTenantKbWrite({
+      admin: admin as unknown as RagAdminDb,
+      userId: sessionUser.id,
+      signal: request.signal,
+    });
+    if (!access.ok) return { ok: false, response: fail(access.status, access.error) };
+    if (!access.isAdmin) predicate = { kind: 'owner', userId: sessionUser.id };
+  } else if (scope.kind === 'org' && scope.organizationId) {
+    predicate = { kind: 'org', organizationId: scope.organizationId };
+  } else if (scope.kind === 'personal' && scope.userId) {
+    predicate = { kind: 'personal', userId: scope.userId };
+  }
+  return { ok: true, value: { admin, predicate } };
+}
 
-                        console.log(`[Images API] Attempting to delete file from storage: ${filename}`);
-                        const { error: storageError } = await supabaseAdmin
-                            .storage
-                            .from('chat-images')
-                            .remove([filename]);
+// GET: List the images in the caller's verified workspace
+export async function GET(request: NextRequest): Promise<Response> {
+  try {
+    const auth = await authorize(request, requestedOrganization(request), false);
+    if (!auth.ok) return auth.response;
+    const { admin, predicate } = auth.value;
 
-                        if (storageError) {
-                            console.warn('[Images API] Failed to delete from storage (non-critical):', storageError);
-                        }
-                    }
-                } catch (e) {
-                    console.warn('[Images API] Error parsing image URL for deletion:', e);
-                }
-            }
-        }
-
-        // 2. Delete the document record (CASADES to document_chunks)
-        const { error: deleteError } = await supabaseAdmin
-            .from('documents')
-            .delete()
-            .eq('id', id);
-
-        if (deleteError) {
-            throw deleteError;
-        }
-
-        return NextResponse.json({ success: true });
-
-    } catch (error) {
-        console.error("Error deleting image:", error);
-        return NextResponse.json({
-            error: "Failed to delete image",
-            details: error instanceof Error ? error.message : String(error)
-        }, { status: 500 });
+    const { data, error: docError } = await applyPredicate(
+      admin.from('documents').select('id, filename, created_at').eq('is_current', true).eq('status', 'ready'),
+      predicate
+    ).order('created_at', { ascending: false });
+    if (docError) {
+      console.error('[Images API] Document listing failed', { code: docError.code });
+      return fail(500, 'Failed to list images');
     }
+
+    const imageDocuments = (data ?? []).filter((doc: { filename?: string | null }) => isImageFilename(doc.filename));
+
+    const imagesWithUrls = await Promise.all(
+      imageDocuments.map(async (doc: { id: string; filename: string; created_at: string }) => {
+        const { data: chunks, error: chunkError } = await admin
+          .from('document_chunks')
+          .select('metadata')
+          .eq('document_id', doc.id)
+          .eq('is_current', true)
+          .eq('status', 'ready')
+          .limit(1);
+
+        if (chunkError || !chunks || chunks.length === 0) return null;
+
+        const imageUrl = chunks[0].metadata?.image_url;
+        if (!imageUrl) return null;
+
+        return { id: doc.id, name: doc.filename, url: imageUrl, created_at: doc.created_at };
+      })
+    );
+
+    const validImages = imagesWithUrls.filter((img) => img !== null);
+    console.log(`[Images API] Found ${validImages.length} images with URLs`);
+
+    return NextResponse.json({ images: validImages });
+  } catch {
+    console.error('[Images API] List request failed');
+    return fail(500, 'Failed to list images');
+  }
+}
+
+// DELETE: Remove an image from the caller's verified workspace
+export async function DELETE(request: NextRequest): Promise<Response> {
+  try {
+    const id = new URL(request.url).searchParams.get('id');
+    if (!id) return fail(400, 'Image ID is required');
+    if (!UUID_RE.test(id)) return fail(400, 'Invalid image id');
+
+    const auth = await authorize(request, requestedOrganization(request), true);
+    if (!auth.ok) return auth.response;
+    const { admin, predicate } = auth.value;
+
+    const { data: doc, error: lookupError } = await applyPredicate(
+      admin.from('documents').select('id, filename, tenant_key, lineage_id, version, original_path, processing_state').eq('id', id),
+      predicate
+    ).maybeSingle();
+    if (lookupError) {
+      console.error('[Images API] Ownership lookup failed', { code: lookupError.code });
+      return fail(500, 'Failed to delete image');
+    }
+    if (!doc || !isImageFilename(doc.filename)) return fail(404, 'Image not found');
+
+    const { data: chunks } = await admin
+      .from('document_chunks')
+      .select('metadata')
+      .eq('document_id', id)
+      .limit(1);
+    const imageUrl: unknown = chunks?.[0]?.metadata?.image_url;
+
+    const { error: chunksError } = await admin.from('document_chunks').delete().eq('document_id', id);
+    if (chunksError) {
+      console.error('[Images API] Chunk delete failed', { code: chunksError.code });
+      return fail(500, 'Failed to delete image');
+    }
+
+    const { error: documentError } = await applyPredicate(admin.from('documents').delete().eq('id', id), predicate);
+    if (documentError) {
+      console.error('[Images API] Document delete failed', { code: documentError.code });
+      return fail(500, 'Failed to delete image');
+    }
+
+    // Best effort and after the rows: a stored original or parse file of the image leaves the private bucket; a failure is logged only.
+    if (typeof doc.tenant_key === 'string') await removeDocumentObjects({ tenantKey: doc.tenant_key, rows: [doc] });
+
+    if (typeof imageUrl === 'string') {
+      try {
+        // URL format: .../storage/v1/object/public/chat-images/filename.jpg
+        const parts = imageUrl.split('/chat-images/');
+        if (parts.length > 1) {
+          const filename = parts[1].split('?')[0];
+          const { error: storageError } = await admin.storage.from('chat-images').remove([filename]);
+          if (storageError) console.warn('[Images API] Storage delete failed (non-critical)');
+        }
+      } catch {
+        console.warn('[Images API] Could not parse image URL for storage delete');
+      }
+    }
+
+    return NextResponse.json({ success: true });
+  } catch {
+    console.error('[Images API] Delete request failed');
+    return fail(500, 'Failed to delete image');
+  }
 }

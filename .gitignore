@@ -75,3 +75,13 @@ eval/golden/private/
 .venv/
 __pycache__/
 .pytest_cache/
+wt/
+
+# Tool run scratch under committed report directories (harness traces, per-cell runs, materialised inputs)
+eval/reports/*/harness/
+eval/reports/*/inputs/
+eval/reports/*/cells/
+eval/reports/chunking-cells/
+
+# tiktoken encoding cache for tests (scripts/ci/fill-tiktoken-cache.py)
+/.cache/

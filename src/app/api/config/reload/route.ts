@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAdminOrDeny } from '@/lib/admin-route-auth';
 import fs from 'fs';
 import path from 'path';
 
@@ -49,7 +50,9 @@ function updateProcessEnv(newEnvVars: Record<string, string>): string[] {
 
 export async function POST(request: NextRequest) {
   try {
-    // Skip admin authorization for config UI access since it's already protected
+    const denied = await requireAdminOrDeny(request);
+    if (denied) return denied;
+
     console.log('🔄 Config Reload: Reloading environment variables from .env.local');
     
     const envPath = path.join(process.cwd(), '.env.local');
@@ -93,11 +96,6 @@ export async function POST(request: NextRequest) {
       modelsUpdated: updatedKeys.some(key => key.includes('_MODELS') || key.includes('_PROVIDER'))
     });
     
-    // Add CORS headers
-    response.headers.set('Access-Control-Allow-Origin', '*');
-    response.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    response.headers.set('Access-Control-Allow-Headers', 'Content-Type');
-    
     return response;
 
   } catch (error) {
@@ -105,7 +103,7 @@ export async function POST(request: NextRequest) {
     
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     
-    const response = NextResponse.json(
+    return NextResponse.json(
       { 
         success: false,
         error: 'Failed to reload environment variables',
@@ -113,17 +111,5 @@ export async function POST(request: NextRequest) {
       },
       { status: 500 }
     );
-    
-    response.headers.set('Access-Control-Allow-Origin', '*');
-    return response;
   }
-}
-
-// Handle OPTIONS request for CORS preflight
-export async function OPTIONS(request: NextRequest) {
-  const response = new NextResponse(null, { status: 200 });
-  response.headers.set('Access-Control-Allow-Origin', '*');
-  response.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  response.headers.set('Access-Control-Allow-Headers', 'Content-Type');
-  return response;
 }

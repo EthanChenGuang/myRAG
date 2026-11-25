@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { chatRequest, readSse, retrievalWith } from './helpers/chat-route-fakes';
+import { chatRequest, installChatPipeline, readSse, retrievalWith } from './helpers/chat-route-fakes';
 
 const IMAGE_URL = 'https://example.com/fixtures/diagram.png';
 
@@ -12,7 +12,6 @@ vi.mock('ai', async (importOriginal) => ({
   ...(await importOriginal<typeof import('ai')>()),
   streamText: h.capture.streamText,
 }));
-vi.mock('@/lib/enhanced-rag-retrieval', () => ({ enhancedRetrieveChunks: h.retrieval }));
 vi.mock('@/lib/document-processor', () => ({ getQueryEmbedding: vi.fn(async () => []) }));
 vi.mock('@/lib/supabase', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/supabase')>()),
@@ -24,15 +23,10 @@ vi.mock('@openrouter/ai-sdk-provider', () => ({
   createOpenRouter: () => (modelId: string) => ({ specificationVersion: 'v3', provider: 'fake', modelId }),
 }));
 vi.mock('exa-js', () => ({ default: h.exa.Exa }));
-vi.mock('@/lib/thinking-rag-enhancer', () => ({
-  createEnhancedRAGPrompt: (base: string, context: string) => base.replace('{{context}}', context),
-  enhanceQueryWithReasoning: vi.fn(),
-  intelligentSearch: vi.fn(),
-  shouldUseEnhancedRAG: () => true,
-}));
 
 async function loadRoute() {
   vi.resetModules();
+  await installChatPipeline(h);
   return import('@/app/api/chat/route');
 }
 
@@ -113,7 +107,7 @@ describe('chat route source_images', () => {
       { name: 'diagram.png', size: 0, type: 'image/jpeg', url: IMAGE_URL },
     ]);
     const documentSources = toolResults.find((part) => part.toolName === 'query_documents');
-    expect(documentSources?.result.images).toEqual([
+    expect(documentSources?.output.images).toEqual([
       { name: 'diagram.png', size: 0, type: 'image/jpeg', url: IMAGE_URL },
     ]);
   });

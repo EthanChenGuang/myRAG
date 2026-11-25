@@ -1,12 +1,20 @@
 import { Language, translations } from '@/translations';
 
-export type SystemPromptTemplate = keyof typeof translations.en.systemPrompts;
+export type SystemPromptTemplate = 'helpful';
 
 export interface SystemPrompt {
   name: string;
   description: string;
   preContext: string;
   postContext: string;
+}
+
+interface SystemPromptTranslation {
+  systemPrompts?: Partial<Record<SystemPromptTemplate, SystemPrompt>>;
+}
+
+function readSystemPrompts(language: Language): Partial<Record<SystemPromptTemplate, SystemPrompt>> | undefined {
+  return (translations[language] as SystemPromptTranslation).systemPrompts;
 }
 
 export class SystemPromptManager {
@@ -25,20 +33,21 @@ Context:
     templateKey: SystemPromptTemplate,
     language: Language = 'en'
   ): SystemPrompt | null {
-    const translation = translations[language];
+    const prompts = readSystemPrompts(language);
+    const englishPrompts = readSystemPrompts('en');
     
     // Check if the language has system prompts
-    if (!translation.systemPrompts) {
+    if (!prompts) {
       console.warn(`[SystemPromptManager] No system prompts found for language: ${language}, falling back to English`);
-      return translations.en.systemPrompts[templateKey] || null;
+      return englishPrompts?.[templateKey] || null;
     }
     
     // Get the prompt template
-    const prompt = translation.systemPrompts[templateKey];
+    const prompt = prompts[templateKey];
     
     if (!prompt) {
-      console.warn(`[SystemPromptManager] Template "${templateKey}" not found for language: ${language}, falling back to English`);
-      return translations.en.systemPrompts[templateKey] || null;
+      console.warn(`[SystemPromptManager] Template "${String(templateKey)}" not found for language: ${language}, falling back to English`);
+      return englishPrompts?.[templateKey] || null;
     }
     
     return prompt;
@@ -75,7 +84,7 @@ Context:
     const template = this.getPromptTemplate(templateKey, language);
     
     if (!template) {
-      console.error(`[SystemPromptManager] Failed to get template: ${templateKey}`);
+      console.error(`[SystemPromptManager] Failed to get template: ${String(templateKey)}`);
       return this.getDefaultPrompt();
     }
     
@@ -138,28 +147,29 @@ Context:
    * Get available template keys
    */
   static getAvailableTemplates(): SystemPromptTemplate[] {
-    return Object.keys(translations.en.systemPrompts) as SystemPromptTemplate[];
+    return Object.keys(readSystemPrompts('en') ?? {}) as SystemPromptTemplate[];
   }
 
   /**
    * Get all templates for a specific language
    */
   static getAllTemplates(language: Language = 'en'): Record<string, SystemPrompt> {
-    const translation = translations[language];
+    const localizedTemplates = readSystemPrompts(language);
+    const englishTemplates: Partial<Record<SystemPromptTemplate, SystemPrompt>> = readSystemPrompts('en') ?? {};
     
-    if (!translation.systemPrompts) {
+    if (!localizedTemplates) {
       console.warn(`[SystemPromptManager] No system prompts for language: ${language}, using English`);
-      return translations.en.systemPrompts;
+      return englishTemplates as Record<string, SystemPrompt>;
     }
     
     // Merge with English templates to ensure all keys are present
-    const englishTemplates = translations.en.systemPrompts;
-    const localizedTemplates = translation.systemPrompts || {};
-    
     const merged: Record<string, SystemPrompt> = {};
     
-    for (const key in englishTemplates) {
-      merged[key] = localizedTemplates[key] || englishTemplates[key];
+    for (const key of Object.keys(englishTemplates) as SystemPromptTemplate[]) {
+      const template = localizedTemplates[key] || englishTemplates[key];
+      if (template) {
+        merged[key] = template;
+      }
     }
     
     return merged;

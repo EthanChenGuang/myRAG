@@ -159,3 +159,103 @@ def test_cli_forwards_org_and_user_to_every_run(tmp_path, monkeypatch):
     for command in commands:
         assert command[command.index("--org") + 1] == org
         assert command[command.index("--user") + 1] == user
+
+
+def _record_commands(tmp_path, monkeypatch, extra_args: list[str]) -> list[list[str]]:
+    commands: list[list[str]] = []
+
+    class _Done:
+        returncode = 0
+        stdout = "deadbeef\n"
+
+    def fake_run(command, **_kwargs):
+        if command[0] == "git":
+            return _Done()
+        commands.append(command)
+        out = baseline_module.resolve_cli_path(command[command.index("--out") + 1])
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "report.json").write_text(_report(f"run-{len(commands)}").model_dump_json(), encoding="utf-8")
+        return _Done()
+
+    monkeypatch.setattr(baseline_module.subprocess, "run", fake_run)
+    assert main(["record", "--runs", "3", *extra_args, "--out", str(tmp_path / "b.json")]) == 0
+    return commands
+
+
+def test_cli_forwards_the_fixture_mode_to_every_run(tmp_path, monkeypatch):
+    commands = _record_commands(tmp_path, monkeypatch, ["--fixture-mode", "ingest"])
+    assert len(commands) == 3
+    for command in commands:
+        assert command[command.index("--fixture-mode") + 1] == "ingest"
+
+
+def test_cli_without_a_fixture_mode_leaves_the_harness_default(tmp_path, monkeypatch):
+    commands = _record_commands(tmp_path, monkeypatch, [])
+    assert len(commands) == 3
+    assert all("--fixture-mode" not in command for command in commands)
+
+
+def test_cli_rejects_an_unknown_fixture_mode(tmp_path):
+    with pytest.raises(SystemExit) as excinfo:
+        main(["record", "--runs", "3", "--fixture-mode", "nope", "--out", str(tmp_path / "b.json")])
+    assert excinfo.value.code == 2
+
+
+def _item_dicts(rank: int | None = 2) -> list[dict]:
+    base = {"language": "en", "category": "general", "refused": False, "provenance": "synthetic_fixture"}
+    return [
+        {**base, "item_id": "a1", "split": "dev", "answerable": True, "span_count": 4, "spans_hit_at_5": 2, "spans_hit_at_10": 2, "first_hit_rank": rank},
+        {**base, "item_id": "u1", "split": "dev", "answerable": False, "refused": True, "span_count": 0, "spans_hit_at_5": 0, "spans_hit_at_10": 0, "first_hit_rank": None},
+        {**base, "item_id": "t1", "split": "test", "answerable": True, "span_count": 1, "spans_hit_at_5": 0, "spans_hit_at_10": 0, "first_hit_rank": None},
+    ]
+
+
+def _report_with_items(run_id: str, rank: int | None = 2) -> EvalReport:
+    return EvalReport.model_validate({**_report(run_id).model_dump(mode="json"), "items": _item_dicts(rank)})
+
+
+def test_record_stores_per_item_rows_for_every_split_and_run():
+    baseline = record_baseline([_report_with_items("a"), _report_with_items("b"), _report_with_items("c")])
+    assert baseline.items is not None
+    assert set(baseline.items) == {"a1", "u1", "t1"}
+    assert baseline.items["a1"] == {
+        "recall_at_5": [0.5, 0.5, 0.5],
+        "recall_at_10": [0.5, 0.5, 0.5],
+        "mrr": [0.5, 0.5, 0.5],
+        "correct_refusal_rate": [None, None, None],
+        "false_refusal_rate": [0.0, 0.0, 0.0],
+    }
+    assert baseline.items["u1"]["correct_refusal_rate"] == [1.0, 1.0, 1.0]
+    assert baseline.items["t1"]["mrr"] == [0.0, 0.0, 0.0]
+
+
+def test_record_keeps_per_run_values_in_recording_order_when_spread_is_allowed():
+    reports = [_report_with_items("a", rank=1), _report_with_items("b", rank=2), _report_with_items("c", rank=4)]
+    baseline = record_baseline(reports, allow_spread=True)
+    assert baseline.items is not None
+    assert baseline.items["a1"]["mrr"] == [1.0, 0.5, 0.25]
+
+
+def test_runs_over_different_item_sets_are_non_deterministic():
+    shorter = EvalReport.model_validate({**_report("c").model_dump(mode="json"), "items": _item_dicts()[:2]})
+    with pytest.raises(NonDeterministicRunError, match="item set"):
+        record_baseline([_report_with_items("a"), _report_with_items("b"), shorter])
+
+
+def _production_report(run_id: str) -> EvalReport:
+    return EvalReport.model_validate({**_report(run_id).model_dump(mode="json"), "gate_population": "production"})
+
+
+def test_record_stores_the_gate_population_of_the_runs():
+    baseline = record_baseline([_production_report("a"), _production_report("b"), _production_report("c")])
+    assert baseline.gate_population == "production"
+    assert record_baseline([_report("a"), _report("b"), _report("c")]).gate_population == "all"
+
+
+def test_runs_with_different_gate_populations_are_non_deterministic():
+    with pytest.raises(NonDeterministicRunError, match="gate_population"):
+        record_baseline([_report("a"), _report("b"), _production_report("c")])
+
+
+def test_reports_without_items_record_no_item_rows():
+    assert record_baseline([_report("a"), _report("b"), _report("c")]).items is None

@@ -1,21 +1,35 @@
-import { streamText, tool, type ToolSet, type ToolCallPart, type ToolResultPart, convertToModelMessages, createUIMessageStream, createUIMessageStreamResponse, UIMessage, stepCountIs } from 'ai';
+import { streamText, tool, type ToolSet, convertToModelMessages, createUIMessageStream, createUIMessageStreamResponse, UIMessage, stepCountIs } from 'ai';
 import { z } from 'zod/v3';
 // Use the dedicated OpenRouter provider
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
-import { getQueryEmbedding } from '@/lib/document-processor';
-import { searchSimilarChunks, getSupabaseAdmin } from '@/lib/supabase';
+import { getSupabaseAdmin } from '@/lib/supabase';
 import { env, getAppName } from '@/lib/env';
 import { formatErrorSSE } from '@/lib/error-stream';
-// Import enhanced RAG modules for dual-mode support
-import { comprehensiveRetrieval, aggregateChunks, requiresComprehensiveRetrieval } from '@/lib/retrieval-strategies';
-import { optimizedSearch } from '@/lib/optimized-search';
 // Remove direct OpenRouter client import if using AI SDK provider
 // import { getOpenRouterClient } from '@/lib/openrouter';
 import { ContentPart, APIMessage, ExtendedMessage, fromAPIMessages, toMessage } from '@/types/chat';
 import { ReasoningConfig, REASONING_MODELS } from '@/lib/types';
-// Import enhanced RAG functionality
-import { enhanceQueryWithReasoning, intelligentSearch, createEnhancedRAGPrompt } from '@/lib/thinking-rag-enhancer';
-import { enhancedRetrieveChunks } from '@/lib/enhanced-rag-retrieval';
+import {
+  createCitationSession,
+  createEnhancedRAGPrompt,
+  createTraceCollector,
+  finishTrace,
+  isV2Pipeline,
+  knowledgeBaseUnavailableMessage,
+  mintAnswerId,
+  parseRetrievalFilters,
+  readGenerationConfig,
+  repairOwnerMembership,
+  resolveTenantScope,
+  runRetrieval,
+  scheduleAnswerFinish,
+  scopeKey,
+  shouldPersistAnswer,
+  type RetrievalFilterInput,
+  type RetrievalResult,
+  type TenantScope,
+  type TraceCollector,
+} from '@/lib/rag';
 // Import URL extraction utilities
 import { formatURLsForContext, type ExtractedURL } from '@/lib/url-extractor';
 // Keep custom tool definitions if needed
@@ -31,13 +45,37 @@ import { classifyQuery, shouldSkipMcp } from '@/lib/query-classifier';
 import { getCachedTools, setCachedTools, getCachedConnection, setCachedConnection } from '@/lib/mcp-cache';
 // Import UniversalMcpClient for YOLO mode execution
 import { UniversalMcpClient } from '@/lib/mcp/universal-client';
+import { callerScopeKey, resolveMcpAdminUserId, writeImageContext } from '@/lib/mcp/caller-scope';
 import { ToolExecutionStateService } from '@/lib/tool-execution-state';
 import { SystemPromptManager, SystemPromptTemplate } from '@/lib/system-prompt-manager';
 import { Language } from '@/translations';
 import { isMultiTenant } from '@/lib/deployment-mode';
+import { writeCustomChunk, buildDocumentSources } from '@/lib/ui-stream-chunks';
 
 // Use Node.js runtime instead of Edge
 export const runtime = 'nodejs';
+
+interface StepToolCall {
+  toolCallId: string;
+  toolName: string;
+  input?: unknown;
+}
+
+// Tool results that are evidence the answer may rely on; anything else (MCP) skips groundedness
+const ANSWER_EVIDENCE_TOOLS = new Set(['webSearch', 'useDocument']);
+
+interface StepToolResult {
+  type: string;
+  toolCallId?: string;
+  toolName?: string;
+  output?: unknown;
+  [key: string]: unknown;
+}
+
+const describeArgs = (input: unknown): { keys: string[]; bytes: number } => ({
+  keys: input && typeof input === 'object' ? Object.keys(input) : [],
+  bytes: input === undefined ? 0 : JSON.stringify(input)?.length ?? 0
+});
 
 // Define document reference tool for function calling using the 'tool' helper
 const documentReferenceTool = tool({
@@ -88,57 +126,10 @@ console.log('API ROUTE: Environment check -', {
   OPENROUTER_API_KEY_START: env.OPENROUTER_API_KEY ? env.OPENROUTER_API_KEY.substring(0, 7) : 'n/a'
 });
 
-// 🔄 GMAIL INTENT ANALYSIS: Determine if user wants to send vs draft
-function analyzeEmailIntent(userMessage: string): { shouldSend: boolean; confidence: number; reasoningText: string } {
-  const message = userMessage.toLowerCase();
-
-  // Strong send indicators
-  const sendKeywords = ['send', 'email', 'immediately', 'now', 'dispatch', 'transmit', 'deliver'];
-  const strongSendPhrases = ['send an email', 'send email', 'email to', 'send and email'];
-
-  // Draft indicators
-  const draftKeywords = ['draft', 'prepare', 'create draft', 'make a draft', 'compose draft'];
-
-  let sendScore = 0;
-  let draftScore = 0;
-  let reasoning = '';
-
-  // Check for strong send phrases first (higher weight)
-  for (const phrase of strongSendPhrases) {
-    if (message.includes(phrase)) {
-      sendScore += 3;
-      reasoning += `Strong send phrase: "${phrase}". `;
-      break; // Only count one strong phrase
-    }
-  }
-
-  // Check for send keywords
-  const sendMatches = sendKeywords.filter(keyword => message.includes(keyword));
-  if (sendMatches.length > 0) {
-    sendScore += sendMatches.length * 2;
-    reasoning += `Send keywords: ${sendMatches.join(', ')}. `;
-  }
-
-  // Check for draft keywords
-  const draftMatches = draftKeywords.filter(keyword => message.includes(keyword));
-  if (draftMatches.length > 0) {
-    draftScore += draftMatches.length * 2;
-    reasoning += `Draft keywords: ${draftMatches.join(', ')}. `;
-  }
-
-  // Calculate confidence and decision
-  const totalScore = sendScore + draftScore;
-  const shouldSend = sendScore > draftScore;
-  const confidence = totalScore > 0 ? Math.max(sendScore, draftScore) / (totalScore + 2) : 0.1;
-
-  return {
-    shouldSend,
-    confidence: Math.min(confidence, 0.95), // Cap at 95%
-    reasoningText: reasoning.trim() || 'No clear indicators found'
-  };
-}
-
 // Initialize AI providers based on configuration
+// Client capabilities are advisory: an invalid value counts as absent, never a 400
+const ChatCapabilitiesSchema = z.object({ citations: z.boolean().optional() }).passthrough();
+
 const AI_PROVIDER = env.NEXT_PUBLIC_AI_PROVIDER as 'openai' | 'openrouter' | 'groq';
 
 // Identify if the current provider supports tool calling
@@ -708,6 +699,7 @@ interface ToolApprovalState {
   [toolCallId: string]: {
     approved: boolean;
     toolCall: any;
+    ownerUserId?: string | null;
     result: any; // Add result field to store pre-fetched result
   };
 }
@@ -1180,7 +1172,16 @@ function cleanMalformedDocumentCalls(text: string): string {
 export async function POST(req: Request) {
   console.log('API ROUTE: Starting POST request handler');
 
+  let ragTrace: { collector: TraceCollector; result: RetrievalResult } | null = null;
+  const finishRagTrace = () => {
+    if (!ragTrace) return;
+    const pending = ragTrace;
+    ragTrace = null;
+    finishTrace(pending.collector, pending.result);
+  };
+
   try {
+    const requestBody = await req.json();
     const { messages: rawMessages, data, imageStorage }: {
       messages: APIMessage[],
       data?: {
@@ -1205,9 +1206,23 @@ export async function POST(req: Request) {
         systemPromptOverride?: string, // WhatsApp and other overrides
         disableRAG?: boolean, // WhatsApp and other overrides
         ragMode?: 'strict' | 'balanced' | 'flexible' | 'bypass' // RAG behavior mode
+        capabilities?: unknown
       },
       imageStorage?: Record<string, string> // Add imageStorage for attached images
-    } = await req.json();
+    } = requestBody;
+
+    // Only the v2 pipeline reads this field; under legacy the body is handled exactly as before
+    let retrievalFilters: RetrievalFilterInput | undefined;
+    if (isV2Pipeline()) {
+      const filtersParsed = parseRetrievalFilters(requestBody?.retrievalFilters);
+      if (!filtersParsed.ok) {
+        return NextResponse.json(
+          { success: false, error: 'Invalid request data', details: filtersParsed.details },
+          { status: 400 }
+        );
+      }
+      retrievalFilters = filtersParsed.filters;
+    }
 
     // Initialize Supabase client
     const supabase = getSupabaseAdmin();
@@ -1218,6 +1233,39 @@ export async function POST(req: Request) {
         { status: 500 }
       );
     }
+
+    // The tenant scope comes from the session and a membership check, never from the body alone
+    let sessionUserPromise: Promise<{ id: string } | null> | null = null;
+    const getSessionUser = () => {
+      sessionUserPromise ??= (async () => {
+        const { createClient: createSSRClient } = await import('@/lib/supabase/server');
+        const sbSSR = await createSSRClient();
+        const { data: userRes } = await sbSSR.auth.getUser();
+        return userRes?.user?.id ? { id: userRes.user.id } : null;
+      })();
+      return sessionUserPromise;
+    };
+
+    const resolveToolOwnerId = async (): Promise<string | null> => {
+      try {
+        return (await getSessionUser())?.id ?? null;
+      } catch {
+        return null;
+      }
+    };
+
+    await repairOwnerMembership({ requestedOrganizationId: data?.organizationId, getUser: getSessionUser });
+    const tenant = await resolveTenantScope({
+      requestedOrganizationId: data?.organizationId,
+      getUser: getSessionUser,
+      signal: req.signal,
+    });
+    if (!tenant.ok) {
+      const error =
+        tenant.status === 403 ? 'Forbidden' : tenant.status === 401 ? 'Unauthorized' : 'Workspace verification unavailable';
+      return NextResponse.json({ error }, { status: tenant.status });
+    }
+    const scope: TenantScope | null = tenant.scope;
 
     // Extract WhatsApp-specific overrides
     const systemPromptOverride = data?.systemPromptOverride;
@@ -1412,6 +1460,7 @@ export async function POST(req: Request) {
     let containsImage = false;
     let imageUrl = null;
     let textPrompt = '';
+    let collapsedDocumentParts: { id: string; name: string }[] = [];
 
     // Process image content if present
     if (lastUserMessage && lastUserMessage.role === 'user' && Array.isArray(lastUserMessage.content)) {
@@ -1441,40 +1490,20 @@ export async function POST(req: Request) {
           console.log('API ROUTE: Handling image-to-image generation with prompt:', textPrompt);
 
           try {
-            // Forward any authorization headers from the original request
-            const headers: Record<string, string> = {
-              'Content-Type': 'application/json',
-            };
-
-            // Copy auth headers from original request if present
-            const authHeader = req.headers.get('authorization');
-            if (authHeader) {
-              headers['Authorization'] = authHeader;
-            }
-
-            // Copy cookie header for authentication
-            const cookieHeader = req.headers.get('cookie');
-            if (cookieHeader) {
-              headers['Cookie'] = cookieHeader;
-            }
-
-            console.log('API ROUTE: Forwarding request to image generation API');
-
-            // Send to image generation endpoint
-            const origin = req.headers.get('origin') || 'http://localhost:3000';
-            const apiUrl = new URL('/api/generate-image', origin).toString();
-            console.log('API ROUTE: Sending request to image generation API:', apiUrl);
-
-            const response = await fetch(apiUrl, {
-              method: 'POST',
-              headers,
-              body: JSON.stringify({
-                prompt: textPrompt || 'Generate a variation of this image',
-                size: 'auto',
-                numOutputs: 1,
-                sourceImageUrl: imageUrl
-              }),
-            });
+            // Called in-process: the target is never derived from request headers, and the session comes from the request context
+            const { POST: generateImage } = await import('@/app/api/generate-image/route');
+            const response = await generateImage(
+              new NextRequest('http://localhost/api/generate-image', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  prompt: textPrompt || 'Generate a variation of this image',
+                  size: 'auto',
+                  numOutputs: 1,
+                  sourceImageUrl: imageUrl
+                }),
+              })
+            );
 
             if (!response.ok) {
               console.error('API ROUTE: Image generation failed:', response.statusText);
@@ -1547,6 +1576,8 @@ export async function POST(req: Request) {
 
           // 🔧 FIX: Use downloadable URLs from image context manager instead of Base64 data
           let finalImageUrl = imageUrl;
+          const imageOwnerId = await resolveToolOwnerId();
+          const imageScopeId = imageOwnerId ? callerScopeKey(imageOwnerId, sessionId) : `anonymous::${crypto.randomUUID()}`;
 
           // Check if we have processed downloadable URLs from attached images
           if (downloadableUrls && downloadableUrls.length > 0) {
@@ -1563,7 +1594,7 @@ export async function POST(req: Request) {
                 dataUrl: imageUrl
               }];
 
-              downloadableUrls = await processAttachedImages(sessionId, attachedImages);
+              downloadableUrls = await processAttachedImages(imageScopeId, attachedImages);
 
               if (downloadableUrls.length > 0) {
                 finalImageUrl = downloadableUrls[0];
@@ -1603,8 +1634,8 @@ export async function POST(req: Request) {
             } catch (error) {
               console.error('API ROUTE: Error converting Base64 to downloadable URL:', error);
               console.log('API ROUTE: Base64 conversion error details:', {
-                errorMessage: error.message,
-                errorStack: error.stack,
+                errorMessage: error instanceof Error ? error.message : String(error),
+                errorStack: error instanceof Error ? error.stack : undefined,
                 imageUrlLength: imageUrl ? imageUrl.length : 0,
                 sessionId: sessionId,
                 hasImageUrl: !!imageUrl,
@@ -1616,28 +1647,17 @@ export async function POST(req: Request) {
             }
           }
 
-          // Store image URL globally for MCP tool use
-          if (!globalThis.mcpImageContext) {
-            globalThis.mcpImageContext = {};
+          // Stored under the verified caller and chat only; anonymous callers never reach MCP tools
+          if (imageOwnerId) {
+            writeImageContext(imageOwnerId, sessionId, {
+              imageUrl: finalImageUrl,
+              downloadableUrls: downloadableUrls || [finalImageUrl],
+              extractedAt: Date.now()
+            });
           }
-
-          // Store the final image URL (preferably downloadable URL, not Base64)
-          globalThis.mcpImageContext[sessionId] = {
-            imageUrl: finalImageUrl,
-            downloadableUrls: downloadableUrls || [finalImageUrl],
-            extractedAt: Date.now()
-          };
-
-          // Also store with the image URL as backup for cross-session retrieval
-          globalThis.mcpImageContext[finalImageUrl] = {
-            imageUrl: finalImageUrl,
-            downloadableUrls: downloadableUrls || [finalImageUrl],
-            extractedAt: Date.now()
-          };
 
           console.log('API ROUTE: Stored image URL for MCP tools:', finalImageUrl);
           console.log('API ROUTE: Stored downloadable URLs:', downloadableUrls || [finalImageUrl]);
-          console.log('API ROUTE: Image storage keys:', Object.keys(globalThis.mcpImageContext));
         }
       }
 
@@ -1645,6 +1665,11 @@ export async function POST(req: Request) {
       // If images ARE present, we need to keep the array format so the AI can actually see the images!
       if (!containsImage) {
         console.log('API ROUTE: Converting array content to string for AI compatibility (no images)');
+        collapsedDocumentParts = lastUserMessage.content.flatMap(part =>
+          part.type === 'document' && part.document?.id
+            ? [{ id: part.document.id, name: part.document.name }]
+            : []
+        );
         lastUserMessage.content = textPrompt;
       } else {
         console.log('API ROUTE: Keeping array content with images for AI vision capability');
@@ -1658,7 +1683,15 @@ export async function POST(req: Request) {
       ? data.settings.mcpEnabled
       : isMcpEnabled;
 
-    const useMcpForRequest = baseMcpSetting && !shouldSkipMcpForPerformance;
+    const mcpAdminUserId =
+      mcpSystemEnabled && baseMcpSetting && !shouldSkipMcpForPerformance
+        ? await resolveMcpAdminUserId({ getSessionUser, admin: supabase, signal: req.signal })
+        : null;
+    if (mcpSystemEnabled && baseMcpSetting && !shouldSkipMcpForPerformance && !mcpAdminUserId) {
+      console.warn('[MCP Gate] MCP tools are limited to verified admins; this request gets none');
+    }
+    const useMcpForRequest = mcpAdminUserId !== null && baseMcpSetting && !shouldSkipMcpForPerformance;
+    const mcpYoloAllowed = mcpAdminUserId !== null && env.NEXT_PUBLIC_MCP_YOLO_MODE_ENABLED === 'true';
     console.log('API ROUTE: Base MCP setting:', baseMcpSetting);
     console.log('API ROUTE: Use MCP for this request:', useMcpForRequest);
 
@@ -1846,6 +1879,31 @@ IMPORTANT:
     // Detect if we're using a GPT model for model-specific instructions
     const isGPTModel = model.includes('gpt-4') || model.includes('o1') || model.includes('chatgpt');
 
+    const parsedCapabilities = ChatCapabilitiesSchema.safeParse(data?.capabilities);
+    const citationCapabilities = parsedCapabilities.success ? { citations: parsedCapabilities.data.citations === true } : null;
+    const generationConfig = readGenerationConfig();
+    const citationSession = createCitationSession({
+      capabilities: citationCapabilities,
+      ragMode,
+      modelId: model,
+      language: userLanguage,
+      config: generationConfig,
+    });
+
+    // Only web-chat answers of a signed-in user outside ghost chats get an answerId and a record
+    let answerUserId: string | null = null;
+    if (scope && citationCapabilities?.citations === true) {
+      try {
+        answerUserId = (await getSessionUser())?.id ?? null;
+      } catch {
+        answerUserId = null;
+      }
+    }
+    const answerId =
+      scope && shouldPersistAnswer({ capabilities: citationCapabilities, userId: answerUserId, chatId: data?.chatId, config: generationConfig })
+        ? mintAnswerId()
+        : null;
+
     // Log model selection for debugging
     console.log('[WEBAPP] Model from request:', data?.settings?.model);
     console.log('[WEBAPP] Using model:', model);
@@ -1896,6 +1954,7 @@ IMPORTANT:
 
     // Initialize variables for RAG
     let context = '';
+    let retrievalResult: RetrievalResult | null = null;
     let ragStartTime = 0;
     let ragDuration = 0;
 
@@ -1912,544 +1971,98 @@ IMPORTANT:
       const contextUserMessage = contextUserMessages[contextUserMessages.length - 1];
 
       let queryText = '';
-      let documentReferences: { id: string; name: string }[] = [];
+      const mentionNames: string[] = [];
+      const documentParts: { id: string; name: string }[] = [];
 
       if (contextUserMessage) {
-        // Check for array content with document references
         if (Array.isArray(contextUserMessage.content)) {
-          console.log('Last user message has array content:', contextUserMessage.content);
-
-          // Find text parts
           const textPart = contextUserMessage.content.find(part => part.type === 'text');
           if (textPart && textPart.text) {
             queryText = textPart.text;
           }
 
-          // Collect document references from explicit document parts
-          const explicitDocRefs = contextUserMessage.content
-            .filter(part => part.type === 'document')
-            .map(part => ({
-              id: part.document.id,
-              name: part.document.name
-            }));
-
-          documentReferences = [...explicitDocRefs];
-
-          console.log('Found explicit document references:', documentReferences);
+          documentParts.push(
+            ...contextUserMessage.content
+              .flatMap(part =>
+                part.type === 'document' && part.document?.id
+                  ? [{ id: part.document.id, name: part.document.name }]
+                  : []
+              )
+          );
         } else if (typeof contextUserMessage.content === 'string') {
-          // If it's a string, use it as the query text and check for @mentions
           queryText = contextUserMessage.content;
+          if (contextUserMessage === lastUserMessage) documentParts.push(...collapsedDocumentParts);
 
-          // Extract @mentions from the text using regex
-          const mentionRegex = /@([^@\s]+)/g;
-          const mentions = queryText.match(mentionRegex);
-
-          if (mentions && mentions.length > 0) {
-            console.log('Found document mentions in text:', mentions);
-
-            // Look up documents by name for each @mention
-            for (const mention of mentions) {
-              const docName = mention.substring(1); // Remove the @ symbol
-              console.log(`Looking for document with name matching: "${docName}"`);
-
-              // Query Supabase for document by name
-              const { data: docs, error } = await supabase
-                .from('documents')
-                .select('id, filename')
-                .ilike('filename', `%${docName}%`)
-                .limit(1);
-
-              if (!error && docs && docs.length > 0) {
-                documentReferences.push({
-                  id: docs[0].id,
-                  name: docs[0].filename
-                });
-                console.log(`Found document for mention ${mention}:`, docs[0]);
-              } else {
-                console.log(`No document found for mention ${mention} using ilike search`);
-
-                // Try alternative approach - use exact match on name
-                const { data: exactDocs, error: exactError } = await supabase
-                  .from('documents')
-                  .select('id, filename')
-                  .eq('filename', docName)
-                  .limit(1);
-
-                if (!exactError && exactDocs && exactDocs.length > 0) {
-                  documentReferences.push({
-                    id: exactDocs[0].id,
-                    name: exactDocs[0].filename
-                  });
-                  console.log(`Found document using exact match for ${mention}:`, exactDocs[0]);
-                } else {
-                  // Log more details for debugging
-                  console.log(`Still no document found for mention ${mention}. Available documents:`);
-                  const { data: allDocs } = await supabase
-                    .from('documents')
-                    .select('id, filename')
-                    .limit(10);
-
-                  console.log('Available documents:', allDocs);
-                }
-              }
-            }
+          const mentions = queryText.match(/@([^@\s]+)/g);
+          if (mentions) {
+            mentionNames.push(...mentions.map(mention => mention.substring(1)));
           }
         }
       }
 
-      // Build context from explicitly referenced documents first
-      // (context already initialized above)
-
-      if (documentReferences.length > 0) {
-        console.log(`Processing ${documentReferences.length} document references`);
-
-        for (const docRef of documentReferences) {
-          console.log(`Fetching chunks for document: ${docRef.name} (${docRef.id})`);
-
-          const { data: docMetadata, error: metadataError } = await supabase
-            .from('documents')
-            .select('id, filename, created_at, content, metadata')
-            .eq('id', docRef.id)
-            .single();
-
-          if (!metadataError && docMetadata) {
-            // Track this document as used
-            usedDocuments.push({
-              id: docRef.id,
-              name: docRef.name,
-              filename: docMetadata.filename,
-              created_at: docMetadata.created_at,
-              content_preview: docMetadata.content ? docMetadata.content.substring(0, 200) + '...' : undefined,
-              explicitly_referenced: true, // Mark as explicitly referenced
-              external_url: docMetadata.metadata?.external_url
-            });
-          }
-
-          const { data: chunks, error } = await supabase
-            .from('document_chunks')
-            .select('content')
-            .eq('document_id', docRef.id)
-            .limit(30); // Get more chunks for referenced documents
-
-          if (error) {
-            console.error(`Error fetching chunks for document ${docRef.id}:`, error);
-            continue;
-          }
-
-          if (chunks && chunks.length > 0) {
-            console.log(`Found ${chunks.length} chunks for document ${docRef.id}`);
-            console.log('First 3 chunks preview:', chunks.slice(0, 3).map(c => c.content.substring(0, 100) + '...'));
-
-            const docContent = chunks.map(chunk => chunk.content).join('\n\n');
-            context += `\n\n=== DOCUMENT: "${docRef.name}" ===\n${docContent}\n=== END OF DOCUMENT ===\n`;
-            console.log(`Added ${chunks.length} chunks (${docContent.length} chars) from document "${docRef.name}"`);
-          } else {
-            console.log(`No chunks found for document ${docRef.id}`);
-
-            // If no chunks are found, try to get the full document text
-            const { data: docData, error: docError } = await supabase
-              .from('documents')
-              .select('content, text')
-              .eq('id', docRef.id)
-              .single();
-
-            if (!docError && docData) {
-              const fullText = docData.text || docData.content || '';
-              if (fullText) {
-                context += `\n\n=== DOCUMENT: "${docRef.name}" ===\n${fullText}\n=== END OF DOCUMENT ===\n`;
-                console.log(`Added full text (${fullText.length} chars) from document "${docRef.name}"`);
-              }
-            } else {
-              // Try to get all available chunks without filtering
-              const { data: allChunks, error: allChunksError } = await supabase
-                .from('document_chunks')
-                .select('*')
-                .eq('document_id', docRef.id)
-                .limit(30);
-
-              if (!allChunksError && allChunks && allChunks.length > 0) {
-                const allContent = allChunks.map(chunk => chunk.content).join('\n\n');
-                context += `\n\n=== DOCUMENT: "${docRef.name}" ===\n${allContent}\n=== END OF DOCUMENT ===\n`;
-                console.log(`Added ${allChunks.length} chunks (${allContent.length} chars) from broader query for "${docRef.name}"`);
-              } else {
-                console.log(`No content found for document ${docRef.id} after multiple attempts`);
-                context += `\n\nDocument "${docRef.name}" was referenced but no content could be retrieved.\n`;
-              }
-            }
-          }
-        }
-      }
+      const documentRefs = { mentions: mentionNames, documentParts };
 
       // Then perform semantic search for the query text
       if (queryText) {
-        let searchResults;
-        const processedQuery = queryText; // Track the processed query for fallback
-
-        // Use optimized intelligent retrieval system
         console.log('[RAG SYSTEM] ========== Starting Intelligent Document Retrieval ==========');
-        console.log('[RAG SYSTEM] Query:', queryText);
 
-        // Use Enhanced RAG Retrieval with Temporal/Financial Intelligence
-        console.log('[RAG SYSTEM] Using Enhanced RAG with Temporal/Financial Intelligence');
+        const collector = createTraceCollector({ profile: 'chat', tenantKey: scope ? scopeKey(scope) : 'none' });
+        const result = await runRetrieval({
+          scope,
+          query: queryText,
+          profile: 'chat',
+          documentRefs,
+          options: {
+            maxResults: parseInt(env.RAG_FINAL_RESULT_COUNT || '25'),
+            fallbackToLowerThreshold: true,
+            isGPTModel,
+            ragMode,
+            webSearchEnabled,
+          },
+          signal: req.signal,
+          trace: collector,
+          ...(retrievalFilters ? { retrievalFilters } : {}),
+          ...(citationSession.labeler ? { citationLabeler: citationSession.labeler } : {}),
+        });
+        ragTrace = { collector, result };
+        collector.setReviewContent({ query: queryText });
+        retrievalResult = result;
 
-        // Get current organization ID from request data (passed from frontend)
-        let currentOrganizationId: string | null = null;
-        const deploymentMode = env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE;
-
-        if (deploymentMode === 'multi-tenant') {
-          // Use organization ID from request data (set by frontend based on user's current workspace)
-          if (data?.organizationId !== undefined) {
-            currentOrganizationId = data.organizationId === 'null' || data.organizationId === null ? null : data.organizationId;
-            console.log('[RAG SYSTEM] Multi-tenant mode: Using organization from request:', currentOrganizationId || 'personal workspace');
-          } else {
-            console.log('[RAG SYSTEM] Multi-tenant mode: No organization ID in request, using personal workspace');
-          }
-        } else {
-          console.log('[RAG SYSTEM] Single-tenant mode: No organization filtering');
-        }
-
-        // Resolve userId via SSR client for personal workspace filtering
-        const { createClient: createSSRClient } = await import('@/lib/supabase/server');
-        const sbSSR = await createSSRClient();
-        const { data: userRes } = await sbSSR.auth.getUser();
-        const currentUserId = userRes?.user?.id || null;
-
-        const enhancedResult = await enhancedRetrieveChunks(queryText, {
-          maxResults: parseInt(env.RAG_FINAL_RESULT_COUNT || '25'),
-          enableTemporalBoost: true,
-          enableFinancialBoost: true,
-          requireTemporalMatch: false, // Allow graceful fallback
-          fallbackToLowerThreshold: true,
-          organizationId: currentOrganizationId, // tenant filtering
-          userId: currentUserId // personal workspace filtering
+        console.log('[Document Search] Retrieval finished:', {
+          status: result.status,
+          reason: result.reason,
+          candidates: result.candidates.length,
+          documents: result.usedDocuments.length,
         });
 
-        console.log(`[RAG SYSTEM] Enhanced retrieval completed:`);
-        console.log(`  - Query Type: ${enhancedResult.queryContext.isTemporalQuery ? 'Temporal' : ''} ${enhancedResult.queryContext.isFinancialQuery ? 'Financial' : ''} ${enhancedResult.queryContext.isSpecificDataQuery ? 'Specific Data' : ''}`);
-        console.log(`  - Precision: ${enhancedResult.queryContext.requiredPrecision}`);
-        console.log(`  - Strategy: ${enhancedResult.retrievalStrategy}`);
-        console.log(`  - Threshold: ${enhancedResult.queryContext.suggestedThreshold}`);
-        console.log(`  - Total chunks: ${enhancedResult.chunks.length}`);
-        console.log(`  - Reasoning: ${enhancedResult.queryContext.reasoningText}`);
-
-        if (enhancedResult.queryContext.timeframe) {
-          console.log(`  - Timeframe: ${enhancedResult.queryContext.timeframe}`);
-        }
-        if (enhancedResult.queryContext.financialMetrics.length > 0) {
-          console.log(`  - Financial Metrics: ${enhancedResult.queryContext.financialMetrics.join(', ')}`);
-        }
-
-        // Convert to expected format for compatibility
-        searchResults = enhancedResult.chunks.map(chunk => ({
-          chunk_id: chunk.chunk_id,
-          document_id: chunk.document_id,
-          content: chunk.content,
-          similarity: chunk.similarity,
-          metadata: chunk.metadata,
-          // Preserve enhanced scoring information
-          temporal_score: chunk.temporal_score,
-          financial_score: chunk.financial_score,
-          final_score: chunk.final_score,
-          match_reason: chunk.match_reason
-        }));
-        console.log('[RAG SYSTEM] =============================================');
-
-        // Use search results directly - already properly formatted
-        const similarChunks = searchResults || [];
-
-        // Enhanced logging for found chunks
-        console.log(`[Enhanced RAG] Found ${similarChunks.length} relevant chunks`);
-        if (similarChunks.length > 0) {
-          console.log('[Enhanced RAG] Top chunk scores:', similarChunks.slice(0, 3).map(c =>
-            `${c.similarity?.toFixed(3) || c.final_score?.toFixed(3)} (${c.match_reason || 'similarity'})`
-          ));
-          console.log('[Enhanced RAG] First chunk preview:', similarChunks[0].content.substring(0, 200));
-        }
-
-        // CHANGE 2: Add keyword-based document filtering
-        const queryTerms = normalize(queryText).split(/\s+/)
-          .filter(term => term.length > 3) // Only consider meaningful terms
-          .map(term => term.replace(/[^a-z0-9]/g, '')); // Remove non-alphanumeric characters
-
-        console.log('Query terms for document filtering:', queryTerms);
-
-        // Add semantic search results to context
-        if (similarChunks.length > 0) {
-          console.log(`Found ${similarChunks.length} similar chunks from semantic search`);
-          console.log('First 2 semantic chunks preview:',
-            similarChunks.slice(0, 2).map(c => `${c.content.substring(0, 100)}... (similarity: ${c.similarity.toFixed(2)})`));
-
-          // Track documents from semantic search
-          for (const chunk of similarChunks) {
-            // Get document metadata first to check relevance
-            const { data: docMetadata, error: metadataError } = await supabase
-              .from('documents')
-              .select('id, filename, created_at, content, metadata')
-              .eq('id', chunk.document_id)
-              .single();
-
-            if (metadataError || !docMetadata) {
-              console.log(`Could not get metadata for document: ${chunk.document_id}`);
-              continue;
-            }
-
-            // [FIX] Explicitly fetch chunk metadata (including image_url) since the RPC doesn't return it
-            if (!chunk.metadata || !chunk.metadata.image_url) {
-              const { data: chunkData } = await supabase
-                .from('document_chunks')
-                .select('metadata')
-                .eq('id', chunk.chunk_id)
-                .single();
-
-              if (chunkData?.metadata) {
-                // Ensure we don't overwrite existing metadata completely if some exists
-                chunk.metadata = { ...(chunk.metadata || {}), ...chunkData.metadata };
-                console.log(`Explicitly fetched metadata for chunk ${chunk.chunk_id}. Has image: ${!!chunk.metadata.image_url}`);
-              }
-            }
-
-            // CHANGE 3: Only include documents that match the query terms or have very high similarity
-            // [FIX] Also include images with reasonable similarity, as they might not match text terms in cross-lingual scenarios
-            const hasImage = !!chunk.metadata?.image_url;
-            const docName = docMetadata.filename.toLowerCase();
-            const isRelevantByName = queryTerms.some(term =>
-              docName.includes(term) ||
-              (docMetadata.content && docMetadata.content.toLowerCase().includes(term))
-            );
-
-            // Include documents with reasonable similarity OR matching terms OR if it's an image with > 0.25 similarity
-            if (chunk.similarity > 0.65 || isRelevantByName || (hasImage && chunk.similarity > 0.25)) {
-              // Check if this document is already in usedDocuments
-              const existingDoc = usedDocuments.find(doc => doc.id === chunk.document_id);
-              if (!existingDoc) {
-                usedDocuments.push({
-                  id: chunk.document_id,
-                  name: docMetadata.filename,
-                  filename: docMetadata.filename,
-                  created_at: docMetadata.created_at,
-                  content_preview: docMetadata.content ? docMetadata.content.substring(0, 200) + '...' : undefined,
-                  similarity: chunk.similarity,
-                  matched_chunk: chunk.content.substring(0, 150) + '...',
-                  explicitly_referenced: false,
-                  image_url: chunk.metadata?.image_url,
-                  external_url: docMetadata.metadata?.external_url
-                });
-
-                console.log(`Added document by relevance check: ${docMetadata.filename} (similarity: ${chunk.similarity.toFixed(2)}, term match: ${isRelevantByName}, hasImage: ${!!chunk.metadata?.image_url})`);
-              } else if (!existingDoc.similarity || chunk.similarity > existingDoc.similarity) {
-                // Update similarity if this chunk has a higher score
-                existingDoc.similarity = chunk.similarity;
-                existingDoc.matched_chunk = chunk.content.substring(0, 150) + '...';
-              }
-            } else {
-              console.log(`Filtered out irrelevant document: ${docMetadata.filename} (similarity: ${chunk.similarity.toFixed(2)}, no matching terms)`);
-            }
-          }
-
-          // Only add content from documents that passed the relevance filter
-          const relevantChunks = similarChunks.filter(chunk =>
-            usedDocuments.some(doc => doc.id === chunk.document_id)
-          );
-
-          if (relevantChunks.length > 0) {
-            // Group chunks by document for better organization
-            const chunksByDocument = new Map<string, Array<{ content: string, similarity: number, chunkNum?: number }>>();
-
-            // Collect URLs from chunk metadata
-            const collectedURLs: ExtractedURL[] = [];
-
-            for (const chunk of relevantChunks) {
-              // Get document name from usedDocuments array (already fetched earlier)
-              const docInfo = usedDocuments.find(doc => doc.id === chunk.document_id);
-              const docName = docInfo?.filename || docInfo?.name || 'Unknown Document';
-
-              // Try to extract chunk number from content if available
-              const chunkMatch = chunk.content.match(/Chunk (\d+) of \d+/);
-              const chunkNum = chunkMatch ? parseInt(chunkMatch[1]) : undefined;
-
-              if (!chunksByDocument.has(docName)) {
-                chunksByDocument.set(docName, []);
-              }
-              chunksByDocument.get(docName)!.push({
-                content: chunk.content,
-                similarity: chunk.similarity,
-                chunkNum
-              });
-
-              // Extract URLs from chunk metadata if available
-              const { data: chunkData } = await supabase
-                .from('document_chunks')
-                .select('metadata')
-                .eq('id', chunk.chunk_id)
-                .single();
-
-              if (chunkData?.metadata?.urls && Array.isArray(chunkData.metadata.urls)) {
-                collectedURLs.push(...chunkData.metadata.urls);
-              }
-            }
-
-            // Build organized context with document grouping
-            const contextParts: string[] = ["\n\n=== RELEVANT INFORMATION FROM DOCUMENTS ==="];
-
-            // Image file extensions to filter out from LLM context
-            // Images are displayed visually via source_images, not cited in text
-            const imageExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg'];
-
-            for (const [docName, chunks] of chunksByDocument) {
-              // Skip image documents - they are displayed visually, not cited in text
-              const isImageDoc = imageExtensions.some(ext => docName.toLowerCase().endsWith(ext));
-              if (isImageDoc) {
-                console.log(`[RAG Context] Skipping image document from LLM context: ${docName}`);
-                continue;
-              }
-
-              // Sort chunks by chunk number if available, otherwise by similarity
-              chunks.sort((a, b) => {
-                if (a.chunkNum && b.chunkNum) return a.chunkNum - b.chunkNum;
-                return b.similarity - a.similarity;
-              });
-
-              // Add document header and chunks with enhanced formatting for GPT models
-              contextParts.push(`\n--- Document: ${docName} (${chunks.length} relevant chunks) ---`);
-
-              // Format chunks with clear source indicators for GPT models
-              const formattedChunks = chunks.map((c, index) => {
-                // Extract the actual content without the prefix
-                const contentMatch = c.content.match(/^Document: [^.]+\.[^.]+\. Chunk \d+ of (\d+)\. Content: (.*)$/s);
-                const totalChunks = contentMatch ? contentMatch[1] : '?';
-                const actualContent = contentMatch ? contentMatch[2] : c.content;
-
-                // Add source citation hint for GPT models
-                if (isGPTModel && c.chunkNum) {
-                  return `[Source: ${docName}]\n${actualContent}`;
-                }
-                return c.content;
-              });
-
-              contextParts.push(...formattedChunks);
-            }
-            contextParts.push("=== END OF RELEVANT INFORMATION ===\n");
-
-            // Add collected URLs to context if any were found
-            if (collectedURLs.length > 0) {
-              // Remove duplicates based on URL
-              const uniqueURLs = Array.from(
-                new Map(collectedURLs.map(url => [url.url, url])).values()
-              );
-
-              const urlSection = formatURLsForContext(uniqueURLs);
-              if (urlSection) {
-                contextParts.push(urlSection);
-                console.log(`Added ${uniqueURLs.length} unique URLs from chunks to context`);
-              }
-            }
-
-            context += contextParts.join('\n\n');
-            console.log(`Added ${relevantChunks.length} organized chunks from ${chunksByDocument.size} documents in filtered semantic search`);
-          }
-        }
+        context = result.context;
+        usedDocuments = result.usedDocuments;
       } else {
-        // Query all chunks to try to gather some relevant context
         console.log('No specific query text provided, performing general context lookup');
 
-        // Use simple semantic search for general queries
-        const queryEmbedding = await getQueryEmbedding('general information overview');
-        const { data: searchResults } = await supabase
-          .rpc('match_document_chunks', {
-            query_embedding: queryEmbedding,
-            match_count: 5,
-            similarity_threshold: 0.5
-          });
+        const collector = createTraceCollector({ profile: 'chat', tenantKey: scope ? scopeKey(scope) : 'none' });
+        const result = await runRetrieval({
+          scope,
+          query: queryText,
+          profile: 'chat',
+          documentRefs,
+          options: { generalOverview: true },
+          signal: req.signal,
+          trace: collector,
+          ...(citationSession.labeler ? { citationLabeler: citationSession.labeler } : {}),
+        });
+        ragTrace = { collector, result };
+        retrievalResult = result;
 
-        const similarChunks = (searchResults || []).map(result => ({
-          chunk_id: result.chunk_id,
-          document_id: result.document_id,
-          content: result.content,
-          similarity: result.similarity
-        }));
-        // Build context with validation and enhanced organization
-        const chunksWithContent = similarChunks.filter(chunk => chunk.content && chunk.content.trim().length > 0);
-        if (chunksWithContent.length > 0) {
-          // Group chunks by document for better organization
-          const chunksByDocument = new Map<string, Array<{ content: string, similarity: number, chunkNum?: number }>>();
+        console.log('[Document Search] Overview retrieval finished:', {
+          status: result.status,
+          reason: result.reason,
+          candidates: result.candidates.length,
+          documents: result.usedDocuments.length,
+        });
 
-          // Cache document names to avoid repeated queries
-          const docNameCache = new Map<string, string>();
-
-          for (const chunk of chunksWithContent) {
-            // Get document name from cache or fetch from database
-            let docName = docNameCache.get(chunk.document_id);
-            if (!docName) {
-              const { data: docData } = await supabase
-                .from('documents')
-                .select('filename')
-                .eq('id', chunk.document_id)
-                .single();
-              docName = docData?.filename || 'Unknown Document';
-              docNameCache.set(chunk.document_id, docName);
-            }
-
-            // Try to extract chunk number from content if available
-            const chunkMatch = chunk.content.match(/Chunk (\d+) of \d+/);
-            const chunkNum = chunkMatch ? parseInt(chunkMatch[1]) : undefined;
-
-            if (!chunksByDocument.has(docName)) {
-              chunksByDocument.set(docName, []);
-            }
-            chunksByDocument.get(docName)!.push({
-              content: chunk.content,
-              similarity: chunk.similarity,
-              chunkNum
-            });
-          }
-
-          // Build organized context with document grouping
-          const contextParts: string[] = [];
-          for (const [docName, chunks] of chunksByDocument) {
-            // Sort chunks by chunk number if available, otherwise by similarity
-            chunks.sort((a, b) => {
-              if (a.chunkNum && b.chunkNum) return a.chunkNum - b.chunkNum;
-              return b.similarity - a.similarity;
-            });
-
-            // Add document header and chunks
-            contextParts.push(`=== Document: ${docName} (${chunks.length} relevant chunks) ===`);
-            contextParts.push(...chunks.map(c => c.content));
-          }
-
-          context = contextParts.join('\n\n');
-          console.log(`[RAG Context] Built organized context from ${chunksWithContent.length} chunks across ${chunksByDocument.size} documents, total ${context.length} characters`);
-        } else {
-          context = 'No relevant context found.';
-          console.log('[RAG Context] ⚠️ WARNING: No chunks with actual content found!');
-        }
-
-        // Track documents from general context lookup
-        for (const chunk of similarChunks) {
-          // Check if this document is already in usedDocuments
-          const existingDoc = usedDocuments.find(doc => doc.id === chunk.document_id);
-          if (!existingDoc) {
-            // Get document metadata
-            const { data: docMetadata, error: metadataError } = await supabase
-              .from('documents')
-              .select('id, filename, created_at, content, metadata')
-              .eq('id', chunk.document_id)
-              .single();
-
-            if (!metadataError && docMetadata) {
-              usedDocuments.push({
-                id: chunk.document_id,
-                name: docMetadata.filename,
-                filename: docMetadata.filename,
-                created_at: docMetadata.created_at,
-                content_preview: docMetadata.content ? docMetadata.content.substring(0, 200) + '...' : undefined,
-                similarity: chunk.similarity,
-                matched_chunk: chunk.content.substring(0, 150) + '...',
-                external_url: docMetadata.metadata?.external_url
-              });
-            }
-          }
-        }
+        context = result.context;
+        usedDocuments = result.usedDocuments;
       }
 
       // Use a fallback if we have no context
@@ -2508,8 +2121,8 @@ IMPORTANT:
         console.log(`Document: ${doc.name || doc.filename}, Similarity: ${doc.similarity?.toFixed(3)}, Explicitly Referenced: ${doc.explicitly_referenced}`);
       });
 
-      // Apply minimal filtering - be more permissive with document selection
-      usedDocuments = usedDocuments.filter(doc => {
+      // Apply minimal filtering - be more permissive with document selection (the pipeline already filtered its own result)
+      if (!retrievalResult || !queryText) usedDocuments = usedDocuments.filter(doc => {
         // Always keep explicitly referenced documents
         if (doc.explicitly_referenced) {
           console.log(`Keeping explicitly referenced document: ${doc.name || doc.filename}`);
@@ -2554,14 +2167,16 @@ IMPORTANT:
 
       // [FIX] Compute sourceImages from usedDocuments for injection into stream response
       // This is done BEFORE streamText so we can pass it to createUIMessageStream
-      precomputedSourceImages = usedDocuments
-        .filter(doc => doc.image_url)
-        .map(doc => ({
-          name: doc.name || doc.filename || 'Source Image',
-          size: 0,
-          type: 'image/jpeg',
-          url: doc.image_url
-        }));
+      precomputedSourceImages = retrievalResult
+        ? retrievalResult.sourceImages
+        : usedDocuments
+            .filter(doc => doc.image_url)
+            .map(doc => ({
+              name: doc.name || doc.filename || 'Source Image',
+              size: 0,
+              type: 'image/jpeg',
+              url: doc.image_url
+            }));
 
       if (precomputedSourceImages.length > 0) {
         console.log('[RAG] Precomputed source images for stream injection:', precomputedSourceImages.length);
@@ -2569,15 +2184,53 @@ IMPORTANT:
 
     } // End of RAG processing (skipped when disableRAG is true)
 
+    const retrievalFailed =
+      !effectiveDisableRAG &&
+      retrievalResult !== null &&
+      (retrievalResult.status === 'error' || (retrievalResult.status === 'degraded' && usedDocuments.length === 0));
+
+    if (retrievalFailed && retrievalResult) {
+      const strictWithoutWebSearch = ragMode === 'strict' && !webSearchEnabled;
+      console.error('[Document Search] Knowledge base unavailable:', {
+        status: retrievalResult.status,
+        reason: retrievalResult.reason,
+        ragMode,
+        webSearchEnabled,
+        degradedToNoContext: !strictWithoutWebSearch,
+      });
+
+      if (strictWithoutWebSearch) {
+        finishRagTrace();
+        const errorText = knowledgeBaseUnavailableMessage(fallbackLanguage);
+        const stream = createUIMessageStream({
+          execute: async ({ writer }) => {
+            writer.write({ type: 'error', errorText });
+          }
+        });
+
+        return createUIMessageStreamResponse({ stream });
+      }
+
+      if (ragTrace) {
+        ragTrace.result = { ...ragTrace.result, status: 'degraded' };
+      }
+      context = 'No relevant context found.';
+      usedDocuments = [];
+      precomputedSourceImages = [];
+    }
+
     const shouldBlockNoContextResponse =
       !effectiveDisableRAG &&
       ragMode === 'strict' &&
       !webSearchEnabled &&
+      (retrievalResult === null || retrievalResult.status === 'empty') &&
       usedDocuments.length === 0 &&
       context.trim().toLowerCase().startsWith('no relevant context found');
 
     if (shouldBlockNoContextResponse) {
       const responseText = buildNoKnowledgeBaseResponse(fallbackLanguage);
+      ragTrace?.collector.setReviewContent({ answer: responseText, context });
+      finishRagTrace();
       const stream = createUIMessageStream({
         execute: async ({ writer }) => {
           const textId = `text-${Date.now()}`;
@@ -2589,6 +2242,8 @@ IMPORTANT:
 
       return createUIMessageStreamResponse({ stream });
     }
+
+    citationSession.attach(retrievalFailed || effectiveDisableRAG ? null : retrievalResult);
 
     // Prepare system prompt with context
     // Check if there's a custom system prompt in environment variables (with fallback)
@@ -2611,8 +2266,8 @@ Context:
 
     // NEW: Check for workspace-level system prompt override (highest priority after WhatsApp override)
     let workspacePromptUsed = false;
-    // Get organization ID from request data
-    const workspaceOrgId = data?.organizationId === 'null' || data?.organizationId === null ? null : data?.organizationId;
+    // The organization comes from the verified scope, never from the request body
+    const workspaceOrgId = scope?.organizationId ?? null;
 
     if (isMultiTenant() && workspaceOrgId) {
       console.log('[System Prompt] Checking workspace-level prompt override...');
@@ -2696,7 +2351,7 @@ Context:
       console.log('[RAG SYSTEM] ✅ Using optimized system prompt with context');
       console.log('[RAG SYSTEM] Creating enhanced prompt with context length:', context.length);
       console.log('[RAG SYSTEM] Using RAG mode:', ragMode);
-      systemPrompt = createEnhancedRAGPrompt(ragSystemPrompt, context, ragMode);
+      systemPrompt = citationSession.decorateSystemPrompt(createEnhancedRAGPrompt(ragSystemPrompt, context, ragMode));
     } else {
       console.log('[RAG SYSTEM] ❌ Using standard system prompt without context');
       console.log('[RAG SYSTEM] Reason: No context/documents found');
@@ -2755,7 +2410,7 @@ Context:
 
     // Add multi-step instructions if handling multi-step query
     if (isHandlingMultiStep && multiStepMetadata) {
-      const allStepsDescription = queryClassification.steps
+      const allStepsDescription = (queryClassification.steps ?? [])
         .map((step, idx) => `Step ${idx + 1}: ${step.text}`)
         .join('\n');
 
@@ -3001,7 +2656,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
       gmailGeneralSystemMessage,
       gmailAttachmentSystemMessage,
       mediaUploadSystemMessage,
-      ...convertedMessages,
+      ...citationSession.stripHistory(convertedMessages),
     ];
 
     const messagesForModel = messagesForModelExtended.map(toMessage);
@@ -3052,6 +2707,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
       }
 
       console.log('API ROUTE: Returning error response:', errorMessage);
+      finishRagTrace();
       return createErrorResponse(errorMessage);
     }
 
@@ -3098,6 +2754,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
 
       if (!modelProvider) {
         console.error('API ROUTE: Failed to get model provider from OpenRouter');
+        finishRagTrace();
         return createErrorResponse("I'm having trouble connecting to the AI service. The model provider could not be initialized.");
       }
 
@@ -3117,6 +2774,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
       let allTools: Record<string, any> = { ...baseTools };
       if (useMcpForRequest) {
         console.log('API ROUTE: Initializing MCP clients for tool discovery from ALL servers...');
+        const mcpToolScopeKey = callerScopeKey(mcpAdminUserId as string, sessionId);
 
         // ⚡ PERFORMANCE OPTIMIZATION: Check cache first
         const cacheKey = `mcp-tools-${queryClassification.category}`;
@@ -3150,7 +2808,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                 }
 
                 // Check if YOLO mode is enabled
-                const yoloModeEnabled = env.NEXT_PUBLIC_MCP_YOLO_MODE_ENABLED === 'true';
+                const yoloModeEnabled = mcpYoloAllowed;
                 console.log(`[CACHED TOOL] YOLO mode enabled: ${yoloModeEnabled}`);
 
                 if (yoloModeEnabled) {
@@ -3160,6 +2818,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                   // Create tool execution state with 'running' status
                   if (sessionId) {
                     await ToolExecutionStateService.upsert({
+                      user_id: await resolveToolOwnerId(),
                       chat_id: sessionId,
                       message_id: messagesForModel.length,
                       tool_call_id: toolCallId,
@@ -3246,7 +2905,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                     }
 
                     // Check if YOLO mode is enabled
-                    const yoloModeEnabled = env.NEXT_PUBLIC_MCP_YOLO_MODE_ENABLED === 'true';
+                    const yoloModeEnabled = mcpYoloAllowed;
                     console.log(`[MCP TOOL] YOLO mode enabled: ${yoloModeEnabled}`);
 
                     if (yoloModeEnabled) {
@@ -3256,6 +2915,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                       // Create tool execution state with 'running' status
                       if (sessionId) {
                         await ToolExecutionStateService.upsert({
+                          user_id: await resolveToolOwnerId(),
                           chat_id: sessionId,
                           message_id: messagesForModel.length,
                           tool_call_id: toolCallId,
@@ -3316,7 +2976,9 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
 
             // Get user query for intelligent routing
             const lastUserMsg = messagesForModelExtended.filter(m => m.role === 'user').pop();
-            const userQuery = lastUserMsg?.content || '';
+            const userQuery = typeof lastUserMsg?.content === 'string'
+              ? lastUserMsg.content
+              : lastUserMsg?.content?.find(part => part.type === 'text')?.text || '';
             console.log(`[Universal MCP] Processing user query: "${userQuery}"`);
 
             // Extract recent conversation messages for context-aware tool selection
@@ -3332,7 +2994,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
 
             // Get enhanced tools through production router with conversation context
             console.log(`[Universal MCP] Getting enhanced tools through production router with context...`);
-            const mcpResult = await productionMcpRouter.getEnhancedMcpTools(userQuery, allMcpTools, recentConversation, sessionId);
+            const mcpResult = await productionMcpRouter.getEnhancedMcpTools(userQuery, allMcpTools, recentConversation, mcpToolScopeKey);
             const enhancedMcpTools = mcpResult.tools;
 
             console.log(`[Universal MCP] Production router selected ${Object.keys(enhancedMcpTools).length} tools for query`);
@@ -3340,7 +3002,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
             console.log(`[Universal MCP] Server health:`, mcpResult.serverHealth);
             console.log(`[Universal MCP] Routing decision confidence:`, mcpResult.routingDecisions[0]?.confidence || 0);
 
-            // Store tools in global cache for approval route
+            // Store tools in the process cache for the approval route, keyed by verified admin and chat
             const global_cache = globalThis as any;
             if (!global_cache.mcpToolsCache) {
               global_cache.mcpToolsCache = new Map<string, { tools: any[], timestamp: number }>();
@@ -3352,13 +3014,8 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                 ...tool
               }));
 
-              global_cache.mcpToolsCache.set(sessionId, { tools: toolsArray, timestamp: Date.now() });
-              console.log(`[Universal MCP] ===== TOOL CACHE STORAGE =====`);
-              console.log(`[Universal MCP] Session ID: ${sessionId}`);
-              console.log(`[Universal MCP] Stored ${toolsArray.length} tools: ${toolsArray.map(t => t.name).join(', ')}`);
-              console.log(`[Universal MCP] Global cache sessions: ${Array.from(global_cache.mcpToolsCache.keys()).join(', ')}`);
-              console.log(`[Universal MCP] Global cache size: ${global_cache.mcpToolsCache.size}`);
-              console.log(`[Universal MCP] =============================`);
+              global_cache.mcpToolsCache.set(mcpToolScopeKey, { tools: toolsArray, timestamp: Date.now() });
+              console.log(`[Universal MCP] Cached ${toolsArray.length} tools for the caller's chat`);
             } else {
               console.log(`[Universal MCP] WARNING: No sessionId provided, cannot cache tools!`);
             }
@@ -3472,6 +3129,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                   (globalThis as any).toolApprovalState[toolCallId] = {
                     approved: false,
                     executed: false, // Add execution tracking flag
+                    ownerUserId: await resolveToolOwnerId(),
                     toolCall: {
                       name: toolName,
                       params: transformedParams, // Use transformed parameters
@@ -3486,7 +3144,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                   console.log(`[PARAM DEBUG] Stored approval state:`, (globalThis as any).toolApprovalState[toolCallId]);
 
                   // Check if YOLO mode is enabled
-                  const yoloModeEnabled = env.NEXT_PUBLIC_MCP_YOLO_MODE_ENABLED === 'true';
+                  const yoloModeEnabled = mcpYoloAllowed;
                   console.log(`[ENHANCED TOOL] YOLO mode enabled: ${yoloModeEnabled}`);
 
                   if (yoloModeEnabled) {
@@ -3499,6 +3157,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                     // Create tool execution state with 'running' status
                     if (sessionId) {
                       await ToolExecutionStateService.upsert({
+                        user_id: await resolveToolOwnerId(),
                         chat_id: sessionId,
                         message_id: messagesForModel.length,
                         tool_call_id: actualToolCallId,
@@ -3826,6 +3485,18 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
 
       // Convert UI messages to model messages required by streamText
       const modelMessages = await convertToModelMessages(messagesForModel);
+      let requestReasoningDetails: Record<string, unknown> | undefined;
+      const captureReasoningDetails = (openrouterMetadata: Record<string, unknown> | undefined) => {
+        const reasoningContent = openrouterMetadata?.reasoning_content;
+        if (typeof reasoningContent !== 'string' || !reasoningContent) return;
+        requestReasoningDetails = {
+          content: reasoningContent,
+          token_count: typeof openrouterMetadata?.reasoning_tokens === 'number' ? openrouterMetadata.reasoning_tokens : 0,
+          model: safeModelId,
+          effort: reasoningSettings?.effort,
+          timestamp: new Date().toISOString()
+        };
+      };
 
       // Special handling for Claude Sonnet 4 - use different parameters
       const streamParams: any = {
@@ -3928,10 +3599,17 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
       };
 
       // First streamText call with merged tools and reasoning
+      const citationTransforms = citationSession.transforms();
+      if (citationTransforms.length > 0) streamParams.experimental_transform = citationTransforms;
+      let answerToolOutputUsed = false;
+
       const result = await streamText({
         ...streamParams,
-        onStepFinish: async (params: { text?: string; toolCalls?: ToolCallPart[]; toolResults?: ToolResultPart[] }) => {
-          let { text, toolCalls = [] as ToolCallPart[], toolResults = [] as ToolResultPart[] } = params;
+        onStepFinish: async (params: { text?: string; toolCalls?: StepToolCall[]; toolResults?: StepToolResult[] }) => {
+          let { text, toolCalls = [] as StepToolCall[], toolResults = [] as StepToolResult[] } = params;
+          if (Array.isArray(toolResults) && toolResults.some((item) => typeof item?.toolName === 'string' && !ANSWER_EVIDENCE_TOOLS.has(item.toolName))) {
+            answerToolOutputUsed = true;
+          }
 
           // Clean any malformed useDocument calls from the text
           if (text && isGPTModel) {
@@ -3999,7 +3677,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
             console.log('🔍 [AI STEP DEBUG] ✅ AI CALLED TOOLS:');
             toolCalls.forEach((call, index) => {
               console.log(`🔍 [AI STEP DEBUG]   Tool ${index + 1}: ${call.toolName}`);
-              console.log(`🔍 [AI STEP DEBUG]   Args: ${JSON.stringify(call.args)}`);
+              console.log(`🔍 [AI STEP DEBUG]   Args:`, describeArgs(call.input));
             });
           } else {
             console.log('🔍 [AI STEP DEBUG] ❌ NO TOOLS CALLED - AI responded with text only');
@@ -4067,7 +3745,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
               type: 'tool-result',
               toolName: 'query_documents',
               toolCallId: 'document-sources-' + Date.now(),
-              result: {
+              output: {
                 documents: usedDocuments.map(doc => ({
                   id: doc.id,
                   name: doc.name || doc.filename,
@@ -4104,7 +3782,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                 explicitly_referenced: doc.explicitly_referenced || false,
                 image_url: doc.image_url
               }))
-            } as any);
+            });
 
             // [FIX] We DO need to push a separate source_images part because the frontend
             // directly looks for {type: 'source_images', source_images: [...]} in message.content
@@ -4112,7 +3790,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
               toolResults.push({
                 type: 'source_images',
                 source_images: sourceImages
-              } as any);
+              });
               console.log('[RAG DEBUG] Added top-level source_images part with', sourceImages.length, 'images');
             }
 
@@ -4132,46 +3810,21 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
               if (result && result.toolName !== 'query_documents' && result.toolName !== 'webSearch') {
                 console.log(`API ROUTE: Clearing result for ${result.toolName} to force explicit approval`);
                 // Set result to null to prevent auto-execution
-                result.result = null;
+                result.output = null;
               }
             });
           }
 
-          // 🔄 GMAIL SMART TOOL REDIRECTION: Fix draft vs send selection
-          // This happens BEFORE user sees the approval UI
-          toolCalls.forEach((call: ToolCallPart) => {
-            if (call.toolName === 'gmail_create_draft') {
-              // Extract user message from tool call instructions (most reliable source)
-              const userMessage = (call.args?.instructions as string) || '';
-              const intentScore = analyzeEmailIntent(userMessage);
-
-              console.log(`🔄 [CHAT REDIRECTION] Analyzing intent for draft call. User message: "${userMessage}"`);
-              console.log(`🔄 [CHAT REDIRECTION] Intent analysis: ${JSON.stringify(intentScore)}`);
-
-              // Redirect to send if user clearly intended to send (not draft)
-              if (intentScore.shouldSend && intentScore.confidence >= 0.7) {
-                console.log(`🔄 [CHAT REDIRECTION] HIGH CONFIDENCE SEND INTENT (${intentScore.confidence.toFixed(2)}). Redirecting gmail_create_draft → gmail_send_email`);
-                call.toolName = 'gmail_send_email';
-
-                console.log('🔄 [CHAT REDIRECTION] Tool successfully redirected to gmail_send_email BEFORE user approval');
-              } else {
-                console.log(`🔄 [CHAT REDIRECTION] Keeping as draft. Reason: ${intentScore.shouldSend ? 'Low confidence' : 'Draft intent detected'} (confidence: ${intentScore.confidence.toFixed(2)})`);
-              }
-            }
-          });
-
           // Track toolCalls in approval state
-          toolCalls.forEach((call: ToolCallPart) => {
+          const stepOwnerUserId = toolCalls.some((call: StepToolCall) => !toolApprovalState[call.toolCallId])
+            ? await resolveToolOwnerId()
+            : null;
+          toolCalls.forEach((call: StepToolCall) => {
             // Check if we already have a result for this tool call
             // This happens for tools that execute immediately (like webSearch or query_documents)
             const existingResult = toolResults.find(r => r.toolCallId === call.toolCallId);
             const isAllowedTool = call.toolName === 'webSearch' || call.toolName === 'query_documents';
-            const hasResultPayload = !!(
-              existingResult &&
-              (existingResult.result !== undefined ||
-                (existingResult as any).output !== undefined ||
-                ((existingResult as any).output && (existingResult as any).output.value !== undefined))
-            );
+            const hasResultPayload = existingResult?.output !== undefined;
 
             // If we have a result AND it's an allowed tool, we treat it as already approved/executed
             if (existingResult && hasResultPayload && isAllowedTool) {
@@ -4185,17 +3838,17 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
               (globalThis as any).toolApprovalState[call.toolCallId] = {
                 approved: false, // Always start unapproved
                 executed: false, // Add execution tracking flag
+                ownerUserId: stepOwnerUserId,
                 toolCall: {
                   name: call.toolName,
-                  params: call.args,
+                  params: call.input,
                   meta: { toolCallId: call.toolCallId }
                 },
                 result: null
               };
 
               // 🎯 CRITICAL DEBUG: Log tool call parameter storage
-              console.log(`[PARAM DEBUG] Tool call ${call.toolName} stored with args:`, call.args);
-              console.log(`[PARAM DEBUG] Final approval state for ${call.toolCallId}:`, (globalThis as any).toolApprovalState[call.toolCallId]);
+              console.log(`[PARAM DEBUG] Tool call ${call.toolName} stored with args:`, describeArgs(call.input));
               console.log('API ROUTE: Requiring explicit approval for call:', call.toolCallId);
             }
           });
@@ -4205,6 +3858,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
         },
         onFinish: async (event) => {
           console.log('API ROUTE: streamText finished, keeping MCP client open for user approval');
+          ragTrace?.collector.setReviewContent({ answer: event.text ?? '', context, model: safeModelId });
 
           // 🕐 END TIMING: AI generation and total request
           const aiEndTime = Date.now();
@@ -4247,20 +3901,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
             }
           }
 
-          // Handle reasoning details if present
-          if (event.experimental_providerMetadata?.openrouter?.reasoning_content) {
-            const reasoningContent = event.experimental_providerMetadata.openrouter.reasoning_content;
-            console.log('API ROUTE: Reasoning content captured:', reasoningContent.substring(0, 100) + '...');
-
-            // Store reasoning details for the response
-            (globalThis as any).lastReasoningDetails = {
-              content: reasoningContent,
-              token_count: event.experimental_providerMetadata.openrouter.reasoning_tokens || 0,
-              model: safeModelId,
-              effort: reasoningSettings?.effort,
-              timestamp: new Date().toISOString()
-            };
-          }
+          captureReasoningDetails(event.providerMetadata?.openrouter);
 
           // Deliberately NOT closing the MCP client here - it will be used for tool execution when approved
 
@@ -4312,18 +3953,95 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
         }
       });
 
+      const ragTraceId = ragTrace?.collector.traceId;
+      let generationFailed = false;
+
+      let answerRecordPending = answerId !== null;
+      const finishAnswerRecord = (responseText: string, aborted: boolean, failed: boolean) => {
+        if (!answerRecordPending || !answerId || !scope || !answerUserId) return;
+        answerRecordPending = false;
+        const records = citationSession.fullRecords();
+        const premiseBlocks =
+          !retrievalFailed && !effectiveDisableRAG && retrievalResult?.blocks
+            ? retrievalResult.blocks.filter((block) => !block.isImage).map((block) => ({ alias: block.alias ?? '', text: block.text }))
+            : [];
+        const knowledgeBaseContext =
+          premiseBlocks.length > 0 && (retrievalResult?.status === 'ok' || retrievalResult?.status === 'degraded');
+        scheduleAnswerFinish({
+          answerId,
+          scope,
+          userId: answerUserId,
+          chatId: typeof data?.chatId === 'string' ? data.chatId : null,
+          traceId: ragTraceId ?? answerId,
+          modelId: safeModelId,
+          ragMode,
+          queryText: getLastUserText(rawMessages),
+          citations: records?.citations ?? [],
+          citationStrategy: records ? citationSession.strategy : null,
+          invalidCitations: records?.invalidCitations ?? 0,
+          answerText: responseText,
+          aborted,
+          groundednessEligible: !failed && (ragMode === 'strict' || ragMode === 'balanced') && knowledgeBaseContext,
+          toolOutputUsed: answerToolOutputUsed,
+          premise: {
+            blocks: premiseBlocks,
+            webSearchTexts: webSearchResults
+              .map((item) => (typeof item?.text === 'string' ? item.text : typeof item?.content === 'string' ? item.content : ''))
+              .filter((text) => text.length > 0),
+          },
+          requestLanguage: userLanguage,
+        });
+      };
+
+      const buildFinishMetadata = () => {
+        const metadata: Record<string, unknown> = {};
+
+        if (isHandlingMultiStep && multiStepMetadata) {
+          metadata.multiStep = {
+            isMultiStep: true,
+            totalSteps: multiStepMetadata.totalSteps,
+            currentStepIndex: multiStepMetadata.currentStepIndex,
+            currentStep: {
+              id: multiStepMetadata.currentStep.id,
+              type: multiStepMetadata.currentStep.type,
+              text: multiStepMetadata.currentStep.text
+            },
+            hasMoreSteps: multiStepMetadata.remainingSteps.length > 0,
+            nextStep: multiStepMetadata.remainingSteps[0] || null,
+            requiresToolApproval: multiStepMetadata.remainingSteps.some(s => s.type === 'mcp')
+          };
+        }
+
+        if (requestReasoningDetails) {
+          metadata.reasoningText = requestReasoningDetails;
+        }
+
+        if (webSearchResults.length > 0) {
+          metadata.webSearch = {
+            toolCallId: webSearchToolCallId,
+            results: webSearchResults
+          };
+        }
+
+        if (isClaudeSonnet4 && usedDocuments && usedDocuments.length > 0) {
+          metadata.documentSources = buildDocumentSources(usedDocuments);
+        }
+
+        return metadata;
+      };
+
       // [FIX] Use createUIMessageStream to inject source_images data part alongside AI response
       const stream = createUIMessageStream({
         execute: async ({ writer }) => {
           // Write source_images and metadata FIRST before merging AI stream
           if (precomputedSourceImages.length > 0) {
             console.log('[RAG] Injecting source_images into stream:', precomputedSourceImages.length, 'images');
-            writer.write({
-              type: 'source_images' as any,
+            writeCustomChunk(writer, {
+              type: 'source_images',
               source_images: precomputedSourceImages
             });
-            writer.write({
-              type: 'metadata' as any,
+            writeCustomChunk(writer, {
+              type: 'metadata',
               usedDocuments: usedDocuments.map(doc => ({
                 type: 'document' as const,
                 id: doc.id,
@@ -4337,58 +4055,40 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
             });
           }
           // Merge AI stream
-          writer.merge(result.toUIMessageStream({ sendStart: precomputedSourceImages.length === 0 }));
+          writer.merge(result.toUIMessageStream({
+            sendStart: precomputedSourceImages.length === 0,
+            messageMetadata: ({ part }) => {
+              if (part.type === 'start') {
+                if (!ragTraceId && !answerId) return undefined;
+                return { ...(ragTraceId ? { ragTraceId } : {}), ...(answerId ? { answerId } : {}) };
+              }
+              if (part.type === 'finish-step') {
+                captureReasoningDetails(part.providerMetadata?.openrouter);
+                return undefined;
+              }
+              if (part.type !== 'finish') return undefined;
+              const finishMetadata = { ...buildFinishMetadata(), ...citationSession.finishMetadata() };
+              if (!ragTraceId && !answerId && Object.keys(finishMetadata).length === 0) return undefined;
+              return { ...(ragTraceId ? { ragTraceId } : {}), ...(answerId ? { answerId } : {}), ...finishMetadata };
+            },
+          }));
         },
-        onFinish: () => {
-          const reasoningDetails = (globalThis as any).lastReasoningDetails;
-          const metadata: any = {};
-
-          // Add multi-step metadata if this is a multi-step query
-          if (isHandlingMultiStep && multiStepMetadata) {
-            metadata.multiStep = {
-              isMultiStep: true,
-              totalSteps: multiStepMetadata.totalSteps,
-              currentStepIndex: multiStepMetadata.currentStepIndex,
-              currentStep: {
-                id: multiStepMetadata.currentStep.id,
-                type: multiStepMetadata.currentStep.type,
-                text: multiStepMetadata.currentStep.text
-              },
-              hasMoreSteps: multiStepMetadata.remainingSteps.length > 0,
-              nextStep: multiStepMetadata.remainingSteps[0] || null,
-              requiresToolApproval: multiStepMetadata.remainingSteps.some(s => s.type === 'mcp')
-            };
-            console.log('📝 [MULTI-STEP] Adding multi-step metadata to response');
+        onFinish: ({ isAborted, finishReason, responseMessage }) => {
+          if (ragTrace) {
+            const status = isAborted ? 'aborted' : generationFailed || finishReason === 'error' ? 'error' : 'ok';
+            ragTrace.collector.record({ name: 'generation', status, startedAt: aiStartTime, endedAt: ragTrace.collector.now() });
           }
-
-          // Add reasoning details if available
-          if (reasoningDetails) {
-            metadata.reasoningText = reasoningDetails;
-            // Clean up after use
-            delete (globalThis as any).lastReasoningDetails;
+          finishRagTrace();
+          if (answerRecordPending) {
+            const responseText = responseMessage.parts
+              .map((part) => (part.type === 'text' ? part.text : ''))
+              .join('');
+            finishAnswerRecord(responseText, isAborted || req.signal.aborted, generationFailed || finishReason === 'error');
           }
-
-          if (webSearchResults.length > 0) {
-            metadata.webSearch = {
-              toolCallId: webSearchToolCallId,
-              results: webSearchResults
-            };
-          }
-
-          // CRITICAL: For Claude Sonnet 4 with disabled tools, add document sources to metadata
-          if (isClaudeSonnet4 && usedDocuments && usedDocuments.length > 0) {
-            metadata.documentSources = usedDocuments.map(doc => ({
-              id: doc.id,
-              name: doc.name || doc.filename,
-              similarity: doc.similarity,
-              chunk_text: doc.chunk_text?.substring(0, 200) + '...'
-            }));
-          }
-
-          return Object.keys(metadata).length > 0 ? metadata : undefined;
         },
         // Handle tool-related errors in the stream
         onError: error => {
+          generationFailed = true;
           if (error instanceof Error) {
             console.error('API ROUTE: Tool execution error:', error);
 
@@ -4484,6 +4184,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
       // Return the stream response
       return createUIMessageStreamResponse({ stream });
     } catch (streamError) {
+      finishRagTrace();
       console.error('API ROUTE: Error in streamText:', streamError);
       console.error('API ROUTE: Error details:', streamError instanceof Error ? streamError.message : String(streamError));
       console.error('API ROUTE: Error stack:', streamError instanceof Error ? streamError.stack : "No stack available");
@@ -4531,6 +4232,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
       // Also clear the global reference
       (globalThis as any).persistentMcpClient = null;
     }
+    finishRagTrace();
     console.error('API ROUTE: Error in POST:', error);
     console.error('API ROUTE: Error details:', error instanceof Error ? error.message : String(error));
     console.error('API ROUTE: Error stack:', error instanceof Error ? error.stack : "No stack available");

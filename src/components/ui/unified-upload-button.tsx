@@ -13,6 +13,10 @@ import { useTheme } from '@/components/theme-provider';
 import { useLanguage } from '@/components/providers/language-provider';
 import { useOrganizationStore } from '@/lib/stores/organization-store';
 import { isMultiTenant } from '@/lib/deployment-mode';
+import { useShallow } from 'zustand/react/shallow';
+import type { IngestJobState } from '@/lib/hooks/use-ingest-job-status';
+import { TrackedIngestStatusBadge } from '@/components/ui/ingest-status-badge';
+import { classifyUploadResponse } from '@/components/ui/ingest-document-rows';
 
 export interface UnifiedUploadButtonProps {
   disabled?: boolean;
@@ -33,10 +37,13 @@ export function UnifiedUploadButton({ disabled, onTempDocUpload, onProcessingSta
   const [isOpen, setIsOpen] = useState(false);
   const { theme, resolvedTheme } = useTheme();
   const isDarkMode = theme === 'dark' || resolvedTheme === 'dark';
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
+  const [queuedUpload, setQueuedUpload] = useState<{ jobId: string; name: string; organizationId: string | null } | null>(null);
 
   // Get current workspace context for multi-tenant document uploads
-  const { currentOrganization, isPersonalMode } = useOrganizationStore();
+  const { currentOrganization, isPersonalMode } = useOrganizationStore(
+    useShallow((s) => ({ currentOrganization: s.currentOrganization, isPersonalMode: s.isPersonalMode })),
+  );
 
   const dropdownBgColor = isDarkMode ? '#2F2F2F' : '#EFE1D5';
   const hoverColor = isDarkMode ? '#424242' : '#E5D6C9';
@@ -53,6 +60,11 @@ export function UnifiedUploadButton({ disabled, onTempDocUpload, onProcessingSta
       setIsOpen(false); // Close dropdown after file selection
     }
     e.target.value = '';
+  };
+
+  const handleQueuedSettled = (jobId: string, state: IngestJobState) => {
+    if (state.status !== 'ready' && state.status !== 'skipped_duplicate') return;
+    setTimeout(() => setQueuedUpload((current) => (current?.jobId === jobId ? null : current)), 4000);
   };
 
   const handleTempDocUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -97,14 +109,22 @@ export function UnifiedUploadButton({ disabled, onTempDocUpload, onProcessingSta
           throw new Error(processedDoc.error);
         }
 
-        console.log('Document processed successfully, calling onTempDocUpload');
-        onTempDocUpload?.(processedDoc);
+        const outcome = classifyUploadResponse(response.status, processedDoc);
+        if (outcome.kind === 'queued') {
+          // A queued knowledge-base upload is followed through its job status badge, not as a temporary document
+          const organizationId = isMultiTenant() && !isPersonalMode && currentOrganization ? currentOrganization.id : null;
+          setQueuedUpload({ jobId: outcome.jobId, name: file.name, organizationId });
+          onProcessingStateChange?.({ isProcessing: false });
+        } else {
+          console.log('Document processed successfully, calling onTempDocUpload');
+          onTempDocUpload?.(processedDoc);
 
-        console.log('Setting processing state to false');
-        // Set processing state to false when done
-        onProcessingStateChange?.({ isProcessing: false });
+          console.log('Setting processing state to false');
+          // Set processing state to false when done
+          onProcessingStateChange?.({ isProcessing: false });
 
-        console.log('Document processing complete');
+          console.log('Document processing complete');
+        }
       } catch (error) {
         console.error('Error processing temporary document:', error);
         // Also set processing state to false on error
@@ -211,6 +231,17 @@ export function UnifiedUploadButton({ disabled, onTempDocUpload, onProcessingSta
           </div>
         </DropdownMenuContent>
       </DropdownMenu>
+      {queuedUpload && (
+        <span className="ml-1 inline-flex max-w-[10rem] items-center" title={queuedUpload.name}>
+          <TrackedIngestStatusBadge
+            key={queuedUpload.jobId}
+            jobId={queuedUpload.jobId}
+            organizationId={queuedUpload.organizationId}
+            language={language}
+            onSettled={(state) => handleQueuedSettled(queuedUpload.jobId, state)}
+          />
+        </span>
+      )}
     </>
   );
 } 

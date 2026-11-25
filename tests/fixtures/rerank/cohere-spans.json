@@ -1,0 +1,20 @@
+{
+  "id": "fixture-response-id-placeholder",
+  "results": [
+    {
+      "index": 0,
+      "relevance_score": 0.88,
+      "relevant_spans": [{ "start": 0, "end": 12, "score": 0.95 }]
+    },
+    {
+      "index": 1,
+      "relevance_score": 0.21,
+      "relevant_spans": [{ "start": 4, "end": 18, "score": 0.7 }]
+    }
+  ],
+  "meta": {
+    "billed_units": {
+      "search_units": 1
+    }
+  }
+}

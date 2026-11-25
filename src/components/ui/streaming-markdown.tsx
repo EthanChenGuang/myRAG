@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useId } from 'react';
+import React, { useMemo, useId, useState, useEffect } from 'react';
 // We need to import the original to avoid circular dependencies
 import { Markdown as OriginalMarkdown, MarkdownProps } from '@/components/ui/markdown';
 import { StreamProcessor } from './stream-processor';

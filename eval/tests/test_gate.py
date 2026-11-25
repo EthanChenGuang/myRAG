@@ -3,10 +3,11 @@ import json
 from pathlib import Path
 
 from rag_sidecar.contracts.baseline import Baseline, NoiseConfig
-from rag_sidecar.contracts.report import EvalReport
+from rag_sidecar.contracts.report import EvalReport, ItemResult
 
 import rag_eval.gate as gate_module
 from rag_eval.gate import EXIT_INTERNAL, EXIT_REGRESSION, evaluate_gate, main
+from rag_eval.paired import item_metrics
 
 METRICS = ("recall_at_5", "recall_at_10", "mrr", "correct_refusal_rate", "false_refusal_rate")
 NOISE_PATH = Path(__file__).resolve().parents[1] / "config" / "noise.json"
@@ -81,7 +82,7 @@ def _noise() -> NoiseConfig:
 def test_noise_file_matches_decided_band():
     noise = _noise()
     assert (noise.k, noise.floor) == (3, 0.02)
-    assert noise.gated_slice_prefixes == ["overall", "language:"]
+    assert noise.gated_slice_prefixes == ["overall", "language:", "category:cross_lingual", "pair:"]
     assert noise.metrics["false_refusal_rate"] == "lower"
 
 
@@ -183,6 +184,32 @@ def test_data_mismatch_exits_2_but_config_difference_does_not(tmp_path):
     assert run(_report(request_options={"generator_model": "openai/gpt-4.1-mini"})) == 2
 
 
+def test_degrade_difference_is_judged_by_metrics_not_rejected_as_a_mismatch(tmp_path):
+    baseline_path = tmp_path / "baseline.json"
+    baseline_path.write_text(_baseline().model_dump_json(), encoding="utf-8")
+
+    def run(report: EvalReport) -> int:
+        report_path = tmp_path / "report.json"
+        report_path.write_text(report.model_dump_json(), encoding="utf-8")
+        return main(
+            ["--report", str(report_path), "--baseline", str(baseline_path), "--noise", str(NOISE_PATH), "--out", str(tmp_path / "out")]
+        )
+
+    degraded = {"degrade": "drop_top_candidate"}
+    assert evaluate_gate(_report(request_options=degraded), _baseline(), _noise()).mismatches == []
+    assert run(_report(request_options=degraded)) == 0
+    assert run(_report(request_options={**degraded, "max_results": 1})) == 0
+    assert run(_report(request_options=degraded, overall=_slice_values(mrr=0.4))) == 10
+    assert run(_report(request_options={**degraded, "organization_id": "11111111-1111-4111-8111-111111111111"})) == 2
+
+
+def test_identity_label_names_both_excluded_fields():
+    report = _report(golden_sha256="x" * 64, request_options={"organization_id": "11111111-1111-4111-8111-111111111111"})
+    result = evaluate_gate(report, _baseline(), _noise())
+    label = next(problem for problem in result.mismatches if problem.startswith("request_options"))
+    assert label.startswith("request_options (excluding max_results and degrade) differs")
+
+
 def test_invalid_input_exits_2(tmp_path):
     missing = tmp_path / "missing.json"
     assert main(["--report", str(missing), "--baseline", str(missing), "--noise", str(NOISE_PATH), "--out", str(tmp_path / "out")]) == 2
@@ -228,3 +255,114 @@ def test_golden_filter_difference_is_a_mismatch(tmp_path):
     report = _report(golden_filter={"review_statuses": ["approved", "draft"], "gate_split": "dev"})
     result = evaluate_gate(report, _baseline(), _noise())
     assert result.mismatches and "golden_filter differs" in result.mismatches[0]
+
+
+def _item(item_id: str, rank: int | None = 1, language: str = "en") -> dict:
+    return {
+        "item_id": item_id,
+        "language": language,
+        "category": "general",
+        "split": "dev",
+        "provenance": "synthetic_fixture",
+        "answerable": True,
+        "refused": False,
+        "span_count": 1,
+        "spans_hit_at_5": 1 if rank else 0,
+        "spans_hit_at_10": 1 if rank else 0,
+        "first_hit_rank": rank,
+    }
+
+
+def _item_row(item: dict) -> dict:
+    return {metric: [value] * 3 for metric, value in item_metrics(ItemResult(**item)).items()}
+
+
+def _paired_inputs(observed_rank: int | None = 1):
+    recorded = [_item("a1"), _item("a2", language="zh")]
+    observed = [_item("a1", rank=observed_rank), _item("a2", language="zh")]
+    baseline = _baseline(items={item["item_id"]: _item_row(item) for item in recorded})
+    return _report(items=observed), baseline
+
+
+def test_gate_attaches_the_paired_block_when_the_baseline_has_items():
+    report, baseline = _paired_inputs()
+    result = evaluate_gate(report, baseline, _noise())
+    assert result.passed
+    assert result.paired is not None and result.paired.all_zero is True
+    assert result.paired.slices["overall"]["mrr"].n == 2
+
+
+def test_gate_without_baseline_items_has_null_paired():
+    assert evaluate_gate(_report(), _baseline(), _noise()).paired is None
+
+
+def test_paired_differences_do_not_change_the_gate_decision(tmp_path):
+    report, baseline = _paired_inputs(observed_rank=2)
+    result = evaluate_gate(report, baseline, _noise())
+    assert result.passed
+    assert result.paired is not None and result.paired.all_zero is False
+    assert result.paired.slices["overall"]["mrr"].n_nonzero == 1
+
+    report_path = tmp_path / "report.json"
+    baseline_path = tmp_path / "baseline.json"
+    report_path.write_text(report.model_dump_json(), encoding="utf-8")
+    baseline_path.write_text(baseline.model_dump_json(), encoding="utf-8")
+    code = main(["--report", str(report_path), "--baseline", str(baseline_path), "--noise", str(NOISE_PATH), "--out", str(tmp_path / "out")])
+    assert code == 0
+    gate = json.loads((tmp_path / "out" / "gate.json").read_text(encoding="utf-8"))
+    assert gate["paired"]["seed"] == 20261123 and gate["paired"]["all_zero"] is False
+    markdown = (tmp_path / "out" / "gate.md").read_text(encoding="utf-8")
+    assert "## Paired differences" in markdown
+    assert "All paired differences zero: no" in markdown
+    assert "| overall | mrr | 2 | 1 |" in markdown
+
+
+def test_regression_still_exits_10_with_the_paired_block_attached(tmp_path):
+    report, baseline = _paired_inputs()
+    report = report.model_copy(update={"overall": _report(overall=_slice_values(recall_at_10=0.1)).overall})
+    report_path = tmp_path / "report.json"
+    baseline_path = tmp_path / "baseline.json"
+    report_path.write_text(report.model_dump_json(), encoding="utf-8")
+    baseline_path.write_text(baseline.model_dump_json(), encoding="utf-8")
+    code = main(["--report", str(report_path), "--baseline", str(baseline_path), "--noise", str(NOISE_PATH), "--out", str(tmp_path / "out")])
+    assert code == EXIT_REGRESSION == 10
+    gate = json.loads((tmp_path / "out" / "gate.json").read_text(encoding="utf-8"))
+    assert gate["passed"] is False and gate["paired"]["all_zero"] is True
+
+
+def test_mismatch_result_carries_no_paired_block(tmp_path):
+    report, baseline = _paired_inputs()
+    result = evaluate_gate(report.model_copy(update={"golden_sha256": "x" * 64}), baseline, _noise())
+    assert result.mismatches and result.paired is None
+
+
+def test_gate_markdown_says_when_the_baseline_has_no_item_rows(tmp_path):
+    report_path = tmp_path / "report.json"
+    baseline_path = tmp_path / "baseline.json"
+    report_path.write_text(_report().model_dump_json(), encoding="utf-8")
+    baseline_path.write_text(_baseline().model_dump_json(), encoding="utf-8")
+    assert main(["--report", str(report_path), "--baseline", str(baseline_path), "--noise", str(NOISE_PATH), "--out", str(tmp_path / "out")]) == 0
+    assert "no per-item rows" in (tmp_path / "out" / "gate.md").read_text(encoding="utf-8")
+    assert json.loads((tmp_path / "out" / "gate.json").read_text(encoding="utf-8"))["paired"] is None
+
+
+def test_gate_population_difference_is_a_mismatch_naming_the_field():
+    result = evaluate_gate(_report(gate_population="production"), _baseline(), _noise())
+    assert not result.passed
+    assert any("gate_population differs" in problem for problem in result.mismatches)
+    assert any("production" in problem and "all" in problem for problem in result.mismatches)
+
+
+def test_matching_production_population_passes():
+    result = evaluate_gate(_report(gate_population="production"), _baseline(gate_population="production"), _noise())
+    assert result.passed and not result.mismatches
+
+
+def test_cli_exits_with_mismatch_code_for_a_population_difference(tmp_path, capsys):
+    report_path = tmp_path / "report.json"
+    baseline_path = tmp_path / "baseline.json"
+    report_path.write_text(_report(gate_population="production").model_dump_json(), encoding="utf-8")
+    baseline_path.write_text(_baseline().model_dump_json(), encoding="utf-8")
+    code = main(["--report", str(report_path), "--baseline", str(baseline_path), "--noise", str(NOISE_PATH), "--out", str(tmp_path / "out")])
+    assert code == 2
+    assert "gate_population" in capsys.readouterr().err

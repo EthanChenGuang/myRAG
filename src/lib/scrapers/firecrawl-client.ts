@@ -26,6 +26,16 @@ export function isFirecrawlEnabled(): boolean {
     return env.NEXT_PUBLIC_FIRECRAWL_ENABLED === 'true' && Boolean(env.FIRECRAWL_API_KEY);
 }
 
+export type ScrapeOutput = 'html' | 'markdown' | 'pdf';
+
+/**
+ * Markdown (and a PDF, which also needs the page title from the Markdown format) is what the unified ingestion
+ * pipeline consumes; HTML stays the default so the legacy callers send exactly what they sent before.
+ */
+function formatFor(output: ScrapeOutput | undefined): 'html' | 'markdown' {
+    return output === 'markdown' || output === 'pdf' ? 'markdown' : 'html';
+}
+
 /**
  * Scrape a single URL using Firecrawl
  */
@@ -35,10 +45,12 @@ export async function scrapeUrl(
         onlyMainContent?: boolean;
         waitFor?: number;
         screenshot?: boolean;
+        output?: ScrapeOutput;
     }
 ): Promise<{
     html?: string;
     markdown?: string;
+    actions?: Record<string, unknown>;
     metadata?: {
         title?: string;
         description?: string;
@@ -53,7 +65,7 @@ export async function scrapeUrl(
     console.log('[Firecrawl] Debug - Prototype keys:', Object.getOwnPropertyNames(Object.getPrototypeOf(firecrawl)));
     console.log('[Firecrawl] Debug - scrapeUrl exists:', !!(firecrawl as any).scrapeUrl);
 
-    const outputFormat = 'html';
+    const outputFormat = formatFor(options?.output);
     const onlyMainContent = options?.onlyMainContent ?? (env.FIRECRAWL_ONLY_MAIN_CONTENT === 'true');
     const waitFor = options?.waitFor ?? parseInt(env.FIRECRAWL_WAIT_FOR_JS || '2000');
 
@@ -67,6 +79,10 @@ export async function scrapeUrl(
 
     if (options?.screenshot !== undefined) {
         scrapeOptions.screenshot = options.screenshot;
+    }
+
+    if (options?.output === 'pdf') {
+        scrapeOptions.actions = [{ type: 'pdf' }];
     }
 
     // Use 'scrape' instead of 'scrapeUrl' per latest SDK
@@ -88,28 +104,35 @@ export async function crawlWebsite(
     options?: {
         maxPages?: number;
         onlyMainContent?: boolean;
+        output?: ScrapeOutput;
     }
 ): Promise<Array<{
     url: string;
     html?: string;
     markdown?: string;
+    actions?: Record<string, unknown>;
     metadata?: any;
 }>> {
     const firecrawl = getFirecrawl();
 
-    const outputFormat = 'html';
+    const outputFormat = formatFor(options?.output);
     const onlyMainContent = options?.onlyMainContent ?? (env.FIRECRAWL_ONLY_MAIN_CONTENT === 'true');
     const maxPages = options?.maxPages || 10;
 
     console.log(`[Firecrawl] Crawling ${url}, max ${maxPages} pages...`);
 
     // Use 'crawl' instead of 'crawlUrl'
+    const crawlScrapeOptions: any = {
+        formats: [outputFormat],
+        onlyMainContent,
+    };
+    if (options?.output === 'pdf') {
+        crawlScrapeOptions.actions = [{ type: 'pdf' }];
+    }
+
     const crawlResult = await firecrawl.crawl(url, {
         limit: maxPages,
-        scrapeOptions: {
-            formats: [outputFormat] as any,
-            onlyMainContent,
-        },
+        scrapeOptions: crawlScrapeOptions,
     });
 
     console.log(`[Firecrawl] Successfully crawled ${crawlResult.data?.length || 0} pages from ${url}`);

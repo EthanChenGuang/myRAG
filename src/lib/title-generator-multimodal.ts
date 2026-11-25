@@ -117,7 +117,7 @@ export async function generateMultimodalTitle(
 
     // If we have images but no analysis yet, analyze the first one
     if (!imageAnalysis && images.length > 0 && env.CHAT_TITLE_ENABLE_VISION === 'true') {
-      imageAnalysis = await analyzeImageForTitle(images[0]);
+      imageAnalysis = (await analyzeImageForTitle(images[0])) ?? undefined;
     }
 
     // Build context for title generation

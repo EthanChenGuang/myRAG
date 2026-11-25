@@ -1,0 +1,60 @@
+{
+  "$defs": {
+    "PreMigrationEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "n": {
+          "minimum": 0,
+          "title": "N",
+          "type": "integer"
+        },
+        "passed": {
+          "title": "Passed",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "passed",
+        "n"
+      ],
+      "title": "PreMigrationEvidence",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "backfill_run_id": {
+      "title": "Backfill Run Id",
+      "type": "string"
+    },
+    "baseline_profile": {
+      "title": "Baseline Profile",
+      "type": "string"
+    },
+    "gate_passed": {
+      "title": "Gate Passed",
+      "type": "boolean"
+    },
+    "pre_migration": {
+      "$ref": "#/$defs/PreMigrationEvidence"
+    },
+    "recorded_at": {
+      "title": "Recorded At",
+      "type": "string"
+    },
+    "target_profile": {
+      "title": "Target Profile",
+      "type": "string"
+    }
+  },
+  "required": [
+    "target_profile",
+    "baseline_profile",
+    "gate_passed",
+    "pre_migration",
+    "backfill_run_id",
+    "recorded_at"
+  ],
+  "title": "ActivationEvidence",
+  "type": "object"
+}

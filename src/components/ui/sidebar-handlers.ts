@@ -1,6 +1,7 @@
 // Sidebar performance optimization: Extract all event handlers to prevent recreating functions on every render
 
-import { Chat, Folder } from '@/lib/supabase';
+import type { Chat } from '@/lib/supabase';
+import type { Folder } from '@/types/folder';
 import { Dispatch } from 'react';
 
 // Chat item event handlers

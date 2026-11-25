@@ -971,7 +971,14 @@ export async function GET(request: NextRequest) {
                   const eventType = parsed.type;
                   const deltaContent = parsed.delta;
                   
-                  if (eventType === 'text-delta' && typeof deltaContent === 'string') {
+                  if (parsed.type === 'error') {
+                    const genericError = 'Sorry, I encountered an error. Please try again.';
+                    console.error('Stream error event received');
+                    removeLoadingDots();
+                    bubble.textContent = genericError;
+                    assistantMessage = genericError;
+                    return;
+                  } else if (eventType === 'text-delta' && typeof deltaContent === 'string') {
                     removeLoadingDots();
                     assistantMessage += deltaContent;
                     bubble.innerHTML = renderText(assistantMessage);

@@ -1,0 +1,42 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "language_hint": {
+      "anyOf": [
+        {
+          "enum": [
+            "zh",
+            "en",
+            "it"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Language Hint"
+    },
+    "markdown": {
+      "maxLength": 2000000,
+      "minLength": 1,
+      "title": "Markdown",
+      "type": "string"
+    },
+    "tables": {
+      "items": {
+        "maxLength": 500000,
+        "type": "string"
+      },
+      "maxItems": 500,
+      "title": "Tables",
+      "type": "array"
+    }
+  },
+  "required": [
+    "markdown"
+  ],
+  "title": "InvoiceExtractRequest",
+  "type": "object"
+}

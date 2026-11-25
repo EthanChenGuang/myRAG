@@ -1,0 +1,150 @@
+From 99411033a5463f84791baa4fd2f45817bc1d930d Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 24 Nov 2026 22:31:06 +0000
+Subject: [PATCH 5/5] docs(03.1-41): summary for L3 detect-vlm plan
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01X342shLsAZx6PYph2vA7hc
+---
+ .../03.1-41-SUMMARY.md                        | 129 ++++++++++++++++++
+ 1 file changed, 129 insertions(+)
+ create mode 100644 .planning/phases/03.1-tiered-parsing-incremental-queue-bulk-backfill/03.1-41-SUMMARY.md
+
+diff --git a/.planning/phases/03.1-tiered-parsing-incremental-queue-bulk-backfill/03.1-41-SUMMARY.md b/.planning/phases/03.1-tiered-parsing-incremental-queue-bulk-backfill/03.1-41-SUMMARY.md
+new file mode 100644
+index 0000000..b90c1a7
+--- /dev/null
++++ b/.planning/phases/03.1-tiered-parsing-incremental-queue-bulk-backfill/03.1-41-SUMMARY.md
+@@ -0,0 +1,129 @@
++---
++phase: 03.1-tiered-parsing-incremental-queue-bulk-backfill
++plan: 41
++subsystem: rag-ingest
++tags: [l3, vlm, preflight, cloud-guard, detect-vlm]
++requires:
++  - phase: 03.1-13
++    provides: recorded VLM verdicts
++  - phase: 03.1-19
++    provides: reserveVlm, settle, release, cloud switch
++  - phase: 03.1-22
++    provides: internal callback route pattern
++  - phase: 03.1-37
++    provides: run_preflight L3 hook and disagreement list
++  - phase: 03.1-55
++    provides: internal-callbacks regression test
++provides:
++  - "handleDetectVlm and POST /api/internal/rag/ingest/jobs/[id]/detect-vlm"
++  - "rag_sidecar.preflight.l3: l3_refine, make_l3_hook, render_page_png"
++  - "run_preflight derives page tiers from L3 verdicts and counts L3 pages"
++affects: [03.1-40, 03.1-44]
++tech-stack:
++  added: []
++  patterns:
++    - "Per-page vision calls with a test-replaceable detector (setVlmDetectorForTests), no provider reached in tests"
++    - "Sync preflight hook bridging to the async app client through the worker loop, a fresh loop, or a helper thread"
++key-files:
++  created:
++    - src/lib/rag/ingest/callbacks/detect-vlm.ts
++    - src/app/api/internal/rag/ingest/jobs/[id]/detect-vlm/route.ts
++    - tests/rag/ingest/detect-vlm.test.ts
++    - rag-sidecar/src/rag_sidecar/preflight/l3.py
++    - rag-sidecar/tests/test_preflight_l3.py
++  modified:
++    - src/lib/rag/index.ts
++    - rag-sidecar/src/rag_sidecar/preflight/l2.py
++    - rag-sidecar/src/rag_sidecar/preflight/run.py
++key-decisions:
++  - "A page whose answer fails PageStructureVerdict validation (or whose call throws) is left out of the response; the contract requires exactly one of verdict or refused per page, so omission is the failed signal"
++  - "Settlement charges only the pages with a valid verdict; with none valid the whole reservation is released"
++  - "The worker skips L3 (renders nothing, sends nothing) when the snapshot has cloud_allowed false, and the app refuses the same case itself"
++  - "One request carries all pages (reservation key is job, attempt and kind), so rendering keeps the body under 3 MB decoded"
++requirements-completed: [DATA-12, DATA-13]
++status: complete
++duration: ~50 min
++completed: 2026-11-24
++commits: 4
++plan_head_before: 045ae01e9143a12e637e25914c89b49eacca80fe
++plan_head_after: ff9272bf4a731bd107e84185a896ac410dcfbe39
++actuals:
++  tokens: 15300
++  tasks: 2
++  commits: 4
++---
++
++# Phase 03.1 Plan 41: L3 detect-vlm Summary
++
++Guarded vision verdicts for the pages where L1 and L2 disagree: the app route checks the cloud switch and the vlm page budget before any model request, validates each answer as `PageStructureVerdict`, and the worker folds the verdicts into page tiers without ever failing the job.
++
++## What was built
++
++- `handleDetectVlm` (`src/lib/rag/ingest/callbacks/detect-vlm.ts`) and the route. Auth goes through `checkSidecarSecret` (03.1-55 seam) before anything else; the id must be a UUID; the body schema is strict, so a `tenant_key` field is a 400. The handler reads the job row (404 unknown, 409 `lease_lost` for a wrong worker, expired lease or terminal job, 409 `vlm_detect_disabled` when the snapshot switch is off), then mints the tenant scope from the job row (`scopeFromIngestionJob`, 404 on an invalid tenant key).
++- Guard order: the snapshot's `cloud_allowed`, then `reserveVlm` (live `RAG_PARSER_ALLOW_CLOUD`, which fails closed for unrecognised values, then one budget page per image, then the batch USD estimate from the L3 cost entry times the page count). Any refusal returns every page as `refused` with the guard's reason and the vision detector is not called.
++- Images are decoded and checked before the ledger is touched: base64 shape, PNG signature, 400 000 byte cap, unique page numbers (400 `image_invalid` or `duplicate_pages`).
++- One vision request per page (4 in flight) with the model from the job snapshot: `RAG_PARSE_VLM_MODEL` as given, the captioning model id when empty. The prompt asks for the seven verdict fields and says to ignore text on the page. The answer (optionally in a json fence) must parse and pass `PageStructureVerdictSchema` (strict); anything else leaves that page out of the response.
++- Settlement closes the reservation in `finally`: `settle` with the number of valid verdicts, `release` when none. Logs carry page numbers, reason codes and error names only; no image data, answer text or file name.
++- `l3.py`: `l3_refine(pages, disagreements, path, snapshot, app_client, cfg, *, job_id, worker_id, attempt_no, loop, timeout_s)` runs only when the snapshot has `vlm_detect` and `cloud_allowed`, picks at most `cfg.l3.max_pages_per_doc` (20) disagreement pages in page order, renders them with pypdfium2 (scale ladder then grayscale, per-page budget `min(400 KB, 3 MB / pages)`), sends one `DetectVlmRequest`, and returns pages with verdicts attached. Any exception or timeout from the call is logged by class name and ignored. `make_l3_hook` binds the client and job identity into the hook shape `run_preflight` expects.
++- `run.py`/`l2.py`: `L2Page` gains `verdict` and `l3_inspected`; a page with a verdict takes its signals, `multi_column`, `has_figure` and `scanned` from the verdict, is tiered through the existing `page_tier(verdict)` path (complex to premium, table/chart/formula to structured_full, scanned to structured_ocr, simple without structure to fast, always inside min/max tier), reports layer L3, and `detect_counts.L3` counts pages with a verdict.
++
++## Tasks
++
++| Task | Commits |
++| --- | --- |
++| 1 detect-vlm route and handler | e046fa6 (RED, stub handler and full route), 16aa640 (GREEN) |
++| 2 Worker-side L3 and preflight hook | d662f68 (RED, stub l3.py), ff9272b (GREEN) |
++
++## Verification
++
++- `npx vitest run tests/rag/ingest/detect-vlm.test.ts tests/rag/ingest/internal-callbacks.test.ts tests/rag/ingest/cloud-guard.test.ts tests/rag/ingest/parse-external.test.ts`: 71 passed (detect-vlm: 27)
++- `uv run --frozen --offline --extra chunking --extra preflight pytest -q tests/test_preflight_l3.py tests/test_preflight_l2.py`: 31 passed (L3: 19)
++- Full sidecar suite in the same environment: 876 passed, 10 skipped
++- `node scripts/ci/check-rag-boundary.mjs`: ok, 1042 files, no violations
++- `npx tsc --noEmit -p tsconfig.json`: 0 errors
++- `node scripts/check-config.mjs`: ok, 125 variables match the manifest (no new env variable)
++- Acceptance greps: `reserveVlm` 2, `PageStructureVerdictSchema` 2, `def l3_refine` 1
++- Zero requests: with `RAG_PARSER_ALLOW_CLOUD` set to `false`, `0`, `off` and an unrecognised value, the vision stub counter is 0 and no budget RPC runs; same for a snapshot with cloud off, budget 0 and a refused batch budget. No real provider is reachable in these tests (detector replaced by a stub, ledger and budget RPCs faked).
++
++## Deviations from Plan
++
++**1. [Rule 3 - Blocking] `L2Page` gets `verdict` and `l3_inspected` (l2.py)**
++- **Issue:** the hook returns `L2Page` rows and `run_preflight` needs the verdict and the examined count; `l2.py` is not in the plan's file list.
++- **Fix:** two defaulted dataclass fields, no behaviour change for L1 and L2 pages.
++- **Commit:** ff9272b
++
++**2. [Rule 2 - Correctness] Worker also skips L3 when the snapshot has `cloud_allowed` false**
++- Not in the plan text, which only gates on `vlm_detect`. It keeps page images off the wire entirely when the job recorded cloud off (T-03.1-92); the app refuses the same case independently.
++
++**3. Failed pages are omitted, not marked**
++- The plan says an invalid answer "returns that page as failed". `DetectVlmPageResult` requires exactly one of `verdict` or `refused`, and `refused` only has the four guard reasons, so a failed page is absent from `pages`. The worker treats absent as failed. No contract change, so no schema regeneration.
++
++**4. Row layer for L3 pages**
++- Per-page rows report L3 for pages with a verdict; a range still takes the layer of its first page (existing `build_ranges` behaviour, also true for L2), so a fast range that starts on an L1 page and contains an L3 page reports L1 at range level.
++
++## Deferred / notes for later plans
++
++- **Retry of the same attempt:** `rag_parse_budget_reservations` is unique on (job, attempt_no, kind). The hook takes `attempt_no` from its caller; a redelivered job that preflights again with the same number gets a ledger error from `reserve`, the route answers 500, and L3 is skipped for that run (fail-safe, job unaffected). 03.1-40 (worker wiring) should pass an attempt number that does not repeat across redeliveries, or accept this.
++- **Wiring is not done here:** `main.py`'s `/v1/preflight` still calls `run_preflight` without a hook and the worker's `process_job.py`/`tiered.py` belong to 03.1-40. `make_l3_hook(app_client, job_id=..., worker_id=..., attempt_no=..., loop=<worker loop>)` is the entry point; pass the worker's event loop so the shared httpx client is used on its own loop.
++- Batch USD reserved for L3 is not refunded when the model returns nothing usable (no refund function in 0354, same note as 03.1-19).
++- The route's validation failure log (`API validation failed`) is the shared `validateRequest` behaviour and prints zod messages, not values.
++
++## Known Stubs
++
++None.
++
++## Threat Flags
++
++None. The new route is covered by T-03.1-92 to T-03.1-94 (guard first, validated verdicts, page cap and per-image budget).
++
++## Design skills
++
++| Skill | Role | Outcome |
++|-------|------|---------|
++| frontend-design | n/a: no UI file touched (internal API route handler only under src/app/api) | n/a |
++| Impeccable | n/a: no UI file touched | n/a |
++| web-design-guidelines | API route handler only, no UI file touched | none |
++
++## Self-Check: PASSED
++
++Files exist: detect-vlm.ts, detect-vlm route.ts, detect-vlm.test.ts, l3.py, test_preflight_l3.py. Commits e046fa6, 16aa640, d662f68, ff9272b are ancestors of HEAD. Tracked eval files are unmodified (`git status` clean before this summary).
+-- 
+2.43.0
+

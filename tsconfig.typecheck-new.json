@@ -7,6 +7,7 @@
   },
   "include": [
     "src/lib/rag-eval/**/*.ts",
+    "src/lib/rag/**/*.ts",
     "src/app/api/internal/rag/**/*.ts",
     "eval/harness/**/*.mts",
     "tests/**/*.ts",

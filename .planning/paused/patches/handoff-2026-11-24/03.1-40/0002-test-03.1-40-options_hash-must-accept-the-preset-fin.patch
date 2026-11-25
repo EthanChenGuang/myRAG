@@ -1,0 +1,42 @@
+From ea27e841c4ea2f99e50d847b70f0983ad6f809bd Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 24 Nov 2026 22:33:59 +0000
+Subject: [PATCH 2/5] test(03.1-40): options_hash must accept the preset
+ fingerprint keys
+
+structured presets emit heading_hierarchy, which options_hash rejects
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01X342shLsAZx6PYph2vA7hc
+---
+ rag-sidecar/tests/test_ingest_cache_keys.py | 16 +++++++++++++++-
+ 1 file changed, 15 insertions(+), 1 deletion(-)
+
+diff --git a/rag-sidecar/tests/test_ingest_cache_keys.py b/rag-sidecar/tests/test_ingest_cache_keys.py
+index 9056957..baae14e 100644
+--- a/rag-sidecar/tests/test_ingest_cache_keys.py
++++ b/rag-sidecar/tests/test_ingest_cache_keys.py
+@@ -58,4 +58,18 @@ def test_merged_options_hash_depends_on_entry_order_and_version():
+     reverse = merged_options_hash([b, a])
+     assert forward != reverse
+     bumped = merged_options_hash([(a[0], "docling-2.108.0", a[2]), b])
+-    assert bumped != forward
+\ No newline at end of file
++    assert bumped != forward
++
++@pytest.mark.parametrize("preset", ["fast", "structured_layout", "structured_full", "structured_ocr"])
++def test_options_hash_accepts_every_key_the_preset_option_fingerprint_emits(preset):
++    from rag_sidecar.parse.presets import preset_option_dict
++
++    fingerprint = preset_option_dict(preset, ocr_languages=["en"], pages=[1, 4])
++    assert len(options_hash(fingerprint)) == 64
++
++
++def test_heading_hierarchy_changes_the_hash():
++    from rag_sidecar.parse.presets import preset_option_dict
++
++    layout = preset_option_dict("structured_layout", ocr_languages=["en"], pages=[1, 4])
++    assert options_hash(layout) != options_hash({**layout, "heading_hierarchy": False})
+-- 
+2.43.0
+

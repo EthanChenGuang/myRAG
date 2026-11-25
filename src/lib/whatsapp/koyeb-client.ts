@@ -8,7 +8,7 @@ import {
   WhatsAppErrorCodes,
   WhatsAppMediaUploadResponse
 } from './types';
-import { BaseWhatsAppClient } from './base-client';
+import { BaseWhatsAppClient, toBlobPart } from './base-client';
 
 /**
  * Koyeb Baileys API Client
@@ -38,9 +38,9 @@ export class KoyebWhatsAppClient extends BaseWhatsAppClient {
   ): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
     
-    const headers: HeadersInit = {
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      ...options.headers
+      ...(options.headers as Record<string, string> | undefined)
     };
 
     if (this.apiKey) {
@@ -57,7 +57,7 @@ export class KoyebWhatsAppClient extends BaseWhatsAppClient {
     // });
     
     // Log if body contains escaped newlines (in stringified JSON, \n becomes \\n)
-    if (options.body && options.body.includes('\\\\n')) {
+    if (typeof options.body === 'string' && options.body.includes('\\\\n')) {
       logger.warn('KoyebWhatsAppClient', 'Request body contains double-escaped newlines');
     }
 
@@ -289,6 +289,49 @@ export class KoyebWhatsAppClient extends BaseWhatsAppClient {
   }
 
   /**
+   * Send a media message
+   */
+  async sendMedia(
+    sessionId: string,
+    to: string,
+    mediaUrl: string,
+    caption?: string,
+    mimeType?: string
+  ): Promise<{ messageId: string }> {
+    logger.info('KoyebWhatsAppClient', `Sending media to: ${to}`);
+
+    const message: KoyebMessagePayload['message'] = {};
+
+    if (mimeType?.startsWith('image/')) {
+      message.image = { url: mediaUrl };
+      if (caption) message.image.caption = caption;
+    } else if (mimeType?.startsWith('video/')) {
+      message.video = { url: mediaUrl };
+      if (caption) message.video.caption = caption;
+    } else if (mimeType?.startsWith('audio/')) {
+      message.audio = { url: mediaUrl };
+    } else {
+      message.document = {
+        url: mediaUrl,
+        filename: mediaUrl.split('/').pop() || 'document'
+      };
+      if (caption) message.document.caption = caption;
+    }
+
+    const response = await this.request<{ messageId: string; status?: string }>(
+      '/api/messages/send',
+      {
+        method: 'POST',
+        body: JSON.stringify({ sessionId, to, message })
+      }
+    );
+
+    return {
+      messageId: response.messageId
+    };
+  }
+
+  /**
    * Upload media to Koyeb for sending
    */
   async uploadMedia(
@@ -301,7 +344,7 @@ export class KoyebWhatsAppClient extends BaseWhatsAppClient {
 
     const formData = new FormData();
     formData.append('sessionId', sessionId);
-    formData.append('file', new Blob([file], { type: mimeType }), filename);
+    formData.append('file', new Blob([toBlobPart(file)], { type: mimeType }), filename);
 
     const response = await fetch(`${this.baseUrl}/api/media/upload`, {
       method: 'POST',
@@ -333,14 +376,7 @@ export class KoyebWhatsAppClient extends BaseWhatsAppClient {
       return false;
     }
 
-    // Simple HMAC validation
-    const crypto = require('crypto');
-    const expectedSignature = crypto
-      .createHmac('sha256', this.webhookSecret)
-      .update(payload)
-      .digest('hex');
-
-    return signature === expectedSignature;
+    return this.hmacSignatureMatches(signature, payload);
   }
 
   /**

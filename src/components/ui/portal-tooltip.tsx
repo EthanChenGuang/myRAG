@@ -3,9 +3,15 @@
 import React, { useState, useRef, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 
+interface TooltipChildProps {
+  ref?: React.Ref<HTMLElement>;
+  onMouseEnter?: (e: React.MouseEvent) => void;
+  onMouseLeave?: (e: React.MouseEvent) => void;
+}
+
 interface PortalTooltipProps {
   content: string;
-  children: React.ReactElement;
+  children: React.ReactElement<TooltipChildProps>;
   className?: string;
   align?: 'left' | 'center' | 'right';
 }

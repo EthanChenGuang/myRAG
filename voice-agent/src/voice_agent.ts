@@ -38,6 +38,7 @@ export class VoicePipeline {
     private isProcessing = false;
     private currentRequestId = 0;  // Track which request is current to cancel stale ones
     private userId?: string;
+    private scopeToken?: string;
 
     // For chat persistence
     private ragApiUrl: string;
@@ -288,6 +289,61 @@ export class VoicePipeline {
         console.log(`[VoicePipeline] User ID set to: ${userId}`);
     }
 
+    public setScopeToken(token?: string) {
+        this.scopeToken = token;
+        console.log(`[VoicePipeline] Scope token ${token ? 'set' : 'not provided'}`);
+    }
+
+    public async close() {
+        this.cancelCurrentPlayback = true;
+        this.isProcessing = false;
+        try {
+            await this.stt.close();
+        } catch (error) {
+            console.error('[VoicePipeline] STT close failed:', error);
+        }
+    }
+
+    public clearScope() {
+        this.scopeToken = undefined;
+        this.userId = undefined;
+    }
+
+    private static readonly KNOWLEDGE_BASE_UNAVAILABLE_LINE =
+        "I can't reach the knowledge base right now. Please try again in a moment.";
+
+    /**
+     * Speak a fixed line through the same TTS and audio output path as the greeting,
+     * without consulting the LLM or touching the conversation history.
+     */
+    private async speakFixedLine(message: string, id: string): Promise<void> {
+        try {
+            let audio: Buffer;
+            if (this.tts.stream) {
+                const chunks: Buffer[] = [];
+                for await (const chunk of this.tts.stream(message)) {
+                    chunks.push(chunk);
+                }
+                audio = Buffer.concat(chunks);
+            } else {
+                audio = await this.tts.synthesize(message);
+            }
+            this.applyFadesInPlace(audio, 30);
+            const durationMs = Math.round((audio.length / 32000) * 1000);
+            this.onTextOutput?.({
+                type: 'transcription',
+                role: 'assistant',
+                text: message,
+                isPartial: false,
+                id,
+                audioDurationMs: durationMs
+            });
+            await this.onAudioOutput(audio);
+        } catch (error) {
+            console.error('[VoicePipeline] Error speaking fixed line:', error);
+        }
+    }
+
     /**
      * Format a user transcript for clean display.
      * - Capitalizes first letter
@@ -420,13 +476,24 @@ Examples:
         // The user should see exactly what they said, not an LLM-expanded version.
 
         // 2. RAG Retrieval with rewritten query
-        const { context, sources, source_images } = await this.rag.query(rewrittenQuery, this.userId);
+        const ragResult = await this.rag.query(rewrittenQuery, this.scopeToken, this.userId);
 
         // CHECK: Was this request superseded by a newer one?
         if (this.currentRequestId !== requestId) {
             console.log(`[VoicePipeline] 🛑 Request ${requestId} cancelled after RAG (superseded by ${this.currentRequestId})`);
             return;
         }
+
+        if (!ragResult.ok) {
+            console.warn(`[VoicePipeline] Knowledge base unavailable (${ragResult.reason}); speaking the fixed line instead of answering`);
+            try {
+                await this.speakFixedLine(VoicePipeline.KNOWLEDGE_BASE_UNAVAILABLE_LINE, `agent-kb-unavailable-${Date.now()}`);
+            } finally {
+                this.isProcessing = false;
+            }
+            return;
+        }
+        const { context, sources, source_images } = ragResult;
 
         // Log Image RAG retrieval
         if (source_images.length > 0) {
@@ -946,7 +1013,8 @@ Examples:
                 {
                     headers: {
                         'x-api-key': this.ragApiKey,
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json',
+                        ...(this.scopeToken ? { 'x-rag-scope-token': this.scopeToken } : {})
                     }
                 }
             );

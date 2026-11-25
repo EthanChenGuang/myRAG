@@ -1,113 +1,118 @@
 import { NextResponse } from 'next/server';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as dotenv from 'dotenv';
-import { createClient } from '@/lib/supabase/server';
-import { isSingleTenant } from '@/lib/deployment-mode';
+import { requireAdminOrDeny } from '@/lib/admin-route-auth';
+import {
+  MAX_CONFIG_VALUE_LENGTH,
+  isReadableEnvEntry,
+  isWritableEnvName,
+} from '@/lib/config-env-allowlist';
+import { EnvWriteError, invalidEnvValueReason, parseEnvContent, stringifyJsonForEnv, writeEnvUpdates } from '@/lib/env-file';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-// Helper to validate env var name
-function isValidEnvVarName(key: string) {
-    return /^[A-Z][A-Z0-9_]*$/i.test(key);
+const NO_STORE = { 'Cache-Control': 'no-store' };
+
+function envFilePath() {
+  return path.resolve(process.cwd(), '.env.local');
 }
 
-export async function GET() {
-    // Authentication check for multi-tenant mode
-    if (!isSingleTenant()) {
-        try {
-            const supabase = await createClient();
-            const { data: { user }, error } = await supabase.auth.getUser();
+function normalizeStructuredValue(text: string): string {
+  const trimmed = text.trim();
+  if (!trimmed.startsWith('[') && !trimmed.startsWith('{')) return text;
+  try {
+    const parsed: unknown = JSON.parse(trimmed);
+    return typeof parsed === 'object' && parsed !== null ? stringifyJsonForEnv(parsed) : text;
+  } catch {
+    return text;
+  }
+}
 
-            if (!user || error) {
-                return new NextResponse("Unauthorized", { status: 401 });
-            }
-        } catch (error) {
-            console.error('Auth error:', error);
-            // Continue execution to avoid breaking local dev if auth fails
-            // In production, you might want to be stricter
-        }
+export async function GET(request: Request) {
+  const denied = await requireAdminOrDeny(request);
+  if (denied) return denied;
+
+  try {
+    const envPath = envFilePath();
+    const parsed = fs.existsSync(envPath) ? parseEnvContent(fs.readFileSync(envPath, 'utf8')) : {};
+
+    const config: Record<string, string> = {};
+    for (const [name, value] of Object.entries(parsed)) {
+      if (isReadableEnvEntry(name, value)) config[name] = value;
     }
 
-    try {
-        const envPath = path.resolve(process.cwd(), '.env.local');
-        let config: Record<string, string> = {};
-
-        if (fs.existsSync(envPath)) {
-            const fileContent = fs.readFileSync(envPath, 'utf8');
-            config = dotenv.parse(fileContent);
-        }
-
-        return NextResponse.json({ config });
-    } catch (error) {
-        console.error('Error reading config:', error);
-        return new NextResponse("Internal Server Error", { status: 500 });
-    }
+    return NextResponse.json({ config }, { headers: NO_STORE });
+  } catch {
+    console.error('[Config API] failed to read configuration');
+    return NextResponse.json({ success: false, error: 'Failed to read configuration' }, { status: 500 });
+  }
 }
 
 export async function POST(request: Request) {
-    // Authentication check for multi-tenant mode
-    if (!isSingleTenant()) {
-        try {
-            const supabase = await createClient();
-            const { data: { user }, error } = await supabase.auth.getUser();
+  const denied = await requireAdminOrDeny(request);
+  if (denied) return denied;
 
-            if (!user || error) {
-                return new NextResponse("Unauthorized", { status: 401 });
-            }
-        } catch (error) {
-            console.error('Auth error:', error);
-            return new NextResponse("Unauthorized", { status: 401 });
-        }
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ success: false, error: 'Invalid JSON body' }, { status: 400 });
+  }
+
+  const updates = (body as { config?: unknown } | null)?.config;
+  if (!updates || typeof updates !== 'object' || Array.isArray(updates)) {
+    return NextResponse.json({ success: false, error: 'config must be an object' }, { status: 400 });
+  }
+
+  const rejected: string[] = [];
+  const invalid: string[] = [];
+  const entries: Array<[string, string]> = [];
+  for (const [name, value] of Object.entries(updates)) {
+    if (!isWritableEnvName(name)) {
+      rejected.push(name);
+      continue;
     }
-
-    try {
-        const body = await request.json();
-        const updates = body.config || {};
-        const envPath = path.resolve(process.cwd(), '.env.local');
-
-        // Read existing file
-        let lines: string[] = [];
-        if (fs.existsSync(envPath)) {
-            const content = fs.readFileSync(envPath, 'utf8');
-            lines = content.split('\n');
-        }
-
-        const validUpdates = Object.entries(updates).filter(([key]) => isValidEnvVarName(key));
-
-        if (validUpdates.length === 0) {
-            return NextResponse.json({ success: true, message: 'No valid updates provided' });
-        }
-
-        // Apply updates
-        validUpdates.forEach(([key, value]) => {
-            const strValue = String(value);
-            let found = false;
-
-            // Map existing lines to update values
-            lines = lines.map(line => {
-                const match = line.match(/^([A-Za-z0-9_]+)=(.*)$/);
-                // Check if line starts with key= (ignoring comments)
-                if (match && match[1] === key) {
-                    found = true;
-                    return `${key}=${strValue}`;
-                }
-                return line;
-            });
-
-            // If not found, append
-            if (!found) {
-                lines.push(`${key}=${strValue}`);
-            }
-        });
-
-        // Write back to file
-        fs.writeFileSync(envPath, lines.join('\n'));
-
-        return NextResponse.json({ success: true, message: 'Configuration saved' });
-    } catch (error) {
-        console.error('Error updating config:', error);
-        return new NextResponse("Internal Server Error", { status: 500 });
+    if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') {
+      invalid.push(name);
+      continue;
     }
+    const text = normalizeStructuredValue(String(value));
+    if (text.length > MAX_CONFIG_VALUE_LENGTH || invalidEnvValueReason(text) !== null) {
+      invalid.push(name);
+      continue;
+    }
+    entries.push([name, text]);
+  }
+
+  if (rejected.length > 0 || invalid.length > 0) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'Configuration contains names or values that are not allowed',
+        rejected,
+        invalid,
+      },
+      { status: 400 },
+    );
+  }
+
+  if (entries.length === 0) {
+    return NextResponse.json({ success: true, message: 'No valid updates provided' });
+  }
+
+  try {
+    writeEnvUpdates(Object.fromEntries(entries));
+    console.log('[Config API] configuration updated', { names: entries.map(([name]) => name) });
+    return NextResponse.json({ success: true, message: 'Configuration saved' });
+  } catch (error) {
+    if (error instanceof EnvWriteError && error.reason !== 'io') {
+      return NextResponse.json(
+        { success: false, error: 'Configuration contains names or values that are not allowed', rejected: [], invalid: error.names },
+        { status: 400 },
+      );
+    }
+    console.error('[Config API] failed to write configuration');
+    return NextResponse.json({ success: false, error: 'Failed to write configuration' }, { status: 500 });
+  }
 }

@@ -108,6 +108,14 @@ def test_write_accepts_an_ignored_private_path(private_out):
     assert items[0].id.startswith("draft-en-") and len(items[0].id) == len("draft-en-") + 10
 
 
+def test_write_keeps_the_evidence_language_of_a_cross_lingual_proposal(private_out):
+    out, manifest = private_out
+    entry = _entry("Quanti giorni vale il rimborso annuale?", language="it", category="cross_lingual", evidence_language="en")
+    result = write_drafted_items([entry], out, manifest_path=manifest)
+    assert result.invalid == [] and len(result.written) == 1
+    assert load_golden(out)[0].evidence_language == "en"
+
+
 def test_write_refuses_when_a_file_under_the_private_directory_is_tracked(private_out, monkeypatch):
     out, manifest = private_out
     real = writer._run_git

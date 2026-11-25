@@ -1,0 +1,422 @@
+From d662f68fffe1b5a7d8f35274e67fc26bd76aad74 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 24 Nov 2026 22:27:28 +0000
+Subject: [PATCH 3/5] test(03.1-41): worker-side L3 refine and preflight hook
+ (RED)
+
+- stub l3_refine and make_l3_hook, tests scripted from the recorded verdicts
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01X342shLsAZx6PYph2vA7hc
+---
+ rag-sidecar/src/rag_sidecar/preflight/l3.py |  57 ++++
+ rag-sidecar/tests/test_preflight_l3.py      | 333 ++++++++++++++++++++
+ 2 files changed, 390 insertions(+)
+ create mode 100644 rag-sidecar/src/rag_sidecar/preflight/l3.py
+ create mode 100644 rag-sidecar/tests/test_preflight_l3.py
+
+diff --git a/rag-sidecar/src/rag_sidecar/preflight/l3.py b/rag-sidecar/src/rag_sidecar/preflight/l3.py
+new file mode 100644
+index 0000000..ade0b51
+--- /dev/null
++++ b/rag-sidecar/src/rag_sidecar/preflight/l3.py
+@@ -0,0 +1,57 @@
++"""L3 preflight: vision-model verdicts for pages where L1 and L2 disagree (D-49, D-50)."""
++
++from __future__ import annotations
++
++import asyncio
++from collections.abc import Callable
++from pathlib import Path
++from typing import Protocol
++
++from rag_sidecar.contracts.queue import DetectVlmRequest, DetectVlmResponse, JobSettingsSnapshot
++from rag_sidecar.contracts.routing import ParseRoutingConfig
++from rag_sidecar.preflight.l2 import L2Page
++
++DEFAULT_TIMEOUT_S = 60.0
++
++
++class L3AppClient(Protocol):
++    async def detect_vlm(self, job_id: str, request: DetectVlmRequest) -> DetectVlmResponse: ...
++
++
++def l3_refine(
++    pages: list[L2Page],
++    disagreements: list[int],
++    path: Path | str,
++    snapshot: JobSettingsSnapshot | None,
++    app_client: L3AppClient,
++    cfg: ParseRoutingConfig,
++    *,
++    job_id: str,
++    worker_id: str,
++    attempt_no: int = 1,
++    loop: asyncio.AbstractEventLoop | None = None,
++    timeout_s: float = DEFAULT_TIMEOUT_S,
++) -> list[L2Page]:
++    return pages
++
++
++def make_l3_hook(
++    app_client: L3AppClient,
++    *,
++    job_id: str,
++    worker_id: str,
++    attempt_no: int = 1,
++    loop: asyncio.AbstractEventLoop | None = None,
++    timeout_s: float = DEFAULT_TIMEOUT_S,
++) -> Callable[[list[L2Page], list[int], Path, JobSettingsSnapshot | None, ParseRoutingConfig], list[L2Page]]:
++    def hook(
++        pages: list[L2Page],
++        disagreements: list[int],
++        path: Path,
++        snapshot: JobSettingsSnapshot | None,
++        cfg: ParseRoutingConfig,
++    ) -> list[L2Page]:
++        del disagreements, path, snapshot, cfg
++        return pages
++
++    return hook
+diff --git a/rag-sidecar/tests/test_preflight_l3.py b/rag-sidecar/tests/test_preflight_l3.py
+new file mode 100644
+index 0000000..f35278d
+--- /dev/null
++++ b/rag-sidecar/tests/test_preflight_l3.py
+@@ -0,0 +1,333 @@
++"""L3 vision verdicts for disagreement pages (plan 03.1-41, D-49, D-50)."""
++
++from __future__ import annotations
++
++import asyncio
++import base64
++import json
++import logging
++import threading
++from pathlib import Path
++from typing import Any
++
++import pytest
++from ingest_fakes import FakeApp
++
++from rag_sidecar.contracts.queue import DetectVlmRequest, DetectVlmResponse, JobSettingsSnapshot
++from rag_sidecar.ingest import converters
++from rag_sidecar.preflight.config import load_routing_config
++from rag_sidecar.preflight.l1 import l1_signals
++from rag_sidecar.preflight.l2 import L2Page, l2_refine
++from rag_sidecar.preflight.l3 import l3_refine, make_l3_hook
++from rag_sidecar.preflight.run import run_preflight
++
++REPO_ROOT = Path(__file__).resolve().parents[2]
++PARSE_ROOT = REPO_ROOT / "eval" / "fixtures" / "parse"
++MANIFEST = json.loads((PARSE_ROOT / "manifest.json").read_text(encoding="utf-8"))
++PDFS = {entry["id"]: REPO_ROOT / "eval" / entry["pdf_path"] for entry in MANIFEST["fixtures"]}
++SHAS = {entry["id"]: entry["sha256"] for entry in MANIFEST["fixtures"]}
++RECORDED = PARSE_ROOT / "recorded"
++JOB = "10000000-0000-4000-8000-000000000001"
++WORKER = "worker-l3-test"
++
++SIMPLE_NO_TABLE = {
++    "has_table": False,
++    "has_multi_column": False,
++    "is_scanned": False,
++    "has_formula": False,
++    "has_chart": False,
++    "complexity": "simple",
++    "confidence": 0.9,
++}
++COMPLEX = {**SIMPLE_NO_TABLE, "complexity": "complex", "has_table": True, "has_chart": True}
++
++
++class RecordedVlmApp(FakeApp):
++    """FakeApp whose detect-vlm answers come from the recorded verdict files, with per-page overrides."""
++
++    def __init__(
++        self,
++        fixture: str | None = None,
++        overrides: dict[int, dict[str, Any] | str] | None = None,
++        default: dict[str, Any] | None = None,
++        raises: BaseException | None = None,
++        delay_s: float = 0.0,
++    ) -> None:
++        super().__init__()
++        self.fixture = fixture
++        self.overrides = overrides or {}
++        self.default = default
++        self.raises = raises
++        self.delay_s = delay_s
++        self.requests: list[DetectVlmRequest] = []
++
++    def _verdict(self, page: int) -> dict[str, Any] | None:
++        override = self.overrides.get(page)
++        if isinstance(override, dict):
++            return override
++        if isinstance(override, str):
++            return None
++        if self.fixture is not None:
++            recorded = RECORDED / SHAS[self.fixture] / "vlm" / f"page-{page}.json"
++            if recorded.exists():
++                return json.loads(recorded.read_text(encoding="utf-8"))
++        return self.default
++
++    async def detect_vlm(self, job_id: str, request: DetectVlmRequest) -> DetectVlmResponse:
++        self.calls.append(("detect_vlm", job_id, {"pages": [item.page for item in request.pages]}))
++        self.requests.append(request)
++        if self.delay_s:
++            await asyncio.sleep(self.delay_s)
++        if self.raises is not None:
++            raise self.raises
++        pages = []
++        for item in request.pages:
++            override = self.overrides.get(item.page)
++            if isinstance(override, str):
++                pages.append({"page": item.page, "refused": override})
++                continue
++            verdict = self._verdict(item.page)
++            if verdict is not None:
++                pages.append({"page": item.page, "verdict": verdict})
++        return DetectVlmResponse.model_validate({"worker_id": request.worker_id, "pages": pages})
++
++
++@pytest.fixture
++def cfg():
++    return load_routing_config()
++
++
++@pytest.fixture
++def recorded_converter():
++    converters.reset_conversion_counter()
++    yield converters.RecordedRangeConverter(RECORDED)
++    converters.reset_conversion_counter()
++
++
++def _settings(**overrides) -> JobSettingsSnapshot:
++    base = {
++        "routing": "tiered",
++        "cloud_allowed": True,
++        "escalation": True,
++        "progressive": False,
++        "premium_max_pages_per_doc": 50,
++        "premium_page_budget": 10,
++        "vlm_detect": True,
++        "profile_id": "general@1",
++        "profile_version": 1,
++        "doc_type": "general",
++        "min_tier": "fast",
++        "max_tier": "premium",
++        "embed_mode": "sync",
++        "ocr_languages": ["en"],
++        "routing_config_version": "1",
++    }
++    base.update(overrides)
++    return JobSettingsSnapshot.model_validate(base)
++
++
++def _l2(fixture: str, recorded_converter, cfg):
++    path = PDFS[fixture]
++    l1 = l1_signals(path, cfg)
++    pages, disagreements, _reusable = l2_refine(l1.pages, path, SHAS[fixture], recorded_converter, cfg)
++    return path, pages, disagreements
++
++
++def _refine(pages, disagreements, path, snapshot, app, cfg, **kwargs):
++    return l3_refine(pages, disagreements, path, snapshot, app, cfg, job_id=JOB, worker_id=WORKER, **kwargs)
++
++
++def _rows(output):
++    return {row.page: row for row in output.result.pages}
++
++
++def test_switch_off_never_calls_the_app(recorded_converter, cfg):
++    path, pages, disagreements = _l2("cross-boundary", recorded_converter, cfg)
++    assert disagreements
++    app = RecordedVlmApp("cross-boundary")
++    out = _refine(pages, disagreements, path, _settings(vlm_detect=False), app, cfg)
++    assert out == pages
++    assert app.calls == []
++    assert _refine(pages, disagreements, path, None, app, cfg) == pages
++    assert app.calls == []
++
++
++def test_cloud_not_allowed_in_the_snapshot_sends_no_images(recorded_converter, cfg):
++    path, pages, disagreements = _l2("cross-boundary", recorded_converter, cfg)
++    app = RecordedVlmApp("cross-boundary")
++    out = _refine(pages, disagreements, path, _settings(cloud_allowed=False), app, cfg)
++    assert out == pages
++    assert app.calls == []
++
++
++def test_no_disagreements_never_calls_the_app(recorded_converter, cfg):
++    path, pages, _ = _l2("digital-text", recorded_converter, cfg)
++    app = RecordedVlmApp(default=SIMPLE_NO_TABLE)
++    assert _refine(pages, [], path, _settings(), app, cfg) == pages
++    assert app.calls == []
++
++
++def test_at_most_twenty_pages_in_page_order_and_the_rest_keep_the_higher_tier_rule(cfg):
++    path = PDFS["bench-100"]
++    l1 = l1_signals(path, cfg)
++    pages = [L2Page(l1=page) for page in l1.pages]
++    disagreements = list(range(25, 0, -1))
++    app = RecordedVlmApp(default={**SIMPLE_NO_TABLE, "has_table": True})
++    out = _refine(pages, disagreements, path, _settings(), app, cfg)
++    assert len(app.requests) == 1
++    assert [item.page for item in app.requests[0].pages] == list(range(1, 21))
++    by_page = {page.page: page for page in out}
++    assert all(by_page[number].layer == "L3" and by_page[number].verdict is not None for number in range(1, 21))
++    assert all(by_page[number].layer != "L3" and by_page[number].verdict is None for number in range(21, 26))
++    assert sum(1 for page in out if page.l3_inspected) == 20
++
++
++def test_request_images_are_valid_pngs_within_the_cap_and_body_budget(cfg):
++    path = PDFS["bench-100"]
++    pages = [L2Page(l1=page) for page in l1_signals(path, cfg).pages]
++    app = RecordedVlmApp(default=SIMPLE_NO_TABLE)
++    _refine(pages, list(range(1, 21)), path, _settings(), app, cfg)
++    request = app.requests[0]
++    total = 0
++    for item in request.pages:
++        raw = base64.b64decode(item.png_base64, validate=True)
++        assert raw.startswith(b"\x89PNG\r\n\x1a\n")
++        assert len(raw) <= 400_000
++        total += len(raw)
++    assert total <= 3_000_000
++    DetectVlmRequest.model_validate(request.model_dump(mode="json"))
++
++
++def test_complex_verdict_routes_to_premium_with_layer_l3(recorded_converter, cfg):
++    path = PDFS["cross-boundary"]
++    app = RecordedVlmApp("cross-boundary", overrides={4: COMPLEX, 5: COMPLEX})
++    hook = make_l3_hook(app, job_id=JOB, worker_id=WORKER)
++    output = run_preflight(path, _settings(), cfg, recorded_converter, hook, file_sha=SHAS["cross-boundary"])
++    rows = _rows(output)
++    assert rows[4].preset == "premium" and rows[4].tier == "premium" and rows[4].layer == "L3"
++    assert rows[5].preset == "premium" and rows[5].layer == "L3"
++    assert output.result.detect_counts.L3 == 2
++    assert any(r.layer == "L3" and r.preset == "premium" for r in output.result.ranges)
++
++
++def test_simple_verdict_without_table_sets_fast(recorded_converter, cfg):
++    path = PDFS["cross-boundary"]
++    baseline = run_preflight(path, _settings(), cfg, recorded_converter, file_sha=SHAS["cross-boundary"])
++    assert _rows(baseline)[4].preset == "structured_full"
++    app = RecordedVlmApp("cross-boundary", overrides={4: SIMPLE_NO_TABLE, 5: SIMPLE_NO_TABLE})
++    hook = make_l3_hook(app, job_id=JOB, worker_id=WORKER)
++    output = run_preflight(path, _settings(), cfg, recorded_converter, hook, file_sha=SHAS["cross-boundary"])
++    rows = _rows(output)
++    assert rows[4].preset == "fast" and rows[4].layer == "L3"
++    assert rows[5].preset == "fast" and rows[5].layer == "L3"
++    assert "tables" not in rows[4].signals
++
++
++def test_recorded_table_verdicts_replace_the_signals_and_count_l3(recorded_converter, cfg):
++    path = PDFS["cross-boundary"]
++    app = RecordedVlmApp("cross-boundary")
++    hook = make_l3_hook(app, job_id=JOB, worker_id=WORKER)
++    output = run_preflight(path, _settings(), cfg, recorded_converter, hook, file_sha=SHAS["cross-boundary"])
++    rows = _rows(output)
++    assert rows[4].preset == "structured_full" and rows[4].layer == "L3"
++    assert "tables" in rows[4].signals
++    assert output.result.detect_counts.L3 == 2
++    assert app.calls[0][1] == JOB
++
++
++@pytest.mark.parametrize("reason", ["cloud_not_allowed", "budget_exhausted", "over_page_cap", "batch_budget_exhausted"])
++def test_refused_pages_keep_the_higher_tier_rule(recorded_converter, cfg, reason):
++    path = PDFS["cross-boundary"]
++    baseline = run_preflight(path, _settings(), cfg, recorded_converter, file_sha=SHAS["cross-boundary"])
++    app = RecordedVlmApp("cross-boundary", overrides={4: reason, 5: reason})
++    hook = make_l3_hook(app, job_id=JOB, worker_id=WORKER)
++    output = run_preflight(path, _settings(), cfg, recorded_converter, hook, file_sha=SHAS["cross-boundary"])
++    assert [(p.page, p.preset, p.layer) for p in output.result.pages] == [(p.page, p.preset, p.layer) for p in baseline.result.pages]
++    assert output.result.ranges == baseline.result.ranges
++    assert output.result.detect_counts.L3 == 0
++    assert _rows(output)[4].preset == "structured_full"
++
++
++def test_failed_app_call_never_raises_and_keeps_the_pages(recorded_converter, cfg, caplog):
++    path = PDFS["cross-boundary"]
++    for error in (RuntimeError("callback returned 500"), TimeoutError("slow"), ValueError("boom")):
++        app = RecordedVlmApp("cross-boundary", raises=error)
++        hook = make_l3_hook(app, job_id=JOB, worker_id=WORKER)
++        output = run_preflight(path, _settings(), cfg, recorded_converter, hook, file_sha=SHAS["cross-boundary"])
++        assert _rows(output)[4].preset == "structured_full"
++        assert output.result.detect_counts.L3 == 0
++    assert "callback returned 500" not in caplog.text
++
++
++def test_slow_app_call_times_out_without_failing(recorded_converter, cfg):
++    path, pages, disagreements = _l2("cross-boundary", recorded_converter, cfg)
++    app = RecordedVlmApp("cross-boundary", delay_s=5.0)
++    out = _refine(pages, disagreements, path, _settings(), app, cfg, timeout_s=0.05)
++    assert out == pages
++
++
++def test_pages_missing_from_the_answer_and_unrequested_pages_are_ignored(recorded_converter, cfg):
++    path, pages, disagreements = _l2("cross-boundary", recorded_converter, cfg)
++    assert sorted(disagreements) == [4, 5]
++
++    class Extra(RecordedVlmApp):
++        async def detect_vlm(self, job_id, request):
++            response = await super().detect_vlm(job_id, request)
++            extra = {"page": 99, "verdict": SIMPLE_NO_TABLE}
++            return DetectVlmResponse.model_validate(
++                {"worker_id": response.worker_id, "pages": [p.model_dump(mode="json") for p in response.pages if p.page == 4] + [extra]}
++            )
++
++    out = _refine(pages, disagreements, path, _settings(), Extra("cross-boundary"), cfg)
++    by_page = {page.page: page for page in out}
++    assert by_page[4].layer == "L3"
++    assert by_page[5].layer != "L3" and by_page[5].verdict is None
++    assert 99 not in by_page
++
++
++def test_image_bytes_never_reach_the_logs(recorded_converter, cfg, caplog):
++    caplog.set_level(logging.DEBUG)
++    path, pages, disagreements = _l2("cross-boundary", recorded_converter, cfg)
++    app = RecordedVlmApp("cross-boundary", overrides={4: "budget_exhausted", 5: "cloud_not_allowed"})
++    _refine(pages, disagreements, path, _settings(), app, cfg)
++    sent = app.requests[0].pages
++    assert sent
++    for item in sent:
++        assert item.png_base64[:32] not in caplog.text
++    app = RecordedVlmApp("cross-boundary", raises=RuntimeError("x"))
++    _refine(pages, disagreements, path, _settings(), app, cfg)
++    for item in app.requests[0].pages:
++        assert item.png_base64[:32] not in caplog.text
++
++
++def test_hook_works_inside_a_running_event_loop(recorded_converter, cfg):
++    path, pages, disagreements = _l2("cross-boundary", recorded_converter, cfg)
++    app = RecordedVlmApp("cross-boundary")
++
++    async def run():
++        return _refine(pages, disagreements, path, _settings(), app, cfg)
++
++    out = asyncio.run(run())
++    assert {page.page for page in out if page.layer == "L3"} == {4, 5}
++
++
++def test_hook_uses_the_given_loop_from_a_worker_thread(recorded_converter, cfg):
++    path, pages, disagreements = _l2("cross-boundary", recorded_converter, cfg)
++    app = RecordedVlmApp("cross-boundary")
++    loop = asyncio.new_event_loop()
++    thread = threading.Thread(target=loop.run_forever, daemon=True)
++    thread.start()
++    try:
++        out = _refine(pages, disagreements, path, _settings(), app, cfg, loop=loop)
++    finally:
++        loop.call_soon_threadsafe(loop.stop)
++        thread.join(timeout=5)
++        loop.close()
++    assert {page.page for page in out if page.layer == "L3"} == {4, 5}
++
++
++def test_run_preflight_without_a_hook_is_unchanged(recorded_converter, cfg):
++    path = PDFS["cross-boundary"]
++    output = run_preflight(path, _settings(), cfg, recorded_converter, file_sha=SHAS["cross-boundary"])
++    assert output.result.detect_counts.L3 == 0
++    assert all(row.layer != "L3" for row in output.result.pages)
+-- 
+2.43.0
+

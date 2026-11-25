@@ -1,0 +1,101 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "alias": {
+      "pattern": "^S[1-9][0-9]*$",
+      "title": "Alias",
+      "type": "string"
+    },
+    "chunkIds": {
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "title": "Chunkids",
+      "type": "array"
+    },
+    "documentId": {
+      "minLength": 1,
+      "title": "Documentid",
+      "type": "string"
+    },
+    "documentName": {
+      "title": "Documentname",
+      "type": "string"
+    },
+    "documentVersion": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Documentversion"
+    },
+    "n": {
+      "minimum": 1,
+      "title": "N",
+      "type": "integer"
+    },
+    "page": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Page"
+    },
+    "quote": {
+      "minLength": 1,
+      "title": "Quote",
+      "type": "string"
+    },
+    "quoteHash": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Quotehash",
+      "type": "string"
+    },
+    "sectionPath": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Sectionpath"
+    },
+    "strategy": {
+      "enum": [
+        "claude-citations",
+        "chunk-alias"
+      ],
+      "title": "Strategy",
+      "type": "string"
+    }
+  },
+  "required": [
+    "n",
+    "alias",
+    "chunkIds",
+    "documentId",
+    "documentName",
+    "quote",
+    "quoteHash",
+    "strategy"
+  ],
+  "title": "CitationRecord",
+  "type": "object"
+}

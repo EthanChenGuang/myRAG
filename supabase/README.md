@@ -97,6 +97,29 @@ Both setup files include:
 - Service role has full access for webhook/backend operations
 - User RLS policies restrict data to authenticated users' own records
 
+## Updating an Existing Database
+
+**Fresh install:** run one folded setup file (`single-tenant-setup.sql` or `multi-tenant-setup.sql`), then apply every file from `scripts/setup-database.sh --list-migrations <mode>` in order.
+
+**Same folded baseline:** the setup files are idempotent (triggers and RLS policies use `DROP … IF EXISTS` before `CREATE`). Re-running the matching folded file on a database that was originally created from that same file leaves the catalog unchanged; prefer this only to repair a half-applied run, not as a routine upgrade path.
+
+**Older databases:** for a project created from an earlier schema version, run the matching file from `patches/` in the SQL Editor (idempotent), before deploying the application code that goes with it:
+
+- `patches/2026-11-security-review-single-tenant.sql`
+- `patches/2026-11-security-review-multi-tenant.sql`
+
+Multi-tenant databases need one more patch, and it runs in the opposite order: apply `patches/2026-11-search-rpc-revoke-multi-tenant.sql` only after the new application version is deployed and live. It revokes `match_documents_by_workspace`, `match_document_chunks_by_org`, `get_documents_by_type_slug` and `get_documents_by_type_slug_workspace` from `PUBLIC`, `anon` and `authenticated` (the application now searches on the service-role client), so a still-running older application would stop finding documents. Until it is applied, the anon key can call those functions with any tenant id. Rolling the application back means re-granting those four functions to `anon` and `authenticated` first.
+
+Order for a multi-tenant upgrade: 1. `2026-11-security-review-multi-tenant.sql`, 2. deploy the application (and the voice agent, see README_VOICE_INTEGRATION.md), 3. `2026-11-search-rpc-revoke-multi-tenant.sql`.
+
+The multi-tenant security-review patch also rewrites the `organizations` and `organization_members` policies on the SECURITY DEFINER helpers `is_org_owner`, `is_org_admin` and `is_org_member`. Before it, the two SELECT policies referenced each other and every user-client query on those tables failed with Postgres error 42P17 (infinite recursion).
+
+## Single-Tenant Access Model
+
+Everyone can read the shared knowledge base. Writes are limited to the document's owner (`documents.user_id`) and to users in `admin_users`; documents stored before ownership was recorded have no owner and are admin-only. When `admin_settings.read_only_doc_dashboard` is on, only admins may change the knowledge base.
+
+A single-tenant deployment that is meant to be private should also disable public sign-ups in Supabase (Authentication, Sign In / Providers, turn off "Allow new users to sign up"), because any account can read the knowledge base.
+
 ## Nango Integration Details
 
 ### Connection Fields

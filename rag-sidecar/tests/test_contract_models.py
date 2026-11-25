@@ -40,6 +40,7 @@ def _item_result(**overrides):
         "language": "en",
         "category": "general",
         "split": "dev",
+        "provenance": "synthetic_fixture",
         "answerable": True,
         "refused": False,
         "span_count": 2,
@@ -159,6 +160,54 @@ class TestEvalReport:
         with pytest.raises(ValidationError):
             ItemResult(**_item_result(language="fr"))
 
+    def test_item_result_requires_provenance(self):
+        row = _item_result()
+        del row["provenance"]
+        with pytest.raises(ValidationError):
+            ItemResult(**row)
+
+    def test_item_result_accepts_production_provenance(self):
+        assert ItemResult(**_item_result(provenance="production")).provenance == "production"
+
+    def test_report_provenance_fields_default_when_absent(self):
+        report = EvalReport(**_report())
+        assert report.by_provenance == {}
+        assert report.by_provenance_category == {}
+        assert report.gate_population == "all"
+
+    def test_report_accepts_provenance_slices_and_production_population(self):
+        report = EvalReport(
+            **_report(
+                by_provenance={"human": _slice_metrics()},
+                by_provenance_category={"human/typo": _slice_metrics()},
+                gate_population="production",
+            )
+        )
+        assert report.by_provenance["human"].mrr.value == 0.5
+        assert report.by_provenance_category["human/typo"].mrr.n == 10
+        assert report.gate_population == "production"
+
+    def test_report_language_pair_defaults_to_empty_and_old_json_still_validates(self):
+        payload = _report()
+        assert "by_language_pair" not in payload
+        report = EvalReport(**payload)
+        assert report.by_language_pair == {}
+        assert EvalReport.model_validate_json(report.model_dump_json()).by_language_pair == {}
+
+    def test_report_accepts_language_pair_slices(self):
+        report = EvalReport(**_report(by_language_pair={"en->zh": _slice_metrics()}))
+        assert report.by_language_pair["en->zh"].mrr.n == 10
+
+    def test_item_result_evidence_language_is_optional(self):
+        assert ItemResult(**_item_result()).evidence_language is None
+        assert ItemResult(**_item_result(category="cross_lingual", evidence_language="zh")).evidence_language == "zh"
+        with pytest.raises(ValidationError):
+            ItemResult(**_item_result(evidence_language="fr"))
+
+    def test_report_rejects_unknown_gate_population(self):
+        with pytest.raises(ValidationError):
+            EvalReport(**_report(gate_population="synthetic"))
+
     def test_slice_metrics_requires_all_five_metrics(self):
         partial = _slice_metrics()
         del partial["mrr"]
@@ -167,6 +216,12 @@ class TestEvalReport:
 
 
 class TestBaseline:
+    def test_gate_population_defaults_to_all_and_accepts_production(self):
+        assert Baseline(**_baseline()).gate_population == "all"
+        assert Baseline(**_baseline(gate_population="production")).gate_population == "production"
+        with pytest.raises(ValidationError):
+            Baseline(**_baseline(gate_population="other"))
+
     def test_three_runs_validate(self):
         baseline = Baseline(**_baseline(runs=3))
         assert len(baseline.runs) == 3
@@ -205,7 +260,7 @@ class TestNoiseConfig:
         noise = NoiseConfig()
         assert noise.k == 3.0
         assert noise.floor == 0.02
-        assert noise.gated_slice_prefixes == ["overall", "language:"]
+        assert noise.gated_slice_prefixes == ["overall", "language:", "category:cross_lingual", "pair:"]
         assert noise.schema_version == 1
 
     def test_false_refusal_rate_is_lower_is_better_by_default(self):
@@ -319,6 +374,37 @@ class TestJudgeConfig:
         with pytest.raises(ValidationError):
             config.judge_model = "other"
 
+    def test_online_judge_is_optional_and_defaults_to_none(self):
+        assert JudgeConfig(**_judge_config()).online_judge is None
+
+    def test_online_judge_block_validates(self):
+        block = {"sample_rate": 0.2, "seed": 7, "judge_model": "other/online-model", "judge_family": "other"}
+        config = JudgeConfig(**_judge_config(online_judge=block))
+        assert config.online_judge is not None
+        assert config.online_judge.sample_rate == 0.2
+        assert config.online_judge.seed == 7
+        assert config.online_judge.judge_model == "other/online-model"
+        assert config.online_judge.judge_family == "other"
+
+    @pytest.mark.parametrize("rate", [-0.01, 1.5])
+    def test_online_judge_sample_rate_out_of_range_rejected(self, rate):
+        block = {"sample_rate": rate, "seed": 7, "judge_model": "other/online-model", "judge_family": "other"}
+        with pytest.raises(ValidationError) as caught:
+            JudgeConfig(**_judge_config(online_judge=block))
+        assert "sample_rate" in str(caught.value)
+
+    def test_online_judge_requires_a_seed(self):
+        block = {"sample_rate": 0.2, "judge_model": "other/online-model", "judge_family": "other"}
+        with pytest.raises(ValidationError) as caught:
+            JudgeConfig(**_judge_config(online_judge=block))
+        assert "seed" in str(caught.value)
+
+    def test_online_judge_unknown_key_rejected(self):
+        block = {"sample_rate": 0.2, "seed": 7, "judge_model": "o/m", "judge_family": "o", "temperature": 1}
+        with pytest.raises(ValidationError) as caught:
+            JudgeConfig(**_judge_config(online_judge=block))
+        assert "temperature" in str(caught.value)
+
 
 class TestJudgeScores:
     def test_score_in_range_and_skipped_item_accepted(self):
@@ -400,3 +486,23 @@ class TestRegistry:
     def test_model_registered_in_serialization_mode(self, name):
         registered = {model.__name__: mode for model, mode in CONTRACTS}
         assert registered.get(name) == "serialization"
+
+
+def test_run_options_accept_known_stage_overrides():
+    options = RagRunOptions(disabled_stages=["assemble", "legacy_rank"], stage_timeouts_ms={"search": 4000})
+    assert options.disabled_stages == ["assemble", "legacy_rank"]
+    assert options.stage_timeouts_ms is not None and options.stage_timeouts_ms.search == 4000
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"disabled_stages": ["rerank"]},
+        {"stage_timeouts_ms": {"rerank": 100}},
+        {"stage_timeouts_ms": {"search": 0}},
+        {"stage_timeouts_ms": {"search": 60001}},
+    ],
+)
+def test_run_options_reject_unknown_stages_and_bad_timeouts(payload):
+    with pytest.raises(ValidationError):
+        RagRunOptions(**payload)

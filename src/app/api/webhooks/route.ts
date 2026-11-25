@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { verifyPolarWebhookSignature } from '@/lib/polar';
+import { claimPolarWebhookId, releasePolarWebhookId, verifyPolarWebhookSignature } from '@/lib/polar-webhook';
 
 // Initialize Supabase client with service role key for admin access
 const supabase = createClient(
@@ -9,15 +9,27 @@ const supabase = createClient(
 );
 
 export async function POST(request: Request) {
+  let claimedId: string | null = null;
   try {
-    const payload = await request.text();
-    const signature = request.headers.get('polar-signature') || '';
+    const webhookSecret = process.env.POLAR_WEBHOOK_SECRET;
+    if (!webhookSecret) {
+      console.error('[Polar Webhook] POLAR_WEBHOOK_SECRET is not configured');
+      return NextResponse.json(
+        { error: 'Webhook verification unavailable' },
+        { status: 503 }
+      );
+    }
 
-    // Verify webhook signature
+    const payload = await request.text();
+
     const isValid = verifyPolarWebhookSignature(
       payload,
-      signature,
-      process.env.POLAR_WEBHOOK_SECRET!
+      {
+        id: request.headers.get('webhook-id'),
+        timestamp: request.headers.get('webhook-timestamp'),
+        signature: request.headers.get('webhook-signature'),
+      },
+      webhookSecret
     );
 
     if (!isValid) {
@@ -26,6 +38,13 @@ export async function POST(request: Request) {
         { status: 401 }
       );
     }
+
+    const webhookId = request.headers.get('webhook-id')!;
+    if (!claimPolarWebhookId(webhookId)) {
+      console.warn('[Polar Webhook] Ignored replayed webhook-id');
+      return NextResponse.json({ received: true, status: 'duplicate' });
+    }
+    claimedId = webhookId;
 
     const event = JSON.parse(payload);
     console.log('Received webhook event:', event.type);
@@ -53,6 +72,7 @@ export async function POST(request: Request) {
     console.log('Webhook received but subscription handling is disabled');
     return NextResponse.json({ received: true, status: 'subscription_disabled' });
   } catch (error) {
+    if (claimedId) releasePolarWebhookId(claimedId);
     console.error('Error processing webhook:', error);
     return NextResponse.json(
       { error: 'Webhook processing failed' },

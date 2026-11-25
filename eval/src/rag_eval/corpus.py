@@ -10,6 +10,10 @@ from rag_eval.paths import resolve_cli_path
 CORPUS_LANGUAGES = ("zh", "en", "it")
 DEFAULT_CREATED_AT = "2025-01-15T00:00:00.000Z"
 CHUNK_MARKER = "<!-- chunk -->"
+CORPUS_DOC_TYPES = frozenset(
+    {"financial_report", "contract_legal", "invoice_receipt", "product_technical", "scanned_image", "general"}
+)
+DEFAULT_DOC_TYPE = "general"
 
 # JavaScript's String.prototype.trim and the \s class use this exact whitespace set, which differs from
 # Python's str.strip at \x1c-\x1f and \x85 and at U+FEFF; the TS loader (eval/harness/corpus.mts) defines parity.
@@ -36,6 +40,7 @@ class CorpusDocument:
     created_at: str
     content: str
     chunks: list[CorpusChunk]
+    doc_type: str | None = None
 
 
 def _js_trim(text: str) -> str:
@@ -48,6 +53,15 @@ def _first_heading(text: str) -> str:
         if match:
             return match.group(1)
     return ""
+
+
+def _resolve_doc_type(meta: dict, relpath: str) -> str:
+    raw = meta.get("doc_type")
+    if raw is None:
+        return DEFAULT_DOC_TYPE
+    if not isinstance(raw, str) or raw not in CORPUS_DOC_TYPES:
+        raise ValueError(f"[Fixture Corpus] invalid doc_type in {relpath}")
+    return raw
 
 
 def _parse_meta(line: str, relpath: str) -> dict:
@@ -113,6 +127,7 @@ def load_corpus(corpus_dir: Path) -> list[CorpusDocument]:
                     )
                     for index, text in enumerate(texts)
                 ],
+                doc_type=_resolve_doc_type(meta, relpath),
             )
         )
     return documents
@@ -124,6 +139,7 @@ def _dump(corpus_dir: Path) -> str:
             "relpath": doc.relpath,
             "filename": doc.filename,
             "language": doc.language,
+            "doc_type": doc.doc_type,
             "chunks": [
                 {"index": c.index, "section": c.section, "text": c.text, "stored": c.stored} for c in doc.chunks
             ],

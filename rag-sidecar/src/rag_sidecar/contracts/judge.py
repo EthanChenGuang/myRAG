@@ -10,6 +10,13 @@ class _Contract(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
+class OnlineJudgeConfig(_Contract):
+    sample_rate: float = Field(ge=0.0, le=1.0)
+    seed: int
+    judge_model: str
+    judge_family: str
+
+
 class JudgeConfig(_Contract):
     judge_model: str
     judge_family: str
@@ -18,6 +25,7 @@ class JudgeConfig(_Contract):
     temperature: float = Field(ge=0.0, le=0.0)
     embedding_model: str
     max_concurrency: int = Field(default=4, ge=1)
+    online_judge: OnlineJudgeConfig | None = None
 
 
 class JudgeItemScore(_Contract):

@@ -4,6 +4,7 @@ import path from 'node:path';
 
 export const PHASE1_PATHS = [
   'src/lib/rag-eval/',
+  'src/lib/rag/',
   'src/app/api/internal/rag/',
   'eval/harness/',
   'tests/',

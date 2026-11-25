@@ -1,0 +1,14 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "passage": {
+      "title": "Passage",
+      "type": "string"
+    }
+  },
+  "required": [
+    "passage"
+  ],
+  "title": "HypotheticalDocument",
+  "type": "object"
+}

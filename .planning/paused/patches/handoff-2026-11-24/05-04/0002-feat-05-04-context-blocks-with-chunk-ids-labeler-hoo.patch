@@ -1,0 +1,477 @@
+From fceda9583be8bd0fb7b4bb84734dd5f1bcad51fa Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 24 Nov 2026 22:26:02 +0000
+Subject: [PATCH 2/5] feat(05-04): context blocks with chunk ids, labeler hook
+ and referenced sections
+
+- ContextBlock, CitationLabeler, RetrievalResult.blocks, RunRetrievalInput.citationLabeler
+- buildContext builds the block list while it renders and applies the labeler only when given;
+  without a labeler the rendered context is unchanged
+- resolveDocumentRefs returns sections; renderReferencedSection is the single section format
+- legacy pipeline passes the labeler into the assemble stage and copies blocks into the result
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01X342shLsAZx6PYph2vA7hc
+---
+ src/lib/rag/context/assemble.ts | 176 +++++++++++++++++++++++++++++---
+ src/lib/rag/index.ts            |  13 ++-
+ src/lib/rag/pipeline.ts         |   6 +-
+ src/lib/rag/refs/resolve.ts     |  26 +++--
+ src/lib/rag/types.ts            |  35 +++++++
+ 5 files changed, 234 insertions(+), 22 deletions(-)
+
+diff --git a/src/lib/rag/context/assemble.ts b/src/lib/rag/context/assemble.ts
+index db1811d..210d536 100644
+--- a/src/lib/rag/context/assemble.ts
++++ b/src/lib/rag/context/assemble.ts
+@@ -1,5 +1,16 @@
+ import { formatURLsForContext, type ExtractedURL } from '@/lib/url-extractor';
+-import type { KeptBy, KeptChunk, RagMode, ReferencedState, SourceImage, UsedDocument } from '../types';
++import { renderReferencedSection } from '../refs/resolve';
++import type {
++  CitationLabeler,
++  ContextBlock,
++  KeptBy,
++  KeptChunk,
++  RagMode,
++  ReferencedSection,
++  ReferencedState,
++  SourceImage,
++  UsedDocument,
++} from '../types';
+ 
+ export interface AssemblyCandidate {
+   chunk_id: string;
+@@ -15,6 +26,7 @@ export interface AssemblyDocumentRow {
+   created_at?: string | null;
+   content?: string | null;
+   metadata?: Record<string, any> | null;
++  version?: number | null;
+ }
+ 
+ export interface AssembleInput<C extends AssemblyCandidate = AssemblyCandidate> {
+@@ -30,6 +42,12 @@ export interface AssembleInput<C extends AssemblyCandidate = AssemblyCandidate>
+   /** When set, document sections render in this id order (unknown ids are ignored). */
+   groupOrder?: string[];
+   keptByOverride?: KeptBy;
++  /** Aliases the blocks as the context is rendered; absent means the context is rendered exactly as before. */
++  citationLabeler?: CitationLabeler;
++  /** Chunk-id runs (v2 merge): consecutive rendered chunks of one run form one block. Never merges image chunks. */
++  runs?: string[][];
++  /** Chunk ids a rendered chunk stands for (a parent block covers its children); defaults to the chunk itself. */
++  coveredChunkIds?: Map<string, string[]>;
+ }
+ 
+ export interface FilteredCandidates<C extends AssemblyCandidate = AssemblyCandidate> {
+@@ -48,6 +66,7 @@ export interface AssembleOutput<C extends AssemblyCandidate = AssemblyCandidate>
+   usedDocuments: UsedDocument[];
+   relevantChunks: C[];
+   kept: KeptChunk[];
++  blocks: ContextBlock[];
+   queryTerms: string[];
+   sourceImages: SourceImage[];
+   links: ExtractedURL[];
+@@ -76,6 +95,112 @@ function queryTermsOf(queryText: unknown): string[] {
+     .map((term) => term.replace(/[^a-z0-9]/g, ''));
+ }
+ 
++interface RenderEntry {
++  chunkId: string;
++  documentId: string;
++  label: string;
++  body: string;
++  isImage: boolean;
++  page: number | null;
++  sectionPath: string[] | null;
++  version: number | null;
++}
++
++function blockTitle(name: string, page: number | null, sectionPath: string[] | null): string {
++  return `${name}${page !== null ? `, p.${page}` : ''}${sectionPath && sectionPath.length > 0 ? ` / ${sectionPath.join(' > ')}` : ''}`;
++}
++
++function numberOrNull(value: unknown): number | null {
++  return typeof value === 'number' && Number.isFinite(value) ? value : null;
++}
++
++function sectionPathOf(value: unknown): string[] | null {
++  if (!Array.isArray(value)) return null;
++  const parts = value.filter((part): part is string => typeof part === 'string');
++  return parts.length > 0 ? parts : null;
++}
++
++/** Consecutive entries of one run become one unit; image entries always stand alone. */
++function renderUnits(entries: RenderEntry[], runs: string[][] | undefined): RenderEntry[][] {
++  const runOf = new Map<string, number>();
++  runs?.forEach((run, index) => run.forEach((chunkId) => runOf.set(chunkId, index)));
++  const units: RenderEntry[][] = [];
++  for (const entry of entries) {
++    const last = units[units.length - 1];
++    const previous = last?.[last.length - 1];
++    const run = runOf.get(entry.chunkId);
++    if (last && previous && !entry.isImage && !previous.isImage && run !== undefined && run === runOf.get(previous.chunkId)) {
++      last.push(entry);
++    } else {
++      units.push([entry]);
++    }
++  }
++  return units;
++}
++
++function unitBlock(
++  unit: RenderEntry[],
++  docName: string,
++  covered: Map<string, string[]> | undefined,
++): Omit<ContextBlock, 'alias'> {
++  const first = unit[0]!;
++  const chunkIds: string[] = [];
++  for (const entry of unit) {
++    for (const id of covered?.get(entry.chunkId) ?? [entry.chunkId]) {
++      if (!chunkIds.includes(id)) chunkIds.push(id);
++    }
++  }
++  return {
++    documentId: first.documentId,
++    documentName: docName,
++    documentVersion: first.version,
++    chunkIds,
++    page: first.page,
++    sectionPath: first.sectionPath,
++    title: blockTitle(docName, first.page, first.sectionPath),
++    text: unit.map((entry) => entry.body).join('\n\n'),
++    isImage: first.isImage,
++  };
++}
++
++/** Blocks for the referenced sections; with a labeler the section is re-rendered in place with its header. */
++function referencedBlocks(
++  referencedContext: string,
++  sections: ReferencedSection[] | undefined,
++  labeler: CitationLabeler | undefined,
++): { context: string; blocks: ContextBlock[]; ordinal: number } {
++  const blocks: ContextBlock[] = [];
++  let context = '';
++  let cursor = 0;
++  let ordinal = 0;
++  for (const section of sections ?? []) {
++    const rendered = renderReferencedSection(section.documentName, section.text);
++    const at = referencedContext.indexOf(rendered, cursor);
++    if (at < 0) continue;
++    const block: Omit<ContextBlock, 'alias'> = {
++      documentId: section.documentId,
++      documentName: section.documentName,
++      documentVersion: null,
++      chunkIds: [...section.chunkIds],
++      page: null,
++      sectionPath: null,
++      title: section.documentName,
++      text: section.text,
++      isImage: false,
++    };
++    if (labeler) {
++      ordinal += 1;
++      const label = labeler(block, ordinal);
++      context += referencedContext.slice(cursor, at) + renderReferencedSection(section.documentName, label.text, label.header);
++      blocks.push({ ...block, text: label.text, alias: label.alias });
++    } else {
++      blocks.push({ ...block, alias: null });
++    }
++    cursor = at + rendered.length;
++  }
++  return { context: labeler && blocks.length > 0 ? context + referencedContext.slice(cursor) : referencedContext, blocks, ordinal };
++}
++
+ export function filterCandidates<C extends AssemblyCandidate>(input: AssembleInput<C>): FilteredCandidates<C> {
+   const { candidates, documents, chunkMetadata, applyRelevanceFilter } = input;
+   const hasQuery = Boolean(input.queryText);
+@@ -158,11 +283,18 @@ export function buildContext<C extends AssemblyCandidate>(
+     if (!docById.has(doc.id)) docById.set(doc.id, doc);
+   }
+ 
+-  let context = filtered.referencedContext;
++  const labeler = input.citationLabeler;
++  const referenced = referencedBlocks(filtered.referencedContext, input.referenced?.sections, labeler);
++  const blocks: ContextBlock[] = [...referenced.blocks];
++  let ordinal = referenced.ordinal;
++  let context = referenced.context;
+   let links: ExtractedURL[] = [];
+ 
+   if (filtered.hasQuery && relevantChunks.length > 0) {
+-    const chunksByDocument = new Map<string, Array<{ content: string; similarity: number; chunkNum?: number }>>();
++    const chunksByDocument = new Map<
++      string,
++      Array<{ content: string; similarity: number; chunkNum?: number; chunk: C; isImage: boolean }>
++    >();
+     const collectedURLs: ExtractedURL[] = [];
+ 
+     for (const chunk of relevantChunks) {
+@@ -175,7 +307,8 @@ export function buildContext<C extends AssemblyCandidate>(
+       if (!chunksByDocument.has(docName)) {
+         chunksByDocument.set(docName, []);
+       }
+-      chunksByDocument.get(docName)!.push({ content: chunk.content, similarity: chunk.similarity, chunkNum });
++      const isImage = !!(chunk.metadata?.image_url || input.chunkMetadata.get(chunk.chunk_id)?.image_url);
++      chunksByDocument.get(docName)!.push({ content: chunk.content, similarity: chunk.similarity, chunkNum, chunk, isImage });
+ 
+       const urls = input.chunkMetadata.get(chunk.chunk_id)?.urls;
+       if (urls && Array.isArray(urls)) {
+@@ -226,17 +359,36 @@ export function buildContext<C extends AssemblyCandidate>(
+ 
+       contextParts.push(`\n--- Document: ${docName} (${chunks.length} relevant chunks) ---`);
+ 
+-      const formattedChunks = chunks.map((c) => {
++      const entries = chunks.map((c): RenderEntry => {
+         const contentMatch = c.content.match(/^Document: [^.]+\.[^.]+\. Chunk \d+ of (\d+)\. Content: (.*)$/s);
+         const actualContent = contentMatch ? contentMatch[2] : c.content;
+-
+-        if (input.isGPTModel && c.chunkNum) {
+-          return `[Source: ${docName}]\n${actualContent}`;
+-        }
+-        return c.content;
++        const rowMetadata = input.chunkMetadata.get(c.chunk.chunk_id);
++        const sourced = input.isGPTModel && c.chunkNum;
++
++        return {
++          chunkId: c.chunk.chunk_id,
++          documentId: c.chunk.document_id,
++          label: sourced ? `[Source: ${docName}]\n` : '',
++          body: sourced ? actualContent : c.content,
++          isImage: c.isImage,
++          page: numberOrNull(c.chunk.metadata?.page_start ?? rowMetadata?.page_start),
++          sectionPath: sectionPathOf(c.chunk.metadata?.section_path ?? rowMetadata?.section_path),
++          version: numberOrNull(input.documents.get(c.chunk.document_id)?.version),
++        };
+       });
+ 
+-      contextParts.push(...formattedChunks);
++      for (const unit of renderUnits(entries, input.runs)) {
++        const block = unitBlock(unit, docName, input.coveredChunkIds);
++        if (labeler && !block.isImage) {
++          ordinal += 1;
++          const label = labeler(block, ordinal);
++          contextParts.push(`${label.header}\n${unit[0]!.label}${label.text}`);
++          blocks.push({ ...block, text: label.text, alias: label.alias });
++        } else {
++          contextParts.push(...unit.map((entry) => `${entry.label}${entry.body}`));
++          blocks.push({ ...block, alias: null });
++        }
++      }
+     }
+     contextParts.push('=== END OF RELEVANT INFORMATION ===\n');
+ 
+@@ -299,7 +451,7 @@ export function buildContext<C extends AssemblyCandidate>(
+     });
+   });
+ 
+-  return { context, usedDocuments, relevantChunks, kept, queryTerms, sourceImages, links, refusalCandidate };
++  return { context, usedDocuments, relevantChunks, kept, blocks, queryTerms, sourceImages, links, refusalCandidate };
+ }
+ 
+ export function assembleContext<C extends AssemblyCandidate>(input: AssembleInput<C>): AssembleOutput<C> {
+diff --git a/src/lib/rag/index.ts b/src/lib/rag/index.ts
+index 026071c..2d955d9 100644
+--- a/src/lib/rag/index.ts
++++ b/src/lib/rag/index.ts
+@@ -83,7 +83,18 @@ export { assembleContext } from './context/assemble';
+ export type { AssembleInput, AssembleOutput, AssemblyCandidate, AssemblyDocumentRow } from './context/assemble';
+ export { fetchAssemblyRows } from './context/fetch-rows';
+ export type { AssemblyRows } from './context/fetch-rows';
+-export type { KeptBy, KeptChunk, RagMode, ReferencedState, SourceImage, UsedDocument } from './types';
++export type {
++  CitationLabel,
++  CitationLabeler,
++  ContextBlock,
++  KeptBy,
++  KeptChunk,
++  RagMode,
++  ReferencedSection,
++  ReferencedState,
++  SourceImage,
++  UsedDocument,
++} from './types';
+ export type { VoiceResult, VoiceResults, VoiceSourceImage } from './context/voice';
+ export { deriveVoiceKeywords } from './voice/keyword-fallback';
+ export { createEnhancedRAGPrompt } from './generation/prompt';
+diff --git a/src/lib/rag/pipeline.ts b/src/lib/rag/pipeline.ts
+index 20f3408..d13ffd9 100644
+--- a/src/lib/rag/pipeline.ts
++++ b/src/lib/rag/pipeline.ts
+@@ -380,7 +380,9 @@ export async function runRefsStage(
+     collector,
+     { candidatesOut: (value) => value.usedDocuments.length },
+   );
+-  return resolved.skipped ? null : { usedDocuments: resolved.value.usedDocuments, context: resolved.value.context };
++  return resolved.skipped
++    ? null
++    : { usedDocuments: resolved.value.usedDocuments, context: resolved.value.context, sections: resolved.value.sections };
+ }
+ 
+ async function runOverviewPipeline(
+@@ -610,6 +612,7 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
+         ragMode: input.options?.ragMode ?? 'strict',
+         webSearchEnabled: input.options?.webSearchEnabled ?? false,
+         applyRelevanceFilter,
++        citationLabeler: input.citationLabeler,
+       });
+ 
+       let rows: AssemblyRows | null = null;
+@@ -689,6 +692,7 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
+     links: assembly.links,
+     relevantChunks: assembly.relevantChunks,
+     kept: assembly.kept,
++    blocks: assembly.blocks,
+     queryTerms: assembly.queryTerms,
+     refusalCandidate: assembly.refusalCandidate,
+   };
+diff --git a/src/lib/rag/refs/resolve.ts b/src/lib/rag/refs/resolve.ts
+index 6350140..e4dcef3 100644
+--- a/src/lib/rag/refs/resolve.ts
++++ b/src/lib/rag/refs/resolve.ts
+@@ -1,7 +1,7 @@
+ import type { SupabaseClient } from '@supabase/supabase-js';
+ import { logger } from '@/lib/logger';
+ import { tenantPredicate, type TenantPredicate, type TenantScope } from '../tenant/scope';
+-import type { DocumentPartRef, ReferencedState, UsedDocument } from '../types';
++import type { DocumentPartRef, ReferencedSection, ReferencedState, UsedDocument } from '../types';
+ 
+ export interface ResolveDocumentRefsInput {
+   scope: TenantScope;
+@@ -48,8 +48,13 @@ interface DocumentRef {
+   name: string;
+ }
+ 
+-function section(name: string, body: string): string {
+-  return `\n\n=== DOCUMENT: "${name}" ===\n${body}\n=== END OF DOCUMENT ===\n`;
++function chunkIdsOf(chunks: Array<{ id?: unknown }>): string[] {
++  return chunks.flatMap((chunk) => (typeof chunk.id === 'string' ? [chunk.id] : []));
++}
++
++/** The one format of a referenced document in the context; a header line (citation alias) goes before the wrapper. */
++export function renderReferencedSection(name: string, body: string, header?: string): string {
++  return `\n\n${header !== undefined ? `${header}\n` : ''}=== DOCUMENT: "${name}" ===\n${body}\n=== END OF DOCUMENT ===\n`;
+ }
+ 
+ export async function resolveDocumentRefs(input: ResolveDocumentRefsInput): Promise<ResolvedDocumentRefs> {
+@@ -85,6 +90,11 @@ export async function resolveDocumentRefs(input: ResolveDocumentRefsInput): Prom
+   const references: DocumentRef[] = [...mentionRefs, ...documentParts.map((part) => ({ id: part.id, name: part.name }))];
+   const usedDocuments: UsedDocument[] = [];
+   let context = '';
++  const sections: ReferencedSection[] = [];
++  const addSection = (docRef: DocumentRef, body: string, chunkIds: string[]) => {
++    context += renderReferencedSection(docRef.name, body);
++    sections.push({ documentId: docRef.id, documentName: docRef.name, chunkIds, text: body });
++  };
+   let ignored = 0;
+ 
+   for (const docRef of references) {
+@@ -110,7 +120,7 @@ export async function resolveDocumentRefs(input: ResolveDocumentRefsInput): Prom
+       external_url: docMetadata.metadata?.external_url,
+     });
+ 
+-    const { data: chunks, error } = await currentChunks(admin.from('document_chunks').select('content').eq('document_id', docRef.id))
++    const { data: chunks, error } = await currentChunks(admin.from('document_chunks').select('id, content').eq('document_id', docRef.id))
+       .limit(REFERENCE_CHUNK_LIMIT)
+       .abortSignal(signal);
+ 
+@@ -120,7 +130,7 @@ export async function resolveDocumentRefs(input: ResolveDocumentRefsInput): Prom
+     }
+ 
+     if (chunks && chunks.length > 0) {
+-      context += section(docRef.name, chunks.map((chunk) => chunk.content).join('\n\n'));
++      addSection(docRef, chunks.map((chunk) => chunk.content).join('\n\n'), chunkIdsOf(chunks));
+       continue;
+     }
+ 
+@@ -133,7 +143,7 @@ export async function resolveDocumentRefs(input: ResolveDocumentRefsInput): Prom
+ 
+     if (!docError && docData) {
+       const fullText = docData.text || docData.content || '';
+-      if (fullText) context += section(docRef.name, fullText);
++      if (fullText) addSection(docRef, fullText, []);
+       continue;
+     }
+ 
+@@ -142,7 +152,7 @@ export async function resolveDocumentRefs(input: ResolveDocumentRefsInput): Prom
+       .abortSignal(signal);
+ 
+     if (!allChunksError && allChunks && allChunks.length > 0) {
+-      context += section(docRef.name, allChunks.map((chunk) => chunk.content).join('\n\n'));
++      addSection(docRef, allChunks.map((chunk) => chunk.content).join('\n\n'), chunkIdsOf(allChunks));
+     } else {
+       context += `\n\nDocument "${docRef.name}" was referenced but no content could be retrieved.\n`;
+     }
+@@ -152,5 +162,5 @@ export async function resolveDocumentRefs(input: ResolveDocumentRefsInput): Prom
+     console.warn('[RAG Tenant] Ignored document references outside the caller scope', { ignoredReferences: ignored });
+   }
+ 
+-  return { usedDocuments, context, ignored };
++  return { usedDocuments, context, sections, ignored };
+ }
+diff --git a/src/lib/rag/types.ts b/src/lib/rag/types.ts
+index 4e87e6f..82ffbc2 100644
+--- a/src/lib/rag/types.ts
++++ b/src/lib/rag/types.ts
+@@ -81,11 +81,44 @@ export interface KeptChunk {
+ 
+ export type RagMode = 'strict' | 'balanced' | 'flexible' | 'bypass';
+ 
++export interface ReferencedSection {
++  documentId: string;
++  documentName: string;
++  /** Ids of the chunks the section text was built from; empty when the full document text was used. */
++  chunkIds: string[];
++  text: string;
++}
++
+ export interface ReferencedState {
+   usedDocuments: UsedDocument[];
+   context: string;
++  /** Rendered document sections in the order they appear in `context`; absent when the producer does not track them. */
++  sections?: ReferencedSection[];
++}
++
++/** One citable unit of the final context, in render order. `text` is exactly what the model saw. */
++export interface ContextBlock {
++  documentId: string;
++  documentName: string;
++  documentVersion: number | null;
++  chunkIds: string[];
++  page: number | null;
++  sectionPath: string[] | null;
++  title: string;
++  text: string;
++  isImage: boolean;
++  alias: string | null;
+ }
+ 
++export interface CitationLabel {
++  alias: string;
++  header: string;
++  text: string;
++}
++
++/** Called once per non-image block in render order; the renderer writes `header` before the block and `text` in its place. */
++export type CitationLabeler = (block: Omit<ContextBlock, 'alias'>, ordinal: number) => CitationLabel;
++
+ export interface DocumentPartRef {
+   id: string;
+   name: string;
+@@ -154,6 +187,7 @@ export interface RunRetrievalInput {
+   stageOverrides?: StageOverrides;
+   retrievalFilters?: RetrievalFilterInput;
+   queryVariants?: QueryVariant[];
++  citationLabeler?: CitationLabeler;
+ }
+ 
+ export interface RetrievalResult {
+@@ -166,6 +200,7 @@ export interface RetrievalResult {
+   links: ExtractedURL[];
+   relevantChunks: Candidate[];
+   kept: KeptChunk[];
++  blocks?: ContextBlock[];
+   queryTerms: string[];
+   refusalCandidate: boolean;
+   stages: StageRecord[];
+-- 
+2.43.0
+

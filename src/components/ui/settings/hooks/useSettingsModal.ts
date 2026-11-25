@@ -53,8 +53,8 @@ const initialState: SettingsModalState = {
 
 export function useSettingsModal(isOpen: boolean, onOpenChange: (open: boolean) => void) {
   const [state, dispatch] = useReducer(settingsModalReducer, initialState);
-  const timeoutRef = useRef<NodeJS.Timeout>();
-  const closeTimeoutRef = useRef<NodeJS.Timeout>();
+  const timeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
+  const closeTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
 
   // Optimized reset with cleanup
   useEffect(() => {

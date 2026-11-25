@@ -1,0 +1,13 @@
+{
+  "name": "v2-recommended",
+  "env": {
+    "RAG_PIPELINE": "v2",
+    "RAG_LEXICAL_SEARCH": "true",
+    "RAG_RERANKER": "cohere",
+    "RAG_REFUSAL_THRESHOLD": "true",
+    "RAG_CONTEXT_EDGE_ORDER": "true"
+  },
+  "overrides": {
+    "rerank_model": "fake-quality-v1"
+  }
+}

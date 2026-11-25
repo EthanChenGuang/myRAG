@@ -1,0 +1,1332 @@
+From 61fee8c02ce1d47cbd2408bfae69097384efdff4 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 24 Nov 2026 22:36:28 +0000
+Subject: [PATCH] wip(04-41): paused mid-plan for account handoff (not
+ verified)
+
+---
+ eval/harness/two-tenant-v2.mts                | 450 ++++++++++
+ tests/helpers/v2-two-tenant-matrix.mts        | 797 ++++++++++++++++++
+ .../v2-two-tenant-matrix-single.test.mts      |  37 +
+ tests/rag-db/v2-two-tenant-matrix.test.mts    |   4 +
+ 4 files changed, 1288 insertions(+)
+ create mode 100644 eval/harness/two-tenant-v2.mts
+ create mode 100644 tests/helpers/v2-two-tenant-matrix.mts
+ create mode 100644 tests/rag-db/v2-two-tenant-matrix-single.test.mts
+ create mode 100644 tests/rag-db/v2-two-tenant-matrix.test.mts
+
+diff --git a/eval/harness/two-tenant-v2.mts b/eval/harness/two-tenant-v2.mts
+new file mode 100644
+index 0000000..7612f68
+--- /dev/null
++++ b/eval/harness/two-tenant-v2.mts
+@@ -0,0 +1,450 @@
++import { createHash } from 'node:crypto';
++import path from 'node:path';
++import { fileURLToPath } from 'node:url';
++import type { PGlite } from '@electric-sql/pglite';
++import { chunkLexicalText, lexicalTokens } from '../../src/lib/rag/lexical/chunk-text';
++import { embedText } from './fixture-embedder.mts';
++import { createFixtureDatabase, type DeploymentMode, type FixtureDatabase } from './pglite-supabase.mts';
++import { TWO_TENANT_IDS, createTwoTenantDatabase, type TwoTenantDatabase } from './two-tenant.mts';
++
++const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
++const DEFAULT_CORPUS_DIR = path.join(REPO_ROOT, 'eval/fixtures/corpus');
++
++export const V2_LEGACY_EMBEDDING_PROFILE = 'openai-3-small-1536';
++/** The non-legacy chunking profile every tenant's canary document is also written under, made the active profile of its doc type. */
++export const V2_CHUNKING_PROFILE = 'p-canary-256';
++export const V2_CANARY_PHRASE = 'Two tenant isolation canary phrase';
++/** Identical in every tenant: only the tenant marker next to it tells the copies apart. */
++export const V2_EXACT_CODE = 'SKU-CANARY-4417';
++export const V2_TRANSLATED_QUERY = { text: 'frase canarino isolamento tenant', language: 'it' } as const;
++/** A doc type each tenant has and the others lack. */
++export const V2_PRIVATE_DOC_TYPE = { A: 'product_technical', B: 'financial_report', O: 'contract_legal', S: 'contract_legal' } as const;
++/** The same supplier and invoice number in every tenant. */
++export const V2_INVOICE = { supplier: 'Fornitore Canary', number: 'INV-CANARY-0001', gross: 500, currency: 'EUR' } as const;
++/** Only the tenant itself holds the answer to its topic question. */
++export const V2_TOPICS: Record<'A' | 'B' | 'O' | 'S', { question: string; text: string }> = {
++  A: { question: 'quokka habitat survey nesting sites counted', text: 'The quokka habitat survey counted eleven nesting sites' },
++  B: { question: 'zephyr turbine maintenance interval hours', text: 'The zephyr turbine maintenance interval is every 4400 hours' },
++  O: { question: 'nautilus archive retention period years', text: 'The nautilus archive retention period is seven years' },
++  S: { question: 'meerkat sentinel rota weekends hours', text: 'The meerkat sentinel rota on weekends alternates every two hours' },
++};
++
++export type V2TenantLabel = 'A' | 'B' | 'O' | 'S';
++
++export interface V2Tenant {
++  label: V2TenantLabel;
++  /** The tenant key the SQL functions take. */
++  key: string;
++  userId: string | null;
++  organizationId: string | null;
++  /** Appears in every text of this tenant and in no text of another tenant. */
++  marker: string;
++  imageUrl: string;
++  /** Every image url a result of this tenant may carry: its own mark, and for O the logo of the Phase 2 organization document. */
++  imageUrls: string[];
++  /** The Phase 2 canary document and its legacy chunk. */
++  docId: string;
++  legacyChunkId: string;
++  skuDocId: string;
++  skuChunkId: string;
++  imageDocId: string;
++  imageChunkId: string;
++  italianDocId: string;
++  italianChunkId: string;
++  privateTypeDocId: string;
++  privateTypeChunkId: string;
++  privateDocType: string;
++  invoiceDocId: string;
++  invoiceChunkId: string;
++  topicDocId: string;
++  topicChunkId: string;
++  topicQuestion: string;
++  parentId: string;
++  childIds: string[];
++}
++
++export type TwoTenantV2Database = TwoTenantDatabase & {
++  deploymentMode: DeploymentMode;
++  tenants: V2Tenant[];
++  tenant(label: V2TenantLabel): V2Tenant;
++};
++
++const CREATED_AT = '2025-01-15T00:00:00.000Z';
++
++const MARKERS: Record<V2TenantLabel, string> = {
++  A: 'alpha personal notes',
++  B: 'bravo personal notes',
++  O: 'organization shared handbook',
++  S: 'single tenant default notes',
++};
++
++const SLOT: Record<V2TenantLabel, number> = { A: 1, B: 2, O: 3, S: 4 };
++
++function rowId(group: number, label: V2TenantLabel): string {
++  return `00000000-0000-4000-8000-${String(group).padStart(6, '0')}${String(SLOT[label]).padStart(6, '0')}`;
++}
++
++function vectorLiteral(values: number[]): string {
++  return `[${values.join(',')}]`;
++}
++
++function describeTenant(label: V2TenantLabel): Omit<V2Tenant, 'parentId' | 'childIds'> {
++  const ids = TWO_TENANT_IDS;
++  const identity: Record<V2TenantLabel, Pick<V2Tenant, 'key' | 'userId' | 'organizationId' | 'docId' | 'legacyChunkId'>> = {
++    A: { key: `u:${ids.userA}`, userId: ids.userA, organizationId: null, docId: ids.docA, legacyChunkId: ids.chunkA },
++    B: { key: `u:${ids.userB}`, userId: ids.userB, organizationId: null, docId: ids.docB, legacyChunkId: ids.chunkB },
++    O: { key: `o:${ids.orgO}`, userId: ids.userA, organizationId: ids.orgO, docId: ids.docO, legacyChunkId: ids.chunkO },
++    S: { key: 's:default', userId: null, organizationId: null, docId: rowId(400, 'S'), legacyChunkId: rowId(401, 'S') },
++  };
++  return {
++    label,
++    ...identity[label],
++    marker: MARKERS[label],
++    imageUrl: `https://example.invalid/two-tenant-v2/tenant-${label.toLowerCase()}/mark.png`,
++    imageUrls: [
++      `https://example.invalid/two-tenant-v2/tenant-${label.toLowerCase()}/mark.png`,
++      ...(label === 'O' ? ['https://example.invalid/logo.png'] : []),
++    ],
++    skuDocId: rowId(410, label),
++    skuChunkId: rowId(411, label),
++    imageDocId: rowId(420, label),
++    imageChunkId: rowId(421, label),
++    italianDocId: rowId(430, label),
++    italianChunkId: rowId(431, label),
++    privateTypeDocId: rowId(440, label),
++    privateTypeChunkId: rowId(441, label),
++    privateDocType: V2_PRIVATE_DOC_TYPE[label],
++    invoiceDocId: rowId(450, label),
++    invoiceChunkId: rowId(451, label),
++    topicDocId: rowId(460, label),
++    topicChunkId: rowId(461, label),
++    topicQuestion: V2_TOPICS[label].question,
++  };
++}
++
++/** The deterministic row ids rag_write_profile_chunks gives parents and children (the first 16 bytes of a sha256 as a UUID). */
++function profileRowId(documentId: string, kind: 'parent' | 'child', index: number): string {
++  const hex = createHash('sha256').update(`${documentId}:${V2_CHUNKING_PROFILE}:${kind}:${index}`, 'utf8').digest('hex').slice(0, 32);
++  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
++}
++
++interface ExtraDocument {
++  docId: string;
++  chunkId: string;
++  filename: string;
++  docType: string;
++  text: string;
++  chunkMetadata: Record<string, unknown>;
++  chunkKind: 'text' | 'image' | 'invoice_header';
++  language: string | null;
++  invoice?: boolean;
++}
++
++function extraDocuments(tenant: Omit<V2Tenant, 'parentId' | 'childIds'>): ExtraDocument[] {
++  const slug = tenant.label.toLowerCase();
++  const canary = `${V2_CANARY_PHRASE}: ${tenant.marker}`;
++  return [
++    {
++      docId: tenant.skuDocId,
++      chunkId: tenant.skuChunkId,
++      filename: `tenant-${slug}-sku.md`,
++      docType: 'general',
++      text: `${canary}. Reference code ${V2_EXACT_CODE} applies to this canary.`,
++      chunkMetadata: { name: `Reference ${slug}` },
++      chunkKind: 'text',
++      language: 'en',
++    },
++    {
++      docId: tenant.imageDocId,
++      chunkId: tenant.imageChunkId,
++      filename: `tenant-${slug}-image.md`,
++      docType: 'scanned_image',
++      text: `Image: ${canary} brand logo mark`,
++      chunkMetadata: { name: `Logo ${slug}`, image_context: `brand logo mark ${tenant.marker}`, image_url: tenant.imageUrl },
++      chunkKind: 'image',
++      language: 'en',
++    },
++    {
++      docId: tenant.italianDocId,
++      chunkId: tenant.italianChunkId,
++      filename: `tenant-${slug}-it.md`,
++      docType: 'general',
++      text: `Frase canarino isolamento tenant: ${tenant.marker}. Il manuale condiviso resta riservato.`,
++      chunkMetadata: { name: `Italiano ${slug}` },
++      chunkKind: 'text',
++      language: 'it',
++    },
++    {
++      docId: tenant.privateTypeDocId,
++      chunkId: tenant.privateTypeChunkId,
++      filename: `tenant-${slug}-private-type.md`,
++      docType: tenant.privateDocType,
++      text: `${canary} ledger of the ${tenant.privateDocType} kind`,
++      chunkMetadata: { name: `Private type ${slug}` },
++      chunkKind: 'text',
++      language: 'en',
++    },
++    {
++      docId: tenant.invoiceDocId,
++      chunkId: tenant.invoiceChunkId,
++      filename: `tenant-${slug}-invoice.md`,
++      docType: 'invoice_receipt',
++      text: `fattura ${V2_INVOICE.supplier} numero ${V2_INVOICE.number} importo ${V2_INVOICE.gross} ${canary}`,
++      chunkMetadata: { name: `Invoice ${slug}` },
++      chunkKind: 'invoice_header',
++      language: 'it',
++      invoice: true,
++    },
++    {
++      docId: tenant.topicDocId,
++      chunkId: tenant.topicChunkId,
++      filename: `tenant-${slug}-topic.md`,
++      docType: 'general',
++      text: `${V2_TOPICS[tenant.label].text} (${tenant.marker}).`,
++      chunkMetadata: { name: `Topic ${slug}` },
++      chunkKind: 'text',
++      language: 'en',
++    },
++  ];
++}
++
++async function insertExtraDocument(db: PGlite, tenant: Omit<V2Tenant, 'parentId' | 'childIds'>, doc: ExtraDocument): Promise<void> {
++  const stored = `Document: ${doc.filename}. Chunk 1 of 1. Content: ${doc.text}`;
++  const multiTenant = tenant.label !== 'S';
++  await db.query(
++    `INSERT INTO documents (id, filename, content, metadata, ${multiTenant ? 'user_id, organization_id, ' : ''}doc_type, language, created_at)
++     VALUES ($1, $2, $3, $4::jsonb, ${multiTenant ? '$5, $6, ' : ''}$${multiTenant ? 7 : 5}, $${multiTenant ? 8 : 6}, $${multiTenant ? 9 : 7})`,
++    [
++      doc.docId,
++      doc.filename,
++      doc.text,
++      JSON.stringify({ relpath: `two-tenant-v2/${doc.filename}` }),
++      ...(multiTenant ? [tenant.userId, tenant.organizationId] : []),
++      doc.docType,
++      doc.language,
++      CREATED_AT,
++    ],
++  );
++  if (doc.invoice) {
++    await db.query(
++      `UPDATE documents SET supplier_name = $2, invoice_number = $3, issue_date = '2025-06-01', gross_total = $4, currency = $5 WHERE id = $1`,
++      [doc.docId, V2_INVOICE.supplier, V2_INVOICE.number, V2_INVOICE.gross, V2_INVOICE.currency],
++    );
++  }
++  const lexical = chunkLexicalText({
++    sectionPath: [],
++    content: stored,
++    chunkKind: doc.chunkKind,
++    metadata: doc.chunkMetadata,
++    documentFilename: doc.filename,
++  });
++  await db.query(
++    `INSERT INTO document_chunks (id, document_id, content, embedding, chunk_index, metadata, doc_type, language, chunk_kind, lexical_text, created_at)
++     VALUES ($1, $2, $3, $4::vector, 0, $5::jsonb, $6, $7, $8, $9, $10)`,
++    [doc.chunkId, doc.docId, stored, vectorLiteral(embedText(doc.text)), JSON.stringify(doc.chunkMetadata), doc.docType, doc.language, doc.chunkKind, lexical, CREATED_AT],
++  );
++}
++
++async function insertSingleTenantCanary(db: PGlite, tenant: Omit<V2Tenant, 'parentId' | 'childIds'>): Promise<void> {
++  const text = `${V2_CANARY_PHRASE}: ${tenant.marker}`;
++  const filename = 'tenant-s-default.md';
++  const stored = `Document: ${filename}. Chunk 1 of 1. Content: ${text}`;
++  await db.query('INSERT INTO documents (id, filename, content, metadata, doc_type, created_at) VALUES ($1, $2, $3, $4::jsonb, $5, $6)', [
++    tenant.docId,
++    filename,
++    text,
++    JSON.stringify({ relpath: `two-tenant-v2/${filename}` }),
++    'general',
++    CREATED_AT,
++  ]);
++  await db.query(
++    `INSERT INTO document_chunks (id, document_id, content, embedding, chunk_index, metadata, doc_type, lexical_text, created_at)
++     VALUES ($1, $2, $3, $4::vector, 0, $5::jsonb, 'general', $6, $7)`,
++    [
++      tenant.legacyChunkId,
++      tenant.docId,
++      stored,
++      vectorLiteral(embedText(text)),
++      JSON.stringify({ name: 'Default notes' }),
++      chunkLexicalText({ sectionPath: [], content: stored, documentFilename: filename }),
++      CREATED_AT,
++    ],
++  );
++}
++
++function childTexts(tenant: Omit<V2Tenant, 'parentId' | 'childIds'>): string[] {
++  const canary = `${V2_CANARY_PHRASE}: ${tenant.marker}`;
++  return [`${canary}. Profile child one of the canary section.`, `${canary}. Profile child two keeps the warranty terms for ${tenant.marker}.`];
++}
++
++function parentText(tenant: Omit<V2Tenant, 'parentId' | 'childIds'>): string {
++  return `PARENT SECTION of ${tenant.marker}. ${V2_CANARY_PHRASE}: ${tenant.marker}. The whole canary section with both child paragraphs and the warranty terms for ${tenant.marker}.`;
++}
++
++async function writeProfileChunks(db: PGlite, tenant: Omit<V2Tenant, 'parentId' | 'childIds'>): Promise<{ parentId: string; childIds: string[] }> {
++  const texts = childTexts(tenant);
++  const children = texts.map((content, index) => ({
++    chunk_index: index,
++    parent_index: 0,
++    content,
++    section_path: ['Canary'],
++    chunk_kind: 'text',
++    embedding_text_version: 1,
++    content_hash: `v2-${tenant.label}-${index}`,
++    lexical_text: chunkLexicalText({ sectionPath: ['Canary'], content }),
++    metadata: { name: `Canary profile ${tenant.label}` },
++  }));
++  const parents = [{ parent_index: 0, section_path: ['Canary'], content: parentText(tenant), token_count: 60 }];
++  const vectors = texts.map((text) => embedText(text));
++  await db.query(
++    `SELECT * FROM rag_write_profile_chunks(
++       p_document_id => $1, p_tenant_key => $2, p_profile_id => $3, p_parents => $4::jsonb, p_children => $5::jsonb, p_embeddings => $6::jsonb,
++       p_final => true, p_total => $7)`,
++    [
++      tenant.docId,
++      tenant.key,
++      V2_CHUNKING_PROFILE,
++      JSON.stringify(parents),
++      JSON.stringify(children),
++      JSON.stringify({ [V2_LEGACY_EMBEDDING_PROFILE]: { vectors, host: 'fixture' } }),
++      children.length,
++    ],
++  );
++  return { parentId: profileRowId(tenant.docId, 'parent', 0), childIds: texts.map((_, index) => profileRowId(tenant.docId, 'child', index)) };
++}
++
++/**
++ * Adds the Phase 4 canary rows to a database that already holds the Phase 2 two-tenant rows (multi-tenant) or nothing of the tenant (single-tenant).
++ * Every tenant gets: an exact-id code in the legacy canary chunk, a code document, an image chunk, an Italian document, a document of a type
++ * only this tenant has, and a non-legacy chunking profile (one parent and two children) that is the active profile of the general doc type.
++ */
++export async function seedTwoTenantV2(db: PGlite, mode: DeploymentMode): Promise<V2Tenant[]> {
++  const labels: V2TenantLabel[] = mode === 'multi-tenant' ? ['A', 'B', 'O'] : ['S'];
++  const described = labels.map(describeTenant);
++
++  await db.query(
++    `INSERT INTO chunking_profiles (id, doc_type, child_tokens, parent_mode, parent_tokens, status, preset)
++     VALUES ($1, 'general', 256, 'structure', 1024, 'building', '256/1024')`,
++    [V2_CHUNKING_PROFILE],
++  );
++
++  const tenants: V2Tenant[] = [];
++  for (const tenant of described) {
++    if (tenant.label === 'S') await insertSingleTenantCanary(db, tenant);
++    for (const doc of extraDocuments(tenant)) await insertExtraDocument(db, tenant, doc);
++
++    // The legacy canary chunk keeps the exact-id code; once the profile children exist the hybrid search hides it, so only the exact-id list finds it.
++    await db.query(
++      `UPDATE document_chunks SET content = content || $2, lexical_text = lexical_text || ' ' || $3 WHERE id = $1`,
++      [tenant.legacyChunkId, ` Archived reference code ${V2_EXACT_CODE}.`, lexicalTokens(`Archived reference code ${V2_EXACT_CODE}.`).join(' ')],
++    );
++
++    const written = await writeProfileChunks(db, tenant);
++    tenants.push({ ...tenant, parentId: written.parentId, childIds: written.childIds });
++  }
++
++  await db.query("UPDATE chunking_profiles SET status = 'ready' WHERE id = 'legacy' AND doc_type = 'general'");
++  await db.query("UPDATE chunking_profiles SET status = 'active', activated_at = now(), activated_by = 'fixture' WHERE id = $1 AND doc_type = 'general'", [
++    V2_CHUNKING_PROFILE,
++  ]);
++  return tenants;
++}
++
++function withLookup(fixture: FixtureDatabase, mode: DeploymentMode, tenants: V2Tenant[]): TwoTenantV2Database {
++  return Object.assign(fixture, {
++    deploymentMode: mode,
++    tenants,
++    tenant(label: V2TenantLabel): V2Tenant {
++      const found = tenants.find((tenant) => tenant.label === label);
++      if (!found) throw new Error(`[Two Tenant V2] no tenant ${label} in a ${mode} fixture`);
++      return found;
++    },
++  });
++}
++
++/** Builds on createTwoTenantDatabase without changing it: Phase 2 tests keep their fixture. */
++export async function createTwoTenantV2Database(options: { corpusDir?: string } = {}): Promise<TwoTenantV2Database> {
++  const fixture = await createTwoTenantDatabase({ corpusDir: options.corpusDir ?? DEFAULT_CORPUS_DIR });
++  try {
++    const tenants = await seedTwoTenantV2(fixture.db, 'multi-tenant');
++    return withLookup(fixture, 'multi-tenant', tenants);
++  } catch (error) {
++    await fixture.db.close().catch(() => undefined);
++    throw error;
++  }
++}
++
++export async function createSingleTenantV2Database(options: { corpusDir?: string } = {}): Promise<TwoTenantV2Database> {
++  const fixture = await createFixtureDatabase({ deploymentMode: 'single-tenant', corpusDir: options.corpusDir ?? DEFAULT_CORPUS_DIR });
++  try {
++    // The one tenant holds the canary rows only, so the corpus does not compete with them for the top ranks.
++    await fixture.db.query('DELETE FROM document_chunks');
++    await fixture.db.query('DELETE FROM documents');
++    const tenants = await seedTwoTenantV2(fixture.db, 'single-tenant');
++    return withLookup(fixture, 'single-tenant', tenants);
++  } catch (error) {
++    await fixture.db.close().catch(() => undefined);
++    throw error;
++  }
++}
++
++/** Every text and url that identifies another tenant: the markers (all texts carry them) and the image urls. */
++export function foreignSignatures(tenants: V2Tenant[], own: V2TenantLabel): string[] {
++  return tenants.filter((tenant) => tenant.label !== own).flatMap((tenant) => [tenant.marker, ...tenant.imageUrls, `tenant-${tenant.label.toLowerCase()}-`]);
++}
++
++export function ownSignature(tenant: V2Tenant): string {
++  return tenant.marker;
++}
++
++/** Returns the first foreign signature found in the text, or null. */
++export function findForeignText(text: string, tenants: V2Tenant[], own: V2TenantLabel): string | null {
++  const lowered = text.toLowerCase();
++  for (const signature of foreignSignatures(tenants, own)) {
++    if (lowered.includes(signature.toLowerCase())) return signature;
++  }
++  return null;
++}
++
++/** Every Phase 4 switch on, with a hosted quality reranker served by the fake edge. */
++export const V2_MATRIX_ENV_DEFAULTS: Readonly<Record<string, string>> = Object.freeze({
++  RAG_PIPELINE: 'v2',
++  RAG_LEXICAL_SEARCH: 'true',
++  RAG_RERANKER: 'cohere',
++  RAG_RERANK_TIER_CHAT: 'quality',
++  RAG_REFUSAL_THRESHOLD: 'true',
++  RAG_CONTEXT_EDGE_ORDER: 'true',
++  RAG_CONTEXT_COMPRESSION: 'true',
++  RAG_PARENT_CHILD: 'true',
++  RAG_LEXICAL_TRANSLATION: 'true',
++  RAG_EXACT_ID_LOOKUP: 'true',
++});
++
++export const V2_MATRIX_ENV_VARIABLE = 'TWO_TENANT_V2_ENV';
++const MATRIX_ENV_KEY = /^(?:RAG_[A-Z0-9_]+|COHERE_[A-Z0-9_]+|VOYAGE_[A-Z0-9_]+)$/;
++
++/**
++ * The environment the matrix runs under: the all-on defaults with the entries of TWO_TENANT_V2_ENV (a JSON object of strings) laid over them.
++ * A later phase runs the same matrix under other defaults by setting that variable, for example
++ * TWO_TENANT_V2_ENV='{"RAG_RERANKER":"auto","RAG_REFUSAL_FLOOR":"legacy_rule"}'; names this base does not read yet pass through unchanged.
++ */
++export function v2MatrixEnv(source: Record<string, string | undefined> = process.env): Record<string, string> {
++  const raw = (source[V2_MATRIX_ENV_VARIABLE] ?? '').trim();
++  if (raw === '') return { ...V2_MATRIX_ENV_DEFAULTS };
++  let parsed: unknown;
++  try {
++    parsed = JSON.parse(raw);
++  } catch {
++    throw new Error(`[Two Tenant V2] ${V2_MATRIX_ENV_VARIABLE} is not valid JSON`);
++  }
++  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
++    throw new Error(`[Two Tenant V2] ${V2_MATRIX_ENV_VARIABLE} must be a JSON object`);
++  }
++  const overlay: Record<string, string> = {};
++  for (const [name, value] of Object.entries(parsed)) {
++    if (!MATRIX_ENV_KEY.test(name)) throw new Error(`[Two Tenant V2] ${V2_MATRIX_ENV_VARIABLE} may set RAG_, COHERE_ and VOYAGE_ variables only, not ${name}`);
++    if (typeof value !== 'string') throw new Error(`[Two Tenant V2] ${V2_MATRIX_ENV_VARIABLE}.${name} must be a string`);
++    overlay[name] = value;
++  }
++  return { ...V2_MATRIX_ENV_DEFAULTS, ...overlay };
++}
+diff --git a/tests/helpers/v2-two-tenant-matrix.mts b/tests/helpers/v2-two-tenant-matrix.mts
+new file mode 100644
+index 0000000..78e15c6
+--- /dev/null
++++ b/tests/helpers/v2-two-tenant-matrix.mts
+@@ -0,0 +1,797 @@
++import { after, before, describe, test } from 'node:test';
++import assert from 'node:assert/strict';
++import path from 'node:path';
++import { fileURLToPath } from 'node:url';
++import type { RetrievalResult } from '@/lib/rag/types';
++import type { TenantScope } from '@/lib/rag/tenant/scope';
++import { NextRequest } from 'next/server';
++import { startFakeEdge, type FakeEdge } from '../../eval/harness/fake-edge.mts';
++import { prepareInProcessEval, type InProcessEval } from '../../eval/harness/run-eval.mts';
++import type { DeploymentMode } from '../../eval/harness/pglite-supabase.mts';
++import {
++  V2_CANARY_PHRASE,
++  V2_EXACT_CODE,
++  V2_INVOICE,
++  V2_PRIVATE_DOC_TYPE,
++  V2_TOPICS,
++  V2_TRANSLATED_QUERY,
++  createSingleTenantV2Database,
++  createTwoTenantV2Database,
++  findForeignText,
++  V2_MATRIX_ENV_VARIABLE,
++  v2MatrixEnv,
++  type TwoTenantV2Database,
++  type V2Tenant,
++  type V2TenantLabel,
++} from '../../eval/harness/two-tenant-v2.mts';
++
++const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
++const CORPUS_DIR = path.join(REPO_ROOT, 'eval/fixtures/corpus');
++const VOICE_SECRET = 'two-tenant-v2-voice-secret-placeholder-0000000000';
++export const PROFILES = ['chat', 'embed', 'voice', 'eval'] as const;
++type MatrixProfile = (typeof PROFILES)[number];
++
++const Q_CANARY = 'two tenant isolation canary phrase';
++const Q_EXACT = `reference code ${V2_EXACT_CODE}`;
++const Q_TRANSLATE = 'which tenant manual keeps the canary';
++const Q_INVOICE_NUMBER = `invoice ${V2_INVOICE.number} from ${V2_INVOICE.supplier}`;
++// No identifier-shaped token: the exact-id list does not apply, so the SQL invoice caps decide.
++const Q_INVOICE = `fattura ${V2_INVOICE.supplier} numero importo ${V2_INVOICE.gross} ${V2_CANARY_PHRASE}`;
++const OPTIONS = { maxResults: 25, fallbackToLowerThreshold: true };
++
++interface RecordedFetch {
++  url: string;
++  body: string;
++}
++
++export interface Session {
++  fixture: TwoTenantV2Database;
++  edge: FakeEdge;
++  prepared: InProcessEval;
++  env: Record<string, string>;
++  rerankCalls: RecordedFetch[];
++  restoreEnv(): void;
++}
++
++function snapshotEnv(): () => void {
++  const saved = { ...process.env } as Record<string, string | undefined>;
++  return () => {
++    const env = process.env as Record<string, string | undefined>;
++    for (const name of Object.keys(env)) {
++      if (!(name in saved)) delete env[name];
++    }
++    Object.assign(env, saved);
++  };
++}
++
++/**
++ * Everything the session starts is closed by close(), including when the build fails halfway: the edge and database
++ * (a fake server that stays up keeps the node:test process alive), the fixture translator and the dep overrides.
++ */
++export async function openSession(mode: DeploymentMode): Promise<{ session: Session; close: () => Promise<void> }> {
++  const restoreEnv = snapshotEnv();
++  const matrixEnv = v2MatrixEnv();
++  let fixture: TwoTenantV2Database | undefined;
++  let edge: FakeEdge | undefined;
++  let prepared: InProcessEval | undefined;
++  let translator: typeof import('@/lib/rag/query/translate') | undefined;
++  let depsModule: typeof import('@/lib/rag/deps') | undefined;
++  let backend: typeof import('@/lib/rag/backend/registry') | undefined;
++  let rerankSelect: typeof import('@/lib/rag/rerank/select') | undefined;
++  let closed = false;
++
++  const close = async (): Promise<void> => {
++    if (closed) return;
++    closed = true;
++    try {
++      translator?.resetTranslatorForTests();
++      depsModule?.resetRagDepsForTests();
++      backend?.resetRetrievalBackendForTests();
++      rerankSelect?.resetRerankerFactoryForTests();
++    } finally {
++      try {
++        await prepared?.close();
++      } finally {
++        try {
++          await edge?.close();
++        } finally {
++          try {
++            await fixture?.db.close().catch(() => undefined);
++          } finally {
++            restoreEnv();
++          }
++        }
++      }
++    }
++  };
++
++  try {
++    fixture = mode === 'multi-tenant' ? await createTwoTenantV2Database() : await createSingleTenantV2Database();
++    edge = await startFakeEdge({ db: fixture.db });
++    const allowed = fixture.tenants.filter((tenant) => tenant.userId !== null).map((tenant) => (tenant.organizationId ? `org:${tenant.organizationId}` : `user:${tenant.userId}`));
++    prepared = await prepareInProcessEval({
++      corpusDir: CORPUS_DIR,
++      deploymentMode: mode,
++      ingestFixture: Object.assign(fixture, { edge }),
++      allowedScopes: allowed,
++      envOverrides: matrixEnv,
++    });
++    // The harness points the vendor routes at their own paths; the fake edge serves the Voyage rerank at /v1.
++    process.env.VOYAGE_BASE_URL = `${edge.url}/v1`;
++    process.env.MYRAG_DEPLOYMENT_MODE = mode;
++    process.env.RAG_VOICE_TOKEN_SECRET = VOICE_SECRET;
++
++    depsModule = await import('@/lib/rag/deps');
++    translator = await import('@/lib/rag/query/translate');
++    backend = await import('@/lib/rag/backend/registry');
++    rerankSelect = await import('@/lib/rag/rerank/select');
++    const cohere = await import('@/lib/rag/rerank/cohere');
++    const voyage = await import('@/lib/rag/rerank/voyage');
++    const localBm25 = await import('@/lib/rag/rerank/local-bm25');
++    const startup = await import('@/lib/rag/v2/startup');
++    const rerankCalls: RecordedFetch[] = [];
++    const realFetch = depsModule.getRagDeps().fetch;
++    depsModule.setRagDepsForTests({
++      fetch: (async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
++        const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
++        if (url.includes('/rerank')) rerankCalls.push({ url, body: typeof init?.body === 'string' ? init.body : '' });
++        return realFetch(input, init);
++      }) as typeof fetch,
++    });
++    // The fixture edge serves fake-* rerank model ids only; the adapters are the real ones, the model id is the fake of the same tier.
++    rerankSelect.setRerankerFactoryForTests((provider, model, ragEnv, fetchImpl) => {
++      const fake = /fast|lite/.test(model) ? 'fake-fast-v1' : 'fake-quality-v1';
++      if (provider === 'cohere') {
++        return cohere.createCohereReranker({ fetch: fetchImpl, apiKey: ragEnv.COHERE_API_KEY ?? '', baseUrl: ragEnv.COHERE_BASE_URL ?? '', model: fake });
++      }
++      if (provider === 'voyage') {
++        return voyage.createVoyageReranker({ fetch: fetchImpl, apiKey: ragEnv.VOYAGE_API_KEY ?? '', baseUrl: ragEnv.VOYAGE_BASE_URL ?? '', model: fake });
++      }
++      return provider === 'local_bm25' ? localBm25.createLocalBm25Reranker() : null;
++    });
++    translator.setTranslatorForTests({
++      name: 'two-tenant-v2',
++      translate: async (text) => (text === Q_TRANSLATE ? [{ ...V2_TRANSLATED_QUERY }] : []),
++    });
++    backend.resetRetrievalBackendForTests();
++    startup.resetV2StartupForTests();
++    await startup.verifyV2Startup();
++
++    return { session: { fixture, edge, prepared, env: matrixEnv, rerankCalls, restoreEnv }, close };
++  } catch (error) {
++    await close();
++    throw error;
++  }
++}
++
++interface Modules {
++  rag: typeof import('@/lib/rag');
++  scopeModule: typeof import('@/lib/rag/tenant/scope');
++  resolveChat: typeof import('@/lib/rag/tenant/resolve-chat');
++  embedModule: typeof import('@/lib/rag/tenant/embed');
++  voiceModule: typeof import('@/lib/rag/tenant/voice');
++  voiceToken: typeof import('@/lib/rag/tenant/voice-token');
++  evalModule: typeof import('@/lib/rag/tenant/eval');
++  supabaseModule: typeof import('@/lib/supabase');
++  depsModule: typeof import('@/lib/rag/deps');
++  contextModule: typeof import('@/lib/rag/v2/stages/context');
++  collectorModule: typeof import('@/lib/rag/trace/collector');
++  paramsModule: typeof import('@/lib/rag/v2/retrieval-params');
++  configModule: typeof import('@/lib/rag/config');
++  hitHelpers: typeof import('../rag/fusion/helpers.ts');
++}
++
++async function loadModules(): Promise<Modules> {
++  return {
++    rag: await import('@/lib/rag'),
++    scopeModule: await import('@/lib/rag/tenant/scope'),
++    resolveChat: await import('@/lib/rag/tenant/resolve-chat'),
++    embedModule: await import('@/lib/rag/tenant/embed'),
++    voiceModule: await import('@/lib/rag/tenant/voice'),
++    voiceToken: await import('@/lib/rag/tenant/voice-token'),
++    evalModule: await import('@/lib/rag/tenant/eval'),
++    supabaseModule: await import('@/lib/supabase'),
++    depsModule: await import('@/lib/rag/deps'),
++    contextModule: await import('@/lib/rag/v2/stages/context'),
++    collectorModule: await import('@/lib/rag/trace/collector'),
++    paramsModule: await import('@/lib/rag/v2/retrieval-params'),
++    configModule: await import('@/lib/rag/config'),
++    hitHelpers: await import('../rag/fusion/helpers.ts'),
++  };
++}
++
++interface Retrieved {
++  result: RetrievalResult;
++  rerankDocuments: string[][];
++}
++
++class Matrix {
++  constructor(
++    readonly session: Session,
++    readonly mode: DeploymentMode,
++    readonly m: Modules,
++  ) {}
++
++  get tenants(): V2Tenant[] {
++    return this.session.fixture.tenants;
++  }
++
++  tenant(label: V2TenantLabel): V2Tenant {
++    return this.session.fixture.tenant(label);
++  }
++
++  get allowedScopes(): string {
++    return this.tenants
++      .filter((tenant) => tenant.userId !== null)
++      .map((tenant) => (tenant.organizationId ? `org:${tenant.organizationId}` : `user:${tenant.userId}`))
++      .join(',');
++  }
++
++  config() {
++    return this.m.configModule.loadRagConfig(this.m.depsModule.getRagDeps().ragEnv());
++  }
++
++  private admin() {
++    return this.m.supabaseModule.getSupabaseAdmin();
++  }
++
++  /** The scope each entry point resolves for the tenant, through the real resolver of that entry point. */
++  async scopeFor(profile: MatrixProfile, tenant: V2Tenant): Promise<TenantScope> {
++    const signal = new AbortController().signal;
++    const chat = async () => {
++      const resolved = await this.m.resolveChat.resolveTenantScope({
++        requestedOrganizationId: tenant.organizationId,
++        deploymentMode: this.mode,
++        getUser: async () => (tenant.userId ? { id: tenant.userId } : null),
++        admin: this.admin(),
++        signal,
++      });
++      assert.ok(resolved.ok && resolved.scope, `chat scope of ${tenant.label} must resolve`);
++      return resolved.scope;
++    };
++    let scope: TenantScope;
++    if (profile === 'chat') {
++      scope = await chat();
++    } else if (profile === 'embed') {
++      const resolved = await this.m.embedModule.resolveEmbedScope({
++        rawBody: {},
++        configuredTenant: this.mode === 'multi-tenant' ? tenant.key : '',
++        deploymentMode: this.mode,
++        admin: this.admin(),
++        signal,
++      });
++      assert.ok(resolved.ok, `embed scope of ${tenant.label} must resolve`);
++      scope = resolved.scope;
++    } else if (profile === 'voice') {
++      const minted = this.m.voiceToken.mintVoiceToken({ scope: await chat(), secret: VOICE_SECRET, ttlSeconds: 600 });
++      assert.ok(minted.ok, 'voice token must mint');
++      const resolved = await this.m.voiceModule.resolveVoiceScope({
++        headers: new Headers({ 'x-rag-scope-token': minted.token }),
++        deploymentMode: this.mode,
++        secret: VOICE_SECRET,
++        admin: this.admin(),
++        signal,
++      });
++      assert.ok(resolved.ok, `voice scope of ${tenant.label} must resolve`);
++      scope = resolved.scope;
++    } else {
++      const resolved = this.m.evalModule.evalScope({
++        deploymentMode: this.mode,
++        organizationId: tenant.organizationId,
++        userId: tenant.userId,
++        allowedScopes: this.allowedScopes,
++      });
++      assert.ok(resolved.ok, `eval scope of ${tenant.label} must resolve`);
++      scope = resolved.scope;
++    }
++    assert.equal(this.m.scopeModule.scopeKey(scope), tenant.key, `${profile} scope of ${tenant.label}`);
++    return scope;
++  }
++
++  async retrieve(
++    scope: TenantScope,
++    profile: MatrixProfile,
++    query: string,
++    extra: { retrievalFilters?: Parameters<Modules['rag']['runRetrieval']>[0]['retrievalFilters'] } = {},
++  ): Promise<Retrieved> {
++    const before = this.session.rerankCalls.length;
++    const result = await this.m.rag.runRetrieval({
++      scope,
++      query,
++      profile,
++      options: OPTIONS,
++      signal: new AbortController().signal,
++      ...(extra.retrievalFilters ? { retrievalFilters: extra.retrievalFilters } : {}),
++    });
++    const rerankDocuments = this.session.rerankCalls.slice(before).map((call) => {
++      const parsed = JSON.parse(call.body) as { documents?: unknown };
++      return Array.isArray(parsed.documents) ? parsed.documents.map(String) : [];
++    });
++    return { result, rerankDocuments };
++  }
++
++  async keysOf(table: 'document_chunks' | 'documents' | 'document_parents', ids: string[]): Promise<Map<string, string | null>> {
++    if (ids.length === 0) return new Map();
++    const rows = await this.session.fixture.db.query<{ id: string; tenant_key: string | null }>(`SELECT id, tenant_key FROM ${table} WHERE id = ANY($1::uuid[])`, [ids]);
++    return new Map(rows.rows.map((row) => [row.id, row.tenant_key]));
++  }
++
++  /** Every surface a caller can read must hold the caller's tenant only, by id (tenant_key of the row) and by text. */
++  async assertClean(retrieved: Retrieved, tenant: V2Tenant, label: string): Promise<void> {
++    const { result, rerankDocuments } = retrieved;
++    const surfaces = {
++      context: result.context,
++      usedDocuments: result.usedDocuments,
++      sourceImages: result.sourceImages,
++      links: result.links,
++      relevantChunks: result.relevantChunks,
++      kept: result.kept,
++      candidates: result.candidates,
++      voice: result.voice ?? null,
++      refusal: result.refusal ?? null,
++      stages: result.stages,
++    };
++    const foreign = findForeignText(JSON.stringify(surfaces), this.tenants, tenant.label);
++    assert.equal(foreign, null, `${label}: a foreign text reached the result`);
++    for (const documents of rerankDocuments) {
++      for (const document of documents) {
++        assert.equal(findForeignText(document, this.tenants, tenant.label), null, `${label}: a foreign text reached the reranker`);
++      }
++    }
++
++    const chunkIds = new Set<string>([
++      ...result.candidates.map((candidate) => candidate.chunk_id),
++      ...result.relevantChunks.map((chunk) => chunk.chunk_id),
++      ...result.kept.map((chunk) => chunk.chunk_id),
++      ...(result.voice?.results ?? []).map((chunk) => String((chunk as { chunk_id?: string }).chunk_id ?? '')).filter((id) => id !== ''),
++    ]);
++    const chunkKeys = await this.keysOf('document_chunks', [...chunkIds]);
++    for (const id of chunkIds) assert.equal(chunkKeys.get(id), tenant.key, `${label}: chunk ${id} is not of ${tenant.key}`);
++
++    const documentIds = new Set<string>([
++      ...result.usedDocuments.map((doc) => doc.id),
++      ...result.candidates.map((candidate) => candidate.document_id),
++      ...result.kept.map((chunk) => chunk.document_id),
++    ]);
++    const documentKeys = await this.keysOf('documents', [...documentIds]);
++    for (const id of documentIds) assert.equal(documentKeys.get(id), tenant.key, `${label}: document ${id} is not of ${tenant.key}`);
++
++    const parentIds = new Set<string>(result.candidates.map((candidate) => candidate.parent_id).filter((id): id is string => typeof id === 'string'));
++    const parentKeys = await this.keysOf('document_parents', [...parentIds]);
++    for (const id of parentIds) assert.equal(parentKeys.get(id), tenant.key, `${label}: parent ${id} is not of ${tenant.key}`);
++
++    for (const image of result.sourceImages) assert.ok(image.url !== undefined && tenant.imageUrls.includes(image.url), `${label}: source image of another tenant (${image.url})`);
++    const voiceImages = (result.voice?.source_images ?? []) as Array<{ url?: string }>;
++    for (const image of voiceImages) assert.ok(image.url !== undefined && tenant.imageUrls.includes(image.url), `${label}: voice source image of another tenant (${image.url})`);
++  }
++
++  voiceChunks(result: RetrievalResult): Array<{ chunk_id: string; content: string }> {
++    return (result.voice?.results ?? []) as unknown as Array<{ chunk_id: string; content: string }>;
++  }
++
++  ownChunkIds(result: RetrievalResult, profile: MatrixProfile): string[] {
++    return profile === 'voice' ? this.voiceChunks(result).map((chunk) => chunk.chunk_id) : result.candidates.map((candidate) => candidate.chunk_id);
++  }
++}
++
++export function describeMatrix(mode: DeploymentMode): void {
++  describe(`v2 two-tenant matrix (${mode})`, () => {
++    let matrix: Matrix;
++    let close: () => Promise<void>;
++
++    before(async () => {
++      const opened = await openSession(mode);
++      close = opened.close;
++      matrix = new Matrix(opened.session, mode, await loadModules());
++    });
++
++    after(async () => {
++      await close?.();
++    });
++
++    const labels = (): V2TenantLabel[] => matrix.tenants.map((tenant) => tenant.label);
++    const expectsRerank = () => ['cohere', 'voyage'].includes((matrix.session.env.RAG_RERANKER ?? '').toLowerCase());
++
++    test('the fixture holds the canary rows of every tenant under the tenant keys, in one non-legacy active profile', async () => {
++      const { db } = matrix.session.fixture;
++      for (const tenant of matrix.tenants) {
++        const rows = await db.query<{ tenant_key: string | null; profile: string }>(
++          `SELECT c.tenant_key, c.chunking_profile_id AS profile FROM document_chunks c
++           WHERE c.document_id = ANY($1::uuid[])`,
++          [[tenant.docId, tenant.skuDocId, tenant.imageDocId, tenant.italianDocId, tenant.privateTypeDocId, tenant.invoiceDocId, tenant.topicDocId]],
++        );
++        assert.ok(rows.rows.length >= 9, `${tenant.label}: canary rows exist`);
++        assert.ok(rows.rows.every((row) => row.tenant_key === tenant.key), `${tenant.label}: every row carries ${tenant.key}`);
++        const children = rows.rows.filter((row) => row.profile !== 'legacy');
++        assert.equal(children.length, 2, `${tenant.label}: two profile children`);
++        const parent = await db.query<{ tenant_key: string }>('SELECT tenant_key FROM document_parents WHERE id = $1', [tenant.parentId]);
++        assert.equal(parent.rows[0]?.tenant_key, tenant.key);
++      }
++      const active = await db.query<{ id: string }>("SELECT id FROM chunking_profiles WHERE doc_type = 'general' AND status = 'active'");
++      assert.deepEqual(active.rows.map((row) => row.id), ['p-canary-256']);
++    });
++
++    for (const profile of PROFILES) {
++      describe(`entry point ${profile}`, () => {
++        test('canary query: dense and lexical legs, rerank, parents, assembly, sources and images stay in the caller tenant', async () => {
++          for (const label of labels()) {
++            const tenant = matrix.tenant(label);
++            const retrieved = await matrix.retrieve(await matrix.scopeFor(profile, tenant), profile, Q_CANARY);
++            const where = `${profile}/${label}/canary`;
++            assert.equal(retrieved.result.status, 'ok', `${where}: ${retrieved.result.reason}`);
++            await matrix.assertClean(retrieved, tenant, where);
++            const ids = matrix.ownChunkIds(retrieved.result, profile);
++            assert.ok(ids.length >= 3, `${where}: the tenant's own rows are returned (${ids.length})`);
++            if (profile === 'voice') {
++              assert.ok(JSON.stringify(retrieved.result.voice).includes(tenant.marker), `${where}: own marker`);
++            } else {
++              assert.ok(retrieved.result.context.includes(tenant.marker), `${where}: own marker in the context`);
++            }
++            const legs = new Set(retrieved.result.candidates.flatMap((candidate) => Object.keys(candidate.legs ?? {}).map((key) => key.split(':')[0])));
++            if (profile !== 'voice') {
++              assert.ok(legs.has('dense'), `${where}: dense leg`);
++              if (matrix.config().v2.lexicalSearch) assert.ok(legs.has('lexical'), `${where}: lexical leg`);
++            }
++            if (expectsRerank()) {
++              assert.ok(retrieved.rerankDocuments.length >= 1, `${where}: the reranker was called`);
++              assert.ok(retrieved.rerankDocuments.flat().some((document) => document.includes(tenant.marker)), `${where}: the reranker got own text`);
++            }
++          }
++        });
++
++        test('parent expansion renders the tenant own parent only', async () => {
++          if (profile === 'voice' || !matrix.config().v2.parentChild) return;
++          for (const label of labels()) {
++            const tenant = matrix.tenant(label);
++            const retrieved = await matrix.retrieve(await matrix.scopeFor(profile, tenant), profile, Q_CANARY);
++            const where = `${profile}/${label}/parents`;
++            assert.ok(retrieved.result.context.includes(`PARENT SECTION of ${tenant.marker}`), `${where}: own parent expanded`);
++            assert.ok(retrieved.result.stages.some((stage) => stage.name === 'expand_parents' && stage.status === 'ok'), `${where}: stage ok`);
++            await matrix.assertClean(retrieved, tenant, where);
++          }
++        });
++
++        test('image chunk: source_images carry the tenant own image only', async () => {
++          if (profile === 'voice') return;
++          for (const label of labels()) {
++            const tenant = matrix.tenant(label);
++            const retrieved = await matrix.retrieve(await matrix.scopeFor(profile, tenant), profile, `brand logo mark ${V2_CANARY_PHRASE}`);
++            const where = `${profile}/${label}/image`;
++            await matrix.assertClean(retrieved, tenant, where);
++            assert.ok(retrieved.result.sourceImages.length >= 1, `${where}: the tenant's own image is returned`);
++            assert.ok(retrieved.result.sourceImages.some((image) => image.url === tenant.imageUrl), `${where}: the tenant's own mark`);
++          }
++        });
++
++        test('exact-id list: the code that every tenant holds returns the caller rows only, hydrated through the tenant-filtered fetch', async () => {
++          if (profile === 'voice' || !matrix.config().exactIdLookup) return;
++          for (const label of labels()) {
++            const tenant = matrix.tenant(label);
++            const retrieved = await matrix.retrieve(await matrix.scopeFor(profile, tenant), profile, Q_EXACT);
++            const where = `${profile}/${label}/exact-id`;
++            await matrix.assertClean(retrieved, tenant, where);
++            const exact = retrieved.result.candidates.filter((candidate) => 'exact_id' in (candidate.legs ?? {}));
++            assert.ok(exact.length >= 1, `${where}: the exact-id list contributed`);
++            assert.ok(exact.some((candidate) => candidate.chunk_id === tenant.legacyChunkId), `${where}: the hidden legacy chunk came through the exact-id list`);
++          }
++        });
++
++        test('translated variant: its dense and lexical searches are tenant-filtered', async () => {
++          if (profile === 'voice' || !matrix.config().v2.lexicalTranslation) return;
++          for (const label of labels()) {
++            const tenant = matrix.tenant(label);
++            const retrieved = await matrix.retrieve(await matrix.scopeFor(profile, tenant), profile, Q_TRANSLATE);
++            const where = `${profile}/${label}/translate`;
++            assert.ok(retrieved.result.stages.some((stage) => stage.name === 'translate' && stage.status === 'ok'), `${where}: translate stage ran`);
++            await matrix.assertClean(retrieved, tenant, where);
++            const italian = retrieved.result.candidates.find((candidate) => candidate.chunk_id === tenant.italianChunkId);
++            assert.ok(italian, `${where}: the tenant's Italian chunk was found`);
++            assert.ok(Object.keys(italian.legs ?? {}).some((key) => key.endsWith(':1')), `${where}: through the translated variant`);
++          }
++        });
++
++        test('the invoice number every tenant holds returns the caller invoice only', async () => {
++          if (profile === 'voice' || !matrix.config().exactIdLookup) return;
++          for (const label of labels()) {
++            const tenant = matrix.tenant(label);
++            const retrieved = await matrix.retrieve(await matrix.scopeFor(profile, tenant), profile, Q_INVOICE_NUMBER);
++            const where = `${profile}/${label}/invoice-number`;
++            await matrix.assertClean(retrieved, tenant, where);
++            const exact = retrieved.result.candidates.filter((candidate) => 'exact_id' in (candidate.legs ?? {}));
++            assert.ok(exact.some((candidate) => candidate.chunk_id === tenant.invoiceChunkId), `${where}: the invoice column match came through the exact-id list`);
++          }
++        });
++
++        test('invoice filters stay inside the caller tenant and cap by amount', async () => {
++          const invoice = { supplier: V2_INVOICE.supplier, amountMin: 100, amountMax: 2000, currency: V2_INVOICE.currency };
++          for (const label of labels()) {
++            const tenant = matrix.tenant(label);
++            const scope = await matrix.scopeFor(profile, tenant);
++            const filtered = await matrix.retrieve(scope, profile, Q_INVOICE, { retrievalFilters: { invoice } });
++            const where = `${profile}/${label}/invoice`;
++            await matrix.assertClean(filtered, tenant, where);
++            assert.deepEqual(matrix.ownChunkIds(filtered.result, profile), [tenant.invoiceChunkId], `${where}: only the tenant's invoice survives the invoice filter`);
++
++            const narrowed = await matrix.retrieve(scope, profile, Q_INVOICE, { retrievalFilters: { invoice: { ...invoice, amountMax: 50 } } });
++            assert.deepEqual(matrix.ownChunkIds(narrowed.result, profile), [], `${where}: a range below the amount returns nothing`);
++          }
++        });
++
++        test("a question only another tenant can answer leaks none of that tenant's text", async () => {
++          for (const label of labels()) {
++            const tenant = matrix.tenant(label);
++            const scope = await matrix.scopeFor(profile, tenant);
++            const own = await matrix.retrieve(scope, profile, V2_TOPICS[label].question);
++            const ownText = JSON.stringify(profile === 'voice' ? own.result.voice : own.result.candidates);
++            assert.ok(ownText.includes(V2_TOPICS[label].text), `${profile}/${label}/topic: the tenant finds its own answer`);
++            for (const other of matrix.tenants.filter((entry) => entry.label !== label)) {
++              const asked = await matrix.retrieve(scope, profile, V2_TOPICS[other.label].question);
++              const where = `${profile}/${label}/asks-${other.label}`;
++              await matrix.assertClean(asked, tenant, where);
++              assert.ok(!JSON.stringify(asked.result).includes(V2_TOPICS[other.label].text), `${where}: the other tenant's answer must not appear`);
++              if (process.env[V2_MATRIX_ENV_VARIABLE] === undefined) {
++                assert.equal(asked.result.status, 'empty', `${where}: nothing the caller holds answers it`);
++                assert.equal(asked.result.refusal?.decision, 'refuse', `${where}: refused`);
++              }
++            }
++          }
++        });
++
++        test('retrievalFilters naming another tenant document or doc type return no rows, and filters only narrow', async () => {
++          if (matrix.mode !== 'multi-tenant') return;
++          for (const label of labels()) {
++            const tenant = matrix.tenant(label);
++            const scope = await matrix.scopeFor(profile, tenant);
++            const foreignTenants = matrix.tenants.filter((entry) => entry.label !== label);
++            for (const other of foreignTenants) {
++              const where = `${profile}/${label}/filter-${other.label}`;
++              const byDocument = await matrix.retrieve(scope, profile, Q_CANARY, { retrievalFilters: { documentIds: [other.docId, other.skuDocId] } });
++              assert.deepEqual(matrix.ownChunkIds(byDocument.result, profile), [], `${where}: foreign document ids`);
++              await matrix.assertClean(byDocument, tenant, `${where}/documents`);
++
++              const byType = await matrix.retrieve(scope, profile, Q_CANARY, { retrievalFilters: { docTypes: [other.privateDocType] } });
++              const typed = matrix.ownChunkIds(byType.result, profile);
++              assert.ok(typed.every((id) => id !== other.privateTypeChunkId), `${where}: the other tenant's private doc type row`);
++              await matrix.assertClean(byType, tenant, `${where}/doc-type`);
++
++              const widened = await matrix.retrieve(scope, profile, Q_CANARY, { retrievalFilters: { documentIds: [tenant.skuDocId, other.skuDocId, other.docId] } });
++              assert.deepEqual(matrix.ownChunkIds(widened.result, profile).sort(), [tenant.skuChunkId], `${where}: own plus foreign ids narrows to the own document`);
++            }
++          }
++        });
++      });
++    }
++
++    // Known gap, tenant-safe: rag_exact_id_documents takes no filters, so an exact-id hit of the caller tenant can sit outside a documentIds filter.
++    test(
++      'the exact-id list narrows with retrievalFilters',
++      { todo: 'rag_exact_id_documents takes no filters; the exact-id list widens documentIds within the caller tenant (see the 04-41 SUMMARY)' },
++      async () => {
++        const tenant = matrix.tenant(mode === 'multi-tenant' ? 'A' : 'S');
++        const scope = await matrix.scopeFor('chat', tenant);
++        const retrieved = await matrix.retrieve(scope, 'chat', Q_EXACT, { retrievalFilters: { documentIds: [tenant.skuDocId] } });
++        assert.deepEqual(matrix.ownChunkIds(retrieved.result, 'chat'), [tenant.skuChunkId]);
++      },
++    );
++
++    test('the matrix detects a backend that searches under another tenant key (positive control)', async () => {
++      const own = matrix.tenant(mode === 'multi-tenant' ? 'A' : 'S');
++      const other = matrix.tenants.find((tenant) => tenant.label !== own.label);
++      if (!other) return;
++      const realBackend = matrix.m.rag.getRetrievalBackend();
++      const otherScope = await matrix.scopeFor('chat', other);
++      matrix.m.rag.setRetrievalBackendForTests({
++        ...realBackend,
++        search: (request) => realBackend.search({ ...request, scope: otherScope }),
++      });
++      try {
++        const retrieved = await matrix.retrieve(await matrix.scopeFor('chat', own), 'chat', Q_CANARY);
++        await assert.rejects(() => matrix.assertClean(retrieved, own, 'leaky backend'), /foreign text|is not of/);
++      } finally {
++        matrix.m.rag.resetRetrievalBackendForTests();
++      }
++    });
++
++    test('a scope minted with upper-case UUIDs retrieves exactly what its lower-case form retrieves (D-33)', async () => {
++      if (mode !== 'multi-tenant') return;
++      const signal = new AbortController().signal;
++      for (const label of labels()) {
++        const tenant = matrix.tenant(label);
++        const lower = await matrix.retrieve(await matrix.scopeFor('chat', tenant), 'chat', Q_CANARY);
++        const expected = matrix.ownChunkIds(lower.result, 'chat').sort();
++        assert.ok(expected.length >= 3);
++
++        const upperScopes: Record<string, TenantScope> = {};
++        upperScopes.minted = tenant.organizationId
++          ? matrix.m.scopeModule.mintScope('org', tenant.userId?.toUpperCase() ?? null, tenant.organizationId.toUpperCase())
++          : matrix.m.scopeModule.mintScope('personal', tenant.userId?.toUpperCase() ?? null, null);
++        const chat = await matrix.m.resolveChat.resolveTenantScope({
++          requestedOrganizationId: tenant.organizationId?.toUpperCase() ?? null,
++          deploymentMode: mode,
++          getUser: async () => ({ id: (tenant.userId as string).toUpperCase() }),
++          admin: matrix.m.supabaseModule.getSupabaseAdmin(),
++          signal,
++        });
++        assert.ok(chat.ok && chat.scope);
++        upperScopes.chat = chat.scope;
++        const embed = await matrix.m.embedModule.resolveEmbedScope({
++          rawBody: {},
++          configuredTenant: tenant.key.toUpperCase(),
++          deploymentMode: mode,
++          admin: matrix.m.supabaseModule.getSupabaseAdmin(),
++          signal,
++        });
++        assert.ok(embed.ok);
++        upperScopes.embed = embed.scope;
++        const evalResolved = matrix.m.evalModule.evalScope({
++          deploymentMode: mode,
++          organizationId: tenant.organizationId?.toUpperCase() ?? null,
++          userId: tenant.userId?.toUpperCase() ?? null,
++          allowedScopes: matrix.allowedScopes,
++        });
++        assert.ok(evalResolved.ok);
++        upperScopes.eval = evalResolved.scope;
++
++        for (const [via, scope] of Object.entries(upperScopes)) {
++          assert.equal(matrix.m.scopeModule.scopeKey(scope), tenant.key, `${label}/${via}: key`);
++          const upper = await matrix.retrieve(scope, 'chat', Q_CANARY);
++          assert.deepEqual(matrix.ownChunkIds(upper.result, 'chat').sort(), expected, `${label}/${via}: same rows as the lower-case scope`);
++          await matrix.assertClean(upper, tenant, `${label}/${via}/upper-case`);
++        }
++      }
++    });
++
++    test('a missing admin client gives status error with reason backend_error: no anon fallback, no empty result', async () => {
++      const original = matrix.m.depsModule.getRagDeps().adminClient;
++      const rpcCalls = () => matrix.session.edge.calls.filter((call) => call.path.includes('/rpc/')).length;
++      try {
++        // The default backend keeps the deps it was built with, so both rebuild around the override.
++        matrix.m.depsModule.setRagDepsForTests({ adminClient: () => null });
++        matrix.m.rag.resetRetrievalBackendForTests();
++        for (const profile of PROFILES) {
++          const tenant = matrix.tenant(mode === 'multi-tenant' ? 'A' : 'S');
++          const before = rpcCalls();
++          const retrieved = await matrix.retrieve(await matrix.scopeFor(profile, tenant), profile, Q_CANARY);
++          const where = `${profile}/no-admin`;
++          assert.equal(retrieved.result.status, 'error', `${where}: ${retrieved.result.reason}`);
++          assert.equal(retrieved.result.reason, 'backend_error', where);
++          assert.deepEqual(retrieved.result.candidates, [], where);
++          assert.equal(retrieved.result.context, '', where);
++          assert.equal(rpcCalls(), before, `${where}: no RPC reached the database`);
++        }
++      } finally {
++        matrix.m.depsModule.setRagDepsForTests({ adminClient: original });
++        matrix.m.rag.resetRetrievalBackendForTests();
++      }
++    });
++
++    test('the tenant key guard of every service-role search function accepts this mode only', async () => {
++      const { db } = matrix.session.fixture;
++      const foreignKeys = mode === 'multi-tenant' ? ['s:default'] : [`u:${matrix.session.fixture.fixtureUserId}`, 'o:00000000-0000-4000-8000-0000000000c1'];
++      const accepted = mode === 'multi-tenant' ? matrix.tenant('A').key : 's:default';
++      for (const key of foreignKeys) {
++        await assert.rejects(() => db.query('SELECT public.rag_assert_tenant_key($1)', [key]), /tenant key not valid for this deployment mode/, key);
++        await assert.rejects(() => db.query('SELECT * FROM public.rag_exact_id_documents($1, ARRAY[$2]::text[], 5)', [key, V2_EXACT_CODE]), undefined, `exact-id ${key}`);
++        await assert.rejects(() => db.query('SELECT * FROM public.rag_fetch_parents($1, ARRAY[]::uuid[])', [key]), /tenant key not valid for this deployment mode/, `parents ${key}`);
++        const admin = matrix.m.supabaseModule.getSupabaseAdmin();
++        assert.ok(admin);
++        const response = await admin.rpc('hybrid_search_chunks', {
++          p_tenant_key: key,
++          p_profile_id: 'openai-3-small-1536',
++          p_query_embedding: null,
++          p_lexical_tokens: ['canary'],
++          p_dense_limit: 0,
++          p_lexical_limit: 5,
++        });
++        assert.ok(response.error, `hybrid search with ${key} must raise`);
++        assert.equal(response.data, null);
++      }
++      await db.query('SELECT public.rag_assert_tenant_key($1)', [accepted]);
++    });
++
++    test('a scope of the other deployment mode never returns rows: status error, not an empty knowledge base', async () => {
++      const wrong =
++        mode === 'multi-tenant'
++          ? matrix.m.scopeModule.mintScope('single', null, null)
++          : matrix.m.scopeModule.mintScope('personal', '00000000-0000-4000-8000-0000000000a1', null);
++      for (const profile of PROFILES) {
++        const retrieved = await matrix.retrieve(wrong, profile, Q_CANARY);
++        assert.equal(retrieved.result.status, 'error', `${profile}: ${retrieved.result.reason}`);
++        assert.deepEqual(retrieved.result.candidates, [], profile);
++        assert.equal(retrieved.result.context, '', profile);
++      }
++    });
++
++    test('expand_parents ignores a forged parent id of another tenant', async () => {
++      const { hit } = matrix.m.hitHelpers;
++      const run = async (tenant: V2Tenant, survivors: Array<{ chunkId: string; parentId: string | null; documentId: string }>) => {
++        matrix.m.configModule.resetRagConfigForTests();
++        const config = matrix.m.configModule.loadRagConfig({ RAG_PIPELINE: 'v2', RAG_PARENT_CHILD: 'true' });
++        const scope = await matrix.scopeFor('chat', tenant);
++        const params = { ...matrix.m.paramsModule.effectiveRetrievalParams('chat', config, null), final_top_k: 20 };
++        const fusedHits = survivors.map((item, index) => ({
++          hit: hit(item.chunkId, {
++            rank: index + 1,
++            documentId: item.documentId,
++            parentId: item.parentId,
++            chunkIndex: index,
++            content: `child body of ${item.chunkId}`,
++            similarity: 0.9 - index * 0.01,
++            document: { filename: `tenant-${tenant.label.toLowerCase()}-forged.md`, createdAt: null, metadata: {}, contentPreview: '' },
++          }),
++          score: 1 / (60 + index + 1),
++          ranks: { 'dense:0': index + 1 },
++        }));
++        const collector = matrix.m.collectorModule.createTraceCollector({ profile: 'chat', tenantKey: tenant.key });
++        const out = await matrix.m.contextModule.runContextStages({
++          input: { scope, query: Q_CANARY, profile: 'chat', signal: new AbortController().signal },
++          config,
++          profile: 'chat',
++          params,
++          fusedHits,
++          referenced: null,
++          signal: new AbortController().signal,
++          collector,
++        });
++        return { context: out.assembly?.context ?? '', record: collector.stages().find((row) => row.name === 'expand_parents') };
++      };
++      for (const label of labels()) {
++        const tenant = matrix.tenant(label);
++        for (const other of matrix.tenants.filter((entry) => entry.label !== label)) {
++          const { context, record } = await run(tenant, [
++            { chunkId: tenant.childIds[0] as string, parentId: tenant.parentId, documentId: tenant.docId },
++            { chunkId: `forged-own-document-${other.label}`, parentId: other.parentId, documentId: tenant.docId },
++            { chunkId: `forged-foreign-document-${other.label}`, parentId: other.parentId, documentId: other.docId },
++          ]);
++          const where = `${label} with a parent id of ${other.label}`;
++          assert.equal(record?.status, 'ok', where);
++          assert.equal(context.split(`PARENT SECTION of ${tenant.marker}`).length - 1, 1, `${where}: own parent once`);
++          assert.ok(!context.includes(`PARENT SECTION of ${other.marker}`), `${where}: the foreign parent must not appear`);
++          assert.equal(findForeignText(context.replace(/forged-foreign-document-\w+|tenant-\w-forged\.md/g, ''), matrix.tenants, label), null, `${where}: no foreign text`);
++          assert.ok(context.includes(`child body of forged-own-document-${other.label}`), `${where}: a child with a foreign parent id stays a child`);
++        }
++      }
++    });
++
++    test('through the eval route: trace candidates, kept chunks and used documents are the caller tenant only', async () => {
++      const post = async (options: Record<string, unknown>, query = Q_CANARY) => {
++        const req = new NextRequest('http://localhost/api/internal/rag/run', {
++          method: 'POST',
++          headers: { 'content-type': 'application/json', 'x-rag-eval-secret': matrix.session.prepared.secret },
++          body: JSON.stringify({ schema_version: 1, query, rag_mode: 'strict', options }),
++        });
++        const res = await matrix.session.prepared.POST(req);
++        return { status: res.status, body: (await res.json()) as Record<string, unknown> };
++      };
++      for (const label of labels()) {
++        const tenant = matrix.tenant(label);
++        const identity = mode === 'multi-tenant' ? (tenant.organizationId ? { organization_id: tenant.organizationId, user_id: tenant.userId } : { user_id: tenant.userId }) : {};
++        const { status, body } = await post(identity);
++        assert.equal(status, 200, `${label}: ${JSON.stringify(body).slice(0, 200)}`);
++        assert.equal(findForeignText(JSON.stringify(body), matrix.tenants, label), null, `${label}: eval trace holds a foreign text`);
++        const kept = (body.kept ?? []) as Array<{ chunk_id: string; document_id: string }>;
++        const candidates = (body.candidates ?? []) as Array<{ chunk_id: string }>;
++        assert.ok(candidates.length >= 3, `${label}: own candidates in the trace`);
++        const keys = await matrix.keysOf('document_chunks', [...new Set([...kept, ...candidates].map((row) => row.chunk_id))]);
++        for (const [id, key] of keys) assert.equal(key, tenant.key, `${label}: trace chunk ${id}`);
++        if (mode === 'multi-tenant') {
++          const other = matrix.tenants.find((entry) => entry.label !== label) as V2Tenant;
++          const filtered = await post({
++            ...identity,
++            retrieval_filters: { current_only: true, date_range: null, sources: null, document_ids: [other.docId], doc_types: null, languages: null },
++          });
++          assert.equal(filtered.status, 200);
++          assert.deepEqual(filtered.body.kept ?? [], [], `${label}: a foreign document id filter keeps nothing`);
++          assert.equal(findForeignText(JSON.stringify(filtered.body), matrix.tenants, label), null, `${label}: filtered trace holds a foreign text`);
++        }
++      }
++    });
++
++    test('the fake edge answered every request it was sent', () => {
++      // The startup probe reads pg_extension, which the fixture edge does not serve, and the key guard test provokes refusals on purpose.
++      const unexpected = matrix.session.edge.errors.filter((error) => !error.url.includes('pg_extension') && !error.message.includes('tenant key not valid for this deployment mode'));
++      assert.deepEqual(unexpected, []);
++    });
++  });
++}
++
+diff --git a/tests/rag-db/v2-two-tenant-matrix-single.test.mts b/tests/rag-db/v2-two-tenant-matrix-single.test.mts
+new file mode 100644
+index 0000000..bf77eaf
+--- /dev/null
++++ b/tests/rag-db/v2-two-tenant-matrix-single.test.mts
+@@ -0,0 +1,37 @@
++import assert from 'node:assert/strict';
++import { describe, test } from 'node:test';
++import { V2_MATRIX_ENV_VARIABLE } from '../../eval/harness/two-tenant-v2.mts';
++import { describeMatrix, openSession } from '../helpers/v2-two-tenant-matrix.mts';
++
++describeMatrix('single-tenant');
++
++
++describe('the matrix session closes everything it starts', () => {
++  test('after close() the fake edge refuses connections and the process environment and dep overrides are restored', async () => {
++    const before = { pipeline: process.env.RAG_PIPELINE, url: process.env.NEXT_PUBLIC_SUPABASE_URL };
++    const opened = await openSession('single-tenant');
++    const url = opened.session.edge.url;
++    const reachable = await fetch(`${url}/rest/v1/organizations`).then(() => true, () => false);
++    assert.equal(reachable, true, 'the edge answers while the session is open');
++    assert.equal(process.env.RAG_PIPELINE, 'v2');
++    await opened.close();
++    await opened.close();
++    const afterClose = await fetch(`${url}/rest/v1/organizations`).then(() => true, () => false);
++    assert.equal(afterClose, false, 'the edge must be closed');
++    assert.equal(process.env.RAG_PIPELINE, before.pipeline);
++    assert.equal(process.env.NEXT_PUBLIC_SUPABASE_URL, before.url);
++    const translate = await import('@/lib/rag/query/translate');
++    assert.equal(translate.getTranslator().name, 'none');
++  });
++
++  test('a malformed overlay is refused before anything starts', async () => {
++    const saved = process.env[V2_MATRIX_ENV_VARIABLE];
++    process.env[V2_MATRIX_ENV_VARIABLE] = '{not json';
++    try {
++      await assert.rejects(() => openSession('single-tenant'), /not valid JSON/);
++    } finally {
++      if (saved === undefined) delete process.env[V2_MATRIX_ENV_VARIABLE];
++      else process.env[V2_MATRIX_ENV_VARIABLE] = saved;
++    }
++  });
++});
+diff --git a/tests/rag-db/v2-two-tenant-matrix.test.mts b/tests/rag-db/v2-two-tenant-matrix.test.mts
+new file mode 100644
+index 0000000..ba6e6f4
+--- /dev/null
++++ b/tests/rag-db/v2-two-tenant-matrix.test.mts
+@@ -0,0 +1,4 @@
++import { describeMatrix } from '../helpers/v2-two-tenant-matrix.mts';
++
++// One deployment mode per test file: the app modules read their environment (fake edge url, service key) on first import, which fixes a process to one session.
++describeMatrix('multi-tenant');
+-- 
+2.43.0
+

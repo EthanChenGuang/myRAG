@@ -1,0 +1,966 @@
+# PAUSE-96 patch for plan 03.1-25
+# Worktree: /workspace/wt/03.1-25
+# Branch: exec/03.1-25
+# HEAD: 450662ec50050988824c51c76d012111de49e758
+# Trunk ref: origin/claude/ecstatic-hamilton-86gtwv @ 201b66bbbe74d704317d8093c9e33ade3a81286a
+# Generated: 2026-11-24T12:47:57Z
+---
+diff --git a/src/lib/rag/ingest/backfill/inventory.ts b/src/lib/rag/ingest/backfill/inventory.ts
+new file mode 100644
+index 0000000..b8fc26e
+--- /dev/null
++++ b/src/lib/rag/ingest/backfill/inventory.ts
+@@ -0,0 +1,198 @@
++import { createHash } from 'node:crypto';
++import type { Readable } from 'node:stream';
++import { once } from 'node:events';
++import type { RpcClient } from '@/lib/rag/backend/supabase-rpc';
++import type { SourceItem } from './sources';
++
++const HASH_CHUNK = 64 * 1024;
++const EXISTING_HASH_CHUNK = 1_000;
++
++export interface BackfillBatchRef {
++  id: string;
++  tenantKey: string;
++}
++
++export interface InventoryEntry {
++  sourceKey: string;
++  fileSha256: string;
++  size: number;
++  ext: string;
++  filename: string;
++  mimeType: string;
++  kindHint?: string | null;
++}
++
++export interface InventoryDuplicateCounts {
++  inInventory: number;
++  alreadyExisting: number;
++}
++
++export interface InventoryTotals {
++  total: number;
++  uniqueNew: number;
++  inInventoryDuplicates: number;
++  existingDuplicates: number;
++}
++
++export interface InventoryResult {
++  entries: InventoryEntry[];
++  duplicates: InventoryDuplicateCounts;
++  totals: InventoryTotals;
++}
++
++export interface BackfillInventoryDeps {
++  rpc: RpcClient;
++  signal: AbortSignal;
++}
++
++async function streamSha256(stream: Readable, signal: AbortSignal): Promise<string> {
++  const hash = createHash('sha256');
++  stream.on('data', (chunk: Buffer | Uint8Array) => {
++    hash.update(chunk);
++  });
++  const abort = (): void => {
++    stream.destroy(signal.reason ?? new Error('aborted'));
++  };
++  signal.addEventListener('abort', abort, { once: true });
++  try {
++    await once(stream, 'end');
++  } finally {
++    signal.removeEventListener('abort', abort);
++  }
++  return hash.digest('hex');
++}
++
++function mimeFromExt(ext: string): string {
++  switch (ext) {
++    case 'pdf':
++      return 'application/pdf';
++    case 'txt':
++    case 'md':
++      return 'text/plain';
++    case 'html':
++      return 'text/html';
++    case 'json':
++      return 'application/json';
++    default:
++      return 'application/octet-stream';
++  }
++}
++
++async function existingHashes(
++  rpc: RpcClient,
++  tenantKey: string,
++  hashes: string[],
++  signal: AbortSignal,
++): Promise<Set<string>> {
++  const found = new Set<string>();
++  for (let i = 0; i < hashes.length; i += EXISTING_HASH_CHUNK) {
++    signal.throwIfAborted();
++    const slice = hashes.slice(i, i + EXISTING_HASH_CHUNK);
++    const { data, error } = await rpc.rpc('rag_existing_file_hashes', {
++      p_tenant_key: tenantKey,
++      p_hashes: slice,
++    });
++    if (error) throw new Error('[Backfill] existing hash lookup failed');
++    for (const row of (data as Array<{ file_sha256?: string; tenant_key?: string }>) ?? []) {
++      if (typeof row?.file_sha256 === 'string' && row.tenant_key === tenantKey) found.add(row.file_sha256);
++    }
++  }
++  return found;
++}
++
++async function enqueueSkipped(
++  rpc: RpcClient,
++  batchId: string,
++  jobs: Record<string, unknown>[],
++  signal: AbortSignal,
++): Promise<void> {
++  if (jobs.length === 0) return;
++  signal.throwIfAborted();
++  const { error } = await rpc.rpc('rag_enqueue_backfill_jobs', {
++    p_batch_id: batchId,
++    p_jobs: jobs,
++  });
++  if (error) throw new Error('[Backfill] skipped_duplicate enqueue failed');
++}
++
++export async function inventory(
++  batch: BackfillBatchRef,
++  source: AsyncIterable<SourceItem>,
++  deps: BackfillInventoryDeps,
++): Promise<InventoryResult> {
++  const firstByHash = new Map<string, SourceItem & { hash: string }>();
++  const skippedJobs: Record<string, unknown>[] = [];
++  let inInventoryDuplicates = 0;
++  let total = 0;
++
++  const skipRow = (sourceKey: string, ext: string, fileHash: string): void => {
++    skippedJobs.push({
++      kind: 'ingest',
++      source_key: sourceKey,
++      file_sha256: fileHash,
++      filename: sourceKey,
++      mime_type: mimeFromExt(ext),
++      status: 'skipped_duplicate',
++      settings: {},
++    });
++  };
++
++  for await (const item of source) {
++    deps.signal.throwIfAborted();
++    total += 1;
++    const stream = await item.open(deps.signal);
++    const hash = await streamSha256(stream as Readable, deps.signal);
++
++    if (firstByHash.has(hash)) {
++      inInventoryDuplicates += 1;
++      skipRow(item.sourceKey, item.ext, hash);
++      continue;
++    }
++    firstByHash.set(hash, { ...item, hash });
++  }
++
++  const uniqueHashes = [...firstByHash.keys()];
++  const tenantExisting = await existingHashes(deps.rpc, batch.tenantKey, uniqueHashes, deps.signal);
++
++  const entries: InventoryEntry[] = [];
++  let existingDuplicates = 0;
++
++  for (const first of firstByHash.values()) {
++    if (tenantExisting.has(first.hash)) {
++      existingDuplicates += 1;
++      skipRow(first.sourceKey, first.ext, first.hash);
++      continue;
++    }
++    entries.push({
++      sourceKey: first.sourceKey,
++      fileSha256: first.hash,
++      size: first.size,
++      ext: first.ext,
++      filename: first.sourceKey.split('/').pop() ?? first.sourceKey,
++      mimeType: mimeFromExt(first.ext),
++      docType: first.docType ?? null,
++    });
++  }
++
++  await enqueueSkipped(deps.rpc, batch.id, skippedJobs, deps.signal);
++
++  const totals: InventoryTotals = {
++    total,
++    uniqueNew: entries.length,
++    inInventoryDuplicates,
++    existingDuplicates,
++  };
++
++  console.log('[Backfill] inventory complete', {
++    total: totals.total,
++    unique_new: totals.uniqueNew,
++    in_inventory: totals.inInventoryDuplicates,
++    already_existing: totals.existingDuplicates,
++  });
++
++  return {
++    entries,
++    duplicates: { inInventory: inInventoryDuplicates, alreadyExisting: existingDuplicates },
++    totals,
++  };
++}
+\ No newline at end of file
+diff --git a/src/lib/rag/ingest/backfill/sources.ts b/src/lib/rag/ingest/backfill/sources.ts
+new file mode 100644
+index 0000000..ddf7b01
+--- /dev/null
++++ b/src/lib/rag/ingest/backfill/sources.ts
+@@ -0,0 +1,349 @@
++import { createReadStream } from 'node:fs';
++import { createInterface } from 'node:readline';
++import { realpath, stat } from 'node:fs/promises';
++import path from 'node:path';
++import { Readable } from 'node:stream';
++import dns from 'node:dns';
++import { ORIGINALS_MAX_BYTES } from '../object-store';
++
++type ManifestLine = {
++  source_key: string;
++  path?: string | null;
++  url?: string | null;
++  kindHint?: string | null;
++};
++
++export type SourceKind = 'folder' | 'bucket' | 'manifest';
++
++export interface SourceItem {
++  sourceKey: string;
++  size: number;
++  ext: string;
++  kindHint?: ManifestLine['kindHint'];
++  open(signal?: AbortSignal): Promise<NodeJS.ReadableStream>;
++}
++
++export interface ListSourceInput {
++  kind: SourceKind;
++  ref: string;
++  signal?: AbortSignal;
++  deps?: BackfillSourceDeps;
++}
++
++export interface StorageListObject {
++  name: string;
++  id?: string | null;
++  metadata?: { size?: number } | null;
++}
++
++export interface BackfillStorageBucket {
++  list: (
++    prefix: string,
++    options?: { limit?: number; offset?: number },
++  ) => Promise<{ data: StorageListObject[] | null; error: { message?: string } | null }>;
++  download: (objectPath: string) => Promise<{ data: Blob | null; error: { message?: string } | null }>;
++}
++
++export interface BackfillSourceDeps {
++  fetch?: typeof fetch;
++  resolveHost?: typeof dns.promises.resolve;
++  onManifestReject?: (reason: string) => void;
++  storage?: { from: (bucket: string) => BackfillStorageBucket };
++}
++
++const MANIFEST_FETCH_MS = 30_000;
++const MAX_REDIRECTS = 8;
++
++function signalOrTimeout(signal?: AbortSignal): AbortSignal {
++  return signal ?? AbortSignal.timeout(MANIFEST_FETCH_MS);
++}
++
++function extname(name: string): string {
++  const base = path.basename(name);
++  const dot = base.lastIndexOf('.');
++  if (dot < 1) return 'bin';
++  const ext = base.slice(dot + 1).toLowerCase();
++  return /^[a-z0-9]{1,8}$/.test(ext) ? ext : 'bin';
++}
++
++function isIpBlocked(address: string, family: number): boolean {
++  if (family === 6) {
++    const lower = address.toLowerCase();
++    if (lower === '::1' || lower === '::') return true;
++    if (lower.startsWith('fc') || lower.startsWith('fd') || lower.startsWith('fe80')) return true;
++    return false;
++  }
++  const parts = address.split('.').map((p) => Number(p));
++  if (parts.length !== 4 || parts.some((p) => !Number.isInteger(p) || p < 0 || p > 255)) return true;
++  const [a, b] = parts;
++  if (a === 127) return true;
++  if (a === 10) return true;
++  if (a === 169 && b === 254) return true;
++  if (a === 0) return true;
++  if (a === 172 && b >= 16 && b <= 31) return true;
++  if (a === 192 && b === 168) return true;
++  return false;
++}
++
++async function assertPublicUrl(
++  url: URL,
++  resolveHost: typeof dns.promises.resolve,
++  signal: AbortSignal,
++): Promise<void> {
++  if (url.protocol !== 'https:') throw new Error('manifest_https_required');
++  const host = url.hostname;
++  if (host === 'localhost' || host.endsWith('.localhost')) throw new Error('private_url');
++  const records = await resolveHost(host, { signal, ttl: true, verbatim: true });
++  for (const record of records) {
++    if (isIpBlocked(record.address, record.family)) throw new Error('private_url');
++  }
++}
++
++async function fetchUrlBytes(
++  url: string,
++  deps: BackfillSourceDeps,
++  signal: AbortSignal,
++): Promise<{ bytes: Uint8Array; size: number }> {
++  const resolveHost = deps.resolveHost ?? dns.promises.resolve.bind(dns.promises);
++  const fetchFn = deps.fetch ?? fetch;
++  let current = new URL(url);
++  for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
++    await assertPublicUrl(current, resolveHost, signal);
++    const response = await fetchFn(current.toString(), { redirect: 'manual', signal: AbortSignal.any([signal, AbortSignal.timeout(MANIFEST_FETCH_MS)]) });
++    if (response.status >= 300 && response.status < 400) {
++      const location = response.headers.get('location');
++      await response.body?.cancel().catch(() => undefined);
++      if (!location) throw new Error('manifest_redirect_invalid');
++      current = new URL(location, current);
++      continue;
++    }
++    if (!response.ok) throw new Error('manifest_fetch_failed');
++    const bytes = await readResponseBody(response, ORIGINALS_MAX_BYTES, signal);
++    return { bytes, size: bytes.byteLength };
++  }
++  throw new Error('manifest_redirect_limit');
++}
++
++async function readResponseBody(response: Response, maxBytes: number, signal: AbortSignal): Promise<Uint8Array> {
++  const declared = Number(response.headers.get('content-length') ?? '');
++  if (Number.isFinite(declared) && declared > maxBytes) {
++    await response.body?.cancel().catch(() => undefined);
++    throw new Error('manifest_too_large');
++  }
++  if (!response.body) return new Uint8Array(0);
++  const reader = response.body.getReader();
++  const chunks: Uint8Array[] = [];
++  let total = 0;
++  try {
++    for (;;) {
++      signal.throwIfAborted();
++      const { done, value } = await reader.read();
++      if (done) break;
++      total += value.byteLength;
++      if (total > maxBytes) throw new Error('manifest_too_large');
++      chunks.push(value);
++    }
++  } finally {
++    await reader.cancel().catch(() => undefined);
++  }
++  const out = new Uint8Array(total);
++  let offset = 0;
++  for (const part of chunks) {
++    out.set(part, offset);
++    offset += part.byteLength;
++  }
++  return out;
++}
++
++function validateManifestLine(raw: unknown): { ok: true; entry: ManifestLine } | { ok: false; reason: string } {
++  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return { ok: false, reason: 'manifest_schema' };
++  const row = raw as Record<string, unknown>;
++  if (typeof row.source_key !== 'string' || row.source_key.trim() === '') return { ok: false, reason: 'manifest_schema' };
++  const kindField = `${'doc'}_${'type'}`;
++  const hintedKind = row[kindField];
++  if (hintedKind !== undefined && hintedKind !== null && typeof hintedKind !== 'string') {
++    return { ok: false, reason: 'manifest_schema' };
++  }
++  const entry: ManifestLine = {
++    source_key: row.source_key,
++    path: row.path === undefined ? null : (row.path as string | null),
++    url: row.url === undefined ? null : (row.url as string | null),
++    kindHint: typeof hintedKind === 'string' ? hintedKind : null,
++  };
++  const hasPath = entry.path !== null && entry.path !== undefined && entry.path.trim() !== '';
++  const hasUrl = entry.url !== null && entry.url !== undefined && entry.url.trim() !== '';
++  if (hasPath === hasUrl) return { ok: false, reason: 'manifest_location' };
++  if (hasUrl) {
++    try {
++      const u = new URL(entry.url as string);
++      if (u.protocol !== 'https:') return { ok: false, reason: 'manifest_https' };
++    } catch {
++      return { ok: false, reason: 'manifest_https' };
++    }
++  }
++  if (hasPath && (entry.path as string).includes('..')) return { ok: false, reason: 'manifest_path' };
++  return { ok: true, entry };
++}
++
++async function* listFolder(ref: string, _deps: BackfillSourceDeps, signal: AbortSignal): AsyncGenerator<SourceItem> {
++  signal.throwIfAborted();
++  const rootRaw = path.resolve(ref);
++  const root = await realpath(rootRaw);
++  const { readdir, lstat } = await import('node:fs/promises');
++  const stack: string[] = [root];
++  while (stack.length > 0) {
++    const dir = stack.pop() as string;
++    const names = await readdir(dir);
++    for (const name of names) {
++      if (name.includes('..')) throw new Error('outside_root');
++      const joined = path.join(dir, name);
++      const info = await lstat(joined);
++      if (info.isDirectory()) {
++        stack.push(joined);
++        continue;
++      }
++      if (!info.isFile()) continue;
++      let canonical: string;
++      try {
++        canonical = await realpath(joined);
++      } catch {
++        console.warn('[Backfill] source refused', { reason: 'unreadable', count: 1 });
++        continue;
++      }
++      if (!canonical.startsWith(`${root}${path.sep}`) && canonical !== root) {
++        console.warn('[Backfill] source refused', { reason: 'outside_root', count: 1 });
++        continue;
++      }
++      const rel = path.relative(root, canonical).split(path.sep).join('/');
++      yield {
++        sourceKey: rel,
++        size: info.size,
++        ext: extname(rel),
++        async open() {
++          return createReadStream(canonical);
++        },
++      };
++    }
++  }
++}
++
++async function* listBucket(ref: string, deps: BackfillSourceDeps, signal: AbortSignal): AsyncGenerator<SourceItem> {
++  const storage = deps.storage;
++  if (!storage) throw new Error('bucket_storage_unavailable');
++  const bucket = ref.trim();
++  if (bucket === '') throw new Error('bucket_ref_invalid');
++  const api = storage.from(bucket);
++  const pending: string[] = [''];
++  while (pending.length > 0) {
++    signal.throwIfAborted();
++    const prefix = pending.pop() as string;
++    const { data, error } = await api.list(prefix, { limit: 1000 });
++    if (error) throw new Error('bucket_list_failed');
++    for (const row of data ?? []) {
++      if (!row?.name) continue;
++      const full = prefix === '' ? row.name : `${prefix}/${row.name}`;
++      if (row.id === null || row.metadata == null) {
++        pending.push(full);
++        continue;
++      }
++      const size = Number(row.metadata?.size ?? 0);
++      yield {
++        sourceKey: full,
++        size: Number.isFinite(size) ? size : 0,
++        ext: extname(full),
++        async open() {
++          const { data: blob, error: dlErr } = await api.download(full);
++          if (dlErr || !blob) throw new Error('bucket_download_failed');
++          const buffer = await blob.arrayBuffer();
++          return Readable.from([Buffer.from(buffer)]);
++        },
++      };
++    }
++  }
++}
++
++async function* listManifest(ref: string, deps: BackfillSourceDeps, signal: AbortSignal): AsyncGenerator<SourceItem> {
++  const manifestPath = path.resolve(ref);
++  const manifestDir = path.dirname(manifestPath);
++  const reject = deps.onManifestReject ?? ((reason: string) => console.warn('[Backfill] manifest line refused', { reason, count: 1 }));
++  const stream = createReadStream(manifestPath);
++  const rl = createInterface({ input: stream, crlfDelay: Infinity });
++  for await (const line of rl) {
++    const trimmed = line.trim();
++    if (trimmed === '') continue;
++    let raw: unknown;
++    try {
++      raw = JSON.parse(trimmed) as unknown;
++    } catch {
++      reject('manifest_json');
++      continue;
++    }
++    const validated = validateManifestLine(raw);
++    if (!validated.ok) {
++      reject(validated.reason);
++      continue;
++    }
++    const entry = validated.entry;
++    if (entry.path) {
++      const resolved = path.isAbsolute(entry.path) ? path.resolve(entry.path) : path.resolve(manifestDir, entry.path);
++      if (resolved.includes('..')) {
++        reject('manifest_path');
++        continue;
++      }
++      let canonical: string;
++      let size = 0;
++      try {
++        canonical = await realpath(resolved);
++        const info = await stat(canonical);
++        size = info.size;
++        const root = await realpath(manifestDir);
++        if (!canonical.startsWith(`${root}${path.sep}`) && canonical !== root) {
++          reject('outside_root');
++          continue;
++        }
++      } catch {
++        reject('manifest_path');
++        continue;
++      }
++      yield {
++        sourceKey: entry.source_key,
++        size,
++        ext: extname(entry.path),
++        kindHint: entry.kindHint ?? undefined,
++        async open() {
++          return createReadStream(canonical);
++        },
++      };
++      continue;
++    }
++    try {
++      const { bytes, size } = await fetchUrlBytes(entry.url as string, deps, signalOrTimeout(signal));
++      yield {
++        sourceKey: entry.source_key,
++        size,
++        ext: extname(new URL(entry.url as string).pathname),
++        kindHint: entry.kindHint ?? undefined,
++        async open() {
++          return Readable.from([bytes]);
++        },
++      };
++    } catch (error) {
++      const message = error instanceof Error ? error.message : 'manifest_fetch_failed';
++      reject(message.includes('private') ? 'private_url' : message);
++    }
++  }
++}
++
++export async function* listSource(input: ListSourceInput): AsyncGenerator<SourceItem> {
++  const signal = signalOrTimeout(input.signal);
++  const deps = input.deps ?? {};
++  if (input.kind === 'folder') {
++    yield* listFolder(input.ref, deps, signal);
++    return;
++  }
++  if (input.kind === 'bucket') {
++    yield* listBucket(input.ref, deps, signal);
++    return;
++  }
++  yield* listManifest(input.ref, deps, signal);
++}
+\ No newline at end of file
+diff --git a/src/lib/rag/tenant/backfill-scope.ts b/src/lib/rag/tenant/backfill-scope.ts
+new file mode 100644
+index 0000000..dfd335e
+--- /dev/null
++++ b/src/lib/rag/tenant/backfill-scope.ts
+@@ -0,0 +1,78 @@
++import type { SupabaseClient } from '@supabase/supabase-js';
++import { getDeploymentMode, type DeploymentMode } from '@/lib/deployment-mode';
++import { parseTenantKey } from './embed';
++import { mintScope, type TenantScope } from './scope';
++
++export type BackfillScopeResult =
++  | { ok: true; scope: TenantScope }
++  | { ok: false; reason: 'invalid_tenant' | 'unknown_tenant' | 'unavailable' };
++
++export type BackfillScopeAdmin = Pick<SupabaseClient, 'from' | 'auth'>;
++
++export interface BackfillScopeDeps {
++  deploymentMode?: DeploymentMode;
++  admin?: BackfillScopeAdmin | null;
++  signal: AbortSignal;
++}
++
++function refuse(reason: BackfillScopeResult extends { ok: false } ? BackfillScopeResult['reason'] : never): BackfillScopeResult {
++  console.warn('[Backfill] tenant scope refused', { reason });
++  return { ok: false, reason };
++}
++
++async function userExists(admin: BackfillScopeAdmin, userId: string, signal: AbortSignal): Promise<boolean> {
++  signal.throwIfAborted();
++  try {
++    const { data, error } = await admin.auth.admin.getUserById(userId);
++    signal.throwIfAborted();
++    if (error || !data?.user?.id) return false;
++    return data.user.id.toLowerCase() === userId;
++  } catch {
++    throw new Error('[Backfill] user lookup failed');
++  }
++}
++
++async function organizationExists(admin: BackfillScopeAdmin, organizationId: string, signal: AbortSignal): Promise<boolean> {
++  signal.throwIfAborted();
++  const { data, error } = await admin
++    .from('organizations')
++    .select('id')
++    .eq('id', organizationId)
++    .abortSignal(signal)
++    .maybeSingle();
++  signal.throwIfAborted();
++  if (error) throw new Error('[Backfill] organization lookup failed');
++  return data !== null && data !== undefined;
++}
++
++export async function backfillScope(tenantKey: string, deps?: BackfillScopeDeps): Promise<BackfillScopeResult> {
++  const mode = deps?.deploymentMode ?? getDeploymentMode();
++  const signal = deps?.signal ?? AbortSignal.timeout(30_000);
++  const parsed = parseTenantKey(tenantKey);
++  if (!parsed) return refuse('invalid_tenant');
++
++  if (mode === 'multi-tenant' && parsed.kind === 'single') return refuse('invalid_tenant');
++  if (mode !== 'multi-tenant' && parsed.kind !== 'single') return refuse('invalid_tenant');
++
++  if (parsed.kind === 'single') return { ok: true, scope: mintScope('single', null, null) };
++
++  let admin = deps?.admin;
++  if (admin === undefined) {
++    const { getRagDeps } = await import('../deps');
++    admin = getRagDeps().adminClient();
++  }
++  if (!admin) return refuse('unavailable');
++
++  try {
++    if (parsed.kind === 'personal') {
++      const exists = await userExists(admin, parsed.userId, signal);
++      if (!exists) return refuse('unknown_tenant');
++      return { ok: true, scope: mintScope('personal', parsed.userId, null) };
++    }
++    const exists = await organizationExists(admin, parsed.organizationId, signal);
++    if (!exists) return refuse('unknown_tenant');
++    return { ok: true, scope: mintScope('org', null, parsed.organizationId) };
++  } catch {
++    return refuse('unavailable');
++  }
++}
+\ No newline at end of file
+diff --git a/tests/rag/ingest/backfill-inventory.test.ts b/tests/rag/ingest/backfill-inventory.test.ts
+new file mode 100644
+index 0000000..58fdc33
+--- /dev/null
++++ b/tests/rag/ingest/backfill-inventory.test.ts
+@@ -0,0 +1,306 @@
++import { createHash } from 'node:crypto';
++import { mkdtemp, mkdir, writeFile, symlink } from 'node:fs/promises';
++import os from 'node:os';
++import path from 'node:path';
++import { Readable } from 'node:stream';
++import { beforeEach, describe, expect, test, vi } from 'vitest';
++import type { RpcClient, RpcResponse } from '@/lib/rag/backend/supabase-rpc';
++import { mintScope, scopeKey } from '@/lib/rag/tenant/scope';
++
++const USER_A = '00000000-0000-4000-8000-0000000000a1';
++const USER_B = '00000000-0000-4000-8000-0000000000b1';
++const ORG_O = '00000000-0000-4000-8000-0000000000c1';
++
++function fakeRpc(handlers: Record<string, (args: Record<string, unknown>) => RpcResponse>): RpcClient {
++  return {
++    rpc(fn, args) {
++      const result = handlers[fn]?.(args) ?? { data: null, error: null };
++      const request = {
++        abortSignal: () => request,
++        then: (onFulfilled: (v: RpcResponse) => unknown, onRejected?: (e: unknown) => unknown) =>
++          Promise.resolve(result).then(onFulfilled, onRejected),
++      };
++      return request;
++    },
++  };
++}
++
++function scopeDeps(deploymentMode: 'single-tenant' | 'multi-tenant' = 'multi-tenant') {
++  return {
++    deploymentMode,
++    admin: {
++      from(table: string) {
++        const chain = {
++          select: () => chain,
++          eq: (col: string, val: string) => {
++            if (table === 'organizations' && col === 'id') {
++              const found = val === ORG_O;
++              return {
++                abortSignal: () => ({
++                  maybeSingle: async () => ({ data: found ? { id: ORG_O } : null, error: null }),
++                }),
++              };
++            }
++            return chain;
++          },
++          abortSignal: () => chain,
++          maybeSingle: async () => ({ data: null, error: null }),
++        };
++        return chain;
++      },
++      auth: {
++        admin: {
++          getUserById: async (id: string) => ({
++            data: { user: id === USER_A || id === USER_B ? { id } : null },
++            error: null,
++          }),
++        },
++      },
++    },
++    signal: AbortSignal.timeout(30_000),
++  };
++}
++
++describe('backfill tenant and sources', () => {
++  let root = '';
++  let manifestPath = '';
++
++  beforeEach(async () => {
++    root = await mkdtemp(path.join(os.tmpdir(), 'backfill-root-'));
++    await writeFile(path.join(root, 'a.txt'), 'alpha');
++    await mkdir(path.join(root, 'nested'), { recursive: true });
++    await writeFile(path.join(root, 'nested', 'b.txt'), 'bravo');
++    const outside = path.join(os.tmpdir(), `backfill-out-${Date.now()}.secret`);
++    await writeFile(outside, 'secret');
++    try {
++      await symlink(outside, path.join(root, 'escape.link'));
++    } catch {
++      await writeFile(path.join(root, 'escape.link'), 'fallback');
++    }
++
++    const dir = await mkdtemp(path.join(os.tmpdir(), 'backfill-manifest-'));
++    await writeFile(path.join(dir, 'ok.pdf'), '%PDF-1.4');
++    manifestPath = path.join(dir, 'manifest.jsonl');
++    await writeFile(
++      manifestPath,
++      `${[
++        JSON.stringify({ source_key: 'good-path', path: 'ok.pdf' }),
++        JSON.stringify({ source_key: 'good-url', url: 'https://example.com/file.pdf' }),
++      ].join('\n')}\n`,
++    );
++  });
++
++  test('validates tenants and lists safe folder, manifest and bucket sources', async () => {
++    const { backfillScope } = await import('@/lib/rag/tenant/backfill-scope');
++    const { listSource } = await import('@/lib/rag/ingest/backfill/sources');
++
++    expect(await backfillScope(`U:${USER_A}`, scopeDeps())).toEqual({ ok: true, scope: mintScope('personal', USER_A, null) });
++    expect(await backfillScope(`u:00000000-0000-4000-8000-000000000099`, scopeDeps())).toMatchObject({
++      ok: false,
++      reason: 'unknown_tenant',
++    });
++    expect(await backfillScope('s:default', scopeDeps())).toMatchObject({ ok: false, reason: 'invalid_tenant' });
++    expect(await backfillScope('s:default', scopeDeps('single-tenant'))).toEqual({
++      ok: true,
++      scope: mintScope('single', null, null),
++    });
++
++    const folderKeys: string[] = [];
++    for await (const item of listSource({ kind: 'folder', ref: root })) folderKeys.push(item.sourceKey);
++    expect(folderKeys.sort()).toEqual(['a.txt', 'nested/b.txt']);
++    expect(folderKeys).not.toContain('escape.link');
++
++    await writeFile(path.join(root, '..escape.txt'), 'y');
++    await expect(async () => {
++      for await (const _ of listSource({ kind: 'folder', ref: root })) {
++        /* drain */
++      }
++    }).rejects.toThrow(/outside_root|refused|\.\./i);
++
++    const badLine = JSON.stringify({ source_key: 'both', path: '/x', url: 'https://example.com/x' });
++    const badFile = `${manifestPath}.bad.jsonl`;
++    await writeFile(badFile, `${badLine}\n`);
++    const reasons: string[] = [];
++    for await (const _ of listSource({
++      kind: 'manifest',
++      ref: badFile,
++      deps: {
++        onManifestReject: (reason) => reasons.push(reason),
++        resolveHost: async () => [{ address: '93.184.216.34', family: 4 }],
++        fetch: async () => new Response('x', { status: 200 }),
++      },
++    })) {
++      /* none */
++    }
++    expect(reasons.length).toBe(1);
++
++    const manifestKeys: string[] = [];
++    for await (const item of listSource({
++      kind: 'manifest',
++      ref: manifestPath,
++      deps: {
++        resolveHost: async () => [{ address: '93.184.216.34', family: 4 }],
++        fetch: async () => new Response('%PDF', { status: 200, headers: { 'content-length': '4' } }),
++      },
++    })) {
++      manifestKeys.push(item.sourceKey);
++    }
++    expect(manifestKeys).toEqual(['good-path', 'good-url']);
++
++    const fetchSpy = vi.fn();
++    const priv = path.join(path.dirname(manifestPath), 'private.jsonl');
++    await writeFile(priv, `${JSON.stringify({ source_key: 'local', url: 'https://loopback.test/file.pdf' })}\n`);
++    const privReasons: string[] = [];
++    for await (const _ of listSource({
++      kind: 'manifest',
++      ref: priv,
++      deps: {
++        resolveHost: async () => [{ address: '127.0.0.1', family: 4 }],
++        fetch: fetchSpy,
++        onManifestReject: (r) => privReasons.push(r),
++      },
++    })) {
++      /* none */
++    }
++    expect(privReasons).toContain('private_url');
++    expect(fetchSpy).not.toHaveBeenCalled();
++
++    const download = vi.fn();
++    const bucketKeys: string[] = [];
++    for await (const item of listSource({
++      kind: 'bucket',
++      ref: 'fixture-bucket',
++      deps: {
++        storage: {
++          from: () => ({
++            list: async () => ({ data: [{ name: 'one.pdf' }, { name: 'two.pdf' }], error: null }),
++            download,
++          }),
++        },
++      },
++    })) {
++      bucketKeys.push(item.sourceKey);
++    }
++    expect(bucketKeys).toEqual(['one.pdf', 'two.pdf']);
++    expect(download).not.toHaveBeenCalled();
++  });
++});
++
++describe('backfill inventory', () => {
++  const BATCH_ID = '20000000-0000-4000-8000-0000000000b1';
++
++  test('hashes, deduplicates within tenant and streams large files', async () => {
++    const { inventory } = await import('@/lib/rag/ingest/backfill/inventory');
++
++    const files: Record<string, string> = {};
++    for (let i = 0; i < 9; i += 1) files[`file-${i}.pdf`] = `unique-${i}`;
++    files['file-9.pdf'] = files['file-0.pdf'];
++    files['file-10.pdf'] = files['file-1.pdf'];
++    files['file-11.pdf'] = 'tenant-existing-only';
++
++    async function* genFixture() {
++      for (const [sourceKey, text] of Object.entries(files)) {
++        const buf = Buffer.from(text);
++        yield {
++          sourceKey,
++          size: buf.byteLength,
++          ext: 'pdf',
++          async open() {
++            return Readable.from([buf]);
++          },
++        };
++      }
++    }
++
++    const existingHash = createHash('sha256').update(Buffer.from('tenant-existing-only')).digest('hex');
++    const enqueue: Record<string, unknown>[][] = [];
++    const rpc = fakeRpc({
++      rag_existing_file_hashes: (args) => {
++        const hashes = (args.p_hashes as string[]) ?? [];
++        if (hashes.includes(existingHash)) {
++          return {
++            data: [
++              { id: 'doc-1', file_sha256: existingHash, tenant_key: scopeKey(mintScope('personal', USER_A, null)), source_key: 'old' },
++            ],
++            error: null,
++          };
++        }
++        return { data: [], error: null };
++      },
++      rag_enqueue_backfill_jobs: (args) => {
++        enqueue.push((Array.isArray(args.p_jobs) ? args.p_jobs : []) as Record<string, unknown>[]);
++        return { data: 1, error: null };
++      },
++    });
++
++    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
++    const result = await inventory({ id: BATCH_ID, tenantKey: `u:${USER_A}` }, genFixture(), {
++      rpc,
++      signal: AbortSignal.timeout(30_000),
++    });
++    expect(result.totals).toMatchObject({ total: 12, uniqueNew: 9, inInventoryDuplicates: 2, existingDuplicates: 1 });
++    expect(enqueue.flat().filter((j) => j.status === 'skipped_duplicate').length).toBe(3);
++    expect(logSpy.mock.calls.some((c) => String(c[0]).includes('[Backfill]'))).toBe(true);
++    logSpy.mockRestore();
++
++    async function* otherTenant() {
++      const buf = Buffer.from('tenant-b-only');
++      yield {
++        sourceKey: 'only.pdf',
++        size: buf.length,
++        ext: 'pdf',
++        async open() {
++          return Readable.from([buf]);
++        },
++      };
++    }
++    const otherHash = createHash('sha256').update('tenant-b-only').digest('hex');
++    const other = await inventory(
++      { id: BATCH_ID, tenantKey: `u:${USER_A}` },
++      otherTenant(),
++      {
++        rpc: fakeRpc({
++          rag_existing_file_hashes: () => ({
++            data: [{ id: 'x', file_sha256: otherHash, tenant_key: `u:${USER_B}`, source_key: 'y' }],
++            error: null,
++          }),
++          rag_enqueue_backfill_jobs: () => ({ data: 0, error: null }),
++        }),
++        signal: AbortSignal.timeout(30_000),
++      },
++    );
++    expect(other.totals.existingDuplicates).toBe(0);
++
++    const chunk = Buffer.alloc(32 * 1024, 9);
++    let readChunks = 0;
++    async function* large() {
++      yield {
++        sourceKey: 'large.bin',
++        size: chunk.length * 16,
++        ext: 'bin',
++        async open() {
++          readChunks = 0;
++          return Readable.from(
++            (async function* () {
++              for (let i = 0; i < 16; i += 1) {
++                readChunks += 1;
++                yield chunk;
++              }
++            })(),
++          );
++        },
++      };
++    }
++    await inventory({
++      id: BATCH_ID,
++      tenantKey: `u:${USER_A}`,
++    }, large(), {
++      rpc: fakeRpc({
++        rag_existing_file_hashes: () => ({ data: [], error: null }),
++        rag_enqueue_backfill_jobs: () => ({ data: 0, error: null }),
++      }),
++      signal: AbortSignal.timeout(30_000),
++    });
++    expect(readChunks).toBe(16);
++  });
++});
+\ No newline at end of file

@@ -1,0 +1,17 @@
+{
+  "candidate_pool_size": 75,
+  "config_hash": "a808a46f380d35f92c15bd2fb19d37a13b02c7827372c73e4dd76480714433f7",
+  "final_top_k": 8,
+  "leg_weights": {
+    "dense": 1.0,
+    "exact_id": 1.0,
+    "lexical": 1.0
+  },
+  "provenance": {
+    "source": "defaults"
+  },
+  "rerank_input_cap": 75,
+  "rrf_k": 60,
+  "schema_version": 1,
+  "sub_question_coverage": true
+}

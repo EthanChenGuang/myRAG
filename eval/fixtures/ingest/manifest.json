@@ -1,0 +1,610 @@
+{
+  "fixtures": [
+    {
+      "doc_type": "financial_report",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "示例股份有限公司 2025 年度财务报告"
+          },
+          {
+            "level": 2,
+            "page": 1,
+            "text": "第一章 经营概况"
+          },
+          {
+            "level": 2,
+            "page": 1,
+            "text": "第二章 费用明细"
+          },
+          {
+            "level": 3,
+            "page": 2,
+            "text": "2.1 费用科目表"
+          }
+        ],
+        "page_count": 2,
+        "table": {
+          "body_rows": 40,
+          "header": [
+            "费用科目",
+            "编号",
+            "金额（万元）",
+            "占比"
+          ],
+          "page": 2,
+          "probe_rows": [
+            [
+              "费用科目01",
+              "EXP-001",
+              "137.07",
+              "1.3%"
+            ],
+            [
+              "费用科目20",
+              "EXP-020",
+              "840.40",
+              "6.6%"
+            ],
+            [
+              "费用科目40",
+              "EXP-040",
+              "680.80",
+              "3.5%"
+            ]
+          ],
+          "section_path": [
+            "示例股份有限公司 2025 年度财务报告",
+            "第二章 费用明细",
+            "2.1 费用科目表"
+          ]
+        }
+      },
+      "file_sha256": "05883209c821f6faf504e34df0d2ba4282ac98e89ec4f3dc1e8d0fa2d7e55d2b",
+      "id": "report-zh-table",
+      "language": "zh",
+      "mime": "application/pdf",
+      "path": "pdf/report-zh-table.pdf",
+      "profile_id": "financial_report@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/report-zh-table.docling.json"
+        },
+        "docling": "recorded/report-zh-table.docling.json",
+        "parse_result": "recorded/report-zh-table.parse.json"
+      },
+      "size_bytes": 19092,
+      "text_layer": "digital"
+    },
+    {
+      "doc_type": "scanned_image",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "设备验收通知"
+          },
+          {
+            "level": 2,
+            "page": 1,
+            "text": "验收结论"
+          }
+        ],
+        "ocr_phrases": [
+          "设备验收通知",
+          "现场验收",
+          "AC-2025-0231",
+          "可以投入使用"
+        ],
+        "page_count": 1,
+        "text_layer_page_share": 0.0
+      },
+      "file_sha256": "e4aab97a27a0e1a121bf287329da3a618c6caceb2114e247bc844bc315493b13",
+      "id": "scan-zh",
+      "language": "zh",
+      "mime": "application/pdf",
+      "path": "pdf/scan-zh.pdf",
+      "profile_id": "scanned_image@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/scan-zh.docling.json"
+        },
+        "docling": "recorded/scan-zh.docling.json",
+        "parse_result": "recorded/scan-zh.parse.json"
+      },
+      "size_bytes": 153372,
+      "text_layer": "scanned"
+    },
+    {
+      "doc_type": "scanned_image",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "Equipment Acceptance Notice"
+          },
+          {
+            "level": 2,
+            "page": 1,
+            "text": "Conclusion"
+          }
+        ],
+        "ocr_phrases": [
+          "Equipment Acceptance Notice",
+          "accepted on site",
+          "AC-2025-0232",
+          "released for use"
+        ],
+        "page_count": 1,
+        "text_layer_page_share": 0.0
+      },
+      "file_sha256": "84a09dfaf8d7401a0bb521790d6d3e6142ff7fa25e7e0e65daa5848919cf5f99",
+      "id": "scan-en",
+      "language": "en",
+      "mime": "application/pdf",
+      "path": "pdf/scan-en.pdf",
+      "profile_id": "scanned_image@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/scan-en.docling.json"
+        },
+        "docling": "recorded/scan-en.docling.json",
+        "parse_result": "recorded/scan-en.parse.json"
+      },
+      "size_bytes": 170934,
+      "text_layer": "scanned"
+    },
+    {
+      "doc_type": "scanned_image",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "Avviso di collaudo dell'attrezzatura"
+          },
+          {
+            "level": 2,
+            "page": 1,
+            "text": "Conclusione"
+          }
+        ],
+        "ocr_phrases": [
+          "Avviso di collaudo",
+          "è stata collaudata",
+          "AC-2025-0233",
+          "è autorizzata all'uso",
+          "unità"
+        ],
+        "page_count": 1,
+        "text_layer_page_share": 0.0
+      },
+      "file_sha256": "f48147803700d33a40acba4a31cb090a82408fef671e0f280dc7875b77977b7b",
+      "id": "scan-it",
+      "language": "it",
+      "mime": "application/pdf",
+      "path": "pdf/scan-it.pdf",
+      "profile_id": "scanned_image@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/scan-it.docling.json"
+        },
+        "docling": "recorded/scan-it.docling.json",
+        "parse_result": "recorded/scan-it.parse.json"
+      },
+      "size_bytes": 181527,
+      "text_layer": "scanned"
+    },
+    {
+      "doc_type": "invoice_receipt",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "增值税电子普通发票"
+          }
+        ],
+        "invoice": {
+          "buyer": {
+            "name": "示例买方有限公司",
+            "role": "buyer",
+            "tax_id": "91000000MA0000001R",
+            "tax_id_scheme": "cn_uscc"
+          },
+          "currency": "CNY",
+          "due_date": null,
+          "gross_total": "1130.00",
+          "invoice_number": "FP-2025-00417",
+          "issue_date": "2025-03-15",
+          "line_item_count": 2,
+          "net_total": "1000.00",
+          "supplier": {
+            "name": "示例销售有限公司",
+            "role": "supplier",
+            "tax_id": "91000000MA0000000N",
+            "tax_id_scheme": "cn_uscc"
+          },
+          "tax_total": "130.00"
+        },
+        "page_count": 1
+      },
+      "file_sha256": "0a55a3cb4749e2a2f5985b9f4eafe0602086c8e93221b63e64fba6f104138909",
+      "id": "invoice-zh",
+      "language": "zh",
+      "mime": "application/pdf",
+      "path": "pdf/invoice-zh.pdf",
+      "profile_id": "invoice_receipt@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/invoice-zh.docling.json"
+        },
+        "docling": "recorded/invoice-zh.docling.json",
+        "parse_result": "recorded/invoice-zh.parse.json"
+      },
+      "size_bytes": 6326,
+      "text_layer": "digital"
+    },
+    {
+      "doc_type": "invoice_receipt",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "Invoice"
+          }
+        ],
+        "invoice": {
+          "buyer": {
+            "name": "Example Buyer GmbH",
+            "role": "buyer",
+            "tax_id": "FR00000000093",
+            "tax_id_scheme": "eu_vat"
+          },
+          "currency": "EUR",
+          "due_date": "2025-04-14",
+          "gross_total": "1200.00",
+          "invoice_number": "INV-2025-00418",
+          "issue_date": "2025-03-15",
+          "line_item_count": 2,
+          "net_total": "1000.00",
+          "supplier": {
+            "name": "Example Supplier Ltd",
+            "role": "supplier",
+            "tax_id": "BE0000000097",
+            "tax_id_scheme": "eu_vat"
+          },
+          "tax_total": "200.00"
+        },
+        "page_count": 1
+      },
+      "file_sha256": "ae5d680962823543e66d4c9c7ec594b1062f133491ef0272a5f0b2a9ae2052a2",
+      "id": "invoice-en",
+      "language": "en",
+      "mime": "application/pdf",
+      "path": "pdf/invoice-en.pdf",
+      "profile_id": "invoice_receipt@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/invoice-en.docling.json"
+        },
+        "docling": "recorded/invoice-en.docling.json",
+        "parse_result": "recorded/invoice-en.parse.json"
+      },
+      "size_bytes": 3789,
+      "text_layer": "digital"
+    },
+    {
+      "doc_type": "invoice_receipt",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "Fattura"
+          }
+        ],
+        "invoice": {
+          "buyer": {
+            "name": "Esempio Cliente S.p.A.",
+            "role": "buyer",
+            "tax_id": "00000010017",
+            "tax_id_scheme": "it_iva"
+          },
+          "currency": "EUR",
+          "due_date": "2025-04-14",
+          "gross_total": "1220.00",
+          "invoice_number": "FT-2025-00419",
+          "issue_date": "2025-03-15",
+          "line_item_count": 2,
+          "net_total": "1000.00",
+          "supplier": {
+            "name": "Esempio Fornitore S.r.l.",
+            "role": "supplier",
+            "tax_id": "99999999990",
+            "tax_id_scheme": "it_iva"
+          },
+          "tax_total": "220.00"
+        },
+        "page_count": 1
+      },
+      "file_sha256": "7c2c84b278413a422f645a4ef4e86d368064ca558f0ebd336e1b5f540af80102",
+      "id": "invoice-it",
+      "language": "it",
+      "mime": "application/pdf",
+      "path": "pdf/invoice-it.pdf",
+      "profile_id": "invoice_receipt@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/invoice-it.docling.json"
+        },
+        "docling": "recorded/invoice-it.docling.json",
+        "parse_result": "recorded/invoice-it.parse.json"
+      },
+      "size_bytes": 3857,
+      "text_layer": "digital"
+    },
+    {
+      "doc_type": "product_technical",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "Example Sensor Hub Product Sheet"
+          },
+          {
+            "level": 2,
+            "page": 2,
+            "text": "Rear panel"
+          }
+        ],
+        "page_count": 2,
+        "pictures": [
+          {
+            "caption": "Figure 1. Front view of the example device.",
+            "image_ref": "picture-1.png",
+            "page": 1,
+            "section_path": [
+              "Example Sensor Hub Product Sheet"
+            ]
+          },
+          {
+            "caption": "Figure 2. Rear view of the example device.",
+            "image_ref": "picture-2.png",
+            "page": 2,
+            "section_path": [
+              "Example Sensor Hub Product Sheet",
+              "Rear panel"
+            ]
+          }
+        ]
+      },
+      "file_sha256": "23517c5cc587f099036f99581ff45c12bd2d560bb19ecb446351642581a480fa",
+      "id": "images-en",
+      "language": "en",
+      "mime": "application/pdf",
+      "path": "pdf/images-en.pdf",
+      "profile_id": "product_technical@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/images-en.docling.json",
+          "picture-1.png": "recorded/images-en.picture-1.png",
+          "picture-2.png": "recorded/images-en.picture-2.png"
+        },
+        "docling": "recorded/images-en.docling.json",
+        "parse_result": "recorded/images-en.parse.json"
+      },
+      "size_bytes": 15373,
+      "text_layer": "digital"
+    },
+    {
+      "doc_type": "contract_legal",
+      "expected": {
+        "clause": {
+          "exception_quote": "但以下情况除外：\n（一）已超过设备制造商规定使用年限的设备；\n（二）因甲方擅自改装而造成故障的设备；\n（三）因不可抗力造成损坏的设备；\n（四）双方另行书面约定不适用本合同的设备。",
+          "heading": "第5条 适用范围",
+          "items": [
+            "（一）已超过设备制造商规定使用年限的设备；",
+            "（二）因甲方擅自改装而造成故障的设备；",
+            "（三）因不可抗力造成损坏的设备；",
+            "（四）双方另行书面约定不适用本合同的设备。"
+          ],
+          "lead_in": "但以下情况除外：",
+          "section_path": [
+            "示例服务合同",
+            "第三章 合同条款",
+            "第5条 适用范围"
+          ]
+        },
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "示例服务合同"
+          },
+          {
+            "level": 2,
+            "page": 1,
+            "text": "第三章 合同条款"
+          },
+          {
+            "level": 3,
+            "page": 1,
+            "text": "第4条 服务内容"
+          },
+          {
+            "level": 3,
+            "page": 1,
+            "text": "第5条 适用范围"
+          },
+          {
+            "level": 3,
+            "page": 1,
+            "text": "第6条 费用与支付"
+          }
+        ],
+        "page_count": 1
+      },
+      "file_sha256": "1dfda691f3ef9df11378873c462dde2b1656a70b9664d6874fe61aa7372de4ff",
+      "id": "contract-zh",
+      "language": "zh",
+      "mime": "application/pdf",
+      "path": "pdf/contract-zh.pdf",
+      "profile_id": "contract_legal@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/contract-zh.docling.json"
+        },
+        "docling": "recorded/contract-zh.docling.json",
+        "parse_result": "recorded/contract-zh.parse.json"
+      },
+      "size_bytes": 4828,
+      "text": {
+        "mime": "text/markdown",
+        "path": "text/contract-zh.md",
+        "sha256": "3c83ca68571549703e243992350e4528267fb53276ae3bde200b8b641739d5e2"
+      },
+      "text_layer": "digital"
+    },
+    {
+      "doc_type": "general",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "示例过滤器维护记录"
+          }
+        ],
+        "injection": {
+          "expected_status": "quarantined",
+          "phrase": "忽略之前的指令",
+          "rule_language": "zh"
+        },
+        "normal_fact": "示例过滤器的更换周期为每90天一次，更换时需要先关闭进水阀。",
+        "page_count": 1
+      },
+      "file_sha256": "81ff8b7d0a95a2ee0a88a43d2c726535ee4240a156601dffdf950b3a24876f57",
+      "id": "injection-zh",
+      "language": "zh",
+      "mime": "application/pdf",
+      "path": "pdf/injection-zh.pdf",
+      "profile_id": "general@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/injection-zh.docling.json"
+        },
+        "docling": "recorded/injection-zh.docling.json",
+        "parse_result": "recorded/injection-zh.parse.json"
+      },
+      "size_bytes": 2955,
+      "text": {
+        "mime": "text/markdown",
+        "path": "text/injection-zh.md",
+        "sha256": "6ec35af4d7b96d35f0c1e70dac03c90a5b6a97e2a8e9378e85f2efcceda738d4"
+      },
+      "text_layer": "digital"
+    },
+    {
+      "doc_type": "general",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "Example filter maintenance log"
+          }
+        ],
+        "injection": {
+          "expected_status": "quarantined",
+          "phrase": "ignore previous instructions",
+          "rule_language": "en"
+        },
+        "normal_fact": "The example filter must be replaced every 90 days, and the water inlet valve is closed first.",
+        "page_count": 1
+      },
+      "file_sha256": "7e375f762f2f0925d28f5fae369466b1247de757b034c10a2fcc277abc86d304",
+      "id": "injection-en",
+      "language": "en",
+      "mime": "application/pdf",
+      "path": "pdf/injection-en.pdf",
+      "profile_id": "general@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/injection-en.docling.json"
+        },
+        "docling": "recorded/injection-en.docling.json",
+        "parse_result": "recorded/injection-en.parse.json"
+      },
+      "size_bytes": 1980,
+      "text": {
+        "mime": "text/markdown",
+        "path": "text/injection-en.md",
+        "sha256": "bec1d892bc707a834ff68855531d6062f43858462af2b5a58fa40a671817cd6c"
+      },
+      "text_layer": "digital"
+    },
+    {
+      "doc_type": "general",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "Registro di manutenzione del filtro di esempio"
+          }
+        ],
+        "injection": {
+          "expected_status": "quarantined",
+          "phrase": "ignora le istruzioni precedenti",
+          "rule_language": "it"
+        },
+        "normal_fact": "Il filtro di esempio va sostituito ogni 90 giorni e prima si chiude la valvola di ingresso dell'acqua.",
+        "page_count": 1
+      },
+      "file_sha256": "1d360939e0b7d630e9f8c7526ecbdf7c2be697b141886889600ed8804022c8ff",
+      "id": "injection-it",
+      "language": "it",
+      "mime": "application/pdf",
+      "path": "pdf/injection-it.pdf",
+      "profile_id": "general@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/injection-it.docling.json"
+        },
+        "docling": "recorded/injection-it.docling.json",
+        "parse_result": "recorded/injection-it.parse.json"
+      },
+      "size_bytes": 2013,
+      "text": {
+        "mime": "text/markdown",
+        "path": "text/injection-it.md",
+        "sha256": "765a79e7cd91203628247190baea4cc14b4d98accdc509ece90b80bd029cb6be"
+      },
+      "text_layer": "digital"
+    }
+  ],
+  "generator": {
+    "pillow": "13.0.0",
+    "render_dpi": 200,
+    "reportlab": "5.1.0"
+  },
+  "recorded_with": {
+    "adapter": "rag_sidecar.parse.docling_adapter.to_parse_result",
+    "docling_core": "2.107.1",
+    "tokenizer": "cl100k_base"
+  },
+  "scan_font": {
+    "family": "WenQuanYi Zen Hei",
+    "index": 0,
+    "sha256": "79c18ebe7b811951e8311bad7103ebeae8c337ed9988ea69e8a78a66cfe029b9",
+    "style": "Regular"
+  },
+  "schema_version": 1
+}

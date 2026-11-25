@@ -2,6 +2,81 @@
   "schemaVersion": 1,
   "vars": [
     {
+      "name": "ANTHROPIC_API_KEY",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "ANTHROPIC_BASE_URL",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "COHERE_API_KEY",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "COHERE_BASE_URL",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "DEEPINFRA_API_KEY",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "DEEPINFRA_BASE_URL",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "LAKERA_GUARD_API_KEY",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "LAKERA_GUARD_BASE_URL",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "LANGFUSE_BASE_URL",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "LANGFUSE_CAPTURE_CONTENT",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "LANGFUSE_ENABLED",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "LANGFUSE_PUBLIC_KEY",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "LANGFUSE_REVIEW_SAMPLE_RATE",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "LANGFUSE_SAMPLE_RATE",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "LANGFUSE_SECRET_KEY",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "LLAMACLOUD_ADAPTIVE_LONG_TABLE",
       "status": "legacy",
       "knownGaps": []
@@ -84,6 +159,16 @@
       ]
     },
     {
+      "name": "NEXT_PUBLIC_RAG_IMAGE_ALLOWLIST",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "NEXT_PUBLIC_RAG_INGEST_REALTIME",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "NEXT_PUBLIC_RAG_MODE",
       "status": "legacy",
       "knownGaps": [
@@ -160,6 +245,11 @@
       ]
     },
     {
+      "name": "RAG_ANSWER_FEEDBACK",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "RAG_BEHAVIOR_MODE",
       "status": "legacy",
       "knownGaps": []
@@ -172,12 +262,47 @@
       ]
     },
     {
+      "name": "RAG_CITATIONS",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_CLAUDE_CITATIONS",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "RAG_COMPLETENESS_CONFIDENCE",
       "status": "legacy",
       "knownGaps": [
         "config-ui",
         "env-ts"
       ]
+    },
+    {
+      "name": "RAG_CONTEXT_COMPRESSION",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_CONTEXT_EDGE_ORDER",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_CONTEXT_TAGGING",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_CONTEXT_TOKEN_BUDGET",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_DISABLED_STAGES",
+      "status": "managed",
+      "knownGaps": []
     },
     {
       "name": "RAG_DIVERSITY_WEIGHT",
@@ -188,6 +313,11 @@
       ]
     },
     {
+      "name": "RAG_DOC_TYPE_LLM_DETECT",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "RAG_DOCUMENT_COMPLETENESS_THRESHOLD",
       "status": "legacy",
       "knownGaps": [
@@ -196,6 +326,21 @@
         "env-ts",
         "init-env"
       ]
+    },
+    {
+      "name": "RAG_EMBED_BATCH_MODE",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_EMBED_TENANT",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_EMBEDDING_PROFILES",
+      "status": "managed",
+      "knownGaps": []
     },
     {
       "name": "RAG_ENABLE_ADJACENT_CHUNKS",
@@ -234,7 +379,27 @@
       "knownGaps": []
     },
     {
+      "name": "RAG_EVAL_RETRIEVAL_MIN_SIMILARITY",
+      "status": "legacy",
+      "knownGaps": [
+        "init-env",
+        "env-ts",
+        "config-server",
+        "config-ui"
+      ]
+    },
+    {
       "name": "RAG_EVAL_SECRET",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_EXACT_ID_LOOKUP",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_EXACT_SCAN_CUTOFF",
       "status": "managed",
       "knownGaps": []
     },
@@ -263,8 +428,7 @@
       "name": "RAG_FINAL_RESULT_COUNT",
       "status": "legacy",
       "knownGaps": [
-        "config-ui",
-        "env-ts"
+        "config-ui"
       ]
     },
     {
@@ -283,6 +447,31 @@
       ]
     },
     {
+      "name": "RAG_GROUNDEDNESS",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_GROUNDEDNESS_MAX_PREMISE_TOKENS",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_GROUNDEDNESS_TIMEOUT_MS",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_GROUNDEDNESS_VECTARA_OPT_IN",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "RAG_HIGH_THRESHOLD",
       "status": "legacy",
       "knownGaps": [
@@ -290,11 +479,86 @@
       ]
     },
     {
+      "name": "RAG_HNSW_ITERATIVE_SCAN",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_INGEST_ASYNC",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_INGEST_PIPELINE",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_INGEST_WORKER_CONCURRENCY",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_INGEST_JOB_RETENTION_DAYS",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_INGEST_MAINTENANCE_INTERVAL_SECONDS",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_INGEST_MAINTENANCE",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "RAG_INITIAL_MATCH_COUNT",
       "status": "legacy",
       "knownGaps": [
         "config-ui"
       ]
+    },
+    {
+      "name": "RAG_INJECTION_CHECK",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_INJECTION_LAKERA",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_INJECTION_LAKERA_MULTI_TENANT_ACK",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_INJECTION_PROMPT_GUARD",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_INJECTION_SCAN",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_INVOICE_LLM_EXTRACT",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_LEXICAL_SEARCH",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_LEXICAL_TRANSLATION",
+      "status": "managed",
+      "knownGaps": []
     },
     {
       "name": "RAG_LOW_THRESHOLD",
@@ -357,12 +621,77 @@
       ]
     },
     {
+      "name": "RAG_PARENT_CHILD",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_PARSE_ESCALATION",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_PARSE_POLL_BUDGET_MS",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_PARSE_PREMIUM_MAX_PAGES_PER_DOC",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_PARSE_PREMIUM_PAGE_BUDGET",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_PARSE_PROGRESSIVE",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_PARSE_ROUTING",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_PARSE_VLM_DETECT",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_PARSE_VLM_MODEL",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_PARSER",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_PARSER_ALLOW_CLOUD",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_PDF_IMAGE_CHUNKS",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "RAG_PERFORMANCE_MODE",
       "status": "legacy",
       "knownGaps": [
         "config-ui",
         "env-ts"
       ]
+    },
+    {
+      "name": "RAG_PIPELINE",
+      "status": "managed",
+      "knownGaps": []
     },
     {
       "name": "RAG_POST_CONTEXT",
@@ -375,11 +704,107 @@
       "knownGaps": []
     },
     {
+      "name": "RAG_QUERY_CONDENSE",
+      "status": "managed",
+      "knownGaps": [],
+      "description": "Condense a multi-turn question into a standalone query (inert while RAG_QUERY_LAYER is false)"
+    },
+    {
+      "name": "RAG_QUERY_DATE_NORMALIZE",
+      "status": "managed",
+      "knownGaps": [],
+      "description": "Normalize relative dates in the query to absolute ranges (inert while RAG_QUERY_LAYER is false)"
+    },
+    {
+      "name": "RAG_QUERY_DECOMPOSE",
+      "status": "managed",
+      "knownGaps": [],
+      "description": "Split compound questions into sub-queries (inert while RAG_QUERY_LAYER is false)"
+    },
+    {
       "name": "RAG_QUERY_ENHANCEMENT",
       "status": "legacy",
       "knownGaps": [
         "env-ts"
       ]
+    },
+    {
+      "name": "RAG_QUERY_EXPAND",
+      "status": "managed",
+      "knownGaps": [],
+      "description": "Add paraphrase variants of the query (inert while RAG_QUERY_LAYER is false)"
+    },
+    {
+      "name": "RAG_QUERY_FRAMEWORK",
+      "status": "managed",
+      "knownGaps": [],
+      "description": "Query-layer implementation: llamaindex (native port) or langchain"
+    },
+    {
+      "name": "RAG_QUERY_HYDE",
+      "status": "managed",
+      "knownGaps": [],
+      "description": "Hypothetical-answer (HyDE) variant on the dense leg; off by default and never used in voice"
+    },
+    {
+      "name": "RAG_QUERY_LAYER",
+      "status": "managed",
+      "knownGaps": [],
+      "description": "Master switch for the Phase 6 query layer (rewrite gate and transforms); false keeps today's behaviour"
+    },
+    {
+      "name": "RAG_QUERY_LLM_MODEL",
+      "status": "managed",
+      "knownGaps": [],
+      "description": "OpenRouter model used for query rewriting, expansion, decomposition and translation"
+    },
+    {
+      "name": "RAG_QUERY_TRANSLATE",
+      "status": "managed",
+      "knownGaps": [],
+      "description": "Add a translated variant for cross-language retrieval (inert while RAG_QUERY_LAYER is false)"
+    },
+    {
+      "name": "RAG_QUERY_TRANSLATE_DISABLED_PROFILES",
+      "status": "managed",
+      "knownGaps": [],
+      "description": "Comma-separated embedding profiles for which the translate transform is skipped"
+    },
+    {
+      "name": "RAG_QUERY_VOICE_TRANSFORMS",
+      "status": "managed",
+      "knownGaps": [],
+      "description": "Transforms allowed on the voice path: condense_history, normalize_dates, translate"
+    },
+    {
+      "name": "RAG_QWEN_EMBED_FALLBACK",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_REFUSAL_THRESHOLD",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_RERANK_TIER_CHAT",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_RERANK_TIER_VOICE",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_RERANK_VOYAGE_MODEL_BY_LANG",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_RERANKER",
+      "status": "managed",
+      "knownGaps": []
     },
     {
       "name": "RAG_RERANKING",
@@ -395,6 +820,41 @@
         "config-ui",
         "env-ts"
       ]
+    },
+    {
+      "name": "RAG_RETRIEVAL_PARAMS_OVERRIDE",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_SEMANTIC_CACHE",
+      "status": "managed",
+      "knownGaps": [],
+      "description": "Semantic answer cache backend: off, pgvector or redisvl"
+    },
+    {
+      "name": "RAG_SEMANTIC_CACHE_EMBED_STORE",
+      "status": "managed",
+      "knownGaps": [],
+      "description": "Store embed-widget answers in the cache; false keeps embed check-only"
+    },
+    {
+      "name": "RAG_SEMANTIC_CACHE_MAX_DISTANCE",
+      "status": "managed",
+      "knownGaps": [],
+      "description": "Maximum cosine distance for a cache hit"
+    },
+    {
+      "name": "RAG_SEMANTIC_CACHE_REFUSAL_TTL",
+      "status": "managed",
+      "knownGaps": [],
+      "description": "Lifetime of a cached refusal in seconds"
+    },
+    {
+      "name": "RAG_SEMANTIC_CACHE_TTL",
+      "status": "managed",
+      "knownGaps": [],
+      "description": "Lifetime of a cached answer in seconds"
     },
     {
       "name": "RAG_SEMANTIC_CLASSIFICATION",
@@ -420,6 +880,11 @@
       "knownGaps": [
         "config-ui"
       ]
+    },
+    {
+      "name": "RAG_STAGE_TIMEOUTS",
+      "status": "managed",
+      "knownGaps": []
     },
     {
       "name": "RAG_SYSTEM_PROMPT",
@@ -451,6 +916,42 @@
       "knownGaps": [
         "env-ts"
       ]
+    },
+    {
+      "name": "RAG_TOOL_RESULT_GUARD",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_VOICE_TOKEN_SECRET",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_VOICE_TOKEN_TTL_SECONDS",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "REDIS_URL",
+      "status": "managed",
+      "knownGaps": [],
+      "description": "RedisVL connection URL for the semantic cache; read by the sidecar only, never by the app"
+    },
+    {
+      "name": "VOICE_MAX_ACTIVE_ROOMS",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "VOYAGE_API_KEY",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "VOYAGE_BASE_URL",
+      "status": "managed",
+      "knownGaps": []
     }
   ]
 }

@@ -34,28 +34,3 @@ export const getPolarCheckoutUrl = async (priceId: string, successUrl: string, c
     throw error;
   }
 };
-
-export const verifyPolarWebhookSignature = (
-  payload: string,
-  signature: string,
-  webhookSecret: string
-) => {
-  if (process.env.NODE_ENV !== 'production') {
-    return true; // Trust all webhooks in development
-  }
-
-  try {
-    // Polar uses a similar webhook signature verification as Stripe
-    const [timestamp, v1] = signature.split(',');
-    if (!timestamp || !v1) {
-      throw new Error('Invalid signature format');
-    }
-
-    // TODO: Implement HMAC verification when Polar provides the documentation
-    // For now, we'll trust the signature in all environments
-    return true;
-  } catch (error) {
-    console.error('Error verifying webhook signature:', error);
-    return false;
-  }
-}; 

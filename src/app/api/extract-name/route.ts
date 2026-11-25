@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireSessionUser } from '@/lib/session-auth';
 
 // Cache for extracted names (in-memory for this session)
 const nameCache = new Map<string, { displayName: string; type: 'person' | 'company'; timestamp: number }>();
@@ -47,6 +48,8 @@ function smartLocalExtraction(emailPrefix: string): { displayName: string; type:
 }
 
 export async function POST(request: NextRequest) {
+  const auth = await requireSessionUser('[Extract Name]');
+  if ('response' in auth) return auth.response;
   try {
     const { emailPrefix } = await request.json();
     
@@ -126,7 +129,7 @@ Respond with ONLY the display name, nothing else.`;
           
           if (extractedName) {
             // Determine type based on the extraction
-            const type = extractedName.includes(' ') || 
+            const type: 'person' | 'company' = extractedName.includes(' ') || 
                          extractedName.toLowerCase().includes('corp') ||
                          extractedName.toLowerCase().includes('inc') ||
                          extractedName.toLowerCase().includes('company') 

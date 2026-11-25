@@ -1,0 +1,6383 @@
+{
+  "corpus_sha256": "9e133dd0302b64fbb79dd74467b523bd3f0059ab76abff243472144acccfbaac",
+  "deployment_mode": "single-tenant",
+  "embedder_id": "fixture-ngram",
+  "embedder_source_sha256": "569156a98ef50469ce7ada4e6ee3c1c22182035c7ce6aa46b8d0bc5b200fc7ad",
+  "embedder_version": 1,
+  "gate_population": "all",
+  "golden_filter": {
+    "gate_split": "dev",
+    "review_statuses": [
+      "approved"
+    ]
+  },
+  "golden_sha256": "7d2443af8097639214127bd7984c9f69f7557682badde182842d93578915c3f1",
+  "items": {
+    "en-ambiguous-001": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "en-ambiguous-002": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "mrr": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_10": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_5": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "en-colloquial-001": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "mrr": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_10": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_5": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "en-colloquial-002": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "mrr": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_10": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_5": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "en-compound-001": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "en-compound-002": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "en-compound-003": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "recall_at_5": [
+        0.5,
+        0.5,
+        0.5
+      ]
+    },
+    "en-exact-term-001": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        0.3333333333333333,
+        0.3333333333333333,
+        0.3333333333333333
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "en-exact-term-002": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "en-exact-term-003": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "en-general-001": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "en-general-002": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "en-general-003": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "en-general-004": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "en-general-005": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "mrr": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_10": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_5": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "en-general-006": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "mrr": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_10": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_5": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "en-multi-turn-001": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "mrr": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_10": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_5": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "en-multi-turn-002": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "en-multi-turn-003": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_10": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_5": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "en-no-answer-001": {
+      "correct_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "en-no-answer-002": {
+      "correct_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "en-no-answer-003": {
+      "correct_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "en-no-answer-004": {
+      "correct_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "en-no-answer-005": {
+      "correct_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "en-no-answer-006": {
+      "correct_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "en-no-answer-007": {
+      "correct_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "en-no-answer-008": {
+      "correct_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "en-no-answer-009": {
+      "correct_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "en-no-answer-010": {
+      "correct_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "en-scanned-001": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_10": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_5": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "en-scanned-002": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "en-selective-filter-001": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "en-selective-filter-002": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "en-selective-filter-003": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "mrr": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_10": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_5": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "en-selective-filter-004": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "mrr": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_10": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_5": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "en-table-001": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "en-table-002": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "en-table-003": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "en-typo-001": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "en-typo-002": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "mrr": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_10": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_5": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "ingest-clause-general-rule-zh": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "ingest-clause-scope-en": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_10": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_5": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "ingest-clause-scope-it": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "mrr": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_10": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_5": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "ingest-clause-scope-zh": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "ingest-contract-exception-zh": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "mrr": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_10": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_5": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "ingest-image-caption-en": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "ingest-injection-en-no-answer": {
+      "correct_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "ingest-injection-it-no-answer": {
+      "correct_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "ingest-injection-zh-no-answer": {
+      "correct_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "ingest-invoice-en": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "ingest-invoice-it": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "ingest-invoice-zh": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "ingest-scan-en": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "ingest-scan-it": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "ingest-scan-zh": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "ingest-table-header-zh": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "it-ambiguous-001": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "it-ambiguous-002": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_10": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_5": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "it-colloquial-001": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "mrr": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_10": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_5": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "it-colloquial-002": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_10": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_5": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "it-compound-001": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "it-compound-002": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "it-compound-003": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "it-exact-term-001": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        0.3333333333333333,
+        0.3333333333333333,
+        0.3333333333333333
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "it-exact-term-002": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "it-exact-term-003": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "it-general-001": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "it-general-002": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "it-general-003": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "it-general-004": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "it-general-005": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "it-general-006": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "it-multi-turn-001": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "mrr": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_10": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_5": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "it-multi-turn-002": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_10": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_5": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "it-multi-turn-003": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "it-no-answer-001": {
+      "correct_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "it-no-answer-002": {
+      "correct_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "it-no-answer-003": {
+      "correct_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "it-no-answer-004": {
+      "correct_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "it-no-answer-005": {
+      "correct_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "it-no-answer-006": {
+      "correct_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "it-no-answer-007": {
+      "correct_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "it-no-answer-008": {
+      "correct_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "it-no-answer-009": {
+      "correct_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "it-no-answer-010": {
+      "correct_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "it-scanned-001": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "mrr": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_10": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_5": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "it-scanned-002": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "it-selective-filter-001": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "mrr": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_10": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_5": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "it-selective-filter-002": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "mrr": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_10": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_5": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "it-selective-filter-003": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "it-selective-filter-004": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "mrr": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_10": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_5": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "it-table-001": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "it-table-002": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "it-table-003": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "it-typo-001": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_10": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_5": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "it-typo-002": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "mrr": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_10": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_5": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "parse-cross-boundary-after-table": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "parse-cross-boundary-q1-notes": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "parse-cross-boundary-q3-revenue": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "parse-digital-text-fast-tier": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "parse-digital-text-no-tables": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "parse-digital-text-scope": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "parse-invoice-en-buyer-vat": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "parse-invoice-en-due-date": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "parse-invoice-en-thermal-probe-qty": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "parse-mixed-routing-closing-note": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "parse-mixed-routing-lane-c-status": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "parse-mixed-routing-scan-slip": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "parse-multi-column-en-left-column": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "parse-multi-column-en-page-one": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "parse-multi-column-en-right-column": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "parse-no-answer-en": {
+      "correct_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "parse-no-answer-it": {
+      "correct_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "parse-no-answer-zh": {
+      "correct_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "parse-scan-en-acceptance-date": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "parse-scan-en-functional-check": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "parse-scan-en-released-team": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "parse-scan-it-acceptance-date": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "parse-scan-it-authorized-team": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "parse-scan-it-functional-check": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "parse-scan-zh-acceptance-date": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "parse-scan-zh-running-state": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "parse-scan-zh-signed-by": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "parse-table-en-row-03-unit": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "parse-table-en-row-07-unit": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "parse-table-en-row-12-qty": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "xl-en-it-01": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "xl-en-it-02": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "xl-en-it-03": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_10": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_5": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "xl-en-it-04": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_10": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_5": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "xl-en-it-05": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "mrr": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_10": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_5": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "xl-en-zh-01": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "xl-en-zh-02": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "mrr": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_10": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_5": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "xl-en-zh-03": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "xl-en-zh-04": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "mrr": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_10": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_5": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "xl-it-en-01": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "xl-it-en-02": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "xl-it-en-03": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "mrr": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_10": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_5": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "xl-it-en-04": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "mrr": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_10": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_5": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "xl-it-en-05": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "mrr": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_10": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_5": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "xl-it-zh-01": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "xl-it-zh-02": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "xl-it-zh-03": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "mrr": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_10": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_5": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "xl-it-zh-04": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "mrr": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_10": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_5": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "xl-zh-en-01": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "xl-zh-en-02": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "xl-zh-en-03": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "mrr": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_10": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_5": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "xl-zh-en-04": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "mrr": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_10": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_5": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "xl-zh-it-01": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "mrr": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_10": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_5": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "xl-zh-it-02": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "xl-zh-it-03": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "mrr": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_10": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_5": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "xl-zh-it-04": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "mrr": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_10": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_5": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "zh-ambiguous-001": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "zh-ambiguous-002": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "mrr": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_10": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_5": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "zh-colloquial-001": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "mrr": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_10": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_5": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "zh-colloquial-002": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "mrr": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_10": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_5": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "zh-compound-001": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "zh-compound-002": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "zh-compound-003": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "recall_at_5": [
+        0.5,
+        0.5,
+        0.5
+      ]
+    },
+    "zh-exact-term-001": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        0.3333333333333333,
+        0.3333333333333333,
+        0.3333333333333333
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "zh-exact-term-002": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "zh-exact-term-003": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "zh-general-001": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "zh-general-002": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "zh-general-003": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "zh-general-004": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "zh-general-005": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "zh-general-006": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "zh-multi-turn-001": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "mrr": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_10": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_5": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "zh-multi-turn-002": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "mrr": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_10": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_5": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "zh-multi-turn-003": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "mrr": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_10": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_5": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "zh-no-answer-001": {
+      "correct_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "zh-no-answer-002": {
+      "correct_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "zh-no-answer-003": {
+      "correct_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "zh-no-answer-004": {
+      "correct_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "zh-no-answer-005": {
+      "correct_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "zh-no-answer-006": {
+      "correct_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "zh-no-answer-007": {
+      "correct_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "zh-no-answer-008": {
+      "correct_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "zh-no-answer-009": {
+      "correct_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "zh-no-answer-010": {
+      "correct_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "zh-scanned-001": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "zh-scanned-002": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "zh-selective-filter-001": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "zh-selective-filter-002": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "zh-selective-filter-003": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        0.3333333333333333,
+        0.3333333333333333,
+        0.3333333333333333
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "zh-selective-filter-004": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "mrr": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_10": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_5": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "zh-table-001": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "zh-table-002": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "zh-table-003": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "zh-typo-001": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "mrr": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_10": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_5": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "zh-typo-002": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    }
+  },
+  "request_options": {
+    "degrade": null,
+    "disabled_stages": null,
+    "embedding_profile": null,
+    "generator_model": null,
+    "max_results": null,
+    "organization_id": null,
+    "retrieval_filters": null,
+    "retrieval_overrides": null,
+    "stage_timeouts_ms": null,
+    "user_id": null
+  },
+  "run_config_hash": "786553834c6f7d96cf258f3cb4e1c271d010c3ae1b6ed3d5e4ba94d68d8a8595",
+  "runs": [
+    {
+      "created_at": "2026-11-25T02:09:21Z",
+      "git_sha": "5883cf49809a6bbf843eff5ec704d47e51767aca",
+      "run_config_hash": "786553834c6f7d96cf258f3cb4e1c271d010c3ae1b6ed3d5e4ba94d68d8a8595",
+      "run_id": "2b9f7206-3c9f-4f7e-b51a-5d1b7aea986a"
+    },
+    {
+      "created_at": "2026-11-25T02:09:31Z",
+      "git_sha": "5883cf49809a6bbf843eff5ec704d47e51767aca",
+      "run_config_hash": "786553834c6f7d96cf258f3cb4e1c271d010c3ae1b6ed3d5e4ba94d68d8a8595",
+      "run_id": "6f17befc-165b-4201-a9d3-7c9824aec297"
+    },
+    {
+      "created_at": "2026-11-25T02:09:40Z",
+      "git_sha": "5883cf49809a6bbf843eff5ec704d47e51767aca",
+      "run_config_hash": "786553834c6f7d96cf258f3cb4e1c271d010c3ae1b6ed3d5e4ba94d68d8a8595",
+      "run_id": "1e3d70ea-d647-4fe0-8095-065388dff68a"
+    }
+  ],
+  "schema_version": 1,
+  "slices": {
+    "category:ambiguous": {
+      "correct_refusal_rate": {
+        "mean": null,
+        "n": 0,
+        "runs": [
+          null,
+          null,
+          null
+        ],
+        "spread": 0.0
+      },
+      "false_refusal_rate": {
+        "mean": 0.3333333333333333,
+        "n": 6,
+        "runs": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ],
+        "spread": 0.0
+      },
+      "mrr": {
+        "mean": 0.5,
+        "n": 6,
+        "runs": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "spread": 0.0
+      },
+      "recall_at_10": {
+        "mean": 0.5,
+        "n": 6,
+        "runs": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "spread": 0.0
+      },
+      "recall_at_5": {
+        "mean": 0.5,
+        "n": 6,
+        "runs": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "spread": 0.0
+      }
+    },
+    "category:colloquial": {
+      "correct_refusal_rate": {
+        "mean": null,
+        "n": 0,
+        "runs": [
+          null,
+          null,
+          null
+        ],
+        "spread": 0.0
+      },
+      "false_refusal_rate": {
+        "mean": 0.8,
+        "n": 5,
+        "runs": [
+          0.8,
+          0.8,
+          0.8
+        ],
+        "spread": 0.0
+      },
+      "mrr": {
+        "mean": 0.0,
+        "n": 5,
+        "runs": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "spread": 0.0
+      },
+      "recall_at_10": {
+        "mean": 0.0,
+        "n": 5,
+        "runs": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "spread": 0.0
+      },
+      "recall_at_5": {
+        "mean": 0.0,
+        "n": 5,
+        "runs": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "spread": 0.0
+      }
+    },
+    "category:compound": {
+      "correct_refusal_rate": {
+        "mean": null,
+        "n": 0,
+        "runs": [
+          null,
+          null,
+          null
+        ],
+        "spread": 0.0
+      },
+      "false_refusal_rate": {
+        "mean": 0.0,
+        "n": 6,
+        "runs": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "spread": 0.0
+      },
+      "mrr": {
+        "mean": 1.0,
+        "n": 6,
+        "runs": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "spread": 0.0
+      },
+      "recall_at_10": {
+        "mean": 0.8333333333333334,
+        "n": 6,
+        "runs": [
+          0.8333333333333334,
+          0.8333333333333334,
+          0.8333333333333334
+        ],
+        "spread": 0.0
+      },
+      "recall_at_5": {
+        "mean": 0.8333333333333334,
+        "n": 6,
+        "runs": [
+          0.8333333333333334,
+          0.8333333333333334,
+          0.8333333333333334
+        ],
+        "spread": 0.0
+      }
+    },
+    "category:cross_lingual": {
+      "correct_refusal_rate": {
+        "mean": null,
+        "n": 0,
+        "runs": [
+          null,
+          null,
+          null
+        ],
+        "spread": 0.0
+      },
+      "false_refusal_rate": {
+        "mean": 0.42105263157894735,
+        "n": 19,
+        "runs": [
+          0.42105263157894735,
+          0.42105263157894735,
+          0.42105263157894735
+        ],
+        "spread": 0.0
+      },
+      "mrr": {
+        "mean": 0.4473684210526316,
+        "n": 19,
+        "runs": [
+          0.4473684210526316,
+          0.4473684210526316,
+          0.4473684210526316
+        ],
+        "spread": 0.0
+      },
+      "recall_at_10": {
+        "mean": 0.47368421052631576,
+        "n": 19,
+        "runs": [
+          0.47368421052631576,
+          0.47368421052631576,
+          0.47368421052631576
+        ],
+        "spread": 0.0
+      },
+      "recall_at_5": {
+        "mean": 0.47368421052631576,
+        "n": 19,
+        "runs": [
+          0.47368421052631576,
+          0.47368421052631576,
+          0.47368421052631576
+        ],
+        "spread": 0.0
+      }
+    },
+    "category:exact_term": {
+      "correct_refusal_rate": {
+        "mean": null,
+        "n": 0,
+        "runs": [
+          null,
+          null,
+          null
+        ],
+        "spread": 0.0
+      },
+      "false_refusal_rate": {
+        "mean": 0.0,
+        "n": 13,
+        "runs": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "spread": 0.0
+      },
+      "mrr": {
+        "mean": 0.8461538461538461,
+        "n": 13,
+        "runs": [
+          0.8461538461538461,
+          0.8461538461538461,
+          0.8461538461538461
+        ],
+        "spread": 0.0
+      },
+      "recall_at_10": {
+        "mean": 1.0,
+        "n": 13,
+        "runs": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "spread": 0.0
+      },
+      "recall_at_5": {
+        "mean": 1.0,
+        "n": 13,
+        "runs": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "spread": 0.0
+      }
+    },
+    "category:general": {
+      "correct_refusal_rate": {
+        "mean": null,
+        "n": 0,
+        "runs": [
+          null,
+          null,
+          null
+        ],
+        "spread": 0.0
+      },
+      "false_refusal_rate": {
+        "mean": 0.13043478260869565,
+        "n": 23,
+        "runs": [
+          0.13043478260869565,
+          0.13043478260869565,
+          0.13043478260869565
+        ],
+        "spread": 0.0
+      },
+      "mrr": {
+        "mean": 0.8260869565217391,
+        "n": 23,
+        "runs": [
+          0.8260869565217391,
+          0.8260869565217391,
+          0.8260869565217391
+        ],
+        "spread": 0.0
+      },
+      "recall_at_10": {
+        "mean": 0.8695652173913043,
+        "n": 23,
+        "runs": [
+          0.8695652173913043,
+          0.8695652173913043,
+          0.8695652173913043
+        ],
+        "spread": 0.0
+      },
+      "recall_at_5": {
+        "mean": 0.8695652173913043,
+        "n": 23,
+        "runs": [
+          0.8695652173913043,
+          0.8695652173913043,
+          0.8695652173913043
+        ],
+        "spread": 0.0
+      }
+    },
+    "category:multi_turn": {
+      "correct_refusal_rate": {
+        "mean": null,
+        "n": 0,
+        "runs": [
+          null,
+          null,
+          null
+        ],
+        "spread": 0.0
+      },
+      "false_refusal_rate": {
+        "mean": 0.5714285714285714,
+        "n": 7,
+        "runs": [
+          0.5714285714285714,
+          0.5714285714285714,
+          0.5714285714285714
+        ],
+        "spread": 0.0
+      },
+      "mrr": {
+        "mean": 0.14285714285714285,
+        "n": 7,
+        "runs": [
+          0.14285714285714285,
+          0.14285714285714285,
+          0.14285714285714285
+        ],
+        "spread": 0.0
+      },
+      "recall_at_10": {
+        "mean": 0.14285714285714285,
+        "n": 7,
+        "runs": [
+          0.14285714285714285,
+          0.14285714285714285,
+          0.14285714285714285
+        ],
+        "spread": 0.0
+      },
+      "recall_at_5": {
+        "mean": 0.14285714285714285,
+        "n": 7,
+        "runs": [
+          0.14285714285714285,
+          0.14285714285714285,
+          0.14285714285714285
+        ],
+        "spread": 0.0
+      }
+    },
+    "category:no_answer": {
+      "correct_refusal_rate": {
+        "mean": 0.5,
+        "n": 26,
+        "runs": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "spread": 0.0
+      },
+      "false_refusal_rate": {
+        "mean": null,
+        "n": 0,
+        "runs": [
+          null,
+          null,
+          null
+        ],
+        "spread": 0.0
+      },
+      "mrr": {
+        "mean": null,
+        "n": 0,
+        "runs": [
+          null,
+          null,
+          null
+        ],
+        "spread": 0.0
+      },
+      "recall_at_10": {
+        "mean": null,
+        "n": 0,
+        "runs": [
+          null,
+          null,
+          null
+        ],
+        "spread": 0.0
+      },
+      "recall_at_5": {
+        "mean": null,
+        "n": 0,
+        "runs": [
+          null,
+          null,
+          null
+        ],
+        "spread": 0.0
+      }
+    },
+    "category:scanned": {
+      "correct_refusal_rate": {
+        "mean": null,
+        "n": 0,
+        "runs": [
+          null,
+          null,
+          null
+        ],
+        "spread": 0.0
+      },
+      "false_refusal_rate": {
+        "mean": 0.0,
+        "n": 14,
+        "runs": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "spread": 0.0
+      },
+      "mrr": {
+        "mean": 0.8928571428571429,
+        "n": 14,
+        "runs": [
+          0.8928571428571429,
+          0.8928571428571429,
+          0.8928571428571429
+        ],
+        "spread": 0.0
+      },
+      "recall_at_10": {
+        "mean": 0.9285714285714286,
+        "n": 14,
+        "runs": [
+          0.9285714285714286,
+          0.9285714285714286,
+          0.9285714285714286
+        ],
+        "spread": 0.0
+      },
+      "recall_at_5": {
+        "mean": 0.9285714285714286,
+        "n": 14,
+        "runs": [
+          0.9285714285714286,
+          0.9285714285714286,
+          0.9285714285714286
+        ],
+        "spread": 0.0
+      }
+    },
+    "category:selective_filter": {
+      "correct_refusal_rate": {
+        "mean": null,
+        "n": 0,
+        "runs": [
+          null,
+          null,
+          null
+        ],
+        "spread": 0.0
+      },
+      "false_refusal_rate": {
+        "mean": 0.375,
+        "n": 8,
+        "runs": [
+          0.375,
+          0.375,
+          0.375
+        ],
+        "spread": 0.0
+      },
+      "mrr": {
+        "mean": 0.5416666666666666,
+        "n": 8,
+        "runs": [
+          0.5416666666666666,
+          0.5416666666666666,
+          0.5416666666666666
+        ],
+        "spread": 0.0
+      },
+      "recall_at_10": {
+        "mean": 0.625,
+        "n": 8,
+        "runs": [
+          0.625,
+          0.625,
+          0.625
+        ],
+        "spread": 0.0
+      },
+      "recall_at_5": {
+        "mean": 0.625,
+        "n": 8,
+        "runs": [
+          0.625,
+          0.625,
+          0.625
+        ],
+        "spread": 0.0
+      }
+    },
+    "category:table": {
+      "correct_refusal_rate": {
+        "mean": null,
+        "n": 0,
+        "runs": [
+          null,
+          null,
+          null
+        ],
+        "spread": 0.0
+      },
+      "false_refusal_rate": {
+        "mean": 0.0,
+        "n": 13,
+        "runs": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "spread": 0.0
+      },
+      "mrr": {
+        "mean": 0.8461538461538461,
+        "n": 13,
+        "runs": [
+          0.8461538461538461,
+          0.8461538461538461,
+          0.8461538461538461
+        ],
+        "spread": 0.0
+      },
+      "recall_at_10": {
+        "mean": 1.0,
+        "n": 13,
+        "runs": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "spread": 0.0
+      },
+      "recall_at_5": {
+        "mean": 1.0,
+        "n": 13,
+        "runs": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "spread": 0.0
+      }
+    },
+    "category:typo": {
+      "correct_refusal_rate": {
+        "mean": null,
+        "n": 0,
+        "runs": [
+          null,
+          null,
+          null
+        ],
+        "spread": 0.0
+      },
+      "false_refusal_rate": {
+        "mean": 0.6666666666666666,
+        "n": 3,
+        "runs": [
+          0.6666666666666666,
+          0.6666666666666666,
+          0.6666666666666666
+        ],
+        "spread": 0.0
+      },
+      "mrr": {
+        "mean": 0.3333333333333333,
+        "n": 3,
+        "runs": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ],
+        "spread": 0.0
+      },
+      "recall_at_10": {
+        "mean": 0.3333333333333333,
+        "n": 3,
+        "runs": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ],
+        "spread": 0.0
+      },
+      "recall_at_5": {
+        "mean": 0.3333333333333333,
+        "n": 3,
+        "runs": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ],
+        "spread": 0.0
+      }
+    },
+    "language:en": {
+      "correct_refusal_rate": {
+        "mean": 0.4,
+        "n": 10,
+        "runs": [
+          0.4,
+          0.4,
+          0.4
+        ],
+        "spread": 0.0
+      },
+      "false_refusal_rate": {
+        "mean": 0.2,
+        "n": 50,
+        "runs": [
+          0.2,
+          0.2,
+          0.2
+        ],
+        "spread": 0.0
+      },
+      "mrr": {
+        "mean": 0.6766666666666667,
+        "n": 50,
+        "runs": [
+          0.6766666666666667,
+          0.6766666666666667,
+          0.6766666666666667
+        ],
+        "spread": 0.0
+      },
+      "recall_at_10": {
+        "mean": 0.71,
+        "n": 50,
+        "runs": [
+          0.71,
+          0.71,
+          0.71
+        ],
+        "spread": 0.0
+      },
+      "recall_at_5": {
+        "mean": 0.71,
+        "n": 50,
+        "runs": [
+          0.71,
+          0.71,
+          0.71
+        ],
+        "spread": 0.0
+      }
+    },
+    "language:it": {
+      "correct_refusal_rate": {
+        "mean": 0.7142857142857143,
+        "n": 7,
+        "runs": [
+          0.7142857142857143,
+          0.7142857142857143,
+          0.7142857142857143
+        ],
+        "spread": 0.0
+      },
+      "false_refusal_rate": {
+        "mean": 0.23333333333333334,
+        "n": 30,
+        "runs": [
+          0.23333333333333334,
+          0.23333333333333334,
+          0.23333333333333334
+        ],
+        "spread": 0.0
+      },
+      "mrr": {
+        "mean": 0.5944444444444444,
+        "n": 30,
+        "runs": [
+          0.5944444444444444,
+          0.5944444444444444,
+          0.5944444444444444
+        ],
+        "spread": 0.0
+      },
+      "recall_at_10": {
+        "mean": 0.6666666666666666,
+        "n": 30,
+        "runs": [
+          0.6666666666666666,
+          0.6666666666666666,
+          0.6666666666666666
+        ],
+        "spread": 0.0
+      },
+      "recall_at_5": {
+        "mean": 0.6666666666666666,
+        "n": 30,
+        "runs": [
+          0.6666666666666666,
+          0.6666666666666666,
+          0.6666666666666666
+        ],
+        "spread": 0.0
+      }
+    },
+    "language:zh": {
+      "correct_refusal_rate": {
+        "mean": 0.4444444444444444,
+        "n": 9,
+        "runs": [
+          0.4444444444444444,
+          0.4444444444444444,
+          0.4444444444444444
+        ],
+        "spread": 0.0
+      },
+      "false_refusal_rate": {
+        "mean": 0.24324324324324326,
+        "n": 37,
+        "runs": [
+          0.24324324324324326,
+          0.24324324324324326,
+          0.24324324324324326
+        ],
+        "spread": 0.0
+      },
+      "mrr": {
+        "mean": 0.6936936936936937,
+        "n": 37,
+        "runs": [
+          0.6936936936936937,
+          0.6936936936936937,
+          0.6936936936936937
+        ],
+        "spread": 0.0
+      },
+      "recall_at_10": {
+        "mean": 0.7432432432432432,
+        "n": 37,
+        "runs": [
+          0.7432432432432432,
+          0.7432432432432432,
+          0.7432432432432432
+        ],
+        "spread": 0.0
+      },
+      "recall_at_5": {
+        "mean": 0.7432432432432432,
+        "n": 37,
+        "runs": [
+          0.7432432432432432,
+          0.7432432432432432,
+          0.7432432432432432
+        ],
+        "spread": 0.0
+      }
+    },
+    "overall": {
+      "correct_refusal_rate": {
+        "mean": 0.5,
+        "n": 26,
+        "runs": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "spread": 0.0
+      },
+      "false_refusal_rate": {
+        "mean": 0.2222222222222222,
+        "n": 117,
+        "runs": [
+          0.2222222222222222,
+          0.2222222222222222,
+          0.2222222222222222
+        ],
+        "spread": 0.0
+      },
+      "mrr": {
+        "mean": 0.6609686609686609,
+        "n": 117,
+        "runs": [
+          0.6609686609686609,
+          0.6609686609686609,
+          0.6609686609686609
+        ],
+        "spread": 0.0
+      },
+      "recall_at_10": {
+        "mean": 0.7094017094017094,
+        "n": 117,
+        "runs": [
+          0.7094017094017094,
+          0.7094017094017094,
+          0.7094017094017094
+        ],
+        "spread": 0.0
+      },
+      "recall_at_5": {
+        "mean": 0.7094017094017094,
+        "n": 117,
+        "runs": [
+          0.7094017094017094,
+          0.7094017094017094,
+          0.7094017094017094
+        ],
+        "spread": 0.0
+      }
+    },
+    "pair:en->it": {
+      "correct_refusal_rate": {
+        "mean": null,
+        "n": 0,
+        "runs": [
+          null,
+          null,
+          null
+        ],
+        "spread": 0.0
+      },
+      "false_refusal_rate": {
+        "mean": 0.3333333333333333,
+        "n": 3,
+        "runs": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ],
+        "spread": 0.0
+      },
+      "mrr": {
+        "mean": 0.3333333333333333,
+        "n": 3,
+        "runs": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ],
+        "spread": 0.0
+      },
+      "recall_at_10": {
+        "mean": 0.3333333333333333,
+        "n": 3,
+        "runs": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ],
+        "spread": 0.0
+      },
+      "recall_at_5": {
+        "mean": 0.3333333333333333,
+        "n": 3,
+        "runs": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ],
+        "spread": 0.0
+      }
+    },
+    "pair:en->zh": {
+      "correct_refusal_rate": {
+        "mean": null,
+        "n": 0,
+        "runs": [
+          null,
+          null,
+          null
+        ],
+        "spread": 0.0
+      },
+      "false_refusal_rate": {
+        "mean": 0.3333333333333333,
+        "n": 3,
+        "runs": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ],
+        "spread": 0.0
+      },
+      "mrr": {
+        "mean": 0.3333333333333333,
+        "n": 3,
+        "runs": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ],
+        "spread": 0.0
+      },
+      "recall_at_10": {
+        "mean": 0.3333333333333333,
+        "n": 3,
+        "runs": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ],
+        "spread": 0.0
+      },
+      "recall_at_5": {
+        "mean": 0.3333333333333333,
+        "n": 3,
+        "runs": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ],
+        "spread": 0.0
+      }
+    },
+    "pair:it->en": {
+      "correct_refusal_rate": {
+        "mean": null,
+        "n": 0,
+        "runs": [
+          null,
+          null,
+          null
+        ],
+        "spread": 0.0
+      },
+      "false_refusal_rate": {
+        "mean": 0.3333333333333333,
+        "n": 3,
+        "runs": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ],
+        "spread": 0.0
+      },
+      "mrr": {
+        "mean": 0.6666666666666666,
+        "n": 3,
+        "runs": [
+          0.6666666666666666,
+          0.6666666666666666,
+          0.6666666666666666
+        ],
+        "spread": 0.0
+      },
+      "recall_at_10": {
+        "mean": 0.6666666666666666,
+        "n": 3,
+        "runs": [
+          0.6666666666666666,
+          0.6666666666666666,
+          0.6666666666666666
+        ],
+        "spread": 0.0
+      },
+      "recall_at_5": {
+        "mean": 0.6666666666666666,
+        "n": 3,
+        "runs": [
+          0.6666666666666666,
+          0.6666666666666666,
+          0.6666666666666666
+        ],
+        "spread": 0.0
+      }
+    },
+    "pair:it->zh": {
+      "correct_refusal_rate": {
+        "mean": null,
+        "n": 0,
+        "runs": [
+          null,
+          null,
+          null
+        ],
+        "spread": 0.0
+      },
+      "false_refusal_rate": {
+        "mean": 0.6,
+        "n": 5,
+        "runs": [
+          0.6,
+          0.6,
+          0.6
+        ],
+        "spread": 0.0
+      },
+      "mrr": {
+        "mean": 0.3,
+        "n": 5,
+        "runs": [
+          0.3,
+          0.3,
+          0.3
+        ],
+        "spread": 0.0
+      },
+      "recall_at_10": {
+        "mean": 0.4,
+        "n": 5,
+        "runs": [
+          0.4,
+          0.4,
+          0.4
+        ],
+        "spread": 0.0
+      },
+      "recall_at_5": {
+        "mean": 0.4,
+        "n": 5,
+        "runs": [
+          0.4,
+          0.4,
+          0.4
+        ],
+        "spread": 0.0
+      }
+    },
+    "pair:zh->en": {
+      "correct_refusal_rate": {
+        "mean": null,
+        "n": 0,
+        "runs": [
+          null,
+          null,
+          null
+        ],
+        "spread": 0.0
+      },
+      "false_refusal_rate": {
+        "mean": 0.3333333333333333,
+        "n": 3,
+        "runs": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ],
+        "spread": 0.0
+      },
+      "mrr": {
+        "mean": 0.6666666666666666,
+        "n": 3,
+        "runs": [
+          0.6666666666666666,
+          0.6666666666666666,
+          0.6666666666666666
+        ],
+        "spread": 0.0
+      },
+      "recall_at_10": {
+        "mean": 0.6666666666666666,
+        "n": 3,
+        "runs": [
+          0.6666666666666666,
+          0.6666666666666666,
+          0.6666666666666666
+        ],
+        "spread": 0.0
+      },
+      "recall_at_5": {
+        "mean": 0.6666666666666666,
+        "n": 3,
+        "runs": [
+          0.6666666666666666,
+          0.6666666666666666,
+          0.6666666666666666
+        ],
+        "spread": 0.0
+      }
+    },
+    "pair:zh->it": {
+      "correct_refusal_rate": {
+        "mean": null,
+        "n": 0,
+        "runs": [
+          null,
+          null,
+          null
+        ],
+        "spread": 0.0
+      },
+      "false_refusal_rate": {
+        "mean": 0.5,
+        "n": 2,
+        "runs": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "spread": 0.0
+      },
+      "mrr": {
+        "mean": 0.5,
+        "n": 2,
+        "runs": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "spread": 0.0
+      },
+      "recall_at_10": {
+        "mean": 0.5,
+        "n": 2,
+        "runs": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "spread": 0.0
+      },
+      "recall_at_5": {
+        "mean": 0.5,
+        "n": 2,
+        "runs": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "spread": 0.0
+      }
+    }
+  },
+  "spread_kind": "stdev_ddof1",
+  "tier": "smoke"
+}

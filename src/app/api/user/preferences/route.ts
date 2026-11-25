@@ -74,7 +74,10 @@ export async function PATCH(request: Request) {
 
     // Get current user metadata
     const { data: user } = await supabase.auth.getUser();
-    const currentPreferences = user?.user.user_metadata?.preferences || {};
+    if (!user?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const currentPreferences = user.user.user_metadata?.preferences || {};
 
     // Merge new preferences
     const updatedPreferences = {
@@ -85,7 +88,7 @@ export async function PATCH(request: Request) {
     // Update user metadata
     const { data: updatedUser, error: updateError } = await supabase.auth.updateUser({
       data: {
-        ...user?.user.user_metadata,
+        ...user.user.user_metadata,
         preferences: updatedPreferences,
       },
     });

@@ -23,6 +23,8 @@ import { isMultiTenant } from '@/lib/deployment-mode';
 import type { Chat } from '@/lib/supabase';
 import type { ExtendedMessage, APIMessage, ContentPart, DocumentContent } from '@/types/chat';
 import { toAPIMessage, toDBMessages, updateMessages, appendMessage, toExtendedMessages, fromUIMessage } from '@/types/chat';
+import { extractStreamAnswerMetadata, type StreamAnswerMetadata } from '@/lib/chat/answer-metadata';
+import { useAnswerRecords } from '@/lib/chat/use-answer-records';
 import { motion, useScroll, useSpring, AnimatePresence } from 'framer-motion';
 import { createChat, updateChat } from '@/lib/chat-store';
 import { nanoid } from 'nanoid';
@@ -63,6 +65,7 @@ interface CancellableError extends Error {
 
 interface ExtendedFormEvent extends React.FormEvent<HTMLFormElement> {
   messageContent?: ContentPart | ContentPart[];
+  data?: { settings?: { webSearch?: boolean } };
 }
 
 interface StreamingMessage extends ExtendedMessage {
@@ -255,6 +258,25 @@ interface LocalChatMessageProps {
   isStreaming?: boolean;
   className?: string;
 }
+
+const handleMultiStepMetadata = (multiStep: any) => {
+  if (!multiStep) return;
+  console.log('📝 [MULTI-STEP] Detected multi-step response');
+  console.log('📝 [MULTI-STEP] Current step:', multiStep.currentStepIndex + 1, 'of', multiStep.totalSteps);
+
+  (window as any).__multiStepMetadata = multiStep;
+
+  if (multiStep.hasMoreSteps && multiStep.requiresToolApproval) {
+    setTimeout(() => {
+      const nextStepQuery = multiStep.nextStep?.text || '';
+      window.dispatchEvent(
+        new CustomEvent('multi-step-mcp-trigger', {
+          detail: { step: multiStep.nextStep, query: nextStepQuery, metadata: multiStep }
+        })
+      );
+    }, 2000);
+  }
+};
 
 export default function Home() {
   const supabase = getSupabase();
@@ -666,6 +688,13 @@ export default function Home() {
     }, 500); // 500ms debounce
   }, []);
 
+  const chatRequestChatId = (): string | null => {
+    const ghost = useGhostModeStore.getState();
+    const chatId = currentChatIdRef.current;
+    if (ghost.isGhostMode) return ghost.ghostChatId ?? (chatId?.startsWith('ghost-') ? chatId : 'ghost-incognito');
+    return chatId ?? null;
+  };
+
   const [input, setInput] = useState('');
 
   // Removed fetchedEmails state
@@ -708,47 +737,10 @@ export default function Home() {
       }, 60000); // 60 seconds maximum streaming time
     },
 
-    onFinish: (async (message: any, options: any) => {
-      const metadata = (options as any)?.metadata;
+    onFinish: (async (message: any) => {
       console.log('=== Stream Complete ===');
       console.log('onFinish handler triggered with message:', message);
-      console.log('onFinish metadata:', metadata);
       console.log('Stored streaming content length:', streamingContentRef.current?.length);
-
-      // Handle multi-step queries
-      if (metadata?.multiStep) {
-        console.log('📝 [MULTI-STEP] Detected multi-step response');
-        console.log('📝 [MULTI-STEP] Current step:', metadata.multiStep.currentStepIndex + 1, 'of', metadata.multiStep.totalSteps);
-        console.log('📝 [MULTI-STEP] Has more steps:', metadata.multiStep.hasMoreSteps);
-        console.log('📝 [MULTI-STEP] Requires tool approval:', metadata.multiStep.requiresToolApproval);
-
-        // Store multi-step metadata for UI display
-        if (window) {
-          (window as any).__multiStepMetadata = metadata.multiStep;
-        }
-
-        // If there are more steps and they require tool approval, trigger MCP modal
-        if (metadata.multiStep.hasMoreSteps && metadata.multiStep.requiresToolApproval) {
-          console.log('📝 [MULTI-STEP] Triggering MCP tool approval for next step');
-
-          // Set a timeout to show the MCP modal after the current response is displayed
-          setTimeout(() => {
-            // Trigger MCP modal for the next step
-            const nextStepQuery = metadata.multiStep.nextStep?.text || '';
-            console.log('📝 [MULTI-STEP] Next step query:', nextStepQuery);
-
-            // Dispatch custom event to trigger MCP modal
-            const event = new CustomEvent('multi-step-mcp-trigger', {
-              detail: {
-                step: metadata.multiStep.nextStep,
-                query: nextStepQuery,
-                metadata: metadata.multiStep
-              }
-            });
-            window.dispatchEvent(event);
-          }, 2000); // Wait 2 seconds for user to read the response
-        }
-      }
 
       // Clear the streaming timeout
       if (streamTimeoutRef.current) {
@@ -834,7 +826,8 @@ export default function Home() {
     },
 
     transport: new DefaultChatTransport({
-      api: '/api/chat'
+      api: '/api/chat',
+      body: () => ({ data: { capabilities: { citations: true }, chatId: chatRequestChatId() } })
     })
   } as any) as any;
   const isChatLoadingRef = useLatestRef(isChatLoading);
@@ -901,6 +894,14 @@ export default function Home() {
   const [showBottomGradient, setShowBottomGradient] = useState(false);
   const [showScrollIndicator, setShowScrollIndicator] = useState(false); // Start hidden
   const [isSwitchingChat, setIsSwitchingChat] = useState(false); // Prevents welcome screen flash during chat switches
+
+  useAnswerRecords({
+    chatId: isGhostMode ? (ghostChatId ?? currentChatId) : currentChatId,
+    messages,
+    setMessages,
+    save: isGhostMode || isSwitchingChat ? undefined : debouncedSave,
+  });
+
   const [isChatTransitionAnimating, setIsChatTransitionAnimating] = useState(false);
   const [isVoiceModeActive, setIsVoiceModeActive] = useState(false); // Voice mode layout state
   const { toast } = useToast();
@@ -1614,7 +1615,19 @@ export default function Home() {
             }
             return '';
           });
-          baseMsg.content = textParts.filter(Boolean).join('\n\n');
+          const joinedText = textParts.filter(Boolean).join('\n\n');
+          const documentRefParts = parts.flatMap(part =>
+            part.type === 'document' && part.document?.id
+              ? [{ type: 'document', document: { id: part.document.id, name: part.document.name } }]
+              : []
+          );
+          if (msg === initialUserMessage && documentRefParts.length > 0) {
+            return {
+              role: msg.role,
+              content: [{ type: 'text', text: joinedText }, ...documentRefParts]
+            };
+          }
+          baseMsg.content = joinedText;
         } else {
           baseMsg.content = msg.content as string;
         }
@@ -1676,7 +1689,9 @@ export default function Home() {
           messages: apiMessages,
           data: {
             settings,
-            organizationId // Pass organization context for workspace-scoped RAG
+            organizationId, // Pass organization context for workspace-scoped RAG
+            capabilities: { citations: true },
+            chatId: chatRequestChatId()
           }
         }),
         signal: abortControllerRef.current.signal
@@ -1894,6 +1909,13 @@ export default function Home() {
 
         let sseBuffer = '';
         let streamClosed = false;
+        let streamAnswerMetadata: StreamAnswerMetadata = {};
+        const captureAnswerMetadata = (messageMetadata: unknown) => {
+          streamAnswerMetadata = extractStreamAnswerMetadata(messageMetadata, streamAnswerMetadata);
+          if (Object.keys(streamAnswerMetadata).length > 0) {
+            streamingMessage.metadata = { ...streamingMessage.metadata, ...streamAnswerMetadata };
+          }
+        };
         const toolCallNameById = new Map<string, string>();
 
         const updateStreamingText = (text: string) => {
@@ -2251,7 +2273,22 @@ export default function Home() {
               updateStreamingText(display);
               break;
             }
-            case 'finish':
+            case 'start':
+            case 'message-metadata': {
+              captureAnswerMetadata(event.messageMetadata);
+              break;
+            }
+            case 'finish': {
+              captureAnswerMetadata(event.messageMetadata);
+              const finishMetadata = event.messageMetadata;
+              if (finishMetadata && typeof finishMetadata === 'object') {
+                handleMultiStepMetadata(finishMetadata.multiStep);
+                if (finishMetadata.webSearch || finishMetadata.documentSources) {
+                  handleSseEvent({ type: 'metadata', metadata: finishMetadata });
+                }
+              }
+              break;
+            }
             case 'step-finish':
             case 'message-annotations':
             case 'tool-call':
@@ -2441,7 +2478,8 @@ export default function Home() {
             id: generateMessageId(),
             role: 'assistant',
             content: messageContent,
-            createdAt: new Date()
+            createdAt: new Date(),
+            ...(Object.keys(streamAnswerMetadata).length > 0 ? { metadata: { ...streamAnswerMetadata } } : {})
           };
 
           console.log('[Manual onFinish] Creating final message with content:', messageContent);

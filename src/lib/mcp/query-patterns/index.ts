@@ -3,7 +3,7 @@
  * Automatically discovers and combines patterns from all MCP servers
  */
 
-import { McpServerPatterns, PatternMatch } from './base';
+import { McpServerPatternsBase, PatternMatch } from './base';
 import { zapierPatterns } from './servers/zapier';
 
 // Import additional server patterns here as they are added
@@ -13,7 +13,7 @@ import { zapierPatterns } from './servers/zapier';
  * Registry of all available MCP server patterns
  * Add new servers to this array as they are implemented
  */
-const serverPatterns: McpServerPatterns[] = [
+const serverPatterns: McpServerPatternsBase[] = [
   zapierPatterns,
   // Add more server patterns here
   // slackPatterns,
@@ -24,7 +24,7 @@ const serverPatterns: McpServerPatterns[] = [
 /**
  * Get all enabled server patterns
  */
-export function getEnabledServerPatterns(): McpServerPatterns[] {
+export function getEnabledServerPatterns(): McpServerPatternsBase[] {
   return serverPatterns.filter(server => {
     try {
       return server.enabled();

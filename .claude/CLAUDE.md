@@ -39,8 +39,8 @@ myRAG 是一个基于 Next.js + Supabase 的 AI 聊天产品，核心是从用�
 
 ## Runtime
 
-- Node.js >=20.9.0 for the main app (per `AGENTS.md`)
-- Node.js 20 for the voice agent (`voice-agent/Dockerfile` uses `npm install` / `npm start` on a Node 20 image)
+- Node.js 22 for the main app (`engines.node` `^22.12.0`, `.nvmrc` `22`, per `AGENTS.md`)
+- Node.js 22 for the voice agent (`voice-agent/Dockerfile` uses `npm install` / `npm start` on the `node:22-slim` image)
 - Node.js 20.18.0 for the WhatsApp service (`baileys-whatsapp/Dockerfile`, base `node:20.18.0-slim`); `baileys-whatsapp/package.json` engines `>=20.0.0`
 - React Server Components / Next.js App Router runtime, with API routes under `src/app/api/`
 - npm - Main app. Lockfile present: `package-lock.json` (root). `.npmrc` sets `legacy-peer-deps=true`.
@@ -123,7 +123,7 @@ myRAG 是一个基于 Next.js + Supabase 的 AI 聊天产品，核心是从用�
 
 ## Platform Requirements
 
-- Node.js >=20.9.0 and npm
+- Node.js 22 (`^22.12.0`) and npm
 - A Supabase project (PostgreSQL with pgvector, storage, auth). Schema: `supabase/single-tenant-setup.sql` or `supabase/multi-tenant-setup.sql`, applied through `scripts/setup-database.sh`
 - API keys for embeddings and chosen models (see Configuration)
 - Optional: `cd voice-agent && npm run dev`, `cd baileys-whatsapp && npm run dev`
@@ -379,7 +379,23 @@ myRAG 是一个基于 Next.js + Supabase 的 AI 聊天产品，核心是从用�
 |-------|-------------|------|
 | brainstorming | "You MUST use this before any creative work - creating features, building components, adding functionality, or modifying behavior. Explores user intent, requirements and design before implementation." | `.claude/skills/brainstorming/SKILL.md` |
 | myrag-expert | Instant deep expertise on the myRAG codebase. Use when discussing architecture, diagnosing issues, planning features, debugging, or answering any question about the codebase. Eliminates need to re-analyze files each session. | `.claude/skills/myRAG-expert/SKILL.md` |
+| frontend-design | Distinctive UI direction for new interfaces (Anthropics skill, pinned in repo). | `.claude/skills/frontend-design/SKILL.md` |
+| impeccable | Critique and polish built UI before ship (pbakaus/impeccable, pinned). | `.claude/skills/impeccable/SKILL.md` |
+| web-design-guidelines | Final code review against Vercel Web Interface Guidelines on changed UI files. | `.claude/skills/web-design-guidelines/SKILL.md` |
 <!-- GSD:skills-end -->
+
+## Frontend design pipeline (GSD + skills)
+
+For UI surface work (`scripts/config-ui/`, `src/components/`, `src/app/`), follow **in order**:
+
+1. `/gsd-ui-phase` → UI-SPEC.md (`gsd-ui-researcher` + **frontend-design**)
+2. Implement with **frontend-design** direction on new interfaces
+3. **Impeccable** critique/polish on built pages (`reference/*.md`; avoid launcher network download unless `IMPECCABLE_BIN` is set)
+4. **web-design-guidelines** on every touched file — fix all findings
+5. `/gsd-ui-review` (`gsd-ui-auditor`)
+6. `/gsd-verify-work` — verifier runs `node scripts/ci/check-frontend-design-summary.mjs` (BLOCKER on UI phases)
+
+Authoritative contract: `.claude/gsd-core/references/frontend-design-pipeline.md` and `frontend-design-verifier-gate.md`. Shared toggles: `.planning/config.json` → `workflow.ui_phase`, `ui_safety_gate`, `ui_review` (enabled). Skill pins: `.cursor/skills/FRONTEND-SKILLS.md` (same SHAs under `.claude/skills/`).
 
 <!-- GSD:workflow-start source:GSD defaults -->
 
@@ -394,6 +410,8 @@ Use these entry points:
 - `/gsd-execute-phase` for planned phase work
 
 Do not make direct repo edits outside a GSD workflow unless the user explicitly asks to bypass it.
+
+**Orchestrator:** follow `.cursor/rules/orchestration.mdc` (context hygiene, one executor per plan, ledger in `.planning/paused/exec-ledger.md`, **merge refill to 4 executors same run**, and **autonomy** — pre-authorized approvals; only pause for human login with the exact link).
 <!-- GSD:workflow-end -->
 
 <!-- GSD:profile-start -->

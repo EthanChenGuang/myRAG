@@ -13,7 +13,7 @@ export const TRACKED = {
 export const TRACKED_LOCATIONS = Object.keys(TRACKED);
 const MANIFEST_PATH = 'scripts/rag/env-manifest.json';
 const ENV_LOCAL = '.env.local';
-const NAME_PATTERN = '(?:NEXT_PUBLIC_)?RAG_[A-Z0-9_]+|LLAMACLOUD_[A-Z0-9_]+|OPENAI_EMBEDDING_MODEL';
+const NAME_PATTERN = '(?:NEXT_PUBLIC_)?RAG_[A-Z0-9_]+|LLAMACLOUD_[A-Z0-9_]+|LANGFUSE_[A-Z0-9_]+|VOYAGE_[A-Z0-9_]+|DEEPINFRA_[A-Z0-9_]+|COHERE_[A-Z0-9_]+|ANTHROPIC_[A-Z0-9_]+|OPENAI_EMBEDDING_MODEL';
 const SRC_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.mjs']);
 
 function presenceRegex(name) {
@@ -145,8 +145,244 @@ export function checkConfig(root) {
     }
   }
 
+  violations.push(...checkModelMappings(root, texts));
+
+  const effectiveEnv = loadEffectiveEnv(root);
+  const ingestion = checkIngestionSwitches(effectiveEnv);
+  violations.push(...ingestion.errors);
+
   violations.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : a.location < b.location ? -1 : a.location > b.location ? 1 : 0));
-  return { violations, varCount: vars.length };
+  return { violations, warnings: ingestion.warnings, varCount: vars.length };
+}
+
+const ANTHROPIC_ID_PATTERN = /^claude-[a-z0-9-]+$/;
+const MODEL_LIST_ANCHORS = {
+  'init-env': [/DEFAULT_OPENROUTER_MODELS\s*=\s*'/],
+  'config-server': [/DEFAULT_OPENROUTER_MODELS\s*=\s*'/],
+  'env-ts': [/NEXT_PUBLIC_OPENROUTER_MODELS:\s*process\.env\.NEXT_PUBLIC_OPENROUTER_MODELS\s*\|\|\s*JSON\.stringify\(/],
+  'config-ui': [
+    /defaultOpenRouterModels\s*=[^\n]*?JSON\.stringify\(/,
+    /openrouterModels:\s*safeJsonParse\(\s*defaultOpenRouterModels\s*,\s*/,
+    /openrouterModels:\s*(?=\[\s*\{)/,
+  ],
+};
+
+function matchingClose(text, start, open, close) {
+  let depth = 0;
+  let quote = null;
+  for (let i = start; i < text.length; i += 1) {
+    const ch = text[i];
+    if (quote) {
+      if (ch === '\\') i += 1;
+      else if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === '`') quote = ch;
+    else if (ch === open) depth += 1;
+    else if (ch === close) {
+      depth -= 1;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+function stringField(objectText, key) {
+  const re = new RegExp(`(?:^|[{,\\s])(['"]?)${key}\\1\\s*:\\s*(['"])((?:\\\\.|(?!\\2).)*)\\2`);
+  const match = objectText.match(re);
+  return match ? match[3] : undefined;
+}
+
+function hasField(objectText, key) {
+  return new RegExp(`(?:^|[{,\\s])(['"]?)${key}\\1\\s*:`).test(objectText);
+}
+
+/** Model objects of one array literal (JSON or JS object literals); null when no array starts at `from`. */
+function modelsInArray(text, from) {
+  const start = text.indexOf('[', from);
+  if (start === -1) return null;
+  const end = matchingClose(text, start, '[', ']');
+  if (end === -1) return null;
+  const models = [];
+  let i = start + 1;
+  while (i < end) {
+    const open = text.indexOf('{', i);
+    if (open === -1 || open > end) break;
+    const close = matchingClose(text, open, '{', '}');
+    if (close === -1 || close > end) break;
+    const objectText = text.slice(open, close + 1);
+    const id = stringField(objectText, 'id');
+    if (id !== undefined) {
+      models.push({ id, anthropicId: stringField(objectText, 'anthropicId'), hasAnthropicField: hasField(objectText, 'anthropicId') });
+    }
+    i = close + 1;
+  }
+  return models;
+}
+
+function envLocalModelList(text) {
+  for (const line of text.split('\n')) {
+    const match = line.match(/^\s*(?:export\s+)?NEXT_PUBLIC_OPENROUTER_MODELS\s*=(.*)$/);
+    if (match) return match[1].trim();
+  }
+  return null;
+}
+
+/** D-08: an anthropicId must be well formed and identical in every model location; unmapped ids stay free. */
+export function checkModelMappings(root, texts) {
+  const lists = [];
+  for (const [location, anchors] of Object.entries(MODEL_LIST_ANCHORS)) {
+    const text = texts[location] ?? '';
+    anchors.forEach((anchor, index) => {
+      const label = anchors.length > 1 ? `fallback array ${index + 1} of ${anchors.length}` : 'model list';
+      const match = anchor.exec(text);
+      const models = match ? modelsInArray(text, match.index + match[0].length) : null;
+      lists.push({ location, label, models });
+    });
+  }
+  const envLocalFile = path.join(root, ENV_LOCAL);
+  if (fs.existsSync(envLocalFile)) {
+    const value = envLocalModelList(fs.readFileSync(envLocalFile, 'utf8'));
+    const models = value ? modelsInArray(value, 0) : null;
+    if (models !== null) lists.push({ location: 'env-local', label: 'NEXT_PUBLIC_OPENROUTER_MODELS', models });
+  }
+
+  const violations = [];
+  const mapped = new Map();
+  for (const list of lists) {
+    for (const model of list.models ?? []) {
+      if (!model.hasAnthropicField) continue;
+      if (!mapped.has(model.id)) mapped.set(model.id, new Set());
+      if (model.anthropicId === undefined) {
+        violations.push({ name: model.id, location: list.location, message: `anthropicId must be a string (${list.label})` });
+        continue;
+      }
+      if (!model.id.startsWith('anthropic/')) {
+        violations.push({ name: model.id, location: list.location, message: `only anthropic/ models may carry an anthropicId (${list.label})` });
+      }
+      if (!ANTHROPIC_ID_PATTERN.test(model.anthropicId)) {
+        violations.push({
+          name: model.id,
+          location: list.location,
+          message: `anthropicId ${JSON.stringify(model.anthropicId)} does not match ${ANTHROPIC_ID_PATTERN} (${list.label})`,
+        });
+      }
+    }
+  }
+
+  for (const id of mapped.keys()) {
+    const seen = lists.map((list) => {
+      const entries = (list.models ?? []).filter((model) => model.id === id);
+      const values = new Set(entries.map((model) => model.anthropicId ?? null));
+      return { list, entries, values };
+    });
+    const summary = seen
+      .map(({ list, entries, values }) => {
+        const where = list.label === 'model list' || list.location === 'env-local' ? list.location : `${list.location}#${list.label.split(' ')[2]}`;
+        if (entries.length === 0) return `${where}=missing`;
+        return `${where}=${[...values].map((value) => value ?? 'none').join('|')}`;
+      })
+      .join(', ');
+    const counts = new Map();
+    for (const { values } of seen) for (const value of values) if (value !== null) counts.set(value, (counts.get(value) ?? 0) + 1);
+    const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+    const agreed = ranked.length > 0 && (ranked.length === 1 || ranked[0][1] > ranked[1][1]) ? ranked[0][0] : null;
+    for (const { list, entries, values } of seen) {
+      if (list.models === null) {
+        violations.push({ name: id, location: list.location, message: `OpenRouter ${list.label} not found, so the mapped model is missing (${summary})` });
+      } else if (entries.length === 0) {
+        violations.push({ name: id, location: list.location, message: `mapped model is missing from this location's ${list.label} (${summary})` });
+      } else if (values.has(null)) {
+        violations.push({ name: id, location: list.location, message: `listed without anthropicId in ${list.label} (${summary})` });
+      } else if (agreed === null || values.size > 1 || !values.has(agreed)) {
+        violations.push({ name: id, location: list.location, message: `anthropicId differs across locations in ${list.label}: ${summary}` });
+      }
+    }
+  }
+  return violations;
+}
+
+function parseEnvAssignments(text) {
+  const map = {};
+  for (const line of text.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eq = trimmed.indexOf('=');
+    if (eq <= 0) continue;
+    const name = trimmed.slice(0, eq).replace(/^export\s+/, '').trim();
+    map[name] = trimmed.slice(eq + 1).trim();
+  }
+  return map;
+}
+
+function loadEffectiveEnv(root) {
+  let env = {};
+  const initPath = path.join(root, TRACKED['init-env']);
+  if (fs.existsSync(initPath)) {
+    env = { ...env, ...parseEnvAssignments(fs.readFileSync(initPath, 'utf8')) };
+  }
+  const localPath = path.join(root, ENV_LOCAL);
+  if (fs.existsSync(localPath)) {
+    env = { ...env, ...parseEnvAssignments(fs.readFileSync(localPath, 'utf8')) };
+  }
+  return env;
+}
+
+/** D-10, D-22 and A-2: invalid switch combinations fail CI; cloud-off with legacy warns only. */
+export function checkIngestionSwitches(env) {
+  const errors = [];
+  const warnings = [];
+  const pipeline = (env.RAG_INGEST_PIPELINE ?? 'legacy').trim().toLowerCase();
+  const routing = (env.RAG_PARSE_ROUTING ?? 'fixed').trim().toLowerCase();
+  const asyncVal = (env.RAG_INGEST_ASYNC ?? 'off').trim().toLowerCase();
+  const allowCloud = (env.RAG_PARSER_ALLOW_CLOUD ?? 'true').trim().toLowerCase();
+  const llamaKey = (env.LLAMA_CLOUD_API_KEY ?? '').trim();
+
+  if (routing === 'tiered' && (pipeline !== 'unified' || asyncVal !== 'on')) {
+    errors.push({
+      name: 'RAG_PARSE_ROUTING',
+      location: 'ingestion',
+      message:
+        'D-10: RAG_PARSE_ROUTING=tiered requires RAG_INGEST_PIPELINE=unified and RAG_INGEST_ASYNC=on',
+    });
+  }
+
+  if (asyncVal === 'on' && pipeline !== 'unified') {
+    errors.push({
+      name: 'RAG_INGEST_ASYNC',
+      location: 'ingestion',
+      message: 'D-22: RAG_INGEST_ASYNC=on requires RAG_INGEST_PIPELINE=unified',
+    });
+  }
+
+  const cloudRefused = !['', 'true', '1', 'yes', 'on'].includes(allowCloud);
+  if (cloudRefused && pipeline === 'legacy' && llamaKey !== '') {
+    warnings.push({
+      name: 'RAG_PARSER_ALLOW_CLOUD',
+      location: 'ingestion',
+      message:
+        'A-2: RAG_PARSER_ALLOW_CLOUD refuses cloud parsing with legacy pipeline while LLAMA_CLOUD_API_KEY is set (key present; value not shown)',
+    });
+  }
+
+  const supabaseUrl = (env.NEXT_PUBLIC_SUPABASE_URL ?? '').trim();
+  if (supabaseUrl.startsWith('postgresql://') || supabaseUrl.startsWith('postgres://')) {
+    errors.push({
+      name: 'NEXT_PUBLIC_SUPABASE_URL',
+      location: 'ingestion',
+      message:
+        'Use the Supabase project HTTPS URL (PostgREST / API), not a direct Postgres connection string',
+    });
+  } else if (/^https:\/\/db\.[a-z0-9-]+\.supabase\.co/i.test(supabaseUrl) || /:5432\b/.test(supabaseUrl)) {
+    warnings.push({
+      name: 'NEXT_PUBLIC_SUPABASE_URL',
+      location: 'ingestion',
+      message:
+        'NEXT_PUBLIC_SUPABASE_URL should be the project API host (*.supabase.co), not db.* or port 5432',
+    });
+  }
+
+  return { errors, warnings };
 }
 
 function parseArgs(argv) {
@@ -159,7 +395,8 @@ function parseArgs(argv) {
 
 function main() {
   const { root } = parseArgs(process.argv.slice(2));
-  const { violations, varCount } = checkConfig(root);
+  const { violations, varCount, warnings } = checkConfig(root);
+  for (const w of warnings) console.warn(`${w.name} [${w.location}] ${w.message}`);
   if (violations.length === 0) {
     console.log(`[check-config] ok: ${varCount} variable(s) match the manifest`);
     return 0;

@@ -1,0 +1,71 @@
+{
+  "body": {
+    "children": [
+      {
+        "$ref": "#/texts/0"
+      }
+    ],
+    "content_layer": "body",
+    "label": "unspecified",
+    "name": "_root_",
+    "self_ref": "#/body"
+  },
+  "form_items": [],
+  "furniture": {
+    "children": [],
+    "content_layer": "furniture",
+    "label": "unspecified",
+    "name": "_root_",
+    "self_ref": "#/furniture"
+  },
+  "groups": [],
+  "key_value_items": [],
+  "name": "bench-100-p80",
+  "origin": {
+    "binary_hash": 80,
+    "filename": "bench-100-p80.pdf",
+    "mimetype": "application/pdf"
+  },
+  "pages": {
+    "1": {
+      "page_no": 1,
+      "size": {
+        "height": 841.89,
+        "width": 595.28
+      }
+    }
+  },
+  "pictures": [],
+  "schema_name": "DoclingDocument",
+  "tables": [],
+  "texts": [
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Benchmark page 80",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 75.5,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 60.0
+          },
+          "charspan": [
+            0,
+            17
+          ],
+          "page_no": 1
+        }
+      ],
+      "self_ref": "#/texts/0",
+      "text": "Benchmark page 80"
+    }
+  ],
+  "version": "1.11.0"
+}

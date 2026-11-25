@@ -126,7 +126,7 @@ export type Chat = {
   created_at: string;
   updated_at: string;
   pinned?: boolean;
-  folder_id?: string;
+  folder_id?: string | null;
   titlePending?: boolean; // True while AI is generating the title
 };
 
@@ -273,42 +273,6 @@ async function storeDocument(filename: string, content: string, chunks: ChunkWit
   return documentId;
 }
 
-/**
- * Search for relevant chunks using vector similarity
- * @param queryEmbedding - The embedding vector to search against
- * @param matchCount - Number of matches to return
- * @param similarityThreshold - Minimum similarity threshold
- * @returns Promise resolving to array of matching chunks with similarity scores
- */
-async function searchSimilarChunks(
-  queryEmbedding: number[],
-  matchCount: number = 5,
-  similarityThreshold: number = 0.7
-): Promise<Array<{ chunk_id: string; document_id: string; content: string; similarity: number }>> {
-  logger.db(`Searching for similar chunks with threshold ${similarityThreshold}, max ${matchCount} results`);
-  logger.db(`Query embedding dimensions: ${queryEmbedding.length}`);
-
-  const { data: chunks, error } = await supabase
-    .rpc('match_document_chunks', {
-      query_embedding: queryEmbedding,
-      match_count: matchCount,
-      similarity_threshold: similarityThreshold,
-    });
-
-  if (error) {
-    logger.error('Supabase', `Error searching chunks: ${error.message}`);
-    throw new Error(`Error searching chunks: ${error.message}`);
-  }
-
-  logger.db(`Found ${chunks?.length || 0} similar chunks`);
-  if (chunks && chunks.length > 0) {
-    logger.db(`Top chunk similarity: ${chunks[0].similarity?.toFixed(3)}`);
-    logger.db(`Lowest chunk similarity: ${chunks[chunks.length - 1].similarity?.toFixed(3)}`);
-  }
-
-  return chunks || [];
-}
-
 export async function createChat(messages: DBMessage[]): Promise<string | null> {
   try {
     logger.warn('Supabase', 'OLD createChat called - this should not happen after our fix!');
@@ -383,4 +347,4 @@ export async function updateChat(chatId: string, messages: DBMessage[]): Promise
   }
 }
 
-export { storeDocument, searchSimilarChunks };
+export { storeDocument };

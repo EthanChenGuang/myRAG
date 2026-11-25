@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "rules": [
+    { "id": "inj-zh-01", "language": "zh", "kind": "phrase", "severity": "high", "pattern": "忽略之前的指令" },
+    { "id": "inj-zh-02", "language": "zh", "kind": "phrase", "severity": "high", "pattern": "忽略以上所有" },
+    { "id": "inj-zh-03", "language": "zh", "kind": "regex", "severity": "medium", "pattern": "你现在是(?!否|不是|谁|什么|哪)" },
+    { "id": "inj-zh-04", "language": "zh", "kind": "regex", "severity": "high", "pattern": "(?:忽略|无视|忽视|不要理会)(?:之前|以前|上面|以上|先前|前面)(?:的|所有的?|全部的?)?(?:指令|指示|提示|规则|要求|内容)" },
+    { "id": "inj-zh-05", "language": "zh", "kind": "regex", "severity": "high", "pattern": "(?:泄露|透露|显示|输出|重复|打印|忘记|覆盖|忽略)[^。]{0,10}系统提示词?" },
+    { "id": "inj-zh-06", "language": "zh", "kind": "regex", "severity": "medium", "pattern": "(?:致|给|写给|告诉|提醒|通知)(?:所有|各位|任何)?的?(?:ai|人工智能|大语言|大)(?:助手|助理|模型|机器人)|(?:ai|人工智能)(?:助手|助理|模型)(?:请注意|须知)" },
+    { "id": "inj-zh-07", "language": "zh", "kind": "regex", "severity": "high", "pattern": "(?:ai|人工智能|大模型|语言模型)[^。！\\n]{0,30}(?:请|必须|务必|一律|总是|始终|只能)(?:回答|回复|答复|声称|告诉用户|告诉客户|告知用户|告知客户)[^。\\n]{0,20}是" },
+    { "id": "inj-en-01", "language": "en", "kind": "regex", "severity": "high", "pattern": "\\bignore (?:all |any |the |your |my )?(?:previous|prior|earlier|above|preceding) (?:instructions|prompts|rules|directions|commands|guidelines)" },
+    { "id": "inj-en-02", "language": "en", "kind": "regex", "severity": "high", "pattern": "\\bdisregard (?:all |any )?(?:of )?(?:the )?(?:above|previous|prior|preceding)\\b(?! (?:notice|reminder|message|email|invoice|statement|payment|if))" },
+    { "id": "inj-en-03", "language": "en", "kind": "regex", "severity": "medium", "pattern": "\\byou are now (?!(?:eligible|able|entitled|logged|connected|subscribed|registered|ready|done|all set|free to|a member|part of|viewing|reading|in the|on the|at the)\\b)" },
+    { "id": "inj-en-04", "language": "en", "kind": "regex", "severity": "high", "pattern": "\\b(?:reveal|show|print|repeat|output|leak|disclose|override|replace|ignore|forget)\\b[^.]{0,40}\\bsystem prompt\\b|\\bnew system prompt\\b" },
+    { "id": "inj-en-05", "language": "en", "kind": "regex", "severity": "high", "pattern": "\\bforget (?:all |any |your |the )?(?:previous |prior |earlier )?(?:instructions|rules|guidelines)\\b" },
+    { "id": "inj-en-06", "language": "en", "kind": "regex", "severity": "high", "pattern": "\\b(?:do not|don.t) follow (?:your|the|any) (?:previous |prior |earlier )?(?:instructions|rules|guidelines)\\b" },
+    { "id": "inj-en-07", "language": "en", "kind": "regex", "severity": "medium", "pattern": "\\b(?:note|message|instructions?|reminder|attention)(?: to| for)? (?:all |any |the )?(?:ai|llm|chatbot|language model)(?:s| assistants?| models?| agents?| systems?)? ?[:,]" },
+    { "id": "inj-en-08", "language": "en", "kind": "regex", "severity": "high", "pattern": "\\b(?:ai|llms?|chatbots?|language models?)\\b[^.]{0,60}(?:[:,]|\\bmust|\\balways|\\bonly|\\bplease) (?:always )?(?:respond|reply|answer|say|state|claim|tell (?:the )?(?:users?|customers?)) that\\b" },
+    { "id": "inj-it-01", "language": "it", "kind": "regex", "severity": "high", "pattern": "\\bignora (?:tutte )?le (?:istruzioni|indicazioni|regole) (?:precedenti|sopra|di prima)\\b" },
+    { "id": "inj-it-02", "language": "it", "kind": "regex", "severity": "medium", "pattern": "\\bora sei (?!(?:pronto|pronta|libero|libera|arrivato|arrivata|iscritto|iscritta|connesso|connessa|qui|a casa|in grado)\\b)" },
+    { "id": "inj-it-03", "language": "it", "kind": "regex", "severity": "high", "pattern": "\\bdimentica (?:tutte )?(?:le |ogni )?(?:istruzioni|regole|indicazioni)\\b" },
+    { "id": "inj-it-04", "language": "it", "kind": "regex", "severity": "high", "pattern": "\\b(?:rivela|mostra|stampa|ripeti|ignora|dimentica|sovrascrivi)\\b[^.]{0,40}\\bprompt di sistema\\b" },
+    { "id": "inj-it-05", "language": "it", "kind": "regex", "severity": "medium", "pattern": "\\b(?:nota|messaggio|istruzioni|avviso|promemoria) (?:per|a|all.|al|agli) ?(?:l.|gli |il |lo |i )?(?:assistent[ei]|chatbot|ia|llm|modell[oi] linguistic[oi])(?: virtual[ei]| ia| digital[ei])? ?:" },
+    { "id": "inj-it-06", "language": "it", "kind": "regex", "severity": "high", "pattern": "(?:\\bia\\b|chatbot|\\bllm|modell[oi] linguistic|assistent[ei] (?:virtual|ia|digital))[^.]{0,60}(?:[:,]|\\bdevi|\\bdeve|\\bsempre|\\bsolo) (?:rispond|dichiar|afferm|conferm|dire|scriv)[a-z]{0,4} che\\b" },
+    { "id": "inj-any-01", "language": "any", "kind": "regex", "severity": "medium", "pattern": "<\\|(?:im_start|im_end|system|endoftext)\\|>" }
+  ]
+}

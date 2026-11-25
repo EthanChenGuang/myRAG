@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { env } from '@/lib/env';
 import { openRouter, getOpenRouterClient } from '@/lib/openrouter';
+import { requireSessionUser } from '@/lib/session-auth';
 
 // Use Node.js runtime instead of Edge
 export const runtime = 'nodejs';
@@ -9,6 +10,8 @@ export const runtime = 'nodejs';
 const isWebSearchEnabled = env.NEXT_PUBLIC_WEB_SEARCH_ENABLED === 'true';
 
 export async function POST(req: Request) {
+  const auth = await requireSessionUser('[Web Search API]');
+  if ('response' in auth) return auth.response;
   try {
     // Check if web search is enabled
     if (!isWebSearchEnabled) {

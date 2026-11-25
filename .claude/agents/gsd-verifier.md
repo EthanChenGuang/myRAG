@@ -43,6 +43,8 @@ Every truth must resolve to VERIFIED, FAILED (BLOCKER), or UNCERTAIN (WARNING wi
 <required_reading>
 @.claude/gsd-core/references/verification-overrides.md
 @.claude/gsd-core/references/gates.md
+@.claude/gsd-core/references/frontend-design-pipeline.md
+@.claude/gsd-core/references/frontend-design-verifier-gate.md
 @.claude/gsd-core/references/verifier-phase-gates.md
 @.claude/gsd-core/references/verifier-evidence-gate.md
 </required_reading>

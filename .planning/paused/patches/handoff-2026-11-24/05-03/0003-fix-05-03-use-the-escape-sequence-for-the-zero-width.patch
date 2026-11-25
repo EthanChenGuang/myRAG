@@ -1,0 +1,49 @@
+From 1f8b28d024ccdfa1bf1e197000e328a320543483 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 24 Nov 2026 22:22:44 +0000
+Subject: [PATCH 3/6] fix(05-03): use the escape sequence for the zero-width
+ space instead of a literal invisible character
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01X342shLsAZx6PYph2vA7hc
+---
+ src/lib/citations/marker-grammar.ts | 2 +-
+ tests/lib/marker-grammar.test.ts    | 6 +++---
+ 2 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/src/lib/citations/marker-grammar.ts b/src/lib/citations/marker-grammar.ts
+index 93859b6..64f97dd 100644
+--- a/src/lib/citations/marker-grammar.ts
++++ b/src/lib/citations/marker-grammar.ts
+@@ -14,7 +14,7 @@ export type MarkerMatch =
+ const OPENERS = '[【［';
+ const CLOSERS = ']】］';
+ const SEPARATORS = ',，、';
+-const ZERO_WIDTH_SPACE = '​';
++const ZERO_WIDTH_SPACE = '\u200B';
+ 
+ type ScanState = 'expect-s' | 'expect-first-digit' | 'in-digits' | 'space-before-separator' | 'space-after-separator';
+ 
+diff --git a/tests/lib/marker-grammar.test.ts b/tests/lib/marker-grammar.test.ts
+index d9ad319..217fdd8 100644
+--- a/tests/lib/marker-grammar.test.ts
++++ b/tests/lib/marker-grammar.test.ts
+@@ -90,12 +90,12 @@ describe('neutralizeCitationMarkers', () => {
+   it('only inserts zero-width spaces', () => {
+     const text = 'see [S1] and 【S12】.';
+     const out = neutralizeCitationMarkers(text);
+-    expect(out.replace(/​/g, '')).toBe(text);
+-    expect(out.match(/​/g)?.length).toBe(2);
++    expect(out.replace(/\u200B/g, '')).toBe(text);
++    expect(out.match(/\u200B/g)?.length).toBe(2);
+   });
+ 
+   it('inserts the space between S and its digits', () => {
+-    expect(neutralizeCitationMarkers('[S1]')).toBe('[S​1]');
++    expect(neutralizeCitationMarkers('[S1]')).toBe('[S\u200B1]');
+   });
+ 
+   it('returns the identical string when there is no marker', () => {
+-- 
+2.43.0
+

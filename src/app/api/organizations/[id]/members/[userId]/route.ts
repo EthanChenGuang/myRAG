@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { getSupabaseAdmin } from '@/lib/supabase';
 import { requireMultiTenant } from '@/lib/deployment-mode';
 import { isPersonalOrganization } from '@/lib/auth/organization-handler';
 import { logger } from '@/lib/logger';
@@ -10,18 +11,27 @@ import { logger } from '@/lib/logger';
  */
 export async function PATCH(
   request: Request,
-  { params }: { params: { id: string; userId: string } }
+  { params }: { params: Promise<{ id: string; userId: string }> }
 ) {
   try {
     requireMultiTenant();
+    const { id, userId } = await params;
 
     const supabase = await createClient();
     const {
-      data: { session },
-    } = await supabase.auth.getSession();
+      data: { user: authUser },
+    } = await supabase.auth.getUser();
 
-    if (!session) {
+    if (!authUser) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Membership rows are hidden from non-owners by RLS, so role checks and writes use the service role
+    // once the caller has been verified through getUser.
+    const db = getSupabaseAdmin();
+    if (!db) {
+      logger.error('API', 'Database client is not available');
+      return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
     }
 
     const body = await request.json();
@@ -37,7 +47,7 @@ export async function PATCH(
     }
 
     // Check if personal organization
-    const isPersonal = await isPersonalOrganization(params.id);
+    const isPersonal = await isPersonalOrganization(id);
     if (isPersonal) {
       return NextResponse.json(
         { error: 'Cannot modify personal organization membership' },
@@ -46,11 +56,11 @@ export async function PATCH(
     }
 
     // Verify requester is admin or owner
-    const { data: requesterMembership } = await supabase
+    const { data: requesterMembership } = await db
       .from('organization_members')
       .select('role')
-      .eq('organization_id', params.id)
-      .eq('user_id', session.user.id)
+      .eq('organization_id', id)
+      .eq('user_id', authUser.id)
       .single();
 
     if (!requesterMembership || !['owner', 'admin'].includes(requesterMembership.role)) {
@@ -60,20 +70,39 @@ export async function PATCH(
       );
     }
 
+    const requesterIsOwner = requesterMembership.role === 'owner';
+    if (role === 'owner' && !requesterIsOwner) {
+      return NextResponse.json(
+        { error: 'Only an owner can grant the owner role' },
+        { status: 403 }
+      );
+    }
+
+    const { data: targetMember } = await db
+      .from('organization_members')
+      .select('role')
+      .eq('organization_id', id)
+      .eq('user_id', userId)
+      .single();
+
+    if (!targetMember) {
+      return NextResponse.json({ error: 'Member not found' }, { status: 404 });
+    }
+
+    if (targetMember.role === 'owner' && !requesterIsOwner) {
+      return NextResponse.json(
+        { error: 'Only an owner can change an owner' },
+        { status: 403 }
+      );
+    }
+
     // Prevent removing the last owner
     if (role !== 'owner') {
-      const { data: targetMember } = await supabase
-        .from('organization_members')
-        .select('role')
-        .eq('organization_id', params.id)
-        .eq('user_id', params.userId)
-        .single();
-
-      if (targetMember?.role === 'owner') {
-        const { count } = await supabase
+      if (targetMember.role === 'owner') {
+        const { count } = await db
           .from('organization_members')
           .select('*', { count: 'exact', head: true })
-          .eq('organization_id', params.id)
+          .eq('organization_id', id)
           .eq('role', 'owner');
 
         if (count === 1) {
@@ -86,11 +115,11 @@ export async function PATCH(
     }
 
     // Update member role
-    const { data: member, error: updateError } = await supabase
+    const { data: member, error: updateError } = await db
       .from('organization_members')
       .update({ role })
-      .eq('organization_id', params.id)
-      .eq('user_id', params.userId)
+      .eq('organization_id', id)
+      .eq('user_id', userId)
       .select()
       .single();
 
@@ -102,7 +131,7 @@ export async function PATCH(
       );
     }
 
-    logger.info('API', `Updated role for user ${params.userId} in org ${params.id} to ${role}`);
+    logger.info('API', `Updated role for user ${userId} in org ${id} to ${role}`);
 
     return NextResponse.json(member);
   } catch (error: any) {
@@ -128,22 +157,31 @@ export async function PATCH(
  */
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string; userId: string } }
+  { params }: { params: Promise<{ id: string; userId: string }> }
 ) {
   try {
     requireMultiTenant();
+    const { id, userId } = await params;
 
     const supabase = await createClient();
     const {
-      data: { session },
-    } = await supabase.auth.getSession();
+      data: { user: authUser },
+    } = await supabase.auth.getUser();
 
-    if (!session) {
+    if (!authUser) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Membership rows are hidden from non-owners by RLS, so role checks and writes use the service role
+    // once the caller has been verified through getUser.
+    const db = getSupabaseAdmin();
+    if (!db) {
+      logger.error('API', 'Database client is not available');
+      return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    }
+
     // Check if personal organization
-    const isPersonal = await isPersonalOrganization(params.id);
+    const isPersonal = await isPersonalOrganization(id);
     if (isPersonal) {
       return NextResponse.json(
         { error: 'Cannot remove members from personal organizations' },
@@ -152,11 +190,11 @@ export async function DELETE(
     }
 
     // Get member being removed
-    const { data: targetMember } = await supabase
+    const { data: targetMember } = await db
       .from('organization_members')
       .select('role')
-      .eq('organization_id', params.id)
-      .eq('user_id', params.userId)
+      .eq('organization_id', id)
+      .eq('user_id', userId)
       .single();
 
     if (!targetMember) {
@@ -167,15 +205,15 @@ export async function DELETE(
     }
 
     // Verify requester has permission
-    const { data: requesterMembership } = await supabase
+    const { data: requesterMembership } = await db
       .from('organization_members')
       .select('role')
-      .eq('organization_id', params.id)
-      .eq('user_id', session.user.id)
+      .eq('organization_id', id)
+      .eq('user_id', authUser.id)
       .single();
 
     // Users can remove themselves, or admins/owners can remove others
-    const isSelf = params.userId === session.user.id;
+    const isSelf = userId === authUser.id;
     const hasPermission = requesterMembership && ['owner', 'admin'].includes(requesterMembership.role);
 
     if (!isSelf && !hasPermission) {
@@ -185,12 +223,19 @@ export async function DELETE(
       );
     }
 
+    if (!isSelf && targetMember.role === 'owner' && requesterMembership?.role !== 'owner') {
+      return NextResponse.json(
+        { error: 'Only an owner can remove an owner' },
+        { status: 403 }
+      );
+    }
+
     // Prevent removing the last owner
     if (targetMember.role === 'owner') {
-      const { count } = await supabase
+      const { count } = await db
         .from('organization_members')
         .select('*', { count: 'exact', head: true })
-        .eq('organization_id', params.id)
+        .eq('organization_id', id)
         .eq('role', 'owner');
 
       if (count === 1) {
@@ -202,11 +247,11 @@ export async function DELETE(
     }
 
     // Remove member
-    const { error: deleteError } = await supabase
+    const { error: deleteError } = await db
       .from('organization_members')
       .delete()
-      .eq('organization_id', params.id)
-      .eq('user_id', params.userId);
+      .eq('organization_id', id)
+      .eq('user_id', userId);
 
     if (deleteError) {
       logger.error('API', `Error removing member: ${deleteError.message}`);
@@ -216,7 +261,7 @@ export async function DELETE(
       );
     }
 
-    logger.info('API', `Removed user ${params.userId} from organization ${params.id}`);
+    logger.info('API', `Removed user ${userId} from organization ${id}`);
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

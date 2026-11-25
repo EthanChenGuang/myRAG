@@ -1,5 +1,31 @@
 {
   "$defs": {
+    "DateRangeFilter": {
+      "additionalProperties": false,
+      "properties": {
+        "from": {
+          "format": "date",
+          "title": "From",
+          "type": "string"
+        },
+        "include_undated": {
+          "default": false,
+          "title": "Include Undated",
+          "type": "boolean"
+        },
+        "to": {
+          "format": "date",
+          "title": "To",
+          "type": "string"
+        }
+      },
+      "required": [
+        "from",
+        "to"
+      ],
+      "title": "DateRangeFilter",
+      "type": "object"
+    },
     "GoldenFilter": {
       "additionalProperties": false,
       "properties": {
@@ -28,6 +54,127 @@
       "title": "GoldenFilter",
       "type": "object"
     },
+    "GroundednessLabelCounts": {
+      "additionalProperties": false,
+      "properties": {
+        "not_checked": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Not Checked",
+          "type": "integer"
+        },
+        "possibly_unreliable": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Possibly Unreliable",
+          "type": "integer"
+        },
+        "verified": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Verified",
+          "type": "integer"
+        }
+      },
+      "title": "GroundednessLabelCounts",
+      "type": "object"
+    },
+    "InjectionReport": {
+      "additionalProperties": false,
+      "properties": {
+        "attack_success_rate": {
+          "additionalProperties": {
+            "$ref": "#/$defs/MetricValue"
+          },
+          "title": "Attack Success Rate",
+          "type": "object"
+        },
+        "config_label": {
+          "enum": [
+            "all_off",
+            "recommended",
+            "tagging_only",
+            "other"
+          ],
+          "title": "Config Label",
+          "type": "string"
+        },
+        "exposure_rate": {
+          "additionalProperties": {
+            "$ref": "#/$defs/MetricValue"
+          },
+          "title": "Exposure Rate",
+          "type": "object"
+        },
+        "false_positive_rate": {
+          "additionalProperties": {
+            "$ref": "#/$defs/MetricValue"
+          },
+          "title": "False Positive Rate",
+          "type": "object"
+        },
+        "gate": {
+          "enum": [
+            "absolute_zero",
+            "report_only"
+          ],
+          "title": "Gate",
+          "type": "string"
+        },
+        "items": {
+          "minimum": 0,
+          "title": "Items",
+          "type": "integer"
+        },
+        "rules_false_positive_count": {
+          "minimum": 0,
+          "title": "Rules False Positive Count",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "config_label",
+        "items",
+        "rules_false_positive_count",
+        "gate"
+      ],
+      "title": "InjectionReport",
+      "type": "object"
+    },
+    "InvoiceFilter": {
+      "additionalProperties": false,
+      "properties": {
+        "amount_max": {
+          "pattern": "^-?\\d+(\\.\\d{1,4})?$",
+          "title": "Amount Max",
+          "type": "string"
+        },
+        "amount_min": {
+          "pattern": "^-?\\d+(\\.\\d{1,4})?$",
+          "title": "Amount Min",
+          "type": "string"
+        },
+        "currency": {
+          "maxLength": 3,
+          "minLength": 3,
+          "title": "Currency",
+          "type": "string"
+        },
+        "supplier": {
+          "minLength": 1,
+          "title": "Supplier",
+          "type": "string"
+        }
+      },
+      "required": [
+        "supplier",
+        "amount_min",
+        "amount_max",
+        "currency"
+      ],
+      "title": "InvoiceFilter",
+      "type": "object"
+    },
     "ItemResult": {
       "additionalProperties": false,
       "properties": {
@@ -43,10 +190,49 @@
             "table",
             "scanned",
             "no_answer",
-            "general"
+            "general",
+            "colloquial",
+            "ambiguous",
+            "typo",
+            "cross_lingual",
+            "selective_filter",
+            "injection",
+            "injection_evasive",
+            "cache_paraphrase",
+            "cache_near_miss",
+            "small_talk"
           ],
           "title": "Category",
           "type": "string"
+        },
+        "doc_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Doc Type"
+        },
+        "evidence_language": {
+          "anyOf": [
+            {
+              "enum": [
+                "zh",
+                "en",
+                "it"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Evidence Language"
         },
         "first_hit_rank": {
           "anyOf": [
@@ -74,9 +260,61 @@
           "title": "Language",
           "type": "string"
         },
+        "lexical_hit_at_10": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Lexical Hit At 10"
+        },
+        "provenance": {
+          "enum": [
+            "synthetic_fixture",
+            "claude_draft",
+            "ragas_generated",
+            "human",
+            "production"
+          ],
+          "title": "Provenance",
+          "type": "string"
+        },
+        "question_kind": {
+          "anyOf": [
+            {
+              "enum": [
+                "fact_lookup",
+                "context_heavy",
+                "other"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Question Kind"
+        },
         "refused": {
           "title": "Refused",
           "type": "boolean"
+        },
+        "rerank_status": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rerank Status"
         },
         "span_count": {
           "minimum": 0,
@@ -107,6 +345,7 @@
         "language",
         "category",
         "split",
+        "provenance",
         "answerable",
         "refused",
         "span_count",
@@ -143,9 +382,360 @@
       "title": "MetricValue",
       "type": "object"
     },
+    "QueryBudgetMsOverride": {
+      "additionalProperties": false,
+      "properties": {
+        "chat": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Chat"
+        },
+        "embed": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Embed"
+        },
+        "voice": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Voice"
+        }
+      },
+      "title": "QueryBudgetMsOverride",
+      "type": "object"
+    },
+    "QueryParamsOverride": {
+      "additionalProperties": false,
+      "properties": {
+        "group_deadline_ms": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Group Deadline Ms"
+        },
+        "history_turn_chars": {
+          "anyOf": [
+            {
+              "maximum": 4000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "History Turn Chars"
+        },
+        "history_turns": {
+          "anyOf": [
+            {
+              "maximum": 20,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "History Turns"
+        },
+        "max_llm_variants": {
+          "anyOf": [
+            {
+              "maximum": 2,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Llm Variants"
+        },
+        "max_searches": {
+          "anyOf": [
+            {
+              "maximum": 8,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Searches"
+        },
+        "max_sub_questions": {
+          "anyOf": [
+            {
+              "maximum": 4,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Sub Questions"
+        },
+        "max_translations": {
+          "anyOf": [
+            {
+              "maximum": 2,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Translations"
+        },
+        "query_budget_ms": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/QueryBudgetMsOverride"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "variant_max_chars": {
+          "anyOf": [
+            {
+              "maximum": 4000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Variant Max Chars"
+        },
+        "variant_max_ratio": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 20,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Variant Max Ratio"
+        }
+      },
+      "title": "QueryParamsOverride",
+      "type": "object"
+    },
+    "QueryTransformToggles": {
+      "additionalProperties": false,
+      "properties": {
+        "condense": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Condense"
+        },
+        "decompose": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Decompose"
+        },
+        "expand": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expand"
+        },
+        "hyde": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hyde"
+        },
+        "normalize_dates": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Normalize Dates"
+        },
+        "translate": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Translate"
+        }
+      },
+      "title": "QueryTransformToggles",
+      "type": "object"
+    },
     "RagRunOptions": {
       "additionalProperties": false,
       "properties": {
+        "cache_seed_answer": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cache Seed Answer"
+        },
+        "citations": {
+          "default": false,
+          "title": "Citations",
+          "type": "boolean"
+        },
+        "degrade": {
+          "anyOf": [
+            {
+              "const": "drop_top_candidate",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Degrade"
+        },
+        "disabled_stages": {
+          "anyOf": [
+            {
+              "items": {
+                "enum": [
+                  "refs",
+                  "analyze",
+                  "embed",
+                  "search",
+                  "legacy_rank",
+                  "post_filter",
+                  "assemble",
+                  "voice_keyword_fallback",
+                  "local_rerank",
+                  "injection_check",
+                  "query_gate",
+                  "condense",
+                  "normalize_dates",
+                  "expand",
+                  "hyde",
+                  "decompose",
+                  "semantic_cache"
+                ],
+                "type": "string"
+              },
+              "maxItems": 17,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Disabled Stages"
+        },
+        "embedding_profile": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Embedding Profile"
+        },
         "generator_model": {
           "anyOf": [
             {
@@ -157,6 +747,11 @@
           ],
           "default": null,
           "title": "Generator Model"
+        },
+        "groundedness": {
+          "default": false,
+          "title": "Groundedness",
+          "type": "boolean"
         },
         "max_results": {
           "anyOf": [
@@ -184,6 +779,106 @@
           "default": null,
           "title": "Organization Id"
         },
+        "query_framework": {
+          "anyOf": [
+            {
+              "enum": [
+                "llamaindex",
+                "langchain"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Query Framework"
+        },
+        "query_layer": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Query Layer"
+        },
+        "query_params": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/QueryParamsOverride"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "query_transforms": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/QueryTransformToggles"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "retrieval_filters": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RetrievalFilters"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "retrieval_overrides": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RetrievalOverrides"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "semantic_cache": {
+          "anyOf": [
+            {
+              "enum": [
+                "off",
+                "pgvector",
+                "redisvl"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Semantic Cache"
+        },
+        "stage_timeouts_ms": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StageTimeoutsMs"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "user_id": {
           "anyOf": [
             {
@@ -200,6 +895,245 @@
       "title": "RagRunOptions",
       "type": "object"
     },
+    "RetrievalFilters": {
+      "additionalProperties": false,
+      "properties": {
+        "current_only": {
+          "const": true,
+          "default": true,
+          "title": "Current Only",
+          "type": "boolean"
+        },
+        "date_range": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DateRangeFilter"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "doc_types": {
+          "anyOf": [
+            {
+              "items": {
+                "enum": [
+                  "general",
+                  "financial_report",
+                  "contract_legal",
+                  "invoice_receipt",
+                  "product_technical",
+                  "scanned_image"
+                ],
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Doc Types"
+        },
+        "document_ids": {
+          "anyOf": [
+            {
+              "items": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Document Ids"
+        },
+        "invoice": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/InvoiceFilter"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "languages": {
+          "anyOf": [
+            {
+              "items": {
+                "enum": [
+                  "zh",
+                  "en",
+                  "it"
+                ],
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Languages"
+        },
+        "sources": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sources"
+        }
+      },
+      "title": "RetrievalFilters",
+      "type": "object"
+    },
+    "RetrievalLegWeights": {
+      "additionalProperties": false,
+      "properties": {
+        "dense": {
+          "default": 1.0,
+          "exclusiveMinimum": 0,
+          "title": "Dense",
+          "type": "number"
+        },
+        "exact_id": {
+          "default": 1.0,
+          "exclusiveMinimum": 0,
+          "title": "Exact Id",
+          "type": "number"
+        },
+        "lexical": {
+          "default": 1.0,
+          "exclusiveMinimum": 0,
+          "title": "Lexical",
+          "type": "number"
+        }
+      },
+      "title": "RetrievalLegWeights",
+      "type": "object"
+    },
+    "RetrievalOverrides": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate_pool_size": {
+          "anyOf": [
+            {
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Candidate Pool Size"
+        },
+        "chunking_profile_by_doc_type": {
+          "additionalProperties": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "propertyNames": {
+            "enum": [
+              "general",
+              "financial_report",
+              "contract_legal",
+              "invoice_receipt",
+              "product_technical",
+              "scanned_image"
+            ]
+          },
+          "title": "Chunking Profile By Doc Type",
+          "type": "object"
+        },
+        "final_top_k": {
+          "anyOf": [
+            {
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Final Top K"
+        },
+        "leg_weights": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RetrievalLegWeights"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "rerank_input_cap": {
+          "anyOf": [
+            {
+              "maximum": 100,
+              "minimum": 50,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rerank Input Cap"
+        },
+        "rerank_model": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rerank Model"
+        },
+        "rrf_k": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rrf K"
+        }
+      },
+      "title": "RetrievalOverrides",
+      "type": "object"
+    },
     "SliceMetrics": {
       "additionalProperties": false,
       "properties": {
@@ -208,6 +1142,20 @@
         },
         "false_refusal_rate": {
           "$ref": "#/$defs/MetricValue"
+        },
+        "false_refusal_upper_95": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "False Refusal Upper 95"
         },
         "mrr": {
           "$ref": "#/$defs/MetricValue"
@@ -228,6 +1176,361 @@
       ],
       "title": "SliceMetrics",
       "type": "object"
+    },
+    "StageLatency": {
+      "additionalProperties": false,
+      "properties": {
+        "n": {
+          "minimum": 0,
+          "title": "N",
+          "type": "integer"
+        },
+        "p50_ms": {
+          "minimum": 0,
+          "title": "P50 Ms",
+          "type": "number"
+        },
+        "p95_ms": {
+          "minimum": 0,
+          "title": "P95 Ms",
+          "type": "number"
+        }
+      },
+      "required": [
+        "p50_ms",
+        "p95_ms",
+        "n"
+      ],
+      "title": "StageLatency",
+      "type": "object"
+    },
+    "StageTimeoutsMs": {
+      "additionalProperties": false,
+      "properties": {
+        "analyze": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Analyze"
+        },
+        "assemble": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Assemble"
+        },
+        "condense": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Condense"
+        },
+        "decompose": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Decompose"
+        },
+        "embed": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Embed"
+        },
+        "expand": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expand"
+        },
+        "hyde": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hyde"
+        },
+        "injection_check": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Injection Check"
+        },
+        "legacy_rank": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Legacy Rank"
+        },
+        "local_rerank": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Local Rerank"
+        },
+        "normalize_dates": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Normalize Dates"
+        },
+        "post_filter": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Post Filter"
+        },
+        "query_gate": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Query Gate"
+        },
+        "refs": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Refs"
+        },
+        "search": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Search"
+        },
+        "semantic_cache": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Semantic Cache"
+        },
+        "voice_keyword_fallback": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Voice Keyword Fallback"
+        }
+      },
+      "title": "StageTimeoutsMs",
+      "type": "object"
+    },
+    "StrategySlice": {
+      "additionalProperties": false,
+      "properties": {
+        "citation_coverage": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MetricValue"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "cited_gold_hit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MetricValue"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "faithfulness": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MetricValue"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "generation_latency": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StageLatency"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "invalid_citation_rate": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MetricValue"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "items": {
+          "minimum": 0,
+          "title": "Items",
+          "type": "integer"
+        },
+        "raw_invalid_markers": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Raw Invalid Markers"
+        }
+      },
+      "required": [
+        "items"
+      ],
+      "title": "StrategySlice",
+      "type": "object"
     }
   },
   "additionalProperties": false,
@@ -237,6 +1540,13 @@
         "$ref": "#/$defs/SliceMetrics"
       },
       "title": "By Category",
+      "type": "object"
+    },
+    "by_doc_type": {
+      "additionalProperties": {
+        "$ref": "#/$defs/SliceMetrics"
+      },
+      "title": "By Doc Type",
       "type": "object"
     },
     "by_language": {
@@ -253,12 +1563,69 @@
       "title": "By Language Category",
       "type": "object"
     },
+    "by_language_pair": {
+      "additionalProperties": {
+        "$ref": "#/$defs/SliceMetrics"
+      },
+      "title": "By Language Pair",
+      "type": "object"
+    },
+    "by_provenance": {
+      "additionalProperties": {
+        "$ref": "#/$defs/SliceMetrics"
+      },
+      "title": "By Provenance",
+      "type": "object"
+    },
+    "by_provenance_category": {
+      "additionalProperties": {
+        "$ref": "#/$defs/SliceMetrics"
+      },
+      "title": "By Provenance Category",
+      "type": "object"
+    },
+    "by_question_kind": {
+      "additionalProperties": {
+        "$ref": "#/$defs/SliceMetrics"
+      },
+      "title": "By Question Kind",
+      "type": "object"
+    },
     "by_split": {
       "additionalProperties": {
         "$ref": "#/$defs/SliceMetrics"
       },
       "title": "By Split",
       "type": "object"
+    },
+    "by_strategy": {
+      "additionalProperties": {
+        "$ref": "#/$defs/StrategySlice"
+      },
+      "title": "By Strategy",
+      "type": "object"
+    },
+    "citation_coverage": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/MetricValue"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "cited_gold_hit": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/MetricValue"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "corpus_sha256": {
       "anyOf": [
@@ -312,12 +1679,73 @@
       "default": null,
       "title": "Embedder Version"
     },
+    "gate_population": {
+      "default": "all",
+      "enum": [
+        "all",
+        "production"
+      ],
+      "title": "Gate Population",
+      "type": "string"
+    },
     "golden_filter": {
       "$ref": "#/$defs/GoldenFilter"
     },
     "golden_sha256": {
       "title": "Golden Sha256",
       "type": "string"
+    },
+    "groundedness_labels": {
+      "additionalProperties": {
+        "additionalProperties": {
+          "$ref": "#/$defs/GroundednessLabelCounts"
+        },
+        "type": "object"
+      },
+      "propertyNames": {
+        "enum": [
+          "hhem_2_3_vectara",
+          "hhem_2_1_open",
+          "none"
+        ]
+      },
+      "title": "Groundedness Labels",
+      "type": "object"
+    },
+    "groundedness_latency": {
+      "additionalProperties": {
+        "$ref": "#/$defs/StageLatency"
+      },
+      "propertyNames": {
+        "enum": [
+          "hhem_2_3_vectara",
+          "hhem_2_1_open"
+        ]
+      },
+      "title": "Groundedness Latency",
+      "type": "object"
+    },
+    "injection": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/InjectionReport"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "invalid_citation_rate": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/MetricValue"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "items": {
       "items": {
@@ -333,6 +1761,32 @@
       "title": "K Values",
       "type": "array"
     },
+    "latency": {
+      "anyOf": [
+        {
+          "additionalProperties": {
+            "$ref": "#/$defs/StageLatency"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Latency"
+    },
+    "lexical_leg_hit_rate_at_10": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/MetricValue"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "notes": {
       "items": {
         "type": "string"
@@ -343,8 +1797,32 @@
     "overall": {
       "$ref": "#/$defs/SliceMetrics"
     },
+    "raw_invalid_markers": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Raw Invalid Markers"
+    },
     "request_options": {
       "$ref": "#/$defs/RagRunOptions"
+    },
+    "rerank_skipped_rate": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/MetricValue"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "run_config_hash": {
       "title": "Run Config Hash",

@@ -104,35 +104,46 @@ class McpConfigManager {
     `;
 
     container.innerHTML = html;
+    // Server ids never reach an inline handler; each card's buttons look the id up from the server list.
+    const actions = new Set(['configureBuiltinServer', 'testConnection', 'editServer', 'deleteServer']);
+    container.querySelectorAll('.server-card').forEach((card, index) => {
+      const server = [...builtinServers, ...customServers][index];
+      if (!server) return;
+      card.querySelectorAll('[data-mcp-action]').forEach((button) => {
+        const action = button.getAttribute('data-mcp-action');
+        if (actions.has(action)) button.addEventListener('click', () => this[action](server.id));
+      });
+    });
   }
 
   renderServerCard(server, isBuiltin) {
+    const esc = (value) => this.escapeText(value);
     const statusIcon = this.getServerStatusIcon(server);
     const statusClass = this.getServerStatusClass(server);
     
     return `
-      <div class="server-card ${statusClass}" data-server-id="${server.id}">
+      <div class="server-card ${statusClass}" data-server-id="${esc(server.id)}">
         <div class="server-header">
           <div class="server-info">
             <div class="server-name">
-              ${statusIcon} ${server.name}
+              ${statusIcon} ${esc(server.name)}
               ${isBuiltin ? '<span class="builtin-badge">Built-in</span>' : ''}
             </div>
-            <div class="server-description">${server.description || 'No description'}</div>
+            <div class="server-description">${esc(server.description || 'No description')}</div>
           </div>
           <div class="server-actions">
             ${isBuiltin ? `
-              <button class="btn btn-sm btn-secondary" onclick="mcpConfig.configureBuiltinServer('${server.id}')">
+              <button type="button" class="btn btn-sm btn-secondary" data-mcp-action="configureBuiltinServer">
                 Configure
               </button>
             ` : `
-              <button class="btn btn-sm btn-secondary" onclick="mcpConfig.testConnection('${server.id}')">
+              <button type="button" class="btn btn-sm btn-secondary" data-mcp-action="testConnection">
                 Test
               </button>
-              <button class="btn btn-sm btn-primary" onclick="mcpConfig.editServer('${server.id}')">
+              <button type="button" class="btn btn-sm btn-primary" data-mcp-action="editServer">
                 Edit
               </button>
-              <button class="btn btn-sm btn-danger" onclick="mcpConfig.deleteServer('${server.id}')">
+              <button type="button" class="btn btn-sm btn-danger" data-mcp-action="deleteServer">
                 Delete
               </button>
             `}
@@ -140,10 +151,10 @@ class McpConfigManager {
         </div>
         <div class="server-details">
           <div class="server-endpoint">
-            <strong>Endpoint:</strong> ${server.endpoint}
+            <strong>Host:</strong> ${esc(server.host || '')}${server.hasCredentials ? ' (credentials stored)' : ''}
           </div>
           <div class="server-stats">
-            <span class="stat">Type: ${server.type?.toUpperCase() || 'HTTP'}</span>
+            <span class="stat">Type: ${esc(server.type?.toUpperCase() || 'HTTP')}</span>
             ${server.settings?.enabledInChat ? '<span class="stat enabled">Chat Enabled</span>' : '<span class="stat disabled">Chat Disabled</span>'}
             ${server.settings?.enabledInEmbed ? '<span class="stat enabled">Embed Enabled</span>' : '<span class="stat disabled">Embed Disabled</span>'}
             ${server.settings?.yoloMode ? '<span class="stat yolo">⚡ YOLO Mode</span>' : ''}
@@ -151,6 +162,12 @@ class McpConfigManager {
         </div>
       </div>
     `;
+  }
+
+  escapeText(value) {
+    return String(value === null || value === undefined ? '' : value).replace(/[&<>"'`]/g, (ch) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '`': '&#96;',
+    })[ch]);
   }
 
   getServerStatusIcon(server) {
@@ -213,26 +230,26 @@ class McpConfigManager {
             <form id="server-form">
               <div class="form-group">
                 <label for="server-id">Server ID</label>
-                <input type="text" id="server-id" value="${server.id}" ${isEditing ? 'readonly' : ''} 
+                <input type="text" id="server-id" value="${this.escapeText(server.id)}" ${isEditing ? 'readonly' : ''} 
                        placeholder="unique-server-id" required>
                 <small>Unique identifier for this server (lowercase, no spaces)</small>
               </div>
               
               <div class="form-group">
                 <label for="server-name">Server Name</label>
-                <input type="text" id="server-name" value="${server.name}" 
+                <input type="text" id="server-name" value="${this.escapeText(server.name)}" 
                        placeholder="My Custom MCP Server" required>
               </div>
               
               <div class="form-group">
                 <label for="server-description">Description</label>
-                <textarea id="server-description" placeholder="What this server provides...">${server.description || ''}</textarea>
+                <textarea id="server-description" placeholder="What this server provides...">${this.escapeText(server.description || '')}</textarea>
               </div>
               
               <div class="form-group">
                 <label for="server-endpoint">Endpoint URL</label>
-                <input type="url" id="server-endpoint" value="${server.endpoint}" 
-                       placeholder="https://api.example.com/mcp" required>
+                <input type="url" id="server-endpoint" value="${isEditing ? '' : this.escapeText(server.endpoint)}"
+                       placeholder="${isEditing ? `Leave blank to keep ${this.escapeText(server.host || 'the stored endpoint')}` : 'https://api.example.com/mcp'}" ${isEditing ? '' : 'required'}>
               </div>
               
               <div class="form-group">
@@ -265,11 +282,11 @@ class McpConfigManager {
                 <div class="form-row">
                   <div class="form-group">
                     <label for="timeout">Timeout (ms)</label>
-                    <input type="number" id="timeout" value="${server.settings?.timeout || 30000}" min="1000" max="120000">
+                    <input type="number" id="timeout" value="${this.escapeText(server.settings?.timeout || 30000)}" min="1000" max="120000">
                   </div>
                   <div class="form-group">
                     <label for="retry-attempts">Retry Attempts</label>
-                    <input type="number" id="retry-attempts" value="${server.settings?.retryAttempts || 3}" min="0" max="10">
+                    <input type="number" id="retry-attempts" value="${this.escapeText(server.settings?.retryAttempts || 3)}" min="0" max="10">
                   </div>
                 </div>
                 
@@ -334,7 +351,7 @@ class McpConfigManager {
         return `
           <div class="form-group">
             <label for="bearer-token">Bearer Token</label>
-            <input type="password" id="bearer-token" value="${credentials.token || ''}" 
+            <input type="password" id="bearer-token" value="${this.escapeText(credentials.token || '')}" 
                    placeholder="your-bearer-token">
           </div>
         `;
@@ -342,7 +359,7 @@ class McpConfigManager {
         return `
           <div class="form-group">
             <label for="api-key">API Key</label>
-            <input type="password" id="api-key" value="${credentials.apiKey || ''}" 
+            <input type="password" id="api-key" value="${this.escapeText(credentials.apiKey || '')}" 
                    placeholder="your-api-key">
           </div>
         `;
@@ -351,12 +368,12 @@ class McpConfigManager {
           <div class="form-row">
             <div class="form-group">
               <label for="basic-username">Username</label>
-              <input type="text" id="basic-username" value="${credentials.username || ''}" 
+              <input type="text" id="basic-username" value="${this.escapeText(credentials.username || '')}" 
                      placeholder="username">
             </div>
             <div class="form-group">
               <label for="basic-password">Password</label>
-              <input type="password" id="basic-password" value="${credentials.password || ''}" 
+              <input type="password" id="basic-password" value="${this.escapeText(credentials.password || '')}" 
                      placeholder="password">
             </div>
           </div>
@@ -473,7 +490,7 @@ class McpConfigManager {
     if (!serverData) return;
     
     // Basic validation
-    if (!serverData.id || !serverData.name || !serverData.endpoint) {
+    if (!serverData.id || !serverData.name || (!this.currentEditingServer && !serverData.endpoint)) {
       this.showError('Please fill in all required fields');
       return;
     }
@@ -601,7 +618,7 @@ class McpConfigManager {
       return;
     }
 
-    const currentEndpoint = server.endpoint !== config.defaultEndpoint ? server.endpoint : '';
+    const currentEndpoint = '';
 
     const dialogHtml = `
       <div class="modal-overlay" id="builtin-server-dialog-overlay">
@@ -623,14 +640,14 @@ class McpConfigManager {
                 <div class="form-group">
                   <label for="builtin-endpoint">Server Endpoint URL</label>
                   <input type="url" id="builtin-endpoint" value="${currentEndpoint}" 
-                         placeholder="${config.placeholder}" required>
+                         placeholder="${server.host ? `Currently ${this.escapeText(server.host)}; enter the full URL to change it` : config.placeholder}" required>
                   <small>Enter the URL of your ${serverId} MCP server endpoint</small>
                 </div>
                 
                 <div class="form-group">
                   <label class="checkbox-label">
                     <input type="checkbox" id="builtin-enabled" ${server.enabled ? 'checked' : ''}>
-                    Enable ${server.name}
+                    Enable ${this.escapeText(server.name)}
                   </label>
                   <small>When enabled, this server will be available in chat and other integrations</small>
                 </div>
@@ -803,10 +820,17 @@ class McpConfigManager {
     // Create notification element
     const notification = document.createElement('div');
     notification.className = `notification notification-${type}`;
-    notification.innerHTML = `
-      <span class="notification-message">${message}</span>
-      <button class="notification-close" onclick="this.parentElement.remove()">&times;</button>
-    `;
+    notification.setAttribute('role', type === 'error' ? 'alert' : 'status');
+    const text = document.createElement('span');
+    text.className = 'notification-message';
+    text.textContent = String(message ?? '');
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'notification-close';
+    close.setAttribute('aria-label', 'Dismiss notification');
+    close.textContent = '×';
+    close.addEventListener('click', () => notification.remove());
+    notification.append(text, close);
     
     // Add to page
     const container = document.getElementById('notification-container') || document.body;

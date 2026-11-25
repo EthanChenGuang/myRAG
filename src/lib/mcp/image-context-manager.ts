@@ -264,42 +264,19 @@ class ImageContextManager {
   }
 
   /**
-   * Enhanced lookup with multiple fallback strategies
+   * Exact lookup for one session key; never falls back to another session
    */
   findImagesWithFallback(sessionId: string): string[] {
     logger.debug('ImageContext', `🔍 [ENHANCED] Starting enhanced lookup for session: ${sessionId}`);
     
     // Strategy 1: Direct session ID lookup
-    let urls = this.getDownloadableUrls(sessionId);
+    const urls = this.getDownloadableUrls(sessionId);
     if (urls.length > 0) {
       logger.debug('ImageContext', `✅ [ENHANCED] Direct lookup successful: ${urls.length} URLs`);
       return urls;
     }
     
-    // Strategy 2: Try most recent session as fallback
-    const mostRecentSession = this.getMostRecentSession();
-    if (mostRecentSession && mostRecentSession !== sessionId) {
-      logger.debug('ImageContext', `🔄 [ENHANCED] Trying fallback to most recent session: ${mostRecentSession}`);
-      urls = this.getDownloadableUrls(mostRecentSession);
-      if (urls.length > 0) {
-        logger.debug('ImageContext', `✅ [ENHANCED] Fallback successful: ${urls.length} URLs`);
-        return urls;
-      }
-    }
-    
-    // Strategy 3: Try any session with images
-    for (const [sid, context] of this.contexts.entries()) {
-      if (context.images.length > 0) {
-        logger.debug('ImageContext', `🔄 [ENHANCED] Trying any available session: ${sid}`);
-        urls = context.images.map(img => img.downloadUrl);
-        if (urls.length > 0) {
-          logger.debug('ImageContext', `✅ [ENHANCED] Any-session fallback successful: ${urls.length} URLs`);
-          return urls;
-        }
-      }
-    }
-    
-    logger.warn('ImageContext', `❌ [ENHANCED] All strategies failed for session: ${sessionId}`);
+    logger.warn('ImageContext', `❌ [ENHANCED] No images for session: ${sessionId}`);
     return [];
   }
 

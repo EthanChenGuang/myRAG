@@ -1,0 +1,172 @@
+{
+  "$defs": {
+    "DuplicateCounts": {
+      "additionalProperties": false,
+      "properties": {
+        "already_existing": {
+          "minimum": 0,
+          "title": "Already Existing",
+          "type": "integer"
+        },
+        "in_inventory": {
+          "minimum": 0,
+          "title": "In Inventory",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "in_inventory",
+        "already_existing"
+      ],
+      "title": "DuplicateCounts",
+      "type": "object"
+    },
+    "InventoryTotals": {
+      "additionalProperties": false,
+      "properties": {
+        "bytes": {
+          "minimum": 0,
+          "title": "Bytes",
+          "type": "integer"
+        },
+        "files": {
+          "minimum": 0,
+          "title": "Files",
+          "type": "integer"
+        },
+        "pages_estimated": {
+          "minimum": 0,
+          "title": "Pages Estimated",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "files",
+        "bytes",
+        "pages_estimated"
+      ],
+      "title": "InventoryTotals",
+      "type": "object"
+    },
+    "ProjectedCostSplit": {
+      "additionalProperties": false,
+      "properties": {
+        "embeddings_usd": {
+          "minimum": 0,
+          "title": "Embeddings Usd",
+          "type": "number"
+        },
+        "premium_parse_usd": {
+          "minimum": 0,
+          "title": "Premium Parse Usd",
+          "type": "number"
+        },
+        "total_usd": {
+          "minimum": 0,
+          "title": "Total Usd",
+          "type": "number"
+        },
+        "vlm_usd": {
+          "minimum": 0,
+          "title": "Vlm Usd",
+          "type": "number"
+        }
+      },
+      "required": [
+        "premium_parse_usd",
+        "vlm_usd",
+        "embeddings_usd",
+        "total_usd"
+      ],
+      "title": "ProjectedCostSplit",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "budget_usd": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Budget Usd"
+    },
+    "class_shares": {
+      "additionalProperties": {
+        "type": "number"
+      },
+      "title": "Class Shares",
+      "type": "object"
+    },
+    "duplicates": {
+      "$ref": "#/$defs/DuplicateCounts"
+    },
+    "embedding_cost_by_profile_usd": {
+      "additionalProperties": {
+        "type": "number"
+      },
+      "title": "Embedding Cost By Profile Usd",
+      "type": "object"
+    },
+    "fits_budget": {
+      "title": "Fits Budget",
+      "type": "boolean"
+    },
+    "inventory": {
+      "$ref": "#/$defs/InventoryTotals"
+    },
+    "projected_cost": {
+      "$ref": "#/$defs/ProjectedCostSplit"
+    },
+    "projected_l2_pages": {
+      "minimum": 0,
+      "title": "Projected L2 Pages",
+      "type": "integer"
+    },
+    "projected_l3_pages": {
+      "minimum": 0,
+      "title": "Projected L3 Pages",
+      "type": "integer"
+    },
+    "projected_pages_by_tier": {
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "title": "Projected Pages By Tier",
+      "type": "object"
+    },
+    "projected_wall_time_s": {
+      "minimum": 0,
+      "title": "Projected Wall Time S",
+      "type": "number"
+    },
+    "sample_size_by_class": {
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "title": "Sample Size By Class",
+      "type": "object"
+    }
+  },
+  "required": [
+    "inventory",
+    "duplicates",
+    "sample_size_by_class",
+    "class_shares",
+    "projected_pages_by_tier",
+    "projected_l2_pages",
+    "projected_l3_pages",
+    "projected_cost",
+    "projected_wall_time_s",
+    "embedding_cost_by_profile_usd",
+    "fits_budget"
+  ],
+  "title": "BackfillDryRunReport",
+  "type": "object"
+}

@@ -1,26 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
 import { env } from '@/lib/env';
 import type { NextRequest } from 'next/server';
+import { checkAdmin, requireAdminOrDeny } from '@/lib/admin-route-auth';
 
 interface ConnectorStats {
   connected_users: number;
   last_sync: string | null;
   total_syncs: number;
   failed_syncs: number;
-}
-
-interface UserConnection {
-  connected: boolean;
-  connection_id: string;
-  status: string;
-  connected_at: string | null;
-  last_sync_at: string | null;
-  sync_folder_id: string | null;
-  sync_folder_name: string | null;
-  sync_folder_path: string | null;
-  sync_file_ids: string[] | null;
-  sync_file_names: string[] | null;
-  sync_enabled: boolean;
 }
 
 interface ConnectorProvider {
@@ -32,10 +19,10 @@ interface ConnectorProvider {
   supported_file_types: string[];
   max_files_per_sync: number;
   stats: ConnectorStats;
-  user_connection?: UserConnection | null;
 }
 
 interface ConnectorConfigResponse {
+  view: 'admin' | 'public';
   feature_enabled: boolean;
   show_on_dashboard: boolean;
   providers: ConnectorProvider[];
@@ -59,16 +46,18 @@ const featureSettingsStore: Record<string, boolean> = {
   show_on_dashboard: true,
 };
 
-// GET /api/config/connectors - Fetch all connector configurations
+const SUPPORTED_PROVIDERS = ['google-drive', 'dropbox', 'notion'];
+
+const EMPTY_STATS: ConnectorStats = { connected_users: 0, last_sync: null, total_syncs: 0, failed_syncs: 0 };
+
+// GET /api/config/connectors - Connector configuration. Admins also receive aggregate statistics;
+// everyone else gets the public flags the dashboard needs to decide which connectors to show.
 export async function GET(request: NextRequest) {
+  const isAdmin = (await checkAdmin(request)).ok;
+
   try {
     const supabase = getSupabaseClient();
 
-    // Note: This endpoint is accessed by the Config UI (admin panel) which doesn't have user context.
-    // Instead of requiring auth, we return representative connection data for all providers.
-    // This shows admins the connection status and stats.
-
-    // Get connector configurations
     const { data: configs, error: configError } = await supabase
       .from('connector_config')
       .select('*')
@@ -76,81 +65,31 @@ export async function GET(request: NextRequest) {
 
     if (configError) throw configError;
 
-    // Get connection statistics (all users)
-    const { data: connections, error: connError } = await supabase
-      .from('nango_connections')
-      .select('provider, user_id, last_sync_at, status')
-      .order('provider', { ascending: true });
-
-    if (connError) throw connError;
-
-    // Get first connected user per provider (for Config UI admin view)
-    // This shows representative connection data for each provider
-    const userConnections: any[] = [];
-    const { data: firstConnections, error: firstConnError } = await supabase
-      .from('nango_connections')
-      .select('*')
-      .eq('status', 'connected')
-      .order('connected_at', { ascending: false });
-
-    if (!firstConnError && firstConnections && firstConnections.length > 0) {
-      // Get first connection per provider
-      const seenProviders = new Set<string>();
-      for (const conn of firstConnections) {
-        if (!seenProviders.has(conn.provider)) {
-          userConnections.push(conn);
-          seenProviders.add(conn.provider);
-        }
-      }
-    }
-
-    // Build stats for each provider
     const statsMap: Record<string, ConnectorStats> = {};
 
-    if (connections) {
-      for (const conn of connections) {
-        if (!statsMap[conn.provider]) {
-          statsMap[conn.provider] = {
-            connected_users: 0,
-            last_sync: null,
-            total_syncs: 0,
-            failed_syncs: 0,
-          };
-        }
+    if (isAdmin) {
+      const { data: connections, error: connError } = await supabase
+        .from('nango_connections')
+        .select('provider, last_sync_at, status')
+        .order('provider', { ascending: true });
 
-        statsMap[conn.provider].connected_users += 1;
-        if (conn.last_sync_at && new Date(conn.last_sync_at) > new Date(statsMap[conn.provider].last_sync || 0)) {
-          statsMap[conn.provider].last_sync = conn.last_sync_at;
+      if (connError) throw connError;
+
+      for (const conn of connections || []) {
+        const stats = (statsMap[conn.provider] ||= { ...EMPTY_STATS });
+        stats.connected_users += 1;
+        if (conn.last_sync_at && new Date(conn.last_sync_at) > new Date(stats.last_sync || 0)) {
+          stats.last_sync = conn.last_sync_at;
         }
         if (conn.status === 'error') {
-          statsMap[conn.provider].failed_syncs += 1;
+          stats.failed_syncs += 1;
         }
-        statsMap[conn.provider].total_syncs += 1;
+        stats.total_syncs += 1;
       }
     }
 
-    // Build user connection map
-    const userConnectionMap: Record<string, any> = {};
-    for (const conn of userConnections) {
-      userConnectionMap[conn.provider] = {
-        connected: conn.status === 'connected',
-        connection_id: conn.connection_id,
-        status: conn.status,
-        connected_at: conn.connected_at,
-        last_sync_at: conn.last_sync_at,
-        sync_folder_id: conn.sync_folder_id,
-        sync_folder_name: conn.sync_folder_name,
-        sync_folder_path: conn.sync_folder_path,
-        sync_file_ids: conn.sync_file_ids,
-        sync_file_names: conn.sync_file_names,
-        sync_enabled: conn.sync_enabled,
-      };
-    }
-
-    // Build response - only include supported providers
-    const supportedProviders = ['google-drive', 'dropbox', 'notion'];
-    const providers: any[] = (configs || [])
-      .filter((config: any) => supportedProviders.includes(config.provider))
+    const providers: ConnectorProvider[] = (configs || [])
+      .filter((config: any) => SUPPORTED_PROVIDERS.includes(config.provider))
       .map((config: any) => ({
         provider: config.provider,
         enabled: config.enabled,
@@ -159,45 +98,46 @@ export async function GET(request: NextRequest) {
         description: config.description,
         supported_file_types: config.supported_file_types || [],
         max_files_per_sync: config.max_files_per_sync || 100,
-        stats: statsMap[config.provider] || {
-          connected_users: 0,
-          last_sync: null,
-          total_syncs: 0,
-          failed_syncs: 0,
-        },
-        // Include user connection data (either authenticated user or representative connection for admin view)
-        user_connection: userConnectionMap[config.provider] || null,
+        stats: statsMap[config.provider] || { ...EMPTY_STATS },
       }));
 
-    const response: any = {
+    const response: ConnectorConfigResponse = {
+      view: isAdmin ? 'admin' : 'public',
       feature_enabled: featureSettingsStore.feature_enabled,
       show_on_dashboard: featureSettingsStore.show_on_dashboard,
       providers,
     };
 
-    return Response.json(response);
-  } catch (error) {
-    console.error('Error fetching connector config:', error);
+    return Response.json(response, { headers: { 'Cache-Control': 'no-store' } });
+  } catch {
+    console.error('[Connector Config] failed to fetch connector configuration');
     return Response.json({ error: 'Failed to fetch connector configuration' }, { status: 500 });
   }
 }
 
 // PUT /api/config/connectors - Update connector configurations
 export async function PUT(request: NextRequest) {
-  try {
-    const body = await request.json();
-    const supabase = getSupabaseClient();
+  const denied = await requireAdminOrDeny(request);
+  if (denied) return denied;
 
-    // Verify admin access - for local dev, any auth header is accepted
-    // In production, this should validate the token properly
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader && process.env.NODE_ENV === 'production') {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  try {
+    let body: any;
+    try {
+      body = await request.json();
+    } catch {
+      return Response.json({ error: 'Invalid JSON body' }, { status: 400 });
     }
+    if (!body || typeof body !== 'object') {
+      return Response.json({ error: 'Invalid request body' }, { status: 400 });
+    }
+    const supabase = getSupabaseClient();
 
     // Update each provider configuration
     if (body.providers && Array.isArray(body.providers)) {
       for (const provider of body.providers) {
+        if (!provider || !SUPPORTED_PROVIDERS.includes(provider.provider)) {
+          return Response.json({ error: 'Unsupported connector provider' }, { status: 400 });
+        }
         const { error } = await supabase
           .from('connector_config')
           .update({
@@ -224,12 +164,12 @@ export async function PUT(request: NextRequest) {
         featureSettingsStore.show_on_dashboard = body.show_on_dashboard;
       }
 
-      console.log('Feature settings updated:', featureSettingsStore);
+      console.log('[Connector Config] feature settings updated');
     }
 
     return Response.json({ success: true, message: 'Connector configuration updated' });
-  } catch (error) {
-    console.error('Error updating connector config:', error);
+  } catch {
+    console.error('[Connector Config] failed to update connector configuration');
     return Response.json({ error: 'Failed to update connector configuration' }, { status: 500 });
   }
 }

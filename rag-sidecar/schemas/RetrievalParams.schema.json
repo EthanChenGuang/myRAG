@@ -1,0 +1,112 @@
+{
+  "$defs": {
+    "ConfigProvenance": {
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "enum": [
+            "defaults",
+            "sweep",
+            "calibration",
+            "fixture",
+            "live"
+          ],
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "title": "ConfigProvenance",
+      "type": "object"
+    },
+    "RetrievalLegWeights": {
+      "additionalProperties": false,
+      "properties": {
+        "dense": {
+          "default": 1.0,
+          "exclusiveMinimum": 0,
+          "title": "Dense",
+          "type": "number"
+        },
+        "exact_id": {
+          "default": 1.0,
+          "exclusiveMinimum": 0,
+          "title": "Exact Id",
+          "type": "number"
+        },
+        "lexical": {
+          "default": 1.0,
+          "exclusiveMinimum": 0,
+          "title": "Lexical",
+          "type": "number"
+        }
+      },
+      "title": "RetrievalLegWeights",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "candidate_pool_size": {
+      "default": 75,
+      "maximum": 200,
+      "minimum": 1,
+      "title": "Candidate Pool Size",
+      "type": "integer"
+    },
+    "config_hash": {
+      "anyOf": [
+        {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Config Hash"
+    },
+    "final_top_k": {
+      "default": 8,
+      "maximum": 100,
+      "minimum": 1,
+      "title": "Final Top K",
+      "type": "integer"
+    },
+    "leg_weights": {
+      "$ref": "#/$defs/RetrievalLegWeights"
+    },
+    "provenance": {
+      "$ref": "#/$defs/ConfigProvenance"
+    },
+    "rerank_input_cap": {
+      "default": 75,
+      "maximum": 100,
+      "minimum": 50,
+      "title": "Rerank Input Cap",
+      "type": "integer"
+    },
+    "rrf_k": {
+      "default": 60,
+      "minimum": 1,
+      "title": "Rrf K",
+      "type": "integer"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "sub_question_coverage": {
+      "default": true,
+      "title": "Sub Question Coverage",
+      "type": "boolean"
+    }
+  },
+  "title": "RetrievalParams",
+  "type": "object"
+}

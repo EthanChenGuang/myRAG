@@ -402,6 +402,11 @@ class DocumentManager {
         // Get status styling
         const statusClass = this.getStatusClass(doc.status);
         const statusText = this.getStatusText(doc.status);
+        const docType = doc.doc_type || doc.metadata?.doc_type || '—';
+        const invoiceFailed =
+            doc.metadata?.invoice_extraction?.status === 'failed'
+                ? '<div class="badge badge-error badge-xs mt-1">Invoice extraction failed</div>'
+                : '';
 
         // Get URL status
         const hasUrl = doc.metadata?.external_url;
@@ -417,20 +422,31 @@ class DocumentManager {
                 <div class="text-xs text-base-content/50">${this.formatFileSize(doc.size)}</div>
                 ${sourceBadge}
             </td>
-            <td class="w-1/6 text-center text-sm">${uploadDate}</td>
+            <td class="w-1/6 text-center text-sm">${this.escapeHtml(uploadDate)}</td>
+            <td class="w-1/6 text-center text-sm">
+                <div class="truncate">${this.escapeHtml(docType)}</div>
+                ${invoiceFailed}
+            </td>
             <td class="w-1/6 text-center">
                 <div class="badge ${statusClass} badge-sm">${statusText}</div>
             </td>
-            <td class="w-1/12 text-center">${doc.chunk_count}</td>
+            <td class="w-1/12 text-center">${this.escapeHtml(doc.chunk_count ?? '')}</td>
             <td class="w-1/6 text-center">
-                <button class="btn ${urlButtonClass} btn-sm mr-2" onclick="window.documentManager.addUrl('${doc.id}', '${this.escapeHtml(doc.metadata?.external_url || '').replace(/'/g, "\\'")}')">
+                <button type="button" class="btn btn-outline btn-sm mr-1" data-doc-action="type">
+                    ✏️ Change type
+                </button>
+                <button type="button" class="btn ${urlButtonClass} btn-sm mr-2" data-doc-action="url">
                     ${urlButtonText}
                 </button>
-                <button class="btn btn-error btn-sm" onclick="window.documentManager.confirmDelete('${doc.id}', '${this.escapeHtml(doc.filename).replace(/'/g, "\\'")}')">
+                <button type="button" class="btn btn-error btn-sm" data-doc-action="delete">
                     🗑️ Delete
                 </button>
             </td>
         `;
+        // Handlers get the raw values; nothing from the document reaches an inline handler.
+        row.querySelector('[data-doc-action="type"]').addEventListener('click', () => this.promptChangeDocType(doc.id, String(docType)));
+        row.querySelector('[data-doc-action="url"]').addEventListener('click', () => this.addUrl(doc.id, doc.metadata?.external_url || ''));
+        row.querySelector('[data-doc-action="delete"]').addEventListener('click', () => this.confirmDelete(doc.id, doc.filename));
 
         return row;
     }
@@ -465,23 +481,70 @@ class DocumentManager {
         }
     }
 
+    async promptChangeDocType(docId, currentType) {
+        if (typeof window.ragFetch !== 'function' || typeof window.buildDocTypeSelectOptions !== 'function') {
+            this.showError('RAG admin tools are not loaded. Refresh the Config UI.');
+            return;
+        }
+        const options = window.buildDocTypeSelectOptions('general', 'en').filter((opt) => opt.value !== 'auto');
+        const labels = options.map((opt, index) => `${index + 1}. ${opt.label} (${opt.value})`).join('\n');
+        const choice = globalThis.prompt(
+            `Change document type for this file.\nCurrent: ${currentType}\n\n${labels}\n\nEnter the type id (e.g. invoice_receipt):`,
+            currentType !== '—' ? currentType : 'general',
+        );
+        if (!choice) return;
+        const normalized = String(choice).trim();
+        if (!options.some((opt) => opt.value === normalized)) {
+            this.showError('Invalid document type.');
+            return;
+        }
+        const result = await window.ragFetch(`admin/documents/${encodeURIComponent(docId)}/doc-type`, {
+            method: 'POST',
+            body: JSON.stringify({ docType: normalized }),
+        });
+        if (!result.ok) {
+            this.showError(result.message || `Type change failed (${result.status})`);
+            return;
+        }
+        await this.loadDocuments();
+    }
+
     confirmDelete(docId, docName) {
         const modal = document.createElement('div');
         modal.className = 'modal modal-open';
-        modal.innerHTML = `
-            <div class="modal-box">
-                <h3 class="font-bold text-lg">Delete Document</h3>
-                <p class="py-4">Are you sure you want to delete "${docName}"? This action cannot be undone and will remove all associated chunks from the vector database.</p>
-                <div class="modal-action">
-                    <button class="btn btn-ghost" onclick="this.closest('.modal').remove()">Cancel</button>
-                    <button class="btn btn-error" onclick="window.documentManager.deleteDocument('${docId}'); this.closest('.modal').remove();">
-                        Delete
-                    </button>
-                </div>
-            </div>
-            <div class="modal-backdrop" onclick="this.closest('.modal').remove()"></div>
-        `;
+        modal.setAttribute('role', 'dialog');
+        modal.setAttribute('aria-modal', 'true');
+        const box = document.createElement('div');
+        box.className = 'modal-box overscroll-contain';
+        const title = document.createElement('h3');
+        title.className = 'font-bold text-lg';
+        title.textContent = 'Delete Document';
+        const body = document.createElement('p');
+        body.className = 'py-4';
+        body.textContent = `Are you sure you want to delete “${docName}”? This action cannot be undone and will remove all associated chunks from the vector database.`;
+        const actions = document.createElement('div');
+        actions.className = 'modal-action';
+        const cancel = document.createElement('button');
+        cancel.type = 'button';
+        cancel.className = 'btn btn-ghost';
+        cancel.textContent = 'Cancel';
+        cancel.addEventListener('click', () => modal.remove());
+        const confirm = document.createElement('button');
+        confirm.type = 'button';
+        confirm.className = 'btn btn-error';
+        confirm.textContent = 'Delete';
+        confirm.addEventListener('click', () => {
+            modal.remove();
+            this.deleteDocument(docId);
+        });
+        actions.append(cancel, confirm);
+        box.append(title, body, actions);
+        const backdrop = document.createElement('div');
+        backdrop.className = 'modal-backdrop';
+        backdrop.addEventListener('click', () => modal.remove());
+        modal.append(box, backdrop);
         document.body.appendChild(modal);
+        cancel.focus();
     }
 
     async deleteDocument(docId) {
@@ -641,7 +704,10 @@ class DocumentManager {
     showToast(message, type = 'info') {
         const toast = document.createElement('div');
         toast.className = `alert alert-${type} fixed bottom-4 right-4 w-auto max-w-sm z-50`;
-        toast.innerHTML = `<span>${message}</span>`;
+        toast.setAttribute('role', type === 'error' ? 'alert' : 'status');
+        const text = document.createElement('span');
+        text.textContent = String(message ?? '');
+        toast.appendChild(text);
         document.body.appendChild(toast);
 
         setTimeout(() => {
@@ -664,7 +730,7 @@ class DocumentManager {
             '"': '&quot;',
             "'": '&#039;'
         };
-        return text.replace(/[&<>"']/g, m => map[m]);
+        return String(text ?? '').replace(/[&<>"']/g, m => map[m]);
     }
 
     // Method to refresh documents after upload

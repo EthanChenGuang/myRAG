@@ -1,0 +1,596 @@
+From e046fa6e42ec55b3826d87252adcf9d2d36c38e7 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 24 Nov 2026 22:23:30 +0000
+Subject: [PATCH 1/5] test(03.1-41): detect-vlm route and guarded L3 handler
+ (RED)
+
+- stub handler, full route wrapper, auth/validation/lease/guard/verdict tests
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01X342shLsAZx6PYph2vA7hc
+---
+ .../rag/ingest/jobs/[id]/detect-vlm/route.ts  |  35 ++
+ src/lib/rag/index.ts                          |   1 +
+ src/lib/rag/ingest/callbacks/detect-vlm.ts    |  22 +
+ tests/rag/ingest/detect-vlm.test.ts           | 486 ++++++++++++++++++
+ 4 files changed, 544 insertions(+)
+ create mode 100644 src/app/api/internal/rag/ingest/jobs/[id]/detect-vlm/route.ts
+ create mode 100644 src/lib/rag/ingest/callbacks/detect-vlm.ts
+ create mode 100644 tests/rag/ingest/detect-vlm.test.ts
+
+diff --git a/src/app/api/internal/rag/ingest/jobs/[id]/detect-vlm/route.ts b/src/app/api/internal/rag/ingest/jobs/[id]/detect-vlm/route.ts
+new file mode 100644
+index 0000000..9363220
+--- /dev/null
++++ b/src/app/api/internal/rag/ingest/jobs/[id]/detect-vlm/route.ts
+@@ -0,0 +1,35 @@
++import { NextRequest, NextResponse } from 'next/server';
++import { validateRequest } from '@/lib/api-middleware';
++import { checkSidecarSecret, handleDetectVlm } from '@/lib/rag';
++import { DetectVlmRequestSchema, DetectVlmResponseSchema } from '@/lib/rag-eval/contracts.generated';
++
++export const runtime = 'nodejs';
++export const maxDuration = 60;
++
++const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
++
++/**
++ * Internal L3 callback of the ingestion sidecar worker. The shared secret is checked before anything else; the tenant is minted
++ * from the job row inside the handler and is not a field of the body (the schema is strict). Page images are never logged.
++ */
++export async function POST(req: NextRequest, context: { params: Promise<{ id: string }> }): Promise<NextResponse> {
++  const auth = checkSidecarSecret(req.headers);
++  if (!auth.ok) return NextResponse.json({ error: 'unauthorized' }, { status: auth.status });
++
++  const { id } = await context.params;
++  if (!UUID.test(id)) return NextResponse.json({ error: 'invalid_job_id' }, { status: 400 });
++
++  const parsed = await validateRequest(req, DetectVlmRequestSchema);
++  if (!parsed.success) return parsed.response;
++
++  const result = await handleDetectVlm(id.toLowerCase(), parsed.data, { signal: req.signal });
++  if (result.status === 200) {
++    const checked = DetectVlmResponseSchema.safeParse(result.body);
++    if (!checked.success) {
++      console.error('[RAG Ingest] detect-vlm produced an invalid response');
++      return NextResponse.json({ error: 'invalid_response' }, { status: 500 });
++    }
++    return NextResponse.json(checked.data);
++  }
++  return NextResponse.json(result.body, { status: result.status });
++}
+diff --git a/src/lib/rag/index.ts b/src/lib/rag/index.ts
+index 026071c..cda5f53 100644
+--- a/src/lib/rag/index.ts
++++ b/src/lib/rag/index.ts
+@@ -151,6 +151,7 @@ export { loadQueueConfig, queueConfigFromProcessEnv } from './ingest/queue-confi
+ export type { QueueConfig } from './ingest/queue-config';
+ export { handleAdvance } from './ingest/callbacks/advance';
+ export { handleParseExternal } from './ingest/callbacks/parse-external';
++export { handleDetectVlm } from './ingest/callbacks/detect-vlm';
+ export { checkSidecarSecret, SIDECAR_SECRET_HEADER } from './ingest/callbacks/internal-auth';
+ export type { ChangeDocumentTypeFailure, ChangeDocumentTypeInput, ChangeDocumentTypeResult } from './ingest/change-doc-type';
+ export { scopeForAdminDocument, AdminDocumentScopeError } from './tenant/ingest-scope';
+diff --git a/src/lib/rag/ingest/callbacks/detect-vlm.ts b/src/lib/rag/ingest/callbacks/detect-vlm.ts
+new file mode 100644
+index 0000000..35f20bb
+--- /dev/null
++++ b/src/lib/rag/ingest/callbacks/detect-vlm.ts
+@@ -0,0 +1,22 @@
++import type { DetectVlmRequest, DetectVlmResponse } from '@/lib/rag-eval/contracts.generated';
++import { refuse, type CallbackResult } from './common';
++
++export interface VlmDetectInput {
++  model: string;
++  page: number;
++  png: Uint8Array;
++}
++
++export type VlmDetectFn = (_input: VlmDetectInput, _options: { signal?: AbortSignal }) => Promise<string>;
++
++export function setVlmDetectorForTests(_fn: VlmDetectFn): void {}
++
++export function resetVlmDetectorForTests(): void {}
++
++export function handleDetectVlm(
++  _jobId: string,
++  _body: DetectVlmRequest,
++  _options: { signal: AbortSignal },
++): Promise<CallbackResult<DetectVlmResponse>> {
++  return Promise.resolve(refuse(500, 'not_implemented'));
++}
+diff --git a/tests/rag/ingest/detect-vlm.test.ts b/tests/rag/ingest/detect-vlm.test.ts
+new file mode 100644
+index 0000000..ade9636
+--- /dev/null
++++ b/tests/rag/ingest/detect-vlm.test.ts
+@@ -0,0 +1,486 @@
++import { NextRequest } from 'next/server';
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
++import type { RpcClient, RpcRequest, RpcResponse } from '@/lib/rag/backend/supabase-rpc';
++import { SIDECAR_SECRET_HEADER } from '@/lib/rag/ingest/callbacks/internal-auth';
++import { resetCloudGuardDepsForTests, setCloudGuardDepsForTests } from '@/lib/rag/ingest/guard/cloud-budget';
++import { imageCaptionModelId } from '@/lib/rag/ingest/captioner';
++import { loadQueueConfig } from '@/lib/rag/ingest/queue-config';
++import { getProcessingProfile } from '@/lib/rag/ingest/profiles/load';
++import { loadRoutingConfig } from '@/lib/rag/ingest/routing/config';
++import { buildJobSettings } from '@/lib/rag/ingest/routing/settings-snapshot';
++import { resetVlmDetectorForTests, setVlmDetectorForTests, type VlmDetectInput } from '@/lib/rag/ingest/callbacks/detect-vlm';
++import { installIngestDeps, uninstallIngestDeps } from '../../helpers/ingest-fakes';
++
++const SECRET = 'detect-vlm-sidecar-secret-0000000000000';
++const JOB_A = '10000000-0000-4000-8000-000000000001';
++const JOB_B = '10000000-0000-4000-8000-000000000002';
++const JOB_UNKNOWN = '20000000-0000-4000-8000-000000000002';
++const USER_A = '00000000-0000-4000-8000-0000000000a1';
++const ORG_B = '00000000-0000-4000-8000-0000000000c2';
++const WORKER_A = 'worker-holding-lease-a';
++const WORKER_B = 'worker-holding-lease-b';
++const NOW = Date.UTC(2026, 10, 24, 12, 0, 0);
++
++const PNG_HEAD = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
++
++function pngBase64(marker: string, extraBytes = 0): string {
++  return Buffer.concat([PNG_HEAD, Buffer.from(marker), Buffer.alloc(extraBytes, 1)]).toString('base64');
++}
++
++const VERDICT = {
++  has_table: true,
++  has_multi_column: false,
++  is_scanned: false,
++  has_formula: false,
++  has_chart: false,
++  complexity: 'simple',
++  confidence: 0.9,
++};
++
++interface LedgerCall {
++  fn: string;
++  args: Record<string, unknown>;
++}
++
++function jobRow(
++  id: string,
++  tenantKey: string,
++  worker: string,
++  settingsEnv: Record<string, string>,
++  overrides: Record<string, unknown> = {},
++): Record<string, unknown> {
++  const settings = buildJobSettings({
++    queueConfig: loadQueueConfig({
++      RAG_INGEST_PIPELINE: 'unified',
++      RAG_INGEST_ASYNC: 'on',
++      RAG_PARSE_ROUTING: 'tiered',
++      RAG_PARSE_VLM_DETECT: 'true',
++      RAG_PARSER_ALLOW_CLOUD: 'true',
++      RAG_PARSE_PREMIUM_PAGE_BUDGET: '10',
++      ...settingsEnv,
++    }),
++    profile: getProcessingProfile('general'),
++    bounds: { min_tier: 'fast', max_tier: 'premium' },
++    routingConfig: loadRoutingConfig(),
++  });
++  return {
++    id,
++    kind: 'ingest',
++    status: 'parsing',
++    tenant_key: tenantKey,
++    source: 'config_upload',
++    source_key: 'doc.pdf',
++    priority: 100,
++    retries: 0,
++    max_retries: 3,
++    escalations: 0,
++    attempts: [],
++    page_ranges: [],
++    tier_page_counts: {},
++    detect_counts: null,
++    timings: {},
++    stage_state: {},
++    settings,
++    created_at: '2026-01-01T00:00:00.000Z',
++    updated_at: '2026-01-01T00:00:00.000Z',
++    deleted_at: null,
++    document_id: null,
++    lineage_id: null,
++    version: null,
++    lease_until: new Date(NOW + 60_000).toISOString(),
++    run_after: null,
++    locked_by: worker,
++    runner: 'worker',
++    batch_id: null,
++    file_sha256: null,
++    filename: 'secret-filename.pdf',
++    mime_type: 'application/pdf',
++    original_ref: null,
++    stage: 'preflight',
++    doc_class: null,
++    tier: null,
++    parser_used: null,
++    parser_version: null,
++    pages: null,
++    preflight_ref: null,
++    est_cost_usd: null,
++    embedding_profile: null,
++    error_class: null,
++    needs_review_reason: null,
++    routing_note: null,
++    provisional_published_at: null,
++    trace_id: null,
++    ...overrides,
++  };
++}
++
++interface Ledger {
++  db: RpcClient;
++  calls: LedgerCall[];
++}
++
++function fakeLedger(rows: Record<string, Record<string, unknown>>, options: { reserve?: boolean | 'batch_refused' } = {}): Ledger {
++  const calls: LedgerCall[] = [];
++  const db: RpcClient = {
++    rpc(fn, args) {
++      const record = (args ?? {}) as Record<string, unknown>;
++      calls.push({ fn, args: record });
++      let response: RpcResponse;
++      if (fn === 'rag_get_ingestion_job_internal') {
++        const row = rows[String(record.p_job_id)];
++        response = { data: row ? [row] : [], error: null };
++      } else if (fn === 'rag_reserve_parse_budget') {
++        response = { data: [{ [fn]: options.reserve !== false }], error: null };
++      } else if (fn === 'rag_reserve_batch_budget') {
++        response = { data: [{ [fn]: options.reserve !== 'batch_refused' }], error: null };
++      } else {
++        response = { data: [{ [fn]: true }], error: null };
++      }
++      const request: RpcRequest = {
++        abortSignal: () => request,
++        then: (onFulfilled, onRejected) => Promise.resolve(response).then(onFulfilled, onRejected),
++      };
++      return request;
++    },
++  };
++  return { db, calls };
++}
++
++interface Stub {
++  inputs: VlmDetectInput[];
++  answer: (input: VlmDetectInput) => string | Promise<string>;
++}
++
++function installStub(answer: Stub['answer'] = () => JSON.stringify(VERDICT)): Stub {
++  const stub: Stub = { inputs: [], answer };
++  setVlmDetectorForTests(async (input) => {
++    stub.inputs.push(input);
++    return stub.answer(input);
++  });
++  return stub;
++}
++
++function body(worker: string, pages: number[], extra: Record<string, unknown> = {}) {
++  return {
++    worker_id: worker,
++    attempt_no: 1,
++    pages: pages.map((page) => ({ page, png_base64: pngBase64(`page-${page}`) })),
++    ...extra,
++  };
++}
++
++async function post(jobId: string, payload: unknown, secret: string | null | undefined = SECRET) {
++  const headers: Record<string, string> = { 'content-type': 'application/json' };
++  if (secret !== null && secret !== undefined) headers[SIDECAR_SECRET_HEADER] = secret;
++  const route = await import('@/app/api/internal/rag/ingest/jobs/[id]/detect-vlm/route');
++  const req = new NextRequest(`http://localhost/api/internal/rag/ingest/jobs/${jobId}/detect-vlm`, {
++    method: 'POST',
++    headers,
++    body: JSON.stringify(payload),
++  });
++  const res = await route.POST(req, { params: Promise.resolve({ id: jobId }) });
++  const text = await res.text();
++  let json: Record<string, unknown> = {};
++  try {
++    json = JSON.parse(text) as Record<string, unknown>;
++  } catch {
++    json = { raw: text };
++  }
++  return { status: res.status, json, text };
++}
++
++function install(rows: Record<string, Record<string, unknown>>, options: { reserve?: boolean | 'batch_refused' } = {}): Ledger {
++  const ledger = fakeLedger(rows, options);
++  installIngestDeps({ db: ledger.db, now: () => NOW });
++  setCloudGuardDepsForTests({ db: () => ledger.db });
++  return ledger;
++}
++
++const rowsA = (settingsEnv: Record<string, string> = {}, overrides: Record<string, unknown> = {}) => ({
++  [JOB_A]: jobRow(JOB_A, `u:${USER_A}`, WORKER_A, settingsEnv, overrides),
++});
++
++let logSpies: Array<ReturnType<typeof vi.spyOn>>;
++
++beforeEach(() => {
++  vi.stubEnv('RAG_SIDECAR_SECRET', SECRET);
++  vi.stubEnv('RAG_PARSER_ALLOW_CLOUD', 'true');
++  vi.stubEnv('RAG_PARSE_PREMIUM_PAGE_BUDGET', '10');
++  logSpies = [
++    vi.spyOn(console, 'log').mockImplementation(() => undefined),
++    vi.spyOn(console, 'info').mockImplementation(() => undefined),
++    vi.spyOn(console, 'debug').mockImplementation(() => undefined),
++    vi.spyOn(console, 'warn').mockImplementation(() => undefined),
++    vi.spyOn(console, 'error').mockImplementation(() => undefined),
++  ];
++});
++
++afterEach(() => {
++  resetVlmDetectorForTests();
++  resetCloudGuardDepsForTests();
++  uninstallIngestDeps();
++  vi.unstubAllEnvs();
++  vi.restoreAllMocks();
++});
++
++describe('detect-vlm route: auth, validation, lease', () => {
++  it('401 without a valid secret, before any ledger call or model request', async () => {
++    const ledger = install(rowsA());
++    const stub = installStub();
++    for (const secret of [undefined, '', 'wrong', SECRET.slice(0, -1)]) {
++      const res = await post(JOB_A, body(WORKER_A, [1]), secret);
++      expect(res.status).toBe(401);
++      expect(res.json).toEqual({ error: 'unauthorized' });
++    }
++    vi.stubEnv('RAG_SIDECAR_SECRET', '');
++    expect((await post(JOB_A, body(WORKER_A, [1]))).status).toBe(401);
++    expect(ledger.calls).toHaveLength(0);
++    expect(stub.inputs).toHaveLength(0);
++  });
++
++  it('400 for a non-UUID job id, a malformed body, a tenant_key field and invalid or oversized images', async () => {
++    const ledger = install(rowsA());
++    const stub = installStub();
++    expect((await post('abc', body(WORKER_A, [1]))).status).toBe(400);
++    expect((await post(JOB_A, { worker_id: WORKER_A })).status).toBe(400);
++    expect((await post(JOB_A, body(WORKER_A, [1], { tenant_key: `o:${ORG_B}` }))).status).toBe(400);
++    expect((await post(JOB_A, body(WORKER_A, Array.from({ length: 21 }, (_, i) => i + 1)))).status).toBe(400);
++    const notPng = { ...body(WORKER_A, [1]), pages: [{ page: 1, png_base64: Buffer.from('plain text, not a png').toString('base64') }] };
++    expect(await post(JOB_A, notPng)).toMatchObject({ status: 400, json: { error: 'image_invalid' } });
++    const oversized = { ...body(WORKER_A, [1]), pages: [{ page: 1, png_base64: pngBase64('big', 400_001) }] };
++    expect(await post(JOB_A, oversized)).toMatchObject({ status: 400, json: { error: 'image_invalid' } });
++    const notBase64 = { ...body(WORKER_A, [1]), pages: [{ page: 1, png_base64: '***not base64***' }] };
++    expect(await post(JOB_A, notBase64)).toMatchObject({ status: 400, json: { error: 'image_invalid' } });
++    const duplicate = body(WORKER_A, [2, 2]);
++    expect(await post(JOB_A, duplicate)).toMatchObject({ status: 400, json: { error: 'duplicate_pages' } });
++    expect(ledger.calls.filter((call) => call.fn.startsWith('rag_reserve'))).toHaveLength(0);
++    expect(stub.inputs).toHaveLength(0);
++  });
++
++  it('404 for an unknown job', async () => {
++    install(rowsA());
++    const stub = installStub();
++    expect(await post(JOB_UNKNOWN, body(WORKER_A, [1]))).toMatchObject({ status: 404, json: { error: 'job_not_found' } });
++    expect(stub.inputs).toHaveLength(0);
++  });
++
++  it('409 lease_lost when the worker does not hold the lease, when the lease expired and when the job is terminal', async () => {
++    const stub = installStub();
++    install(rowsA());
++    expect(await post(JOB_A, body(WORKER_B, [1]))).toMatchObject({ status: 409, json: { error: 'lease_lost' } });
++    install(rowsA({}, { lease_until: new Date(NOW - 1000).toISOString() }));
++    expect(await post(JOB_A, body(WORKER_A, [1]))).toMatchObject({ status: 409, json: { error: 'lease_lost' } });
++    install(rowsA({}, { status: 'failed' }));
++    expect(await post(JOB_A, body(WORKER_A, [1]))).toMatchObject({ status: 409, json: { error: 'lease_lost' } });
++    expect(stub.inputs).toHaveLength(0);
++  });
++
++  it('409 vlm_detect_disabled when the job snapshot has the switch off, with no model request and no reservation', async () => {
++    const ledger = install(rowsA({ RAG_PARSE_VLM_DETECT: 'false' }));
++    const stub = installStub();
++    expect(await post(JOB_A, body(WORKER_A, [1]))).toMatchObject({ status: 409, json: { error: 'vlm_detect_disabled' } });
++    expect(stub.inputs).toHaveLength(0);
++    expect(ledger.calls.filter((call) => call.fn.startsWith('rag_reserve'))).toHaveLength(0);
++  });
++});
++
++describe('detect-vlm guard', () => {
++  it.each(['false', '0', 'off', 'maybe-later'])('RAG_PARSER_ALLOW_CLOUD=%s: every page refused cloud_not_allowed, stub receives zero requests', async (value) => {
++    vi.stubEnv('RAG_PARSER_ALLOW_CLOUD', value);
++    const ledger = install(rowsA());
++    const stub = installStub();
++    const res = await post(JOB_A, body(WORKER_A, [3, 4, 5]));
++    expect(res.status).toBe(200);
++    expect(res.json).toEqual({
++      worker_id: WORKER_A,
++      pages: [3, 4, 5].map((page) => ({ page, verdict: null, refused: 'cloud_not_allowed' })),
++    });
++    expect(stub.inputs).toHaveLength(0);
++    expect(ledger.calls.filter((call) => call.fn.startsWith('rag_reserve'))).toHaveLength(0);
++  });
++
++  it('a job whose snapshot recorded cloud off is refused even when the live switch is on', async () => {
++    const ledger = install(rowsA({ RAG_PARSER_ALLOW_CLOUD: 'false' }));
++    const stub = installStub();
++    const res = await post(JOB_A, body(WORKER_A, [1, 2]));
++    expect(res.json).toMatchObject({ pages: [{ page: 1, refused: 'cloud_not_allowed' }, { page: 2, refused: 'cloud_not_allowed' }] });
++    expect(stub.inputs).toHaveLength(0);
++    expect(ledger.calls.filter((call) => call.fn.startsWith('rag_reserve'))).toHaveLength(0);
++  });
++
++  it('budget 0: refused budget_exhausted and the stub is never called', async () => {
++    const ledger = install(rowsA(), { reserve: false });
++    vi.stubEnv('RAG_PARSE_PREMIUM_PAGE_BUDGET', '0');
++    const stub = installStub();
++    const res = await post(JOB_A, body(WORKER_A, [1, 2]));
++    expect(res.status).toBe(200);
++    expect(res.json).toEqual({
++      worker_id: WORKER_A,
++      pages: [1, 2].map((page) => ({ page, verdict: null, refused: 'budget_exhausted' })),
++    });
++    expect(stub.inputs).toHaveLength(0);
++    const reserve = ledger.calls.find((call) => call.fn === 'rag_reserve_parse_budget');
++    expect(reserve?.args).toMatchObject({ p_kind: 'vlm', p_pages: 2, p_limit: 0 });
++    expect(ledger.calls.some((call) => call.fn === 'rag_settle_parse_budget')).toBe(false);
++  });
++
++  it('a refused batch budget is reported per page and sends nothing', async () => {
++    install(rowsA(), { reserve: 'batch_refused' });
++    const stub = installStub();
++    const res = await post(JOB_A, body(WORKER_A, [1]));
++    expect(res.json).toEqual({ worker_id: WORKER_A, pages: [{ page: 1, verdict: null, refused: 'batch_budget_exhausted' }] });
++    expect(stub.inputs).toHaveLength(0);
++  });
++
++  it('budget 10 with 3 pages: 3 reserved as vlm, the stub gets 3 images, 3 vlm pages settled', async () => {
++    const ledger = install(rowsA());
++    const stub = installStub();
++    const res = await post(JOB_A, body(WORKER_A, [7, 8, 9]));
++    expect(res.status).toBe(200);
++    expect(res.json).toEqual({
++      worker_id: WORKER_A,
++      pages: [7, 8, 9].map((page) => ({ page, verdict: VERDICT, refused: null })),
++    });
++    expect(stub.inputs.map((input) => input.page).sort()).toEqual([7, 8, 9]);
++    expect(stub.inputs.every((input) => input.png.byteLength > 0)).toBe(true);
++    const reserve = ledger.calls.find((call) => call.fn === 'rag_reserve_parse_budget');
++    expect(reserve?.args).toMatchObject({ p_job_id: JOB_A, p_kind: 'vlm', p_pages: 3, p_limit: 10 });
++    expect(ledger.calls.findIndex((call) => call.fn === 'rag_reserve_parse_budget')).toBeLessThan(
++      ledger.calls.findIndex((call) => call.fn === 'rag_reserve_batch_budget'),
++    );
++    const batch = ledger.calls.find((call) => call.fn === 'rag_reserve_batch_budget');
++    expect(batch?.args.p_job_id).toBe(JOB_A);
++    expect(typeof batch?.args.p_usd).toBe('number');
++    const settle = ledger.calls.filter((call) => call.fn === 'rag_settle_parse_budget');
++    expect(settle).toHaveLength(1);
++    expect(settle[0]?.args).toMatchObject({ p_job_id: JOB_A, p_kind: 'vlm', p_pages_used: 3 });
++    expect(ledger.calls.some((call) => call.fn === 'rag_release_parse_budget')).toBe(false);
++  });
++
++  it('reserves before the first model request', async () => {
++    const ledger = install(rowsA());
++    let reservedAtFirstRequest = false;
++    installStub((_input) => {
++      reservedAtFirstRequest = ledger.calls.some((call) => call.fn === 'rag_reserve_batch_budget');
++      return JSON.stringify(VERDICT);
++    });
++    await post(JOB_A, body(WORKER_A, [1]));
++    expect(reservedAtFirstRequest).toBe(true);
++  });
++});
++
++describe('detect-vlm verdict validation', () => {
++  it('an answer that fails PageStructureVerdict validation leaves that page without a verdict and does not charge it', async () => {
++    const ledger = install(rowsA());
++    const stub = installStub((input) =>
++      input.page === 2 ? JSON.stringify({ ...VERDICT, complexity: 'medium' }) : JSON.stringify(VERDICT),
++    );
++    const res = await post(JOB_A, body(WORKER_A, [1, 2, 3]));
++    expect(res.status).toBe(200);
++    expect(res.json).toEqual({
++      worker_id: WORKER_A,
++      pages: [1, 3].map((page) => ({ page, verdict: VERDICT, refused: null })),
++    });
++    expect(stub.inputs).toHaveLength(3);
++    const settle = ledger.calls.find((call) => call.fn === 'rag_settle_parse_budget');
++    expect(settle?.args.p_pages_used).toBe(2);
++  });
++
++  it.each([
++    ['not json', 'I think this page has a table'],
++    ['extra fields', JSON.stringify({ ...VERDICT, injected: 'premium' })],
++    ['confidence out of range', JSON.stringify({ ...VERDICT, confidence: 3 })],
++    ['array', JSON.stringify([VERDICT])],
++    ['empty', ''],
++  ])('rejects an unusable answer (%s) and releases the reservation when no page is valid', async (_name, answer) => {
++    const ledger = install(rowsA());
++    installStub(() => answer);
++    const res = await post(JOB_A, body(WORKER_A, [1]));
++    expect(res.status).toBe(200);
++    expect(res.json).toEqual({ worker_id: WORKER_A, pages: [] });
++    expect(ledger.calls.some((call) => call.fn === 'rag_release_parse_budget')).toBe(true);
++    expect(ledger.calls.some((call) => call.fn === 'rag_settle_parse_budget')).toBe(false);
++  });
++
++  it('accepts a verdict wrapped in a json code fence', async () => {
++    install(rowsA());
++    installStub(() => `\`\`\`json\n${JSON.stringify(VERDICT)}\n\`\`\``);
++    const res = await post(JOB_A, body(WORKER_A, [1]));
++    expect(res.json).toEqual({ worker_id: WORKER_A, pages: [{ page: 1, verdict: VERDICT, refused: null }] });
++  });
++
++  it('a model call that throws fails only that page', async () => {
++    install(rowsA());
++    installStub((input) => {
++      if (input.page === 1) throw new Error('provider exploded with secret-filename.pdf');
++      return JSON.stringify(VERDICT);
++    });
++    const res = await post(JOB_A, body(WORKER_A, [1, 2]));
++    expect(res.status).toBe(200);
++    expect(res.json).toEqual({ worker_id: WORKER_A, pages: [{ page: 2, verdict: VERDICT, refused: null }] });
++    expect(res.text).not.toMatch(/secret-filename|exploded/);
++  });
++});
++
++describe('detect-vlm model id', () => {
++  it('RAG_PARSE_VLM_MODEL empty uses the captioning model id', async () => {
++    install(rowsA({ RAG_PARSE_VLM_MODEL: '' }));
++    const stub = installStub();
++    await post(JOB_A, body(WORKER_A, [1]));
++    expect(stub.inputs[0]?.model).toBe(imageCaptionModelId());
++  });
++
++  it('a set RAG_PARSE_VLM_MODEL is used as given', async () => {
++    install(rowsA({ RAG_PARSE_VLM_MODEL: 'vision-model-placeholder' }));
++    const stub = installStub();
++    await post(JOB_A, body(WORKER_A, [1]));
++    expect(stub.inputs[0]?.model).toBe('vision-model-placeholder');
++  });
++});
++
++describe('detect-vlm tenant scope and logging', () => {
++  it('reserves against the job row of the caller and never touches the other tenant job', async () => {
++    const rows = {
++      ...rowsA(),
++      [JOB_B]: jobRow(JOB_B, `o:${ORG_B}`, WORKER_B, {}),
++    };
++    const ledger = install(rows);
++    installStub();
++    expect((await post(JOB_A, body(WORKER_A, [1]))).status).toBe(200);
++    const budgetCalls = ledger.calls.filter((call) => call.fn.startsWith('rag_reserve') || call.fn.startsWith('rag_settle'));
++    expect(budgetCalls.length).toBeGreaterThan(0);
++    expect(budgetCalls.every((call) => call.args.p_job_id === JOB_A)).toBe(true);
++    // worker B holds job B only: it cannot spend job A's budget
++    expect(await post(JOB_A, body(WORKER_B, [1]))).toMatchObject({ status: 409, json: { error: 'lease_lost' } });
++    // and job B is reserved under its own id
++    ledger.calls.length = 0;
++    expect((await post(JOB_B, body(WORKER_B, [1]))).status).toBe(200);
++    expect(ledger.calls.filter((call) => call.fn.startsWith('rag_reserve')).every((call) => call.args.p_job_id === JOB_B)).toBe(true);
++  });
++
++  it('a job row with an invalid tenant key is refused as not found', async () => {
++    install({ [JOB_A]: jobRow(JOB_A, 'not-a-tenant', WORKER_A, {}) });
++    const stub = installStub();
++    expect(await post(JOB_A, body(WORKER_A, [1]))).toMatchObject({ status: 404, json: { error: 'job_not_found' } });
++    expect(stub.inputs).toHaveLength(0);
++  });
++
++  it('no log line and no response carries image data or the file name', async () => {
++    install(rowsA());
++    installStub();
++    const payload = body(WORKER_A, [1, 2]);
++    const res = await post(JOB_A, payload);
++    const everything = JSON.stringify(logSpies.flatMap((spy) => spy.mock.calls)) + res.text;
++    for (const page of payload.pages) {
++      expect(everything).not.toContain(page.png_base64);
++      expect(everything).not.toContain(page.png_base64.slice(0, 24));
++    }
++    expect(everything).not.toContain('secret-filename');
++
++    // a refused call logs as well, still without images
++    vi.stubEnv('RAG_PARSER_ALLOW_CLOUD', 'false');
++    await post(JOB_A, payload);
++    const refusedLogs = JSON.stringify(logSpies.flatMap((spy) => spy.mock.calls));
++    expect(refusedLogs).not.toContain(payload.pages[0]!.png_base64.slice(0, 24));
++  });
++});
+-- 
+2.43.0
+

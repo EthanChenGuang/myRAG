@@ -4,11 +4,16 @@ const path = require('path');
 const dotenv = require('dotenv');
 const { exec, spawn } = require('child_process');
 const multer = require('multer');
+const security = require('./config-server-security');
 const app = express();
 const PORT = 3333;
+// Loopback only. CONFIG_UI_HOST can override it, but any other value exposes an unauthenticated .env editor to the network.
+const HOST = process.env.CONFIG_UI_HOST || '127.0.0.1';
 
 // Resolve project root (one level up from this script directory)
-const REPO_ROOT = path.resolve(__dirname, '..');
+const REPO_ROOT = process.env.MYRAG_CONFIG_ROOT
+  ? path.resolve(process.env.MYRAG_CONFIG_ROOT)
+  : path.resolve(__dirname, '..');
 
 // Helper function to get deployment mode from .env.local
 function getDeploymentMode() {
@@ -45,8 +50,6 @@ function getMainAppBaseUrl() {
   return normalizeBaseUrl(
     process.env.MYRAG_APP_URL ||
     getEnvVar('MYRAG_APP_URL') ||
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    getEnvVar('NEXT_PUBLIC_SITE_URL') ||
     'http://localhost:3000'
   );
 }
@@ -72,9 +75,16 @@ function createMainAppRequest(apiPath, method, headers = {}) {
   };
 }
 
+function withAuthHeaders(req, headers = {}) {
+  const forwarded = { ...headers };
+  if (req.headers.cookie) forwarded['Cookie'] = req.headers.cookie;
+  if (req.headers.authorization) forwarded['Authorization'] = req.headers.authorization;
+  return forwarded;
+}
+
 function mainAppConnectionError(error) {
   return {
-    error: `Unable to connect to main myRAG app at ${getMainAppBaseUrl()}. Check MYRAG_APP_URL or NEXT_PUBLIC_SITE_URL, and make sure the app server is running.`,
+    error: `Unable to connect to main myRAG app at ${getMainAppBaseUrl()}. Check MYRAG_APP_URL, and make sure the app server is running.`,
     details: error.message
   };
 }
@@ -88,28 +98,8 @@ function getSupabaseConfig() {
   };
 }
 
-// Set up multer for file uploads
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    const type = req.body.type || 'ai';
-    const uploadDir = path.join(REPO_ROOT, 'public', 'logos', type);
-
-    // Ensure directory exists
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-
-    cb(null, uploadDir);
-  },
-  filename: function (req, file, cb) {
-    const type = req.body.type || 'ai';
-    const timestamp = Date.now();
-    const extension = path.extname(file.originalname);
-    cb(null, `${type}-logo-${timestamp}${extension}`);
-  }
-});
-
-const upload = multer({ storage: storage });
+// Image uploads are held in memory, validated, and written under server-chosen names
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: security.MAX_IMAGE_BYTES, files: 1 } });
 
 // Separate multer config for document processing (needs memory storage for proxy)
 const documentUpload = multer({
@@ -143,6 +133,8 @@ if (!fs.existsSync(path.join(configUiDir, 'index.html'))) {
   console.log('Created index.html with fix script');
 }
 
+app.use(security.securityMiddleware);
+
 // Serve static files from the config-ui directory
 app.use(express.static(configUiDir));
 app.use(express.json());
@@ -169,9 +161,9 @@ Based on the context provided, offer comprehensive and helpful answers. If speci
 // Default model configurations
 const DEFAULT_OPENAI_MODELS = '[{"id":"gpt-4.1-mini","displayName":"GPT-4.1 Mini"},{"id":"gpt-4.1","displayName":"GPT-4.1"},{"id":"o3","displayName":"o3"},{"id":"o4-mini","displayName":"o4 Mini"}]';
 
-const DEFAULT_OPENROUTER_MODELS = '[{"id":"anthropic/claude-sonnet-4.5","displayName":"Claude Sonnet 4.5","isDefault":true},{"id":"openai/gpt-5.2-chat","displayName":"GPT-5.2"},{"id":"openai/gpt-5-mini","displayName":"GPT-5 Mini"},{"id":"openai/gpt-5","displayName":"GPT-5"},{"id":"anthropic/claude-opus-4.1","displayName":"Claude Opus 4.1"},{"id":"google/gemini-2.5-flash-lite","displayName":"Gemini 2.5 Flash Lite"},{"id":"google/gemini-2.5-flash","displayName":"Gemini 2.5 Flash"},{"id":"meta-llama/llama-4-maverick","displayName":"Llama 4 Maverick","isOpenSource":true},{"id":"cognitivecomputations/dolphin-mistral-24b-venice-edition:free","displayName":"Venice: Uncensored","isFree":true,"isOpenSource":true,"isUncensored":true}]';
+const DEFAULT_OPENROUTER_MODELS = '[{"id":"anthropic/claude-sonnet-4.5","displayName":"Claude Sonnet 4.5","isDefault":true},{"id":"openai/gpt-5.2-chat","displayName":"GPT-5.2"},{"id":"openai/gpt-5-mini","displayName":"GPT-5 Mini"},{"id":"openai/gpt-5","displayName":"GPT-5"},{"id":"anthropic/claude-opus-4.1","displayName":"Claude Opus 4.1"},{"id":"anthropic/claude-opus-5.5","displayName":"Claude Opus 5.5","anthropicId":"claude-opus-5-5","supportsReasoning":true,"reasoningMethod":"effort","contextLength":1000000},{"id":"anthropic/claude-sonnet-5.5","displayName":"Claude Sonnet 5.5","anthropicId":"claude-sonnet-5-5","supportsReasoning":true,"reasoningMethod":"effort","contextLength":1000000},{"id":"anthropic/claude-haiku-5.5","displayName":"Claude Haiku 5.5","anthropicId":"claude-haiku-5-5","supportsReasoning":true,"reasoningMethod":"effort","contextLength":1000000},{"id":"google/gemini-2.5-flash-lite","displayName":"Gemini 2.5 Flash Lite"},{"id":"google/gemini-2.5-flash","displayName":"Gemini 2.5 Flash"},{"id":"meta-llama/llama-4-maverick","displayName":"Llama 4 Maverick","isOpenSource":true},{"id":"cognitivecomputations/dolphin-mistral-24b-venice-edition:free","displayName":"Venice: Uncensored","isFree":true,"isOpenSource":true,"isUncensored":true}]';
 
-// API endpoint to get current .env values
+// API endpoint to get current .env values. Secret values are never returned; secretsSet lists which ones are set.
 app.get('/api/config', (req, res) => {
   try {
     const envPath = path.join(REPO_ROOT, '.env.local');
@@ -179,17 +171,16 @@ app.get('/api/config', (req, res) => {
       ? fs.readFileSync(envPath, 'utf8')
       : '';
 
-    const config = dotenv.parse(envContent || '');
+    const { config, secretsSet } = security.maskConfig(dotenv.parse(envContent || ''));
 
-    // Send the actual values since we're running locally
     res.json({
-      config: config,
-      hasFile: fs.existsSync(envPath),
-      envPath: envPath // For debugging
+      config,
+      secretsSet,
+      hasFile: fs.existsSync(envPath)
     });
   } catch (error) {
     console.error('Error loading configuration:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Failed to load configuration' });
   }
 });
 
@@ -204,7 +195,27 @@ app.post('/api/config', (req, res) => {
     // Filter out invalid environment variable names and template placeholders
     const fullValues = filterValidEnvVars(rawFullValues);
 
-    for (const name of ['RAG_EVAL_SECRET', 'RAG_SIDECAR_SECRET']) {
+    // The UI never receives secret values, so an empty secret means "unchanged"
+    for (const [name, value] of Object.entries(fullValues)) {
+      if (security.isSecretConfigEntry(name, '') && (value === '' || value === null || value === undefined)) {
+        delete fullValues[name];
+      }
+    }
+
+    // A value must stay on one .env.local line: line breaks other than \n are refused, \n is stored as the literal \n
+    const refused = [];
+    for (const [name, value] of Object.entries(fullValues)) {
+      if (value === null || value === undefined || typeof value === 'boolean') continue;
+      const text = typeof value === 'object' ? (Array.isArray(value) ? value.join(',') : JSON.stringify(value)) : value;
+      const safe = security.toEnvLineValue(text);
+      if (safe === null) refused.push(name);
+      else fullValues[name] = safe;
+    }
+    if (refused.length > 0) {
+      return res.status(400).json({ error: 'Configuration contains values that cannot be stored', invalid: refused });
+    }
+
+    for (const name of ['RAG_EVAL_SECRET', 'RAG_SIDECAR_SECRET', 'RAG_VOICE_TOKEN_SECRET', 'VOYAGE_API_KEY', 'DEEPINFRA_API_KEY', 'COHERE_API_KEY', 'LAKERA_GUARD_API_KEY']) {
       const value = fullValues[name];
       if (typeof value === 'string' && value.length > 0 && value.length < 32) {
         console.warn(`[Config] ${name} is ${value.length} characters; at least 32 are required or the endpoint answers 503`);
@@ -456,6 +467,7 @@ ${fullValues.KOYEB_API_KEY ? `KOYEB_API_KEY=${fullValues.KOYEB_API_KEY}` : 'KOYE
 ${fullValues.FLYIO_BAILEYS_URL ? `FLYIO_BAILEYS_URL=${fullValues.FLYIO_BAILEYS_URL}` : 'FLYIO_BAILEYS_URL='}
 ${fullValues.FLYIO_API_KEY ? `FLYIO_API_KEY=${fullValues.FLYIO_API_KEY}` : 'FLYIO_API_KEY='}
 ${fullValues.WHATSAPP_WEBHOOK_SECRET ? `WHATSAPP_WEBHOOK_SECRET=${fullValues.WHATSAPP_WEBHOOK_SECRET}` : 'WHATSAPP_WEBHOOK_SECRET='}
+${fullValues.WHATSAPP_WEBHOOK_ALLOW_UNSIGNED ? `WHATSAPP_WEBHOOK_ALLOW_UNSIGNED=${fullValues.WHATSAPP_WEBHOOK_ALLOW_UNSIGNED}` : 'WHATSAPP_WEBHOOK_ALLOW_UNSIGNED='}
 ${fullValues.WHATSAPP_WEBHOOK_URL ? `WHATSAPP_WEBHOOK_URL=${fullValues.WHATSAPP_WEBHOOK_URL}` : 'WHATSAPP_WEBHOOK_URL='}
 ${fullValues.WHATSAPP_ENABLE_MCP !== undefined ? `WHATSAPP_ENABLE_MCP=${fullValues.WHATSAPP_ENABLE_MCP}` : 'WHATSAPP_ENABLE_MCP=false'}
 ${fullValues.WHATSAPP_ENABLE_WEB_SEARCH !== undefined ? `WHATSAPP_ENABLE_WEB_SEARCH=${fullValues.WHATSAPP_ENABLE_WEB_SEARCH}` : 'WHATSAPP_ENABLE_WEB_SEARCH=false'}
@@ -533,6 +545,115 @@ ${fullValues.RAG_EVAL_SECRET !== undefined ? `RAG_EVAL_SECRET=${fullValues.RAG_E
 ${fullValues.RAG_EVAL_ALLOWED_SCOPES !== undefined ? `RAG_EVAL_ALLOWED_SCOPES=${fullValues.RAG_EVAL_ALLOWED_SCOPES}` : 'RAG_EVAL_ALLOWED_SCOPES='}
 ${fullValues.RAG_SIDECAR_URL !== undefined ? `RAG_SIDECAR_URL=${fullValues.RAG_SIDECAR_URL}` : 'RAG_SIDECAR_URL='}
 ${fullValues.RAG_SIDECAR_SECRET !== undefined ? `RAG_SIDECAR_SECRET=${fullValues.RAG_SIDECAR_SECRET}` : 'RAG_SIDECAR_SECRET='}
+
+# Retrieval pipeline
+${fullValues.RAG_PIPELINE !== undefined ? `RAG_PIPELINE=${fullValues.RAG_PIPELINE}` : 'RAG_PIPELINE=legacy'}
+${fullValues.RAG_DISABLED_STAGES !== undefined ? `RAG_DISABLED_STAGES=${fullValues.RAG_DISABLED_STAGES}` : 'RAG_DISABLED_STAGES='}
+${fullValues.RAG_STAGE_TIMEOUTS !== undefined ? `RAG_STAGE_TIMEOUTS=${fullValues.RAG_STAGE_TIMEOUTS}` : 'RAG_STAGE_TIMEOUTS='}
+${fullValues.RAG_LEXICAL_SEARCH !== undefined ? `RAG_LEXICAL_SEARCH=${fullValues.RAG_LEXICAL_SEARCH}` : 'RAG_LEXICAL_SEARCH=false'}
+${fullValues.RAG_RERANKER !== undefined ? `RAG_RERANKER=${fullValues.RAG_RERANKER}` : 'RAG_RERANKER=none'}
+${fullValues.RAG_RERANK_TIER_CHAT !== undefined ? `RAG_RERANK_TIER_CHAT=${fullValues.RAG_RERANK_TIER_CHAT}` : 'RAG_RERANK_TIER_CHAT=quality'}
+${fullValues.RAG_RERANK_TIER_VOICE !== undefined ? `RAG_RERANK_TIER_VOICE=${fullValues.RAG_RERANK_TIER_VOICE}` : 'RAG_RERANK_TIER_VOICE=fast'}
+${fullValues.RAG_RERANK_VOYAGE_MODEL_BY_LANG !== undefined ? `RAG_RERANK_VOYAGE_MODEL_BY_LANG=${fullValues.RAG_RERANK_VOYAGE_MODEL_BY_LANG}` : 'RAG_RERANK_VOYAGE_MODEL_BY_LANG='}
+${fullValues.COHERE_API_KEY !== undefined ? `COHERE_API_KEY=${fullValues.COHERE_API_KEY}` : 'COHERE_API_KEY='}
+${fullValues.COHERE_BASE_URL !== undefined ? `COHERE_BASE_URL=${fullValues.COHERE_BASE_URL}` : 'COHERE_BASE_URL='}
+${fullValues.RAG_REFUSAL_THRESHOLD !== undefined ? `RAG_REFUSAL_THRESHOLD=${fullValues.RAG_REFUSAL_THRESHOLD}` : 'RAG_REFUSAL_THRESHOLD=false'}
+${fullValues.RAG_CONTEXT_EDGE_ORDER !== undefined ? `RAG_CONTEXT_EDGE_ORDER=${fullValues.RAG_CONTEXT_EDGE_ORDER}` : 'RAG_CONTEXT_EDGE_ORDER=false'}
+${fullValues.RAG_CONTEXT_COMPRESSION !== undefined ? `RAG_CONTEXT_COMPRESSION=${fullValues.RAG_CONTEXT_COMPRESSION}` : 'RAG_CONTEXT_COMPRESSION=false'}
+${fullValues.RAG_CONTEXT_TOKEN_BUDGET !== undefined ? `RAG_CONTEXT_TOKEN_BUDGET=${fullValues.RAG_CONTEXT_TOKEN_BUDGET}` : 'RAG_CONTEXT_TOKEN_BUDGET=6000'}
+${fullValues.RAG_PARENT_CHILD !== undefined ? `RAG_PARENT_CHILD=${fullValues.RAG_PARENT_CHILD}` : 'RAG_PARENT_CHILD=false'}
+${fullValues.RAG_HNSW_ITERATIVE_SCAN !== undefined ? `RAG_HNSW_ITERATIVE_SCAN=${fullValues.RAG_HNSW_ITERATIVE_SCAN}` : 'RAG_HNSW_ITERATIVE_SCAN=off'}
+${fullValues.RAG_EXACT_SCAN_CUTOFF !== undefined ? `RAG_EXACT_SCAN_CUTOFF=${fullValues.RAG_EXACT_SCAN_CUTOFF}` : 'RAG_EXACT_SCAN_CUTOFF=0'}
+${fullValues.RAG_LEXICAL_TRANSLATION !== undefined ? `RAG_LEXICAL_TRANSLATION=${fullValues.RAG_LEXICAL_TRANSLATION}` : 'RAG_LEXICAL_TRANSLATION=false'}
+${fullValues.RAG_RETRIEVAL_PARAMS_OVERRIDE !== undefined ? `RAG_RETRIEVAL_PARAMS_OVERRIDE=${fullValues.RAG_RETRIEVAL_PARAMS_OVERRIDE}` : 'RAG_RETRIEVAL_PARAMS_OVERRIDE='}
+${fullValues.RAG_EMBED_TENANT !== undefined ? `RAG_EMBED_TENANT=${fullValues.RAG_EMBED_TENANT}` : 'RAG_EMBED_TENANT='}
+${fullValues.RAG_VOICE_TOKEN_SECRET !== undefined ? `RAG_VOICE_TOKEN_SECRET=${fullValues.RAG_VOICE_TOKEN_SECRET}` : 'RAG_VOICE_TOKEN_SECRET='}
+${fullValues.RAG_VOICE_TOKEN_TTL_SECONDS !== undefined ? `RAG_VOICE_TOKEN_TTL_SECONDS=${fullValues.RAG_VOICE_TOKEN_TTL_SECONDS}` : 'RAG_VOICE_TOKEN_TTL_SECONDS=3600'}
+${fullValues.VOICE_MAX_ACTIVE_ROOMS !== undefined ? `VOICE_MAX_ACTIVE_ROOMS=${fullValues.VOICE_MAX_ACTIVE_ROOMS}` : 'VOICE_MAX_ACTIVE_ROOMS=4'}
+
+# Langfuse tracing
+${fullValues.LANGFUSE_ENABLED !== undefined ? `LANGFUSE_ENABLED=${fullValues.LANGFUSE_ENABLED}` : 'LANGFUSE_ENABLED=false'}
+${fullValues.LANGFUSE_PUBLIC_KEY !== undefined ? `LANGFUSE_PUBLIC_KEY=${fullValues.LANGFUSE_PUBLIC_KEY}` : 'LANGFUSE_PUBLIC_KEY='}
+${fullValues.LANGFUSE_SECRET_KEY !== undefined ? `LANGFUSE_SECRET_KEY=${fullValues.LANGFUSE_SECRET_KEY}` : 'LANGFUSE_SECRET_KEY='}
+${fullValues.LANGFUSE_BASE_URL !== undefined ? `LANGFUSE_BASE_URL=${fullValues.LANGFUSE_BASE_URL}` : 'LANGFUSE_BASE_URL=https://cloud.langfuse.com'}
+${fullValues.LANGFUSE_SAMPLE_RATE !== undefined ? `LANGFUSE_SAMPLE_RATE=${fullValues.LANGFUSE_SAMPLE_RATE}` : 'LANGFUSE_SAMPLE_RATE=0.1'}
+${fullValues.LANGFUSE_CAPTURE_CONTENT !== undefined ? `LANGFUSE_CAPTURE_CONTENT=${fullValues.LANGFUSE_CAPTURE_CONTENT}` : 'LANGFUSE_CAPTURE_CONTENT=false'}
+${fullValues.LANGFUSE_REVIEW_SAMPLE_RATE !== undefined ? `LANGFUSE_REVIEW_SAMPLE_RATE=${fullValues.LANGFUSE_REVIEW_SAMPLE_RATE}` : 'LANGFUSE_REVIEW_SAMPLE_RATE=0'}
+
+# Verified citations and groundedness
+${fullValues.RAG_CITATIONS !== undefined ? `RAG_CITATIONS=${fullValues.RAG_CITATIONS}` : 'RAG_CITATIONS=false'}
+${fullValues.RAG_CLAUDE_CITATIONS !== undefined ? `RAG_CLAUDE_CITATIONS=${fullValues.RAG_CLAUDE_CITATIONS}` : 'RAG_CLAUDE_CITATIONS=false'}
+${fullValues.ANTHROPIC_API_KEY !== undefined ? `ANTHROPIC_API_KEY=${fullValues.ANTHROPIC_API_KEY}` : 'ANTHROPIC_API_KEY='}
+${fullValues.ANTHROPIC_BASE_URL !== undefined ? `ANTHROPIC_BASE_URL=${fullValues.ANTHROPIC_BASE_URL}` : 'ANTHROPIC_BASE_URL='}
+${fullValues.RAG_GROUNDEDNESS !== undefined ? `RAG_GROUNDEDNESS=${fullValues.RAG_GROUNDEDNESS}` : 'RAG_GROUNDEDNESS=false'}
+${fullValues.RAG_GROUNDEDNESS_VECTARA_OPT_IN !== undefined ? `RAG_GROUNDEDNESS_VECTARA_OPT_IN=${fullValues.RAG_GROUNDEDNESS_VECTARA_OPT_IN}` : 'RAG_GROUNDEDNESS_VECTARA_OPT_IN=false'}
+${fullValues.RAG_GROUNDEDNESS_TIMEOUT_MS !== undefined ? `RAG_GROUNDEDNESS_TIMEOUT_MS=${fullValues.RAG_GROUNDEDNESS_TIMEOUT_MS}` : 'RAG_GROUNDEDNESS_TIMEOUT_MS=20000'}
+${fullValues.RAG_GROUNDEDNESS_MAX_PREMISE_TOKENS !== undefined ? `RAG_GROUNDEDNESS_MAX_PREMISE_TOKENS=${fullValues.RAG_GROUNDEDNESS_MAX_PREMISE_TOKENS}` : 'RAG_GROUNDEDNESS_MAX_PREMISE_TOKENS=3000'}
+${fullValues.RAG_ANSWER_FEEDBACK !== undefined ? `RAG_ANSWER_FEEDBACK=${fullValues.RAG_ANSWER_FEEDBACK}` : 'RAG_ANSWER_FEEDBACK=false'}
+${fullValues.RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK !== undefined ? `RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK=${fullValues.RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK}` : 'RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK=false'}
+
+# Prompt-injection defense
+${fullValues.RAG_CONTEXT_TAGGING !== undefined ? `RAG_CONTEXT_TAGGING=${fullValues.RAG_CONTEXT_TAGGING}` : 'RAG_CONTEXT_TAGGING=false'}
+${fullValues.RAG_INJECTION_CHECK !== undefined ? `RAG_INJECTION_CHECK=${fullValues.RAG_INJECTION_CHECK}` : 'RAG_INJECTION_CHECK=off'}
+${fullValues.RAG_INJECTION_PROMPT_GUARD !== undefined ? `RAG_INJECTION_PROMPT_GUARD=${fullValues.RAG_INJECTION_PROMPT_GUARD}` : 'RAG_INJECTION_PROMPT_GUARD=false'}
+${fullValues.RAG_INJECTION_LAKERA !== undefined ? `RAG_INJECTION_LAKERA=${fullValues.RAG_INJECTION_LAKERA}` : 'RAG_INJECTION_LAKERA=false'}
+${fullValues.LAKERA_GUARD_API_KEY !== undefined ? `LAKERA_GUARD_API_KEY=${fullValues.LAKERA_GUARD_API_KEY}` : 'LAKERA_GUARD_API_KEY='}
+${fullValues.LAKERA_GUARD_BASE_URL !== undefined ? `LAKERA_GUARD_BASE_URL=${fullValues.LAKERA_GUARD_BASE_URL}` : 'LAKERA_GUARD_BASE_URL='}
+${fullValues.RAG_INJECTION_LAKERA_MULTI_TENANT_ACK !== undefined ? `RAG_INJECTION_LAKERA_MULTI_TENANT_ACK=${fullValues.RAG_INJECTION_LAKERA_MULTI_TENANT_ACK}` : 'RAG_INJECTION_LAKERA_MULTI_TENANT_ACK=false'}
+${fullValues.RAG_TOOL_RESULT_GUARD !== undefined ? `RAG_TOOL_RESULT_GUARD=${fullValues.RAG_TOOL_RESULT_GUARD}` : 'RAG_TOOL_RESULT_GUARD=off'}
+${fullValues.NEXT_PUBLIC_RAG_IMAGE_ALLOWLIST !== undefined ? `NEXT_PUBLIC_RAG_IMAGE_ALLOWLIST=${fullValues.NEXT_PUBLIC_RAG_IMAGE_ALLOWLIST}` : 'NEXT_PUBLIC_RAG_IMAGE_ALLOWLIST=false'}
+
+# Query layer
+${fullValues.RAG_QUERY_LAYER !== undefined ? `RAG_QUERY_LAYER=${fullValues.RAG_QUERY_LAYER}` : 'RAG_QUERY_LAYER=false'}
+${fullValues.RAG_QUERY_FRAMEWORK !== undefined ? `RAG_QUERY_FRAMEWORK=${fullValues.RAG_QUERY_FRAMEWORK}` : 'RAG_QUERY_FRAMEWORK=llamaindex'}
+${fullValues.RAG_QUERY_LLM_MODEL !== undefined ? `RAG_QUERY_LLM_MODEL=${fullValues.RAG_QUERY_LLM_MODEL}` : 'RAG_QUERY_LLM_MODEL=openai/gpt-4.1-nano'}
+${fullValues.RAG_QUERY_CONDENSE !== undefined ? `RAG_QUERY_CONDENSE=${fullValues.RAG_QUERY_CONDENSE}` : 'RAG_QUERY_CONDENSE=true'}
+${fullValues.RAG_QUERY_EXPAND !== undefined ? `RAG_QUERY_EXPAND=${fullValues.RAG_QUERY_EXPAND}` : 'RAG_QUERY_EXPAND=true'}
+${fullValues.RAG_QUERY_DECOMPOSE !== undefined ? `RAG_QUERY_DECOMPOSE=${fullValues.RAG_QUERY_DECOMPOSE}` : 'RAG_QUERY_DECOMPOSE=true'}
+${fullValues.RAG_QUERY_TRANSLATE !== undefined ? `RAG_QUERY_TRANSLATE=${fullValues.RAG_QUERY_TRANSLATE}` : 'RAG_QUERY_TRANSLATE=true'}
+${fullValues.RAG_QUERY_DATE_NORMALIZE !== undefined ? `RAG_QUERY_DATE_NORMALIZE=${fullValues.RAG_QUERY_DATE_NORMALIZE}` : 'RAG_QUERY_DATE_NORMALIZE=true'}
+${fullValues.RAG_QUERY_HYDE !== undefined ? `RAG_QUERY_HYDE=${fullValues.RAG_QUERY_HYDE}` : 'RAG_QUERY_HYDE=false'}
+${fullValues.RAG_QUERY_TRANSLATE_DISABLED_PROFILES !== undefined ? `RAG_QUERY_TRANSLATE_DISABLED_PROFILES=${fullValues.RAG_QUERY_TRANSLATE_DISABLED_PROFILES}` : 'RAG_QUERY_TRANSLATE_DISABLED_PROFILES='}
+${fullValues.RAG_QUERY_VOICE_TRANSFORMS !== undefined ? `RAG_QUERY_VOICE_TRANSFORMS=${fullValues.RAG_QUERY_VOICE_TRANSFORMS}` : 'RAG_QUERY_VOICE_TRANSFORMS=condense_history,normalize_dates'}
+
+# Semantic cache
+${fullValues.RAG_SEMANTIC_CACHE !== undefined ? `RAG_SEMANTIC_CACHE=${fullValues.RAG_SEMANTIC_CACHE}` : 'RAG_SEMANTIC_CACHE=off'}
+${fullValues.RAG_SEMANTIC_CACHE_TTL !== undefined ? `RAG_SEMANTIC_CACHE_TTL=${fullValues.RAG_SEMANTIC_CACHE_TTL}` : 'RAG_SEMANTIC_CACHE_TTL=3600'}
+${fullValues.RAG_SEMANTIC_CACHE_REFUSAL_TTL !== undefined ? `RAG_SEMANTIC_CACHE_REFUSAL_TTL=${fullValues.RAG_SEMANTIC_CACHE_REFUSAL_TTL}` : 'RAG_SEMANTIC_CACHE_REFUSAL_TTL=600'}
+${fullValues.RAG_SEMANTIC_CACHE_MAX_DISTANCE !== undefined ? `RAG_SEMANTIC_CACHE_MAX_DISTANCE=${fullValues.RAG_SEMANTIC_CACHE_MAX_DISTANCE}` : 'RAG_SEMANTIC_CACHE_MAX_DISTANCE=0.05'}
+${fullValues.RAG_SEMANTIC_CACHE_EMBED_STORE !== undefined ? `RAG_SEMANTIC_CACHE_EMBED_STORE=${fullValues.RAG_SEMANTIC_CACHE_EMBED_STORE}` : 'RAG_SEMANTIC_CACHE_EMBED_STORE=false'}
+${fullValues.REDIS_URL !== undefined ? `REDIS_URL=${fullValues.REDIS_URL}` : 'REDIS_URL='}
+
+# Ingestion and embedding profiles
+${fullValues.RAG_INGEST_PIPELINE !== undefined ? `RAG_INGEST_PIPELINE=${fullValues.RAG_INGEST_PIPELINE}` : 'RAG_INGEST_PIPELINE=legacy'}
+${fullValues.RAG_PARSER !== undefined ? `RAG_PARSER=${fullValues.RAG_PARSER}` : 'RAG_PARSER=llamaparse'}
+${fullValues.RAG_PARSE_POLL_BUDGET_MS !== undefined ? `RAG_PARSE_POLL_BUDGET_MS=${fullValues.RAG_PARSE_POLL_BUDGET_MS}` : 'RAG_PARSE_POLL_BUDGET_MS=45000'}
+${fullValues.RAG_DOC_TYPE_LLM_DETECT !== undefined ? `RAG_DOC_TYPE_LLM_DETECT=${fullValues.RAG_DOC_TYPE_LLM_DETECT}` : 'RAG_DOC_TYPE_LLM_DETECT=false'}
+${fullValues.RAG_INVOICE_LLM_EXTRACT !== undefined ? `RAG_INVOICE_LLM_EXTRACT=${fullValues.RAG_INVOICE_LLM_EXTRACT}` : 'RAG_INVOICE_LLM_EXTRACT=false'}
+${fullValues.RAG_EXACT_ID_LOOKUP !== undefined ? `RAG_EXACT_ID_LOOKUP=${fullValues.RAG_EXACT_ID_LOOKUP}` : 'RAG_EXACT_ID_LOOKUP=false'}
+${fullValues.RAG_PDF_IMAGE_CHUNKS !== undefined ? `RAG_PDF_IMAGE_CHUNKS=${fullValues.RAG_PDF_IMAGE_CHUNKS}` : 'RAG_PDF_IMAGE_CHUNKS=false'}
+${fullValues.RAG_INJECTION_SCAN !== undefined ? `RAG_INJECTION_SCAN=${fullValues.RAG_INJECTION_SCAN}` : 'RAG_INJECTION_SCAN=off'}
+${fullValues.RAG_EMBEDDING_PROFILES !== undefined ? `RAG_EMBEDDING_PROFILES=${fullValues.RAG_EMBEDDING_PROFILES}` : 'RAG_EMBEDDING_PROFILES=off'}
+${fullValues.RAG_QWEN_EMBED_FALLBACK !== undefined ? `RAG_QWEN_EMBED_FALLBACK=${fullValues.RAG_QWEN_EMBED_FALLBACK}` : 'RAG_QWEN_EMBED_FALLBACK=openrouter'}
+${fullValues.RAG_PARSE_ROUTING !== undefined ? `RAG_PARSE_ROUTING=${fullValues.RAG_PARSE_ROUTING}` : 'RAG_PARSE_ROUTING=fixed'}
+${fullValues.RAG_PARSER_ALLOW_CLOUD !== undefined ? `RAG_PARSER_ALLOW_CLOUD=${fullValues.RAG_PARSER_ALLOW_CLOUD}` : 'RAG_PARSER_ALLOW_CLOUD=true'}
+${fullValues.RAG_PARSE_PREMIUM_PAGE_BUDGET !== undefined ? `RAG_PARSE_PREMIUM_PAGE_BUDGET=${fullValues.RAG_PARSE_PREMIUM_PAGE_BUDGET}` : 'RAG_PARSE_PREMIUM_PAGE_BUDGET=0'}
+${fullValues.RAG_PARSE_PREMIUM_MAX_PAGES_PER_DOC !== undefined ? `RAG_PARSE_PREMIUM_MAX_PAGES_PER_DOC=${fullValues.RAG_PARSE_PREMIUM_MAX_PAGES_PER_DOC}` : 'RAG_PARSE_PREMIUM_MAX_PAGES_PER_DOC=200'}
+${fullValues.RAG_PARSE_ESCALATION !== undefined ? `RAG_PARSE_ESCALATION=${fullValues.RAG_PARSE_ESCALATION}` : 'RAG_PARSE_ESCALATION=on'}
+${fullValues.RAG_PARSE_VLM_DETECT !== undefined ? `RAG_PARSE_VLM_DETECT=${fullValues.RAG_PARSE_VLM_DETECT}` : 'RAG_PARSE_VLM_DETECT=false'}
+${fullValues.RAG_PARSE_VLM_MODEL !== undefined ? `RAG_PARSE_VLM_MODEL=${fullValues.RAG_PARSE_VLM_MODEL}` : 'RAG_PARSE_VLM_MODEL='}
+${fullValues.RAG_INGEST_ASYNC !== undefined ? `RAG_INGEST_ASYNC=${fullValues.RAG_INGEST_ASYNC}` : 'RAG_INGEST_ASYNC=off'}
+${fullValues.RAG_INGEST_WORKER_CONCURRENCY !== undefined ? `RAG_INGEST_WORKER_CONCURRENCY=${fullValues.RAG_INGEST_WORKER_CONCURRENCY}` : 'RAG_INGEST_WORKER_CONCURRENCY=2'}
+${fullValues.RAG_INGEST_JOB_RETENTION_DAYS !== undefined ? `RAG_INGEST_JOB_RETENTION_DAYS=${fullValues.RAG_INGEST_JOB_RETENTION_DAYS}` : 'RAG_INGEST_JOB_RETENTION_DAYS=90'}
+${fullValues.RAG_INGEST_MAINTENANCE_INTERVAL_SECONDS !== undefined ? `RAG_INGEST_MAINTENANCE_INTERVAL_SECONDS=${fullValues.RAG_INGEST_MAINTENANCE_INTERVAL_SECONDS}` : 'RAG_INGEST_MAINTENANCE_INTERVAL_SECONDS=3600'}
+${fullValues.RAG_INGEST_MAINTENANCE !== undefined ? `RAG_INGEST_MAINTENANCE=${fullValues.RAG_INGEST_MAINTENANCE}` : 'RAG_INGEST_MAINTENANCE=on'}
+${fullValues.RAG_PARSE_PROGRESSIVE !== undefined ? `RAG_PARSE_PROGRESSIVE=${fullValues.RAG_PARSE_PROGRESSIVE}` : 'RAG_PARSE_PROGRESSIVE=false'}
+${fullValues.RAG_EMBED_BATCH_MODE !== undefined ? `RAG_EMBED_BATCH_MODE=${fullValues.RAG_EMBED_BATCH_MODE}` : 'RAG_EMBED_BATCH_MODE=sync'}
+${fullValues.NEXT_PUBLIC_RAG_INGEST_REALTIME !== undefined ? `NEXT_PUBLIC_RAG_INGEST_REALTIME=${fullValues.NEXT_PUBLIC_RAG_INGEST_REALTIME}` : 'NEXT_PUBLIC_RAG_INGEST_REALTIME=false'}
+${fullValues.VOYAGE_API_KEY !== undefined ? `VOYAGE_API_KEY=${fullValues.VOYAGE_API_KEY}` : 'VOYAGE_API_KEY='}
+${fullValues.VOYAGE_BASE_URL !== undefined ? `VOYAGE_BASE_URL=${fullValues.VOYAGE_BASE_URL}` : 'VOYAGE_BASE_URL=https://api.voyageai.com/v1'}
+${fullValues.DEEPINFRA_API_KEY !== undefined ? `DEEPINFRA_API_KEY=${fullValues.DEEPINFRA_API_KEY}` : 'DEEPINFRA_API_KEY='}
+${fullValues.DEEPINFRA_BASE_URL !== undefined ? `DEEPINFRA_BASE_URL=${fullValues.DEEPINFRA_BASE_URL}` : 'DEEPINFRA_BASE_URL=https://api.deepinfra.com/v1/openai'}
 
 # Temporal and Financial Intelligence (Unified RAG)
 ${fullValues.RAG_TEMPORAL_BOOST !== undefined ? `RAG_TEMPORAL_BOOST=${fullValues.RAG_TEMPORAL_BOOST}` : 'RAG_TEMPORAL_BOOST=true'}
@@ -760,12 +881,13 @@ app.get('/api/config/rag-prompt', async (req, res) => {
     console.log('[RAG API] Proxying GET request to main app');
     const response = await fetch(getMainAppUrl('/api/config/rag-prompt'), {
       method: 'GET',
-      headers: {
+      headers: withAuthHeaders(req, {
         'Content-Type': 'application/json',
-      },
+      }),
     });
 
     const data = await response.json();
+    if (!response.ok) return res.status(response.status).json(data);
 
     // Transform the response to match config-ui expectations
     const transformedData = {
@@ -795,9 +917,9 @@ app.post('/api/config/rag-prompt', async (req, res) => {
 
     const response = await fetch(getMainAppUrl('/api/config/rag-prompt'), {
       method: 'POST',
-      headers: {
+      headers: withAuthHeaders(req, {
         'Content-Type': 'application/json',
-      },
+      }),
       body: JSON.stringify({
         preContext,
         postContext
@@ -805,6 +927,7 @@ app.post('/api/config/rag-prompt', async (req, res) => {
     });
 
     const data = await response.json();
+    if (!response.ok) return res.status(response.status).json(data);
 
     // Transform the response to match config-ui expectations
     const transformedData = {
@@ -844,6 +967,7 @@ app.post('/api/upload', documentUpload.array('files'), async (req, res) => {
     if (req.body.image_context) {
       formData.append('image_context', req.body.image_context);
     }
+    formData.append('upload_source', 'config_upload');
 
     // Forward authentication headers (Cookie, Authorization) so the backend knows the user
     const headers = {};
@@ -932,15 +1056,13 @@ app.all(/^\/api\/nango\//, async (req, res) => {
 
     console.log(`[Nango Proxy] ${req.method} ${url}`);
 
-    // Build headers - forward Authorization header from config-ui
     const headers = {
       'Content-Type': 'application/json',
     };
 
-    // Forward Authorization header if present (for config-ui admin auth)
-    if (req.headers.authorization) {
-      headers['Authorization'] = req.headers.authorization;
-      console.log(`[Nango Proxy] Forwarding Authorization header`);
+    // The main app authenticates Nango routes from the Supabase session cookie only
+    if (req.headers.cookie) {
+      headers['Cookie'] = req.headers.cookie;
     }
 
     const options = {
@@ -1285,6 +1407,109 @@ RAG_EVAL_SECRET=${getEnvValue('RAG_EVAL_SECRET') || ''}
 RAG_EVAL_ALLOWED_SCOPES=${getEnvValue('RAG_EVAL_ALLOWED_SCOPES') || ''}
 RAG_SIDECAR_URL=${getEnvValue('RAG_SIDECAR_URL') || ''}
 RAG_SIDECAR_SECRET=${getEnvValue('RAG_SIDECAR_SECRET') || ''}
+# Retrieval pipeline
+RAG_PIPELINE=${getEnvValue('RAG_PIPELINE') || 'legacy'}
+RAG_DISABLED_STAGES=${getEnvValue('RAG_DISABLED_STAGES') || ''}
+RAG_STAGE_TIMEOUTS=${getEnvValue('RAG_STAGE_TIMEOUTS') || ''}
+RAG_LEXICAL_SEARCH=${getEnvValue('RAG_LEXICAL_SEARCH') || 'false'}
+RAG_RERANKER=${getEnvValue('RAG_RERANKER') || 'none'}
+RAG_RERANK_TIER_CHAT=${getEnvValue('RAG_RERANK_TIER_CHAT') || 'quality'}
+RAG_RERANK_TIER_VOICE=${getEnvValue('RAG_RERANK_TIER_VOICE') || 'fast'}
+RAG_RERANK_VOYAGE_MODEL_BY_LANG=${getEnvValue('RAG_RERANK_VOYAGE_MODEL_BY_LANG') || ''}
+COHERE_API_KEY=${getEnvValue('COHERE_API_KEY') || ''}
+COHERE_BASE_URL=${getEnvValue('COHERE_BASE_URL') || ''}
+RAG_REFUSAL_THRESHOLD=${getEnvValue('RAG_REFUSAL_THRESHOLD') || 'false'}
+RAG_CONTEXT_EDGE_ORDER=${getEnvValue('RAG_CONTEXT_EDGE_ORDER') || 'false'}
+RAG_CONTEXT_COMPRESSION=${getEnvValue('RAG_CONTEXT_COMPRESSION') || 'false'}
+RAG_CONTEXT_TOKEN_BUDGET=${getEnvValue('RAG_CONTEXT_TOKEN_BUDGET') || '6000'}
+RAG_PARENT_CHILD=${getEnvValue('RAG_PARENT_CHILD') || 'false'}
+RAG_HNSW_ITERATIVE_SCAN=${getEnvValue('RAG_HNSW_ITERATIVE_SCAN') || 'off'}
+RAG_EXACT_SCAN_CUTOFF=${getEnvValue('RAG_EXACT_SCAN_CUTOFF') || '0'}
+RAG_LEXICAL_TRANSLATION=${getEnvValue('RAG_LEXICAL_TRANSLATION') || 'false'}
+RAG_RETRIEVAL_PARAMS_OVERRIDE=${getEnvValue('RAG_RETRIEVAL_PARAMS_OVERRIDE') || ''}
+RAG_EMBED_TENANT=${getEnvValue('RAG_EMBED_TENANT') || ''}
+RAG_VOICE_TOKEN_SECRET=${getEnvValue('RAG_VOICE_TOKEN_SECRET') || ''}
+RAG_VOICE_TOKEN_TTL_SECONDS=${getEnvValue('RAG_VOICE_TOKEN_TTL_SECONDS') || '3600'}
+VOICE_MAX_ACTIVE_ROOMS=${getEnvValue('VOICE_MAX_ACTIVE_ROOMS') || '4'}
+# Langfuse tracing
+LANGFUSE_ENABLED=${getEnvValue('LANGFUSE_ENABLED') || 'false'}
+LANGFUSE_PUBLIC_KEY=${getEnvValue('LANGFUSE_PUBLIC_KEY') || ''}
+LANGFUSE_SECRET_KEY=${getEnvValue('LANGFUSE_SECRET_KEY') || ''}
+LANGFUSE_BASE_URL=${getEnvValue('LANGFUSE_BASE_URL') || 'https://cloud.langfuse.com'}
+LANGFUSE_SAMPLE_RATE=${getEnvValue('LANGFUSE_SAMPLE_RATE') || '0.1'}
+LANGFUSE_CAPTURE_CONTENT=${getEnvValue('LANGFUSE_CAPTURE_CONTENT') || 'false'}
+LANGFUSE_REVIEW_SAMPLE_RATE=${getEnvValue('LANGFUSE_REVIEW_SAMPLE_RATE') || '0'}
+# Verified citations and groundedness
+RAG_CITATIONS=${getEnvValue('RAG_CITATIONS') || 'false'}
+RAG_CLAUDE_CITATIONS=${getEnvValue('RAG_CLAUDE_CITATIONS') || 'false'}
+ANTHROPIC_API_KEY=${getEnvValue('ANTHROPIC_API_KEY') || ''}
+ANTHROPIC_BASE_URL=${getEnvValue('ANTHROPIC_BASE_URL') || ''}
+RAG_GROUNDEDNESS=${getEnvValue('RAG_GROUNDEDNESS') || 'false'}
+RAG_GROUNDEDNESS_VECTARA_OPT_IN=${getEnvValue('RAG_GROUNDEDNESS_VECTARA_OPT_IN') || 'false'}
+RAG_GROUNDEDNESS_TIMEOUT_MS=${getEnvValue('RAG_GROUNDEDNESS_TIMEOUT_MS') || '20000'}
+RAG_GROUNDEDNESS_MAX_PREMISE_TOKENS=${getEnvValue('RAG_GROUNDEDNESS_MAX_PREMISE_TOKENS') || '3000'}
+RAG_ANSWER_FEEDBACK=${getEnvValue('RAG_ANSWER_FEEDBACK') || 'false'}
+RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK=${getEnvValue('RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK') || 'false'}
+
+# Prompt-injection defense
+RAG_CONTEXT_TAGGING=${getEnvValue('RAG_CONTEXT_TAGGING') || 'false'}
+RAG_INJECTION_CHECK=${getEnvValue('RAG_INJECTION_CHECK') || 'off'}
+RAG_INJECTION_PROMPT_GUARD=${getEnvValue('RAG_INJECTION_PROMPT_GUARD') || 'false'}
+RAG_INJECTION_LAKERA=${getEnvValue('RAG_INJECTION_LAKERA') || 'false'}
+LAKERA_GUARD_API_KEY=${getEnvValue('LAKERA_GUARD_API_KEY') || ''}
+LAKERA_GUARD_BASE_URL=${getEnvValue('LAKERA_GUARD_BASE_URL') || ''}
+RAG_INJECTION_LAKERA_MULTI_TENANT_ACK=${getEnvValue('RAG_INJECTION_LAKERA_MULTI_TENANT_ACK') || 'false'}
+RAG_TOOL_RESULT_GUARD=${getEnvValue('RAG_TOOL_RESULT_GUARD') || 'off'}
+NEXT_PUBLIC_RAG_IMAGE_ALLOWLIST=${getEnvValue('NEXT_PUBLIC_RAG_IMAGE_ALLOWLIST') || 'false'}
+# Query layer
+RAG_QUERY_LAYER=${getEnvValue('RAG_QUERY_LAYER') || 'false'}
+RAG_QUERY_FRAMEWORK=${getEnvValue('RAG_QUERY_FRAMEWORK') || 'llamaindex'}
+RAG_QUERY_LLM_MODEL=${getEnvValue('RAG_QUERY_LLM_MODEL') || 'openai/gpt-4.1-nano'}
+RAG_QUERY_CONDENSE=${getEnvValue('RAG_QUERY_CONDENSE') || 'true'}
+RAG_QUERY_EXPAND=${getEnvValue('RAG_QUERY_EXPAND') || 'true'}
+RAG_QUERY_DECOMPOSE=${getEnvValue('RAG_QUERY_DECOMPOSE') || 'true'}
+RAG_QUERY_TRANSLATE=${getEnvValue('RAG_QUERY_TRANSLATE') || 'true'}
+RAG_QUERY_DATE_NORMALIZE=${getEnvValue('RAG_QUERY_DATE_NORMALIZE') || 'true'}
+RAG_QUERY_HYDE=${getEnvValue('RAG_QUERY_HYDE') || 'false'}
+RAG_QUERY_TRANSLATE_DISABLED_PROFILES=${getEnvValue('RAG_QUERY_TRANSLATE_DISABLED_PROFILES') || ''}
+RAG_QUERY_VOICE_TRANSFORMS=${getEnvValue('RAG_QUERY_VOICE_TRANSFORMS') || 'condense_history,normalize_dates'}
+# Semantic cache
+RAG_SEMANTIC_CACHE=${getEnvValue('RAG_SEMANTIC_CACHE') || 'off'}
+RAG_SEMANTIC_CACHE_TTL=${getEnvValue('RAG_SEMANTIC_CACHE_TTL') || '3600'}
+RAG_SEMANTIC_CACHE_REFUSAL_TTL=${getEnvValue('RAG_SEMANTIC_CACHE_REFUSAL_TTL') || '600'}
+RAG_SEMANTIC_CACHE_MAX_DISTANCE=${getEnvValue('RAG_SEMANTIC_CACHE_MAX_DISTANCE') || '0.05'}
+RAG_SEMANTIC_CACHE_EMBED_STORE=${getEnvValue('RAG_SEMANTIC_CACHE_EMBED_STORE') || 'false'}
+REDIS_URL=${getEnvValue('REDIS_URL') || ''}
+# Ingestion and embedding profiles
+RAG_INGEST_PIPELINE=${getEnvValue('RAG_INGEST_PIPELINE') || 'legacy'}
+RAG_PARSER=${getEnvValue('RAG_PARSER') || 'llamaparse'}
+RAG_PARSE_POLL_BUDGET_MS=${getEnvValue('RAG_PARSE_POLL_BUDGET_MS') || '45000'}
+RAG_DOC_TYPE_LLM_DETECT=${getEnvValue('RAG_DOC_TYPE_LLM_DETECT') || 'false'}
+RAG_INVOICE_LLM_EXTRACT=${getEnvValue('RAG_INVOICE_LLM_EXTRACT') || 'false'}
+RAG_EXACT_ID_LOOKUP=${getEnvValue('RAG_EXACT_ID_LOOKUP') || 'false'}
+RAG_PDF_IMAGE_CHUNKS=${getEnvValue('RAG_PDF_IMAGE_CHUNKS') || 'false'}
+RAG_INJECTION_SCAN=${getEnvValue('RAG_INJECTION_SCAN') || 'off'}
+RAG_EMBEDDING_PROFILES=${getEnvValue('RAG_EMBEDDING_PROFILES') || 'off'}
+RAG_QWEN_EMBED_FALLBACK=${getEnvValue('RAG_QWEN_EMBED_FALLBACK') || 'openrouter'}
+RAG_PARSE_ROUTING=${getEnvValue('RAG_PARSE_ROUTING') || 'fixed'}
+RAG_PARSER_ALLOW_CLOUD=${getEnvValue('RAG_PARSER_ALLOW_CLOUD') || 'true'}
+RAG_PARSE_PREMIUM_PAGE_BUDGET=${getEnvValue('RAG_PARSE_PREMIUM_PAGE_BUDGET') || '0'}
+RAG_PARSE_PREMIUM_MAX_PAGES_PER_DOC=${getEnvValue('RAG_PARSE_PREMIUM_MAX_PAGES_PER_DOC') || '200'}
+RAG_PARSE_ESCALATION=${getEnvValue('RAG_PARSE_ESCALATION') || 'on'}
+RAG_PARSE_VLM_DETECT=${getEnvValue('RAG_PARSE_VLM_DETECT') || 'false'}
+RAG_PARSE_VLM_MODEL=${getEnvValue('RAG_PARSE_VLM_MODEL') || ''}
+RAG_INGEST_ASYNC=${getEnvValue('RAG_INGEST_ASYNC') || 'off'}
+RAG_INGEST_WORKER_CONCURRENCY=${getEnvValue('RAG_INGEST_WORKER_CONCURRENCY') || '2'}
+RAG_INGEST_JOB_RETENTION_DAYS=${getEnvValue('RAG_INGEST_JOB_RETENTION_DAYS') || '90'}
+RAG_INGEST_MAINTENANCE_INTERVAL_SECONDS=${getEnvValue('RAG_INGEST_MAINTENANCE_INTERVAL_SECONDS') || '3600'}
+RAG_INGEST_MAINTENANCE=${getEnvValue('RAG_INGEST_MAINTENANCE') || 'on'}
+RAG_PARSE_PROGRESSIVE=${getEnvValue('RAG_PARSE_PROGRESSIVE') || 'false'}
+RAG_EMBED_BATCH_MODE=${getEnvValue('RAG_EMBED_BATCH_MODE') || 'sync'}
+NEXT_PUBLIC_RAG_INGEST_REALTIME=${getEnvValue('NEXT_PUBLIC_RAG_INGEST_REALTIME') || 'false'}
+VOYAGE_API_KEY=${getEnvValue('VOYAGE_API_KEY') || ''}
+VOYAGE_BASE_URL=${getEnvValue('VOYAGE_BASE_URL') || 'https://api.voyageai.com/v1'}
+DEEPINFRA_API_KEY=${getEnvValue('DEEPINFRA_API_KEY') || ''}
+DEEPINFRA_BASE_URL=${getEnvValue('DEEPINFRA_BASE_URL') || 'https://api.deepinfra.com/v1/openai'}
 # LlamaCloud configuration
 LLAMACLOUD_PARSING_MODE=${getEnvValue('LLAMACLOUD_PARSING_MODE') || 'balanced'}
 LLAMACLOUD_CHUNK_STRATEGY=${getEnvValue('LLAMACLOUD_CHUNK_STRATEGY') || 'sentence'}
@@ -1568,6 +1793,7 @@ KOYEB_API_KEY=${getEnvValue('KOYEB_API_KEY') || ''}
 FLYIO_BAILEYS_URL=${getEnvValue('FLYIO_BAILEYS_URL') || ''}
 FLYIO_API_KEY=${getEnvValue('FLYIO_API_KEY') || ''}
 WHATSAPP_WEBHOOK_SECRET=${getEnvValue('WHATSAPP_WEBHOOK_SECRET') || ''}
+WHATSAPP_WEBHOOK_ALLOW_UNSIGNED=${getEnvValue('WHATSAPP_WEBHOOK_ALLOW_UNSIGNED') || ''}
 WHATSAPP_WEBHOOK_URL=${getEnvValue('WHATSAPP_WEBHOOK_URL') || ''}
 WHATSAPP_ENABLE_MCP=${getEnvValue('WHATSAPP_ENABLE_MCP') || 'false'}
 WHATSAPP_ENABLE_WEB_SEARCH=${getEnvValue('WHATSAPP_ENABLE_WEB_SEARCH') || 'false'}
@@ -1604,6 +1830,109 @@ RAG_EVAL_SECRET=${getEnvValue('RAG_EVAL_SECRET') || ''}
 RAG_EVAL_ALLOWED_SCOPES=${getEnvValue('RAG_EVAL_ALLOWED_SCOPES') || ''}
 RAG_SIDECAR_URL=${getEnvValue('RAG_SIDECAR_URL') || ''}
 RAG_SIDECAR_SECRET=${getEnvValue('RAG_SIDECAR_SECRET') || ''}
+# Retrieval pipeline
+RAG_PIPELINE=${getEnvValue('RAG_PIPELINE') || 'legacy'}
+RAG_DISABLED_STAGES=${getEnvValue('RAG_DISABLED_STAGES') || ''}
+RAG_STAGE_TIMEOUTS=${getEnvValue('RAG_STAGE_TIMEOUTS') || ''}
+RAG_LEXICAL_SEARCH=${getEnvValue('RAG_LEXICAL_SEARCH') || 'false'}
+RAG_RERANKER=${getEnvValue('RAG_RERANKER') || 'none'}
+RAG_RERANK_TIER_CHAT=${getEnvValue('RAG_RERANK_TIER_CHAT') || 'quality'}
+RAG_RERANK_TIER_VOICE=${getEnvValue('RAG_RERANK_TIER_VOICE') || 'fast'}
+RAG_RERANK_VOYAGE_MODEL_BY_LANG=${getEnvValue('RAG_RERANK_VOYAGE_MODEL_BY_LANG') || ''}
+COHERE_API_KEY=${getEnvValue('COHERE_API_KEY') || ''}
+COHERE_BASE_URL=${getEnvValue('COHERE_BASE_URL') || ''}
+RAG_REFUSAL_THRESHOLD=${getEnvValue('RAG_REFUSAL_THRESHOLD') || 'false'}
+RAG_CONTEXT_EDGE_ORDER=${getEnvValue('RAG_CONTEXT_EDGE_ORDER') || 'false'}
+RAG_CONTEXT_COMPRESSION=${getEnvValue('RAG_CONTEXT_COMPRESSION') || 'false'}
+RAG_CONTEXT_TOKEN_BUDGET=${getEnvValue('RAG_CONTEXT_TOKEN_BUDGET') || '6000'}
+RAG_PARENT_CHILD=${getEnvValue('RAG_PARENT_CHILD') || 'false'}
+RAG_HNSW_ITERATIVE_SCAN=${getEnvValue('RAG_HNSW_ITERATIVE_SCAN') || 'off'}
+RAG_EXACT_SCAN_CUTOFF=${getEnvValue('RAG_EXACT_SCAN_CUTOFF') || '0'}
+RAG_LEXICAL_TRANSLATION=${getEnvValue('RAG_LEXICAL_TRANSLATION') || 'false'}
+RAG_RETRIEVAL_PARAMS_OVERRIDE=${getEnvValue('RAG_RETRIEVAL_PARAMS_OVERRIDE') || ''}
+RAG_EMBED_TENANT=${getEnvValue('RAG_EMBED_TENANT') || ''}
+RAG_VOICE_TOKEN_SECRET=${getEnvValue('RAG_VOICE_TOKEN_SECRET') || ''}
+RAG_VOICE_TOKEN_TTL_SECONDS=${getEnvValue('RAG_VOICE_TOKEN_TTL_SECONDS') || '3600'}
+VOICE_MAX_ACTIVE_ROOMS=${getEnvValue('VOICE_MAX_ACTIVE_ROOMS') || '4'}
+# Langfuse tracing
+LANGFUSE_ENABLED=${getEnvValue('LANGFUSE_ENABLED') || 'false'}
+LANGFUSE_PUBLIC_KEY=${getEnvValue('LANGFUSE_PUBLIC_KEY') || ''}
+LANGFUSE_SECRET_KEY=${getEnvValue('LANGFUSE_SECRET_KEY') || ''}
+LANGFUSE_BASE_URL=${getEnvValue('LANGFUSE_BASE_URL') || 'https://cloud.langfuse.com'}
+LANGFUSE_SAMPLE_RATE=${getEnvValue('LANGFUSE_SAMPLE_RATE') || '0.1'}
+LANGFUSE_CAPTURE_CONTENT=${getEnvValue('LANGFUSE_CAPTURE_CONTENT') || 'false'}
+LANGFUSE_REVIEW_SAMPLE_RATE=${getEnvValue('LANGFUSE_REVIEW_SAMPLE_RATE') || '0'}
+# Verified citations and groundedness
+RAG_CITATIONS=${getEnvValue('RAG_CITATIONS') || 'false'}
+RAG_CLAUDE_CITATIONS=${getEnvValue('RAG_CLAUDE_CITATIONS') || 'false'}
+ANTHROPIC_API_KEY=${getEnvValue('ANTHROPIC_API_KEY') || ''}
+ANTHROPIC_BASE_URL=${getEnvValue('ANTHROPIC_BASE_URL') || ''}
+RAG_GROUNDEDNESS=${getEnvValue('RAG_GROUNDEDNESS') || 'false'}
+RAG_GROUNDEDNESS_VECTARA_OPT_IN=${getEnvValue('RAG_GROUNDEDNESS_VECTARA_OPT_IN') || 'false'}
+RAG_GROUNDEDNESS_TIMEOUT_MS=${getEnvValue('RAG_GROUNDEDNESS_TIMEOUT_MS') || '20000'}
+RAG_GROUNDEDNESS_MAX_PREMISE_TOKENS=${getEnvValue('RAG_GROUNDEDNESS_MAX_PREMISE_TOKENS') || '3000'}
+RAG_ANSWER_FEEDBACK=${getEnvValue('RAG_ANSWER_FEEDBACK') || 'false'}
+RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK=${getEnvValue('RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK') || 'false'}
+
+# Prompt-injection defense
+RAG_CONTEXT_TAGGING=${getEnvValue('RAG_CONTEXT_TAGGING') || 'false'}
+RAG_INJECTION_CHECK=${getEnvValue('RAG_INJECTION_CHECK') || 'off'}
+RAG_INJECTION_PROMPT_GUARD=${getEnvValue('RAG_INJECTION_PROMPT_GUARD') || 'false'}
+RAG_INJECTION_LAKERA=${getEnvValue('RAG_INJECTION_LAKERA') || 'false'}
+LAKERA_GUARD_API_KEY=${getEnvValue('LAKERA_GUARD_API_KEY') || ''}
+LAKERA_GUARD_BASE_URL=${getEnvValue('LAKERA_GUARD_BASE_URL') || ''}
+RAG_INJECTION_LAKERA_MULTI_TENANT_ACK=${getEnvValue('RAG_INJECTION_LAKERA_MULTI_TENANT_ACK') || 'false'}
+RAG_TOOL_RESULT_GUARD=${getEnvValue('RAG_TOOL_RESULT_GUARD') || 'off'}
+NEXT_PUBLIC_RAG_IMAGE_ALLOWLIST=${getEnvValue('NEXT_PUBLIC_RAG_IMAGE_ALLOWLIST') || 'false'}
+# Query layer
+RAG_QUERY_LAYER=${getEnvValue('RAG_QUERY_LAYER') || 'false'}
+RAG_QUERY_FRAMEWORK=${getEnvValue('RAG_QUERY_FRAMEWORK') || 'llamaindex'}
+RAG_QUERY_LLM_MODEL=${getEnvValue('RAG_QUERY_LLM_MODEL') || 'openai/gpt-4.1-nano'}
+RAG_QUERY_CONDENSE=${getEnvValue('RAG_QUERY_CONDENSE') || 'true'}
+RAG_QUERY_EXPAND=${getEnvValue('RAG_QUERY_EXPAND') || 'true'}
+RAG_QUERY_DECOMPOSE=${getEnvValue('RAG_QUERY_DECOMPOSE') || 'true'}
+RAG_QUERY_TRANSLATE=${getEnvValue('RAG_QUERY_TRANSLATE') || 'true'}
+RAG_QUERY_DATE_NORMALIZE=${getEnvValue('RAG_QUERY_DATE_NORMALIZE') || 'true'}
+RAG_QUERY_HYDE=${getEnvValue('RAG_QUERY_HYDE') || 'false'}
+RAG_QUERY_TRANSLATE_DISABLED_PROFILES=${getEnvValue('RAG_QUERY_TRANSLATE_DISABLED_PROFILES') || ''}
+RAG_QUERY_VOICE_TRANSFORMS=${getEnvValue('RAG_QUERY_VOICE_TRANSFORMS') || 'condense_history,normalize_dates'}
+# Semantic cache
+RAG_SEMANTIC_CACHE=${getEnvValue('RAG_SEMANTIC_CACHE') || 'off'}
+RAG_SEMANTIC_CACHE_TTL=${getEnvValue('RAG_SEMANTIC_CACHE_TTL') || '3600'}
+RAG_SEMANTIC_CACHE_REFUSAL_TTL=${getEnvValue('RAG_SEMANTIC_CACHE_REFUSAL_TTL') || '600'}
+RAG_SEMANTIC_CACHE_MAX_DISTANCE=${getEnvValue('RAG_SEMANTIC_CACHE_MAX_DISTANCE') || '0.05'}
+RAG_SEMANTIC_CACHE_EMBED_STORE=${getEnvValue('RAG_SEMANTIC_CACHE_EMBED_STORE') || 'false'}
+REDIS_URL=${getEnvValue('REDIS_URL') || ''}
+# Ingestion and embedding profiles
+RAG_INGEST_PIPELINE=${getEnvValue('RAG_INGEST_PIPELINE') || 'legacy'}
+RAG_PARSER=${getEnvValue('RAG_PARSER') || 'llamaparse'}
+RAG_PARSE_POLL_BUDGET_MS=${getEnvValue('RAG_PARSE_POLL_BUDGET_MS') || '45000'}
+RAG_DOC_TYPE_LLM_DETECT=${getEnvValue('RAG_DOC_TYPE_LLM_DETECT') || 'false'}
+RAG_INVOICE_LLM_EXTRACT=${getEnvValue('RAG_INVOICE_LLM_EXTRACT') || 'false'}
+RAG_EXACT_ID_LOOKUP=${getEnvValue('RAG_EXACT_ID_LOOKUP') || 'false'}
+RAG_PDF_IMAGE_CHUNKS=${getEnvValue('RAG_PDF_IMAGE_CHUNKS') || 'false'}
+RAG_INJECTION_SCAN=${getEnvValue('RAG_INJECTION_SCAN') || 'off'}
+RAG_EMBEDDING_PROFILES=${getEnvValue('RAG_EMBEDDING_PROFILES') || 'off'}
+RAG_QWEN_EMBED_FALLBACK=${getEnvValue('RAG_QWEN_EMBED_FALLBACK') || 'openrouter'}
+RAG_PARSE_ROUTING=${getEnvValue('RAG_PARSE_ROUTING') || 'fixed'}
+RAG_PARSER_ALLOW_CLOUD=${getEnvValue('RAG_PARSER_ALLOW_CLOUD') || 'true'}
+RAG_PARSE_PREMIUM_PAGE_BUDGET=${getEnvValue('RAG_PARSE_PREMIUM_PAGE_BUDGET') || '0'}
+RAG_PARSE_PREMIUM_MAX_PAGES_PER_DOC=${getEnvValue('RAG_PARSE_PREMIUM_MAX_PAGES_PER_DOC') || '200'}
+RAG_PARSE_ESCALATION=${getEnvValue('RAG_PARSE_ESCALATION') || 'on'}
+RAG_PARSE_VLM_DETECT=${getEnvValue('RAG_PARSE_VLM_DETECT') || 'false'}
+RAG_PARSE_VLM_MODEL=${getEnvValue('RAG_PARSE_VLM_MODEL') || ''}
+RAG_INGEST_ASYNC=${getEnvValue('RAG_INGEST_ASYNC') || 'off'}
+RAG_INGEST_WORKER_CONCURRENCY=${getEnvValue('RAG_INGEST_WORKER_CONCURRENCY') || '2'}
+RAG_INGEST_JOB_RETENTION_DAYS=${getEnvValue('RAG_INGEST_JOB_RETENTION_DAYS') || '90'}
+RAG_INGEST_MAINTENANCE_INTERVAL_SECONDS=${getEnvValue('RAG_INGEST_MAINTENANCE_INTERVAL_SECONDS') || '3600'}
+RAG_INGEST_MAINTENANCE=${getEnvValue('RAG_INGEST_MAINTENANCE') || 'on'}
+RAG_PARSE_PROGRESSIVE=${getEnvValue('RAG_PARSE_PROGRESSIVE') || 'false'}
+RAG_EMBED_BATCH_MODE=${getEnvValue('RAG_EMBED_BATCH_MODE') || 'sync'}
+NEXT_PUBLIC_RAG_INGEST_REALTIME=${getEnvValue('NEXT_PUBLIC_RAG_INGEST_REALTIME') || 'false'}
+VOYAGE_API_KEY=${getEnvValue('VOYAGE_API_KEY') || ''}
+VOYAGE_BASE_URL=${getEnvValue('VOYAGE_BASE_URL') || 'https://api.voyageai.com/v1'}
+DEEPINFRA_API_KEY=${getEnvValue('DEEPINFRA_API_KEY') || ''}
+DEEPINFRA_BASE_URL=${getEnvValue('DEEPINFRA_BASE_URL') || 'https://api.deepinfra.com/v1/openai'}
 # LlamaCloud configuration
 LLAMACLOUD_PARSING_MODE=${getEnvValue('LLAMACLOUD_PARSING_MODE') || 'balanced'}
 LLAMACLOUD_CHUNK_STRATEGY=${getEnvValue('LLAMACLOUD_CHUNK_STRATEGY') || 'sentence'}
@@ -1695,7 +2024,20 @@ app.post('/api/config/upload-logo', upload.single('logoFile'), (req, res) => {
     }
 
     const type = req.body.type || 'ai';
-    const relativePath = `/logos/${type}/${req.file.filename}`;
+    if (!security.LOGO_TYPES.has(type)) {
+      return res.status(400).json({ error: 'Invalid logo type' });
+    }
+
+    const validation = security.validateImageUpload(req.file.originalname, req.file.buffer);
+    if (!validation.ok) {
+      return res.status(400).json({ error: validation.error });
+    }
+
+    const uploadDir = path.join(REPO_ROOT, 'public', 'logos', type);
+    fs.mkdirSync(uploadDir, { recursive: true });
+    const fileName = `${type}-logo-${Date.now()}.${validation.extension}`;
+    fs.writeFileSync(path.join(uploadDir, fileName), req.file.buffer);
+    const relativePath = `/logos/${type}/${fileName}`;
 
     console.log(`API: Logo file uploaded to ${relativePath}`);
 
@@ -1706,28 +2048,25 @@ app.post('/api/config/upload-logo', upload.single('logoFile'), (req, res) => {
     });
   } catch (error) {
     console.error('API: Error uploading logo:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Failed to upload logo' });
   }
 });
 
 // API endpoint for uploading favicon
-app.post('/api/config/upload-favicon', multer({
-  storage: multer.diskStorage({
-    destination: function (req, file, cb) {
-      cb(null, path.join(REPO_ROOT, 'public'));
-    },
-    filename: function (req, file, cb) {
-      const extension = path.extname(file.originalname);
-      cb(null, `favicon${extension}`);
-    }
-  })
-}).single('favicon'), (req, res) => {
+app.post('/api/config/upload-favicon', upload.single('favicon'), (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    const relativePath = `/${req.file.filename}`;
+    const validation = security.validateImageUpload(req.file.originalname, req.file.buffer);
+    if (!validation.ok) {
+      return res.status(400).json({ error: validation.error });
+    }
+
+    const fileName = `favicon.${validation.extension}`;
+    fs.writeFileSync(path.join(REPO_ROOT, 'public', fileName), req.file.buffer);
+    const relativePath = `/${fileName}`;
 
     console.log(`API: Favicon uploaded to ${relativePath}`);
 
@@ -1738,7 +2077,7 @@ app.post('/api/config/upload-favicon', multer({
     });
   } catch (error) {
     console.error('API: Error uploading favicon:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Failed to upload favicon' });
   }
 });
 
@@ -1999,6 +2338,10 @@ app.post('/api/admin/setup', async (req, res) => {
 
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required' });
+    }
+
+    if (security.hasEnvLineBreak(email) || security.hasEnvLineBreak(password)) {
+      return res.status(400).json({ error: 'Email and password cannot contain line breaks' });
     }
 
     console.log('Setting up primary admin:', email);
@@ -2351,11 +2694,11 @@ function execPromise(command, options = {}) {
   });
 }
 
-// API endpoint to get environment variable
+// API endpoint to get environment variable (secret values are never returned)
 app.get('/api/config/get-env', (req, res) => {
   try {
     const varName = req.query.var;
-    if (!varName) {
+    if (!varName || typeof varName !== 'string') {
       return res.status(400).json({ error: 'No variable name provided' });
     }
 
@@ -2365,21 +2708,110 @@ app.get('/api/config/get-env', (req, res) => {
 
     const envVars = parseEnvFile(envContent);
 
+    if (security.isSecretConfigEntry(varName, envVars[varName] || '')) {
+      return res.status(403).json({ success: false, message: 'Variable not available' });
+    }
+
     // Return the variable value if it exists
-    if (varName in envVars) {
-      console.log(`API: Returning environment variable ${varName}:`, envVars[varName]);
+    if (Object.prototype.hasOwnProperty.call(envVars, varName)) {
       return res.json({ success: true, value: envVars[varName] });
     } else {
       // For the border setting, default to true if not found
       if (varName === 'NEXT_PUBLIC_AI_RESPONSE_LOGO_BORDER') {
-        console.log(`API: Variable ${varName} not found, returning default 'true'`);
         return res.json({ success: true, value: 'true' });
       }
       return res.json({ success: false, message: 'Variable not found' });
     }
   } catch (error) {
     console.error('API: Error fetching environment variable:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Failed to read environment variable' });
+  }
+});
+
+class InjectionSummaryError extends Error {
+  constructor(code, message) {
+    super(message);
+    this.code = code;
+  }
+}
+
+const INJECTION_RULE_LANGUAGES = ['zh', 'en', 'it', 'any'];
+const PROMPT_GUARD_MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._-]*$/;
+const PROMPT_GUARD_REVISION = /^[0-9a-f]{40}$/;
+const DETECTOR_CONFIG_VERSION = /^\d{4}-\d{2}-\d{2}\.[1-9][0-9]*$/;
+const SAFE_TOKEN = /^[a-z0-9_]{1,64}$/;
+
+function readInjectionConfigFile(fileName, label) {
+  const filePath = path.join(REPO_ROOT, 'config', 'rag', fileName);
+  let bytes;
+  try {
+    bytes = fs.readFileSync(filePath);
+  } catch {
+    throw new InjectionSummaryError(`injection_${label}_missing`, `config/rag/${fileName} could not be read`);
+  }
+  try {
+    return { bytes, data: JSON.parse(bytes.toString('utf8')) };
+  } catch {
+    throw new InjectionSummaryError(`injection_${label}_invalid`, `config/rag/${fileName} is not valid JSON`);
+  }
+}
+
+function isTokenList(value) {
+  return Array.isArray(value) && value.length > 0 && value.every((item) => typeof item === 'string' && SAFE_TOKEN.test(item));
+}
+
+/** Versions, counts and ids of the active injection defense; never a rule pattern, rule id or env value (D-18). Read on every call. */
+function summarizeInjectionDefense() {
+  const rulesFile = readInjectionConfigFile('injection-rules.json', 'rules');
+  const rules = rulesFile.data && Array.isArray(rulesFile.data.rules) ? rulesFile.data.rules : null;
+  if (!rules) throw new InjectionSummaryError('injection_rules_invalid', 'config/rag/injection-rules.json has no rules list');
+  const counts = Object.fromEntries(INJECTION_RULE_LANGUAGES.map((language) => [language, 0]));
+  for (const rule of rules) {
+    if (rule && Object.prototype.hasOwnProperty.call(counts, rule.language)) counts[rule.language] += 1;
+  }
+
+  const { data: detectors } = readInjectionConfigFile('injection-detectors.json', 'detectors');
+  const promptGuard = detectors && detectors.prompt_guard;
+  const lakera = detectors && detectors.lakera;
+  const valid =
+    detectors && typeof detectors.version === 'string' && DETECTOR_CONFIG_VERSION.test(detectors.version) &&
+    promptGuard && typeof promptGuard.model_id === 'string' && PROMPT_GUARD_MODEL_ID.test(promptGuard.model_id) && promptGuard.model_id.length <= 200 &&
+    typeof promptGuard.revision === 'string' && PROMPT_GUARD_REVISION.test(promptGuard.revision) &&
+    typeof promptGuard.threshold === 'number' && promptGuard.threshold >= 0 && promptGuard.threshold <= 1 &&
+    isTokenList(promptGuard.languages) &&
+    lakera && isTokenList(lakera.detector_types) &&
+    (lakera.min_level === null || lakera.min_level === undefined || (typeof lakera.min_level === 'string' && SAFE_TOKEN.test(lakera.min_level)));
+  if (!valid) throw new InjectionSummaryError('injection_detectors_invalid', 'config/rag/injection-detectors.json does not match the detector config contract');
+
+  return {
+    rules: {
+      version: require('crypto').createHash('sha256').update(rulesFile.bytes).digest('hex').slice(0, 12),
+      counts,
+    },
+    detectors: {
+      version: detectors.version,
+      prompt_guard: {
+        model_id: promptGuard.model_id,
+        revision: promptGuard.revision,
+        threshold: promptGuard.threshold,
+        languages: [...promptGuard.languages],
+      },
+      lakera: { detector_types: [...lakera.detector_types], min_level: lakera.min_level ?? null },
+    },
+  };
+}
+
+// Read-only summary for the Prompt-injection defense card; served behind the same loopback and CSRF gate as every config endpoint.
+app.get('/api/config/injection-defense', (req, res) => {
+  try {
+    return res.json(summarizeInjectionDefense());
+  } catch (error) {
+    if (error instanceof InjectionSummaryError) {
+      console.error('[Injection Defense] summary unavailable:', { code: error.code });
+      return res.status(500).json({ error: error.message, code: error.code });
+    }
+    console.error('[Injection Defense] summary failed');
+    return res.status(500).json({ error: 'Injection defense summary failed', code: 'injection_summary_failed' });
   }
 });
 
@@ -2665,6 +3097,13 @@ app.post('/api/process-document', documentUpload.single('file'), async (req, res
       console.log('📂 Adding organization_id to form:', req.body.organization_id);
     }
 
+    // Marks the upload as coming from the Config UI. The app honours it only for a signed-in admin
+    // whose session matches the admin check, and ignores it otherwise.
+    form.append('upload_source', 'config_upload');
+    if (req.body.doc_type) {
+      form.append('doc_type', req.body.doc_type);
+    }
+
     const { client, options } = createMainAppRequest('/api/process-document', 'POST', {
         ...form.getHeaders(),
         'Cookie': cookieHeader  // Forward authentication cookies
@@ -2823,10 +3262,10 @@ app.post('/api/config/models', async (req, res) => {
     // Prepare the request to the main myRAG app
     const postData = JSON.stringify(req.body);
 
-    const { client, options } = createMainAppRequest('/api/config/models', 'POST', {
+    const { client, options } = createMainAppRequest('/api/config/models', 'POST', withAuthHeaders(req, {
         'Content-Type': 'application/json',
         'Content-Length': Buffer.byteLength(postData)
-    });
+    }));
 
     // Create the request to the main app
     const proxyReq = client.request(options, (proxyRes) => {
@@ -2892,9 +3331,9 @@ app.post('/api/config/reload', async (req, res) => {
   try {
     console.log('🔄 Config Proxy: Forwarding environment reload request to main myRAG app...');
 
-    const { client, options } = createMainAppRequest('/api/config/reload', 'POST', {
+    const { client, options } = createMainAppRequest('/api/config/reload', 'POST', withAuthHeaders(req, {
         'Content-Type': 'application/json'
-    });
+    }));
 
     const proxyReq = client.request(options, (proxyRes) => {
       console.log(`📡 Config Proxy: Main app responded with status ${proxyRes.statusCode}`);
@@ -3071,9 +3510,9 @@ app.get('/api/config/connectors', async (req, res) => {
   try {
     console.log('🔄 Config Proxy: Forwarding connectors GET request to main myRAG app...');
 
-    const { client, options } = createMainAppRequest('/api/config/connectors', 'GET', {
+    const { client, options } = createMainAppRequest('/api/config/connectors', 'GET', withAuthHeaders(req, {
         'Content-Type': 'application/json'
-    });
+    }));
 
     const proxyReq = client.request(options, (proxyRes) => {
       console.log(`📡 Config Proxy: Main app responded with status ${proxyRes.statusCode}`);
@@ -3123,10 +3562,10 @@ app.put('/api/config/connectors', async (req, res) => {
 
     const postData = JSON.stringify(req.body);
 
-    const { client, options } = createMainAppRequest('/api/config/connectors', 'PUT', {
+    const { client, options } = createMainAppRequest('/api/config/connectors', 'PUT', withAuthHeaders(req, {
         'Content-Type': 'application/json',
         'Content-Length': Buffer.byteLength(postData)
-    });
+    }));
 
     const proxyReq = client.request(options, (proxyRes) => {
       console.log(`📡 Config Proxy: Main app responded with status ${proxyRes.statusCode}`);
@@ -3175,9 +3614,9 @@ app.get('/api/mcp/servers', async (req, res) => {
   try {
     console.log('🔄 Config Proxy: Forwarding MCP servers GET request to main myRAG app...');
 
-    const { client, options } = createMainAppRequest('/api/mcp/servers', 'GET', {
+    const { client, options } = createMainAppRequest('/api/mcp/servers', 'GET', withAuthHeaders(req, {
         'Content-Type': 'application/json'
-    });
+    }));
 
     const proxyReq = client.request(options, (proxyRes) => {
       console.log(`📡 Config Proxy: Main app responded with status ${proxyRes.statusCode}`);
@@ -3224,6 +3663,86 @@ app.get('/api/mcp/servers', async (req, res) => {
   }
 });
 
+function isAllowedRagProxyPathname(pathname) {
+  const normalized = path.posix.normalize(pathname);
+  if (normalized.includes('..')) return false;
+  if (!normalized.startsWith('/api/rag')) return false;
+  if (normalized.length > '/api/rag'.length && !normalized.startsWith('/api/rag/')) return false;
+  return true;
+}
+
+function buildRagProxyTargetPath(pathParam, queryString) {
+  const raw = String(pathParam ?? '').replace(/^\/+/, '');
+  const parts = raw ? raw.split('/').filter(Boolean) : [];
+  for (const part of parts) {
+    let decoded;
+    try {
+      decoded = decodeURIComponent(part);
+    } catch {
+      return null;
+    }
+    if (decoded === '.' || decoded === '..') return null;
+  }
+  const joined = parts.map((p) => {
+    try {
+      return decodeURIComponent(p);
+    } catch {
+      return p;
+    }
+  }).join('/');
+  const base = joined ? `/api/rag/${joined}` : '/api/rag';
+  const normalized = path.posix.normalize(base);
+  if (!isAllowedRagProxyPathname(normalized)) return null;
+  return `${normalized}${queryString || ''}`;
+}
+
+function resolveRagProxyMainAppUrl(targetPath) {
+  let resolved;
+  try {
+    resolved = new URL(targetPath, getMainAppBaseUrl());
+  } catch {
+    return null;
+  }
+  if (!isAllowedRagProxyPathname(resolved.pathname)) return null;
+  return resolved.toString();
+}
+
+app.all('/api/rag/*path', async (req, res) => {
+  const query = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+  const targetPath = buildRagProxyTargetPath(req.params.path, query);
+  if (!targetPath) {
+    return res.status(400).json({ success: false, error: 'Invalid RAG proxy path' });
+  }
+  const logPath = targetPath.split('?')[0];
+  const mainAppUrl = resolveRagProxyMainAppUrl(targetPath);
+  if (!mainAppUrl) {
+    return res.status(400).json({ success: false, error: 'Invalid RAG proxy path' });
+  }
+  console.log('[RAG Proxy]', req.method, logPath);
+  try {
+    const headers = withAuthHeaders(req, {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    });
+    const init = { method: req.method, headers };
+    if (req.method !== 'GET' && req.method !== 'HEAD' && req.body !== undefined) {
+      init.body = JSON.stringify(req.body);
+    }
+    const response = await fetch(mainAppUrl, init);
+    const text = await response.text();
+    let body;
+    try {
+      body = text ? JSON.parse(text) : {};
+    } catch {
+      return res.status(502).json({ success: false, error: 'Invalid response from main app' });
+    }
+    return res.status(response.status).json(body);
+  } catch (error) {
+    console.error('[RAG Proxy] connection error:', error.message);
+    return res.status(500).json(mainAppConnectionError(error));
+  }
+});
+
 // Proxy endpoint for MCP servers (POST)
 app.post('/api/mcp/servers', async (req, res) => {
   try {
@@ -3232,10 +3751,10 @@ app.post('/api/mcp/servers', async (req, res) => {
     // Prepare the request to the main myRAG app
     const postData = JSON.stringify(req.body);
 
-    const { client, options } = createMainAppRequest('/api/mcp/servers', 'POST', {
+    const { client, options } = createMainAppRequest('/api/mcp/servers', 'POST', withAuthHeaders(req, {
         'Content-Type': 'application/json',
         'Content-Length': Buffer.byteLength(postData)
-    });
+    }));
 
     // Create the request to the main app
     const proxyReq = client.request(options, (proxyRes) => {
@@ -3598,38 +4117,60 @@ server.on('clientError', (err, socket) => {
   }
 });
 
-// Prevent server from closing on errors
-process.on('uncaughtException', (error) => {
-  console.error('⚠️ Uncaught exception (server will continue):', error);
-  // Don't exit, keep server running
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('⚠️ Unhandled promise rejection:', reason);
-  // Don't exit, keep server running
-});
-
-// Check for .env.local before starting
-const { checkAndCreateEnvFile } = require('./init-env');
-checkAndCreateEnvFile();
-
-// Start the server and automatically open the browser
-server.listen(PORT, () => {
-  console.log(`\n🔧 myRAG Config Tool running at http://localhost:${PORT}`);
-  console.log(`\n✨ Open this URL in your browser to configure myRAG`);
-  console.log(`\n🔄 Live Preview proxy ready - will forward chat requests to ${getMainAppBaseUrl()}`);
-  console.log(`\n📄 Document processing proxy ready - will forward document requests to ${getMainAppBaseUrl()}`);
-  console.log(`\n🌐 Translation API ready - will use OpenAI/OpenRouter for translations`);
-  console.log(`\n⚡ Server configured with enhanced keepalive settings to prevent disconnections`);
-
-  // Try to auto-open the browser (works on most systems)
-  try {
-    const startCmd = process.platform === 'win32' ? 'start' :
-      (process.platform === 'darwin' ? 'open' : 'xdg-open');
-    const { exec } = require('child_process');
-    exec(`${startCmd} http://localhost:${PORT}`);
-    console.log(`\n🌐 Browser opening automatically...`);
-  } catch (err) {
-    console.log(`\n🌐 Please open http://localhost:${PORT} in your browser`);
+app.use((error, req, res, next) => {
+  if (res.headersSent) return next(error);
+  if (error && error.code === 'LIMIT_FILE_SIZE') {
+    return res.status(413).json({ error: 'File is too large' });
   }
+  if (error && (error.type === 'entity.parse.failed' || error.status === 400)) {
+    return res.status(400).json({ error: 'Invalid request body' });
+  }
+  console.error('API: Unhandled error:', error);
+  return res.status(500).json({ error: 'Internal server error' });
 });
+
+function start() {
+  // Prevent server from closing on errors
+  process.on('uncaughtException', (error) => {
+    console.error('⚠️ Uncaught exception (server will continue):', error);
+    // Don't exit, keep server running
+  });
+
+  process.on('unhandledRejection', (reason, promise) => {
+    console.error('⚠️ Unhandled promise rejection:', reason);
+    // Don't exit, keep server running
+  });
+
+  // Check for .env.local before starting
+  const { checkAndCreateEnvFile } = require('./init-env');
+  checkAndCreateEnvFile();
+
+  server.listen(PORT, HOST, () => {
+    console.log(`\n🔧 myRAG Config Tool running at http://localhost:${PORT}`);
+    if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') {
+      console.warn(`\n⚠️ UNSAFE: CONFIG_UI_HOST=${HOST} exposes this unauthenticated .env editor beyond this machine. Unset it unless you fully trust the network.`);
+    }
+    console.log(`\n✨ Open this URL in your browser to configure myRAG`);
+    console.log(`\n🔄 Live Preview proxy ready - will forward chat requests to ${getMainAppBaseUrl()}`);
+    console.log(`\n📄 Document processing proxy ready - will forward document requests to ${getMainAppBaseUrl()}`);
+    console.log(`\n🌐 Translation API ready - will use OpenAI/OpenRouter for translations`);
+    console.log(`\n⚡ Server configured with enhanced keepalive settings to prevent disconnections`);
+
+    // Try to auto-open the browser (works on most systems)
+    try {
+      const startCmd = process.platform === 'win32' ? 'start' :
+        (process.platform === 'darwin' ? 'open' : 'xdg-open');
+      const { exec } = require('child_process');
+      exec(`${startCmd} http://localhost:${PORT}`);
+      console.log(`\n🌐 Browser opening automatically...`);
+    } catch (err) {
+      console.log(`\n🌐 Please open http://localhost:${PORT} in your browser`);
+    }
+  });
+}
+
+if (require.main === module) {
+  start();
+}
+
+module.exports = { app, server, start, HOST, PORT };

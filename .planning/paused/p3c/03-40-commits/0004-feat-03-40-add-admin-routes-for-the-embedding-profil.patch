@@ -1,0 +1,250 @@
+From 561e37cd903ab19572aa9d1eafd9631a9b7cdfec Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 24 Nov 2026 09:26:40 +0000
+Subject: [PATCH 4/5] feat(03-40): add admin routes for the embedding profile
+ pointer flip
+
+- GET list, POST {id}/activate and POST rollback behind checkAdmin, fail closed 401, 403, 503
+- the actor is the guard result's user id; bodies are strict and empty, ids are validated
+- 404 for an unknown profile, 409 with the gate's reason for every other refusal, 503 without database text
+- completeness per profile on the list only when asked, evidence only as a flag
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01X342shLsAZx6PYph2vA7hc
+---
+ .../embedding-profiles/[id]/activate/route.ts | 44 ++++++++++++++-
+ .../admin/embedding-profiles/_responses.ts    | 47 ++++++++++++++++
+ .../embedding-profiles/rollback/route.ts      | 37 ++++++++++++-
+ .../api/rag/admin/embedding-profiles/route.ts | 54 ++++++++++++++++++-
+ src/lib/rag/embeddings/profile-ops.ts         |  2 +-
+ 5 files changed, 177 insertions(+), 7 deletions(-)
+ create mode 100644 src/app/api/rag/admin/embedding-profiles/_responses.ts
+
+diff --git a/src/app/api/rag/admin/embedding-profiles/[id]/activate/route.ts b/src/app/api/rag/admin/embedding-profiles/[id]/activate/route.ts
+index fd1421d..fe00cb9 100644
+--- a/src/app/api/rag/admin/embedding-profiles/[id]/activate/route.ts
++++ b/src/app/api/rag/admin/embedding-profiles/[id]/activate/route.ts
+@@ -1,5 +1,45 @@
++import { z } from 'zod/v3';
++import { adminDenied, checkAdmin } from '@/lib/admin-route-auth';
++import { activateEmbeddingProfile } from '@/lib/rag';
++import { PROFILE_ID_PATTERN, invalidRequest, jsonNoStore, profileUnavailable, refusalResponse } from '../../_responses';
++
+ export const runtime = 'nodejs';
+ 
+-export async function POST(): Promise<Response> {
+-  return new Response(null, { status: 501 });
++const ParamsSchema = z.object({ id: z.string().regex(PROFILE_ID_PATTERN) });
++/** The activation takes no input: an actor or any other key is refused, the actor is the verified admin. */
++const BodySchema = z.object({}).strict();
++
++/** Flips the active pointer to one profile through the SQL gate. The gate refuses an incomplete, inconsistent or unproven profile. */
++export async function POST(request: Request, context: { params: Promise<{ id: string }> }): Promise<Response> {
++  const admin = await checkAdmin(request);
++  if (!admin.ok) return adminDenied(admin.status);
++
++  const parsed = ParamsSchema.safeParse(await context.params);
++  if (!parsed.success) {
++    return invalidRequest(parsed.error.errors.map((issue) => ({ path: issue.path.join('.'), message: issue.message })));
++  }
++
++  const raw = await request.text();
++  if (raw.trim() !== '') {
++    let body: unknown;
++    try {
++      body = JSON.parse(raw);
++    } catch {
++      return invalidRequest([{ path: '', message: 'Body is not valid JSON' }]);
++    }
++    const checked = BodySchema.safeParse(body);
++    if (!checked.success) {
++      return invalidRequest(checked.error.errors.map((issue) => ({ path: issue.path.join('.'), message: issue.message })));
++    }
++  }
++
++  const profileId = parsed.data.id;
++  try {
++    const result = await activateEmbeddingProfile(profileId, admin.userId);
++    if (!result.ok) return refusalResponse('activate', profileId, result);
++    console.log('[Embedding Profile] admin action', { action: 'activate', profileId: result.activated });
++    return jsonNoStore({ success: true, activated: result.activated, previous: result.previous });
++  } catch (error) {
++    return profileUnavailable('activate', profileId, error);
++  }
+ }
+diff --git a/src/app/api/rag/admin/embedding-profiles/_responses.ts b/src/app/api/rag/admin/embedding-profiles/_responses.ts
+new file mode 100644
+index 0000000..6d6959a
+--- /dev/null
++++ b/src/app/api/rag/admin/embedding-profiles/_responses.ts
+@@ -0,0 +1,47 @@
++import { NextResponse } from 'next/server';
++import { ProfileUnavailableError } from '@/lib/rag';
++import type { ProfileRefusal } from '@/lib/rag';
++
++const NO_STORE = { 'Cache-Control': 'no-store' };
++
++/** The profile ids the registry and the CLI use: lowercase letters, digits, dots, underscores and hyphens. */
++export const PROFILE_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/;
++
++export type ProfileAction = 'list' | 'activate' | 'rollback';
++
++export function jsonNoStore(body: unknown, status = 200): NextResponse {
++  return NextResponse.json(body, { status, headers: NO_STORE });
++}
++
++export function invalidRequest(details: Array<{ path: string; message: string }>): NextResponse {
++  return jsonNoStore({ success: false, error: 'Invalid request data', details }, 400);
++}
++
++/** Anything the gate did not name: the registry, the database or the response was not usable. Only the reason word is logged and answered. */
++export function profileUnavailable(action: ProfileAction, profileId: string | null, error: unknown): NextResponse {
++  const reason = error instanceof ProfileUnavailableError ? error.reason : 'unexpected';
++  console.error('[Embedding Profile] admin action failed', { action, profileId, reason });
++  return jsonNoStore({ success: false, error: 'Embedding profile administration is unavailable' }, 503);
++}
++
++const MISSING_COUNT = /^(?:activation|rollback)_refused: incomplete \((\d+) /;
++
++/**
++ * A refusal of the gate: 404 for an unknown profile, 409 for every other named refusal, with the gate's own reason and, for an incomplete
++ * profile, the number of chunks still missing. The rest of the gate's message is not passed on.
++ */
++export function refusalResponse(action: 'activate' | 'rollback', profileId: string | null, refusal: ProfileRefusal): NextResponse {
++  if (/: actor_required$/.test(refusal.reason)) return profileUnavailable(action, profileId, new Error('actor_required'));
++  console.warn('[Embedding Profile] admin action refused', { action, profileId, reason: refusal.reason });
++  if (refusal.reason === 'activation_refused: unknown_profile') return jsonNoStore({ success: false, error: 'Profile not found' }, 404);
++  const missing = MISSING_COUNT.exec(refusal.detail);
++  return jsonNoStore(
++    {
++      success: false,
++      error: action === 'activate' ? 'Activation refused' : 'Rollback refused',
++      reason: refusal.reason,
++      ...(missing ? { missing_chunks: Number(missing[1]) } : {}),
++    },
++    409,
++  );
++}
+diff --git a/src/app/api/rag/admin/embedding-profiles/rollback/route.ts b/src/app/api/rag/admin/embedding-profiles/rollback/route.ts
+index fd1421d..b100619 100644
+--- a/src/app/api/rag/admin/embedding-profiles/rollback/route.ts
++++ b/src/app/api/rag/admin/embedding-profiles/rollback/route.ts
+@@ -1,5 +1,38 @@
++import { z } from 'zod/v3';
++import { adminDenied, checkAdmin } from '@/lib/admin-route-auth';
++import { rollbackEmbeddingProfile } from '@/lib/rag';
++import { invalidRequest, jsonNoStore, profileUnavailable, refusalResponse } from '../_responses';
++
+ export const runtime = 'nodejs';
+ 
+-export async function POST(): Promise<Response> {
+-  return new Response(null, { status: 501 });
++/** The rollback takes no input: an actor or any other key is refused, the actor is the verified admin. */
++const BodySchema = z.object({}).strict();
++
++/** Restores the previously active profile through the SQL gate, which refuses when that profile no longer has a vector for every chunk. */
++export async function POST(request: Request): Promise<Response> {
++  const admin = await checkAdmin(request);
++  if (!admin.ok) return adminDenied(admin.status);
++
++  const raw = await request.text();
++  if (raw.trim() !== '') {
++    let body: unknown;
++    try {
++      body = JSON.parse(raw);
++    } catch {
++      return invalidRequest([{ path: '', message: 'Body is not valid JSON' }]);
++    }
++    const checked = BodySchema.safeParse(body);
++    if (!checked.success) {
++      return invalidRequest(checked.error.errors.map((issue) => ({ path: issue.path.join('.'), message: issue.message })));
++    }
++  }
++
++  try {
++    const result = await rollbackEmbeddingProfile(admin.userId);
++    if (!result.ok) return refusalResponse('rollback', null, result);
++    console.log('[Embedding Profile] admin action', { action: 'rollback', profileId: result.restored });
++    return jsonNoStore({ success: true, restored: result.restored, rolled_back: result.rolledBack });
++  } catch (error) {
++    return profileUnavailable('rollback', null, error);
++  }
+ }
+diff --git a/src/app/api/rag/admin/embedding-profiles/route.ts b/src/app/api/rag/admin/embedding-profiles/route.ts
+index 6cc00aa..63ccd54 100644
+--- a/src/app/api/rag/admin/embedding-profiles/route.ts
++++ b/src/app/api/rag/admin/embedding-profiles/route.ts
+@@ -1,5 +1,55 @@
++import { z } from 'zod/v3';
++import { requireAdminOrDeny } from '@/lib/admin-route-auth';
++import { getEmbeddingProfileCompleteness, getEmbeddingProfileStatus } from '@/lib/rag';
++import type { ProfileCompleteness } from '@/lib/rag';
++import { invalidRequest, jsonNoStore, profileUnavailable } from './_responses';
++
+ export const runtime = 'nodejs';
+ 
+-export async function GET(): Promise<Response> {
+-  return new Response(null, { status: 501 });
++const QuerySchema = z.object({ completeness: z.enum(['true', 'false']).default('false') });
++
++function completenessBody(entry: ProfileCompleteness | undefined): Record<string, unknown> {
++  if (!entry || entry.state === 'unavailable') return { state: 'unavailable' };
++  if (entry.state === 'legacy_column') return { state: 'legacy_column' };
++  return { state: 'measured', chunks: entry.chunks, missing: entry.missing, percent: entry.percent };
++}
++
++/**
++ * Every embedding profile with its status, storage and whether evidence exists; never an evidence body. `?completeness=true` also counts, per
++ * vector-table profile, the current ready chunks that already have a vector, which scans the corpus and is left off by default.
++ */
++export async function GET(request: Request): Promise<Response> {
++  const denied = await requireAdminOrDeny(request);
++  if (denied) return denied;
++
++  const parsed = QuerySchema.safeParse({ completeness: new URL(request.url).searchParams.get('completeness') ?? undefined });
++  if (!parsed.success) {
++    return invalidRequest(parsed.error.errors.map((issue) => ({ path: issue.path.join('.'), message: issue.message })));
++  }
++
++  try {
++    const status = await getEmbeddingProfileStatus();
++    const completeness = parsed.data.completeness === 'true' ? await getEmbeddingProfileCompleteness(status.profiles, request.signal) : null;
++    console.log('[Embedding Profile] admin action', { action: 'list', count: status.profiles.length });
++    return jsonNoStore({
++      success: true,
++      switch: status.switch,
++      active: status.active.id,
++      profiles: status.profiles.map((profile) => ({
++        id: profile.id,
++        provider: profile.provider,
++        model: profile.model,
++        dims: profile.dims,
++        storage: profile.storage,
++        status: profile.status,
++        has_evidence: profile.hasEvidence,
++        activated_at: profile.activatedAt,
++        activated_by: profile.activatedBy,
++        previous_active_id: profile.previousActiveId,
++        ...(completeness ? { completeness: completenessBody(completeness[profile.id]) } : {}),
++      })),
++    });
++  } catch (error) {
++    return profileUnavailable('list', null, error);
++  }
+ }
+diff --git a/src/lib/rag/embeddings/profile-ops.ts b/src/lib/rag/embeddings/profile-ops.ts
+index 891f485..0ce5a3f 100644
+--- a/src/lib/rag/embeddings/profile-ops.ts
++++ b/src/lib/rag/embeddings/profile-ops.ts
+@@ -133,7 +133,7 @@ export async function getEmbeddingProfileCompleteness(
+       const tenants = await writer.count(profile.id, null);
+       const chunks = tenants.reduce((sum, tenant) => sum + tenant.chunks, 0);
+       const missing = tenants.reduce((sum, tenant) => sum + tenant.chunksMissing, 0);
+-      out[profile.id] = { state: 'measured', chunks, missing, percent: chunks === 0 ? 100 : ((chunks - missing) / chunks) * 100 };
++      out[profile.id] = { state: 'measured', chunks, missing, percent: chunks === 0 ? 100 : ((chunks - missing) * 100) / chunks };
+     } catch {
+       out[profile.id] = { state: 'unavailable' };
+     }
+-- 
+2.43.0
+

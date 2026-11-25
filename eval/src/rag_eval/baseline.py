@@ -11,6 +11,7 @@ from pydantic import ValidationError
 from rag_sidecar.contracts.baseline import Baseline, BaselineMetricStat
 from rag_sidecar.contracts.report import EvalReport, SliceMetrics
 
+from rag_eval.paired import item_metrics
 from rag_eval.paths import REPO_ROOT, resolve_cli_path
 
 METRICS = ("recall_at_5", "recall_at_10", "mrr", "correct_refusal_rate", "false_refusal_rate")
@@ -29,6 +30,8 @@ def _slices(report: EvalReport) -> dict[str, SliceMetrics]:
         slices[f"language:{language}"] = metrics
     for category, metrics in report.by_category.items():
         slices[f"category:{category}"] = metrics
+    for pair, metrics in report.by_language_pair.items():
+        slices[f"pair:{pair}"] = metrics
     return slices
 
 
@@ -69,6 +72,7 @@ def record_baseline(
     _require_same("embedder_id", [report.embedder_id for report in reports])
     _require_same("embedder_version", [report.embedder_version for report in reports])
     _require_same("embedder_source_sha256", [report.embedder_source_sha256 for report in reports])
+    _require_same("gate_population", [report.gate_population for report in reports])
     _require_same("tier", [report.tier for report in reports])
     _require_same("deployment_mode", [report.deployment_mode for report in reports])
     _require_same("request_options", [report.request_options for report in reports])
@@ -86,6 +90,13 @@ def record_baseline(
                 raise NonDeterministicRunError(f"{name} {metric} differs between runs: {values!r}")
             slices[name][metric] = _stat(values, cells[0].n)
 
+    _require_same("item set", [sorted(item.item_id for item in report.items) for report in reports])
+    per_run_items = [{item.item_id: item_metrics(item) for item in report.items} for report in reports]
+    items = {
+        item_id: {metric: [run[item_id][metric] for run in per_run_items] for metric in METRICS}
+        for item_id in sorted(per_run_items[0])
+    }
+
     first = reports[0]
     return Baseline(
         spread_kind="stdev_ddof1",
@@ -95,6 +106,7 @@ def record_baseline(
         corpus_sha256=first.corpus_sha256,
         golden_sha256=first.golden_sha256,
         golden_filter=first.golden_filter,
+        gate_population=first.gate_population,
         embedder_id=first.embedder_id,
         embedder_version=first.embedder_version,
         embedder_source_sha256=first.embedder_source_sha256,
@@ -104,6 +116,7 @@ def record_baseline(
             for report, sha, stamp in zip(reports, shas, stamps)
         ],
         slices=slices,
+        items=items or None,
     )
 
 
@@ -145,6 +158,7 @@ def _record(args: argparse.Namespace) -> int:
         for flag, value in (
             ("--golden", args.golden),
             ("--corpus", args.corpus),
+            ("--fixture-mode", args.fixture_mode),
             ("--base-url", args.base_url),
             ("--org", args.org),
             ("--user", args.user),
@@ -191,6 +205,7 @@ def main(argv: list[str] | None = None) -> int:
     record.add_argument("--out", required=True, type=Path)
     record.add_argument("--golden")
     record.add_argument("--corpus")
+    record.add_argument("--fixture-mode", choices=("prechunked", "ingest"), help="how the harness builds the fixture database (default: prechunked)")
     record.add_argument("--base-url")
     record.add_argument("--allow-spread", action="store_true")
     record.add_argument("--org", help="organization UUID to scope the run to (multi-tenant)")

@@ -39,7 +39,17 @@
             "table",
             "scanned",
             "no_answer",
-            "general"
+            "general",
+            "colloquial",
+            "ambiguous",
+            "typo",
+            "cross_lingual",
+            "selective_filter",
+            "injection",
+            "injection_evasive",
+            "cache_paraphrase",
+            "cache_near_miss",
+            "small_talk"
           ],
           "title": "Category",
           "type": "string"
@@ -50,6 +60,23 @@
           },
           "title": "Conversation",
           "type": "array"
+        },
+        "evidence_language": {
+          "anyOf": [
+            {
+              "enum": [
+                "zh",
+                "en",
+                "it"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Evidence Language"
         },
         "expected_answer": {
           "anyOf": [

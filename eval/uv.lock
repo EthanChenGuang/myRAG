@@ -1541,6 +1541,24 @@ wheels = [
 ]
 
 [[package]]
+name = "python-multipart"
+version = "0.0.34"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/7e/c0/c753d487a83d873f6946cee6cbc26cea3fe59a476ad0de99a14938a2fbd8/python_multipart-0.0.34.tar.gz", hash = "sha256:b998ae90ca6e1e363261ce2e0e230281b8af53867b757970abd69ee9edcd843a", size = 52456, upload-time = "2026-11-16T10:40:38.261Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f5/0e/090c52b122d8ec5fa37942c1410fea9cf04ce98bca0c84dde7f0aa11594d/python_multipart-0.0.34-py3-none-any.whl", hash = "sha256:ebacd224bd686eee2f9aa1066a657affe07435a185834e05e5235e2e59173e91", size = 32585, upload-time = "2026-11-16T10:40:37.119Z" },
+]
+
+[[package]]
+name = "python-stdnum"
+version = "2.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/15/7f/96c2b9de6024353177dc6139c33730d5ac25877bc33215515d6b95b84555/python_stdnum-2.2.tar.gz", hash = "sha256:e95fcfa858a703d4a40130cb3eaac133c60d8808a7f3c98efeedac968c2479b9", size = 1311813, upload-time = "2026-01-04T19:36:16.753Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/2f/61/aa32d9c79f83a2fae033cd6496fb2a24aba918d31c73704271dfcfb48375/python_stdnum-2.2-py3-none-any.whl", hash = "sha256:bdf98fd117a0ca152e4047aa8ad254bae63853d4e915ddd4e0effb33ba0e9260", size = 1193213, upload-time = "2026-01-04T19:36:14.812Z" },
+]
+
+[[package]]
 name = "pyyaml"
 version = "6.0.4"
 source = { registry = "https://pypi.org/simple" }
@@ -1585,9 +1603,15 @@ draft = [
     { name = "httpx" },
     { name = "ragas" },
 ]
+fixtures = [
+    { name = "reportlab" },
+]
 judge = [
     { name = "deepeval" },
     { name = "ragas" },
+]
+online = [
+    { name = "httpx" },
 ]
 
 [package.dev-dependencies]
@@ -1600,12 +1624,14 @@ requires-dist = [
     { name = "anthropic", marker = "extra == 'draft'", specifier = "==2.12.0" },
     { name = "deepeval", marker = "extra == 'judge'", specifier = "==4.3.4" },
     { name = "httpx", marker = "extra == 'draft'", specifier = "==0.28.1" },
+    { name = "httpx", marker = "extra == 'online'", specifier = "==0.28.1" },
     { name = "pydantic", specifier = ">=2.14.4" },
     { name = "rag-sidecar", editable = "../rag-sidecar" },
     { name = "ragas", marker = "extra == 'draft'", specifier = "==0.4.4" },
     { name = "ragas", marker = "extra == 'judge'", specifier = "==0.4.4" },
+    { name = "reportlab", marker = "extra == 'fixtures'", specifier = "==5.1.0" },
 ]
-provides-extras = ["judge", "draft"]
+provides-extras = ["judge", "draft", "online", "fixtures"]
 
 [package.metadata.requires-dev]
 dev = [{ name = "pytest", specifier = "==9.2.0" }]
@@ -1618,16 +1644,34 @@ dependencies = [
     { name = "fastapi" },
     { name = "httpx" },
     { name = "pydantic" },
+    { name = "python-multipart" },
+    { name = "python-stdnum" },
     { name = "uvicorn" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "docling", extras = ["rapidocr"], marker = "extra == 'docling'", specifier = "==2.150.1" },
+    { name = "docling-core", extras = ["chunking-openai"], marker = "extra == 'chunking'", specifier = "==2.107.1" },
+    { name = "docling-core", extras = ["chunking-openai"], marker = "extra == 'docling'", specifier = "==2.107.1" },
     { name = "fastapi", specifier = "==0.165.0" },
     { name = "httpx", specifier = "==0.28.1" },
+    { name = "huggingface-hub", marker = "extra == 'chunking'", specifier = "==1.33.0" },
+    { name = "pdfplumber", marker = "extra == 'docling'", specifier = "==0.11.11" },
+    { name = "pdfplumber", marker = "extra == 'preflight'", specifier = "==0.11.11" },
     { name = "pydantic", specifier = ">=2.14.4" },
+    { name = "pypdfium2", marker = "extra == 'docling'", specifier = "==5.15.2" },
+    { name = "pypdfium2", marker = "extra == 'preflight'", specifier = "==5.15.2" },
+    { name = "python-multipart", specifier = "==0.0.34" },
+    { name = "python-stdnum", specifier = "==2.2" },
+    { name = "ray", extras = ["data"], marker = "extra == 'ray'", specifier = "==2.60.1" },
+    { name = "tiktoken", marker = "extra == 'chunking'", specifier = "==0.14.0" },
+    { name = "tiktoken", marker = "extra == 'docling'", specifier = "==0.14.0" },
+    { name = "torch", marker = "extra == 'docling'", specifier = "==2.15.0", index = "https://download.pytorch.org/whl/cpu" },
+    { name = "torchvision", marker = "extra == 'docling'", specifier = "==0.29.2", index = "https://download.pytorch.org/whl/cpu" },
     { name = "uvicorn", specifier = "==0.54.0" },
 ]
+provides-extras = ["chunking", "preflight", "docling", "ray"]
 
 [package.metadata.requires-dev]
 dev = [{ name = "pytest", specifier = "==9.2.0" }]
@@ -1686,6 +1730,19 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/0f/cc/2f6b02511d096b3de8a1f2ceb0d7ae912f3b0639ff71373251c65abf182c/regex-2026.11.19-cp312-cp312-win32.whl", hash = "sha256:0745dc7150e820bb0978b2c7df8750b1b59483d5dddad416b63f73c50f4918e1", size = 270385, upload-time = "2026-11-18T18:24:37.455Z" },
     { url = "https://files.pythonhosted.org/packages/77/2d/8f5b2641845be2e5990763702ddc3c454f2bad9fc67592b253406d1650bb/regex-2026.11.19-cp312-cp312-win_amd64.whl", hash = "sha256:6b379ac8a3d0f21f2490e3b6264bb82e0bf572c0c14c44d6f12b8e4e3fa37117", size = 281496, upload-time = "2026-11-18T18:24:38.777Z" },
     { url = "https://files.pythonhosted.org/packages/75/b0/9407b9aa8a555b22cb0971e0a440182597e345e526ede542ca1a62dca245/regex-2026.11.19-cp312-cp312-win_arm64.whl", hash = "sha256:97a0ecaf54b58ad8d6a547e9d727547eb8f6da8a93207846faf64afc9e3c6e6e", size = 280865, upload-time = "2026-11-18T18:24:40.609Z" },
+]
+
+[[package]]
+name = "reportlab"
+version = "5.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "charset-normalizer" },
+    { name = "pillow" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/89/22/c18474be40b9bbb52fdb7051177d4d25f1ea59fada17eb181026411e93b1/reportlab-5.1.0.tar.gz", hash = "sha256:6878200464527e87672d19e9f7cfc6bb890e3a6931e74ac6a1a8d1754aa55671", size = 4109612, upload-time = "2026-10-22T07:26:43.307Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4a/3c/bf68d44f160b44685fc714f746a954c71d0091b3dc4fd3c8670154b44841/reportlab-5.1.0-py3-none-any.whl", hash = "sha256:59fdbaec5efe437095ad1d7292ec9a271c8ca2d3ec75e889c6e61400929b90df", size = 2018647, upload-time = "2026-10-22T07:26:40.754Z" },
 ]
 
 [[package]]

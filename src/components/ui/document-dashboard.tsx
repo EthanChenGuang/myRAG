@@ -26,10 +26,26 @@ import { useLanguage } from "@/components/providers/language-provider"
 import { PortalTooltip } from "./portal-tooltip"
 import { useOrganizationStore } from "@/lib/stores/organization-store"
 import { isMultiTenant } from "@/lib/deployment-mode"
+import { useShallow } from "zustand/react/shallow"
+import type { IngestJobState } from "@/lib/hooks/use-ingest-job-status"
+import { IngestStatusBadge, TrackedIngestStatusBadge } from "@/components/ui/ingest-status-badge"
+import {
+  attachQueuedJob,
+  classifyUploadResponse,
+  failStalledProcessingRows,
+  mergeRefreshedDocuments,
+  settleQueuedRow,
+} from "@/components/ui/ingest-document-rows"
 import { ConnectorGrid } from "@/components/ui/nango"
 import { useConnectorConfig } from "@/lib/hooks/use-connector-config"
 import { useFirecrawlConfig } from "@/lib/hooks/use-firecrawl-config"
 import { UrlScraper } from "@/components/ui/scrapers/url-scraper"
+import {
+  DocTypePicker,
+  buildChatUploadFormData,
+  pollIngestUntilTerminal,
+  type DocTypePickerValue,
+} from "@/components/ui/doc-type-picker"
 
 export interface ProcessedDocument {
   id: string
@@ -50,6 +66,9 @@ export interface ProcessedDocument {
   source?: string
   source_provider?: string
   source_file_id?: string
+  jobId?: string
+  jobOrganizationId?: string | null
+  ingest?: IngestJobState
 }
 
 export interface DocumentDashboardProps {
@@ -106,8 +125,6 @@ const mapApiDocumentToProcessed = (doc: ApiDocumentRecord): ProcessedDocument =>
   source_provider: doc.source_provider,
   source_file_id: doc.source_file_id
 })
-
-const getUploadTimestamp = (doc: ProcessedDocument) => doc.uploadedAt?.getTime() ?? 0
 
 // Smart column width calculation utility with responsive breakpoints
 const calculateOptimalColumnWidths = (containerWidth: number, readOnly: boolean = false) => {
@@ -238,13 +255,17 @@ export function DocumentDashboard({
   onProcessingError,
   onDelete
 }: DocumentDashboardProps) {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const [isDragging, setIsDragging] = React.useState(false)
   const [isProcessing, setIsProcessing] = React.useState(false)
   const [searchQuery, setSearchQuery] = React.useState("")
   const [files, setFiles] = React.useState<File[]>([])
   const [storedDocuments, setStoredDocuments] = React.useState<ProcessedDocument[]>([])
   const [activeTab, setActiveTab] = React.useState(readOnly ? "stored" : "upload")
+  const [docTypePickerEnabled, setDocTypePickerEnabled] = React.useState(false)
+  const [tenantDocTypeDefault, setTenantDocTypeDefault] = React.useState<DocTypePickerValue>("auto")
+  const [fileDocTypes, setFileDocTypes] = React.useState<Record<string, DocTypePickerValue>>({})
+  const docTypeDefaultsLoadedRef = React.useRef<string | null>(null)
   const [isTabSwitching, setIsTabSwitching] = React.useState(false)
   const [isLoading, setIsLoading] = React.useState(false)
   const [showSkeleton, setShowSkeleton] = React.useState(false)
@@ -292,7 +313,9 @@ export function DocumentDashboard({
   const { config: connectorConfig } = useConnectorConfig();
 
   // Get current workspace context for multi-tenant document uploads
-  const { currentOrganization, isPersonalMode } = useOrganizationStore();
+  const { currentOrganization, isPersonalMode } = useOrganizationStore(
+    useShallow((s) => ({ currentOrganization: s.currentOrganization, isPersonalMode: s.isPersonalMode })),
+  );
 
   // Track visibility of the dashboard so we can ignore bogus ResizeObserver events
   const [isVisible, setIsVisible] = React.useState(true)
@@ -423,6 +446,76 @@ export function DocumentDashboard({
     };
   }, [debouncedSetContainerWidth, isVisible, isTabSwitching]);
 
+  const docTypeDefaultsKey =
+    activeTab === "upload" && !readOnly
+      ? `${isPersonalMode ? "personal" : currentOrganization?.id ?? "personal"}`
+      : null
+
+  React.useEffect(() => {
+    if (!docTypeDefaultsKey || docTypeDefaultsLoadedRef.current === docTypeDefaultsKey) {
+      return
+    }
+    docTypeDefaultsLoadedRef.current = docTypeDefaultsKey
+    let cancelled = false
+    const params = new URLSearchParams({ source: "chat_upload" })
+    if (isMultiTenant() && !isPersonalMode && currentOrganization) {
+      params.set("organizationId", currentOrganization.id)
+    }
+    void (async () => {
+      try {
+        const response = await fetch(`/api/rag/doc-type-defaults?${params.toString()}`)
+        if (!response.ok || cancelled) return
+        const data = (await response.json()) as { enabled?: boolean; docType?: DocTypePickerValue }
+        if (cancelled) return
+        if (data.enabled) {
+          const defaultType: DocTypePickerValue = data.docType ?? "auto"
+          setDocTypePickerEnabled(true)
+          setTenantDocTypeDefault(defaultType)
+        } else {
+          setDocTypePickerEnabled(false)
+        }
+      } catch (error) {
+        console.error("[DocumentDashboard] doc-type defaults fetch failed", error)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [docTypeDefaultsKey, currentOrganization?.id, isPersonalMode])
+
+  React.useEffect(() => {
+    if (!docTypePickerEnabled) return
+    setFileDocTypes((prev) => {
+      const next = { ...prev }
+      let changed = false
+      for (const file of files) {
+        if (!(file.name in next)) {
+          next[file.name] = tenantDocTypeDefault
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [docTypePickerEnabled, tenantDocTypeDefault, files])
+
+  const workspaceQuery =
+    isMultiTenant() && !isPersonalMode && currentOrganization
+      ? `?organizationId=${encodeURIComponent(currentOrganization.id)}`
+      : ''
+
+  const mergeDocTypesForFiles = React.useCallback(
+    (incoming: File[]) => {
+      setFileDocTypes((prev) => {
+        const next = { ...prev }
+        for (const file of incoming) {
+          if (!(file.name in next)) next[file.name] = tenantDocTypeDefault
+        }
+        return next
+      })
+    },
+    [tenantDocTypeDefault],
+  )
+
   // Force stored tab when in read-only mode
   React.useEffect(() => {
     if (readOnly && activeTab !== "stored") {
@@ -462,13 +555,8 @@ export function DocumentDashboard({
       processingTimeoutRef.current = setTimeout(() => {
         setIsProcessing(false);
         // Update any documents still in processing state to failed
-        setStoredDocuments(prev =>
-          prev.map(doc =>
-            doc.status === 'processing'
-              ? { ...doc, status: 'failed' }
-              : doc
-          )
-        );
+        // Queued uploads that carry a jobId keep polling their job and are not failed here
+        setStoredDocuments(prev => failStalledProcessingRows(prev));
       }, 45 * 60 * 1000); // 45 minutes timeout
     } else if (processingTimeoutRef.current) {
       // Clear timeout if we're no longer processing
@@ -510,32 +598,7 @@ export function DocumentDashboard({
 
         // Only replace documents that aren't currently processing
         // This prevents removing "processing" documents when data is refreshed
-        setStoredDocuments(prev => {
-          const processingDocs = prev.filter(doc => doc.status === 'processing');
-          const newDocs = data.documents.map(mapApiDocumentToProcessed);
-
-          // Keep all processing docs - they'll either complete or timeout
-          // Only update processing docs that now appear in the database
-          const updatedProcessingDocs = processingDocs.map(pDoc => {
-            const matchingNewDoc = newDocs.find((nDoc: { name: string }) => nDoc.name === pDoc.name);
-            if (matchingNewDoc) {
-              // Document has been processed successfully
-              return matchingNewDoc;
-            }
-            // Keep as processing - let timeout handle failure
-            return pDoc;
-          });
-
-          // Filter out newDocs that were already in processing
-          const genuinelyNewDocs = newDocs.filter(
-            nDoc => !processingDocs.some(pDoc => pDoc.name === nDoc.name)
-          );
-
-          // Combine and sort by date
-          return [...updatedProcessingDocs, ...genuinelyNewDocs].sort(
-            (a, b) => getUploadTimestamp(b) - getUploadTimestamp(a)
-          );
-        });
+        setStoredDocuments(prev => mergeRefreshedDocuments(prev, data.documents.map(mapApiDocumentToProcessed)));
       } catch (error) {
         console.error('Error fetching documents:', error)
         if (isMounted) { // Only call callback if mounted
@@ -572,32 +635,7 @@ export function DocumentDashboard({
       const data: DocumentsApiResponse = await response.json();
 
       // Same logic as in useEffect but as a callback
-      setStoredDocuments(prev => {
-        const processingDocs = prev.filter(doc => doc.status === 'processing');
-        const newDocs = data.documents.map(mapApiDocumentToProcessed);
-
-        // Keep all processing docs - they'll either complete or timeout
-        // Only update processing docs that now appear in the database
-        const updatedProcessingDocs = processingDocs.map(pDoc => {
-          const matchingNewDoc = newDocs.find((nDoc: { name: string }) => nDoc.name === pDoc.name);
-          if (matchingNewDoc) {
-            // Document has been processed successfully
-            return matchingNewDoc;
-          }
-          // Keep as processing - let timeout handle failure
-          return pDoc;
-        });
-
-        // Filter out newDocs that were already in processing
-        const genuinelyNewDocs = newDocs.filter(
-          nDoc => !processingDocs.some(pDoc => pDoc.name === nDoc.name)
-        );
-
-        // Combine and sort by date
-        return [...updatedProcessingDocs, ...genuinelyNewDocs].sort(
-          (a, b) => getUploadTimestamp(b) - getUploadTimestamp(a)
-        );
-      });
+      setStoredDocuments(prev => mergeRefreshedDocuments(prev, data.documents.map(mapApiDocumentToProcessed)));
     } catch (error) {
       console.error('Error refreshing documents:', error);
       onProcessingError?.(error as Error);
@@ -655,6 +693,7 @@ export function DocumentDashboard({
     )
 
     setFiles((prev) => [...prev, ...documentFiles])
+    mergeDocTypesForFiles(documentFiles)
   }
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -672,12 +711,38 @@ export function DocumentDashboard({
         return true
       })
       setFiles((prev) => [...prev, ...validFiles])
+      mergeDocTypesForFiles(validFiles)
     }
   }
 
   const removeFile = (index: number) => {
-    setFiles((prev) => prev.filter((_, i) => i !== index))
+    setFiles((prev) => {
+      const removed = prev[index]
+      if (removed) {
+        setFileDocTypes((types) => {
+          const next = { ...types }
+          delete next[removed.name]
+          return next
+        })
+      }
+      return prev.filter((_, i) => i !== index)
+    })
   }
+
+  const settledJobsRef = React.useRef<Set<string>>(new Set())
+
+  const handleIngestSettled = React.useCallback((jobId: string, state: IngestJobState) => {
+    if (settledJobsRef.current.has(jobId)) return;
+    settledJobsRef.current.add(jobId);
+    const queuedDoc = storedDocuments.find(d => d.jobId === jobId);
+    setStoredDocuments(prev => settleQueuedRow(prev, jobId, state));
+    if (state.status === 'ready' || state.status === 'skipped_duplicate' || state.status === 'needs_review') {
+      void refreshDocuments();
+      if (queuedDoc) onProcessingComplete?.({ ...queuedDoc, status: 'ready', ingest: state });
+      return;
+    }
+    onProcessingError?.(new Error(state.reason ?? 'Document processing failed'));
+  }, [storedDocuments, refreshDocuments, onProcessingComplete, onProcessingError]);
 
   const handleUpload = React.useCallback(async () => {
     console.log('[DocumentDashboard] handleUpload called, files:', files.length);
@@ -720,15 +785,18 @@ export function DocumentDashboard({
       try {
         onProcessingStart?.(file.name);
 
-        const formData = new FormData();
-        formData.append('file', file);
-
-        // Add organization context for multi-tenant mode
-        // If no organization selected (personal workspace mode), omit organization_id
-        // This will save to flat personal workspace (user_id, org_id=NULL)
-        if (isMultiTenant() && !isPersonalMode && currentOrganization) {
-          formData.append('organization_id', currentOrganization.id);
-          console.log('[DocumentDashboard] Added organization_id to formData:', currentOrganization.id);
+        const organizationId =
+          isMultiTenant() && !isPersonalMode && currentOrganization ? currentOrganization.id : null;
+        const pickedType = fileDocTypes[file.name] ?? tenantDocTypeDefault;
+        // Unified ingest sends doc_type per file; legacy leaves the request unchanged.
+        const formData = buildChatUploadFormData({
+          file,
+          organizationId,
+          pickerEnabled: docTypePickerEnabled,
+          docType: pickedType,
+        });
+        if (organizationId) {
+          console.log('[DocumentDashboard] Added organization_id to formData:', organizationId);
         } else {
           console.log('[DocumentDashboard] Personal workspace mode, no organization_id added');
         }
@@ -755,14 +823,51 @@ export function DocumentDashboard({
           throw new Error(result.error);
         }
 
-        // Update document status to ready using original temporary ID
+        const resolvedId = (result.id ?? result.documentId) as string | undefined;
+        let ingestStatus: string = typeof result.status === 'string' ? result.status : 'ready';
+        const outcome = classifyUploadResponse(response.status, result);
+
+        if (outcome.kind === 'queued') {
+          // The row keeps its status badge until the job is ready; the next file starts right away
+          setStoredDocuments(prev =>
+            attachQueuedJob(prev, doc.id, { jobId: outcome.jobId, documentId: outcome.documentId, organizationId })
+          );
+          continue;
+        }
+
+        if (outcome.kind === 'poll' && resolvedId) {
+          const polled = await pollIngestUntilTerminal(resolvedId, {
+            fetchStatus: async (documentId) => {
+              const statusUrl = `/api/rag/ingest/${documentId}${workspaceQuery}`;
+              const statusRes = await fetch(statusUrl);
+              if (!statusRes.ok) return { status: 'processing' };
+              const body = (await statusRes.json()) as { status?: string };
+              return { status: body.status ?? 'processing' };
+            },
+            sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+            now: () => Date.now(),
+          });
+          ingestStatus = polled.status;
+          if (ingestStatus === 'failed') {
+            throw new Error('Document processing failed');
+          }
+        }
+
+        const uiStatus: ProcessedDocument['status'] =
+          ingestStatus === 'failed'
+            ? 'failed'
+            : ingestStatus === 'processing'
+              ? 'processing'
+              : 'ready';
+
+        // Update document status using original temporary ID
         setStoredDocuments(prev => {
           return prev.map(d =>
             d.id === doc.id
               ? {
                 ...d,
-                id: result.id, // Replace with server-generated ID
-                status: 'ready',
+                id: resolvedId ?? d.id,
+                status: uiStatus,
                 // Update additional fields that may have changed
                 pages: result.pages,
                 text: result.text || d.text,
@@ -777,8 +882,8 @@ export function DocumentDashboard({
 
         onProcessingComplete?.({
           ...doc,
-          id: result.id,
-          status: 'ready',
+          id: resolvedId ?? doc.id,
+          status: uiStatus === 'processing' ? 'processing' : uiStatus,
           pages: result.pages,
           text: result.text || doc.text,
           partialSuccess: result.successfulChunks !== undefined &&
@@ -806,6 +911,7 @@ export function DocumentDashboard({
     // All documents processed, clean up
     setIsProcessing(false);
     setFiles([]);
+    setFileDocTypes({});
 
     // Check if any documents failed
     const failedCount = storedDocuments.filter(doc =>
@@ -815,7 +921,7 @@ export function DocumentDashboard({
     if (failedCount > 0) {
       console.warn(`${failedCount} document(s) failed to process.`);
     }
-  }, [files, onProcessingStart, onProcessingComplete, onProcessingError, setActiveTab, storedDocuments, currentOrganization?.id, isPersonalMode]);
+  }, [files, fileDocTypes, docTypePickerEnabled, tenantDocTypeDefault, onProcessingStart, onProcessingComplete, onProcessingError, setActiveTab, storedDocuments, currentOrganization?.id, isPersonalMode, workspaceQuery]);
 
   // Create a function to handle tab switching with better visual feedback
   const handleTabChange = (tab: string) => {
@@ -849,7 +955,7 @@ export function DocumentDashboard({
       // Add document ID to the deleting list to show spinner
       setDeletingDocIds(prev => [...prev, id]);
 
-      const response = await fetch(`/api/documents/${id}`, {
+      const response = await fetch(`/api/documents/${id}${workspaceQuery}`, {
         method: 'DELETE',
       });
 
@@ -887,7 +993,7 @@ export function DocumentDashboard({
     try {
       setUpdatingUrlDocId(docId);
 
-      const response = await fetch(`/api/documents/${docId}`, {
+      const response = await fetch(`/api/documents/${docId}${workspaceQuery}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -1326,12 +1432,22 @@ export function DocumentDashboard({
                               {files.map((file, index) => (
                                 <div
                                   key={index}
-                                  className="group flex items-center justify-between px-4 py-2 hover:bg-white/50 dark:hover:bg-[#212121]"
+                                  className="group flex items-center justify-between gap-2 px-4 py-2 hover:bg-white/50 dark:hover:bg-[#212121]"
                                 >
                                   <div className="grid gap-0.5 min-w-0 flex-1 mr-2">
                                     <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{file.name}</p>
                                     <p className="text-xs text-gray-600 dark:text-gray-400">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
                                   </div>
+                                  {docTypePickerEnabled ? (
+                                    <DocTypePicker
+                                      value={fileDocTypes[file.name] ?? tenantDocTypeDefault}
+                                      language={language}
+                                      disabled={isProcessing}
+                                      onChange={(value) =>
+                                        setFileDocTypes((prev) => ({ ...prev, [file.name]: value }))
+                                      }
+                                    />
+                                  ) : null}
                                   <Button
                                     variant="ghost"
                                     size="icon"
@@ -1504,34 +1620,49 @@ export function DocumentDashboard({
                                     </div>
                                   </TableCell>
                                   <TableCell className="pl-2 pr-2 whitespace-nowrap" style={{ width: '80px' }}>
-                                    <div className="flex items-center gap-1.5 overflow-hidden">
-                                      <div className="flex -space-x-1 overflow-hidden flex-shrink-0">
-                                        {doc.status === "processing" && (
-                                          <div className="h-2.5 w-2.5 rounded-full bg-[#38BDF8] dark:bg-blue-500 animate-pulse" />
-                                        )}
-                                        {doc.status === "failed" && (
-                                          <div className="h-2.5 w-2.5 rounded-full bg-[#F87171] dark:bg-red-500" />
-                                        )}
-                                        {doc.status === "ready" && (
-                                          <>
-                                            <div className="h-2.5 w-2.5 rounded-full bg-[#4ADE80] dark:bg-green-500" />
-                                            {doc.partialSuccess && (
-                                              <div className="h-2.5 w-2.5 rounded-full bg-[#FACC15] dark:bg-yellow-500 ml-0.5" title={t('documentProcessedWithPartialChunkSuccess')} />
-                                            )}
-                                          </>
+                                    {doc.jobId ? (
+                                      <div className="flex items-center overflow-hidden">
+                                        {doc.ingest ? (
+                                          <IngestStatusBadge state={doc.ingest} language={language} />
+                                        ) : (
+                                          <TrackedIngestStatusBadge
+                                            jobId={doc.jobId}
+                                            organizationId={doc.jobOrganizationId}
+                                            language={language}
+                                            onSettled={(state) => handleIngestSettled(doc.jobId as string, state)}
+                                          />
                                         )}
                                       </div>
-                                      <span className="text-xs font-medium capitalize text-gray-600 dark:text-gray-400 truncate">
-                                        {doc.status === "ready"
-                                          ? t('readyStatus')
-                                          : doc.status === "processing"
-                                            ? t('processingStatus')
-                                            : doc.status === "failed"
-                                              ? t('failedStatus')
-                                              : t('partialStatus')}
-                                        {doc.partialSuccess && doc.status === "ready" && " (" + t('partialStatus') + ")"}
-                                      </span>
-                                    </div>
+                                    ) : (
+                                      <div className="flex items-center gap-1.5 overflow-hidden">
+                                        <div className="flex -space-x-1 overflow-hidden flex-shrink-0">
+                                          {doc.status === "processing" && (
+                                            <div className="h-2.5 w-2.5 rounded-full bg-[#38BDF8] dark:bg-blue-500 animate-pulse" />
+                                          )}
+                                          {doc.status === "failed" && (
+                                            <div className="h-2.5 w-2.5 rounded-full bg-[#F87171] dark:bg-red-500" />
+                                          )}
+                                          {doc.status === "ready" && (
+                                            <>
+                                              <div className="h-2.5 w-2.5 rounded-full bg-[#4ADE80] dark:bg-green-500" />
+                                              {doc.partialSuccess && (
+                                                <div className="h-2.5 w-2.5 rounded-full bg-[#FACC15] dark:bg-yellow-500 ml-0.5" title={t('documentProcessedWithPartialChunkSuccess')} />
+                                              )}
+                                            </>
+                                          )}
+                                        </div>
+                                        <span className="text-xs font-medium capitalize text-gray-600 dark:text-gray-400 truncate">
+                                          {doc.status === "ready"
+                                            ? t('readyStatus')
+                                            : doc.status === "processing"
+                                              ? t('processingStatus')
+                                              : doc.status === "failed"
+                                                ? t('failedStatus')
+                                                : t('partialStatus')}
+                                          {doc.partialSuccess && doc.status === "ready" && " (" + t('partialStatus') + ")"}
+                                        </span>
+                                      </div>
+                                    )}
                                   </TableCell>
                                   {!readOnly && (
                                     <TableCell className="text-center px-1" style={{ width: '90px' }}>

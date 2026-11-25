@@ -1,0 +1,194 @@
+%PDF-1.4
+%“Œ‹ž ReportLab Generated PDF document (opensource)
+1 0 obj
+<<
+/F1 2 0 R /F2 3 0 R
+>>
+endobj
+2 0 obj
+<<
+/BaseFont /Helvetica /Encoding /WinAnsiEncoding /Name /F1 /Subtype /Type1 /Type /Font
+>>
+endobj
+3 0 obj
+<<
+/BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding /Name /F2 /Subtype /Type1 /Type /Font
+>>
+endobj
+4 0 obj
+<<
+/Contents 8 0 R /MediaBox [ 0 0 595.28 841.89 ] /Parent 7 0 R /Resources <<
+/Font 1 0 R /ProcSet [ /PDF /Text /ImageB /ImageC /ImageI ]
+>> /Rotate 0 /Trans <<
+
+>> 
+  /Type /Page
+>>
+endobj
+5 0 obj
+<<
+/PageMode /UseNone /Pages 7 0 R /Type /Catalog
+>>
+endobj
+6 0 obj
+<<
+/Author (myRAG synthetic fixtures) /CreationDate (D:20000101000000+00'00') /Creator (anonymous) /Keywords () /ModDate (D:20000101000000+00'00') /Producer (ReportLab PDF Library - \(opensource\)) 
+  /Subject (Synthetic ingestion fixture) /Title (invoice-it) /Trapped /False
+>>
+endobj
+7 0 obj
+<<
+/Count 1 /Kids [ 4 0 R ] /Type /Pages
+>>
+endobj
+8 0 obj
+<<
+/Length 2474
+>>
+stream
+1 0 0 1 0 0 cm  BT /F1 12 Tf 14.4 TL ET
+q
+1 0 0 1 56.7 745.89 cm
+q
+0 0 0 rg
+BT 1 0 0 1 0 6 Tm /F2 20 Tf 26 TL (Fattura) Tj T* ET
+Q
+Q
+q
+1 0 0 1 56.7 726.39 cm
+q
+0 0 0 rg
+BT 1 0 0 1 0 5 Tm /F1 10.5 Tf 15.5 TL (Numero fattura: FT-2025-00419) Tj T* ET
+Q
+Q
+q
+1 0 0 1 56.7 704.89 cm
+q
+0 0 0 rg
+BT 1 0 0 1 0 5 Tm /F1 10.5 Tf 15.5 TL (Data: 15/03/2025) Tj T* ET
+Q
+Q
+q
+1 0 0 1 56.7 683.39 cm
+q
+0 0 0 rg
+BT 1 0 0 1 0 5 Tm /F1 10.5 Tf 15.5 TL (Data scadenza: 14/04/2025) Tj T* ET
+Q
+Q
+q
+1 0 0 1 56.7 661.89 cm
+q
+0 0 0 rg
+BT 1 0 0 1 0 5 Tm /F1 10.5 Tf 15.5 TL (Cedente/Prestatore: Esempio Fornitore S.r.l.) Tj T* ET
+Q
+Q
+q
+1 0 0 1 56.7 640.39 cm
+q
+0 0 0 rg
+BT 1 0 0 1 0 5 Tm /F1 10.5 Tf 15.5 TL (P.IVA: 99999999990) Tj T* ET
+Q
+Q
+q
+1 0 0 1 56.7 618.89 cm
+q
+0 0 0 rg
+BT 1 0 0 1 0 5 Tm /F1 10.5 Tf 15.5 TL (Cessionario/Committente: Esempio Cliente S.p.A.) Tj T* ET
+Q
+Q
+q
+1 0 0 1 56.7 597.39 cm
+q
+0 0 0 rg
+BT 1 0 0 1 0 5 Tm /F1 10.5 Tf 15.5 TL (P.IVA: 00000010017) Tj T* ET
+Q
+Q
+q
+1 0 0 1 56.7 541.19 cm
+q
+.901961 .901961 .901961 rg
+n 0 46.2 481.88 -15.4 re f*
+0 0 0 rg
+BT /F2 9.5 Tf 11.4 TL ET
+BT 1 0 0 1 6 34.7 Tm (Descrizione) Tj T* ET
+BT 1 0 0 1 149.9382 34.7 Tm (Quantit\340) Tj T* ET
+BT 1 0 0 1 218.7782 34.7 Tm (Prezzo unitario) Tj T* ET
+BT 1 0 0 1 331.4255 34.7 Tm (Importo) Tj T* ET
+BT 1 0 0 1 394.0073 34.7 Tm (Aliquota IVA) Tj T* ET
+BT /F1 9.5 Tf 11.4 TL ET
+BT 1 0 0 1 6 19.3 Tm (Sonda termica) Tj T* ET
+BT 1 0 0 1 149.9382 19.3 Tm (8) Tj T* ET
+BT 1 0 0 1 218.7782 19.3 Tm (100,00) Tj T* ET
+BT 1 0 0 1 331.4255 19.3 Tm (800,00) Tj T* ET
+BT 1 0 0 1 394.0073 19.3 Tm (22%) Tj T* ET
+BT 1 0 0 1 6 3.9 Tm (Cavo di ricambio 5 m) Tj T* ET
+BT 1 0 0 1 149.9382 3.9 Tm (4) Tj T* ET
+BT 1 0 0 1 218.7782 3.9 Tm (50,00) Tj T* ET
+BT 1 0 0 1 331.4255 3.9 Tm (200,00) Tj T* ET
+BT 1 0 0 1 394.0073 3.9 Tm (22%) Tj T* ET
+q
+1 J
+1 j
+.501961 .501961 .501961 RG
+.5 w
+n 0 46.2 m 481.88 46.2 l S
+n 0 0 m 481.88 0 l S
+n 0 0 m 0 46.2 l S
+n 481.88 0 m 481.88 46.2 l S
+n 0 30.8 m 481.88 30.8 l S
+n 0 15.4 m 481.88 15.4 l S
+n 143.9382 0 m 143.9382 46.2 l S
+n 212.7782 0 m 212.7782 46.2 l S
+n 325.4255 0 m 325.4255 46.2 l S
+n 388.0073 0 m 388.0073 46.2 l S
+Q
+Q
+Q
+q
+1 0 0 1 56.7 515.69 cm
+q
+0 0 0 rg
+BT 1 0 0 1 0 5 Tm /F1 10.5 Tf 15.5 TL (Imponibile: \200 1.000,00) Tj T* ET
+Q
+Q
+q
+1 0 0 1 56.7 494.19 cm
+q
+0 0 0 rg
+BT 1 0 0 1 0 5 Tm /F1 10.5 Tf 15.5 TL (IVA 22 %: \200 220,00) Tj T* ET
+Q
+Q
+q
+1 0 0 1 56.7 472.69 cm
+q
+0 0 0 rg
+BT 1 0 0 1 0 5 Tm /F1 10.5 Tf 15.5 TL (Totale documento: \200 1.220,00) Tj T* ET
+Q
+Q
+ 
+endstream
+endobj
+xref
+0 9
+0000000000 65535 f 
+0000000061 00000 n 
+0000000102 00000 n 
+0000000209 00000 n 
+0000000321 00000 n 
+0000000520 00000 n 
+0000000588 00000 n 
+0000000882 00000 n 
+0000000941 00000 n 
+trailer
+<<
+/ID 
+[<bda4f8196716c70f0e046fb8f8dc3035><bda4f8196716c70f0e046fb8f8dc3035>]
+% ReportLab generated PDF document -- digest (opensource)
+
+/Info 6 0 R
+/Root 5 0 R
+/Size 9
+>>
+startxref
+3466
+%%EOF

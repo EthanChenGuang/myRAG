@@ -1,0 +1,139 @@
+{
+  "body": {
+    "children": [
+      {
+        "$ref": "#/texts/0"
+      },
+      {
+        "$ref": "#/texts/1"
+      },
+      {
+        "$ref": "#/texts/2"
+      }
+    ],
+    "content_layer": "body",
+    "label": "unspecified",
+    "name": "_root_",
+    "self_ref": "#/body"
+  },
+  "form_items": [],
+  "furniture": {
+    "children": [],
+    "content_layer": "furniture",
+    "label": "unspecified",
+    "name": "_root_",
+    "self_ref": "#/furniture"
+  },
+  "groups": [],
+  "key_value_items": [],
+  "name": "multi-column-en-p2",
+  "origin": {
+    "binary_hash": 2,
+    "filename": "multi-column-en-p2.pdf",
+    "mimetype": "application/pdf"
+  },
+  "pages": {
+    "1": {
+      "page_no": 1,
+      "size": {
+        "height": 841.89,
+        "width": 595.28
+      }
+    },
+    "2": {
+      "page_no": 2,
+      "size": {
+        "height": 841.89,
+        "width": 595.28
+      }
+    }
+  },
+  "pictures": [],
+  "schema_name": "DoclingDocument",
+  "tables": [],
+  "texts": [
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "section_header",
+      "level": 2,
+      "orig": "Bulletin body",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 86.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 60.0
+          },
+          "charspan": [
+            0,
+            13
+          ],
+          "page_no": 2
+        }
+      ],
+      "self_ref": "#/texts/0",
+      "text": "Bulletin body"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Left column copy explains maintenance intervals and torque limits for example valves.",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 127.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 291.64,
+            "t": 96.0
+          },
+          "charspan": [
+            0,
+            85
+          ],
+          "page_no": 2
+        }
+      ],
+      "self_ref": "#/texts/1",
+      "text": "Left column copy explains maintenance intervals and torque limits for example valves."
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Right column copy lists example SKUs and replacement kits used only in routing tests.",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 127.0,
+            "coord_origin": "TOPLEFT",
+            "l": 297.64,
+            "r": 532.5799999999999,
+            "t": 96.0
+          },
+          "charspan": [
+            0,
+            85
+          ],
+          "page_no": 2
+        }
+      ],
+      "self_ref": "#/texts/2",
+      "text": "Right column copy lists example SKUs and replacement kits used only in routing tests."
+    }
+  ],
+  "version": "1.11.0"
+}

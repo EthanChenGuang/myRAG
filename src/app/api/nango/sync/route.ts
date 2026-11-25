@@ -122,6 +122,7 @@ export async function POST(request: NextRequest) {
     await supabaseAdmin
       .from('nango_connections')
       .update({ last_sync_at: new Date().toISOString() })
+      .eq('user_id', user.id)
       .eq('connection_id', connectionId);
 
     return NextResponse.json(stats);

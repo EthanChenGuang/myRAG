@@ -1,3 +1,4 @@
+<!-- fixture-meta {"doc_type":"general"} -->
 ## Durata della garanzia
 
 Gli strumenti venduti da Valle Verde Strumenti sono coperti da una garanzia legale e commerciale di 24 mesi a partire dalla data di consegna. Gli accessori di consumo, come batterie e guaine protettive, sono coperti per 6 mesi. La garanzia non si rinnova dopo una riparazione e non viene prolungata dal periodo di fermo dello strumento.

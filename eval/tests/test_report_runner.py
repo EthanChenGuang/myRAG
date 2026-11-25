@@ -165,7 +165,7 @@ def test_write_report_markdown_has_tables_rounding_and_na(tmp_path: Path):
     assert "n/a (n=0)" in md
     assert "0.3333333" not in md
     assert "categories are report-only" in md.lower()
-    assert "only overall and per-language slices gate" in md.lower()
+    assert "only overall, per-language, cross_lingual and per-language-pair slices gate" in md.lower()
 
 
 def test_write_report_is_byte_identical_across_two_writes(tmp_path: Path):
@@ -285,3 +285,57 @@ def test_held_out_test_split_is_reported_but_not_in_gated_slices():
     assert report.by_split["test"].recall_at_5.value == 1.0
     assert report.by_split["dev"].recall_at_5.n == 2
     assert {item.split for item in report.items} == {"dev", "test"}
+
+
+def _with_production() -> tuple[list[GoldenItem], list[RagTrace]]:
+    golden, traces = _four_items()
+    golden = [
+        *golden,
+        _item("it-colloquial-001", "it", answerable=True, category="colloquial").model_copy(update={"provenance": "production"}),
+        _item("en-typo-001", "en", answerable=True, category="typo").model_copy(update={"provenance": "production"}),
+    ]
+    traces = [
+        *traces,
+        _trace("it-colloquial-001", [("doc.it.md", f"intro {QUOTE} outro")]),
+        _trace("en-typo-001", [], refused=True),
+    ]
+    return golden, traces
+
+
+def test_report_carries_provenance_slices_and_item_provenance():
+    report = _report()
+    assert report.gate_population == "all"
+    assert set(report.by_provenance) == {"synthetic_fixture"}
+    assert set(report.by_provenance_category) == {"synthetic_fixture/general", "synthetic_fixture/no_answer"}
+    assert {item.provenance for item in report.items} == {"synthetic_fixture"}
+    assert report.by_provenance["synthetic_fixture"] == report.overall
+
+
+def test_report_gates_on_approved_production_items_only_and_notes_it():
+    golden, traces = _with_production()
+    report = _report(golden, traces)
+    assert report.gate_population == "production"
+    assert report.overall.recall_at_5.n == 2
+    assert set(report.by_language) == {"it", "en"}
+    assert set(report.by_category) == {"colloquial", "typo"}
+    assert set(report.by_provenance) == {"synthetic_fixture", "production"}
+    assert any("production" in note and "gate" in note.lower() for note in report.notes)
+
+
+def test_draft_production_items_do_not_switch_the_gate_population():
+    golden, traces = _with_production()
+    golden = [item.model_copy(update={"review_status": "draft"}) if item.provenance == "production" else item for item in golden]
+    report = _report(golden, traces)
+    assert report.gate_population == "all"
+    assert "production" in report.by_provenance
+
+
+def test_markdown_has_provenance_tables(tmp_path: Path):
+    golden, traces = _with_production()
+    _, md_path = write_report(_report(golden, traces), tmp_path)
+    md = md_path.read_text(encoding="utf-8")
+    assert "## By provenance" in md
+    assert "## By provenance and category" in md
+    assert "| production |" in md
+    assert "production/colloquial" in md
+    assert "Gate population: production" in md

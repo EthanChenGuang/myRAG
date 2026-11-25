@@ -1,0 +1,48 @@
+<objective>
+Execute plan 06 of phase 02-Unified Retrieval Pipeline & Tenant Scope.
+[gsd:dispatch phase="02" plan="02-06"]
+Commit each task atomically. Create SUMMARY.md.
+Do NOT update STATE.md, ROADMAP.md or REQUIREMENTS.md — the orchestrator owns those writes after all worktree agents in the wave complete.
+</objective>
+
+<parallel_execution>
+You are a PARALLEL executor running in a git worktree that the harness created for you; your working directory IS that worktree. Do not cd to /home/user/myRAG and do not run any git command against the main checkout. Other executors run in parallel in their own worktrees on other plans.
+First: run `git rev-parse --show-toplevel` and `git log --oneline -1` and record them. Then make dependencies available without reinstalling: `[ -e node_modules ] || ln -s /home/user/myRAG/node_modules node_modules` (do not commit the symlink; it is untracked and must stay so — never `git add` it). For Python, use `/root/.local/bin/uv` inside the worktree's eval/ or rag-sidecar/ (it creates its own .venv).
+Run `git commit` normally with hooks; no --no-verify. Stage files by explicit path only (never `git add -A`/`.`). Never create or switch branches, never push, never stash, never reset.
+REQUIRED: SUMMARY.md MUST be committed in this worktree before you return (it is the only planning file you write). REQUIRED ORDER: Write SUMMARY.md → commit → only then narration.
+For TDD: the RED commit must fail on assertions (e.g. against a stub export), not on module-not-found.
+In your final report include a `<worktree_metadata>` JSON block with agent_id "02-06", worktree_path (absolute), branch (git rev-parse --abbrev-ref HEAD) and the base SHA you recorded, plus any decisions or requirement IDs the orchestrator should record in STATE/ROADMAP/REQUIREMENTS.
+</parallel_execution>
+
+<execution_context>
+Read these files first with the Read tool (they define how you execute, commit and summarize; paths are in the main checkout and are read-only references):
+- /home/user/myRAG/.claude/gsd-core/workflows/execute-plan.md
+- /home/user/myRAG/.claude/gsd-core/templates/summary.md
+- /home/user/myRAG/.claude/gsd-core/references/checkpoints.md
+- /home/user/myRAG/.claude/gsd-core/references/tdd.md (this plan is TDD-applicable)
+- /home/user/myRAG/.claude/gsd-core/references/worktree-path-safety.md
+- /home/user/myRAG/.claude/gsd-core/references/executor-examples.md
+</execution_context>
+
+<required_reading>
+Read these from YOUR worktree root (PROJECT_ROOT=$(git rev-parse --show-toplevel)):
+- ${PROJECT_ROOT}/.planning/phases/02-unified-retrieval-pipeline-tenant-scope/02-06-PLAN.md (Plan)
+- ${PROJECT_ROOT}/.planning/PROJECT.md, .planning/STATE.md (read-only), .planning/config.json
+- ${PROJECT_ROOT}/CLAUDE.md, AGENTS.md, .claude/CLAUDE.md, .claude/skills/
+- ${PROJECT_ROOT}/.planning/phases/02-unified-retrieval-pipeline-tenant-scope/02-CONTEXT.md (the "Adjustments after research" section overrides the original decisions), 02-RESEARCH.md, 02-PATTERNS.md, 02-VALIDATION.md
+- All existing 02-*-SUMMARY.md in that phase directory
+</required_reading>
+
+<environment>
+No Docker daemon, no live vendor keys, no live Supabase. Never commit secrets, real phone numbers, customer data or model identifiers in commit messages or code comments. Every commit message ends with these trailers (if a gsd_run commit helper cannot add them, commit with plain `git commit`):
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01X342shLsAZx6PYph2vA7hc
+If a usage/rate limit error occurs, stop cleanly after committing completed tasks and report it.
+</environment>
+
+<success_criteria>
+- [ ] All tasks executed
+- [ ] Each task committed individually
+- [ ] SUMMARY.md created in the plan directory and committed in this worktree
+- [ ] No modifications to STATE.md, ROADMAP.md, REQUIREMENTS.md
+</success_criteria>

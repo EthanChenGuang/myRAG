@@ -2,11 +2,17 @@ import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
+import { ingestModeGoldenPaths, mergeGoldenFiles, parseIngestRoutingFlags } from './ingest-mode.mts';
 import { runEval, type EvalRequestOptions } from './run-eval.mts';
-import type { DeploymentMode } from './pglite-supabase.mts';
+import { CHUNKING_PROFILES_NEED_INGEST, loadRunConfig, RunConfigError } from './run-config.mts';
+import type { DeploymentMode, FixtureMode } from './pglite-supabase.mts';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const DEFAULT_BASELINE = path.join(REPO_ROOT, 'eval/baselines/fixture-baseline.json');
+const DEFAULT_BASELINES: Record<FixtureMode, string> = {
+  prechunked: path.join(REPO_ROOT, 'eval/baselines/fixture-baseline.json'),
+  ingest: path.join(REPO_ROOT, 'eval/baselines/fixture-ingest-baseline.json'),
+};
+const DEFAULT_GOLDEN = 'eval/fixtures/golden.jsonl';
 const NOISE_PATH = path.join(REPO_ROOT, 'eval/config/noise.json');
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -22,17 +28,23 @@ function runPython(module: string, args: string[]): number {
 async function main(): Promise<number> {
   const { values } = parseArgs({
     options: {
-      golden: { type: 'string', default: 'eval/fixtures/golden.jsonl' },
+      golden: { type: 'string' },
       corpus: { type: 'string', default: 'eval/fixtures/corpus' },
+      'fixture-mode': { type: 'string', default: 'prechunked' },
       out: { type: 'string', default: 'eval/out/smoke' },
       'deployment-mode': { type: 'string', default: 'single-tenant' },
       'max-results': { type: 'string' },
+      degrade: { type: 'string' },
       'base-url': { type: 'string' },
       'no-gate': { type: 'boolean', default: false },
+      'embedding-profile': { type: 'string' },
       baseline: { type: 'string' },
       'include-drafts': { type: 'boolean', default: false },
+      'run-config': { type: 'string' },
       org: { type: 'string' },
       user: { type: 'string' },
+      routing: { type: 'string' },
+      'force-tier': { type: 'string' },
     },
     strict: true,
   });
@@ -42,6 +54,18 @@ async function main(): Promise<number> {
     throw new Error(`--deployment-mode must be single-tenant or multi-tenant, got ${String(deploymentMode)}`);
   }
 
+  const fixtureMode = values['fixture-mode'];
+  if (fixtureMode !== 'prechunked' && fixtureMode !== 'ingest') {
+    throw new Error(`--fixture-mode must be prechunked or ingest, got ${String(fixtureMode)}`);
+  }
+  if (fixtureMode === 'ingest' && values['base-url']) {
+    throw new Error('--fixture-mode ingest builds the fixture database itself and cannot be combined with --base-url');
+  }
+  // --routing fixed|tiered sends every document through the queue and the sidecar job function; --force-tier fast|structured|premium
+  // pins every page to one tier (D-40).
+  const ingestRouting = parseIngestRoutingFlags({ routing: values.routing, 'force-tier': values['force-tier'] });
+  if (ingestRouting && fixtureMode !== 'ingest') throw new Error('--routing and --force-tier need --fixture-mode ingest');
+
   let maxResults: number | undefined;
   if (values['max-results'] !== undefined) {
     maxResults = Number.parseInt(values['max-results'], 10);
@@ -50,8 +74,30 @@ async function main(): Promise<number> {
     }
   }
 
+  const embeddingProfileId = values['embedding-profile']?.trim();
+  if (embeddingProfileId !== undefined && embeddingProfileId === '') {
+    throw new Error('--embedding-profile must not be empty');
+  }
+  const baseUrl = values['base-url'];
+  if (baseUrl && embeddingProfileId) {
+    throw new Error('--embedding-profile is only supported for in-process fixture runs (omit --base-url)');
+  }
+
+  const runConfigFile = values['run-config']?.trim();
+  if (runConfigFile !== undefined && runConfigFile === '') throw new RunConfigError('[Eval Harness] --run-config must not be empty');
+  const runConfig = runConfigFile ? loadRunConfig(path.resolve(runConfigFile)) : undefined;
+  if (runConfig && baseUrl && Object.keys(runConfig.env).length > 0) {
+    throw new RunConfigError('[Eval Harness] a run-config env overlay applies to in-process runs only; omit --base-url or drop its env');
+  }
+  if (runConfig?.chunkingProfiles?.length && fixtureMode !== 'ingest') throw new RunConfigError(CHUNKING_PROFILES_NEED_INGEST);
+
   const requestOptions: EvalRequestOptions = {};
   if (maxResults !== undefined) requestOptions.max_results = maxResults;
+  if (values.degrade !== undefined) {
+    if (values.degrade !== 'drop_top_candidate') throw new Error('--degrade must be drop_top_candidate');
+    requestOptions.degrade = values.degrade;
+  }
+  if (embeddingProfileId) requestOptions.embedding_profile = embeddingProfileId;
   for (const [flag, key] of [['org', 'organization_id'], ['user', 'user_id']] as const) {
     const value = values[flag]?.trim();
     if (value === undefined) continue;
@@ -59,16 +105,22 @@ async function main(): Promise<number> {
     requestOptions[key] = value.toLowerCase();
   }
 
-  const gate = !values['no-gate'];
-  const baseUrl = values['base-url'];
+  let gate = !values['no-gate'];
+  if (embeddingProfileId) gate = false;
+  // A queued build has its own corpus hash; it is compared with another routing mode by the parser gate, not with the inline baseline.
+  if (ingestRouting && values.baseline === undefined) gate = false;
   if (gate && baseUrl && values.baseline === undefined) {
     console.error('[Eval Harness] a --base-url run needs --baseline <live baseline> or --no-gate');
     return 2;
   }
-  const baselinePath = path.resolve(values.baseline ?? DEFAULT_BASELINE);
+  const baselinePath = path.resolve(values.baseline ?? DEFAULT_BASELINES[fixtureMode]);
 
-  const goldenPath = path.resolve(values.golden as string);
   const outDir = path.resolve(values.out as string);
+  if (ingestRouting) ingestRouting.ledgerOut = path.join(outDir, 'ingest-ledger.json');
+  // Ingest mode scores the golden files it names itself unless --golden says otherwise, so its ingest-only items need no change here.
+  const defaultGolden = fixtureMode === 'ingest' ? ingestModeGoldenPaths() : [DEFAULT_GOLDEN];
+  const goldenFiles = values.golden !== undefined ? [path.resolve(values.golden)] : defaultGolden.map((file) => path.resolve(REPO_ROOT, file));
+  const goldenPath = mergeGoldenFiles(goldenFiles, path.join(outDir, 'golden.merged.jsonl'));
   if (runPython('rag_sidecar.contracts.validate', ['--model', 'GoldenItem', '--jsonl', goldenPath]) !== 0) {
     console.error('[Eval Harness] golden file failed Pydantic validation; nothing was run');
     return 2;
@@ -78,10 +130,14 @@ async function main(): Promise<number> {
     corpusDir: path.resolve(values.corpus as string),
     outDir,
     deploymentMode: deploymentMode as DeploymentMode,
+    fixtureMode,
     requestOptions,
     tier: baseUrl ? 'live' : 'smoke',
     baseUrl,
     includeDrafts: values['include-drafts'],
+    embeddingProfileId,
+    ...(ingestRouting ? { ingestRouting } : {}),
+    ...(runConfig ? { runConfig } : {}),
   });
 
   console.log(`[Eval Harness] wrote ${result.itemCount} trace(s) to ${result.tracesPath} (${result.skippedCount} golden item(s) not approved, skipped)`);
@@ -119,6 +175,11 @@ async function main(): Promise<number> {
 main().then(
   (code) => process.exit(code),
   (error: unknown) => {
+    if (error instanceof RunConfigError) {
+      console.error(error.message);
+      if (error.names.length > 0) console.error(`[Eval Harness] not allowed in run-config env: ${error.names.join(', ')}`);
+      process.exit(2);
+    }
     console.error(`[Eval Harness] FAILED: ${error instanceof Error ? error.message : String(error)}`);
     process.exit(3);
   },

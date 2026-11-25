@@ -1,0 +1,111 @@
+import { randomBytes } from 'node:crypto';
+import { getRagDeps } from '../deps';
+import type { Profile, StageFailureReason, StageRecord, StageRunStatus } from '../types';
+
+const TRACE_ID = /^[0-9a-f]{32}$/;
+
+const STAGE_COUNT_KEY = /^[a-z][a-z0-9_]{0,63}$/;
+
+export function sanitizeStageCounts(raw: Record<string, number>): Record<string, number> | undefined {
+  const counts: Record<string, number> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (!STAGE_COUNT_KEY.test(key) || typeof value !== 'number' || !Number.isFinite(value)) continue;
+    counts[key] = value;
+  }
+  return Object.keys(counts).length > 0 ? counts : undefined;
+}
+
+export interface StageEntry {
+  name: string;
+  status: StageRunStatus;
+  reason?: StageFailureReason | 'disabled';
+  startedAt: number;
+  endedAt: number;
+  candidatesIn?: number | null;
+  candidatesOut?: number | null;
+  counts?: Record<string, number>;
+  rules?: string[];
+  detail?: string;
+}
+
+export interface ReviewContent {
+  query?: string;
+  answer?: string;
+  context?: string;
+  model?: string;
+}
+
+/** The retrieval profiles plus `ingest`, the profile of an ingestion trace. */
+export type TraceProfile = Profile | 'ingest';
+
+export interface TraceCollector {
+  readonly traceId: string;
+  readonly profile: TraceProfile;
+  readonly tenantKey: string;
+  readonly startedAt: number;
+  now(): number;
+  record(entry: StageEntry): StageRecord;
+  stages(): StageRecord[];
+  toStageLatency(): Record<string, number>;
+  toStageStatus(): Record<string, StageRunStatus>;
+  setReviewContent(content: ReviewContent): void;
+  reviewContent(): ReviewContent | null;
+}
+
+export interface TraceCollectorOptions {
+  profile: TraceProfile;
+  tenantKey: string;
+}
+
+function normaliseTraceId(raw: string): string {
+  const candidate = raw.replace(/-/g, '').toLowerCase();
+  return TRACE_ID.test(candidate) ? candidate : randomBytes(16).toString('hex');
+}
+
+export function createTraceCollector(options: TraceCollectorOptions): TraceCollector {
+  const deps = getRagDeps();
+  const records: StageRecord[] = [];
+  const traceId = normaliseTraceId(deps.randomId());
+  const startedAt = deps.now();
+  let review: ReviewContent | null = null;
+
+  return {
+    traceId,
+    profile: options.profile,
+    tenantKey: options.tenantKey,
+    startedAt,
+    now: () => deps.now(),
+    record(entry) {
+      const record: StageRecord = {
+        name: entry.name,
+        status: entry.status,
+        startedAt: entry.startedAt,
+        endedAt: entry.endedAt,
+        latency_ms: Math.max(0, entry.endedAt - entry.startedAt),
+        candidates_in: entry.candidatesIn ?? null,
+        candidates_out: entry.candidatesOut ?? null,
+        rules: entry.rules ?? [],
+      };
+      if (entry.reason !== undefined) record.reason = entry.reason;
+      if (entry.detail !== undefined) record.detail = entry.detail;
+      if (entry.counts !== undefined) record.counts = entry.counts;
+      records.push(record);
+      return record;
+    },
+    stages: () => records.slice(),
+    toStageLatency() {
+      const latency: Record<string, number> = {};
+      for (const record of records) latency[record.name] = record.latency_ms;
+      return latency;
+    },
+    setReviewContent(content) {
+      review = { ...review, ...content };
+    },
+    reviewContent: () => (review ? { ...review } : null),
+    toStageStatus() {
+      const status: Record<string, StageRunStatus> = {};
+      for (const record of records) status[record.name] = record.status;
+      return status;
+    },
+  };
+}

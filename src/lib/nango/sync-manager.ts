@@ -1,10 +1,11 @@
 import { getNango } from './client';
 import { getSupabaseAdmin } from '@/lib/supabase';
-import { processDocumentWithMetadata } from './document-adapter';
+import { nangoPipeline, processDocumentWithMetadata } from './document-adapter';
 import { fetchFileContent } from './file-fetcher';
 import { PROVIDER_CONFIG, type NangoFileRecord, type SupportedProvider, type SyncStats } from './types';
 import { env } from '@/lib/env';
 import { logger } from '@/lib/logger';
+import { nangoOwnerScope, queueConfigFromProcessEnv, removeDocumentObjects, scopeKey, softDeleteLineage, type DocumentObjectRow } from '@/lib/rag';
 
 const SUPPORTED_EXTENSIONS = (env.NANGO_SUPPORTED_FILE_TYPES || 'pdf,doc,docx,txt,md').split(',');
 const MAX_FILES_PER_SYNC = parseInt(env.NANGO_MAX_FILES_PER_SYNC || '100');
@@ -59,13 +60,17 @@ interface GoogleDriveFile {
     webViewLink?: string;
 }
 
+/** Most listing pages one run reads; a folder with more than this many pages is treated as cut short. */
+const MAX_LISTING_PAGES = 200;
+
 /**
- * Fetch files from Google Drive using proxy API
+ * Fetch every file of a Google Drive folder through the proxy API, following nextPageToken. `complete` is false when a later page failed
+ * or the page limit was reached: the list is then a prefix of the folder and must not be used to decide that a file is gone.
  */
 async function fetchGoogleDriveFiles(
     connectionId: string,
     folderId?: string
-): Promise<GoogleDriveFile[]> {
+): Promise<{ files: GoogleDriveFile[]; complete: boolean }> {
     const nango = getNango();
 
     // Build query - get files from specific folder or root
@@ -74,25 +79,135 @@ async function fetchGoogleDriveFiles(
         query += ` and '${folderId}' in parents`;
     }
 
-    try {
-        const response = await nango.proxy({
-            providerConfigKey: 'google-drive',
-            connectionId: connectionId,
-            method: 'GET',
-            endpoint: '/drive/v3/files',
-            params: {
-                q: query,
-                pageSize: MAX_FILES_PER_SYNC.toString(),
-                fields: 'files(id,name,mimeType,modifiedTime,size,parents,webViewLink)',
-                orderBy: 'modifiedTime desc',
-            },
-        });
+    const files: GoogleDriveFile[] = [];
+    let pageToken: string | undefined;
+    for (let page = 0; page < MAX_LISTING_PAGES; page++) {
+        try {
+            const response = await nango.proxy({
+                providerConfigKey: 'google-drive',
+                connectionId: connectionId,
+                method: 'GET',
+                endpoint: '/drive/v3/files',
+                params: {
+                    q: query,
+                    pageSize: MAX_FILES_PER_SYNC.toString(),
+                    fields: 'nextPageToken,files(id,name,mimeType,modifiedTime,size,parents,webViewLink)',
+                    orderBy: 'modifiedTime desc',
+                    ...(pageToken ? { pageToken } : {}),
+                },
+            });
+            const data = response.data as { files?: GoogleDriveFile[]; nextPageToken?: string };
+            files.push(...(data.files || []));
+            if (!data.nextPageToken) return { files, complete: true };
+            pageToken = data.nextPageToken;
+        } catch (error) {
+            logger.error('Nango', 'Failed to fetch Google Drive files', error);
+            if (page === 0) throw error;
+            return { files, complete: false };
+        }
+    }
+    logger.error('Nango', `Google Drive listing stopped after ${MAX_LISTING_PAGES} pages`);
+    return { files, complete: false };
+}
 
-        const data = response.data as { files?: GoogleDriveFile[] };
-        return data.files || [];
+function orphanUsesSoftDelete(): boolean {
+    if (nangoPipeline() !== 'unified') return false;
+    try {
+        return queueConfigFromProcessEnv().ingestAsync;
+    } catch {
+        return false;
+    }
+}
+
+async function collectNangoLineageIds(
+    supabaseAdmin: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
+    tenantKey: string,
+    connectionId: string,
+    fileId: string
+): Promise<string[]> {
+    const lineageIds = new Set<string>();
+    for (const column of ['source_key', 'source_file_id'] as const) {
+        const { data, error } = await supabaseAdmin
+            .from('documents')
+            .select('id, lineage_id')
+            .eq('tenant_key', tenantKey)
+            .eq('source', 'nango')
+            .eq('source_connection_id', connectionId)
+            .eq(column, fileId);
+        if (error) throw error;
+        for (const row of (data ?? []) as Array<{ id: string; lineage_id: string | null }>) {
+            lineageIds.add(row.lineage_id ?? row.id);
+        }
+    }
+    return Array.from(lineageIds);
+}
+
+async function softDeleteNangoLineages(
+    supabaseAdmin: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
+    tenantKey: string,
+    connectionId: string,
+    fileId: string,
+    userId: string
+): Promise<boolean> {
+    try {
+        const lineages = await collectNangoLineageIds(supabaseAdmin, tenantKey, connectionId, fileId);
+        if (lineages.length === 0) return true;
+        const owner = nangoOwnerScope({ ownerUserId: userId });
+        if (!owner.ok) return false;
+        const signal = AbortSignal.timeout(120_000);
+        for (const lineageId of lineages) {
+            const result = await softDeleteLineage(owner.scope, lineageId, 'nango', { signal });
+            if (!result.ok) return false;
+        }
+        return true;
     } catch (error) {
-        logger.error('Nango', 'Failed to fetch Google Drive files', error);
-        throw error;
+        logger.error('Nango', `Failed to soft-delete the lineage of ${fileId}`, error);
+        return false;
+    }
+}
+
+/**
+ * Delete every version of the files a source no longer has, inside one tenant. A file is found by its identity
+ * (the provider file id of this connection), never by the document id a sync record holds: that id can name another
+ * lineage when ingest reported a duplicate of an older, unrelated document. Returns false when a delete failed, so
+ * the caller keeps the sync record and the next sync retries.
+ */
+async function deleteNangoLineages(
+    supabaseAdmin: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
+    tenantKey: string,
+    connectionId: string,
+    fileId: string
+): Promise<boolean> {
+    try {
+        const lineages = await collectNangoLineageIds(supabaseAdmin, tenantKey, connectionId, fileId);
+        if (lineages.length === 0) return true;
+        const { data: versions, error: versionsError } = await supabaseAdmin
+            .from('documents')
+            .select('id, version, lineage_id, original_path, processing_state')
+            .in('lineage_id', lineages)
+            .eq('tenant_key', tenantKey)
+            .eq('source', 'nango');
+        if (versionsError) throw versionsError;
+        const versionRows = (versions ?? []) as DocumentObjectRow[];
+        const versionIds = versionRows.map((version) => version.id);
+
+        if (versionIds.length > 0) {
+            const { error: chunksError } = await supabaseAdmin.from('document_chunks').delete().in('document_id', versionIds);
+            if (chunksError) throw chunksError;
+        }
+        const { error: documentsError } = await supabaseAdmin
+            .from('documents')
+            .delete()
+            .in('lineage_id', lineages)
+            .eq('tenant_key', tenantKey)
+            .eq('source', 'nango');
+        if (documentsError) throw documentsError;
+        // Best effort and after the rows: the originals and parse files of the removed versions leave the private bucket.
+        await removeDocumentObjects({ tenantKey, rows: versionRows });
+        return true;
+    } catch (error) {
+        logger.error('Nango', `Failed to delete the lineage of ${fileId}`, error);
+        return false;
     }
 }
 
@@ -112,6 +227,18 @@ async function deleteOrphanedDocuments(
     }
 
     let deletedCount = 0;
+
+    // Unified: lineages are removed inside the tenant of the connection owner only. An owner that cannot be a tenant
+    // deletes nothing.
+    let tenantKey: string | null = null;
+    if (nangoPipeline() === 'unified') {
+        const owner = nangoOwnerScope({ ownerUserId: userId });
+        if (!owner.ok) {
+            logger.error('Nango', `Orphan deletion skipped: owner scope refused (${owner.reason})`);
+            return 0;
+        }
+        tenantKey = scopeKey(owner.scope);
+    }
 
     try {
         // Get all previously synced files for this connection
@@ -148,8 +275,15 @@ async function deleteOrphanedDocuments(
 
             for (const record of batch) {
                 try {
-                    // Delete the document if it exists (CASCADE will handle chunks)
-                    if (record.document_id) {
+                    if (tenantKey !== null) {
+                        const removed = orphanUsesSoftDelete()
+                            ? await softDeleteNangoLineages(supabaseAdmin, tenantKey, connectionId, record.file_id, userId)
+                            : await deleteNangoLineages(supabaseAdmin, tenantKey, connectionId, record.file_id);
+                        if (!removed) {
+                            continue;
+                        }
+                    } else if (record.document_id) {
+                        // Delete the document if it exists (CASCADE will handle chunks)
                         const { error: docDeleteError } = await supabaseAdmin
                             .from('documents')
                             .delete()
@@ -205,8 +339,8 @@ async function syncGoogleDriveDocuments(
     supabaseAdmin: ReturnType<typeof getSupabaseAdmin>,
     folderId?: string | null,
     skipOrphanDeletion: boolean = false
-): Promise<SyncStats & { fileIds?: string[] }> {
-    const stats: SyncStats & { fileIds?: string[] } = { processed: 0, failed: 0, skipped: 0, deleted: 0 };
+): Promise<SyncStats & { fileIds?: string[]; listingComplete?: boolean }> {
+    const stats: SyncStats & { fileIds?: string[]; listingComplete?: boolean } = { processed: 0, failed: 0, skipped: 0, deleted: 0 };
 
     if (!supabaseAdmin) {
         throw new Error('Supabase admin client not available');
@@ -219,25 +353,33 @@ async function syncGoogleDriveDocuments(
 
     try {
         // Fetch files from the selected Google Drive folder
-        const files = await fetchGoogleDriveFiles(connectionId, folderId);
-        logger.debug('Nango', `Found ${files.length} files in Google Drive folder ${folderId}`);
+        const listing = await fetchGoogleDriveFiles(connectionId, folderId);
+        stats.listingComplete = listing.complete;
+        logger.debug('Nango', `Found ${listing.files.length} files in Google Drive folder ${folderId}`);
+
+        // Deletion detection sees every listed file; the files that are synced stay the first page, as before pagination.
+        const files = listing.files.slice(0, MAX_FILES_PER_SYNC);
 
         // Build set of current file IDs for deletion detection
-        const currentFileIds = new Set(files.map(f => f.id));
+        const currentFileIds = new Set(listing.files.map(f => f.id));
 
         // Delete documents that no longer exist in Google Drive
         // This handles the case where user deleted files from Google Drive
         // Skip if called from multi-folder mode (will be done once at the end)
         if (!skipOrphanDeletion) {
-            stats.deleted = await deleteOrphanedDocuments(
-                connectionId,
-                userId,
-                currentFileIds,
-                supabaseAdmin
-            );
+            if (listing.complete) {
+                stats.deleted = await deleteOrphanedDocuments(
+                    connectionId,
+                    userId,
+                    currentFileIds,
+                    supabaseAdmin
+                );
+            } else {
+                logger.error('Nango', `Orphan deletion skipped: the listing of folder ${folderId} is incomplete`);
+            }
         } else {
             // Return file IDs for multi-folder mode to aggregate
-            stats.fileIds = files.map(f => f.id);
+            stats.fileIds = listing.files.map(f => f.id);
         }
 
         // Filter to supported file types
@@ -325,6 +467,9 @@ async function syncGoogleDriveDocuments(
                     sourceProvider: 'google-drive',
                     sourceFileId: file.id,
                     sourceConnectionId: connectionId,
+                    nangoConnectionId: connectionId,
+                    nangoFolderId: folderId ?? undefined,
+                    mimeType: file.mimeType,
                 });
 
                 // Update sync record as completed
@@ -476,6 +621,9 @@ async function syncGoogleDriveFilesByIds(
                     sourceProvider: 'google-drive',
                     sourceFileId: file.id,
                     sourceConnectionId: connectionId,
+                    nangoConnectionId: connectionId,
+                    nangoFolderId: file.parents?.[0],
+                    mimeType: file.mimeType,
                 });
 
                 // Update sync record as completed
@@ -523,7 +671,8 @@ async function syncNotionPagesByIds(
     connectionId: string,
     userId: string,
     supabaseAdmin: ReturnType<typeof getSupabaseAdmin>,
-    pageIds: string[]
+    pageIds: string[],
+    folderId?: string
 ): Promise<SyncStats> {
     const stats: SyncStats = { processed: 0, failed: 0, skipped: 0, deleted: 0 };
 
@@ -616,6 +765,9 @@ async function syncNotionPagesByIds(
                     sourceProvider: 'notion',
                     sourceFileId: pageId,
                     sourceConnectionId: connectionId,
+                    nangoConnectionId: connectionId,
+                    nangoFolderId: folderId,
+                    mimeType: fileRecord.mime_type,
                 });
 
                 // Update sync record as completed
@@ -688,7 +840,7 @@ async function syncNotionPageWithChildren(
         logger.debug('Nango', `Found ${pageIds.length} total pages to sync (1 parent + ${childPages.length} children)`);
 
         // Use syncNotionPagesByIds for actual syncing
-        const syncResult = await syncNotionPagesByIds(connectionId, userId, supabaseAdmin, pageIds);
+        const syncResult = await syncNotionPagesByIds(connectionId, userId, supabaseAdmin, pageIds, parentPageId);
 
         return syncResult;
 
@@ -1001,17 +1153,25 @@ export async function syncDocumentsForConnection(
 
     try {
         // Get the user_id and sync settings from the connection record
-        const { data: connRecord } = await supabaseAdmin
+        // connection_id is unique, so this is the one row that binds the connection to its owner. The owner is read here and
+        // nowhere else: not from the webhook body, the request or Nango metadata. A missing row or a failed lookup stops the sync.
+        const { data: connRecord, error: connError } = await supabaseAdmin
             .from('nango_connections')
             .select('user_id, sync_folder_id, sync_folder_name, sync_file_ids, sync_file_names')
             .eq('connection_id', connectionId)
             .single();
 
-        if (!connRecord) {
+        if (connError || !connRecord || typeof connRecord.user_id !== 'string' || connRecord.user_id === '') {
             throw new Error(`Connection not found: ${connectionId}`);
         }
 
         const userId = connRecord.user_id;
+        if (nangoPipeline() === 'unified') {
+            const owner = nangoOwnerScope({ ownerUserId: userId });
+            if (!owner.ok) {
+                throw new Error(`Connection owner cannot be a tenant (${owner.reason}): ${connectionId}`);
+            }
+        }
         const folderId = connRecord.sync_folder_id;
         const fileIds = connRecord.sync_file_ids;
 
@@ -1027,6 +1187,7 @@ export async function syncDocumentsForConnection(
                 logger.debug('Nango', `Syncing ${fileIds.length} Google Drive folders`);
                 const combinedStats: SyncStats = { processed: 0, failed: 0, skipped: 0, deleted: 0 };
                 const allFileIds: string[] = [];
+                let listingsComplete = true;
 
                 for (const folderIdItem of fileIds) {
                     try {
@@ -1039,15 +1200,22 @@ export async function syncDocumentsForConnection(
                         if (folderStats.fileIds) {
                             allFileIds.push(...folderStats.fileIds);
                         }
+                        if (folderStats.listingComplete === false) listingsComplete = false;
                     } catch (folderError) {
                         logger.error('Nango', `Failed to sync Google Drive folder ${folderIdItem}`, folderError);
                         combinedStats.failed++;
+                        listingsComplete = false;
                     }
                 }
 
-                // Now do orphan deletion once with ALL file IDs from ALL folders
-                const allFileIdsSet = new Set(allFileIds);
-                combinedStats.deleted = await deleteOrphanedDocuments(connectionId, userId, allFileIdsSet, supabaseAdmin);
+                // Now do orphan deletion once with ALL file IDs from ALL folders, and only when every folder was listed to the end:
+                // the files of a folder that failed or was cut short are not in the set and would be deleted as orphans.
+                if (listingsComplete) {
+                    const allFileIdsSet = new Set(allFileIds);
+                    combinedStats.deleted = await deleteOrphanedDocuments(connectionId, userId, allFileIdsSet, supabaseAdmin);
+                } else {
+                    logger.error('Nango', 'Orphan deletion skipped: a Google Drive folder listing was incomplete');
+                }
 
                 logger.debug('Nango', `Multi-folder Google Drive sync complete: ${combinedStats.processed} processed, ${combinedStats.failed} failed, ${combinedStats.skipped} skipped`);
                 return combinedStats;
@@ -1112,10 +1280,12 @@ export async function syncDocumentsForConnection(
 
             // Collect all files from all folders first
             const allFiles: { id: string; name: string; path?: string; mime_type?: string; size?: number; modified_at?: string }[] = [];
+            const folderOfFile = new Map<string, string>();
             for (const folderPath of fileIds) {
                 try {
                     const files = await fetchFilesForProvider(nango, provider, connectionId, folderPath || 'root');
                     logger.debug('Nango', `Found ${files.length} files in folder ${folderPath}`);
+                    for (const listed of files) folderOfFile.set(listed.id, folderPath || 'root');
                     allFiles.push(...files);
                 } catch (folderError) {
                     logger.error('Nango', `Failed to fetch files from folder ${folderPath} for ${provider}`, folderError);
@@ -1174,11 +1344,16 @@ export async function syncDocumentsForConnection(
                         sourceProvider: provider,
                         sourceFileId: file.id,
                         sourceConnectionId: connectionId,
+                        nangoConnectionId: connectionId,
+                        nangoFolderId: folderOfFile.get(file.id),
+                        mimeType: file.mime_type,
                     });
 
                     await supabaseAdmin.from('nango_sync_records').update({
                         document_id: documentId,
-                        status: 'synced',
+                        // The legacy value is not one nango_sync_records.status accepts, so that update never applied; kept
+                        // as it was for the legacy pipeline, while the unified pipeline writes the value the table allows.
+                        status: nangoPipeline() === 'unified' ? 'completed' : 'synced',
                         last_synced_at: new Date().toISOString(),
                         updated_at: new Date().toISOString(),
                     }).eq('user_id', userId).eq('file_id', file.id);
@@ -1280,6 +1455,9 @@ export async function syncDocumentsForConnection(
                     sourceProvider: provider,
                     sourceFileId: file.id,
                     sourceConnectionId: connectionId,
+                    nangoConnectionId: connectionId,
+                    nangoFolderId: folderId || 'root',
+                    mimeType: file.mime_type,
                 });
 
                 // Update sync record as completed

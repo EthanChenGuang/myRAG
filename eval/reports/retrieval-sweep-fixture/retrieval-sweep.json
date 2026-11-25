@@ -1,0 +1,337 @@
+{
+  "cells": [
+    {
+      "candidate_pool_size": 25,
+      "final_top_k": 5,
+      "latency_p95_ms": 95.0,
+      "mean_context_tokens": 611.6728971962617,
+      "mrr": 0.7633720930232559,
+      "n_items": 86,
+      "out_dir": "eval/reports/retrieval-sweep-fixture/cells/pool-25_k-5",
+      "recall_at_k": 0.8604651162790697,
+      "rerank_input_cap": 50,
+      "run_config_hash": "a16b2dc21cf12ce6cc2484f76b18a3c3c66bfad81baec91a282adb7467e7c2a0"
+    },
+    {
+      "candidate_pool_size": 25,
+      "final_top_k": 8,
+      "latency_p95_ms": 72.0,
+      "mean_context_tokens": 929.2897196261682,
+      "mrr": 0.7672480620155039,
+      "n_items": 86,
+      "out_dir": "eval/reports/retrieval-sweep-fixture/cells/pool-25_k-8",
+      "recall_at_k": 0.8837209302325582,
+      "rerank_input_cap": 50,
+      "run_config_hash": "582650feae4f7844a93c50a563b4fa3f81101ffa3f49369b62f7e6bbb0c0b266"
+    },
+    {
+      "candidate_pool_size": 25,
+      "final_top_k": 10,
+      "latency_p95_ms": 69.0,
+      "mean_context_tokens": 1145.056074766355,
+      "mrr": 0.7672480620155039,
+      "n_items": 86,
+      "out_dir": "eval/reports/retrieval-sweep-fixture/cells/pool-25_k-10",
+      "recall_at_k": 0.8837209302325582,
+      "rerank_input_cap": 50,
+      "run_config_hash": "c3e22750cc77eb7fd1bbbc255c674a83a63c51f21ec2ad723494aff865643247"
+    },
+    {
+      "candidate_pool_size": 25,
+      "final_top_k": 15,
+      "latency_p95_ms": 74.0,
+      "mean_context_tokens": 1669.4392523364486,
+      "mrr": 0.7683051444679352,
+      "n_items": 86,
+      "out_dir": "eval/reports/retrieval-sweep-fixture/cells/pool-25_k-15",
+      "recall_at_k": 0.8953488372093024,
+      "rerank_input_cap": 50,
+      "run_config_hash": "64718f5303f10fc943d20eed7cdb8db55ed56b263519d13eced0300fd0fbf3d1"
+    },
+    {
+      "candidate_pool_size": 25,
+      "final_top_k": 20,
+      "latency_p95_ms": 66.0,
+      "mean_context_tokens": 2172.542056074766,
+      "mrr": 0.7688865398167724,
+      "n_items": 86,
+      "out_dir": "eval/reports/retrieval-sweep-fixture/cells/pool-25_k-20",
+      "recall_at_k": 0.9069767441860465,
+      "rerank_input_cap": 50,
+      "run_config_hash": "c7f0c4da3d3e215f0902999c1acf8f061ab1ceefbd12024b6b9217250b6caee9"
+    },
+    {
+      "candidate_pool_size": 50,
+      "final_top_k": 5,
+      "latency_p95_ms": 98.0,
+      "mean_context_tokens": 610.018691588785,
+      "mrr": 0.7633720930232559,
+      "n_items": 86,
+      "out_dir": "eval/reports/retrieval-sweep-fixture/cells/pool-50_k-5",
+      "recall_at_k": 0.8604651162790697,
+      "rerank_input_cap": 50,
+      "run_config_hash": "a9a058a107ffa36f0084e8ef2fb61ef7cff80a3851322677e73b76ed3e57fdef"
+    },
+    {
+      "candidate_pool_size": 50,
+      "final_top_k": 8,
+      "latency_p95_ms": 95.0,
+      "mean_context_tokens": 932.5420560747664,
+      "mrr": 0.7672480620155039,
+      "n_items": 86,
+      "out_dir": "eval/reports/retrieval-sweep-fixture/cells/pool-50_k-8",
+      "recall_at_k": 0.8837209302325582,
+      "rerank_input_cap": 50,
+      "run_config_hash": "9f341d782242367ad34aa5f4c70c68c5878bd19ed7dc5661e2947c20bd8d83d9"
+    },
+    {
+      "candidate_pool_size": 50,
+      "final_top_k": 10,
+      "latency_p95_ms": 93.0,
+      "mean_context_tokens": 1145.9158878504672,
+      "mrr": 0.7672480620155039,
+      "n_items": 86,
+      "out_dir": "eval/reports/retrieval-sweep-fixture/cells/pool-50_k-10",
+      "recall_at_k": 0.8837209302325582,
+      "rerank_input_cap": 50,
+      "run_config_hash": "27f0d837640eb1ea8710abdae43ab81399221ea99ebc73be6c4cb3e8ff323757"
+    },
+    {
+      "candidate_pool_size": 50,
+      "final_top_k": 15,
+      "latency_p95_ms": 106.0,
+      "mean_context_tokens": 1674.0280373831777,
+      "mrr": 0.7683051444679352,
+      "n_items": 86,
+      "out_dir": "eval/reports/retrieval-sweep-fixture/cells/pool-50_k-15",
+      "recall_at_k": 0.8953488372093024,
+      "rerank_input_cap": 50,
+      "run_config_hash": "fbf9d57014d11f93855badd7d02ecb8f098529df5d101782079369b33072ba0c"
+    },
+    {
+      "candidate_pool_size": 50,
+      "final_top_k": 20,
+      "latency_p95_ms": 105.0,
+      "mean_context_tokens": 2175.0654205607475,
+      "mrr": 0.7688865398167724,
+      "n_items": 86,
+      "out_dir": "eval/reports/retrieval-sweep-fixture/cells/pool-50_k-20",
+      "recall_at_k": 0.9069767441860465,
+      "rerank_input_cap": 50,
+      "run_config_hash": "fd5241e85551a7ef608e95796accd2d3fd28588c7ce6ebe6b1ac18c069db1447"
+    },
+    {
+      "candidate_pool_size": 75,
+      "final_top_k": 5,
+      "latency_p95_ms": 135.0,
+      "mean_context_tokens": 615.8317757009346,
+      "mrr": 0.7633720930232559,
+      "n_items": 86,
+      "out_dir": "eval/reports/retrieval-sweep-fixture/cells/pool-75_k-5",
+      "recall_at_k": 0.8604651162790697,
+      "rerank_input_cap": 75,
+      "run_config_hash": "68c13df08e0a66af5ff9f1e5499e46b4abb59af9d2960e8000f4ecd8fc6bcff1"
+    },
+    {
+      "candidate_pool_size": 75,
+      "final_top_k": 8,
+      "latency_p95_ms": 133.0,
+      "mean_context_tokens": 942.6822429906542,
+      "mrr": 0.7672480620155039,
+      "n_items": 86,
+      "out_dir": "eval/reports/retrieval-sweep-fixture/cells/pool-75_k-8",
+      "recall_at_k": 0.8837209302325582,
+      "rerank_input_cap": 75,
+      "run_config_hash": "7f11b7e4d71b6f8477451938ac4ba69141fc28c0e1997183d15ef48947308c1b"
+    },
+    {
+      "candidate_pool_size": 75,
+      "final_top_k": 10,
+      "latency_p95_ms": 141.0,
+      "mean_context_tokens": 1157.1401869158879,
+      "mrr": 0.7672480620155039,
+      "n_items": 86,
+      "out_dir": "eval/reports/retrieval-sweep-fixture/cells/pool-75_k-10",
+      "recall_at_k": 0.8837209302325582,
+      "rerank_input_cap": 75,
+      "run_config_hash": "729058d1eb6db53717d7080fb226ddb353592a4fc31ee4c29bca7dbfed5dc0fd"
+    },
+    {
+      "candidate_pool_size": 75,
+      "final_top_k": 15,
+      "latency_p95_ms": 127.0,
+      "mean_context_tokens": 1689.1308411214952,
+      "mrr": 0.7690803382663848,
+      "n_items": 86,
+      "out_dir": "eval/reports/retrieval-sweep-fixture/cells/pool-75_k-15",
+      "recall_at_k": 0.9069767441860465,
+      "rerank_input_cap": 75,
+      "run_config_hash": "e5274c3e0a56fa62f640aab04912ce7cbd878d401859368843780ed62ff06c00"
+    },
+    {
+      "candidate_pool_size": 75,
+      "final_top_k": 20,
+      "latency_p95_ms": 128.0,
+      "mean_context_tokens": 2192.121495327103,
+      "mrr": 0.7696617336152219,
+      "n_items": 86,
+      "out_dir": "eval/reports/retrieval-sweep-fixture/cells/pool-75_k-20",
+      "recall_at_k": 0.9186046511627907,
+      "rerank_input_cap": 75,
+      "run_config_hash": "df5d30511f9a782c2142160c4a4ab6ea78d2a4ace74b4be68835f404f90ea062"
+    },
+    {
+      "candidate_pool_size": 100,
+      "final_top_k": 5,
+      "latency_p95_ms": 136.0,
+      "mean_context_tokens": 615.8317757009346,
+      "mrr": 0.7633720930232559,
+      "n_items": 86,
+      "out_dir": "eval/reports/retrieval-sweep-fixture/cells/pool-100_k-5",
+      "recall_at_k": 0.8604651162790697,
+      "rerank_input_cap": 100,
+      "run_config_hash": "77d045e71ef18c8aea900238c6248c042e0a895e318c38bdd590b1e0442aca77"
+    },
+    {
+      "candidate_pool_size": 100,
+      "final_top_k": 8,
+      "latency_p95_ms": 134.0,
+      "mean_context_tokens": 942.6822429906542,
+      "mrr": 0.7672480620155039,
+      "n_items": 86,
+      "out_dir": "eval/reports/retrieval-sweep-fixture/cells/pool-100_k-8",
+      "recall_at_k": 0.8837209302325582,
+      "rerank_input_cap": 100,
+      "run_config_hash": "58cc4cc7f1126d85b835a911fb1e32bb733a62f632c82842b2376159fee39154"
+    },
+    {
+      "candidate_pool_size": 100,
+      "final_top_k": 10,
+      "latency_p95_ms": 128.0,
+      "mean_context_tokens": 1157.1401869158879,
+      "mrr": 0.7672480620155039,
+      "n_items": 86,
+      "out_dir": "eval/reports/retrieval-sweep-fixture/cells/pool-100_k-10",
+      "recall_at_k": 0.8837209302325582,
+      "rerank_input_cap": 100,
+      "run_config_hash": "d3db0923094e6a2e977c5b42f03bd28229e373dcfca9b3c7f632dc2618656971"
+    },
+    {
+      "candidate_pool_size": 100,
+      "final_top_k": 15,
+      "latency_p95_ms": 113.0,
+      "mean_context_tokens": 1689.1308411214952,
+      "mrr": 0.7690803382663848,
+      "n_items": 86,
+      "out_dir": "eval/reports/retrieval-sweep-fixture/cells/pool-100_k-15",
+      "recall_at_k": 0.9069767441860465,
+      "rerank_input_cap": 100,
+      "run_config_hash": "93ef56bb8b0828193869278ecfa5207f587e25d8aa694ad72a700d8a7adaac5b"
+    },
+    {
+      "candidate_pool_size": 100,
+      "final_top_k": 20,
+      "latency_p95_ms": 138.0,
+      "mean_context_tokens": 2192.121495327103,
+      "mrr": 0.7696617336152219,
+      "n_items": 86,
+      "out_dir": "eval/reports/retrieval-sweep-fixture/cells/pool-100_k-20",
+      "recall_at_k": 0.9186046511627907,
+      "rerank_input_cap": 100,
+      "run_config_hash": "60d6fbc87b5837228efa74668e59ae6880ed2cc28f43f1eb0bec0c723ac71494"
+    }
+  ],
+  "dev_only": true,
+  "golden_sha256": "35190de6a0102a6a803525512c2ef910a2a6758063afe9e85d6e8f53d57232de",
+  "grid": {
+    "pools": [
+      25,
+      50,
+      75,
+      100
+    ],
+    "top_ks": [
+      5,
+      8,
+      10,
+      15,
+      20
+    ]
+  },
+  "grid_sha256": "79f993d5a30b23bc54949bb2f903d89770ad60221782dd5e9b2deb6822abb418",
+  "mode": "fixture",
+  "noise": {
+    "band": 0.02,
+    "floor": 0.02,
+    "k": 3.0,
+    "spread": 0.0
+  },
+  "notes": [
+    "Fixture run: the params file was not touched (D-12)."
+  ],
+  "params_path": null,
+  "params_written": false,
+  "proposed_params": {
+    "candidate_pool_size": 25,
+    "config_hash": "d1def1be1a701f5afeff71a45469a10094b348d880e6d4624b86f162df92316c",
+    "final_top_k": 20,
+    "leg_weights": {
+      "dense": 1.0,
+      "exact_id": 1.0,
+      "lexical": 1.0
+    },
+    "provenance": {
+      "source": "sweep"
+    },
+    "rerank_input_cap": 50,
+    "rrf_k": 60,
+    "schema_version": 1
+  },
+  "rule": "Smallest candidate pool whose Recall@k and MRR are both within the noise band of the best cell; ties on pool size go to the lower mean context tokens, then the lower latency p95.",
+  "run_config_name": "v2-recommended",
+  "run_config_sha256": "a6c8b44ea3551b70c0d70856af6b8dbe24b6361521d50f990bfb2ef04e99e9d2",
+  "schema_version": 1,
+  "selection": {
+    "best_mrr": 0.7696617336152219,
+    "best_recall": 0.9186046511627907,
+    "chosen": {
+      "candidate_pool_size": 25,
+      "final_top_k": 20,
+      "latency_p95_ms": 66.0,
+      "mean_context_tokens": 2172.542056074766,
+      "mrr": 0.7688865398167724,
+      "n_items": 86,
+      "out_dir": "eval/reports/retrieval-sweep-fixture/cells/pool-25_k-20",
+      "recall_at_k": 0.9069767441860465,
+      "rerank_input_cap": 50,
+      "run_config_hash": "c7f0c4da3d3e215f0902999c1acf8f061ab1ceefbd12024b6b9217250b6caee9"
+    },
+    "noise_band": 0.02,
+    "within_band": [
+      [
+        25,
+        20
+      ],
+      [
+        50,
+        20
+      ],
+      [
+        75,
+        15
+      ],
+      [
+        75,
+        20
+      ],
+      [
+        100,
+        15
+      ],
+      [
+        100,
+        20
+      ]
+    ]
+  }
+}

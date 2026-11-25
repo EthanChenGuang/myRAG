@@ -1,28 +1,42 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod/v3';
 import { ToolExecutionStateService } from '@/lib/tool-execution-state';
+import { getToolSessionUser } from '@/lib/tool-execution-auth';
 import { devLog } from '@/lib/dev-logger';
 import { formatToolResultUniversally } from '@/lib/universal-tool-formatter';
-import { findImagesWithFallback } from '@/lib/mcp/image-context-manager';
+import { getDownloadableUrls } from '@/lib/mcp/image-context-manager';
+import {
+  callerScopeKey,
+  deleteImageContext,
+  imageUrlsFromContext,
+  readImageContext,
+} from '@/lib/mcp/caller-scope';
+import { getSupabaseAdmin } from '@/lib/supabase';
+import { isAdminUser, type RagAdminDb } from '@/lib/rag';
 import { isUrlMcpCompatible } from '@/lib/mcp/url-validator';
 
-// Global cache for Gmail data chaining
-const global_cache = globalThis as any;
-if (!global_cache.gmailCache) {
-  global_cache.gmailCache = {
-    lastFoundEmail: null as any,
-    recentEmails: [] as Array<{
-      id: string;
-      threadId?: string;
-      from: string;
-      subject: string;
-      snippet?: string;
-      timestamp: number;
-    }>,
-    timestamp: null as number | null,
-    MAX_CACHED_EMAILS: 10 // Keep last 10 emails in cache
-  };
+function describeConnections(client: unknown): { server: string; connected: boolean }[] {
+  const candidate = client as { getConnectionStatus?: () => { server: string; connected: boolean }[] } | null;
+  return typeof candidate?.getConnectionStatus === 'function' ? candidate.getConnectionStatus() : [];
 }
+
+function callerImageUrls(userId: string, chatIds: Array<string | undefined | null>): string[] {
+  for (const chatId of chatIds) {
+    if (!chatId) continue;
+    const managed = getDownloadableUrls(callerScopeKey(userId, chatId));
+    if (managed.length > 0) return managed;
+    const stored = imageUrlsFromContext(userId, chatId);
+    if (stored.length > 0) return stored;
+  }
+  return [];
+}
+
+interface CallerScope {
+  userId: string;
+  chatId?: string | null;
+}
+
+const global_cache = globalThis as any;
 
 // Global cache for MCP tools persistence
 if (!global_cache.mcpToolsCache) {
@@ -119,7 +133,7 @@ function applyUniversalParameterMapping(toolName: string, params: any): any {
  * This function applies transformations BEFORE storing in persistent state
  * Supports any MCP server type following JSON-RPC 2.0 specifications
  */
-async function transformToolParameters(toolName: string, originalParams: any): Promise<any> {
+async function transformToolParameters(toolName: string, originalParams: any, scope: CallerScope): Promise<any> {
   let optimizedParams = { ...originalParams };
 
   console.log(`🔧 [TRANSFORM] Starting transformation for tool: ${toolName}`);
@@ -137,14 +151,14 @@ async function transformToolParameters(toolName: string, originalParams: any): P
         
         try {
           const { processAttachedImages } = await import('@/lib/mcp/image-context-manager');
-          const sessionId = originalParams.sessionId || originalParams.session_id || `transform_${crypto.randomUUID()}`;
+          const sessionId = scope.chatId || `transform_${crypto.randomUUID()}`;
           
           const attachedImages = [{
             name: `converted-image-${Date.now()}.png`,
             dataUrl: value
           }];
           
-          const downloadableUrls = await processAttachedImages(sessionId, attachedImages);
+          const downloadableUrls = await processAttachedImages(callerScopeKey(scope.userId, sessionId), attachedImages);
           
           if (downloadableUrls.length > 0) {
             optimizedParams[key] = downloadableUrls[0];
@@ -185,39 +199,15 @@ async function transformToolParameters(toolName: string, originalParams: any): P
         injectionSource = 'direct_params';
         devLog.verbose('🖼️ [IMAGE URL INJECTION] Using directly provided downloadableUrls:', imageUrls.length);
       } else {
-        // Priority 2: Enhanced lookup with fallback strategies
-        const sessionId = originalParams.sessionId || 
-                         originalParams.chatId || 
-                         originalParams._sessionId;
-        
-        console.log(`🔧 [TRANSFORM] Using enhanced lookup for sessionId: ${sessionId}`);
+        // Priority 2: this caller's own context for this chat
+        const sessionId = scope.chatId;
         
         if (sessionId) {
-          // Use the enhanced fallback method from ImageContextManager
-          imageUrls = findImagesWithFallback(sessionId);
-          injectionSource = 'enhanced_context_manager';
+          imageUrls = callerImageUrls(scope.userId, [sessionId]);
+          injectionSource = 'caller_scoped_context';
           
           if (imageUrls.length > 0) {
-            console.log(`🔧 [TRANSFORM] ✅ Enhanced lookup found ${imageUrls.length} URLs`);
-            devLog.verbose('🖼️ [IMAGE URL INJECTION] Enhanced lookup successful:', imageUrls.length);
-          } else {
-            console.log(`🔧 [TRANSFORM] ❌ Enhanced lookup failed, trying global context fallback`);
-            
-            // Final fallback: Try global context
-            if ((globalThis as any).mcpImageContext) {
-              const availableKeys = Object.keys((globalThis as any).mcpImageContext);
-              console.log(`🔧 [TRANSFORM] Global context fallback - trying ${availableKeys.length} keys`);
-              
-              for (const key of availableKeys) {
-                const context = (globalThis as any).mcpImageContext[key];
-                if (context && context.downloadableUrls && context.downloadableUrls.length > 0) {
-                  imageUrls = context.downloadableUrls;
-                  injectionSource = 'global_context_fallback';
-                  console.log(`🔧 [TRANSFORM] ✅ Global context fallback successful: ${key} -> ${imageUrls.length} URLs`);
-                  break;
-                }
-              }
-            }
+            devLog.verbose('🖼️ [IMAGE URL INJECTION] Scoped lookup successful:', imageUrls.length);
           }
         } else {
           devLog.warn('🖼️ [IMAGE URL INJECTION] No session ID available for lookup');
@@ -422,74 +412,17 @@ async function transformToolParameters(toolName: string, originalParams: any): P
     // 🖼️ ENHANCED IMAGE CONTEXT INTEGRATION: Check for images in session context
     // Note: metadata might not be available in transformToolParameters, so we skip this for now
     // This functionality is handled in the main image injection section later in the flow
-    const sessionIdFromMetadata = (originalParams as any)?._sessionId || (originalParams as any)?.sessionId;
-    if (!optimizedParams.attachment_url && !optimizedParams.file && sessionIdFromMetadata) {
-      devLog.verbose('📧 [GMAIL TRANSFORM] No explicit attachment - checking session context for images');
+    if (!optimizedParams.attachment_url && !optimizedParams.file && scope.chatId) {
+      devLog.verbose('📧 [GMAIL TRANSFORM] No explicit attachment - checking this caller\'s session context for images');
       
-      try {
-        // Try to get image URL from Enhanced Image Context Manager
-        const { findImagesWithFallback } = await import('@/lib/mcp/image-context-manager');
-        
-        const imageUrls = findImagesWithFallback(sessionIdFromMetadata);
-        if (imageUrls && imageUrls.length > 0) {
-          const imageUrl = imageUrls[0];
-          devLog.verbose('📧 [GMAIL TRANSFORM] ✅ Found image URL from session context:', imageUrl);
-          
-          // Set both file and attachment_url for Gmail tools
-          optimizedParams.attachment_url = imageUrl;
-          optimizedParams.file = imageUrl.includes('supabase.co/storage/v1/object/public/') 
-            ? `${imageUrl}?download`
-            : imageUrl;
-          
-          devLog.verbose('📧 [GMAIL TRANSFORM] ✅ Injected image URL into Gmail parameters');
-        }
-      } catch (imageContextError) {
-        devLog.verbose('📧 [GMAIL TRANSFORM] ⚠️ Enhanced Image Context Manager not available:', imageContextError);
-      }
-      
-      // Fallback to global context if Enhanced Image Context Manager failed
-      if (!optimizedParams.attachment_url && (globalThis as any).mcpImageContext) {
-        const imageContext = (globalThis as any).mcpImageContext[sessionIdFromMetadata];
-        
-        if (imageContext && imageContext.imageUrl) {
-          devLog.verbose('📧 [GMAIL TRANSFORM] ✅ Found image URL from global context:', imageContext.imageUrl);
-          optimizedParams.attachment_url = imageContext.imageUrl;
-          optimizedParams.file = imageContext.imageUrl.includes('supabase.co/storage/v1/object/public/') 
-            ? `${imageContext.imageUrl}?download`
-            : imageContext.imageUrl;
-        } else if (imageContext && imageContext.downloadableUrls && imageContext.downloadableUrls.length > 0) {
-          const imageUrl = imageContext.downloadableUrls[0];
-          devLog.verbose('📧 [GMAIL TRANSFORM] ✅ Found downloadable URL from global context:', imageUrl);
-          optimizedParams.attachment_url = imageUrl;
-          optimizedParams.file = imageUrl.includes('supabase.co/storage/v1/object/public/') 
-            ? `${imageUrl}?download`
-            : imageUrl;
-        }
-      }
-      
-      // 🚨 EMERGENCY FALLBACK: Check all available image contexts as last resort
-      if (!optimizedParams.attachment_url && (globalThis as any).mcpImageContext) {
-        devLog.verbose('📧 [GMAIL TRANSFORM] ⚠️ No session-specific image found, checking all available contexts');
-        
-        const allContexts = Object.values((globalThis as any).mcpImageContext);
-        for (const ctx of allContexts) {
-          if (ctx && typeof ctx === 'object' && (ctx as any).imageUrl) {
-            devLog.verbose('📧 [GMAIL TRANSFORM] 🚨 Emergency fallback: Using available image URL:', (ctx as any).imageUrl);
-            optimizedParams.attachment_url = (ctx as any).imageUrl;
-            optimizedParams.file = (ctx as any).imageUrl.includes('supabase.co/storage/v1/object/public/') 
-              ? `${(ctx as any).imageUrl}?download`
-              : (ctx as any).imageUrl;
-            break;
-          } else if (ctx && typeof ctx === 'object' && (ctx as any).downloadableUrls && (ctx as any).downloadableUrls.length > 0) {
-            const emergencyUrl = (ctx as any).downloadableUrls[0];
-            devLog.verbose('📧 [GMAIL TRANSFORM] 🚨 Emergency fallback: Using available downloadable URL:', emergencyUrl);
-            optimizedParams.attachment_url = emergencyUrl;
-            optimizedParams.file = emergencyUrl.includes('supabase.co/storage/v1/object/public/') 
-              ? `${emergencyUrl}?download`
-              : emergencyUrl;
-            break;
-          }
-        }
+      const imageUrls = callerImageUrls(scope.userId, [scope.chatId]);
+      if (imageUrls.length > 0) {
+        const imageUrl = imageUrls[0];
+        optimizedParams.attachment_url = imageUrl;
+        optimizedParams.file = imageUrl.includes('supabase.co/storage/v1/object/public/') 
+          ? `${imageUrl}?download`
+          : imageUrl;
+        devLog.verbose('📧 [GMAIL TRANSFORM] ✅ Injected image URL into Gmail parameters');
       }
     }
     
@@ -588,98 +521,10 @@ async function transformToolParameters(toolName: string, originalParams: any): P
       structuredParams.body = bodyLines.join('\n').trim();
     }
     
-    // Get thread_id from Gmail cache if available (for proper reply threading)
-    if (global_cache.gmailCache?.lastFoundEmail?.thread_id) {
-      structuredParams.thread_id = global_cache.gmailCache.lastFoundEmail.thread_id;
-      devLog.verbose('📧 [GMAIL TRANSFORM] Using cached thread_id:', structuredParams.thread_id);
-    }
-    
-    // If no To field was extracted, try to get it from cache
-    if (!structuredParams.to && global_cache.gmailCache?.lastFoundEmail?.from) {
-      structuredParams.to = global_cache.gmailCache.lastFoundEmail.from;
-      devLog.verbose('📧 [GMAIL TRANSFORM] Using cached sender as To field:', structuredParams.to);
-    }
-    
-    // If still no To field, try to extract from the original user message or cache
-    if (!structuredParams.to) {
-      // Check if we have access to the original user message
-      const userMessage = optimizedParams._userMessage || '';
-      
-      devLog.verbose('📧 [GMAIL TRANSFORM] No To field found, checking user message and cache for email hints');
-      devLog.verbose('📧 [GMAIL TRANSFORM] User message:', userMessage);
-      
-      // Look for common patterns in the user message
-      // 1. Full email addresses
-      const emailRegex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g;
-      const emailMatches = userMessage.match(emailRegex);
-      
-      if (emailMatches && emailMatches.length > 0) {
-        structuredParams.to = emailMatches[0];
-        devLog.verbose('📧 [GMAIL TRANSFORM] Extracted email from user message:', structuredParams.to);
-      } else {
-        // 2. Look for names or usernames mentioned in the user message
-        const namePatterns = [
-          /(?:to|for|email|reply to|draft to)\s+(\w+)(?:\s|,|$)/i,
-          /(\w+)(?:\s+and\s+their|'s)\s+(?:email|message)/i,
-          /write\s+(?:a\s+)?(?:draft|email|reply)\s+to\s+(\w+)/i
-        ];
-        
-        let extractedName = null;
-        for (const pattern of namePatterns) {
-          const match = userMessage.match(pattern);
-          if (match && match[1]) {
-            extractedName = match[1].toLowerCase();
-            devLog.verbose('📧 [GMAIL TRANSFORM] Extracted name from user message:', extractedName);
-            break;
-          }
-        }
-        
-        if (extractedName && global_cache.gmailCache?.recentEmails) {
-            devLog.verbose('📧 [GMAIL TRANSFORM] Searching cache for name:', extractedName);
-            devLog.verbose('📧 [GMAIL TRANSFORM] Cached emails:', global_cache.gmailCache.recentEmails.map((e: any) => ({ from: e.from, fromName: e.fromName })));
-            
-            for (const cachedEmail of global_cache.gmailCache.recentEmails) {
-              const cachedFrom = cachedEmail.from;
-              const cachedFromName = cachedEmail.fromName || '';
-              
-              // Check both email address and name fields for matches
-              if (cachedFrom && cachedFrom.toLowerCase().includes(extractedName)) {
-                structuredParams.to = cachedFrom;
-                devLog.verbose('📧 [GMAIL TRANSFORM] Matched partial email to cached sender:', structuredParams.to);
-                
-                // Also set thread_id if this is the email being replied to
-                if (cachedEmail.threadId) {
-                  structuredParams.thread_id = cachedEmail.threadId;
-                  devLog.verbose('📧 [GMAIL TRANSFORM] Also using thread_id from matched email:', structuredParams.thread_id);
-                }
-                break;
-              } else if (cachedFromName && cachedFromName.toLowerCase().includes(extractedName)) {
-                structuredParams.to = cachedFrom;
-                devLog.verbose('📧 [GMAIL TRANSFORM] Matched name to cached sender:', structuredParams.to);
-                
-                // Also set thread_id if this is the email being replied to
-                if (cachedEmail.threadId) {
-                  structuredParams.thread_id = cachedEmail.threadId;
-                  devLog.verbose('📧 [GMAIL TRANSFORM] Also using thread_id from matched email:', structuredParams.thread_id);
-                }
-                break;
-              }
-            }
-          }
-          
-          // If still no match, check if we have a domain hint and extracted name
-          if (!structuredParams.to && extractedName && userMessage.toLowerCase().includes('@proton.me')) {
-            structuredParams.to = `${extractedName}@proton.me`;
-            devLog.verbose('📧 [GMAIL TRANSFORM] Constructed email with domain hint:', structuredParams.to);
-          }
+    for (const field of ['to', 'subject', 'thread_id'] as const) {
+      if (!structuredParams[field] && typeof originalParams[field] === 'string' && originalParams[field]) {
+        structuredParams[field] = originalParams[field];
       }
-    }
-    
-    // If no Subject was extracted, create a reply subject from cache
-    if (!structuredParams.subject && global_cache.gmailCache?.lastFoundEmail?.subject) {
-      const originalSubject = global_cache.gmailCache.lastFoundEmail.subject;
-      structuredParams.subject = originalSubject.startsWith('Re:') ? originalSubject : `Re: ${originalSubject}`;
-      devLog.verbose('📧 [GMAIL TRANSFORM] Using cached subject as reply:', structuredParams.subject);
     }
     
     // 🎯 PARAMETER ORDER FIX: Create properly ordered parameters for Zapier Gmail API
@@ -919,55 +764,6 @@ async function transformToolParameters(toolName: string, originalParams: any): P
   return optimizedParams;
 }
 
-function analyzeEmailIntent(userMessage: string): { shouldSend: boolean; confidence: number; reasoningText: string } {
-  const message = userMessage.toLowerCase();
-  
-  // Strong send indicators
-  const sendKeywords = ['send', 'email', 'immediately', 'now', 'dispatch', 'transmit', 'deliver'];
-  const strongSendPhrases = ['send an email', 'send email', 'email to', 'send and email'];
-  
-  // Draft indicators
-  const draftKeywords = ['draft', 'prepare', 'create draft', 'make a draft', 'compose draft'];
-  
-  let sendScore = 0;
-  let draftScore = 0;
-  let reasoning = '';
-  
-  // Check for strong send phrases first (higher weight)
-  for (const phrase of strongSendPhrases) {
-    if (message.includes(phrase)) {
-      sendScore += 3;
-      reasoning += `Strong send phrase: "${phrase}". `;
-      break; // Only count one strong phrase
-    }
-  }
-  
-  // Check for send keywords
-  const sendMatches = sendKeywords.filter(keyword => message.includes(keyword));
-  if (sendMatches.length > 0) {
-    sendScore += sendMatches.length * 2;
-    reasoning += `Send keywords: ${sendMatches.join(', ')}. `;
-  }
-  
-  // Check for draft keywords
-  const draftMatches = draftKeywords.filter(keyword => message.includes(keyword));
-  if (draftMatches.length > 0) {
-    draftScore += draftMatches.length * 2;
-    reasoning += `Draft keywords: ${draftMatches.join(', ')}. `;
-  }
-  
-  // Calculate confidence and decision
-  const totalScore = sendScore + draftScore;
-  const shouldSend = sendScore > draftScore;
-  const confidence = totalScore > 0 ? Math.max(sendScore, draftScore) / (totalScore + 2) : 0.1;
-  
-  return {
-    shouldSend,
-    confidence: Math.min(confidence, 0.95), // Cap at 95%
-    reasoningText: reasoning.trim() || 'No clear indicators found'
-  };
-}
-
 function analyzeCalendarIntent(userMessage: string): { 
   operation: 'find' | 'create' | 'update' | 'delete'; 
   timeScope: 'today' | 'tomorrow' | 'week' | 'month' | 'next' | 'specific';
@@ -1099,6 +895,12 @@ export async function POST(req: NextRequest) {
     }
     
     const { toolCallId, action, sessionId, params = {} } = parsedData;
+
+    const auth = await getToolSessionUser();
+    if (!auth.ok) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
+    }
+    const userId = auth.userId;
     
     console.log(`API APPROVE: Tool ${toolCallId}, action=${action}`);
     
@@ -1129,8 +931,37 @@ export async function POST(req: NextRequest) {
       );
     }
     
+    const pendingEntry = toolApprovalState[toolCallId];
+    if (pendingEntry && pendingEntry.ownerUserId !== userId) {
+      console.warn(`API APPROVE: Refusing approval for ${toolCallId}: caller is not the recorded owner`);
+      return NextResponse.json(
+        { error: 'Tool call not found or already processed' },
+        { status: 404 }
+      );
+    }
+
+    let mcpAdminDb: RagAdminDb | null = null;
+    try {
+      mcpAdminDb = getSupabaseAdmin() as RagAdminDb | null;
+    } catch {
+      mcpAdminDb = null;
+    }
+    if (!mcpAdminDb) {
+      return NextResponse.json({ error: 'Admin verification is unavailable' }, { status: 503 });
+    }
+    let callerIsAdmin: boolean;
+    try {
+      callerIsAdmin = await isAdminUser(mcpAdminDb, userId, req.signal);
+    } catch {
+      return NextResponse.json({ error: 'Admin verification is unavailable' }, { status: 503 });
+    }
+    if (!callerIsAdmin) {
+      console.warn(`API APPROVE: Refusing ${toolCallId}: MCP tool approval is limited to admins`);
+      return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
+    }
+
     // Check persistent state first, create if not exists
-    let persistentState = await ToolExecutionStateService.getByToolCallId(toolCallId);
+    let persistentState = await ToolExecutionStateService.getForUser(toolCallId, userId);
     
     // 🔍 CRITICAL FIX: Always ensure persistent state has correct parameters from global state
     if (toolApprovalState[toolCallId]) {
@@ -1151,10 +982,9 @@ export async function POST(req: NextRequest) {
           let paramsWithImages = { ...toolCall.params };
           
           console.log(`🔍 [CONTEXT DEBUG] Searching for image context with sessionId: ${effectiveSessionId}`);
-          console.log(`🔍 [CONTEXT DEBUG] Available global context keys:`, (globalThis as any).mcpImageContext ? Object.keys((globalThis as any).mcpImageContext) : 'none');
           
-          if ((globalThis as any).mcpImageContext && (globalThis as any).mcpImageContext[effectiveSessionId]) {
-            const imageContext = (globalThis as any).mcpImageContext[effectiveSessionId];
+          const imageContext = readImageContext(userId, effectiveSessionId);
+          if (imageContext) {
             console.log(`🔍 [CONTEXT DEBUG] Found image context for session ${effectiveSessionId}:`, {
               hasAttachedImages: !!imageContext.attachedImages,
               attachedImagesCount: imageContext.attachedImages?.length || 0,
@@ -1187,7 +1017,7 @@ export async function POST(req: NextRequest) {
           }
           
           // 🎯 CRITICAL FIX: Apply parameter transformation BEFORE storing
-          const transformedParams = await transformToolParameters(toolCall.name, paramsWithImages);
+          const transformedParams = await transformToolParameters(toolCall.name, paramsWithImages, { userId, chatId: effectiveSessionId });
           console.log(`🔍 [PARAM TRANSFORM] Pre-storage transformation for ${toolCall.name}:`);
           console.log(`🔍 [PARAM TRANSFORM]   Original:`, toolCall.params);
           console.log(`🔍 [PARAM TRANSFORM]   With Images:`, paramsWithImages);
@@ -1198,7 +1028,8 @@ export async function POST(req: NextRequest) {
             message_id: Date.now(),
             tool_call_id: toolCallId,
             tool_name: toolCall.name || 'unknown_tool',
-            tool_params: transformedParams
+            tool_params: transformedParams,
+            user_id: userId
           });
           
           if (persistentState) {
@@ -1217,10 +1048,9 @@ export async function POST(req: NextRequest) {
         let globalParamsWithImages = { ...globalParams };
         
         console.log(`🔍 [CONTEXT DEBUG] Update: Searching for image context with sessionId: ${effectiveSessionId}`);
-        console.log(`🔍 [CONTEXT DEBUG] Update: Available global context keys:`, (globalThis as any).mcpImageContext ? Object.keys((globalThis as any).mcpImageContext) : 'none');
         
-        if ((globalThis as any).mcpImageContext && (globalThis as any).mcpImageContext[effectiveSessionId]) {
-          const imageContext = (globalThis as any).mcpImageContext[effectiveSessionId];
+        const imageContext = readImageContext(userId, effectiveSessionId);
+        if (imageContext) {
           console.log(`🔍 [CONTEXT DEBUG] Update: Found image context for session ${effectiveSessionId}:`, {
             hasAttachedImages: !!imageContext.attachedImages,
             attachedImagesCount: imageContext.attachedImages?.length || 0,
@@ -1253,7 +1083,7 @@ export async function POST(req: NextRequest) {
         }
         
         // 🎯 CRITICAL FIX: Apply transformation to global params before comparison
-        const transformedGlobalParams = await transformToolParameters(toolCall.name, globalParamsWithImages);
+        const transformedGlobalParams = await transformToolParameters(toolCall.name, globalParamsWithImages, { userId, chatId: effectiveSessionId });
         
         // Only update if transformed global state has more parameters than persistent state
         if (Object.keys(transformedGlobalParams).length > Object.keys(currentParams).length) {
@@ -1294,6 +1124,26 @@ export async function POST(req: NextRequest) {
       );
     }
     
+    if (!toolApprovalState[toolCallId]) {
+      if (action === 'cancel' && persistentState) {
+        await ToolExecutionStateService.upsert({
+          user_id: userId,
+          chat_id: sessionId || '00000000-0000-0000-0000-000000000000',
+          message_id: Date.now(),
+          tool_call_id: toolCallId,
+          tool_name: persistentState.tool_name,
+          tool_params: persistentState.tool_params,
+          status: 'cancelled'
+        });
+        return NextResponse.json({ success: true, cancelled: true, toolCallId });
+      }
+      console.warn(`API APPROVE: In-memory approval state missing for ${toolCallId}, refusing to execute`);
+      return NextResponse.json(
+        { error: 'Approval expired, ask again', code: 'approval_expired' },
+        { status: 409 }
+      );
+    }
+
     // Update approval state
     toolApprovalState[toolCallId].approved = action === 'approve';
     console.log(`API APPROVE: Updated approval state for ${toolCallId} to ${action === 'approve'}`);
@@ -1322,10 +1172,9 @@ export async function POST(req: NextRequest) {
         let storedParamsWithImages = { ...storedToolCall.params };
         
         console.log(`🔍 [CONTEXT DEBUG] Execute: Searching for image context with sessionId: ${effectiveSessionId}`);
-        console.log(`🔍 [CONTEXT DEBUG] Execute: Available global context keys:`, (globalThis as any).mcpImageContext ? Object.keys((globalThis as any).mcpImageContext) : 'none');
         
-        if ((globalThis as any).mcpImageContext && (globalThis as any).mcpImageContext[effectiveSessionId]) {
-          const imageContext = (globalThis as any).mcpImageContext[effectiveSessionId];
+        const imageContext = readImageContext(userId, effectiveSessionId);
+        if (imageContext) {
           console.log(`🔍 [CONTEXT DEBUG] Execute: Found image context for session ${effectiveSessionId}:`, {
             hasAttachedImages: !!imageContext.attachedImages,
             attachedImagesCount: imageContext.attachedImages?.length || 0,
@@ -1361,7 +1210,7 @@ export async function POST(req: NextRequest) {
         console.log(`🔍 [TRANSFORM DEBUG] Before transformation for ${storedToolCall.name}:`);
         console.log(`🔍 [TRANSFORM DEBUG] Input params:`, JSON.stringify(storedParamsWithImages, null, 2));
         
-        const transformedParams = await transformToolParameters(storedToolCall.name, storedParamsWithImages);
+        const transformedParams = await transformToolParameters(storedToolCall.name, storedParamsWithImages, { userId, chatId: effectiveSessionId });
         
         console.log(`🔍 [TRANSFORM DEBUG] After transformation for ${storedToolCall.name}:`);
         console.log(`🔍 [TRANSFORM DEBUG] Output params:`, JSON.stringify(transformedParams, null, 2));
@@ -1369,6 +1218,7 @@ export async function POST(req: NextRequest) {
         console.log(`🔍 [TRANSFORM DEBUG] Has 'files' parameter:`, !!transformedParams.files);
         
         await ToolExecutionStateService.upsert({
+          user_id: userId,
           chat_id: effectiveChatId,
           message_id: Date.now(),
           tool_call_id: toolCallId,
@@ -1377,6 +1227,7 @@ export async function POST(req: NextRequest) {
           status: 'approved'
         });
         await ToolExecutionStateService.upsert({
+          user_id: userId,
           chat_id: effectiveChatId,
           message_id: Date.now(),
           tool_call_id: toolCallId,
@@ -1454,11 +1305,8 @@ export async function POST(req: NextRequest) {
         
         console.log(`API APPROVE: Getting cached tools with chatId: ${chatId}`);
         
-        // First check local global cache
-        console.log(`API APPROVE: Global cache keys: ${Array.from(global_cache.mcpToolsCache.keys()).join(', ')}`);
-        console.log(`API APPROVE: Global cache size: ${global_cache.mcpToolsCache.size}`);
-        
-        const localCache = global_cache.mcpToolsCache.get(chatId);
+        const toolScopeKey = callerScopeKey(userId, chatId);
+        const localCache = global_cache.mcpToolsCache.get(toolScopeKey);
         if (localCache && Date.now() - localCache.timestamp < 15 * 60 * 1000) {
           console.log(`API APPROVE: Found tools in local global cache for ${chatId}: ${localCache.tools.length} tools`);
           console.log(`API APPROVE: Tool names from cache: ${localCache.tools.map((t: any) => t.name).join(', ')}`);
@@ -1466,7 +1314,7 @@ export async function POST(req: NextRequest) {
         } else {
           console.log(`API APPROVE: No tools in local global cache for ${chatId}, trying production router`);
           // Try production router cache
-          cachedTools = await productionMcpRouter.getCachedTools(servers, chatId);
+          cachedTools = await productionMcpRouter.getCachedTools(servers, toolScopeKey);
           console.log(`API APPROVE: Production router returned ${cachedTools.length} tools for session ${chatId}`);
         }
         
@@ -1561,7 +1409,7 @@ export async function POST(req: NextRequest) {
               );
               
               const transport = new SSEClientTransport(new URL(endpoint.url), {
-                headers: { 'Content-Type': 'application/json' }
+                requestInit: { headers: { 'Content-Type': 'application/json' } }
               });
               await mcpClient.connect(transport);
               
@@ -1640,25 +1488,6 @@ export async function POST(req: NextRequest) {
             ? { ...persistentState.tool_params }
             : { ...toolCall.params };
           
-          console.log('🔍 [GMAIL CACHE STATUS] At Gmail tool execution:', {
-            toolName: toolCall.name,
-            hasGlobalCache: !!global_cache,
-            hasGmailCache: !!global_cache?.gmailCache,
-            hasLastFoundEmail: !!global_cache?.gmailCache?.lastFoundEmail,
-            lastFoundEmailStructure: global_cache?.gmailCache?.lastFoundEmail ? {
-              type: typeof global_cache.gmailCache.lastFoundEmail,
-              keys: Object.keys(global_cache.gmailCache.lastFoundEmail),
-              hasContent: !!global_cache.gmailCache.lastFoundEmail.content,
-              contentLength: global_cache.gmailCache.lastFoundEmail.content?.length || 0
-            } : null,
-            recentEmailsCount: global_cache?.gmailCache?.recentEmails?.length || 0,
-            cacheAge: global_cache?.gmailCache?.timestamp ? `${Date.now() - global_cache.gmailCache.timestamp}ms` : 'N/A'
-          });
-          
-          // Pass user message for email extraction
-          const userMessage = (toolCall.params?.instructions as string) || (body.messages?.[body.messages.length - 1]?.content as string) || '';
-          optimizedParams._userMessage = userMessage;
-          
           // 🎯 CRITICAL FIX: Transform instructions → query for Gmail find_email tools
           // The Zapier MCP client expects 'query' parameter, but AI sends 'instructions'
           if (toolCall.name.includes('find_email') && optimizedParams.instructions && !optimizedParams.query) {
@@ -1681,61 +1510,12 @@ export async function POST(req: NextRequest) {
             devLog.verbose('🔍 [PARAM TRANSFORM] Final parameter count:', Object.keys(optimizedParams).length);
           }
 
-          // 🔄 GMAIL SMART TOOL REDIRECTION: Fix draft vs send selection
-          // This logic runs BEFORE the existing Gmail optimization
-          if (toolCall.name === 'gmail_create_draft') {
-            // Extract user message from tool call instructions or a fallback
-            const userMessage = (toolCall.params?.instructions as string) || (body.messages?.[body.messages.length - 1]?.content as string) || '';
-            const intentScore = analyzeEmailIntent(userMessage);
-            
-            console.log(`🔄 [GMAIL REDIRECTION] Analyzing intent for draft call. User message: "${userMessage}"`);
-            console.log(`🔄 [GMAIL REDIRECTION] Intent analysis: ${JSON.stringify(intentScore)}`);
-            
-            // Redirect to send if user clearly intended to send (not draft)
-            if (intentScore.shouldSend && intentScore.confidence >= 0.7) {
-              console.log(`🔄 [GMAIL REDIRECTION] HIGH CONFIDENCE SEND INTENT (${intentScore.confidence.toFixed(2)}). Redirecting gmail_create_draft → gmail_send_email`);
-              
-              // 🔧 ATTACHMENT PARAMETER PRESERVATION: Ensure attachment parameters are preserved during redirection
-              const originalParams = { ...optimizedParams };
-              console.log('🔄 [GMAIL REDIRECTION] Original parameters before redirection:', JSON.stringify(originalParams, null, 2));
-              
-              // Preserve attachment-related parameters
-              const attachmentParams = {
-                file: originalParams.file,
-                attachment_url: originalParams.attachment_url,
-                files: originalParams.files,
-                file_url: originalParams.file_url,
-                file_urls: originalParams.file_urls
-              };
-              
-              // Only include attachment parameters that actually exist
-              const preservedAttachmentParams = Object.fromEntries(
-                Object.entries(attachmentParams).filter(([_, value]) => value !== undefined && value !== null)
-              );
-              
-              if (Object.keys(preservedAttachmentParams).length > 0) {
-                console.log('🔄 [GMAIL REDIRECTION] Preserving attachment parameters:', JSON.stringify(preservedAttachmentParams, null, 2));
-                
-                // Merge preserved attachment parameters back into optimizedParams
-                Object.assign(optimizedParams, preservedAttachmentParams);
-              }
-              
-              toolCall.name = 'gmail_send_email';
-              
-              console.log('🔄 [GMAIL REDIRECTION] Tool successfully redirected to gmail_send_email');
-              console.log('🔄 [GMAIL REDIRECTION] Final parameters after redirection:', JSON.stringify(optimizedParams, null, 2));
-            } else {
-              console.log(`🔄 [GMAIL REDIRECTION] Keeping as draft. Reason: ${intentScore.shouldSend ? 'Low confidence' : 'Draft intent detected'} (confidence: ${intentScore.confidence.toFixed(2)})`);
-            }
-          }
-          
           // Add comprehensive logging from GMAIL_FIX_PLAN.md Step 1
           devLog.verbose('🔍 [OPTIMIZATION START] Tool details:', {
             name: toolCall.name,
             hasReplyInName: toolCall.name.includes('reply_to_email'),
             hasDraftInName: toolCall.name.includes('create_draft_reply'),
-            params: Object.keys(optimizedParams),
-            cacheExists: !!global_cache?.gmailCache?.lastFoundEmail
+            params: Object.keys(optimizedParams)
           });
 
           // Verify tool name matching (from GMAIL_FIX_PLAN.MD Phase 1, Step 2)
@@ -1745,317 +1525,6 @@ export async function POST(req: NextRequest) {
             includesDraft: toolCall.name.includes('create_draft_reply')
           });
             
-          // Test email extraction function directly (from GMAIL_FIX_PLAN.MD Phase 1, Step 3)
-          // Assuming extractEmailAddressFromSender is defined elsewhere or will be defined
-          // For now, let's define a placeholder if it's not present, or ensure it's correctly scoped
-          // Enhanced version from GMAIL_FIX_PLAN.md Step 2:
-          function extractEmailAddressFromSender(fromField: string): string | null {
-            devLog.verbose('🔍 [EMAIL EXTRACT] Input:', fromField);
-            
-            if (!fromField) {
-              devLog.verbose('🔍 [EMAIL EXTRACT] No fromField provided');
-              return null;
-            }
-
-            // Try multiple patterns
-            const patterns = [
-              /<([^>]+)>/, // "Name <email@domain.com>"
-              /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/, // Direct email
-              /"?([^"]*)"?\s*<([^>]+)>/ // "Name" <email>
-            ];
-
-            for (const pattern of patterns) {
-              const match = fromField.match(pattern);
-              if (match) {
-                const email = match[1] || match[2];
-                devLog.verbose('🔍 [EMAIL EXTRACT] Success:', email, 'using pattern:', pattern);
-                return email;
-              }
-            }
-
-            devLog.verbose('🔍 [EMAIL EXTRACT] Failed - no patterns matched');
-            return null;
-          }
-
-          const testEmail = "Carlos Marcial <carlos@example.com>";
-          const extracted = extractEmailAddressFromSender(testEmail);
-          devLog.verbose('🔍 [EMAIL TEST]', { input: testEmail, output: extracted });
-          
-          if (
-            (toolCall.name.includes('reply_to_email') ||
-              toolCall.name.includes('create_draft_reply'))
-          ) {
-            // Look for the best matching email from cache
-            let cachedEmailData = null;
-            const recentEmails = global_cache?.gmailCache?.recentEmails || [];
-
-            // PRIORITY 1: Check if AI provided an email_id or message_id parameter
-            const providedEmailId = optimizedParams.email_id || optimizedParams.message_id || optimizedParams.id;
-            if (providedEmailId) {
-              console.log(`🔍 [GMAIL REPLY/DRAFT] AI provided email_id: ${providedEmailId}, searching in cache...`);
-
-              // Search in recent emails cache
-              for (const recentEmail of recentEmails) {
-                if (recentEmail.id === providedEmailId ||
-                    recentEmail.messageId === providedEmailId ||
-                    recentEmail.message_id === providedEmailId) {
-                  // Convert cached email format to expected format
-                  cachedEmailData = {
-                    content: [{
-                      text: JSON.stringify({
-                        execution: {
-                          result: [{
-                            id: recentEmail.id || recentEmail.messageId || recentEmail.message_id,
-                            threadId: recentEmail.threadId || recentEmail.thread_id,
-                            from: recentEmail.from,
-                            subject: recentEmail.subject
-                          }]
-                        },
-                        results: [{
-                          id: recentEmail.id || recentEmail.messageId || recentEmail.message_id,
-                          threadId: recentEmail.threadId || recentEmail.thread_id,
-                          from: recentEmail.from,
-                          subject: recentEmail.subject
-                        }]
-                      })
-                    }]
-                  };
-                  console.log(`🔍 [GMAIL REPLY/DRAFT] ✅ Found exact email match for ID: ${providedEmailId}`);
-                  console.log(`🔍 [GMAIL REPLY/DRAFT] Email subject: "${recentEmail.subject}"`);
-                  break;
-                }
-              }
-
-              // Also check lastFoundEmail if it matches the ID
-              if (!cachedEmailData && global_cache?.gmailCache?.lastFoundEmail) {
-                try {
-                  const lastFoundContent = JSON.parse(global_cache.gmailCache.lastFoundEmail.content[0].text);
-                  const lastFoundResult = lastFoundContent.execution?.result?.[0] || lastFoundContent.results?.[0];
-                  if (lastFoundResult && (lastFoundResult.id === providedEmailId ||
-                      lastFoundResult.messageId === providedEmailId)) {
-                    cachedEmailData = global_cache.gmailCache.lastFoundEmail;
-                    console.log(`🔍 [GMAIL REPLY/DRAFT] ✅ Found email in lastFoundEmail cache for ID: ${providedEmailId}`);
-                  }
-                } catch (e) {
-                  console.log(`🔍 [GMAIL REPLY/DRAFT] Could not parse lastFoundEmail cache`);
-                }
-              }
-
-              if (!cachedEmailData) {
-                console.log(`🔍 [GMAIL REPLY/DRAFT] ⚠️ Email ID ${providedEmailId} not found in cache, will proceed with fallback`);
-              }
-            }
-
-            // PRIORITY 2: Check if user mentioned a specific sender in the parameters (only if no email_id match)
-            if (!cachedEmailData) {
-              const paramsStr = JSON.stringify(toolCall.params).toLowerCase();
-
-              // Try to match by sender name mentioned in params
-              for (const recentEmail of recentEmails) {
-                if (recentEmail.from) {
-                  // Handle from as either string or object
-                  const senderString = typeof recentEmail.from === 'string'
-                    ? recentEmail.from
-                    : recentEmail.from.email || recentEmail.from.name || '';
-                  const senderName = senderString.toLowerCase();
-                  // Extract first name or key part of sender
-                  const senderParts = senderName.split(/[\s<@]/);
-                  for (const part of senderParts) {
-                    if (part.length > 2 && paramsStr.includes(part)) {
-                      // Convert cached email format to expected format
-                      cachedEmailData = {
-                        content: [{
-                          text: JSON.stringify({
-                            execution: {
-                              result: [{
-                                id: recentEmail.id || recentEmail.messageId || recentEmail.message_id,
-                                threadId: recentEmail.threadId || recentEmail.thread_id,
-                                from: recentEmail.from,
-                                subject: recentEmail.subject
-                              }]
-                            },
-                            results: [{
-                              id: recentEmail.id || recentEmail.messageId || recentEmail.message_id,
-                              threadId: recentEmail.threadId || recentEmail.thread_id,
-                              from: recentEmail.from,
-                              subject: recentEmail.subject
-                            }]
-                          })
-                        }]
-                      };
-                      console.log(`🔍 [GMAIL REPLY/DRAFT] Found email by sender name match: ${recentEmail.from}`);
-                      console.log(`🔍 [GMAIL REPLY/DRAFT] Email subject: "${recentEmail.subject}"`);
-                      break;
-                    }
-                  }
-                  if (cachedEmailData) break;
-                }
-              }
-            }
-
-            // PRIORITY 3: Fall back to lastFoundEmail if no specific match
-            if (!cachedEmailData && global_cache?.gmailCache?.lastFoundEmail) {
-              cachedEmailData = global_cache.gmailCache.lastFoundEmail;
-              devLog.verbose('🔍 [GMAIL REPLY/DRAFT] Using lastFoundEmail as fallback');
-              console.log('🔍 [GMAIL REPLY/DRAFT] lastFoundEmail structure:', {
-                type: typeof cachedEmailData,
-                keys: cachedEmailData ? Object.keys(cachedEmailData) : [],
-                hasContent: !!cachedEmailData?.content,
-                contentLength: cachedEmailData?.content?.length || 0
-              });
-            } else if (!cachedEmailData) {
-              console.log('🔍 [GMAIL REPLY/DRAFT] No cached email data available:', {
-                hasGlobalCache: !!global_cache,
-                hasGmailCache: !!global_cache?.gmailCache,
-                hasLastFoundEmail: !!global_cache?.gmailCache?.lastFoundEmail,
-                recentEmailsCount: global_cache?.gmailCache?.recentEmails?.length || 0
-              });
-            }
-            
-            if (cachedEmailData) {
-              devLog.verbose('🔍 [GMAIL REPLY/DRAFT] Attempting to use cached email data for auto-population.');
-              
-              // Debug cache structure
-              console.log('🔍 [GMAIL REPLY/DRAFT] Cache structure validation:', {
-                hasCachedData: !!cachedEmailData,
-                hasContent: !!cachedEmailData?.content,
-                contentIsArray: Array.isArray(cachedEmailData?.content),
-                contentLength: cachedEmailData?.content?.length || 0,
-                hasFirstContent: !!cachedEmailData?.content?.[0],
-                hasText: !!cachedEmailData?.content?.[0]?.text,
-                textType: typeof cachedEmailData?.content?.[0]?.text
-              });
-
-            let parsedText = null;
-            if (cachedEmailData?.content?.[0]?.text) {
-              try {
-                console.log('🔍 [GMAIL REPLY/DRAFT] Attempting to parse cached text (first 200 chars):', cachedEmailData.content[0].text.substring(0, 200));
-                parsedText = JSON.parse(cachedEmailData.content[0].text);
-              } catch (e) {
-                console.error('🔍 [GMAIL REPLY/DRAFT] Error parsing cached email content:', e);
-                console.log('🔍 [GMAIL REPLY/DRAFT] Invalid JSON text:', cachedEmailData.content[0].text);
-                // parsedText will remain null
-              }
-            } else {
-              console.log('🔍 [GMAIL REPLY/DRAFT] No text content found in cached email data structure');
-            }
-
-            if (parsedText) {
-              devLog.verbose('🔍 [GMAIL REPLY/DRAFT] Successfully parsed cached text content.');
-              const primaryEmailDataSource = parsedText.execution?.result?.[0]; // Preferred for threadId and as fallback
-              const secondaryEmailDataSource = parsedText.results?.[0];       // Preferred for from/subject
-
-              if (primaryEmailDataSource) {
-                  devLog.verbose("🔍 [GMAIL REPLY/DRAFT] Primary email data source (execution.result[0]):", JSON.stringify(primaryEmailDataSource, null, 2));
-              }
-              if (secondaryEmailDataSource) {
-                  devLog.verbose("🔍 [GMAIL REPLY/DRAFT] Secondary email data source (results[0]):", JSON.stringify(secondaryEmailDataSource, null, 2));
-              }
-
-              // Determine 'to' address
-              const fromDetails = secondaryEmailDataSource?.from || primaryEmailDataSource?.from;
-              if (fromDetails) {
-                const senderEmail = extractEmailAddressFromSender(typeof fromDetails === 'string' ? fromDetails : fromDetails.email || fromDetails.name);
-                            if (senderEmail) {
-                              optimizedParams.to = senderEmail;
-                  devLog.verbose(`🔍 [GMAIL REPLY/DRAFT] Auto-populated TO field: ${senderEmail}`);
-                            } else {
-                  devLog.verbose('🔍 [GMAIL REPLY/DRAFT] Could not extract sender email from:', JSON.stringify(fromDetails, null, 2));
-                }
-              } else {
-                console.log('🔍 [GMAIL REPLY/DRAFT] No "from" details found in cached email to set "to" field.');
-                            }
-
-              // Determine 'thread_id' - UNCONDITIONALLY OVERWRITE/SET from cache if available
-              // Check for both camelCase and snake_case versions, but DO NOT fall back to message ID
-              const threadIdFromCache = primaryEmailDataSource?.threadId || primaryEmailDataSource?.thread_id || 
-                                       secondaryEmailDataSource?.threadId || secondaryEmailDataSource?.thread_id;
-              
-              // Log what we found for debugging
-              console.log('🔍 [GMAIL REPLY/DRAFT] Thread ID extraction:', {
-                primaryThreadId: primaryEmailDataSource?.threadId,
-                primaryThread_id: primaryEmailDataSource?.thread_id,
-                primaryId: primaryEmailDataSource?.id,
-                secondaryThreadId: secondaryEmailDataSource?.threadId,
-                secondaryThread_id: secondaryEmailDataSource?.thread_id,
-                secondaryId: secondaryEmailDataSource?.id,
-                selectedThreadId: threadIdFromCache
-              });
-              if (threadIdFromCache) {
-                if (optimizedParams.thread_id && optimizedParams.thread_id !== threadIdFromCache) {
-                  console.log(`🔍 [GMAIL REPLY/DRAFT] Overwriting AI-provided thread_id "${optimizedParams.thread_id}" with cached thread_id "${threadIdFromCache}".`);
-                } else if (!optimizedParams.thread_id) {
-                  console.log(`🔍 [GMAIL REPLY/DRAFT] Setting thread_id from cache: "${threadIdFromCache}".`);
-                } else {
-                  console.log(`🔍 [GMAIL REPLY/DRAFT] AI-provided thread_id "${optimizedParams.thread_id}" matches cached_id "${threadIdFromCache}". No change needed.`);
-                }
-                optimizedParams.thread_id = threadIdFromCache;
-              } else {
-                console.log('🔍 [GMAIL REPLY/DRAFT] Could not determine thread_id from cached email. Existing thread_id (if any):', optimizedParams.thread_id);
-              }
-
-              // Determine 'subject'
-              const subjectFromCache = secondaryEmailDataSource?.subject || primaryEmailDataSource?.subject;
-              if (subjectFromCache) {
-                if (typeof subjectFromCache === 'string' && !subjectFromCache.toLowerCase().startsWith('re:')) {
-                  optimizedParams.subject = `Re: ${subjectFromCache}`;
-                } else {
-                  optimizedParams.subject = subjectFromCache; 
-                }
-                console.log(`🔍 [GMAIL REPLY/DRAFT] Auto-populated SUBJECT field: ${optimizedParams.subject}`);
-              } else {
-                console.log('🔍 [GMAIL REPLY/DRAFT] No "subject" found in cached email.');
-              }
-
-              // Handle Email Body for Gmail reply/draft tools
-              // For draft reply tools, if we have input but no body, use input as body
-              if (toolCall.name.includes('create_draft_reply') && toolCall.params.input && !toolCall.params.body) {
-                optimizedParams.body = toolCall.params.input;
-                console.log('🔍 [GMAIL BODY GEN] Copying input to body for draft reply');
-              }
-              
-              if (toolCall.params.body || optimizedParams.body) {
-                  console.log('🔍 [GMAIL BODY GEN] AI provided an explicit `body`. Processing for HTML formatting.');
-                  let newBody = toolCall.params.body || optimizedParams.body;
-                  // Convert newlines to <br /> for HTML, unless it already seems to contain basic HTML block tags or <br>.
-                  if (!(/<br\s*\/?>|<p>|<div>/i.test(newBody))) {
-                      newBody = newBody.replace(/\n/g, '<br />\n');
-                      console.log('🔍 [GMAIL BODY GEN] Converted newlines to <br /> for HTML.');
-                  } else {
-                      console.log('🔍 [GMAIL BODY GEN] Body seems to contain HTML tags, using as is regarding line breaks.');
-                  }
-                  optimizedParams.body = newBody;
-                  optimizedParams.body_type = 'html'; // Always set to HTML if we process/provide the body
-                  console.log('🔍 [GMAIL BODY GEN] Final HTML body set. Body type: html.');
-                  if (toolCall.params.instructions) {
-                      // If instructions are also present, pass them along as they might be used by Zapier for other things.
-                      optimizedParams.instructions = toolCall.params.instructions;
-                      console.log('🔍 [GMAIL BODY GEN] `instructions` also present, passing to Zapier:', toolCall.params.instructions);
-                  }
-              } else if (toolCall.params.instructions) {
-                  // AI did not provide `body`, but provided `instructions`.
-                  // Pass `instructions` to Zapier. Zapier might use this as a fallback for the body content.
-                  optimizedParams.instructions = toolCall.params.instructions;
-                  console.log('🔍 [GMAIL BODY GEN] AI did not provide `body`. Passing `instructions` to Zapier. Body content will be determined by Zapier (might use instructions as fallback).');
-                  // We are NOT setting optimizedParams.body or optimizedParams.body_type here based on tool.params.instructions
-              } else {
-                  console.log('🔍 [GMAIL BODY GEN] AI provided neither `body` nor `instructions`. Email body will likely be empty or Zapier might error if body is required.');
-              }
-
-            } else {
-              console.log('🔍 [GMAIL REPLY/DRAFT] Could not parse text from cachedEmailData. Details:', {
-                reason: !cachedEmailData?.content?.[0]?.text ? 'No text content in cache structure' : 'JSON parse failed',
-                cacheStructure: cachedEmailData ? Object.keys(cachedEmailData) : 'null',
-                contentType: cachedEmailData?.content ? typeof cachedEmailData.content : 'undefined',
-                contentLength: cachedEmailData?.content?.length || 0
-              });
-              console.log('🔍 [GMAIL REPLY/DRAFT] Skipping auto-population of to/thread_id/subject.');
-            }
-            } else {
-              console.warn('🔍 [GMAIL REPLY/DRAFT] Attempted to process reply/draft but no cached email found');
-            }
-          }
-          
           // --- BEGINNING OF ADDED/MODIFIED SECTION FOR INSTRUCTIONS ---
           const gmailToolsRequiringInstructionsAndBodyFormatting = [ // Renamed for clarity
             'gmail_send_email',
@@ -2126,9 +1595,6 @@ export async function POST(req: NextRequest) {
             }
             
             optimizedParams.instructions = optimizedInstructions;
-            
-            // Mark this as a find_email operation for later caching
-            optimizedParams._cache_email_result = true;
           }
           
           // PHASE 3: Common Gmail optimizations
@@ -2205,91 +1671,10 @@ export async function POST(req: NextRequest) {
                   console.log('🔍 [GMAIL DEBUG] Original params:', JSON.stringify(optimizedParams, null, 2));
                   console.log('🔍 [GMAIL DEBUG] Session ID from body:', sessionId);
                   console.log('🔍 [GMAIL DEBUG] Session ID from metadata:', metadataSessionId);
-                  console.log('🔍 [GMAIL DEBUG] Available image contexts:', Object.keys((globalThis as any).mcpImageContext || {}));
-                  console.log('🔍 [GMAIL DEBUG] Global image context data:', JSON.stringify((globalThis as any).mcpImageContext, null, 2));
                   console.log('🔍 [GMAIL DEBUG] Body object keys:', Object.keys(body || {}));
-                  console.log('🔍 [GMAIL DEBUG] ToolCall meta:', JSON.stringify(toolCall.meta, null, 2));
                   
-                  let imageUrl = null;
-                  
-                  // Method 1: Try to get image URL from Enhanced Image Context Manager (preferred)
-                  try {
-                    console.log('🔍 [GMAIL DEBUG] Attempting to import Enhanced Image Context Manager...');
-                    const { findImagesWithFallback } = await import('@/lib/mcp/image-context-manager');
-                    console.log('🔍 [GMAIL DEBUG] ✅ Successfully imported Enhanced Image Context Manager');
-                    
-                    // Try to get images using the enhanced fallback method for each session ID
-                    const sessionIds = [sessionId, metadataSessionId].filter(Boolean);
-                    console.log('🔍 [GMAIL DEBUG] Session IDs to check:', sessionIds);
-                    
-                    for (const sid of sessionIds) {
-                      if (sid) {
-                        console.log('🔍 [GMAIL DEBUG] Checking session ID:', sid);
-                        const imageUrls = findImagesWithFallback(sid);
-                        console.log('🔍 [GMAIL DEBUG] findImagesWithFallback returned:', imageUrls);
-                        if (imageUrls && imageUrls.length > 0) {
-                          console.log('🔍 [GMAIL DEBUG] ✅ Found image URLs from Enhanced Context Manager:', imageUrls);
-                          imageUrl = imageUrls[0];
-                          break;
-                        } else {
-                          console.log('🔍 [GMAIL DEBUG] ❌ No images found for session ID:', sid);
-                        }
-                      }
-                    }
-                  } catch (imageContextError) {
-                    console.log('🔍 [GMAIL DEBUG] ⚠️ Enhanced Image Context Manager not available:', imageContextError);
-                  }
-                  
-                  // Method 2: Fallback to global context (legacy support)
-                  if (!imageUrl && (globalThis as any).mcpImageContext) {
-                    console.log('🔍 [GMAIL DEBUG] Checking global context fallback...');
-                    const imageContext = (globalThis as any).mcpImageContext[sessionId] || 
-                                       (globalThis as any).mcpImageContext[metadataSessionId];
-                    
-                    console.log('🔍 [GMAIL DEBUG] Global context for session:', imageContext);
-                    
-                    if (imageContext && (imageContext as any).imageUrl) {
-                      console.log('🔍 [GMAIL DEBUG] ✅ Found image URL from global context:', (imageContext as any).imageUrl);
-                      imageUrl = (imageContext as any).imageUrl;
-                    } else if (imageContext && (imageContext as any).downloadableUrls) {
-                      const downloadableUrls = (imageContext as any).downloadableUrls;
-                      console.log('🔍 [GMAIL DEBUG] Found downloadableUrls:', downloadableUrls);
-                      if (Array.isArray(downloadableUrls) && downloadableUrls.length > 0) {
-                        console.log('🔍 [GMAIL DEBUG] ✅ Found downloadable URLs from global context:', downloadableUrls);
-                        imageUrl = downloadableUrls[0];
-                      }
-                    } else {
-                      console.log('🔍 [GMAIL DEBUG] ❌ No valid image data in global context');
-                    }
-                  } else {
-                    console.log('🔍 [GMAIL DEBUG] ❌ No global context available or image already found');
-                  }
-                  
-                  // Method 3: Emergency fallback - check all available image contexts
-                  if (!imageUrl && (globalThis as any).mcpImageContext) {
-                    console.log('🔍 [GMAIL DEBUG] ⚠️ Emergency fallback: No session-specific image found, checking all available contexts');
-                    
-                    const allContexts = Object.values((globalThis as any).mcpImageContext);
-                    console.log('🔍 [GMAIL DEBUG] Emergency fallback: Found', allContexts.length, 'contexts to check');
-                    
-                    for (const ctx of allContexts) {
-                      console.log('🔍 [GMAIL DEBUG] Emergency fallback: Checking context:', ctx);
-                      if (ctx && typeof ctx === 'object' && (ctx as any).imageUrl) {
-                        console.log('🔍 [GMAIL DEBUG] 🚨 Emergency fallback: Using available image URL:', (ctx as any).imageUrl);
-                        imageUrl = (ctx as any).imageUrl;
-                        break;
-                      } else if (ctx && typeof ctx === 'object' && (ctx as any).downloadableUrls && (ctx as any).downloadableUrls.length > 0) {
-                        const emergencyUrl = (ctx as any).downloadableUrls[0];
-                        console.log('🔍 [GMAIL DEBUG] 🚨 Emergency fallback: Using available downloadable URL:', emergencyUrl);
-                        imageUrl = emergencyUrl;
-                        break;
-                      }
-                    }
-                    
-                    if (!imageUrl) {
-                      console.log('🔍 [GMAIL DEBUG] ❌ Emergency fallback: No valid image found in any context');
-                    }
-                  }
+                  const callerUrls = callerImageUrls(userId, [sessionId, metadataSessionId]);
+                  const imageUrl: string | null = callerUrls.length > 0 ? callerUrls[0] : null;
                   
                   // Apply the image URL to parameters if found
                   if (imageUrl) {
@@ -2501,65 +1886,13 @@ export async function POST(req: NextRequest) {
             console.log(`🔍 [${toolType} DEBUG] Original params:`, JSON.stringify(paramsToUse, null, 2));
             console.log(`🔍 [${toolType} DEBUG] Session ID from body:`, sessionId);
             console.log(`🔍 [${toolType} DEBUG] Session ID from metadata:`, metadataSessionId);
-            console.log(`🔍 [${toolType} DEBUG] Available image contexts:`, Object.keys((globalThis as any).mcpImageContext || {}));
-            console.log(`🔍 [${toolType} DEBUG] Global image context data:`, JSON.stringify((globalThis as any).mcpImageContext, null, 2));
-            
-            let imageUrl = null;
-            
-            // Method 1: Try to get image URL from Enhanced Image Context Manager (preferred)
-            try {
-              const { findImagesWithFallback } = await import('@/lib/mcp/image-context-manager');
-              
-              // Try to get images using the enhanced fallback method for each session ID
-              const sessionIds = [sessionId, metadataSessionId].filter(Boolean);
-              
-              for (const sid of sessionIds) {
-                if (sid) {
-                  const imageUrls = findImagesWithFallback(sid);
-                  if (imageUrls && imageUrls.length > 0) {
-                    console.log(`🔍 [${toolType} DEBUG] ✅ Found image URLs from Enhanced Context Manager:`, imageUrls);
-                    imageUrl = imageUrls[0];
-                    
-                    // If we found multiple images, also inject additional parameters
-                    if (imageUrls.length > 1) {
-                      paramsToUse.files = imageUrls;
-                      paramsToUse.file_urls = imageUrls;
-                    }
-                    break;
-                  }
-                }
-              }
-            } catch (imageContextError) {
-              console.log(`🔍 [${toolType} DEBUG] ⚠️ Enhanced Image Context Manager not available:`, imageContextError);
-            }
-            
-            // Method 2: Fallback to global context (legacy support)
-            if (!imageUrl && (globalThis as any).mcpImageContext) {
-              const imageContext = (globalThis as any).mcpImageContext[sessionId] || 
-                                 (globalThis as any).mcpImageContext[metadataSessionId];
-              
-              if (imageContext && (imageContext as any).imageUrl) {
-                console.log(`🔍 [${toolType} DEBUG] ✅ Found image URL from global context:`, (imageContext as any).imageUrl);
-                imageUrl = (imageContext as any).imageUrl;
-              } else if (imageContext && (imageContext as any).downloadableUrls) {
-                const downloadableUrls = (imageContext as any).downloadableUrls;
-                if (Array.isArray(downloadableUrls) && downloadableUrls.length > 0) {
-                  console.log(`🔍 [${toolType} DEBUG] ✅ Found downloadable URLs from global context:`, downloadableUrls);
-                  imageUrl = downloadableUrls[0];
-                }
-              }
-              
-              // If still no image URL, try to find by checking if any stored URL is valid
-              if (!imageUrl) {
-                console.log('🖼️ [IMAGE INJECTION] No direct session match, checking for any valid image URLs...');
-                const allContexts = Object.values((globalThis as any).mcpImageContext);
-                for (const ctx of allContexts) {
-                  if (ctx && typeof ctx === 'object' && (ctx as any).imageUrl) {
-                    console.log('🖼️ [IMAGE INJECTION] Found candidate image URL:', (ctx as any).imageUrl);
-                    imageUrl = (ctx as any).imageUrl;
-                    break;
-                  }
-                }
+            let imageUrl: string | null = null;
+            const callerUrls = callerImageUrls(userId, [sessionId, metadataSessionId]);
+            if (callerUrls.length > 0) {
+              imageUrl = callerUrls[0];
+              if (callerUrls.length > 1) {
+                paramsToUse.files = callerUrls;
+                paramsToUse.file_urls = callerUrls;
               }
             }
             
@@ -2589,11 +1922,8 @@ export async function POST(req: NextRequest) {
               console.log(`🔍 [${toolType} DEBUG] ✅ Updated params with image URL:`, JSON.stringify(paramsToUse, null, 2));
               
               // Clean up the stored image context after use
-              if ((globalThis as any).mcpImageContext) {
-                delete (globalThis as any).mcpImageContext[sessionId];
-                delete (globalThis as any).mcpImageContext[metadataSessionId];
-                delete (globalThis as any).mcpImageContext[imageUrl];
-              }
+              deleteImageContext(userId, sessionId);
+              deleteImageContext(userId, metadataSessionId);
               console.log(`🔍 [${toolType} DEBUG] ✅ Cleaned up stored image context`);
             } else {
               console.log(`🔍 [${toolType} DEBUG] ❌ No image URL found from any source`);
@@ -2648,7 +1978,7 @@ export async function POST(req: NextRequest) {
                     dataUrl: fileUrl
                   }];
                   
-                  const downloadableUrls = await processAttachedImages(sessionId, attachedImages);
+                  const downloadableUrls = await processAttachedImages(callerScopeKey(userId, sessionId), attachedImages);
                   
                   if (downloadableUrls.length > 0) {
                     paramsToUse.file = downloadableUrls[0];
@@ -2659,7 +1989,7 @@ export async function POST(req: NextRequest) {
                   }
                 } catch (error) {
                   console.error('🔍 [URL VALIDATION] ❌ Error converting Base64 to downloadable URL:', error);
-                  throw new Error(`Error processing Base64 image: ${error.message}`);
+                  throw new Error(`Error processing Base64 image: ${error instanceof Error ? error.message : String(error)}`);
                 }
               } else {
                 // Validate regular URLs (not Base64)
@@ -2710,23 +2040,13 @@ export async function POST(req: NextRequest) {
           if (toolCall.name.includes('google_drive') && !paramsToUse.file && !paramsToUse.files) {
             console.log('🚨 [EMERGENCY] Missing file parameter for Google Drive tool, attempting direct injection');
             
-            // Try to get image URL from global context
-            const sessionId = body.sessionId || toolCall.meta?.sessionId;
-            const globalImageContext = (globalThis as any).mcpImageContext;
-            
-            if (globalImageContext && sessionId) {
-              const imageContext = globalImageContext[sessionId];
-              if (imageContext && imageContext.downloadableUrls && imageContext.downloadableUrls.length > 0) {
-                paramsToUse.file = imageContext.downloadableUrls[0];
-                console.log('🚨 [EMERGENCY] Injected file URL from global context:', paramsToUse.file);
-              } else if (imageContext && imageContext.imageUrl) {
-                paramsToUse.file = imageContext.imageUrl;
-                console.log('🚨 [EMERGENCY] Injected file URL from imageUrl:', paramsToUse.file);
-              } else {
-                console.log('🚨 [EMERGENCY] No downloadable URLs found in global context');
-              }
+            const emergencyChatId = body.sessionId || toolCall.meta?.sessionId;
+            const emergencyUrls = imageUrlsFromContext(userId, emergencyChatId);
+            if (emergencyUrls.length > 0) {
+              paramsToUse.file = emergencyUrls[0];
+              console.log('🚨 [EMERGENCY] Injected file URL from caller image context:', paramsToUse.file);
             } else {
-              console.log('🚨 [EMERGENCY] No global image context available');
+              console.log('🚨 [EMERGENCY] No image context available for this caller');
             }
             
             // Re-log parameters after emergency injection
@@ -2919,8 +2239,8 @@ export async function POST(req: NextRequest) {
           } catch (innerError) {
             console.error('🔴 [ERROR] Error in tool-specific processing:', innerError);
             console.error('🔴 [ERROR] Error details:', {
-              message: innerError.message,
-              stack: innerError.stack,
+              message: innerError instanceof Error ? innerError.message : String(innerError),
+              stack: innerError instanceof Error ? innerError.stack : undefined,
               toolName: toolCall.name,
               paramsToUse
             });
@@ -2978,7 +2298,7 @@ export async function POST(req: NextRequest) {
         if (!result || (typeof result === 'object' && Object.keys(result).length === 0)) {
           console.error('🔴 [ZAPIER ERROR] Tool execution returned empty/null result');
           console.error('🔴 [ZAPIER ERROR] Tool:', toolCall.name);
-          console.error('🔴 [ZAPIER ERROR] Parameters sent:', paramsToUse);
+          console.error('🔴 [ZAPIER ERROR] Parameters sent:', persistentState?.tool_params || toolCall.params);
 
           // Check if this is a Gmail tool that should have created something
           if (toolCall.name.includes('gmail') && toolCall.name.includes('create')) {
@@ -3093,101 +2413,6 @@ export async function POST(req: NextRequest) {
           global.toolApprovalState[toolCallId].result = result;
         }
         
-        // GMAIL_FIX_PLAN.md: Phase 2, Step 1: Verify cache population during find_email
-        console.log('🔍 [CACHE CHECK] find_email params for caching:', JSON.stringify(toolCall.params, null, 2));
-        if (result && global_cache?.gmailCache) {
-          // Parse the actual email data from the result structure
-          let emailsToCache = [];
-          try {
-            if (result?.content?.[0]?.text) {
-              // Old format (wrapped in content array)
-              const parsed = JSON.parse(result.content[0].text);
-              emailsToCache = parsed.results || [];
-            } else if (result?.data?.content?.[0]?.text) {
-              // Universal MCP Client with Zapier format (JSON string in content)
-              const parsed = JSON.parse(result.data.content[0].text);
-              emailsToCache = parsed.results || [];
-            } else if (result?.data?.results) {
-              // Universal MCP Client format (ToolExecutionResult with direct results)
-              emailsToCache = result.data.results;
-            } else if (result?.results) {
-              // Direct Zapier response format
-              emailsToCache = result.results;
-            } else if (Array.isArray(result)) {
-              emailsToCache = result;
-            } else if (result && typeof result === 'object') {
-              emailsToCache = [result];
-            }
-            
-            // Update recent emails cache
-            if (emailsToCache.length > 0) {
-              const currentTime = Date.now();
-              
-              console.log(`🔍 [GMAIL CACHE] Processing ${emailsToCache.length} emails for cache`);
-              
-              // Add new emails to the front of the cache
-              const newCacheEntries = emailsToCache.map((email: any) => {
-                // Extract email address from various formats
-                let fromEmail = '';
-                if (typeof email.from === 'object' && email.from?.email) {
-                  fromEmail = email.from.email;
-                } else if (typeof email.from === 'string') {
-                  fromEmail = email.from;
-                } else if (email.sender) {
-                  fromEmail = email.sender;
-                }
-                
-                return {
-                  id: email.id || email.messageId || email.message_id,
-                  threadId: email.threadId || email.thread_id,
-                  from: fromEmail,
-                  fromName: (typeof email.from === 'object' && email.from?.name) ? email.from.name : '',
-                  subject: email.subject || '',
-                  snippet: email.snippet || email.body_plain?.substring(0, 200) || email.body?.substring(0, 200) || '',
-                  timestamp: currentTime
-                };
-              });
-              
-              // Merge with existing cache, keeping most recent MAX_CACHED_EMAILS
-              global_cache.gmailCache.recentEmails = [
-                ...newCacheEntries,
-                ...global_cache.gmailCache.recentEmails
-              ].slice(0, global_cache.gmailCache.MAX_CACHED_EMAILS);
-              
-              // Also update lastFoundEmail for backward compatibility
-              // Store in the format expected by the reply/draft code
-              if (emailsToCache.length > 0 && emailsToCache[0]) {
-                console.log(`🔍 [GMAIL CACHE] Storing first email in lastFoundEmail cache with proper structure`);
-                global_cache.gmailCache.lastFoundEmail = {
-                  content: [{
-                    text: JSON.stringify({
-                      execution: {
-                        result: [emailsToCache[0]]
-                      },
-                      results: [emailsToCache[0]]
-                    })
-                  }]
-                };
-                console.log(`🔍 [GMAIL CACHE] lastFoundEmail cache structure check:`, {
-                  hasContent: !!global_cache.gmailCache.lastFoundEmail?.content,
-                  hasFirstContent: !!global_cache.gmailCache.lastFoundEmail?.content?.[0],
-                  hasText: !!global_cache.gmailCache.lastFoundEmail?.content?.[0]?.text
-                });
-              } else {
-                console.log(`🔍 [GMAIL CACHE] No emails to cache in lastFoundEmail`);
-                global_cache.gmailCache.lastFoundEmail = null;
-              }
-              global_cache.gmailCache.timestamp = currentTime;
-              
-              console.log(`🔍 [GMAIL CACHE] Cached ${newCacheEntries.length} emails, total cached: ${global_cache.gmailCache.recentEmails.length}`);
-              console.log('🔍 [GMAIL CACHE] Recent email subjects:', 
-                global_cache.gmailCache.recentEmails.map(e => e.subject).slice(0, 3));
-            }
-          } catch (e) {
-            console.error('🔍 [GMAIL CACHE] Error caching emails:', e);
-          }
-        }
-
         // GMAIL_FIX_PLAN.md: Step 3: Verify Gmail API Response Structure
         if (toolCall.name.includes('find_email') && result) {
           console.log('🔍 [GMAIL STRUCTURE] Complete email object (or first if array):', JSON.stringify(Array.isArray(result) ? result[0] : result, null, 2));
@@ -3783,7 +3008,8 @@ Would you like me to search for events in a different time range, or would you p
             };
           } else if (formattedResult && typeof formattedResult === 'object') {
             // Try to extract meaningful content
-            const textContent = formattedResult.text || formattedResult.message || formattedResult.response || JSON.stringify(formattedResult, null, 2);
+            const malformedResult = formattedResult as unknown as { text?: string; message?: string; response?: string };
+            const textContent = malformedResult.text || malformedResult.message || malformedResult.response || JSON.stringify(formattedResult, null, 2);
             formattedResult = {
               content: [{ type: 'text', text: textContent }],
               isError: false
@@ -3836,6 +3062,7 @@ Would you like me to search for events in a different time range, or would you p
         if (storedToolCall) {
           // Store the formatted result instead of raw result to prevent [object Object] display issues
           await ToolExecutionStateService.upsert({
+            user_id: userId,
             chat_id: effectiveChatId,
             message_id: Date.now(),
             tool_call_id: toolCallId,
@@ -3873,9 +3100,10 @@ Would you like me to search for events in a different time range, or would you p
         // Connection diagnostics
         if (activeClient) {
           console.log('🔴 [MCP ERROR] Active Client Details:');
-          console.log('🔴 [MCP ERROR] - Client endpoint:', activeClient.endpoint || 'unknown');
-          console.log('🔴 [MCP ERROR] - Client connected:', activeClient.connected || 'unknown');
-          console.log('🔴 [MCP ERROR] - Client tools count:', activeClient.tools?.length || 'unknown');
+          const connections = describeConnections(activeClient);
+          console.log('🔴 [MCP ERROR] - Client servers:', connections.map(c => c.server).join(', ') || 'unknown');
+          console.log('🔴 [MCP ERROR] - Client connected:', connections.some(c => c.connected));
+          console.log('🔴 [MCP ERROR] - Client tools count:', Object.keys(allMcpTools).length);
         }
         
         // Environment diagnostics
@@ -3910,7 +3138,6 @@ Would you like me to search for events in a different time range, or would you p
         // Gmail-specific error logging and handling
         if (toolCall?.name?.includes('gmail')) {
           console.log('🔍 [GMAIL ERROR] Gmail-specific diagnostics:');
-          console.log('🔍 [GMAIL ERROR] Gmail Cache State:', JSON.stringify(global_cache?.gmailCache, null, 2));
           
           // Simple Gmail timeout handling
           if (err?.message?.includes('timeout')) {
@@ -3925,6 +3152,7 @@ Would you like me to search for events in a different time range, or would you p
             // Update state and return helpful response
             if (storedToolCall) {
               await ToolExecutionStateService.upsert({
+                user_id: userId,
                 chat_id: sessionId || '00000000-0000-0000-0000-000000000000',
                 message_id: Date.now(),
                 tool_call_id: toolCallId,
@@ -3974,7 +3202,7 @@ Would you like me to search for events in a different time range, or would you p
           debugInfo: {
             hasActiveClient: !!activeClient,
             activeClientType: activeClient?.constructor?.name || 'unknown',
-            activeClientEndpoint: activeClient?.endpoint || 'unknown',
+            activeClientEndpoint: describeConnections(activeClient).map(c => c.server).join(', ') || 'unknown',
             toolFound: !!allMcpTools[toolCall?.name],
             cachedToolsCount: cachedTools?.length || 0,
             errorType: typeof error,
@@ -3997,6 +3225,7 @@ Would you like me to search for events in a different time range, or would you p
         if (storedToolCall) {
           try {
             await ToolExecutionStateService.upsert({
+              user_id: userId,
               chat_id: effectiveChatId,
               message_id: Date.now(),
               tool_call_id: toolCallId,
@@ -4022,6 +3251,7 @@ Would you like me to search for events in a different time range, or would you p
       const cancelChatId = sessionId || '00000000-0000-0000-0000-000000000000';
       if (cancelledToolCall) {
         await ToolExecutionStateService.upsert({
+          user_id: userId,
           chat_id: cancelChatId,
           message_id: Date.now(),
           tool_call_id: toolCallId,

@@ -1,0 +1,222 @@
+{
+  "schema_version": 1,
+  "note": "synthetic ids, validity computed with python-stdnum; regenerate with: uv run --directory rag-sidecar python -m rag_sidecar.extract.tax_ids",
+  "normalization": "remove whitespace and . - / _ then uppercase; 11 digits is it_iva, 18 letters or digits is cn_uscc, two letters plus 2 to 12 letters or digits is eu_vat, anything else is unknown and invalid",
+  "vectors": [
+    {
+      "scheme": "it_iva",
+      "value": "99999999990",
+      "valid": true
+    },
+    {
+      "scheme": "it_iva",
+      "value": "00000010017",
+      "valid": true
+    },
+    {
+      "scheme": "it_iva",
+      "value": "00000021006",
+      "valid": true
+    },
+    {
+      "scheme": "it_iva",
+      "value": "00000031203",
+      "valid": true
+    },
+    {
+      "scheme": "it_iva",
+      "value": "00000041210",
+      "valid": true
+    },
+    {
+      "scheme": "it_iva",
+      "value": "00000058883",
+      "valid": true
+    },
+    {
+      "scheme": "it_iva",
+      "value": "23456780016",
+      "valid": true
+    },
+    {
+      "scheme": "it_iva",
+      "value": "99999999991",
+      "valid": false
+    },
+    {
+      "scheme": "it_iva",
+      "value": "00000010010",
+      "valid": false
+    },
+    {
+      "scheme": "it_iva",
+      "value": "00000021000",
+      "valid": false
+    },
+    {
+      "scheme": "it_iva",
+      "value": "23456780010",
+      "valid": false
+    },
+    {
+      "scheme": "it_iva",
+      "value": "00000011015",
+      "valid": false
+    },
+    {
+      "scheme": "it_iva",
+      "value": "00000000018",
+      "valid": false
+    },
+    {
+      "scheme": "it_iva",
+      "value": "999 999 999 90",
+      "valid": true
+    },
+    {
+      "scheme": "cn_uscc",
+      "value": "91000000MA0000000N",
+      "valid": true
+    },
+    {
+      "scheme": "cn_uscc",
+      "value": "91000000MA0000001R",
+      "valid": true
+    },
+    {
+      "scheme": "cn_uscc",
+      "value": "91000000MA0000002W",
+      "valid": true
+    },
+    {
+      "scheme": "cn_uscc",
+      "value": "51000000MA1234567J",
+      "valid": true
+    },
+    {
+      "scheme": "cn_uscc",
+      "value": "9100000069ABCDEFG0",
+      "valid": true
+    },
+    {
+      "scheme": "cn_uscc",
+      "value": "110000001000000007",
+      "valid": true
+    },
+    {
+      "scheme": "cn_uscc",
+      "value": "91000000MA0000000X",
+      "valid": false
+    },
+    {
+      "scheme": "cn_uscc",
+      "value": "91000000MA0000001T",
+      "valid": false
+    },
+    {
+      "scheme": "cn_uscc",
+      "value": "51000000MA1234567K",
+      "valid": false
+    },
+    {
+      "scheme": "cn_uscc",
+      "value": "91000000IA0000000N",
+      "valid": false
+    },
+    {
+      "scheme": "cn_uscc",
+      "value": "9100000069ABCDEFG1",
+      "valid": false
+    },
+    {
+      "scheme": "cn_uscc",
+      "value": "91000000-MA0000000-N",
+      "valid": true
+    },
+    {
+      "scheme": "eu_vat",
+      "value": "IT99999999990",
+      "valid": true
+    },
+    {
+      "scheme": "eu_vat",
+      "value": "DE100142542",
+      "valid": true
+    },
+    {
+      "scheme": "eu_vat",
+      "value": "FR00000000093",
+      "valid": true
+    },
+    {
+      "scheme": "eu_vat",
+      "value": "ATU10000005",
+      "valid": true
+    },
+    {
+      "scheme": "eu_vat",
+      "value": "NL100000009B01",
+      "valid": true
+    },
+    {
+      "scheme": "eu_vat",
+      "value": "BE0000000097",
+      "valid": true
+    },
+    {
+      "scheme": "eu_vat",
+      "value": "IT99999999991",
+      "valid": false
+    },
+    {
+      "scheme": "eu_vat",
+      "value": "DE100142543",
+      "valid": false
+    },
+    {
+      "scheme": "eu_vat",
+      "value": "FR00000000094",
+      "valid": false
+    },
+    {
+      "scheme": "eu_vat",
+      "value": "ATU10000006",
+      "valid": false
+    },
+    {
+      "scheme": "eu_vat",
+      "value": "NL100000008B01",
+      "valid": false
+    },
+    {
+      "scheme": "eu_vat",
+      "value": "XX12345678",
+      "valid": false
+    },
+    {
+      "scheme": "eu_vat",
+      "value": "it 99999999990",
+      "valid": true
+    },
+    {
+      "scheme": "unknown",
+      "value": "12345",
+      "valid": false
+    },
+    {
+      "scheme": "unknown",
+      "value": "9999999999",
+      "valid": false
+    },
+    {
+      "scheme": "unknown",
+      "value": "99999999990999",
+      "valid": false
+    },
+    {
+      "scheme": "unknown",
+      "value": "N/A",
+      "valid": false
+    }
+  ]
+}

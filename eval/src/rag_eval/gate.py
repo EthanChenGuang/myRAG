@@ -3,10 +3,11 @@ import sys
 from pathlib import Path
 
 from pydantic import ValidationError
-from rag_sidecar.contracts.baseline import Baseline, GateOffender, GateResult, NoiseConfig
+from rag_sidecar.contracts.baseline import Baseline, GateOffender, GateResult, NoiseConfig, PairedReport
 from rag_sidecar.contracts.eval_run import RagRunOptions
 from rag_sidecar.contracts.report import EvalReport, SliceMetrics
 
+from rag_eval.paired import is_gated_slice, paired_report
 from rag_eval.paths import resolve_cli_path
 
 EXIT_PASS = 0
@@ -21,11 +22,13 @@ def _report_slices(report: EvalReport) -> dict[str, SliceMetrics]:
         slices[f"language:{language}"] = metrics
     for category, metrics in report.by_category.items():
         slices[f"category:{category}"] = metrics
+    for pair, metrics in report.by_language_pair.items():
+        slices[f"pair:{pair}"] = metrics
     return slices
 
 
 def _scope(options: RagRunOptions) -> dict[str, object]:
-    return options.model_dump(exclude={"max_results"})
+    return options.model_dump(exclude={"max_results", "degrade"})
 
 
 def _mismatches(report: EvalReport, baseline: Baseline) -> list[str]:
@@ -36,9 +39,10 @@ def _mismatches(report: EvalReport, baseline: Baseline) -> list[str]:
         ("embedder_id", report.embedder_id, baseline.embedder_id),
         ("embedder_version", report.embedder_version, baseline.embedder_version),
         ("embedder_source_sha256", report.embedder_source_sha256, baseline.embedder_source_sha256),
+        ("gate_population", report.gate_population, baseline.gate_population),
         ("tier", report.tier, baseline.tier),
         ("deployment_mode", report.deployment_mode, baseline.deployment_mode),
-        ("request_options (excluding max_results)", _scope(report.request_options), _scope(baseline.request_options)),
+        ("request_options (excluding max_results and degrade)", _scope(report.request_options), _scope(baseline.request_options)),
     )
     if report.golden_filter != baseline.golden_filter:
         problems.append(
@@ -53,10 +57,7 @@ def _mismatches(report: EvalReport, baseline: Baseline) -> list[str]:
 
 
 def _is_gated(slice_name: str, noise: NoiseConfig) -> bool:
-    return any(
-        slice_name == prefix if not prefix.endswith(":") else slice_name.startswith(prefix)
-        for prefix in noise.gated_slice_prefixes
-    )
+    return is_gated_slice(slice_name, noise)
 
 
 def evaluate_gate(report: EvalReport, baseline: Baseline, noise: NoiseConfig) -> GateResult:
@@ -98,7 +99,13 @@ def evaluate_gate(report: EvalReport, baseline: Baseline, noise: NoiseConfig) ->
                         direction=direction,
                     )
                 )
-    return GateResult(passed=not offenders, offenders=offenders, skipped=skipped, mismatches=[])
+    return GateResult(
+        passed=not offenders,
+        offenders=offenders,
+        skipped=skipped,
+        mismatches=[],
+        paired=paired_report(report, baseline, noise),
+    )
 
 
 def _fmt(value: float) -> str:
@@ -123,6 +130,31 @@ def _category_rows(report: EvalReport, baseline: Baseline, noise: NoiseConfig) -
                 f"{observed_value - stat.mean:+.4f} |"
             )
     return rows
+
+
+def _fmt_optional(value: float | None, signed: bool = False) -> str:
+    if value is None:
+        return "n/a"
+    return f"{round(value, 4):+.4f}" if signed else _fmt(value)
+
+
+def _paired_lines(paired: PairedReport | None) -> list[str]:
+    lines = ["## Paired differences", ""]
+    if paired is None:
+        lines.append("None (the baseline has no per-item rows).")
+        return lines
+    lines.append(f"All paired differences zero: {'yes' if paired.all_zero else 'no'}")
+    lines.append(f"Bootstrap: seed {paired.seed}, {paired.resamples} resamples, percentile 95% interval")
+    lines.append("")
+    lines.append("| Slice | Metric | n | n_nonzero | mean_d | 95% interval |")
+    lines.append("| --- | --- | --- | --- | --- | --- |")
+    for slice_name in sorted(paired.slices):
+        for metric, stat in paired.slices[slice_name].items():
+            interval = "n/a" if stat.ci_low is None or stat.ci_high is None else f"[{_fmt_optional(stat.ci_low, True)}, {_fmt_optional(stat.ci_high, True)}]"
+            lines.append(
+                f"| {slice_name} | {metric} | {stat.n} | {stat.n_nonzero} | {_fmt_optional(stat.mean_d, True)} | {interval} |"
+            )
+    return lines
 
 
 def render_gate_markdown(
@@ -168,6 +200,8 @@ def render_gate_markdown(
         lines.extend(f"- {entry} (no value to compare)" for entry in result.skipped)
     else:
         lines.append("None.")
+    lines.append("")
+    lines.extend(_paired_lines(result.paired))
     return "\n".join(lines) + "\n"
 
 

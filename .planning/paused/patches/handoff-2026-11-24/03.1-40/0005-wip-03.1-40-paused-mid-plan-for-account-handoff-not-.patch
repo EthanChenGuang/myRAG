@@ -1,0 +1,1187 @@
+From 803651fb0321dfe405a51b377e870469ad4d306b Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 24 Nov 2026 22:36:29 +0000
+Subject: [PATCH 5/5] wip(03.1-40): paused mid-plan for account handoff (not
+ verified)
+
+---
+ .../src/rag_sidecar/ingest/converters.py      |   7 +-
+ rag-sidecar/src/rag_sidecar/ingest/merge.py   |  29 +
+ .../src/rag_sidecar/ingest/process_job.py     |  76 +-
+ rag-sidecar/src/rag_sidecar/ingest/tiered.py  | 945 +++++++++++++++++-
+ rag-sidecar/tests/test_ingest_tiered.py       |   2 +-
+ 5 files changed, 1038 insertions(+), 21 deletions(-)
+
+diff --git a/rag-sidecar/src/rag_sidecar/ingest/converters.py b/rag-sidecar/src/rag_sidecar/ingest/converters.py
+index 69bfb57..b5592f3 100644
+--- a/rag-sidecar/src/rag_sidecar/ingest/converters.py
++++ b/rag-sidecar/src/rag_sidecar/ingest/converters.py
+@@ -9,7 +9,7 @@ from typing import Any, Protocol
+ 
+ from docling_core.types.doc import DoclingDocument, Size
+ 
+-from rag_sidecar.ingest.merge import join_page_parts, merge, slice_pages
++from rag_sidecar.ingest.merge import join_page_parts, merge, shift_pages, slice_pages
+ from rag_sidecar.parse import docling_adapter
+ from rag_sidecar.parse.converter import ConversionError
+ from rag_sidecar.preflight.config import load_routing_config
+@@ -163,7 +163,10 @@ class RecordedRangeConverter:
+             if not recorded.is_file():
+                 raise RecordedMiss()
+             doc = DoclingDocument.load_from_json(recorded)
+-            parts.append(slice_pages(doc, {page}))
++            if page not in doc.pages and len(doc.pages) == 1:
++                parts.append(shift_pages(doc, page - next(iter(doc.pages))))
++            else:
++                parts.append(slice_pages(doc, {page}))
+             _increment_conversion_counter()
+         document = join_page_parts(parts)
+         return document, {"preset": preset, "start": start, "end": end, "sub_ranges": end - start + 1}
+diff --git a/rag-sidecar/src/rag_sidecar/ingest/merge.py b/rag-sidecar/src/rag_sidecar/ingest/merge.py
+index a30c2c2..99b9649 100644
+--- a/rag-sidecar/src/rag_sidecar/ingest/merge.py
++++ b/rag-sidecar/src/rag_sidecar/ingest/merge.py
+@@ -112,6 +112,32 @@ def merge(parts: Sequence[DoclingDocument], n_pages: int) -> DoclingDocument:
+     return merged
+ 
+ 
++def _shift_provenance(node: object, offset: int) -> None:
++    if isinstance(node, dict):
++        if "page_no" in node and "bbox" in node:
++            node["page_no"] = int(node["page_no"]) + offset
++        for value in node.values():
++            _shift_provenance(value, offset)
++    elif isinstance(node, list):
++        for value in node:
++            _shift_provenance(value, offset)
++
++
++def shift_pages(doc: DoclingDocument, offset: int) -> DoclingDocument:
++    """Returns a copy whose pages and item provenance are numbered ``offset`` higher; the structure and refs are unchanged."""
++    if offset == 0:
++        return doc
++    payload = doc.export_to_dict()
++    pages = payload.get("pages", {})
++    payload["pages"] = {
++        str(int(key) + offset): {**value, "page_no": int(value["page_no"]) + offset} for key, value in pages.items()
++    }
++    for key, value in payload.items():
++        if key != "pages":
++            _shift_provenance(value, offset)
++    return DoclingDocument.model_validate(payload)
++
++
+ def join_page_parts(parts: Sequence[DoclingDocument]) -> DoclingDocument:
+     """Join non-overlapping parts without renumbering page_no (recorded assembly)."""
+     if not parts:
+@@ -122,6 +148,9 @@ def join_page_parts(parts: Sequence[DoclingDocument]) -> DoclingDocument:
+     flat = sorted({page for pages in page_sets for page in pages})
+     if flat == list(range(1, flat[-1] + 1)):
+         return merge(parts, flat[-1])
++    if flat == list(range(flat[0], flat[-1] + 1)):
++        ordered = sorted(parts, key=lambda part: min(part.pages))
++        return shift_pages(DoclingDocument.concatenate(ordered), flat[0] - 1)
+     merged = parts[0].model_copy(deep=True)
+     merged.pages = {key: value for part in parts for key, value in part.pages.items()}
+     merged.texts = []
+diff --git a/rag-sidecar/src/rag_sidecar/ingest/process_job.py b/rag-sidecar/src/rag_sidecar/ingest/process_job.py
+index 1d999b2..44306ad 100644
+--- a/rag-sidecar/src/rag_sidecar/ingest/process_job.py
++++ b/rag-sidecar/src/rag_sidecar/ingest/process_job.py
+@@ -18,6 +18,7 @@ from rag_sidecar.contracts.queue import (
+     AdvanceRequest,
+     AdvanceResponse,
+     IngestionJob,
++    ParseAttemptPages,
+     ParseExternalRequest,
+     ParseExternalResponse,
+ )
+@@ -88,20 +89,32 @@ async def _fail(deps: WorkerDeps, job: IngestionJob, error_class: str, *, retrya
+     return JobOutcome(status=row.status, error_class=error_class)
+ 
+ 
+-async def _parse(deps: WorkerDeps, job: IngestionJob) -> tuple[str, int, int]:
+-    """Runs parse-external in chain mode until it is done; returns the cache id, the attempt number and the elapsed ms."""
+-    started = deps.clock()
+-    options = _chain_options_hash(job)
++async def parse_external_done(
++    deps: WorkerDeps,
++    job: IngestionJob,
++    *,
++    mode: str,
++    options: str,
++    attempt_no: int = 1,
++    pages: ParseAttemptPages | None = None,
++    subpdf_ref: str | None = None,
++    cursor: str | None = None,
++    allow_refused: bool = False,
++) -> ParseExternalResponse:
++    """Calls parse-external until it answers done, polling pending answers; a refusal is returned only when the caller allows it."""
+     continuation: str | None = None
+     for _ in range(MAX_PARSE_POLLS):
+         response: ParseExternalResponse = await deps.app.parse_external(
+             job.id,
+             ParseExternalRequest(
+                 worker_id=deps.worker_id,
+-                attempt_no=1,
+-                mode="chain",
++                attempt_no=attempt_no,
++                mode=mode,  # type: ignore[arg-type]
++                pages=pages,
++                subpdf_ref=subpdf_ref,
+                 options_hash=options,
+                 continuation=continuation,
++                cursor=cursor,
+             ),
+         )
+         if response.status == "pending":
+@@ -109,15 +122,25 @@ async def _parse(deps: WorkerDeps, job: IngestionJob) -> tuple[str, int, int]:
+             await deps.sleep((response.retry_after_ms or 0) / 1000)
+             continue
+         if response.status == "refused":
++            if allow_refused:
++                return response
+             raise _Stop(await _fail(deps, job, response.reason or "refused", retryable=False))
+         if response.status == "failed":
+             error_class = response.error_class or "parse_failed"
+             raise _Stop(await _fail(deps, job, error_class, retryable=error_class not in PERMANENT_PARSE_ERRORS))
+         assert response.cache_id is not None
+-        return response.cache_id, 1, int((deps.clock() - started) * 1000)
++        return response
+     raise _Stop(await _fail(deps, job, "parse_timeout", retryable=True))
+ 
+ 
++async def _parse(deps: WorkerDeps, job: IngestionJob) -> tuple[str, int, int]:
++    """Runs parse-external in chain mode until it is done; returns the cache id, the attempt number and the elapsed ms."""
++    started = deps.clock()
++    response = await parse_external_done(deps, job, mode="chain", options=_chain_options_hash(job))
++    assert response.cache_id is not None
++    return response.cache_id, 1, int((deps.clock() - started) * 1000)
++
++
+ async def _record_fixed_chain_attempt(deps: WorkerDeps, job: IngestionJob, elapsed_ms: int) -> int:
+     return await deps.ledger.record_attempt(
+         job.id,
+@@ -174,18 +197,43 @@ def _resume_parse_cache(job: IngestionJob) -> str | None:
+     return None
+ 
+ 
++async def _process_fixed(job: IngestionJob, deps: WorkerDeps) -> JobOutcome:
++    resume_cache = _resume_parse_cache(job)
++    if resume_cache:
++        attempt_no = job.attempts[-1].attempt_no if job.attempts else 1
++        return await _advance_until_done(deps, job, resume_cache, attempt_no)
++    cache_id, attempt_no, elapsed_ms = await _parse(deps, job)
++    attempt_no = await _record_fixed_chain_attempt(deps, job, elapsed_ms) or attempt_no
++    return await _advance_until_done(deps, job, cache_id, attempt_no)
++
++
++async def _process_tiered(job: IngestionJob, deps: WorkerDeps) -> JobOutcome:
++    """Tiered routing and dry-run jobs (D-12, D-33). A type without a tiered path keeps the chain of the fixed path (F-9)."""
++    dry_run = job.kind == "dry_run"
++    if job.settings.routing != "tiered":
++        return await _fail(deps, job, "routing_not_supported", retryable=False)
++    resume_cache = None if dry_run else _resume_parse_cache(job)
++    if resume_cache:
++        attempt_no = job.attempts[-1].attempt_no if job.attempts else 1
++        return await _advance_until_done(deps, job, resume_cache, attempt_no)
++    try:
++        from rag_sidecar.ingest import tiered
++    except ImportError:
++        logger.error("[RAG Ingest] tiered routing needs the docling stack", extra={"job_id": job.id})
++        return await _fail(deps, job, "tiered_unavailable", retryable=False)
++    if tiered.detect_kind(job).name == "unknown" and not dry_run:
++        return await _process_fixed(job, deps)
++    return await tiered.run_tiered(job, deps, dry_run=dry_run)
++
++
+ async def process_job(job: IngestionJob, deps: WorkerDeps) -> JobOutcome:
+     """Runs one claimed job. The returned outcome says how it ended; nothing document-related is logged."""
+     try:
++        if job.kind == "dry_run" or job.settings.routing == "tiered":
++            return await _process_tiered(job, deps)
+         if job.settings.routing != "fixed":
+             return await _fail(deps, job, "routing_not_supported", retryable=False)
+-        resume_cache = _resume_parse_cache(job)
+-        if resume_cache:
+-            attempt_no = job.attempts[-1].attempt_no if job.attempts else 1
+-            return await _advance_until_done(deps, job, resume_cache, attempt_no)
+-        cache_id, attempt_no, elapsed_ms = await _parse(deps, job)
+-        attempt_no = await _record_fixed_chain_attempt(deps, job, elapsed_ms) or attempt_no
+-        return await _advance_until_done(deps, job, cache_id, attempt_no)
++        return await _process_fixed(job, deps)
+     except _Stop as stop:
+         return stop.outcome
+     except LeaseLost:
+diff --git a/rag-sidecar/src/rag_sidecar/ingest/tiered.py b/rag-sidecar/src/rag_sidecar/ingest/tiered.py
+index e4efc72..893acfe 100644
+--- a/rag-sidecar/src/rag_sidecar/ingest/tiered.py
++++ b/rag-sidecar/src/rag_sidecar/ingest/tiered.py
+@@ -1,10 +1,947 @@
+-"""Tiered routing in the worker: preflight, range parsing, checks, merge and hand-off to advance (D-15, D-53, D-56)."""
++"""Tiered routing in the worker: preflight, range parsing with cache, quality check, merge and hand-off (D-15, D-53, D-56).
++
++One run parses a document range by range at the tier the preflight chose. Every finished range is cached under the
++tenant's parse-cache prefix, so a reclaimed job converts nothing twice (D-56). The ranges are merged in page order into
++one Docling document, turned into the ParseResult the app's post-parse stages read, cached as the ``merged`` entry and
++handed to ``advance``. A dry run stops after the checks and writes no document (D-33).
++
++CPU work (preflight, conversion, merge, chunking) runs in the priority pool when the worker has one; backfill ranges
++are cut into sub-ranges so an upload can take the pool between them (A-4). Logs and errors carry job id, pages and
++reason codes only; no document text.
++"""
+ 
+ from __future__ import annotations
+ 
+-from rag_sidecar.contracts.queue import IngestionJob
+-from rag_sidecar.ingest.process_job import JobOutcome, WorkerDeps
++import asyncio
++import functools
++import json
++import logging
++import shutil
++import tempfile
++from dataclasses import dataclass, field
++from pathlib import Path
++from typing import Any
++
++from docling_core.types.doc import DoclingDocument, Size
++
++from rag_sidecar.contracts.ingest import ParseJobRequest, ParseResult, ProcessingProfile, ProcessingProfileSet
++from rag_sidecar.contracts.queue import IngestionJob, ParseAttemptPages, ParseExternalResponse
++from rag_sidecar.contracts.routing import (
++    PageRange,
++    PageSignals,
++    ParseRoutingConfig,
++    ParseTier,
++    PreflightResult,
++    QualityCheckResult,
++)
++from rag_sidecar.ingest import quality
++from rag_sidecar.ingest.cache_keys import merged_options_hash, options_hash
++from rag_sidecar.ingest.converters import _slice_subranges
++from rag_sidecar.ingest.ledger_client import ParseCacheEntry
++from rag_sidecar.ingest.merge import MergeInvariantError, join_page_parts, merge, premium_part
++from rag_sidecar.ingest.process_job import (
++    JobOutcome,
++    WorkerDeps,
++    _advance_until_done,
++    _fail,
++    _Stop,
++    parse_external_done,
++)
++from rag_sidecar.ingest.storage_client import StorageError, StoragePathError
++from rag_sidecar.ingest.subpdf import cut_subpdf
++from rag_sidecar.parse.converter import ConversionError
++from rag_sidecar.preflight.config import load_routing_config
++
++logger = logging.getLogger(__name__)
++
++DOCLING_JSON = "docling.json"
++RESULT_JSON = "result.json"
++PREFLIGHT_JSON = "preflight.json"
++MERGED_PARSER = "merged"
++MERGED_VERSION = "tiered-1"
++PREMIUM_PART_PARSER = "premium_part"
++PREMIUM_PART_VERSION = "1"
++SUBPDF_PARSER = "subpdf"
++NATIVE_PARSER = "plain_text"
++NATIVE_VERSION = "native"
++PREMIUM_PARSER = "llamaparse"
++PREMIUM_PARSER_VERSION = "llamaparse-v2"
++
++_PROFILES_PATH = Path(__file__).resolve().parents[4] / "config" / "rag" / "processing-profiles.json"
++_TIER_RANK: dict[str, int] = {"native": 0, "fast": 1, "structured": 2, "premium": 3}
++_PERMANENT_CONVERSION_ERRORS = frozenset(
++    {
++        "recorded_miss",
++        "invalid_docling_json",
++        "unsupported_converter",
++        "configuration_error",
++        "page_cap",
++        "unsupported_input",
++    }
++)
++_TEXT_MIMES = frozenset({"text/markdown", "text/plain", "text/csv", "application/csv", "text/x-markdown"})
++_TEXT_EXTENSIONS = frozenset({".md", ".markdown", ".txt", ".csv"})
++_IMAGE_EXTENSIONS = frozenset({".png", ".jpg", ".jpeg", ".gif", ".webp"})
++_OFFICE_MIMES = {
++    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
++    "application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx",
++    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
++    "text/html": "html",
++}
++_OFFICE_EXTENSIONS = {".docx": "docx", ".pptx": "pptx", ".xlsx": "xlsx", ".html": "html", ".htm": "html"}
++
++Reusable = dict[tuple[int, int], tuple[DoclingDocument, dict[str, Any]]]
++
++
++@dataclass(frozen=True)
++class DocKind:
++    """What a job's file is, as far as the tiered flow cares: pdf, text, image, office (with its format key) or unknown."""
++
++    name: str
++    office_format: str | None = None
++
++
++def detect_kind(job: IngestionJob) -> DocKind:
++    """Classifies the job's file from its media type, then its name. No bytes are read."""
++    mime = (job.mime_type or "").split(";")[0].strip().lower()
++    name = job.filename or (job.original_ref.path if job.original_ref else "") or job.source_key
++    extension = Path(name).suffix.lower()
++    if mime == "application/pdf":
++        return DocKind("pdf")
++    if mime in _OFFICE_MIMES:
++        return DocKind("office", _OFFICE_MIMES[mime])
++    if mime in _TEXT_MIMES:
++        return DocKind("text")
++    if mime.startswith("image/"):
++        return DocKind("image")
++    if extension == ".pdf":
++        return DocKind("pdf")
++    if extension in _OFFICE_EXTENSIONS:
++        return DocKind("office", _OFFICE_EXTENSIONS[extension])
++    if extension in _TEXT_EXTENSIONS:
++        return DocKind("text")
++    if extension in _IMAGE_EXTENSIONS:
++        return DocKind("image")
++    return DocKind("unknown")
++
++
++# --- run state ------------------------------------------------------------------------------------------------------
++
++
++@dataclass
++class _RangeResult:
++    """One parsed range: its document, its cache key and what the ledger row needs."""
++
++    rng: PageRange
++    document: DoclingDocument
++    parser: str
++    version: str
++    options: str
++    entry: ParseCacheEntry | None
++    check: QualityCheckResult | None = None
++
++
++@dataclass
++class _Run:
++    job: IngestionJob
++    deps: WorkerDeps
++    cfg: ParseRoutingConfig
++    tmp: Path
++    started: float
++    original: Path | None = None
++    parse_ms: int = 0
++    check_ms: int = 0
++    last_attempt_no: int = 0
++    results: list[_RangeResult] = field(default_factory=list)
++
++    @property
++    def bucket(self) -> str:
++        assert self.job.original_ref is not None
++        return self.job.original_ref.bucket
++
++    @property
++    def tenant_prefix(self) -> str:
++        return f"{self.job.tenant_key}/_parse-cache/{self.job.file_sha256}/"
++
++    @property
++    def next_attempt_no(self) -> int:
++        return (self.last_attempt_no or len(self.job.attempts)) + 1
++
++
++def _capture(fn: Any, *args: Any) -> Any:
++    """Returns the exception instead of raising it: the pool wraps what a task raises, and the class decides the job outcome."""
++    try:
++        return ("ok", fn(*args))
++    except Exception as error:  # noqa: BLE001 - re-raised unchanged by _cpu
++        return ("err", error)
++
++
++async def _cpu(run: _Run, fn: Any, *args: Any, deadline_ms: int | None = None) -> Any:
++    pool = run.deps.pool
++    if pool is None:
++        kind, value = await asyncio.to_thread(_capture, fn, *args)
++    else:
++        seconds = (deadline_ms if deadline_ms is not None else run.cfg.timeouts.parse_slice_ms) / 1000
++        kind, value = await pool.submit(_capture, (fn, *args), priority=run.job.priority, deadline_s=seconds)
++    if kind == "err":
++        raise value
++    return value
++
++
++def _ms(run: _Run, since: float) -> int:
++    return max(0, int((run.deps.clock() - since) * 1000))
++
++
++async def _unavailable(run: _Run) -> _Stop:
++    return _Stop(await _fail(run.deps, run.job, "tiered_unavailable", retryable=False))
++
++
++async def _original(run: _Run) -> Path:
++    """The original file, downloaded the first time a step needs its bytes."""
++    if run.original is not None:
++        return run.original
++    if run.deps.storage is None:
++        raise await _unavailable(run)
++    ref = run.job.original_ref
++    if ref is None:
++        raise _Stop(await _fail(run.deps, run.job, "file_missing", retryable=False))
++    try:
++        run.original = await run.deps.storage.download(ref, dest_dir=run.tmp)
++    except StorageError as error:
++        raise _Stop(await _fail(run.deps, run.job, "storage_error", retryable=True)) from error
++    return run.original
++
++
++def _cost(run: _Run, tier: str, pages: int) -> float:
++    return float(getattr(run.cfg.costs.tier, tier).usd_per_page) * pages
++
++
++def _prefix_ok(run: _Run, prefix: str) -> bool:
++    return bool(run.job.file_sha256) and prefix.startswith(run.tenant_prefix)
++
++
++# --- cache objects --------------------------------------------------------------------------------------------------
++
++
++def _document_bytes(document: DoclingDocument) -> bytes:
++    return json.dumps(document.export_to_dict(), ensure_ascii=False).encode("utf-8")
++
++
++def _document_from_bytes(data: bytes) -> DoclingDocument:
++    return DoclingDocument.model_validate(json.loads(data))
++
++
++async def _put_entry(
++    run: _Run,
++    parser: str,
++    version: str,
++    options: str,
++    objects: dict[str, bytes],
++    meta: dict[str, Any],
++) -> ParseCacheEntry:
++    """Writes the objects under the SQL-derived prefix of (job, parser, version, options), then the cache row."""
++    job, deps = run.job, run.deps
++    prefix = await deps.ledger.cache_prefix(job.id, parser, version, options)
++    if not prefix or not _prefix_ok(run, prefix):
++        raise _Stop(await _fail(deps, job, "ledger_error", retryable=True))
++    deps.storage.register_cache_prefix(prefix)
++    try:
++        for name, data in objects.items():
++            await deps.storage.put(run.bucket, prefix, name, data)
++    except (StorageError, StoragePathError) as error:
++        raise _Stop(await _fail(deps, job, "storage_error", retryable=True)) from error
++    return await deps.ledger.cache_put(
++        job.id,
++        parser,
++        version,
++        options,
++        prefix,
++        result=meta,
++        byte_size=sum(len(data) for data in objects.values()),
++    )
++
++
++async def _cached_document(run: _Run, parser: str, version: str, options: str) -> tuple[DoclingDocument, ParseCacheEntry] | None:
++    """The cached range document of this job's tenant and file, or None. A row outside the tenant prefix or without its object is a miss."""
++    entries = await run.deps.ledger.cache_lookup(run.job.id, parser, version, options)
++    for entry in entries:
++        if not _prefix_ok(run, entry.object_prefix):
++            logger.warning("[RAG Ingest] cache entry outside the tenant prefix ignored", extra={"job_id": run.job.id})
++            continue
++        try:
++            data = await run.deps.storage.get_bytes(run.bucket, f"{entry.object_prefix}{DOCLING_JSON}")
++        except StorageError:
++            continue
++        return await _cpu(run, _document_from_bytes, data), entry
++    return None
++
++
++async def _store_document(
++    run: _Run,
++    parser: str,
++    version: str,
++    options: str,
++    document: DoclingDocument,
++    meta: dict[str, Any],
++) -> ParseCacheEntry:
++    data = await _cpu(run, _document_bytes, document)
++    return await _put_entry(run, parser, version, options, {DOCLING_JSON: data}, meta)
++
++
++def _docling_version() -> str:
++    from rag_sidecar.parse import docling_adapter
++
++    return docling_adapter.parser_version()
++
++
++def _range_options(run: _Run, preset: str, start: int | None, end: int | None, *, input_format: str | None = None) -> str:
++    from rag_sidecar.parse.presets import preset_option_dict
++
++    pages = [start, end] if start is not None and end is not None else None
++    payload = preset_option_dict(preset, run.cfg, ocr_languages=list(run.job.settings.ocr_languages), pages=pages)
++    if input_format:
++        payload["input_format"] = input_format
++    return options_hash(payload)
++
++
++def _premium_options(rng: PageRange) -> str:
++    return options_hash({"preset": "premium", "pages": [rng.start, rng.end], "input_format": "application/pdf"})
++
++
++# --- preflight ------------------------------------------------------------------------------------------------------
++
++
++def _default_preflight(path: Path, settings: Any, cfg: ParseRoutingConfig, converter: Any, *, file_sha: str | None = None) -> Any:
++    from rag_sidecar.preflight.run import run_preflight
++
++    return run_preflight(path, settings, cfg, converter, file_sha=file_sha)
++
++
++async def _load_preflight(run: _Run) -> PreflightResult | None:
++    ref = run.job.preflight_ref
++    if not ref or not _prefix_ok(run, ref):
++        return None
++    try:
++        data = await run.deps.storage.get_bytes(run.bucket, ref)
++        return PreflightResult.model_validate_json(data)
++    except (StorageError, ValueError):
++        return None
++
++
++async def _persist_preflight(run: _Run, result: PreflightResult) -> str:
++    """Stores the full probe result next to the parse cache; the job row keeps the object path."""
++    options = options_hash({"preset": "preflight", "input_format": run.job.mime_type or "application/pdf"})
++    payload = result.model_dump_json().encode("utf-8")
++    entry = await _put_entry(
++        run, "preflight", result.probe_version, options, {PREFLIGHT_JSON: payload}, {"page_count": result.page_count}
++    )
++    return f"{entry.object_prefix}{PREFLIGHT_JSON}"
++
++
++async def _preflight(run: _Run) -> tuple[PreflightResult, Reusable]:
++    loaded = await _load_preflight(run)
++    if loaded is not None:
++        return loaded, {}
++    path = await _original(run)
++    started = run.deps.clock()
++    preflight = run.deps.preflight_fn or _default_preflight
++    call = functools.partial(preflight, file_sha=run.job.file_sha256)
++    try:
++        output = await _cpu(
++            run, call, path, run.job.settings, run.cfg, run.deps.converter, deadline_ms=run.cfg.timeouts.preflight_ms
++        )
++    except Exception as error:  # noqa: BLE001
++        if type(error).__name__ == "EncryptedPdf":
++            raise _Stop(await _fail(run.deps, run.job, "encrypted_pdf", retryable=False)) from error
++        raise
++    result: PreflightResult = output.result
++    if result.page_count > run.deps.page_cap:
++        raise _Stop(await _fail(run.deps, run.job, "page_cap", retryable=False))
++    ref = await _persist_preflight(run, result)
++    await run.deps.ledger.advance(
++        run.job.id,
++        run.deps.worker_id,
++        stage="preflight",
++        status="preflight",
++        timing_ms=_ms(run, started),
++        fields={"preflight_ref": ref, "pages": result.page_count},
++    )
++    return result, dict(output.reusable_fast)
++
++
++# --- docling ranges -------------------------------------------------------------------------------------------------
++
++
++def _convert_slice(converter: Any, path: Path, sha: str, preset: str, start: int, end: int, priority: int) -> DoclingDocument:
++    document, _meta = converter.convert(path, sha, preset, start, end, priority)
++    return document
++
++
++def _segments(rng: PageRange, reusable: Reusable) -> list[Any]:
++    """Splits a fast range into L2 conversions that are already done and the gaps that still need converting (A-3)."""
++    if rng.preset != "fast":
++        return [("convert", rng.start, rng.end)]
++    inside = sorted(key for key in reusable if rng.start <= key[0] and key[1] <= rng.end)
++    segments: list[Any] = []
++    cursor = rng.start
++    for start, end in inside:
++        if start < cursor:
++            continue
++        if start > cursor:
++            segments.append(("convert", cursor, start - 1))
++        segments.append(("have", reusable[(start, end)][0]))
++        cursor = end + 1
++    if cursor <= rng.end:
++        segments.append(("convert", cursor, rng.end))
++    return segments
++
++
++async def _convert_range(run: _Run, rng: PageRange, reusable: Reusable) -> DoclingDocument:
++    path = await _original(run)
++    sha = run.job.file_sha256 or ""
++    parts: list[DoclingDocument] = []
++    for segment in _segments(rng, reusable):
++        if segment[0] == "have":
++            parts.append(segment[1])
++            continue
++        _kind, start, end = segment
++        for sub_start, sub_end in _slice_subranges(start, end, run.cfg.ranges.max_pages_per_conversion, run.job.priority):
++            if run.deps.clock() - run.started > run.deps.document_timeout_s:
++                raise _Stop(await _fail(run.deps, run.job, "document_timeout", retryable=True))
++            parts.append(
++                await _cpu(run, _convert_slice, run.deps.converter, path, sha, rng.preset, sub_start, sub_end, run.job.priority)
++            )
++    return parts[0] if len(parts) == 1 else await _cpu(run, join_page_parts, parts)
++
++
++def _check_range(run: _Run, document: DoclingDocument, rng: PageRange, preflight_pages: list[PageSignals]) -> QualityCheckResult:
++    by_page = {page.page: page for page in preflight_pages}
++    previous = by_page.get(rng.start - 1)
++    return quality.check(
++        document,
++        [page for page in preflight_pages if rng.start <= page.page <= rng.end],
++        list(run.job.settings.ocr_languages),
++        run.cfg,
++        boundary_prev_ends_in_table=bool(previous and previous.continues_to_next),
++        first_page=rng.start,
++    )
++
++
++async def _record_attempt(
++    run: _Run,
++    *,
++    tier: str,
++    preset: str,
++    parser: str,
++    version: str,
++    start: int,
++    end: int,
++    reason: str,
++    ms: int,
++    cost: float,
++    cache_hit: bool,
++    refused: bool,
++    check: QualityCheckResult | None,
++) -> int:
++    attempt: dict[str, Any] = {
++        "tier": tier,
++        "preset": preset,
++        "parser": parser,
++        "parser_version": version,
++        "pages": {"start": start, "end": end},
++        "reason": reason,
++        "ms": ms,
++        "est_cost_usd": cost,
++        "cache_hit": cache_hit,
++        "refused": refused,
++    }
++    if check is not None:
++        attempt["check"] = check.model_dump(mode="json")
++    number = await run.deps.ledger.record_attempt(run.job.id, run.deps.worker_id, attempt)
++    run.last_attempt_no = number
++    return number
++
++
++async def _docling_range(
++    run: _Run,
++    rng: PageRange,
++    result: PreflightResult,
++    reusable: Reusable,
++    *,
++    reason: str = "initial",
++) -> _RangeResult:
++    version = _docling_version()
++    options = _range_options(run, rng.preset, rng.start, rng.end)
++    pages = rng.end - rng.start + 1
++    started = run.deps.clock()
++    hit = await _cached_document(run, "docling", version, options)
++    if hit is not None:
++        document, entry = hit
++        cache_hit = True
++    else:
++        document = await _convert_range(run, rng, reusable)
++        entry = await _store_document(
++            run, "docling", version, options, document, {"preset": rng.preset, "start": rng.start, "end": rng.end}
++        )
++        cache_hit = False
++    parse_ms = _ms(run, started)
++    check_started = run.deps.clock()
++    check = _check_range(run, document, rng, result.pages)
++    run.check_ms += _ms(run, check_started)
++    run.parse_ms += parse_ms
++    await _record_attempt(
++        run,
++        tier=rng.tier,
++        preset=rng.preset,
++        parser="docling",
++        version=version,
++        start=rng.start,
++        end=rng.end,
++        reason=reason,
++        ms=parse_ms,
++        cost=0.0 if cache_hit else _cost(run, rng.tier, pages),
++        cache_hit=cache_hit,
++        refused=False,
++        check=check,
++    )
++    return _RangeResult(rng, document, "docling", version, options, entry, check)
++
++
++# --- premium ranges -------------------------------------------------------------------------------------------------
++
++
++def _page_sizes(path: Path, pages: list[int]) -> dict[int, Size]:
++    import pypdfium2 as pdfium
++
++    document = pdfium.PdfDocument(str(path))
++    try:
++        sizes: dict[int, Size] = {}
++        for page in pages:
++            width, height = document[page - 1].get_size()
++            sizes[page] = Size(width=float(width), height=float(height))
++        return sizes
++    finally:
++        document.close()
++
++
++def _premium_document(response: ParseExternalResponse, sizes: dict[int, Size]) -> DoclingDocument:
++    assert response.pages is not None
++    ordered = sorted(response.pages, key=lambda page: page.page)
++    return premium_part([(page.page, page.text) for page in ordered], sizes)
++
++
++async def _premium_range(run: _Run, rng: PageRange, result: PreflightResult) -> _RangeResult | None:
++    """Parses a premium range through parse-external with a sub-PDF holding only its pages (D-53). None when the guard refused it."""
++    job, deps = run.job, run.deps
++    pages = list(range(rng.start, rng.end + 1))
++    options = _premium_options(rng)
++    started = deps.clock()
++    attempt = {
++        "tier": "premium",
++        "preset": "premium",
++        "parser": PREMIUM_PARSER,
++        "version": PREMIUM_PARSER_VERSION,
++        "start": rng.start,
++        "end": rng.end,
++        "reason": "initial",
++    }
++    hit = await _cached_document(run, PREMIUM_PART_PARSER, PREMIUM_PART_VERSION, options)
++    if hit is not None:
++        document, entry = hit
++        parse_ms = _ms(run, started)
++        run.parse_ms += parse_ms
++        check = _check_range(run, document, rng, result.pages)
++        await _record_attempt(run, **attempt, ms=parse_ms, cost=0.0, cache_hit=True, refused=False, check=check)
++        return _RangeResult(rng, document, PREMIUM_PART_PARSER, PREMIUM_PART_VERSION, options, entry, check)
++
++    path = await _original(run)
++    sub_path = run.tmp / f"premium-{rng.start}-{rng.end}.pdf"
++    await _cpu(run, cut_subpdf, path, pages, sub_path)
++    prefix = await deps.ledger.cache_prefix(job.id, SUBPDF_PARSER, "1", options)
++    if not prefix or not _prefix_ok(run, prefix):
++        raise _Stop(await _fail(deps, job, "ledger_error", retryable=True))
++    deps.storage.register_cache_prefix(prefix)
++    name = f"subpdf-{rng.start}-{rng.end}.pdf"
++    try:
++        await deps.storage.put(run.bucket, prefix, name, sub_path.read_bytes())
++    except (StorageError, StoragePathError) as error:
++        raise _Stop(await _fail(deps, job, "storage_error", retryable=True)) from error
++
++    response = await parse_external_done(
++        deps,
++        job,
++        mode="premium",
++        options=options,
++        attempt_no=run.next_attempt_no,
++        pages=ParseAttemptPages(start=rng.start, end=rng.end),
++        subpdf_ref=f"{prefix}{name}",
++        cursor=json.dumps({"original_pages": pages, "reserve_pages": len(pages)}),
++        allow_refused=True,
++    )
++    parse_ms = _ms(run, started)
++    run.parse_ms += parse_ms
++    if response.status == "refused":
++        await _record_attempt(run, **attempt, ms=parse_ms, cost=0.0, cache_hit=False, refused=True, check=None)
++        return None
++    if response.pages is None:
++        raise _Stop(await _fail(deps, job, "premium_pages_missing", retryable=True))
++    sizes = await _cpu(run, _page_sizes, path, pages)
++    document = await _cpu(run, _premium_document, response, sizes)
++    entry = await _store_document(
++        run, PREMIUM_PART_PARSER, PREMIUM_PART_VERSION, options, document, {"preset": "premium", "start": rng.start, "end": rng.end}
++    )
++    check = _check_range(run, document, rng, result.pages)
++    await _record_attempt(
++        run, **attempt, ms=parse_ms, cost=_cost(run, "premium", len(pages)), cache_hit=False, refused=False, check=check
++    )
++    return _RangeResult(rng, document, PREMIUM_PART_PARSER, PREMIUM_PART_VERSION, options, entry, check)
++
++
++# --- merge and hand-off ---------------------------------------------------------------------------------------------
++
++
++@functools.lru_cache(maxsize=1)
++def _profiles() -> dict[str, ProcessingProfile]:
++    payload = ProcessingProfileSet.model_validate_json(_PROFILES_PATH.read_text(encoding="utf-8"))
++    return {profile.id: profile for profile in payload.profiles}
++
++
++def _content_type(name: str) -> str:
++    if name.endswith(".json"):
++        return "application/json"
++    if name.endswith(".png"):
++        return "image/png"
++    return "application/octet-stream"
++
++
++def _build_parse_result(
++    document: DoclingDocument,
++    request: ParseJobRequest,
++    parser: str,
++    version: str,
++    text_layer_share: float | None,
++) -> tuple[ParseResult, dict[str, bytes]]:
++    from rag_sidecar.parse import docling_adapter
++
++    with tempfile.TemporaryDirectory(prefix="rag-merged-") as directory:
++        out = Path(directory)
++        parsed = docling_adapter.to_parse_result(
++            document, request, out, parser=parser, parser_version_text=version, text_layer_page_share=text_layer_share
++        )
++        files = {name: (out / name).read_bytes() for name in parsed.artifacts}
++    return parsed, files
++
++
++def _merged_version(run: _Run) -> str:
++    return f"{MERGED_VERSION}:{run.job.settings.profile_id}"
++
++
++async def _find_merged(run: _Run, entries: list[tuple[str, str, str]]) -> tuple[str, ParseCacheEntry | None]:
++    options = merged_options_hash(entries)
++    for entry in await run.deps.ledger.cache_lookup(run.job.id, MERGED_PARSER, _merged_version(run), options):
++        if _prefix_ok(run, entry.object_prefix):
++            return options, entry
++    return options, None
++
++
++async def _merged_entry(run: _Run, results: list[_RangeResult], n_pages: int, text_layer_share: float | None) -> ParseCacheEntry:
++    options, existing = await _find_merged(run, [(item.parser, item.version, item.options) for item in results])
++    if existing is not None:
++        return existing
++    parts = [item.document for item in results]
++    document = parts[0] if len(parts) == 1 else await _cpu(run, merge, parts, n_pages)
++    profile = _profiles().get(run.job.settings.profile_id)
++    if profile is None:
++        raise _Stop(await _fail(run.deps, run.job, "profile_missing", retryable=False))
++    request = ParseJobRequest(
++        profile_id=profile.id,
++        profile_version=profile.version,
++        docling=profile.parser.docling,
++        ocr_languages=list(run.job.settings.ocr_languages),
++        max_tokens=profile.chunker.max_tokens,
++        repeat_table_header=profile.chunker.repeat_table_header,
++    )
++    parser = PREMIUM_PARSER if all(item.parser == PREMIUM_PART_PARSER for item in results) else "docling"
++    parsed, files = await _cpu(run, _build_parse_result, document, request, parser, _docling_version(), text_layer_share)
++    objects = {RESULT_JSON: parsed.model_dump_json().encode("utf-8"), **files}
++    meta = {
++        "parser": parsed.parser,
++        "parser_version": parsed.parser_version,
++        "page_count": parsed.page_count,
++        "artifacts": [{"name": name, "content_type": _content_type(name)} for name in parsed.artifacts],
++    }
++    return await _put_entry(run, MERGED_PARSER, _merged_version(run), options, objects, meta)
++
++
++def _ranges_payload(results: list[_RangeResult]) -> list[dict[str, Any]]:
++    payload: list[dict[str, Any]] = []
++    for item in results:
++        failed = item.check is not None and not item.check.passed
++        updated = item.rng.model_copy(
++            update={"status": "needs_review" if failed else "ok", "cache_id": item.entry.id if item.entry else None}
++        )
++        payload.append(updated.model_dump(mode="json"))
++    return payload
++
++
++def _top_tier(counts: dict[str, int]) -> str:
++    present = [tier for tier, count in counts.items() if count > 0]
++    return max(present, key=lambda tier: _TIER_RANK.get(tier, 0)) if present else "fast"
++
++
++async def _finish(
++    run: _Run,
++    results: list[_RangeResult],
++    n_pages: int,
++    text_layer_share: float | None,
++    *,
++    dry_run: bool,
++) -> JobOutcome:
++    """Records the check, then either ends a dry run or merges, caches the merged entry and drives advance to the end."""
++    job, deps = run.job, run.deps
++    await deps.ledger.advance(job.id, deps.worker_id, stage="parse", status="parsing", timing_ms=run.parse_ms)
++    ranges = _ranges_payload(results)
++    await deps.ledger.advance(
++        job.id, deps.worker_id, stage="check", status="checking", timing_ms=run.check_ms, fields={"page_ranges": ranges}
++    )
++    if dry_run:
++        await deps.ledger.advance(job.id, deps.worker_id, stage="ready", status="ready", fields={"page_ranges": ranges})
++        return JobOutcome(status="ready")
++    try:
++        entry = await _merged_entry(run, results, n_pages, text_layer_share)
++    except MergeInvariantError as error:
++        logger.warning("[RAG Ingest] merge invariant failed", extra={"job_id": job.id, "reason": str(error)})
++        raise _Stop(await _fail(deps, job, "merge_invariant", retryable=False)) from error
++    return await _advance_until_done(deps, job, entry.id, max(1, run.last_attempt_no))
++
++
++async def _already_merged(run: _Run, result: PreflightResult) -> ParseCacheEntry | None:
++    """The merged entry of this exact range plan when an earlier run finished it, so a resumed job parses and merges nothing."""
++    entries: list[tuple[str, str, str]] = []
++    version = _docling_version()
++    for rng in result.ranges:
++        if rng.preset == "premium":
++            entries.append((PREMIUM_PART_PARSER, PREMIUM_PART_VERSION, _premium_options(rng)))
++        else:
++            entries.append(("docling", version, _range_options(run, rng.preset, rng.start, rng.end)))
++    _options, entry = await _find_merged(run, entries)
++    return entry
++
++
++# --- the three flows ------------------------------------------------------------------------------------------------
++
++
++async def _run_pdf(run: _Run, *, dry_run: bool) -> JobOutcome:
++    job, deps = run.job, run.deps
++    result, reusable = await _preflight(run)
++    await deps.ledger.advance(
++        job.id,
++        deps.worker_id,
++        stage="parse",
++        status="parsing",
++        fields={
++            "doc_class": result.doc_class,
++            "tier": _top_tier(dict(result.tier_page_counts)),
++            "pages": result.page_count,
++            "tier_page_counts": dict(result.tier_page_counts),
++            "detect_counts": result.detect_counts.model_dump(mode="json"),
++            "page_ranges": [rng.model_dump(mode="json") for rng in result.ranges],
++        },
++    )
++    if not dry_run:
++        merged = await _already_merged(run, result)
++        if merged is not None:
++            return await _advance_until_done(deps, job, merged.id, max(1, len(job.attempts)))
++
++    version = _docling_version()
++    for (start, end), (document, _meta) in reusable.items():
++        options = _range_options(run, "fast", start, end)
++        if await _cached_document(run, "docling", version, options) is None:
++            await _store_document(run, "docling", version, options, document, {"preset": "fast", "start": start, "end": end})
++
++    for planned in result.ranges:
++        if deps.clock() - run.started > deps.document_timeout_s:
++            raise _Stop(await _fail(deps, job, "document_timeout", retryable=True))
++        rng = planned
++        if rng.preset == "premium":
++            premium = await _premium_range(run, rng, result)
++            if premium is not None:
++                run.results.append(premium)
++                continue
++            rng = rng.model_copy(update={"preset": "structured_full", "tier": "structured", "parser": "docling"})
++        run.results.append(await _docling_range(run, rng, result, reusable))
++    pages = result.pages
++    share = sum(1 for page in pages if page.text_layer) / len(pages) if pages else None
++    return await _finish(run, run.results, result.page_count, share, dry_run=dry_run)
++
++
++async def _run_native(run: _Run, kind: DocKind, *, dry_run: bool) -> JobOutcome:
++    """txt, md and csv through the app's plain-text parser, images through native captioning (D-10, D-12)."""
++    job, deps = run.job, run.deps
++    options = options_hash({"preset": "native", "input_format": job.mime_type or "application/octet-stream"})
++    started = deps.clock()
++    response = await parse_external_done(deps, job, mode="native", options=options, attempt_no=run.next_attempt_no)
++    parse_ms = _ms(run, started)
++    assert response.cache_id is not None
++    pages = response.pages or []
++    check_started = deps.clock()
++    check = quality.check_text_pages(
++        [quality.TextPage(page=page.page, text=page.text, has_table=page.has_table) for page in pages],
++        [],
++        list(job.settings.ocr_languages),
++        run.cfg,
++    )
++    check_ms = _ms(run, check_started)
++    end = max([page.page for page in pages], default=1)
++    number = await _record_attempt(
++        run,
++        tier="native",
++        preset="native",
++        parser=NATIVE_PARSER,
++        version=NATIVE_VERSION,
++        start=1,
++        end=end,
++        reason="native",
++        ms=parse_ms,
++        cost=_cost(run, "native", end),
++        cache_hit=False,
++        refused=False,
++        check=check,
++    )
++    rng = PageRange(
++        start=1,
++        end=end,
++        tier="native",
++        preset="native",
++        parser=NATIVE_PARSER,
++        layer="L1",
++        signals=[],
++        status="ok" if check.passed else "needs_review",
++        cache_id=response.cache_id,
++    )
++    payload = [rng.model_dump(mode="json")]
++    await deps.ledger.advance(
++        job.id,
++        deps.worker_id,
++        stage="parse",
++        status="parsing",
++        timing_ms=parse_ms,
++        fields={
++            "doc_class": "image" if kind.name == "image" else "native",
++            "tier": "native",
++            "pages": end,
++            "tier_page_counts": {"native": end, "fast": 0, "structured": 0, "premium": 0},
++            "page_ranges": payload,
++        },
++    )
++    await deps.ledger.advance(job.id, deps.worker_id, stage="check", status="checking", timing_ms=check_ms, fields={"page_ranges": payload})
++    if dry_run:
++        await deps.ledger.advance(job.id, deps.worker_id, stage="ready", status="ready", fields={"page_ranges": payload})
++        return JobOutcome(status="ready")
++    return await _advance_until_done(deps, job, response.cache_id, number)
++
++
++def _convert_whole(deps: WorkerDeps, path: Path, preset: str, languages: list[str]) -> DoclingDocument:
++    if deps.whole_converter is not None:
++        return deps.whole_converter(path, preset, languages)
++    from rag_sidecar.parse import docling_adapter
++
++    return docling_adapter.convert_whole(path, preset, languages)
++
++
++async def _run_office(run: _Run, kind: DocKind, *, dry_run: bool) -> JobOutcome:
++    """docx and html as one native range, pptx and xlsx as one structured range, all converted in the worker (D-10, D-12)."""
++    job, deps = run.job, run.deps
++    if deps.storage is None:
++        raise await _unavailable(run)
++    structured = run.cfg.office_formats.get(kind.office_format or "", "native") == "structured"
++    tier: ParseTier = "structured" if structured else "native"
++    converter_preset = "structured_layout" if structured else "fast"
++    preset = "structured_layout" if structured else "native"
++    version = _docling_version()
++    options = _range_options(run, converter_preset, None, None, input_format=job.mime_type or "application/octet-stream")
++    started = deps.clock()
++    hit = await _cached_document(run, "docling", version, options)
++    if hit is not None:
++        document, entry = hit
++        cache_hit = True
++    else:
++        path = await _original(run)
++        document = await _cpu(run, _convert_whole, deps, path, converter_preset, list(job.settings.ocr_languages))
++        entry = await _store_document(run, "docling", version, options, document, {"preset": preset})
++        cache_hit = False
++    parse_ms = _ms(run, started)
++    end = max(1, max(document.pages, default=0))
++    rng = PageRange(start=1, end=end, tier=tier, preset=preset, parser="docling", layer="L1", signals=[], status="pending")  # type: ignore[arg-type]
++    check_started = deps.clock()
++    check = quality.check(document, [], list(job.settings.ocr_languages), run.cfg, first_page=1)
++    run.check_ms += _ms(run, check_started)
++    run.parse_ms += parse_ms
++    await _record_attempt(
++        run,
++        tier=tier,
++        preset=preset,
++        parser="docling",
++        version=version,
++        start=1,
++        end=end,
++        reason="initial" if structured else "native",
++        ms=parse_ms,
++        cost=0.0 if cache_hit else _cost(run, tier, end),
++        cache_hit=cache_hit,
++        refused=False,
++        check=check,
++    )
++    run.results.append(_RangeResult(rng, document, "docling", version, options, entry, check))
++    await deps.ledger.advance(
++        job.id,
++        deps.worker_id,
++        stage="parse",
++        status="parsing",
++        fields={
++            "doc_class": "layout" if structured else "native",
++            "tier": tier,
++            "pages": end,
++            "tier_page_counts": {"native": 0, "fast": 0, "structured": 0, "premium": 0, tier: end},
++            "page_ranges": [rng.model_dump(mode="json")],
++        },
++    )
++    return await _finish(run, run.results, end, None, dry_run=dry_run)
+ 
+ 
+ async def run_tiered(job: IngestionJob, deps: WorkerDeps, *, dry_run: bool = False) -> JobOutcome:
+-    return JobOutcome(status="not_implemented")
++    """Runs one tiered job to its end: parsed, checked, merged and advanced, or a dry run that stops after the checks.
++
++    Returns the outcome for every ending the job function owns; a lost lease and transient client errors propagate to
++    process_job, which maps them.
++    """
++    kind = detect_kind(job)
++    run = _Run(
++        job=job,
++        deps=deps,
++        cfg=deps.routing_cfg or load_routing_config(),
++        tmp=Path(tempfile.mkdtemp(prefix="rag-tiered-", dir=deps.work_dir)),
++        started=deps.clock(),
++    )
++    try:
++        if kind.name == "pdf":
++            if deps.storage is None or deps.converter is None:
++                return await _fail(deps, job, "tiered_unavailable", retryable=False)
++            return await _run_pdf(run, dry_run=dry_run)
++        if kind.name in {"text", "image"}:
++            return await _run_native(run, kind, dry_run=dry_run)
++        if kind.name == "office":
++            return await _run_office(run, kind, dry_run=dry_run)
++        return await _fail(deps, job, "unsupported_type", retryable=False)
++    except _Stop as stop:
++        return stop.outcome
++    except ConversionError as error:
++        return await _fail(deps, job, error.error_class, retryable=error.error_class not in _PERMANENT_CONVERSION_ERRORS)
++    except MergeInvariantError:
++        return await _fail(deps, job, "merge_invariant", retryable=False)
++    except StoragePathError:
++        return await _fail(deps, job, "storage_error", retryable=False)
++    except StorageError:
++        return await _fail(deps, job, "storage_error", retryable=True)
++    finally:
++        shutil.rmtree(run.tmp, ignore_errors=True)
+diff --git a/rag-sidecar/tests/test_ingest_tiered.py b/rag-sidecar/tests/test_ingest_tiered.py
+index 6eaf294..f7d3ac3 100644
+--- a/rag-sidecar/tests/test_ingest_tiered.py
++++ b/rag-sidecar/tests/test_ingest_tiered.py
+@@ -304,7 +304,7 @@ def test_mixed_fixture_parses_each_range_records_attempts_caches_and_hands_the_m
+     stages = [step["stage"] for step in env.ledger.advances]
+     assert stages.index("preflight") < stages.index("parse") < stages.index("check")
+     parse_fields = next(step["fields"] for step in env.ledger.advances if step["stage"] == "parse")
+-    assert parse_fields["doc_class"] == "mixed"
++    assert parse_fields["doc_class"] == PreflightResult.model_validate_json(stored).doc_class
+     assert [(r["start"], r["end"], r["preset"]) for r in parse_fields["page_ranges"]] == [
+         (1, 6, "fast"),
+         (7, 8, "structured_full"),
+-- 
+2.43.0
+

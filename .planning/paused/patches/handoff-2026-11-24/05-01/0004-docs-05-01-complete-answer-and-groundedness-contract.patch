@@ -1,0 +1,134 @@
+From db9994ce921ea5626f67bf374efb92905c82f9c0 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 24 Nov 2026 22:24:51 +0000
+Subject: [PATCH 4/4] docs(05-01): complete answer and groundedness contracts
+ plan
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01X342shLsAZx6PYph2vA7hc
+---
+ .../05-01-SUMMARY.md                          | 112 ++++++++++++++++++
+ 1 file changed, 112 insertions(+)
+ create mode 100644 .planning/phases/05-verified-citations-groundedness/05-01-SUMMARY.md
+
+diff --git a/.planning/phases/05-verified-citations-groundedness/05-01-SUMMARY.md b/.planning/phases/05-verified-citations-groundedness/05-01-SUMMARY.md
+new file mode 100644
+index 0000000..f2f06cb
+--- /dev/null
++++ b/.planning/phases/05-verified-citations-groundedness/05-01-SUMMARY.md
+@@ -0,0 +1,112 @@
++---
++phase: 05-verified-citations-groundedness
++plan: 01
++subsystem: contracts
++tags: [pydantic, zod, citations, groundedness, feedback, contracts]
++
++requires:
++  - phase: 04-hybrid-retrieval-reranking-calibrated-refusal
++    provides: contract pipeline state after 04-04 and 04-26 (export_schemas.py, samples.py, generated Zod)
++provides:
++  - CitationRecord (D-01), AnswerGroundedness, AnswerFeedback, AnswerFeedbackRequest, AnswerRecord (D-15, D-18, D-22)
++  - GroundednessRequest, GroundednessResult, GroundednessThresholdCell, GroundednessThresholds (D-11, D-13, D-22)
++  - six new schema files, generated Zod schemas and samples, eval/config/groundedness-thresholds.json
++affects: [05-02, 05-03, 05-07, 05-08, 05-09, 05-19]
++
++actuals:
++  tokens: 21000
++  tasks: 2
++  commits: 3
++plan_head_before: 045ae01
++plan_head_after: 57d50c603145cfc1609d0d4baa36850814693dc2
++
++tech-stack:
++  added: []
++  patterns:
++    - "CitationRecord, AnswerRecord and the answer models use camelCase field names (no alias generator); the sidecar wire models (Groundedness*) stay snake_case"
++    - "Per-status invariants (pending, scored, not_checked) are model validators, not separate classes, so one schema covers all states"
++
++key-files:
++  created:
++    - rag-sidecar/src/rag_sidecar/contracts/answers.py
++    - rag-sidecar/src/rag_sidecar/contracts/groundedness.py
++    - rag-sidecar/tests/test_answer_contracts.py
++    - eval/config/groundedness-thresholds.json
++    - rag-sidecar/schemas/CitationRecord.schema.json
++    - rag-sidecar/schemas/AnswerRecord.schema.json
++    - rag-sidecar/schemas/AnswerFeedbackRequest.schema.json
++    - rag-sidecar/schemas/GroundednessRequest.schema.json
++    - rag-sidecar/schemas/GroundednessResult.schema.json
++    - rag-sidecar/schemas/GroundednessThresholds.schema.json
++  modified:
++    - rag-sidecar/src/rag_sidecar/contracts/__init__.py
++    - rag-sidecar/src/rag_sidecar/export_schemas.py
++    - rag-sidecar/src/rag_sidecar/contracts/samples.py
++    - src/lib/rag-eval/contracts.generated.ts
++    - tests/fixtures/contracts/samples.json
++
++key-decisions:
++  - "answerId and chatId are UUID in AnswerRecord and chatId is UUID in AnswerFeedbackRequest (generated Zod gets .uuid()); chatId is nullable on the record because a new chat's row is created after the first answer"
++  - "Timestamps (checkedAt, createdAt, updatedAt) are datetime, matching IngestionJob; reason codes are free short strings (1-64 chars), not an enum, so later plans can add codes without a contract change"
++  - "A not_checked GroundednessResult does not constrain the scorer, so a scorer that timed out can still be named; only a scored result must name a real scorer"
++  - "AnswerFeedback (stored) applies the same chip, uniqueness and 500-character rules as the request"
++  - "GroundednessThresholdCell.scorer excludes none: a threshold exists only for a scorer that can produce a score"
++  - "documents on AnswerRecord is a map of documentId to current or unavailable (default empty); feedbackEnabled defaults false; review_reasons is deliberately absent (extra=forbid rejects it)"
++
++patterns-established:
++  - "RED commit for a Pydantic contract uses an unconstrained skeleton of the same module so the cases fail on assertions, not on import"
++
++requirements-completed: [GEN-02, GEN-03, GEN-04, GEN-05, EVAL-16]
++
++duration: 20min
++completed: 2026-11-24
++status: complete
++---
++
++# Phase 5 Plan 01: Answer and groundedness contracts Summary
++
++**Pydantic v2 source of truth for CitationRecord, AnswerRecord, feedback and the sidecar groundedness wire, with generated Zod, samples and the default 0.5 thresholds file.**
++
++## Performance
++
++- **Tasks:** 2 (plus a RED commit for the TDD task)
++- **Files:** 10 created, 5 modified
++
++## Accomplishments
++
++- CitationRecord carries exactly the D-01 fields; alias pattern `^S[1-9][0-9]*$`, quoteHash `^[0-9a-f]{64}$`, strategy limited to claude-citations and chunk-alias, quote not capped (the app caps message metadata at 1,000 characters, D-03).
++- AnswerGroundedness, GroundednessResult and GroundednessThresholds enforce the per-status rules and (scorer, language) uniqueness through validators.
++- AnswerFeedbackRequest: vote enum, at most four unique reason chips, comment at most 500, optional UUID chatId.
++- `eval/config/groundedness-thresholds.json` holds three default 0.5 cells (hhem_2_3_vectara en and zh-Hans, hhem_2_1_open en); a test loads it through GroundednessThresholds.
++- Registered in CONTRACTS (validation for GroundednessRequest and AnswerFeedbackRequest, serialization for the other four) with one invented-text sample each.
++
++## Task Commits
++
++1. RED: `8532a6a` test(05-01): RED answer and groundedness contract tests
++2. Task 1 GREEN: `e403dc9` feat(05-01): answer and groundedness contract models
++3. Task 2: `57d50c6` feat(05-01): register Phase 5 contracts and regenerate Zod schemas
++
++## Verification
++
++- `uv run --frozen --offline --directory rag-sidecar pytest -q tests/test_answer_contracts.py`: 82 passed, 0 failed (RED before: 53 failed, 29 passed, all assertion failures).
++- `npm run gen:schemas` equivalent (`python -m rag_sidecar.export_schemas` then `node scripts/gen-zod.mjs`) run twice: second run leaves `contracts.generated.ts` byte-identical and no further diff. `npm run gen:schemas` itself calls `uv run` without `--frozen --offline`, so the two steps were run directly with those flags.
++- `npx vitest run tests/contracts.test.ts tests/schema-parity.test.ts tests/ingest-queue-contracts.test.ts`: 3 files, 175 tests passed. The "BackfillManifestEntry rejects a known invalid case" failure the brief mentioned does not occur on this base.
++- `node scripts/ci/check-rag-boundary.mjs`: ok, 1039 files, no violations. `npx tsc --noEmit -p tsconfig.json`: no output (0 errors). `node scripts/check-config.mjs`: ok, 125 variables.
++- Full sidecar suite: 782 passed, 8 skipped, 5 failed plus 4 collection errors, all `ModuleNotFoundError` for docling_core, pypdfium2 or regex (optional packages not installed in this offline environment; nothing to do with these contracts).
++- Acceptance greps: CitationRecordSchema and GroundednessResultSchema present in the generated file (4 matches), 3 `"source": "default"` cells, all six schema files exist.
++
++## Deviations from Plan
++
++None - plan executed as written. Two environment notes, not deviations: the commit trailer uses the attribution lines the session supplied (Claude Sonnet 5.5), not the Opus line quoted in the brief; the sidecar tests that need docling_core, pypdfium2 or regex cannot run offline.
++
++## Known Stubs
++
++None.
++
++## Threat Flags
++
++None. T-05-01 to T-05-03 mitigations are in the models and covered by tests (extra keys forbidden, enum votes and chips, 500-character comment cap, UUID chatId, alias and strategy validation, no review_reasons on AnswerRecord, invented sample text).
++
++## Self-Check: PASSED
++
++All ten created files exist; commits 8532a6a, e403dc9 and 57d50c6 are ancestors of HEAD.
+-- 
+2.43.0
+

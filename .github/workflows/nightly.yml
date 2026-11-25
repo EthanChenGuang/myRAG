@@ -73,3 +73,90 @@ jobs:
           name: eval-nightly
           path: eval/out/nightly
           if-no-files-found: warn
+  online-judge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      HAS_ONLINE_JUDGE_KEYS: ${{ secrets.LANGFUSE_PUBLIC_KEY != '' && secrets.LANGFUSE_SECRET_KEY != '' && secrets.OPENROUTER_API_KEY != '' }}
+    steps:
+      - name: Skip notice when Langfuse or judge keys are absent
+        if: env.HAS_ONLINE_JUDGE_KEYS != 'true'
+        run: echo "::notice::langfuse keys not configured, skipping online judge"
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        if: env.HAS_ONLINE_JUDGE_KEYS == 'true'
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+        if: env.HAS_ONLINE_JUDGE_KEYS == 'true'
+        with:
+          version: '0.11.32'
+          python-version: '3.12'
+          enable-cache: true
+          cache-dependency-glob: '**/uv.lock'
+      - name: Sync eval project
+        if: env.HAS_ONLINE_JUDGE_KEYS == 'true'
+        run: uv sync --directory eval --locked --all-extras
+      - name: Online judge
+        if: env.HAS_ONLINE_JUDGE_KEYS == 'true'
+        env:
+          LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+          LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
+          LANGFUSE_BASE_URL: ${{ vars.LANGFUSE_BASE_URL }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: uv run --directory eval python -m rag_eval.online_judge
+  real-docling:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+        with:
+          version: '0.11.32'
+          python-version: '3.12'
+          enable-cache: true
+          cache-dependency-glob: '**/uv.lock'
+      - name: Install CJK fonts for the scanned fixtures
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends fonts-noto-cjk
+      - name: Sync the docling extra
+        id: docling
+        run: |
+          if uv sync --directory rag-sidecar --locked --extra docling; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::docling extra not installable, skipping"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Sync eval fixtures extra
+        if: steps.docling.outputs.ready == 'true'
+        run: uv sync --directory eval --locked --extra fixtures
+      - name: Build the docling image and copy out its baked models
+        if: steps.docling.outputs.ready == 'true'
+        run: |
+          docker build --target docling -t rag-sidecar:docling rag-sidecar
+          container="$(docker create rag-sidecar:docling)"
+          mkdir -p "$RUNNER_TEMP/baked"
+          docker cp "$container:/opt/docling-models" "$RUNNER_TEMP/baked/docling-models"
+          docker cp "$container:/opt/tiktoken" "$RUNNER_TEMP/baked/tiktoken"
+          docker rm "$container"
+      - name: Regenerate the fixture PDFs with the runner CJK font
+        if: steps.docling.outputs.ready == 'true'
+        run: >-
+          uv run --directory eval --extra fixtures python fixtures/ingest/generate_pdfs.py
+          --out "$RUNNER_TEMP/ingest-pdf"
+          --cjk-font /usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc
+          --cjk-font-index 2
+      - name: Real Docling on the fixture PDFs
+        if: steps.docling.outputs.ready == 'true'
+        env:
+          RAG_SIDECAR_DOCLING_ARTIFACTS: ${{ runner.temp }}/baked/docling-models
+          TIKTOKEN_CACHE_DIR: ${{ runner.temp }}/baked/tiktoken
+          HF_HUB_OFFLINE: '1'
+          TRANSFORMERS_OFFLINE: '1'
+          RAG_FIXTURE_PDF_DIR: ${{ runner.temp }}/ingest-pdf
+          RAG_REAL_DOCLING_REPORT: ${{ runner.temp }}/real-docling-report.json
+        run: uv run --locked --directory rag-sidecar --extra docling pytest -q -m real_docling
+      - name: Upload the real-Docling measurements
+        if: always() && steps.docling.outputs.ready == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: real-docling-report
+          path: ${{ runner.temp }}/real-docling-report.json
+          if-no-files-found: warn

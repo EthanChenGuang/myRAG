@@ -1,0 +1,1209 @@
+From 57d50c603145cfc1609d0d4baa36850814693dc2 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 24 Nov 2026 22:23:44 +0000
+Subject: [PATCH 3/4] feat(05-01): register Phase 5 contracts and regenerate
+ Zod schemas
+
+Six new schema files, generated Zod and samples (no hand edits).
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01X342shLsAZx6PYph2vA7hc
+---
+ .../schemas/AnswerFeedbackRequest.schema.json |  58 +++
+ rag-sidecar/schemas/AnswerRecord.schema.json  | 427 ++++++++++++++++++
+ .../schemas/CitationRecord.schema.json        | 101 +++++
+ .../schemas/GroundednessRequest.schema.json   |  42 ++
+ .../schemas/GroundednessResult.schema.json    |  67 +++
+ .../GroundednessThresholds.schema.json        | 108 +++++
+ .../src/rag_sidecar/contracts/samples.py      |  75 +++
+ rag-sidecar/src/rag_sidecar/export_schemas.py |  12 +
+ src/lib/rag-eval/contracts.generated.ts       |  18 +
+ tests/fixtures/contracts/samples.json         | 132 ++++++
+ 10 files changed, 1040 insertions(+)
+ create mode 100644 rag-sidecar/schemas/AnswerFeedbackRequest.schema.json
+ create mode 100644 rag-sidecar/schemas/AnswerRecord.schema.json
+ create mode 100644 rag-sidecar/schemas/CitationRecord.schema.json
+ create mode 100644 rag-sidecar/schemas/GroundednessRequest.schema.json
+ create mode 100644 rag-sidecar/schemas/GroundednessResult.schema.json
+ create mode 100644 rag-sidecar/schemas/GroundednessThresholds.schema.json
+
+diff --git a/rag-sidecar/schemas/AnswerFeedbackRequest.schema.json b/rag-sidecar/schemas/AnswerFeedbackRequest.schema.json
+new file mode 100644
+index 0000000..521c7e3
+--- /dev/null
++++ b/rag-sidecar/schemas/AnswerFeedbackRequest.schema.json
+@@ -0,0 +1,58 @@
++{
++  "additionalProperties": false,
++  "properties": {
++    "chatId": {
++      "anyOf": [
++        {
++          "format": "uuid",
++          "type": "string"
++        },
++        {
++          "type": "null"
++        }
++      ],
++      "default": null,
++      "title": "Chatid"
++    },
++    "comment": {
++      "anyOf": [
++        {
++          "maxLength": 500,
++          "type": "string"
++        },
++        {
++          "type": "null"
++        }
++      ],
++      "default": null,
++      "title": "Comment"
++    },
++    "reasons": {
++      "items": {
++        "enum": [
++          "wrong",
++          "incomplete",
++          "not_from_documents",
++          "bad_citation"
++        ],
++        "type": "string"
++      },
++      "maxItems": 4,
++      "title": "Reasons",
++      "type": "array"
++    },
++    "vote": {
++      "enum": [
++        "helpful",
++        "not_helpful"
++      ],
++      "title": "Vote",
++      "type": "string"
++    }
++  },
++  "required": [
++    "vote"
++  ],
++  "title": "AnswerFeedbackRequest",
++  "type": "object"
++}
+diff --git a/rag-sidecar/schemas/AnswerRecord.schema.json b/rag-sidecar/schemas/AnswerRecord.schema.json
+new file mode 100644
+index 0000000..42b1923
+--- /dev/null
++++ b/rag-sidecar/schemas/AnswerRecord.schema.json
+@@ -0,0 +1,427 @@
++{
++  "$defs": {
++    "AnswerFeedback": {
++      "additionalProperties": false,
++      "properties": {
++        "comment": {
++          "anyOf": [
++            {
++              "maxLength": 500,
++              "type": "string"
++            },
++            {
++              "type": "null"
++            }
++          ],
++          "default": null,
++          "title": "Comment"
++        },
++        "reasons": {
++          "items": {
++            "enum": [
++              "wrong",
++              "incomplete",
++              "not_from_documents",
++              "bad_citation"
++            ],
++            "type": "string"
++          },
++          "maxItems": 4,
++          "title": "Reasons",
++          "type": "array"
++        },
++        "updatedAt": {
++          "format": "date-time",
++          "title": "Updatedat",
++          "type": "string"
++        },
++        "vote": {
++          "enum": [
++            "helpful",
++            "not_helpful"
++          ],
++          "title": "Vote",
++          "type": "string"
++        }
++      },
++      "required": [
++        "vote",
++        "updatedAt"
++      ],
++      "title": "AnswerFeedback",
++      "type": "object"
++    },
++    "AnswerGroundedness": {
++      "additionalProperties": false,
++      "properties": {
++        "checkedAt": {
++          "anyOf": [
++            {
++              "format": "date-time",
++              "type": "string"
++            },
++            {
++              "type": "null"
++            }
++          ],
++          "default": null,
++          "title": "Checkedat"
++        },
++        "label": {
++          "anyOf": [
++            {
++              "enum": [
++                "verified",
++                "possibly_unreliable",
++                "not_checked"
++              ],
++              "type": "string"
++            },
++            {
++              "type": "null"
++            }
++          ],
++          "default": null,
++          "title": "Label"
++        },
++        "latencyMs": {
++          "anyOf": [
++            {
++              "minimum": 0,
++              "type": "integer"
++            },
++            {
++              "type": "null"
++            }
++          ],
++          "default": null,
++          "title": "Latencyms"
++        },
++        "reason": {
++          "anyOf": [
++            {
++              "maxLength": 64,
++              "minLength": 1,
++              "type": "string"
++            },
++            {
++              "type": "null"
++            }
++          ],
++          "default": null,
++          "title": "Reason"
++        },
++        "score": {
++          "anyOf": [
++            {
++              "maximum": 1,
++              "minimum": 0,
++              "type": "number"
++            },
++            {
++              "type": "null"
++            }
++          ],
++          "default": null,
++          "title": "Score"
++        },
++        "scorer": {
++          "anyOf": [
++            {
++              "enum": [
++                "hhem_2_3_vectara",
++                "hhem_2_1_open",
++                "none"
++              ],
++              "type": "string"
++            },
++            {
++              "type": "null"
++            }
++          ],
++          "default": null,
++          "title": "Scorer"
++        },
++        "status": {
++          "enum": [
++            "pending",
++            "scored",
++            "not_checked"
++          ],
++          "title": "Status",
++          "type": "string"
++        },
++        "threshold": {
++          "anyOf": [
++            {
++              "maximum": 1,
++              "minimum": 0,
++              "type": "number"
++            },
++            {
++              "type": "null"
++            }
++          ],
++          "default": null,
++          "title": "Threshold"
++        },
++        "thresholdSource": {
++          "anyOf": [
++            {
++              "enum": [
++                "default",
++                "calibrated"
++              ],
++              "type": "string"
++            },
++            {
++              "type": "null"
++            }
++          ],
++          "default": null,
++          "title": "Thresholdsource"
++        },
++        "truncated": {
++          "default": false,
++          "title": "Truncated",
++          "type": "boolean"
++        }
++      },
++      "required": [
++        "status"
++      ],
++      "title": "AnswerGroundedness",
++      "type": "object"
++    },
++    "CitationRecord": {
++      "additionalProperties": false,
++      "properties": {
++        "alias": {
++          "pattern": "^S[1-9][0-9]*$",
++          "title": "Alias",
++          "type": "string"
++        },
++        "chunkIds": {
++          "items": {
++            "type": "string"
++          },
++          "title": "Chunkids",
++          "type": "array"
++        },
++        "documentId": {
++          "minLength": 1,
++          "title": "Documentid",
++          "type": "string"
++        },
++        "documentName": {
++          "minLength": 1,
++          "title": "Documentname",
++          "type": "string"
++        },
++        "documentVersion": {
++          "anyOf": [
++            {
++              "type": "integer"
++            },
++            {
++              "type": "null"
++            }
++          ],
++          "default": null,
++          "title": "Documentversion"
++        },
++        "n": {
++          "minimum": 1,
++          "title": "N",
++          "type": "integer"
++        },
++        "page": {
++          "anyOf": [
++            {
++              "type": "integer"
++            },
++            {
++              "type": "null"
++            }
++          ],
++          "default": null,
++          "title": "Page"
++        },
++        "quote": {
++          "minLength": 1,
++          "title": "Quote",
++          "type": "string"
++        },
++        "quoteHash": {
++          "pattern": "^[0-9a-f]{64}$",
++          "title": "Quotehash",
++          "type": "string"
++        },
++        "sectionPath": {
++          "anyOf": [
++            {
++              "items": {
++                "type": "string"
++              },
++              "type": "array"
++            },
++            {
++              "type": "null"
++            }
++          ],
++          "default": null,
++          "title": "Sectionpath"
++        },
++        "strategy": {
++          "enum": [
++            "claude-citations",
++            "chunk-alias"
++          ],
++          "title": "Strategy",
++          "type": "string"
++        }
++      },
++      "required": [
++        "n",
++        "alias",
++        "chunkIds",
++        "documentId",
++        "documentName",
++        "quote",
++        "quoteHash",
++        "strategy"
++      ],
++      "title": "CitationRecord",
++      "type": "object"
++    }
++  },
++  "additionalProperties": false,
++  "properties": {
++    "answerId": {
++      "format": "uuid",
++      "title": "Answerid",
++      "type": "string"
++    },
++    "answerLanguage": {
++      "anyOf": [
++        {
++          "type": "string"
++        },
++        {
++          "type": "null"
++        }
++      ],
++      "default": null,
++      "title": "Answerlanguage"
++    },
++    "chatId": {
++      "anyOf": [
++        {
++          "format": "uuid",
++          "type": "string"
++        },
++        {
++          "type": "null"
++        }
++      ],
++      "default": null,
++      "title": "Chatid"
++    },
++    "citationStrategy": {
++      "anyOf": [
++        {
++          "enum": [
++            "claude-citations",
++            "chunk-alias"
++          ],
++          "type": "string"
++        },
++        {
++          "type": "null"
++        }
++      ],
++      "default": null,
++      "title": "Citationstrategy"
++    },
++    "citations": {
++      "items": {
++        "$ref": "#/$defs/CitationRecord"
++      },
++      "title": "Citations",
++      "type": "array"
++    },
++    "createdAt": {
++      "format": "date-time",
++      "title": "Createdat",
++      "type": "string"
++    },
++    "documents": {
++      "additionalProperties": {
++        "enum": [
++          "current",
++          "unavailable"
++        ],
++        "type": "string"
++      },
++      "title": "Documents",
++      "type": "object"
++    },
++    "feedback": {
++      "anyOf": [
++        {
++          "$ref": "#/$defs/AnswerFeedback"
++        },
++        {
++          "type": "null"
++        }
++      ],
++      "default": null
++    },
++    "feedbackEnabled": {
++      "default": false,
++      "title": "Feedbackenabled",
++      "type": "boolean"
++    },
++    "groundedness": {
++      "$ref": "#/$defs/AnswerGroundedness"
++    },
++    "invalidCitations": {
++      "default": 0,
++      "minimum": 0,
++      "title": "Invalidcitations",
++      "type": "integer"
++    },
++    "modelId": {
++      "minLength": 1,
++      "title": "Modelid",
++      "type": "string"
++    },
++    "ragMode": {
++      "minLength": 1,
++      "title": "Ragmode",
++      "type": "string"
++    },
++    "traceId": {
++      "minLength": 1,
++      "title": "Traceid",
++      "type": "string"
++    },
++    "updatedAt": {
++      "format": "date-time",
++      "title": "Updatedat",
++      "type": "string"
++    }
++  },
++  "required": [
++    "answerId",
++    "traceId",
++    "modelId",
++    "ragMode",
++    "citations",
++    "groundedness",
++    "createdAt",
++    "updatedAt"
++  ],
++  "title": "AnswerRecord",
++  "type": "object"
++}
+diff --git a/rag-sidecar/schemas/CitationRecord.schema.json b/rag-sidecar/schemas/CitationRecord.schema.json
+new file mode 100644
+index 0000000..dd43258
+--- /dev/null
++++ b/rag-sidecar/schemas/CitationRecord.schema.json
+@@ -0,0 +1,101 @@
++{
++  "additionalProperties": false,
++  "properties": {
++    "alias": {
++      "pattern": "^S[1-9][0-9]*$",
++      "title": "Alias",
++      "type": "string"
++    },
++    "chunkIds": {
++      "items": {
++        "type": "string"
++      },
++      "title": "Chunkids",
++      "type": "array"
++    },
++    "documentId": {
++      "minLength": 1,
++      "title": "Documentid",
++      "type": "string"
++    },
++    "documentName": {
++      "minLength": 1,
++      "title": "Documentname",
++      "type": "string"
++    },
++    "documentVersion": {
++      "anyOf": [
++        {
++          "type": "integer"
++        },
++        {
++          "type": "null"
++        }
++      ],
++      "default": null,
++      "title": "Documentversion"
++    },
++    "n": {
++      "minimum": 1,
++      "title": "N",
++      "type": "integer"
++    },
++    "page": {
++      "anyOf": [
++        {
++          "type": "integer"
++        },
++        {
++          "type": "null"
++        }
++      ],
++      "default": null,
++      "title": "Page"
++    },
++    "quote": {
++      "minLength": 1,
++      "title": "Quote",
++      "type": "string"
++    },
++    "quoteHash": {
++      "pattern": "^[0-9a-f]{64}$",
++      "title": "Quotehash",
++      "type": "string"
++    },
++    "sectionPath": {
++      "anyOf": [
++        {
++          "items": {
++            "type": "string"
++          },
++          "type": "array"
++        },
++        {
++          "type": "null"
++        }
++      ],
++      "default": null,
++      "title": "Sectionpath"
++    },
++    "strategy": {
++      "enum": [
++        "claude-citations",
++        "chunk-alias"
++      ],
++      "title": "Strategy",
++      "type": "string"
++    }
++  },
++  "required": [
++    "n",
++    "alias",
++    "chunkIds",
++    "documentId",
++    "documentName",
++    "quote",
++    "quoteHash",
++    "strategy"
++  ],
++  "title": "CitationRecord",
++  "type": "object"
++}
+diff --git a/rag-sidecar/schemas/GroundednessRequest.schema.json b/rag-sidecar/schemas/GroundednessRequest.schema.json
+new file mode 100644
+index 0000000..95cd018
+--- /dev/null
++++ b/rag-sidecar/schemas/GroundednessRequest.schema.json
+@@ -0,0 +1,42 @@
++{
++  "additionalProperties": false,
++  "properties": {
++    "allow_vectara": {
++      "title": "Allow Vectara",
++      "type": "boolean"
++    },
++    "hypothesis": {
++      "minLength": 1,
++      "title": "Hypothesis",
++      "type": "string"
++    },
++    "language": {
++      "minLength": 1,
++      "title": "Language",
++      "type": "string"
++    },
++    "premise_texts": {
++      "items": {
++        "minLength": 1,
++        "type": "string"
++      },
++      "minItems": 1,
++      "title": "Premise Texts",
++      "type": "array"
++    },
++    "request_id": {
++      "minLength": 1,
++      "title": "Request Id",
++      "type": "string"
++    }
++  },
++  "required": [
++    "request_id",
++    "language",
++    "premise_texts",
++    "hypothesis",
++    "allow_vectara"
++  ],
++  "title": "GroundednessRequest",
++  "type": "object"
++}
+diff --git a/rag-sidecar/schemas/GroundednessResult.schema.json b/rag-sidecar/schemas/GroundednessResult.schema.json
+new file mode 100644
+index 0000000..1ed6f20
+--- /dev/null
++++ b/rag-sidecar/schemas/GroundednessResult.schema.json
+@@ -0,0 +1,67 @@
++{
++  "additionalProperties": false,
++  "properties": {
++    "latency_ms": {
++      "minimum": 0,
++      "title": "Latency Ms",
++      "type": "integer"
++    },
++    "reason": {
++      "anyOf": [
++        {
++          "maxLength": 64,
++          "minLength": 1,
++          "type": "string"
++        },
++        {
++          "type": "null"
++        }
++      ],
++      "default": null,
++      "title": "Reason"
++    },
++    "score": {
++      "anyOf": [
++        {
++          "maximum": 1,
++          "minimum": 0,
++          "type": "number"
++        },
++        {
++          "type": "null"
++        }
++      ],
++      "default": null,
++      "title": "Score"
++    },
++    "scorer": {
++      "enum": [
++        "hhem_2_3_vectara",
++        "hhem_2_1_open",
++        "none"
++      ],
++      "title": "Scorer",
++      "type": "string"
++    },
++    "status": {
++      "enum": [
++        "scored",
++        "not_checked"
++      ],
++      "title": "Status",
++      "type": "string"
++    },
++    "truncated": {
++      "default": false,
++      "title": "Truncated",
++      "type": "boolean"
++    }
++  },
++  "required": [
++    "status",
++    "scorer",
++    "latency_ms"
++  ],
++  "title": "GroundednessResult",
++  "type": "object"
++}
+diff --git a/rag-sidecar/schemas/GroundednessThresholds.schema.json b/rag-sidecar/schemas/GroundednessThresholds.schema.json
+new file mode 100644
+index 0000000..002c515
+--- /dev/null
++++ b/rag-sidecar/schemas/GroundednessThresholds.schema.json
+@@ -0,0 +1,108 @@
++{
++  "$defs": {
++    "GroundednessThresholdCell": {
++      "additionalProperties": false,
++      "properties": {
++        "dev": {
++          "anyOf": [
++            {
++              "additionalProperties": {
++                "type": "number"
++              },
++              "type": "object"
++            },
++            {
++              "type": "null"
++            }
++          ],
++          "default": null,
++          "title": "Dev"
++        },
++        "fitted_at": {
++          "anyOf": [
++            {
++              "format": "date-time",
++              "type": "string"
++            },
++            {
++              "type": "null"
++            }
++          ],
++          "default": null,
++          "title": "Fitted At"
++        },
++        "holdout": {
++          "anyOf": [
++            {
++              "additionalProperties": {
++                "type": "number"
++              },
++              "type": "object"
++            },
++            {
++              "type": "null"
++            }
++          ],
++          "default": null,
++          "title": "Holdout"
++        },
++        "language": {
++          "minLength": 1,
++          "title": "Language",
++          "type": "string"
++        },
++        "scorer": {
++          "enum": [
++            "hhem_2_3_vectara",
++            "hhem_2_1_open"
++          ],
++          "title": "Scorer",
++          "type": "string"
++        },
++        "source": {
++          "enum": [
++            "default",
++            "calibrated"
++          ],
++          "title": "Source",
++          "type": "string"
++        },
++        "threshold": {
++          "maximum": 1,
++          "minimum": 0,
++          "title": "Threshold",
++          "type": "number"
++        }
++      },
++      "required": [
++        "scorer",
++        "language",
++        "threshold",
++        "source"
++      ],
++      "title": "GroundednessThresholdCell",
++      "type": "object"
++    }
++  },
++  "additionalProperties": false,
++  "properties": {
++    "cells": {
++      "items": {
++        "$ref": "#/$defs/GroundednessThresholdCell"
++      },
++      "title": "Cells",
++      "type": "array"
++    },
++    "schema_version": {
++      "const": 1,
++      "default": 1,
++      "title": "Schema Version",
++      "type": "integer"
++    }
++  },
++  "required": [
++    "cells"
++  ],
++  "title": "GroundednessThresholds",
++  "type": "object"
++}
+diff --git a/rag-sidecar/src/rag_sidecar/contracts/samples.py b/rag-sidecar/src/rag_sidecar/contracts/samples.py
+index 83abf27..c145525 100644
+--- a/rag-sidecar/src/rag_sidecar/contracts/samples.py
++++ b/rag-sidecar/src/rag_sidecar/contracts/samples.py
+@@ -3,6 +3,15 @@ from datetime import datetime, timezone
+ from typing import Any
+ 
+ from rag_sidecar.contracts import (
++    AnswerFeedback,
++    AnswerFeedbackRequest,
++    AnswerGroundedness,
++    AnswerRecord,
++    CitationRecord,
++    GroundednessRequest,
++    GroundednessResult,
++    GroundednessThresholdCell,
++    GroundednessThresholds,
+     AdvanceRequest,
+     AdvanceResponse,
+     BackfillDryRunReport,
+@@ -810,6 +819,71 @@ def _activation_evidence() -> ActivationEvidence:
+     )
+ 
+ 
++def _phase5_contract_samples() -> dict[str, Any]:
++    citation = CitationRecord(
++        n=1,
++        alias="S1",
++        chunkIds=["chunk-0001"],
++        documentId=_SAMPLE_DOC_ID,
++        documentName="handbook.pdf",
++        documentVersion=1,
++        page=3,
++        sectionPath=["Leave", "Annual leave"],
++        quote="Employees receive twenty days of annual leave.",
++        quoteHash=_HASH_A,
++        strategy="chunk-alias",
++    )
++    return {
++        "CitationRecord": citation,
++        "GroundednessRequest": GroundednessRequest(
++            request_id="req-0001",
++            language="en",
++            premise_texts=["Employees receive twenty days of annual leave."],
++            hypothesis="Employees get twenty days of leave.",
++            allow_vectara=True,
++        ),
++        "GroundednessResult": GroundednessResult(
++            status="scored", scorer="hhem_2_3_vectara", score=0.93, truncated=False, latency_ms=140
++        ),
++        "GroundednessThresholds": GroundednessThresholds(
++            cells=[
++                GroundednessThresholdCell(scorer="hhem_2_3_vectara", language="en", threshold=0.5, source="default"),
++                GroundednessThresholdCell(scorer="hhem_2_3_vectara", language="zh-Hans", threshold=0.5, source="default"),
++                GroundednessThresholdCell(scorer="hhem_2_1_open", language="en", threshold=0.5, source="default"),
++            ]
++        ),
++        "AnswerFeedbackRequest": AnswerFeedbackRequest(
++            vote="not_helpful", reasons=["incomplete", "bad_citation"], comment="Missing the carry-over rule.", chatId=_SAMPLE_JOB_ID
++        ),
++        "AnswerRecord": AnswerRecord(
++            answerId=_SAMPLE_JOB_ID,
++            chatId=None,
++            traceId="trace-0001",
++            modelId="model-placeholder",
++            citationStrategy="chunk-alias",
++            ragMode="strict",
++            answerLanguage="en",
++            invalidCitations=0,
++            citations=[citation],
++            groundedness=AnswerGroundedness(
++                status="scored",
++                scorer="hhem_2_3_vectara",
++                score=0.93,
++                label="verified",
++                threshold=0.5,
++                thresholdSource="default",
++                latencyMs=140,
++                checkedAt=_SAMPLE_NOW,
++            ),
++            feedback=AnswerFeedback(vote="not_helpful", reasons=["incomplete"], comment=None, updatedAt=_SAMPLE_NOW),
++            documents={_SAMPLE_DOC_ID: "current"},
++            feedbackEnabled=True,
++            createdAt=_SAMPLE_NOW,
++            updatedAt=_SAMPLE_NOW,
++        ),
++    }
++
++
+ def _models() -> dict[str, Any]:
+     return {
+         "ConversationTurn": ConversationTurn(role="user", content="Tell me about leave."),
+@@ -965,6 +1039,7 @@ def _models() -> dict[str, Any]:
+             source="fixture",
+         ),
+         **_phase31_contract_samples(),
++        **_phase5_contract_samples(),
+     }
+ 
+ 
+diff --git a/rag-sidecar/src/rag_sidecar/export_schemas.py b/rag-sidecar/src/rag_sidecar/export_schemas.py
+index 92870bd..ba13d6f 100644
+--- a/rag-sidecar/src/rag_sidecar/export_schemas.py
++++ b/rag-sidecar/src/rag_sidecar/export_schemas.py
+@@ -7,7 +7,10 @@ from typing import Literal
+ from pydantic import BaseModel
+ 
+ from rag_sidecar.contracts import (
++    AnswerFeedbackRequest,
++    AnswerRecord,
+     Baseline,
++    CitationRecord,
+     ConversationTurn,
+     DocTypeDetection,
+     DraftedItemBatch,
+@@ -15,6 +18,9 @@ from rag_sidecar.contracts import (
+     GateResult,
+     GoldenItem,
+     GoldenSplitManifest,
++    GroundednessRequest,
++    GroundednessResult,
++    GroundednessThresholds,
+     InjectionRuleSet,
+     InvoiceExtractRequest,
+     InvoiceFields,
+@@ -129,6 +135,12 @@ CONTRACTS: list[tuple[type[BaseModel], Mode]] = [
+     (ParserExpected, "validation"),
+     (ParserEvalReport, "serialization"),
+     (ParseGateReport, "serialization"),
++    (CitationRecord, "serialization"),
++    (AnswerRecord, "serialization"),
++    (AnswerFeedbackRequest, "validation"),
++    (GroundednessRequest, "validation"),
++    (GroundednessResult, "serialization"),
++    (GroundednessThresholds, "serialization"),
+ ]
+ 
+ 
+diff --git a/src/lib/rag-eval/contracts.generated.ts b/src/lib/rag-eval/contracts.generated.ts
+index f54cf5f..baba414 100644
+--- a/src/lib/rag-eval/contracts.generated.ts
++++ b/src/lib/rag-eval/contracts.generated.ts
+@@ -10,6 +10,12 @@ export type AdvanceRequest = z.infer<typeof AdvanceRequestSchema>
+ export const AdvanceResponseSchema = z.object({ "done": z.boolean(), "reason": z.union([z.string(), z.null()]).default(null), "stage": z.string(), "status": z.union([z.enum(["queued","preflight","parsing","checking","chunking","embedding","ready","failed","quarantined","needs_review","skipped_duplicate"]), z.null()]).default(null), "wait_ms": z.union([z.number().int().gte(0), z.null()]).default(null), "worker_id": z.string().min(1).max(128) }).strict()
+ export type AdvanceResponse = z.infer<typeof AdvanceResponseSchema>
+ 
++export const AnswerFeedbackRequestSchema = z.object({ "chatId": z.union([z.string().uuid(), z.null()]).default(null), "comment": z.union([z.string().max(500), z.null()]).default(null), "reasons": z.array(z.enum(["wrong","incomplete","not_from_documents","bad_citation"])).max(4).optional(), "vote": z.enum(["helpful","not_helpful"]) }).strict()
++export type AnswerFeedbackRequest = z.infer<typeof AnswerFeedbackRequestSchema>
++
++export const AnswerRecordSchema = z.object({ "answerId": z.string().uuid(), "answerLanguage": z.union([z.string(), z.null()]).default(null), "chatId": z.union([z.string().uuid(), z.null()]).default(null), "citationStrategy": z.union([z.enum(["claude-citations","chunk-alias"]), z.null()]).default(null), "citations": z.array(z.object({ "alias": z.string().regex(new RegExp("^S[1-9][0-9]*$")), "chunkIds": z.array(z.string()), "documentId": z.string().min(1), "documentName": z.string().min(1), "documentVersion": z.union([z.number().int(), z.null()]).default(null), "n": z.number().int().gte(1), "page": z.union([z.number().int(), z.null()]).default(null), "quote": z.string().min(1), "quoteHash": z.string().regex(new RegExp("^[0-9a-f]{64}$")), "sectionPath": z.union([z.array(z.string()), z.null()]).default(null), "strategy": z.enum(["claude-citations","chunk-alias"]) }).strict()), "createdAt": z.string().datetime({ offset: true }), "documents": z.record(z.string(), z.enum(["current","unavailable"])).optional(), "feedback": z.union([z.object({ "comment": z.union([z.string().max(500), z.null()]).default(null), "reasons": z.array(z.enum(["wrong","incomplete","not_from_documents","bad_citation"])).max(4).optional(), "updatedAt": z.string().datetime({ offset: true }), "vote": z.enum(["helpful","not_helpful"]) }).strict(), z.null()]).default(null), "feedbackEnabled": z.boolean().default(false), "groundedness": z.object({ "checkedAt": z.union([z.string().datetime({ offset: true }), z.null()]).default(null), "label": z.union([z.enum(["verified","possibly_unreliable","not_checked"]), z.null()]).default(null), "latencyMs": z.union([z.number().int().gte(0), z.null()]).default(null), "reason": z.union([z.string().min(1).max(64), z.null()]).default(null), "score": z.union([z.number().gte(0).lte(1), z.null()]).default(null), "scorer": z.union([z.enum(["hhem_2_3_vectara","hhem_2_1_open","none"]), z.null()]).default(null), "status": z.enum(["pending","scored","not_checked"]), "threshold": z.union([z.number().gte(0).lte(1), z.null()]).default(null), "thresholdSource": z.union([z.enum(["default","calibrated"]), z.null()]).default(null), "truncated": z.boolean().default(false) }).strict(), "invalidCitations": z.number().int().gte(0).default(0), "modelId": z.string().min(1), "ragMode": z.string().min(1), "traceId": z.string().min(1), "updatedAt": z.string().datetime({ offset: true }) }).strict()
++export type AnswerRecord = z.infer<typeof AnswerRecordSchema>
++
+ export const BackfillDryRunReportSchema = z.object({ "budget_usd": z.union([z.number().gte(0), z.null()]).default(null), "class_shares": z.record(z.string(), z.number()), "duplicates": z.object({ "already_existing": z.number().int().gte(0), "in_inventory": z.number().int().gte(0) }).strict(), "embedding_cost_by_profile_usd": z.record(z.string(), z.number()), "fits_budget": z.boolean(), "inventory": z.object({ "bytes": z.number().int().gte(0), "files": z.number().int().gte(0), "pages_estimated": z.number().int().gte(0) }).strict(), "projected_cost": z.object({ "embeddings_usd": z.number().gte(0), "premium_parse_usd": z.number().gte(0), "total_usd": z.number().gte(0), "vlm_usd": z.number().gte(0) }).strict(), "projected_l2_pages": z.number().int().gte(0), "projected_l3_pages": z.number().int().gte(0), "projected_pages_by_tier": z.record(z.string(), z.number().int()), "projected_wall_time_s": z.number().gte(0), "sample_size_by_class": z.record(z.string(), z.number().int()) }).strict()
+ export type BackfillDryRunReport = z.infer<typeof BackfillDryRunReportSchema>
+ 
+@@ -28,6 +34,9 @@ export type ChunkingProfile = z.infer<typeof ChunkingProfileSchema>
+ export const ChunkingSweepReportSchema = z.object({ "config_hash": z.union([z.string().regex(new RegExp("^[a-f0-9]{64}$")), z.null()]).default(null), "profiles": z.array(z.object({ "gate": z.union([z.object({ "baseline_profile_id": z.string(), "passed": z.boolean(), "regressions": z.array(z.object({ "band": z.number(), "diff": z.number(), "metric": z.string(), "slice": z.string() }).strict()).optional() }).strict(), z.null()]).default(null), "metrics": z.object({ "by_doc_type": z.record(z.string(), z.object({ "context_tokens": z.object({ "n": z.number().int().gte(0), "value": z.union([z.number(), z.null()]) }).strict(), "correct_refusal_rate": z.object({ "n": z.number().int().gte(0), "value": z.union([z.number(), z.null()]) }).strict(), "false_refusal_rate": z.object({ "n": z.number().int().gte(0), "value": z.union([z.number(), z.null()]) }).strict(), "judge_correctness": z.object({ "n": z.number().int().gte(0), "value": z.union([z.number(), z.null()]) }).strict(), "judge_skipped": z.boolean().default(false), "latency_p50_ms": z.object({ "n": z.number().int().gte(0), "value": z.union([z.number(), z.null()]) }).strict(), "latency_p95_ms": z.object({ "n": z.number().int().gte(0), "value": z.union([z.number(), z.null()]) }).strict(), "mrr": z.object({ "n": z.number().int().gte(0), "value": z.union([z.number(), z.null()]) }).strict(), "recall_at_k": z.object({ "n": z.number().int().gte(0), "value": z.union([z.number(), z.null()]) }).strict() }).strict()).optional(), "by_language": z.record(z.string(), z.object({ "context_tokens": z.object({ "n": z.number().int().gte(0), "value": z.union([z.number(), z.null()]) }).strict(), "correct_refusal_rate": z.object({ "n": z.number().int().gte(0), "value": z.union([z.number(), z.null()]) }).strict(), "false_refusal_rate": z.object({ "n": z.number().int().gte(0), "value": z.union([z.number(), z.null()]) }).strict(), "judge_correctness": z.object({ "n": z.number().int().gte(0), "value": z.union([z.number(), z.null()]) }).strict(), "judge_skipped": z.boolean().default(false), "latency_p50_ms": z.object({ "n": z.number().int().gte(0), "value": z.union([z.number(), z.null()]) }).strict(), "latency_p95_ms": z.object({ "n": z.number().int().gte(0), "value": z.union([z.number(), z.null()]) }).strict(), "mrr": z.object({ "n": z.number().int().gte(0), "value": z.union([z.number(), z.null()]) }).strict(), "recall_at_k": z.object({ "n": z.number().int().gte(0), "value": z.union([z.number(), z.null()]) }).strict() }).strict()).optional(), "by_question_kind": z.record(z.string(), z.object({ "context_tokens": z.object({ "n": z.number().int().gte(0), "value": z.union([z.number(), z.null()]) }).strict(), "correct_refusal_rate": z.object({ "n": z.number().int().gte(0), "value": z.union([z.number(), z.null()]) }).strict(), "false_refusal_rate": z.object({ "n": z.number().int().gte(0), "value": z.union([z.number(), z.null()]) }).strict(), "judge_correctness": z.object({ "n": z.number().int().gte(0), "value": z.union([z.number(), z.null()]) }).strict(), "judge_skipped": z.boolean().default(false), "latency_p50_ms": z.object({ "n": z.number().int().gte(0), "value": z.union([z.number(), z.null()]) }).strict(), "latency_p95_ms": z.object({ "n": z.number().int().gte(0), "value": z.union([z.number(), z.null()]) }).strict(), "mrr": z.object({ "n": z.number().int().gte(0), "value": z.union([z.number(), z.null()]) }).strict(), "recall_at_k": z.object({ "n": z.number().int().gte(0), "value": z.union([z.number(), z.null()]) }).strict() }).strict()).optional(), "overall": z.object({ "context_tokens": z.object({ "n": z.number().int().gte(0), "value": z.union([z.number(), z.null()]) }).strict(), "correct_refusal_rate": z.object({ "n": z.number().int().gte(0), "value": z.union([z.number(), z.null()]) }).strict(), "false_refusal_rate": z.object({ "n": z.number().int().gte(0), "value": z.union([z.number(), z.null()]) }).strict(), "judge_correctness": z.object({ "n": z.number().int().gte(0), "value": z.union([z.number(), z.null()]) }).strict(), "judge_skipped": z.boolean().default(false), "latency_p50_ms": z.object({ "n": z.number().int().gte(0), "value": z.union([z.number(), z.null()]) }).strict(), "latency_p95_ms": z.object({ "n": z.number().int().gte(0), "value": z.union([z.number(), z.null()]) }).strict(), "mrr": z.object({ "n": z.number().int().gte(0), "value": z.union([z.number(), z.null()]) }).strict(), "recall_at_k": z.object({ "n": z.number().int().gte(0), "value": z.union([z.number(), z.null()]) }).strict() }).strict() }).strict(), "profile_id": z.string() }).strict()).optional(), "provenance": z.object({ "source": z.enum(["defaults","sweep","calibration","fixture","live"]) }).strict(), "schema_version": z.literal(1).default(1) }).strict()
+ export type ChunkingSweepReport = z.infer<typeof ChunkingSweepReportSchema>
+ 
++export const CitationRecordSchema = z.object({ "alias": z.string().regex(new RegExp("^S[1-9][0-9]*$")), "chunkIds": z.array(z.string()), "documentId": z.string().min(1), "documentName": z.string().min(1), "documentVersion": z.union([z.number().int(), z.null()]).default(null), "n": z.number().int().gte(1), "page": z.union([z.number().int(), z.null()]).default(null), "quote": z.string().min(1), "quoteHash": z.string().regex(new RegExp("^[0-9a-f]{64}$")), "sectionPath": z.union([z.array(z.string()), z.null()]).default(null), "strategy": z.enum(["claude-citations","chunk-alias"]) }).strict()
++export type CitationRecord = z.infer<typeof CitationRecordSchema>
++
+ export const ConversationTurnSchema = z.object({ "content": z.string().min(1), "role": z.enum(["user","assistant"]) }).strict()
+ export type ConversationTurn = z.infer<typeof ConversationTurnSchema>
+ 
+@@ -58,6 +67,15 @@ export type GoldenItem = z.infer<typeof GoldenItemSchema>
+ export const GoldenSplitManifestSchema = z.object({ "assignments": z.record(z.string(), z.enum(["dev","test"])), "rule": z.literal("sha256-first8hex-mod100-lt70-dev"), "schema_version": z.literal(1).default(1) }).strict()
+ export type GoldenSplitManifest = z.infer<typeof GoldenSplitManifestSchema>
+ 
++export const GroundednessRequestSchema = z.object({ "allow_vectara": z.boolean(), "hypothesis": z.string().min(1), "language": z.string().min(1), "premise_texts": z.array(z.string().min(1)).min(1), "request_id": z.string().min(1) }).strict()
++export type GroundednessRequest = z.infer<typeof GroundednessRequestSchema>
++
++export const GroundednessResultSchema = z.object({ "latency_ms": z.number().int().gte(0), "reason": z.union([z.string().min(1).max(64), z.null()]).default(null), "score": z.union([z.number().gte(0).lte(1), z.null()]).default(null), "scorer": z.enum(["hhem_2_3_vectara","hhem_2_1_open","none"]), "status": z.enum(["scored","not_checked"]), "truncated": z.boolean().default(false) }).strict()
++export type GroundednessResult = z.infer<typeof GroundednessResultSchema>
++
++export const GroundednessThresholdsSchema = z.object({ "cells": z.array(z.object({ "dev": z.union([z.record(z.string(), z.number()), z.null()]).default(null), "fitted_at": z.union([z.string().datetime({ offset: true }), z.null()]).default(null), "holdout": z.union([z.record(z.string(), z.number()), z.null()]).default(null), "language": z.string().min(1), "scorer": z.enum(["hhem_2_3_vectara","hhem_2_1_open"]), "source": z.enum(["default","calibrated"]), "threshold": z.number().gte(0).lte(1) }).strict()), "schema_version": z.literal(1).default(1) }).strict()
++export type GroundednessThresholds = z.infer<typeof GroundednessThresholdsSchema>
++
+ export const IngestionJobSchema = z.object({ "attempts": z.array(z.object({ "attempt_no": z.number().int().gte(1), "cache_hit": z.boolean(), "check": z.union([z.object({ "pages": z.array(z.object({ "failed": z.array(z.enum(["empty_text","low_chars","garbled","language_mismatch","missing_table","partial_conversion","table_boundary"])), "page": z.number().int().gte(1) }).strict()), "partial": z.boolean(), "passed": z.boolean(), "score": z.number().gte(0).lte(1) }).strict(), z.null()]).default(null), "est_cost_usd": z.number().gte(0), "ms": z.number().int().gte(0), "pages": z.object({ "end": z.number().int().gte(1), "start": z.number().int().gte(1) }).strict(), "parser": z.string(), "parser_version": z.string(), "preset": z.enum(["native","fast","structured_layout","structured_full","structured_ocr","premium"]), "reason": z.enum(["initial","escalation","table_boundary","progressive_fast","fixed_chain","native"]), "refused": z.boolean(), "tier": z.enum(["native","fast","structured","premium"]) }).strict()).optional(), "batch_id": z.union([z.string().regex(new RegExp("^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")), z.null()]).default(null), "created_at": z.string().datetime({ offset: true }), "dead_letter_at": z.union([z.string().datetime({ offset: true }), z.null()]).default(null), "deleted_at": z.union([z.string().datetime({ offset: true }), z.null()]).default(null), "detect_counts": z.union([z.object({ "L1": z.number().int().gte(0), "L2": z.number().int().gte(0), "L3": z.number().int().gte(0), "gated_share": z.number().gte(0).lte(1) }).strict(), z.null()]).default(null), "doc_class": z.union([z.string(), z.null()]).default(null), "document_id": z.union([z.string().regex(new RegExp("^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")), z.null()]).default(null), "embedding_profile": z.union([z.string(), z.null()]).default(null), "error_class": z.union([z.string(), z.null()]).default(null), "escalations": z.number().int().gte(0).default(0), "est_cost_usd": z.union([z.number().gte(0), z.null()]).default(null), "file_sha256": z.union([z.string().regex(new RegExp("^[a-f0-9]{64}$")), z.null()]).default(null), "filename": z.union([z.string(), z.null()]).default(null), "id": z.string().regex(new RegExp("^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")), "kind": z.enum(["ingest","dry_run","delete"]), "lease_until": z.union([z.string().datetime({ offset: true }), z.null()]).default(null), "lineage_id": z.union([z.string(), z.null()]).default(null), "locked_by": z.union([z.string().min(1).max(128), z.null()]).default(null), "max_retries": z.number().int().gte(0).default(3), "mime_type": z.union([z.string(), z.null()]).default(null), "needs_review_reason": z.union([z.string(), z.null()]).default(null), "original_ref": z.union([z.object({ "bucket": z.string(), "path": z.string() }).strict(), z.null()]).default(null), "page_ranges": z.array(z.object({ "cache_id": z.union([z.string(), z.null()]).default(null), "end": z.number().int().gte(1), "layer": z.enum(["L1","L2","L3"]), "parser": z.string(), "preset": z.enum(["native","fast","structured_layout","structured_full","structured_ocr","premium"]), "signals": z.array(z.enum(["tables","multi_col","has_figure","scanned","garbled","uncertain","table_continues"])), "start": z.number().int().gte(1), "status": z.enum(["pending","ok","escalated","needs_review"]), "tier": z.enum(["native","fast","structured","premium"]) }).strict()).optional(), "pages": z.union([z.number().int().gte(0), z.null()]).default(null), "parser_used": z.union([z.string(), z.null()]).default(null), "parser_version": z.union([z.string(), z.null()]).default(null), "preflight_ref": z.union([z.string(), z.null()]).default(null), "priority": z.number().int().gte(0).default(100), "provisional_published_at": z.union([z.string().datetime({ offset: true }), z.null()]).default(null), "retries": z.number().int().gte(0).default(0), "routing_note": z.union([z.string(), z.null()]).default(null), "run_after": z.union([z.string().datetime({ offset: true }), z.null()]).default(null), "runner": z.union([z.enum(["worker","ray"]), z.null()]).default(null), "settings": z.object({ "cloud_allowed": z.boolean(), "doc_type": z.enum(["general","financial_report","contract_legal","invoice_receipt","product_technical","scanned_image"]), "embed_mode": z.enum(["sync","batch_api"]), "escalation": z.boolean(), "max_tier": z.union([z.enum(["native","fast","structured","premium"]), z.null()]).default(null), "min_tier": z.union([z.enum(["native","fast","structured","premium"]), z.null()]).default(null), "ocr_languages": z.array(z.enum(["zh","en","it"])).min(1), "premium_max_pages_per_doc": z.number().int().gte(0), "premium_page_budget": z.number().int().gte(0), "profile_id": z.string(), "profile_version": z.number().int().gte(1), "progressive": z.boolean(), "routing": z.enum(["fixed","tiered"]), "routing_config_version": z.string(), "vlm_detect": z.boolean(), "vlm_model": z.union([z.string(), z.null()]).default(null) }).strict(), "source": z.string(), "source_key": z.string(), "stage": z.union([z.string(), z.null()]).default(null), "stage_state": z.record(z.string(), z.unknown()).optional(), "status": z.enum(["queued","preflight","parsing","checking","chunking","embedding","ready","failed","quarantined","needs_review","skipped_duplicate"]), "tenant_key": z.string().min(1).max(256), "tier": z.union([z.enum(["native","fast","structured","premium"]), z.null()]).default(null), "tier_page_counts": z.record(z.string(), z.number().int()).optional(), "timings": z.record(z.string(), z.number().int()).optional(), "trace_id": z.union([z.string(), z.null()]).default(null), "updated_at": z.string().datetime({ offset: true }), "version": z.union([z.number().int().gte(1), z.null()]).default(null) }).strict()
+ export type IngestionJob = z.infer<typeof IngestionJobSchema>
+ 
+diff --git a/tests/fixtures/contracts/samples.json b/tests/fixtures/contracts/samples.json
+index dd2073e..725a02b 100644
+--- a/tests/fixtures/contracts/samples.json
++++ b/tests/fixtures/contracts/samples.json
+@@ -27,6 +27,71 @@
+       "wait_ms": 0,
+       "worker_id": "worker-1"
+     },
++    "AnswerFeedbackRequest": {
++      "chatId": "00000000-0000-4000-8000-000000000001",
++      "comment": "Missing the carry-over rule.",
++      "reasons": [
++        "incomplete",
++        "bad_citation"
++      ],
++      "vote": "not_helpful"
++    },
++    "AnswerRecord": {
++      "answerId": "00000000-0000-4000-8000-000000000001",
++      "answerLanguage": "en",
++      "chatId": null,
++      "citationStrategy": "chunk-alias",
++      "citations": [
++        {
++          "alias": "S1",
++          "chunkIds": [
++            "chunk-0001"
++          ],
++          "documentId": "00000000-0000-4000-8000-000000000002",
++          "documentName": "handbook.pdf",
++          "documentVersion": 1,
++          "n": 1,
++          "page": 3,
++          "quote": "Employees receive twenty days of annual leave.",
++          "quoteHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
++          "sectionPath": [
++            "Leave",
++            "Annual leave"
++          ],
++          "strategy": "chunk-alias"
++        }
++      ],
++      "createdAt": "2026-01-01T00:00:00Z",
++      "documents": {
++        "00000000-0000-4000-8000-000000000002": "current"
++      },
++      "feedback": {
++        "comment": null,
++        "reasons": [
++          "incomplete"
++        ],
++        "updatedAt": "2026-01-01T00:00:00Z",
++        "vote": "not_helpful"
++      },
++      "feedbackEnabled": true,
++      "groundedness": {
++        "checkedAt": "2026-01-01T00:00:00Z",
++        "label": "verified",
++        "latencyMs": 140,
++        "reason": null,
++        "score": 0.93,
++        "scorer": "hhem_2_3_vectara",
++        "status": "scored",
++        "threshold": 0.5,
++        "thresholdSource": "default",
++        "truncated": false
++      },
++      "invalidCitations": 0,
++      "modelId": "model-placeholder",
++      "ragMode": "strict",
++      "traceId": "trace-0001",
++      "updatedAt": "2026-01-01T00:00:00Z"
++    },
+     "BackfillDryRunReport": {
+       "budget_usd": 10.0,
+       "class_shares": {
+@@ -234,6 +299,24 @@
+       },
+       "schema_version": 1
+     },
++    "CitationRecord": {
++      "alias": "S1",
++      "chunkIds": [
++        "chunk-0001"
++      ],
++      "documentId": "00000000-0000-4000-8000-000000000002",
++      "documentName": "handbook.pdf",
++      "documentVersion": 1,
++      "n": 1,
++      "page": 3,
++      "quote": "Employees receive twenty days of annual leave.",
++      "quoteHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
++      "sectionPath": [
++        "Leave",
++        "Annual leave"
++      ],
++      "strategy": "chunk-alias"
++    },
+     "ConversationTurn": {
+       "content": "Tell me about leave.",
+       "role": "user"
+@@ -1234,6 +1317,55 @@
+       "rule": "sha256-first8hex-mod100-lt70-dev",
+       "schema_version": 1
+     },
++    "GroundednessRequest": {
++      "allow_vectara": true,
++      "hypothesis": "Employees get twenty days of leave.",
++      "language": "en",
++      "premise_texts": [
++        "Employees receive twenty days of annual leave."
++      ],
++      "request_id": "req-0001"
++    },
++    "GroundednessResult": {
++      "latency_ms": 140,
++      "reason": null,
++      "score": 0.93,
++      "scorer": "hhem_2_3_vectara",
++      "status": "scored",
++      "truncated": false
++    },
++    "GroundednessThresholds": {
++      "cells": [
++        {
++          "dev": null,
++          "fitted_at": null,
++          "holdout": null,
++          "language": "en",
++          "scorer": "hhem_2_3_vectara",
++          "source": "default",
++          "threshold": 0.5
++        },
++        {
++          "dev": null,
++          "fitted_at": null,
++          "holdout": null,
++          "language": "zh-Hans",
++          "scorer": "hhem_2_3_vectara",
++          "source": "default",
++          "threshold": 0.5
++        },
++        {
++          "dev": null,
++          "fitted_at": null,
++          "holdout": null,
++          "language": "en",
++          "scorer": "hhem_2_1_open",
++          "source": "default",
++          "threshold": 0.5
++        }
++      ],
++      "schema_version": 1
++    },
+     "IngestionJob": {
+       "attempts": [
+         {
+-- 
+2.43.0
+

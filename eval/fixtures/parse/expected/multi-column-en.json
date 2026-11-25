@@ -1,0 +1,60 @@
+{
+  "fixture_id": "multi-column-en",
+  "headings": [
+    {
+      "level": 1,
+      "page": 1,
+      "text": "Two-column service bulletin"
+    },
+    {
+      "level": 2,
+      "page": 2,
+      "text": "Bulletin body"
+    }
+  ],
+  "language": "en",
+  "pages": [
+    {
+      "page": 1,
+      "preset": "fast",
+      "signals": [],
+      "tier": "fast"
+    },
+    {
+      "page": 2,
+      "preset": "structured_layout",
+      "signals": [
+        "multi_col"
+      ],
+      "tier": "structured"
+    }
+  ],
+  "reading_order": [
+    {
+      "order": 0,
+      "page": 1,
+      "text": "Two-column service bulletin"
+    },
+    {
+      "order": 1,
+      "page": 1,
+      "text": "Page one is single-column context for the layout fixture."
+    },
+    {
+      "order": 2,
+      "page": 2,
+      "text": "Bulletin body"
+    },
+    {
+      "order": 3,
+      "page": 2,
+      "text": "Left column copy explains maintenance intervals and torque limits for example va"
+    },
+    {
+      "order": 4,
+      "page": 2,
+      "text": "Right column copy lists example SKUs and replacement kits used only in routing t"
+    }
+  ],
+  "table_cells": []
+}

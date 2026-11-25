@@ -1,0 +1,31 @@
+---
+description: GSD orchestrator — context hygiene and executor parallelism (Guang)
+alwaysApply: true
+---
+
+# Orchestration (Guang)
+
+## 1. Context hygiene
+
+After each wave/merge, or when context feels ~60% full:
+
+1. **Persist and push** `.planning/STATE.md`, `.planning/paused/exec-ledger.md`, `HANDOFF.md`, and plan `SUMMARY.md` files.
+2. **Compact** working memory: keep only standing rules, current wave, ledger, and next steps — not full transcripts or tool dumps.
+3. **Subagents** get a fresh minimal brief: `.planning/paused/p3-common.md` (or phase equivalent) **plus that plan’s PLAN file only**.
+4. **Large output** → write to disk; read only what you need; never paste huge logs into chat.
+
+## 2. Parallelism
+
+- Run **exactly 4 concurrent executors** whenever dependency-ready, file-disjoint plans exist (never more than one agent per plan id).
+- **Never** more than one executor on the same plan id.
+- **Before every spawn:** read `.planning/paused/exec-ledger.md` (plan → agent → status); confirm with `cursor-cloud` list (status `RUNNING`) when the UI count looks wrong.
+- **Merge refill (same turn):** On any merge to the integration branch, in **one assistant message** (batch): merge tests → ledger update → **all** missing `Task` spawns to restore **4** `RUNNING` → fast-forward every active `wt/*` worktree from trunk (rebase local WIP if ff fails). Do **not** end a turn with &lt;4 executors unless the ledger records **why** (fewer runnable plans).
+- **Visibility:** Executors must `git push -u origin exec/<plan>` after **each task commit** (and WIP commits if pausing). Orchestrator updates `.planning/NEXT-ACCOUNT-PROMPT.md` after **every merge** and pushes with trunk; reports all four bcIds in status replies.
+- **Account switch (~96% usage):** On message `PAUSE-96`, follow Guang's pause protocol (patches, no half merges, `/gsd-pause-work`, refresh `NEXT-ACCOUNT-PROMPT.md`). See that file for cold-resume paste prompt.
+- **Retry** only after the previous agent for that plan is confirmed stopped (`IDLE`); log duplicates in the ledger.
+
+## 3. Autonomy
+
+- Do everything you can **without asking Guang**. Guang pre-authorizes approvals the work needs (package installs, plan approvals, GSD checkpoints you can run).
+- Only when a **human login** is required (dashboard OAuth, missing secret only the user holds), stop **that item**, give Guang the **exact login link**, and keep working on everything else.
+- Hard limits unchanged: no secrets or real customer data in commits; push only to the active integration branch; no PR unless asked.

@@ -1,0 +1,204 @@
+From 7a664e7c8029181d3127a964e876380606a4d31e Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 24 Nov 2026 22:33:40 +0000
+Subject: [PATCH 3/5] test(04-33): chunking profile validator parity and
+ embedding input limits (red)
+
+- parity test runs every row of chunking-profile-cases.json
+- maxInputTokensFor and validateChunkingProfile are stubs until the next commit
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01X342shLsAZx6PYph2vA7hc
+---
+ src/lib/rag/chunking/validate.ts            | 19 ++++
+ src/lib/rag/embeddings/registry.ts          |  4 +
+ tests/rag/chunking/profile-validate.test.ts | 97 +++++++++++++++++++++
+ tests/rag/embeddings/registry.test.ts       | 26 ++++++
+ 4 files changed, 146 insertions(+)
+ create mode 100644 src/lib/rag/chunking/validate.ts
+ create mode 100644 tests/rag/chunking/profile-validate.test.ts
+
+diff --git a/src/lib/rag/chunking/validate.ts b/src/lib/rag/chunking/validate.ts
+new file mode 100644
+index 0000000..273f7ff
+--- /dev/null
++++ b/src/lib/rag/chunking/validate.ts
+@@ -0,0 +1,19 @@
++export interface ChunkingFinding {
++  code: string;
++  message: string;
++}
++
++export interface ChunkingValidationContext {
++  maxChildTokens?: number;
++  topK?: number;
++  contextBudget?: number;
++}
++
++export interface ChunkingValidation {
++  errors: ChunkingFinding[];
++  warnings: ChunkingFinding[];
++}
++
++export async function validateChunkingProfile(_input: unknown, _context: ChunkingValidationContext = {}): Promise<ChunkingValidation> {
++  return { errors: [], warnings: [] };
++}
+diff --git a/src/lib/rag/embeddings/registry.ts b/src/lib/rag/embeddings/registry.ts
+index 1764fda..d955d1e 100644
+--- a/src/lib/rag/embeddings/registry.ts
++++ b/src/lib/rag/embeddings/registry.ts
+@@ -77,3 +77,7 @@ export function resetEmbeddingProvidersForTests(): void {
+   overrides = {};
+   defaults = null;
+ }
++
++export function maxInputTokensFor(_providerId: string): number {
++  return 0;
++}
+diff --git a/tests/rag/chunking/profile-validate.test.ts b/tests/rag/chunking/profile-validate.test.ts
+new file mode 100644
+index 0000000..2f7068e
+--- /dev/null
++++ b/tests/rag/chunking/profile-validate.test.ts
+@@ -0,0 +1,97 @@
++import fs from 'node:fs';
++import path from 'node:path';
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
++import type { EmbeddingProfile } from '@/lib/rag/embeddings/active-profile';
++import { resetRagConfigForTests } from '@/lib/rag/config';
++import { resetRagDepsForTests, setRagDepsForTests } from '@/lib/rag/deps';
++
++const activeProfile = vi.hoisted(() => ({ provider: 'openai' as string }));
++
++vi.mock('@/lib/rag/embeddings/active-profile', async (importOriginal) => {
++  const actual = await importOriginal<typeof import('@/lib/rag/embeddings/active-profile')>();
++  return { ...actual, getActiveProfile: async () => ({ ...actual.LEGACY_PROFILE, provider: activeProfile.provider }) as EmbeddingProfile };
++});
++
++import { validateChunkingProfile } from '@/lib/rag/chunking/validate';
++
++interface CaseRow {
++  input: Record<string, unknown>;
++  errors: string[];
++  warnings: string[];
++}
++
++interface CaseTable {
++  cases: CaseRow[];
++  default_context: { max_child_tokens: number; top_k: number; context_budget: number };
++}
++
++const TABLE = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../../rag-sidecar/schemas/chunking-profile-cases.json'), 'utf8')) as CaseTable;
++
++const codes = (findings: { code: string }[]): string[] => findings.map((finding) => finding.code).sort();
++
++beforeEach(() => {
++  activeProfile.provider = 'openai';
++  resetRagConfigForTests();
++  setRagDepsForTests({ ragEnv: () => ({}) });
++});
++
++afterEach(() => {
++  resetRagDepsForTests();
++  resetRagConfigForTests();
++});
++
++describe('validateChunkingProfile parity with chunking-profile-cases.json (Pydantic)', () => {
++  it('reads a case table with every error and warning code', () => {
++    expect(TABLE.cases.length).toBeGreaterThanOrEqual(5);
++  });
++
++  for (const [index, row] of TABLE.cases.entries()) {
++    it(`case ${index} ${String(row.input.id)} gives errors [${row.errors.join(',')}] and warnings [${row.warnings.join(',')}]`, async () => {
++      const result = await validateChunkingProfile(row.input, {
++        maxChildTokens: TABLE.default_context.max_child_tokens,
++        topK: TABLE.default_context.top_k,
++        contextBudget: TABLE.default_context.context_budget,
++      });
++      expect(codes(result.errors)).toEqual([...row.errors].sort());
++      expect(codes(result.warnings)).toEqual([...row.warnings].sort());
++    });
++  }
++});
++
++describe('validateChunkingProfile context', () => {
++  const child9000 = { id: 'big-child', doc_type: 'general', child_tokens: 9000, parent_mode: 'none', parent_tokens: null, status: 'building', preset: 'custom' };
++
++  it('takes the child limit from the active embedding profile provider when none is given', async () => {
++    activeProfile.provider = 'openai';
++    expect(codes((await validateChunkingProfile(child9000)).errors)).toEqual(['child_exceeds_embedding_input']);
++    activeProfile.provider = 'voyage';
++    expect((await validateChunkingProfile(child9000)).errors).toEqual([]);
++    activeProfile.provider = 'qwen3';
++    expect((await validateChunkingProfile({ ...child9000, child_tokens: 32769 })).errors.map((e) => e.code)).toEqual(['child_exceeds_embedding_input']);
++  });
++
++  it('takes top_k from the effective retrieval params and the budget from RAG_CONTEXT_TOKEN_BUDGET', async () => {
++    const profile = { id: 'p', doc_type: 'general', child_tokens: 256, parent_mode: 'structure', parent_tokens: 1024, status: 'building', preset: '256/1024' };
++    expect(codes((await validateChunkingProfile(profile)).warnings)).toEqual(['top_k_parent_over_budget']);
++    resetRagConfigForTests();
++    setRagDepsForTests({ ragEnv: () => ({ RAG_CONTEXT_TOKEN_BUDGET: '9000' }) });
++    expect((await validateChunkingProfile(profile)).warnings).toEqual([]);
++  });
++
++  it('an explicit context value wins over the default', async () => {
++    activeProfile.provider = 'voyage';
++    const result = await validateChunkingProfile(child9000, { maxChildTokens: 8191 });
++    expect(codes(result.errors)).toEqual(['child_exceeds_embedding_input']);
++  });
++
++  it('reports a malformed profile as one invalid_shape error instead of throwing', async () => {
++    const result = await validateChunkingProfile({ id: '', doc_type: 'memo', child_tokens: 0 });
++    expect(codes(result.errors)).toEqual(['invalid_shape']);
++    expect(result.warnings).toEqual([]);
++  });
++
++  it('gives every finding a message without echoing input values', async () => {
++    const result = await validateChunkingProfile(child9000, { maxChildTokens: 8191 });
++    expect(result.errors[0]?.message.length).toBeGreaterThan(10);
++  });
++});
+diff --git a/tests/rag/embeddings/registry.test.ts b/tests/rag/embeddings/registry.test.ts
+index c32e68a..0ae6f30 100644
+--- a/tests/rag/embeddings/registry.test.ts
++++ b/tests/rag/embeddings/registry.test.ts
+@@ -6,6 +6,7 @@ import { estimateCostUsd, priceFor } from '@/lib/rag/embeddings/prices';
+ import {
+   canonicalModelId,
+   getEmbeddingProvider,
++  maxInputTokensFor,
+   resetEmbeddingProvidersForTests,
+   setEmbeddingProvidersForTests,
+   validateProfileShape,
+@@ -242,3 +243,28 @@ describe('registry', () => {
+     expect(getEmbeddingProvider('openai')).not.toBe(fake);
+   });
+ });
++
++describe('maxInputTokensFor', () => {
++  it('returns the documented input limit of each registered provider', () => {
++    expect(maxInputTokensFor('openai')).toBe(8191);
++    expect(maxInputTokensFor('voyage')).toBe(32000);
++    expect(maxInputTokensFor('qwen3')).toBe(32768);
++  });
++
++  it('follows a provider swapped in for a test and throws for an unknown id', () => {
++    setEmbeddingProvidersForTests({
++      openai: {
++        id: 'openai',
++        model: 'fake-model',
++        maxInputTokens: 123,
++        supportedDims: [1536],
++        normalize: true,
++        embedDocuments: async () => ({ vectors: [], model: 'fake-model', host: 'fake', usage: { tokens: 0 } }),
++        embedQuery: async () => ({ vectors: [], model: 'fake-model', host: 'fake', usage: { tokens: 0 } }),
++      },
++    });
++    expect(maxInputTokensFor('openai')).toBe(123);
++    expect(() => maxInputTokensFor('cohere')).toThrow('[Embedding Profile] unknown provider cohere');
++    expect(() => maxInputTokensFor('__proto__')).toThrow(/unknown provider/);
++  });
++});
+-- 
+2.43.0
+

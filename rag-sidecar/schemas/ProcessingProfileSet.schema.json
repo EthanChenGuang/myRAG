@@ -1,0 +1,325 @@
+{
+  "$defs": {
+    "ChunkerSettings": {
+      "additionalProperties": false,
+      "properties": {
+        "clause_patterns": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Clause Patterns",
+          "type": "array"
+        },
+        "kind": {
+          "enum": [
+            "markdown_sections",
+            "legal_clauses",
+            "table_aware",
+            "invoice",
+            "image_caption"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "lead_in_phrases": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Lead In Phrases",
+          "type": "array"
+        },
+        "max_tokens": {
+          "maximum": 4096,
+          "minimum": 64,
+          "title": "Max Tokens",
+          "type": "integer"
+        },
+        "min_chunk_tokens": {
+          "minimum": 0,
+          "title": "Min Chunk Tokens",
+          "type": "integer"
+        },
+        "overlap_tokens": {
+          "minimum": 0,
+          "title": "Overlap Tokens",
+          "type": "integer"
+        },
+        "repeat_table_header": {
+          "title": "Repeat Table Header",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "kind",
+        "max_tokens",
+        "overlap_tokens",
+        "repeat_table_header",
+        "min_chunk_tokens"
+      ],
+      "title": "ChunkerSettings",
+      "type": "object"
+    },
+    "DoclingOptions": {
+      "additionalProperties": false,
+      "properties": {
+        "force_full_page_ocr": {
+          "title": "Force Full Page Ocr",
+          "type": "boolean"
+        },
+        "generate_picture_images": {
+          "title": "Generate Picture Images",
+          "type": "boolean"
+        },
+        "heading_hierarchy": {
+          "title": "Heading Hierarchy",
+          "type": "boolean"
+        },
+        "ocr": {
+          "title": "Ocr",
+          "type": "boolean"
+        },
+        "table_mode": {
+          "enum": [
+            "off",
+            "fast",
+            "accurate"
+          ],
+          "title": "Table Mode",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ocr",
+        "force_full_page_ocr",
+        "table_mode",
+        "heading_hierarchy",
+        "generate_picture_images"
+      ],
+      "title": "DoclingOptions",
+      "type": "object"
+    },
+    "EmbeddingTextTemplate": {
+      "additionalProperties": false,
+      "properties": {
+        "header": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Header"
+        },
+        "version": {
+          "minimum": 1,
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "version"
+      ],
+      "title": "EmbeddingTextTemplate",
+      "type": "object"
+    },
+    "ParentChild": {
+      "additionalProperties": false,
+      "properties": {
+        "child_max_tokens": {
+          "maximum": 4096,
+          "minimum": 32,
+          "title": "Child Max Tokens",
+          "type": "integer"
+        },
+        "parent_max_tokens": {
+          "maximum": 16384,
+          "minimum": 64,
+          "title": "Parent Max Tokens",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "parent_max_tokens",
+        "child_max_tokens"
+      ],
+      "title": "ParentChild",
+      "type": "object"
+    },
+    "ParserSettings": {
+      "additionalProperties": false,
+      "properties": {
+        "docling": {
+          "$ref": "#/$defs/DoclingOptions"
+        },
+        "ocr_languages": {
+          "items": {
+            "enum": [
+              "zh",
+              "en",
+              "it"
+            ],
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Ocr Languages",
+          "type": "array"
+        },
+        "preference": {
+          "items": {
+            "enum": [
+              "configured",
+              "docling",
+              "llamaparse"
+            ],
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Preference",
+          "type": "array"
+        }
+      },
+      "required": [
+        "preference",
+        "docling",
+        "ocr_languages"
+      ],
+      "title": "ParserSettings",
+      "type": "object"
+    },
+    "ProcessingProfile": {
+      "additionalProperties": false,
+      "properties": {
+        "chunker": {
+          "$ref": "#/$defs/ChunkerSettings"
+        },
+        "doc_type": {
+          "enum": [
+            "general",
+            "financial_report",
+            "contract_legal",
+            "invoice_receipt",
+            "product_technical",
+            "scanned_image"
+          ],
+          "title": "Doc Type",
+          "type": "string"
+        },
+        "embedding_text_template": {
+          "$ref": "#/$defs/EmbeddingTextTemplate"
+        },
+        "extractors": {
+          "items": {
+            "enum": [
+              "dates",
+              "financial",
+              "invoice",
+              "urls"
+            ],
+            "type": "string"
+          },
+          "title": "Extractors",
+          "type": "array"
+        },
+        "id": {
+          "pattern": "^[a-z][a-z_]*@[1-9][0-9]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "max_tier": {
+          "anyOf": [
+            {
+              "enum": [
+                "fast",
+                "structured",
+                "premium"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Tier"
+        },
+        "min_tier": {
+          "anyOf": [
+            {
+              "enum": [
+                "fast",
+                "structured",
+                "premium"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Min Tier"
+        },
+        "parent_child": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ParentChild"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "parser": {
+          "$ref": "#/$defs/ParserSettings"
+        },
+        "scan_injection": {
+          "title": "Scan Injection",
+          "type": "boolean"
+        },
+        "version": {
+          "minimum": 1,
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "version",
+        "doc_type",
+        "parser",
+        "chunker",
+        "extractors",
+        "embedding_text_template",
+        "scan_injection"
+      ],
+      "title": "ProcessingProfile",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "profiles": {
+      "items": {
+        "$ref": "#/$defs/ProcessingProfile"
+      },
+      "title": "Profiles",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "profiles"
+  ],
+  "title": "ProcessingProfileSet",
+  "type": "object"
+}

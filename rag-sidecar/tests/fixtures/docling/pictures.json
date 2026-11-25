@@ -1,0 +1,222 @@
+{
+  "body": {
+    "children": [
+      {
+        "$ref": "#/texts/0"
+      },
+      {
+        "$ref": "#/texts/1"
+      },
+      {
+        "$ref": "#/pictures/0"
+      },
+      {
+        "$ref": "#/texts/2"
+      },
+      {
+        "$ref": "#/pictures/1"
+      }
+    ],
+    "content_layer": "body",
+    "label": "unspecified",
+    "name": "_root_",
+    "self_ref": "#/body"
+  },
+  "form_items": [],
+  "furniture": {
+    "children": [],
+    "content_layer": "furniture",
+    "label": "unspecified",
+    "name": "_root_",
+    "self_ref": "#/furniture"
+  },
+  "groups": [],
+  "key_value_items": [],
+  "name": "pictures",
+  "origin": {
+    "binary_hash": 1003,
+    "filename": "pictures.pdf",
+    "mimetype": "application/pdf"
+  },
+  "pages": {
+    "1": {
+      "page_no": 1,
+      "size": {
+        "height": 800.0,
+        "width": 600.0
+      }
+    },
+    "2": {
+      "page_no": 2,
+      "size": {
+        "height": 800.0,
+        "width": 600.0
+      }
+    }
+  },
+  "pictures": [
+    {
+      "annotations": [],
+      "captions": [],
+      "children": [],
+      "content_layer": "body",
+      "footnotes": [],
+      "image": {
+        "dpi": 72,
+        "mimetype": "image/png",
+        "size": {
+          "height": 4.0,
+          "width": 4.0
+        },
+        "uri": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAFElEQVR4nGM8ISfHAANMDEgANwcANHYBDK9qubUAAAAASUVORK5CYII="
+      },
+      "label": "picture",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 500.0,
+            "coord_origin": "BOTTOMLEFT",
+            "l": 100.0,
+            "r": 300.0,
+            "t": 700.0
+          },
+          "charspan": [
+            0,
+            0
+          ],
+          "page_no": 1
+        }
+      ],
+      "references": [],
+      "self_ref": "#/pictures/0"
+    },
+    {
+      "annotations": [],
+      "captions": [],
+      "children": [],
+      "content_layer": "body",
+      "footnotes": [],
+      "image": {
+        "dpi": 72,
+        "mimetype": "image/png",
+        "size": {
+          "height": 4.0,
+          "width": 4.0
+        },
+        "uri": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAFElEQVR4nGM8ISfHAANMDEgANwcANHYBDK9qubUAAAAASUVORK5CYII="
+      },
+      "label": "picture",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 500.0,
+            "coord_origin": "TOPLEFT",
+            "l": 50.0,
+            "r": 550.0,
+            "t": 100.0
+          },
+          "charspan": [
+            0,
+            0
+          ],
+          "page_no": 2
+        }
+      ],
+      "references": [],
+      "self_ref": "#/pictures/1"
+    }
+  ],
+  "schema_name": "DoclingDocument",
+  "tables": [],
+  "texts": [
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "section_header",
+      "level": 1,
+      "orig": "Product sheet",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 140.0,
+            "coord_origin": "TOPLEFT",
+            "l": 50.0,
+            "r": 550.0,
+            "t": 80.0
+          },
+          "charspan": [
+            0,
+            0
+          ],
+          "page_no": 1
+        }
+      ],
+      "self_ref": "#/texts/0",
+      "text": "Product sheet"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Front view of the example device.",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 160.0,
+            "coord_origin": "TOPLEFT",
+            "l": 50.0,
+            "r": 550.0,
+            "t": 120.0
+          },
+          "charspan": [
+            0,
+            0
+          ],
+          "page_no": 1
+        }
+      ],
+      "self_ref": "#/texts/1",
+      "text": "Front view of the example device."
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Rear view of the example device.",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 100.0,
+            "coord_origin": "TOPLEFT",
+            "l": 50.0,
+            "r": 550.0,
+            "t": 60.0
+          },
+          "charspan": [
+            0,
+            0
+          ],
+          "page_no": 2
+        }
+      ],
+      "self_ref": "#/texts/2",
+      "text": "Rear view of the example device."
+    }
+  ],
+  "version": "1.11.0"
+}

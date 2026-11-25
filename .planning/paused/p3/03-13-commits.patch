@@ -1,0 +1,2063 @@
+From 5e32e1a974a5005ab76cbcf8d72069cdb66e3ef7 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 24 Nov 2026 01:37:28 +0000
+Subject: [PATCH 1/3] feat(03-13): ingest() tracer from a Markdown upload to
+ retrieval
+
+- D-02 stage runner with the eight tracer stages, each in its own module
+- writer.ts as the only caller of the rag_* writer RPCs, keyed by scopeKey(scope)
+- Markdown section chunker with heading-stack section_path and a token budget measured on the embedding text
+- tracer test: ingest for tenant A, retrieval finds it for A and not for B
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01SEn5g9gV3RHr18oaonxqof
+---
+ .../rag/ingest/chunkers/markdown-sections.ts  | 267 +++++++++++++++
+ src/lib/rag/ingest/deps.ts                    |  48 +++
+ src/lib/rag/ingest/identity.ts                |  40 +++
+ src/lib/rag/ingest/index.ts                   |  48 +++
+ src/lib/rag/ingest/runner.ts                  | 140 ++++++++
+ src/lib/rag/ingest/stages/chunk.ts            |  47 +++
+ src/lib/rag/ingest/stages/dedup.ts            |  51 +++
+ src/lib/rag/ingest/stages/embed-write.ts      |  85 +++++
+ src/lib/rag/ingest/stages/identify.ts         |  52 +++
+ src/lib/rag/ingest/stages/parse.ts            |  43 +++
+ src/lib/rag/ingest/stages/publish.ts          |  19 ++
+ src/lib/rag/ingest/types.ts                   | 177 ++++++++++
+ src/lib/rag/ingest/writer.ts                  | 306 ++++++++++++++++++
+ tests/rag-db/ingest-tracer.test.mts           | 168 ++++++++++
+ tests/rag/ingest/markdown-sections.test.ts    |  80 +++++
+ 15 files changed, 1571 insertions(+)
+ create mode 100644 src/lib/rag/ingest/chunkers/markdown-sections.ts
+ create mode 100644 src/lib/rag/ingest/deps.ts
+ create mode 100644 src/lib/rag/ingest/identity.ts
+ create mode 100644 src/lib/rag/ingest/index.ts
+ create mode 100644 src/lib/rag/ingest/runner.ts
+ create mode 100644 src/lib/rag/ingest/stages/chunk.ts
+ create mode 100644 src/lib/rag/ingest/stages/dedup.ts
+ create mode 100644 src/lib/rag/ingest/stages/embed-write.ts
+ create mode 100644 src/lib/rag/ingest/stages/identify.ts
+ create mode 100644 src/lib/rag/ingest/stages/parse.ts
+ create mode 100644 src/lib/rag/ingest/stages/publish.ts
+ create mode 100644 src/lib/rag/ingest/types.ts
+ create mode 100644 src/lib/rag/ingest/writer.ts
+ create mode 100644 tests/rag-db/ingest-tracer.test.mts
+ create mode 100644 tests/rag/ingest/markdown-sections.test.ts
+
+diff --git a/src/lib/rag/ingest/chunkers/markdown-sections.ts b/src/lib/rag/ingest/chunkers/markdown-sections.ts
+new file mode 100644
+index 0000000..21d0336
+--- /dev/null
++++ b/src/lib/rag/ingest/chunkers/markdown-sections.ts
+@@ -0,0 +1,267 @@
++import { buildEmbeddingText } from '../text/embedding-text';
++import { countTokens, truncateToTokens } from '../text/tokens';
++import type { ChunkDraft } from '../types';
++
++export interface MarkdownChunkOptions {
++  maxTokens: number;
++  overlapTokens: number;
++  minChunkTokens: number;
++  repeatTableHeader: boolean;
++}
++
++type UnitKind = 'paragraph' | 'list' | 'fence' | 'row';
++
++interface Unit {
++  text: string;
++  kind: UnitKind;
++  /** Separator that precedes this unit when it follows another one. */
++  sep: string;
++  /** Header and separator rows of the table this row belongs to. */
++  tableHeader?: string;
++}
++
++interface Section {
++  path: string[];
++  lines: string[];
++}
++
++interface PackedChunk {
++  units: Unit[];
++  newStart: number;
++}
++
++const HEADING = /^ {0,3}(#{1,6})[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*$/;
++const FENCE = /^ {0,3}(```|~~~)/;
++const LIST_ITEM = /^ {0,6}(?:[-*+]|\d{1,9}[.)])[ \t]+\S/;
++const TABLE_SEPARATOR = /^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)*\|?\s*$/;
++const SENTENCE_END = /(?<=[.!?;。！？；])\s+|(?<=[。！？；])/u;
++const CJK_SENTENCE_END = /[。！？；]$/u;
++const MAX_ATOMIC_TOKENS = 4000;
++
++const isTableRow = (line: string): boolean => line.trim().startsWith('|');
++
++function splitSections(markdown: string): Section[] {
++  const sections: Section[] = [{ path: [], lines: [] }];
++  const stack: Array<{ level: number; title: string }> = [];
++  let fence: string | null = null;
++
++  for (const line of markdown.replace(/\r\n?/g, '\n').split('\n')) {
++    const fenceMatch = FENCE.exec(line);
++    if (fenceMatch) {
++      const marker = fenceMatch[1] ?? '```';
++      if (fence === null) fence = marker;
++      else if (fence === marker) fence = null;
++    }
++    const heading = fence === null && !fenceMatch ? HEADING.exec(line) : null;
++    const title = heading ? (heading[2] ?? '').trim() : '';
++    if (heading && title !== '') {
++      const level = (heading[1] ?? '#').length;
++      while (stack.length > 0 && (stack[stack.length - 1]?.level ?? 0) >= level) stack.pop();
++      stack.push({ level, title });
++      sections.push({ path: stack.map((entry) => entry.title), lines: [] });
++      continue;
++    }
++    if (heading) continue;
++    sections[sections.length - 1]?.lines.push(line);
++  }
++  return sections;
++}
++
++function toUnits(lines: string[]): Unit[] {
++  const units: Unit[] = [];
++  let blankBefore = false;
++  let i = 0;
++
++  const separator = (): string => (units.length === 0 ? '' : blankBefore ? '\n\n' : '\n');
++  const push = (text: string, kind: UnitKind, tableHeader?: string): void => {
++    const unit: Unit = { text, kind, sep: separator() };
++    if (tableHeader !== undefined) unit.tableHeader = tableHeader;
++    units.push(unit);
++    blankBefore = false;
++  };
++  const startsBlock = (line: string): boolean => FENCE.test(line) || isTableRow(line) || LIST_ITEM.test(line);
++
++  while (i < lines.length) {
++    const line = lines[i] ?? '';
++    if (line.trim() === '') {
++      blankBefore = true;
++      i += 1;
++      continue;
++    }
++    const fenceMatch = FENCE.exec(line);
++    if (fenceMatch) {
++      const marker = fenceMatch[1] ?? '```';
++      const block = [line];
++      i += 1;
++      while (i < lines.length) {
++        const inner = lines[i] ?? '';
++        block.push(inner);
++        i += 1;
++        if (FENCE.exec(inner)?.[1] === marker) break;
++      }
++      push(block.join('\n'), 'fence');
++      continue;
++    }
++    if (isTableRow(line)) {
++      const rows: string[] = [];
++      while (i < lines.length && isTableRow(lines[i] ?? '')) {
++        rows.push(lines[i] ?? '');
++        i += 1;
++      }
++      const hasHeader = rows.length >= 2 && TABLE_SEPARATOR.test(rows[1] ?? '');
++      const header = hasHeader ? `${rows[0]}\n${rows[1]}` : undefined;
++      const body = hasHeader ? rows.slice(2) : rows;
++      if (header !== undefined) {
++        // The header travels with the first body row so a chunk never ends on a header alone.
++        const first = body.shift();
++        push(first === undefined ? header : `${header}\n${first}`, 'row', header);
++      }
++      for (const row of body) push(row, 'row', header);
++      continue;
++    }
++    if (LIST_ITEM.test(line)) {
++      const item = [line];
++      i += 1;
++      while (i < lines.length && (lines[i] ?? '').trim() !== '' && !startsBlock(lines[i] ?? '')) {
++        item.push(lines[i] ?? '');
++        i += 1;
++      }
++      push(item.join('\n'), 'list');
++      continue;
++    }
++    const paragraph = [line];
++    i += 1;
++    while (i < lines.length && (lines[i] ?? '').trim() !== '' && !startsBlock(lines[i] ?? '')) {
++      paragraph.push(lines[i] ?? '');
++      i += 1;
++    }
++    push(paragraph.join('\n'), 'paragraph');
++  }
++  return units;
++}
++
++function hardSplit(text: string, budget: number): string[] {
++  const pieces: string[] = [];
++  let rest = text;
++  while (rest !== '') {
++    const piece = truncateToTokens(rest, Math.max(1, budget));
++    if (piece === '') {
++      pieces.push(rest);
++      break;
++    }
++    pieces.push(piece);
++    rest = rest.slice(piece.length);
++  }
++  return pieces;
++}
++
++export function chunkMarkdownSections(markdown: string, options: MarkdownChunkOptions): ChunkDraft[] {
++  const drafts: ChunkDraft[] = [];
++
++  for (const section of splitSections(markdown)) {
++    const units = toUnits(section.lines);
++    if (units.length === 0) continue;
++    const path = section.path;
++    const prefixTokens = countTokens(buildEmbeddingText({ section_path: path, content: '' }));
++    const contentBudget = Math.max(1, options.maxTokens - prefixTokens);
++
++    const render = (list: Unit[]): string => {
++      let out = '';
++      list.forEach((unit, index) => {
++        out += index === 0 ? unit.text : `${unit.sep}${unit.text}`;
++      });
++      const first = list[0];
++      if (options.repeatTableHeader && first?.tableHeader !== undefined && !first.text.startsWith(first.tableHeader)) {
++        out = `${first.tableHeader}\n${out}`;
++      }
++      return out;
++    };
++    const fits = (list: Unit[]): boolean =>
++      countTokens(buildEmbeddingText({ section_path: path, content: render(list) })) <= options.maxTokens;
++
++    const expand = (unit: Unit): Unit[] => {
++      if (fits([unit])) return [unit];
++      const tokens = countTokens(unit.text);
++      if ((unit.kind === 'list' || unit.kind === 'row') && tokens <= MAX_ATOMIC_TOKENS) return [unit];
++      const parts =
++        unit.kind === 'fence'
++          ? unit.text.split('\n')
++          : unit.kind === 'paragraph'
++            ? unit.text.split(SENTENCE_END).filter((part) => part !== '')
++            : [unit.text];
++      const joinerAfter = (previous: string): string =>
++        unit.kind === 'fence' ? '\n' : CJK_SENTENCE_END.test(previous) ? '' : ' ';
++      const pieces: Unit[] = [];
++      let current = '';
++      const flush = (): void => {
++        if (current !== '') pieces.push({ text: current, kind: unit.kind, sep: pieces.length === 0 ? unit.sep : joinerAfter(pieces[pieces.length - 1]?.text ?? '') });
++        current = '';
++      };
++      for (const part of parts) {
++        const candidate = current === '' ? part : `${current}${joinerAfter(current)}${part}`;
++        if (countTokens(candidate) <= contentBudget) {
++          current = candidate;
++          continue;
++        }
++        flush();
++        if (countTokens(part) <= contentBudget) current = part;
++        else for (const piece of hardSplit(part, contentBudget)) pieces.push({ text: piece, kind: unit.kind, sep: pieces.length === 0 ? unit.sep : '' });
++      }
++      flush();
++      return pieces;
++    };
++
++    const packed: PackedChunk[] = [];
++    let current: Unit[] = [];
++    let newStart = 0;
++    for (const unit of units.flatMap(expand)) {
++      if (current.length === 0) {
++        current = [unit];
++        newStart = 0;
++        continue;
++      }
++      if (fits([...current, unit])) {
++        current.push(unit);
++        continue;
++      }
++      packed.push({ units: current, newStart });
++      let overlap: Unit[] = [];
++      if (options.overlapTokens > 0) {
++        for (let k = current.length - 1; k > newStart - 1 && k >= 0; k -= 1) {
++          const candidate = current.slice(k);
++          if (countTokens(render(candidate)) > options.overlapTokens) break;
++          overlap = candidate;
++        }
++        if (overlap.length === current.length) overlap = overlap.slice(1);
++      }
++      if (overlap.length > 0 && !fits([...overlap, unit])) overlap = [];
++      current = [...overlap, unit];
++      newStart = overlap.length;
++    }
++    if (current.length > 0) packed.push({ units: current, newStart });
++
++    const last = packed[packed.length - 1];
++    const before = packed[packed.length - 2];
++    if (last && before && countTokens(render(last.units.slice(last.newStart))) < options.minChunkTokens) {
++      const merged = [...before.units, ...last.units.slice(last.newStart)];
++      if (fits(merged)) {
++        packed.splice(packed.length - 2, 2, { units: merged, newStart: before.newStart });
++      }
++    }
++
++    for (const chunk of packed) {
++      const content = render(chunk.units).trim();
++      if (content === '') continue;
++      const added = chunk.units.slice(chunk.newStart);
++      drafts.push({
++        content,
++        section_path: path.slice(),
++        chunk_kind: added.length > 0 && added.every((unit) => unit.kind === 'row') ? 'table' : 'text',
++        page_start: null,
++        page_end: null,
++        metadata: {},
++      });
++    }
++  }
++  return drafts;
++}
+diff --git a/src/lib/rag/ingest/deps.ts b/src/lib/rag/ingest/deps.ts
+new file mode 100644
+index 0000000..9af54c9
+--- /dev/null
++++ b/src/lib/rag/ingest/deps.ts
+@@ -0,0 +1,48 @@
++import { randomUUID } from 'node:crypto';
++import { env } from '@/lib/env';
++import { getSupabaseAdmin } from '@/lib/supabase';
++import { embedBatch } from '../embeddings/openai';
++import type { RpcClient } from '../backend/supabase-rpc';
++import type { IngestEnvInput } from './config';
++
++export interface IngestDeps {
++  /** The admin client: the writer RPCs are executable by service_role only. */
++  db: () => RpcClient | null;
++  embedDocuments: (texts: string[], opts: { signal: AbortSignal }) => Promise<number[][]>;
++  now: () => number;
++  randomId: () => string;
++  ingestEnv: () => IngestEnvInput;
++}
++
++const defaults: IngestDeps = {
++  db: () => getSupabaseAdmin() as unknown as RpcClient | null,
++  embedDocuments: (texts, opts) => embedBatch(texts, opts),
++  now: () => Date.now(),
++  randomId: () => randomUUID(),
++  ingestEnv: () => ({
++    RAG_INGEST_PIPELINE: env.RAG_INGEST_PIPELINE,
++    RAG_PARSER: env.RAG_PARSER,
++    RAG_PARSE_POLL_BUDGET_MS: env.RAG_PARSE_POLL_BUDGET_MS,
++    RAG_DOC_TYPE_LLM_DETECT: env.RAG_DOC_TYPE_LLM_DETECT,
++    RAG_INVOICE_LLM_EXTRACT: env.RAG_INVOICE_LLM_EXTRACT,
++    RAG_EXACT_ID_LOOKUP: env.RAG_EXACT_ID_LOOKUP,
++    RAG_PDF_IMAGE_CHUNKS: env.RAG_PDF_IMAGE_CHUNKS,
++    RAG_INJECTION_SCAN: env.RAG_INJECTION_SCAN,
++    RAG_EMBEDDING_PROFILES: env.RAG_EMBEDDING_PROFILES,
++    RAG_QWEN_EMBED_FALLBACK: env.RAG_QWEN_EMBED_FALLBACK,
++  }),
++};
++
++let overrides: Partial<IngestDeps> = {};
++
++export function getIngestDeps(): IngestDeps {
++  return { ...defaults, ...overrides };
++}
++
++export function setIngestDepsForTests(partial: Partial<IngestDeps>): void {
++  overrides = { ...overrides, ...partial };
++}
++
++export function resetIngestDepsForTests(): void {
++  overrides = {};
++}
+diff --git a/src/lib/rag/ingest/identity.ts b/src/lib/rag/ingest/identity.ts
+new file mode 100644
+index 0000000..9551c76
+--- /dev/null
++++ b/src/lib/rag/ingest/identity.ts
+@@ -0,0 +1,40 @@
++import { normalizeScrapedUrl } from '@/lib/scrapers/url-utils';
++import type { IngestSource } from './types';
++
++export type SourceKeyParts =
++  | { folderId?: string | null; filename: string }
++  | { providerFileId: string }
++  | { url: string }
++  | { storagePath: string };
++
++/** NFKC, directory part and control characters removed, trimmed. */
++export function normalizeFilename(filename: string): string {
++  const base = filename.normalize('NFKC').replace(/\\/g, '/').split('/').pop() ?? '';
++  const cleaned = base.replace(/\p{Cc}/gu, '').trim();
++  return cleaned === '' ? 'untitled' : cleaned;
++}
++
++function requireText(label: string, value: unknown): string {
++  if (typeof value !== 'string' || value.trim() === '') throw new Error(`[Ingest] source key needs ${label}`);
++  return value.trim();
++}
++
++/**
++ * The stable identity part of (tenant_key, source, source_key), D-10: uploads use the logical folder
++ * (or root) plus the normalised filename, Nango the provider file id, scrapers the canonical URL, image
++ * uploads the storage path.
++ */
++export function buildSourceKey(source: IngestSource, parts: SourceKeyParts): string {
++  if (source === 'nango') {
++    return requireText('providerFileId', 'providerFileId' in parts ? parts.providerFileId : undefined);
++  }
++  if (source === 'scraper') {
++    return normalizeScrapedUrl(requireText('url', 'url' in parts ? parts.url : undefined));
++  }
++  if (source === 'image_upload') {
++    return requireText('storagePath', 'storagePath' in parts ? parts.storagePath : undefined);
++  }
++  if (!('filename' in parts)) throw new Error('[Ingest] source key needs filename');
++  const folder = typeof parts.folderId === 'string' && parts.folderId.trim() !== '' ? parts.folderId.trim() : 'root';
++  return `${folder}/${normalizeFilename(parts.filename)}`;
++}
+diff --git a/src/lib/rag/ingest/index.ts b/src/lib/rag/ingest/index.ts
+new file mode 100644
+index 0000000..1b6e515
+--- /dev/null
++++ b/src/lib/rag/ingest/index.ts
+@@ -0,0 +1,48 @@
++import { loadIngestConfig } from './config';
++import { getIngestDeps } from './deps';
++import { runIngestStages } from './runner';
++import {
++  DEFAULT_INGEST_DEADLINE_MS,
++  emptyIngestState,
++  type IngestInput,
++  type IngestResult,
++  type StageContext,
++} from './types';
++import { createIngestWriter } from './writer';
++
++export type {
++  IngestInput,
++  IngestOptions,
++  IngestResult,
++  IngestSource,
++  IngestStatus,
++} from './types';
++
++/**
++ * The one entry point of the unified ingestion pipeline: turns an upload into a ready, current version of
++ * its document, scoped to the tenant that minted `scope`.
++ */
++export async function ingest(input: IngestInput): Promise<IngestResult> {
++  const deps = getIngestDeps();
++  const db = deps.db();
++  if (!db) {
++    console.error('[Ingest] admin client unavailable');
++    return { status: 'failed', documentId: null, version: null, parserUsed: null, chunkCount: 0, warnings: [], reason: 'db_unavailable' };
++  }
++
++  const ctx: StageContext = {
++    input,
++    deps,
++    writer: createIngestWriter({ db, scope: input.scope, signal: input.signal }),
++    config: loadIngestConfig(deps.ingestEnv()),
++    signal: input.signal,
++    deadline: deps.now() + (input.deadlineMs ?? DEFAULT_INGEST_DEADLINE_MS),
++    state: emptyIngestState(),
++    warnings: [],
++    identity: null,
++    document: null,
++    parserUsed: null,
++    work: { parseText: null, parserVersion: null, chunks: [], chunksWritten: 0 },
++  };
++  return runIngestStages(ctx);
++}
+diff --git a/src/lib/rag/ingest/runner.ts b/src/lib/rag/ingest/runner.ts
+new file mode 100644
+index 0000000..15befd7
+--- /dev/null
++++ b/src/lib/rag/ingest/runner.ts
+@@ -0,0 +1,140 @@
++import { IngestWriterError, createIngestWriter } from './writer';
++import { contentHashDedupStage, fileHashDedupStage } from './stages/dedup';
++import { chunkStage } from './stages/chunk';
++import { embedStage, writeStage } from './stages/embed-write';
++import { identifyStage } from './stages/identify';
++import { parseStage } from './stages/parse';
++import { publishStage } from './stages/publish';
++import {
++  IngestStageError,
++  type IngestResult,
++  type StageContext,
++  type StageName,
++  type StageSpec,
++} from './types';
++
++/** The D-02 stages in order. */
++export const INGEST_STAGES = [
++  'identify',
++  'file_hash_dedup',
++  'store_original',
++  'parse',
++  'content_hash_dedup',
++  'scan_injection',
++  'chunk',
++  'enrich',
++  'extract',
++  'images',
++  'embed',
++  'write',
++  'publish',
++] as const satisfies readonly StageName[];
++
++const _everyStageListed: [Exclude<StageName, (typeof INGEST_STAGES)[number]>] extends [never] ? true : never = true;
++
++/** Registered stage modules in D-02 order. Plan 03-13b registers store_original, scan_injection, enrich, extract and images. */
++const REGISTERED_STAGES: readonly StageSpec[] = [
++  identifyStage,
++  fileHashDedupStage,
++  parseStage,
++  contentHashDedupStage,
++  chunkStage,
++  embedStage,
++  writeStage,
++  publishStage,
++];
++
++const CLEANUP_TIMEOUT_MS = 5000;
++
++function assertOrder(stages: readonly StageSpec[]): void {
++  let previous = -1;
++  for (const stage of stages) {
++    const position = INGEST_STAGES.indexOf(stage.name);
++    if (position <= previous) throw new Error(`[Ingest] stage ${stage.name} is out of order or repeated`);
++    previous = position;
++  }
++}
++
++function failureReason(stage: StageName, error: unknown, signal: AbortSignal): string {
++  if (error instanceof IngestStageError) return error.reason;
++  if (signal.aborted) return 'aborted';
++  return `${stage}_failed`;
++}
++
++function logFailure(stage: StageName, reason: string, error: unknown): void {
++  const data: Record<string, unknown> = { stage, reason };
++  if (error instanceof IngestWriterError) {
++    data.error = error.name;
++    data.rpc = error.rpc;
++    data.code = error.code;
++    if (error.reason) data.writer_reason = error.reason;
++  } else if (error instanceof Error) {
++    data.error = error.name;
++  }
++  console.error('[Ingest] stage failed', data);
++}
++
++async function markFailed(ctx: StageContext, reason: string): Promise<void> {
++  if (!ctx.document) return;
++  try {
++    let writer = ctx.writer;
++    if (ctx.signal.aborted) {
++      const db = ctx.deps.db();
++      if (!db) return;
++      writer = createIngestWriter({ db, scope: ctx.input.scope, signal: AbortSignal.timeout(CLEANUP_TIMEOUT_MS) });
++    }
++    await writer.markFailed(ctx.document.id, reason);
++  } catch (error) {
++    console.error('[Ingest] could not mark the version failed', {
++      error: error instanceof Error ? error.name : 'unknown',
++      ...(error instanceof IngestWriterError ? { rpc: error.rpc, code: error.code } : {}),
++    });
++  }
++}
++
++async function failRun(ctx: StageContext, stage: StageName, reason: string, error?: unknown): Promise<IngestResult> {
++  if (error !== undefined) logFailure(stage, reason, error);
++  await markFailed(ctx, reason);
++  return {
++    status: 'failed',
++    documentId: ctx.document?.id ?? null,
++    version: ctx.document?.version ?? null,
++    parserUsed: ctx.parserUsed,
++    chunkCount: 0,
++    warnings: ctx.warnings.slice(),
++    reason,
++  };
++}
++
++/**
++ * Runs the registered stages in D-02 order. A stage that fails or throws marks the version failed with its
++ * reason; the run ends at the first stage that returns a result. Plan 03-13b adds the deadline, state
++ * persistence and resume.
++ */
++export async function runIngestStages(ctx: StageContext, stages: readonly StageSpec[] = REGISTERED_STAGES): Promise<IngestResult> {
++  void _everyStageListed;
++  assertOrder(stages);
++  for (const stage of stages) {
++    try {
++      ctx.signal.throwIfAborted();
++      const outcome = await stage.run(ctx);
++      if (outcome.kind === 'done') return outcome.result;
++      if (outcome.kind === 'fail') return await failRun(ctx, stage.name, outcome.reason);
++      if (outcome.kind === 'yield') {
++        return {
++          status: 'processing',
++          documentId: ctx.document?.id ?? null,
++          version: ctx.document?.version ?? null,
++          parserUsed: ctx.parserUsed,
++          chunkCount: 0,
++          warnings: ctx.warnings.slice(),
++          reason: outcome.reason,
++        };
++      }
++      ctx.state.lastCompleted = stage.name;
++    } catch (error) {
++      return failRun(ctx, stage.name, failureReason(stage.name, error, ctx.signal), error);
++    }
++  }
++  return failRun(ctx, 'publish', 'stage_list_incomplete');
++}
+diff --git a/src/lib/rag/ingest/stages/chunk.ts b/src/lib/rag/ingest/stages/chunk.ts
+new file mode 100644
+index 0000000..29be912
+--- /dev/null
++++ b/src/lib/rag/ingest/stages/chunk.ts
+@@ -0,0 +1,47 @@
++import { chunkMarkdownSections } from '../chunkers/markdown-sections';
++import type { ProcessingProfile } from '../profiles/load';
++import {
++  requireIdentity,
++  type ChunkDraft,
++  type StageContext,
++  type StageOutcome,
++  type StageSpec,
++} from '../types';
++
++type ChunkerKind = ProcessingProfile['chunker']['kind'];
++type Chunker = (text: string, profile: ProcessingProfile) => ChunkDraft[];
++
++/** Chunkers by profile chunker kind; plans that add a chunker register it here. */
++const CHUNKERS: Partial<Record<ChunkerKind, Chunker>> = {
++  markdown_sections: (text, profile) =>
++    chunkMarkdownSections(text, {
++      maxTokens: profile.chunker.max_tokens,
++      overlapTokens: profile.chunker.overlap_tokens,
++      minChunkTokens: profile.chunker.min_chunk_tokens,
++      repeatTableHeader: profile.chunker.repeat_table_header,
++    }),
++};
++
++async function run(ctx: StageContext): Promise<StageOutcome> {
++  const identity = requireIdentity(ctx, 'chunk');
++  const kind = identity.profile.chunker.kind;
++  const chunker = CHUNKERS[kind];
++  if (!chunker) ctx.warnings.push(`chunker_fallback:${kind}`);
++
++  const drafts = (chunker ?? CHUNKERS.markdown_sections)?.(ctx.work.parseText ?? '', identity.profile) ?? [];
++  if (drafts.length === 0) return { kind: 'fail', reason: 'no_chunks' };
++
++  drafts.forEach((draft, index) => {
++    draft.metadata = {
++      ...draft.metadata,
++      document_title: identity.filename,
++      chunk_index: index,
++      chunk_position: index + 1,
++      total_chunks: drafts.length,
++    };
++  });
++  ctx.work.chunks = drafts;
++  return { kind: 'next' };
++}
++
++export const chunkStage: StageSpec = { name: 'chunk', minMsNeeded: 0, run };
+diff --git a/src/lib/rag/ingest/stages/dedup.ts b/src/lib/rag/ingest/stages/dedup.ts
+new file mode 100644
+index 0000000..8172571
+--- /dev/null
++++ b/src/lib/rag/ingest/stages/dedup.ts
+@@ -0,0 +1,51 @@
++import { HASH_NORMALIZATION_VERSION, contentHash } from '../hash';
++import {
++  requireDocument,
++  requireIdentity,
++  type StageContext,
++  type StageOutcome,
++  type StageSpec,
++} from '../types';
++
++async function runFileHashDedup(ctx: StageContext): Promise<StageOutcome> {
++  const identity = requireIdentity(ctx, 'file_hash_dedup');
++  const begun = await ctx.writer.begin({
++    source: ctx.input.source,
++    sourceKey: ctx.input.sourceKey,
++    filename: identity.filename,
++    fileSha256: identity.fileSha256,
++    docType: identity.docType,
++    docTypeOrigin: identity.docTypeOrigin,
++    profileId: identity.profile.id,
++    profileVersion: identity.profile.version,
++  });
++  if (begun.outcome === 'skipped_duplicate') {
++    return {
++      kind: 'done',
++      result: {
++        status: 'skipped_duplicate',
++        documentId: null,
++        version: null,
++        parserUsed: null,
++        chunkCount: 0,
++        warnings: ctx.warnings.slice(),
++        duplicateOf: begun.duplicateOf,
++      },
++    };
++  }
++  ctx.document = { id: begun.documentId, version: begun.version, resumed: begun.outcome === 'resumed' };
++  return { kind: 'next' };
++}
++
++async function runContentHashDedup(ctx: StageContext): Promise<StageOutcome> {
++  const document = requireDocument(ctx, 'content_hash_dedup');
++  const hash = contentHash(ctx.work.parseText ?? '');
++  await ctx.writer.setFields(document.id, {
++    content_hash: hash,
++    metadata: { content_hash_version: HASH_NORMALIZATION_VERSION },
++  });
++  return { kind: 'next' };
++}
++
++export const fileHashDedupStage: StageSpec = { name: 'file_hash_dedup', minMsNeeded: 0, run: runFileHashDedup };
++export const contentHashDedupStage: StageSpec = { name: 'content_hash_dedup', minMsNeeded: 0, run: runContentHashDedup };
+diff --git a/src/lib/rag/ingest/stages/embed-write.ts b/src/lib/rag/ingest/stages/embed-write.ts
+new file mode 100644
+index 0000000..f822473
+--- /dev/null
++++ b/src/lib/rag/ingest/stages/embed-write.ts
+@@ -0,0 +1,85 @@
++import { buildEmbeddingText, EMBEDDING_TEXT_VERSION } from '../text/embedding-text';
++import {
++  IngestStageError,
++  requireDocument,
++  type StageContext,
++  type StageOutcome,
++  type StageSpec,
++} from '../types';
++import type { ChunkWrite } from '../writer';
++
++const LEGACY_PROFILE_ID = 'openai-3-small-1536';
++const LEGACY_DIMENSIONS = 1536;
++const MAX_BATCH_BYTES = 1_000_000;
++const APPROX_VECTOR_BYTES = LEGACY_DIMENSIONS * 20;
++
++function toWrites(ctx: StageContext): ChunkWrite[] {
++  return ctx.work.chunks.map((draft, index) => ({
++    content: draft.content,
++    chunk_index: index,
++    section_path: draft.section_path,
++    chunk_kind: draft.chunk_kind,
++    embedding_text_version: EMBEDDING_TEXT_VERSION,
++    page_start: draft.page_start,
++    page_end: draft.page_end,
++    metadata: draft.metadata,
++  }));
++}
++
++/** Batches sized by JSON bytes, vectors included, so a call stays near 1 MB whatever the chunk length. */
++function batchByBytes(writes: ChunkWrite[]): ChunkWrite[][] {
++  const batches: ChunkWrite[][] = [];
++  let current: ChunkWrite[] = [];
++  let bytes = 0;
++  for (const write of writes) {
++    const size = Buffer.byteLength(JSON.stringify(write), 'utf8') + APPROX_VECTOR_BYTES;
++    if (current.length > 0 && bytes + size > MAX_BATCH_BYTES) {
++      batches.push(current);
++      current = [];
++      bytes = 0;
++    }
++    current.push(write);
++    bytes += size;
++  }
++  if (current.length > 0) batches.push(current);
++  return batches;
++}
++
++/**
++ * Embeds and writes in one batched loop so vectors never live outside the database. The legacy profile
++ * is the only target here (multi-profile targets arrive with the profile write path).
++ */
++async function runEmbed(ctx: StageContext): Promise<StageOutcome> {
++  const document = requireDocument(ctx, 'embed');
++  const writes = toWrites(ctx);
++  const batches = batchByBytes(writes);
++  let written = 0;
++
++  for (const [position, batch] of batches.entries()) {
++    ctx.signal.throwIfAborted();
++    const texts = batch.map((write) => buildEmbeddingText({ section_path: write.section_path, content: write.content }));
++    const vectors = await ctx.deps.embedDocuments(texts, { signal: ctx.signal });
++    ctx.signal.throwIfAborted();
++    if (vectors.length !== batch.length || vectors.some((vector) => vector.length !== LEGACY_DIMENSIONS)) {
++      throw new IngestStageError('embed', 'embedding_dimension_mismatch');
++    }
++    const result = await ctx.writer.writeChunks(document.id, batch, {
++      embeddings: { [LEGACY_PROFILE_ID]: vectors },
++      final: position === batches.length - 1,
++      total: writes.length,
++    });
++    written += result.chunksWritten;
++  }
++
++  ctx.work.chunksWritten = written;
++  ctx.state.embeddingTargets = [LEGACY_PROFILE_ID];
++  return { kind: 'next' };
++}
++
++async function runWrite(ctx: StageContext): Promise<StageOutcome> {
++  if (ctx.work.chunksWritten !== ctx.work.chunks.length) return { kind: 'fail', reason: 'write_incomplete' };
++  return { kind: 'next' };
++}
++
++export const embedStage: StageSpec = { name: 'embed', minMsNeeded: 0, run: runEmbed };
++export const writeStage: StageSpec = { name: 'write', minMsNeeded: 0, run: runWrite };
+diff --git a/src/lib/rag/ingest/stages/identify.ts b/src/lib/rag/ingest/stages/identify.ts
+new file mode 100644
+index 0000000..efe7c35
+--- /dev/null
++++ b/src/lib/rag/ingest/stages/identify.ts
+@@ -0,0 +1,52 @@
++import { assertTenantScope, scopeKey } from '../../tenant/scope';
++import { fileSha256 } from '../hash';
++import { normalizeFilename } from '../identity';
++import { getProcessingProfile, type DocType, type ProcessingProfile } from '../profiles/load';
++import {
++  INGEST_SOURCES,
++  IngestStageError,
++  type DocTypeOrigin,
++  type StageContext,
++  type StageOutcome,
++  type StageSpec,
++} from '../types';
++
++function resolveProfile(picked: DocType | undefined): { docType: DocType; origin: DocTypeOrigin; profile: ProcessingProfile; invalid: boolean } {
++  if (picked !== undefined) {
++    try {
++      return { docType: picked, origin: 'picked', profile: getProcessingProfile(picked), invalid: false };
++    } catch {
++      return { docType: 'general', origin: 'fallback', profile: getProcessingProfile('general'), invalid: true };
++    }
++  }
++  return { docType: 'general', origin: 'fallback', profile: getProcessingProfile('general'), invalid: false };
++}
++
++async function run(ctx: StageContext): Promise<StageOutcome> {
++  const { input } = ctx;
++  try {
++    assertTenantScope(input.scope);
++  } catch {
++    console.warn('[Ingest] refused: scope was not minted by the tenant module');
++    throw new IngestStageError('identify', 'invalid_scope');
++  }
++  if (!INGEST_SOURCES.includes(input.source)) throw new IngestStageError('identify', 'invalid_source');
++  if (typeof input.sourceKey !== 'string' || input.sourceKey.trim() === '') throw new IngestStageError('identify', 'invalid_source_key');
++
++  const bytes = input.file ?? null;
++  const resolved = resolveProfile(input.docType);
++  if (resolved.invalid) ctx.warnings.push('doc_type_invalid');
++
++  ctx.identity = {
++    tenantKey: scopeKey(input.scope).toLowerCase(),
++    filename: normalizeFilename(input.filename),
++    fileSha256: fileSha256(bytes ?? Buffer.from(input.text ?? '', 'utf8')),
++    docType: resolved.docType,
++    docTypeOrigin: resolved.origin,
++    profile: resolved.profile,
++    bytes,
++  };
++  return { kind: 'next' };
++}
++
++export const identifyStage: StageSpec = { name: 'identify', minMsNeeded: 0, run };
+diff --git a/src/lib/rag/ingest/stages/parse.ts b/src/lib/rag/ingest/stages/parse.ts
+new file mode 100644
+index 0000000..b03e3c8
+--- /dev/null
++++ b/src/lib/rag/ingest/stages/parse.ts
+@@ -0,0 +1,43 @@
++import {
++  requireDocument,
++  requireIdentity,
++  type StageContext,
++  type StageOutcome,
++  type StageSpec,
++} from '../types';
++
++const TEXT_EXTENSIONS = new Set(['md', 'markdown', 'txt', 'csv']);
++const TEXT_MIME_TYPES = new Set(['text/markdown', 'text/plain', 'text/csv']);
++
++function extensionOf(filename: string): string {
++  const dot = filename.lastIndexOf('.');
++  return dot < 0 ? '' : filename.slice(dot + 1).toLowerCase();
++}
++
++function isTextLike(filename: string, mimeType: string): boolean {
++  const extension = extensionOf(filename);
++  if (extension !== '') return TEXT_EXTENSIONS.has(extension);
++  return TEXT_MIME_TYPES.has((mimeType ?? '').split(';')[0]?.trim().toLowerCase() ?? '');
++}
++
++async function run(ctx: StageContext): Promise<StageOutcome> {
++  const identity = requireIdentity(ctx, 'parse');
++  const document = requireDocument(ctx, 'parse');
++
++  let text: string;
++  if (ctx.input.text !== undefined) {
++    text = ctx.input.text;
++  } else if (identity.bytes !== null && isTextLike(identity.filename, ctx.input.mimeType)) {
++    text = new TextDecoder('utf-8').decode(identity.bytes);
++  } else {
++    throw new Error('unsupported file type');
++  }
++
++  ctx.work.parseText = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
++  ctx.work.parserVersion = 'native';
++  ctx.parserUsed = 'text';
++  await ctx.writer.setFields(document.id, { parser_used: 'text', parser_version: 'native' });
++  return { kind: 'next' };
++}
++
++export const parseStage: StageSpec = { name: 'parse', minMsNeeded: 0, run };
+diff --git a/src/lib/rag/ingest/stages/publish.ts b/src/lib/rag/ingest/stages/publish.ts
+new file mode 100644
+index 0000000..f5e32a9
+--- /dev/null
++++ b/src/lib/rag/ingest/stages/publish.ts
+@@ -0,0 +1,19 @@
++import { requireDocument, type StageContext, type StageOutcome, type StageSpec } from '../types';
++
++async function run(ctx: StageContext): Promise<StageOutcome> {
++  const document = requireDocument(ctx, 'publish');
++  const published = await ctx.writer.publish(document.id);
++  return {
++    kind: 'done',
++    result: {
++      status: published.outcome === 'quarantined' ? 'quarantined' : 'ready',
++      documentId: published.documentId,
++      version: published.version,
++      parserUsed: ctx.parserUsed,
++      chunkCount: ctx.work.chunksWritten,
++      warnings: ctx.warnings.slice(),
++    },
++  };
++}
++
++export const publishStage: StageSpec = { name: 'publish', minMsNeeded: 0, run };
+diff --git a/src/lib/rag/ingest/types.ts b/src/lib/rag/ingest/types.ts
+new file mode 100644
+index 0000000..87a230f
+--- /dev/null
++++ b/src/lib/rag/ingest/types.ts
+@@ -0,0 +1,177 @@
++import type { TenantScope } from '../tenant/scope';
++import type { TraceCollector } from '../trace/collector';
++import type { IngestConfig } from './config';
++import type { IngestDeps } from './deps';
++import type { DocType, ProcessingProfile } from './profiles/load';
++import type { IngestWriter } from './writer';
++
++export type { DocType, ProcessingProfile };
++
++export const INGEST_SOURCES = ['chat_upload', 'config_upload', 'nango', 'scraper', 'image_upload', 'ai_to_rag'] as const;
++export type IngestSource = (typeof INGEST_SOURCES)[number];
++
++export type StageName =
++  | 'identify'
++  | 'file_hash_dedup'
++  | 'store_original'
++  | 'parse'
++  | 'content_hash_dedup'
++  | 'scan_injection'
++  | 'chunk'
++  | 'enrich'
++  | 'extract'
++  | 'images'
++  | 'embed'
++  | 'write'
++  | 'publish';
++
++export type DocTypeOrigin = 'picked' | 'source_default' | 'tenant_default' | 'auto' | 'fallback';
++
++export interface IngestOptions {
++  [key: string]: unknown;
++}
++
++interface IngestInputBase {
++  scope: TenantScope;
++  source: IngestSource;
++  sourceKey: string;
++  filename: string;
++  mimeType: string;
++  docType?: DocType;
++  options?: IngestOptions;
++  signal: AbortSignal;
++  trace?: TraceCollector;
++  /** Request budget in milliseconds from the start of the call. Defaults to DEFAULT_INGEST_DEADLINE_MS. */
++  deadlineMs?: number;
++}
++
++export type IngestInput = IngestInputBase &
++  ({ text: string; file?: undefined } | { file: Uint8Array; text?: undefined });
++
++export const DEFAULT_INGEST_DEADLINE_MS = 50000;
++
++export type IngestStatus = 'ready' | 'skipped_duplicate' | 'quarantined' | 'processing' | 'failed';
++
++export interface IngestResult {
++  status: IngestStatus;
++  documentId: string | null;
++  version: number | null;
++  parserUsed: string | null;
++  chunkCount: number;
++  warnings: string[];
++  duplicateOf?: string;
++  reason?: string;
++}
++
++export interface IngestState {
++  lastCompleted: StageName | null;
++  parseJob: { parser: string; jobId: string; submittedAt: string; attempt: number } | null;
++  artifacts: Record<string, string>;
++  docTypeDetection: { signals: string[]; refined: DocType | null; reparsed: boolean } | null;
++  quarantine: { ruleIds: string[]; released: boolean } | null;
++  invoice: { extractor: string; status: string } | null;
++  images: { nextIndex: number; captioned: number } | null;
++  embeddingTargets: string[];
++  embeddingGaps: Array<{ profileId: string; chunkIndex: number }>;
++}
++
++export function emptyIngestState(): IngestState {
++  return {
++    lastCompleted: null,
++    parseJob: null,
++    artifacts: {},
++    docTypeDetection: null,
++    quarantine: null,
++    invoice: null,
++    images: null,
++    embeddingTargets: [],
++    embeddingGaps: [],
++  };
++}
++
++export type ChunkKind = 'text' | 'table';
++
++/** A chunk as the chunker produces it: plain content, never prefixed with its path or document name. */
++export interface ChunkDraft {
++  content: string;
++  section_path: string[];
++  chunk_kind: ChunkKind;
++  page_start: number | null;
++  page_end: number | null;
++  metadata: Record<string, unknown>;
++}
++
++export interface IngestIdentity {
++  tenantKey: string;
++  filename: string;
++  fileSha256: string;
++  docType: DocType;
++  docTypeOrigin: DocTypeOrigin;
++  profile: ProcessingProfile;
++  bytes: Uint8Array | null;
++}
++
++export interface IngestDocumentRef {
++  id: string;
++  version: number;
++  resumed: boolean;
++}
++
++/** Working data of one run. Not persisted; plan 03-13b moves what a resume needs into the object store. */
++export interface IngestWork {
++  parseText: string | null;
++  parserVersion: string | null;
++  chunks: ChunkDraft[];
++  chunksWritten: number;
++}
++
++export interface StageContext {
++  readonly input: IngestInput;
++  readonly deps: IngestDeps;
++  readonly writer: IngestWriter;
++  readonly config: IngestConfig;
++  readonly signal: AbortSignal;
++  /** Absolute time in deps.now() units by which the request must have returned. */
++  readonly deadline: number;
++  readonly state: IngestState;
++  readonly warnings: string[];
++  identity: IngestIdentity | null;
++  document: IngestDocumentRef | null;
++  parserUsed: string | null;
++  work: IngestWork;
++}
++
++export type StageOutcome =
++  | { kind: 'next' }
++  | { kind: 'done'; result: IngestResult }
++  | { kind: 'fail'; reason: string }
++  | { kind: 'yield'; reason: string };
++
++export interface StageSpec {
++  name: StageName;
++  minMsNeeded: number;
++  run(ctx: StageContext): Promise<StageOutcome>;
++}
++
++/** A stage failure with a stable reason that the runner reports instead of `<stage>_failed`. */
++export class IngestStageError extends Error {
++  readonly stage: StageName;
++  readonly reason: string;
++
++  constructor(stage: StageName, reason: string) {
++    super(`[Ingest] stage ${stage} failed (${reason})`);
++    this.name = 'IngestStageError';
++    this.stage = stage;
++    this.reason = reason;
++  }
++}
++
++export function requireIdentity(ctx: StageContext, stage: StageName): IngestIdentity {
++  if (!ctx.identity) throw new IngestStageError(stage, 'identity_missing');
++  return ctx.identity;
++}
++
++export function requireDocument(ctx: StageContext, stage: StageName): IngestDocumentRef {
++  if (!ctx.document) throw new IngestStageError(stage, 'document_missing');
++  return ctx.document;
++}
+diff --git a/src/lib/rag/ingest/writer.ts b/src/lib/rag/ingest/writer.ts
+new file mode 100644
+index 0000000..60d9d8a
+--- /dev/null
++++ b/src/lib/rag/ingest/writer.ts
+@@ -0,0 +1,306 @@
++import type { RpcClient } from '../backend/supabase-rpc';
++import { assertTenantScope, scopeKey, type TenantScope } from '../tenant/scope';
++import type { ChunkKind, DocTypeOrigin, IngestSource } from './types';
++
++type Row = Record<string, unknown>;
++
++/** Reason words the SQL functions raise; only these ever leave the writer, never the rest of a message. */
++const KNOWN_REASONS = new Set([
++  'tenant_mismatch',
++  'invalid_argument',
++  'invalid_source',
++  'invalid_fields',
++  'invalid_field',
++  'invalid_status',
++  'invalid_metadata',
++  'invalid_state',
++  'invalid_chunks',
++  'invalid_chunk',
++  'invalid_total',
++  'invalid_embeddings',
++  'embedding_profile_unsupported',
++  'embedding_count_mismatch',
++  'document_not_writable',
++  'document_not_publishable',
++  'document_is_current',
++]);
++
++/** A failed writer RPC. Carries the function name and the error code only: the database message can echo row content. */
++export class IngestWriterError extends Error {
++  readonly rpc: string;
++  readonly code: string | null;
++  readonly reason: string | null;
++
++  constructor(rpc: string, code: string | null, reason: string | null = null) {
++    super(`[Ingest Writer] ${rpc} failed${code ? ` (${code})` : ''}`);
++    this.name = 'IngestWriterError';
++    this.rpc = rpc;
++    this.code = code;
++    this.reason = reason;
++  }
++}
++
++export interface BeginArgs {
++  source: IngestSource;
++  sourceKey: string;
++  filename: string;
++  fileSha256: string | null;
++  docType: string;
++  docTypeOrigin: DocTypeOrigin;
++  profileId: string;
++  profileVersion: number;
++}
++
++export type BeginResult =
++  | { outcome: 'created' | 'resumed'; documentId: string; version: number; lineageId: string }
++  | { outcome: 'skipped_duplicate'; duplicateOf: string };
++
++export interface DocumentFields {
++  content_hash?: string | null;
++  language?: string | null;
++  doc_date?: string | null;
++  doc_type?: string | null;
++  doc_type_origin?: string | null;
++  parser_used?: string | null;
++  parser_version?: string | null;
++  processing_profile_id?: string | null;
++  processing_profile_version?: number | null;
++  original_path?: string | null;
++  source_provider?: string | null;
++  source_file_id?: string | null;
++  source_connection_id?: string | null;
++  status?: 'processing' | 'quarantined' | 'failed' | 'deleted';
++  metadata?: Record<string, unknown>;
++}
++
++export interface ChunkWrite {
++  content: string;
++  chunk_index: number;
++  section_path: string[];
++  chunk_kind: ChunkKind;
++  embedding_text_version: number;
++  page_start?: number | null;
++  page_end?: number | null;
++  content_hash?: string | null;
++  lexical_text?: string | null;
++  metadata: Record<string, unknown>;
++}
++
++export interface WriteChunksOptions {
++  /** Vectors keyed by embedding profile id; each array lines up with the chunks. */
++  embeddings: Record<string, number[][]> | null;
++  final: boolean;
++  total: number;
++}
++
++export interface WriteChunksResult {
++  chunksWritten: number;
++  chunksDeleted: number;
++}
++
++export type PublishOutcome = 'published' | 'already_current' | 'quarantined';
++
++export interface PublishResult {
++  outcome: PublishOutcome;
++  documentId: string;
++  version: number;
++  supersededDocumentId: string | null;
++}
++
++export interface IngestDocumentRow {
++  status: string;
++  version: number;
++  processingStatus: string | null;
++  processingState: Record<string, unknown>;
++  filename: string;
++  docType: string;
++  parserUsed: string | null;
++  createdAt: string;
++}
++
++export interface IngestWriter {
++  begin(args: BeginArgs): Promise<BeginResult>;
++  findContentDuplicate(contentHash: string, documentId: string | null): Promise<string | null>;
++  setFields(documentId: string, fields: DocumentFields): Promise<void>;
++  saveState(documentId: string, processingStatus: string, state: Record<string, unknown>): Promise<void>;
++  getDocument(documentId: string): Promise<IngestDocumentRow | null>;
++  writeChunks(documentId: string, chunks: ChunkWrite[], options: WriteChunksOptions): Promise<WriteChunksResult>;
++  publish(documentId: string): Promise<PublishResult>;
++  markFailed(documentId: string, reason: string): Promise<void>;
++}
++
++export interface CreateIngestWriterInput {
++  db: RpcClient;
++  scope: TenantScope;
++  signal: AbortSignal;
++}
++
++function text(row: Row, key: string): string | null {
++  const value = row[key];
++  return typeof value === 'string' ? value : null;
++}
++
++function requireText(rpc: string, row: Row, key: string): string {
++  const value = text(row, key);
++  if (value === null) throw new IngestWriterError(rpc, 'bad_response');
++  return value;
++}
++
++function integer(row: Row, key: string): number | null {
++  const value = row[key];
++  return typeof value === 'number' && Number.isInteger(value) ? value : null;
++}
++
++function reasonOf(message: string | undefined): string | null {
++  const word = /^[a-z_]+/.exec(message ?? '')?.[0];
++  return word !== undefined && KNOWN_REASONS.has(word) ? word : null;
++}
++
++/**
++ * The only caller of the rag_* writer RPCs. The tenant key, user id and organization id come from the
++ * scope on every call and from nowhere else; a single-tenant scope never sends a user id.
++ */
++export function createIngestWriter(input: CreateIngestWriterInput): IngestWriter {
++  const { db, scope, signal } = input;
++
++  function identity(): { tenantKey: string; userId: string | null; orgId: string | null } {
++    assertTenantScope(scope);
++    if (scope.kind === 'single') return { tenantKey: scopeKey(scope).toLowerCase(), userId: null, orgId: null };
++    return {
++      tenantKey: scopeKey(scope).toLowerCase(),
++      userId: scope.userId?.toLowerCase() ?? null,
++      orgId: scope.kind === 'org' ? (scope.organizationId?.toLowerCase() ?? null) : null,
++    };
++  }
++
++  async function call(rpc: string, args: Record<string, unknown>): Promise<Row[]> {
++    signal.throwIfAborted();
++    const response = await db.rpc(rpc, args).abortSignal(signal);
++    signal.throwIfAborted();
++    if (response.error) throw new IngestWriterError(rpc, response.error.code ?? null, reasonOf(response.error.message));
++    return (response.data ?? []) as Row[];
++  }
++
++  async function callOne(rpc: string, args: Record<string, unknown>): Promise<Row> {
++    const rows = await call(rpc, args);
++    const row = rows[0];
++    if (!row) throw new IngestWriterError(rpc, 'no_row');
++    return row;
++  }
++
++  return {
++    async begin(args) {
++      const { tenantKey, userId, orgId } = identity();
++      const row = await callOne('rag_begin_document_version', {
++        p_tenant_key: tenantKey,
++        p_user_id: userId,
++        p_org_id: orgId,
++        p_source: args.source,
++        p_source_key: args.sourceKey,
++        p_filename: args.filename,
++        p_file_sha256: args.fileSha256,
++        p_doc_type: args.docType,
++        p_doc_type_origin: args.docTypeOrigin,
++        p_profile_id: args.profileId,
++        p_profile_version: args.profileVersion,
++      });
++      const outcome = text(row, 'outcome');
++      if (outcome === 'skipped_duplicate') {
++        return { outcome, duplicateOf: requireText('rag_begin_document_version', row, 'duplicate_of') };
++      }
++      if (outcome !== 'created' && outcome !== 'resumed') throw new IngestWriterError('rag_begin_document_version', 'bad_response');
++      const version = integer(row, 'version');
++      if (version === null) throw new IngestWriterError('rag_begin_document_version', 'bad_response');
++      return {
++        outcome,
++        documentId: requireText('rag_begin_document_version', row, 'document_id'),
++        version,
++        lineageId: requireText('rag_begin_document_version', row, 'lineage_id'),
++      };
++    },
++
++    async findContentDuplicate(contentHash, documentId) {
++      const rows = await call('rag_find_content_duplicate', {
++        p_tenant_key: identity().tenantKey,
++        p_content_hash: contentHash,
++        p_document_id: documentId,
++      });
++      const first = rows[0];
++      return first ? text(first, 'duplicate_of') : null;
++    },
++
++    async setFields(documentId, fields) {
++      await callOne('rag_set_document_fields', {
++        p_document_id: documentId,
++        p_tenant_key: identity().tenantKey,
++        p_fields: fields,
++      });
++    },
++
++    async saveState(documentId, processingStatus, state) {
++      await callOne('rag_save_ingest_state', {
++        p_document_id: documentId,
++        p_tenant_key: identity().tenantKey,
++        p_processing_status: processingStatus,
++        p_state: state,
++      });
++    },
++
++    async getDocument(documentId) {
++      const rows = await call('rag_get_ingest_document', {
++        p_document_id: documentId,
++        p_tenant_key: identity().tenantKey,
++      });
++      const row = rows[0];
++      if (!row) return null;
++      const state = row.processing_state;
++      return {
++        status: requireText('rag_get_ingest_document', row, 'status'),
++        version: integer(row, 'version') ?? 0,
++        processingStatus: text(row, 'processing_status'),
++        processingState: typeof state === 'object' && state !== null ? (state as Record<string, unknown>) : {},
++        filename: text(row, 'filename') ?? '',
++        docType: text(row, 'doc_type') ?? '',
++        parserUsed: text(row, 'parser_used'),
++        createdAt: text(row, 'created_at') ?? '',
++      };
++    },
++
++    async writeChunks(documentId, chunks, options) {
++      const row = await callOne('rag_write_chunks', {
++        p_document_id: documentId,
++        p_tenant_key: identity().tenantKey,
++        p_chunks: chunks,
++        p_embeddings: options.embeddings,
++        p_final: options.final,
++        p_total: options.total,
++      });
++      return { chunksWritten: integer(row, 'chunks_written') ?? 0, chunksDeleted: integer(row, 'chunks_deleted') ?? 0 };
++    },
++
++    async publish(documentId) {
++      const row = await callOne('rag_publish_document_version', {
++        p_document_id: documentId,
++        p_tenant_key: identity().tenantKey,
++      });
++      const outcome = text(row, 'outcome');
++      if (outcome !== 'published' && outcome !== 'already_current' && outcome !== 'quarantined') {
++        throw new IngestWriterError('rag_publish_document_version', 'bad_response');
++      }
++      return {
++        outcome,
++        documentId: requireText('rag_publish_document_version', row, 'document_id'),
++        version: integer(row, 'version') ?? 0,
++        supersededDocumentId: text(row, 'superseded_document_id'),
++      };
++    },
++
++    async markFailed(documentId, reason) {
++      await callOne('rag_mark_document_failed', {
++        p_document_id: documentId,
++        p_tenant_key: identity().tenantKey,
++        p_reason: reason,
++      });
++    },
++  };
++}
+diff --git a/tests/rag-db/ingest-tracer.test.mts b/tests/rag-db/ingest-tracer.test.mts
+new file mode 100644
+index 0000000..3fc4c55
+--- /dev/null
++++ b/tests/rag-db/ingest-tracer.test.mts
+@@ -0,0 +1,168 @@
++import { after, before, describe, test } from 'node:test';
++import assert from 'node:assert/strict';
++import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from '../../eval/harness/fake-edge.mts';
++import { TWO_TENANT_IDS, createTwoTenantDatabase, type TwoTenantDatabase } from '../../eval/harness/two-tenant.mts';
++
++type Row = Record<string, unknown>;
++
++const MARKDOWN = [
++  '# Warehouse Handbook',
++  '',
++  'Forklift batteries rotate every shift under the zebra quartz seventeen policy.',
++  '',
++  '## Receiving Dock',
++  '',
++  'Pallets arriving at the receiving dock are scanned by the night crew and staged beside bay four.',
++  '',
++  '## Shipping Cage',
++  '',
++  'Outbound pallets leave through the shipping cage after the supervisor signs the manifest.',
++  '',
++].join('\n');
++
++const SECTION_QUERY = 'Pallets arriving at the receiving dock are scanned by the night crew and staged beside bay four.';
++const OPTIONS = { maxResults: 25, fallbackToLowerThreshold: true };
++
++describe('ingest tracer: one Markdown upload from ingest() to retrieval', () => {
++  let fixture: TwoTenantDatabase;
++  let edge: FakeEdge;
++  let rag: typeof import('@/lib/rag');
++  let ingestModule: typeof import('@/lib/rag/ingest');
++  let runnerModule: typeof import('@/lib/rag/ingest/runner');
++  let resolver: typeof import('@/lib/rag/tenant/resolve-chat');
++  let supabaseModule: typeof import('@/lib/supabase');
++
++  before(async () => {
++    fixture = await createTwoTenantDatabase();
++    edge = await startFakeEdge({ db: fixture.db });
++    Object.assign(process.env, fixtureProcessEnv(edge.url));
++    process.env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE = 'multi-tenant';
++    process.env.MYRAG_DEPLOYMENT_MODE = 'multi-tenant';
++    rag = await import('@/lib/rag');
++    ingestModule = await import('@/lib/rag/ingest');
++    runnerModule = await import('@/lib/rag/ingest/runner');
++    resolver = await import('@/lib/rag/tenant/resolve-chat');
++    supabaseModule = await import('@/lib/supabase');
++  });
++
++  after(async () => {
++    await edge?.close();
++    await fixture?.db.close();
++  });
++
++  const scopeOf = async (userId: string) => {
++    const resolved = await resolver.resolveTenantScope({
++      requestedOrganizationId: null,
++      deploymentMode: 'multi-tenant',
++      getUser: async () => ({ id: userId }),
++      admin: supabaseModule.getSupabaseAdmin(),
++      signal: new AbortController().signal,
++    });
++    assert.ok(resolved.ok && resolved.scope, 'scope must resolve');
++    return resolved.scope;
++  };
++
++  const upload = async (userId: string, text: string, filename: string) =>
++    ingestModule.ingest({
++      scope: await scopeOf(userId),
++      source: 'config_upload',
++      sourceKey: `root/${filename}`,
++      text,
++      filename,
++      mimeType: 'text/markdown',
++      signal: new AbortController().signal,
++    });
++
++  const rows = async (sql: string, params: unknown[]): Promise<Row[]> => (await fixture.db.query<Row>(sql, params)).rows;
++
++  let first: Awaited<ReturnType<typeof upload>>;
++
++  test('a Markdown upload becomes a ready version-1 document with section-path chunks', async () => {
++    first = await upload(TWO_TENANT_IDS.userA, MARKDOWN, 'warehouse-handbook.md');
++    assert.equal(first.status, 'ready');
++    assert.equal(first.version, 1);
++    assert.equal(first.parserUsed, 'text');
++    assert.ok(first.documentId);
++
++    const documents = await rows('SELECT * FROM documents WHERE id = $1', [first.documentId]);
++    assert.equal(documents.length, 1);
++    const document = documents[0] as Row;
++    assert.equal(document.is_current, true);
++    assert.equal(document.status, 'ready');
++    assert.equal(document.doc_type, 'general');
++    assert.equal(document.tenant_key, `u:${TWO_TENANT_IDS.userA}`);
++    assert.ok(document.file_sha256);
++    assert.ok(document.content_hash);
++
++    const chunks = await rows(
++      'SELECT content, chunk_index, section_path, embedding_text_version, metadata, embedding IS NOT NULL AS embedded, is_current, status FROM document_chunks WHERE document_id = $1 ORDER BY chunk_index',
++      [first.documentId],
++    );
++    assert.equal(chunks.length, first.chunkCount);
++    assert.deepEqual(
++      chunks.map((chunk) => chunk.section_path),
++      [['Warehouse Handbook'], ['Warehouse Handbook', 'Receiving Dock'], ['Warehouse Handbook', 'Shipping Cage']],
++    );
++    for (const [index, chunk] of chunks.entries()) {
++      const content = String(chunk.content);
++      assert.ok(!content.startsWith('Document:'), 'content carries no document prefix');
++      assert.ok(!/Chunk \d+ of \d+/.test(content), 'content carries no chunk counter');
++      assert.ok(!content.includes('Warehouse Handbook'), 'content carries no path prefix');
++      assert.equal(chunk.embedding_text_version, 1);
++      assert.equal(chunk.embedded, true);
++      assert.equal(chunk.is_current, true);
++      assert.equal(chunk.status, 'ready');
++      const metadata = chunk.metadata as Row;
++      assert.equal(metadata.document_title, 'warehouse-handbook.md');
++      assert.equal(metadata.chunk_index, index);
++      assert.equal(metadata.chunk_position, index + 1);
++      assert.equal(metadata.total_chunks, chunks.length);
++    }
++    assert.ok(String(chunks[1]?.content).includes('receiving dock'));
++  });
++
++  test('retrieval returns the ingested chunk for its tenant and never for the other tenant', async () => {
++    assert.ok(first?.documentId, 'the first test ingested the document');
++    const retrieve = async (userId: string) =>
++      rag.runRetrieval({
++        scope: await scopeOf(userId),
++        query: SECTION_QUERY,
++        profile: 'eval',
++        options: OPTIONS,
++        signal: new AbortController().signal,
++      });
++
++    const forA = await retrieve(TWO_TENANT_IDS.userA);
++    const hit = forA.candidates.find((candidate) => candidate.document_id === first.documentId);
++    assert.ok(hit, 'tenant A retrieves a chunk of its ingested document');
++    assert.ok(hit.content.includes('receiving dock'));
++
++    const forB = await retrieve(TWO_TENANT_IDS.userB);
++    assert.equal(
++      forB.candidates.some((candidate) => candidate.document_id === first.documentId),
++      false,
++      'tenant B never retrieves it',
++    );
++  });
++
++  test('INGEST_STAGES lists the thirteen D-02 stages in order', () => {
++    assert.deepEqual(
++      [...runnerModule.INGEST_STAGES],
++      [
++        'identify',
++        'file_hash_dedup',
++        'store_original',
++        'parse',
++        'content_hash_dedup',
++        'scan_injection',
++        'chunk',
++        'enrich',
++        'extract',
++        'images',
++        'embed',
++        'write',
++        'publish',
++      ],
++    );
++  });
++});
+diff --git a/tests/rag/ingest/markdown-sections.test.ts b/tests/rag/ingest/markdown-sections.test.ts
+new file mode 100644
+index 0000000..e110791
+--- /dev/null
++++ b/tests/rag/ingest/markdown-sections.test.ts
+@@ -0,0 +1,80 @@
++import { describe, expect, it } from 'vitest';
++import { chunkMarkdownSections, type MarkdownChunkOptions } from '@/lib/rag/ingest/chunkers/markdown-sections';
++import { buildEmbeddingText } from '@/lib/rag/ingest/text/embedding-text';
++import { countTokens } from '@/lib/rag/ingest/text/tokens';
++
++const OPTIONS: MarkdownChunkOptions = { maxTokens: 120, overlapTokens: 0, minChunkTokens: 0, repeatTableHeader: false };
++const embeddingTokens = (chunk: { section_path: string[]; content: string }): number =>
++  countTokens(buildEmbeddingText({ section_path: chunk.section_path, content: chunk.content }));
++
++describe('markdown section chunker', () => {
++  it('builds section_path from the heading stack and pops it on a sibling heading', () => {
++    const chunks = chunkMarkdownSections(
++      ['Preamble text.', '', '# A', '', 'alpha body', '', '## B', '', 'beta body', '', '## C ##', '', 'gamma body', '', '# D', '', 'delta body'].join('\n'),
++      OPTIONS,
++    );
++    expect(chunks.map((chunk) => chunk.section_path)).toEqual([[], ['A'], ['A', 'B'], ['A', 'C'], ['D']]);
++    expect(chunks.map((chunk) => chunk.content)).toEqual(['Preamble text.', 'alpha body', 'beta body', 'gamma body', 'delta body']);
++  });
++
++  it('does not treat a hash line inside a code fence as a heading', () => {
++    const chunks = chunkMarkdownSections(['# Real', '', '```sh', '# comment line', 'run --now', '```'].join('\n'), OPTIONS);
++    expect(chunks).toHaveLength(1);
++    expect(chunks[0]?.section_path).toEqual(['Real']);
++    expect(chunks[0]?.content).toContain('# comment line');
++  });
++
++  it('keeps every chunk within max_tokens on the embedding text and never splits a list item', () => {
++    const items = Array.from({ length: 30 }, (_, i) => `- item ${i} ${'alpha beta gamma '.repeat(3).trim()}`);
++    const chunks = chunkMarkdownSections(['# List', '', ...items].join('\n'), OPTIONS);
++    expect(chunks.length).toBeGreaterThan(1);
++    for (const chunk of chunks) expect(embeddingTokens(chunk)).toBeLessThanOrEqual(OPTIONS.maxTokens);
++    for (const item of items) expect(chunks.some((chunk) => chunk.content.includes(item))).toBe(true);
++  });
++
++  it('keeps table rows whole, marks table chunks and repeats the header when the profile asks for it', () => {
++    const rows = Array.from({ length: 25 }, (_, i) => `| row-${i} | ${'cell '.repeat(6).trim()} | ${i} |`);
++    const markdown = ['## Table', '', '| name | note | n |', '| --- | --- | --- |', ...rows].join('\n');
++
++    const plain = chunkMarkdownSections(markdown, OPTIONS);
++    expect(plain.length).toBeGreaterThan(1);
++    expect(plain.every((chunk) => chunk.chunk_kind === 'table')).toBe(true);
++    for (const row of rows) expect(plain.some((chunk) => chunk.content.includes(row))).toBe(true);
++    expect(plain.slice(1).some((chunk) => chunk.content.startsWith('| name |'))).toBe(false);
++
++    const repeated = chunkMarkdownSections(markdown, { ...OPTIONS, repeatTableHeader: true });
++    for (const chunk of repeated) {
++      expect(chunk.content.startsWith('| name | note | n |\n| --- | --- | --- |')).toBe(true);
++      expect(embeddingTokens(chunk)).toBeLessThanOrEqual(OPTIONS.maxTokens);
++    }
++    for (const row of rows) expect(repeated.some((chunk) => chunk.content.includes(row))).toBe(true);
++  });
++
++  it('carries overlap units inside a section and never across sections', () => {
++    const paragraphs = Array.from({ length: 12 }, (_, i) => `Paragraph ${i} says ${'north south east west '.repeat(2).trim()}.`);
++    const markdown = ['# One', '', ...paragraphs.flatMap((p) => [p, '']), '# Two', '', 'Other section text.'].join('\n');
++    const chunks = chunkMarkdownSections(markdown, { ...OPTIONS, overlapTokens: 25 });
++    const one = chunks.filter((chunk) => chunk.section_path[0] === 'One');
++    expect(one.length).toBeGreaterThan(1);
++    for (let i = 1; i < one.length; i += 1) {
++      const previousLast = (one[i - 1]?.content ?? '').split('\n\n').pop() ?? '';
++      expect(one[i]?.content.startsWith(previousLast)).toBe(true);
++    }
++    expect(chunks[chunks.length - 1]?.content).toBe('Other section text.');
++  });
++
++  it('splits an oversized paragraph on sentence boundaries and keeps CJK text unspaced', () => {
++    const latin = chunkMarkdownSections(`# L\n\n${'One sentence ends here. '.repeat(60)}`, OPTIONS);
++    expect(latin.length).toBeGreaterThan(1);
++    for (const chunk of latin) expect(embeddingTokens(chunk)).toBeLessThanOrEqual(OPTIONS.maxTokens);
++
++    const cjk = chunkMarkdownSections(`# 章\n\n${'这是一个测试句子。'.repeat(80)}`, OPTIONS);
++    expect(cjk.length).toBeGreaterThan(1);
++    expect(cjk.every((chunk) => !chunk.content.includes(' '))).toBe(true);
++    expect(cjk.map((chunk) => chunk.content).join('')).toBe('这是一个测试句子。'.repeat(80));
++  });
++
++  it('returns no chunk for a document with headings only', () => {
++    expect(chunkMarkdownSections('# Only\n\n## Headings\n', OPTIONS)).toEqual([]);
++  });
++});
+-- 
+2.43.0
+
+
+From ebb4c9e5b0f53fff05f6bb21c1a87f5457da85de Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 24 Nov 2026 01:39:35 +0000
+Subject: [PATCH 2/3] test(03-13): add failing tests for duplicate,
+ unreadable-file and writer-error branches
+
+- same bytes twice, same bytes for another tenant, CRLF content duplicate
+- PDF fails with parser_unavailable and its version is marked failed
+- writer failure surfaces as IngestWriterError with no document text in logs
+- forged scope refused before any RPC; ids and tenant key come from the scope
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01SEn5g9gV3RHr18oaonxqof
+---
+ tests/rag-db/ingest-tracer.test.mts | 217 +++++++++++++++++++++++++++-
+ 1 file changed, 216 insertions(+), 1 deletion(-)
+
+diff --git a/tests/rag-db/ingest-tracer.test.mts b/tests/rag-db/ingest-tracer.test.mts
+index 3fc4c55..02129b1 100644
+--- a/tests/rag-db/ingest-tracer.test.mts
++++ b/tests/rag-db/ingest-tracer.test.mts
+@@ -1,7 +1,9 @@
+-import { after, before, describe, test } from 'node:test';
++import { after, afterEach, before, describe, mock, test } from 'node:test';
+ import assert from 'node:assert/strict';
+ import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from '../../eval/harness/fake-edge.mts';
+ import { TWO_TENANT_IDS, createTwoTenantDatabase, type TwoTenantDatabase } from '../../eval/harness/two-tenant.mts';
++import type { RpcClient, RpcResponse } from '@/lib/rag/backend/supabase-rpc';
++import type { TenantScope } from '@/lib/rag/tenant/scope';
+ 
+ type Row = Record<string, unknown>;
+ 
+@@ -20,6 +22,8 @@ const MARKDOWN = [
+   '',
+ ].join('\n');
+ 
++const PHRASE = 'heliotrope marmalade quasar';
++
+ const SECTION_QUERY = 'Pallets arriving at the receiving dock are scanned by the night crew and staged beside bay four.';
+ const OPTIONS = { maxResults: 25, fallbackToLowerThreshold: true };
+ 
+@@ -29,6 +33,8 @@ describe('ingest tracer: one Markdown upload from ingest() to retrieval', () =>
+   let rag: typeof import('@/lib/rag');
+   let ingestModule: typeof import('@/lib/rag/ingest');
+   let runnerModule: typeof import('@/lib/rag/ingest/runner');
++  let writerModule: typeof import('@/lib/rag/ingest/writer');
++  let depsModule: typeof import('@/lib/rag/ingest/deps');
+   let resolver: typeof import('@/lib/rag/tenant/resolve-chat');
+   let supabaseModule: typeof import('@/lib/supabase');
+ 
+@@ -41,6 +47,8 @@ describe('ingest tracer: one Markdown upload from ingest() to retrieval', () =>
+     rag = await import('@/lib/rag');
+     ingestModule = await import('@/lib/rag/ingest');
+     runnerModule = await import('@/lib/rag/ingest/runner');
++    writerModule = await import('@/lib/rag/ingest/writer');
++    depsModule = await import('@/lib/rag/ingest/deps');
+     resolver = await import('@/lib/rag/tenant/resolve-chat');
+     supabaseModule = await import('@/lib/supabase');
+   });
+@@ -50,6 +58,11 @@ describe('ingest tracer: one Markdown upload from ingest() to retrieval', () =>
+     await fixture?.db.close();
+   });
+ 
++  afterEach(() => {
++    depsModule.resetIngestDepsForTests();
++    mock.restoreAll();
++  });
++
+   const scopeOf = async (userId: string) => {
+     const resolved = await resolver.resolveTenantScope({
+       requestedOrganizationId: null,
+@@ -73,6 +86,53 @@ describe('ingest tracer: one Markdown upload from ingest() to retrieval', () =>
+       signal: new AbortController().signal,
+     });
+ 
++  const uploadFile = async (userId: string, file: Uint8Array, filename: string, mimeType: string) =>
++    ingestModule.ingest({
++      scope: await scopeOf(userId),
++      source: 'config_upload',
++      sourceKey: `root/${filename}`,
++      file,
++      filename,
++      mimeType,
++      signal: new AbortController().signal,
++    });
++
++  interface RecordedRpc {
++    fn: string;
++    args: Record<string, unknown>;
++  }
++
++  /** The real admin client behind a recorder; `failures` answers named functions with a database error instead. */
++  const recordingDb = (failures: Record<string, { code: string; message: string }> = {}, passthrough = true) => {
++    const calls: RecordedRpc[] = [];
++    const real = supabaseModule.getSupabaseAdmin() as unknown as RpcClient;
++    const db: RpcClient = {
++      rpc(fn, args) {
++        calls.push({ fn, args });
++        const failure = failures[fn];
++        if (!failure && passthrough) return real.rpc(fn, args);
++        const response: RpcResponse = failure ? { data: null, error: failure } : { data: null, error: { code: 'XX000', message: 'refused' } };
++        const request = {
++          abortSignal: () => request,
++          then: (onFulfilled: Parameters<Promise<RpcResponse>['then']>[0], onRejected: Parameters<Promise<RpcResponse>['then']>[1]) =>
++            Promise.resolve(response).then(onFulfilled, onRejected),
++        };
++        return request as unknown as ReturnType<RpcClient['rpc']>;
++      },
++    };
++    return { db, calls };
++  };
++
++  const captureConsole = () => {
++    const lines: string[] = [];
++    for (const method of ['error', 'warn', 'log', 'info'] as const) {
++      mock.method(console, method, (...args: unknown[]) => {
++        lines.push(`${method}: ${args.map((arg) => (typeof arg === 'string' ? arg : JSON.stringify(arg))).join(' ')}`);
++      });
++    }
++    return lines;
++  };
++
+   const rows = async (sql: string, params: unknown[]): Promise<Row[]> => (await fixture.db.query<Row>(sql, params)).rows;
+ 
+   let first: Awaited<ReturnType<typeof upload>>;
+@@ -165,4 +225,159 @@ describe('ingest tracer: one Markdown upload from ingest() to retrieval', () =>
+       ],
+     );
+   });
++
++  test('the same bytes ingested twice for tenant A return skipped_duplicate and add no chunks', async () => {
++    const text = `# Duplicate Bytes\n\nThe amber ledger records every pallet moved across the north apron.\n`;
++    const original = await upload(TWO_TENANT_IDS.userA, text, 'dup-bytes-one.md');
++    assert.equal(original.status, 'ready');
++    const chunkCount = async () => Number((await rows('SELECT count(*)::int AS n FROM document_chunks WHERE document_id = $1', [original.documentId]))[0]?.n);
++    const before = await chunkCount();
++
++    const again = await upload(TWO_TENANT_IDS.userA, text, 'dup-bytes-two.md');
++    assert.equal(again.status, 'skipped_duplicate');
++    assert.equal(again.duplicateOf, original.documentId);
++    assert.equal(again.documentId, null);
++    assert.equal(again.chunkCount, 0);
++    assert.equal(await chunkCount(), before);
++    const sameBytes = await rows('SELECT count(*)::int AS n FROM documents WHERE file_sha256 = (SELECT file_sha256 FROM documents WHERE id = $1)', [original.documentId]);
++    assert.equal(sameBytes[0]?.n, 1, 'no second row for the same bytes');
++  });
++
++  test('the same bytes for another tenant are ingested normally', async () => {
++    const text = `# Shared Bytes\n\nThe cobalt manifest lists every crate on the west pier.\n`;
++    const forA = await upload(TWO_TENANT_IDS.userA, text, 'shared-bytes.md');
++    const forB = await upload(TWO_TENANT_IDS.userB, text, 'shared-bytes.md');
++    assert.equal(forA.status, 'ready');
++    assert.equal(forB.status, 'ready');
++    assert.notEqual(forA.documentId, forB.documentId);
++    const owner = await rows('SELECT tenant_key FROM documents WHERE id = $1', [forB.documentId]);
++    assert.equal(owner[0]?.tenant_key, `u:${TWO_TENANT_IDS.userB}`);
++  });
++
++  test('the same Markdown with CRLF line endings is a content duplicate and its version is deleted', async () => {
++    const lf = `# Line Endings\n\nThe copper tally sheet is filed by the dispatch clerk each evening.\n\nA second paragraph closes the sheet.\n`;
++    const crlf = lf.replace(/\n/g, '\r\n');
++    const original = await upload(TWO_TENANT_IDS.userA, lf, 'crlf-one.md');
++    assert.equal(original.status, 'ready');
++
++    const again = await upload(TWO_TENANT_IDS.userA, crlf, 'crlf-two.md');
++    assert.equal(again.status, 'skipped_duplicate');
++    assert.equal(again.duplicateOf, original.documentId);
++
++    const tombstones = await rows(
++      "SELECT id, status, (SELECT count(*)::int FROM document_chunks c WHERE c.document_id = d.id) AS chunks FROM documents d WHERE d.metadata->>'duplicate_of' = $1",
++      [original.documentId],
++    );
++    assert.equal(tombstones.length, 1);
++    assert.equal(tombstones[0]?.status, 'deleted');
++    assert.equal(tombstones[0]?.chunks, 0);
++  });
++
++  test('a PDF the tracer parser cannot read fails with parser_unavailable and its version is marked failed', async () => {
++    const pdf = new Uint8Array(Buffer.from('%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\ntrailer\n%%EOF\n', 'utf8'));
++    const result = await uploadFile(TWO_TENANT_IDS.userA, pdf, 'scan-one.pdf', 'application/pdf');
++    assert.equal(result.status, 'failed');
++    assert.equal(result.reason, 'parser_unavailable');
++    assert.ok(result.documentId, 'the version row exists');
++
++    const version = await rows(
++      'SELECT status, is_current, processing_state, (SELECT count(*)::int FROM document_chunks c WHERE c.document_id = d.id) AS chunks FROM documents d WHERE d.id = $1',
++      [result.documentId],
++    );
++    assert.equal(version[0]?.status, 'failed');
++    assert.equal(version[0]?.is_current, false);
++    assert.equal(version[0]?.chunks, 0);
++    assert.equal((version[0]?.processing_state as Row).failure_reason, 'parser_unavailable');
++  });
++
++  test('a failed rag_write_chunks surfaces as IngestWriterError and no log line or message carries document text', async () => {
++    const failure = { code: '57014', message: `canceling statement while processing "${PHRASE}"` };
++    const text = `# Leak Check\n\nThe ${PHRASE} entry must never reach a log line.\n`;
++
++    const writer = writerModule.createIngestWriter({
++      db: recordingDb({ rag_write_chunks: failure }).db,
++      scope: await scopeOf(TWO_TENANT_IDS.userA),
++      signal: new AbortController().signal,
++    });
++    const thrown = await writer
++      .writeChunks('00000000-0000-4000-8000-0000000000f1', [], { embeddings: null, final: false, total: 0 })
++      .then(
++        () => null,
++        (error: unknown) => error,
++      );
++    assert.ok(thrown instanceof writerModule.IngestWriterError);
++    assert.equal(thrown.rpc, 'rag_write_chunks');
++    assert.equal(thrown.code, '57014');
++    assert.ok(!thrown.message.includes(PHRASE));
++
++    const { db, calls } = recordingDb({ rag_write_chunks: failure });
++    depsModule.setIngestDepsForTests({ db: () => db });
++    const lines = captureConsole();
++    const result = await upload(TWO_TENANT_IDS.userA, text, 'leak-check.md');
++
++    assert.equal(result.status, 'failed');
++    assert.ok(result.documentId);
++    assert.ok(calls.some((call) => call.fn === 'rag_mark_document_failed'), 'the version was marked failed');
++    const stored = await rows('SELECT status FROM documents WHERE id = $1', [result.documentId]);
++    assert.equal(stored[0]?.status, 'failed');
++
++    const ingestErrors = lines.filter((line) => line.startsWith('error: [Ingest]'));
++    assert.equal(ingestErrors.length, 1, 'one [Ingest] error line');
++    assert.ok(ingestErrors[0]?.includes('IngestWriterError'));
++    assert.ok(ingestErrors[0]?.includes('rag_write_chunks'));
++    assert.ok(ingestErrors[0]?.includes('57014'));
++    for (const line of lines) assert.ok(!line.includes(PHRASE), `no log line carries document text: ${line.slice(0, 80)}`);
++  });
++
++  test('an object shaped like a scope is refused in identify before any RPC', async () => {
++    const forged = { kind: 'personal', userId: TWO_TENANT_IDS.userA, organizationId: null } as unknown as TenantScope;
++    const { db, calls } = recordingDb();
++    depsModule.setIngestDepsForTests({ db: () => db });
++    captureConsole();
++
++    const result = await ingestModule.ingest({
++      scope: forged,
++      source: 'config_upload',
++      sourceKey: 'root/forged.md',
++      text: '# Forged\n\nA forged scope must never reach the database.\n',
++      filename: 'forged.md',
++      mimeType: 'text/markdown',
++      signal: new AbortController().signal,
++    });
++    assert.equal(result.status, 'failed');
++    assert.equal(result.reason, 'invalid_scope');
++    assert.equal(result.documentId, null);
++    assert.equal(calls.length, 0);
++  });
++
++  test('the writer takes tenant key and ids from the scope, and sends no user id for a single-tenant scope', async () => {
++    const send = async (scope: TenantScope) => {
++      const { db, calls } = recordingDb({}, false);
++      depsModule.setIngestDepsForTests({ db: () => db });
++      captureConsole();
++      await ingestModule.ingest({
++        scope,
++        source: 'chat_upload',
++        sourceKey: 'root/scope-args.md',
++        text: '# Scope\n\nArguments follow the scope.\n',
++        filename: 'scope-args.md',
++        mimeType: 'text/markdown',
++        signal: new AbortController().signal,
++      });
++      mock.restoreAll();
++      return calls.find((call) => call.fn === 'rag_begin_document_version')?.args;
++    };
++
++    const personal = await send(await scopeOf(TWO_TENANT_IDS.userA));
++    assert.equal(personal?.p_tenant_key, `u:${TWO_TENANT_IDS.userA}`);
++    assert.equal(personal?.p_user_id, TWO_TENANT_IDS.userA);
++    assert.equal(personal?.p_org_id, null);
++
++    const single = await resolver.resolveTenantScope({ deploymentMode: 'single-tenant', signal: new AbortController().signal });
++    assert.ok(single.ok && single.scope);
++    const singleArgs = await send(single.scope);
++    assert.equal(singleArgs?.p_tenant_key, 's:default');
++    assert.equal(singleArgs?.p_user_id, null);
++    assert.equal(singleArgs?.p_org_id, null);
++  });
+ });
+-- 
+2.43.0
+
+
+From f31d5a34982b9c2b29ecd76cdadc7c0d678e255e Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 24 Nov 2026 01:40:13 +0000
+Subject: [PATCH 3/3] feat(03-13): content-hash duplicates and unreadable files
+ on the tracer path
+
+- content_hash_dedup marks a same-tenant duplicate version deleted with metadata.duplicate_of
+- parse reports parser_unavailable for files the tracer parser cannot read
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01SEn5g9gV3RHr18oaonxqof
+---
+ src/lib/rag/ingest/stages/dedup.ts | 20 ++++++++++++++++++++
+ src/lib/rag/ingest/stages/parse.ts |  2 +-
+ 2 files changed, 21 insertions(+), 1 deletion(-)
+
+diff --git a/src/lib/rag/ingest/stages/dedup.ts b/src/lib/rag/ingest/stages/dedup.ts
+index 8172571..d2145bb 100644
+--- a/src/lib/rag/ingest/stages/dedup.ts
++++ b/src/lib/rag/ingest/stages/dedup.ts
+@@ -40,6 +40,26 @@ async function runFileHashDedup(ctx: StageContext): Promise<StageOutcome> {
+ async function runContentHashDedup(ctx: StageContext): Promise<StageOutcome> {
+   const document = requireDocument(ctx, 'content_hash_dedup');
+   const hash = contentHash(ctx.work.parseText ?? '');
++  const duplicateOf = await ctx.writer.findContentDuplicate(hash, document.id);
++  if (duplicateOf !== null) {
++    await ctx.writer.setFields(document.id, {
++      content_hash: hash,
++      status: 'deleted',
++      metadata: { duplicate_of: duplicateOf, content_hash_version: HASH_NORMALIZATION_VERSION },
++    });
++    return {
++      kind: 'done',
++      result: {
++        status: 'skipped_duplicate',
++        documentId: null,
++        version: null,
++        parserUsed: ctx.parserUsed,
++        chunkCount: 0,
++        warnings: ctx.warnings.slice(),
++        duplicateOf,
++      },
++    };
++  }
+   await ctx.writer.setFields(document.id, {
+     content_hash: hash,
+     metadata: { content_hash_version: HASH_NORMALIZATION_VERSION },
+diff --git a/src/lib/rag/ingest/stages/parse.ts b/src/lib/rag/ingest/stages/parse.ts
+index b03e3c8..8c19285 100644
+--- a/src/lib/rag/ingest/stages/parse.ts
++++ b/src/lib/rag/ingest/stages/parse.ts
+@@ -30,7 +30,7 @@ async function run(ctx: StageContext): Promise<StageOutcome> {
+   } else if (identity.bytes !== null && isTextLike(identity.filename, ctx.input.mimeType)) {
+     text = new TextDecoder('utf-8').decode(identity.bytes);
+   } else {
+-    throw new Error('unsupported file type');
++    return { kind: 'fail', reason: 'parser_unavailable' };
+   }
+ 
+   ctx.work.parseText = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+-- 
+2.43.0
+
