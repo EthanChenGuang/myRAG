@@ -371,6 +371,7 @@ def _empty_thresholds(tmp_path: Path) -> Path:
 def _calibrate(tmp_path: Path, runner, golden: Path, **kwargs):
     if "thresholds_path" not in kwargs:
         kwargs["thresholds_path"] = _empty_thresholds(tmp_path)
+    kwargs.setdefault("floor_path", tmp_path / "fixture-score-calibration.json")
     return run_refusal_calibration(
         V2_RECOMMENDED, tmp_path / "out", golden=golden, runner=runner, now=DAY, **kwargs
     )
@@ -695,6 +696,7 @@ def test_harness_runner_hands_over_both_splits_only_when_asked(tmp_path):
 def _patch_cli(monkeypatch, tmp_path: Path, scores, *, thresholds: Path | None = None):
     runner = _Runner(scores)
     monkeypatch.setattr(refusal_module, "_default_runner", runner)
+    monkeypatch.setattr(refusal_module, "FLOOR_PATH", tmp_path / "fixture-score-calibration.json")
     if thresholds is not None:
         monkeypatch.setattr(refusal_module, "THRESHOLDS_PATH", thresholds)
     return runner

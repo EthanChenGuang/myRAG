@@ -439,10 +439,64 @@ class FixtureScoreCalibration(BaseModel):
     golden_sha256: str = ""
 
 
+def _best_dense(trace: RagTrace, image_floor: float) -> float | None:
+    """The D-30 floor's view of a trace: best dense similarity, or +inf when an image chunk clears the image floor."""
+    best: float | None = None
+    for candidate in trace.candidates:
+        sim = candidate.similarity
+        if sim is None or not math.isfinite(sim):
+            continue
+        if candidate.has_image and sim > image_floor:
+            return math.inf
+        if best is None or sim > best:
+            best = sim
+    return best
+
+
 def fit_similarity_floor(
-    traces: Sequence[RagTrace], golden: Sequence[GoldenItem], config: RefusalCalibrationConfig, *, environment: str
+    traces: Sequence[RagTrace],
+    golden: Sequence[GoldenItem],
+    config: RefusalCalibrationConfig,
+    *,
+    environment: str,
+    image_floor: float = IMAGE_FLOOR,
 ) -> SimilarityFloorFit:
-    return SimilarityFloorFit()
+    """Fallback similarity floor fitted on the dev split only, at the same false-refusal target as the threshold cells."""
+    by_id = {item.id: item for item in golden}
+    answerable: list[float] = []
+    no_answer: list[float] = []
+    excluded = 0
+    seen: set[str] = set()
+    for trace in traces:
+        item = by_id.get(trace.item_id) if trace.item_id else None
+        if item is None or item.id in seen:
+            continue
+        seen.add(item.id)
+        if item.split != DEV_SPLIT or assign_split(item.id) != DEV_SPLIT:
+            continue
+        best = _best_dense(trace, image_floor)
+        if best is None:
+            excluded += 1
+            continue
+        (answerable if item.answerable else no_answer).append(best)
+    minimums = getattr(config.dev_minimums, environment)
+    target = config.target_false_refusal
+    if len(answerable) < minimums.answerable or len(no_answer) < minimums.no_answer:
+        return SimilarityFloorFit(
+            status="insufficient_data",
+            target_false_refusal=target,
+            dev=_metric_block(answerable, no_answer, None),
+            excluded_no_similarity=excluded,
+        )
+    fit = fit_threshold(answerable, no_answer, target)
+    threshold = fit.threshold if math.isfinite(fit.threshold) else None
+    return SimilarityFloorFit(
+        status="calibrated" if threshold is not None else "uncalibrated",
+        context_threshold=threshold,
+        target_false_refusal=target,
+        dev=_metric_block(answerable, no_answer, threshold),
+        excluded_no_similarity=excluded,
+    )
 
 
 class CalibrationResult(BaseModel):
@@ -763,6 +817,23 @@ def render_report(result: CalibrationResult) -> str:
             )
         else:
             lines.append("Cross-lingual false refusal does not exceed the same-language rate by more than the noise band in any comparable language.")
+    lines += ["", "## Fixture similarity floor (D-30 fallback)", ""]
+    floor = result.similarity_floor
+    if floor is None or floor.dev is None:
+        lines.append("Not fitted.")
+    else:
+        lines += [
+            "Fitted on the dev split only (the test split is not read) over every dev item's best dense similarity, at the same "
+            f"false-refusal target ({_fmt(floor.target_false_refusal)}); an image chunk above the image floor counts as answered. "
+            "It applies where the threshold gate is not_applied. Fixture floors are written for the eval harness only; the "
+            "production legacy profile keeps its own score_calibration.",
+            "",
+            "| Status | context_threshold | Dev answerable / no-answer | Dev false refusal (95% upper) | Dev correct refusal | Excluded (no similarity) |",
+            "| --- | --- | --- | --- | --- | --- |",
+            f"| {floor.status} | {_fmt(floor.context_threshold, 4)} | {_counts(floor.dev)} | {_rate(floor.dev)} | {_correct(floor.dev)} | {floor.excluded_no_similarity} |",
+        ]
+        if result.floor_written:
+            lines += ["", f"Written to `{result.floor_path}` (source fixture)."]
     for note in result.notes:
         lines += ["", f"Note: {note}"]
     return "\n".join(lines) + "\n"
@@ -866,6 +937,7 @@ def run_refusal_calibration(
         previous=_previous_cells(out_dir / RESULT_NAME, existing),
         now=day,
     )
+    floor_fit = fit_similarity_floor(run.traces, golden_items, config, environment=source)
     new_keys = {r.cell.key for r in records}
     stale = sorted(c.key for c in existing.cells if c.key not in new_keys and _is_stale(c, versions))
 
@@ -884,6 +956,7 @@ def run_refusal_calibration(
         excluded=excluded,
         stale_cells=stale,
         cross_vs_same=compare_cross_same(records, noise.floor),
+        similarity_floor=floor_fit,
         notes=notes,
     )
 
@@ -897,6 +970,22 @@ def run_refusal_calibration(
         write_config_atomically(thresholds_file, merged)
         result.thresholds_written = True
         result.thresholds_path = repo_relative(thresholds_file)
+        if source == "fixture":
+            floor_file = Path(floor_path) if floor_path else FLOOR_PATH
+            floor_record = FixtureScoreCalibration(
+                fixture_mode="ingest" if fixture_mode == "ingest" else "prechunked",
+                status=floor_fit.status,
+                score_calibration={"context_threshold": floor_fit.context_threshold}
+                if floor_fit.context_threshold is not None
+                else {},
+                target_false_refusal=floor_fit.target_false_refusal,
+                dev=floor_fit.dev,
+                golden_sha256=result.golden_sha256,
+            )
+            floor_file.parent.mkdir(parents=True, exist_ok=True)
+            floor_file.write_text(_stable_json(floor_record.model_dump(mode="json")), encoding="utf-8")
+            result.floor_written = True
+            result.floor_path = repo_relative(floor_file)
 
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / RESULT_NAME).write_text(_stable_json(result.model_dump(mode="json")), encoding="utf-8")
