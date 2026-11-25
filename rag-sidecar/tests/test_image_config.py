@@ -18,7 +18,12 @@ SIDECAR_DIR = Path(__file__).resolve().parents[1]
 REPO_ROOT = SIDECAR_DIR.parent
 SHIPPED_CONFIG_DIR = SIDECAR_DIR / "config" / "rag"
 # Every JSON the sidecar reads at run time; each plan that adds one asserts its presence here.
-REQUIRED_CONFIG_FILES = ("parse-routing.json", "processing-profiles.json", "language-packs.json")
+REQUIRED_CONFIG_FILES = (
+    "parse-routing.json",
+    "processing-profiles.json",
+    "language-packs.json",
+    "hidden-text-rules.json",
+)
 CONFIG_FILES = tuple(sorted(path.name for path in SHIPPED_CONFIG_DIR.glob("*.json")))
 
 _PROBE = """
