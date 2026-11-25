@@ -45,6 +45,8 @@ export interface CitationSession {
   stripHistory<T extends HistoryMessage>(messages: T[]): T[];
   transforms(): Array<StreamTextTransform<ToolSet>>;
   finishMetadata(): CitationFinishMetadata;
+  /** The validated records with full quotes, for the answer record; null when no strategy is active. */
+  fullRecords(): { citations: CitationRecord[]; invalidCitations: number } | null;
   answerText(): string;
 }
 
@@ -74,6 +76,7 @@ export function createCitationSession(input: CitationSessionInput): CitationSess
   let parser: MarkerParser | null = null;
   let failed = false;
   let finished: { citations: CitationRecord[]; invalidCitations: number } | null = null;
+  let full: CitationRecord[] = [];
   let answer = '';
 
   const fail = (reason: string) => {
@@ -90,8 +93,9 @@ export function createCitationSession(input: CitationSessionInput): CitationSess
     }
     try {
       const parsed = parser.finish();
-      const records = capQuotes(buildCitationRecords(parsed.valid, aliasMap, strategy));
-      finished = { citations: CitationListSchema.parse(records), invalidCitations: parsed.invalidCitations };
+      const records = CitationListSchema.parse(buildCitationRecords(parsed.valid, aliasMap, strategy));
+      finished = { citations: CitationListSchema.parse(capQuotes(records)), invalidCitations: parsed.invalidCitations };
+      full = records;
     } catch {
       fail('record_error');
       finished = { citations: [], invalidCitations: 0 };
@@ -155,6 +159,11 @@ export function createCitationSession(input: CitationSessionInput): CitationSess
       if (!strategy) return {};
       const result = finalize() ?? { citations: [], invalidCitations: 0 };
       return { citations: result.citations, citationStrategy: strategy, invalidCitations: result.invalidCitations };
+    },
+    fullRecords() {
+      if (!strategy) return null;
+      const result = finalize() ?? { citations: [], invalidCitations: 0 };
+      return { citations: result.citations.length === 0 ? [] : full, invalidCitations: result.invalidCitations };
     },
     answerText() {
       return answer;
