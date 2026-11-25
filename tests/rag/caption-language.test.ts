@@ -190,4 +190,118 @@ describe('resolveCaptionLanguage', () => {
     expect(await resolveCaptionLanguage({ documentLanguage: 'zh', tenantKey: 's:default', lookupShares })).toBe('zh');
     expect(lookupShares).not.toHaveBeenCalled();
   });
+
+  it('without a document language takes the largest tenant share, ties in registry order', async () => {
+    expect(await resolveCaptionLanguage({ documentLanguage: null, tenantKey: 's:default', lookupShares: async () => [{ language: 'it', share: 0.7 }, { language: 'en', share: 0.3 }] })).toBe('it');
+    const tie = [
+      { language: 'it', share: 0.4 },
+      { language: 'zh', share: 0.4 },
+      { language: 'en', share: 0.2 },
+    ];
+    expect(await resolveCaptionLanguage({ documentLanguage: null, tenantKey: 's:default', lookupShares: async () => tie })).toBe('zh');
+  });
+
+  it('ignores a share or a document language outside the configured set', async () => {
+    const lookupShares = async () => [{ language: 'de', share: 0.9 }, { language: 'it', share: 0.1 }];
+    expect(await resolveCaptionLanguage({ documentLanguage: 'de', tenantKey: 's:default', lookupShares })).toBe('it');
+  });
+
+  it('without shares falls to the primary language, and so does a failed lookup, without throwing', async () => {
+    expect(await resolveCaptionLanguage({ documentLanguage: null, tenantKey: 's:default', lookupShares: async () => [] })).toBe('en');
+    expect(await resolveCaptionLanguage({ documentLanguage: null, tenantKey: 's:default' })).toBe('en');
+    const failing = async (): Promise<never> => {
+      throw new Error('database unavailable');
+    };
+    expect(await resolveCaptionLanguage({ documentLanguage: null, tenantKey: 's:default', lookupShares: failing })).toBe('en');
+  });
+
+  it('with the languages unset returns no target and warns once, naming the switch', async () => {
+    vi.stubEnv('RAG_SUPPORTED_LANGUAGES', '');
+    vi.stubEnv('RAG_PRIMARY_LANGUAGE', '');
+    resetLanguageSettingsForTests();
+    const warn = vi.mocked(console.warn);
+    expect(await resolveCaptionLanguage({ documentLanguage: 'zh', tenantKey: 's:default' })).toBeNull();
+    expect(await resolveCaptionLanguage({ documentLanguage: null, tenantKey: 's:default' })).toBeNull();
+    const named = warn.mock.calls.filter((call) => String(call[0]).startsWith('[Ingest]') && String(call[0]).includes('RAG_CAPTION_LANGUAGE'));
+    expect(named).toHaveLength(1);
+  });
+});
+
+const IMAGE = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3, 4]);
+const IMAGE_URL = 'https://project.example.test/storage/v1/object/public/chat-images/user-1/pic_1_abc.png';
+
+function uploadImage() {
+  return ingest({
+    scope,
+    source: 'image_upload',
+    sourceKey: 'user-1/pic_1_abc.png',
+    file: IMAGE,
+    filename: 'pic.png',
+    mimeType: 'image/png',
+    signal: new AbortController().signal,
+    options: { imageUrl: IMAGE_URL },
+  } as Parameters<typeof ingest>[0]);
+}
+
+describe('a standalone image upload', () => {
+  const IT_CAPTION = 'Una scheda bianca con la parola Novità al centro e tre linee blu sotto di essa, su uno sfondo grigio chiaro.';
+
+  it('in a tenant whose largest share is it asks for Italiano and stores the caption language on the document', async () => {
+    generateText.mockResolvedValue({ text: IT_CAPTION });
+    const { db, calls } = fakeIngestDb({ languageShares: [{ language: 'it', share: 0.6, docs: 3 }, { language: 'en', share: 0.4, docs: 2 }] });
+    installIngestDeps({ db, env: { RAG_CAPTION_LANGUAGE: 'document' } });
+    const result = await uploadImage();
+    expect(result.status).toBe('ready');
+    expect(promptsSent()).toEqual([captionPromptFor('it')]);
+    expect(promptsSent()[0]).toContain('Italiano');
+    expect(callsOf(calls, 'rag_tenant_language_shares')).toHaveLength(1);
+    const chunks = writtenChunks(calls);
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0]!.metadata.caption_language).toBe('it');
+    expect(callsOf(calls, 'rag_set_document_fields').map((call) => (call.args.p_fields as Record<string, unknown>).language).filter(Boolean)).toEqual(['it']);
+  });
+
+  it('with no shares and no document language asks for the primary language', async () => {
+    generateText.mockResolvedValue({ text: EN_CAPTION });
+    const { db } = fakeIngestDb();
+    installIngestDeps({ db, env: { RAG_CAPTION_LANGUAGE: 'document' } });
+    expect((await uploadImage()).status).toBe('ready');
+    expect(promptsSent()).toEqual([captionPromptFor('en')]);
+  });
+
+  it('a failed share lookup falls to the primary language and does not fail the stage', async () => {
+    generateText.mockResolvedValue({ text: EN_CAPTION });
+    const { db } = fakeIngestDb({ failures: { rag_tenant_language_shares: { code: '57014', message: 'canceling statement' } } });
+    installIngestDeps({ db, env: { RAG_CAPTION_LANGUAGE: 'document' } });
+    expect((await uploadImage()).status).toBe('ready');
+    expect(promptsSent()).toEqual([captionPromptFor('en')]);
+  });
+
+  it('with the languages unset under document sends the pinned prompt', async () => {
+    vi.stubEnv('RAG_SUPPORTED_LANGUAGES', '');
+    vi.stubEnv('RAG_PRIMARY_LANGUAGE', '');
+    resetLanguageSettingsForTests();
+    generateText.mockResolvedValue({ text: EN_CAPTION });
+    const { db, calls } = fakeIngestDb();
+    installIngestDeps({ db, env: { RAG_CAPTION_LANGUAGE: 'document' } });
+    expect((await uploadImage()).status).toBe('ready');
+    expect(promptsSent()).toEqual([IMAGE_CAPTION_PROMPT]);
+    expect(callsOf(calls, 'rag_tenant_language_shares')).toEqual([]);
+  });
+
+  it('an empty caption writes no chunk, as today', async () => {
+    generateText.mockResolvedValue({ text: '  \n ' });
+    const { db, calls } = fakeIngestDb();
+    installIngestDeps({ db, env: { RAG_CAPTION_LANGUAGE: 'document' } });
+    const result = await uploadImage();
+    expect(result.status).toBe('failed');
+    expect(writtenChunks(calls)).toEqual([]);
+  });
+
+  it('an empty picture caption inside a document writes no image chunk and keeps the document', async () => {
+    const { result, calls } = await runPdf(PARSE_ZH, { RAG_CAPTION_LANGUAGE: 'document' }, '   ');
+    expect(result.status).toBe('ready');
+    expect(writtenChunks(calls).filter((chunk) => chunk.chunk_kind === 'image')).toEqual([]);
+    expect(callsOf(calls, 'rag_set_image_chunk_languages')).toEqual([]);
+  });
 });

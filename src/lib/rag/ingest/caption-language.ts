@@ -2,6 +2,7 @@ import { detectLanguage } from '../lang/detect';
 import { getLanguagePack, registryOrder } from '../lang/registry';
 import { getLanguageSettings } from '../lang/settings';
 import { IMAGE_CAPTION_PROMPT } from './captioner';
+import type { StageContext } from './types';
 
 /**
  * D-23: the one sentence appended to the English caption instruction under RAG_CAPTION_LANGUAGE=document. It is fixed text around the
@@ -22,7 +23,7 @@ export type ShareLookup = (tenantKey: string) => Promise<LanguageShare[]>;
 export interface ResolveCaptionLanguageInput {
   /** The document's own language (detected on its text); null for a picture upload with no text. */
   documentLanguage: string | null;
-  tenantKey: string;
+  tenantKey: string | null;
   /** Reads the tenant's language shares; a failure falls through to the primary language. */
   lookupShares?: ShareLookup;
 }
@@ -54,7 +55,7 @@ export async function resolveCaptionLanguage(input: ResolveCaptionLanguageInput)
   const enabled = new Set(settings.languages);
   if (input.documentLanguage !== null && enabled.has(input.documentLanguage)) return input.documentLanguage;
 
-  if (input.lookupShares) {
+  if (input.lookupShares && input.tenantKey !== null) {
     try {
       const shares = (await input.lookupShares(input.tenantKey)).filter(
         (entry) => enabled.has(entry.language) && Number.isFinite(entry.share) && entry.share > 0,
@@ -71,6 +72,25 @@ export async function resolveCaptionLanguage(input: ResolveCaptionLanguageInput)
     }
   }
   return settings.primary;
+}
+
+/**
+ * The caption target of one ingest run, resolved once and kept on the run (ctx.work), so a run reads the tenant shares at most once. With
+ * RAG_CAPTION_LANGUAGE=en nothing is read and there is no target. The document language is detected on its text as the enrich stage does.
+ */
+export async function captionTargetForRun(ctx: StageContext, documentText: string | null): Promise<string | null> {
+  if (ctx.config.captionLanguage !== 'document') return null;
+  if (ctx.work.captionTarget) return ctx.work.captionTarget.language;
+  const tenantKey = ctx.identity?.tenantKey ?? null;
+  const documentLanguage = documentText === null || documentText.trim() === '' ? null : captionLanguageOf(documentText);
+  const writer = ctx.writer;
+  const language = await resolveCaptionLanguage({
+    documentLanguage,
+    tenantKey,
+    ...(tenantKey !== null && writer.tenantLanguageShares ? { lookupShares: () => writer.tenantLanguageShares!() } : {}),
+  });
+  ctx.work.captionTarget = { language };
+  return language;
 }
 
 /** The language of a caption as written, among the configured languages; null when it cannot be told. */

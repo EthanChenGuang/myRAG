@@ -3,7 +3,7 @@ import { detectLanguage } from '../../lang/detect';
 import { lexicalText } from '../../lexical/tokenize';
 import { scanText, type InjectionScanResult } from '../../security/injection-scan';
 import { isArtifactName, loadArtifact, originalName, saveArtifact } from '../artifacts';
-import { captionLanguageOf, resolveCaptionLanguage } from '../caption-language';
+import { captionLanguageOf, captionTargetForRun } from '../caption-language';
 import { CaptionError, captionImage } from '../captioner';
 import { contentHash } from '../hash';
 import { imageContextOf, validImageUrl } from '../image-options';
@@ -44,25 +44,9 @@ async function saveCaption(ctx: StageContext, index: number, caption: string): P
   }
 }
 
-/**
- * RAG_CAPTION_LANGUAGE=document (D-23): the language captions of this document are asked for, resolved once per run. The document's own
- * language is detected on its text as the enrich stage does; a picture upload has none and falls to the tenant share, then the primary.
- * With the switch at en there is no target and nothing is read.
- */
-async function captionTarget(ctx: StageContext): Promise<string | null> {
-  if (ctx.config.captionLanguage !== 'document') return null;
-  if (ctx.work.captionTarget) return ctx.work.captionTarget.language;
-  const tenantKey = requireIdentity(ctx, 'images').tenantKey;
-  const text = ctx.work.captionOnly ? '' : (ctx.work.parseText ?? ctx.work.chunks.map((draft) => draft.content).join('\n'));
-  const documentLanguage = text.trim() === '' ? null : captionLanguageOf(text);
-  const writer = ctx.writer;
-  const language = await resolveCaptionLanguage({
-    documentLanguage,
-    tenantKey,
-    ...(writer.tenantLanguageShares ? { lookupShares: () => writer.tenantLanguageShares!() } : {}),
-  });
-  ctx.work.captionTarget = { language };
-  return language;
+/** RAG_CAPTION_LANGUAGE=document: the target of this run's captions; a picture document has no text of its own. */
+function captionTarget(ctx: StageContext): Promise<string | null> {
+  return captionTargetForRun(ctx, ctx.work.captionOnly ? null : (ctx.work.parseText ?? ctx.work.chunks.map((draft) => draft.content).join('\n')));
 }
 
 /** One vision call inside the request budget. Null means the budget ran out and the run should yield. */
