@@ -172,3 +172,96 @@ class TestEvalReportLatency:
         report = EvalReport(**_report_payload(latency=latency))
         assert report.latency["embed"].n == 4
         assert EvalReport.model_validate(report.model_dump(mode="json")) == report
+
+
+def _query_layer_payload(**overrides):
+    base = {
+        "items": 4,
+        "items_with_plan": 4,
+        "gate_rules": {"R1_PRONOUN": 3, "R9_KEYWORDS": 1},
+        "transforms": {
+            "condense": {"run": 3, "disabled": 0, "skipped": 0},
+            "expand": {"run": 0, "disabled": 0, "skipped": 1, "skip_reasons": {"timeout": 1}},
+        },
+        "llm_transform_share": {"value": 0.5, "n": 4},
+        "protected_token_losses": 1,
+        "budget_profile": "chat",
+        "query_budget": {"p50_ms": 600, "p95_ms": 1200},
+        "query_latency": {"latency": {"p50_ms": 300.0, "p95_ms": 900.0, "n": 4}, "status": "within"},
+        "query_latency_by_language": {"en": {"latency": {"p50_ms": 300.0, "p95_ms": 1300.0, "n": 2}, "status": "over"}},
+        "query_latency_by_category": {},
+    }
+    base.update(overrides)
+    return base
+
+
+def _cache_payload(**overrides):
+    base = {
+        "checks": 4,
+        "hits": 1,
+        "misses": 3,
+        "failures": 1,
+        "bypasses": {"protected_tokens": 2},
+        "hit_rate": {"value": 0.25, "n": 4},
+        "hit_latency": {"p50_ms": 20.0, "p95_ms": 20.0, "n": 1},
+        "miss_latency": {"p50_ms": 400.0, "p95_ms": 800.0, "n": 3},
+        "near_miss_checks": 2,
+        "near_miss_wrong_hits": 0,
+        "near_miss_wrong_hit_rate": {"value": 0.0, "n": 2},
+    }
+    base.update(overrides)
+    return base
+
+
+class TestEvalReportQuerySections:
+    def test_report_written_before_the_sections_still_parses(self):
+        report = EvalReport(**_report_payload())
+        assert report.query_layer is None and report.semantic_cache is None
+
+    def test_filled_sections_round_trip(self):
+        report = EvalReport(**_report_payload(query_layer=_query_layer_payload(), semantic_cache=_cache_payload()))
+        assert report.query_layer.gate_rules["R1_PRONOUN"] == 3
+        assert report.query_layer.transforms["expand"].skip_reasons == {"timeout": 1}
+        assert report.semantic_cache.bypasses == {"protected_tokens": 2}
+        assert EvalReport.model_validate(report.model_dump(mode="json")) == report
+
+    @pytest.mark.parametrize(
+        "section, payload",
+        [
+            ("query_layer", _query_layer_payload(protected_token_losses=-1)),
+            ("query_layer", _query_layer_payload(query_latency={"latency": {"p50_ms": 1, "p95_ms": 2, "n": 1}, "status": "late"})),
+            ("query_layer", _query_layer_payload(smuggled=1)),
+            ("semantic_cache", _cache_payload(hits=-1)),
+            ("semantic_cache", _cache_payload(query_text="x")),
+        ],
+    )
+    def test_invalid_sections_rejected(self, section, payload):
+        with pytest.raises(ValidationError):
+            EvalReport(**_report_payload(**{section: payload}))
+
+    def test_empty_sections_validate(self):
+        report = EvalReport(
+            **_report_payload(
+                query_layer=_query_layer_payload(
+                    items_with_plan=0,
+                    gate_rules={},
+                    transforms={},
+                    llm_transform_share={"value": None, "n": 0},
+                    protected_token_losses=0,
+                    query_latency=None,
+                    query_latency_by_language={},
+                ),
+                semantic_cache=_cache_payload(
+                    checks=0, hits=0, misses=0, failures=0, bypasses={}, hit_rate={"value": None, "n": 0},
+                    hit_latency=None, miss_latency=None, near_miss_checks=0, near_miss_wrong_hits=0,
+                    near_miss_wrong_hit_rate=None,
+                ),
+            )
+        )
+        assert report.query_layer.items_with_plan == 0 and report.semantic_cache.checks == 0
+
+    def test_samples_carry_both_sections_and_the_query_group(self):
+        samples = build_samples()["samples"]
+        assert samples["EvalReport"].query_layer is not None
+        assert samples["EvalReport"].semantic_cache is not None
+        assert samples["LatencyBudgets"].profiles["chat"].groups["query"].p95_ms == 1200
