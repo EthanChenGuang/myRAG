@@ -228,6 +228,14 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_purge_stale_ingestion_jobs(integer, integer) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_purge_stale_ingestion_jobs(integer, integer) TO service_role;
   END IF;
+  IF to_regprocedure('public.rag_purge_retrieval_log(integer, integer)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_purge_retrieval_log(integer, integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_purge_retrieval_log(integer, integer) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_feedback_loop_on_chat_delete()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_feedback_loop_on_chat_delete() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_feedback_loop_on_chat_delete() TO service_role;
+  END IF;
   IF to_regprocedure('public.rag_find_content_duplicate(text, text, uuid)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_find_content_duplicate(text, text, uuid) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_find_content_duplicate(text, text, uuid) TO service_role;
