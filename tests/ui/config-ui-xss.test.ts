@@ -294,6 +294,17 @@ describe('Config UI index.html renders untrusted data as text (XSS)', () => {
     expectNoInjection(doc);
   });
 
+  it('Document processor activity log: file names, workspace names and errors', () => {
+    const doc = new FakeDocument();
+    const log = host(doc, 'activity-log');
+    const context = makeContext(doc);
+    vm.runInContext(`globalThis.__obj = { ${methodSource(html, 'logActivity(message) {')} };`, context);
+    const obj = context.__obj as { logActivity: (m: string) => void };
+    obj.logActivity(`❌ Failed to process ${XSS_PAYLOAD}: ${XSS_PAYLOAD}`);
+    expectNoInjection(doc);
+    expect(log.textContent).toContain(`Failed to process ${XSS_PAYLOAD}`);
+  });
+
   it('Add model auto-fetch: model data and error text', async () => {
     const ids = ['new-model-id', 'fetch-model-btn', 'fetch-btn-text', 'model-fetch-status'];
     const cases = [
