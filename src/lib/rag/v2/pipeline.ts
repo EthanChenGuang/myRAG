@@ -28,6 +28,7 @@ import { runRankStages } from './stages/rank';
 import { runSearchStages } from './stages/search';
 import { bindingHashFields, planBindingLegs, startBindingEmbeds, type BindingEmbed, type BindingLegsPlan } from './stages/binding-legs';
 import { buildV2Result, fusedHitsToVoiceChunks } from './result';
+import { variantDenseTexts } from '../query/variants';
 
 export const V2_PROFILES = ['chat', 'embed', 'eval', 'voice'] as const;
 
@@ -121,11 +122,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
         spec('embed', 'throw'),
         signal,
         (stageSignal) =>
-          embedForRetrieval(
-            input,
-            query.variants.map((variant) => variant.text),
-            stageSignal,
-          ),
+          embedForRetrieval(input, variantDenseTexts(query.variants), stageSignal),
         collector,
         { detail: (value) => value[0]?.profile?.id },
       ),
@@ -145,6 +142,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
       stageOverrides: input.stageOverrides,
       variants: query.variants,
       variantEmbeddings,
+      ...(query.queryLayer ? { trackStandalone: true } : {}),
       filters: query.filters,
       bindings: { plan: bindingPlan, embeds: bindingEmbeds },
     });
@@ -245,6 +243,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
         ...(rank.rerank.scoreByChunk.has(row.hit.chunkId)
           ? { rerank_score: rank.rerank.scoreByChunk.get(row.hit.chunkId) }
           : {}),
+        ...(row.standaloneSimilarity !== undefined ? { standaloneSimilarity: row.standaloneSimilarity } : {}),
       }));
     }
   } catch (error) {

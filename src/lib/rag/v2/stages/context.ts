@@ -102,6 +102,7 @@ export function fusedToCandidate(row: FusedHit, rerankScore?: number): Candidate
     legs,
     language: row.hit.language,
     ...(rerankScore !== undefined ? { rerank_score: rerankScore } : {}),
+    ...(row.standaloneSimilarity !== undefined ? { standaloneSimilarity: row.standaloneSimilarity } : {}),
   };
 }
 
