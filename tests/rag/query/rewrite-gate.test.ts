@@ -83,6 +83,11 @@ describe('needsRewrite: rules', () => {
     expect(gate('近30天的订单有多少？').transforms).toEqual(['normalize_dates']);
   });
 
+  it('overlapping relative-time spans keep only the longest match', () => {
+    expect(matchRelativeTime('最近30天的订单')).toEqual([{ term: '近N天', unit: 'day', offset: null, n: 30 }]);
+    expect(matchRelativeTime('最近的公告')).toEqual([{ term: '最近', unit: 'recent', offset: null }]);
+  });
+
   it('R4: a code alone is short, so it is expanded but still protected', () => {
     const result = gate('ERR_TIMEOUT');
     expect(result.transforms).toEqual(['expand']);
