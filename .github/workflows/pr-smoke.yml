@@ -78,6 +78,26 @@ jobs:
           uv run --directory eval python ../scripts/ci/check-workflows.py
           uv run --directory eval python -m unittest discover -s ../scripts/tests -p 'test_check_workflows.py'
 
+  next-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NEXT_TELEMETRY_DISABLED: '1'
+      NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
+      SUPABASE_SERVICE_ROLE_KEY: placeholder-service-role-key
+      OPENAI_API_KEY: placeholder-openai-key
+      OPENROUTER_API_KEY: placeholder-openrouter-key
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Production build (what Vercel runs)
+        run: npx next build
+
   sibling-types:
     runs-on: ubuntu-latest
     timeout-minutes: 20
