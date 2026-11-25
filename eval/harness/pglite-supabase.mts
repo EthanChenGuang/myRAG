@@ -38,6 +38,8 @@ export interface FixtureDatabase {
   ingestSidecarUploads?: Array<{ fileSha256: string; request: Record<string, unknown> }>;
   /** LlamaParse parse attempts during the ingest-mode build (expected zero). */
   ingestLlamaParseAttempts?: number;
+  /** Chunking profile ids the ingest-mode builder seeded as building before ingestion. */
+  seededChunkingProfiles?: string[];
 }
 
 const SUPABASE_SHIM_SQL = `
@@ -167,6 +169,8 @@ export async function createFixtureDatabase(options: {
   setupSqlPath?: string;
   /** Rebuild lexical_text after corpus load. Defaults to whether migrations run: the relex RPCs come from 0402, so a migrations:false caller applies them and then calls runFixtureRelex. */
   relex?: boolean;
+  /** Ingest mode only: candidate chunking profiles seeded before the first document. */
+  chunkingProfiles?: import('../../src/lib/rag-eval/contracts.generated.ts').ChunkingProfile[];
 }): Promise<FixtureDatabase> {
   const { deploymentMode, corpusDir } = options;
   if (deploymentMode !== 'single-tenant' && deploymentMode !== 'multi-tenant') {
@@ -186,8 +190,10 @@ export async function createFixtureDatabase(options: {
       supabaseGrants: options.supabaseGrants,
       migrations: options.migrations,
       setupSqlPath: options.setupSqlPath,
+      ...(options.chunkingProfiles?.length ? { chunkingProfiles: options.chunkingProfiles } : {}),
     });
   }
+  if (options.chunkingProfiles?.length) throw new Error('[Fixture DB] chunking profiles are seeded only in the ingest fixture mode');
 
   const corpus = loadCorpus(corpusDir);
   const { db, sqlSha256 } = await createEmptyFixtureDatabase(options);

@@ -6,7 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { buildIngestFixtureDatabase } from '../../eval/harness/ingest-mode.mts';
-import type { FixtureDatabase } from '../../eval/harness/pglite-supabase.mts';
+import { FIXTURE_USER_ID, type FixtureDatabase } from '../../eval/harness/pglite-supabase.mts';
 import { runEval } from '../../eval/harness/run-eval.mts';
 import { parseRunConfig, RunConfigError } from '../../eval/harness/run-config.mts';
 
@@ -140,11 +140,14 @@ describe('seeded profiles in an ingest-mode build and eval run', () => {
 
   before(async () => {
     const config = parseRunConfig({ name: 'seeded', env: V2_ENV, chunking_profiles: [PROFILE] }, 'inline');
+    // The app reads its environment when the ingest code first imports it, so the eval endpoint settings go into the build env.
+    const evalEnv = { RAG_EVAL_SECRET: 'e'.repeat(48), RAG_EVAL_ALLOWED_SCOPES: `user:${FIXTURE_USER_ID}` };
+    process.env.RAG_EVAL_SECRET = evalEnv.RAG_EVAL_SECRET;
     fixture = await buildIngestFixtureDatabase({
       deploymentMode: 'single-tenant',
       corpusDir: CORPUS_DIR,
       corpusRange: { start: 0, end: 0 },
-      processEnv: config.env,
+      processEnv: { ...evalEnv, ...config.env },
       chunkingProfiles: config.chunkingProfiles,
     });
   });
