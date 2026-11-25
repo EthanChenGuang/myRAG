@@ -5,6 +5,7 @@ import type { RpcClient } from '../../backend/supabase-rpc';
 import { backfillScope } from '../../tenant/backfill-scope';
 import type { TenantScope } from '../../tenant/scope';
 import { PARSE_ARTIFACT, loadArtifact, type ArtifactContext } from '../artifacts';
+import { currentIngestConfig } from '../current-config';
 import { getIngestDeps } from '../deps';
 import { resolveEmbeddingTargets, type EmbeddingTarget } from '../embedding-targets';
 import { ObjectStoreError } from '../object-store';
@@ -363,7 +364,11 @@ async function prepare(doc: RechunkDocument, profile: ChunkingProfileRow, signal
   let built: BuiltProfileChunks;
   try {
     const templateHeader = templateHeaderFor(processing.embedding_text_template, doc.templateRow);
-    built = buildProfileChunks({ filename: doc.filename, chunker: processing.chunker, templateHeader }, markdown, profile);
+    built = buildProfileChunks(
+      { filename: doc.filename, chunker: processing.chunker, templateHeader, languageAwareIngest: currentIngestConfig().languageAwareIngest },
+      markdown,
+      profile,
+    );
   } catch (error) {
     if (signal.aborted) throw error;
     return { kind: 'gap', reason: 'failed', detail: 'chunking_failed' };

@@ -1,15 +1,8 @@
 import { buildEmbeddingText } from '../text/embedding-text';
+import { legacyBlockSplitter, type SentenceSplitter } from '@/lib/rag/lang/sentences';
 import { countTokens, truncateToTokens } from '../text/tokens';
 import type { ChunkDraft, ChunkResult } from '../types';
-import {
-  CJK_SENTENCE_END,
-  FENCE,
-  HEADING,
-  SENTENCE_END,
-  chunkSection,
-  hardSplit,
-  type MarkdownChunkOptions,
-} from './markdown-sections';
+import { FENCE, HEADING, chunkSection, type MarkdownChunkOptions } from './markdown-sections';
 
 export interface LegalChunkOptions extends MarkdownChunkOptions {
   /** Clause heading patterns from the profile data; applied to the start of each line. */
@@ -315,8 +308,9 @@ function chunkClause(span: ClauseSpan, options: LegalChunkOptions, patterns: rea
       current = '';
     };
     const fitsPart = (body: string): boolean => fits(compose(headFor(out.length), leadText, body, sepFor(out.length)));
-    for (const part of text.split(SENTENCE_END).filter((piece) => piece !== '')) {
-      const candidate = current === '' ? part : `${current}${CJK_SENTENCE_END.test(current) ? '' : ' '}${part}`;
+    const splitter: SentenceSplitter = (options.sentences ?? legacyBlockSplitter)(text);
+    for (const part of splitter.split(text)) {
+      const candidate = current === '' ? part : `${current}${splitter.join(current)}${part}`;
       if (fitsPart(candidate)) {
         current = candidate;
         continue;
@@ -326,7 +320,7 @@ function chunkClause(span: ClauseSpan, options: LegalChunkOptions, patterns: rea
         current = part;
         continue;
       }
-      const pieces = hardSplit(part, hardBudget);
+      const pieces = splitter.hardSplit(part, hardBudget);
       pieces.forEach((piece, index) => {
         current = piece;
         if (index < pieces.length - 1) emit();

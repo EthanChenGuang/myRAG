@@ -1,3 +1,4 @@
+import { legacyBlockSplitter, type BlockSplitter } from '@/lib/rag/lang/sentences';
 import { countTokens } from '../text/tokens';
 import type { ChunkDraft } from '../types';
 import { CHUNKERS, ChunkerUnavailableError, type ChunkerConfig } from './index';
@@ -38,16 +39,16 @@ function parentCap(profile: ParentChildProfile): number {
 }
 
 /** Whole sections, clauses or tables up to the cap, cut by the chunker kind the processing profile names. */
-function structureParents(markdown: string, chunker: ChunkerConfig, cap: number): { drafts: ChunkDraft[]; warnings: string[] } {
+function structureParents(markdown: string, chunker: ChunkerConfig, cap: number, sentences: BlockSplitter): { drafts: ChunkDraft[]; warnings: string[] } {
   const chunk = CHUNKERS[chunker.kind];
   if (!chunk) throw new ChunkerUnavailableError(chunker.kind);
-  const result = chunk(markdown, { ...chunker, max_tokens: cap, overlap_tokens: 0, min_chunk_tokens: 0 });
+  const result = chunk(markdown, { ...chunker, max_tokens: cap, overlap_tokens: 0, min_chunk_tokens: 0 }, sentences);
   return { drafts: result.captionOnly === true ? [] : result.chunks, warnings: result.warnings };
 }
 
 /** Windows of at most `cap` tokens that end at sentence boundaries and stay inside one heading section; a window that starts inside a table repeats its header. */
-function fixedParents(markdown: string, cap: number): ChunkDraft[] {
-  return chunkMarkdownSections(markdown, { maxTokens: cap, overlapTokens: 0, minChunkTokens: 0, repeatTableHeader: true });
+function fixedParents(markdown: string, cap: number, sentences: BlockSplitter): ChunkDraft[] {
+  return chunkMarkdownSections(markdown, { maxTokens: cap, overlapTokens: 0, minChunkTokens: 0, repeatTableHeader: true, sentences });
 }
 
 /** Children of one parent: text packed to the child budget, tables by whole rows with the header row repeated. */
@@ -60,14 +61,21 @@ function childrenOf(parent: ParentDraft, options: MarkdownChunkOptions, warnings
  * sections, clauses or tables, capped at parentTokens) or are parentTokens windows in fixed mode. Each parent is then cut into children of at
  * most childTokens, measured on the embedding text, that never split a table row and repeat a table header when a table is cut. Children carry
  * the section path of their parent. The chunker kind comes from the processing profile data (a ChunkerConfig); no document type is compared here.
+ * `sentences` picks the sentence splitter of each over-long block for parents and children alike (D-15); absent, the legacy shared set.
  */
-export function chunkParentChild(markdown: string, profile: ParentChildProfile, chunker: ChunkerConfig): ParentChildResult {
+export function chunkParentChild(
+  markdown: string,
+  profile: ParentChildProfile,
+  chunker: ChunkerConfig,
+  sentences: BlockSplitter = legacyBlockSplitter,
+): ParentChildResult {
   const warnings = new Set<string>();
   const childOptions: MarkdownChunkOptions = {
     maxTokens: profile.childTokens,
     overlapTokens: 0,
     minChunkTokens: Math.min(chunker.min_chunk_tokens, Math.floor(profile.childTokens / 2)),
     repeatTableHeader: true,
+    sentences,
   };
 
   if (profile.parentMode === 'none') {
@@ -79,7 +87,7 @@ export function chunkParentChild(markdown: string, profile: ParentChildProfile, 
       overlap_tokens: 0,
       min_chunk_tokens: childOptions.minChunkTokens,
       repeat_table_header: true,
-    });
+    }, sentences);
     for (const warning of result.warnings) warnings.add(warning);
     const children = result.captionOnly === true ? [] : result.chunks.map((draft): ChildDraft => ({ ...draft, section_path: [...draft.section_path], parent_index: null }));
     return { parents: [], children, warnings: [...warnings] };
@@ -88,11 +96,11 @@ export function chunkParentChild(markdown: string, profile: ParentChildProfile, 
   const cap = parentCap(profile);
   let drafts: ChunkDraft[];
   if (profile.parentMode === 'structure') {
-    const built = structureParents(markdown, chunker, cap);
+    const built = structureParents(markdown, chunker, cap, sentences);
     drafts = built.drafts;
     for (const warning of built.warnings) warnings.add(warning);
   } else {
-    drafts = fixedParents(markdown, cap);
+    drafts = fixedParents(markdown, cap, sentences);
   }
 
   const parents: ParentDraft[] = [];
