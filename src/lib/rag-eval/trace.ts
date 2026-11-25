@@ -1,4 +1,7 @@
 import crypto from 'node:crypto';
+import { readSecurityConfig } from '@/lib/rag/security/config';
+import { detectorsConfigVersion } from '@/lib/rag/security/detectors';
+import { injectionRulesVersion } from '@/lib/rag/security/injection-rules';
 
 export const ENDPOINT_VERSION = 'rag-eval/1';
 
@@ -14,6 +17,8 @@ export interface EffectiveConfig {
   generator_model: string | null;
   rag_env: Record<string, string>;
   rag_prompt_sha256: Record<string, string>;
+  /** Present only while RAG_INJECTION_CHECK is not off (D-18). */
+  security?: { rules_version: string; detectors_version: string };
 }
 
 function sha256Hex(value: string): string {
@@ -38,7 +43,13 @@ export function buildEffectiveConfig(): EffectiveConfig {
     promptDigests[name] = sha256Hex(process.env[name] ?? '');
   }
 
+  const security =
+    readSecurityConfig(process.env).injectionCheck !== 'off'
+      ? { security: { rules_version: injectionRulesVersion(), detectors_version: detectorsConfigVersion() } }
+      : {};
+
   return {
+    ...security,
     deployment_mode: process.env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE || 'single-tenant',
     embedding_model: process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small',
     endpoint_version: ENDPOINT_VERSION,

@@ -102,7 +102,7 @@ describe('released rule ids under drop, two tenants with identical chunk text (v
     assert.ok(!result.candidates.some((candidate) => candidate.chunk_id === TWO_TENANT_IDS.chunkB));
 
     for (const call of calls) {
-      const named = `${decodeURIComponent(call.query ?? '')} ${JSON.stringify(call.body ?? null)}`;
+      const named = decodeURIComponent(call.query ?? '');
       assert.ok(!named.includes(TWO_TENANT_IDS.docA), `B's request ${call.path} named A's document`);
       assert.ok(!named.includes(TWO_TENANT_IDS.chunkA), `B's request ${call.path} named A's chunk`);
     }

@@ -16,7 +16,10 @@ import { RERANK_TEXT_VERSION } from '../rerank/types';
 import type { TraceCollector } from '../trace/collector';
 import type { Candidate, InjectionSummary, Profile, RetrievalResult, RunRetrievalInput } from '../types';
 import type { TemporalQueryContext } from '../query/temporal-query-detector';
-import { computeRetrievalConfigHash } from './config-hash';
+import { isMultiTenant } from '@/lib/deployment-mode';
+import { getRagDeps } from '../deps';
+import type { SecurityConfig } from '../security/config';
+import { computeRetrievalConfigHash, securityHashComponent } from './config-hash';
 import { effectiveRetrievalParams } from './retrieval-params';
 import type { AssembleOutput } from '../context/assemble';
 import type { RetrievalParams } from '@/lib/rag-eval/contracts.generated';
@@ -39,6 +42,8 @@ export interface BuildV2ResultInput {
   /** The injection_check summary; absent when RAG_INJECTION_CHECK is off. */
   injection?: InjectionSummary;
   injectionStalled?: boolean;
+  /** The request's security config; defaults to RagDeps.securityConfig(). */
+  security?: SecurityConfig;
 }
 
 export function fusedHitsToVoiceChunks(hits: FusedHit[], scoreByChunk?: Map<string, number>): ChunkWithScore[] {
@@ -95,6 +100,7 @@ export async function buildV2Result(ctx: BuildV2ResultInput): Promise<RetrievalR
     injection,
     injectionStalled = false,
   } = ctx;
+  const security = ctx.security ?? getRagDeps().securityConfig();
   const records = collector.stages();
   const outputCandidates = resolveCandidates(profile, refusal, candidates, preRefusalCandidates);
   const voiceCount = voice?.results.length ?? 0;
@@ -145,6 +151,7 @@ export async function buildV2Result(ctx: BuildV2ResultInput): Promise<RetrievalR
       rerankTierChat: config.v2.rerankTier.chat,
       rerankTierVoice: config.v2.rerankTier.voice,
     },
+    security: securityHashComponent(security, { multiTenant: isMultiTenant() }),
   });
 
   const base = { ...failure(collector, status, reason, queryContext), ...(injection ? { injection } : {}) };

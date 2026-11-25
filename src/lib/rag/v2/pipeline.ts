@@ -266,6 +266,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
     voice,
     injection,
     injectionStalled,
+    security,
   });
 }
 

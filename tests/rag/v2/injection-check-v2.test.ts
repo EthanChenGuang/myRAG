@@ -435,6 +435,27 @@ describe('v2 injection_check through runRetrieval (status, voice)', () => {
     expect(result.injection?.droppedChunkIds).toEqual([]);
   });
 
+  it('the retrieval config hash is unchanged with every switch at its default and moves with the defense on', async () => {
+    const chunk = hit('chunk-1', { similarity: 0.85, documentId: 'doc-1', content: 'refund policy terms' });
+    const once = async (sec: Record<string, string>) => {
+      uninstallDeps();
+      installV2([chunk], {}, sec);
+      await verifyV2Startup();
+      const result = await runRetrieval({ scope, query: 'refund policy', profile: 'chat', options: { ragMode: 'strict' }, signal: new AbortController().signal });
+      return result.retrievalConfigHash;
+    };
+    const defaults = await once({});
+    uninstallDeps();
+    installV2([chunk]);
+    setRagDepsForTests({ securityConfig: () => readSecurityConfig({ LAKERA_GUARD_BASE_URL: 'https://guard.example.test' }) });
+    await verifyV2Startup();
+    const keyOnly = (await runRetrieval({ scope, query: 'refund policy', profile: 'chat', options: { ragMode: 'strict' }, signal: new AbortController().signal }))
+      .retrievalConfigHash;
+    expect(keyOnly).toBe(defaults);
+    expect(await once({ RAG_CONTEXT_TAGGING: 'true' })).not.toBe(defaults);
+    expect(await once({ RAG_INJECTION_CHECK: 'flag' })).not.toBe(defaults);
+  });
+
   it('with the check off the v2 voice and chat results carry no injection summary and no stage', async () => {
     installV2([hit('chunk-1', { similarity: 0.85, documentId: 'doc-1', content: `refund clause. ${INJECTED}` })]);
     await verifyV2Startup();
