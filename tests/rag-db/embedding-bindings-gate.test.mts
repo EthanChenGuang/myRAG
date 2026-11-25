@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { PGlite } from '@electric-sql/pglite';
 import { createEmptyFixtureDatabase, type DeploymentMode } from '../../eval/harness/pglite-supabase.mts';
+import { applyMigrationFiles } from '../../eval/harness/migrations.mts';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const MIGRATION = 'supabase/migrations/0441_binding_gate.sql';
@@ -572,6 +573,23 @@ for (const mode of MODES) {
       const gate = rows.find((r) => r.name === 'rag_activate_embedding_binding')!.source;
       assert.match(gate, /c_min_real_items\s+CONSTANT\s+integer\s*:=\s*30/);
       assert.doesNotMatch(gate, /'(zh|en|it)'/, 'the gate names no language code');
+    });
+
+    test('applying 0441 a second time keeps every function, body and grant', async () => {
+      const read = async (): Promise<string> =>
+        JSON.stringify(
+          (
+            await db.query(
+              `SELECT p.oid::regprocedure::text AS sig, pg_catalog.pg_get_functiondef(p.oid) AS def, p.proacl::text AS acl FROM pg_proc p
+                WHERE p.pronamespace = 'public'::regnamespace AND p.oid::regprocedure::text = ANY ($1::text[]) ORDER BY 1`,
+              [SIGNATURES],
+            )
+          ).rows,
+        );
+      const before = await read();
+      assert.equal((JSON.parse(before) as unknown[]).length, SIGNATURES.length);
+      await applyMigrationFiles(db, [MIGRATION]);
+      assert.equal(await read(), before);
     });
 
     if (mode === 'multi-tenant') {
