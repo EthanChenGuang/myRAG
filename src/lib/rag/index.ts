@@ -132,6 +132,8 @@ export type {
   CitationSessionInput,
   HistoryMessage,
 } from './generation/citations/session';
+export { mintAnswerId, scheduleAnswerFinish, shouldPersistAnswer } from './generation/answer-finish';
+export type { AnswerFinishDeps, AnswerFinishInput, AnswerPendingContext, ShouldPersistAnswerInput } from './generation/answer-finish';
 export { selectCitationStrategy } from './generation/citations/strategy';
 export type { CitationRagMode, CitationStrategyId, CitationTurn } from './generation/citations/strategy';
 export { repairOwnerMembership } from './tenant/repair-owner';
