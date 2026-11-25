@@ -3,7 +3,9 @@
 -- foreign key to documents or document_chunks: deleting or re-versioning a document leaves its records intact.
 -- chat_id is nullable: a new chat's row is created only after its first answer; plan 05-09 attaches the record later.
 -- organization_id gets its foreign key in the multi-tenant 0502 (single-tenant has no organizations table).
--- tenant_key is a generated column added per mode by 0502. Idempotent.
+-- tenant_key is a generated column added per mode by 0502.
+-- Access: RLS on; authenticated may only SELECT its own rows; no client write grant or policy; only service_role writes.
+-- Shared-chat policies do not extend here (shared chats render from message metadata). Idempotent.
 
 BEGIN;
 
@@ -32,5 +34,18 @@ CREATE TABLE IF NOT EXISTS public.rag_answer_records (
 
 CREATE INDEX IF NOT EXISTS idx_rag_answer_records_chat_id ON public.rag_answer_records (chat_id);
 CREATE INDEX IF NOT EXISTS idx_rag_answer_records_user_created ON public.rag_answer_records (user_id, created_at);
+
+ALTER TABLE public.rag_answer_records ENABLE ROW LEVEL SECURITY;
+
+REVOKE ALL ON TABLE public.rag_answer_records FROM PUBLIC, anon, authenticated;
+GRANT SELECT ON TABLE public.rag_answer_records TO authenticated;
+GRANT ALL ON TABLE public.rag_answer_records TO service_role;
+
+DROP POLICY IF EXISTS rag_answer_records_select_own ON public.rag_answer_records;
+CREATE POLICY rag_answer_records_select_own ON public.rag_answer_records
+  FOR SELECT TO authenticated
+  USING (user_id = auth.uid());
+
+NOTIFY pgrst, 'reload schema';
 
 COMMIT;
