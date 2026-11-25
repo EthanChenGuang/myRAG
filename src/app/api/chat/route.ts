@@ -10,12 +10,14 @@ import { formatErrorSSE } from '@/lib/error-stream';
 import { ContentPart, APIMessage, ExtendedMessage, fromAPIMessages, toMessage } from '@/types/chat';
 import { ReasoningConfig, REASONING_MODELS } from '@/lib/types';
 import {
+  createCitationSession,
   createEnhancedRAGPrompt,
   createTraceCollector,
   finishTrace,
   isV2Pipeline,
   knowledgeBaseUnavailableMessage,
   parseRetrievalFilters,
+  readGenerationConfig,
   repairOwnerMembership,
   resolveTenantScope,
   runRetrieval,
@@ -119,6 +121,9 @@ console.log('API ROUTE: Environment check -', {
 });
 
 // Initialize AI providers based on configuration
+// Client capabilities are advisory: an invalid value counts as absent, never a 400
+const ChatCapabilitiesSchema = z.object({ citations: z.boolean().optional() }).passthrough();
+
 const AI_PROVIDER = env.NEXT_PUBLIC_AI_PROVIDER as 'openai' | 'openrouter' | 'groq';
 
 // Identify if the current provider supports tool calling
@@ -1195,6 +1200,7 @@ export async function POST(req: Request) {
         systemPromptOverride?: string, // WhatsApp and other overrides
         disableRAG?: boolean, // WhatsApp and other overrides
         ragMode?: 'strict' | 'balanced' | 'flexible' | 'bypass' // RAG behavior mode
+        capabilities?: unknown
       },
       imageStorage?: Record<string, string> // Add imageStorage for attached images
     } = requestBody;
@@ -1867,6 +1873,15 @@ IMPORTANT:
     // Detect if we're using a GPT model for model-specific instructions
     const isGPTModel = model.includes('gpt-4') || model.includes('o1') || model.includes('chatgpt');
 
+    const parsedCapabilities = ChatCapabilitiesSchema.safeParse(data?.capabilities);
+    const citationSession = createCitationSession({
+      capabilities: parsedCapabilities.success ? { citations: parsedCapabilities.data.citations === true } : null,
+      ragMode,
+      modelId: model,
+      language: userLanguage,
+      config: readGenerationConfig(),
+    });
+
     // Log model selection for debugging
     console.log('[WEBAPP] Model from request:', data?.settings?.model);
     console.log('[WEBAPP] Using model:', model);
@@ -1985,6 +2000,7 @@ IMPORTANT:
           signal: req.signal,
           trace: collector,
           ...(retrievalFilters ? { retrievalFilters } : {}),
+          ...(citationSession.labeler ? { citationLabeler: citationSession.labeler } : {}),
         });
         ragTrace = { collector, result };
         collector.setReviewContent({ query: queryText });
@@ -2011,6 +2027,7 @@ IMPORTANT:
           options: { generalOverview: true },
           signal: req.signal,
           trace: collector,
+          ...(citationSession.labeler ? { citationLabeler: citationSession.labeler } : {}),
         });
         ragTrace = { collector, result };
         retrievalResult = result;
@@ -2204,6 +2221,8 @@ IMPORTANT:
       return createUIMessageStreamResponse({ stream });
     }
 
+    citationSession.attach(retrievalFailed || effectiveDisableRAG ? null : retrievalResult);
+
     // Prepare system prompt with context
     // Check if there's a custom system prompt in environment variables (with fallback)
     const defaultSystemPrompt = `You are a helpful AI assistant with access to a knowledge base. When answering questions:
@@ -2310,7 +2329,7 @@ Context:
       console.log('[RAG SYSTEM] ✅ Using optimized system prompt with context');
       console.log('[RAG SYSTEM] Creating enhanced prompt with context length:', context.length);
       console.log('[RAG SYSTEM] Using RAG mode:', ragMode);
-      systemPrompt = createEnhancedRAGPrompt(ragSystemPrompt, context, ragMode);
+      systemPrompt = citationSession.decorateSystemPrompt(createEnhancedRAGPrompt(ragSystemPrompt, context, ragMode));
     } else {
       console.log('[RAG SYSTEM] ❌ Using standard system prompt without context');
       console.log('[RAG SYSTEM] Reason: No context/documents found');
@@ -3558,6 +3577,9 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
       };
 
       // First streamText call with merged tools and reasoning
+      const citationTransforms = citationSession.transforms();
+      if (citationTransforms.length > 0) streamParams.experimental_transform = citationTransforms;
+
       const result = await streamText({
         ...streamParams,
         onStepFinish: async (params: { text?: string; toolCalls?: StepToolCall[]; toolResults?: StepToolResult[] }) => {
@@ -3979,7 +4001,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                 return undefined;
               }
               if (part.type !== 'finish') return undefined;
-              const finishMetadata = buildFinishMetadata();
+              const finishMetadata = { ...buildFinishMetadata(), ...citationSession.finishMetadata() };
               if (!ragTraceId && Object.keys(finishMetadata).length === 0) return undefined;
               return { ...(ragTraceId ? { ragTraceId } : {}), ...finishMetadata };
             },
