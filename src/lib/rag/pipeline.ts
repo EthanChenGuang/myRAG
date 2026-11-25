@@ -107,6 +107,8 @@ export interface StageRunOptions<T> {
   detail?: (value: T) => string | undefined;
   /** Defaults to ok; injection_check reports degraded when a needed ML detector was unavailable. */
   status?: (value: T) => Extract<StageRecord['status'], 'ok' | 'degraded'>;
+  /** Detail recorded when the stage fails (reason failed), e.g. search_delegate_error. */
+  failureDetail?: (error: unknown) => string | undefined;
 }
 
 export class StageError extends Error {
@@ -198,6 +200,8 @@ export async function runStage<T>(
       throw new StageError(spec.name, reason, error);
     }
 
+    const failureDetail = reason === 'failed' && options.failureDetail ? options.failureDetail(error) : undefined;
+
     if (spec.onFail === 'throw') {
       collector.record({
         name: spec.name,
@@ -206,11 +210,20 @@ export async function runStage<T>(
         startedAt,
         endedAt,
         candidatesIn,
+        ...(failureDetail !== undefined ? { detail: failureDetail } : {}),
       });
       throw new StageError(spec.name, reason, error);
     }
 
-    collector.record({ name: spec.name, status: 'skipped', reason, startedAt, endedAt, candidatesIn });
+    collector.record({
+      name: spec.name,
+      status: 'skipped',
+      reason,
+      startedAt,
+      endedAt,
+      candidatesIn,
+      ...(failureDetail !== undefined ? { detail: failureDetail } : {}),
+    });
     logger.warn('RAG Pipeline', 'Optional stage skipped', { stage: spec.name, reason });
     return { skipped: true, reason };
   }
