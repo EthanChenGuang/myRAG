@@ -326,3 +326,150 @@ for (const mode of MODES) {
     });
   });
 }
+
+const LIST_SQL = 'SELECT * FROM rag_list_pending_uploads(p_actor => $1, p_tenant_key => $2, p_limit => $3, p_offset => $4)';
+
+/** A brand-new lineage whose only version is held. */
+async function pendingNewDocument(ctx: Ctx, label: string): Promise<string> {
+  const id = await begin(ctx, `approval/${next(label)}.md`, next(label));
+  await writeChunks(ctx, id, [`${next('toknew')} neutral probe sentence for a new document`]);
+  assert.equal(await hold(ctx, id), 'pending_review');
+  return id;
+}
+
+for (const mode of MODES) {
+  describe(`0803 upload approval: reject, list, ordering and repeat calls (${mode})`, () => {
+    let ctx: Ctx;
+    const it = (name: string, run: () => Promise<void>) => test(`${name} [${mode}]`, run);
+
+    before(async () => {
+      ctx = await createCtx(mode);
+    });
+
+    after(async () => {
+      await ctx?.db.close();
+    });
+
+    it('reject of a pending new version deletes only that version; the current version stays current, ready and retrievable', async () => {
+      const { v1, v2, t1 } = await lineageWithPendingVersion(ctx, 'reject');
+      const rejected = (await rows(ctx.db, REJECT_SQL, [v2, ctx.admin]))[0] as Row;
+      assert.equal(rejected.outcome, 'deleted');
+      const doc = await docState(ctx, v2);
+      assert.equal(doc.status, 'deleted');
+      assert.equal(doc.is_current, false);
+      assert.ok((await chunkStates(ctx, v2)).every((row) => row.status === 'deleted' && row.is_current === false));
+      const previous = await docState(ctx, v1);
+      assert.equal(previous.status, 'ready');
+      assert.equal(previous.is_current, true);
+      assert.deepEqual(await hybridDocuments(ctx, `${t1} neutral probe sentence about a shared topic`, t1), [v1]);
+      const audit = await auditRows(ctx, v2);
+      assert.deepEqual(audit.map((row) => row.action), ['reject_upload']);
+    });
+
+    it('reject of a pending new document goes through the soft-delete seam (lineage deleted, delete ledger row written)', async () => {
+      const id = await pendingNewDocument(ctx, 'rejectnew');
+      const rejected = (await rows(ctx.db, REJECT_SQL, [id, ctx.admin]))[0] as Row;
+      assert.equal(rejected.outcome, 'deleted');
+      assert.equal((await docState(ctx, id)).status, 'deleted');
+      const ledger = await rows(ctx.db, "SELECT kind, status FROM ingestion_jobs WHERE document_id = $1 AND kind = 'delete'", [id]);
+      assert.equal(ledger.length, 1, 'the soft-delete seam records the delete in the ledger');
+      assert.deepEqual((await auditRows(ctx, id)).map((row) => row.action), ['reject_upload']);
+    });
+
+    it('approve and reject refuse a ready, a quarantined and an already decided document with not_pending', async () => {
+      const { v1, v2 } = await lineageWithPendingVersion(ctx, 'repeat');
+      for (const sql of [APPROVE_SQL, REJECT_SQL]) {
+        assert.match((await failure(ctx.db, sql, [v1, ctx.admin]))?.message ?? '', /not_pending/, 'a ready document is not pending');
+      }
+      assert.equal(((await rows(ctx.db, APPROVE_SQL, [v2, ctx.admin]))[0] as Row).outcome, 'published');
+      assert.match((await failure(ctx.db, APPROVE_SQL, [v2, ctx.admin]))?.message ?? '', /not_pending/, 'a second approve is refused');
+      assert.match((await failure(ctx.db, REJECT_SQL, [v2, ctx.admin]))?.message ?? '', /not_pending/, 'a reject after an approve is refused');
+      assert.equal((await auditRows(ctx, v2)).length, 1);
+
+      const rejectedFirst = await pendingNewDocument(ctx, 'rejectfirst');
+      await rows(ctx.db, REJECT_SQL, [rejectedFirst, ctx.admin]);
+      assert.match((await failure(ctx.db, APPROVE_SQL, [rejectedFirst, ctx.admin]))?.message ?? '', /not_pending/, 'an approve after a reject is refused');
+      assert.match((await failure(ctx.db, REJECT_SQL, [rejectedFirst, ctx.admin]))?.message ?? '', /not_pending/, 'a second reject is refused');
+
+      const quarantined = await begin(ctx, `approval/${next('quar')}.md`, next('quar'));
+      await rows(ctx.db, "UPDATE documents SET status = 'quarantined' WHERE id = $1", [quarantined]);
+      for (const sql of [APPROVE_SQL, REJECT_SQL]) {
+        assert.match((await failure(ctx.db, sql, [quarantined, ctx.admin]))?.message ?? '', /not_pending/, 'quarantine wins');
+      }
+      assert.equal((await docState(ctx, quarantined)).status, 'quarantined');
+    });
+
+    it('reject by a non-admin or an admin of another tenant is not_found', async () => {
+      const id = await pendingNewDocument(ctx, 'rejectdenied');
+      for (const actor of [ctx.member, ...(ctx.otherAdmin ? [ctx.otherAdmin] : [])]) {
+        assert.match((await failure(ctx.db, REJECT_SQL, [id, actor]))?.message ?? '', /not_found/);
+      }
+      assert.equal((await docState(ctx, id)).status, 'pending_review');
+    });
+
+    it('approving a pending version older than the current version is refused with superseded_by_newer', async () => {
+      const { v2, sourceKey } = await lineageWithPendingVersion(ctx, 'order');
+      const v3 = await begin(ctx, sourceKey, next('order-v3'));
+      await writeChunks(ctx, v3, [`${next('tokthree')} neutral probe sentence about a shared topic`]);
+      assert.equal(await hold(ctx, v3), 'pending_review');
+      assert.equal(((await rows(ctx.db, APPROVE_SQL, [v3, ctx.admin]))[0] as Row).outcome, 'published');
+      const refused = await failure(ctx.db, APPROVE_SQL, [v2, ctx.admin]);
+      assert.match(refused?.message ?? '', /superseded_by_newer/);
+      const current = await docState(ctx, v3);
+      assert.equal(current.is_current, true);
+      assert.equal(current.status, 'ready');
+      const older = await docState(ctx, v2);
+      assert.equal(older.status, 'pending_review', 'the refused version stays pending for a reject');
+      assert.equal(older.approved_by, null, 'the refusal rolls back the approver stamps');
+      assert.equal(((await rows(ctx.db, REJECT_SQL, [v2, ctx.admin]))[0] as Row).outcome, 'deleted');
+      assert.equal((await docState(ctx, v3)).is_current, true, 'rejecting the older version leaves the newer current');
+    });
+
+    it('an approval that publishes removes the tenant semantic-cache rows', async () => {
+      const { v2 } = await lineageWithPendingVersion(ctx, 'cache');
+      await ctx.db.query(
+        `INSERT INTO rag_semantic_cache (tenant_key, key_hash, embedding_profile_id, embedding, query_text_masked, answer, expires_at)
+         VALUES ($1, $2, $3, $4::halfvec, 'q', '{}'::jsonb, now() + interval '1 hour')`,
+        [ctx.key, next('cachekey'), HALFVEC_PROFILE, vectorText(halfvecOf('probe'))],
+      );
+      const count = async () => Number((await rows(ctx.db, 'SELECT count(*)::int AS n FROM rag_semantic_cache WHERE tenant_key = $1', [ctx.key]))[0]?.n);
+      assert.equal(await count(), 1);
+      await rows(ctx.db, APPROVE_SQL, [v2, ctx.admin]);
+      assert.equal(await count(), 0);
+    });
+
+    it('the list returns pending rows of the actor tenants only, oldest first with id as tie-break, with total and new_version', async () => {
+      await rows(ctx.db, "UPDATE documents SET status = 'deleted', is_current = false WHERE status = 'pending_review'");
+      const first = await pendingNewDocument(ctx, 'listone');
+      const { v2: second } = await lineageWithPendingVersion(ctx, 'listtwo');
+      const third = await pendingNewDocument(ctx, 'listthree');
+      await rows(ctx.db, "UPDATE documents SET created_at = '2026-01-01T00:00:00Z' WHERE id = $1", [first]);
+      await rows(ctx.db, "UPDATE documents SET created_at = '2026-01-02T00:00:00Z' WHERE id = ANY($1::uuid[])", [[second, third]]);
+      const tied = [second, third].sort();
+
+      const listed = await rows(ctx.db, LIST_SQL, [ctx.admin, null, 50, 0]);
+      assert.deepEqual(listed.map((row) => row.document_id), [first, ...tied]);
+      assert.ok(listed.every((row) => Number(row.total_count) === 3));
+      const byId = Object.fromEntries(listed.map((row) => [String(row.document_id), row]));
+      assert.equal(byId[second]?.new_version, true);
+      assert.equal(byId[first]?.new_version, false);
+      assert.equal(byId[first]?.uploader_id, ctx.userId);
+      assert.equal(byId[first]?.source, 'config_upload');
+      assert.equal(byId[first]?.doc_type, 'general');
+      assert.equal(byId[first]?.tenant_key, ctx.key);
+      assert.ok(byId[first]?.uploaded_at instanceof Date);
+
+      const page = await rows(ctx.db, LIST_SQL, [ctx.admin, null, 1, 1]);
+      assert.deepEqual(page.map((row) => row.document_id), [tied[0]]);
+      assert.equal(Number(page[0]?.total_count), 3);
+
+      const filtered = await rows(ctx.db, LIST_SQL, [ctx.admin, ctx.key, 50, 0]);
+      assert.equal(filtered.length, 3);
+      if (ctx.otherAdmin) {
+        assert.equal((await rows(ctx.db, LIST_SQL, [ctx.otherAdmin, null, 50, 0])).length, 0, 'another tenant admin sees none of them');
+        assert.equal((await rows(ctx.db, LIST_SQL, [ctx.otherAdmin, ctx.key, 50, 0])).length, 0, 'naming a foreign tenant key returns nothing');
+      }
+      assert.equal((await rows(ctx.db, LIST_SQL, [ctx.member, null, 50, 0])).length, 0, 'a non-admin sees nothing');
+    });
+  });
+}
