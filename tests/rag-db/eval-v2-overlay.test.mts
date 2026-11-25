@@ -9,6 +9,8 @@ import { GoldenItemSchema, RetrievalOverridesSchema, type GoldenItem } from '../
 import { configHash } from '../../src/lib/rag-eval/trace.ts';
 import { itemRequestOptions, runEval } from '../../eval/harness/run-eval.mts';
 import { loadRunConfig, parseRunConfig, RunConfigError, RUN_CONFIG_ENV_ALLOWLIST } from '../../eval/harness/run-config.mts';
+import { applyFixtureProcessEnv } from '../../eval/harness/process-env.mts';
+import { fixtureProcessEnv } from '../../eval/harness/fake-edge.mts';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const RUNS_DIR = path.join(REPO_ROOT, 'eval/config/runs');
@@ -64,9 +66,55 @@ describe('run-config file contents', () => {
   });
 });
 
+describe('Phase 4.1 defaults-gate run configs', () => {
+  const D01 = {
+    RAG_PIPELINE: 'v2',
+    RAG_LEXICAL_SEARCH: 'true',
+    RAG_RERANKER: 'auto',
+    RAG_REFUSAL_THRESHOLD: 'true',
+    RAG_REFUSAL_FLOOR: 'legacy_rule',
+  };
+  const KEYLESS = { ...D01, COHERE_API_KEY: '' };
+  const HOSTED = { ...D01, COHERE_API_KEY: 'fixture' };
+  const expected: Record<string, { env: Record<string, string>; rerankModel: string | null }> = {
+    legacy: { env: { RAG_PIPELINE: 'legacy' }, rerankModel: null },
+    'v2-default': { env: KEYLESS, rerankModel: null },
+    'v2-default-no-cells': { env: { ...KEYLESS, RAG_REFUSAL_THRESHOLD: 'false' }, rerankModel: null },
+    'v2-default-hosted-fake': { env: HOSTED, rerankModel: 'fake-quality-v1' },
+    'v2-default-hosted-fake-no-cells': { env: { ...HOSTED, RAG_REFUSAL_THRESHOLD: 'false' }, rerankModel: 'fake-quality-v1' },
+    'v2-default-similarity-floor': { env: { ...KEYLESS, RAG_REFUSAL_FLOOR: 'similarity' }, rerankModel: null },
+    'v2-default-similarity-floor-no-cells': {
+      env: { ...KEYLESS, RAG_REFUSAL_FLOOR: 'similarity', RAG_REFUSAL_THRESHOLD: 'false' },
+      rerankModel: null,
+    },
+    'v2-default-similarity-floor-hosted-fake': { env: { ...HOSTED, RAG_REFUSAL_FLOOR: 'similarity' }, rerankModel: 'fake-quality-v1' },
+    'v2-default-similarity-floor-hosted-fake-no-cells': {
+      env: { ...HOSTED, RAG_REFUSAL_FLOOR: 'similarity', RAG_REFUSAL_THRESHOLD: 'false' },
+      rerankModel: 'fake-quality-v1',
+    },
+    'v2-default-fallback-none': { env: { ...KEYLESS, RAG_RERANKER: 'none' }, rerankModel: null },
+    'v2-default-fallback-none-no-cells': {
+      env: { ...KEYLESS, RAG_RERANKER: 'none', RAG_REFUSAL_THRESHOLD: 'false' },
+      rerankModel: null,
+    },
+  };
+
+  for (const [name, want] of Object.entries(expected)) {
+    test(`${name}.json loads with the registered settings`, () => {
+      const config = loadRunConfig(path.join(RUNS_DIR, `${name}.json`));
+      assert.equal(config.name, name);
+      assert.deepEqual(config.env, Object.fromEntries(Object.entries(want.env).sort(([a], [b]) => a.localeCompare(b))));
+      assert.equal(config.overrides?.rerank_model ?? null, want.rerankModel);
+      for (const key of Object.keys(config.env)) assert.doesNotMatch(key, /MODE/);
+    });
+  }
+});
+
 describe('run-config validation', () => {
-  test('the allow-list is RAG_PIPELINE and the Phase 4 RAG_ switches', () => {
+  test('the allow-list is RAG_PIPELINE, the Phase 4 RAG_ switches, the refusal floor and the value-constrained vendor settings', () => {
     assert.deepEqual([...RUN_CONFIG_ENV_ALLOWLIST].sort(), [
+      'COHERE_API_KEY',
+      'COHERE_BASE_URL',
       'RAG_CONTEXT_COMPRESSION',
       'RAG_CONTEXT_EDGE_ORDER',
       'RAG_CONTEXT_TOKEN_BUDGET',
@@ -76,15 +124,64 @@ describe('run-config validation', () => {
       'RAG_LEXICAL_TRANSLATION',
       'RAG_PARENT_CHILD',
       'RAG_PIPELINE',
+      'RAG_REFUSAL_FLOOR',
       'RAG_REFUSAL_THRESHOLD',
       'RAG_RERANKER',
       'RAG_RERANK_TIER_CHAT',
       'RAG_RERANK_TIER_VOICE',
       'RAG_RERANK_VOYAGE_MODEL_BY_LANG',
+      'VOYAGE_API_KEY',
+      'VOYAGE_BASE_URL',
     ]);
   });
 
-  for (const name of ['OPENROUTER_API_KEY', 'RAG_EVAL_SECRET', 'COHERE_API_KEY', 'NODE_ENV', 'RAG_RETRIEVAL_PARAMS_OVERRIDE', 'RAG_DISABLED_STAGES']) {
+  test('RAG_REFUSAL_FLOOR is accepted', () => {
+    const config = parseRunConfig({ name: 'floor', env: { RAG_PIPELINE: 'v2', RAG_REFUSAL_FLOOR: 'legacy_rule' }, overrides: null }, 'inline');
+    assert.equal(config.env.RAG_REFUSAL_FLOOR, 'legacy_rule');
+  });
+
+  test('key overlay only takes placeholders', () => {
+    for (const name of ['COHERE_API_KEY', 'VOYAGE_API_KEY']) {
+      for (const value of ['', 'proxy-injected', 'fixture']) {
+        const config = parseRunConfig({ name: 'key', env: { RAG_PIPELINE: 'v2', [name]: value }, overrides: null }, 'inline');
+        assert.equal(config.env[name], value);
+      }
+      for (const value of ['abc123', 'sk-live-0000', ' proxy-injected', 'FIXTURE']) {
+        assert.throws(
+          () => parseRunConfig({ name: 'key', env: { RAG_PIPELINE: 'v2', [name]: value }, overrides: null }, 'inline'),
+          (error: unknown) =>
+            error instanceof RunConfigError && error.names.includes(name) && !error.message.includes(value.trim() || '\u0000'),
+        );
+      }
+    }
+  });
+
+  test('base url overlay only takes vendor hosts', () => {
+    const allowed: Record<string, string[]> = {
+      COHERE_BASE_URL: ['', 'https://api.cohere.com'],
+      VOYAGE_BASE_URL: ['', 'https://api.voyageai.com/v1'],
+    };
+    for (const [name, values] of Object.entries(allowed)) {
+      for (const value of values) {
+        const config = parseRunConfig({ name: 'url', env: { [name]: value }, overrides: null }, 'inline');
+        assert.equal(config.env[name], value);
+      }
+    }
+    for (const [name, value] of [
+      ['COHERE_BASE_URL', 'https://evil.example'],
+      ['COHERE_BASE_URL', 'http://api.cohere.com'],
+      ['COHERE_BASE_URL', 'https://api.voyageai.com/v1'],
+      ['VOYAGE_BASE_URL', 'https://api.cohere.com'],
+      ['VOYAGE_BASE_URL', 'https://api.voyageai.com.evil.example/v1'],
+    ]) {
+      assert.throws(
+        () => parseRunConfig({ name: 'url', env: { [name]: value }, overrides: null }, 'inline'),
+        (error: unknown) => error instanceof RunConfigError && error.names.includes(name),
+      );
+    }
+  });
+
+  for (const name of ['OPENROUTER_API_KEY', 'RAG_EVAL_SECRET', 'OPENAI_API_KEY', 'NODE_ENV', 'RAG_RETRIEVAL_PARAMS_OVERRIDE', 'RAG_DISABLED_STAGES']) {
     test(`an overlay naming ${name} is rejected`, () => {
       assert.throws(
         () => parseRunConfig({ name: 'bad', env: { RAG_PIPELINE: 'v2', [name]: 'x' }, overrides: null }, 'inline'),
@@ -111,6 +208,44 @@ describe('run-config validation', () => {
   test('overrides are normalized through the generated schema', () => {
     const config = parseRunConfig({ name: 'ok', env: { RAG_PIPELINE: 'v2' }, overrides: { final_top_k: 5 } }, 'inline');
     assert.deepEqual(config.overrides, RetrievalOverridesSchema.parse({ final_top_k: 5 }));
+  });
+});
+
+describe('fixture process env and the vendor-key overlay', () => {
+  const EDGE = 'http://127.0.0.1:9';
+  const fixtureKey = fixtureProcessEnv(EDGE).COHERE_API_KEY;
+
+  function withProcessEnv(extra: Record<string, string>): NodeJS.ProcessEnv {
+    const saved = { ...process.env };
+    try {
+      applyFixtureProcessEnv({ edgeUrl: EDGE, deploymentMode: 'single-tenant', extra });
+      return { ...process.env };
+    } finally {
+      for (const name of Object.keys(process.env)) delete process.env[name];
+      Object.assign(process.env, saved);
+    }
+  }
+
+  test('empty key overlay clears the fixture key', () => {
+    const env = withProcessEnv({ RAG_PIPELINE: 'v2', RAG_RERANKER: 'cohere', COHERE_API_KEY: '' });
+    assert.equal(env.COHERE_API_KEY, '');
+  });
+
+  test('auto runs keyless unless asked', () => {
+    assert.ok(fixtureKey.length > 0);
+    const keyless = withProcessEnv({ RAG_PIPELINE: 'v2', RAG_RERANKER: 'auto' });
+    assert.equal(keyless.COHERE_API_KEY ?? '', '');
+    const asked = withProcessEnv({ RAG_PIPELINE: 'v2', RAG_RERANKER: 'auto', COHERE_API_KEY: 'fixture' });
+    assert.equal(asked.COHERE_API_KEY, fixtureKey);
+    const explicit = withProcessEnv({ RAG_PIPELINE: 'v2', RAG_RERANKER: 'cohere' });
+    assert.equal(explicit.COHERE_API_KEY, fixtureKey);
+    const none = withProcessEnv({ RAG_PIPELINE: 'v2', RAG_RERANKER: 'none' });
+    assert.equal(none.COHERE_API_KEY, fixtureKey);
+  });
+
+  test('the fixture token keeps the fixture Voyage key too', () => {
+    const env = withProcessEnv({ RAG_PIPELINE: 'v2', VOYAGE_API_KEY: 'fixture' });
+    assert.equal(env.VOYAGE_API_KEY, fixtureProcessEnv(EDGE).VOYAGE_API_KEY);
   });
 });
 
