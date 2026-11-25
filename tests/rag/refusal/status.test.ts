@@ -230,9 +230,9 @@ async function loadRoute(env: RagEnvInput = { RAG_PIPELINE: 'v2', RAG_RERANKER: 
     const original = await importOriginal<Record<string, unknown>>();
     return {
       ...original,
-      currentRefusalCalibrationStatus: (...args: unknown[]) => {
+      currentRefusalCalibrationStatus: () => {
         guard.statusCalls += 1;
-        return (original.currentRefusalCalibrationStatus as (...a: unknown[]) => unknown)(...args);
+        return (original.currentRefusalCalibrationStatus as () => unknown)();
       },
     };
   });

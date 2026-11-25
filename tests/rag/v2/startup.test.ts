@@ -90,7 +90,7 @@ describe('verifyV2Startup', () => {
 
   it('v2 startup warns about documents missing from the active chunking profile', async () => {
     const DOC_ID = '11111111-2222-4333-8444-555555555555';
-    const chunkingCoverage = vi.fn(async (_signal: AbortSignal) => [
+    const chunkingCoverage = vi.fn<(signal: AbortSignal) => Promise<ReturnType<typeof coverage>[]>>(async () => [
       coverage('contract_legal', 'legacy', false, 5, 5),
       coverage('contract_legal', 'p256-1024', true, 5, 2),
       coverage('general', 'legacy', true, 10, 4),
