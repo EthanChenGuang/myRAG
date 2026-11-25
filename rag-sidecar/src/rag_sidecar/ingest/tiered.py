@@ -32,7 +32,7 @@ from rag_sidecar.contracts.routing import (
     QualityScoreWeights,
 )
 from rag_sidecar.ingest import escalation, progressive, quality
-from rag_sidecar.ingest.cache_keys import merged_options_hash, options_hash
+from rag_sidecar.ingest.cache_keys import chunker_key, effective_repeat_table_header, merged_options_hash, options_hash
 from rag_sidecar.ingest.escalation import EscalationUnit, PageAttempt
 from rag_sidecar.ingest.merge import MergeInvariantError, join_page_parts, merge, premium_part, slice_pages
 from rag_sidecar.ingest.pool import UPLOAD_PRIORITY, PoolCrashed
@@ -199,7 +199,8 @@ def _parse_request(job: IngestionJob, profile: ProcessingProfile, input_format: 
         ocr_languages=list(job.settings.ocr_languages),
         tokenizer="cl100k_base",
         max_tokens=profile.chunker.max_tokens,
-        repeat_table_header=profile.chunker.repeat_table_header,
+        # D-22: the snapshot's repeat_table_header_effective, else the profile's flag.
+        repeat_table_header=effective_repeat_table_header(job.settings, profile),
         input_format=input_format,  # type: ignore[arg-type]
         page_cap=None,
     )
@@ -934,7 +935,7 @@ async def _merged_entry(
 ) -> str:
     """The merged document of the kept parts, chunked once; cached under parser ``merged`` with a hash over the ordered parts."""
     merged_hash = merged_options_hash([part.cache_entry() for part in parts])
-    version = f"{MERGED_VERSION}/{run.docling_version}/mt{profile.chunker.max_tokens}-rh{int(profile.chunker.repeat_table_header)}"
+    version = f"{MERGED_VERSION}/{run.docling_version}/{chunker_key(run.job.settings, profile)}"
     hit = await _lookup(run, MERGED_PARSER, version, merged_hash)
     if hit is not None:
         return str(hit.id)

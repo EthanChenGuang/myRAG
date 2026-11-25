@@ -60,7 +60,7 @@ class FakeLedger:
   def __init__(self, clock: FakeClock | None = None) -> None:
       self.clock = clock or FakeClock()
       self.jobs: dict[str, IngestionJob] = {}
-      self.cache: dict[tuple[str, str, str, str], ParseCacheEntry] = {}
+      self.cache: dict[tuple[str, str, str, str, str], ParseCacheEntry] = {}
       self.call_counts: dict[str, int] = {}
 
   def _bump(self, name: str) -> None:
@@ -247,7 +247,7 @@ class FakeLedger:
       job = self.jobs.get(job_id)
       if job is None or job.file_sha256 is None:
           return []
-      row = self.cache.get((job.tenant_key, job.file_sha256, parser, options_hash))
+      row = self.cache.get((job.tenant_key, job.file_sha256, parser, parser_version, options_hash))
       return [row] if row else []
 
   async def cache_put(
@@ -279,7 +279,7 @@ class FakeLedger:
           result=result or {},
           byte_size=byte_size,
       )
-      self.cache[(job.tenant_key, job.file_sha256, parser, options_hash)] = row
+      self.cache[(job.tenant_key, job.file_sha256, parser, parser_version, options_hash)] = row
       return row
 
 
