@@ -81,6 +81,8 @@ export function legacyWriterProblems(list, knownRules = null) {
 }
 
 const RAG_DIR = 'src/lib/rag/';
+export const LANGCHAIN_DIR = 'src/lib/rag/query/langchain/';
+const SELF_TEST_DIR = 'scripts/tests/';
 const RERANK_DIR = 'src/lib/rag/rerank/';
 const TENANT_DIR = 'src/lib/rag/tenant/';
 const INGEST_DIR = 'src/lib/rag/ingest/';
@@ -144,6 +146,40 @@ const outsideBudgetClient = (rel) => inSrc(rel) && rel !== BUDGET_CLIENT;
 const outsideCacheClient = (rel) => inSrc(rel) && rel !== CACHE_CLIENT;
 const outsideBackfillDir = (rel) => inSrc(rel) && !rel.startsWith(BACKFILL_DIR);
 
+export const LANGCHAIN_ADAPTER_ALLOWED_IMPORTS = [
+  { kind: 'package-prefix', value: '@langchain/', reason: 'LangChain packages' },
+  { kind: 'path-prefix', value: LANGCHAIN_DIR, reason: 'files inside the adapter' },
+  { kind: 'path', value: 'src/lib/rag/query/port-types', reason: 'the retrieval port types (D-18)' },
+  { kind: 'path-prefix', value: 'src/lib/rag/query/prompts/', reason: 'versioned query prompts' },
+  { kind: 'path', value: 'src/lib/rag/query/transformer', typeOnly: true, reason: 'the QueryTransformer interface, types only' },
+  { kind: 'path', value: 'src/lib/rag-eval/contracts.generated', reason: 'generated zod/v3 contracts' },
+  { kind: 'path-prefix', value: 'rag-sidecar/schemas/', suffix: '.schema.json', reason: 'generated JSON Schemas' },
+];
+
+const LANGCHAIN_PACKAGE_RE = /^(?:@langchain\/|langchain(?:\/|$))/;
+const ZOD_V4_RE = /^zod\/(?:v4|mini|v4-mini)(?:\/|$)/;
+
+export function resolveSpec(rel, spec) {
+  if (spec.startsWith('@/')) return path.posix.normalize(`src/${spec.slice(2)}`);
+  if (spec === '.' || spec === '..' || spec.startsWith('./') || spec.startsWith('../')) {
+    return path.posix.normalize(path.posix.join(path.posix.dirname(rel), spec));
+  }
+  return null;
+}
+
+export function adapterImportAllowed(rel, imp) {
+  const resolved = resolveSpec(rel, imp.spec);
+  const base = resolved === null ? null : specBase(resolved).replace(/\/$/, '');
+  return LANGCHAIN_ADAPTER_ALLOWED_IMPORTS.some((entry) => {
+    if (entry.kind === 'package-prefix') return resolved === null && imp.spec.startsWith(entry.value);
+    if (base === null) return false;
+    if (entry.typeOnly && !imp.typeOnly) return false;
+    if (entry.suffix && !base.endsWith(entry.suffix)) return false;
+    if (entry.kind === 'path') return base === entry.value;
+    return `${base}/`.startsWith(entry.value);
+  });
+}
+
 const IMPORT_FROM_RE =
   /\b(?:import|export)\s+(?:type\s+)?((?:[\w$]+\s*,?\s*)?(?:\*(?:\s*as\s+[\w$]+)?|\{[^}]*\})?)\s*from\s*(['"])([^'"\n]+)\2/g;
 const IMPORT_SIDE_EFFECT_RE = /\bimport\s*(['"])([^'"\n]+)\1/g;
@@ -192,10 +228,18 @@ export function stripComments(text) {
   return out;
 }
 
+function isTypeOnly(statement, clause) {
+  if (/^(?:import|export)\s+type\s/.test(statement)) return true;
+  const braces = /^\s*\{([^}]*)\}\s*$/.exec(clause);
+  if (!braces) return false;
+  const names = braces[1].split(',').map((n) => n.trim()).filter(Boolean);
+  return names.length > 0 && names.every((n) => /^type\s/.test(n));
+}
+
 export function listImports(text) {
   const found = [];
   for (const m of text.matchAll(IMPORT_FROM_RE)) {
-    found.push({ spec: m[3], clause: m[1], kind: 'from', index: m.index + m[0].lastIndexOf(m[3]) });
+    found.push({ spec: m[3], clause: m[1], kind: 'from', typeOnly: isTypeOnly(m[0], m[1]), index: m.index + m[0].lastIndexOf(m[3]) });
   }
   for (const m of text.matchAll(IMPORT_SIDE_EFFECT_RE)) {
     found.push({ spec: m[2], clause: '', kind: 'side-effect', index: m.index + m[0].lastIndexOf(m[2]) });
@@ -223,6 +267,11 @@ const clauseNames = (clause) =>
   [...clause.matchAll(/[\w$]+/g)].map((m) => m[0]).filter((n) => n !== 'type' && n !== 'as');
 
 const specBase = (spec) => spec.replace(/\.(?:[cm]?[jt]sx?)$/, '');
+
+const outsideLangchainDir = (rel) => !rel.startsWith(LANGCHAIN_DIR);
+const inLangchainDir = (rel) => rel.startsWith(LANGCHAIN_DIR);
+const outsideSelfTests = (rel) => !rel.startsWith(SELF_TEST_DIR);
+const everywhere = () => true;
 
 export const RULES = [
   {
@@ -373,6 +422,25 @@ export const RULES = [
       ...regexMatches(/\/v2\/guard\b/g, text),
     ],
   },
+  {
+    id: 'langchain-import',
+    description: `@langchain package imported outside ${LANGCHAIN_DIR} (D-19)`,
+    appliesTo: outsideLangchainDir,
+    enforcedOnAllowlisted: outsideSelfTests,
+    find: (text) => importMatches(text, ({ spec }) => (LANGCHAIN_PACKAGE_RE.test(spec) ? spec : null)),
+  },
+  {
+    id: 'langchain-adapter-reach',
+    description: 'the LangChain adapter imports outside its allow-list (LANGCHAIN_ADAPTER_ALLOWED_IMPORTS, D-18)',
+    appliesTo: inLangchainDir,
+    find: (text, rel) => importMatches(text, (imp) => (adapterImportAllowed(rel, imp) ? null : imp.spec)),
+  },
+  {
+    id: 'zod-v4',
+    description: 'zod 4 (zod/v4, zod/mini) imported in app code; only LangChain\'s nested copy uses zod 4 (D-20)',
+    appliesTo: everywhere,
+    find: (text) => importMatches(text, ({ spec }) => (ZOD_V4_RE.test(spec) ? spec : null)),
+  },
 ];
 
 export function isAllowlisted(rel) {
@@ -404,12 +472,15 @@ export function checkBoundary(root = DEFAULT_ROOT) {
   const violations = [];
   for (const file of collectFiles(root)) {
     const rel = path.relative(root, file).split(path.sep).join('/');
-    if (isAllowlisted(rel)) continue;
+    const allowlisted = isAllowlisted(rel);
+    const rules = RULES.filter(
+      (rule) => rule.appliesTo(rel) && (!allowlisted || (rule.enforcedOnAllowlisted?.(rel) ?? false)),
+    );
+    if (rules.length === 0) continue;
     const text = stripComments(fs.readFileSync(file, 'utf8'));
     const seen = new Set();
-    for (const rule of RULES) {
-      if (!rule.appliesTo(rel)) continue;
-      for (const hit of rule.find(text)) {
+    for (const rule of rules) {
+      for (const hit of rule.find(text, rel)) {
         const line = lineOf(text, hit.index);
         const key = `${line}:${rule.id}`;
         if (seen.has(key)) continue;

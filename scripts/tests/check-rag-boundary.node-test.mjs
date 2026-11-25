@@ -499,12 +499,14 @@ test('langchain-import: static, dynamic and require imports fail outside the ada
     'scripts/x.cjs': "const { ChatOpenAI } = require('@langchain/openai');\nmodule.exports = ChatOpenAI;\n",
     'eval/harness/x.mts': LC_STATIC,
     'voice-agent/src/x.ts': "export * from '@langchain/core/messages';\n",
+    'src/lib/y.ts': "import { Document } from 'langchain/document';\n",
   };
   assert.deepEqual(onlyRule(files, 'langchain-import'), [
     'eval/harness/x.mts:langchain-import',
     'scripts/x.cjs:langchain-import',
     'src/app/x.ts:langchain-import',
     'src/lib/rag/v2/x.ts:langchain-import',
+    'src/lib/y.ts:langchain-import',
     'tests/x.test.ts:langchain-import',
     'voice-agent/src/x.ts:langchain-import',
   ]);
