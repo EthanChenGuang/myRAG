@@ -163,6 +163,16 @@ BEGIN
     RAISE EXCEPTION 'not_pending';
   END IF;
 
+  -- The lineage lock the publish function takes, so no newer version can become current between this check and the publish.
+  PERFORM pg_advisory_xact_lock(hashtextextended(doc.tenant_key || '|' || doc.source || '|' || doc.source_key, 0));
+  IF EXISTS (
+    SELECT 1 FROM public.documents d
+    WHERE d.tenant_key = doc.tenant_key AND d.source = doc.source AND d.source_key = doc.source_key
+      AND d.is_current AND d.id <> doc.id AND d.version > doc.version
+  ) THEN
+    RAISE EXCEPTION 'superseded_by_newer';
+  END IF;
+
   UPDATE public.documents d SET status = 'processing', approved_by = p_actor, approved_at = now() WHERE d.id = doc.id;
   UPDATE public.document_chunks c SET approved_by = p_actor WHERE c.document_id = doc.id;
 
@@ -178,6 +188,86 @@ BEGIN
 END
 $function$;
 
+-- Reject (D-36: reject is the soft delete, Phase 3.1 D-27). A pending document that is the only live version of its lineage goes through
+-- rag_soft_delete_document (lineage deleted, delete ledger row for the vector-sync outbox). A pending new version of a lineage that still
+-- has a live version is soft-deleted alone with the same row changes, because the seam deletes every version of the lineage and the current
+-- version must stay untouched.
+CREATE OR REPLACE FUNCTION public.rag_reject_upload(p_document_id uuid, p_actor uuid)
+ RETURNS TABLE(outcome text, document_id uuid, lineage_id uuid, version integer)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+#variable_conflict use_column
+DECLARE
+  keys text[];
+  doc public.documents%ROWTYPE;
+  deleted_outcome text;
+BEGIN
+  keys := public.rag_upload_approval_keys(p_actor);
+  SELECT * INTO doc FROM public.documents d WHERE d.id = p_document_id AND d.tenant_key = ANY (keys) FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'not_found';
+  END IF;
+  IF doc.status IS DISTINCT FROM 'pending_review' THEN
+    RAISE EXCEPTION 'not_pending';
+  END IF;
+
+  PERFORM pg_advisory_xact_lock(hashtextextended(doc.tenant_key || '|' || doc.source || '|' || doc.source_key, 0));
+  IF EXISTS (
+    SELECT 1 FROM public.documents d
+    WHERE d.tenant_key = doc.tenant_key AND d.lineage_id = doc.lineage_id AND d.id <> doc.id
+      AND (d.is_current OR d.status IN ('processing', 'ready', 'pending_review', 'quarantined'))
+  ) THEN
+    UPDATE public.documents d SET is_current = false, status = 'deleted' WHERE d.id = doc.id;
+    UPDATE public.document_chunks c SET is_current = false, status = 'deleted', embedding = NULL WHERE c.document_id = doc.id;
+    deleted_outcome := 'deleted';
+  ELSE
+    SELECT s.outcome INTO deleted_outcome FROM public.rag_soft_delete_document(doc.tenant_key, doc.lineage_id, doc.source) AS s;
+    IF deleted_outcome IS DISTINCT FROM 'deleted' THEN
+      RAISE EXCEPTION 'reject_failed: %', COALESCE(deleted_outcome, 'unknown');
+    END IF;
+  END IF;
+
+  INSERT INTO public.rag_admin_audit (action, document_id, lineage_id, tenant_key, version, actor, rule_ids)
+  VALUES ('reject_upload', doc.id, doc.lineage_id, doc.tenant_key, doc.version, p_actor, '{}'::text[]);
+
+  RETURN QUERY SELECT deleted_outcome, doc.id, doc.lineage_id, doc.version;
+END
+$function$;
+
+-- Pending uploads of the actor's tenants, oldest first with the id as tie-break. new_version: the lineage has a current version that the
+-- approval would replace. A p_tenant_key outside the actor's keys returns nothing.
+CREATE OR REPLACE FUNCTION public.rag_list_pending_uploads(p_actor uuid, p_tenant_key text DEFAULT NULL, p_limit integer DEFAULT 50, p_offset integer DEFAULT 0)
+ RETURNS TABLE(document_id uuid, lineage_id uuid, tenant_key text, filename text, source text, doc_type text, version integer, uploader_id uuid, uploaded_at timestamp with time zone, new_version boolean, total_count bigint)
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+#variable_conflict use_column
+DECLARE
+  keys text[];
+  page_size integer := LEAST(GREATEST(COALESCE(p_limit, 50), 1), 100);
+  skip integer := GREATEST(COALESCE(p_offset, 0), 0);
+BEGIN
+  keys := public.rag_upload_approval_keys(p_actor);
+  IF p_tenant_key IS NOT NULL THEN
+    keys := CASE WHEN p_tenant_key = ANY (keys) THEN ARRAY[p_tenant_key] ELSE '{}'::text[] END;
+  END IF;
+  RETURN QUERY
+  SELECT d.id, d.lineage_id, d.tenant_key, d.filename, d.source, d.doc_type, d.version, d.user_id, d.created_at,
+         EXISTS (
+           SELECT 1 FROM public.documents cur
+           WHERE cur.tenant_key = d.tenant_key AND cur.lineage_id = d.lineage_id AND cur.is_current AND cur.id <> d.id
+         ),
+         count(*) OVER ()
+  FROM public.documents d
+  WHERE d.status = 'pending_review' AND d.tenant_key = ANY (keys)
+  ORDER BY d.created_at, d.id
+  LIMIT page_size OFFSET skip;
+END
+$function$;
+
 REVOKE ALL ON FUNCTION public.rag_publish_document_version(uuid, text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.rag_publish_document_version(uuid, text) TO service_role;
 REVOKE ALL ON FUNCTION public.rag_hold_document_for_review(uuid, text) FROM PUBLIC, anon, authenticated;
@@ -186,6 +276,11 @@ REVOKE ALL ON FUNCTION public.rag_upload_approval_keys(uuid) FROM PUBLIC, anon, 
 GRANT EXECUTE ON FUNCTION public.rag_upload_approval_keys(uuid) TO service_role;
 REVOKE ALL ON FUNCTION public.rag_approve_upload(uuid, uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.rag_approve_upload(uuid, uuid) TO service_role;
+
+REVOKE ALL ON FUNCTION public.rag_reject_upload(uuid, uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_reject_upload(uuid, uuid) TO service_role;
+REVOKE ALL ON FUNCTION public.rag_list_pending_uploads(uuid, text, integer, integer) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_list_pending_uploads(uuid, text, integer, integer) TO service_role;
 
 COMMIT;
 
