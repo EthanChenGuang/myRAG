@@ -329,3 +329,59 @@ Applied to `<live-project-ref>` from `origin/main` 9ddad6d0 (train 16, PR #88). 
 - Re-running 0801 or 0422 restores the ledger bodies without the `translate` kind, and re-running 0421 restores the two-kind claim indexes, so re-run 0810 after any of them.
 - 0806 and 0810 carry their own REVOKE/GRANT; re-run 0410 after any future migration that adds a definer function it lists.
 - **0804 gap:** 0806 says the newest `rag_release_quarantine` body is in 0804, which accepts publish's new `superseded_lineage` outcome. 0804 is not on trunk and not live. The live `rag_release_quarantine` refuses any outcome other than `published` (it raises `release_failed` and its transaction rolls back), so releasing a quarantined version of a lineage that a confirmed supersession link has retired fails safe instead of succeeding. Nothing can reach this until an admin confirms a supersession. Apply 0804 when it reaches trunk.
+
+## 0531-0533, 0812, 0813 and 0410 r6 (applied after train 17, 2026-11-25)
+
+Applied to `<live-project-ref>` from `origin/main` 17fe2938 (train 17, PR #90). Only 0532 has a `.single-tenant`/`.multi-tenant` variant; the multi-tenant one was applied. For each file, only the top-level `BEGIN;` and `COMMIT;` and the leading header comment block were left out; every statement and every comment inside a function body is the exact file text. No statement failed. The first attempt at 0533 timed out waiting on the MCP server's confirmation prompt and changed nothing (checked: no function, no migration row); the main session then applied the same 0533 text, and this run continued from there.
+
+### Preconditions
+- 0531/0532/0533: none of `rag_retrieval_log`, `rag_feedback_loop_on_chat_delete` or `rag_purge_retrieval_log` existed. `public.organizations` exists (multi-tenant), so 0531 adds the organization foreign key. `public.chats` had only `update_chats_updated_at`.
+- 0812: the live `rag_write_chunks` body md5 was 6a0a895510e2e7dfaf689933b6d654e0 (10824 characters), exactly the 0801 body the file says it replaces. 0810 does not redefine it; the only repo files that define it are 0408, 0424, 0801 and 0812 (0410 only grants). The repo diff 0801 → 0812 is only the per-chunk `language` check and its use in the insert and metadata, so nothing from a later live migration is dropped.
+- 0813: none of its ten functions or two tables existed. Dependencies present: `rag_assert_tenant_key`, the invoice columns and `lineage_id` on `documents`, `chunk_embeddings.embedding_host`/`embedded_at`.
+- 0410: the repo file changed since r5 (9ddad6d0) by +8 lines only, adding guarded REVOKE/GRANT for `rag_purge_retrieval_log` and `rag_feedback_loop_on_chat_delete`. Grants only; the guarded `DROP` of the stale 4-argument `rag_fail_ingestion_job` was a no-op (one overload remains).
+
+### Steps
+| # | Migration name | Result |
+|---|---|---|
+| 1 | 0531_rag_retrieval_log | ok |
+| 2 | 0532_rag_retrieval_log_tenant_multi_tenant | ok |
+| 3 | 0533_rag_retrieval_log_functions | first attempt timed out on the confirmation prompt, no change; applied by the main session with the same text, ok |
+| 4 | 0812_chunk_language | ok |
+| 5 | 0813_caption_language_recaption | ok |
+| 6 | 0410_security_definer_rpc_grants_r6 | ok |
+
+### Verification
+- **Body md5 matches the repo (13/13)**, one overload each, `search_path=""`, EXECUTE for service_role only (anon and authenticated refused):
+  - 0531: `rag_feedback_loop_on_chat_delete` 8d66bb3b5fa98d0f223b7dab6a788e16, SECURITY DEFINER.
+  - 0533: `rag_purge_retrieval_log` 8ab457e2199a6621b14118a38190fddf, SECURITY DEFINER.
+  - 0812: `rag_write_chunks` aa65730e587d66d5b30b4432099c1bb5 (11278 characters), SECURITY DEFINER as before (replaces the 0801 body).
+  - 0813 (all SECURITY INVOKER, as the file defines):
+    - rag_set_image_chunk_languages d5ce801c6f7b940d917fc9ffca2071dd
+    - rag_recaption_candidates bdb8555dfe57f730941761d3b3a60166
+    - rag_recaption_get_run 48ed98462ac57991dcfa916458a5988a
+    - rag_recaption_start_run 94fd98c21b41384a85e57bc427a5566e
+    - rag_recaption_resume_run 246d05a4b7fe7f20e0f4e1a48ea7d21b
+    - rag_recaption_write_chunk dd12111f53a0c9e33e3d4c588b97e4c4
+    - rag_recaption_advance e9b894fb539a909845f7cfe2ea6e1f91
+    - rag_recaption_finish_run 9133f4700546dcf851c04094e04e1ca0
+    - rag_recaption_rollback_run 57ba9e60528d229a3efcb0312c50ef28
+    - rag_purge_hook_recaption 2c89399dc56a5b97dede332f2598d7af
+- **Purge hooks:** `rag_purge_hook_supersession`, `rag_purge_hook_chunk_translations`, `rag_purge_hook_recaption` and `rag_purge_retrieval_log` each have one overload, `search_path=""`, and EXECUTE for service_role only.
+- **New tables** (RLS on, no policies, 0 rows, no anon or authenticated grant; service_role full access as the files grant): `rag_retrieval_log`, `rag_recaption_runs`, `rag_recaption_items`.
+- **0531/0532 schema:** foreign keys on `user_id` and `organization_id` (both cascade); indexes on created_at, chat_id, trace_id (unique), `(tenant_key, created_at desc)` and the partial negative-feedback index. `tenant_key` is generated as `o:<organization_id>` or `u:<user_id>`. The statement trigger `rag_feedback_loop_chats_delete` is on `public.chats`.
+- **0410 r6 grants:** no `rag_*` or `hybrid_search*` function is executable by anon or authenticated except `rag_ingest_realtime_topic_allowed` (authenticated, by design).
+- **Whole database:**
+  - Public functions: 386 → 398 (+1 from 0531, +1 from 0533, +10 from 0813; 0812 replaced one with one).
+  - Public tables with RLS off: 0.
+  - Only one SECURITY DEFINER function lacks `search_path=""`: `rls_auto_enable()`, Supabase's own, as before.
+- **Security advisors:**
+  - No ERROR.
+  - No new WARN: the same set and counts as before (function_search_path_mutable 4, extension_in_public 2, GraphQL 0026/0027 24/25, anon definers 5, authenticated definers 13, leaked password protection).
+  - The only new items are INFO rls_enabled_no_policy on the three new server-only tables (28 → 31), as intended.
+- **Data intact:** documents 4, document_chunks 1, chunk_embeddings 0 and ingestion_jobs 0, the same before and after (documents was 1 after train 16; the three new rows came from app use between trains, not from these migrations). All document and chunk statuses are `ready`. `rag_retrieval_log` has 0 rows.
+
+### Re-run and ordering notes
+- Re-running 0801, 0424 or 0408 restores an older `rag_write_chunks` body without per-chunk languages, so re-run 0812 after any of them (as well as the files noted above that follow 0801).
+- 0532 depends on 0531's table; re-run them in order. 0533 only needs the table.
+- 0813 creates new objects only and does not replace any earlier body; it needs `rag_assert_tenant_key` (0403/0425) and the 0801 chunk columns.
+- 0531, 0533, 0812 and 0813 carry their own REVOKE/GRANT; re-run 0410 after any future migration that adds a definer function it lists.
