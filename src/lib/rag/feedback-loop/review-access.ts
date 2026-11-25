@@ -143,9 +143,33 @@ export type ListReviewItemsResult =
 
 /** Newest first by (mined_at, id); the opaque cursor is the last returned pair. Reads with the caller's SSR client only. */
 export async function listReviewItems(ssr: Client, query: ReviewListQuery): Promise<ListReviewItemsResult> {
-  void ssr;
-  void query;
-  return { ok: true, items: [], next_cursor: null };
+  let builder = ssr.from('rag_review_items').select(ITEM_COLUMNS.join(','));
+  if (query.status) builder = builder.eq('status', query.status);
+  if (query.reason) builder = builder.contains('reasons', [query.reason]);
+  if (query.language) builder = builder.eq('query_language', query.language);
+  if (query.cursor) {
+    const cursor = decodeCursor(query.cursor);
+    if (!cursor) return { ok: false, reason: 'invalid_cursor' };
+    builder = builder.or(`mined_at.lt."${cursor.minedAt}",and(mined_at.eq."${cursor.minedAt}",id.lt.${cursor.id})`);
+  }
+  const { data, error } = await builder
+    .order('mined_at', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(REVIEW_PAGE_SIZE + 1);
+  if (error) throw new Error('review_items_read_failed');
+  const rows = ((data ?? []) as unknown as Row[]).slice(0, REVIEW_PAGE_SIZE + 1);
+  const page = rows.slice(0, REVIEW_PAGE_SIZE);
+  const items: ReviewItem[] = [];
+  for (const row of page) {
+    const item = toReviewItem(row, null);
+    if (item) items.push(item);
+  }
+  const last = page[page.length - 1];
+  const next_cursor =
+    rows.length > REVIEW_PAGE_SIZE && last && typeof last.mined_at === 'string' && typeof last.id === 'string'
+      ? encodeCursor(last.mined_at, last.id)
+      : null;
+  return { ok: true, items, next_cursor };
 }
 
 /** The item as RLS lets the caller see it, with the internal link columns; null when missing or not visible. */
@@ -208,10 +232,16 @@ async function linkedAnswer(admin: Client, item: Row): Promise<string | null> {
 export type GetReviewItemResult = { ok: true; item: ReviewItem } | { ok: false; reason: 'not_found' | 'invalid_item' };
 
 export async function getReviewItem(ssr: Client, admin: Client, id: string): Promise<GetReviewItemResult> {
-  void ssr;
-  void admin;
-  void id;
-  return { ok: false, reason: 'not_found' };
+  const row = await readVisibleItem(ssr, id);
+  if (!row) return { ok: false, reason: 'not_found' };
+  let answer: string | null = null;
+  try {
+    answer = await linkedAnswer(admin, row);
+  } catch {
+    console.error('[Review] linked answer read failed', { item: hashForLog(String(row.id)) });
+  }
+  const item = toReviewItem(row, answer);
+  return item ? { ok: true, item } : { ok: false, reason: 'invalid_item' };
 }
 
 export interface ReviewChunk {
