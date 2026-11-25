@@ -8,7 +8,7 @@ import {
 } from '@/lib/rag/backend/tenant-key';
 import { mintScope, scopeKey, type TenantScope } from '@/lib/rag/tenant/scope';
 
-const keyOverride = vi.hoisted(() => ({ transform: null as ((key: string) => string) | null }));
+const keyOverride = vi.hoisted(() => ({ transform: null as ((_key: string) => string) | null }));
 
 vi.mock('@/lib/rag/tenant/scope', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/rag/tenant/scope')>();
