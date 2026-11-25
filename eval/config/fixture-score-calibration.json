@@ -1,0 +1,18 @@
+{
+  "dev": {
+    "answerable_count": 86,
+    "correct_refusal_rate": 0.3333333333333333,
+    "false_refusal_rate": 0.046511627906976744,
+    "false_refusal_rate_upper_bound": 0.10327809264274575,
+    "no_answer_count": 21
+  },
+  "fixture_mode": "prechunked",
+  "golden_sha256": "425aa830422844d8a4856775c8ec50f4be73f090ed7097b9d9dec2d85a12fa67",
+  "schema_version": 1,
+  "score_calibration": {
+    "context_threshold": 0.11585847749171707
+  },
+  "source": "fixture",
+  "status": "calibrated",
+  "target_false_refusal": 0.05
+}

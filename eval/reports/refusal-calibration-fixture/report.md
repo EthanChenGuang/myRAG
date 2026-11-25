@@ -40,3 +40,13 @@ The noise band is 0.020 (noise.json floor; single run, no spread). The gap is cr
 | zh (cohere / fake-quality-v1) | - | - | - | - | not comparable: a cell without a threshold has no false-refusal rate to compare |
 
 No query language has both a same and a cross cell with a threshold, so the comparison is open.
+
+## Fixture similarity floor (D-30 fallback)
+
+Fitted on the dev split only (the test split is not read) over every dev item's best dense similarity, at the same false-refusal target (0.050); an image chunk above the image floor counts as answered. It applies where the threshold gate is not_applied. Fixture floors are written for the eval harness only; the production legacy profile keeps its own score_calibration.
+
+| Status | context_threshold | Dev answerable / no-answer | Dev false refusal (95% upper) | Dev correct refusal | Excluded (no similarity) |
+| --- | --- | --- | --- | --- | --- |
+| calibrated | 0.1159 | 86 / 21 | 0.047 (0.103) | 0.333 | 0 |
+
+Written to `eval/config/fixture-score-calibration.json` (source fixture).
