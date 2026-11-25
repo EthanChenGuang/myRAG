@@ -1,9 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { streamText, type UIMessageChunk } from 'ai';
 import { MockLanguageModelV3, convertArrayToReadableStream } from 'ai/test';
+import type { LanguageModelV3StreamPart } from '@ai-sdk/provider';
 import { createCitationSession, type CitationFinishMetadata, type ContextBlock } from '@/lib/rag';
-
-type StreamPart = Parameters<typeof convertArrayToReadableStream>[0][number];
 
 const USAGE = {
   inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
@@ -45,14 +44,14 @@ function textParts(id: string, deltas: string[]) {
   ];
 }
 
-async function run(parts: unknown[], citationSession = session()) {
+async function run(parts: LanguageModelV3StreamPart[], citationSession = session()) {
   const model = new MockLanguageModelV3({
     doStream: async () => ({
-      stream: convertArrayToReadableStream([
+      stream: convertArrayToReadableStream<LanguageModelV3StreamPart>([
         { type: 'stream-start', warnings: [] },
         ...parts,
         { type: 'finish', finishReason: { unified: 'stop', raw: 'stop' }, usage: USAGE },
-      ] as StreamPart[]),
+      ]),
     }),
   });
   const result = streamText({
