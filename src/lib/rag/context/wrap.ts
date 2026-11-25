@@ -77,3 +77,31 @@ export function escapeAttr(value: string): string {
     .replace(/&[a-z]*$/, '')
     .replace(/[\uD800-\uDBFF]$/, '');
 }
+
+export const REFERENCE_NOTICE = '';
+export const REFERENCE_REMINDER = '';
+export const TOOL_RESULT_SENTENCE = '';
+export const TOOL_RESULT_NOTICE = '';
+
+export interface WrapDoc {
+  id: string;
+  text: string;
+  header?: string;
+  source?: string;
+  section?: string;
+  type?: string;
+  kind?: 'links' | 'image' | 'reference';
+  flagged?: boolean;
+}
+
+export function wrapDocuments(_docs: readonly WrapDoc[], _opts: { toolResults?: boolean } = {}): string | null {
+  return null;
+}
+
+export function docsFromBlocks(_blocks: readonly unknown[], _opts: Record<string, unknown> = {}): WrapDoc[] {
+  return [];
+}
+
+export function buildClaudeContextReplacement(_input: { attachedSentence: string; docs: readonly WrapDoc[] }): string {
+  return '';
+}
