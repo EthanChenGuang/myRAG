@@ -1,4 +1,4 @@
-import { after, before, beforeEach, describe, test } from 'node:test';
+import { after, afterEach, before, beforeEach, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -7,11 +7,13 @@ import { fileURLToPath } from 'node:url';
 import type { PGlite } from '@electric-sql/pglite';
 import { createEmptyFixtureDatabase } from '../../eval/harness/pglite-supabase.mts';
 import { applyMigrationFiles, migrationFiles } from '../../eval/harness/migrations.mts';
+import { TWO_TENANT_IDS, createTwoTenantDatabase, type TwoTenantDatabase } from '../../eval/harness/two-tenant.mts';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const MIGRATION = 'supabase/migrations/0442_reembed_scope.sql';
 
 const LAW = 'voyage-law-2-1024';
+const LAW_MODEL = 'voyage-law-2';
 const FINANCE = 'voyage-finance-2-1024';
 const UNSCOPED = 'voyage-4-large-1024';
 const QWEN_2048 = 'qwen3-8b-2048';
@@ -369,5 +371,197 @@ describe('0442 scoped re-embed SQL (multi-tenant)', () => {
       assert.equal(row.auth_exec, false);
       assert.equal(row.service_exec, true);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// The TypeScript runner and CLI over the two-tenant fixture, with a fake Voyage provider.
+// ---------------------------------------------------------------------------------------------------------------------
+
+function vectorFor(text: string, dims: number): number[] {
+  const digest = crypto.createHash('sha256').update(text).digest();
+  const raw = Array.from({ length: dims }, (_, index) => (digest[index % 32] as number) / 255 - 0.4 + (index % 5) * 0.01);
+  const norm = Math.sqrt(raw.reduce((sum, x) => sum + x * x, 0));
+  return raw.map((x) => x / norm);
+}
+
+function fakeLawProvider() {
+  let calls = 0;
+  const provider: import('@/lib/rag/embeddings/types').EmbeddingProvider = {
+    id: 'voyage',
+    model: LAW_MODEL,
+    maxInputTokens: 8000,
+    supportedDims: [1024],
+    normalize: true,
+    async embedDocuments(texts, opts) {
+      calls += 1;
+      return { vectors: texts.map((text) => vectorFor(text, opts.dims)), model: LAW_MODEL, host: 'fake-host', usage: { tokens: texts.length * 10 } };
+    },
+    async embedQuery(text, opts) {
+      return { vectors: [vectorFor(text, opts.dims)], model: LAW_MODEL, host: 'fake-host', usage: { tokens: 1 } };
+    },
+  };
+  return {
+    provider,
+    get calls() {
+      return calls;
+    },
+  };
+}
+
+describe('scoped re-embed runner and CLI (src/lib/rag/ingest/reembed)', () => {
+  let fixture: TwoTenantDatabase;
+  let edge: import('../../eval/harness/fake-edge.mts').FakeEdge;
+  let reembed: typeof import('@/lib/rag/ingest/reembed/run');
+  let cliModule: typeof import('@/lib/rag/ingest/reembed/cli');
+  let depsModule: typeof import('@/lib/rag/ingest/deps');
+  let configModule: typeof import('@/lib/rag/ingest/config');
+  let registryModule: typeof import('@/lib/rag/embeddings/registry');
+  let activeModule: typeof import('@/lib/rag/embeddings/active-profile');
+  const tenantA = `u:${TWO_TENANT_IDS.userA}`;
+  const tenantB = `u:${TWO_TENANT_IDS.userB}`;
+  let contractIds: string[] = [];
+  const contractByTenant = new Map<string, number>();
+
+  const rows = async (sql: string, params: unknown[] = []): Promise<Row[]> => (await fixture.db.query<Row>(sql, params)).rows;
+  const db = () => depsModule.getIngestDeps().db() as import('@/lib/rag/backend/supabase-rpc').RpcClient;
+
+  let sequence = 0;
+  async function seed(tenant: { key: string; userId: string }, docType: string, count: number): Promise<string[]> {
+    const sourceKey = `scope-runner-${++sequence}.md`;
+    const begun = await rows(
+      `SELECT * FROM rag_begin_document_version(
+         p_tenant_key => $1, p_user_id => $2::uuid, p_org_id => NULL, p_source => 'config_upload', p_source_key => $3, p_filename => $3,
+         p_file_sha256 => $4, p_doc_type => $5, p_doc_type_origin => 'fallback', p_profile_id => $6, p_profile_version => 1)`,
+      [tenant.key, tenant.userId, sourceKey, crypto.createHash('sha256').update(sourceKey).digest('hex'), docType, `${docType}@1`],
+    );
+    const documentId = String(begun[0]?.document_id);
+    const chunks = Array.from({ length: count }, (_, index) => ({
+      content: `A neutral synthetic sentence ${index} in sample record ${sequence}.`,
+      chunk_index: index,
+      section_path: ['Sample', `Record ${sequence}`],
+      chunk_kind: 'text',
+      embedding_text_version: 1,
+      metadata: {},
+    }));
+    await rows('SELECT * FROM rag_write_chunks(p_document_id => $1, p_tenant_key => $2, p_chunks => $3::jsonb, p_embeddings => NULL, p_final => true, p_total => $4)', [
+      documentId,
+      tenant.key,
+      JSON.stringify(chunks),
+      count,
+    ]);
+    await rows('SELECT * FROM rag_publish_document_version(p_document_id => $1, p_tenant_key => $2)', [documentId, tenant.key]);
+    return (await rows('SELECT id FROM document_chunks WHERE document_id = $1 ORDER BY id', [documentId])).map((row) => String(row.id));
+  }
+
+  async function stageBinding(tenantKey: string | null, status: 'backfilling' | 'available' = 'backfilling'): Promise<string> {
+    const created = (await rows("SELECT * FROM rag_create_embedding_binding('contract_legal', $1, $2, 'operator-test')", [tenantKey, LAW]))[0] as Row;
+    if (status === 'backfilling') await rows("SELECT * FROM rag_set_embedding_binding_status($1, 'backfilling', 'operator-test')", [created.binding_id]);
+    return String(created.binding_id);
+  }
+
+  before(async () => {
+    const { fixtureProcessEnv, startFakeEdge } = await import('../../eval/harness/fake-edge.mts');
+    fixture = await createTwoTenantDatabase();
+    edge = await startFakeEdge({ db: fixture.db });
+    Object.assign(process.env, fixtureProcessEnv(edge.url));
+    process.env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE = 'multi-tenant';
+    process.env.MYRAG_DEPLOYMENT_MODE = 'multi-tenant';
+    reembed = await import('@/lib/rag/ingest/reembed/run');
+    cliModule = await import('@/lib/rag/ingest/reembed/cli');
+    depsModule = await import('@/lib/rag/ingest/deps');
+    configModule = await import('@/lib/rag/ingest/config');
+    registryModule = await import('@/lib/rag/embeddings/registry');
+    activeModule = await import('@/lib/rag/embeddings/active-profile');
+    await seed({ key: tenantA, userId: TWO_TENANT_IDS.userA }, 'contract_legal', 3);
+    await seed({ key: tenantB, userId: TWO_TENANT_IDS.userB }, 'contract_legal', 2);
+    await seed({ key: tenantA, userId: TWO_TENANT_IDS.userA }, 'financial_report', 2);
+    await seed({ key: tenantA, userId: TWO_TENANT_IDS.userA }, 'general', 2);
+    const inScope = await rows(
+      `SELECT c.id, c.tenant_key FROM document_chunks c JOIN documents d ON d.id = c.document_id
+        WHERE c.is_current AND c.status = 'ready' AND COALESCE(c.doc_type, d.doc_type) = 'contract_legal'`,
+    );
+    contractIds = inScope.map((row) => String(row.id));
+    for (const row of inScope) contractByTenant.set(String(row.tenant_key), (contractByTenant.get(String(row.tenant_key)) ?? 0) + 1);
+    const total = Number((await rows("SELECT count(*)::int AS n FROM document_chunks WHERE is_current AND status = 'ready'"))[0]?.n);
+    assert.ok(total > contractIds.length && contractByTenant.get(tenantB) === 2, 'the fixture holds out-of-scope chunks and B has contract chunks');
+  });
+
+  after(async () => {
+    await edge?.close();
+    await fixture?.db.close();
+  });
+
+  beforeEach(async () => {
+    await fixture.db.query('DELETE FROM embedding_backfill_gaps');
+    await fixture.db.query('DELETE FROM embedding_backfill_runs');
+    await fixture.db.query("DELETE FROM chunk_embeddings WHERE profile_id <> 'openai-3-small-1536'");
+    await fixture.db.query('DELETE FROM embedding_profile_bindings');
+    configModule.resetIngestConfigForTests();
+    depsModule.setIngestDepsForTests({ ingestEnv: () => ({ RAG_EMBEDDING_PROFILES: 'on' }) });
+    activeModule.resetActiveProfileForTests();
+  });
+
+  afterEach(() => {
+    registryModule.resetEmbeddingProvidersForTests();
+    depsModule.resetIngestDepsForTests();
+    activeModule.resetActiveProfileForTests();
+  });
+
+  const lawRows = async (): Promise<string[]> =>
+    (await rows('SELECT chunk_id FROM chunk_embeddings WHERE profile_id = $1 ORDER BY chunk_id', [LAW])).map((row) => String(row.chunk_id));
+
+  test('runReembed fills only contract chunks under a backfilling binding and reports the profile still available', async () => {
+    await stageBinding(null);
+    const fake = fakeLawProvider();
+    registryModule.setEmbeddingProvidersForTests({ voyage: fake.provider });
+    const report = await reembed.runReembed({ db: db(), profileId: LAW, batchSize: 2 });
+    assert.equal(report.status, 'completed', report.reason ?? '');
+    assert.equal(report.chunksEmbedded, contractIds.length);
+    assert.deepEqual(report.scope, ['contract_legal']);
+    assert.equal(report.profileStatus, 'available');
+    assert.ok(!report.warnings.includes('dual_write_not_active'), 'a scoped profile is never in the backfilling set; no spurious warning');
+    assert.deepEqual(await lawRows(), [...contractIds].sort());
+    assert.equal(String((await rows('SELECT status FROM embedding_profiles WHERE id = $1', [LAW]))[0]?.status), 'available');
+  });
+
+  test('dryRunReembed counts only contract chunks and prices them at the catalog voyage-law-2 price', async () => {
+    const report = await reembed.dryRunReembed({ db: db(), profileId: LAW, batchSize: 4 });
+    assert.deepEqual(report.scope, ['contract_legal']);
+    assert.equal(report.cost.totals.chunks, contractIds.length);
+    assert.deepEqual(
+      report.tenants.map((tenant) => [tenant.tenantKey, tenant.chunksToEmbed]),
+      [...contractByTenant.entries()].sort(([a], [b]) => (a < b ? -1 : 1)),
+    );
+    const tokens = report.cost.totals.tokens;
+    assert.ok(tokens > 0);
+    assert.ok(Math.abs(report.cost.totals.usd - (tokens * 0.12) / 1_000_000) < 1e-12, 'priced at 0.12 USD per 1M tokens');
+    assert.equal(report.cost.estimated, true);
+    assert.equal((await rows('SELECT count(*)::int AS n FROM embedding_backfill_runs'))[0]?.n, 0);
+  });
+
+  test('the CLI prints the scope, refuses without a binding and prints no stored text', async () => {
+    registryModule.setEmbeddingProvidersForTests({ voyage: fakeLawProvider().provider });
+    const lines: string[] = [];
+    const io = { out: (line: string) => lines.push(line), err: (line: string) => lines.push(line) };
+    assert.equal(await cliModule.main(['--profile', LAW, '--dry-run'], io), 0, lines.join('\n'));
+    assert.match(lines.join('\n'), /\[Re-embed\] scope: contract_legal/);
+
+    lines.length = 0;
+    assert.equal(await cliModule.main(['--profile', LAW], io), 1);
+    assert.match(lines.join('\n'), /\[Re-embed\] refused: reembed_refused: no_backfilling_binding/);
+    assert.deepEqual(await lawRows(), []);
+
+    await stageBinding(tenantA);
+    lines.length = 0;
+    assert.equal(await cliModule.main(['--profile', LAW, '--tenant', tenantA], io), 0, lines.join('\n'));
+    const output = lines.join('\n');
+    assert.match(output, /\[Re-embed\] scope: contract_legal/);
+    assert.match(output, /completed/);
+    for (const chunk of await rows('SELECT content FROM document_chunks')) {
+      assert.ok(!output.includes(String(chunk.content).slice(0, 25)), 'no stored text in the output');
+    }
+    const tenants = await rows('SELECT DISTINCT tenant_key FROM chunk_embeddings WHERE profile_id = $1', [LAW]);
+    assert.deepEqual(tenants.map((row) => row.tenant_key), [tenantA]);
   });
 });
