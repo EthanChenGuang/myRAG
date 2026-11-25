@@ -853,4 +853,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 3.1 → 3.1.1 → 3.2 → 3.2
 | 6.1. Embedding Fine-tuning Pipeline (INSERTED) | 0/20 | Planned (plan-check PASS) | - |
 | 6.2. Query Layer Additions (INSERTED) | 0/TBD | Not planned | - |
 | 6.3. Source Deletion Sync & Purge (INSERTED) | 0/TBD | Not planned | - |
-| 7. External Backends & Release Defaults | 2/52 | In Progress (needs plan revision for LANG-10, LANG-11, SEC-11) | - |
+| 7. External Backends & Release Defaults | 2/52 | In Progress (revision 4 planned 2026-11-25; UI-SPEC pending for 07-48, 07-49, 07-52) | - |
