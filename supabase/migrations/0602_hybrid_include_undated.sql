@@ -1,6 +1,7 @@
 -- 0602: hybrid_search_chunks gains p_include_undated (D-11, A-6). With true and a date range set, chunks whose doc_date is NULL pass
 -- the date predicate on both legs; false, NULL or omitted keeps the 0407 predicate text exactly. Tenant, current, status and every other
--- filter are unchanged. The 0407 signature is dropped first so exactly one function exists and PostgREST rpc() is never ambiguous (P-8);
+-- filter are unchanged; the body is the 0413 one, so legacy image and invoice_header rows stay searchable under an active profile.
+-- The 0407 signature is dropped first so exactly one function exists and PostgREST rpc() is never ambiguous (P-8);
 -- a new overload would otherwise get PUBLIC execute. search_path is '' with schema-qualified names and operators.
 -- Idempotent: safe to run more than once.
 
@@ -131,6 +132,7 @@ BEGIN
     ' c.tenant_key = $2 AND c.is_current AND c.status IN (''ready'', ''variant'')'
     || ' AND EXISTS (SELECT 1 FROM pg_temp._hybrid_eff_profile ep WHERE ep.doc_type = c.doc_type AND ('
     || '   c.chunking_profile_id = ep.profile_id'
+    || '   OR (ep.profile_id <> ''legacy'' AND c.chunking_profile_id = ''legacy'' AND c.chunk_kind IN (''image'', ''invoice_header''))'
     || '   OR (ep.profile_id <> ''legacy'' AND c.chunking_profile_id = ''legacy'''
     || '       AND NOT EXISTS (SELECT 1 FROM public.document_chunks c2 WHERE c2.document_id = c.document_id'
     || '         AND c2.tenant_key = $2 AND c2.is_current AND c2.chunking_profile_id = ep.profile_id))'
