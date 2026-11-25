@@ -225,7 +225,7 @@ for (const mode of MODES) {
       assert.match(unknown?.message ?? '', /invalid_field/);
     });
 
-    it('a pending_review document and its chunks are returned by no retrieval function, and publishing returns them again', async () => {
+    it('a pending_review document and its chunks are returned by no retrieval function, and publishing after a decision returns them again', async () => {
       const token = `zqxheld${sequence + 1}${mode === 'single-tenant' ? 's' : 'm'}`;
       const text = `${token} the archive shelf holds the neutral probe sentence`;
       const id = await begin(ctx, next('held-retrieval'));
@@ -243,6 +243,8 @@ for (const mode of MODES) {
       const hidden = await retrievalHits(ctx, text, token);
       for (const [fn, ids] of Object.entries(hidden)) assert.ok(!ids.includes(chunkId), `${fn} returns no pending_review chunk`);
 
+      assert.equal(await publish(ctx, id), 'pending_review', 'the 0803 guard refuses to publish a pending_review document');
+      await rows(ctx.db, SET_SQL, [id, ctx.a.key, JSON.stringify({ status: 'processing' })]);
       assert.equal(await publish(ctx, id), 'published');
       const back = await retrievalHits(ctx, text, token);
       for (const [fn, ids] of Object.entries(back)) assert.ok(ids.includes(chunkId), `${fn} returns the chunk after publish`);
