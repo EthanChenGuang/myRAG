@@ -31,6 +31,8 @@ export interface Candidate {
   parent_id?: string | null;
   legs?: Record<string, number>;
   language?: string | null;
+  /** Query layer only: the dense similarity under the standalone variant's list (0 when that list missed the chunk). */
+  standaloneSimilarity?: number;
 }
 
 export type StageRunStatus = 'ok' | 'skipped' | 'disabled' | 'degraded' | 'error' | 'timeout' | 'aborted';
@@ -162,10 +164,12 @@ export interface QueryVariant {
   text: string;
   language: string | null;
   kind: QueryVariantKind;
-  /** Retrieval legs this variant searches; absent means every leg (Phase 4 behaviour). */
-  legs?: Array<'dense' | 'lexical'>;
+  /** Retrieval legs this variant searches: 'dense' sends no lexical tokens (HyDE); absent means both (Phase 4 behaviour). */
+  legs?: 'both' | 'dense';
   /** sub_question variants only: the index into QueryPlan.sub_questions. */
   subQuestionIndex?: number;
+  /** The text embedded for the dense leg when it differs from text; absent means text. */
+  denseText?: string;
 }
 
 export interface RetrievalOverrides {
