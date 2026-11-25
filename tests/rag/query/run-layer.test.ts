@@ -112,7 +112,7 @@ describe('runQueryLayer: router, parallel group and native transforms', () => {
   });
 
   it('a short keyword query runs expand only, asked for the full LLM-variant budget of 2', async () => {
-    const { fake, prompts } = install([{ transform: 'expand', query: SHORT_ZH, output: { queries: ['系统日志在哪里查看', '日志配置说明'] } }]);
+    const { fake, prompts } = install([{ transform: 'expand', query: SHORT_ZH, output: { queries: ['系统日志', '日志配置'] } }]);
     const { out, stage } = await run(SHORT_ZH);
 
     expect(fake.calls).toEqual([{ transform: 'expand', input: SHORT_ZH }]);
@@ -140,10 +140,10 @@ describe('runQueryLayer: router, parallel group and native transforms', () => {
   });
 
   it('with a condensed query and HyDE on, expand gets no budget and makes no call', async () => {
-    const condensed = 'Where are the logs of the sample gateway service?';
+    const condensed = 'gateway service logs';
     const { fake } = install([
       { transform: 'condense', query: FOLLOW_UP_KEYWORDS, output: { standalone: condensed, unchanged: false } },
-      { transform: 'hyde', query: condensed, output: { passage: 'The sample gateway service writes its logs to a synthetic directory.' } },
+      { transform: 'hyde', query: condensed, output: { passage: 'The gateway service writes logs.' } },
       { transform: 'expand', query: condensed, output: { queries: ['synthetic expansion one', 'synthetic expansion two'] } },
     ]);
     const { out } = await run(FOLLOW_UP_KEYWORDS, { history: HISTORY, env: { RAG_QUERY_HYDE: 'true' } });
