@@ -135,6 +135,13 @@ export type { VoiceResult, VoiceResults, VoiceSourceImage } from './context/voic
 export { deriveVoiceKeywords } from './voice/keyword-fallback';
 export { createEnhancedRAGPrompt } from './generation/prompt';
 export {
+  answerLanguageInstruction,
+  answerLanguageOptions,
+  appendAnswerLanguage,
+  contextLanguages,
+  type AnswerLanguageOptions,
+} from './generation/answer-language';
+export {
   knowledgeBaseUnavailableLanguage,
   knowledgeBaseUnavailableMessage,
   noKnowledgeBaseResponse,
