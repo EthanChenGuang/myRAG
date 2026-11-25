@@ -8,6 +8,7 @@ export type TableHeaderRepeat = 'profile' | 'always';
 export type CaptionLanguage = 'en' | 'document';
 export type IngestCheckMode = 'off' | 'flag' | 'quarantine';
 export type UploadApprovalMode = 'off' | 'members' | 'all';
+export type DomainEmbeddingsMode = 'off' | 'on';
 
 export interface IngestEnvInput {
   RAG_INGEST_PIPELINE?: string;
@@ -34,6 +35,7 @@ export interface IngestEnvInput {
   RAG_SCOPE_TAG_SUGGEST?: string;
   RAG_SUPERSESSION_DETECT?: string;
   RAG_EFFECTIVE_DATE_LLM_EXTRACT?: string;
+  RAG_DOMAIN_EMBEDDINGS?: string;
 }
 
 export interface IngestConfig {
@@ -63,6 +65,7 @@ export interface IngestConfig {
   scopeTagSuggest: boolean;
   supersessionDetect: OffOn;
   effectiveDateLlmExtract: boolean;
+  domainEmbeddings: DomainEmbeddingsMode;
   warnings: string[];
 }
 
@@ -95,6 +98,7 @@ const ENV_NAMES = [
   'RAG_SCOPE_TAG_SUGGEST',
   'RAG_SUPERSESSION_DETECT',
   'RAG_EFFECTIVE_DATE_LLM_EXTRACT',
+  'RAG_DOMAIN_EMBEDDINGS',
 ] as const satisfies readonly (keyof IngestEnvInput)[];
 
 const loggedProblems = new Set<string>();
@@ -149,6 +153,18 @@ function parsePollBudget(raw: string | undefined, warnings: string[]): number {
   return ms;
 }
 
+/** Domain bindings need the embedding profile registry, so RAG_EMBEDDING_PROFILES=off keeps them off. */
+function parseDomainEmbeddings(raw: string | undefined, profiles: EmbeddingProfilesMode, warnings: string[]): DomainEmbeddingsMode {
+  const requested = parseChoice('RAG_DOMAIN_EMBEDDINGS', raw, ['off', 'on'], 'off', warnings);
+  if (requested === 'on' && profiles === 'off') {
+    problem(warnings, 'domain-embeddings-profiles-off', 'domain-embeddings needs embedding profiles; RAG_DOMAIN_EMBEDDINGS stays off', {
+      RAG_EMBEDDING_PROFILES: 'off',
+    });
+    return 'off';
+  }
+  return requested;
+}
+
 /** Pure function of an env snapshot; any invalid or unknown value resolves to today's behaviour. */
 export function loadIngestConfig(env: IngestEnvInput): IngestConfig {
   const snapshot = JSON.stringify(ENV_NAMES.map((name) => env[name] ?? ''));
@@ -156,6 +172,7 @@ export function loadIngestConfig(env: IngestEnvInput): IngestConfig {
   if (cached) return cached;
 
   const warnings: string[] = [];
+  const embeddingProfiles = parseChoice('RAG_EMBEDDING_PROFILES', env.RAG_EMBEDDING_PROFILES, ['off', 'on'], 'off', warnings);
   const config: IngestConfig = {
     pipeline: parseChoice('RAG_INGEST_PIPELINE', env.RAG_INGEST_PIPELINE, ['legacy', 'unified'], 'legacy', warnings),
     parser: parseChoice('RAG_PARSER', env.RAG_PARSER, ['llamaparse', 'docling'], 'llamaparse', warnings),
@@ -165,7 +182,7 @@ export function loadIngestConfig(env: IngestEnvInput): IngestConfig {
     exactIdLookup: parseFlag('RAG_EXACT_ID_LOOKUP', env.RAG_EXACT_ID_LOOKUP, warnings),
     pdfImageChunks: parseFlag('RAG_PDF_IMAGE_CHUNKS', env.RAG_PDF_IMAGE_CHUNKS, warnings),
     injectionScan: parseChoice('RAG_INJECTION_SCAN', env.RAG_INJECTION_SCAN, ['off', 'quarantine'], 'off', warnings),
-    embeddingProfiles: parseChoice('RAG_EMBEDDING_PROFILES', env.RAG_EMBEDDING_PROFILES, ['off', 'on'], 'off', warnings),
+    embeddingProfiles,
     qwenFallback: parseChoice('RAG_QWEN_EMBED_FALLBACK', env.RAG_QWEN_EMBED_FALLBACK, ['openrouter', 'none'], 'openrouter', warnings),
     languageAwareIngest: parseChoice('RAG_LANGUAGE_AWARE_INGEST', env.RAG_LANGUAGE_AWARE_INGEST, ['off', 'on'], 'off', warnings),
     tableHeaderRepeat: parseChoice('RAG_TABLE_HEADER_REPEAT', env.RAG_TABLE_HEADER_REPEAT, ['profile', 'always'], 'profile', warnings),
@@ -181,6 +198,7 @@ export function loadIngestConfig(env: IngestEnvInput): IngestConfig {
     scopeTagSuggest: parseFlag('RAG_SCOPE_TAG_SUGGEST', env.RAG_SCOPE_TAG_SUGGEST, warnings),
     supersessionDetect: parseChoice('RAG_SUPERSESSION_DETECT', env.RAG_SUPERSESSION_DETECT, ['off', 'on'], 'off', warnings),
     effectiveDateLlmExtract: parseFlag('RAG_EFFECTIVE_DATE_LLM_EXTRACT', env.RAG_EFFECTIVE_DATE_LLM_EXTRACT, warnings),
+    domainEmbeddings: parseDomainEmbeddings(env.RAG_DOMAIN_EMBEDDINGS, embeddingProfiles, warnings),
     warnings,
   };
   memo.set(snapshot, config);

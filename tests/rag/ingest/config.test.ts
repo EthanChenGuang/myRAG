@@ -44,6 +44,7 @@ const DEFAULTS: IngestConfig = {
   scopeTagSuggest: false,
   supersessionDetect: 'off',
   effectiveDateLlmExtract: false,
+  domainEmbeddings: 'off',
   warnings: [],
 };
 

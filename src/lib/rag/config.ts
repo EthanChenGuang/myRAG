@@ -124,6 +124,12 @@ export interface RetrievalParamsOverride {
   rrf_k?: number;
 }
 
+export interface DomainEmbeddingsConfig {
+  enabled: boolean;
+  maxLegs: number;
+  timeoutMs: number;
+}
+
 export interface V2Config {
   lexicalSearch: boolean;
   reranker: RerankerKind;
@@ -140,6 +146,7 @@ export interface V2Config {
   paramsOverride: RetrievalParamsOverride;
   hasCohereKey: boolean;
   hasVoyageKey: boolean;
+  domainEmbeddings: DomainEmbeddingsConfig;
 }
 
 export interface RagEnvInput {
@@ -170,6 +177,10 @@ export interface RagEnvInput {
   RAG_DOC_TRANSLATION?: string;
   RAG_BGE_M3_SERVING?: string;
   RAG_OUTPUT_LINK_ALLOWLIST?: string;
+  RAG_EMBEDDING_PROFILES?: string;
+  RAG_DOMAIN_EMBEDDINGS?: string;
+  RAG_DOMAIN_EMBEDDING_MAX_LEGS?: string;
+  RAG_DOMAIN_EMBEDDING_TIMEOUT_MS?: string;
 }
 
 export interface RagConfig {
@@ -317,6 +328,58 @@ function parseNonNegativeInt(raw: string | undefined, defaultValue: number, max:
   return n;
 }
 
+function parseBoundedInt(
+  raw: string | undefined,
+  defaultValue: number,
+  min: number,
+  max: number,
+  name: string,
+  warnings: string[],
+): number {
+  const value = (raw ?? '').trim();
+  if (value === '') return defaultValue;
+  const n = /^\d+$/.test(value) ? Number(value) : NaN;
+  if (!Number.isInteger(n) || n < min || n > max) {
+    problem(warnings, `${name}:${value}`, `Invalid ${name}, expected an integer from ${min} to ${max}, using ${defaultValue}`, { value });
+    return defaultValue;
+  }
+  return n;
+}
+
+function parseOnOff(raw: string | undefined, name: string, warnings: string[]): boolean {
+  const value = (raw ?? '').trim().toLowerCase();
+  if (value === '' || value === 'off') return false;
+  if (value === 'on') return true;
+  problem(warnings, `${name}:${value}`, `Unsupported ${name} value, using off`, { value });
+  return false;
+}
+
+export const DEFAULT_DOMAIN_EMBEDDING_MAX_LEGS = 2;
+export const DEFAULT_DOMAIN_EMBEDDING_TIMEOUT_MS = 800;
+
+/** Domain bindings need the embedding profile registry, so RAG_EMBEDDING_PROFILES=off keeps them off. */
+function parseDomainEmbeddings(env: RagEnvInput, warnings: string[]): DomainEmbeddingsConfig {
+  const requested = parseOnOff(env.RAG_DOMAIN_EMBEDDINGS, 'RAG_DOMAIN_EMBEDDINGS', warnings);
+  const profilesOn = (env.RAG_EMBEDDING_PROFILES ?? '').trim().toLowerCase() === 'on';
+  if (requested && !profilesOn) {
+    problem(warnings, 'domain-embeddings-profiles-off', 'domain-embeddings needs embedding profiles; RAG_DOMAIN_EMBEDDINGS stays off', {
+      RAG_EMBEDDING_PROFILES: (env.RAG_EMBEDDING_PROFILES ?? '').trim() || 'off',
+    });
+  }
+  return {
+    enabled: requested && profilesOn,
+    maxLegs: parseBoundedInt(env.RAG_DOMAIN_EMBEDDING_MAX_LEGS, DEFAULT_DOMAIN_EMBEDDING_MAX_LEGS, 0, 5, 'RAG_DOMAIN_EMBEDDING_MAX_LEGS', warnings),
+    timeoutMs: parseBoundedInt(
+      env.RAG_DOMAIN_EMBEDDING_TIMEOUT_MS,
+      DEFAULT_DOMAIN_EMBEDDING_TIMEOUT_MS,
+      100,
+      5000,
+      'RAG_DOMAIN_EMBEDDING_TIMEOUT_MS',
+      warnings,
+    ),
+  };
+}
+
 const PARAM_KEYS: Record<string, keyof RetrievalParamsOverride> = {
   pool: 'candidate_pool_size',
   cap: 'rerank_input_cap',
@@ -459,6 +522,10 @@ function memoKey(env: RagEnvInput): string {
     env.RAG_DOC_TRANSLATION ?? '',
     env.RAG_BGE_M3_SERVING ?? '',
     env.RAG_OUTPUT_LINK_ALLOWLIST ?? '',
+    env.RAG_EMBEDDING_PROFILES ?? '',
+    env.RAG_DOMAIN_EMBEDDINGS ?? '',
+    env.RAG_DOMAIN_EMBEDDING_MAX_LEGS ?? '',
+    env.RAG_DOMAIN_EMBEDDING_TIMEOUT_MS ?? '',
   ]);
 }
 
@@ -498,6 +565,7 @@ export function loadRagConfig(env: RagEnvInput): RagConfig {
     paramsOverride: parseParamsOverride(env.RAG_RETRIEVAL_PARAMS_OVERRIDE, warnings),
     hasCohereKey: (env.COHERE_API_KEY ?? '').trim() !== '',
     hasVoyageKey: (env.VOYAGE_API_KEY ?? '').trim() !== '',
+    domainEmbeddings: parseDomainEmbeddings(env, warnings),
   };
 
   applyV2DisabledStages(v2, disabledStages);
