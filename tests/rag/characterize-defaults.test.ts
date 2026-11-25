@@ -45,7 +45,7 @@ vi.mock('@/lib/rag/trace/finish', async (importOriginal) => {
         status: result.status,
         reason: result.reason,
         stages: result.stages.map((stage) => ({ name: stage.name, status: stage.status, detail: stage.detail })),
-        sourceImages: result.sourceImages.map((image) => image.url),
+        sourceImages: result.sourceImages.map((image) => image.url ?? ''),
       });
       return actual.finishTrace(...args);
     },
