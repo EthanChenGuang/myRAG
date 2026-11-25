@@ -266,13 +266,18 @@ export interface FingerprintCoverage {
   total_current: number;
 }
 
+/** The saved values the coverage compares against: the variables the fingerprint records and the primary language. */
+export function coverageProposal(saved: Record<string, string>): Record<string, string> {
+  return pick(saved, [...FINGERPRINT_VARIABLES, LANGUAGE_COMPANION]);
+}
+
 /** GET /api/rag/admin/ingest-fingerprint: documents left on previous settings per mechanism, under the saved values. */
 export function coverageFromGroups(
   groups: readonly FingerprintGroup[],
   saved: Record<string, string>,
   ingestAsync: boolean,
 ): FingerprintCoverage {
-  const counts = countImpact(groups, pick(saved, [...FINGERPRINT_VARIABLES, LANGUAGE_COMPANION]));
+  const counts = countImpact(groups, coverageProposal(saved));
   const pending = REBUILD_MECHANISMS.map((mechanism): PendingRebuild => {
     const byDocType = Object.fromEntries(DOC_TYPES.map((docType) => [docType, counts.affected.get(mechanism)?.get(docType) ?? 0])) as Record<
       ImpactDocType,

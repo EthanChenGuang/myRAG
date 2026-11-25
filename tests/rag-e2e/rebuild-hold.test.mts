@@ -189,6 +189,7 @@ describe('a held reparse rebuild', () => {
     const before = new Map<string, number>();
     for (const { documentId } of docs.slice(0, 2)) before.set(documentId, await vectorCount(documentId));
     await rebuild.recordRebuildEvidence(runId, PASSING_GATE);
+    published.length = 0;
     const activated = await rebuild.activateRebuild(runId, 'admin');
     assert.equal(activated.published.length, 2);
     assert.deepEqual([...published].sort(), [...activated.published].sort());

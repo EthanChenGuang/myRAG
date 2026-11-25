@@ -48,7 +48,7 @@ function sourceOf(value: string | null): IngestSource | null {
 }
 
 /** What the new version carries over from the one it replaces: the origin fields, the caller metadata and, for a picture, its URL and context. */
-function optionsOf(row: Row): IngestOptions {
+export function optionsOf(row: Row): IngestOptions {
   const origin: IngestOrigin = {};
   const provider = text(row, 'source_provider');
   const fileId = text(row, 'source_file_id');
