@@ -203,6 +203,7 @@ def _parse_request(job: IngestionJob, profile: ProcessingProfile, input_format: 
         repeat_table_header=effective_repeat_table_header(job.settings, profile),
         input_format=input_format,  # type: ignore[arg-type]
         page_cap=None,
+        carry_table_header=job.settings.carry_table_header,
     )
 
 

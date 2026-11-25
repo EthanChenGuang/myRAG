@@ -4,7 +4,14 @@ from __future__ import annotations
 
 import pytest
 
-from rag_sidecar.ingest.cache_keys import merged_options_hash, options_hash  # noqa: E402
+from rag_sidecar.contracts.queue import JobSettingsSnapshot
+from rag_sidecar.ingest.cache_keys import (
+    chunker_key,
+    effective_repeat_table_header,
+    merged_options_hash,
+    options_hash,
+)
+from rag_sidecar.preflight.config import load_processing_profiles
 
 
 def test_options_hash_is_stable_for_key_order_and_sensitive_to_preset_and_pages():
@@ -63,10 +70,6 @@ def test_merged_options_hash_depends_on_entry_order_and_version():
 # ---------------------------------------------------------------------------------------------------------------------
 # D-22: the effective header flag in the chunker part of the key
 # ---------------------------------------------------------------------------------------------------------------------
-
-from rag_sidecar.contracts.queue import JobSettingsSnapshot  # noqa: E402
-from rag_sidecar.ingest.cache_keys import chunker_key, effective_repeat_table_header  # noqa: E402
-from rag_sidecar.preflight.config import load_processing_profiles  # noqa: E402
 
 PROFILES = load_processing_profiles().profiles
 

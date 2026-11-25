@@ -81,8 +81,9 @@ def _long_table_spec(fixture_id: str):
 
 
 def _recorded_document(fixture_id: str):
-    from rag_sidecar.parse.docling_adapter import SIDECAR_METADATA_KEY
     from docling_core.types.doc import DoclingDocument
+
+    from rag_sidecar.parse.docling_adapter import SIDECAR_METADATA_KEY
 
     payload = json.loads((INGEST / "recorded" / f"{fixture_id}.docling.json").read_text(encoding="utf-8"))
     payload.pop(SIDECAR_METADATA_KEY, None)
