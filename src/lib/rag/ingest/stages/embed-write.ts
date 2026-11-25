@@ -1,5 +1,4 @@
-import { loadRagConfig } from '../../config';
-import { getRagDeps } from '../../deps';
+import { isMissingPhase4Function, markV2Unavailable, resolveEffectivePipeline } from '../../v2/readiness';
 import { EmbeddingProfileMismatch } from '../../embeddings/mrl';
 import { ProfileUnavailableError, type EmbeddingProfile } from '../../embeddings/active-profile';
 import { canonicalModelId, getEmbeddingProviderFor } from '../../embeddings/registry';
@@ -159,6 +158,11 @@ async function dualWriteProfiles(ctx: StageContext, documentId: string, targets:
     rows = await ctx.writer.listChunkingProfiles();
   } catch (error) {
     if (ctx.signal.aborted) throw error;
+    // D-07: a defaulted v2 on a database without the Phase 4 functions ingests as legacy; an explicit v2 still fails.
+    if (error instanceof IngestWriterError && isMissingPhase4Function(error) && resolveEffectivePipeline().source === 'default') {
+      markV2Unavailable(error.rpc);
+      return;
+    }
     logProfileFailure('list', error);
     throw new IngestStageError('embed', 'chunking_profiles_unavailable');
   }
@@ -232,7 +236,7 @@ async function dualWriteProfiles(ctx: StageContext, documentId: string, targets:
 async function runEmbed(ctx: StageContext): Promise<StageOutcome> {
   const document = requireDocument(ctx, 'embed');
   const identity = requireIdentity(ctx, 'embed');
-  const dualWrite = loadRagConfig(getRagDeps().ragEnv()).pipeline === 'v2';
+  const dualWrite = resolveEffectivePipeline().pipeline !== 'legacy';
   let targets: EmbeddingTarget[];
   try {
     targets = await resolveEmbeddingTargets(ctx.writer, { docType: identity.docType, tenantKey: identity.tenantKey });
@@ -323,7 +327,7 @@ async function runEmbed(ctx: StageContext): Promise<StageOutcome> {
  */
 async function runDeferredEmbed(ctx: StageContext): Promise<StageOutcome> {
   const document = requireDocument(ctx, 'embed');
-  const dualWrite = loadRagConfig(getRagDeps().ragEnv()).pipeline === 'v2';
+  const dualWrite = resolveEffectivePipeline().pipeline !== 'legacy';
   let targets: EmbeddingTarget[];
   try {
     targets = await resolveEmbeddingTargets(ctx.writer);

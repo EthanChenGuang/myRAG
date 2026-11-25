@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { env } from '@/lib/env';
 import { getSupabaseAdmin } from '@/lib/supabase';
-import { loadRagConfig, type RagEnvInput } from './config';
+import { loadRagConfig, pipelineSourceOf, type RagEnvInput } from './config';
 import type { RawPipelineEnv } from './lang/resolve';
 import type { EmbeddingProfile } from './embeddings/active-profile';
 import { EmbeddingProfileMismatch } from './embeddings/mrl';
@@ -46,11 +46,17 @@ export interface RagDeps {
   fetch: typeof fetch;
   /** The two pipeline variables exactly as the process has them (undefined when unset), for the D-02 startup check. */
   rawPipelineEnv: () => RawPipelineEnv;
+  /**
+   * D-24: whether the deployment has chosen its supported languages. null means no language-settings reader is connected through this
+   * seam, and the resolver then applies no language fallback of its own.
+   */
+  languagesConfigured: () => boolean | null;
 }
 
 function readRagEnvInput(): RagEnvInput {
   return {
     RAG_PIPELINE: process.env.RAG_PIPELINE ?? env.RAG_PIPELINE,
+    pipelineSourceHint: pipelineSourceOf(getRagDeps().rawPipelineEnv().RAG_PIPELINE),
     RAG_DISABLED_STAGES: process.env.RAG_DISABLED_STAGES ?? env.RAG_DISABLED_STAGES,
     RAG_STAGE_TIMEOUTS: process.env.RAG_STAGE_TIMEOUTS ?? env.RAG_STAGE_TIMEOUTS,
     RAG_EXACT_ID_LOOKUP: process.env.RAG_EXACT_ID_LOOKUP ?? env.RAG_EXACT_ID_LOOKUP,
@@ -139,6 +145,7 @@ const defaults: RagDeps = {
   queryLlm: defaultQueryLlmClient,
   fetch: globalThis.fetch.bind(globalThis),
   rawPipelineEnv: () => ({ RAG_PIPELINE: process.env.RAG_PIPELINE, RAG_INGEST_PIPELINE: process.env.RAG_INGEST_PIPELINE }),
+  languagesConfigured: () => null,
 };
 
 let overrides: Partial<RagDeps> = {};

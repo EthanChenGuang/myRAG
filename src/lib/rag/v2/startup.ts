@@ -3,6 +3,7 @@ import { getChunkingCoverage, type ChunkingCoverageRow } from '../chunking/profi
 import { loadRagConfig, type RagEnvInput } from '../config';
 import { getRagDeps } from '../deps';
 import { icuSegmentsChinese } from '../lexical/icu-check';
+import { resolveEffectivePipeline } from './readiness';
 
 function compareSemver(a: string, b: string): number {
   const pa = a.split('.').map((part) => Number.parseInt(part, 10));
@@ -116,8 +117,9 @@ async function readChunkingCoverage(deps: V2StartupDeps): Promise<V2ChunkingCove
 }
 
 async function runChecks(deps: V2StartupDeps): Promise<V2StartupVerdict> {
-  const config = loadRagConfig(deps.ragEnv());
-  if (config.pipeline !== 'v2') {
+  const env = deps.ragEnv();
+  const config = loadRagConfig(env);
+  if (resolveEffectivePipeline(env).pipeline === 'legacy') {
     verdict = {
       status: 'not_checked',
       icuAvailable: true,

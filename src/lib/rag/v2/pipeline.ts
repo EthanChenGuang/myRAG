@@ -1,5 +1,6 @@
 import { logger } from '@/lib/logger';
 import { RetrievalBackendError } from '../backend/supabase-rpc';
+import { isMissingPhase4Function, markV2Unavailable, resolveEffectivePipeline, V2_UNAVAILABLE } from './readiness';
 import { loadRagConfig } from '../config';
 import { getRagDeps } from '../deps';
 import { getEmbeddingProfileById } from '../embeddings/active-profile';
@@ -250,6 +251,11 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
       const profileReason = profileFailureReason(error.original);
       if (profileReason) return failure(collector, 'error', profileReason, queryContext);
       if (error.original instanceof RetrievalBackendError) {
+        // D-07: only a defaulted v2 turns a missing Phase 4 function into a legacy fallback; an explicit v2 keeps backend_error.
+        if (isMissingPhase4Function(error.original) && resolveEffectivePipeline().source === 'default') {
+          markV2Unavailable(error.original.rpc);
+          return failure(collector, 'error', V2_UNAVAILABLE, queryContext);
+        }
         logger.error('RAG Pipeline', 'Backend error', { rpc: error.original.rpc, code: error.original.code });
         return failure(collector, 'error', 'backend_error', queryContext);
       }
