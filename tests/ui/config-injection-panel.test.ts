@@ -168,3 +168,178 @@ describe('GET /api/config/injection-defense (D-18)', () => {
     expect(reply.body).not.toContain(root);
   });
 });
+
+// ---------------------------------------------------------------------------------------------------------------------------------------
+// A minimal DOM: innerHTML and insertAdjacentHTML throw, so a panel that parses markup fails the test.
+
+class FakeText {
+  parentNode: FakeElement | null = null;
+  constructor(public data: string) {}
+  get textContent(): string {
+    return this.data;
+  }
+}
+
+type FakeNode = FakeElement | FakeText;
+
+class FakeElement {
+  parentNode: FakeElement | null = null;
+  childNodes: FakeNode[] = [];
+  attributes = new Map<string, string>();
+  constructor(public tagName: string) {}
+  get className(): string {
+    return this.attributes.get('class') ?? '';
+  }
+  set className(value: string) {
+    this.attributes.set('class', String(value));
+  }
+  setAttribute(name: string, value: string) {
+    this.attributes.set(name, String(value));
+  }
+  getAttribute(name: string): string | null {
+    return this.attributes.get(name) ?? null;
+  }
+  get children(): FakeElement[] {
+    return this.childNodes.filter((n): n is FakeElement => n instanceof FakeElement);
+  }
+  get textContent(): string {
+    return this.childNodes.map((n) => n.textContent).join('');
+  }
+  set textContent(value: string) {
+    this.childNodes = [];
+    if (value !== '') this.appendChild(new FakeText(String(value)));
+  }
+  set innerHTML(_value: string) {
+    throw new Error('innerHTML is not allowed in Config UI panels');
+  }
+  insertAdjacentHTML(): void {
+    throw new Error('insertAdjacentHTML is not allowed in Config UI panels');
+  }
+  appendChild<T extends FakeNode>(node: T): T {
+    node.parentNode = this;
+    this.childNodes.push(node);
+    return node;
+  }
+  append(...nodes: Array<FakeNode | string>) {
+    for (const node of nodes) this.appendChild(typeof node === 'string' ? new FakeText(node) : node);
+  }
+  replaceChildren(...nodes: Array<FakeNode | string>) {
+    this.childNodes = [];
+    this.append(...nodes);
+  }
+  all(): FakeElement[] {
+    return this.children.flatMap((c) => [c, ...c.all()]);
+  }
+}
+
+const fakeDoc = {
+  createElement: (tag: string) => new FakeElement(tag.toLowerCase()),
+  createTextNode: (text: string) => new FakeText(String(text)),
+};
+
+interface PanelModule {
+  INJECTION_DEFENSE_ENDPOINT: string;
+  PROMPT_GUARD_LANGUAGE_NOTE: string;
+  renderInjectionDefenseSummary: (container: FakeElement, summary: unknown, doc: typeof fakeDoc) => void;
+  loadInjectionDefenseSummary: (container: FakeElement, options: { fetcher: typeof fetch; doc: typeof fakeDoc }) => Promise<void>;
+}
+
+function loadPanel(): PanelModule {
+  return require('../../scripts/config-ui/rag-panels/injection-defense.js') as PanelModule;
+}
+
+const SUMMARY = {
+  rules: { version: 'abcdef012345', counts: { zh: 7, en: 8, it: 6, any: 1 } },
+  detectors: {
+    version: '2026-11-24.1',
+    prompt_guard: { model_id: 'meta-llama/Llama-Prompt-Guard-2-86M', revision: 'a'.repeat(40), threshold: 0.5, languages: ['en', 'it'] },
+    lakera: { detector_types: ['prompt_attack'], min_level: null },
+  },
+};
+
+function jsonFetch(status: number, body: unknown): { fetcher: typeof fetch; calls: Array<[string, RequestInit | undefined]> } {
+  const calls: Array<[string, RequestInit | undefined]> = [];
+  const fetcher = (async (url: string, init?: RequestInit) => {
+    calls.push([url, init]);
+    return { ok: status >= 200 && status < 300, status, json: async () => body } as Response;
+  }) as unknown as typeof fetch;
+  return { fetcher, calls };
+}
+
+describe('Prompt-injection defense card: detector summary (D-18, A-12)', () => {
+  it('renders the versions, counts, Prompt Guard model, revision, threshold, the language note and Lakera types', () => {
+    const { renderInjectionDefenseSummary, PROMPT_GUARD_LANGUAGE_NOTE } = loadPanel();
+    expect(PROMPT_GUARD_LANGUAGE_NOTE).toBe('Prompt Guard: en and it only; on CPU it runs inline only in eval runs and fills a warm cache for chat');
+    const container = new FakeElement('div');
+    renderInjectionDefenseSummary(container, SUMMARY, fakeDoc);
+    const text = container.textContent;
+    for (const value of ['abcdef012345', 'zh 7', 'en 8', 'it 6', '2026-11-24.1', 'meta-llama/Llama-Prompt-Guard-2-86M', 'a'.repeat(40), '0.5', 'prompt_attack', PROMPT_GUARD_LANGUAGE_NOTE]) {
+      expect(text).toContain(value);
+    }
+    expect(text).not.toContain('null');
+  });
+
+  it('inserts values as text, never as markup', () => {
+    const { renderInjectionDefenseSummary } = loadPanel();
+    const hostile = structuredClone(SUMMARY);
+    hostile.detectors.prompt_guard.model_id = '<img src=x onerror=alert(1)>';
+    hostile.detectors.lakera.detector_types = ['<b>bold</b>'];
+    const container = new FakeElement('div');
+    renderInjectionDefenseSummary(container, hostile, fakeDoc);
+    expect(container.textContent).toContain('<img src=x onerror=alert(1)>');
+    expect(container.textContent).toContain('<b>bold</b>');
+    expect(container.all().map((e) => e.tagName)).not.toContain('img');
+    expect(container.all().map((e) => e.tagName)).not.toContain('b');
+  });
+
+  it('fetches the config server endpoint same-origin and renders it', async () => {
+    const { loadInjectionDefenseSummary, INJECTION_DEFENSE_ENDPOINT } = loadPanel();
+    expect(INJECTION_DEFENSE_ENDPOINT).toBe(ENDPOINT);
+    const { fetcher, calls } = jsonFetch(200, SUMMARY);
+    const container = new FakeElement('div');
+    await loadInjectionDefenseSummary(container, { fetcher, doc: fakeDoc });
+    expect(calls).toHaveLength(1);
+    expect(calls[0][0]).toBe(ENDPOINT);
+    expect(calls[0][1]?.credentials).toBe('same-origin');
+    expect(container.textContent).toContain('abcdef012345');
+  });
+
+  it.each([
+    ['a 500 with a code', () => jsonFetch(500, { error: 'Detector configuration is invalid', code: 'injection_detectors_invalid' }).fetcher],
+    ['a 403', () => jsonFetch(403, { error: 'Forbidden host' }).fetcher],
+    ['a malformed body', () => jsonFetch(200, { rules: 'x' }).fetcher],
+    [
+      'a network error',
+      () =>
+        (async () => {
+          throw new Error('offline');
+        }) as unknown as typeof fetch,
+    ],
+  ])('on %s shows exactly one error line', async (_name, makeFetcher) => {
+    const { loadInjectionDefenseSummary } = loadPanel();
+    const container = new FakeElement('div');
+    await expect(loadInjectionDefenseSummary(container, { fetcher: makeFetcher(), doc: fakeDoc })).resolves.toBeUndefined();
+    expect(container.children).toHaveLength(1);
+    expect(container.children[0].getAttribute('role')).toBe('status');
+    expect(container.textContent).toMatch(/^Detector summary unavailable/);
+    expect(container.textContent).not.toContain('abcdef012345');
+  });
+});
+
+describe('Config UI wiring', () => {
+  const html = fs.readFileSync(path.join(repoRoot, 'scripts/config-ui/index.html'), 'utf8');
+  const source = fs.readFileSync(path.join(repoRoot, 'scripts/config-ui/rag-panels/injection-defense.js'), 'utf8');
+
+  it('index.html includes the panel script and its container inside the Prompt-injection defense card', () => {
+    expect(html).toContain('<script src="rag-panels/injection-defense.js"></script>');
+    const card = html.slice(html.indexOf('<!-- Prompt-injection defense -->'), html.indexOf('<!-- Info Box -->'));
+    expect(card).toContain('id="injection-defense-summary"');
+    expect(card).toContain('id="RAG_INJECTION_CHECK"');
+    expect(card).toContain('Sends chunk text to Lakera, a third party');
+    expect(card).toMatch(/id="LAKERA_GUARD_API_KEY"[^>]*type="password"|type="password"[^>]*id="LAKERA_GUARD_API_KEY"/);
+  });
+
+  it('the panel script never parses markup', () => {
+    expect(source).not.toMatch(/innerHTML|outerHTML|insertAdjacentHTML|document\.write/);
+  });
+});
