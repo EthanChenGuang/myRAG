@@ -3,7 +3,8 @@ phase: "04"
 plan: "36"
 slug: "hybrid-retrieval-reranking-calibrated-refusal"
 surface: "Config UI: RAG administration > Chunking profiles and Refusal calibration panels"
-status: draft
+status: approved
+reviewed_at: 2026-11-25
 shadcn_initialized: false
 preset: none
 created: "2026-11-25"
