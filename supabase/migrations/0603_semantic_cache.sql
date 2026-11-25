@@ -1,0 +1,202 @@
+-- 0603: pgvector semantic answer cache (Phase 6, CACHE-01, D-34, A-6).
+-- rag_semantic_cache holds one cached answer per row, keyed by tenant_key, key_hash (64 lower-case hex over answer language, RAG mode,
+-- generator model, retrieval-config hash and query framework) and embedding_profile_id. The embedding column is an untyped halfvec, so
+-- profiles of different dimensions share the table; every lookup filters by tenant, key, profile and expiry in a materialized CTE before any
+-- distance is computed (research P-5). RLS is on with no policies; only service_role reaches the table, through the functions below.
+-- Every function takes the tenant only from p_tenant_key, checked first by rag_assert_tenant_key (Phase 4 D-04), is SECURITY INVOKER with an
+-- empty search_path and is service_role only. Idempotent.
+
+BEGIN;
+
+CREATE TABLE IF NOT EXISTS public.rag_semantic_cache (
+  id uuid PRIMARY KEY DEFAULT pg_catalog.gen_random_uuid(),
+  tenant_key text NOT NULL,
+  key_hash text NOT NULL,
+  embedding_profile_id text NOT NULL,
+  embedding public.halfvec NOT NULL,
+  query_text_masked text NOT NULL,
+  answer jsonb NOT NULL,
+  source_versions jsonb NOT NULL DEFAULT '[]'::jsonb,
+  is_refusal boolean NOT NULL DEFAULT false,
+  created_at timestamptz NOT NULL DEFAULT pg_catalog.now(),
+  expires_at timestamptz NOT NULL,
+  CONSTRAINT rag_semantic_cache_source_versions_array CHECK (pg_catalog.jsonb_typeof(source_versions) = 'array')
+);
+
+CREATE INDEX IF NOT EXISTS rag_semantic_cache_lookup_idx
+  ON public.rag_semantic_cache (tenant_key, key_hash, embedding_profile_id, expires_at);
+
+ALTER TABLE public.rag_semantic_cache ENABLE ROW LEVEL SECURITY;
+
+REVOKE ALL ON TABLE public.rag_semantic_cache FROM PUBLIC, anon, authenticated;
+GRANT SELECT, INSERT, DELETE ON TABLE public.rag_semantic_cache TO service_role;
+
+-- Nearest entry for (tenant, key, profile) among unexpired rows. Returns exactly one row: the nearest distance is reported even on a miss
+-- (NULL when no candidate exists); answer, entry_id and is_refusal are set only on a hit (distance <= p_max_distance).
+CREATE OR REPLACE FUNCTION public.rag_cache_check(
+  p_tenant_key text,
+  p_key_hash text,
+  p_profile text,
+  p_embedding public.halfvec,
+  p_max_distance double precision
+)
+RETURNS TABLE (hit boolean, entry_id uuid, distance double precision, answer jsonb, is_refusal boolean)
+LANGUAGE plpgsql
+VOLATILE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_id uuid;
+  v_distance double precision;
+  v_answer jsonb;
+  v_is_refusal boolean;
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  IF p_key_hash IS NULL OR p_key_hash !~ '^[0-9a-f]{64}$' THEN
+    RAISE EXCEPTION 'malformed cache key hash' USING ERRCODE = '22023';
+  END IF;
+  IF p_profile IS NULL OR pg_catalog.btrim(p_profile) = '' OR pg_catalog.length(p_profile) > 200 THEN
+    RAISE EXCEPTION 'malformed embedding profile id' USING ERRCODE = '22023';
+  END IF;
+  IF p_embedding IS NULL THEN
+    RAISE EXCEPTION 'embedding is required' USING ERRCODE = '22023';
+  END IF;
+  IF p_max_distance IS NULL OR p_max_distance < 0 OR p_max_distance > 2 OR p_max_distance <> p_max_distance THEN
+    RAISE EXCEPTION 'max distance must be within 0..2' USING ERRCODE = '22023';
+  END IF;
+
+  WITH candidates AS MATERIALIZED (
+    SELECT c.id, c.embedding, c.answer, c.is_refusal
+    FROM public.rag_semantic_cache c
+    WHERE c.tenant_key = p_tenant_key
+      AND c.key_hash = p_key_hash
+      AND c.embedding_profile_id = p_profile
+      AND c.expires_at > pg_catalog.now()
+      AND public.vector_dims(c.embedding) = public.vector_dims(p_embedding)
+  )
+  SELECT k.id, (k.embedding OPERATOR(public.<=>) p_embedding)::double precision, k.answer, k.is_refusal
+  INTO v_id, v_distance, v_answer, v_is_refusal
+  FROM candidates k
+  ORDER BY 2, k.id
+  LIMIT 1;
+
+  IF v_id IS NULL THEN
+    RETURN QUERY SELECT false, NULL::uuid, NULL::double precision, NULL::jsonb, NULL::boolean;
+    RETURN;
+  END IF;
+  IF v_distance > p_max_distance THEN
+    RETURN QUERY SELECT false, NULL::uuid, v_distance, NULL::jsonb, NULL::boolean;
+    RETURN;
+  END IF;
+
+  RETURN QUERY SELECT true, v_id, v_distance, v_answer, v_is_refusal;
+END
+$fn$;
+
+-- Stores one entry and returns its id. The TTL must be 1..86400 s; every source must be a current, ready document version of the tenant.
+-- Each call also deletes at most 100 expired rows of the same tenant.
+CREATE OR REPLACE FUNCTION public.rag_cache_store(
+  p_tenant_key text,
+  p_key_hash text,
+  p_profile text,
+  p_embedding public.halfvec,
+  p_query_text_masked text,
+  p_answer jsonb,
+  p_source_versions jsonb,
+  p_is_refusal boolean,
+  p_ttl_seconds integer
+)
+RETURNS uuid
+LANGUAGE plpgsql
+VOLATILE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_sources jsonb;
+  v_id uuid;
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  IF p_key_hash IS NULL OR p_key_hash !~ '^[0-9a-f]{64}$' THEN
+    RAISE EXCEPTION 'malformed cache key hash' USING ERRCODE = '22023';
+  END IF;
+  IF p_profile IS NULL OR pg_catalog.btrim(p_profile) = '' OR pg_catalog.length(p_profile) > 200 THEN
+    RAISE EXCEPTION 'malformed embedding profile id' USING ERRCODE = '22023';
+  END IF;
+  IF p_embedding IS NULL THEN
+    RAISE EXCEPTION 'embedding is required' USING ERRCODE = '22023';
+  END IF;
+  IF p_query_text_masked IS NULL THEN
+    RAISE EXCEPTION 'masked query text is required' USING ERRCODE = '22023';
+  END IF;
+  IF p_answer IS NULL OR pg_catalog.jsonb_typeof(p_answer) <> 'object' THEN
+    RAISE EXCEPTION 'answer must be a json object' USING ERRCODE = '22023';
+  END IF;
+  IF p_is_refusal IS NULL THEN
+    RAISE EXCEPTION 'is_refusal is required' USING ERRCODE = '22023';
+  END IF;
+  IF p_ttl_seconds IS NULL OR p_ttl_seconds < 1 OR p_ttl_seconds > 86400 THEN
+    RAISE EXCEPTION 'ttl must be within 1..86400 seconds' USING ERRCODE = '22023';
+  END IF;
+  IF p_source_versions IS NULL OR pg_catalog.jsonb_typeof(p_source_versions) <> 'array' THEN
+    RAISE EXCEPTION 'source_versions must be a json array' USING ERRCODE = '22023';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM pg_catalog.jsonb_array_elements(p_source_versions) AS e(v)
+    WHERE pg_catalog.jsonb_typeof(e.v) <> 'object'
+       OR pg_catalog.jsonb_typeof(e.v -> 'document_id') IS DISTINCT FROM 'string'
+       OR pg_catalog.jsonb_typeof(e.v -> 'version') IS DISTINCT FROM 'number'
+  ) THEN
+    RAISE EXCEPTION 'each source must be {document_id, version}' USING ERRCODE = '22023';
+  END IF;
+
+  SELECT coalesce(
+           pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object('document_id', s.document_id, 'version', s.version) ORDER BY s.document_id, s.version),
+           '[]'::jsonb)
+  INTO v_sources
+  FROM (SELECT DISTINCT r.document_id, r.version
+        FROM pg_catalog.jsonb_to_recordset(p_source_versions) AS r(document_id uuid, version integer)) s;
+
+  IF EXISTS (
+    SELECT 1 FROM pg_catalog.jsonb_to_recordset(v_sources) AS s(document_id uuid, version integer)
+    WHERE NOT EXISTS (
+      SELECT 1 FROM public.documents d
+      WHERE d.id = s.document_id
+        AND d.tenant_key = p_tenant_key
+        AND d.version = s.version
+        AND d.is_current
+        AND d.status = 'ready'
+    )
+  ) THEN
+    RAISE EXCEPTION 'cache_sources_not_current' USING DETAIL = 'every source must be a current, ready document of the tenant';
+  END IF;
+
+  DELETE FROM public.rag_semantic_cache c
+  WHERE c.id IN (
+    SELECT x.id FROM public.rag_semantic_cache x
+    WHERE x.tenant_key = p_tenant_key AND x.expires_at <= pg_catalog.now()
+    LIMIT 100
+  );
+
+  INSERT INTO public.rag_semantic_cache (
+    tenant_key, key_hash, embedding_profile_id, embedding, query_text_masked, answer, source_versions, is_refusal, created_at, expires_at
+  )
+  VALUES (
+    p_tenant_key, p_key_hash, p_profile, p_embedding, p_query_text_masked, p_answer, v_sources, p_is_refusal, pg_catalog.now(),
+    pg_catalog.now() + pg_catalog.make_interval(secs => p_ttl_seconds)
+  )
+  RETURNING id INTO v_id;
+
+  RETURN v_id;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_cache_check(text, text, text, public.halfvec, double precision) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_cache_store(text, text, text, public.halfvec, text, jsonb, jsonb, boolean, integer) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_cache_check(text, text, text, public.halfvec, double precision) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_cache_store(text, text, text, public.halfvec, text, jsonb, jsonb, boolean, integer) TO service_role;
+
+NOTIFY pgrst, 'reload schema';
+
+COMMIT;
