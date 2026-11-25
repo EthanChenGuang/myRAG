@@ -21,6 +21,11 @@ SIDECAR_ENV_VAR = "RAG_SIDECAR_ENV"
 SUPABASE_URL_ENV_VAR = "NEXT_PUBLIC_SUPABASE_URL"
 SERVICE_ROLE_KEY_ENV_VAR = "SUPABASE_SERVICE_ROLE_KEY"
 APP_INTERNAL_URL_ENV_VAR = "RAG_APP_INTERNAL_URL"
+VECTARA_API_KEY_ENV_VAR = "VECTARA_API_KEY"
+VECTARA_BASE_URL_ENV_VAR = "VECTARA_BASE_URL"
+HHEM_MODEL_REVISION_ENV_VAR = "HHEM_MODEL_REVISION"
+DEFAULT_VECTARA_BASE_URL = "https://api.vectara.io"
+DEFAULT_HHEM_MODEL_REVISION = "de9a5e6ba9ba49531a022dba17e35ffeb2a6fad8"
 
 
 def _package_version_or_fallback() -> str:
@@ -53,6 +58,9 @@ class SidecarSettings(BaseModel):
     supabase_url: str | None = None
     service_role_key: SecretStr | None = None
     app_internal_url: str | None = None
+    vectara_api_key: SecretStr | None = None
+    vectara_base_url: str = DEFAULT_VECTARA_BASE_URL
+    hhem_model_revision: str = DEFAULT_HHEM_MODEL_REVISION
 
     def model_post_init(self, __context: object) -> None:
         if not self.version:
@@ -61,6 +69,10 @@ class SidecarSettings(BaseModel):
     @property
     def secret_configured(self) -> bool:
         return self.secret is not None and len(self.secret.get_secret_value()) >= self.min_secret_length
+
+    @property
+    def vectara_configured(self) -> bool:
+        return self.vectara_api_key is not None and len(self.vectara_api_key.get_secret_value().strip()) > 0
 
     @property
     def max_upload_bytes(self) -> int:
@@ -161,4 +173,10 @@ def load_settings() -> SidecarSettings:
     values["service_role_key"] = SecretStr(service) if service else None
     app_url = (os.environ.get(APP_INTERNAL_URL_ENV_VAR) or "").strip()
     values["app_internal_url"] = app_url.rstrip("/") or None
+    vectara_key = (os.environ.get(VECTARA_API_KEY_ENV_VAR) or "").strip()
+    values["vectara_api_key"] = SecretStr(vectara_key) if vectara_key else None
+    vectara_base = (os.environ.get(VECTARA_BASE_URL_ENV_VAR) or "").strip().rstrip("/")
+    values["vectara_base_url"] = vectara_base or DEFAULT_VECTARA_BASE_URL
+    revision = (os.environ.get(HHEM_MODEL_REVISION_ENV_VAR) or "").strip()
+    values["hhem_model_revision"] = revision or DEFAULT_HHEM_MODEL_REVISION
     return SidecarSettings(**values)
