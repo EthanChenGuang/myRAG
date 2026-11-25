@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { PGlite } from '@electric-sql/pglite';
 import { embedText } from '../../eval/harness/fixture-embedder.mts';
+import { migrationFiles } from '../../eval/harness/migrations.mts';
 import { createFixtureDatabase, type DeploymentMode } from '../../eval/harness/pglite-supabase.mts';
 import { TWO_TENANT_IDS, createTwoTenantDatabase } from '../../eval/harness/two-tenant.mts';
 
@@ -669,7 +670,11 @@ for (const mode of MODES) {
 
     it('a second apply of 0803 succeeds and leaves the catalog unchanged', async () => {
       const before = await catalog(ctx.db);
-      await ctx.db.exec(fs.readFileSync(path.join(REPO_ROOT, MIGRATION), 'utf8'));
+      // Re-running 0803 puts back its own publish and approve bodies; the later migrations that replace them (0806) are re-run after it.
+      const files = migrationFiles(mode);
+      for (const file of files.slice(files.indexOf(MIGRATION))) {
+        await ctx.db.exec(fs.readFileSync(path.join(REPO_ROOT, file), 'utf8'));
+      }
       assert.deepEqual(await catalog(ctx.db), before);
     });
   });
