@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 from rag_sidecar.contracts.baseline import NoiseConfig
-from rag_sidecar.contracts.eval_run import RagRunOptions, TraceRefusal
+from rag_sidecar.contracts.eval_run import RagRunOptions, TraceCandidate, TraceRefusal
 from rag_sidecar.contracts.golden import GoldenItem
 from rag_sidecar.contracts.report import MetricValue
 from rag_sidecar.contracts.retrieval import ChunkingDecision, ChunkingSweepReport
@@ -77,12 +77,25 @@ GOLDEN = [
 DOC = {item.id: item.gold_evidence[0].document if item.gold_evidence else "doc.en.md" for item in GOLDEN}
 
 
+ANSWERABLE_DENSE = 0.6
+NO_ANSWER_DENSE = 0.1
+
+
+def _candidate(item: GoldenItem, similarity: float) -> TraceCandidate:
+    return TraceCandidate(
+        rank=1, chunk_id=f"cand-{item.id}", document_id="d-cand", content="candidate", similarity=similarity, has_image=False
+    )
+
+
 def _output(
     misses=(),
     refused=("en-no_answer-001",),
     tokens: int = 100,
     threshold_refusals=(),
     lexical=None,
+    rank2=(),
+    dense=None,
+    refusals=None,
 ) -> RunOutput:
     traces = []
     for item in GOLDEN:
@@ -90,11 +103,16 @@ def _output(
             trace = _trace(item.id, [], refused=True)
         elif not item.answerable or item.id in misses:
             trace = _trace(item.id, [(DOC[item.id], "unrelated text")])
+        elif item.id in rank2:
+            trace = _trace(item.id, [(DOC[item.id], "unrelated text"), (DOC[item.id], f"intro {QUOTE} outro")])
         else:
             trace = _trace(item.id, [(DOC[item.id], f"intro {QUOTE} outro")])
-        update = {"context_tokens": tokens}
+        similarity = (dense or {}).get(item.id, ANSWERABLE_DENSE if item.answerable else NO_ANSWER_DENSE)
+        update = {"context_tokens": tokens, "candidates": [_candidate(item, similarity)]}
         if item.id in threshold_refusals:
             update["refusal"] = TraceRefusal(decision="refuse", basis="rerank_threshold", reason="below_threshold")
+        if refusals and item.id in refusals:
+            update["refusal"] = refusals[item.id]
         traces.append(trace.model_copy(update=update))
     report = build_report(_manifest(), score_items(traces, GOLDEN), GOLDEN)
     if lexical is not None:
@@ -145,7 +163,9 @@ def test_recommended_passes_with_no_drop_and_higher_correct_refusal():
     recommended = _output(refused=NO_ANSWER)
     result = recommended_rule(recommended, baseline, reference, NOISE, run="v2-recommended", reference_name="v2-all-off")
     assert result.passed is True
-    assert result.baseline.refusal.improved is True and result.reference.refusal.improved is True
+    assert result.baseline.refusal.passed is True and result.reference.refusal.passed is True
+    assert result.baseline.refusal.strictly_improved is True and result.reference.refusal.strictly_improved is True
+    assert result.strict_improvement.verdict == "improved"
     assert result.baseline.refusal.false_refusal == 0.0
     assert result.baseline.refusal.false_refusal_upper_95 is not None
 
@@ -160,12 +180,125 @@ def test_recommended_fails_on_a_category_drop_the_ci_gate_does_not_see():
     assert all(drop.metric in ("recall_at_5", "recall_at_10", "mrr") for drop in result.baseline.drops)
 
 
-def test_recommended_fails_when_correct_refusal_is_not_higher():
+def test_equal_correct_and_false_refusal_passes_with_the_strict_gain_open():
     baseline = _baseline(_output())
     result = recommended_rule(_output(), baseline, _output(), NOISE, run="r", reference_name="o")
-    assert result.passed is False
-    assert result.baseline.refusal.improved is False
-    assert result.reference.refusal.improved is False
+    assert result.passed is True
+    assert result.reference.refusal.method == "point"
+    assert result.reference.refusal.strictly_improved is False
+    assert result.strict_improvement.verdict == "open"
+    assert "04-43" in result.strict_improvement.note
+
+
+# ---------- rule (b) refusal at matched false refusal
+
+
+def test_equal_correct_refusal_with_lower_false_refusal_passes_against_the_reference():
+    reference = _output(refused=("en-no_answer-001", "zh-general-001"))
+    result = recommended_rule(_output(), _baseline(_output()), reference, NOISE, run="r", reference_name="o")
+    refusal = result.reference.refusal
+    assert refusal.correct_refusal == refusal.reference_correct_refusal
+    assert refusal.false_refusal < refusal.reference_false_refusal
+    assert refusal.passed is True and result.reference.passed is True
+    assert result.passed is True
+
+
+def test_lower_correct_refusal_fails_against_the_reference():
+    reference = _output(refused=NO_ANSWER)
+    result = recommended_rule(_output(), _baseline(_output()), reference, NOISE, run="r", reference_name="o")
+    assert result.reference.refusal.passed is False
+    assert result.reference.passed is False and result.passed is False
+    assert any("correct refusal" in failure for failure in result.reference.refusal.failures)
+
+
+def test_equal_correct_refusal_with_higher_false_refusal_fails_against_the_reference():
+    recommended = _output(refused=("en-no_answer-001", "zh-general-001"))
+    result = recommended_rule(recommended, _baseline(_output()), _output(), NOISE, run="r", reference_name="o")
+    refusal = result.reference.refusal
+    assert refusal.correct_refusal == refusal.reference_correct_refusal
+    assert refusal.passed is False
+    assert any("false refusal" in failure for failure in refusal.failures)
+
+
+def test_matched_false_refusal_fails_when_v2_refuses_fewer_no_answer_items_than_legacy():
+    legacy = _output(refused=(*NO_ANSWER, "en-general-001"))
+    baseline = _baseline(legacy)
+    dense = {"zh-no_answer-001": 0.9}
+    reference = _output(dense=dense)
+    recommended = _output(refused=NO_ANSWER, dense=dense)
+    result = recommended_rule(recommended, baseline, reference, NOISE, run="r", reference_name="o")
+    refusal = result.baseline.refusal
+    assert refusal.method == "matched_false_refusal"
+    assert refusal.matched is not None
+    assert refusal.matched.target_false_refusal == pytest.approx(1 / 6)
+    assert refusal.matched.false_refusal <= 1 / 6
+    assert refusal.matched.correct_refusal == 0.5
+    assert refusal.matched.covers_reference is False and refusal.matched.missing == ["zh-no_answer-001"]
+    assert refusal.passed is False and result.baseline.passed is False and result.passed is False
+
+
+def test_matched_false_refusal_passes_when_v2_reaches_legacy_correct_refusal():
+    baseline = _baseline(_output(refused=(*NO_ANSWER, "en-general-001")))
+    dense = {"zh-no_answer-001": 0.15}
+    result = recommended_rule(_output(refused=NO_ANSWER, dense=dense), baseline, _output(dense=dense), NOISE, run="r", reference_name="o")
+    matched = result.baseline.refusal.matched
+    assert matched is not None and matched.correct_refusal == 1.0
+    assert matched.covers_reference is True and matched.missing == []
+    assert result.baseline.refusal.passed is True
+
+
+# ---------- rule (b) category slices by paired significance
+
+
+def test_a_single_rank_move_on_a_three_item_category_is_report_only():
+    reference = _output(rank2=("en-table-001",))
+    recommended = _output(rank2=("en-general-001",), refused=NO_ANSWER)
+    result = recommended_rule(recommended, _baseline(reference), reference, NOISE, run="r", reference_name="o")
+    moves = {(move.drop.slice, move.drop.metric): move for move in result.reference.report_only}
+    assert ("category:general", "mrr") in moves
+    assert moves[("category:general", "mrr")].n == 3 and moves[("category:general", "mrr")].n_nonzero == 1
+    assert result.reference.drops == []
+    assert result.reference.passed is True and result.passed is True
+
+
+def test_a_multi_item_category_drop_fails():
+    reference = _output(rank2=("en-table-001", "it-xl-001"))
+    recommended = _output(rank2=("en-general-001", "it-general-001"), refused=NO_ANSWER)
+    result = recommended_rule(recommended, _baseline(reference), reference, NOISE, run="r", reference_name="o")
+    assert ("category:general", "mrr") in {(drop.slice, drop.metric) for drop in result.reference.drops}
+    assert not [drop for drop in result.reference.drops if not drop.slice.startswith("category:")]
+    assert result.reference.passed is False and result.passed is False
+
+
+def test_a_category_drop_whose_paired_interval_is_below_zero_fails():
+    reference = _output(rank2=("en-clause-001",))
+    recommended = _output(rank2=("en-table-001",), refused=NO_ANSWER)
+    result = recommended_rule(recommended, _baseline(reference), reference, NOISE, run="r", reference_name="o")
+    assert ("category:table", "mrr") in {(drop.slice, drop.metric) for drop in result.reference.drops}
+    assert result.reference.passed is False
+
+
+def test_an_overall_or_language_drop_beyond_the_band_still_fails():
+    reference = _output()
+    recommended = _output(rank2=("en-general-001",), refused=NO_ANSWER)
+    result = recommended_rule(recommended, _baseline(reference), reference, NOISE, run="r", reference_name="o")
+    slices = {(drop.slice, drop.metric) for drop in result.reference.drops}
+    assert {("overall", "mrr"), ("language:en", "mrr")} <= slices
+    assert ("category:general", "mrr") in {(m.drop.slice, m.drop.metric) for m in result.reference.report_only}
+    assert result.reference.passed is False and result.passed is False
+
+
+def test_gate_answers_below_the_similarity_floor_are_reported():
+    floor = TraceRefusal(decision="answer", basis="similarity_floor", reason="above_similarity_floor", top_score=0.6, threshold=0.12)
+    reference = _output(refusals={item.id: floor for item in GOLDEN if item.answerable})
+    gate = TraceRefusal(
+        decision="answer", basis="none", reason="above_threshold", top_score=0.07, threshold=0.04, cell_key="cohere|fake|zh|same"
+    )
+    recommended = _output(dense={"zh-no_answer-001": 0.05}, refusals={"zh-no_answer-001": gate})
+    result = recommended_rule(recommended, _baseline(reference), reference, NOISE, run="r", reference_name="o")
+    assert [(row.item_id, row.cell_key) for row in result.gate_below_floor] == [("zh-no_answer-001", "cohere|fake|zh|same")]
+    row = result.gate_below_floor[0]
+    assert row.floor == 0.12 and row.best_dense == 0.05 and row.split == "dev"
 
 
 def test_recommended_fails_against_the_reference_run_even_when_the_baseline_passes():
@@ -443,8 +576,18 @@ def test_run_phase_comparison_materialises_each_named_run(tmp_path: Path):
     assert "chunking_profiles" not in seen["v2-recommended"].run_config
 
 
-def test_run_phase_comparison_fails_when_a_rule_fails(tmp_path: Path):
+def test_run_phase_comparison_names_the_open_strict_refusal_gain(tmp_path: Path):
     spec, outputs = _world(tmp_path, recommended_refused=("en-no_answer-001",))
+    commands, _ = _stub_commands()
+    result = run_phase_comparison(spec, tmp_path / "out", runner=_stub_runner(outputs, {}), commands=commands)
+    assert result.passed is True
+    assert result.recommended.strict_improvement.verdict == "open"
+    md = (tmp_path / "out" / "comparison.md").read_text(encoding="utf-8")
+    assert "04-43" in md and "matched false refusal" in md
+
+
+def test_run_phase_comparison_fails_when_a_rule_fails(tmp_path: Path):
+    spec, outputs = _world(tmp_path, recommended_refused=())
     commands, _ = _stub_commands(codes={"voice-budget": 1})
     result = run_phase_comparison(spec, tmp_path / "out", runner=_stub_runner(outputs, {}), commands=commands)
     assert result.passed is False

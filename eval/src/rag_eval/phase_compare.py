@@ -162,15 +162,41 @@ class LegacyParityResult(_Model):
     runs: list[LegacyRunCheck]
 
 
+class MatchedRefusal(_Model):
+    source: str
+    target_false_refusal: float
+    threshold: float | None
+    false_refusal: float
+    correct_refusal: float
+    answerable_n: int
+    no_answer_n: int
+    excluded_no_similarity: int
+    reference_refused: int | None
+    covers_reference: bool | None
+    missing: list[str]
+
+
 class RefusalComparison(_Model):
+    method: Literal["point", "matched_false_refusal"] = "point"
     correct_refusal: float | None
     correct_refusal_n: int
     reference_correct_refusal: float | None
-    improved: bool
     false_refusal: float | None
     false_refusal_n: int
     false_refusal_upper_95: float | None
     reference_false_refusal: float | None
+    matched: MatchedRefusal | None = None
+    passed: bool
+    strictly_improved: bool
+    failures: list[str] = Field(default_factory=list)
+
+
+class ReportOnlyMove(_Model):
+    drop: GateOffender
+    n: int
+    n_nonzero: int
+    ci_low: float | None
+    ci_high: float | None
 
 
 class RecommendedCheck(_Model):
@@ -178,7 +204,22 @@ class RecommendedCheck(_Model):
     passed: bool
     mismatches: list[str]
     drops: list[GateOffender]
+    report_only: list[ReportOnlyMove] = Field(default_factory=list)
     refusal: RefusalComparison
+
+
+class StrictImprovement(_Model):
+    verdict: Literal["improved", "open"]
+    note: str
+
+
+class GateBelowFloor(_Model):
+    item_id: str
+    split: str
+    cell_key: str | None
+    gate_threshold: float | None
+    best_dense: float
+    floor: float
 
 
 class RecommendedResult(_Model):
@@ -186,6 +227,8 @@ class RecommendedResult(_Model):
     passed: bool
     baseline: RecommendedCheck
     reference: RecommendedCheck
+    strict_improvement: StrictImprovement = StrictImprovement(verdict="open", note="")
+    gate_below_floor: list[GateBelowFloor] = Field(default_factory=list)
 
 
 class SwitchResult(_Model):
@@ -423,7 +466,8 @@ def _refusal(report: EvalReport, reference: Baseline) -> RefusalComparison:
         correct_refusal=correct.value,
         correct_refusal_n=correct.n,
         reference_correct_refusal=reference_correct,
-        improved=correct.value is not None and reference_correct is not None and correct.value > reference_correct,
+        passed=correct.value is not None and reference_correct is not None and correct.value > reference_correct,
+        strictly_improved=correct.value is not None and reference_correct is not None and correct.value > reference_correct,
         false_refusal=false.value,
         false_refusal_n=false.n,
         false_refusal_upper_95=report.overall.false_refusal_upper_95,
@@ -436,7 +480,7 @@ def _recommended_check(output: RunOutput, reference: Baseline, noise: NoiseConfi
     refusal = _refusal(output.report, reference)
     return RecommendedCheck(
         against=against,
-        passed=not gate.mismatches and not gate.offenders and refusal.improved,
+        passed=not gate.mismatches and not gate.offenders and refusal.passed,
         mismatches=list(gate.mismatches),
         drops=list(gate.offenders),
         refusal=refusal,
@@ -913,7 +957,7 @@ def _recommended_section(check: RecommendedCheck, label: str) -> list[str]:
         f"#### Against {label}: {_verdict(check.passed)}",
         "",
         f"- Correct refusal: {_num(r.correct_refusal)} (n={r.correct_refusal_n}) vs {_num(r.reference_correct_refusal)}; "
-        f"higher: {'yes' if r.improved else 'no'}",
+        f"higher: {'yes' if r.strictly_improved else 'no'}",
         f"- False refusal: {_num(r.false_refusal)} (n={r.false_refusal_n}, 95% upper {_num(r.false_refusal_upper_95)}) "
         f"vs {_num(r.reference_false_refusal)}",
         *([f"- Data mismatch: {m}" for m in check.mismatches]),
