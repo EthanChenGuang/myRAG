@@ -119,9 +119,13 @@ describe('internal ingest callbacks: authentication and tenant isolation with tw
       assert.equal((await harness.callback(UNKNOWN_JOB, 'advance', advanceBody(WORKER_A, UNKNOWN_JOB))).status, 404);
     });
 
-    test('modes and phases that this plan does not handle are refused with 400', async () => {
-      assert.equal((await harness.callback(a.jobId, 'parse-external', parseBody(WORKER_A, { mode: 'native' }))).status, 400);
-      assert.equal((await harness.callback(a.jobId, 'advance', advanceBody(WORKER_A, 'x', { phase: 'begin', parse_cache_id: null }))).status, 400);
+    test('unknown modes and phases that do not apply to this job are refused, and the job is untouched', async () => {
+      const before = await jobRow(a.jobId);
+      assert.equal((await harness.callback(a.jobId, 'parse-external', parseBody(WORKER_A, { mode: 'unknown-mode' }))).status, 400);
+      const begin = await harness.callback(a.jobId, 'advance', advanceBody(WORKER_A, 'x', { phase: 'begin', parse_cache_id: null }));
+      assert.ok(begin.status === 400 || begin.status === 409, `begin on an upload job: ${begin.status}`);
+      assert.deepEqual(await jobRow(a.jobId), before);
+      assert.equal((await harness.rows('SELECT count(*)::int AS n FROM rag_parse_cache'))[0]?.n, 0);
     });
   });
 
