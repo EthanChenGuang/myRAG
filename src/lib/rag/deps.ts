@@ -56,7 +56,7 @@ export interface RagDeps {
 function readRagEnvInput(): RagEnvInput {
   return {
     RAG_PIPELINE: process.env.RAG_PIPELINE ?? env.RAG_PIPELINE,
-    RAG_PIPELINE_SOURCE: pipelineSourceOf(getRagDeps().rawPipelineEnv().RAG_PIPELINE),
+    pipelineSourceHint: pipelineSourceOf(getRagDeps().rawPipelineEnv().RAG_PIPELINE),
     RAG_DISABLED_STAGES: process.env.RAG_DISABLED_STAGES ?? env.RAG_DISABLED_STAGES,
     RAG_STAGE_TIMEOUTS: process.env.RAG_STAGE_TIMEOUTS ?? env.RAG_STAGE_TIMEOUTS,
     RAG_EXACT_ID_LOOKUP: process.env.RAG_EXACT_ID_LOOKUP ?? env.RAG_EXACT_ID_LOOKUP,

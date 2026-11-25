@@ -76,11 +76,11 @@ describe('DEFAULT_PIPELINE and pipelineSource', () => {
     setDefaultPipelineForTests('v2');
     setRagDepsForTests({ rawPipelineEnv: () => ({ RAG_PIPELINE: undefined, RAG_INGEST_PIPELINE: undefined }) });
     const unset = getRagDeps().ragEnv();
-    expect(unset.RAG_PIPELINE_SOURCE).toBe('default');
+    expect(unset.pipelineSourceHint).toBe('default');
     expect(loadRagConfig({ ...unset, RAG_PIPELINE: 'legacy' })).toMatchObject({ pipeline: 'v2', pipelineSource: 'default' });
 
     setRagDepsForTests({ rawPipelineEnv: () => ({ RAG_PIPELINE: 'legacy', RAG_INGEST_PIPELINE: undefined }) });
-    expect(getRagDeps().ragEnv().RAG_PIPELINE_SOURCE).toBe('explicit');
+    expect(getRagDeps().ragEnv().pipelineSourceHint).toBe('explicit');
   });
 
   it('the language seam reports no reader by default', () => {

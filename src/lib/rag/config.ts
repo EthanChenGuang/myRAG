@@ -255,7 +255,7 @@ export interface RagEnvInput {
    * D-07: whether RAG_PIPELINE is set and non-empty in the process environment. The deps reader fills it from the raw process value,
    * because RAG_PIPELINE above may carry the env.ts fallback; absent, the source follows RAG_PIPELINE itself.
    */
-  RAG_PIPELINE_SOURCE?: PipelineSource;
+  pipelineSourceHint?: PipelineSource;
   RAG_DISABLED_STAGES?: string;
   RAG_STAGE_TIMEOUTS?: string;
   RAG_EXACT_ID_LOOKUP?: string;
@@ -379,7 +379,7 @@ export function pipelineSourceOf(raw: string | undefined): PipelineSource {
 }
 
 function pipelineSource(env: RagEnvInput): PipelineSource {
-  return env.RAG_PIPELINE_SOURCE ?? pipelineSourceOf(env.RAG_PIPELINE);
+  return env.pipelineSourceHint ?? pipelineSourceOf(env.RAG_PIPELINE);
 }
 
 /** The value the pipeline parsers read: empty when the source is default, so the env.ts fallback never counts as a choice. */
