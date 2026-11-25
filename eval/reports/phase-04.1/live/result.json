@@ -1,0 +1,61 @@
+{
+  "band": {
+    "mrr": 0.02,
+    "recall_at_10": 0.02
+  },
+  "baseline_sha256": "734ad7d03cb62e7acc652355d7a6b4bd55d02dd3ac363547007249625fdcd51a",
+  "cap": 600,
+  "caveat": "Fixture evidence only: a small synthetic corpus in three languages, retrieved with the lexical fixture embedder, so the candidate lists the rerankers see differ from production. The numbers show whether hosted rerank is worse than the local paths on this fixture and how fast the vendors answer 75 candidates; they are not a production quality estimate.",
+  "created_at": "2026-11-25T18:59:41Z",
+  "dev_items_total": 117,
+  "dev_items_used": 117,
+  "g7": {
+    "alternative_chat_voyage": "not_run",
+    "alternative_voice_voyage": "not_run",
+    "auto_chat_cohere": "not_run",
+    "auto_voice_cohere": "not_run"
+  },
+  "git_sha": "8ed6941d857ac3bfc7bc45cdac10559d4fc6eb2f",
+  "golden_sha256": "ad75386e9c38478fbc608549ed09d96b72be70647b7f1ad11890f9aa1dfb2a04",
+  "indicative_refusal_fit": {
+    "reason": "skipped for now: it follows the live checks, which plan 588 requests for the dev split in force, so it will be skipped (at or above 450)",
+    "status": "skipped"
+  },
+  "latency_budgets_ms": {
+    "chat": 600.0,
+    "voice": 250.0
+  },
+  "models": [],
+  "offline_references": {
+    "local_bm25": {
+      "mrr": 0.7658854166666668,
+      "n": 96,
+      "recall_at_10": 0.90625,
+      "recall_at_10_by_language": {
+        "en": 0.9714285714285714,
+        "it": 0.7931034482758621,
+        "zh": 0.9375
+      },
+      "run_config": "v2-default-no-cells",
+      "run_id": "e98fff72-b34c-476a-b582-84f616b553f0"
+    },
+    "none": {
+      "mrr": 0.7727678571428571,
+      "n": 96,
+      "recall_at_10": 0.90625,
+      "recall_at_10_by_language": {
+        "en": 0.9714285714285714,
+        "it": 0.7931034482758621,
+        "zh": 0.9375
+      },
+      "run_config": "v2-default-fallback-none-no-cells",
+      "run_id": "d7fa4693-4218-41c2-99e8-a0e31d3e00d5"
+    }
+  },
+  "sampled": false,
+  "schema_version": 1,
+  "status": "pending_live",
+  "stop_reason": null,
+  "total_requests": 0,
+  "verdicts": []
+}
