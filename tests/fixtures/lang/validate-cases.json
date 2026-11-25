@@ -1,0 +1,73 @@
+{
+  "description": "Phase 3.2 D-07: one case file for every entry point of validateLanguageSettings (app settings.ts, scripts/init-env.js, scripts/config-server.js). context.reranker and context.embeddingProfile are {id, supportedLanguages} or null; context.registryChange edits one shipped pack the way tests/fixtures/rag/language-pack-completeness-cases.json does. expect.settings is what getLanguageSettings() returns for the same two raw values.",
+  "cases": [
+    {
+      "name": "valid_three_languages",
+      "supported": "zh,en,it",
+      "primary": "en",
+      "context": {
+        "reranker": null,
+        "embeddingProfile": null
+      },
+      "expect": {
+        "ok": true,
+        "errors": [],
+        "warnings": [
+          {
+            "code": "groundedness_not_checked",
+            "language": "it"
+          }
+        ],
+        "verifiedAgainstActiveProfile": false,
+        "normalized": {
+          "languages": [
+            "zh",
+            "en",
+            "it"
+          ],
+          "primary": "en",
+          "supported": "zh,en,it"
+        },
+        "settings": {
+          "configured": true,
+          "languages": [
+            "zh",
+            "en",
+            "it"
+          ],
+          "primary": "en",
+          "monolingual": false
+        }
+      }
+    },
+    {
+      "name": "empty_set",
+      "supported": "",
+      "primary": "",
+      "context": {
+        "reranker": null,
+        "embeddingProfile": null
+      },
+      "expect": {
+        "ok": false,
+        "errors": [
+          {
+            "code": "empty_set"
+          },
+          {
+            "code": "primary_not_in_set"
+          }
+        ],
+        "warnings": [],
+        "verifiedAgainstActiveProfile": false,
+        "normalized": null,
+        "settings": {
+          "configured": false,
+          "languages": [],
+          "primary": null,
+          "monolingual": false
+        }
+      }
+    }
+  ]
+}
