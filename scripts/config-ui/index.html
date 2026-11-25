@@ -77,6 +77,7 @@
     <script src="rag-panels/chunking-validate.js"></script>
     <script src="rag-panels/chunking-profiles.js"></script>
     <script src="rag-panels/refusal-calibration.js"></script>
+    <script src="rag-panels/injection-defense.js"></script>
 
     <style>
         /* Tab content visibility */
@@ -7100,6 +7101,10 @@
                                             <label class="label pl-8">
                                                 <span class="label-text-alt min-w-0 text-base-content/70">Images from other hosts render as plain links. Inlined at build time, so a change takes effect only after a rebuild.</span>
                                             </label>
+                                        </div>
+
+                                        <div id="injection-defense-summary" class="rounded-box bg-base-100 p-4 mt-4" aria-live="polite">
+                                            <p class="text-sm text-base-content/70">Loading detector configuration…</p>
                                         </div>
                                     </div>
                                 </div>
