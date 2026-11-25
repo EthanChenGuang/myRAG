@@ -22,10 +22,14 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Unified Retrieval Pipeline & Tenant Scope** - Text chat, embedded chat and voice run through one `src/lib/rag/` pipeline that only searches a server-verified tenant, reproducing the baseline
 - [ ] **Phase 3: Unified Ingestion & Embedding Profiles** - One `ingest()` for every upload path with document types, Docling fallback, dedup, versioning, switchable embeddings and rollbackable re-embedding
 - [ ] **Phase 3.1: Tiered Parsing, Incremental Queue & Bulk Backfill** (INSERTED) - Cheapest-tier-that-passes parse routing with escalation, cloud and budget constraints, an ingestion ledger and parse cache, an async upload queue and a budgeted, resumable backfill. **2026-11-24 pause:** trunk merge train at `56b0349d` (#10 #9 #4 #5 merged); resume per `.planning/phases/03.1-tiered-parsing-incremental-queue-bulk-backfill/.continue-here.md`.
+- [ ] **Phase 3.2: Language Support & Ingestion Hardening** (INSERTED) - Deployment-level supported languages chosen at setup, a language-pack registry, chunk languages, scope tags, captions and document translation in the document's language, BGE-M3 fallback, hidden-text and link checks, optional upload approval
 - [ ] **Phase 4: Hybrid Retrieval, Reranking & Calibrated Refusal** - Filtered hybrid search on pgvector, switchable rerankers, edge-ordered context and refusal from calibrated rerank scores
+- [ ] **Phase 4.2: Retrieval Tuning Additions** (INSERTED) - Rerank pool floor 25 and nDCG, tenant tokenizer dictionary and eval-gated Italian stemming, version-aware retrieval, TTFT tracing and CI gate
 - [ ] **Phase 5: Verified Citations & Groundedness** - Claude Citations, validated chunk-ID citations for other models, one persisted citation record and a post-stream groundedness badge
 - [ ] **Phase 5.1: Prompt Injection Defense** (INSERTED) - Tagged, instruction-free context, runtime injection detection and an injection eval gated at 0
+- [ ] **Phase 5.2: Grounded Answers & Output Safety** (INSERTED) - Partial-answer rule, a citation per factual sentence, claim-level grounding marks, LLM-judge groundedness for unsupported languages, output-length cap, per-language refusal texts, output link and credential guard, uploader tracing
 - [ ] **Phase 6: Query Layer (LlamaIndex & LangChain)** - History rewrite, multi-query fusion, HyDE and sub-questions with a router and budgets, in two switchable frameworks compared in eval
+- [ ] **Phase 6.2: Query Layer Additions** (INSERTED) - Complete decomposition, per-sub-question filters, comparison answers, translation glossary, query-language confidence, voice cross-language, speculative retrieval and Auto model routing behind switches
 - [ ] **Phase 7: External Backends & Release Defaults** - Weaviate and Qdrant synced from Supabase behind tenant canaries; a full regression sets the defaults; Config UI and docs complete
 
 ## Phase Details
@@ -83,7 +87,7 @@ Plans:
 ### Phase 2: Unified Retrieval Pipeline & Tenant Scope
 **Goal**: Text chat, embedded chat and voice get their context from one pipeline that can only search a tenant verified on the server, and answers are unchanged from the baseline
 **Depends on**: Phase 1
-**Requirements**: PIPE-01, PIPE-02, PIPE-03, PIPE-04, PIPE-05, PIPE-06, PIPE-07, PIPE-08, PIPE-09, PIPE-10, OBS-01, OBS-02, EVAL-14, EVAL-15, LAT-04, LANG-01, LANG-02, LANG-10
+**Requirements**: PIPE-01, PIPE-02, PIPE-03, PIPE-04, PIPE-05, PIPE-06, PIPE-07, PIPE-08, PIPE-09, PIPE-10, OBS-01, OBS-02, EVAL-14, EVAL-15
 **Success Criteria** (what must be TRUE):
   1. Text chat, embedded chat and voice all retrieve through `src/lib/rag/`; a CI check fails if any file outside it imports an embedding provider, retrieval backend or reranker; the unused retrieval modules are deleted and `tsc --noEmit` passes.
   2. Tests show that three kinds of request retrieve nothing outside the caller's verified tenant: an `organizationId` in the request body for an organization the caller does not belong to, an embedded chat request naming a different workspace than its server-side embed configuration, and a voice request with a bare `userId` or an expired or forged token. Voice never falls back to a global search.
@@ -92,10 +96,6 @@ Plans:
   5. All three entry points share one context-assembly step (dedupe, grouping, source labels, links section, images), and a query-counting test shows its database query count stays fixed as the number of returned chunks grows.
   6. A production request produces one Langfuse trace with a span per stage (latency, candidate counts), sent asynchronously without delaying the answer, with a `[RAG Trace]` log line as the fallback when Langfuse is off or unreachable (tested with a fake Langfuse endpoint), and eval reports show p50/p95 latency per stage against the documented text-chat and voice budgets.
   7. Reports split every metric by provenance and the new `colloquial`, `ambiguous` and `typo` categories; a sampled, PII-masked share of production traces lands in a review queue, and online judge scores appear on the Langfuse traces (tested with a fake Langfuse endpoint and a stub judge).
-  8. Every entry point records time to first token (p50/p95) on its trace and in eval reports; a TTFT budget is documented with the end-to-end budgets, and an injected delay before the first token makes the CI latency gate fail (fake models).
-  9. First-run setup asks for the supported languages (single or multi-select, plus a primary language) in an interactive `scripts/init-env.js` run and in the Config UI, writes them to `.env.local` and mirrors them in the five config locations; with the languages unset, `RAG_PIPELINE=legacy` behaves as today and the new pipeline refuses to start with a message pointing to the picker; choosing one language turns off detection, translation and the cross-lingual slices.
-  10. The language-pack registry is Pydantic data with generated Zod; the golden-set contract, eval corpus, drafting tools and rewrite-gate `Lang` validate against it, and a CI check fails if a hard-coded `zh|en|it` language literal remains outside the registry and the fixtures.
-  11. Traces carry query language and confidence, answer language and chunk languages; eval reports, online judge scores, helpful votes and the "information not available" rate are split per language and language pair, and a fixture where one language drops while the average holds raises the alert.
 **Live verification**: Check tenant resolution against a real Supabase project with personal and organization memberships in both single-tenant and multi-tenant modes; run a voice session with the running `voice-agent/` using the signed token; repeat the legacy-parity check on the real golden set.
 **Plans**: 36/36 plans executed; verified 7/7 (SC5 by override) on 2026-11-24, 11 live checks pending
 
@@ -151,27 +151,18 @@ Plans:
 ### Phase 3: Unified Ingestion & Embedding Profiles
 **Goal**: Every document enters the knowledge base through one path (typed, deduplicated, versioned and carrying the same metadata), and its chunks are embedded under a switchable embedding profile that can be rolled back
 **Depends on**: Phase 2
-**Requirements**: DATA-01, DATA-02, DATA-03, DATA-04, DATA-05, DATA-06, DATA-07, EMB-01, EMB-02, EMB-03, EMB-04, EMB-05, EMB-11, CHK-01, CHK-02, SEC-01, XLG-02, DATA-09, DATA-10, DATA-11, SEC-07, SEC-08, SEC-09, XLG-04, XLG-06, LANG-03, LANG-04, LANG-05, LANG-06
+**Requirements**: DATA-01, DATA-02, DATA-03, DATA-04, DATA-05, DATA-06, DATA-07, EMB-01, EMB-02, EMB-03, EMB-04, EMB-05, CHK-01, CHK-02, SEC-01, XLG-02, DATA-09, DATA-10, DATA-11
 **Success Criteria** (what must be TRUE):
   1. User can pick a document type for each file at upload (financial/accounting report, contract/legal, invoice/receipt, product/technical, scanned/image), starting from a default set by the admin (fixed type or auto-detect, per tenant and per source) that they can change, and untyped files become `general`; each type applies its processing profile (parser options, chunk size and boundaries, OCR, metadata extraction), which is defined as data, as shown by ingesting a fixture file of every type.
   2. A fixture ingested through chat/Config UI upload, Nango sync, a scraper and image upload produces chunks with the same metadata fields on every path: tenant, document ID, version, `is_current`, source, type, date, language, page or section, content hash, `parser_used` and the URL metadata.
   3. Re-uploading the same content in the same tenant adds no chunks, while the same content in another tenant is ingested normally; uploading a new version flips `is_current` in one transaction, retrieval returns only current chunks, and a message citing the old version still resolves.
   4. With LlamaParse unconfigured or failing (stubbed), fixture PDFs including a table and a scan are parsed by the sidecar's async Docling job with OCR configured for zh/en/it; every table chunk repeats its header row, and `parser_used` records which parser ran.
-  5. Tests with fake providers show the following. Switching the active embedding profile among OpenAI `text-embedding-3-small`, Voyage `voyage-4-large`, hosted Qwen3-Embedding-8B and the open-source BGE-M3 fallback (hosted API or the sidecar on CPU, which give identical vectors for the same fixture text) is a pointer flip that can be rolled back. The re-embed job (dry-run, batched, resumable after a kill, reads stored chunk text and makes zero parser calls) fills the new profile side by side. A query-model or dimension mismatch fails loudly at startup and per request.
+  5. Tests with fake providers show the following. Switching the active embedding profile among OpenAI `text-embedding-3-small`, Voyage `voyage-4-large` and hosted Qwen3-Embedding-8B is a pointer flip that can be rolled back. The re-embed job (dry-run, batched, resumable after a kill, reads stored chunk text and makes zero parser calls) fills the new profile side by side. A query-model or dimension mismatch fails loudly at startup and per request.
   6. Every chunk carries `metadata.section_path`, prefixed into its embedding and `lexical_text` (not into the LLM text); on the contract fixture, the "exceptions to this clause" question retrieves the chunk holding the whole exception list, and clause pieces all carry the clause heading.
-  7. A fixture document containing injection phrasing in zh, en or it, including in an image caption, is quarantined at ingestion and never appears in any retrieval result until an admin releases it in the Config UI.
+  7. A fixture document containing injection phrasing in zh, en or it is quarantined at ingestion and never appears in any retrieval result until an admin releases it in the Config UI.
   8. The fixture golden set has a `cross_lingual` category covering all six query-language/document-language pairs; its baseline under `RAG_PIPELINE=legacy` is recorded, and each embedding profile is compared on it per pair (the multilingual profiles must beat `text-embedding-3-small` on the cross-lingual slice to become the default candidate).
   9. Fixture invoices in zh, en and it yield validated invoice metadata (number, dates, parties, tax IDs, currency, totals, line items) that can be filtered by supplier, date and amount, and an invoice-number question retrieves the exact invoice; admin-set tenant and per-source default types are applied in the documented precedence, and changing an existing document’s type re-processes it as a new version; images inside a fixture PDF become captioned image chunks with page numbers that stream as `source_images`.
   10. A test re-embed into a new profile shows that documents uploaded during the migration land in both profiles, activation is refused while any current chunk lacks a target vector or while the target profile's eval regresses (including on documents ingested before the migration), and a same-dimension model mismatch fails loudly (EMB-05).
-  11. Fixture PDF and Word files with white-on-white text, tiny fonts, off-page text, zero-width characters and hidden Word runs are quarantined with the hidden spans shown to the admin, and none of that text reaches embeddings, `lexical_text` or the LLM; a parser path that cannot report styles records `not_checked`.
-  12. A reworded injection that the SEC-01 rules miss is caught by the ingestion classifier (stubbed in CI) and its score is stored on the chunk; a document containing a link outside the allowlist is quarantined for review.
-  13. With `RAG_UPLOAD_APPROVAL` on, a member's upload on each ingestion path stays out of retrieval and the cache until an admin approves it; exempted connectors index directly; uploader and approver are stored; with the switch off, ingestion behaves as before.
-  14. With `RAG_DOC_TRANSLATION` on for a fixture tenant, Chinese chunks also get English and Italian retrieval-only translations; an Italian question hits a translation but the answer cites the original Chinese chunk; replacing or deleting the document rebuilds or removes its translations; with the switch off, ingestion and retrieval match the baseline, and the eval report shows the cross-lingual Recall gain next to storage, cost and ingestion time.
-  15. Fixture images in Chinese and Italian documents get captions written in that language, with in-image text quoted verbatim, and the caption chunk's `language` matches; the re-embedding job regenerates existing English captions without re-parsing.
-  16. Saving a language set fails with a clear error when a pack is incomplete, the embedding profile or reranker does not support a chosen language, or the primary language is outside the set.
-  17. Each chunk carries an ingestion fingerprint; changing an ingestion-side setting shows the affected document count and rebuilds only those documents side by side behind a pointer flip that can be rolled back, while a query-side change takes effect on save.
-  18. Fixture documents in Chinese, English, Italian and a mixed Chinese–English document get correct per-chunk languages with confidence, undetectable text is stored as `und`, and every ingestion path splits Chinese at 。！？ and counts length with the embedding tokenizer.
-  19. DATA-05 fixture: with `zh,en,it` enabled, Docling and LlamaParse receive the matching OCR languages and a scanned page with Chinese text and Italian accents comes out character-exact.
 **Live verification**: Parse real documents with the LlamaCloud key, and run Docling OCR on real scanned Chinese and Italian files; call Voyage, DeepInfra and OpenRouter with real keys (check Qwen3 dimension parameter, instruction prefix, MRL truncation); run the re-embed job and the `halfvec` HNSW index build on the real Supabase project; compare each embedding profile with the baseline on the real golden set; sync a real Nango connection.
 **Plans**: 49 plans
 
@@ -242,22 +233,38 @@ Plans:
 **Plans**: 54 plans in 14 waves — see `phases/03.1-tiered-parsing-incremental-queue-bulk-backfill/03.1-PLAN-INDEX.md`
 **UI hint**: yes
 
+
+### Phase 3.2: Language Support & Ingestion Hardening (INSERTED)
+**Goal**: The deployment supports exactly the languages chosen at setup, every ingestion step works per language, and documents with hidden text, untrusted links or unapproved uploads never reach retrieval
+**Depends on**: Phase 3, Phase 3.1
+**Requirements**: LANG-01, LANG-02, LANG-03, LANG-04, LANG-05, LANG-06, XLG-04, XLG-06, EMB-11, SEC-07, SEC-08, SEC-09, DATA-18 (plus the DATA-05 and XLG-02 deltas)
+**Success Criteria** (what must be TRUE):
+  1. First-run setup asks for the supported languages (single or multi-select, plus a primary language) in an interactive `scripts/init-env.js` run and in the Config UI, and writes them to `.env.local` and the five config locations; with them unset, `RAG_PIPELINE=legacy` behaves as today and the new pipeline refuses to start with a message pointing to the picker; choosing one language turns off detection, translation and the cross-lingual slices.
+  2. The language-pack registry is Pydantic data with generated Zod; the golden contract, eval corpus, drafting tools and `src/lib/rag/lang/detect.ts` validate against it, a CI check fails on a hard-coded `zh|en|it` literal outside the registry and fixtures, and saving a set with an incomplete pack or an unsupported embedding profile or reranker fails.
+  3. One ingestion fingerprint combines the existing per-chunk versions and the settings snapshot; an ingestion-side change shows the affected document count and rebuilds only those documents side by side, rollbackable; chunks carry their own language with confidence (`und` when undetected), and Chinese chunks split at 。！？ with `cl100k_base` counting.
+  4. A fixture scan with Chinese text and Italian accents comes out character-exact on Docling and LlamaParse, the legacy routes no longer hard-code `language: "en"`, captions of Chinese and Italian documents are written in that language, and with `RAG_DOC_TRANSLATION` on an Italian question hits a translation while the answer cites the original Chinese chunk.
+  5. BGE-M3 runs as an embedding profile through the hosted API and the sidecar with identical vectors, passes the EMB-05 activation gate and is compared on every slice with cost.
+  6. Fixture documents with white-on-white text, tiny fonts, off-page text, zero-width characters and hidden Word runs, and documents containing links outside the allowlist, are quarantined with the reason shown to the admin; with `RAG_UPLOAD_APPROVAL` on, a member's upload stays out of retrieval and the cache until approved; scope tags filter retrieval to documents tagged for the Italian branch.
+  7. With every new switch off, the characterization tests pass and no slice drops beyond the noise band; machine-translated zh/it golden items count only after native-speaker review.
+**Live verification**: Run OCR on real scanned Chinese and Italian documents; call the hosted BGE-M3 API; review a sample of quarantined real documents.
+**Plans**: TBD
+**UI hint**: yes
+
 ### Phase 4: Hybrid Retrieval, Reranking & Calibrated Refusal
 **Goal**: On pgvector, questions in Chinese, English and Italian find the right chunks through filtered hybrid search and reranking, and the system refuses when the best reranked evidence is too weak
 **Depends on**: Phase 3
-**Requirements**: RET-01, RET-02, RET-03, RET-04, RET-10, DATA-08, RNK-01, RNK-02, RNK-03, RNK-04, RNK-05, RNK-06, CHK-03, LAT-01, LAT-02, XLG-03, CHK-04, CHK-05, LANG-07
+**Requirements**: RET-01, RET-02, RET-03, RET-04, RET-10, DATA-08, RNK-01, RNK-02, RNK-03, RNK-04, RNK-05, RNK-06, CHK-03, LAT-01, LAT-02, XLG-03, CHK-04, CHK-05
 **Success Criteria** (what must be TRUE):
   1. Against a local Postgres with pgvector seeded with the fixture corpus, Chinese exact-term queries (model numbers, IDs, names) and their English and Italian counterparts retrieve the expected chunk. The search is hybrid lexical + vector over the shared tokenizer's `lexical_text`, fused with RRF. Filters by date range, source, document, document type and language apply before search, and the hybrid function runs for the server role and is refused for `anon`.
   2. Cohere `rerank-v5.0-pro`/`rerank-v5.0-fast`, Voyage `rerank-3` (with `rerank-2.5` as fallback) and the local BM25 reranker are switchable and rerank an enlarged candidate pool; when a fake reranker times out or errors, the fused order is used and threshold refusal is off for that request.
   3. The assembled context puts the most relevant chunks at its start and end, merges adjacent chunks from the same document and stays within the token budget; context compression changes the context only when its switch is on.
-  4. Calibration tooling derives a refusal threshold per reranker provider and language on the dev split and checks it on the holdout split, and sweep tooling picks the candidate pool size (at least 20, 30, 50 and 100, reporting quality and rerank latency for each) and final top-k, preferring the smallest pool within the noise band of the best; both record their numbers (shown on the fixture set with fake rerankers). With the threshold applied, fixture no-answer questions are refused and answerable ones are not.
+  4. Calibration tooling derives a refusal threshold per reranker provider and language on the dev split and checks it on the holdout split, and sweep tooling picks the candidate pool size and final top-k; both record their numbers (shown on the fixture set with fake rerankers). With the threshold applied, fixture no-answer questions are refused and answerable ones are not.
   5. The pgvector retrieval adapter accepts only a `TenantScope`, and its hybrid conformance tests (including the Chinese exact-term test) are written to run unchanged against any backend; the fixture eval records paired differences against baseline, and no language slice drops beyond the noise band on Recall@k or MRR.
   6. With `RAG_PARENT_CHILD` on, child hits return their parent once within the token budget and tenant scope, and the eval shows Recall gains on clause/exception items with no other slice dropping beyond the noise band.
   7. Retrieval paths run in parallel, candidates are deduplicated before rerank, the rerank input count is capped and reported, and the fast rerank tier keeps voice within its latency budget.
   8. Cross-language questions also succeed through the lexical path and the local BM25 reranker (translated query), and the refusal threshold calibrated on the cross-lingual slice does not raise its false-refusal rate above the same-language slices beyond the noise band.
   9. Admin can set child size, parent mode and parent size per document type in the Config UI (presets 128/512, 256/1024, 256/2048 or custom); a child size above the embedding input limit or a parent smaller than twice the child is rejected, ratio and context-budget problems are warned; the new profile is built side by side and can be activated and rolled back; the sweep report compares the candidate profiles on the fixture golden set per document type and question category, and the chosen profile is recorded with its numbers.
   10. With a `selective_filter` golden category (a tenant or document type at ≤ 3% of rows), filtered pgvector retrieval with `hnsw.iterative_scan` and the exact-scan cutoff returns the same top-k as an unfiltered exact search over the matching rows; the eval reports Recall@k for this category with iterative scan off and on (RET-10).
-  11. The versioned, language-aware tokenizer makes 年假 (with the tenant dictionary), dipendente/dipendenti, più/piu and l'azienda match on the lexical path and in the local BM25 reranker; queries are analyzed per searched language with the index's tokenizer version, and a dictionary change rebuilds `lexical_text` side by side. The rerank sweep reports nDCG@k with k equal to the chunks sent to the LLM.
 **Live verification**: Calibrate thresholds and sweep pool size and top-k with real Cohere and Voyage keys on the real golden set's dev split, then check them on the holdout split; compare Voyage `rerank-3` with `rerank-2.5` on the zh and it slices; apply the hybrid SQL migration to the real Supabase project and confirm Chinese lexical behavior there.
 **Plans**: 2/45 plans executed (04-01..04-45) — see `phases/04-hybrid-retrieval-reranking-calibrated-refusal/04-PLAN-INDEX.md`
 - [x] 04-01-PLAN.md
@@ -306,10 +313,23 @@ Plans:
 - [ ] 04-44-PLAN.md
 - [ ] 04-45-PLAN.md
 
+
+### Phase 4.2: Retrieval Tuning Additions (INSERTED)
+**Goal**: Retrieval keeps the smallest rerank pool that works, matches company terms as single words, can answer questions about earlier policy versions, and its time to first token is gated
+**Depends on**: Phase 4, Phase 3.2
+**Requirements**: LAT-04, LANG-07, RET-11 (plus the RNK-02 and LAT-01 deltas)
+**Success Criteria** (what must be TRUE):
+  1. The sweep grid includes a pool of 25, the rerank input cap accepts 25, and the sweep report adds nDCG@k with k equal to the chunks sent to the LLM.
+  2. A tenant dictionary term such as 年假 matches as one lexical term after `rag:relex`; Italian stemming makes dipendente and dipendenti match and is turned on only if the it slice gains Recall with no other slice dropping.
+  3. With `versions: all` or a period range, a fixture question comparing two versions of one policy retrieves chunks of both, superseded chunks carry their version and dates, and the default still returns current versions only; the semantic cache bypasses these queries.
+  4. TTFT p50/p95 is on the trace for text, embed and voice, cache hits and misses are reported separately, and an injected pre-generation delay makes the CI latency gate fail.
+**Live verification**: Re-run the pool sweep with real rerankers including the 25 pool; measure real TTFT against the budget.
+**Plans**: TBD
+
 ### Phase 5: Verified Citations & Groundedness
 **Goal**: Every RAG answer cites only chunks that were actually sent to the model, its citations survive later document changes, and users can see whether the answer was checked for groundedness
 **Depends on**: Phase 4
-**Requirements**: GEN-01, GEN-02, GEN-03, GEN-04, GEN-05, GEN-06, GEN-07, EVAL-16, LAT-05, LANG-09
+**Requirements**: GEN-01, GEN-02, GEN-03, GEN-04, GEN-05, GEN-06, GEN-07, EVAL-16
 **Success Criteria** (what must be TRUE):
   1. Against recorded or fake Anthropic streams: when the selected model is Claude, the answer comes from the direct Anthropic API with Citations (one plain-text document per chunk) and no structured output on that call. The OpenRouter-to-Anthropic model ID map passes the five-location model check, and turns needing tools, MCP or webSearch keep working or fall back to the existing path.
   2. For other models, the server parses chunk-ID citations from the stream even when a marker is split across tokens, drops unknown IDs and IDs not in the context sent, and returns the citation list through structured output. Both paths persist the same `citations[]` record with a text snapshot that still resolves after the cited document is re-chunked or replaced.
@@ -317,8 +337,6 @@ Plans:
   4. User sees a three-state badge (verified / possibly unreliable / not checked), never a numeric score, on RAG answers in strict and balanced modes only.
   5. The Phase 1 characterization tests still pass (strict-mode "information not available" in the user's language, webSearch + Exa, `source_images`, `{{context}}`), and the fixture eval shows no slice dropping beyond the noise band.
   6. User can mark any RAG answer helpful or not helpful; the vote is stored with the message, sent to Langfuse as a score, and "not helpful" votes and "possibly unreliable" results appear in the review queue.
-  7. With `RAG_MAX_OUTPUT_TOKENS` off, answers match today's behavior. With it on, RAG answers are capped and asked to be concise without changing the admin's `RAG_SYSTEM_PROMPT` or `{{context}}`; the cap is skipped when the user set their own max tokens or reasoning; the strict-mode refusal is never cut, citations streamed before a cut-off are still validated and persisted, and the eval records the chosen default per RAG mode with correctness, citation recall, output tokens, generation latency and a truncation rate below 2%.
-  8. The strict-mode refusal and fixed notices come from the registry in the question's language for every enabled language; the English text is byte-identical to today's.
 **Live verification**: Start with a spike using a real `ANTHROPIC_API_KEY` to confirm Citations survive AI SDK v6 streaming with tools, MCP approvals and webSearch; call Vectara with a real key and opt-in, and confirm host, header, rate limits, `source_texts` limit and data retention before any multi-tenant use; download and run HHEM-2.1-Open in the sidecar; compare Faithfulness on the real golden set with the baseline.
 **Plans**: 26 plans (passed plan check); see `.planning/phases/05-verified-citations-groundedness/`
 **UI hint**: yes
@@ -326,14 +344,12 @@ Plans:
 ### Phase 5.1: Prompt Injection Defense (INSERTED)
 **Goal**: Content from the knowledge base is always treated as reference material, never as instructions the model follows
 **Depends on**: Phase 5
-**Requirements**: SEC-02, SEC-03, SEC-04, SEC-05, SEC-06, SEC-10
+**Requirements**: SEC-02, SEC-03, SEC-04, SEC-05
 **Success Criteria** (what must be TRUE):
-  1. Retrieved chunks, webSearch results and MCP tool results reach the model wrapped in boundary tags with a per-request random value (a fixture document that forges a closing tag fails to escape), with tag-like text escaped, under a system-prompt statement that this content is not instructions and that links found only there and password or log-in requests must not be output; `{{context}}` still works, and the Claude Citations path carries the same statement.
+  1. Retrieved chunks reach the model wrapped in `<documents><doc id>` tags with embedded same-name tags escaped, under a system-prompt statement that tagged content is not instructions; `{{context}}` still works, and the Claude Citations path carries the same statement.
   2. Before generation, chunks are checked by the SEC-01 rules and, when switched on, Prompt Guard (sidecar) or Lakera Guard; flagged chunks are dropped or down-weighted and appear in the trace.
   3. The fixture `injection` category (zh/en/it) has an attack-success rate of 0, gated in CI, and no other category drops beyond the noise band; with all SEC switches off, results match the baseline.
   4. A design document describes reading critical facts (prices, stock) from the database through tools/MCP instead of document text.
-  5. With `RAG_OUTPUT_GUARD` on, a fixture document carrying a hidden phishing link and a "log in again and enter your password" instruction (zh/en/it) produces answers with the link replaced and the credential request blocked by a fixed notice, while a benign password-reset guide only gets a warning, even when the link is split across stream tokens; allowlisted links and same-turn webSearch URLs pass unchanged; each removal is in the trace and sends the source chunk to the review queue; the injection gate counts such links as attacks; with the switch off, answers match the baseline.
-  6. Injection events carry the uploader on the trace, in logs and in the review queue; a fake uploader crossing the event threshold raises an admin alert; Langfuse shows detection, quarantine, removal and block counts per tenant; a red-team run (scheduled and on demand) replays the attack corpus and reports attack success per technique and language, and a seeded success opens a review case.
 **Live verification**: Run Prompt Guard in the sidecar image and Lakera Guard with a real key against the injection set and real documents; measure added latency against the OBS-02 budgets.
 **Plans**: 25 plans in 7 waves (05.1-01..05.1-25); closing plan 05.1-22 — plan index `phases/05.1-prompt-injection-defense/05.1-PLAN-INDEX.md`, validation contract `05.1-VALIDATION.md`
 
@@ -364,10 +380,25 @@ Plans:
 - [ ] 05.1-24-PLAN.md — Golden attack field and injection categories, eval run, trace and report contract changes with regenerated Zod (wave 2)
 - [ ] 05.1-25-PLAN.md — Prompt Guard scorer, bake step and promptguard image target on the orchestrator-locked environment (wave 4)
 
+
+### Phase 5.2: Grounded Answers & Output Safety (INSERTED)
+**Goal**: When the documents answer only part of a question, the answer says so instead of filling the gap, every claim can be traced to a block, and no answer can carry a phishing link or a credential request
+**Depends on**: Phase 5, Phase 5.1
+**Requirements**: GEN-08, GEN-09, GEN-10, GEN-11, GEN-12, LAT-05, LANG-09, SEC-06, SEC-10 (plus the SEC-02 delta)
+**Success Criteria** (what must be TRUE):
+  1. With `RAG_PARTIAL_ANSWER_RULE` on, the `partial_answer` fixture items (e.g. a limit is stated but not what happens above it) are answered for the covered part and say for the rest that the documents do not cover it, in zh, en and it; the share of answers adding unsupported content is 0 in CI; when strict mode calls webSearch, document and web parts are labelled separately; `RAG_SYSTEM_PROMPT` and `{{context}}` are unchanged.
+  2. The eval reports `uncited_sentence_rate`, the UI marks sentences without a valid citation, and with `RAG_CLAIM_CHECK` on unsupported sentences are marked "not confirmed by the documents" without deleting or blocking text; with the LLM judge opted in, Italian answers get a calibrated groundedness label instead of "not checked".
+  3. With `RAG_MAX_OUTPUT_TOKENS` on, answers are capped and asked to be concise, the strict refusal is never cut, citations before a cut-off are persisted and the truncation rate stays below 2%; refusal and notice texts come from the registry in the question's language and today's English text is byte-identical.
+  4. With `RAG_OUTPUT_GUARD` on, a fixture document carrying a hidden phishing link and a "log in again and enter your password" instruction produces answers with the link replaced and the request blocked, even across stream tokens; allowlisted links pass; WhatsApp replies are filtered and no server-side preview is fetched for non-allowlisted hosts; the system prompt forbids outputting links found only in material and asking for passwords.
+  5. Security events carry the uploader on the trace, in logs and in the review queue, and a fake uploader crossing the threshold raises an admin alert; with every switch off, results match the Phase 5.1 baseline.
+**Live verification**: Run the claim check and the LLM judge on real answers; send a real WhatsApp reply with an injected link and confirm no preview fetch.
+**Plans**: TBD
+**UI hint**: yes
+
 ### Phase 6: Query Layer (LlamaIndex & LangChain)
 **Goal**: Follow-up, vague and compound questions retrieve as well as standalone ones under either query framework, within their latency budgets, and voice stays fast
 **Depends on**: Phase 5, Phase 5.1 (plans require Phase 5 complete and share files with Phase 5.1)
-**Requirements**: QRY-01, QRY-02, QRY-03, QRY-04, QRY-05, QRY-06, QRY-07, QRY-08, LAT-03, XLG-01, CACHE-01, LAT-06, LAT-07, XLG-05, XLG-07, LANG-08
+**Requirements**: QRY-01, QRY-02, QRY-03, QRY-04, QRY-05, QRY-06, QRY-07, QRY-08, LAT-03, XLG-01, CACHE-01
 **Success Criteria** (what must be TRUE):
   1. Under the default `RAG_QUERY_FRAMEWORK=llamaindex`, native TypeScript ports make no framework call at query time and do four things: rewrite follow-ups into standalone queries in the user's language with numbers, names and IDs verbatim (standalone questions pass through unchanged); fuse multi-query variants with RRF; run HyDE only when switched on; and decompose compound questions into at most four sub-questions with no synthesized answer. Outputs validate against the Pydantic-generated Zod schemas (fake LLM, fixture multi-turn and compound items).
   2. The router reuses the existing query classifier to choose transforms per query. Each transform has its own switch, timeout and latency budget, and is skipped without failing the request when it overruns (injected delays). The original query is always retrieved. Voice runs only history rewrite, hybrid retrieval and an optional fast reranker within its latency budget, never HyDE, multi-query or decomposition.
@@ -376,11 +407,6 @@ Plans:
   5. The eval runs both frameworks on the fixture golden set and records paired differences per language and category; under the default framework the multi-turn and compound slices hold or improve against Phase 4, and no slice drops beyond the noise band.
   6. Rewriting runs only when the router asks for it, with a small model and at most two variants; fixture items asking in English or Italian about Chinese documents retrieve the right chunks through translated-query fusion and are answered in the asker’s language.
   7. With the semantic cache on, cache hits have much lower p95 latency than misses, any document change in the tenant invalidates affected entries, and the cross-tenant canary suite includes the cache.
-  8. With `RAG_MODEL_ROUTING=auto` and the "Auto" model selected, simple fixture lookups go to the fast model and comparison, compound and cross-language items go to the quality model, with the rule on the trace; an explicitly chosen model is never replaced, and with the switch off nothing changes. The eval against the fixed quality model shows correctness and refusal rates within the noise band per language and category and a lower generation p95.
-  9. With injected transform delays, original-query retrieval starts before the transforms finish, late variants still join the fusion, an overrunning transform is dropped without failing the request, and a semantic-cache hit cancels in-flight retrieval; the pre-retrieval p95 is close to the slowest single path, not the sum.
-  10. An admin-entered glossary term ("ferie" → "年假") is used by query translation, document translation and rewriting; a fake translator that ignores it has its output corrected or discarded; the `glossary` fixture items pass in zh, en and it.
-  11. The `cross_lingual` slice runs through the voice entry point and is reported per language pair; voice adds query translation only if the eval shows it fits the voice budget and improves the slice, and the slice is gated either way.
-  12. Short, accent-free and mixed-script fixture queries (e.g. "ferie residue?") are assigned the right language through the confidence fallback chain (fastText in the sidecar, the rewrite model's reported language, previous turn, UI language, primary language), choosing only among enabled languages.
 **Live verification**: Run both frameworks with real LLM keys; measure p50/p95 latency of each transform and of the whole pre-retrieval stage for chat (starting budget about 2 s before first token) and voice (about 800 ms), and replace the starting budgets with the measured ones; compare LlamaIndex and LangChain on the real golden set.
 **Plans**: 46 plans in 13 waves (06-01..06-46) — see `phases/06-query-layer-llamaindex-langchain/06-PLAN-INDEX.md`
 
@@ -433,10 +459,23 @@ Plans:
 - [ ] 06-46-PLAN.md — W13: live verification checkpoints (autonomous: false)
 **UI hint**: yes
 
+
+### Phase 6.2: Query Layer Additions (INSERTED)
+**Goal**: Questions that bundle several periods, places or topics retrieve evidence for every part and get a structured comparison, cross-language queries use company terms, and the optional latency switches pay off only when the eval says so
+**Depends on**: Phase 6, Phase 3.2, Phase 4.2, Phase 5.2
+**Requirements**: QRY-09, QRY-10, QRY-11, GEN-13, XLG-05, XLG-07, LANG-08, LAT-06, LAT-07
+**Success Criteria** (what must be TRUE):
+  1. For "2024 年和 2025 年的差旅政策有什么变化？对意大利分公司有什么影响？" and its en/it versions, decomposition yields sub-questions covering both years and the Italian branch (a fake decomposer that drops one is corrected or discarded); with `RAG_QUERY_SUBQ_FILTERS` on, each sub-question is filtered by period, version scope or scope tag within the verified tenant, an empty filtered result falls back, and the answer has one cited part per sub-question plus the differences.
+  2. The `version_compare` and `scoped_compound` slices report all-evidence recall and sub-question coverage above single-pass retrieval, and no other slice drops beyond the noise band.
+  3. Glossary terms are enforced in translation, document translation and rewriting; short and mixed-script queries get the right language through the confidence fallback chain; the cross_lingual slice runs through the voice entry point and is gated.
+  4. With `RAG_SPECULATIVE_RETRIEVAL` on, original-query retrieval starts before the transforms finish and a cache hit cancels it; with `RAG_MODEL_ROUTING=auto` and the Auto model selected, simple lookups go to the fast model; with both off, the Phase 6 order and model choice are unchanged.
+**Live verification**: Run the multi-part fixtures and real comparison questions with real LLM keys; measure the speculative-retrieval and routing latency gains.
+**Plans**: TBD
+
 ### Phase 7: External Backends & Release Defaults
 **Goal**: Admins can switch retrieval to Weaviate or Qdrant without any cross-tenant leakage, every new provider and switch is configurable in the Config UI, and the shipped defaults are backed by a full regression
-**Depends on**: Phase 5, Phase 5.1, Phase 6
-**Requirements**: RET-05, RET-06, RET-07, RET-08, RET-09, ADM-01, ADM-02, ADM-03, ADM-04, EVAL-17, LANG-11
+**Depends on**: Phase 5, Phase 5.1, Phase 6, Phase 3.2, Phase 4.2, Phase 5.2, Phase 6.2
+**Requirements**: RET-05, RET-06, RET-07, RET-08, RET-09, ADM-01, ADM-02, ADM-03, ADM-04, EVAL-17, LANG-10, LANG-11, SEC-11 (plus the ADM-02 delta)
 **Success Criteria** (what must be TRUE):
   1. Tests against Weaviate and Qdrant containers in CI show that inserts, updates, deletes (including cascade deletes), version replacements and re-embeds in Supabase reach both stores through the outbox and drain worker, and that the reconcile job detects and repairs injected drift. Weaviate uses one tenant per workspace; Qdrant uses a shared collection per embedding profile with an `is_tenant` index and a tenant filter injected on every query and prefetch.
   2. The cross-tenant canary suite (personal vs organization, null organization, removed member, after delete, after version replace, after re-embed) passes on pgvector, Weaviate and Qdrant in CI and blocks release on failure; chunk IDs from an external backend that fail re-validation against Supabase under the caller's scope are dropped.
@@ -444,7 +483,7 @@ Plans:
   4. Admin can configure every new provider and switch in the Config UI with masked secrets, a Test-connection button and a warning when the active embedding profile and backend don't match.
   5. The regression runner evaluates backend, embedding profile and reranker combinations on the locked test split and writes a defaults decision record with its numbers (shown on fixtures). `AGENTS.md`, the `.env` templates and setup docs describe the sidecar, providers, switches, sync and eval workflow. A vendor data-flow inventory lists what content goes to Vectara, Cohere, Voyage, DeepInfra, Weaviate, Qdrant, Anthropic, LlamaCloud and any other external service the pipeline calls.
   6. Admin can open a queued case in the Config UI, write its expected answer and evidence spans and promote it into the private golden set with provenance `production`; the next eval run includes it, and the periodic failure report groups new failures by layer and category.
-  7. A new embedding profile can be activated for chosen tenants or a traffic share first, with per-language monitoring, and rolled back per tenant; adding a fixture language records its baseline and reprocesses only `und`, scanned and out-of-date documents, and removing a language deletes no data and keeps its documents searchable. The defaults record includes cost, latency and per-language quality, and no enabled language falls below its baseline.
+  7. Traces carry chunk languages; online judge scores, votes and the "information not available" rate are split per language, and a fixture where one language drops while the average holds raises an alert; a new embedding profile can be activated for chosen tenants or a traffic share first and rolled back per tenant; adding a fixture language records its baseline and reprocesses only `und`, scanned and out-of-date documents; a red-team run started from the Config UI replays the growing attack corpus and opens a review case per success; the defaults record includes cost per 1,000 documents and queries.
 **Live verification**: Provision Weaviate and Qdrant (cloud or self-hosted), host the drain worker within the 60 s function limit, and run the canary suite against them; run Test-connection for each real provider; run the full regression on the real locked test split with all real keys (the ADM-02 defaults decision is final only from this live run, not from fixtures); check voice latency end to end.
 **Plans**: 34 plans in 13 waves — see `phases/07-external-backends-release-defaults/07-PLAN-INDEX.md`
 
@@ -488,26 +527,30 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 5.1 → 6 → 7. Phase 6 depends on Phase 5 (its plans build on Phase 5 contracts) and runs after Phase 5.1, which touches the same files. Phase 7's backend and sync work needs only Phases 3 and 4; its regression and closeout need Phases 5 and 6.
+Phases execute in numeric order: 1 → 2 → 3 → 3.1 → 3.2 → 4 → 4.2 → 5 → 5.1 → 5.2 → 6 → 6.2 → 7. Phases 3.2, 4.2, 5.2 and 6.2 were inserted on 2026-11-25 so that no plan of a phase already executing changes; Phase 7 had 2 of 34 plans executed and gains requirements through a plan revision. Phase 6 depends on Phase 5 (its plans build on Phase 5 contracts) and runs after Phase 5.1, which touches the same files. Phase 7's backend and sync work needs only Phases 3 and 4; its regression and closeout need Phases 5 and 6.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Evaluation Harness & Baseline | 22/22 | In Progress | - |
+| 1. Evaluation Harness & Baseline | 22/22 | Executed (verification pending) | - |
 | 2. Unified Retrieval Pipeline & Tenant Scope | 36/36 | Complete (live checks pending) | 2026-11-24 |
-| 3. Unified Ingestion & Embedding Profiles | 12/49 | In Progress | - |
-| 3.1. Tiered Parsing, Incremental Queue & Bulk Backfill (INSERTED) | 0/55 | Planned (plan-check PASS) | - |
-| 4. Hybrid Retrieval, Reranking & Calibrated Refusal | 2/45 | In Progress | - |
-| 5. Verified Citations & Groundedness | 0/26 | Planned (plan-check PASS after W1 fix) | - |
-| 5.1. Prompt Injection Defense (INSERTED) | 0/25 | Planned (revision pass 1) | - |
-| 6. Query Layer (LlamaIndex & LangChain) | 0/46 | Planned (plan-check pending) | - |
-| 7. External Backends & Release Defaults | 0/34 | Planned (34 plans, 13 waves; revised after plan-check pass 1) | - |
+| 3. Unified Ingestion & Embedding Profiles | 53/53 (55 summaries incl. gap plans) | Executed (verification pending) | - |
+| 3.1. Tiered Parsing, Incremental Queue & Bulk Backfill (INSERTED) | 54/55 | In Progress (live checks) | - |
+| 3.2. Language Support & Ingestion Hardening (INSERTED) | 0/TBD | Not planned | - |
+| 4. Hybrid Retrieval, Reranking & Calibrated Refusal | 46/47 | In Progress (04-43 live calibration) | - |
+| 4.2. Retrieval Tuning Additions (INSERTED) | 0/TBD | Not planned | - |
+| 5. Verified Citations & Groundedness | 18/26 | In Progress | - |
+| 5.1. Prompt Injection Defense (INSERTED) | 10/25 | In Progress | - |
+| 5.2. Grounded Answers & Output Safety (INSERTED) | 0/TBD | Not planned | - |
+| 6. Query Layer (LlamaIndex & LangChain) | 12/46 | In Progress | - |
+| 6.2. Query Layer Additions (INSERTED) | 0/TBD | Not planned | - |
+| 7. External Backends & Release Defaults | 2/34 | In Progress (needs plan revision for LANG-10, LANG-11, SEC-11) | - |
 
 ## Backlog
 
 ### Phase 999.1: WhatsApp server-side link preview as an exfiltration channel (security follow-up from Phase 5.1) (BACKLOG)
 
 **Goal:** The Baileys WhatsApp service fetches link previews server-side for any URL in a reply (`generateHighQualityLinkPreview: true` in `baileys-whatsapp/server.ts`), so an injected answer can trigger a zero-click fetch of an attacker URL that carries data in its query string. Fix: disable server-side link previews, or allowlist the hosts they may fetch.
-**Requirements:** TBD
+**Requirements:** folded into SEC-06 (Phase 5.2) on 2026-11-25
 **Plans:** 0 plans
 
 Plans:
