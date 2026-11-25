@@ -88,11 +88,11 @@ export function buildEvalSystemPrompt(input: {
   /** D-25: the query plan's language and the kept chunks' languages (the trace has a query plan). */
   answerLanguage?: AnswerLanguageOptions;
 }): string {
-  const { context, ragMode } = input;
+  const { context, ragMode, answerLanguage } = input;
   const ragSystemPrompt = resolveEvalPromptTemplate(input.promptEnv);
 
   if (context.length > 0) {
-    return createEnhancedRAGPrompt(ragSystemPrompt, context, ragMode, input.answerLanguage);
+    return createEnhancedRAGPrompt(ragSystemPrompt, context, ragMode, answerLanguage);
   }
   return SystemPromptManager.injectContext(ragSystemPrompt, context);
 }
