@@ -200,3 +200,120 @@ describe('chat trace linkage', () => {
     expect(review?.model).not.toBe('');
   });
 });
+
+const ANSWER_ID = '7d3f0a52-4c1e-4b7a-9d55-2f1c8e6b9a01';
+
+function citationRecord(n: number, overrides: Record<string, unknown> = {}) {
+  return {
+    alias: `S${n}`,
+    chunkIds: [`chunk-${n}`],
+    documentId: `doc-${n}`,
+    documentName: `handbook-${n}.md`,
+    documentVersion: 2,
+    n,
+    page: 3,
+    quote: `Refunds are accepted within ${n * 10} days.`,
+    quoteHash: 'a'.repeat(64),
+    sectionPath: ['Refunds'],
+    strategy: 'chunk-alias',
+    ...overrides,
+  };
+}
+
+const GROUNDEDNESS = {
+  checkedAt: '2026-11-25T10:00:05.000Z',
+  label: 'verified',
+  latencyMs: 820,
+  reason: null,
+  score: 0.91,
+  scorer: 'hhem_2_1_open',
+  status: 'scored',
+  threshold: 0.5,
+  thresholdSource: 'default',
+  truncated: false,
+};
+
+const FEEDBACK = { comment: null, reasons: [], updatedAt: '2026-11-25T10:01:00.000Z', vote: 'helpful' };
+
+function answerMetadata() {
+  return {
+    ragTraceId: 'f'.repeat(32),
+    answerId: ANSWER_ID,
+    citations: [citationRecord(1), citationRecord(2)],
+    citationStrategy: 'chunk-alias',
+    invalidCitations: 1,
+    groundedness: GROUNDEDNESS,
+    feedback: FEEDBACK,
+  };
+}
+
+function assistantWith(metadata: Record<string, unknown> | undefined): ExtendedMessage {
+  return {
+    id: 'assistant-9',
+    role: 'assistant',
+    content: 'Refunds are accepted within 30 days [S1].',
+    createdAt: new Date('2026-11-25T10:00:00.000Z'),
+    ...(metadata ? { metadata } : {}),
+  };
+}
+
+function saveAndReload(message: ExtendedMessage): ExtendedMessage {
+  const stored = JSON.parse(JSON.stringify(toDBMessages([message]))) as DBMessage[];
+  return fromDBMessages(stored)[0];
+}
+
+describe('answer metadata persistence (D-15)', () => {
+  it('keeps answerId, citations, strategy, invalid count, groundedness and feedback through save, reload and the UI shape', () => {
+    const metadata = answerMetadata();
+    const stored = JSON.parse(JSON.stringify(toDBMessages([assistantWith(metadata)]))) as DBMessage[];
+    expect(stored[0].metadata).toEqual(metadata);
+
+    const [restored] = fromDBMessages(stored);
+    expect(restored.metadata).toEqual(metadata);
+
+    const ui = toMessage(restored);
+    expect(ui.metadata).toMatchObject(metadata);
+    const back = fromUIMessage(ui);
+    expect(back.metadata).toEqual(metadata);
+    expect(saveAndReload(back).metadata).toEqual(metadata);
+  });
+
+  it('round-trips a message with only ragTraceId and one with no metadata exactly as before', () => {
+    const traced = assistantWith({ ragTraceId: 'f'.repeat(32) });
+    const [stored] = toDBMessages([traced]);
+    expect(stored.metadata).toEqual({ ragTraceId: 'f'.repeat(32) });
+    expect(Object.keys(stored)).toEqual(['id', 'role', 'content', 'createdAt', 'metadata']);
+    expect(saveAndReload(traced).metadata).toEqual({ ragTraceId: 'f'.repeat(32) });
+
+    const plain = assistantWith(undefined);
+    const [plainStored] = toDBMessages([plain]);
+    expect(plainStored).not.toHaveProperty('metadata');
+    expect(saveAndReload(plain)).not.toHaveProperty('metadata');
+  });
+
+  it('drops malformed values field by field and never persists unknown keys', () => {
+    const metadata = {
+      ...answerMetadata(),
+      citations: [citationRecord(1), { ...citationRecord(2), quoteHash: 'not-a-hash' }, citationRecord(3)],
+      groundedness: { ...GROUNDEDNESS, status: 'great' },
+      somethingElse: 'kept out',
+    };
+    const [stored] = toDBMessages([assistantWith(metadata)]);
+    expect(stored.metadata).toEqual({
+      ragTraceId: 'f'.repeat(32),
+      answerId: ANSWER_ID,
+      citations: [citationRecord(1), citationRecord(3)],
+      citationStrategy: 'chunk-alias',
+      invalidCitations: 1,
+      feedback: FEEDBACK,
+    });
+
+    const [badId] = toDBMessages([assistantWith({ ragTraceId: 'f'.repeat(32), answerId: 'answer-1', invalidCitations: -2 })]);
+    expect(badId.metadata).toEqual({ ragTraceId: 'f'.repeat(32) });
+
+    const loaded = fromDBMessages([
+      { id: 'a-1', role: 'assistant', content: 'x', metadata: { answerId: ANSWER_ID, feedback: { vote: 'meh' } } as unknown as DBMessage['metadata'] },
+    ]);
+    expect(loaded[0].metadata).toEqual({ answerId: ANSWER_ID });
+  });
+});

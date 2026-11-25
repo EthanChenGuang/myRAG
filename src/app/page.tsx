@@ -23,6 +23,8 @@ import { isMultiTenant } from '@/lib/deployment-mode';
 import type { Chat } from '@/lib/supabase';
 import type { ExtendedMessage, APIMessage, ContentPart, DocumentContent } from '@/types/chat';
 import { toAPIMessage, toDBMessages, updateMessages, appendMessage, toExtendedMessages, fromUIMessage } from '@/types/chat';
+import { extractStreamAnswerMetadata, type StreamAnswerMetadata } from '@/lib/chat/answer-metadata';
+import { useAnswerRecords } from '@/lib/chat/use-answer-records';
 import { motion, useScroll, useSpring, AnimatePresence } from 'framer-motion';
 import { createChat, updateChat } from '@/lib/chat-store';
 import { nanoid } from 'nanoid';
@@ -686,6 +688,13 @@ export default function Home() {
     }, 500); // 500ms debounce
   }, []);
 
+  const chatRequestChatId = (): string | null => {
+    const ghost = useGhostModeStore.getState();
+    const chatId = currentChatIdRef.current;
+    if (ghost.isGhostMode) return ghost.ghostChatId ?? (chatId?.startsWith('ghost-') ? chatId : 'ghost-incognito');
+    return chatId ?? null;
+  };
+
   const [input, setInput] = useState('');
 
   // Removed fetchedEmails state
@@ -817,7 +826,8 @@ export default function Home() {
     },
 
     transport: new DefaultChatTransport({
-      api: '/api/chat'
+      api: '/api/chat',
+      body: () => ({ data: { capabilities: { citations: true }, chatId: chatRequestChatId() } })
     })
   } as any) as any;
   const isChatLoadingRef = useLatestRef(isChatLoading);
@@ -884,6 +894,14 @@ export default function Home() {
   const [showBottomGradient, setShowBottomGradient] = useState(false);
   const [showScrollIndicator, setShowScrollIndicator] = useState(false); // Start hidden
   const [isSwitchingChat, setIsSwitchingChat] = useState(false); // Prevents welcome screen flash during chat switches
+
+  useAnswerRecords({
+    chatId: isGhostMode ? (ghostChatId ?? currentChatId) : currentChatId,
+    messages,
+    setMessages,
+    save: isGhostMode || isSwitchingChat ? undefined : debouncedSave,
+  });
+
   const [isChatTransitionAnimating, setIsChatTransitionAnimating] = useState(false);
   const [isVoiceModeActive, setIsVoiceModeActive] = useState(false); // Voice mode layout state
   const { toast } = useToast();
@@ -1671,7 +1689,9 @@ export default function Home() {
           messages: apiMessages,
           data: {
             settings,
-            organizationId // Pass organization context for workspace-scoped RAG
+            organizationId, // Pass organization context for workspace-scoped RAG
+            capabilities: { citations: true },
+            chatId: chatRequestChatId()
           }
         }),
         signal: abortControllerRef.current.signal
@@ -1889,6 +1909,13 @@ export default function Home() {
 
         let sseBuffer = '';
         let streamClosed = false;
+        let streamAnswerMetadata: StreamAnswerMetadata = {};
+        const captureAnswerMetadata = (messageMetadata: unknown) => {
+          streamAnswerMetadata = extractStreamAnswerMetadata(messageMetadata, streamAnswerMetadata);
+          if (Object.keys(streamAnswerMetadata).length > 0) {
+            streamingMessage.metadata = { ...streamingMessage.metadata, ...streamAnswerMetadata };
+          }
+        };
         const toolCallNameById = new Map<string, string>();
 
         const updateStreamingText = (text: string) => {
@@ -2246,7 +2273,13 @@ export default function Home() {
               updateStreamingText(display);
               break;
             }
+            case 'start':
+            case 'message-metadata': {
+              captureAnswerMetadata(event.messageMetadata);
+              break;
+            }
             case 'finish': {
+              captureAnswerMetadata(event.messageMetadata);
               const finishMetadata = event.messageMetadata;
               if (finishMetadata && typeof finishMetadata === 'object') {
                 handleMultiStepMetadata(finishMetadata.multiStep);
@@ -2445,7 +2478,8 @@ export default function Home() {
             id: generateMessageId(),
             role: 'assistant',
             content: messageContent,
-            createdAt: new Date()
+            createdAt: new Date(),
+            ...(Object.keys(streamAnswerMetadata).length > 0 ? { metadata: { ...streamAnswerMetadata } } : {})
           };
 
           console.log('[Manual onFinish] Creating final message with content:', messageContent);
