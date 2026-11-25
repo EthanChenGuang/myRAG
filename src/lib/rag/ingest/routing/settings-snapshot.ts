@@ -33,7 +33,8 @@ export function buildJobSettings(input: BuildJobSettingsInput): JobSettingsSnaps
     holdPublish = false,
   } = input;
 
-  const progressive = isBackfill ? false : queueConfig.parseProgressive;
+  // A held upload is never visible before approval, so a provisional version would only end the job before its routed run (D-30, D-36).
+  const progressive = isBackfill || approval?.required === true ? false : queueConfig.parseProgressive;
   // D-35: batch_api only when the switch asks for it, only for backfill jobs and only for OpenAI profiles; everything else embeds in sync.
   const embedMode = isBackfill && queueConfig.embedBatchMode === 'batch_api' && embedProfileProvider === 'openai' ? 'batch_api' : 'sync';
 
