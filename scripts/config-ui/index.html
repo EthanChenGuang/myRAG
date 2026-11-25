@@ -2315,13 +2315,15 @@
 
                                         // Truncate filename if too long
                                         const displayName = file.name.length > 12
-                                            ? file.name.substring(0, 10) + '...'
+                                            ? file.name.substring(0, 10) + '…'
                                             : file.name;
 
                                         const frame = document.createElement('div');
                                         frame.className = 'w-16 h-16 rounded-lg overflow-hidden border border-base-content/30 bg-base-300';
                                         const preview = document.createElement('img');
                                         preview.className = 'w-full h-full object-cover';
+                                        preview.width = 64;
+                                        preview.height = 64;
                                         preview.src = e.target.result;
                                         preview.alt = file.name;
                                         frame.appendChild(preview);
@@ -2392,6 +2394,8 @@
                                                 </div>
                                             `;
                                             const thumb = imgEl.querySelector('[data-kb-image]');
+                                            thumb.width = 112;
+                                            thumb.height = 112;
                                             thumb.src = String(img.url || '');
                                             thumb.alt = String(img.name || 'Uploaded image');
                                             imgEl.querySelector('[data-kb-image-delete]').addEventListener('click', (event) => window.deleteImage(img.id, event));
@@ -9741,6 +9745,8 @@
                 if (faviconPreview) {
                     const faviconImg = document.createElement('img');
                     faviconImg.className = 'w-6 h-6';
+                    faviconImg.width = 24;
+                    faviconImg.height = 24;
                     faviconImg.alt = 'Current favicon';
                     faviconImg.addEventListener('error', () => { faviconImg.src = '/favicon.svg'; }, { once: true });
                     faviconImg.src = String(faviconUrl);
@@ -11115,6 +11121,7 @@
                                         <div>
                                             <input type="text" class="font-semibold bg-transparent border-b border-transparent hover:border-base-300 focus:border-primary px-1" 
                                                    data-slot-value="label"
+                                                   aria-label="Group label"
                                                    onchange="suggestionsManager.updateGroupLabel(${index}, this.value)"
                                                    placeholder="Group Label">
                                             <div class="text-sm text-base-content/60 mt-1">
@@ -11157,6 +11164,7 @@
                                             <span class="text-base-content/50">•</span>
                                             <input type="text" class="input input-sm input-bordered flex-1" 
                                                    data-suggestion-item="${itemIndex}"
+                                                   aria-label="Suggestion ${itemIndex + 1}"
                                                    onchange="suggestionsManager.updateItem(${index}, ${itemIndex}, this.value)"
                                                    placeholder="Suggestion text">
                                             <button class="btn btn-ghost btn-xs text-error" onclick="suggestionsManager.removeItem(${index}, ${itemIndex})">
@@ -12357,6 +12365,8 @@
                                     if (preview) {
                                         const previewImg = document.createElement('img');
                                         previewImg.className = 'w-6 h-6';
+                                        previewImg.width = 24;
+                                        previewImg.height = 24;
                                         previewImg.alt = 'Favicon preview';
                                         previewImg.src = `${faviconUrl.value}?t=${Date.now()}`;
                                         preview.replaceChildren(previewImg);
@@ -15056,7 +15066,7 @@ When messaging:
                         </div>
                     `;
                     const sharedPre = String(shareData.preContext ?? '');
-                    cuiFillSlots(modal, { preview: sharedPre.substring(0, 200) + (sharedPre.length > 200 ? '...' : '') });
+                    cuiFillSlots(modal, { preview: sharedPre.substring(0, 200) + (sharedPre.length > 200 ? '…' : '') });
                     document.body.appendChild(modal);
 
                     // Handle acceptance
@@ -17007,10 +17017,11 @@ When messaging:
                 handle.className = 'drag-handle mr-2';
                 handle.setAttribute('style', 'font-size: 1.2rem; line-height: 1;');
                 handle.title = 'Drag to reorder';
+                handle.setAttribute('aria-hidden', 'true');
                 handle.textContent = '☰';
 
                 const info = document.createElement('div');
-                info.className = 'flex-1 min-w-0';
+                info.className = 'flex-1 min-w-0 break-words';
                 const name = document.createElement('span');
                 name.className = 'font-medium';
                 name.textContent = String(model.displayName ?? '');
@@ -17547,7 +17558,7 @@ When messaging:
             dialog.className = 'modal';
             dialog.setAttribute('aria-labelledby', 'remove-model-dialog-title');
             const box = document.createElement('div');
-            box.className = 'modal-box';
+            box.className = 'modal-box overscroll-contain';
             const title = document.createElement('h3');
             title.id = 'remove-model-dialog-title';
             title.className = 'text-base font-semibold';

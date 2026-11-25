@@ -515,13 +515,13 @@ class DocumentManager {
         modal.setAttribute('role', 'dialog');
         modal.setAttribute('aria-modal', 'true');
         const box = document.createElement('div');
-        box.className = 'modal-box';
+        box.className = 'modal-box overscroll-contain';
         const title = document.createElement('h3');
         title.className = 'font-bold text-lg';
         title.textContent = 'Delete Document';
         const body = document.createElement('p');
         body.className = 'py-4';
-        body.textContent = `Are you sure you want to delete "${docName}"? This action cannot be undone and will remove all associated chunks from the vector database.`;
+        body.textContent = `Are you sure you want to delete “${docName}”? This action cannot be undone and will remove all associated chunks from the vector database.`;
         const actions = document.createElement('div');
         actions.className = 'modal-action';
         const cancel = document.createElement('button');
