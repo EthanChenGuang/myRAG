@@ -39,6 +39,24 @@ export interface EffectiveIngestSettings {
 const DEFAULT_SWITCHES: EffectiveIngestSettingsInput['ingestConfig'] = { languageAwareIngest: 'off', tableHeaderRepeat: 'profile', tableRowSerialization: false };
 const UNSET: EffectiveLanguageInput = { configured: false, languages: [], primary: null };
 
+/** The table-header part of the effective settings: the only input the chunkers need of RAG_TABLE_HEADER_REPEAT. */
+export interface EffectiveTableHeader {
+  /** True with `always`, the profile's repeat_table_header otherwise. */
+  repeatTableHeader: boolean;
+  repeatTableHeaderForced: boolean;
+  /** D-20: a header-less continuation table takes the previous table's header; only with `always`. */
+  carryTableHeader: boolean;
+}
+
+/** D-19: the effective header flag; `profile` (or absent) is the processing profile's own value, so chunking stays as today. */
+export function effectiveTableHeader(
+  mode: IngestConfig['tableHeaderRepeat'] | undefined,
+  chunker: Pick<ProcessingProfile['chunker'], 'repeat_table_header'>,
+): EffectiveTableHeader {
+  const forced = mode === 'always';
+  return { repeatTableHeader: forced ? true : chunker.repeat_table_header, repeatTableHeaderForced: forced, carryTableHeader: forced };
+}
+
 /** The language settings for an ingestion run: read only on the unified pipeline, so the legacy path never reads them (D-02). */
 export function ingestLanguageSettings(config: Pick<IngestConfig, 'pipeline' | 'pipelineBlocked'>): EffectiveLanguageInput {
   if (config.pipeline !== 'unified' || config.pipelineBlocked !== null) return UNSET;
@@ -69,7 +87,7 @@ export function effectiveIngestSettings(input: EffectiveIngestSettingsInput): Ef
     : [];
   const languageAware = ingestConfig.languageAwareIngest === 'on';
   const aware = languageAware && languageSettings.configured ? registryOrder(languageSettings.languages) : [];
-  const forced = ingestConfig.tableHeaderRepeat === 'always';
+  const header = effectiveTableHeader(ingestConfig.tableHeaderRepeat, profile.chunker);
   return {
     ocrLanguages: fromSettings ? codes : [...profile.parser.ocr_languages],
     ocrPrimaryLanguage: fromSettings ? primary : null,
@@ -77,9 +95,7 @@ export function effectiveIngestSettings(input: EffectiveIngestSettingsInput): Ef
     languageAware,
     languages: aware,
     primaryLanguage: languageSettings.primary !== null && aware.includes(languageSettings.primary) ? languageSettings.primary : null,
-    repeatTableHeader: forced ? true : profile.chunker.repeat_table_header,
-    repeatTableHeaderForced: forced,
-    carryTableHeader: forced,
+    ...header,
     rowSerialization: ingestConfig.tableRowSerialization,
   };
 }

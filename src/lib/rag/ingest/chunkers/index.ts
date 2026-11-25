@@ -1,6 +1,7 @@
 import type { ParseResult } from '@/lib/rag-eval/contracts.generated';
 import { blockSplitterForIngest, legacyBlockSplitter, type BlockSplitter } from '@/lib/rag/lang/sentences';
 import type { ProcessingProfile } from '../profiles/load';
+import { effectiveTableHeader } from '../routing/effective-settings';
 import type { ChunkDraft, ChunkResult } from '../types';
 import { chunkImageCaption } from './image-caption';
 import { chunkInvoice } from './invoice';
@@ -80,6 +81,12 @@ export interface ChunkDocumentOptions {
   tableHeaderRepeat?: 'profile' | 'always';
 }
 
+/** The chunker config with the effective header flag (D-19); the profile's own object when nothing changes, so profile mode is today's call. */
+export function withEffectiveHeader(chunker: ChunkerConfig, mode: ChunkDocumentOptions['tableHeaderRepeat']): ChunkerConfig {
+  const { repeatTableHeader } = effectiveTableHeader(mode, chunker);
+  return repeatTableHeader === chunker.repeat_table_header ? chunker : { ...chunker, repeat_table_header: repeatTableHeader };
+}
+
 /**
  * Chunks a parsed document by the profile's chunker kind. Docling's chunks are used as they are (headings as
  * section_path, pages, is_table, plain text) for markdown_sections and table_aware; legal_clauses always chunks
@@ -92,5 +99,5 @@ export function chunkDocument(chunker: ChunkerConfig, parse: ChunkSource, option
   if (DOCLING_KINDS.has(chunker.kind) && parse.chunks && parse.chunks.length > 0) {
     return { chunks: fromDocling(parse.chunks), warnings: [] };
   }
-  return chunk(parse.markdown, chunker, blockSplitterForIngest(options.languageAwareIngest));
+  return chunk(parse.markdown, withEffectiveHeader(chunker, options.tableHeaderRepeat), blockSplitterForIngest(options.languageAwareIngest));
 }

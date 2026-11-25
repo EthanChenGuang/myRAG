@@ -171,7 +171,7 @@ async function dualWriteProfiles(ctx: StageContext, documentId: string, targets:
   for (const profile of profiles) {
     ctx.signal.throwIfAborted();
     const built = buildProfileChunks(
-      { filename: identity.filename, chunker: identity.profile.chunker, templateHeader, languageAwareIngest: ctx.config?.languageAwareIngest },
+      { filename: identity.filename, chunker: identity.profile.chunker, templateHeader, languageAwareIngest: ctx.config?.languageAwareIngest, tableHeaderRepeat: ctx.config?.tableHeaderRepeat },
       ctx.work.parseText ?? '',
       profile,
     );

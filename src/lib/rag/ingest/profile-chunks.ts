@@ -1,7 +1,7 @@
 import { blockSplitterForIngest } from '@/lib/rag/lang/sentences';
 import { enrichChunkWithURLs } from '@/lib/url-extractor';
 import { LEXICAL_VERSION, chunkLexicalText } from '../lexical/chunk-text';
-import type { ChunkerConfig } from './chunkers';
+import { withEffectiveHeader, type ChunkerConfig } from './chunkers';
 import { chunkParentChild } from './chunkers/parent-child';
 import { contentHash } from './hash';
 import { buildEmbeddingText, EMBEDDING_TEXT_VERSION } from './text/embedding-text';
@@ -58,7 +58,7 @@ export function buildProfileChunks(document: ProfileDocument, parseMarkdown: str
   const cut = chunkParentChild(
     parseMarkdown,
     { childTokens: profile.childTokens, parentMode: profile.parentMode, parentTokens: profile.parentTokens },
-    document.chunker,
+    withEffectiveHeader(document.chunker, document.tableHeaderRepeat),
     blockSplitterForIngest(document.languageAwareIngest),
   );
   const parents: ProfileParentWrite[] = cut.parents.map((parent) => ({

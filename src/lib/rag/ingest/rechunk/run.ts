@@ -365,7 +365,7 @@ async function prepare(doc: RechunkDocument, profile: ChunkingProfileRow, signal
   try {
     const templateHeader = templateHeaderFor(processing.embedding_text_template, doc.templateRow);
     built = buildProfileChunks(
-      { filename: doc.filename, chunker: processing.chunker, templateHeader, languageAwareIngest: currentIngestConfig().languageAwareIngest },
+      { filename: doc.filename, chunker: processing.chunker, templateHeader, languageAwareIngest: currentIngestConfig().languageAwareIngest, tableHeaderRepeat: currentIngestConfig().tableHeaderRepeat },
       markdown,
       profile,
     );

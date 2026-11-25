@@ -110,7 +110,7 @@ function assertRowsInOrder(perChunk: string[][], rows: string[]): void {
   expect(firstSeen).toEqual(rows);
 }
 
-const tableChunks = (chunks: readonly ChunkDraft[]): ChunkDraft[] => chunks.filter((chunk) => chunk.content.split('\n').some(isPipe));
+const tableChunks = <T extends Pick<ChunkDraft, 'content'>>(chunks: readonly T[]): T[] => chunks.filter((chunk) => chunk.content.split('\n').some(isPipe));
 
 const targetLine = (fixture: LongTableFixture, rows: string[]): string => {
   const line = rows.find((row) => JSON.stringify(cells(row)) === JSON.stringify(fixture.spec.target_values));
@@ -166,7 +166,7 @@ describe('RAG_TABLE_HEADER_REPEAT=always on the long-table fixtures (D-19)', () 
             fixture.markdown,
             PROFILE_ROW(parentMode),
           );
-          const children = tableChunks(built.children.map((child) => ({ ...child, page_start: null, page_end: null })));
+          const children = tableChunks(built.children);
           expect(children.length).toBeGreaterThan(1);
           assertRowsInOrder(children.map((child) => assertHeadedGroups(child.content, header, separator)), rows);
         }
