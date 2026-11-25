@@ -157,7 +157,12 @@ describe.each<Path>(['no_context', 'kb_unavailable'])('chat %s stream and RAG_RE
     const body = await ask(path);
 
     const [first, ...rest] = parts(body);
-    expect(first).toEqual({ type: 'start', messageMetadata: { ragTraceId: expect.stringMatching(/^[0-9a-f]{32}$/), refusal: true } });
+    // the SDK adds a generated messageId to a start part that has none
+    expect(first).toEqual({
+      type: 'start',
+      messageId: expect.any(String),
+      messageMetadata: { ragTraceId: expect.stringMatching(/^[0-9a-f]{32}$/), refusal: true },
+    });
     expect(rest).toEqual(parts(off));
     expect(withoutStart(body)).toBe(off);
     expect(h.writes).toHaveLength(1);

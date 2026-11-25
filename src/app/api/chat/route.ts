@@ -1235,6 +1235,12 @@ export async function POST(req: Request) {
     if (value !== null) logOutcome.value = value;
     if (answerLanguage !== undefined) logOutcome.answerLanguage = answerLanguage;
   };
+  // D-08: only when a log row will exist to vote on; read before finishRagTrace clears ragTrace
+  const refusalStartMetadata = (): { ragTraceId: string; refusal: true } | null => {
+    if (!ragTrace || !ragLogContext || ragLogContext.skip) return null;
+    if (!readFeedbackLoopConfig().refusalFeedback) return null;
+    return { ragTraceId: ragTrace.collector.traceId, refusal: true };
+  };
 
   try {
     const requestBody = await req.json();
@@ -2307,10 +2313,12 @@ IMPORTANT:
 
       if (strictWithoutWebSearch) {
         setRagLogOutcome('kb_unavailable', knowledgeBaseUnavailableLanguage(fallbackLanguage));
+        const refusalMetadata = refusalStartMetadata();
         finishRagTrace();
         const errorText = knowledgeBaseUnavailableMessage(fallbackLanguage);
         const stream = createUIMessageStream({
           execute: async ({ writer }) => {
+            if (refusalMetadata) writer.write({ type: 'start', messageMetadata: refusalMetadata });
             writer.write({ type: 'error', errorText });
           }
         });
@@ -2340,9 +2348,11 @@ IMPORTANT:
       const responseText = noKnowledgeBaseResponse(fallbackLanguage);
       ragTrace?.collector.setReviewContent({ answer: responseText, context });
       setRagLogOutcome('refused_no_context', noKnowledgeBaseResponseLanguage(fallbackLanguage));
+      const refusalMetadata = refusalStartMetadata();
       finishRagTrace();
       const stream = createUIMessageStream({
         execute: async ({ writer }) => {
+          if (refusalMetadata) writer.write({ type: 'start', messageMetadata: refusalMetadata });
           const textId = `text-${Date.now()}`;
           writer.write({ type: 'text-start', id: textId });
           writer.write({ type: 'text-delta', id: textId, delta: responseText });
