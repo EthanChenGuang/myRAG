@@ -19,7 +19,7 @@ affects: [05-25, 05-26]
 actuals:
   tokens: 14000
   tasks: 2
-  commits: 6
+  commits: 8
 
 tech-stack:
   added: []
@@ -89,6 +89,7 @@ status: complete
 | 1. Citation metrics and groundedness counts (D-24) | `5952295`: 8 of 9 cases failed against stub functions | `a9c8f97` |
 | 2. Strategy slices, report-only budgets, Faithfulness entry (D-23, D-24) | `2f4cc2f`: 8 of 10 cases failed (no slices, no sections, no budget section) | `bfc463b` |
 | Contract test fix (deviation 1) | — | `ed077eb` |
+| Domain-neutral test sentences (orchestrator rule) | — | `3f85cc3` |
 
 ## Behaviour
 
@@ -114,7 +115,7 @@ status: complete
 | `npx next typegen && npx tsc --noEmit -p tsconfig.json` | 0 errors |
 | `npx vitest run` | 296 files, 4703 passed, 1 skipped |
 | `node --import tsx --test tests/*.test.mts` | 172 passed |
-| `node --import tsx --test tests/rag-db/*.test.mts` | see final report |
+| `node --import tsx --test tests/rag-db/*.test.mts` | 1457 passed |
 | `check-rag-boundary` + node test | ok, 38 passed |
 | `node scripts/check-config.mjs` | ok (144 variables) |
 | `check-workflows.py` | OK |
