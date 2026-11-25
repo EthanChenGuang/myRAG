@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { InjectionDetectorConfig } from '@/lib/rag-eval/contracts.generated';
 import { mintScope } from '@/lib/rag/tenant/scope';
 import type { InjectionCheckMode } from '@/lib/rag/security/config';
 import type { DetectorClassifyOptions } from '@/lib/rag/security/detectors';
@@ -18,13 +19,13 @@ const TRACE = 'trace-placeholder-0001';
 
 type RecordedName = Exclude<keyof typeof recorded, '_source'>;
 
-const LAKERA_CONFIG = {
+const LAKERA_CONFIG: InjectionDetectorConfig['lakera'] = {
   detector_types: ['prompt_attack'],
   min_level: null,
   concurrency: 4,
   max_chars: 20000,
   profiles: ['chat', 'embed', 'eval'],
-} as const;
+};
 
 function settings(overrides: Partial<LakeraSettings> = {}): LakeraSettings {
   return {
@@ -350,8 +351,8 @@ describe('lakeraAllowed truth table', () => {
     else expect(result).toEqual({ allowed: false, reason: expected });
   });
 
-  it('allows exactly 12 combinations', () => {
-    expect(TABLE.filter((c) => lakeraAllowed(c).allowed)).toHaveLength(12);
+  it('allows exactly 9 combinations', () => {
+    expect(TABLE.filter((c) => lakeraAllowed(c).allowed)).toHaveLength(9);
   });
 });
 
