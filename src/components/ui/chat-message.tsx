@@ -74,6 +74,79 @@ import { pickAnswerMetadata } from '@/lib/chat/answer-metadata'
 import { useAnswerRecordsStore } from '@/lib/stores/answer-records-store'
 import { GroundednessBadge } from './groundedness-badge'
 import { AnswerFeedback } from './answer-feedback'
+import { imageLinkHref, isAllowedImageUrl } from '@/lib/safe-image-hosts'
+
+const IMAGE_ALLOWLIST = process.env.NEXT_PUBLIC_RAG_IMAGE_ALLOWLIST === 'true';
+
+function allowlistedImage(linkClassName: string): NonNullable<Components['img']> {
+  return function AllowlistedImage({ src, alt, title }) {
+    if (typeof src === 'string' && isAllowedImageUrl(src)) {
+      return <img src={src} alt={alt ?? ''} title={title} referrerPolicy="no-referrer" loading="lazy" />;
+    }
+    const href = imageLinkHref(src);
+    const label = alt || href || '';
+    if (!href) return <span>{label}</span>;
+    return (
+      <a href={href} title={title} target="_blank" rel="noopener noreferrer nofollow" className={cn(linkClassName, 'break-all')}>
+        {label}
+      </a>
+    );
+  };
+}
+
+const answerImage = allowlistedImage('text-[#FF6417] dark:text-[#FF8A4D] hover:underline font-medium');
+const toolResultImage = allowlistedImage('text-blue-600 dark:text-blue-400 hover:underline');
+
+export const TOOL_RESULT_MARKDOWN_COMPONENTS: Partial<Components> = {
+  ...(IMAGE_ALLOWLIST ? { img: toolResultImage } : {}),
+  // Ensure links open in new tab
+  a: ({ href, children, ...props }) => (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-blue-600 dark:text-blue-400 hover:underline"
+      {...props}
+    >
+      {children}
+    </a>
+  ),
+  // Style code blocks
+  code: ({ className, children, ...props }) => (
+    <code
+      className={cn(
+        "bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded text-sm",
+        className
+      )}
+      {...props}
+    >
+      {children}
+    </code>
+  ),
+  // Style lists
+  ul: ({ children, ...props }) => (
+    <ul className="list-disc list-inside space-y-1" {...props}>
+      {children}
+    </ul>
+  ),
+  ol: ({ children, ...props }) => (
+    <ol className="list-decimal list-inside space-y-1" {...props}>
+      {children}
+    </ol>
+  ),
+  // Style headings
+  h3: ({ children, ...props }) => (
+    <h3 className="text-lg font-semibold mt-4 mb-2" {...props}>
+      {children}
+    </h3>
+  ),
+  // Style paragraphs
+  p: ({ children, ...props }) => (
+    <p className="mb-2 last:mb-0" {...props}>
+      {children}
+    </p>
+  )
+};
 
 // Define DocumentContent type that was missing
 type DocumentContent = {
@@ -2483,55 +2556,7 @@ const ToolInvocation: React.FC<ToolInvocationProps> = React.memo(function ToolIn
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm, remarkMath, remarkBreaks]}
                         rehypePlugins={[rehypeKatex]}
-                        components={{
-                          // Ensure links open in new tab
-                          a: ({ href, children, ...props }) => (
-                            <a
-                              href={href}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-blue-600 dark:text-blue-400 hover:underline"
-                              {...props}
-                            >
-                              {children}
-                            </a>
-                          ),
-                          // Style code blocks
-                          code: ({ className, children, ...props }) => (
-                            <code
-                              className={cn(
-                                "bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded text-sm",
-                                className
-                              )}
-                              {...props}
-                            >
-                              {children}
-                            </code>
-                          ),
-                          // Style lists
-                          ul: ({ children, ...props }) => (
-                            <ul className="list-disc list-inside space-y-1" {...props}>
-                              {children}
-                            </ul>
-                          ),
-                          ol: ({ children, ...props }) => (
-                            <ol className="list-decimal list-inside space-y-1" {...props}>
-                              {children}
-                            </ol>
-                          ),
-                          // Style headings
-                          h3: ({ children, ...props }) => (
-                            <h3 className="text-lg font-semibold mt-4 mb-2" {...props}>
-                              {children}
-                            </h3>
-                          ),
-                          // Style paragraphs
-                          p: ({ children, ...props }) => (
-                            <p className="mb-2 last:mb-0" {...props}>
-                              {children}
-                            </p>
-                          )
-                        }}
+                        components={TOOL_RESULT_MARKDOWN_COMPONENTS}
                       >
                         {finalMarkdown}
                       </ReactMarkdown>
@@ -3958,6 +3983,7 @@ ChatMessage = function ({
 
   // Define markdown components with access to component state
   const markdownComponents: Partial<Components> = useMemo(() => ({
+    ...(IMAGE_ALLOWLIST ? { img: answerImage } : {}),
     h1: ({ children }) => (
       <h1 className="font-semibold mb-4 mt-8 first:mt-0 text-gray-900 dark:text-gray-100">{children}</h1>
     ),
