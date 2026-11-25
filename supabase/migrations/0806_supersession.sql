@@ -111,6 +111,20 @@ ALTER TABLE public.rag_supersession_links ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.rag_supersession_links FROM PUBLIC, anon, authenticated, service_role;
 GRANT SELECT ON TABLE public.rag_supersession_links TO service_role;
 
+-- Whether a candidate can no longer be decided as raised: one of its documents is gone from the tenant, not ready, or no longer current.
+CREATE OR REPLACE FUNCTION public.rag_supersession_stale(p_candidate_id uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY INVOKER
+ SET search_path TO ''
+AS $function$
+  SELECT (
+    SELECT count(*) FROM public.rag_supersession_candidates c
+    JOIN public.documents d ON d.id IN (c.document_id, c.candidate_document_id) AND d.tenant_key = c.tenant_key
+    WHERE c.id = p_candidate_id AND d.status = 'ready' AND d.is_current
+  ) <> 2
+$function$;
+
 -- Raise a candidate (service path: the detector, the upload route, the answer-conflict writer). Both documents must be current and ready in
 -- the tenant. Returns raised, or exists with the pending candidate of the same unordered pair.
 CREATE OR REPLACE FUNCTION public.rag_supersession_raise(
@@ -129,6 +143,8 @@ AS $function$
 #variable_conflict use_column
 DECLARE
   found_count integer;
+  distinct_hashes integer;
+  hashed_count integer;
   created uuid;
 BEGIN
   PERFORM public.rag_assert_tenant_key(p_tenant_key);
@@ -148,10 +164,16 @@ BEGIN
     RAISE EXCEPTION 'invalid_signals' USING ERRCODE = '22023';
   END IF;
 
-  SELECT count(*) INTO found_count FROM public.documents d
+  SELECT count(*), count(DISTINCT d.content_hash) FILTER (WHERE d.content_hash IS NOT NULL), count(d.content_hash)
+  INTO found_count, distinct_hashes, hashed_count
+  FROM public.documents d
   WHERE d.id IN (p_document_id, p_candidate_document_id) AND d.tenant_key = p_tenant_key AND d.is_current AND d.status = 'ready';
   IF found_count <> 2 THEN
     RAISE EXCEPTION 'not_found';
+  END IF;
+  -- Equal content is a duplicate (content_hash_dedup), never a version of another document.
+  IF hashed_count = 2 AND distinct_hashes = 1 THEN
+    RAISE EXCEPTION 'duplicate_not_candidate' USING ERRCODE = '22023';
   END IF;
 
   INSERT INTO public.rag_supersession_candidates AS c (tenant_key, document_id, candidate_document_id, signals, direction, origin)
@@ -186,7 +208,6 @@ DECLARE
   newer_id uuid;
   older public.documents%ROWTYPE;
   newer public.documents%ROWTYPE;
-  lock_key bigint;
   created uuid;
 BEGIN
   keys := public.rag_upload_approval_keys(p_actor);
@@ -202,25 +223,22 @@ BEGIN
     older_id := cand.candidate_document_id;
   ELSIF cand.direction = 'candidate_newer' THEN
     older_id := cand.document_id;
+  ELSIF p_older_document_id IN (cand.document_id, cand.candidate_document_id) THEN
+    older_id := p_older_document_id;
+  ELSE
+    RAISE EXCEPTION 'direction_required' USING ERRCODE = '22023';
   END IF;
-  older_id := COALESCE(older_id, p_older_document_id);
+  IF p_older_document_id IS NOT NULL AND p_older_document_id <> older_id THEN
+    RAISE EXCEPTION 'direction_conflict' USING ERRCODE = '22023';
+  END IF;
   newer_id := CASE WHEN older_id = cand.document_id THEN cand.candidate_document_id ELSE cand.document_id END;
 
   -- The lineage locks the publish function takes, in key order, then both document rows in id order.
-  FOR lock_key IN
-    SELECT DISTINCT pg_catalog.hashtextextended(d.tenant_key || '|' || d.source || '|' || d.source_key, 0) AS k
-    FROM public.documents d WHERE d.id IN (cand.document_id, cand.candidate_document_id) AND d.tenant_key = cand.tenant_key
-    ORDER BY 1
-  LOOP
-    PERFORM pg_catalog.pg_advisory_xact_lock(lock_key);
-  END LOOP;
-  PERFORM 1 FROM public.documents d
-  WHERE d.id IN (cand.document_id, cand.candidate_document_id) AND d.tenant_key = cand.tenant_key
-  ORDER BY d.id FOR UPDATE;
+  PERFORM public.rag_supersession_lock_pair(cand.tenant_key, cand.document_id, cand.candidate_document_id);
 
   SELECT * INTO older FROM public.documents d WHERE d.id = older_id AND d.tenant_key = cand.tenant_key;
   SELECT * INTO newer FROM public.documents d WHERE d.id = newer_id AND d.tenant_key = cand.tenant_key;
-  IF older.id IS NULL OR newer.id IS NULL OR NOT (older.is_current AND older.status = 'ready' AND newer.is_current AND newer.status = 'ready') THEN
+  IF public.rag_supersession_stale(cand.id) OR NOT (older.is_current AND newer.is_current) THEN
     RAISE EXCEPTION 'stale_candidate';
   END IF;
 
@@ -242,10 +260,197 @@ BEGIN
 END
 $function$;
 
+-- Takes the lineage advisory locks of both documents of a candidate in key order, then both document rows in id order.
+CREATE OR REPLACE FUNCTION public.rag_supersession_lock_pair(p_tenant_key text, p_document_id uuid, p_candidate_document_id uuid)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY INVOKER
+ SET search_path TO ''
+AS $function$
+DECLARE
+  lock_key bigint;
+BEGIN
+  FOR lock_key IN
+    SELECT DISTINCT pg_catalog.hashtextextended(d.tenant_key || '|' || d.source || '|' || d.source_key, 0) AS k
+    FROM public.documents d WHERE d.id IN (p_document_id, p_candidate_document_id) AND d.tenant_key = p_tenant_key
+    ORDER BY 1
+  LOOP
+    PERFORM pg_catalog.pg_advisory_xact_lock(lock_key);
+  END LOOP;
+  PERFORM 1 FROM public.documents d
+  WHERE d.id IN (p_document_id, p_candidate_document_id) AND d.tenant_key = p_tenant_key
+  ORDER BY d.id FOR UPDATE;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION public.rag_dismiss_supersession(p_candidate_id uuid, p_actor uuid)
+ RETURNS TABLE(outcome text, candidate_id uuid)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+#variable_conflict use_column
+DECLARE
+  keys text[];
+  cand public.rag_supersession_candidates%ROWTYPE;
+  doc public.documents%ROWTYPE;
+BEGIN
+  keys := public.rag_upload_approval_keys(p_actor);
+  SELECT * INTO cand FROM public.rag_supersession_candidates c WHERE c.id = p_candidate_id AND c.tenant_key = ANY (keys) FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'not_found';
+  END IF;
+  IF cand.status <> 'pending' THEN
+    RAISE EXCEPTION 'already_decided';
+  END IF;
+
+  UPDATE public.rag_supersession_candidates c SET status = 'dismissed', decided_by = p_actor, decided_at = pg_catalog.now() WHERE c.id = cand.id;
+
+  SELECT * INTO doc FROM public.documents d WHERE d.id = cand.document_id;
+  INSERT INTO public.rag_admin_audit (action, document_id, lineage_id, tenant_key, version, actor, rule_ids)
+  VALUES ('dismiss_supersession', cand.document_id, doc.lineage_id, cand.tenant_key, doc.version, p_actor, '{}'::text[]);
+
+  RETURN QUERY SELECT 'dismissed'::text, cand.id;
+END
+$function$;
+
+-- Undo a confirmation: the older document and its chunks are current again, superseded_by is cleared, the link is deleted and the candidate
+-- is pending again (dismissed instead when the same pair has another pending candidate by then). Refused with stale_candidate when the link
+-- is gone, the older document is no longer ready, its lineage has a current document or a later ready version.
+CREATE OR REPLACE FUNCTION public.rag_undo_supersession(p_candidate_id uuid, p_actor uuid)
+ RETURNS TABLE(outcome text, candidate_id uuid, older_document_id uuid, newer_document_id uuid)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+#variable_conflict use_column
+DECLARE
+  keys text[];
+  cand public.rag_supersession_candidates%ROWTYPE;
+  link public.rag_supersession_links%ROWTYPE;
+  older public.documents%ROWTYPE;
+  other_pending boolean;
+BEGIN
+  keys := public.rag_upload_approval_keys(p_actor);
+  SELECT * INTO cand FROM public.rag_supersession_candidates c WHERE c.id = p_candidate_id AND c.tenant_key = ANY (keys) FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'not_found';
+  END IF;
+  IF cand.status <> 'confirmed' THEN
+    RAISE EXCEPTION 'not_confirmed';
+  END IF;
+
+  PERFORM public.rag_supersession_lock_pair(cand.tenant_key, cand.document_id, cand.candidate_document_id);
+
+  SELECT * INTO link FROM public.rag_supersession_links l WHERE l.candidate_id = cand.id FOR UPDATE;
+  SELECT * INTO older FROM public.documents d WHERE d.id = cand.older_document_id AND d.tenant_key = cand.tenant_key;
+  IF link.id IS NULL OR older.id IS NULL OR older.status <> 'ready' OR older.is_current
+     OR EXISTS (
+       SELECT 1 FROM public.documents d
+       WHERE d.tenant_key = older.tenant_key AND d.lineage_id = older.lineage_id AND d.id <> older.id
+         AND (d.is_current OR (d.status = 'ready' AND d.version > older.version))
+     ) THEN
+    RAISE EXCEPTION 'stale_candidate';
+  END IF;
+
+  UPDATE public.documents d SET is_current = true, superseded_by = NULL WHERE d.id = older.id;
+  UPDATE public.document_chunks c SET is_current = true WHERE c.document_id = older.id;
+  DELETE FROM public.rag_supersession_links l WHERE l.id = link.id;
+
+  other_pending := EXISTS (
+    SELECT 1 FROM public.rag_supersession_candidates c
+    WHERE c.tenant_key = cand.tenant_key AND c.status = 'pending' AND c.id <> cand.id
+      AND LEAST(c.document_id, c.candidate_document_id) = LEAST(cand.document_id, cand.candidate_document_id)
+      AND GREATEST(c.document_id, c.candidate_document_id) = GREATEST(cand.document_id, cand.candidate_document_id)
+  );
+  IF other_pending THEN
+    UPDATE public.rag_supersession_candidates c
+    SET status = 'dismissed', older_document_id = NULL, decided_by = p_actor, decided_at = pg_catalog.now() WHERE c.id = cand.id;
+  ELSE
+    UPDATE public.rag_supersession_candidates c
+    SET status = 'pending', older_document_id = NULL, decided_by = NULL, decided_at = NULL WHERE c.id = cand.id;
+  END IF;
+
+  INSERT INTO public.rag_admin_audit (action, document_id, lineage_id, tenant_key, version, actor, rule_ids)
+  VALUES ('undo_supersession', older.id, older.lineage_id, older.tenant_key, older.version, p_actor, '{}'::text[]);
+
+  RETURN QUERY SELECT 'undone'::text, cand.id, older.id, link.newer_document_id;
+END
+$function$;
+
+-- The Versions view (UI-SPEC 6.8): the actor's pending candidates, oldest first with the id as tie-break, then the confirmed links by
+-- decision time. Each row carries both documents (id, file name, type, dates, upload time, uploader). A p_tenant_key outside the actor's
+-- keys returns nothing.
+CREATE OR REPLACE FUNCTION public.rag_list_supersession(p_actor uuid, p_tenant_key text DEFAULT NULL, p_limit integer DEFAULT 50, p_offset integer DEFAULT 0)
+ RETURNS TABLE(
+   kind text, candidate_id uuid, link_id uuid, tenant_key text, status text, stale boolean, origin text, direction text, signals jsonb,
+   older_document_id uuid, document jsonb, candidate_document jsonb, created_at timestamp with time zone, decided_by uuid,
+   decided_at timestamp with time zone, total_count bigint
+ )
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+#variable_conflict use_column
+DECLARE
+  keys text[];
+  page_size integer := LEAST(GREATEST(COALESCE(p_limit, 50), 1), 100);
+  skip integer := GREATEST(COALESCE(p_offset, 0), 0);
+BEGIN
+  keys := public.rag_upload_approval_keys(p_actor);
+  IF p_tenant_key IS NOT NULL THEN
+    keys := CASE WHEN p_tenant_key = ANY (keys) THEN ARRAY[p_tenant_key] ELSE '{}'::text[] END;
+  END IF;
+  RETURN QUERY
+  WITH entries AS (
+    SELECT 0 AS rank, 'candidate'::text AS kind, c.id AS candidate_id, NULL::uuid AS link_id, c.tenant_key, c.status,
+           public.rag_supersession_stale(c.id) AS stale, c.origin, c.direction, c.signals,
+           CASE c.direction WHEN 'document_newer' THEN c.candidate_document_id WHEN 'candidate_newer' THEN c.document_id END AS older_document_id,
+           c.document_id AS first_id, c.candidate_document_id AS second_id, c.created_at, c.decided_by, c.decided_at,
+           c.created_at AS sort_at
+    FROM public.rag_supersession_candidates c
+    WHERE c.status = 'pending' AND c.tenant_key = ANY (keys)
+    UNION ALL
+    SELECT 1, 'link'::text, c.id, l.id, l.tenant_key, c.status, false, c.origin, c.direction, c.signals,
+           l.older_document_id, l.older_document_id, l.newer_document_id, c.created_at, l.created_by, l.created_at,
+           l.created_at
+    FROM public.rag_supersession_links l
+    JOIN public.rag_supersession_candidates c ON c.id = l.candidate_id
+    WHERE l.tenant_key = ANY (keys)
+  )
+  SELECT e.kind, e.candidate_id, e.link_id, e.tenant_key, e.status, e.stale, e.origin, e.direction, e.signals, e.older_document_id,
+         (SELECT pg_catalog.jsonb_build_object(
+            'id', d.id, 'lineage_id', d.lineage_id, 'filename', d.filename, 'doc_type', d.doc_type, 'doc_date', d.doc_date,
+            'effective_from', d.effective_from, 'effective_to', d.effective_to, 'uploaded_at', d.created_at, 'uploader_id', d.user_id,
+            'version', d.version, 'is_current', d.is_current, 'status', d.status)
+          FROM public.documents d WHERE d.id = e.first_id AND d.tenant_key = e.tenant_key),
+         (SELECT pg_catalog.jsonb_build_object(
+            'id', d.id, 'lineage_id', d.lineage_id, 'filename', d.filename, 'doc_type', d.doc_type, 'doc_date', d.doc_date,
+            'effective_from', d.effective_from, 'effective_to', d.effective_to, 'uploaded_at', d.created_at, 'uploader_id', d.user_id,
+            'version', d.version, 'is_current', d.is_current, 'status', d.status)
+          FROM public.documents d WHERE d.id = e.second_id AND d.tenant_key = e.tenant_key),
+         e.created_at, e.decided_by, e.decided_at, count(*) OVER ()
+  FROM entries e
+  ORDER BY e.rank, e.sort_at, COALESCE(e.link_id, e.candidate_id)
+  LIMIT page_size OFFSET skip;
+END
+$function$;
+
 REVOKE ALL ON FUNCTION public.rag_supersession_raise(text, uuid, uuid, jsonb, text, text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.rag_supersession_raise(text, uuid, uuid, jsonb, text, text) TO service_role;
 REVOKE ALL ON FUNCTION public.rag_confirm_supersession(uuid, uuid, uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.rag_confirm_supersession(uuid, uuid, uuid) TO service_role;
+
+REVOKE ALL ON FUNCTION public.rag_supersession_stale(uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_supersession_stale(uuid) TO service_role;
+REVOKE ALL ON FUNCTION public.rag_supersession_lock_pair(text, uuid, uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_supersession_lock_pair(text, uuid, uuid) TO service_role;
+REVOKE ALL ON FUNCTION public.rag_dismiss_supersession(uuid, uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_dismiss_supersession(uuid, uuid) TO service_role;
+REVOKE ALL ON FUNCTION public.rag_undo_supersession(uuid, uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_undo_supersession(uuid, uuid) TO service_role;
+REVOKE ALL ON FUNCTION public.rag_list_supersession(uuid, text, integer, integer) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_list_supersession(uuid, text, integer, integer) TO service_role;
 
 COMMIT;
 
