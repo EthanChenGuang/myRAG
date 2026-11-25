@@ -1,0 +1,326 @@
+{
+  "cells": [
+    {
+      "band": 0.02,
+      "ci_high": 0.0,
+      "ci_low": 0.0,
+      "fixed_spread": 0.0,
+      "mean_d": 0.0,
+      "metric": "category:cross_lingual/recall_at_5",
+      "n": 16,
+      "n_nonzero": 0,
+      "within_noise_band": true
+    },
+    {
+      "band": 0.02,
+      "ci_high": 0.0,
+      "ci_low": 0.0,
+      "fixed_spread": 0.0,
+      "mean_d": 0.0,
+      "metric": "category:cross_lingual/recall_at_10",
+      "n": 16,
+      "n_nonzero": 0,
+      "within_noise_band": true
+    },
+    {
+      "band": 0.02,
+      "ci_high": 0.0,
+      "ci_low": 0.0,
+      "fixed_spread": 0.0,
+      "mean_d": 0.0,
+      "metric": "language:en/recall_at_5",
+      "n": 48,
+      "n_nonzero": 0,
+      "within_noise_band": true
+    },
+    {
+      "band": 0.02,
+      "ci_high": 0.0,
+      "ci_low": 0.0,
+      "fixed_spread": 0.0,
+      "mean_d": 0.0,
+      "metric": "language:en/recall_at_10",
+      "n": 48,
+      "n_nonzero": 0,
+      "within_noise_band": true
+    },
+    {
+      "band": 0.02,
+      "ci_high": 0.0,
+      "ci_low": 0.0,
+      "fixed_spread": 0.0,
+      "mean_d": 0.0,
+      "metric": "language:en/correct_refusal_rate",
+      "n": 5,
+      "n_nonzero": 0,
+      "within_noise_band": true
+    },
+    {
+      "band": 0.02,
+      "ci_high": 0.0,
+      "ci_low": 0.0,
+      "fixed_spread": 0.0,
+      "mean_d": 0.0,
+      "metric": "language:it/recall_at_5",
+      "n": 29,
+      "n_nonzero": 0,
+      "within_noise_band": true
+    },
+    {
+      "band": 0.02,
+      "ci_high": 0.0,
+      "ci_low": 0.0,
+      "fixed_spread": 0.0,
+      "mean_d": 0.0,
+      "metric": "language:it/recall_at_10",
+      "n": 29,
+      "n_nonzero": 0,
+      "within_noise_band": true
+    },
+    {
+      "band": 0.02,
+      "ci_high": 0.0,
+      "ci_low": 0.0,
+      "fixed_spread": 0.0,
+      "mean_d": 0.0,
+      "metric": "language:it/correct_refusal_rate",
+      "n": 4,
+      "n_nonzero": 0,
+      "within_noise_band": true
+    },
+    {
+      "band": 0.02,
+      "ci_high": 0.0,
+      "ci_low": 0.0,
+      "fixed_spread": 0.0,
+      "mean_d": 0.0,
+      "metric": "language:zh/recall_at_5",
+      "n": 35,
+      "n_nonzero": 0,
+      "within_noise_band": true
+    },
+    {
+      "band": 0.02,
+      "ci_high": 0.0,
+      "ci_low": 0.0,
+      "fixed_spread": 0.0,
+      "mean_d": 0.0,
+      "metric": "language:zh/recall_at_10",
+      "n": 35,
+      "n_nonzero": 0,
+      "within_noise_band": true
+    },
+    {
+      "band": 0.02,
+      "ci_high": 0.0,
+      "ci_low": 0.0,
+      "fixed_spread": 0.0,
+      "mean_d": 0.0,
+      "metric": "language:zh/correct_refusal_rate",
+      "n": 5,
+      "n_nonzero": 0,
+      "within_noise_band": true
+    },
+    {
+      "band": 0.02,
+      "ci_high": 0.0,
+      "ci_low": 0.0,
+      "fixed_spread": 0.0,
+      "mean_d": 0.0,
+      "metric": "overall/recall_at_5",
+      "n": 112,
+      "n_nonzero": 0,
+      "within_noise_band": true
+    },
+    {
+      "band": 0.02,
+      "ci_high": 0.0,
+      "ci_low": 0.0,
+      "fixed_spread": 0.0,
+      "mean_d": 0.0,
+      "metric": "overall/recall_at_10",
+      "n": 112,
+      "n_nonzero": 0,
+      "within_noise_band": true
+    },
+    {
+      "band": 0.02,
+      "ci_high": 0.0,
+      "ci_low": 0.0,
+      "fixed_spread": 0.0,
+      "mean_d": 0.0,
+      "metric": "overall/correct_refusal_rate",
+      "n": 14,
+      "n_nonzero": 0,
+      "within_noise_band": true
+    },
+    {
+      "band": 0.02,
+      "ci_high": 0.0,
+      "ci_low": 0.0,
+      "fixed_spread": 0.0,
+      "mean_d": 0.0,
+      "metric": "pair:en->it/recall_at_5",
+      "n": 2,
+      "n_nonzero": 0,
+      "within_noise_band": true
+    },
+    {
+      "band": 0.02,
+      "ci_high": 0.0,
+      "ci_low": 0.0,
+      "fixed_spread": 0.0,
+      "mean_d": 0.0,
+      "metric": "pair:en->it/recall_at_10",
+      "n": 2,
+      "n_nonzero": 0,
+      "within_noise_band": true
+    },
+    {
+      "band": 0.02,
+      "ci_high": 0.0,
+      "ci_low": 0.0,
+      "fixed_spread": 0.0,
+      "mean_d": 0.0,
+      "metric": "pair:en->zh/recall_at_5",
+      "n": 2,
+      "n_nonzero": 0,
+      "within_noise_band": true
+    },
+    {
+      "band": 0.02,
+      "ci_high": 0.0,
+      "ci_low": 0.0,
+      "fixed_spread": 0.0,
+      "mean_d": 0.0,
+      "metric": "pair:en->zh/recall_at_10",
+      "n": 2,
+      "n_nonzero": 0,
+      "within_noise_band": true
+    },
+    {
+      "band": 0.02,
+      "ci_high": 0.0,
+      "ci_low": 0.0,
+      "fixed_spread": 0.0,
+      "mean_d": 0.0,
+      "metric": "pair:it->en/recall_at_5",
+      "n": 3,
+      "n_nonzero": 0,
+      "within_noise_band": true
+    },
+    {
+      "band": 0.02,
+      "ci_high": 0.0,
+      "ci_low": 0.0,
+      "fixed_spread": 0.0,
+      "mean_d": 0.0,
+      "metric": "pair:it->en/recall_at_10",
+      "n": 3,
+      "n_nonzero": 0,
+      "within_noise_band": true
+    },
+    {
+      "band": 0.02,
+      "ci_high": 0.0,
+      "ci_low": 0.0,
+      "fixed_spread": 0.0,
+      "mean_d": 0.0,
+      "metric": "pair:it->zh/recall_at_5",
+      "n": 4,
+      "n_nonzero": 0,
+      "within_noise_band": true
+    },
+    {
+      "band": 0.02,
+      "ci_high": 0.0,
+      "ci_low": 0.0,
+      "fixed_spread": 0.0,
+      "mean_d": 0.0,
+      "metric": "pair:it->zh/recall_at_10",
+      "n": 4,
+      "n_nonzero": 0,
+      "within_noise_band": true
+    },
+    {
+      "band": 0.02,
+      "ci_high": 0.0,
+      "ci_low": 0.0,
+      "fixed_spread": 0.0,
+      "mean_d": 0.0,
+      "metric": "pair:zh->en/recall_at_5",
+      "n": 3,
+      "n_nonzero": 0,
+      "within_noise_band": true
+    },
+    {
+      "band": 0.02,
+      "ci_high": 0.0,
+      "ci_low": 0.0,
+      "fixed_spread": 0.0,
+      "mean_d": 0.0,
+      "metric": "pair:zh->en/recall_at_10",
+      "n": 3,
+      "n_nonzero": 0,
+      "within_noise_band": true
+    },
+    {
+      "band": 0.02,
+      "ci_high": 0.0,
+      "ci_low": 0.0,
+      "fixed_spread": 0.0,
+      "mean_d": 0.0,
+      "metric": "pair:zh->it/recall_at_5",
+      "n": 2,
+      "n_nonzero": 0,
+      "within_noise_band": true
+    },
+    {
+      "band": 0.02,
+      "ci_high": 0.0,
+      "ci_low": 0.0,
+      "fixed_spread": 0.0,
+      "mean_d": 0.0,
+      "metric": "pair:zh->it/recall_at_10",
+      "n": 2,
+      "n_nonzero": 0,
+      "within_noise_band": true
+    }
+  ],
+  "fixed_corpus_sha256": "0568b8d2018e6873b4f6f7e2aec4fce3bef144b26f9bfa4c842286d783005be7",
+  "fixed_pages": {
+    "pages_by_tier": {
+      "fast": 0.0,
+      "native": 0.0,
+      "premium": 0.0,
+      "structured": 36.0
+    },
+    "pdf_jobs": 17,
+    "runs": 3
+  },
+  "fixed_runs": [
+    "ae61d0c6-ec4f-4818-ba41-15fabeace4fb",
+    "80905b8b-690c-4bf7-8aec-8878d1055cf2",
+    "89647e71-418f-404b-92fa-07f18f6a6396"
+  ],
+  "gate_split": "dev",
+  "golden_sha256": "a9f81f744b55a10658ced1e56dcd6264f8701344aa4b08ba3eeb7c92d0d27241",
+  "offenders": [],
+  "projection_population": "PDF jobs of each build; fixed jobs count every page at the fixed chain's tier",
+  "tiered_corpus_sha256": "cab53ff5c1248a65f6ed6acd5e97e0aa87b79d54601e0829f177c822d73a9015",
+  "tiered_pages": {
+    "pages_by_tier": {
+      "fast": 19.0,
+      "native": 0.0,
+      "premium": 0.0,
+      "structured": 17.0
+    },
+    "pdf_jobs": 17,
+    "runs": 3
+  },
+  "tiered_runs": [
+    "860ba80b-80df-4439-8efb-a1c791ad6002",
+    "dfd1ccdb-1c3b-46de-8fa4-5558da353d62",
+    "3409e676-2d44-4a4c-bcb4-2ae6c12788cd"
+  ]
+}

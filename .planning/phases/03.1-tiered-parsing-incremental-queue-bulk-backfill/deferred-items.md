@@ -79,3 +79,20 @@ and releases (0316: `WHERE d.status = 'quarantined'`). So an injection hit found
 but cannot be reviewed or released from the quarantine admin. The ingest mode under `--routing` accepts a job status of
 `quarantined` with an unpublished document as the queued equivalent. Fix: a 03xx migration that keeps `quarantined` for that
 transition (the function body must be copied from its latest definition), plus a PGlite test through the worker.
+
+## 9. (03.1-51) The L1 threshold sweep is flat on the synthetic dev fixtures
+
+`eval/reports/phase-03.1/threshold-sweep.json`: all 150 grid candidates (garbled ratio 0.03-0.08, ruling-path minimum 2-6, scanned
+character limit 20-60) route the 12 dev pages identically (tier accuracy 1.0, projected dev Recall@5 1.0), so the tie rule kept
+the current values. The fixtures are far from every threshold (scans have no text layer, tables have many ruling paths, no page
+is garbled), which confirms the values but cannot tune them. Rerun `npm run eval:parse-gate` after
+`python -m rag_eval.parse_gate sweep --write-config` once dev fixtures near the thresholds exist (thin-ruled tables, scans with a
+short text stamp, partly garbled text layers, ideally real documents from a backfill dry run).
+
+## 10. (03.1-51) The worker labels a text upload named like an image as doc_class image
+
+`classify_input` in `rag-sidecar/src/rag_sidecar/ingest/tiered.py` decides by extension before the MIME type, so a Config UI
+caption uploaded as `text/markdown` under `floor.png` is recorded with `doc_class = 'image'` and parser `text/image`. Parsing is
+correct since 03.1-51 (native mode uses the text input), but the ledger row and the backfill dry-run projection (which prices an
+image at `IMAGE_TOKENS`) see an image. Fix: a text MIME type wins over an image extension in `classify_input`, with a failing test
+first.

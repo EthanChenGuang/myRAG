@@ -1,0 +1,147 @@
+{
+  "correct_refusal": [
+    {
+      "delta": 0.0,
+      "metric": "language:en/correct_refusal_rate",
+      "within_noise_band": true
+    },
+    {
+      "delta": 0.0,
+      "metric": "language:it/correct_refusal_rate",
+      "within_noise_band": true
+    },
+    {
+      "delta": 0.0,
+      "metric": "language:zh/correct_refusal_rate",
+      "within_noise_band": true
+    },
+    {
+      "delta": 0.0,
+      "metric": "overall/correct_refusal_rate",
+      "within_noise_band": true
+    }
+  ],
+  "fixed": {
+    "premium_page_share": 0.0,
+    "projected_cost_per_1000_pages_usd": 1.0000000000000002
+  },
+  "noise_band_floor": 0.02,
+  "noise_band_k": 3.0,
+  "passed": true,
+  "recall_at_k": [
+    {
+      "delta": 0.0,
+      "metric": "category:cross_lingual/recall_at_5",
+      "within_noise_band": true
+    },
+    {
+      "delta": 0.0,
+      "metric": "category:cross_lingual/recall_at_10",
+      "within_noise_band": true
+    },
+    {
+      "delta": 0.0,
+      "metric": "language:en/recall_at_5",
+      "within_noise_band": true
+    },
+    {
+      "delta": 0.0,
+      "metric": "language:en/recall_at_10",
+      "within_noise_band": true
+    },
+    {
+      "delta": 0.0,
+      "metric": "language:it/recall_at_5",
+      "within_noise_band": true
+    },
+    {
+      "delta": 0.0,
+      "metric": "language:it/recall_at_10",
+      "within_noise_band": true
+    },
+    {
+      "delta": 0.0,
+      "metric": "language:zh/recall_at_5",
+      "within_noise_band": true
+    },
+    {
+      "delta": 0.0,
+      "metric": "language:zh/recall_at_10",
+      "within_noise_band": true
+    },
+    {
+      "delta": 0.0,
+      "metric": "overall/recall_at_5",
+      "within_noise_band": true
+    },
+    {
+      "delta": 0.0,
+      "metric": "overall/recall_at_10",
+      "within_noise_band": true
+    },
+    {
+      "delta": 0.0,
+      "metric": "pair:en->it/recall_at_5",
+      "within_noise_band": true
+    },
+    {
+      "delta": 0.0,
+      "metric": "pair:en->it/recall_at_10",
+      "within_noise_band": true
+    },
+    {
+      "delta": 0.0,
+      "metric": "pair:en->zh/recall_at_5",
+      "within_noise_band": true
+    },
+    {
+      "delta": 0.0,
+      "metric": "pair:en->zh/recall_at_10",
+      "within_noise_band": true
+    },
+    {
+      "delta": 0.0,
+      "metric": "pair:it->en/recall_at_5",
+      "within_noise_band": true
+    },
+    {
+      "delta": 0.0,
+      "metric": "pair:it->en/recall_at_10",
+      "within_noise_band": true
+    },
+    {
+      "delta": 0.0,
+      "metric": "pair:it->zh/recall_at_5",
+      "within_noise_band": true
+    },
+    {
+      "delta": 0.0,
+      "metric": "pair:it->zh/recall_at_10",
+      "within_noise_band": true
+    },
+    {
+      "delta": 0.0,
+      "metric": "pair:zh->en/recall_at_5",
+      "within_noise_band": true
+    },
+    {
+      "delta": 0.0,
+      "metric": "pair:zh->en/recall_at_10",
+      "within_noise_band": true
+    },
+    {
+      "delta": 0.0,
+      "metric": "pair:zh->it/recall_at_5",
+      "within_noise_band": true
+    },
+    {
+      "delta": 0.0,
+      "metric": "pair:zh->it/recall_at_10",
+      "within_noise_band": true
+    }
+  ],
+  "tiered": {
+    "premium_page_share": 0.0,
+    "projected_cost_per_1000_pages_usd": 1.0000000000000002
+  }
+}
