@@ -6,15 +6,23 @@ from rag_sidecar.contracts.baseline import NoiseConfig
 from rag_sidecar.contracts.judge import JudgeItemScore, JudgeReport
 from rag_sidecar.contracts.latency import LatencyBudgets
 from rag_sidecar.contracts.report import EvalReport, MetricValue
+from test_citation_metrics import (
+    GOLD_QUOTE,
+    NOT_CHECKED,
+    _citation,
+    _item,
+    _scored,
+    _trace,
+)
+from test_gate import _baseline
+from test_latency_report import _budgets as _plain_budgets
+from test_latency_report import _with_latency
+from test_report_runner import _four_items, _manifest, _score_args, _write_inputs
 
 from rag_eval.gate import evaluate_gate
 from rag_eval.metrics import score_items
 from rag_eval.report import build_report, load_latency_budgets, write_report
-from test_citation_metrics import GOLD_QUOTE, NOT_CHECKED, _citation, _item, _scored, _trace
-from test_gate import _baseline
-from test_latency_report import _budgets as _plain_budgets
-from test_latency_report import _with_latency
-from test_report_runner import _four_items, _manifest
+from rag_eval.runner import main
 
 EVAL_ROOT = Path(__file__).resolve().parents[1]
 BUDGETS_PATH = EVAL_ROOT / "config" / "latency-budgets.json"
@@ -232,3 +240,22 @@ def test_report_without_citation_data_is_byte_identical_to_before(tmp_path: Path
 def test_report_json_with_citations_validates(tmp_path: Path):
     json_path, _ = write_report(_report(), tmp_path, _budgets())
     EvalReport.model_validate(json.loads(json_path.read_text(encoding="utf-8")))
+
+
+def test_score_cli_reads_judge_results_for_faithfulness_per_strategy(tmp_path: Path):
+    golden, traces = _two_strategy_run()
+    traces_path, golden_path, manifest_path, out = _write_inputs(tmp_path, traces, golden)
+    judge_path = tmp_path / "judge.json"
+    judge_path.write_text(_judge({"c2": (1.0, 0.8)}).model_dump_json(), encoding="utf-8")
+    args = _score_args(traces_path, golden_path, manifest_path, out) + ["--judge", str(judge_path)]
+    assert main(args) == 0
+    report = EvalReport.model_validate_json((out / "report.json").read_text(encoding="utf-8"))
+    claude = report.by_strategy["claude-citations"].faithfulness
+    assert claude is not None and claude.n == 1
+
+
+def test_score_cli_exits_2_for_an_unreadable_judge_file(tmp_path: Path):
+    golden, traces = _two_strategy_run()
+    traces_path, golden_path, manifest_path, out = _write_inputs(tmp_path, traces, golden)
+    args = _score_args(traces_path, golden_path, manifest_path, out) + ["--judge", str(tmp_path / "missing.json")]
+    assert main(args) == 2
