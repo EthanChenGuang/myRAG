@@ -1,5 +1,6 @@
 import { env } from '@/lib/env';
 import { logger } from '@/lib/logger';
+import { describeStageCause } from './stage-error-cause';
 import { RetrievalBackendError, searchByEmbedding, type RawChunk, type RpcClient } from './backend/supabase-rpc';
 import {
   CORE_STAGES,
@@ -526,7 +527,7 @@ async function runMediaPipeline(input: RunRetrievalInput, collector: TraceCollec
         logger.error('RAG Pipeline', 'Backend error', { rpc: error.original.rpc, code: error.original.code });
         return failure(collector, 'error', 'backend_error', null);
       }
-      logger.error('RAG Pipeline', 'Stage failure', { stage: error.stage, reason: error.reason });
+      logger.error('RAG Pipeline', 'Stage failure', { stage: error.stage, reason: error.reason, ...describeStageCause(error.original) });
       return failure(collector, 'error', `${error.stage}_${error.reason}`, null);
     }
     if (signal.aborted) return failure(collector, 'error', 'aborted', null);
@@ -696,7 +697,7 @@ async function runOverviewPipeline(
         logger.error('RAG Pipeline', 'Backend error', { rpc: error.original.rpc, code: error.original.code });
         return failure(collector, 'error', 'backend_error', null);
       }
-      logger.error('RAG Pipeline', 'Stage failure', { stage: error.stage, reason: error.reason });
+      logger.error('RAG Pipeline', 'Stage failure', { stage: error.stage, reason: error.reason, ...describeStageCause(error.original) });
       return failure(collector, 'error', `${error.stage}_${error.reason}`, null);
     }
     if (signal.aborted) return failure(collector, 'error', 'aborted', null);
@@ -961,7 +962,7 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
         logger.error('RAG Pipeline', 'Backend error', { rpc: error.original.rpc, code: error.original.code });
         return failure(collector, 'error', 'backend_error', queryContext);
       }
-      logger.error('RAG Pipeline', 'Stage failure', { stage: error.stage, reason: error.reason });
+      logger.error('RAG Pipeline', 'Stage failure', { stage: error.stage, reason: error.reason, ...describeStageCause(error.original) });
       return failure(collector, 'error', `${error.stage}_${error.reason}`, queryContext);
     }
     if (signal.aborted) return failure(collector, 'error', 'aborted', queryContext);
@@ -1132,7 +1133,7 @@ async function runVoicePipeline(input: RunRetrievalInput, collector: TraceCollec
         logger.error('RAG Pipeline', 'Backend error', { rpc: error.original.rpc, code: error.original.code });
         return failure(collector, 'error', 'backend_error', null);
       }
-      logger.error('RAG Pipeline', 'Stage failure', { stage: error.stage, reason: error.reason });
+      logger.error('RAG Pipeline', 'Stage failure', { stage: error.stage, reason: error.reason, ...describeStageCause(error.original) });
       return failure(collector, 'error', `${error.stage}_${error.reason}`, null);
     }
     if (signal.aborted) return failure(collector, 'error', 'aborted', null);
