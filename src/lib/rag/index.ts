@@ -216,6 +216,25 @@ export type {
   QuarantineItem,
   ReleaseQuarantinedResult,
 } from './ingest/quarantine-admin';
+export {
+  addExemption,
+  approveUpload,
+  exemptionChoices,
+  listExemptions,
+  listPendingUploads,
+  rejectUpload,
+  removeExemption,
+} from './ingest/approval/admin';
+export type {
+  AddExemptionResult,
+  ApprovalFailure,
+  ApproveUploadResult,
+  ExemptionChoice,
+  PendingUpload,
+  RejectUploadResult,
+  UploadExemption,
+  UserDisplay,
+} from './ingest/approval/admin';
 export { docTypePickerEnabled, resolvePickerDefault, listDocTypeDefaults, setDocTypeDefault, DocTypeDefaultsError, DOC_TYPE_DEFAULT_SOURCE_KINDS, DOC_TYPE_IDS, DOC_TYPE_CHOICES } from './ingest/profiles/doc-type-defaults';
 export type { DocTypeChoice, DocTypeDefaultRow, DocTypeDefaultSourceKind, PickerDefault, SetDocTypeDefaultInput } from './ingest/profiles/doc-type-defaults';
 export { getEmbeddingProfileCompleteness } from './embeddings/profile-ops';
