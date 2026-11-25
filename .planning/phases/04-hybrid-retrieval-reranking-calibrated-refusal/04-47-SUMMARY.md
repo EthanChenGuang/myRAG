@@ -31,6 +31,7 @@ key-files:
     - .planning/phases/04-hybrid-retrieval-reranking-calibrated-refusal/04-47-PLAN.md
     - .planning/phases/04-hybrid-retrieval-reranking-calibrated-refusal/04-47-SUMMARY.md
   modified:
+    - AGENTS.md
     - supabase/single-tenant-setup.sql
     - supabase/multi-tenant-setup.sql
     - tests/rag-db/schema-equality.test.mts
@@ -171,6 +172,26 @@ This plan changed `scripts/config-ui/index.html`, so it is a UI plan.
 | `node scripts/ci/check-frontend-design-summary.mjs <phase 4 dir>` | PASS, exit 0 (3 UI plan summaries: 04-02, 04-36, 04-47) |
 
 Python, contracts and golden data were not touched, so pytest and gen:schemas were not run. Nothing under `eval/fixtures/parse/` was touched.
+
+## Review Fixes (0425 review, warnings and IN-01, IN-05)
+
+0425 had not been applied to a live database, so 0425 and its fold sections were edited in place; the fold stays byte-identical to the migration files. Each fix began with a failing test.
+
+- **WR-01:** the seven catalog references in 0425 are now `pg_catalog.pg_attribute` and `pg_catalog.pg_extension`. The scanner flags unqualified pg_catalog relations anywhere in an empty-path body. A test reproduces the review: in multi-tenant mode, a service_role session with a temporary `pg_attribute` must still be refused `s:default` by `rag_ingest_assert_tenant_key`. 0413, 0424, 0601 and 0602 had no unqualified catalog relation. The header now says that pg_temp is still searched first under `''`.
+- **WR-02:** in `tests/helpers/sql-function-acl.ts`, DROP FUNCTION clears the required signature, and only CREATE OR REPLACE may skip one. A signature is required only when the block checks it with `to_regprocedure(...) IS NULL` and raises after it. On the repository files, every scenario tracks the same functions and ACLs as before.
+- **WR-03:** each 0425 precheck stops with `55000` when pgvector is not in schema `public`. It is tested with `ALTER EXTENSION vector SET SCHEMA extensions` in PGlite. The requirement is noted in AGENTS.md section 6.
+- **WR-04, IN-01:** `0425_expected_pre_hashes.json` and a dry run in the 0425 header (see Operator Actions). Both the frozen setup plus every migration below 0425 and the setup files at `e2319f2a~1` give the same hashes.
+
+| Gate | Result |
+|------|--------|
+| search-path-empty / schema-equality / definer-search-path-pglite / search-rpc-grants-pglite | 26/26, 31/31, 6/6, 10/10 |
+| vitest search-rpc-grants (ACL simulator units), security-definer-search-path, agents-guide | 55/55 |
+| hybrid-filters / -grants / -include-undated / -search / -tenant | 7, 12, 12, 13, 11, all pass |
+| v2-two-tenant-matrix, ingest-writer, profile-chunk-writer | 50, 67, 20, all pass |
+| ingestion-* (8 suites, after `uv sync --extra chunking --extra preflight`) | 115 pass, 0 fail |
+| rechunk, reembed | 23, 44, all pass |
+| `npx next typegen && npx tsc --noEmit -p tsconfig.json`, `npm run typecheck:new` | 0 errors |
+| reviewer's diff0425 (accepting `pg_catalog.` too), both modes | 126 / 135 changed, 0 body mismatches, 0 header diffs, idempotent, 6 `pg_catalog.` edits per mode |
 
 ## Deferred Issues
 
