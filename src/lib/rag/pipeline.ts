@@ -380,7 +380,9 @@ export async function runRefsStage(
     collector,
     { candidatesOut: (value) => value.usedDocuments.length },
   );
-  return resolved.skipped ? null : { usedDocuments: resolved.value.usedDocuments, context: resolved.value.context };
+  if (resolved.skipped) return null;
+  const { usedDocuments, context, sections } = resolved.value;
+  return { usedDocuments, context, sections };
 }
 
 async function runOverviewPipeline(
@@ -610,6 +612,7 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
         ragMode: input.options?.ragMode ?? 'strict',
         webSearchEnabled: input.options?.webSearchEnabled ?? false,
         applyRelevanceFilter,
+        citationLabeler: input.citationLabeler,
       });
 
       let rows: AssemblyRows | null = null;
@@ -691,6 +694,7 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
     kept: assembly.kept,
     queryTerms: assembly.queryTerms,
     refusalCandidate: assembly.refusalCandidate,
+    blocks: assembly.blocks,
   };
 }
 

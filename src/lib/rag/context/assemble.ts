@@ -1,5 +1,7 @@
 import { formatURLsForContext, type ExtractedURL } from '@/lib/url-extractor';
+import { renderReferencedSection } from '../refs/resolve';
 import type {
+  CitationLabel,
   CitationLabeler,
   ContextBlock,
   KeptBy,
@@ -201,17 +203,17 @@ class BlockLabeller {
 
   constructor(private readonly labeler: CitationLabeler | undefined) {}
 
-  /** Returns the text to render for the block: the plain parts without a labeler, one labelled part with one. */
-  add(draft: DraftBlock, plainParts: string[]): string[] {
+  /** Records the block; returns its label when a labeler is set and the block is not an image. */
+  add(draft: DraftBlock): CitationLabel | null {
     const unlabelled = { ...draft, title: blockTitle(draft) };
     if (!this.labeler || draft.isImage) {
       this.blocks.push({ ...unlabelled, alias: null });
-      return plainParts;
+      return null;
     }
     this.ordinal += 1;
     const label = this.labeler(unlabelled, this.ordinal);
     this.blocks.push({ ...unlabelled, text: label.text, alias: label.alias });
-    return [`${label.header}\n${label.text}`];
+    return label;
   }
 }
 
@@ -227,6 +229,24 @@ export function buildContext<C extends AssemblyCandidate>(
 
   const labeller = new BlockLabeller(input.citationLabeler);
   let context = filtered.referencedContext;
+  const sections = input.referenced?.sections;
+  if (sections?.length) {
+    const rendered = sections.map((section) => {
+      if (section.missing) return renderReferencedSection(section);
+      const label = labeller.add({
+        documentId: section.documentId,
+        documentName: section.documentName,
+        documentVersion: null,
+        chunkIds: [...section.chunkIds],
+        page: null,
+        sectionPath: null,
+        text: section.text,
+        isImage: false,
+      });
+      return label ? renderReferencedSection({ ...section, text: label.text }, label.header) : renderReferencedSection(section);
+    });
+    if (input.citationLabeler) context = rendered.join('');
+  }
   let links: ExtractedURL[] = [];
 
   if (filtered.hasQuery && relevantChunks.length > 0) {
@@ -343,7 +363,9 @@ export function buildContext<C extends AssemblyCandidate>(
           text: group.map((piece) => piece.body).join('\n\n'),
           isImage: first.isImage,
         };
-        contextParts.push(...labeller.add(draft, group.map((piece) => piece.rendered)));
+        const label = labeller.add(draft);
+        if (label) contextParts.push(`${label.header}\n${label.text}`);
+        else contextParts.push(...group.map((piece) => piece.rendered));
         start = end;
       }
     }
