@@ -2538,6 +2538,17 @@ export default function Home() {
 
   const handleSubmitRef = useLatestRef(handleSubmit);
 
+  const isResponseInFlight = isChatLoading || isStreaming;
+
+  const handleFollowupSelect = (question: string) => {
+    if (isResponseInFlight) return;
+    setInput(question);
+    setTimeout(() => {
+      const form = document.querySelector<HTMLFormElement>('form[data-chat-input-form]') ?? document.querySelector('form');
+      form?.requestSubmit();
+    }, 100);
+  };
+
   /**
    * Handles creating a new chat. The order of operations is critical:
    * 1. Reset input first to prevent any pending operations
@@ -4648,6 +4659,8 @@ export default function Home() {
                               isThinking={isThinkingMessage || (isLastAssistantMessage && isChatLoading && !message.content)}
                               isStreaming={Boolean(isLastAssistantMessage && isChatLoading && message.content)}
                               sessionId={sessionIdRef.current || undefined}
+                              onFollowupSelect={handleFollowupSelect}
+                              followupsDisabled={isResponseInFlight}
                             />
                           );
                         })}

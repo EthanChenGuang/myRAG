@@ -15,6 +15,8 @@ interface ChatMessageProps {
   isStreamingMessage?: boolean;
   className?: string;
   sessionId?: string; // Add sessionId for MCP tool persistence
+  onFollowupSelect?: (question: string) => void;
+  followupsDisabled?: boolean;
 }
 
 // Then forward declare the ChatMessage component for the export
@@ -75,6 +77,9 @@ import { useAnswerRecordsStore } from '@/lib/stores/answer-records-store'
 import { GroundednessBadge } from './groundedness-badge'
 import { AnswerFeedback } from './answer-feedback'
 import { imageLinkHref, isAllowedImageUrl } from '@/lib/safe-image-hosts'
+import { splitFollowups } from '@/lib/chat/followups'
+import { answerQualityStrings } from '@/translations/answer-quality'
+import { RelatedQuestions } from './related-questions'
 
 const IMAGE_ALLOWLIST = process.env.NEXT_PUBLIC_RAG_IMAGE_ALLOWLIST === 'true';
 
@@ -2707,13 +2712,15 @@ ChatMessage = function ({
   isStreaming = false,
   className,
   sessionId,
+  onFollowupSelect,
+  followupsDisabled = false,
   ...props
 }: ChatMessageProps) {
   const { theme } = useTheme();
   const { textSize } = useTextSize();
   const { fontFamily } = useFont();
   const { openArtifact } = useArtifact();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   // Correctly destructure the tracked setter and other needed values
   const { trackedSetIsSourcesOpen, setSources, isSourcesOpen } = useSources();
   const audioSettings = useAudioSettings();
@@ -3628,6 +3635,7 @@ ChatMessage = function ({
   const handleCopy = async () => {
     // Use processed parts instead of raw message content to get properly extracted RAG text
     const textParts = processMessageContent.renderableParts
+      .map((part, index) => (index === followupSplit.partIndex && part.type === 'text' ? { ...part, text: followupSplit.body } : part))
       .filter((part): part is { type: 'text'; text: string } => part.type === 'text');
 
     // Concatenate text from all text parts (includes RAG content extracted before approval marker)
@@ -4277,6 +4285,21 @@ ChatMessage = function ({
   }, [messageContentParts, message.role, message.id]);
   // --- END MODIFIED ---
 
+  // Split the related-question tail only once the answer is complete, so it does not flicker while streaming.
+  const followupSplit = useMemo(() => {
+    const none = { partIndex: -1, body: '', followups: [] as string[] };
+    const isComplete = !isThinking && !isStreaming && !isStreamingMessage && !(isLastMessage && followupsDisabled);
+    if (!isAI || !isComplete) return none;
+    const parts = processMessageContent.renderableParts;
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const part = parts[i];
+      if (part.type !== 'text') continue;
+      const { body, followups } = splitFollowups((part as { text: string }).text);
+      return followups.length > 0 ? { partIndex: i, body, followups } : none;
+    }
+    return none;
+  }, [isAI, isThinking, isStreaming, isStreamingMessage, isLastMessage, followupsDisabled, processMessageContent.renderableParts]);
+
   // Add these handlers for the McpToolBox
   const { toast } = useToast();
 
@@ -4534,7 +4557,7 @@ ChatMessage = function ({
                         return (
                           <TextPartRenderer
                             key={`text-part-${index}`}
-                            part={part as ContentPart & { type: 'text' }}
+                            part={(index === followupSplit.partIndex ? { ...part, text: followupSplit.body } : part) as ContentPart & { type: 'text' }}
                             index={index}
                             inlineSourcesEnabled={env.NEXT_PUBLIC_SHOW_SOURCES_ENABLED === 'true'}
                             markdownComponents={markdownComponents}
@@ -4808,6 +4831,14 @@ ChatMessage = function ({
                       }
                     })}
                     {/* End parts mapping */}
+                    {followupSplit.followups.length > 0 && (
+                      <RelatedQuestions
+                        questions={followupSplit.followups}
+                        heading={answerQualityStrings(language).relatedHeading}
+                        onSelect={onFollowupSelect}
+                        disabled={followupsDisabled}
+                      />
+                    )}
                   </>
                 )}
 
