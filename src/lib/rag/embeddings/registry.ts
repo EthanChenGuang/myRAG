@@ -21,6 +21,12 @@ const KNOWN_DIMS: Record<EmbeddingProviderId, readonly number[]> = {
   qwen3: QWEN_SUPPORTED_DIMS,
 };
 
+const KNOWN_LIMITS: Record<EmbeddingProviderId, { maxInputTokens: number }> = {
+  openai: { maxInputTokens: 8191 },
+  voyage: { maxInputTokens: 32000 },
+  qwen3: { maxInputTokens: 32768 },
+};
+
 let defaults: Partial<Record<EmbeddingProviderId, EmbeddingProvider>> | null = null;
 let overrides: Partial<Record<EmbeddingProviderId, EmbeddingProvider>> = {};
 
@@ -44,6 +50,14 @@ function supportedDimsFor(id: string): readonly number[] | undefined {
   const registered = findProvider(id);
   if (registered) return registered.supportedDims;
   return Object.prototype.hasOwnProperty.call(KNOWN_DIMS, id) ? KNOWN_DIMS[id as EmbeddingProviderId] : undefined;
+}
+
+/** The provider's documented input limit in tokens; throws for an id that is not a registered provider. */
+export function maxInputTokensFor(providerId: string): number {
+  const registered = findProvider(providerId);
+  if (registered) return registered.maxInputTokens;
+  if (Object.prototype.hasOwnProperty.call(KNOWN_LIMITS, providerId)) return KNOWN_LIMITS[providerId as EmbeddingProviderId].maxInputTokens;
+  throw new Error(`[Embedding Profile] unknown provider ${providerId}`);
 }
 
 function reject(reason: ProfileShapeFailure, detail: string): ProfileShapeResult {

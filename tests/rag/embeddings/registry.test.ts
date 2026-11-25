@@ -6,6 +6,7 @@ import { estimateCostUsd, priceFor } from '@/lib/rag/embeddings/prices';
 import {
   canonicalModelId,
   getEmbeddingProvider,
+  maxInputTokensFor,
   resetEmbeddingProvidersForTests,
   setEmbeddingProvidersForTests,
   validateProfileShape,
@@ -240,5 +241,40 @@ describe('registry', () => {
     expect(getEmbeddingProvider('openai')).toBe(fake);
     resetEmbeddingProvidersForTests();
     expect(getEmbeddingProvider('openai')).not.toBe(fake);
+  });
+});
+
+describe('maxInputTokensFor', () => {
+  it.each([
+    ['openai', 8191],
+    ['voyage', 32000],
+    ['qwen3', 32768],
+  ])('returns the documented input limit of %s', (id, limit) => {
+    expect(maxInputTokensFor(id)).toBe(limit);
+  });
+
+  it('agrees with the maxInputTokens each registered provider declares', () => {
+    for (const id of ['openai', 'voyage', 'qwen3']) {
+      expect(maxInputTokensFor(id)).toBe(getEmbeddingProvider(id).maxInputTokens);
+    }
+  });
+
+  it('throws for an unknown provider id and for ids that only exist on Object.prototype', () => {
+    expect(() => maxInputTokensFor('cohere')).toThrow('[Embedding Profile] unknown provider cohere');
+    expect(() => maxInputTokensFor('constructor')).toThrow('[Embedding Profile] unknown provider constructor');
+  });
+
+  it('follows a provider swapped in for tests', () => {
+    const fake: EmbeddingProvider = {
+      id: 'openai',
+      model: 'fake-model',
+      maxInputTokens: 1234,
+      supportedDims: [1536],
+      normalize: true,
+      embedDocuments: async () => ({ vectors: [], model: 'fake-model', host: 'fake', usage: { tokens: 0 } }),
+      embedQuery: async () => ({ vectors: [], model: 'fake-model', host: 'fake', usage: { tokens: 0 } }),
+    };
+    setEmbeddingProvidersForTests({ openai: fake });
+    expect(maxInputTokensFor('openai')).toBe(1234);
   });
 });
