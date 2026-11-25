@@ -36,9 +36,7 @@ import {
 // Import URL extraction utilities
 import { formatURLsForContext, type ExtractedURL } from '@/lib/url-extractor';
 import type { JSONValue } from '@ai-sdk/provider';
-import { REFERENCE_NOTICE, TOOL_RESULT_NOTICE, TOOL_RESULT_SENTENCE } from '@/lib/rag/context/wrap';
-import { readSecurityConfig, type ToolResultGuardMode } from '@/lib/rag/security/config';
-import { escapeToolOutput, scanToolOutput } from '@/lib/rag/security/tool-results';
+import { REFERENCE_NOTICE, TOOL_RESULT_NOTICE, TOOL_RESULT_SENTENCE, readSecurityConfig, escapeToolOutput, scanToolOutput, type ToolResultGuardMode } from '@/lib/rag';
 // Keep custom tool definitions if needed
 
 import { ReadableStream } from 'stream/web';

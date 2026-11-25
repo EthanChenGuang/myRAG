@@ -234,3 +234,7 @@ export { softDeleteLineage } from './ingest/soft-delete';
 export { removeDocumentObjects } from './ingest/remove-document-objects';
 export type { DocumentObjectRow } from './ingest/remove-document-objects';
 export type { SoftDeleteResult, SoftDeleteFailure } from './ingest/soft-delete';
+export { escapeTags, REFERENCE_NOTICE, TOOL_RESULT_NOTICE, TOOL_RESULT_SENTENCE } from './context/wrap';
+export { readSecurityConfig } from './security/config';
+export type { ToolResultGuardMode } from './security/config';
+export { escapeToolOutput, scanToolOutput, wrapToolResultsForPrompt } from './security/tool-results';

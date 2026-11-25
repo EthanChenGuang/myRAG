@@ -12,11 +12,8 @@ import {
   readImageContext,
 } from '@/lib/mcp/caller-scope';
 import { getSupabaseAdmin } from '@/lib/supabase';
-import { isAdminUser, type RagAdminDb } from '@/lib/rag';
+import { escapeTags, isAdminUser, readSecurityConfig, scanToolOutput, TOOL_RESULT_NOTICE, wrapToolResultsForPrompt, type RagAdminDb } from '@/lib/rag';
 import { isUrlMcpCompatible } from '@/lib/mcp/url-validator';
-import { escapeTags, TOOL_RESULT_NOTICE } from '@/lib/rag/context/wrap';
-import { readSecurityConfig } from '@/lib/rag/security/config';
-import { scanToolOutput, wrapToolResultsForPrompt } from '@/lib/rag/security/tool-results';
 
 function describeConnections(client: unknown): { server: string; connected: boolean }[] {
   const candidate = client as { getConnectionStatus?: () => { server: string; connected: boolean }[] } | null;
