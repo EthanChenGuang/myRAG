@@ -380,3 +380,17 @@ export {
 export type { TenantFeedbackSettingsRow, TenantRetrievalLog } from './feedback-loop/settings';
 export { purgeRetrievalLog, PurgeError } from './feedback-loop/purge';
 export type { PurgeCounts } from './feedback-loop/purge';
+export {
+  getReviewItem,
+  getReviewItemChunks,
+  grantDomainExpert,
+  isReviewItemId,
+  listDomainExperts,
+  listReviewItems,
+  REVIEW_PAGE_SIZE,
+  ReviewListQuerySchema,
+  revokeDomainExpert,
+  validateGrantTenantKey,
+} from './feedback-loop/review-access';
+export type { DomainExpertGrant, ReviewChunk, ReviewListQuery } from './feedback-loop/review-access';
+export { openReviewSession, REVIEW_NO_STORE, reviewNotFound, reviewUnavailable } from './feedback-loop/review-route';
