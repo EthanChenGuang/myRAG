@@ -22,7 +22,7 @@ const withZeroWidth = (text: string, count: number): string => {
   return words.map((word, index) => (index < count ? `${word}${ZWSP}` : word)).join(' ') + ZWSP.repeat(Math.max(0, count - words.length));
 };
 
-let warn: ReturnType<typeof vi.spyOn>;
+let warn: { mock: { calls: unknown[][] } };
 
 beforeEach(() => {
   warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
