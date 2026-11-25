@@ -67,8 +67,8 @@ async function seedDocument(db: PGlite, userId: string, organizationId: string |
   const docId = crypto.randomUUID();
   await db.query(
     `INSERT INTO documents (id, filename, content, user_id, organization_id, is_current, status, ingest_fingerprint)
-     VALUES ($1, $2, $3, $4, $5, true, 'ready', 'fp-' || $1)`,
-    [docId, `${label}.md`, `${TOKEN} ${label}`, userId, organizationId],
+     VALUES ($1, $2, $3, $4, $5, true, 'ready', $6)`,
+    [docId, `${label}.md`, `${TOKEN} ${label}`, userId, organizationId, `fp-${docId}`],
   );
   const tenantKey = organizationId ? `o:${organizationId}` : `u:${userId}`;
   const chunkIds: string[] = [];
