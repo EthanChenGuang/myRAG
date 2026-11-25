@@ -3,6 +3,11 @@
 -- its document's language (D-14, research Open Question 4). A null-language chunk still matches no languages filter. The body is the
 -- 0602 one; tenant, current, status, profile and every other filter are unchanged. With the three new arguments at their defaults and no
 -- 'und' chunk stored, every call returns what 0602 returns (D-46).
+-- p_scopes holds dimension:value tags split once into region, legal_entity and department arrays (any other dimension, an empty value or a
+-- tag without a colon raises invalid_scope, 22023); values of one dimension are OR, dimensions are AND, and a chunk without a tag in a
+-- filtered dimension passes only with p_scopes_include_untagged (D-39). An empty array equals NULL. p_effective_on keeps a chunk when
+-- effective_from is null or <= the date and effective_to is null or >= the date (inclusive, D-44). Both predicates are appended to the
+-- shared filter only when set, as bound parameters ($16-$20) in all three USING lists, and are AND-ed to the tenant filter: they only narrow.
 -- The 0407 and 0602 signatures are dropped unconditionally so exactly one function exists and PostgREST rpc() is never ambiguous; a new
 -- overload would otherwise get PUBLIC execute. Re-running a lower-numbered file that defines this function (0407, 0413, 0602) requires
 -- re-running 0802; a re-run of this file repairs that state. search_path is '' with schema-qualified names and operators.
@@ -86,6 +91,11 @@ DECLARE
   v_pgvector text;
   v_key text;
   v_val text;
+  v_tag text;
+  v_dim text;
+  v_scope_region text[];
+  v_scope_legal_entity text[];
+  v_scope_department text[];
   v_doc_types text[] := ARRAY[
     'financial_report', 'contract_legal', 'invoice_receipt',
     'product_technical', 'scanned_image', 'general'
@@ -107,6 +117,23 @@ BEGIN
     FOR v_key, v_val IN SELECT key, value FROM jsonb_each_text(p_chunking_override) LOOP
       IF NOT EXISTS (SELECT 1 FROM public.chunking_profiles cp WHERE cp.doc_type = v_key AND cp.id = v_val) THEN
         RAISE EXCEPTION 'hybrid_search_chunks: unknown chunking profile in override' USING ERRCODE = '22023';
+      END IF;
+    END LOOP;
+  END IF;
+
+  IF p_scopes IS NOT NULL THEN
+    FOREACH v_tag IN ARRAY p_scopes LOOP
+      v_dim := CASE WHEN v_tag IS NULL OR strpos(v_tag, ':') = 0 THEN NULL ELSE split_part(v_tag, ':', 1) END;
+      IF v_dim IS NULL OR length(v_tag) <= length(v_dim) + 1 THEN
+        RAISE EXCEPTION 'invalid_scope: a tag is dimension:value' USING ERRCODE = '22023';
+      ELSIF v_dim = 'region' THEN
+        v_scope_region := array_append(v_scope_region, v_tag);
+      ELSIF v_dim = 'legal_entity' THEN
+        v_scope_legal_entity := array_append(v_scope_legal_entity, v_tag);
+      ELSIF v_dim = 'department' THEN
+        v_scope_department := array_append(v_scope_department, v_tag);
+      ELSE
+        RAISE EXCEPTION 'invalid_scope: unknown dimension' USING ERRCODE = '22023';
       END IF;
     END LOOP;
   END IF;
@@ -158,6 +185,23 @@ BEGIN
     || ' AND ($11::numeric IS NULL OR d.gross_total <= $11)'
     || ' AND ($12::text IS NULL OR d.currency = $12) ';
 
+  IF v_scope_region IS NOT NULL THEN
+    v_filter := v_filter || ' AND (c.scopes && $16::text[] OR ($19::boolean'
+      || ' AND NOT EXISTS (SELECT 1 FROM unnest(c.scopes) AS s(tag) WHERE starts_with(s.tag, ''region:'')))) ';
+  END IF;
+  IF v_scope_legal_entity IS NOT NULL THEN
+    v_filter := v_filter || ' AND (c.scopes && $17::text[] OR ($19::boolean'
+      || ' AND NOT EXISTS (SELECT 1 FROM unnest(c.scopes) AS s(tag) WHERE starts_with(s.tag, ''legal_entity:'')))) ';
+  END IF;
+  IF v_scope_department IS NOT NULL THEN
+    v_filter := v_filter || ' AND (c.scopes && $18::text[] OR ($19::boolean'
+      || ' AND NOT EXISTS (SELECT 1 FROM unnest(c.scopes) AS s(tag) WHERE starts_with(s.tag, ''department:'')))) ';
+  END IF;
+  IF p_effective_on IS NOT NULL THEN
+    v_filter := v_filter || ' AND (c.effective_from IS NULL OR c.effective_from <= $20::date)'
+      || ' AND (c.effective_to IS NULL OR c.effective_to >= $20::date) ';
+  END IF;
+
   v_sel :=
     ' c.id, c.document_id, c.content, c.metadata, c.chunk_index, %s, %s, c.doc_type, c.language,'
     || ' c.parent_id, c.section_path, c.chunk_kind,'
@@ -181,7 +225,8 @@ BEGIN
       EXECUTE 'SELECT count(*)::int FROM (SELECT 1 FROM ' || v_from || ' WHERE ' || v_filter || ' LIMIT $13) s'
         INTO v_n
         USING p_query_embedding, p_tenant_key, p_date_from, p_date_to, p_sources, p_document_ids, p_doc_types, p_languages,
-          p_supplier, p_amount_min, p_amount_max, p_currency, p_exact_scan_cutoff + 1;
+          p_supplier, p_amount_min, p_amount_max, p_currency, p_exact_scan_cutoff + 1, p_lexical_languages, p_query_embedding,
+          v_scope_region, v_scope_legal_entity, v_scope_department, COALESCE(p_scopes_include_untagged, false), p_effective_on;
       IF v_n <= p_exact_scan_cutoff THEN v_mode := 'exact'; END IF;
     END IF;
 
@@ -203,7 +248,8 @@ BEGIN
       || 'SELECT ''dense''::text, t.rnk, ' || format(v_sel, '(1 - t.dist)::double precision', 'NULL::real', v_mode)
       || ' FROM top t JOIN public.document_chunks c ON c.id = t.hid JOIN public.documents d ON d.id = c.document_id ORDER BY t.rnk'
       USING p_query_embedding, p_tenant_key, p_date_from, p_date_to, p_sources, p_document_ids, p_doc_types, p_languages,
-        p_supplier, p_amount_min, p_amount_max, p_currency, p_dense_limit;
+        p_supplier, p_amount_min, p_amount_max, p_currency, p_dense_limit, p_lexical_languages, p_query_embedding,
+        v_scope_region, v_scope_legal_entity, v_scope_department, COALESCE(p_scopes_include_untagged, false), p_effective_on;
   END IF;
 
   v_tsq := public.rag_lexical_tsquery(p_lexical_tokens);
@@ -225,7 +271,8 @@ BEGIN
       )
       || ' FROM hits t JOIN public.document_chunks c ON c.id = t.hid JOIN public.documents d ON d.id = c.document_id ORDER BY t.score DESC, t.hid'
       USING v_tsq, p_tenant_key, p_date_from, p_date_to, p_sources, p_document_ids, p_doc_types, p_languages,
-        p_supplier, p_amount_min, p_amount_max, p_currency, p_lexical_limit, p_lexical_languages, p_query_embedding;
+        p_supplier, p_amount_min, p_amount_max, p_currency, p_lexical_limit, p_lexical_languages, p_query_embedding,
+        v_scope_region, v_scope_legal_entity, v_scope_department, COALESCE(p_scopes_include_untagged, false), p_effective_on;
   END IF;
 END
 $fn$;
