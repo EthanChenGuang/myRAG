@@ -40,4 +40,19 @@ def report_only_reason(item: GoldenItem) -> str | None:
 
 
 def review_backlog(items: list[GoldenItem]) -> list[NativeReviewBacklogEntry]:
-    return []
+    """Items a native speaker still has to read, sorted by language then id (informational, D-45).
+
+    pending items are report-only until approved; existing synthetic_fixture zh/it items without a review keep counting."""
+    entries: list[NativeReviewBacklogEntry] = []
+    for item in items:
+        sides = _reviewed_sides(item)
+        if not sides:
+            continue
+        if not counts_in_gated_slices(item):
+            state = "pending"
+        elif item.native_review is None and item.provenance == EXISTING_PROVENANCE:
+            state = "existing_unreviewed"
+        else:
+            continue
+        entries.append(NativeReviewBacklogEntry(item_id=item.id, language=sides[0], state=state))
+    return sorted(entries, key=lambda entry: (entry.language, entry.item_id))
