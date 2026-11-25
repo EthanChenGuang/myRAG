@@ -11,12 +11,14 @@ import {
   createEnhancedRAGPrompt,
   createTraceCollector,
   detectLanguage,
+  effectiveLogMode,
   finishTrace,
   isQueryLayerEnabled,
   isSmallTalkResult,
   isV2Pipeline,
   knowledgeBaseUnavailableLanguage,
   knowledgeBaseUnavailableMessage,
+  mintEmbedFeedbackToken,
   parseRetrievalFilters,
   readFeedbackLoopConfig,
   resolveEmbedScope,
@@ -131,6 +133,7 @@ export async function POST(request: NextRequest) {
   // Set only while RAG_RETRIEVAL_LOG is on; off leaves finishTrace's arguments as they were
   let logContext: LogContext | null = null;
   let logQuery: string | undefined;
+  let feedbackTraceId: string | null = null;
   const finishPendingTrace = () => {
     if (!pendingTrace) return;
     const pending = pendingTrace;
@@ -281,6 +284,7 @@ export async function POST(request: NextRequest) {
       });
       collector.setReviewContent({ query: queryText, context: result.context, model });
       pendingTrace = { collector, result };
+      feedbackTraceId = collector.traceId;
       if (readFeedbackLoopConfig().retrievalLog !== 'off') {
         logContext = {
           channel: 'embed',
@@ -424,8 +428,20 @@ Context:
       const answeredOutcome = logContext ? pendingTrace?.result.logOutcome : undefined;
       if (answeredOutcome && answeredOutcome.value === 'unknown') answeredOutcome.value = 'answered';
 
+      // D-11: only with the embed rating enabled and a logged row to rate; otherwise the stream is unchanged
+      let feedbackToken: string | null = null;
+      if (feedbackTraceId && readFeedbackLoopConfig().embedFeedbackEnabled) {
+        const tenantKey = scopeKey(embedScope.scope);
+        if ((await effectiveLogMode(tenantKey)) !== 'off') {
+          feedbackToken = mintEmbedFeedbackToken({ traceId: feedbackTraceId, tenantKey });
+        }
+      }
+
       // Return the AI SDK stream directly (SAME AS MAIN CHAT API)
       return result.toUIMessageStreamResponse({
+        ...(feedbackToken
+          ? { messageMetadata: ({ part }) => (part.type === 'start' ? { feedbackToken } : undefined) }
+          : {}),
         headers: {
           'Content-Type': 'text/plain; charset=utf-8',
           'Cache-Control': 'no-cache, no-transform',

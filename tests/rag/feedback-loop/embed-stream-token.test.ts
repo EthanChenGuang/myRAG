@@ -32,7 +32,9 @@ vi.mock('ai', async (importOriginal) => {
         toUIMessageStreamResponse: (options?: Record<string, unknown>) => {
           h.responseOptions.push(options);
           const stream = result.toUIMessageStream(options as never);
-          return actual.createUIMessageStreamResponse({ stream: stream as never, headers: options?.headers as HeadersInit });
+          const response = actual.createUIMessageStreamResponse({ stream: stream as never, headers: options?.headers as HeadersInit });
+          (params.onFinish as ((event: { text: string }) => void) | undefined)?.({ text: 'ok' });
+          return response;
         },
       };
     },
