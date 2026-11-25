@@ -86,6 +86,11 @@ export interface RunEvalOptions {
   citations?: boolean;
   /** Sets options.groundedness on every request; implies includeAnswer. In-process runs score against the fake sidecar. */
   groundedness?: boolean;
+  /**
+   * Trusted harness input (never a run config): app variables for an in-process run, applied after the pinned eval env, such as
+   * the nightly's Prompt Guard sidecar endpoint. Never recorded in the manifest.
+   */
+  appEnv?: Record<string, string>;
 }
 
 export interface RunEvalResult {
@@ -175,6 +180,8 @@ export async function prepareInProcessEval(options: {
   ingestRouting?: import('./ingest-mode.mts').IngestRoutingOptions;
   /** Applied after the pinned eval env, before the eval route is imported. */
   envOverrides?: Record<string, string>;
+  /** Trusted harness variables applied with the overlay; not part of the run's recorded configuration. */
+  appEnv?: Record<string, string>;
   /** Ingest mode: seeded before the first document; the env overlay is then applied to the build too, so dual-write runs under v2. */
   chunkingProfiles?: import('../../src/lib/rag-eval/contracts.generated.ts').ChunkingProfile[];
 }): Promise<InProcessEval> {
@@ -188,6 +195,7 @@ export async function prepareInProcessEval(options: {
     envOverrides,
     chunkingProfiles,
     ingestRouting,
+    appEnv,
   } = options;
   if (ingestRouting && fixtureMode !== 'ingest') throw new Error('[Eval Harness] routing and forced tiers need --fixture-mode ingest');
   const existingSecret = process.env.RAG_EVAL_SECRET ?? '';
@@ -227,7 +235,7 @@ export async function prepareInProcessEval(options: {
   applyFixtureProcessEnv({
     edgeUrl: startedEdge.url,
     deploymentMode,
-    extra: { ...evalEnv, ...retrievalEnv },
+    extra: { ...evalEnv, ...retrievalEnv, ...appEnv },
     vendorEmbeddingRoutes: !!(embeddingProfileId || ingestFixture),
   });
 
@@ -392,6 +400,10 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     }
   }
 
+  if (baseUrl && options.appEnv && Object.keys(options.appEnv).length > 0) {
+    throw new Error('[Eval Harness] app variables apply to in-process runs only; omit --base-url');
+  }
+
   let liveApiKey = '';
   if (includeAnswer) {
     if (generator !== 'stub' && generator !== 'live' && generator !== 'fake') {
@@ -469,6 +481,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
           ...(ingestRouting ? { ingestRouting } : {}),
           ...(runConfig && Object.keys(runConfig.env).length > 0 ? { envOverrides: runConfig.env } : {}),
           ...(runConfig?.chunkingProfiles?.length ? { chunkingProfiles: runConfig.chunkingProfiles } : {}),
+          ...(options.appEnv && Object.keys(options.appEnv).length > 0 ? { appEnv: options.appEnv } : {}),
         });
         inProcess = prepared;
       }
