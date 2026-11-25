@@ -193,7 +193,7 @@ def test_with_the_flag_every_chunk_of_the_second_table_starts_with_the_carried_h
     doc = _recorded(fixture_id)
     header = "\n".join(next(chunk for chunk in _parse(doc, tmp_path, "plain")[0].chunks if chunk.is_table).text.splitlines()[:2])
 
-    result, out_dir = _parse(doc, tmp_path, "carried", carry_table_header=True)
+    result, _ = _parse(doc, tmp_path, "carried", carry_table_header=True)
 
     tables = [chunk for chunk in result.chunks if chunk.is_table]
     second = [chunk for chunk in tables if chunk.pages == [2]]
