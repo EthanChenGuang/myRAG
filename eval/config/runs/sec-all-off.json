@@ -1,0 +1,11 @@
+{
+  "name": "sec-all-off",
+  "env": {
+    "RAG_CONTEXT_TAGGING": "false",
+    "RAG_INJECTION_CHECK": "off",
+    "RAG_INJECTION_LAKERA": "false",
+    "RAG_INJECTION_PROMPT_GUARD": "false",
+    "RAG_TOOL_RESULT_GUARD": "off"
+  },
+  "overrides": null
+}

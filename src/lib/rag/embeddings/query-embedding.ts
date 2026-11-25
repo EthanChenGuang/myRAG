@@ -9,7 +9,7 @@ import {
   type EmbeddingProfile,
 } from './active-profile';
 import { EmbeddingProfileMismatch } from './mrl';
-import { canonicalModelId, getEmbeddingProvider } from './registry';
+import { canonicalModelId, getEmbeddingProviderFor } from './registry';
 
 export interface QueryEmbedding {
   vector: number[];
@@ -33,7 +33,7 @@ function assertDims(profile: EmbeddingProfile, length: number): void {
 function assertConfiguredModel(profile: EmbeddingProfile): void {
   let configured: string;
   try {
-    configured = getEmbeddingProvider(profile.provider).model;
+    configured = getEmbeddingProviderFor(profile.provider, profile.model).model;
   } catch {
     throw mismatchError('provider', profile, profile.provider);
   }

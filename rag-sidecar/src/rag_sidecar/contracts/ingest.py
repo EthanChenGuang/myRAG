@@ -3,6 +3,8 @@ from typing import Annotated, Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .languages import LANGUAGE_CODES, Language, build_language_type
+
 DocType = Literal[
     "general",
     "financial_report",
@@ -22,13 +24,13 @@ DocTypeChoice = Literal[
 ]
 ParserPreference = Literal["configured", "docling", "llamaparse"]
 TableMode = Literal["off", "fast", "accurate"]
-OcrLanguage = Literal["zh", "en", "it"]
+OcrLanguage = Language
 ChunkerKind = Literal["markdown_sections", "legal_clauses", "table_aware", "invoice", "image_caption"]
 Extractor = Literal["dates", "financial", "invoice", "urls"]
 Tier = Literal["fast", "structured", "premium"]
 RuleKind = Literal["phrase", "regex"]
 RuleSeverity = Literal["low", "medium", "high"]
-RuleLanguage = Literal["zh", "en", "it", "any"]
+RuleLanguage = build_language_type(LANGUAGE_CODES, extra=("any",))
 DetectionMethod = Literal["rules", "llm"]
 InputFormat = Literal["pdf", "docx", "html", "image", "json_docling"]
 ParserUsed = Literal["docling", "llamaparse", "text"]

@@ -14,6 +14,7 @@ const DEFAULT_BASELINES: Record<FixtureMode, string> = {
 };
 const DEFAULT_GOLDEN = 'eval/fixtures/golden.jsonl';
 const NOISE_PATH = path.join(REPO_ROOT, 'eval/config/noise.json');
+const SEC_LOG_SWITCHES = ['RAG_CONTEXT_TAGGING', 'RAG_INJECTION_CHECK', 'RAG_INJECTION_PROMPT_GUARD', 'RAG_INJECTION_LAKERA', 'RAG_TOOL_RESULT_GUARD'] as const;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function runPython(module: string, args: string[]): number {
@@ -92,6 +93,11 @@ async function main(): Promise<number> {
     throw new RunConfigError('[Eval Harness] a run-config env overlay applies to in-process runs only; omit --base-url or drop its env');
   }
   if (runConfig?.chunkingProfiles?.length && fixtureMode !== 'ingest') throw new RunConfigError(CHUNKING_PROFILES_NEED_INGEST);
+  if (runConfig) {
+    // The SEC overlay decides the injection report's configuration label (recommended is gated at absolute zero, D-14).
+    const security = SEC_LOG_SWITCHES.filter((name) => runConfig.env[name] !== undefined).map((name) => `${name}=${runConfig.env[name]}`);
+    if (security.length > 0) console.log(`[Eval Harness] run-config ${runConfig.name} SEC switches: ${security.join(', ')}`);
+  }
 
   const requestOptions: EvalRequestOptions = {};
   if (maxResults !== undefined) requestOptions.max_results = maxResults;

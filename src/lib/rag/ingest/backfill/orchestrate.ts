@@ -4,7 +4,7 @@ import type { RpcClient } from '@/lib/rag/backend/supabase-rpc';
 import { scopeKey, type TenantScope } from '@/lib/rag/tenant/scope';
 import { getRagDeps } from '../../deps';
 import { estimateCostUsd } from '../../embeddings/prices';
-import { canonicalModelId, getEmbeddingProvider } from '../../embeddings/registry';
+import { canonicalModelId, getEmbeddingProviderFor } from '../../embeddings/registry';
 import type { EmbeddingProviderId } from '../../embeddings/types';
 import { publishDeferred } from '../callbacks/advance';
 import { getIngestDeps } from '../deps';
@@ -475,7 +475,7 @@ async function embedSynchronously(ctx: RunContext, target: EmbeddingTarget, entr
     for (let start = 0; start < group.length; start += SYNC_EMBED_GROUP) {
       const part = group.slice(start, start + SYNC_EMBED_GROUP);
       try {
-        const provider = getEmbeddingProvider(profile.provider);
+        const provider = getEmbeddingProviderFor(profile.provider, profile.model);
         const output = await provider.embedDocuments(
           part.map((chunk) => chunk.text),
           { dims: profile.dims, signal: deps.signal },

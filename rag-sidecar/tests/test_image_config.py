@@ -95,7 +95,8 @@ def test_a_missing_config_fails_with_an_error_that_names_the_paths_it_tried(tmp_
 
     assert done.returncode != 0
     assert "RagConfigMissing" in done.stderr, done.stderr[-2000:]
-    assert str(app / "config" / "rag" / "parse-routing.json") in done.stderr
+    # The contracts build their Language type from the registry at import (D-06), so it is the first file missed.
+    assert str(app / "config" / "rag" / "language-packs.json") in done.stderr
 
 
 def test_a_checkout_still_reads_the_repo_root_config():

@@ -47,6 +47,25 @@ describe('Python samples parse with the generated Zod schemas', () => {
   });
 });
 
+describe('language codes come from the language-pack registry', () => {
+  const registry = JSON.parse(fs.readFileSync(path.join(ROOT, 'config', 'rag', 'language-packs.json'), 'utf8')) as {
+    packs: Array<{ code: string }>;
+  };
+  const codes = registry.packs.map((pack) => pack.code);
+
+  it('GoldenItem accepts every registry code and rejects an unknown one', () => {
+    for (const language of codes) {
+      expect(schemaFor('GoldenItem').safeParse({ ...fixture.samples.GoldenItem, language }).success, language).toBe(true);
+    }
+    expect(schemaFor('GoldenItem').safeParse({ ...fixture.samples.GoldenItem, language: 'xx' }).success).toBe(false);
+  });
+
+  it('the GoldenItem JSON Schema lists the registry codes in registry order', () => {
+    const schema = JSON.parse(fs.readFileSync(path.join(SCHEMAS_DIR, 'GoldenItem.schema.json'), 'utf8'));
+    expect(schema.properties.language.enum).toEqual(codes);
+  });
+});
+
 describe('optional and defaulted fields', () => {
   it('parses every variant', () => {
     for (const [name, variant] of Object.entries(fixture.variants)) {

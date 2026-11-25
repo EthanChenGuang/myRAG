@@ -1,0 +1,125 @@
+{
+  "description": "Files that still hard-code the zh/en/it language codes (Phase 3.2 D-06). Every entry names the plan or phase that removes the literal; checked by scripts/ci/check-language-literals.mjs.",
+  "entries": [
+    {
+      "path": "src/lib/rag/lang/detect.ts",
+      "owner": "03.2-10",
+      "reason": "language detection and OCR language defaults; plan 03.2-10 reads them from the registry"
+    },
+    {
+      "path": "rag-sidecar/src/rag_sidecar/parse/docling_adapter.py",
+      "owner": "03.2-10",
+      "reason": "language detection and OCR language defaults; plan 03.2-10 reads them from the registry"
+    },
+    {
+      "path": "rag-sidecar/src/rag_sidecar/parse/presets.py",
+      "owner": "03.2-10",
+      "reason": "language detection and OCR language defaults; plan 03.2-10 reads them from the registry"
+    },
+    {
+      "path": "src/lib/rag/query/filters.ts",
+      "owner": "03.2-11",
+      "reason": "language value list or label map; plan 03.2-11 converts it to the registry codes"
+    },
+    {
+      "path": "src/lib/rag/ingest/invoice-client.ts",
+      "owner": "03.2-11",
+      "reason": "language value list or label map; plan 03.2-11 converts it to the registry codes"
+    },
+    {
+      "path": "src/components/ui/doc-type-labels.ts",
+      "owner": "03.2-11",
+      "reason": "language value list or label map; plan 03.2-11 converts it to the registry codes"
+    },
+    {
+      "path": "src/components/ui/ingest-status-labels.ts",
+      "owner": "03.2-11",
+      "reason": "language value list or label map; plan 03.2-11 converts it to the registry codes"
+    },
+    {
+      "path": "src/lib/rag/query/rewrite-gate.ts",
+      "owner": "03.2-11",
+      "reason": "language value list or label map; plan 03.2-11 converts it to the registry codes"
+    },
+    {
+      "path": "eval/src/rag_eval/corpus.py",
+      "owner": "03.2-11",
+      "reason": "language value list or label map; plan 03.2-11 converts it to the registry codes"
+    },
+    {
+      "path": "eval/src/rag_eval/review_queue.py",
+      "owner": "03.2-11",
+      "reason": "language value list or label map; plan 03.2-11 converts it to the registry codes"
+    },
+    {
+      "path": "eval/src/rag_eval/draft/config.py",
+      "owner": "03.2-11",
+      "reason": "language value list or label map; plan 03.2-11 converts it to the registry codes"
+    },
+    {
+      "path": "scripts/config-server.js",
+      "owner": "03.2-11",
+      "reason": "language value list or label map; plan 03.2-11 converts it to the registry codes"
+    },
+    {
+      "path": "scripts/config-ui/rag-panels/chunking-profiles.js",
+      "owner": "03.2-11",
+      "reason": "language value list or label map; plan 03.2-11 converts it to the registry codes"
+    },
+    {
+      "path": "src/lib/rag/refusal/gate.ts",
+      "owner": "Phase 5.2 (LANG-09)",
+      "reason": "refusal and injection-defense language cells; LANG-09 moves them to the registry"
+    },
+    {
+      "path": "src/lib/rag/refusal/status.ts",
+      "owner": "Phase 5.2 (LANG-09)",
+      "reason": "refusal and injection-defense language cells; LANG-09 moves them to the registry"
+    },
+    {
+      "path": "src/lib/rag/v2/stages/rank.ts",
+      "owner": "Phase 5.2 (LANG-09)",
+      "reason": "refusal and injection-defense language cells; LANG-09 moves them to the registry"
+    },
+    {
+      "path": "eval/src/rag_eval/calibrate/refusal.py",
+      "owner": "Phase 5.2 (LANG-09)",
+      "reason": "refusal and injection-defense language cells; LANG-09 moves them to the registry"
+    },
+    {
+      "path": "scripts/config-ui/rag-panels/refusal-calibration.js",
+      "owner": "Phase 5.2 (LANG-09)",
+      "reason": "refusal and injection-defense language cells; LANG-09 moves them to the registry"
+    },
+    {
+      "path": "scripts/config-ui/rag-panels/injection-defense.js",
+      "owner": "Phase 5.2 (LANG-09)",
+      "reason": "refusal and injection-defense language cells; LANG-09 moves them to the registry"
+    },
+    {
+      "path": "src/lib/rag/query/language.ts",
+      "owner": "Phase 6.2 (LANG-08)",
+      "reason": "query-language detector bodies; LANG-08 replaces them"
+    },
+    {
+      "path": "src/lib/rag/query/gate-language.ts",
+      "owner": "Phase 6.2 (LANG-08)",
+      "reason": "query-language detector bodies; LANG-08 replaces them"
+    },
+    {
+      "path": "src/lib/rag/trace/review-candidates.ts",
+      "owner": "Phase 6.2 (LANG-08)",
+      "reason": "query-language detector bodies; LANG-08 replaces them"
+    },
+    {
+      "path": "src/lib/rag/embeddings/catalog.ts",
+      "owner": "Phase 3.1.1",
+      "reason": "supported_languages declared per catalog model (created by plan 03.1.1-01); the declarations move to the registry codes with the catalog owner"
+    },
+    {
+      "path": "src/lib/rag/generation/groundedness.ts",
+      "owner": "Phase 5",
+      "reason": "groundedness scorer language tags incl. zh-Hans/zh-Hant (created by plan 05-14); the registry groundedness field replaces them"
+    }
+  ]
+}
