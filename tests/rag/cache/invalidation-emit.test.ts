@@ -61,6 +61,7 @@ function publishContext(
     document: { id: DOC_NEW, version: 2, lineageId: LINEAGE, resumed: false },
     parserUsed: 'text',
     work: { chunksWritten: 3 } as StageContext['work'],
+    state: {},
     warnings: [],
   } as unknown as StageContext;
 }
