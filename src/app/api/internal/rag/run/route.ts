@@ -5,6 +5,9 @@ import { env } from '@/lib/env';
 import { validateRequest } from '@/lib/api-middleware';
 import { classifyQuery } from '@/lib/query-classifier';
 import {
+  answerLanguageOptions,
+  appendAnswerLanguage,
+  type AnswerLanguageOptions,
   BINDING_DOC_TYPES,
   CORE_STAGES,
   countTokens,
@@ -343,6 +346,7 @@ async function generateClaudeAnswer(input: {
   query: string;
   conversation: EvalConversationTurn[];
   signal: AbortSignal;
+  answerLanguage?: AnswerLanguageOptions;
 }): Promise<string | null> {
   const { session } = input;
   let streamError: unknown = null;
@@ -351,7 +355,7 @@ async function generateClaudeAnswer(input: {
       input.conversation.map((turn) => ({ role: turn.role, content: turn.content })),
     ) as ModelMessage[];
     const stream = session.startClaude({
-      system: session.claudeSystemPrompt(resolveEvalPromptTemplate()),
+      system: appendAnswerLanguage(session.claudeSystemPrompt(resolveEvalPromptTemplate()), input.answerLanguage),
       history,
       question: input.query,
       reasoning: false,
@@ -476,9 +480,16 @@ export async function POST(req: NextRequest) {
       if (generatorModel !== null && !refused) {
         const generationStart = collector.now();
         citationSession?.attach(result);
+        const answerLanguage = answerLanguageOptions(result);
         try {
           if (citationSession?.strategy === 'claude-citations') {
-            answer = await generateClaudeAnswer({ session: citationSession, query, conversation: conversation ?? [], signal: req.signal });
+            answer = await generateClaudeAnswer({
+              session: citationSession,
+              query,
+              conversation: conversation ?? [],
+              signal: req.signal,
+              ...(answerLanguage ? { answerLanguage } : {}),
+            });
           }
           if (answer === null) {
             answer = await generateEvalAnswer({
@@ -488,6 +499,7 @@ export async function POST(req: NextRequest) {
               ragMode,
               generatorModel,
               ...(citationSession ? { decorateSystemPrompt: (prompt: string) => citationSession.decorateSystemPrompt(prompt) } : {}),
+              ...(answerLanguage ? { answerLanguage } : {}),
             });
             citationSession?.ingestFullText(answer);
           }
