@@ -404,6 +404,24 @@ describe('legacy rule pool', () => {
     expect((await rank(LEGACY_RULE, termHit, { profile: 'eval' })).out.decision).toMatchObject({ decision: 'refuse' });
   });
 
+  it('voice replays the legacy voice search', async () => {
+    const termHit = (similarity: number) => pool([{ similarity, content: 'The widget arrives in two parts.' }]);
+    expect((await rank(LEGACY_RULE, termHit(0.2), { profile: 'voice' })).out.decision).toMatchObject({ decision: 'answer' });
+    expect((await rank(LEGACY_RULE, termHit(0.2))).out.decision).toMatchObject({ decision: 'refuse' });
+    expect((await rank(LEGACY_RULE, termHit(0.14), { profile: 'voice' })).out.decision).toMatchObject({ decision: 'refuse' });
+    const sixth = pool([
+      { similarity: 0.6 },
+      { similarity: 0.59 },
+      { similarity: 0.58 },
+      { similarity: 0.57 },
+      { similarity: 0.56 },
+      { similarity: 0.55, content: 'The widget arrives in two parts.' },
+    ]);
+    const voice = await rank(LEGACY_RULE, sixth, { profile: 'voice', inputOptions: { maxResults: 1 } });
+    expect(voice.out.decision).toMatchObject({ decision: 'refuse' });
+    expect(voice.refusalStage?.detail).toBe('similarity_floor floor=legacy_rule pool=5');
+  });
+
   it('default unchanged: the similarity floor judges every fused hit', async () => {
     const lexicalOnly = only({ 'lexical:0': 1 }, { similarity: 0.7 });
     const a = await rank(V2, [lexicalOnly]);
