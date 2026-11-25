@@ -18,6 +18,8 @@ export interface AnswerDbState {
   rpcs: Array<{ name: string; args: unknown }>;
   rpcResults: Record<string, { data: unknown; error: { code?: string; message: string } | null }>;
   failUpdates: boolean;
+  failSelects: string[];
+  tokens: Record<string, string>;
 }
 
 export function newAnswerDb(): AnswerDbState {
@@ -28,6 +30,8 @@ export function newAnswerDb(): AnswerDbState {
     rpcs: [],
     rpcResults: {},
     failUpdates: false,
+    failSelects: [],
+    tokens: {},
   };
 }
 
@@ -51,6 +55,7 @@ function builder(state: AnswerDbState, kind: 'session' | 'admin', table: string)
     state.queries.push({ client: kind, table, op, payload: op === 'update' ? payload : undefined, filters: described });
     if (op === 'update' && kind === 'session') throw new Error('session client must not write');
     if (op === 'update' && state.failUpdates) return { data: null, error: { code: 'PGRST500' } };
+    if (op === 'select' && state.failSelects.includes(table)) return { data: null, error: { code: 'PGRST500' } };
     const rows = state.tables[table] ?? [];
     let hit = rows.filter((row) => (kind === 'admin' || visibleToSession(state, table, row)) && filters.every((filter) => filter(row)));
     if (op === 'update') hit.forEach((row) => Object.assign(row, structuredClone(payload)));
@@ -109,6 +114,12 @@ export function sessionClient(state: AnswerDbState): SupabaseClient {
 
 export function adminClient(state: AnswerDbState): SupabaseClient {
   return {
+    auth: {
+      getUser: async (token: string) => {
+        const id = state.tokens[token];
+        return id ? { data: { user: { id } }, error: null } : { data: { user: null }, error: { message: 'invalid' } };
+      },
+    },
     from: (table: string) => builder(state, 'admin', table),
     rpc: async (name: string, args: unknown) => {
       state.rpcs.push({ name, args });

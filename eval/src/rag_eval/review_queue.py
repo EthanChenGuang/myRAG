@@ -135,6 +135,12 @@ def _to_item(row: dict[str, Any]) -> ReviewQueueItem | None:
         return None
 
 
+def _http_client():
+    import httpx
+
+    return httpx.Client(timeout=30.0)
+
+
 def _parse_time(value: str) -> datetime:
     parsed = datetime.fromisoformat(value)
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
@@ -291,6 +297,9 @@ def main(argv: list[str] | None = None) -> int:
     pull_cmd.add_argument("--to", dest="to_time", required=True, help="window end, ISO 8601")
     pull_cmd.add_argument("--out-dir", type=Path, help="queue directory inside eval/golden/private/")
     pull_cmd.add_argument("--out", type=Path, help="queue file inside eval/golden/private/ (overrides --out-dir)")
+    pull_cmd.add_argument("--source", choices=("langfuse", "db", "both"), default="langfuse")
+    pull_cmd.add_argument("--base-url")
+    pull_cmd.add_argument("--token-env", default="RAG_ADMIN_BEARER")
 
     promote_cmd = commands.add_parser("promote", help="turn a queue item into a draft golden item")
     promote_cmd.add_argument("item_id", help="trace id or observation id of the queue item")
