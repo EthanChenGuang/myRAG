@@ -278,6 +278,205 @@
       "spread_kind": "stdev_ddof1",
       "tier": "smoke"
     },
+    "CacheCheckRequest": {
+      "embedding_profile_id": "openai-3-small-1536",
+      "key_hash": "814ef09af4c97afaf97ed878e7175773d817b777d31f5cc2ba586119feb8c490",
+      "max_distance": 0.05,
+      "tenant_key": "s:default",
+      "vector": [
+        0.125,
+        -0.25,
+        0.5
+      ]
+    },
+    "CacheCheckResponse": {
+      "answer": {
+        "answer_language": "en",
+        "answer_text": "Placeholder cached answer [S1].",
+        "citations": [
+          {
+            "alias": "S1",
+            "chunkIds": [
+              "00000000-0000-4000-8000-0000000000c1",
+              "00000000-0000-4000-8000-0000000000c2"
+            ],
+            "documentId": "00000000-0000-4000-8000-0000000000d1",
+            "documentName": "leave-policy.pdf",
+            "documentVersion": 2,
+            "n": 1,
+            "page": 4,
+            "quote": "placeholder quote",
+            "quoteHash": "17f49d7a8415d6f39d8b8eb10c32fef1ac46049eee08447ce28e9820998e5a42",
+            "sectionPath": [
+              "Leave",
+              "Annual leave"
+            ],
+            "strategy": "chunk-alias"
+          }
+        ],
+        "created_at": "2026-01-01T00:00:00.000Z",
+        "groundedness": {
+          "checkedAt": "2026-01-01T00:00:03.000Z",
+          "label": "verified",
+          "latencyMs": 640,
+          "reason": null,
+          "score": 0.82,
+          "scorer": "hhem_2_1_open",
+          "status": "scored",
+          "threshold": 0.5,
+          "thresholdSource": "default",
+          "truncated": false
+        },
+        "is_refusal": false,
+        "rag_mode": "strict",
+        "source_versions": [
+          {
+            "document_id": "00000000-0000-4000-8000-0000000000d1",
+            "version": 2
+          }
+        ],
+        "sources": [
+          {
+            "document_id": "00000000-0000-4000-8000-0000000000d1",
+            "name": "leave-policy.pdf",
+            "version": 2
+          }
+        ],
+        "trace_id": "0123456789abcdef0123456789abcdef"
+      },
+      "distance": 0.03,
+      "entry_id": "cache-entry-0001",
+      "hit": true
+    },
+    "CacheInvalidateRequest": {
+      "document_ids": [
+        "00000000-0000-4000-8000-0000000000d1"
+      ],
+      "tenant_key": "s:default"
+    },
+    "CacheInvalidateResponse": {
+      "deleted": 3
+    },
+    "CacheStoreRequest": {
+      "answer": {
+        "answer_language": "en",
+        "answer_text": "Placeholder cached answer [S1].",
+        "citations": [
+          {
+            "alias": "S1",
+            "chunkIds": [
+              "00000000-0000-4000-8000-0000000000c1",
+              "00000000-0000-4000-8000-0000000000c2"
+            ],
+            "documentId": "00000000-0000-4000-8000-0000000000d1",
+            "documentName": "leave-policy.pdf",
+            "documentVersion": 2,
+            "n": 1,
+            "page": 4,
+            "quote": "placeholder quote",
+            "quoteHash": "17f49d7a8415d6f39d8b8eb10c32fef1ac46049eee08447ce28e9820998e5a42",
+            "sectionPath": [
+              "Leave",
+              "Annual leave"
+            ],
+            "strategy": "chunk-alias"
+          }
+        ],
+        "created_at": "2026-01-01T00:00:00.000Z",
+        "groundedness": {
+          "checkedAt": "2026-01-01T00:00:03.000Z",
+          "label": "verified",
+          "latencyMs": 640,
+          "reason": null,
+          "score": 0.82,
+          "scorer": "hhem_2_1_open",
+          "status": "scored",
+          "threshold": 0.5,
+          "thresholdSource": "default",
+          "truncated": false
+        },
+        "is_refusal": false,
+        "rag_mode": "strict",
+        "source_versions": [
+          {
+            "document_id": "00000000-0000-4000-8000-0000000000d1",
+            "version": 2
+          }
+        ],
+        "sources": [
+          {
+            "document_id": "00000000-0000-4000-8000-0000000000d1",
+            "name": "leave-policy.pdf",
+            "version": 2
+          }
+        ],
+        "trace_id": "0123456789abcdef0123456789abcdef"
+      },
+      "embedding_profile_id": "openai-3-small-1536",
+      "key_hash": "814ef09af4c97afaf97ed878e7175773d817b777d31f5cc2ba586119feb8c490",
+      "query_text_masked": "How many leave days does [EMAIL] get?",
+      "tenant_key": "s:default",
+      "ttl_seconds": 3600,
+      "vector": [
+        0.125,
+        -0.25,
+        0.5
+      ]
+    },
+    "CachedAnswer": {
+      "answer_language": "en",
+      "answer_text": "Placeholder cached answer [S1].",
+      "citations": [
+        {
+          "alias": "S1",
+          "chunkIds": [
+            "00000000-0000-4000-8000-0000000000c1",
+            "00000000-0000-4000-8000-0000000000c2"
+          ],
+          "documentId": "00000000-0000-4000-8000-0000000000d1",
+          "documentName": "leave-policy.pdf",
+          "documentVersion": 2,
+          "n": 1,
+          "page": 4,
+          "quote": "placeholder quote",
+          "quoteHash": "17f49d7a8415d6f39d8b8eb10c32fef1ac46049eee08447ce28e9820998e5a42",
+          "sectionPath": [
+            "Leave",
+            "Annual leave"
+          ],
+          "strategy": "chunk-alias"
+        }
+      ],
+      "created_at": "2026-01-01T00:00:00.000Z",
+      "groundedness": {
+        "checkedAt": "2026-01-01T00:00:03.000Z",
+        "label": "verified",
+        "latencyMs": 640,
+        "reason": null,
+        "score": 0.82,
+        "scorer": "hhem_2_1_open",
+        "status": "scored",
+        "threshold": 0.5,
+        "thresholdSource": "default",
+        "truncated": false
+      },
+      "is_refusal": false,
+      "rag_mode": "strict",
+      "source_versions": [
+        {
+          "document_id": "00000000-0000-4000-8000-0000000000d1",
+          "version": 2
+        }
+      ],
+      "sources": [
+        {
+          "document_id": "00000000-0000-4000-8000-0000000000d1",
+          "name": "leave-policy.pdf",
+          "version": 2
+        }
+      ],
+      "trace_id": "0123456789abcdef0123456789abcdef"
+    },
     "ChunkingDecision": {
       "build_run_id": "build-run-001",
       "chosen_on": {
@@ -3007,6 +3206,29 @@
       },
       "tier": "smoke"
     },
+    "SemanticCacheCalibration": {
+      "profiles": [
+        {
+          "dev": {
+            "near_miss_pairs": 10,
+            "near_miss_wrong_hit_rate": 0.0,
+            "paraphrase_hit_rate": 0.8,
+            "paraphrase_pairs": 10
+          },
+          "embedding_profile_id": "openai-3-small-1536",
+          "fitted_at": "2026-01-01T00:00:00.000Z",
+          "max_distance": 0.05,
+          "source": "calibrated",
+          "test": {
+            "near_miss_pairs": 10,
+            "near_miss_wrong_hit_rate": 0.0,
+            "paraphrase_hit_rate": 0.8,
+            "paraphrase_pairs": 10
+          }
+        }
+      ],
+      "schema_version": 1
+    },
     "SidecarError": {
       "error": "synthetic error"
     },
@@ -3068,6 +3290,22 @@
         "ragMode": "strict",
         "traceId": "0123456789abcdef0123456789abcdef",
         "updatedAt": "2026-01-01T00:00:10.000Z"
+      }
+    },
+    "CacheCheckResponse:miss": {
+      "model": "CacheCheckResponse",
+      "value": {
+        "answer": null,
+        "distance": null,
+        "entry_id": null,
+        "hit": false
+      }
+    },
+    "CacheInvalidateRequest:whole_tenant": {
+      "model": "CacheInvalidateRequest",
+      "value": {
+        "document_ids": null,
+        "tenant_key": "s:default"
       }
     },
     "EvalReport:injection": {
@@ -3493,6 +3731,33 @@
         "run_id": "run-001",
         "schema_version": 1,
         "tier": "smoke"
+      }
+    },
+    "GoldenItem:cache_near_miss": {
+      "model": "GoldenItem",
+      "value": {
+        "answerable": true,
+        "attack": null,
+        "category": "cache_near_miss",
+        "conversation": [],
+        "evidence_language": null,
+        "expected_answer": "Ten days per year.",
+        "gold_evidence": [
+          {
+            "document": "handbook.md",
+            "quote": "twenty days",
+            "section": "Leave policy"
+          }
+        ],
+        "id": "en-cache-near-miss-001",
+        "language": "en",
+        "pair_of": "en-general-001",
+        "provenance": "synthetic_fixture",
+        "question": "How many sick days do employees get?",
+        "retrieval_filters": null,
+        "review_status": "approved",
+        "split": "dev",
+        "tags": []
       }
     },
     "GoldenItem:cross_lingual": {
@@ -4234,6 +4499,26 @@
             "similarity": 0.82
           }
         ]
+      }
+    },
+    "RetrievalParams:sub_question_coverage_off": {
+      "model": "RetrievalParams",
+      "value": {
+        "candidate_pool_size": 75,
+        "config_hash": null,
+        "final_top_k": 8,
+        "leg_weights": {
+          "dense": 1.0,
+          "exact_id": 1.0,
+          "lexical": 1.0
+        },
+        "provenance": {
+          "source": "defaults"
+        },
+        "rerank_input_cap": 75,
+        "rrf_k": 60,
+        "schema_version": 1,
+        "sub_question_coverage": false
       }
     }
   }
