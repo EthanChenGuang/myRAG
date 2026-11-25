@@ -95,7 +95,7 @@ RED commits failed on assertions: 19 bake tests (a stub module with the constant
   - `npx next typegen && npx tsc --noEmit`: 0 errors.
   - vitest: 4596 passed, 1 skipped.
   - `tests/*.test.mts`: 172 passed.
-  - `tests/rag-db/*.test.mts`: see the final report.
+  - `tests/rag-db/*.test.mts`: 1457 passed, 0 failed.
   - RAG boundary script and its 38 tests: pass.
   - `check-config` and `check-workflows`: OK.
   - rag-sidecar pytest: 1420 passed, 11 skipped.
