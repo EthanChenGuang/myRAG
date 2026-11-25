@@ -3,6 +3,7 @@ import { countTokens } from '../text/tokens';
 import type { ChunkDraft } from '../types';
 import { CHUNKERS, ChunkerUnavailableError, type ChunkerConfig } from './index';
 import { chunkMarkdownSections, type MarkdownChunkOptions } from './markdown-sections';
+import { carryTableHeaders, markCarriedChunks, type TableHeaderCarry } from './markdown-tables';
 import { chunkTableSection } from './table-aware';
 
 export interface ParentChildProfile {
@@ -22,6 +23,11 @@ export interface ParentDraft {
 export interface ChildDraft extends ChunkDraft {
   /** Null only for a profile without parents. */
   parent_index: number | null;
+}
+
+export interface ParentChildTableOptions {
+  /** D-20 (RAG_TABLE_HEADER_REPEAT=always): header-less continuation tables take the previous header before parents are cut. */
+  carryTableHeader?: boolean;
 }
 
 export interface ParentChildResult {
@@ -68,7 +74,11 @@ export function chunkParentChild(
   profile: ParentChildProfile,
   chunker: ChunkerConfig,
   sentences: BlockSplitter = legacyBlockSplitter,
+  tables: ParentChildTableOptions = {},
 ): ParentChildResult {
+  const carry: TableHeaderCarry | null = tables.carryTableHeader === true ? carryTableHeaders(markdown) : null;
+  if (carry !== null) markdown = carry.markdown;
+  const mark = <T extends ChunkDraft>(drafts: T[]): T[] => (carry === null ? drafts : markCarriedChunks(drafts, carry));
   const warnings = new Set<string>();
   const childOptions: MarkdownChunkOptions = {
     maxTokens: profile.childTokens,
@@ -89,7 +99,7 @@ export function chunkParentChild(
       repeat_table_header: true,
     }, sentences);
     for (const warning of result.warnings) warnings.add(warning);
-    const children = result.captionOnly === true ? [] : result.chunks.map((draft): ChildDraft => ({ ...draft, section_path: [...draft.section_path], parent_index: null }));
+    const children = result.captionOnly === true ? [] : mark(result.chunks.map((draft): ChildDraft => ({ ...draft, section_path: [...draft.section_path], parent_index: null })));
     return { parents: [], children, warnings: [...warnings] };
   }
 
@@ -120,5 +130,5 @@ export function chunkParentChild(
       children.push({ ...draft, section_path: [...parent.section_path], parent_index: parent.parent_index });
     }
   }
-  return { parents, children, warnings: [...warnings] };
+  return { parents, children: mark(children), warnings: [...warnings] };
 }
