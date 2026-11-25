@@ -7,6 +7,7 @@ import { chunkImageCaption } from './image-caption';
 import { chunkInvoice } from './invoice';
 import { chunkLegalClauses } from './legal-clauses';
 import { chunkMarkdownSections } from './markdown-sections';
+import { carryTableHeaders, markCarriedChunks } from './markdown-tables';
 import { chunkTableAware } from './table-aware';
 
 export type ChunkerConfig = ProcessingProfile['chunker'];
@@ -99,5 +100,11 @@ export function chunkDocument(chunker: ChunkerConfig, parse: ChunkSource, option
   if (DOCLING_KINDS.has(chunker.kind) && parse.chunks && parse.chunks.length > 0) {
     return { chunks: fromDocling(parse.chunks), warnings: [] };
   }
-  return chunk(parse.markdown, withEffectiveHeader(chunker, options.tableHeaderRepeat), blockSplitterForIngest(options.languageAwareIngest));
+  const config = withEffectiveHeader(chunker, options.tableHeaderRepeat);
+  const sentences = blockSplitterForIngest(options.languageAwareIngest);
+  if (!effectiveTableHeader(options.tableHeaderRepeat, chunker).carryTableHeader) return chunk(parse.markdown, config, sentences);
+  // D-20: header-less continuation tables take the previous table's header before any chunker cuts them.
+  const carry = carryTableHeaders(parse.markdown);
+  const result = chunk(carry.markdown, config, sentences);
+  return { ...result, chunks: markCarriedChunks(result.chunks, carry) };
 }

@@ -4,6 +4,7 @@ import { LEXICAL_VERSION, chunkLexicalText } from '../lexical/chunk-text';
 import { withEffectiveHeader, type ChunkerConfig } from './chunkers';
 import { chunkParentChild } from './chunkers/parent-child';
 import { contentHash } from './hash';
+import { effectiveTableHeader } from './routing/effective-settings';
 import { buildEmbeddingText, EMBEDDING_TEXT_VERSION } from './text/embedding-text';
 import type {
   ChunkingProfileRow,
@@ -60,6 +61,7 @@ export function buildProfileChunks(document: ProfileDocument, parseMarkdown: str
     { childTokens: profile.childTokens, parentMode: profile.parentMode, parentTokens: profile.parentTokens },
     withEffectiveHeader(document.chunker, document.tableHeaderRepeat),
     blockSplitterForIngest(document.languageAwareIngest),
+    { carryTableHeader: effectiveTableHeader(document.tableHeaderRepeat, document.chunker).carryTableHeader },
   );
   const parents: ProfileParentWrite[] = cut.parents.map((parent) => ({
     parent_index: parent.parent_index,
