@@ -2,7 +2,7 @@
  * The backfill dry run (D-33 steps 2 to 4): a stratified sample that grows until every class seen by preflight has 20 files, the
  * projection report built from the sample's per-page tiers, and the `rag:backfill` command that reports before it spends.
  */
-import { describe, test } from 'node:test';
+import { after, before, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { BackfillDryRunReportSchema } from '@/lib/rag-eval/contracts.generated';
 import { loadRoutingConfig } from '@/lib/rag/ingest/routing/config';
@@ -291,5 +291,254 @@ describe('projection report (D-33 step 3)', () => {
       Number(((10 * 10_000 * 0.02) / 1e6).toFixed(6)),
       'the pre-sample bound counts text files only',
     );
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// The command: report before spending, run only within the budget (D-31 to D-34, D-36, D-37)
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+type Row = Record<string, unknown>;
+
+describe('rag:backfill orchestration and exit codes', () => {
+  let harness: import('../../eval/harness/queued-ingest.mts').QueuedHarness;
+  let cli: typeof import('@/lib/rag/ingest/backfill/cli');
+  let tenant: string;
+  let folder: string;
+  let stopWorker: () => void = () => undefined;
+
+  function textFile(label: string): Buffer {
+    return Buffer.from(`# ${label}\n\nThe ${label} note describes one shelf of the archive in a few plain sentences.\n`, 'utf8');
+  }
+
+  /** A worker stand-in: every queued job of a batch ends ready, dry runs with a native one-page preflight result. */
+  function fakeWorker(): () => void {
+    const timer = setInterval(() => {
+      harness
+        .rows(
+          `UPDATE ingestion_jobs
+              SET status = 'ready', stage = 'ready', doc_class = 'native', pages = 1,
+                  tier_page_counts = '{"native":1,"fast":0,"structured":0,"premium":0}'::jsonb,
+                  detect_counts = '{"L1":1,"L2":0,"L3":0,"gated_share":0}'::jsonb
+            WHERE batch_id IS NOT NULL AND status = 'queued' AND deleted_at IS NULL`,
+        )
+        .catch(() => undefined);
+    }, 40);
+    return () => clearInterval(timer);
+  }
+
+  async function runCli(args: string[], overrides: Record<string, unknown> = {}): Promise<{ code: number; out: string[]; err: string[]; batchId: string | null }> {
+    const out: string[] = [];
+    const err: string[] = [];
+    const code = await cli.main(args, { out: (line) => out.push(line), err: (line) => err.push(line) }, new AbortController().signal, {
+      monitorIntervalMs: 50,
+      ...overrides,
+    });
+    const match = [...out, ...err].join('\n').match(/batch ([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/);
+    return { code, out, err, batchId: match ? (match[1] as string) : null };
+  }
+
+  async function batchRow(batchId: string): Promise<Row> {
+    const [row] = await harness.rows('SELECT * FROM ingestion_batches WHERE id = $1', [batchId]);
+    assert.ok(row, 'batch row');
+    return row;
+  }
+
+  async function counts(batchId: string, kind: string): Promise<Record<string, number>> {
+    const rows = await harness.rows('SELECT status, count(*)::int AS n FROM ingestion_jobs WHERE batch_id = $1 AND kind = $2 GROUP BY status', [batchId, kind]);
+    return Object.fromEntries(rows.map((row) => [String(row.status), Number(row.n)]));
+  }
+
+  before(async () => {
+    const { startQueuedHarness, QUEUED_IDS } = await import('../../eval/harness/queued-ingest.mts');
+    harness = await startQueuedHarness();
+    const objectStore = await import('@/lib/rag/ingest/object-store');
+    objectStore.resetObjectStoreForTests();
+    cli = await import('@/lib/rag/ingest/backfill/cli');
+    tenant = `o:${QUEUED_IDS.orgB}`;
+    const { mkdtemp, writeFile, mkdir } = await import('node:fs/promises');
+    const os = await import('node:os');
+    const path = await import('node:path');
+    folder = await mkdtemp(path.join(os.tmpdir(), 'backfill-dry-run-'));
+    await mkdir(path.join(folder, 'copies'));
+    for (let index = 0; index < 8; index += 1) await writeFile(path.join(folder, `note-${index}.txt`), textFile(`note-${index}`));
+    await writeFile(path.join(folder, 'copies', 'note-0.txt'), textFile('note-0'));
+    await writeFile(path.join(folder, 'copies', 'note-1.txt'), textFile('note-1'));
+    stopWorker = fakeWorker();
+  });
+
+  after(async () => {
+    stopWorker();
+    await harness?.close();
+    if (folder) await (await import('node:fs/promises')).rm(folder, { recursive: true, force: true });
+  });
+
+  test('no --budget: inventory, sample and report are printed and stored on the batch, exit 2, no ingest job is enqueued', async () => {
+    const result = await runCli(['--tenant', tenant, '--source', `folder:${folder}`]);
+    assert.equal(result.code, 2, result.err.join('\n'));
+    assert.ok(result.batchId, 'the batch id is printed');
+    const row = await batchRow(result.batchId as string);
+    const report = BackfillDryRunReportSchema.parse(row.dry_run_report);
+    assert.equal(report.inventory.files, 8);
+    assert.deepEqual(report.duplicates, { in_inventory: 2, already_existing: 0 });
+    assert.equal(report.budget_usd, null);
+    assert.equal(report.fits_budget, false);
+    assert.equal(row.source_kind, 'folder');
+    assert.equal(row.tenant_key, tenant);
+    assert.ok(result.out.some((line) => line.includes('projected cost')), 'the report is printed');
+    assert.ok(result.err.some((line) => line.includes('--budget')), 'says why it stopped');
+    assert.deepEqual(await counts(result.batchId as string, 'ingest'), { skipped_duplicate: 2 }, 'only the inventory duplicates');
+    const sample = await counts(result.batchId as string, 'dry_run');
+    assert.ok((sample.ready ?? 0) >= 1, 'the sample ran');
+  });
+
+  test('--dry-run with --budget: the same report and exit 2, nothing ingested', async () => {
+    const result = await runCli(['--tenant', tenant, '--source', `folder:${folder}`, '--budget', '100', '--dry-run']);
+    assert.equal(result.code, 2, result.err.join('\n'));
+    const row = await batchRow(result.batchId as string);
+    const report = BackfillDryRunReportSchema.parse(row.dry_run_report);
+    assert.equal(report.budget_usd, 100);
+    assert.equal(report.fits_budget, true);
+    assert.deepEqual(await counts(result.batchId as string, 'ingest'), { skipped_duplicate: 2 });
+  });
+
+  test('--budget below the projection: refused with exit 3 and a message naming the shortfall', async () => {
+    const result = await runCli(['--tenant', tenant, '--source', `folder:${folder}`, '--budget', '0.01']);
+    assert.equal(result.code, 3, result.err.join('\n'));
+    const report = BackfillDryRunReportSchema.parse((await batchRow(result.batchId as string)).dry_run_report);
+    assert.equal(report.fits_budget, false);
+    const shortfall = report.projected_cost.total_usd - 0.01;
+    assert.ok(shortfall > 0);
+    assert.ok(
+      result.err.some((line) => /short by/.test(line) && line.includes(shortfall.toFixed(6))),
+      `names the shortfall: ${result.err.join(' | ')}`,
+    );
+    assert.deepEqual(await counts(result.batchId as string, 'ingest'), { skipped_duplicate: 2 });
+  });
+
+  test('projected embedding cost alone above the budget: refused before the sample runs, exit 3', async () => {
+    const result = await runCli(['--tenant', tenant, '--source', `folder:${folder}`, '--budget', '0.000001']);
+    assert.equal(result.code, 3, result.err.join('\n'));
+    assert.ok(result.err.some((line) => /embedding cost alone/.test(line)), result.err.join(' | '));
+    assert.deepEqual(await counts(result.batchId as string, 'dry_run'), {}, 'no sample job');
+    assert.deepEqual(await counts(result.batchId as string, 'ingest'), { skipped_duplicate: 2 });
+  });
+
+  test('--budget above the projection: ingest jobs at priority 10, monitored to the end, end report printed, exit 0', async () => {
+    const result = await runCli(['--tenant', tenant, '--source', `folder:${folder}`, '--budget', '100', '--concurrency', '2']);
+    assert.equal(result.code, 0, result.err.join('\n'));
+    const batchId = result.batchId as string;
+    const row = await batchRow(batchId);
+    assert.equal(row.status, 'completed');
+    assert.equal(row.concurrency, 2);
+    assert.equal(Number(row.budget_usd), 100);
+    assert.deepEqual(await counts(batchId, 'ingest'), { ready: 8, skipped_duplicate: 2 });
+    const priorities = await harness.rows("SELECT DISTINCT priority FROM ingestion_jobs WHERE batch_id = $1 AND kind = 'ingest' AND status = 'ready'", [batchId]);
+    assert.deepEqual(priorities.map((p) => p.priority), [10]);
+    const totals = row.totals as Row;
+    assert.equal(totals.ready, 8);
+    assert.equal(totals.ingest_total, 10);
+    assert.ok(result.out.some((line) => /end report/.test(line)), 'end report printed');
+  });
+
+  test('success counts exclude dry runs: 20 ready sample jobs never add to the 90 ready of 100 ingest jobs', async () => {
+    const [created] = await harness.rows("SELECT id FROM rag_create_ingestion_batch($1, 'folder', '/archive', 5, 2, 'worker', NULL)", [tenant]);
+    const batchId = String(created?.id);
+    const statuses = [
+      ...Array.from({ length: 90 }, () => 'ready'),
+      ...Array.from({ length: 6 }, () => 'skipped_duplicate'),
+      ...Array.from({ length: 3 }, () => 'needs_review'),
+      'failed',
+    ];
+    const jobs = [
+      ...statuses.map((status, index) => ({ kind: 'ingest', source: 'config_upload', source_key: `a/${index}.pdf`, status, settings: {} })),
+      ...Array.from({ length: 20 }, (_, index) => ({ kind: 'dry_run', source: 'config_upload', source_key: `a/${index}.pdf`, status: 'ready', settings: {} })),
+    ];
+    await harness.rows('SELECT rag_enqueue_backfill_jobs($1, $2::jsonb)', [batchId, JSON.stringify(jobs)]);
+    const { finishBatch } = await import('@/lib/rag/ingest/backfill/orchestrate');
+    const out: string[] = [];
+    const end = await finishBatch({ id: batchId, scope: harness.scopeB }, { signal: new AbortController().signal, io: { out: (line) => out.push(line), err: (line) => out.push(line) } });
+    assert.equal(end.ingest.total, 100);
+    assert.deepEqual(end.ingest.byStatus, { ready: 90, skipped_duplicate: 6, needs_review: 3, failed: 1 });
+    assert.deepEqual(end.sample, { total: 20, byStatus: { ready: 20 } });
+    const totals = (await batchRow(batchId)).totals as Row;
+    assert.equal(totals.ready, 90, 'stored ready excludes the sample');
+    assert.equal(totals.ingest_total, 100);
+    assert.equal(totals.skipped_duplicate, 6);
+    assert.equal(totals.needs_review, 3);
+    assert.equal(totals.failed, 1);
+    assert.deepEqual(totals.sample, { total: 20, by_status: { ready: 20 } });
+    const text = out.join('\n');
+    assert.match(text, /ingest jobs 100: ready 90/);
+    assert.doesNotMatch(text, /ready 110/);
+    assert.match(text, /sample \(dry runs, not ingested\) 20: ready 20/);
+  });
+
+  test('unknown flags, a missing --tenant or an invalid tenant: exit 64 with usage', async () => {
+    for (const args of [
+      ['--tenant', tenant, '--source', `folder:${folder}`, '--bogus'],
+      ['--source', `folder:${folder}`],
+      ['--tenant', 'x:not-a-tenant', '--source', `folder:${folder}`],
+      ['--tenant', 'o:00000000-0000-4000-8000-00000000dead', '--source', `folder:${folder}`],
+      ['--tenant', tenant, '--source', 'ftp:somewhere'],
+      ['--tenant', tenant, '--source', `folder:${folder}`, '--budget', '-1'],
+      ['--tenant', tenant, '--source', `folder:${folder}`, '--runner', 'spark'],
+      ['--tenant', tenant, '--resume', 'not-a-uuid'],
+      ['--tenant', tenant],
+    ]) {
+      const result = await runCli(args);
+      assert.equal(result.code, 64, `${args.join(' ')} -> ${result.code}: ${result.err.join(' | ')}`);
+      assert.ok(result.err.some((line) => line.includes('usage: npm run rag:backfill')), `usage for ${args.join(' ')}`);
+    }
+  });
+
+  test('--runner ray builds the uv command line with --extra ray and passes RAY_ADDRESS through', async () => {
+    const { rayRunnerCommand, startRunner } = await import('@/lib/rag/ingest/backfill/runners');
+    const id = '11111111-2222-4333-8444-555555555555';
+    const command = rayRunnerCommand(id, { PATH: '/usr/bin', RAY_ADDRESS: 'ray://head.example.invalid:10001' });
+    assert.equal(command.command, 'uv');
+    const sidecar = command.args[2] as string;
+    assert.deepEqual(command.args, ['run', '--project', sidecar, '--extra', 'ray', 'python', '-m', 'rag_sidecar.ingest.ray_runner', '--batch', id]);
+    assert.ok(sidecar.endsWith('rag-sidecar'));
+    assert.equal(command.env.RAY_ADDRESS, 'ray://head.example.invalid:10001');
+    assert.equal('RAY_ADDRESS' in rayRunnerCommand(id, { PATH: '/usr/bin' }).env, false, 'a local Ray instance without RAY_ADDRESS');
+    assert.equal('RAY_ADDRESS' in rayRunnerCommand(id, { PATH: '/usr/bin', RAY_ADDRESS: '' }).env, false);
+    assert.throws(() => rayRunnerCommand(`${id}; rm -rf /`, {}), /batch id/);
+
+    const { EventEmitter } = await import('node:events');
+    const { PassThrough } = await import('node:stream');
+    const calls: Array<{ command: string; args: readonly string[]; options: Row }> = [];
+    const child = Object.assign(new EventEmitter(), { stdout: new PassThrough(), stderr: new PassThrough(), pid: 4242, kill: () => true });
+    const spawnSpy = ((cmd: string, args: readonly string[], options: Row) => {
+      calls.push({ command: cmd, args, options });
+      return child;
+    }) as unknown as typeof import('node:child_process').spawn;
+    const lines: string[] = [];
+    const handle = startRunner('ray', id, { io: { out: (line) => lines.push(line), err: (line) => lines.push(line) }, spawn: spawnSpy });
+    child.stdout.write('claimed 3 jobs\n');
+    await new Promise((resolve) => setImmediate(resolve));
+    child.emit('close', 0);
+    assert.deepEqual(await handle.done, { exitCode: 0 });
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0]?.command, 'uv');
+    assert.ok(!calls[0]?.options.shell, 'no shell');
+    assert.ok(lines.some((line) => line.includes('[Backfill][ray] claimed 3 jobs')), lines.join(' | '));
+
+    const started: Array<[string, string]> = [];
+    const result = await runCli(['--tenant', tenant, '--source', `folder:${folder}`, '--runner', 'ray', '--dry-run'], {
+      startRunner: (runner: string, batchId: string) => {
+        started.push([runner, batchId]);
+        return { runner, done: new Promise(() => undefined), stop() {} };
+      },
+    });
+    assert.equal(result.code, 2, result.err.join('\n'));
+    assert.equal((await batchRow(result.batchId as string)).runner, 'ray', 'the runner is recorded on the batch');
+    assert.ok(started.length >= 1 && started.every(([runner, batchId]) => runner === 'ray' && batchId === result.batchId));
+  });
+
+  test('the command never activates an embedding profile', () => {
+    const activations = harness.edge.calls.filter((call) => /activate_embedding_profile/.test(call.path));
+    assert.equal(activations.length, 0);
+    assert.ok(harness.edge.calls.some((call) => call.path.endsWith('/rag_create_ingestion_batch')), 'the spy saw the CLI calls');
   });
 });
