@@ -62,6 +62,8 @@ export interface RouteFixtureOptions {
   deploymentMode: DeploymentMode;
   /** Two users, a personal document each and an organization document (multi-tenant only). Also lets the edge answer filename lookups. */
   twoTenant?: boolean;
+  /** Lets the edge answer filename lookups (the chat route resolves @mentions that way) without the two-tenant corpus. */
+  documentFilenameFilter?: boolean;
   /** Extra rows inserted into the fixture database before the fake edge starts. */
   seed?: (db: PGlite) => Promise<void>;
 }
@@ -84,7 +86,7 @@ export async function startRouteFixture(options: RouteFixtureOptions): Promise<R
   }
   let edge: FakeEdge;
   try {
-    edge = await startFakeEdge({ db: fixture.db, documentFilenameFilter: options.twoTenant === true });
+    edge = await startFakeEdge({ db: fixture.db, documentFilenameFilter: options.twoTenant === true || options.documentFilenameFilter === true });
   } catch (error) {
     await fixture.db.close().catch(() => undefined);
     throw error;

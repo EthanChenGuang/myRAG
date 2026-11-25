@@ -514,6 +514,53 @@
           "default": null,
           "title": "Disabled Stages"
         },
+        "domain_control_leg": {
+          "anyOf": [
+            {
+              "enum": [
+                "general",
+                "financial_report",
+                "contract_legal",
+                "invoice_receipt",
+                "product_technical",
+                "scanned_image"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Domain Control Leg"
+        },
+        "embedding_bindings": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+                "type": "string"
+              },
+              "maxProperties": 6,
+              "propertyNames": {
+                "enum": [
+                  "general",
+                  "financial_report",
+                  "contract_legal",
+                  "invoice_receipt",
+                  "product_technical",
+                  "scanned_image"
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Embedding Bindings"
+        },
         "embedding_profile": {
           "anyOf": [
             {
@@ -801,6 +848,11 @@
           "default": 1.0,
           "exclusiveMinimum": 0,
           "title": "Dense",
+          "type": "number"
+        },
+        "domain": {
+          "exclusiveMinimum": 0,
+          "title": "Domain",
           "type": "number"
         },
         "exact_id": {

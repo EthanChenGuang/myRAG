@@ -1,0 +1,11 @@
+{
+  "documents": {
+    "en/contract-legal-a.en.md": "contract_legal",
+    "en/financial-report-a.en.md": "financial_report",
+    "it/contract-legal-a.it.md": "contract_legal",
+    "it/financial-report-a.it.md": "financial_report",
+    "zh/contract-legal-a.zh.md": "contract_legal",
+    "zh/financial-report-a.zh.md": "financial_report"
+  },
+  "schema_version": 1
+}

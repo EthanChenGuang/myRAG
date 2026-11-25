@@ -31,6 +31,8 @@ const nextConfig = {
   turbopack: {
     root: __dirname,
   },
+  // tiktoken loads tiktoken_bg.wasm from its own package directory; bundled, the file is missing at runtime
+  serverExternalPackages: ['tiktoken'],
   experimental: {
     serverActions: {
       allowedOrigins: ["localhost:3000"]

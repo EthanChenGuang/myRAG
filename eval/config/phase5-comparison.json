@@ -1,0 +1,85 @@
+{
+  "schema_version": 2,
+  "phase": "05",
+  "noise": "eval/config/noise.json",
+  "baselines": {
+    "prechunked": "eval/baselines/fixture-baseline.json",
+    "ingest": "eval/baselines/fixture-ingest-baseline.json"
+  },
+  "runs": [
+    {
+      "name": "off-prechunked",
+      "fixture_mode": "prechunked",
+      "switches": {
+        "RAG_CITATIONS": "false",
+        "RAG_CLAUDE_CITATIONS": "false",
+        "RAG_GROUNDEDNESS": "false",
+        "RAG_GROUNDEDNESS_VECTARA_OPT_IN": "false",
+        "RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK": "false",
+        "RAG_ANSWER_FEEDBACK": "false"
+      },
+      "harness_flags": [],
+      "checks": ["paired_all_zero", "characterization"]
+    },
+    {
+      "name": "off-ingest",
+      "fixture_mode": "ingest",
+      "switches": {
+        "RAG_CITATIONS": "false",
+        "RAG_CLAUDE_CITATIONS": "false",
+        "RAG_GROUNDEDNESS": "false",
+        "RAG_GROUNDEDNESS_VECTARA_OPT_IN": "false",
+        "RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK": "false",
+        "RAG_ANSWER_FEEDBACK": "false"
+      },
+      "harness_flags": [],
+      "checks": ["paired_all_zero", "characterization"]
+    },
+    {
+      "name": "on-prechunked",
+      "fixture_mode": "prechunked",
+      "switches": {
+        "RAG_CITATIONS": "true",
+        "RAG_CLAUDE_CITATIONS": "false",
+        "RAG_GROUNDEDNESS": "true",
+        "RAG_GROUNDEDNESS_VECTARA_OPT_IN": "false",
+        "RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK": "false",
+        "RAG_ANSWER_FEEDBACK": "false"
+      },
+      "harness_flags": ["--citations", "--groundedness"],
+      "checks": ["retrieval_unchanged", "no_slice_drop", "citation_validity", "strict_refusal"]
+    },
+    {
+      "name": "on-ingest",
+      "fixture_mode": "ingest",
+      "switches": {
+        "RAG_CITATIONS": "true",
+        "RAG_CLAUDE_CITATIONS": "false",
+        "RAG_GROUNDEDNESS": "true",
+        "RAG_GROUNDEDNESS_VECTARA_OPT_IN": "false",
+        "RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK": "false",
+        "RAG_ANSWER_FEEDBACK": "false"
+      },
+      "harness_flags": ["--citations", "--groundedness"],
+      "checks": ["retrieval_unchanged", "no_slice_drop", "citation_validity", "strict_refusal"]
+    }
+  ],
+  "commands": {
+    "characterization": [
+      "npx", "vitest", "run",
+      "tests/rag/characterize-chat.test.ts",
+      "tests/rag/characterize-chat-overview.test.ts",
+      "tests/rag/characterize-embed.test.ts",
+      "tests/rag/characterize-voice.test.ts",
+      "tests/chat-strict.test.ts",
+      "tests/chat-websearch.test.ts",
+      "tests/chat-source-images.test.ts"
+    ],
+    "strict_refusal": [
+      "npx", "vitest", "run",
+      "tests/chat-strict.test.ts",
+      "tests/rag/citations/chat-citations-route.test.ts",
+      "tests/rag/generation/answer-finish-groundedness-route.test.ts"
+    ]
+  }
+}

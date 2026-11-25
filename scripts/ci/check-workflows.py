@@ -22,7 +22,7 @@ TESTS_DIR = ROOT / "tests"
 TSX_GLOB = "tests/*.test.mts"
 TSX_COMMAND_RE = re.compile(r"node\s+--import\s+tsx\s+--test\b(?P<args>[^\n]*)")
 
-PR_JOBS = ["ts", "sibling-types", "voice-agent", "schema-parity", "python", "eval-smoke", "gate-negative-control", "docker-build"]
+PR_JOBS = ["ts", "sibling-types", "voice-agent", "schema-parity", "python", "eval-smoke", "gate-negative-control", "docker-build", "next-build"]
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 USES_LINE_RE = re.compile(r"^\s*(?:-\s+)?uses:\s*(?P<ref>\S+)(?P<rest>.*)$")
 VERSION_COMMENT_RE = re.compile(r"^\s+#\s*v\d+(\.\d+){0,2}\s*$")
@@ -289,6 +289,7 @@ def check_pr(errors: list[str]) -> None:
         job = jobs.get(jname)
         if job is not None and "npm ci" not in step_text(job):
             errors.append(f"pr-smoke: job {jname} must install with npm ci")
+    check_next_build(jobs.get("next-build"), errors)
     docker = jobs.get("docker-build")
     if docker is not None:
         body = step_text(docker)
@@ -304,6 +305,27 @@ def check_pr(errors: list[str]) -> None:
         ):
             if needle not in body:
                 errors.append(f"pr-smoke: job docker-build is missing '{needle}'")
+
+
+def check_next_build(job: dict | None, errors: list[str]) -> None:
+    """The production build Vercel runs: next build must succeed with placeholder env and no secrets."""
+    if job is None:
+        return
+    body = step_text(job)
+    if "npm ci" not in body:
+        errors.append("pr-smoke: job next-build must install with npm ci")
+    if not re.search(r"(?:npx next|npm run) build\b", body):
+        errors.append("pr-smoke: job next-build must run 'npx next build'")
+    env = {str(k): str(v) for k, v in (job.get("env") or {}).items()}
+    for step in all_steps(job):
+        env.update({str(k): str(v) for k, v in (step.get("env") or {}).items()})
+    for key in ("NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY"):
+        if key not in env:
+            errors.append(f"pr-smoke: job next-build must set {key} to a placeholder")
+        elif "placeholder" not in env[key]:
+            errors.append(f"pr-smoke: job next-build must use a placeholder value for {key}")
+    if "secrets." in str(job):
+        errors.append("pr-smoke: job next-build must not reference secrets.")
 
 
 def check_eval_smoke(job: dict | None, errors: list[str]) -> None:

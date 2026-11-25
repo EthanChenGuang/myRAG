@@ -489,6 +489,12 @@ RAG_PDF_IMAGE_CHUNKS=false
 RAG_INJECTION_SCAN=off
 # Embedding profile registry: off | on (off keeps the single configured embedding model)
 RAG_EMBEDDING_PROFILES=off
+# Domain embedding leg for document types with an active binding: off | on (needs RAG_EMBEDDING_PROFILES=on)
+RAG_DOMAIN_EMBEDDINGS=off
+# Maximum domain embedding legs per query (0..5; 0 keeps bindings without extra legs)
+RAG_DOMAIN_EMBEDDING_MAX_LEGS=2
+# Timeout for one domain embedding leg in milliseconds (100..5000)
+RAG_DOMAIN_EMBEDDING_TIMEOUT_MS=800
 # Fallback host when the Qwen embedding provider is unavailable: openrouter | none
 RAG_QWEN_EMBED_FALLBACK=openrouter
 
@@ -525,6 +531,46 @@ RAG_EMBED_BATCH_MODE=sync
 # Browser realtime job updates (Supabase broadcast): true | false
 NEXT_PUBLIC_RAG_INGEST_REALTIME=false
 # Ledger workers and the app must use the Supabase project HTTPS URL (PostgREST), never a direct Postgres DSN.
+
+# -----------------------------
+# LANGUAGES AND INGESTION HARDENING (Phase 3.2)
+# -----------------------------
+# Supported languages, comma-separated registry codes (e.g. zh,en,it). Empty = not configured; set them in the Languages panel
+RAG_SUPPORTED_LANGUAGES=
+# Primary language: one of RAG_SUPPORTED_LANGUAGES (empty = not configured)
+RAG_PRIMARY_LANGUAGE=
+# Language-aware chunking, sentence splitting and OCR: off | on
+RAG_LANGUAGE_AWARE_INGEST=off
+# Repeat table headers in split table chunks: profile | always
+RAG_TABLE_HEADER_REPEAT=profile
+# Add "column = value" lines per table row to the search text: true | false
+RAG_TABLE_ROW_SERIALIZATION=false
+# Image caption language: en | document
+RAG_CAPTION_LANGUAGE=en
+# BGE-M3 serving (Phase 3.2.1): hosted | sidecar
+RAG_BGE_M3_SERVING=hosted
+# Search-only translations of document chunks: off | on
+RAG_DOC_TRANSLATION=off
+# Translation model override (empty = RAG_QUERY_LLM_MODEL)
+RAG_DOC_TRANSLATION_MODEL=
+# Hidden text check at ingestion: off | flag | quarantine
+RAG_HIDDEN_TEXT_CHECK=off
+# Link check at ingestion against the allowlist: off | flag | quarantine
+RAG_INGEST_LINK_CHECK=off
+# Allowed link domains, comma-separated (subdomains included)
+RAG_OUTPUT_LINK_ALLOWLIST=
+# Uploads that need admin approval: off | members | all (needs the unified pipeline)
+RAG_UPLOAD_APPROVAL=off
+# Document scope tags at upload and in retrieval filters: true | false
+RAG_SCOPE_TAGS=false
+# Suggest scope tags for new documents: true | false
+RAG_SCOPE_TAG_SUGGEST=false
+# Detect possible older versions of new documents: off | on
+RAG_SUPERSESSION_DETECT=off
+# Exclude documents outside their effective dates from answers: true | false
+RAG_EFFECTIVE_DATES=false
+# Read effective dates with a model when rules find none: true | false
+RAG_EFFECTIVE_DATE_LLM_EXTRACT=false
 
 # Voyage embeddings
 VOYAGE_API_KEY=

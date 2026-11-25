@@ -75,9 +75,16 @@ from rag_sidecar.contracts.injection import (
     VerdictCacheConfig,
 )
 from rag_sidecar.contracts.judge import JudgeConfig, JudgeItemScore, JudgeReport, OnlineJudgeConfig
+from rag_sidecar.contracts.languages import LanguagePack, LanguageRegistry
 from rag_sidecar.contracts.latency import LatencyBudgets, ProfileBudget, StageLatency
 from rag_sidecar.contracts.profiles import (
     ActivationEvidence,
+    BindingActivationEvidence,
+    BindingArm,
+    BindingCandidateResult,
+    BindingComparison,
+    BindingComparisonHashes,
+    BindingDocTypeSlice,
     ComparisonSliceBlock,
     EmbeddingProfileComparison,
     PreMigrationEvidence,
@@ -223,12 +230,20 @@ __all__ = [
     "ProcessingProfile",
     "ProcessingProfileSet",
     "ActivationEvidence",
+    "BindingActivationEvidence",
+    "BindingArm",
+    "BindingCandidateResult",
+    "BindingComparison",
+    "BindingComparisonHashes",
+    "BindingDocTypeSlice",
     "ComparisonSliceBlock",
     "EmbeddingProfileComparison",
     "PreMigrationEvidence",
     "PreMigrationSlice",
     "ProfileComparisonEntry",
     "ProfileMetricBlocks",
+    "LanguagePack",
+    "LanguageRegistry",
     "LatencyBudgets",
     "ProfileBudget",
     "StageLatency",

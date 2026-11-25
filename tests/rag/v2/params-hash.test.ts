@@ -8,7 +8,8 @@ import { RetrievalParamsSchema, type RetrievalOverrides, type RetrievalParams } 
 import rawCommitted from '../../../eval/config/retrieval-params.json';
 import { effectiveRetrievalParams } from '@/lib/rag/v2/retrieval-params';
 import { v2ProfileSettings } from '@/lib/rag/v2/profiles';
-import { computeRetrievalConfigHash, type RetrievalConfigHashInput } from '@/lib/rag/v2/config-hash';
+import { computeRetrievalConfigHash, securityHashComponent, type RetrievalConfigHashInput } from '@/lib/rag/v2/config-hash';
+import { readSecurityConfig } from '@/lib/rag/security/config';
 import {
   getActiveChunkingProfiles,
   refreshActiveChunkingProfiles,
@@ -293,5 +294,152 @@ describe('eval chunking override in the retrieval config hash', () => {
     const withOverride = computeRetrievalConfigHash({ ...baseHashInput(), activeChunkingProfiles: hashedChunkingProfiles('eval', active, override) });
     const without = computeRetrievalConfigHash({ ...baseHashInput(), activeChunkingProfiles: hashedChunkingProfiles('eval', active, undefined) });
     expect(withOverride).not.toBe(without);
+  });
+});
+
+/** A hash input built only from literals, so the pinned value does not move with the committed params file. */
+function literalHashInput(): RetrievalConfigHashInput {
+  return {
+    backendId: 'pgvector',
+    embeddingProfileId: 'openai-3-small-1536',
+    lexicalVersion: 1,
+    rerankTextVersion: 1,
+    params: {
+      candidate_pool_size: 75,
+      config_hash: 'a808a46f380d35f92c15bd2fb19d37a13b02c7827372c73e4dd76480714433f7',
+      final_top_k: 8,
+      leg_weights: { dense: 1, exact_id: 1, lexical: 1 },
+      provenance: { source: 'defaults' },
+      rerank_input_cap: 75,
+      rrf_k: 60,
+      schema_version: 1,
+      sub_question_coverage: true,
+    } as RetrievalParams,
+    reranker: { id: 'none', model: 'none' },
+    thresholdsConfigHash: null,
+    activeChunkingProfiles: { general: 'legacy' },
+    switches: {
+      lexicalSearch: false,
+      refusalThreshold: false,
+      edgeOrder: false,
+      compression: false,
+      tokenBudget: 6000,
+      parentChild: false,
+      iterativeScan: 'off',
+      exactScanCutoff: 0,
+      lexicalTranslation: false,
+      exactIdLookup: false,
+      rerankTierChat: 'quality',
+      rerankTierVoice: 'fast',
+    },
+  };
+}
+
+/** The hash of literalHashInput() before the security component existed (05.1-14 base). */
+const PINNED_DEFAULT_HASH = 'f0bbcf06e9a792e368b2bcf880adf10f17336aa167a2c9fe5597198df3fc4fac';
+
+const SECURITY_DEFAULT = {
+  contextTagging: false,
+  injectionCheck: 'off',
+  promptGuard: false,
+  lakera: false,
+  lakeraMultiTenantAck: false,
+  lakeraEffective: false,
+  toolResultGuard: 'off',
+  rulesVersion: 'rules-v1',
+  detectorsVersion: 'detectors-v1',
+} as const;
+
+describe('computeRetrievalConfigHash security component (D-18)', () => {
+  it('with no security component the hash equals the pinned pre-5.1 value', () => {
+    expect(computeRetrievalConfigHash(literalHashInput())).toBe(PINNED_DEFAULT_HASH);
+    expect(computeRetrievalConfigHash({ ...literalHashInput(), security: null })).toBe(PINNED_DEFAULT_HASH);
+  });
+
+  it('a security component changes the hash, and each single change gives a distinct hash', () => {
+    const variants = [
+      { ...SECURITY_DEFAULT, contextTagging: true },
+      { ...SECURITY_DEFAULT, injectionCheck: 'flag' },
+      { ...SECURITY_DEFAULT, injectionCheck: 'drop' },
+      { ...SECURITY_DEFAULT, injectionCheck: 'downweight' },
+      { ...SECURITY_DEFAULT, promptGuard: true },
+      { ...SECURITY_DEFAULT, lakera: true },
+      { ...SECURITY_DEFAULT, lakeraMultiTenantAck: true },
+      { ...SECURITY_DEFAULT, lakeraEffective: true },
+      { ...SECURITY_DEFAULT, toolResultGuard: 'tag' },
+      { ...SECURITY_DEFAULT, rulesVersion: 'rules-v2' },
+      { ...SECURITY_DEFAULT, detectorsVersion: 'detectors-v2' },
+    ] as const;
+    const hashes = variants.map((security) => computeRetrievalConfigHash({ ...literalHashInput(), security }));
+    expect(new Set([...hashes, PINNED_DEFAULT_HASH]).size).toBe(variants.length + 1);
+  });
+});
+
+describe('securityHashComponent (D-18, plan-check W2)', () => {
+  const VERSIONS = { rulesVersion: 'rules-v1', detectorsVersion: 'detectors-v1' };
+  const hashFor = (env: Record<string, string>, multiTenant: boolean, versions: { rulesVersion: string; detectorsVersion: string } = VERSIONS) =>
+    computeRetrievalConfigHash({ ...literalHashInput(), security: securityHashComponent(readSecurityConfig(env), { multiTenant, ...versions }) });
+  const LAKERA_ON = { RAG_INJECTION_CHECK: 'drop', RAG_INJECTION_LAKERA: 'true', LAKERA_GUARD_API_KEY: 'placeholder-key' };
+
+  it('is null with every switch at its default, so the hash is the pinned value in both deployment modes', () => {
+    expect(securityHashComponent(readSecurityConfig({}), { multiTenant: false })).toBeNull();
+    expect(hashFor({}, false)).toBe(PINNED_DEFAULT_HASH);
+    expect(hashFor({}, true)).toBe(PINNED_DEFAULT_HASH);
+    expect(hashFor({ LAKERA_GUARD_API_KEY: 'placeholder-key', LAKERA_GUARD_BASE_URL: 'https://guard.example.test' }, true)).toBe(PINNED_DEFAULT_HASH);
+  });
+
+  it('gives a distinct hash for each single switch change', () => {
+    const envs: Array<Record<string, string>> = [
+      { RAG_CONTEXT_TAGGING: 'true' },
+      { RAG_INJECTION_CHECK: 'flag' },
+      { RAG_INJECTION_CHECK: 'drop' },
+      { RAG_INJECTION_CHECK: 'downweight' },
+      { RAG_INJECTION_PROMPT_GUARD: 'true' },
+      { RAG_INJECTION_LAKERA: 'true' },
+      { RAG_TOOL_RESULT_GUARD: 'tag' },
+      { RAG_INJECTION_LAKERA_MULTI_TENANT_ACK: 'true' },
+    ];
+    const hashes = envs.map((env) => hashFor(env, false));
+    expect(new Set([...hashes, PINNED_DEFAULT_HASH]).size).toBe(envs.length + 1);
+  });
+
+  it("multi-tenant: the acknowledgement and the key move Lakera's effective state and the hash", () => {
+    const acked = securityHashComponent(readSecurityConfig({ ...LAKERA_ON, RAG_INJECTION_LAKERA_MULTI_TENANT_ACK: 'true' }), { multiTenant: true, ...VERSIONS });
+    const unacked = securityHashComponent(readSecurityConfig(LAKERA_ON), { multiTenant: true, ...VERSIONS });
+    expect(acked?.lakeraEffective).toBe(true);
+    expect(unacked?.lakeraEffective).toBe(false);
+    expect(hashFor({ ...LAKERA_ON, RAG_INJECTION_LAKERA_MULTI_TENANT_ACK: 'true' }, true)).not.toBe(hashFor(LAKERA_ON, true));
+
+    const { LAKERA_GUARD_API_KEY: _key, ...noKey } = { ...LAKERA_ON, RAG_INJECTION_LAKERA_MULTI_TENANT_ACK: 'true' };
+    expect(securityHashComponent(readSecurityConfig(noKey), { multiTenant: true, ...VERSIONS })?.lakeraEffective).toBe(false);
+    expect(hashFor(noKey, true)).not.toBe(hashFor({ ...LAKERA_ON, RAG_INJECTION_LAKERA_MULTI_TENANT_ACK: 'true' }, true));
+  });
+
+  it('single-tenant: the acknowledgement does not change the effective state but is still part of the component', () => {
+    const acked = securityHashComponent(readSecurityConfig({ ...LAKERA_ON, RAG_INJECTION_LAKERA_MULTI_TENANT_ACK: 'true' }), { multiTenant: false, ...VERSIONS });
+    const unacked = securityHashComponent(readSecurityConfig(LAKERA_ON), { multiTenant: false, ...VERSIONS });
+    expect(acked?.lakeraEffective).toBe(true);
+    expect(unacked?.lakeraEffective).toBe(true);
+    expect(acked?.lakeraMultiTenantAck).toBe(true);
+    expect(hashFor({ ...LAKERA_ON, RAG_INJECTION_LAKERA_MULTI_TENANT_ACK: 'true' }, false)).not.toBe(hashFor(LAKERA_ON, false));
+  });
+
+  it('never carries the key, only its presence through the effective state', () => {
+    const component = securityHashComponent(readSecurityConfig(LAKERA_ON), { multiTenant: false, ...VERSIONS });
+    expect(JSON.stringify(component)).not.toContain('placeholder-key');
+  });
+
+  it('the rules and detector versions move the hash while the check is on and not while every switch is off', () => {
+    const on = { RAG_INJECTION_CHECK: 'drop' };
+    expect(hashFor(on, false, { ...VERSIONS, rulesVersion: 'rules-v2' })).not.toBe(hashFor(on, false));
+    expect(hashFor(on, false, { ...VERSIONS, detectorsVersion: 'detectors-v2' })).not.toBe(hashFor(on, false));
+    expect(hashFor({}, false, { ...VERSIONS, rulesVersion: 'rules-v2' })).toBe(PINNED_DEFAULT_HASH);
+    expect(hashFor({}, false, { ...VERSIONS, detectorsVersion: 'detectors-v2' })).toBe(PINNED_DEFAULT_HASH);
+  });
+
+  it('reads the real rules and detector config versions when none are given', () => {
+    const component = securityHashComponent(readSecurityConfig({ RAG_INJECTION_CHECK: 'flag' }), { multiTenant: false });
+    expect(component?.rulesVersion).toMatch(/^[0-9a-f]{12}$/);
+    expect(component?.detectorsVersion).toMatch(/\S/);
   });
 });

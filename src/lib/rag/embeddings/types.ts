@@ -30,6 +30,8 @@ export interface ProfileShape {
   provider: string;
   dims: number;
   storage: string;
+  /** When given, the dims are checked against this model's catalog entry instead of the provider default. */
+  model?: string;
 }
 
 export type ProfileShapeFailure =
@@ -38,7 +40,8 @@ export type ProfileShapeFailure =
   | 'dims_invalid'
   | 'dims_above_limit'
   | 'legacy_column_dims'
-  | 'dims_unsupported';
+  | 'dims_unsupported'
+  | 'model_unknown';
 
 export type ProfileShapeResult = { ok: true } | { ok: false; reason: ProfileShapeFailure; detail: string };
 
@@ -47,7 +50,11 @@ export const QWEN_NATIVE_DIMS = 4096;
 export const VOYAGE_SUPPORTED_DIMS: readonly number[] = [256, 512, 1024, 2048];
 export const QWEN_SUPPORTED_DIMS: readonly number[] = [256, 512, 1024, 1536, 2048, QWEN_NATIVE_DIMS];
 export const VOYAGE_MODEL_ID = 'voyage-4-large';
+export const VOYAGE_LAW_MODEL_ID = 'voyage-law-2';
+export const VOYAGE_FINANCE_MODEL_ID = 'voyage-finance-2';
 export const QWEN_MODEL_ID = 'Qwen/Qwen3-Embedding-8B';
+
+const VOYAGE_MODEL_IDS: readonly string[] = [VOYAGE_MODEL_ID, VOYAGE_LAW_MODEL_ID, VOYAGE_FINANCE_MODEL_ID];
 
 /**
  * Maps host-specific spellings of one model to a single id so a same-dimension model swap is detectable.
@@ -56,7 +63,9 @@ export function canonicalModelId(model: string): string {
   const id = model.trim();
   const lower = id.toLowerCase();
   if (lower === QWEN_MODEL_ID.toLowerCase()) return QWEN_MODEL_ID;
-  if (lower === VOYAGE_MODEL_ID || lower === `mongodb/${VOYAGE_MODEL_ID}`) return VOYAGE_MODEL_ID;
+  for (const voyage of VOYAGE_MODEL_IDS) {
+    if (lower === voyage || lower === `mongodb/${voyage}`) return voyage;
+  }
   return id;
 }
 
