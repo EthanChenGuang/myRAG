@@ -6,6 +6,7 @@ import { detectLanguageWithConfidence, type LanguageDetection } from '../lang/de
 import { maskPII } from '../trace/mask';
 import type { Candidate, LogChannel, LogContext, LogOutcomeValue, RagMode, RetrievalResult } from '../types';
 import type { RetrievalLogLevel } from './config';
+import { effectiveLogMode, type EffectiveLogModeDeps } from './settings';
 
 export type { LogContext } from '../types';
 
@@ -204,6 +205,8 @@ export interface WriteRetrievalLogOptions {
   client?: SupabaseClient | LogClient | null;
   timeoutMs?: number;
   log?: (line: string) => void;
+  /** Overrides for the tenant-setting read (D-06); the writer's client is used when none is given. */
+  settings?: EffectiveLogModeDeps;
 }
 
 class WriteTimeout extends Error {}
@@ -268,8 +271,16 @@ export async function writeRetrievalLog(row: RetrievalLogRow, options: WriteRetr
       return;
     }
 
+    // D-06: the tenant may lower the level; an opted-out tenant gets no row and an ids tenant no query text. Fails closed to off.
+    const mode = await effectiveLogMode(options.expectedTenantKey, {
+      client: client as unknown as SupabaseClient,
+      ...(options.settings ?? {}),
+    });
+    if (mode === 'off') return;
+    const stored: RetrievalLogRow = mode === 'ids' ? { ...row, query_masked: null, query_fingerprint: null } : row;
+
     const inserted = await timeBoxed<DbResponse>(timeoutMs, (signal) =>
-      client.from('rag_retrieval_log').insert(row).select('id, tenant_key').abortSignal(signal).single(),
+      client.from('rag_retrieval_log').insert(stored).select('id, tenant_key').abortSignal(signal).single(),
     );
     if (inserted.error) {
       report('write_failed', errorClass(inserted.error));
