@@ -27,7 +27,7 @@ interface SemanticCache {
 
 ## Rules
 
-1. **Key scope.** An entry matches only when all of these are equal: tenant (`TenantScope`), answer language, RAG mode, generator model, retrieval-config hash and query framework. Answer language is in the key because a multilingual embedding puts "酒店报销上限" and "hotel reimbursement limit" close together, and an English asker must not get a Chinese answer.
+1. **Key scope.** An entry matches only when all of these are equal: tenant (`TenantScope`), answer language, RAG mode, generator model, retrieval-config hash and query framework. Answer language is in the key because a multilingual embedding puts "酒店报销上限" and "hotel reimbursement limit" close together, and an English asker must not get a Chinese answer. The retrieval-config hash includes the enabled language set and the tokenizer version (LANG-01, LANG-07), so changing either never serves entries built under the old setting.
 2. **Standalone queries only.** The cache key is the condensed standalone query (after QRY-01), never the raw follow-up. A turn the rewrite gate (LAT-03) marks `condense_history` but could not condense is not cached.
 3. **Strict threshold.** Start with cosine distance ≤ 0.05, then calibrate on the dev split as described under Eval gate.
 4. **Bypass, neither checked nor stored**, when any of these holds:

@@ -82,7 +82,7 @@ Plans:
 ### Phase 2: Unified Retrieval Pipeline & Tenant Scope
 **Goal**: Text chat, embedded chat and voice get their context from one pipeline that can only search a tenant verified on the server, and answers are unchanged from the baseline
 **Depends on**: Phase 1
-**Requirements**: PIPE-01, PIPE-02, PIPE-03, PIPE-04, PIPE-05, PIPE-06, PIPE-07, PIPE-08, PIPE-09, PIPE-10, OBS-01, OBS-02, EVAL-14, EVAL-15, LAT-04
+**Requirements**: PIPE-01, PIPE-02, PIPE-03, PIPE-04, PIPE-05, PIPE-06, PIPE-07, PIPE-08, PIPE-09, PIPE-10, OBS-01, OBS-02, EVAL-14, EVAL-15, LAT-04, LANG-01, LANG-02, LANG-10
 **Success Criteria** (what must be TRUE):
   1. Text chat, embedded chat and voice all retrieve through `src/lib/rag/`; a CI check fails if any file outside it imports an embedding provider, retrieval backend or reranker; the unused retrieval modules are deleted and `tsc --noEmit` passes.
   2. Tests show that three kinds of request retrieve nothing outside the caller's verified tenant: an `organizationId` in the request body for an organization the caller does not belong to, an embedded chat request naming a different workspace than its server-side embed configuration, and a voice request with a bare `userId` or an expired or forged token. Voice never falls back to a global search.
@@ -92,13 +92,16 @@ Plans:
   6. A production request produces one Langfuse trace with a span per stage (latency, candidate counts), sent asynchronously without delaying the answer, with a `[RAG Trace]` log line as the fallback when Langfuse is off or unreachable (tested with a fake Langfuse endpoint), and eval reports show p50/p95 latency per stage against the documented text-chat and voice budgets.
   7. Reports split every metric by provenance and the new `colloquial`, `ambiguous` and `typo` categories; a sampled, PII-masked share of production traces lands in a review queue, and online judge scores appear on the Langfuse traces (tested with a fake Langfuse endpoint and a stub judge).
   8. Every entry point records time to first token (p50/p95) on its trace and in eval reports; a TTFT budget is documented with the end-to-end budgets, and an injected delay before the first token makes the CI latency gate fail (fake models).
+  9. First-run setup asks for the supported languages (single or multi-select, plus a primary language) in an interactive `scripts/init-env.js` run and in the Config UI, writes them to `.env.local` and mirrors them in the five config locations; with the languages unset, `RAG_PIPELINE=legacy` behaves as today and the new pipeline refuses to start with a message pointing to the picker; choosing one language turns off detection, translation and the cross-lingual slices.
+  10. The language-pack registry is Pydantic data with generated Zod; the golden-set contract, eval corpus, drafting tools and rewrite-gate `Lang` validate against it, and a CI check fails if a hard-coded `zh|en|it` language literal remains outside the registry and the fixtures.
+  11. Traces carry query language and confidence, answer language and chunk languages; eval reports, online judge scores, helpful votes and the "information not available" rate are split per language and language pair, and a fixture where one language drops while the average holds raises the alert.
 **Live verification**: Check tenant resolution against a real Supabase project with personal and organization memberships in both single-tenant and multi-tenant modes; run a voice session with the running `voice-agent/` using the signed token; repeat the legacy-parity check on the real golden set.
 **Plans**: TBD
 
 ### Phase 3: Unified Ingestion & Embedding Profiles
 **Goal**: Every document enters the knowledge base through one path (typed, deduplicated, versioned and carrying the same metadata), and its chunks are embedded under a switchable embedding profile that can be rolled back
 **Depends on**: Phase 2
-**Requirements**: DATA-01, DATA-02, DATA-03, DATA-04, DATA-05, DATA-06, DATA-07, EMB-01, EMB-02, EMB-03, EMB-04, EMB-05, CHK-01, CHK-02, SEC-01, XLG-02, DATA-09, DATA-10, DATA-11, SEC-07, SEC-08, SEC-09, XLG-04, XLG-06
+**Requirements**: DATA-01, DATA-02, DATA-03, DATA-04, DATA-05, DATA-06, DATA-07, EMB-01, EMB-02, EMB-03, EMB-04, EMB-05, CHK-01, CHK-02, SEC-01, XLG-02, DATA-09, DATA-10, DATA-11, SEC-07, SEC-08, SEC-09, XLG-04, XLG-06, LANG-03, LANG-04, LANG-05, LANG-06
 **Success Criteria** (what must be TRUE):
   1. User can pick a document type for each file at upload (financial/accounting report, contract/legal, invoice/receipt, product/technical, scanned/image), starting from a default set by the admin (fixed type or auto-detect, per tenant and per source) that they can change, and untyped files become `general`; each type applies its processing profile (parser options, chunk size and boundaries, OCR, metadata extraction), which is defined as data, as shown by ingesting a fixture file of every type.
   2. A fixture ingested through chat/Config UI upload, Nango sync, a scraper and image upload produces chunks with the same metadata fields on every path: tenant, document ID, version, `is_current`, source, type, date, language, page or section, content hash, `parser_used` and the URL metadata.
@@ -114,6 +117,10 @@ Plans:
   12. With `RAG_UPLOAD_APPROVAL` on, a member's upload on each ingestion path stays out of retrieval and the cache until an admin approves it; exempted connectors index directly; uploader and approver are stored; with the switch off, ingestion behaves as before.
   13. With `RAG_DOC_TRANSLATION` on for a fixture tenant, Chinese chunks also get English and Italian retrieval-only translations; an Italian question hits a translation but the answer cites the original Chinese chunk; replacing or deleting the document rebuilds or removes its translations; with the switch off, ingestion and retrieval match the baseline, and the eval report shows the cross-lingual Recall gain next to storage, cost and ingestion time.
   14. Fixture images in Chinese and Italian documents get captions written in that language, with in-image text quoted verbatim, and the caption chunk's `language` matches; the re-embedding job regenerates existing English captions without re-parsing.
+  15. Saving a language set fails with a clear error when a pack is incomplete, the embedding profile or reranker does not support a chosen language, or the primary language is outside the set.
+  16. Each chunk carries an ingestion fingerprint; changing an ingestion-side setting shows the affected document count and rebuilds only those documents side by side behind a pointer flip that can be rolled back, while a query-side change takes effect on save.
+  17. Fixture documents in Chinese, English, Italian and a mixed Chinese–English document get correct per-chunk languages with confidence, undetectable text is stored as `und`, and every ingestion path splits Chinese at 。！？ and counts length with the embedding tokenizer.
+  18. DATA-05 fixture: with `zh,en,it` enabled, Docling and LlamaParse receive the matching OCR languages and a scanned page with Chinese text and Italian accents comes out character-exact.
 **Live verification**: Parse real documents with the LlamaCloud key, and run Docling OCR on real scanned Chinese and Italian files; call Voyage, DeepInfra and OpenRouter with real keys (check Qwen3 dimension parameter, instruction prefix, MRL truncation); run the re-embed job and the `halfvec` HNSW index build on the real Supabase project; compare each embedding profile with the baseline on the real golden set; sync a real Nango connection.
 **Plans**: TBD
 **UI hint**: yes
@@ -121,7 +128,7 @@ Plans:
 ### Phase 4: Hybrid Retrieval, Reranking & Calibrated Refusal
 **Goal**: On pgvector, questions in Chinese, English and Italian find the right chunks through filtered hybrid search and reranking, and the system refuses when the best reranked evidence is too weak
 **Depends on**: Phase 3
-**Requirements**: RET-01, RET-02, RET-03, RET-04, DATA-08, RNK-01, RNK-02, RNK-03, RNK-04, RNK-05, RNK-06, CHK-03, LAT-01, LAT-02, XLG-03, CHK-04, CHK-05
+**Requirements**: RET-01, RET-02, RET-03, RET-04, DATA-08, RNK-01, RNK-02, RNK-03, RNK-04, RNK-05, RNK-06, CHK-03, LAT-01, LAT-02, XLG-03, CHK-04, CHK-05, LANG-07
 **Success Criteria** (what must be TRUE):
   1. Against a local Postgres with pgvector seeded with the fixture corpus, Chinese exact-term queries (model numbers, IDs, names) and their English and Italian counterparts retrieve the expected chunk. The search is hybrid lexical + vector over the shared tokenizer's `lexical_text`, fused with RRF. Filters by date range, source, document, document type and language apply before search, and the hybrid function runs for the server role and is refused for `anon`.
   2. Cohere `rerank-v5.0-pro`/`rerank-v5.0-fast`, Voyage `rerank-3` (with `rerank-2.5` as fallback) and the local BM25 reranker are switchable and rerank an enlarged candidate pool; when a fake reranker times out or errors, the fused order is used and threshold refusal is off for that request.
@@ -132,13 +139,14 @@ Plans:
   7. Retrieval paths run in parallel, candidates are deduplicated before rerank, the rerank input count is capped and reported, and the fast rerank tier keeps voice within its latency budget.
   8. Cross-language questions also succeed through the lexical path and the local BM25 reranker (translated query), and the refusal threshold calibrated on the cross-lingual slice does not raise its false-refusal rate above the same-language slices beyond the noise band.
   9. Admin can set child size, parent mode and parent size per document type in the Config UI (presets 128/512, 256/1024, 256/2048 or custom); a child size above the embedding input limit or a parent smaller than twice the child is rejected, ratio and context-budget problems are warned; the new profile is built side by side and can be activated and rolled back; the sweep report compares the candidate profiles on the fixture golden set per document type and question category, and the chosen profile is recorded with its numbers.
+  10. The versioned, language-aware tokenizer makes 年假 (with the tenant dictionary), dipendente/dipendenti, più/piu and l'azienda match on the lexical path and in the local BM25 reranker; queries are analyzed per searched language with the index's tokenizer version, and a dictionary change rebuilds `lexical_text` side by side. The rerank sweep reports nDCG@k with k equal to the chunks sent to the LLM.
 **Live verification**: Calibrate thresholds and sweep pool size and top-k with real Cohere and Voyage keys on the real golden set's dev split, then check them on the holdout split; compare Voyage `rerank-3` with `rerank-2.5` on the zh and it slices; apply the hybrid SQL migration to the real Supabase project and confirm Chinese lexical behavior there.
 **Plans**: TBD
 
 ### Phase 5: Verified Citations & Groundedness
 **Goal**: Every RAG answer cites only chunks that were actually sent to the model, its citations survive later document changes, and users can see whether the answer was checked for groundedness
 **Depends on**: Phase 4
-**Requirements**: GEN-01, GEN-02, GEN-03, GEN-04, GEN-05, GEN-06, GEN-07, EVAL-16, LAT-05
+**Requirements**: GEN-01, GEN-02, GEN-03, GEN-04, GEN-05, GEN-06, GEN-07, EVAL-16, LAT-05, LANG-09
 **Success Criteria** (what must be TRUE):
   1. Against recorded or fake Anthropic streams: when the selected model is Claude, the answer comes from the direct Anthropic API with Citations (one plain-text document per chunk) and no structured output on that call. The OpenRouter-to-Anthropic model ID map passes the five-location model check, and turns needing tools, MCP or webSearch keep working or fall back to the existing path.
   2. For other models, the server parses chunk-ID citations from the stream even when a marker is split across tokens, drops unknown IDs and IDs not in the context sent, and returns the citation list through structured output. Both paths persist the same `citations[]` record with a text snapshot that still resolves after the cited document is re-chunked or replaced.
@@ -147,6 +155,7 @@ Plans:
   5. The Phase 1 characterization tests still pass (strict-mode "information not available" in the user's language, webSearch + Exa, `source_images`, `{{context}}`), and the fixture eval shows no slice dropping beyond the noise band.
   6. User can mark any RAG answer helpful or not helpful; the vote is stored with the message, sent to Langfuse as a score, and "not helpful" votes and "possibly unreliable" results appear in the review queue.
   7. With `RAG_MAX_OUTPUT_TOKENS` off, answers match today's behavior. With it on, RAG answers are capped and asked to be concise without changing the admin's `RAG_SYSTEM_PROMPT` or `{{context}}`; the cap is skipped when the user set their own max tokens or reasoning; the strict-mode refusal is never cut, citations streamed before a cut-off are still validated and persisted, and the eval records the chosen default per RAG mode with correctness, citation recall, output tokens, generation latency and a truncation rate below 2%.
+  8. The strict-mode refusal and fixed notices come from the registry in the question's language for every enabled language; the English text is byte-identical to today's.
 **Live verification**: Start with a spike using a real `ANTHROPIC_API_KEY` to confirm Citations survive AI SDK v6 streaming with tools, MCP approvals and webSearch; call Vectara with a real key and opt-in, and confirm host, header, rate limits, `source_texts` limit and data retention before any multi-tenant use; download and run HHEM-2.1-Open in the sidecar; compare Faithfulness on the real golden set with the baseline.
 **Plans**: TBD
 **UI hint**: yes
@@ -168,7 +177,7 @@ Plans:
 ### Phase 6: Query Layer (LlamaIndex & LangChain)
 **Goal**: Follow-up, vague and compound questions retrieve as well as standalone ones under either query framework, within their latency budgets, and voice stays fast
 **Depends on**: Phase 4
-**Requirements**: QRY-01, QRY-02, QRY-03, QRY-04, QRY-05, QRY-06, QRY-07, QRY-08, LAT-03, XLG-01, CACHE-01, LAT-06, LAT-07, XLG-05, XLG-07
+**Requirements**: QRY-01, QRY-02, QRY-03, QRY-04, QRY-05, QRY-06, QRY-07, QRY-08, LAT-03, XLG-01, CACHE-01, LAT-06, LAT-07, XLG-05, XLG-07, LANG-08
 **Success Criteria** (what must be TRUE):
   1. Under the default `RAG_QUERY_FRAMEWORK=llamaindex`, native TypeScript ports make no framework call at query time and do four things: rewrite follow-ups into standalone queries in the user's language with numbers, names and IDs verbatim (standalone questions pass through unchanged); fuse multi-query variants with RRF; run HyDE only when switched on; and decompose compound questions into at most four sub-questions with no synthesized answer. Outputs validate against the Pydantic-generated Zod schemas (fake LLM, fixture multi-turn and compound items).
   2. The router reuses the existing query classifier to choose transforms per query. Each transform has its own switch, timeout and latency budget, and is skipped without failing the request when it overruns (injected delays). The original query is always retrieved. Voice runs only history rewrite, hybrid retrieval and an optional fast reranker within its latency budget, never HyDE, multi-query or decomposition.
@@ -181,6 +190,7 @@ Plans:
   9. With injected transform delays, original-query retrieval starts before the transforms finish, late variants still join the fusion, an overrunning transform is dropped without failing the request, and a semantic-cache hit cancels in-flight retrieval; the pre-retrieval p95 is close to the slowest single path, not the sum.
   10. An admin-entered glossary term ("ferie" → "年假") is used by query translation, document translation and rewriting; a fake translator that ignores it has its output corrected or discarded; the `glossary` fixture items pass in zh, en and it.
   11. The `cross_lingual` slice runs through the voice entry point and is reported per language pair; voice adds query translation only if the eval shows it fits the voice budget and improves the slice, and the slice is gated either way.
+  12. Short, accent-free and mixed-script fixture queries (e.g. "ferie residue?") are assigned the right language through the confidence fallback chain (fastText in the sidecar, the rewrite model's reported language, previous turn, UI language, primary language), choosing only among enabled languages.
 **Live verification**: Run both frameworks with real LLM keys; measure p50/p95 latency of each transform and of the whole pre-retrieval stage for chat (starting budget about 2 s before first token) and voice (about 800 ms), and replace the starting budgets with the measured ones; compare LlamaIndex and LangChain on the real golden set.
 **Plans**: TBD
 **UI hint**: yes
@@ -188,7 +198,7 @@ Plans:
 ### Phase 7: External Backends & Release Defaults
 **Goal**: Admins can switch retrieval to Weaviate or Qdrant without any cross-tenant leakage, every new provider and switch is configurable in the Config UI, and the shipped defaults are backed by a full regression
 **Depends on**: Phase 5, Phase 5.1, Phase 6
-**Requirements**: RET-05, RET-06, RET-07, RET-08, RET-09, ADM-01, ADM-02, ADM-03, ADM-04, EVAL-17
+**Requirements**: RET-05, RET-06, RET-07, RET-08, RET-09, ADM-01, ADM-02, ADM-03, ADM-04, EVAL-17, LANG-11
 **Success Criteria** (what must be TRUE):
   1. Tests against Weaviate and Qdrant containers in CI show that inserts, updates, deletes (including cascade deletes), version replacements and re-embeds in Supabase reach both stores through the outbox and drain worker, and that the reconcile job detects and repairs injected drift. Weaviate uses one tenant per workspace; Qdrant uses a shared collection per embedding profile with an `is_tenant` index and a tenant filter injected on every query and prefetch.
   2. The cross-tenant canary suite (personal vs organization, null organization, removed member, after delete, after version replace, after re-embed) passes on pgvector, Weaviate and Qdrant in CI and blocks release on failure; chunk IDs from an external backend that fail re-validation against Supabase under the caller's scope are dropped.
@@ -196,6 +206,7 @@ Plans:
   4. Admin can configure every new provider and switch in the Config UI with masked secrets, a Test-connection button and a warning when the active embedding profile and backend don't match.
   5. The regression runner evaluates backend, embedding profile and reranker combinations on the locked test split and writes a defaults decision record with its numbers (shown on fixtures). `AGENTS.md`, the `.env` templates and setup docs describe the sidecar, providers, switches, sync and eval workflow. A vendor data-flow inventory lists what content goes to Vectara, Cohere, Voyage, DeepInfra, Weaviate, Qdrant, Anthropic, LlamaCloud and any other external service the pipeline calls.
   6. Admin can open a queued case in the Config UI, write its expected answer and evidence spans and promote it into the private golden set with provenance `production`; the next eval run includes it, and the periodic failure report groups new failures by layer and category.
+  7. A new embedding profile can be activated for chosen tenants or a traffic share first, with per-language monitoring, and rolled back per tenant; adding a fixture language records its baseline and reprocesses only `und`, scanned and out-of-date documents, and removing a language deletes no data and keeps its documents searchable. The defaults record includes cost, latency and per-language quality, and no enabled language falls below its baseline.
 **Live verification**: Provision Weaviate and Qdrant (cloud or self-hosted), host the drain worker within the 60 s function limit, and run the canary suite against them; run Test-connection for each real provider; run the full regression on the real locked test split with all real keys (the ADM-02 defaults decision is final only from this live run, not from fixtures); check voice latency end to end.
 **Plans**: TBD
 **UI hint**: yes

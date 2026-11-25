@@ -9,7 +9,7 @@ The user's four rules and the minimum-length rule are mandatory. The rules added
 The gate returns every rule that fired, not just the first one, so the router can run more than one transform. The original query is always retrieved as well (QRY-05).
 
 ```ts
-type Lang = 'zh' | 'en' | 'it';
+type Lang = LanguageCode;   // a code from the LANG-02 registry, limited to RAG_SUPPORTED_LANGUAGES (zh | en | it in the fixtures)
 type Transform =
   | 'condense_history'   // QRY-01  rewrite with conversation history
   | 'normalize_dates'    // deterministic, no LLM: relative time → absolute date range
@@ -104,7 +104,7 @@ function needsRewrite(q: string, ctx: { hasHistory: boolean; kbLang?: Lang; now:
   - 该 only at the start of the query or before a noun such as 产品/文档/条款/公司/功能, so 应该 does not match.
   - 它 is matched freely.
 - English and Italian terms are matched case-insensitively on word boundaries, with Italian elisions normalized (l'anno → l' anno).
-- Language detection:
+- Language detection (LANG-08): candidates are only the enabled languages, and the result carries a confidence; with one enabled language, detection is skipped. The script and stopword rules below are the fast first pass for zh/en/it; when its confidence is low (short queries, codes, mixed scripts), the LANG-08 fallback chain decides (fastText language ID in the sidecar, the rewrite model's reported language, the previous turn, the UI language, the primary language). Other languages use the stopwords from their registry pack.
   - CJK characters ≥ 30% → zh.
   - Otherwise, an Italian stopword score (il, lo, la, gli, che, di, è, perché, quale, come, sono, della) above the English one (the, is, are, what, which, how, of) → it.
   - Otherwise → en.
