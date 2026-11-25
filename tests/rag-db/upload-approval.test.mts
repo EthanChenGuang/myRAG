@@ -175,7 +175,7 @@ async function hybridDocuments(ctx: Ctx, text: string, token: string): Promise<s
     `SELECT DISTINCT c.document_id::text AS id FROM hybrid_search_chunks(
        p_tenant_key => $1, p_profile_id => $2, p_query_embedding => $3::vector, p_lexical_tokens => $4::text[],
        p_dense_limit => 200, p_lexical_limit => 200) h
-     JOIN document_chunks c ON c.id = h.chunk_id`,
+     JOIN document_chunks c ON c.id = h.chunk_id WHERE h.leg = 'lexical'`,
     [ctx.key, LEGACY_PROFILE, vectorText(embedText(text)), [token]],
   );
   return found.map((row) => String(row.id)).sort();
@@ -269,7 +269,7 @@ for (const mode of MODES) {
       const { v2 } = await lineageWithPendingVersion(ctx, 'variant');
       await rows(
         ctx.db,
-        "INSERT INTO document_chunks (document_id, content, chunk_index, metadata, organization_id, tenant_key, chunking_profile_id, status, is_current) SELECT id, 'variant probe', 99, '{}'::jsonb, organization_id, tenant_key, 'approval-variant', 'pending_review', false FROM documents WHERE id = $1",
+        "INSERT INTO document_chunks (id, document_id, content, chunk_index, metadata, organization_id, tenant_key, chunking_profile_id, status, is_current) SELECT gen_random_uuid(), id, 'variant probe', 99, '{}'::jsonb, organization_id, tenant_key, 'approval-variant', 'pending_review', false FROM documents WHERE id = $1",
         [v2],
       );
       const approved = (await rows(ctx.db, APPROVE_SQL, [v2, ctx.admin]))[0] as Row;
