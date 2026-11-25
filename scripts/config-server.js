@@ -2801,7 +2801,17 @@ class InjectionSummaryError extends Error {
   }
 }
 
-const INJECTION_RULE_LANGUAGES = ['zh', 'en', 'it', 'any'];
+/** D-06: the language codes ship with the code in config/rag/language-packs.json; read once at start. */
+function readShippedLanguageCodes() {
+  const registry = JSON.parse(fs.readFileSync(path.resolve(__dirname, '..', 'config', 'rag', 'language-packs.json'), 'utf8'));
+  const codes = Array.isArray(registry && registry.packs) ? registry.packs.map((pack) => pack && pack.code) : [];
+  if (codes.length === 0 || !codes.every((code) => typeof code === 'string' && code !== '')) {
+    throw new Error('config/rag/language-packs.json lists no language codes');
+  }
+  return codes;
+}
+
+const INJECTION_RULE_LANGUAGES = [...readShippedLanguageCodes(), 'any'];
 const PROMPT_GUARD_MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const PROMPT_GUARD_REVISION = /^[0-9a-f]{40}$/;
 const DETECTOR_CONFIG_VERSION = /^\d{4}-\d{2}-\d{2}\.[1-9][0-9]*$/;

@@ -2,31 +2,6 @@
   "description": "Files that still hard-code the zh/en/it language codes (Phase 3.2 D-06). Every entry names the plan or phase that removes the literal; checked by scripts/ci/check-language-literals.mjs.",
   "entries": [
     {
-      "path": "eval/src/rag_eval/corpus.py",
-      "owner": "03.2-11",
-      "reason": "language value list or label map; plan 03.2-11 converts it to the registry codes"
-    },
-    {
-      "path": "eval/src/rag_eval/review_queue.py",
-      "owner": "03.2-11",
-      "reason": "language value list or label map; plan 03.2-11 converts it to the registry codes"
-    },
-    {
-      "path": "eval/src/rag_eval/draft/config.py",
-      "owner": "03.2-11",
-      "reason": "language value list or label map; plan 03.2-11 converts it to the registry codes"
-    },
-    {
-      "path": "scripts/config-server.js",
-      "owner": "03.2-11",
-      "reason": "language value list or label map; plan 03.2-11 converts it to the registry codes"
-    },
-    {
-      "path": "scripts/config-ui/rag-panels/chunking-profiles.js",
-      "owner": "03.2-11",
-      "reason": "language value list or label map; plan 03.2-11 converts it to the registry codes"
-    },
-    {
       "path": "src/lib/rag/refusal/gate.ts",
       "owner": "Phase 5.2 (LANG-09)",
       "reason": "refusal and injection-defense language cells; LANG-09 moves them to the registry"
