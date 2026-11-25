@@ -1,10 +1,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { chunkDocument } from '@/lib/rag/ingest/chunkers';
+import { chunkDocument, type ChunkerConfig } from '@/lib/rag/ingest/chunkers';
+import { carryTableHeaders, isHeaderLike } from '@/lib/rag/ingest/chunkers/markdown-tables';
 import { chunkParentChild } from '@/lib/rag/ingest/chunkers/parent-child';
 import { buildProfileChunks, type ChunkingProfileRow } from '@/lib/rag/ingest/profile-chunks';
-import type { ChunkDraft } from '@/lib/rag/ingest/types';
+import { chunkStage } from '@/lib/rag/ingest/stages/chunk';
+import { buildEmbeddingText } from '@/lib/rag/ingest/text/embedding-text';
+import { countTokens } from '@/lib/rag/ingest/text/tokens';
+import type { ChunkDraft, StageContext } from '@/lib/rag/ingest/types';
 import { PROCESSING_PROFILES, profileModeDigests } from './helpers/table-header-snapshot';
 
 const ROOT = path.resolve(__dirname, '../..');
@@ -192,4 +196,184 @@ describe('RAG_TABLE_HEADER_REPEAT=always on the long-table fixtures (D-19)', () 
     const changed = Object.keys(SNAPSHOT).filter((key) => digests[key] !== SNAPSHOT[key]);
     expect(changed).toEqual([]);
   }, 120_000);
+});
+
+const carriedFlag = (chunk: Pick<ChunkDraft, 'metadata'>): unknown => chunk.metadata.table_header_carried;
+
+/** Chunks holding a row of the second table carry the flag; chunks holding only first-table rows do not. */
+function assertCarryFlags<T extends Pick<ChunkDraft, 'content' | 'metadata'>>(chunks: readonly T[], secondRows: readonly string[]): void {
+  const second = new Set(secondRows);
+  let carried = 0;
+  for (const chunk of tableChunks(chunks)) {
+    if (chunk.content.split('\n').some((line) => second.has(line))) {
+      expect(carriedFlag(chunk)).toBe(true);
+      carried += 1;
+    } else {
+      expect(carriedFlag(chunk)).toBeUndefined();
+    }
+  }
+  expect(carried).toBeGreaterThan(0);
+}
+
+describe('carry-forward of a header onto a header-less continuation table (D-20)', () => {
+  for (const profile of PROCESSING_PROFILES) {
+    for (const fixture of CONTINUED) {
+      it(`${profile.id} / ${fixture.id}: the second table's chunks start with the first table's header and are marked carried`, () => {
+        const { header, separator, rows, secondRows } = tableOf(fixture);
+        expect(rows).toHaveLength(fixture.spec.tables.reduce((sum, table) => sum + table.body_rows, 0));
+        expect(secondRows).toHaveLength(fixture.spec.tables[1]?.body_rows ?? -1);
+        const { chunks } = chunkDocument(profile.chunker, { markdown: fixture.markdown }, { tableHeaderRepeat: 'always' });
+        const withTable = tableChunks(chunks);
+        assertRowsInOrder(withTable.map((chunk) => assertHeadedGroups(chunk.content, header, separator)), rows);
+        assertCarryFlags(chunks, secondRows);
+        const target = targetLine(fixture, rows);
+        expect(secondRows).toContain(target);
+        for (const chunk of withTable.filter((entry) => entry.content.split('\n').includes(target))) {
+          for (const column of fixture.spec.value_columns) expect(chunk.content).toContain(column);
+        }
+      });
+
+      it(`${profile.id} / ${fixture.id}: profile mode carries nothing`, () => {
+        const { chunks } = chunkDocument(profile.chunker, { markdown: fixture.markdown }, { tableHeaderRepeat: 'profile' });
+        for (const chunk of chunks) expect(carriedFlag(chunk)).toBeUndefined();
+      });
+    }
+  }
+
+  for (const fixture of CONTINUED) {
+    it(`rag:rechunk path (buildProfileChunks) / ${fixture.id}: children of the second table start with the carried header and are marked`, () => {
+      const { header, separator, rows, secondRows } = tableOf(fixture);
+      for (const profile of PROCESSING_PROFILES) {
+        for (const parentMode of ['none', 'structure', 'fixed'] as const) {
+          const built = buildProfileChunks(
+            { filename: `${fixture.id}.md`, chunker: profile.chunker, tableHeaderRepeat: 'always' },
+            fixture.markdown,
+            PROFILE_ROW(parentMode),
+          );
+          assertRowsInOrder(tableChunks(built.children).map((child) => assertHeadedGroups(child.content, header, separator)), rows);
+          assertCarryFlags(built.children, secondRows);
+        }
+      }
+    });
+
+    it(`ingest chunk stage / ${fixture.id}: the stage reads RAG_TABLE_HEADER_REPEAT from the ingest config`, async () => {
+      const { header, separator, secondRows } = tableOf(fixture);
+      const general = PROCESSING_PROFILES.find((profile) => profile.chunker.kind === 'markdown_sections') as (typeof PROCESSING_PROFILES)[number];
+      const run = async (tableHeaderRepeat: 'profile' | 'always'): Promise<ChunkDraft[]> => {
+        const ctx = {
+          identity: { filename: `${fixture.id}.md`, profile: { chunker: general.chunker } },
+          config: { languageAwareIngest: 'off', tableHeaderRepeat },
+          work: { parseText: fixture.markdown, parseChunks: null, parserVersion: null, chunks: [], chunksWritten: 0 },
+          warnings: [],
+        } as unknown as StageContext;
+        expect((await chunkStage.run(ctx)).kind).toBe('next');
+        return ctx.work.chunks;
+      };
+      const forced = await run('always');
+      for (const chunk of tableChunks(forced)) assertHeadedGroups(chunk.content, header, separator);
+      assertCarryFlags(forced, secondRows);
+      for (const chunk of await run('profile')) expect(carriedFlag(chunk)).toBeUndefined();
+    });
+  }
+});
+
+const H = '| Label | Group | Count | Total |';
+const SEP = '| --- | --- | --- | --- |';
+const row = (i: number): string => `| Item ${i} | Group ${i % 3} | ${10 + i} | ${200 + i} |`;
+const rowsOf = (from: number, to: number): string[] => Array.from({ length: to - from }, (_, k) => row(from + k));
+
+describe('carryTableHeaders: the Markdown continuation rule', () => {
+  it('rules: a header row is header-like, a data row is not', () => {
+    expect(isHeaderLike(H, rowsOf(0, 6))).toBe(true);
+    expect(isHeaderLike(row(6), rowsOf(0, 6))).toBe(false);
+  });
+
+  it('a table that follows across blank lines with the same column count and a data-like first row takes the previous header', () => {
+    const markdown = ['Intro sentence.', '', H, SEP, ...rowsOf(0, 6), '', '', row(6), SEP, ...rowsOf(7, 10), '', 'Closing sentence.'].join('\n');
+    const result = carryTableHeaders(markdown);
+    expect(result.carried).toBe(1);
+    expect(result.markdown).toBe(['Intro sentence.', '', H, SEP, ...rowsOf(0, 6), '', '', H, SEP, ...rowsOf(6, 10), '', 'Closing sentence.'].join('\n'));
+    expect([...result.carriedRows]).toEqual(rowsOf(6, 10));
+  });
+
+  it('a header-less pipe run after a table takes the header and keeps every row', () => {
+    const markdown = [H, SEP, ...rowsOf(0, 4), '', ...rowsOf(4, 8)].join('\n');
+    const result = carryTableHeaders(markdown);
+    expect(result.carried).toBe(1);
+    expect(result.markdown).toBe([H, SEP, ...rowsOf(0, 4), '', H, SEP, ...rowsOf(4, 8)].join('\n'));
+  });
+
+  it('a chain of continuations all take the first header', () => {
+    const markdown = [H, SEP, ...rowsOf(0, 4), '', row(4), SEP, ...rowsOf(5, 8), '', row(8), SEP, ...rowsOf(9, 12)].join('\n');
+    const result = carryTableHeaders(markdown);
+    expect(result.carried).toBe(2);
+    expect(result.markdown).toBe([H, SEP, ...rowsOf(0, 4), '', H, SEP, ...rowsOf(4, 8), '', H, SEP, ...rowsOf(8, 12)].join('\n'));
+  });
+
+  const untouched: Array<[string, string[]]> = [
+    ['a second table with its own header-like first row', [H, SEP, ...rowsOf(0, 6), '', '| Name | Kind | Size | Weight |', SEP, ...rowsOf(6, 9)]],
+    ['a second table with a different column count', [H, SEP, ...rowsOf(0, 6), '', '| Item 6 | Group 0 | 16 |', '| --- | --- | --- |', '| Item 7 | Group 1 | 17 |']],
+    ['two tables separated by a paragraph', [H, SEP, ...rowsOf(0, 6), '', 'A plain sentence between the two tables.', '', row(6), SEP, ...rowsOf(7, 9)]],
+    ['a header-less table with no table before it', ['Intro sentence.', '', ...rowsOf(0, 4)]],
+    ['a header-less first table followed by a continuation', [...rowsOf(0, 4), '', row(4), SEP, ...rowsOf(5, 7)]],
+    ['a continuation candidate inside a code fence', [H, SEP, ...rowsOf(0, 4), '', '```', row(4), SEP, '```']],
+  ];
+  for (const [name, lines] of untouched) {
+    it(`leaves ${name} untouched and marks nothing`, () => {
+      const markdown = lines.join('\n');
+      const result = carryTableHeaders(markdown);
+      expect(result.carried).toBe(0);
+      expect(result.markdown).toBe(markdown);
+      expect(result.carriedRows.size).toBe(0);
+      for (const profile of PROCESSING_PROFILES) {
+        const { chunks } = chunkDocument(profile.chunker, { markdown: `## Section\n\n${markdown}\n` }, { tableHeaderRepeat: 'always' });
+        for (const chunk of chunks) expect(carriedFlag(chunk)).toBeUndefined();
+      }
+    });
+  }
+});
+
+describe('header repetition edge cases under always (CHK-06)', () => {
+  const tableAware = (maxTokens: number): ChunkerConfig => ({
+    kind: 'table_aware',
+    max_tokens: maxTokens,
+    overlap_tokens: 0,
+    repeat_table_header: false,
+    min_chunk_tokens: 0,
+    clause_patterns: [],
+    lead_in_phrases: [],
+  });
+  const tokensOf = (content: string): number => countTokens(buildEmbeddingText({ section_path: ['Section'], content }));
+
+  it('rows that exactly fill the budget stay one chunk with one header; one more row starts a second chunk with the header', () => {
+    const table = [H, SEP, ...rowsOf(0, 12)].join('\n');
+    const budget = tokensOf(table);
+    const exact = chunkDocument(tableAware(budget), { markdown: `## Section\n\n${table}\n` }, { tableHeaderRepeat: 'always' }).chunks;
+    expect(exact.map((chunk) => chunk.content)).toEqual([table]);
+
+    const longer = [H, SEP, ...rowsOf(0, 13)].join('\n');
+    const split = chunkDocument(tableAware(budget), { markdown: `## Section\n\n${longer}\n` }, { tableHeaderRepeat: 'always' }).chunks;
+    expect(split).toHaveLength(2);
+    for (const chunk of split) expect(chunk.content.startsWith(`${H}\n${SEP}\n`)).toBe(true);
+    expect(split.flatMap((chunk) => chunk.content.split('\n').slice(2))).toEqual(rowsOf(0, 13));
+  });
+
+  it('a header-only table yields one chunk without a repeated header', () => {
+    for (const profile of PROCESSING_PROFILES) {
+      const { chunks } = chunkDocument(profile.chunker, { markdown: `## Section\n\n${H}\n${SEP}\n` }, { tableHeaderRepeat: 'always' });
+      expect(chunks.map((chunk) => chunk.content)).toEqual([`${H}\n${SEP}`]);
+    }
+  });
+
+  it('two adjacent tables with the same column count, the second with its own header, are not merged', () => {
+    const other = '| Name | Kind | Size | Weight |';
+    const markdown = `## Section\n\n${[H, SEP, ...rowsOf(0, 20), '', other, SEP, ...rowsOf(20, 40)].join('\n')}\n`;
+    const { chunks } = chunkDocument(tableAware(120), { markdown }, { tableHeaderRepeat: 'always' });
+    const second = new Set(rowsOf(20, 40));
+    for (const chunk of chunks) {
+      expect(carriedFlag(chunk)).toBeUndefined();
+      if (chunk.content.split('\n').some((line) => second.has(line))) expect(chunk.content.startsWith(`${other}\n${SEP}\n`)).toBe(true);
+      else expect(chunk.content.startsWith(`${H}\n${SEP}\n`)).toBe(true);
+    }
+  });
 });

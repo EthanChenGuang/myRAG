@@ -79,3 +79,25 @@ export function splitTableBlocks(lines: readonly string[]): MarkdownBlock[] {
   flush();
   return blocks;
 }
+
+export interface TableHeaderRules {
+  schema_version: 1;
+  rules_version: string;
+  numeric_cell_pattern: string;
+  min_non_numeric_share: number;
+  max_repeated_value_share: number;
+}
+
+export interface TableHeaderCarry {
+  markdown: string;
+  carried: number;
+  carriedRows: ReadonlySet<string>;
+}
+
+export function isHeaderLike(_row: string, _neighbours: readonly string[]): boolean {
+  return true;
+}
+
+export function carryTableHeaders(markdown: string): TableHeaderCarry {
+  return { markdown, carried: 0, carriedRows: new Set() };
+}
