@@ -18,3 +18,11 @@ The invalid sample is `{ source_key, path, url: 'http://...' }` (both locations,
 (03.1-02 summary: cross-field rules live in Pydantic). Either the test case must use an enum or range violation, or the Pydantic
 model needs a schema-visible constraint (`oneOf`). 03.1-25's `listSource` enforces both rules itself after the Zod parse
 (`manifest_location`, `manifest_https`) and tests them, so the backfill is safe either way.
+
+## 3. Progressive final run for an organization tenant may hit the same missing-owner error (found by 03.1-48)
+
+`startProgressiveFinal` in `src/lib/rag/ingest/callbacks/advance.ts` calls `writer.begin` with the scope from
+`scopeFromIngestionJob`, which for an `o:<org>` job has no user. In multi-tenant mode `rag_begin_document_version` raises
+`invalid_argument: p_user_id is required` without one. 03.1-48 fixed the same gap for backfill begin (`backfillDocumentScope`,
+the organization owner); the progressive path should probably carry the previous version's `user_id` instead. Not reproduced
+here (no org-tenant progressive test exists); needs a failing test first.
