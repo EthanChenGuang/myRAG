@@ -12,7 +12,7 @@ import { identifyStage } from './stages/identify';
 import { imagesStage } from './stages/images';
 import { parseStage } from './stages/parse';
 import { publishStage } from './stages/publish';
-import { scanInjectionStage } from './stages/scan-injection';
+import { reapplyHiddenTextRemoval, scanInjectionStage } from './stages/scan-injection';
 import { storeOriginalStage } from './stages/store-original';
 import type { IngestSpan, IngestSpanDetail, IngestSpanEnd, IngestTrace } from './trace';
 import {
@@ -348,6 +348,8 @@ export async function rehydrateFromStore(ctx: StageContext): Promise<RehydrateRe
   } else if (!(await loadOriginal(originalFile))) {
     return { failed: 'original_unavailable' };
   }
+  // D-34: the stored parse text still holds zero-width characters the scan removed before chunking.
+  if (reached(last, 'scan_injection')) reapplyHiddenTextRemoval(ctx);
 
   const deterministic: StageSpec[] = [chunkStage, enrichStage, extractStage];
   for (const stage of deterministic) {

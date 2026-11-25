@@ -92,6 +92,8 @@ export interface DocumentFields {
   /** The parsed text, kept for the relevance filter and the source preview that read documents.content. */
   content?: string;
   status?: 'processing' | 'quarantined' | 'failed' | 'deleted';
+  /** D-34: the hidden-text outcome of the version (0801 column). */
+  hidden_text_check?: 'clean' | 'hidden_found' | 'not_checked';
   metadata?: Record<string, unknown>;
 }
 
