@@ -81,6 +81,8 @@ export function legacyWriterProblems(list, knownRules = null) {
 }
 
 const RAG_DIR = 'src/lib/rag/';
+export const LANGCHAIN_DIR = 'src/lib/rag/query/langchain/';
+const SELF_TEST_DIR = 'scripts/tests/';
 const RERANK_DIR = 'src/lib/rag/rerank/';
 const TENANT_DIR = 'src/lib/rag/tenant/';
 const INGEST_DIR = 'src/lib/rag/ingest/';
@@ -131,7 +133,6 @@ const BUDGET_RPCS = [
   'rag_reserve_batch_budget',
 ];
 const BUDGET_RPC_RE = new RegExp(String.raw`\.rpc\s*\(\s*(['"\`])(?:${BUDGET_RPCS.join('|')})`, 'g');
-const CACHE_RPC_RE = /\.rpc\s*\(\s*(['"`])(?:rag_set_document_parse_cache|rag_parse_cache_)/g;
 const BACKFILL_RPC_TOKENS = ['ingestion_batch', 'rag_enqueue_backfill_jobs', 'rag_existing_file_hashes', 'embed_batch'];
 const BACKFILL_RPC_RE = new RegExp(
   `\\.rpc\\s*\\(\\s*(['"\`])[^'"\`\\$]*(?:${BACKFILL_RPC_TOKENS.join('|')})`,
@@ -141,8 +142,97 @@ const BACKFILL_RPC_RE = new RegExp(
 const inSrc = (rel) => rel.startsWith('src/');
 const outsideLedgerClient = (rel) => inSrc(rel) && rel !== LEDGER_CLIENT;
 const outsideBudgetClient = (rel) => inSrc(rel) && rel !== BUDGET_CLIENT;
-const outsideCacheClient = (rel) => inSrc(rel) && rel !== CACHE_CLIENT;
 const outsideBackfillDir = (rel) => inSrc(rel) && !rel.startsWith(BACKFILL_DIR);
+
+export const LANGCHAIN_ADAPTER_ALLOWED_IMPORTS = [
+  { kind: 'package-prefix', value: '@langchain/', reason: 'LangChain packages' },
+  { kind: 'path-prefix', value: LANGCHAIN_DIR, reason: 'files inside the adapter' },
+  { kind: 'path', value: 'src/lib/rag/query/port-types', reason: 'the retrieval port types (D-18)' },
+  { kind: 'path-prefix', value: 'src/lib/rag/query/prompts/', reason: 'versioned query prompts' },
+  { kind: 'path', value: 'src/lib/rag/query/transformer', typeOnly: true, reason: 'the QueryTransformer interface, types only' },
+  { kind: 'path', value: 'src/lib/rag-eval/contracts.generated', reason: 'generated zod/v3 contracts' },
+  { kind: 'path-prefix', value: 'rag-sidecar/schemas/', suffix: '.schema.json', reason: 'generated JSON Schemas' },
+];
+
+const QUERY_DIR = 'src/lib/rag/query/';
+const QUERY_LLM_MODULE = 'src/lib/rag/query/llm';
+
+export const QUERY_LLM_IMPORTERS = [
+  { path: QUERY_DIR, reason: 'query transforms call the query LLM (D-13)' },
+  { path: 'src/lib/rag/deps.ts', reason: 'RagDeps builds the default client so a fake can be injected' },
+];
+export const QUERY_LLM_AI_CALLS = ['generateText', 'generateObject', 'streamText', 'streamObject'];
+
+export const CACHE_RPC_HOMES = [
+  { prefix: 'rag_set_document_parse_cache', home: CACHE_CLIENT, srcOnly: true, reason: 'Phase 3.1 parse cache' },
+  { prefix: 'rag_parse_cache_', home: CACHE_CLIENT, srcOnly: true, reason: 'Phase 3.1 parse cache' },
+  { prefix: 'rag_cache_', home: 'src/lib/rag/cache/', reason: 'tenant-keyed semantic cache' },
+  { name: 'rag_tenant_language_shares', home: QUERY_DIR, reason: 'tenant-keyed KB language shares' },
+];
+
+const pathMatches = (rel, p) => (p.endsWith('/') ? rel.startsWith(p) : rel === p);
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const CACHE_RPC_MATCHERS = CACHE_RPC_HOMES.map((entry) => ({
+  ...entry,
+  re: new RegExp(
+    String.raw`\.rpc\s*\(\s*(['"\`])` + (entry.name ? `${escapeRe(entry.name)}(?![\\w])` : escapeRe(entry.prefix)),
+    'g',
+  ),
+}));
+
+function findCacheRpc(text, rel) {
+  const out = [];
+  for (const m of CACHE_RPC_MATCHERS) {
+    if (m.srcOnly && !inSrc(rel)) continue;
+    if (pathMatches(rel, m.home)) continue;
+    out.push(...regexMatches(m.re, text));
+  }
+  return out;
+}
+
+function findQueryLlmCall(text, rel) {
+  const importerAllowed = QUERY_LLM_IMPORTERS.some((a) => pathMatches(rel, a.path));
+  const aiCallsAllowed = !rel.startsWith(QUERY_DIR) || specBase(rel) === QUERY_LLM_MODULE;
+  return importMatches(text, (imp) => {
+    if (!importerAllowed) {
+      const resolved = resolveSpec(rel, imp.spec);
+      const base = resolved === null ? null : specBase(resolved);
+      if (base === QUERY_LLM_MODULE || base === `${QUERY_LLM_MODULE}/index`) return `query LLM client ${imp.spec}`;
+    }
+    if (!aiCallsAllowed && imp.spec === 'ai') {
+      if (imp.kind === 'call') return 'dynamic import of ai';
+      if (imp.kind !== 'from' || imp.typeOnly) return null;
+      const banned = clauseNames(imp.clause).filter((n) => QUERY_LLM_AI_CALLS.includes(n));
+      if (banned.length > 0) return `ai: ${banned.join(', ')}`;
+      if (/\*/.test(imp.clause)) return 'namespace import of ai';
+    }
+    return null;
+  });
+}
+
+const LANGCHAIN_PACKAGE_RE = /^(?:@langchain\/|langchain(?:\/|$))/;
+const ZOD_V4_RE = /^zod\/(?:v4|mini|v4-mini)(?:\/|$)/;
+
+export function resolveSpec(rel, spec) {
+  if (spec.startsWith('@/')) return path.posix.normalize(`src/${spec.slice(2)}`);
+  if (spec === '.' || spec === '..' || spec.startsWith('./') || spec.startsWith('../')) {
+    return path.posix.normalize(path.posix.join(path.posix.dirname(rel), spec));
+  }
+  return null;
+}
+
+export function adapterImportAllowed(rel, imp) {
+  const resolved = resolveSpec(rel, imp.spec);
+  const base = resolved === null ? null : specBase(resolved).replace(/\/$/, '');
+  return LANGCHAIN_ADAPTER_ALLOWED_IMPORTS.some((entry) => {
+    if (entry.kind === 'package-prefix') return resolved === null && imp.spec.startsWith(entry.value);
+    if (base === null) return false;
+    if (entry.typeOnly && !imp.typeOnly) return false;
+    if (entry.suffix && !base.endsWith(entry.suffix)) return false;
+    if (entry.kind === 'path') return base === entry.value;
+    return `${base}/`.startsWith(entry.value);
+  });
+}
 
 const IMPORT_FROM_RE =
   /\b(?:import|export)\s+(?:type\s+)?((?:[\w$]+\s*,?\s*)?(?:\*(?:\s*as\s+[\w$]+)?|\{[^}]*\})?)\s*from\s*(['"])([^'"\n]+)\2/g;
@@ -192,10 +282,18 @@ export function stripComments(text) {
   return out;
 }
 
+function isTypeOnly(statement, clause) {
+  if (/^(?:import|export)\s+type\s/.test(statement)) return true;
+  const braces = /^\s*\{([^}]*)\}\s*$/.exec(clause);
+  if (!braces) return false;
+  const names = braces[1].split(',').map((n) => n.trim()).filter(Boolean);
+  return names.length > 0 && names.every((n) => /^type\s/.test(n));
+}
+
 export function listImports(text) {
   const found = [];
   for (const m of text.matchAll(IMPORT_FROM_RE)) {
-    found.push({ spec: m[3], clause: m[1], kind: 'from', index: m.index + m[0].lastIndexOf(m[3]) });
+    found.push({ spec: m[3], clause: m[1], kind: 'from', typeOnly: isTypeOnly(m[0], m[1]), index: m.index + m[0].lastIndexOf(m[3]) });
   }
   for (const m of text.matchAll(IMPORT_SIDE_EFFECT_RE)) {
     found.push({ spec: m[2], clause: '', kind: 'side-effect', index: m.index + m[0].lastIndexOf(m[2]) });
@@ -223,6 +321,11 @@ const clauseNames = (clause) =>
   [...clause.matchAll(/[\w$]+/g)].map((m) => m[0]).filter((n) => n !== 'type' && n !== 'as');
 
 const specBase = (spec) => spec.replace(/\.(?:[cm]?[jt]sx?)$/, '');
+
+const outsideLangchainDir = (rel) => !rel.startsWith(LANGCHAIN_DIR);
+const inLangchainDir = (rel) => rel.startsWith(LANGCHAIN_DIR);
+const outsideSelfTests = (rel) => !rel.startsWith(SELF_TEST_DIR);
+const everywhere = () => true;
 
 export const RULES = [
   {
@@ -341,9 +444,10 @@ export const RULES = [
   },
   {
     id: 'cache-rpc',
-    description: 'parse-cache RPC called outside src/lib/rag/ingest/parse-cache.ts',
-    appliesTo: outsideCacheClient,
-    find: (text) => regexMatches(CACHE_RPC_RE, text),
+    description:
+      'cache RPC called outside its home: parse cache in src/lib/rag/ingest/parse-cache.ts, rag_cache_* in src/lib/rag/cache/, rag_tenant_language_shares in src/lib/rag/query/',
+    appliesTo: everywhere,
+    find: findCacheRpc,
   },
   {
     id: 'backfill-rpc',
@@ -372,6 +476,31 @@ export const RULES = [
       ...regexMatches(/\b(?:[a-z0-9-]+\.)*api\.lakera\.ai\b/gi, text),
       ...regexMatches(/\/v2\/guard\b/g, text),
     ],
+  },
+  {
+    id: 'langchain-import',
+    description: `@langchain package imported outside ${LANGCHAIN_DIR} (D-19)`,
+    appliesTo: outsideLangchainDir,
+    enforcedOnAllowlisted: outsideSelfTests,
+    find: (text) => importMatches(text, ({ spec }) => (LANGCHAIN_PACKAGE_RE.test(spec) ? spec : null)),
+  },
+  {
+    id: 'langchain-adapter-reach',
+    description: 'the LangChain adapter imports outside its allow-list (LANGCHAIN_ADAPTER_ALLOWED_IMPORTS, D-18)',
+    appliesTo: inLangchainDir,
+    find: (text, rel) => importMatches(text, (imp) => (adapterImportAllowed(rel, imp) ? null : imp.spec)),
+  },
+  {
+    id: 'query-llm-call',
+    description: 'query-LLM client imported outside src/lib/rag/query/ and deps.ts, or an ai generate/stream call in src/lib/rag/query/ outside llm.ts (D-13)',
+    appliesTo: everywhere,
+    find: findQueryLlmCall,
+  },
+  {
+    id: 'zod-v4',
+    description: 'zod 4 (zod/v4, zod/mini) imported in app code; only LangChain\'s nested copy uses zod 4 (D-20)',
+    appliesTo: everywhere,
+    find: (text) => importMatches(text, ({ spec }) => (ZOD_V4_RE.test(spec) ? spec : null)),
   },
 ];
 
@@ -404,12 +533,15 @@ export function checkBoundary(root = DEFAULT_ROOT) {
   const violations = [];
   for (const file of collectFiles(root)) {
     const rel = path.relative(root, file).split(path.sep).join('/');
-    if (isAllowlisted(rel)) continue;
+    const allowlisted = isAllowlisted(rel);
+    const rules = RULES.filter(
+      (rule) => rule.appliesTo(rel) && (!allowlisted || (rule.enforcedOnAllowlisted?.(rel) ?? false)),
+    );
+    if (rules.length === 0) continue;
     const text = stripComments(fs.readFileSync(file, 'utf8'));
     const seen = new Set();
-    for (const rule of RULES) {
-      if (!rule.appliesTo(rel)) continue;
-      for (const hit of rule.find(text)) {
+    for (const rule of rules) {
+      for (const hit of rule.find(text, rel)) {
         const line = lineOf(text, hit.index);
         const key = `${line}:${rule.id}`;
         if (seen.has(key)) continue;
