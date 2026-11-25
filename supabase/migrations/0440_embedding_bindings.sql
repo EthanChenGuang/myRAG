@@ -50,7 +50,8 @@ BEGIN
 END
 $doc_types_check$;
 
--- Scope trigger: a scoped profile is never backfilling or active, and its scope is fixed once it has vectors.
+-- Scope trigger: a scoped profile is never backfilling or active, and its scope is fixed once it has vectors; a binding's doc type cannot
+-- leave its profile's scope (the bindings table is created below; plpgsql resolves the name when the trigger runs).
 
 CREATE OR REPLACE FUNCTION public.rag_embedding_profiles_scope_guard()
 RETURNS trigger
@@ -60,6 +61,12 @@ AS $$
 BEGIN
   IF TG_OP = 'UPDATE' AND NEW.doc_types IS DISTINCT FROM OLD.doc_types THEN
     IF EXISTS (SELECT 1 FROM public.chunk_embeddings e WHERE e.profile_id = OLD.id) THEN
+      RAISE EXCEPTION 'profile_status_refused: scope_locked' USING ERRCODE = '22000';
+    END IF;
+    IF EXISTS (
+      SELECT 1 FROM public.embedding_profile_bindings b
+      WHERE b.profile_id = OLD.id AND (NEW.doc_types IS NULL OR NOT (b.doc_type = ANY (NEW.doc_types)))
+    ) THEN
       RAISE EXCEPTION 'profile_status_refused: scope_locked' USING ERRCODE = '22000';
     END IF;
   END IF;
@@ -105,6 +112,67 @@ CREATE INDEX IF NOT EXISTS chunk_embeddings_voyage_finance_2_1024_hnsw ON public
 CREATE INDEX IF NOT EXISTS chunk_embeddings_voyage_4_large_1024_domain_hnsw ON public.chunk_embeddings
   USING hnsw ((embedding::public.halfvec(1024)) public.halfvec_cosine_ops) WITH (m = 64, ef_construction = 200)
   WHERE profile_id = 'voyage-4-large-1024-domain';
+
+-- Per-doc-type bindings (D-06). tenant_key NULL = deployment-wide; otherwise a key of this deployment mode (public.rag_assert_tenant_key).
+-- 0441 moves rows between statuses through the gate; the indexes keep one active and one backfilling row per (doc type, tenant).
+
+CREATE TABLE IF NOT EXISTS public.embedding_profile_bindings (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  doc_type text NOT NULL CONSTRAINT embedding_profile_bindings_doc_type_check
+    CHECK (doc_type IN ('financial_report', 'contract_legal', 'invoice_receipt', 'product_technical', 'scanned_image', 'general')),
+  tenant_key text,
+  profile_id text NOT NULL REFERENCES public.embedding_profiles (id),
+  status text NOT NULL DEFAULT 'available' CONSTRAINT embedding_profile_bindings_status_check
+    CHECK (status IN ('backfilling', 'active', 'available', 'retired')),
+  previous_binding_id uuid REFERENCES public.embedding_profile_bindings (id),
+  eval_evidence jsonb,
+  activated_at timestamptz,
+  activated_by text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  created_by text NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS embedding_profile_bindings_single_active
+  ON public.embedding_profile_bindings ((doc_type), (COALESCE(tenant_key, ''))) WHERE status = 'active';
+CREATE UNIQUE INDEX IF NOT EXISTS embedding_profile_bindings_single_backfilling
+  ON public.embedding_profile_bindings ((doc_type), (COALESCE(tenant_key, ''))) WHERE status = 'backfilling';
+CREATE UNIQUE INDEX IF NOT EXISTS embedding_profile_bindings_triple_ux
+  ON public.embedding_profile_bindings (doc_type, (COALESCE(tenant_key, '')), profile_id);
+
+CREATE OR REPLACE FUNCTION public.rag_embedding_bindings_guard()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_scope text[];
+BEGIN
+  SELECT p.doc_types INTO v_scope FROM public.embedding_profiles p WHERE p.id = NEW.profile_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'binding_refused: unknown_profile' USING ERRCODE = '22023';
+  END IF;
+  IF v_scope IS NULL OR NOT (NEW.doc_type = ANY (v_scope)) THEN
+    RAISE EXCEPTION 'binding_refused: profile_scope_mismatch' USING ERRCODE = '22023';
+  END IF;
+  IF NEW.tenant_key IS NOT NULL THEN
+    PERFORM public.rag_assert_tenant_key(NEW.tenant_key);
+  END IF;
+  RETURN NEW;
+END
+$$;
+
+REVOKE ALL ON FUNCTION public.rag_embedding_bindings_guard() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_embedding_bindings_guard() TO service_role;
+
+DROP TRIGGER IF EXISTS rag_embedding_bindings_guard ON public.embedding_profile_bindings;
+CREATE TRIGGER rag_embedding_bindings_guard
+  BEFORE INSERT OR UPDATE OF profile_id, doc_type, tenant_key ON public.embedding_profile_bindings
+  FOR EACH ROW EXECUTE FUNCTION public.rag_embedding_bindings_guard();
+
+ALTER TABLE public.embedding_profile_bindings ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.embedding_profile_bindings FROM PUBLIC, anon, authenticated;
+GRANT ALL ON TABLE public.embedding_profile_bindings TO service_role;
 
 -- chunk_embeddings guard: the 0425 body plus the doc type scope check.
 
