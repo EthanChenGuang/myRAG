@@ -23,7 +23,7 @@ import type { FusedHit } from '../fusion/rrf';
 import type { Candidate, InjectionSummary, Profile, RetrievalResult, RunRetrievalInput } from '../types';
 import { evalRetrievalOverrides } from './overrides';
 import { effectiveRetrievalParams } from './retrieval-params';
-import { runContextStages } from './stages/context';
+import { evalFinalTopK, evalResultCap, runContextStages } from './stages/context';
 import { runQueryStages } from './stages/query';
 import { runRankStages } from './stages/rank';
 import { runSearchStages } from './stages/search';
@@ -199,7 +199,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
               topK:
                 profile === 'voice'
                   ? (validResultCount(input.options?.maxResults) ?? VOICE_DEFAULT_MATCH_COUNT)
-                  : params.final_top_k,
+                  : evalFinalTopK(profile, input, params.final_top_k),
             },
           }
         : {}),
@@ -269,7 +269,9 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
     }
     if (profile === 'eval' && rank.decision.decision === 'refuse') {
       const dropped = new Set(injection?.droppedChunkIds ?? []);
-      preRefusalCandidates = rank.preRefusalHits.filter((row) => !dropped.has(row.hit.chunkId)).map((row, index) => ({
+      const cap = evalResultCap(profile, input);
+      const kept = rank.preRefusalHits.filter((row) => !dropped.has(row.hit.chunkId));
+      preRefusalCandidates = (cap === null ? kept : kept.slice(0, cap)).map((row) => ({
         chunk_id: row.hit.chunkId,
         document_id: row.hit.documentId,
         content: row.hit.content,
