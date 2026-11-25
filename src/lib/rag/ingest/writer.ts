@@ -230,6 +230,10 @@ export interface IngestWriter {
   /** Records chunks that have no vector for a profile; returns how many rows were written. */
   recordBackfillGap(args: BackfillGapArgs): Promise<number>;
   markFailed(documentId: string, reason: string): Promise<void>;
+  /** The scope tenant's language shares over its current ready documents (rag_tenant_language_shares), largest first. */
+  tenantLanguageShares?(): Promise<Array<{ language: string; share: number }>>;
+  /** RAG_CAPTION_LANGUAGE=document: the language detected on each written picture caption, by image URL, onto this version's image chunks. */
+  setImageChunkLanguages?(documentId: string, items: Array<{ imageUrl: string; language: string }>): Promise<number>;
 }
 
 export interface CreateIngestWriterInput {
@@ -517,6 +521,27 @@ export function createIngestWriter(input: CreateIngestWriterInput): IngestWriter
         p_tenant_key: identity().tenantKey,
         p_reason: reason,
       });
+    },
+
+    async tenantLanguageShares() {
+      const rows = await call('rag_tenant_language_shares', { p_tenant_key: identity().tenantKey });
+      const shares: Array<{ language: string; share: number }> = [];
+      for (const row of rows) {
+        const language = text(row, 'language');
+        const share = typeof row.share === 'number' ? row.share : Number(row.share);
+        if (language !== null && Number.isFinite(share)) shares.push({ language, share });
+      }
+      return shares;
+    },
+
+    async setImageChunkLanguages(documentId, items) {
+      if (items.length === 0) return 0;
+      const row = await callOne('rag_set_image_chunk_languages', {
+        p_document_id: documentId,
+        p_tenant_key: identity().tenantKey,
+        p_items: items.map((item) => ({ image_url: item.imageUrl, language: item.language })),
+      });
+      return integer(row, 'chunks_updated') ?? 0;
     },
   };
 }

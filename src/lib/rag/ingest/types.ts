@@ -152,6 +152,8 @@ export interface ChunkDraft {
   /** Set by the enrich stage. */
   content_hash?: string;
   lexical_text?: string;
+  /** RAG_CAPTION_LANGUAGE=document, image chunks only: the language detected on the caption as written (D-23). */
+  language?: string;
 }
 
 /** What a chunker returns: the drafts plus stable warning codes for the stage to report. */
@@ -199,6 +201,8 @@ export interface IngestWork {
   templateRow?: Record<string, string | null> | null;
   chunks: ChunkDraft[];
   chunksWritten: number;
+  /** RAG_CAPTION_LANGUAGE=document: the caption target language, resolved once per run (null: no target, English prompt). */
+  captionTarget?: { language: string | null };
 }
 
 export interface StageContext {
