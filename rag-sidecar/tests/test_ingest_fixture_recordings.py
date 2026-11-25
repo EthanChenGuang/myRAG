@@ -124,3 +124,26 @@ def test_under_the_effective_flag_every_chunk_of_the_60_row_table_starts_with_th
     tables = [chunk for chunk in result.chunks if chunk.is_table]
     assert len(tables) > 1
     assert all(chunk.text.startswith(header + "\n") for chunk in tables)
+
+
+@pytest.mark.parametrize("fixture_id", LONG_TABLES)
+def test_under_repeat_and_carry_every_chunk_of_the_continued_variant_starts_with_the_header(fixture_id, tmp_path):
+    _, spec = _long_table_spec(fixture_id)
+    header = _header_lines(spec)
+    continued = f"{fixture_id}-continued"
+
+    result, out_dir = _parse(continued, tmp_path, repeat_table_header=True, carry_table_header=True)
+
+    tables = [chunk for chunk in result.chunks if chunk.is_table]
+    assert any(chunk.pages == [2] for chunk in tables)
+    assert all(chunk.text.startswith(header + "\n") for chunk in tables)
+    assert all(chunk.table_header_carried is True for chunk in tables if chunk.pages == [2])
+    committed = json.loads((INGEST / "recorded" / f"{continued}.docling.json").read_text(encoding="utf-8"))
+    assert _normalized(json.loads((out_dir / "docling.json").read_text(encoding="utf-8"))) == _normalized(committed)
+
+
+@pytest.mark.parametrize("fixture_id", LONG_TABLES)
+def test_the_carry_leaves_the_single_table_variant_untouched(fixture_id, tmp_path):
+    plain, _ = _parse(fixture_id, tmp_path, repeat_table_header=True)
+    carried, _ = _parse(fixture_id, tmp_path, repeat_table_header=True, carry_table_header=True)
+    assert carried.chunks == plain.chunks

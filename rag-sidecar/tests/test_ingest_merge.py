@@ -157,3 +157,57 @@ def test_slice_pages_keeps_the_page_numbers_of_a_document_that_starts_after_page
     assert sorted(sliced.pages) == [5, 6]
     pages_by_text = {item.text: [prov.page_no for prov in item.prov] for item, _level in sliced.iterate_items() if getattr(item, "text", "")}
     assert pages_by_text == {"Five.": [5], "Six.": [6]}
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Phase 3.2 D-20: header carry-forward on the merged document (03.2-28)
+# ---------------------------------------------------------------------------------------------------------------------
+
+
+def _table_part(page_no: int, rows: list[tuple[str, ...]], *, header: bool) -> DoclingDocument:
+    from docling_core.types.doc import TableCell, TableData
+
+    doc = DoclingDocument(name="range", origin=DocumentOrigin(mimetype="application/pdf", binary_hash=1, filename="r.pdf"))
+    doc.add_page(page_no=page_no, size=PAGE)
+    cells = [
+        TableCell(
+            text=value,
+            start_row_offset_idx=r,
+            end_row_offset_idx=r + 1,
+            start_col_offset_idx=c,
+            end_col_offset_idx=c + 1,
+            column_header=header and r == 0,
+        )
+        for r, row in enumerate(rows)
+        for c, value in enumerate(row)
+    ]
+    doc.add_table(data=TableData(num_rows=len(rows), num_cols=len(rows[0]), table_cells=cells), prov=_prov(page_no))
+    return doc
+
+
+def test_a_table_continued_across_a_range_boundary_takes_the_header_on_the_merged_document(tmp_path):
+    pytest.importorskip("tiktoken")
+    from rag_sidecar.contracts.ingest import DoclingOptions, ParseJobRequest
+    from rag_sidecar.parse.docling_adapter import to_parse_result
+
+    header = ("Item", "Batch", "First reading", "Second reading")
+    rows = [(f"Item {i:02d}", f"Batch {i % 3}", f"{i * 4}.5", f"{90 - i}.25") for i in range(1, 25)]
+    merged = merge([_table_part(1, [header, *rows[:12]], header=True), _table_part(2, rows[12:], header=False)], 2)
+    request = ParseJobRequest(
+        profile_id="general@1",
+        profile_version=1,
+        docling=DoclingOptions(ocr=False, force_full_page_ocr=False, table_mode="accurate", heading_hierarchy=True, generate_picture_images=False),
+        ocr_languages=["en"],
+        max_tokens=120,
+        repeat_table_header=True,
+        carry_table_header=True,
+    )
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+
+    result = to_parse_result(merged, request, out_dir)
+
+    second = [chunk for chunk in result.chunks if chunk.is_table and chunk.pages == [2]]
+    assert second and all(chunk.table_header_carried for chunk in second)
+    assert all(chunk.text.startswith("| Item ") and "First reading" in chunk.text.splitlines()[0] for chunk in second)
+    assert len(merged.tables[1].data.table_cells) == len(rows[12:]) * len(header)
