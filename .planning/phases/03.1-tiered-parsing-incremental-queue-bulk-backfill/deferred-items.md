@@ -26,3 +26,10 @@ model needs a schema-visible constraint (`oneOf`). 03.1-25's `listSource` enforc
 `invalid_argument: p_user_id is required` without one. 03.1-48 fixed the same gap for backfill begin (`backfillDocumentScope`,
 the organization owner); the progressive path should probably carry the previous version's `user_id` instead. Not reproduced
 here (no org-tenant progressive test exists); needs a failing test first.
+
+## 4. tests/rag-e2e/queued-callbacks-two-tenant.test.mts: 3 failures on the 03.1-46 base (seen by 03.1-48)
+
+Same 3 failures with the base `advance.ts` (c8967f53) restored: "modes and phases that this plan does not handle are refused
+with 400" (advance `phase: 'begin'` now answers 200, the 03.1-22 case predates begin from 03.1-46), "each tenant parses its own
+copy of the same bytes" (3 cache rows, expected 2) and "parse-external is idempotent". Not caused by 03.1-48; the test needs
+updating for begin and the parse-cache row count needs a look.
