@@ -115,6 +115,19 @@ from rag_sidecar.contracts import (
     TraceUsedDocument,
 )
 
+from rag_sidecar.contracts.cache import (
+    CacheCheckRequest,
+    CacheCheckResponse,
+    CachedAnswer,
+    CachedSource,
+    CachedSourceVersion,
+    CacheInvalidateRequest,
+    CacheInvalidateResponse,
+    CacheSplitMetrics,
+    CacheStoreRequest,
+    SemanticCacheCalibration,
+    SemanticCacheProfileCalibration,
+)
 from rag_sidecar.contracts.latency import GroundednessBudgets, ScorerBudget
 from rag_sidecar.contracts.parse_eval import (
     DuplicateCounts,
@@ -1111,6 +1124,101 @@ def _answer_record(*, pending: bool = False) -> AnswerRecord:
     )
 
 
+_CACHE_QUOTE = "placeholder quote"
+_CACHE_DOCUMENT_ID = "00000000-0000-4000-8000-0000000000d1"
+_CACHE_KEY_HASH = hashlib.sha256(b"cache-key-placeholder").hexdigest()
+_CACHE_PROFILE_ID = "openai-3-small-1536"
+_CACHE_VECTOR = [0.125, -0.25, 0.5]
+
+
+def _cached_answer() -> CachedAnswer:
+    citation = _citation_record().model_copy(
+        update={"quote": _CACHE_QUOTE, "quoteHash": hashlib.sha256(_CACHE_QUOTE.encode("utf-8")).hexdigest()}
+    )
+    return CachedAnswer(
+        answer_text="Placeholder cached answer [S1].",
+        citations=[citation],
+        sources=[CachedSource(document_id=_CACHE_DOCUMENT_ID, name="leave-policy.pdf", version=2)],
+        source_versions=[CachedSourceVersion(document_id=_CACHE_DOCUMENT_ID, version=2)],
+        answer_language="en",
+        rag_mode="strict",
+        is_refusal=False,
+        groundedness=_answer_record().groundedness,
+        trace_id="0123456789abcdef0123456789abcdef",
+        created_at="2026-01-01T00:00:00.000Z",
+    )
+
+
+def _cache_check_request() -> CacheCheckRequest:
+    return CacheCheckRequest(
+        tenant_key="s:default",
+        key_hash=_CACHE_KEY_HASH,
+        embedding_profile_id=_CACHE_PROFILE_ID,
+        vector=_CACHE_VECTOR,
+        max_distance=0.05,
+    )
+
+
+def _cache_store_request() -> CacheStoreRequest:
+    return CacheStoreRequest(
+        tenant_key="s:default",
+        key_hash=_CACHE_KEY_HASH,
+        embedding_profile_id=_CACHE_PROFILE_ID,
+        query_text_masked="How many leave days does [EMAIL] get?",
+        vector=_CACHE_VECTOR,
+        answer=_cached_answer(),
+        ttl_seconds=3600,
+    )
+
+
+def _semantic_cache_calibration() -> SemanticCacheCalibration:
+    metrics = CacheSplitMetrics(
+        paraphrase_pairs=10, near_miss_pairs=10, paraphrase_hit_rate=0.8, near_miss_wrong_hit_rate=0.0
+    )
+    return SemanticCacheCalibration(
+        profiles=[
+            SemanticCacheProfileCalibration(
+                embedding_profile_id=_CACHE_PROFILE_ID,
+                max_distance=0.05,
+                source="calibrated",
+                fitted_at="2026-01-01T00:00:00.000Z",
+                dev=metrics,
+                test=metrics,
+            )
+        ]
+    )
+
+
+def _cache_contract_samples() -> dict[str, Any]:
+    return {
+        "CachedAnswer": _cached_answer(),
+        "CacheCheckRequest": _cache_check_request(),
+        "CacheCheckResponse": CacheCheckResponse(
+            hit=True, entry_id="cache-entry-0001", distance=0.03, answer=_cached_answer()
+        ),
+        "CacheStoreRequest": _cache_store_request(),
+        "CacheInvalidateRequest": CacheInvalidateRequest(tenant_key="s:default", document_ids=[_CACHE_DOCUMENT_ID]),
+        "CacheInvalidateResponse": CacheInvalidateResponse(deleted=3),
+        "SemanticCacheCalibration": _semantic_cache_calibration(),
+    }
+
+
+def _cache_near_miss_item() -> GoldenItem:
+    return GoldenItem(
+        id="en-cache-near-miss-001",
+        question="How many sick days do employees get?",
+        language="en",
+        category="cache_near_miss",
+        answerable=True,
+        expected_answer="Ten days per year.",
+        gold_evidence=[_span()],
+        pair_of="en-general-001",
+        review_status="approved",
+        provenance="synthetic_fixture",
+        split="dev",
+    )
+
+
 def _groundedness_thresholds() -> GroundednessThresholds:
     return GroundednessThresholds(
         cells=[
@@ -1338,6 +1446,7 @@ def _models() -> dict[str, Any]:
         ),
         **_phase31_contract_samples(),
         **_query_contract_samples(),
+        **_cache_contract_samples(),
     }
 
 
@@ -1365,6 +1474,22 @@ def build_samples() -> dict[str, dict[str, Any]]:
         "GoldenItem:cross_lingual": {
             "model": "GoldenItem",
             "value": _cross_lingual_item().model_dump(mode="json"),
+        },
+        "GoldenItem:cache_near_miss": {
+            "model": "GoldenItem",
+            "value": _cache_near_miss_item().model_dump(mode="json"),
+        },
+        "RetrievalParams:sub_question_coverage_off": {
+            "model": "RetrievalParams",
+            "value": RetrievalParams(sub_question_coverage=False).model_dump(mode="json"),
+        },
+        "CacheCheckResponse:miss": {
+            "model": "CacheCheckResponse",
+            "value": CacheCheckResponse(hit=False).model_dump(mode="json"),
+        },
+        "CacheInvalidateRequest:whole_tenant": {
+            "model": "CacheInvalidateRequest",
+            "value": CacheInvalidateRequest(tenant_key="s:default").model_dump(mode="json"),
         },
         "GoldenItem:injection": {
             "model": "GoldenItem",
