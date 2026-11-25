@@ -336,3 +336,10 @@ def test_a_zero_page_file_is_clean_even_after_a_failed_open(client):
     # pdfium sets no error for an empty page tree, so a stale code from an earlier failed open must not decide.
     assert post(client, b"%PDF-1.4\nthis is not a pdf body\n").status_code == 422
     assert report_for(client, "zero-pages.pdf").status == "clean"
+
+
+def test_a_password_protected_pdf_is_refused(client):
+    data = (Path(__file__).parent / "fixtures" / "preflight" / "user-password.pdf").read_bytes()
+    response = post(client, data)
+    assert response.status_code == 422
+    assert response.json()["error"] == "encrypted_document"

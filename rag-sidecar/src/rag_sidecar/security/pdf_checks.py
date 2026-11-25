@@ -31,7 +31,6 @@ PAGE_WHITE = (1.0, 1.0, 1.0)
 INVISIBLE_MODES = frozenset({3, 7})
 STROKE_ONLY_MODES = frozenset({1, 5})
 MAX_FORM_DEPTH = 8
-FPDF_ERR_SUCCESS = 0
 FPDF_ERR_PASSWORD = 4
 
 # pdfium is not thread-safe; one check at a time in this process.
@@ -393,11 +392,11 @@ def check_pdf_hidden_text(data: bytes, rules: HiddenTextRules) -> CheckOutcome:
         try:
             document = pdfium.PdfDocument(data)
         except pdfium.PdfiumError as error:
-            code = getattr(error, "err_code", None)
-            if code == FPDF_ERR_PASSWORD:
-                raise EncryptedDocument("password required") from error
-            if code == FPDF_ERR_SUCCESS and _zero_pages(data):
+            # pdfium sets no error for an empty page tree, so its last-error code can be stale: count pages separately.
+            if _zero_pages(data):
                 return CheckOutcome(checked=True, spans=[], link_targets=[])
+            if getattr(error, "err_code", None) == FPDF_ERR_PASSWORD:
+                raise EncryptedDocument("password required") from error
             raise UnreadableDocument("pdf could not be opened") from error
         spans: list[FoundSpan] = []
         targets: list[str] = []
