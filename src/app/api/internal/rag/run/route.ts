@@ -116,6 +116,46 @@ function toBindingOverrides(options: RagRunRequest['options']): BindingOverrides
   return { ok: true, value };
 }
 
+type QueryLayerOverrides = NonNullable<StageOverrides['queryLayer']>;
+type QueryTransformToggles = NonNullable<NonNullable<RagRunRequest['options']>['query_transforms']>;
+type QueryTransformSwitchName = keyof NonNullable<QueryLayerOverrides['transforms']>;
+
+const TRANSFORM_SWITCHES: ReadonlyArray<[keyof QueryTransformToggles, QueryTransformSwitchName]> = [
+  ['condense', 'condense'],
+  ['normalize_dates', 'normalizeDates'],
+  ['translate', 'translate'],
+  ['expand', 'expand'],
+  ['hyde', 'hyde'],
+  ['decompose', 'decompose'],
+];
+
+function withoutNulls<T extends object>(input: T): Partial<T> {
+  return Object.fromEntries(Object.entries(input).filter((entry) => entry[1] !== null && entry[1] !== undefined)) as Partial<T>;
+}
+
+/** D-38: the eval-only query-layer overrides. Built only here; the pipeline applies them for the eval profile only. */
+function toQueryLayerOverrides(options: RagRunRequest['options']): QueryLayerOverrides | undefined {
+  if (!options) return undefined;
+  const out: QueryLayerOverrides = {};
+  if (typeof options.query_layer === 'boolean') out.enabled = options.query_layer;
+  if (options.query_framework) out.framework = options.query_framework;
+  const transforms: NonNullable<QueryLayerOverrides['transforms']> = {};
+  for (const [name, key] of TRANSFORM_SWITCHES) {
+    const value = options.query_transforms?.[name];
+    if (typeof value === 'boolean') transforms[key] = value;
+  }
+  if (Object.keys(transforms).length > 0) out.transforms = transforms;
+  if (options.semantic_cache) out.semanticCache = options.semantic_cache;
+  if (options.query_params) {
+    const { query_budget_ms: budget, ...scalars } = options.query_params;
+    const params: NonNullable<QueryLayerOverrides['queryParams']> = withoutNulls(scalars);
+    const budgetParams = budget ? withoutNulls(budget) : {};
+    if (Object.keys(budgetParams).length > 0) params.query_budget_ms = budgetParams;
+    if (Object.keys(params).length > 0) out.queryParams = params;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
 function toStageOverrides(options: RagRunRequest['options']): StageOverrides | undefined {
   const disabledStages = options?.disabled_stages?.flatMap((name) => (isRegisteredStage(name) ? [name] : []));
   const timeouts = Object.fromEntries(
@@ -123,11 +163,13 @@ function toStageOverrides(options: RagRunRequest['options']): StageOverrides | u
   );
   const hasTimeouts = Object.keys(timeouts).length > 0;
   const retrievalOverrides = toRetrievalOverrides(options?.retrieval_overrides);
-  if (!disabledStages?.length && !hasTimeouts && !retrievalOverrides) return undefined;
+  const queryLayer = toQueryLayerOverrides(options);
+  if (!disabledStages?.length && !hasTimeouts && !retrievalOverrides && !queryLayer) return undefined;
   return {
     ...(disabledStages?.length ? { disabledStages } : {}),
     ...(hasTimeouts ? { timeouts } : {}),
     ...(retrievalOverrides ? { retrievalOverrides } : {}),
+    ...(queryLayer ? { queryLayer } : {}),
   };
 }
 
@@ -218,11 +260,62 @@ const EVAL_CLAUDE_FACTS: ClaudeTurnFacts = { mcp: false, multiStep: false, webSe
 
 const NO_CITATIONS: CitationRecord[] = [];
 
-/** D-38: the rewrites the query layer searched, in plan order; empty while the layer is off. */
+type TraceTransform = NonNullable<RagTrace['query_transforms']>[number];
+type TraceTransformName = NonNullable<TraceTransform['transform']>;
+type TraceTransformStatus = NonNullable<TraceTransform['status']>;
+
+/** Trace order: the D-05 order of the layer, translate last. */
+const TRACE_TRANSFORMS: ReadonlyArray<{ name: TraceTransformName; plan: string; variant: string | null }> = [
+  { name: 'condense', plan: 'condense_history', variant: 'condensed' },
+  { name: 'normalize_dates', plan: 'normalize_dates', variant: null },
+  { name: 'expand', plan: 'expand', variant: 'expanded' },
+  { name: 'hyde', plan: 'hyde', variant: 'hyde' },
+  { name: 'decompose', plan: 'decompose', variant: 'sub_question' },
+  { name: 'translate', plan: 'translate', variant: 'translated' },
+];
+
+const TRACE_STATUSES: ReadonlySet<string> = new Set<TraceTransformStatus>(['ok', 'skipped', 'disabled', 'degraded', 'error', 'timeout', 'aborted']);
+
+function traceReason(value: string | null | undefined): string | null {
+  return value ? value.slice(0, 64) : null;
+}
+
+/**
+ * D-38: every transform the query layer considered, with its status and skip reason; the rewrites it searched come first
+ * in plan order. A transform without a searched variant has kind 'none' (or 'date_range' for a normalized range). Empty
+ * while the layer is off.
+ */
 function queryTransformsOf(result: RetrievalResult): RagTrace['query_transforms'] {
   const plan = result.queryPlan;
   if (!plan) return [];
-  return (plan.variants ?? []).filter((variant) => variant.kind !== 'original').map((variant) => ({ kind: variant.kind, text: variant.text }));
+  const records = new Map(result.stages.map((stage) => [stage.name as string, stage]));
+  const skipped = new Map((plan.skipped ?? []).map((entry) => [entry.transform as string, entry.reason as string]));
+  const variants = (plan.variants ?? []).filter((variant) => variant.kind !== 'original');
+  const out: TraceTransform[] = [];
+  const tail: TraceTransform[] = [];
+  // Until the layer handles translate, the Phase 4 slot records it on every v2 request; it counts only when the gate asked for it.
+  const gateTranslate = plan.gate.transforms.includes('translate');
+  for (const transform of TRACE_TRANSFORMS) {
+    const record = transform.name === 'translate' && !gateTranslate ? undefined : records.get(transform.name);
+    const planReason = skipped.get(transform.plan);
+    const recordStatus = record && TRACE_STATUSES.has(record.status) ? (record.status as TraceTransformStatus) : null;
+    const status: TraceTransformStatus | null = recordStatus ?? (planReason ? 'skipped' : null);
+    const produced = transform.variant ? variants.filter((variant) => variant.kind === transform.variant) : [];
+    if (produced.length > 0) {
+      for (const variant of produced) {
+        out.push({ kind: variant.kind, text: variant.text, transform: transform.name, status: 'ok', reason: traceReason(planReason) });
+      }
+      continue;
+    }
+    if (!status) continue;
+    const reason = traceReason(planReason ?? (status === 'ok' ? null : (record?.detail ?? record?.reason)));
+    if (transform.name === 'normalize_dates' && plan.date_range && status === 'ok') {
+      tail.push({ kind: 'date_range', text: `${plan.date_range.from_date}..${plan.date_range.to_date}`, transform: transform.name, status, reason });
+      continue;
+    }
+    tail.push({ kind: 'none', text: '', transform: transform.name, status, reason });
+  }
+  return [...out, ...tail];
 }
 
 interface CitationTraceFields {

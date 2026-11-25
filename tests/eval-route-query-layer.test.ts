@@ -110,6 +110,7 @@ function layerResult() {
       stage('query_gate', 'ok'),
       stage('expand', 'disabled', { reason: 'disabled', detail: 'disabled' }),
       stage('decompose', 'ok'),
+      stage('translate', 'disabled', { reason: 'disabled' }),
       stage('search', 'ok', { detail: 'fake' }),
       stage('assemble', 'ok'),
     ],
@@ -138,6 +139,11 @@ function evalRequest(options?: Record<string, unknown>) {
     headers: { 'content-type': 'application/json', 'x-rag-eval-secret': SECRET },
     body: JSON.stringify({ schema_version: 1, query: ORIGINAL, rag_mode: 'strict', ...(options ? { options } : {}) }),
   });
+}
+
+interface TraceBody {
+  query_plan: { sub_questions?: string[] } | null;
+  query_transforms: unknown[];
 }
 
 function routeFiles(dir: string): string[] {
@@ -228,7 +234,7 @@ describe('eval route query-layer overrides (D-38)', () => {
     const response = await route.POST(evalRequest({ query_layer: true, query_transforms: { expand: false } }));
 
     expect(response.status).toBe(200);
-    const trace = (await response.json()) as Record<string, any>;
+    const trace = (await response.json()) as TraceBody;
     expect(RagTraceSchema.safeParse(trace).success).toBe(true);
     expect(trace.query_plan?.sub_questions).toEqual([SUB_A, SUB_B]);
     expect(trace.query_transforms).toEqual([
@@ -257,7 +263,7 @@ describe('eval route query-layer overrides (D-38)', () => {
       ],
     });
     const route = await loadRoute();
-    const trace = (await (await route.POST(evalRequest())).json()) as Record<string, any>;
+    const trace = (await (await route.POST(evalRequest())).json()) as TraceBody;
 
     expect(RagTraceSchema.safeParse(trace).success).toBe(true);
     expect(trace.query_transforms).toEqual([
@@ -286,7 +292,7 @@ describe('eval route query-layer overrides (D-38)', () => {
       ],
     });
     const route = await loadRoute();
-    const trace = (await (await route.POST(evalRequest())).json()) as Record<string, any>;
+    const trace = (await (await route.POST(evalRequest())).json()) as TraceBody;
 
     expect(RagTraceSchema.safeParse(trace).success).toBe(true);
     expect(trace.query_transforms).toEqual([
@@ -297,7 +303,7 @@ describe('eval route query-layer overrides (D-38)', () => {
 
   it('keeps query_plan null and query_transforms empty while the layer is off, and the trace validates', async () => {
     const route = await loadRoute();
-    const trace = (await (await route.POST(evalRequest({ query_layer: false }))).json()) as Record<string, any>;
+    const trace = (await (await route.POST(evalRequest({ query_layer: false }))).json()) as TraceBody;
 
     expect(RagTraceSchema.safeParse(trace).success).toBe(true);
     expect(trace.query_plan).toBeNull();

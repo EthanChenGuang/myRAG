@@ -320,3 +320,20 @@ def test_date_range_include_undated_defaults_false():
         {"date_range": {"from": "2026-01-01", "to": "2026-01-31", "include_undated": True}}
     )
     assert getattr(with_undated.date_range, "include_undated", None) is True
+
+
+def test_trace_query_transform_carries_transform_status_and_reason() -> None:
+    from rag_sidecar.contracts.eval_run import TraceQueryTransform
+
+    assert accepts(TraceQueryTransform, {"kind": "rewrite", "text": "neutral text"})
+    assert accepts(
+        TraceQueryTransform,
+        {"kind": "none", "text": "", "transform": "expand", "status": "disabled", "reason": "disabled"},
+    )
+    assert accepts(
+        TraceQueryTransform,
+        {"kind": "sub_question", "text": "neutral text", "transform": "decompose", "status": "ok", "reason": None},
+    )
+    assert rejects(TraceQueryTransform, {"kind": "none", "text": "", "transform": "summarize"})
+    assert rejects(TraceQueryTransform, {"kind": "none", "text": "", "status": "pending"})
+    assert rejects(TraceQueryTransform, {"kind": "none", "text": "", "reason": "x" * 65})
