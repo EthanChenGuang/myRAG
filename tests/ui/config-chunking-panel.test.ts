@@ -897,8 +897,12 @@ describe('ChunkingProfilesPanel renders server strings as text only', () => {
       const { ChunkingProfilesPanel } = loadChunkingPanel();
       const list = listBody();
       (list.profiles as Array<Record<string, unknown>>).push(profileRow(XSS, 'general', { activated_by: 'MARKER_ACTIVATED_BY' }));
-      const report = { ...REPORT, config_hash: 'MARKER_CONFIG_HASH', notes: [...REPORT.notes, XSS] };
-      report.profiles = [...REPORT.profiles, { ...REPORT.profiles[1], profile_id: XSS }];
+      const report: Record<string, unknown> = {
+        ...REPORT,
+        config_hash: 'MARKER_CONFIG_HASH',
+        notes: [...REPORT.notes, XSS],
+        profiles: [...REPORT.profiles, { ...REPORT.profiles[1], profile_id: XSS }],
+      };
       const { fetcher, calls } = fakeFetcher({
         'GET /api/rag/admin/chunking-profiles': { ok: true, status: 200, body: list },
         'GET /api/rag/admin/chunking-profiles/report': { ok: true, status: 200, body: { success: true, report, decisions: DECISIONS } },
