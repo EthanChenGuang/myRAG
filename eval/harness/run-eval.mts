@@ -11,7 +11,8 @@ import type { LanguageModel } from 'ai';
 import { GoldenItemSchema, RagTraceSchema, RunManifestSchema, type GoldenItem, type RagRunRequest, type RagTrace, type RunManifest } from '../../src/lib/rag-eval/contracts.generated.ts';
 import { canonicalJson, configHash } from '../../src/lib/rag-eval/trace.ts';
 import { EMBEDDER_ID, EMBEDDER_VERSION, embedderSourceSha256 } from './fixture-embedder.mts';
-import { ingestModeRetrievalEnv } from './ingest-mode.mts';
+import { ingestModeRetrievalEnv, partitionIngestModeItems } from './ingest-mode.mts';
+import { closeTableSplitTenants, isTableSplitItem, TABLE_SPLIT_USER_ID, withTableSplitTenant, type TableSplitTenant } from './table-split.mts';
 import { createFixtureDatabase, FIXTURE_USER_ID, type DeploymentMode, type FixtureMode } from './pglite-supabase.mts';
 import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from './fake-edge.mts';
 import { applyFixtureProcessEnv } from './process-env.mts';
@@ -54,6 +55,10 @@ export interface InProcessEval {
   POST: (req: NextRequest) => Promise<Response>;
   secret: string;
   edge: FakeEdge;
+  /** The fixture database the edge serves between table_split items. */
+  fixtureDb: import('@electric-sql/pglite').PGlite;
+  /** Set when the session was prepared for table_split items (ingest mode only). */
+  tableSplitTenants?: TableSplitTenant[];
   fixtureUserId: string;
   corpusSha256: string;
   sqlSha256: Record<string, string>;
@@ -184,6 +189,8 @@ export async function prepareInProcessEval(options: {
   appEnv?: Record<string, string>;
   /** Ingest mode: seeded before the first document; the env overlay is then applied to the build too, so dual-write runs under v2. */
   chunkingProfiles?: import('../../src/lib/rag-eval/contracts.generated.ts').ChunkingProfile[];
+  /** Ingest mode: also load the isolated table_split tenants (table-split.mts). */
+  tableSplit?: boolean;
 }): Promise<InProcessEval> {
   const {
     corpusDir,
@@ -197,12 +204,20 @@ export async function prepareInProcessEval(options: {
     ingestRouting,
     appEnv,
   } = options;
+  const tableSplit = options.tableSplit === true;
   if (ingestRouting && fixtureMode !== 'ingest') throw new Error('[Eval Harness] routing and forced tiers need --fixture-mode ingest');
+  if (tableSplit && (fixtureMode !== 'ingest' || ingestRouting)) {
+    throw new Error('[Eval Harness] table_split items run only in the inline ingest fixture mode');
+  }
   const existingSecret = process.env.RAG_EVAL_SECRET ?? '';
   const secret = existingSecret.length >= 32 ? existingSecret : crypto.randomBytes(24).toString('hex');
   const evalEnv = {
     RAG_EVAL_SECRET: secret,
-    RAG_EVAL_ALLOWED_SCOPES: [`user:${FIXTURE_USER_ID}`, ...allowedScopes].join(','),
+    RAG_EVAL_ALLOWED_SCOPES: [
+      `user:${FIXTURE_USER_ID}`,
+      ...(tableSplit && deploymentMode === 'multi-tenant' ? [`user:${TABLE_SPLIT_USER_ID}`] : []),
+      ...allowedScopes,
+    ].join(','),
     ...(embeddingProfileId ? { RAG_EMBEDDING_PROFILES: 'on' } : {}),
   };
   const seeding = !ingestFixture && (chunkingProfiles?.length ?? 0) > 0;
@@ -215,7 +230,12 @@ export async function prepareInProcessEval(options: {
       processEnv: seeding ? { ...evalEnv, ...envOverrides } : evalEnv,
       ...(seeding ? { chunkingProfiles } : {}),
       ...(ingestRouting ? { ingestRouting } : {}),
+      ...(tableSplit ? { tableSplit: true } : {}),
     }));
+  if (tableSplit && !fixture.tableSplitTenants) {
+    if (!ingestFixture) await fixture.db.close().catch(() => undefined);
+    throw new Error('[Eval Harness] the ingest fixture was built without the table_split tenants');
+  }
   let edge: FakeEdge | undefined;
   try {
     // The ingest mode ingests the corpus through its own edge and hands it over: a second edge would have another URL than the
@@ -265,6 +285,8 @@ export async function prepareInProcessEval(options: {
     POST: route.POST as unknown as InProcessEval['POST'],
     secret,
     edge: startedEdge,
+    fixtureDb: fixture.db,
+    ...(fixture.tableSplitTenants ? { tableSplitTenants: fixture.tableSplitTenants } : {}),
     fixtureUserId: fixture.fixtureUserId,
     corpusSha256: fixture.corpusSha256,
     sqlSha256: fixture.sqlSha256,
@@ -272,7 +294,10 @@ export async function prepareInProcessEval(options: {
       translatorModule?.resetTranslatorForTests();
       floorModule.resetEvalScoreCalibration();
       if (ownsEdge) await startedEdge.close();
-      if (ownsDb) await fixture.db.close().catch(() => undefined);
+      if (ownsDb) {
+        await closeTableSplitTenants(fixture.tableSplitTenants);
+        await fixture.db.close().catch(() => undefined);
+      }
     },
   };
 }
@@ -423,7 +448,10 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
 
   const goldenFilter = goldenFilterFor(includeDrafts);
   const allItems = readGolden(goldenPath);
-  const items = selectGolden(allItems, goldenFilter);
+  // table_split items need the isolated tenants of the inline ingest fixture mode; every other run leaves them out.
+  const tableSplitRunnable = !baseUrl && fixtureMode === 'ingest' && !ingestRouting;
+  const items = selectGolden(allItems, goldenFilter).filter((item) => tableSplitRunnable || !isTableSplitItem(item));
+  const routed = partitionIngestModeItems(items);
   if (items.length === 0) {
     throw new Error(`[Eval Harness] no golden items with review_status in [${goldenFilter.review_statuses.join(', ')}] in ${goldenPath}`);
   }
@@ -479,6 +507,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
           embeddingProfileId,
           ingestFixture,
           ...(ingestRouting ? { ingestRouting } : {}),
+          ...(routed.tableSplit.length > 0 ? { tableSplit: true } : {}),
           ...(runConfig && Object.keys(runConfig.env).length > 0 ? { envOverrides: runConfig.env } : {}),
           ...(runConfig?.chunkingProfiles?.length ? { chunkingProfiles: runConfig.chunkingProfiles } : {}),
           ...(options.appEnv && Object.keys(options.appEnv).length > 0 ? { appEnv: options.appEnv } : {}),
@@ -522,10 +551,20 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
       };
     }
 
-    for (const item of items) {
+    const tableTenants = routed.tableSplit.length > 0 ? inProcess?.tableSplitTenants : undefined;
+    if (routed.tableSplit.length > 0 && !tableTenants) {
+      throw new Error('[Eval Harness] table_split items need an ingest session prepared with the table_split tenants');
+    }
+    // Ingest mode routes by category: the other items first, exactly as before, then each table_split item against its tenant.
+    for (const item of [...routed.main, ...routed.tableSplit]) {
       const options = itemRequestOptions(requestOptions, item);
       if (inProcess && deploymentMode === 'multi-tenant' && !options.user_id) {
         options.user_id = inProcess.fixtureUserId;
+      }
+      // In multi-tenant mode the table_split documents belong to their own fixture user: its tenant key is the request's scope.
+      if (inProcess && deploymentMode === 'multi-tenant' && isTableSplitItem(item)) {
+        options.user_id = TABLE_SPLIT_USER_ID;
+        options.organization_id = null;
       }
       const stubAnswer = stubInjectionAnswers && answersItemForInjectionMetrics(tier, item);
       if (stubAnswer) options.generator_model = STUB_GENERATOR_MODEL;
@@ -540,7 +579,10 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
         ...(includeAnswer || stubAnswer ? { include_answer: true as const } : {}),
       } as RagRunRequest;
 
-      const { status, body } = await send(payload);
+      const { status, body } =
+        tableTenants && inProcess && isTableSplitItem(item)
+          ? await withTableSplitTenant(inProcess.edge, inProcess.fixtureDb, tableTenants, item, () => send(payload))
+          : await send(payload);
       if (status !== 200) {
         const detail = body && typeof body === 'object' && 'error' in body ? String((body as { error: unknown }).error) : 'no error body';
         throw new Error(`[Eval Harness] item ${item.id}: route returned ${status} (${detail})`);

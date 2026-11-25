@@ -30,7 +30,8 @@ def _fixture_text(document: str) -> str:
 @pytest.fixture(scope="module")
 def manifest_documents() -> dict[str, str]:
     by_file: dict[str, str] = {}
-    for item in json.loads(MANIFEST.read_text(encoding="utf-8"))["fixtures"]:
+    manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    for item in [*manifest["fixtures"], *manifest.get("long_table_fixtures", [])]:
         name = Path(item["path"]).name
         text = item.get("text")
         if isinstance(text, dict) and "path" in text:
@@ -93,11 +94,19 @@ def test_existing_ingest_golden_items_are_unchanged():
     lines = [line for line in GOLDEN.read_text(encoding="utf-8").split("\n") if line.strip()]
     rows = [json.loads(line) for line in lines]
     old = sorted(
-        (row for row in rows if not {"clause", "parse_fixtures"} & set(row.get("tags", []))), key=lambda row: row["id"]
+        (
+            row
+            for row in rows
+            if not {"clause", "parse_fixtures"} & set(row.get("tags", [])) and row["category"] != TABLE_SPLIT
+        ),
+        key=lambda row: row["id"],
     )
     assert len(old) == PRE_CLAUSE_COUNT
     payload = "\n".join(json.dumps(row, sort_keys=True, ensure_ascii=False) for row in old)
     assert hashlib.sha256(payload.encode("utf-8")).hexdigest() == PRE_CLAUSE_SHA256
+
+
+TABLE_SPLIT = "table_split"
 
 
 # Parse fixtures (03.1-47, D-40/D-41): at least three approved items per class link to the fixture document by name.
@@ -194,10 +203,11 @@ def test_new_items_take_their_split_from_the_rule_and_the_manifest_keeps_the_old
     items = load_golden(GOLDEN)
     parse_ids = {item.id for item in items if PARSE_TAG in item.tags}
     assert parse_ids, "no parse fixture items"
+    table_ids = {item.id for item in items if item.category == TABLE_SPLIT}
     for item in items:
-        if item.id in parse_ids:
+        if item.id in parse_ids | table_ids:
             assert manifest.get(item.id) == item.split == assign_split(item.id), item.id
         else:
             assert item.id not in manifest, f"{item.id} keeps the split it was written with"
     golden_ids = {item.id for item in load_golden(REPO / "eval/fixtures/golden.jsonl")}
-    assert set(manifest) == golden_ids | parse_ids
+    assert set(manifest) == golden_ids | parse_ids | table_ids

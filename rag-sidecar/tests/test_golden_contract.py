@@ -430,6 +430,11 @@ def test_every_committed_golden_line_still_validates_and_dumps_without_new_keys(
     assert len(lines) >= 192
     for name, number, line in lines:
         item = GoldenItem.model_validate_json(line)
+        if item.category == "table_split":
+            # 03.2-30 table_split items carry the new keys; every line written before them keeps the pre-Phase-3.2 key set.
+            assert item.table_answer is not None, f"{name}:{number}"
+            assert GoldenItem.model_validate(item.model_dump(mode="json")) == item, f"{name}:{number}"
+            continue
         dumped = item.model_dump(mode="json")
         assert "table_answer" not in dumped, f"{name}:{number}"
         assert "native_review" not in dumped, f"{name}:{number}"

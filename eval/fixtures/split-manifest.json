@@ -46,6 +46,7 @@
     "en-table-003": "dev",
     "en-typo-001": "dev",
     "en-typo-002": "dev",
+    "ingest-table-split-en-01": "test",
     "it-ambiguous-001": "dev",
     "it-ambiguous-002": "dev",
     "it-colloquial-001": "dev",
