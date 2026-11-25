@@ -24,6 +24,8 @@ export interface QueryLlmRequest<T> {
   prompt: string;
   /** The query the transform works on; the real client ignores it (it is in the prompt), the fake keys on it. */
   input: string;
+  /** translate only: the language asked for; the real client has it in the prompt, the fake keys on it. */
+  targetLanguage?: 'zh' | 'en' | 'it';
   signal: AbortSignal;
 }
 
