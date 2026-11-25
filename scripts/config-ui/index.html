@@ -16878,6 +16878,9 @@ When messaging:
             svg.setAttribute('stroke-linejoin', 'round');
             svg.setAttribute('class', 'inline-block ml-2');
             svg.setAttribute('style', `color: ${color}; vertical-align: middle;`);
+            svg.setAttribute('role', 'img');
+            svg.setAttribute('aria-label', label);
+            svg.setAttribute('focusable', 'false');
             // Constant markup only: the path table holds no model data.
             svg.innerHTML = paths[kind];
             const title = document.createElement('title');
@@ -16939,7 +16942,7 @@ When messaging:
                 info.append(name, ' ', id);
 
                 if (model.supportsReasoning) {
-                    info.appendChild(modelStatusIcon('reasoning', orangeColor, `Supports ${model.reasoningMethod || 'reasoning'}`));
+                    info.appendChild(modelStatusIcon('reasoning', orangeColor, model.reasoningMethod ? `Supports reasoning (${model.reasoningMethod})` : 'Supports reasoning'));
                 }
                 if (model.isFree) info.appendChild(modelStatusIcon('free', purpleColor, 'Free on OpenRouter'));
                 if (model.isOpenSource) info.appendChild(modelStatusIcon('openSource', blueColor, 'Open Source'));
