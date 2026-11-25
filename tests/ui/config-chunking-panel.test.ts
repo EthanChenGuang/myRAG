@@ -3,6 +3,9 @@ import path from 'node:path';
 import vm from 'node:vm';
 import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
+import { RefusalThresholdsSchema } from '@/lib/rag-eval/contracts.generated';
+import { loadRagConfig, resetRagConfigForTests } from '@/lib/rag/config';
+import { refusalCalibrationStatus } from '@/lib/rag/refusal/status';
 
 const require = createRequire(import.meta.url);
 const repoRoot = path.resolve(import.meta.dirname, '../..');
@@ -1076,5 +1079,279 @@ describe('ChunkingProfilesPanel flows', () => {
       expect(all).toContain('npm run rag:chunking -- record-decision <decision.json>');
       expect(root.querySelectorAll('div').some((el) => el.getAttribute('role') === 'alert')).toBe(true);
     });
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------------------------------
+// Refusal calibration panel (Task 3)
+
+interface RefusalCellRow {
+  provider: string;
+  model: string;
+  language: string;
+  pairing: string;
+  statusKey: string;
+  statusLabel: string;
+  statusHint: string;
+  fixture: boolean;
+  fixtureLabel: string | null;
+  stale: boolean;
+  staleLabel: string | null;
+  threshold: string;
+  dev: { falseRefusal: Record<string, unknown>; correctRefusal: Record<string, unknown> };
+  holdout: { falseRefusal: Record<string, unknown>; correctRefusal: Record<string, unknown> };
+  recorded: { iso: string; text: string } | null;
+}
+
+function loadRefusalPanel() {
+  return require('../../scripts/config-ui/rag-panels/refusal-calibration.js') as {
+    REFUSAL_LABELS: Record<Locale, Record<string, string>>;
+    refusalLabel: (key: string, locale: Locale, vars?: Record<string, unknown>) => string;
+    cellRows: (status: Record<string, unknown>, locale: Locale) => RefusalCellRow[];
+    refusalWarningView: (
+      warning: Record<string, unknown>,
+      locale: Locale,
+    ) => Message & { code: string; tone: string; icon: string; lang?: string; missing: Array<{ text: string }> };
+    refusalSummary: (
+      status: Record<string, unknown>,
+      locale: Locale,
+      page?: { refusalThreshold?: boolean | null; reranker?: string | null },
+    ) => { notes: Message[]; models: unknown[] | null; items: Array<{ key: string; value: string }> };
+    mapRefusalError: (result: Record<string, unknown>, locale: Locale, ctx?: Record<string, unknown>) => Message & { signIn?: boolean };
+    RefusalCalibrationPanel: new (
+      root: unknown,
+      deps: { fetcher: Fetcher; locale?: Locale; appUrl?: string; page?: { refusalThreshold?: boolean | null; reranker?: string | null } },
+    ) => { mount: () => Promise<void> };
+  };
+}
+
+const THRESHOLDS = RefusalThresholdsSchema.parse(JSON.parse(fs.readFileSync(path.join(repoRoot, 'eval/config/refusal-thresholds.json'), 'utf8')));
+
+function statusFor(env: Record<string, string>, cells = THRESHOLDS.cells ?? []): Record<string, unknown> {
+  resetRagConfigForTests();
+  const status = refusalCalibrationStatus({ ...THRESHOLDS, cells }, loadRagConfig({ RAG_PIPELINE: 'v2', ...env }));
+  resetRagConfigForTests();
+  return JSON.parse(JSON.stringify({ success: true, ...status })) as Record<string, unknown>;
+}
+
+describe('refusal calibration labels', () => {
+  it('every key exists in en, zh and it', () => {
+    const { REFUSAL_LABELS } = loadRefusalPanel();
+    const keys = new Set([...Object.keys(REFUSAL_LABELS.en), ...Object.keys(REFUSAL_LABELS.zh), ...Object.keys(REFUSAL_LABELS.it)]);
+    expect(keys.size).toBeGreaterThan(60);
+    for (const key of keys) for (const locale of ['en', 'zh', 'it'] as const) expect(REFUSAL_LABELS[locale][key], `${locale} ${key}`).toBeTruthy();
+  });
+
+  it('uses the words point estimate and 95% upper bound and never a target claim', () => {
+    const { REFUSAL_LABELS, refusalLabel } = loadRefusalPanel();
+    expect(refusalLabel('col.falseRefusalSub', 'en')).toBe('point estimate, 95% upper bound');
+    expect(refusalLabel('cell.upper', 'en', { value: '77.6%' })).toBe('95% upper bound 77.6%');
+    const all = Object.values(REFUSAL_LABELS.en).join('\n');
+    expect(all).not.toMatch(/at most|≤|meets the target|within target/i);
+  });
+});
+
+describe('cellRows', () => {
+  const { cellRows } = loadRefusalPanel();
+  const status = statusFor({ RAG_RERANKER: 'cohere', RAG_REFUSAL_THRESHOLD: 'true' });
+  const rows = cellRows(status, 'en');
+  const cells = (status.cells as Array<Record<string, any>>);
+
+  it('one row per cell, in the route order, with status, source, threshold and both splits', () => {
+    expect(rows.length).toBe(cells.length);
+    rows.forEach((row, i) => {
+      const cell = cells[i];
+      expect(row.model).toBe(cell.model);
+      expect(row.statusKey).toBe(cell.status);
+      expect(row.fixture).toBe(cell.source === 'fixture');
+      expect(row.fixtureLabel?.toLowerCase()).toBe('fixture, eval only');
+      expect(row.threshold).toBe(cell.threshold === null ? 'None' : cell.threshold.toFixed(3));
+    });
+  });
+
+  it('a false-refusal rate carries its point estimate, 95% upper bound and n; an empty split says so', () => {
+    const index = cells.findIndex((c) => c.dev.answerable_count > 0);
+    const dev = rows[index].dev.falseRefusal;
+    expect(dev.empty).toBe(false);
+    expect(dev.point).toBe(new Intl.NumberFormat('en', { style: 'percent', minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(cells[index].dev.false_refusal_point_estimate));
+    expect(dev.upper).toBe(new Intl.NumberFormat('en', { style: 'percent', minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(cells[index].dev.false_refusal_upper_bound_95));
+    expect(dev.n).toBe(String(cells[index].dev.answerable_count));
+    const emptyIndex = cells.findIndex((c) => c.holdout.answerable_count === 0);
+    expect(rows[emptyIndex].holdout.falseRefusal).toMatchObject({ empty: true, text: 'No answerable items' });
+  });
+
+  it('marks stale cells and hides the raw key and per-cell versions', () => {
+    const stale = cellRows(statusFor({ RAG_RERANKER: 'cohere' }, (THRESHOLDS.cells ?? []).map((c) => ({ ...c, tokenizer_version: 99 }))), 'en');
+    expect(stale.every((r) => r.stale && r.staleLabel === 'Stale')).toBe(true);
+    const json = JSON.stringify(rows);
+    for (const cell of cells) expect(json).not.toContain(cell.key);
+    expect(json).not.toContain('tokenizer_version');
+    expect(json).not.toContain('holdout_evaluations');
+  });
+});
+
+describe('refusal warnings', () => {
+  const { refusalWarningView } = loadRefusalPanel();
+
+  it('each warning code is a sentence in en, zh and it', () => {
+    const warnings = [
+      { code: 'refusal_on_without_calibrated_cell', languages: ['zh', 'en'], missing: [{ tier: 'chat', model: 'rerank-v3.5', query_language: 'zh' }], message: 'x' },
+      { code: 'fixture_cells_only', message: 'x' },
+      { code: 'stale_cells', keys: ['a', 'b'], message: 'x' },
+      { code: 'relative_reranker', provider: 'local_bm25', message: 'x' },
+      { code: 'thresholds_invalid', message: 'x' },
+    ];
+    for (const warning of warnings) {
+      for (const locale of ['en', 'zh', 'it'] as const) {
+        const view = refusalWarningView(warning, locale);
+        expect(view.key).toBe(`warning.${warning.code}`);
+        expect(view.text.length).toBeGreaterThan(40);
+        expect(view.text).not.toMatch(/\{\w+\}/);
+      }
+    }
+    expect(refusalWarningView(warnings[2], 'en').text).toContain(': 2.');
+    expect(refusalWarningView(warnings[2], 'en').text).not.toContain('a, b');
+    expect(refusalWarningView(warnings[3], 'en').text).toContain('Local BM25');
+    expect(refusalWarningView(warnings[4], 'en').tone).toBe('error');
+    expect(refusalWarningView(warnings[1], 'en').tone).toBe('info');
+  });
+
+  it('refusal_on_without_calibrated_cell names the languages that fall back to the similarity floor and lists what is missing', () => {
+    const view = refusalWarningView(
+      { code: 'refusal_on_without_calibrated_cell', languages: ['zh', 'it'], missing: [{ tier: 'voice', model: 'rerank-v3.5', query_language: 'it' }], message: 'x' },
+      'en',
+    );
+    expect(view.text).toContain('Chinese and Italian');
+    expect(view.text).toContain('similarity floor');
+    expect(view.missing.map((m) => m.text)).toEqual(['Voice (fast tier): rerank-v3.5, Italian']);
+    expect(view.segments).toContainEqual({ code: 'python -m rag_eval.calibrate refusal' });
+  });
+
+  it('an unknown code shows the route message as English text', () => {
+    const view = refusalWarningView({ code: 'something_new', message: 'Route says so.' }, 'zh');
+    expect(view.text).toBe('Route says so.');
+    expect(view.lang).toBe('en');
+  });
+});
+
+describe('refusal summary notes', () => {
+  const { refusalSummary } = loadRefusalPanel();
+
+  it('notes legacy pipeline, refusal off, and saved settings that differ from the running value', () => {
+    resetRagConfigForTests();
+    const legacy = JSON.parse(JSON.stringify(refusalCalibrationStatus(THRESHOLDS, loadRagConfig({ RAG_PIPELINE: 'legacy' })))) as Record<string, unknown>;
+    resetRagConfigForTests();
+    const view = refusalSummary(legacy, 'en', { refusalThreshold: true, reranker: 'voyage' });
+    const keys = view.notes.map((n) => n.key);
+    expect(keys).toEqual(['note.legacyPipeline', 'note.refusalOff', 'note.pending', 'note.pendingReranker']);
+    expect(view.notes[2].text).toBe('Settings show threshold refusal On; the app uses Off until it restarts with the saved value.');
+    expect(view.models).toBeNull();
+    const same = refusalSummary(statusFor({ RAG_RERANKER: 'cohere', RAG_REFUSAL_THRESHOLD: 'true' }), 'en', { refusalThreshold: true, reranker: 'cohere' });
+    expect(same.notes).toEqual([]);
+    expect(same.models).not.toBeNull();
+  });
+});
+
+describe('mapRefusalError', () => {
+  const { mapRefusalError } = loadRefusalPanel();
+  it('maps 401, 403, 503, 500 and network failures', () => {
+    const signIn = mapRefusalError({ ok: false, status: 401, body: {} }, 'en', { appUrl: 'https://app.example.test' });
+    expect(signIn.signIn).toBe(true);
+    expect(signIn.text).toContain('https://app.example.test');
+    expect(mapRefusalError({ ok: false, status: 403, body: {} }, 'en').signIn).toBe(true);
+    expect(mapRefusalError({ ok: false, status: 503, body: { error: 'Admin verification is unavailable' } }, 'en').key).toBe('error.unavailable');
+    expect(mapRefusalError({ ok: false, status: 500, body: { error: 'refusal_status_unavailable' } }, 'en').key).toBe('error.statusUnreadable');
+    expect(mapRefusalError({ thrown: true }, 'en').key).toBe('error.network');
+  });
+});
+
+describe('refusal-calibration.js is read-only (D-17)', () => {
+  const code = fs.readFileSync(path.join(panelDir, 'refusal-calibration.js'), 'utf8');
+
+  it('sends only GET /api/rag/admin/refusal-calibration and reads only the two page switches', () => {
+    expect(code).toContain('95%');
+    expect(code).not.toMatch(/\bfetch\(/);
+    expect(code).not.toMatch(/method:\s*['"](POST|PUT|PATCH|DELETE)/);
+    const paths = [...code.matchAll(/['`](\/api\/[^'`$]*)/g)].map((m) => m[1]);
+    expect(paths).toEqual(['/api/rag/admin/refusal-calibration']);
+    const ids = [...code.matchAll(/getElementById\(['"]([^'"]+)['"]\)/g)].map((m) => m[1]).filter((id) => /^[A-Z_]+$/.test(id));
+    expect(new Set(ids)).toEqual(new Set(['RAG_REFUSAL_THRESHOLD', 'RAG_RERANKER']));
+    expect(code).not.toMatch(/innerHTML|outerHTML|insertAdjacentHTML|document\.write/);
+    expect(code).not.toMatch(/localStorage|sessionStorage|document\.cookie|Authorization/);
+    expect(code).not.toMatch(/(KEY|SECRET|TOKEN|PASSWORD)['"]/);
+  });
+
+  it('renders no control that edits a threshold, and markup in a model id or warning message stays text', async () => {
+    await withFakeDocument(async (doc) => {
+      const { RefusalCalibrationPanel } = loadRefusalPanel();
+      const status = statusFor({ RAG_RERANKER: 'cohere', RAG_REFUSAL_THRESHOLD: 'true' });
+      (status.cells as Array<Record<string, unknown>>)[0].model = XSS;
+      (status.cells as Array<Record<string, unknown>>)[0].key = 'MARKER_CELL_KEY';
+      status.config_hash = 'MARKER_CONFIG_HASH';
+      (status.warnings as Array<Record<string, unknown>>).push({ code: 'brand_new_warning', message: XSS });
+      const { fetcher, calls } = fakeFetcher({ 'GET /api/rag/admin/refusal-calibration': { ok: true, status: 200, body: status } });
+      const root = doc.createElement('section');
+      for (const attr of ['data-refusal-title', 'data-refusal-description', 'data-refusal-alert', 'data-refusal-content', 'data-refusal-status']) {
+        const el = doc.createElement('div');
+        el.setAttribute(attr, '');
+        root.appendChild(el);
+      }
+      doc.body.appendChild(root);
+      doc.created = [];
+      const panel = new RefusalCalibrationPanel(root, { fetcher, locale: 'en', page: { refusalThreshold: true, reranker: 'cohere' } });
+      await panel.mount();
+      await flush();
+      expect(calls.map((c) => `${c.method} ${c.path}`)).toEqual(['GET /api/rag/admin/refusal-calibration']);
+      expect(doc.created).not.toContain('img');
+      for (const tag of ['input', 'select', 'textarea']) expect(root.querySelectorAll(tag).length).toBe(0);
+      expect(root.querySelectorAll('button').map((b) => b.textContent.trim())).toEqual(['Refresh status']);
+      const texts = textNodes(root);
+      expect(texts.filter((t) => t.includes(XSS)).length).toBeGreaterThanOrEqual(2);
+      const all = texts.join('\n');
+      expect(all).toContain('Fixture, eval only');
+      expect(all).toContain('95% upper bound');
+      expect(all).toContain('point estimate');
+      expect(all).not.toContain('MARKER_CELL_KEY');
+      expect(all).not.toContain('MARKER_CONFIG_HASH');
+      const status2 = textNodes(root.querySelector('[data-refusal-status]') as FakeElement).join('');
+      expect(status2).toMatch(/Thresholds: \d+\. Warnings: \d+\./);
+    });
+  });
+
+  it('401 shows the sign-in message', async () => {
+    await withFakeDocument(async (doc) => {
+      const { RefusalCalibrationPanel } = loadRefusalPanel();
+      const { fetcher } = fakeFetcher({ 'GET /api/rag/admin/refusal-calibration': { ok: false, status: 401, body: { error: 'Admin authentication required' } } });
+      const root = doc.createElement('section');
+      for (const attr of ['data-refusal-title', 'data-refusal-description', 'data-refusal-alert', 'data-refusal-content', 'data-refusal-status']) {
+        const el = doc.createElement('div');
+        el.setAttribute(attr, '');
+        root.appendChild(el);
+      }
+      doc.body.appendChild(root);
+      const panel = new RefusalCalibrationPanel(root, { fetcher, locale: 'en', appUrl: 'https://app.example.test' });
+      await panel.mount();
+      await flush();
+      expect(textNodes(root).join(' ')).toContain('https://app.example.test');
+      expect((root.querySelector('[data-refusal-content]') as FakeElement).hidden).toBe(true);
+    });
+  });
+});
+
+describe('index.html mounts both panels and the pointer', () => {
+  const html = fs.readFileSync(path.join(repoRoot, 'scripts/config-ui/index.html'), 'utf8');
+  it('loads the three scripts once each after ingestion.js, in order', () => {
+    const order = ['rag-panels/ingestion.js', 'rag-panels/chunking-validate.js', 'rag-panels/chunking-profiles.js', 'rag-panels/refusal-calibration.js'];
+    const positions = order.map((src) => html.indexOf(`<script src="${src}"></script>`));
+    for (const src of order) expect(html.split(`<script src="${src}"></script>`).length - 1).toBe(1);
+    expect(positions).toEqual([...positions].sort((a, b) => a - b));
+  });
+
+  it('has both sections and the pointer next to the refusal switch, without changing the switch', () => {
+    expect(html).toContain('id="rag-administration-chunking"');
+    expect(html).toContain('id="rag-administration-refusal"');
+    expect(html.split('id="RAG_REFUSAL_THRESHOLD"').length - 1).toBe(1);
+    const afterSwitch = html.slice(html.indexOf('id="RAG_REFUSAL_THRESHOLD"'), html.indexOf('id="RAG_CONTEXT_EDGE_ORDER"'));
+    expect(afterSwitch).toContain('data-refusal-pointer');
   });
 });
