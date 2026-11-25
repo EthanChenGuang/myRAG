@@ -135,17 +135,18 @@ function initEmbeddingProfilesPanel() {
   window.embeddingProfilesPanel = panel;
 }
 
+function bindEmbeddingProfilesPanel() {
+  document.querySelectorAll('[data-tab="rag-administration"]').forEach((link) => {
+    if (link.getAttribute('data-profiles-bound')) return;
+    link.setAttribute('data-profiles-bound', '1');
+    link.addEventListener('click', () => initEmbeddingProfilesPanel());
+  });
+}
+
 if (typeof window !== 'undefined') {
   window.initEmbeddingProfilesPanel = initEmbeddingProfilesPanel;
   window.formatActivationRefusal = formatActivationRefusal;
-  document.addEventListener('DOMContentLoaded', () => {
-    const tab = document.querySelector('[data-tab="rag-administration"]');
-    if (tab) {
-      tab.addEventListener('click', () => {
-        initEmbeddingProfilesPanel();
-      });
-    }
-  });
+  document.addEventListener('DOMContentLoaded', () => bindEmbeddingProfilesPanel());
 }
 
 if (typeof module !== 'undefined' && module.exports) {
