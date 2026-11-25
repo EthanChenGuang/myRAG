@@ -6,6 +6,9 @@ import type { PipelineSource } from '../lang/resolve';
 
 export type PipelineFallback = 'none' | 'v2_unavailable' | 'languages_not_configured';
 
+/** The reason a defaulted v2 run returns when a Phase 4 function is missing; runRetrieval then re-runs the request on legacy. */
+export const V2_UNAVAILABLE = 'v2_unavailable';
+
 export interface EffectivePipeline {
   /** The pipeline that serves the request. */
   pipeline: 'legacy' | 'v2';

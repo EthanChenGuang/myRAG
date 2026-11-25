@@ -62,6 +62,7 @@ import { hybridRerank } from './rerank/local-hybrid';
 import { assertTenantScope, scopeKey, type TenantScope } from './tenant/scope';
 import { createTraceCollector, sanitizeStageCounts, type TraceCollector } from './trace/collector';
 import { finishTrace } from './trace/finish';
+import { resolveEffectivePipeline, V2_UNAVAILABLE, type PipelineFallback } from './v2/readiness';
 import { voiceKeywordFallback, type VoiceChunk } from './voice/keyword-fallback';
 import type {
   Candidate,
@@ -761,20 +762,80 @@ export async function runRetrieval(input: RunRetrievalInput): Promise<RetrievalR
     if (ownsTrace) finishTrace(collector, blocked, { query: input.query });
     return blocked;
   }
-  const useV2 =
-    config.pipeline === 'v2' &&
-    !input.options?.generalOverview &&
-    input.profile !== 'media' &&
-    (['chat', 'embed', 'eval', 'voice'] as const).includes(input.profile as 'chat' | 'embed' | 'eval' | 'voice');
-
-  const result =
-    input.profile === 'voice' && !useV2
-      ? await runVoicePipeline(input, collector)
-      : useV2
-      ? await (await import('./v2/pipeline')).runV2Pipeline(input, collector)
-      : await runPipeline(input, collector);
+  const result = await dispatchRetrieval(input, collector);
   if (ownsTrace) finishTrace(collector, result, { query: input.query });
   return result;
+}
+
+const V2_PROFILES: readonly Profile[] = ['chat', 'embed', 'eval', 'voice'];
+
+function runLegacyPipeline(input: RunRetrievalInput, collector: TraceCollector): Promise<RetrievalResult> {
+  return input.profile === 'voice' ? runVoicePipeline(input, collector) : runPipeline(input, collector);
+}
+
+/** D-07: the fallback is a trace record with its reason only, never query text, tenant id or an error body. */
+function recordPipelineFallback(collector: TraceCollector, reason: Exclude<PipelineFallback, 'none'>): void {
+  const at = collector.now();
+  collector.record({ name: 'pipeline_fallback', status: 'ok', startedAt: at, endedAt: at, detail: reason });
+}
+
+/** A collector that buffers its records so a defaulted v2 attempt that falls back leaves no trace of its stages. */
+function bufferedCollector(parent: TraceCollector): TraceCollector & { commit(): void } {
+  const buffer = createTraceCollector({ profile: parent.profile, tenantKey: parent.tenantKey });
+  return {
+    traceId: parent.traceId,
+    profile: parent.profile,
+    tenantKey: parent.tenantKey,
+    startedAt: parent.startedAt,
+    now: () => parent.now(),
+    record: (entry) => buffer.record(entry),
+    stages: () => buffer.stages(),
+    toStageLatency: () => buffer.toStageLatency(),
+    toStageStatus: () => buffer.toStageStatus(),
+    setReviewContent: (content) => parent.setReviewContent(content),
+    reviewContent: () => parent.reviewContent(),
+    commit() {
+      for (const record of buffer.stages()) {
+        parent.record({
+          name: record.name,
+          status: record.status,
+          ...(record.reason !== undefined ? { reason: record.reason } : {}),
+          startedAt: record.startedAt,
+          endedAt: record.endedAt,
+          candidatesIn: record.candidates_in,
+          candidatesOut: record.candidates_out,
+          ...(record.counts !== undefined ? { counts: record.counts } : {}),
+          rules: record.rules,
+          ...(record.versions !== undefined ? { versions: record.versions } : {}),
+          ...(record.detail !== undefined ? { detail: record.detail } : {}),
+        });
+      }
+    },
+  };
+}
+
+async function dispatchRetrieval(input: RunRetrievalInput, collector: TraceCollector): Promise<RetrievalResult> {
+  const eligible = !input.options?.generalOverview && V2_PROFILES.includes(input.profile);
+  if (!eligible) return runLegacyPipeline(input, collector);
+
+  const effective = resolveEffectivePipeline();
+  if (effective.pipeline === 'legacy') {
+    if (effective.fallback !== 'none') recordPipelineFallback(collector, effective.fallback);
+    return runLegacyPipeline(input, collector);
+  }
+
+  const { runV2Pipeline } = await import('./v2/pipeline');
+  if (effective.source === 'explicit') return runV2Pipeline(input, collector);
+
+  // A defaulted v2 may find the Phase 4 functions missing: that attempt is discarded and the same input re-runs on legacy.
+  const attempt = bufferedCollector(collector);
+  const result = await runV2Pipeline(input, attempt);
+  if (result.status === 'error' && result.reason === V2_UNAVAILABLE) {
+    recordPipelineFallback(collector, V2_UNAVAILABLE);
+    return runLegacyPipeline(input, collector);
+  }
+  attempt.commit();
+  return { ...result, stages: collector.stages() };
 }
 
 async function runPipeline(input: RunRetrievalInput, collector: TraceCollector): Promise<RetrievalResult> {
