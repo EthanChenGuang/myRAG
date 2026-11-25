@@ -852,6 +852,16 @@
       "knownGaps": []
     },
     {
+      "name": "RAG_REFUSAL_FLOOR",
+      "status": "legacy",
+      "knownGaps": [
+        "config-server",
+        "config-ui",
+        "env-ts",
+        "init-env"
+      ]
+    },
+    {
       "name": "RAG_REFUSAL_THRESHOLD",
       "status": "managed",
       "knownGaps": []
