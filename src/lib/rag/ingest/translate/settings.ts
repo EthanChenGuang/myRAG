@@ -3,7 +3,7 @@ import type { RpcClient } from '../../backend/supabase-rpc';
 import { getRagDeps } from '../../deps';
 import { getActiveProfile } from '../../embeddings/active-profile';
 import { getLanguageSettings } from '../../lang/settings';
-import { registryOrder } from '../../lang/registry';
+import { getLanguageRegistry, registryOrder } from '../../lang/registry';
 import { currentIngestConfig } from '../current-config';
 import { getIngestDeps } from '../deps';
 
@@ -218,4 +218,27 @@ export async function setTranslationSettings(input: SetTranslationSettingsInput)
   if (!result.ok) return result;
   console.log('[Translation] settings saved', { targets: checked.targets.length, enabled: input.enabled });
   return view(result.rows[0], input);
+}
+
+export interface LanguageDocumentCount {
+  language: string;
+  documents: number;
+}
+
+export type LanguageDocumentCountsResult = { ok: true; counts: LanguageDocumentCount[] } | TranslationSettingsError;
+
+/**
+ * D-08 picker suggestions: the number of current ready documents per registry language over the whole deployment, in registry order, a
+ * language without documents as zero. Documents with no language or with a code outside the registry are not listed. Counts only.
+ */
+export async function languageDocumentCounts(input: { signal: AbortSignal }): Promise<LanguageDocumentCountsResult> {
+  const result = await call('rag_language_document_counts', {}, input.signal);
+  if (!result.ok) return result;
+  const totals = new Map<string, number>(getLanguageRegistry().packs.map((pack) => [pack.code, 0]));
+  for (const row of result.rows) {
+    const language = typeof row.language === 'string' ? row.language : null;
+    if (language === null || !totals.has(language)) continue;
+    totals.set(language, (totals.get(language) ?? 0) + count(row.documents));
+  }
+  return { ok: true, counts: [...totals].map(([language, documents]) => ({ language, documents })) };
 }

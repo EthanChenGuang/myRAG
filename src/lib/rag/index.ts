@@ -249,8 +249,9 @@ export type {
   UploadExemption,
   UserDisplay,
 } from './ingest/approval/admin';
-export { getTranslationSettings, setTranslationSettings, translationCoverage, validateTranslationTargets, MAX_TRANSLATION_TARGETS } from './ingest/translate/settings';
+export { getTranslationSettings, languageDocumentCounts, setTranslationSettings, translationCoverage, validateTranslationTargets, MAX_TRANSLATION_TARGETS } from './ingest/translate/settings';
 export type {
+  LanguageDocumentCount,
   SetTranslationSettingsInput,
   TranslationCoverageRow,
   TranslationSettingsError,
