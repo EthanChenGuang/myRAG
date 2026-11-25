@@ -1,4 +1,4 @@
-import type { DocTypeDetection, ParseResult, UploadApproval } from '@/lib/rag-eval/contracts.generated';
+import type { DocTypeDetection, HiddenTextReport, ParseResult, UploadApproval } from '@/lib/rag-eval/contracts.generated';
 import type { TenantScope } from '../tenant/scope';
 import type { TraceCollector } from '../trace/collector';
 import type { IngestConfig } from './config';
@@ -59,6 +59,8 @@ export interface TypeChangeState {
   reuseParseOfVersion: number | null;
   /** parser_used and parser_version of that version, kept on the new row when its parse output is reused. */
   reusedParser: { parser: 'docling' | 'llamaparse' | 'text'; version: string } | null;
+  /** The version replaced had its hidden spans removed (metadata.hidden_text_sanitized): only its sanitized parse.md and chunks.json may be reused, never docling.json or the original. */
+  sanitizedParse?: boolean;
 }
 
 interface IngestInputBase {
@@ -132,6 +134,21 @@ export interface IngestState {
   publishHold?: { batchId: string };
   /** The parser version of this version's parse, kept so a resumed run can still name it in the ingestion fingerprint (D-10). */
   parserVersion?: string;
+  /** The hidden-text check of this version (D-33, D-34), kept so a retried scan reuses the report and removes each span once. */
+  hiddenText?: HiddenTextState;
+}
+
+export interface HiddenTextState {
+  /** The original the report belongs to. */
+  fileSha256: string;
+  /** The sidecar's report; null when the format has no checker or the check could not run under flag. */
+  report: HiddenTextReport | null;
+  /** Spans of the report removed from the parse output under quarantine; the write-time assertion checks them. */
+  removedSpans: string[];
+  /** Spans the remover could not locate, counted on the first removal (a retry reads sanitized text). */
+  unlocated: number;
+  /** parse.md and chunks.json were overwritten with the sanitized text. */
+  sanitized: boolean;
 }
 
 export function emptyIngestState(): IngestState {

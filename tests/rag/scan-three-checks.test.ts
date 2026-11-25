@@ -6,6 +6,7 @@ import { reapplyHiddenTextRemoval, scanInjectionStage } from '@/lib/rag/ingest/s
 import { emptyIngestState, type StageContext } from '@/lib/rag/ingest/types';
 import { createIngestWriter } from '@/lib/rag/ingest/writer';
 import { findZeroWidth, resetHiddenTextRulesForTests, setHiddenTextRulesForTests, stripZeroWidth } from '@/lib/rag/security/zero-width';
+import { resetHiddenTextClientForTests, setHiddenTextClientForTests, type HiddenTextOutcome, type HiddenTextReport } from '@/lib/rag/security/hidden-text';
 import { mintScope } from '@/lib/rag/tenant/scope';
 import { FAKE_DOCUMENT_ID, FAKE_LINEAGE_ID, callsOf, fakeIngestDb, installIngestDeps, uninstallIngestDeps, type RecordedRpc } from '../helpers/ingest-fakes';
 import hiddenTextRules from '../../config/rag/hidden-text-rules.json';
@@ -112,10 +113,11 @@ describe('the three checks', () => {
     expect(ctx.state.quarantine).toBeNull();
   });
 
-  test('flag on a clean text records a clean report', async () => {
+  test('flag on a clean text records a not_checked report: text has no styling checker, so it is never clean (D-34)', async () => {
     const { ctx, calls } = setup({ RAG_HIDDEN_TEXT_CHECK: 'flag' }, CLEAN);
-    expect(await scanInjectionStage.run(ctx)).toEqual({ kind: 'next', outcome: 'hidden_text:clean' });
-    expect((fieldsOf(calls)[0]?.metadata as Record<string, unknown>).hidden_text_report).toMatchObject({ status: 'clean', spans: [] });
+    expect(await scanInjectionStage.run(ctx)).toEqual({ kind: 'next', outcome: 'hidden_text:not_checked' });
+    expect(fieldsOf(calls)[0]?.hidden_text_check).toBe('not_checked');
+    expect((fieldsOf(calls)[0]?.metadata as Record<string, unknown>).hidden_text_report).toMatchObject({ status: 'not_checked', spans: [] });
   });
 
   test('quarantine below the threshold strips the characters from the text and the parser chunks with one count-only warning', async () => {
@@ -126,7 +128,7 @@ describe('the three checks', () => {
     expect(await scanInjectionStage.run(ctx)).toEqual({ kind: 'next', outcome: 'hidden_text:zero_width_stripped' });
     expect(ctx.work.parseText).toBe(stripZeroWidth(text));
     expect(ZERO_WIDTH.test(JSON.stringify(ctx.work.parseChunks))).toBe(false);
-    expect(callsOf(calls, 'rag_set_document_fields')).toHaveLength(0);
+    expect(fieldsOf(calls)).toEqual([{ hidden_text_check: 'not_checked' }]);
     const security = warn.mock.calls.filter((call) => String(call[0]).startsWith('[RAG Security]'));
     expect(security).toEqual([['[RAG Security] zero-width characters stripped below the quarantine threshold', { count: THRESHOLD - 1 }]]);
   });
@@ -156,8 +158,8 @@ describe('the three checks', () => {
   test('a leading byte-order mark alone does not reach the threshold', async () => {
     setHiddenTextRulesForTests({ ...hiddenTextRules, zero_width_threshold: 1 });
     const { ctx, calls } = setup({ RAG_HIDDEN_TEXT_CHECK: 'quarantine' }, `﻿${CLEAN}`);
-    expect(await scanInjectionStage.run(ctx)).toEqual({ kind: 'next', outcome: 'hidden_text:clean' });
-    expect(callsOf(calls, 'rag_set_document_fields')).toHaveLength(0);
+    expect(await scanInjectionStage.run(ctx)).toEqual({ kind: 'next', outcome: 'hidden_text:not_checked' });
+    expect(fieldsOf(calls)).toEqual([{ hidden_text_check: 'not_checked' }]);
   });
 
   test('a rule hit with zero-width characters lists both reasons in the fixed order, whichever check runs first', async () => {
@@ -177,8 +179,8 @@ describe('the three checks', () => {
 
   test('injection rules off and hidden text on: only the hidden-text check runs', async () => {
     const { ctx, calls } = setup({ RAG_HIDDEN_TEXT_CHECK: 'quarantine' }, RULE_HIT);
-    expect(await scanInjectionStage.run(ctx)).toEqual({ kind: 'next', outcome: 'hidden_text:clean' });
-    expect(callsOf(calls, 'rag_set_document_fields')).toHaveLength(0);
+    expect(await scanInjectionStage.run(ctx)).toEqual({ kind: 'next', outcome: 'hidden_text:not_checked' });
+    expect(fieldsOf(calls)).toEqual([{ hidden_text_check: 'not_checked' }]);
   });
 
   test('the link switch alone runs no check yet (plan 39 registers it) and writes nothing', async () => {
@@ -214,5 +216,189 @@ describe('the three checks', () => {
     const flag = setup({ RAG_HIDDEN_TEXT_CHECK: 'flag' }, text);
     reapplyHiddenTextRemoval(flag.ctx);
     expect(flag.ctx.work.parseText).toBe(text);
+  });
+});
+
+describe('the sidecar hidden-text report (plan 03.2-37)', () => {
+  const HIDDEN = 'The grey lever stays down during the night cycle.';
+  const PDF_TEXT = `# Notes\n\nThe blue module joins the second relay after the amber light turns steady.\n\nThe grey lever stays\ndown during the night cycle.\n\nThe panel closes at dusk.\n`;
+  const SHA = 'a'.repeat(64);
+  const report = (status: 'clean' | 'hidden_found' | 'not_checked', spans: string[] = []): HiddenTextReport => ({
+    status,
+    spans: spans.map((text) => ({ page: 1, text, reason: 'color_near_background' as const, bbox: null })),
+    link_targets: [],
+    checker_version: 'hidden-text/1/test',
+    dropped: 0,
+  });
+
+  let requests: Array<{ mimeType: string; filename: string; bytes: number }>;
+  let answers: HiddenTextOutcome[];
+
+  beforeEach(() => {
+    requests = [];
+    answers = [];
+    setHiddenTextClientForTests(async (original) => {
+      requests.push({ mimeType: original.mimeType, filename: original.filename, bytes: original.bytes.byteLength });
+      return answers.shift() ?? { ok: true, report: report('clean') };
+    });
+  });
+
+  afterEach(() => {
+    resetHiddenTextClientForTests();
+  });
+
+  function setupFile(env: Record<string, string>, text: string, mimeType: string, filename: string) {
+    return setup(env, text, (c) => {
+      (c as { input: StageContext['input'] }).input = { ...c.input, text: undefined, file: new TextEncoder().encode('%PDF-1.4 bytes'), mimeType, filename };
+      c.identity = { profile: { scan_injection: true }, bytes: new TextEncoder().encode('%PDF-1.4 bytes'), filename, fileSha256: SHA, tenantKey: 's:single' } as unknown as StageContext['identity'];
+      c.work.parseChunks = [{ text: 'The grey lever stays down during the night cycle.', contextualized_text: 'Notes\nThe grey lever stays down during the night cycle.', headings: ['Notes'], is_table: false, pages: [1], table_header: null }];
+    });
+  }
+
+  test('quarantine removes a reported span from the parse text and the parser chunks and quarantines with the span as the reason', async () => {
+    answers.push({ ok: true, report: report('hidden_found', [HIDDEN]) });
+    const { ctx, calls } = setupFile({ RAG_HIDDEN_TEXT_CHECK: 'quarantine' }, PDF_TEXT, 'application/pdf', 'notes.pdf');
+    expect(await scanInjectionStage.run(ctx)).toEqual({ kind: 'next', outcome: 'hidden_text:quarantined' });
+    expect(requests).toEqual([{ mimeType: 'application/pdf', filename: 'notes.pdf', bytes: 14 }]);
+    expect(ctx.work.parseText).not.toContain('grey lever');
+    expect(ctx.work.parseText).toContain('The panel closes at dusk.');
+    expect(JSON.stringify(ctx.work.parseChunks)).not.toContain('grey lever');
+    const writes = fieldsOf(calls);
+    expect(writes).toHaveLength(1);
+    expect(writes[0]).toMatchObject({ status: 'quarantined', hidden_text_check: 'hidden_found' });
+    const reasons = (((writes[0]?.metadata as Record<string, unknown>).quarantine as Record<string, unknown>).reasons as unknown[]).map((r) => QuarantineReasonSchema.parse(r));
+    expect(reasons).toHaveLength(1);
+    expect(reasons[0]).toMatchObject({ kind: 'hidden_text', unlocated: 0, checker_version: 'hidden-text/1/test' });
+    expect(reasons[0]?.kind === 'hidden_text' && reasons[0].spans).toEqual([{ page: 1, text: HIDDEN, reason: 'color_near_background' }]);
+    expect(ctx.state.hiddenText).toMatchObject({ fileSha256: SHA, removedSpans: [HIDDEN], unlocated: 0 });
+  });
+
+  test('a span the remover cannot locate is counted as unlocated and the document is still quarantined', async () => {
+    answers.push({ ok: true, report: report('hidden_found', ['A sentence the parser rendered differently.']) });
+    const { ctx, calls } = setupFile({ RAG_HIDDEN_TEXT_CHECK: 'quarantine' }, PDF_TEXT, 'application/pdf', 'notes.pdf');
+    expect(await scanInjectionStage.run(ctx)).toEqual({ kind: 'next', outcome: 'hidden_text:quarantined' });
+    const writes = fieldsOf(calls);
+    expect(writes[0]).toMatchObject({ status: 'quarantined', hidden_text_check: 'hidden_found' });
+    const reason = QuarantineReasonSchema.parse((((writes[0]?.metadata as Record<string, unknown>).quarantine as Record<string, unknown>).reasons as unknown[])[0]);
+    expect(reason.unlocated).toBe(1);
+    expect(reason.detail).toMatch(/1 not located/);
+  });
+
+  test('a clean report records clean and leaves the text alone', async () => {
+    const { ctx, calls } = setupFile({ RAG_HIDDEN_TEXT_CHECK: 'quarantine' }, PDF_TEXT, 'application/pdf', 'notes.pdf');
+    expect(await scanInjectionStage.run(ctx)).toEqual({ kind: 'next', outcome: 'hidden_text:clean' });
+    expect(ctx.work.parseText).toBe(PDF_TEXT);
+    expect(fieldsOf(calls)).toEqual([{ hidden_text_check: 'clean' }]);
+  });
+
+  test('a Word file the sidecar cannot check yet is not_checked, indexed and never clean', async () => {
+    answers.push({ ok: true, report: report('not_checked') });
+    const docx = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    const { ctx, calls } = setupFile({ RAG_HIDDEN_TEXT_CHECK: 'quarantine' }, PDF_TEXT, docx, 'notes.docx');
+    expect(await scanInjectionStage.run(ctx)).toEqual({ kind: 'next', outcome: 'hidden_text:not_checked' });
+    expect(requests.map((r) => r.mimeType)).toEqual([docx]);
+    expect(fieldsOf(calls)).toEqual([{ hidden_text_check: 'not_checked' }]);
+  });
+
+  test.each([
+    ['a presentation', 'application/vnd.openxmlformats-officedocument.presentationml.presentation', 'deck.pptx'],
+    ['a spreadsheet', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'sheet.xlsx'],
+    ['scraper HTML', 'text/html', 'page.html'],
+  ])('%s is not_checked without a sidecar call', async (_name, mimeType, filename) => {
+    const { ctx, calls } = setupFile({ RAG_HIDDEN_TEXT_CHECK: 'quarantine' }, PDF_TEXT, mimeType, filename);
+    expect(await scanInjectionStage.run(ctx)).toEqual({ kind: 'next', outcome: 'hidden_text:not_checked' });
+    expect(requests).toHaveLength(0);
+    expect(fieldsOf(calls)).toEqual([{ hidden_text_check: 'not_checked' }]);
+  });
+
+  test('flag stores the merged report and hidden_text_check, removes nothing and does not quarantine', async () => {
+    answers.push({ ok: true, report: report('hidden_found', [HIDDEN]) });
+    const { ctx, calls } = setupFile({ RAG_HIDDEN_TEXT_CHECK: 'flag' }, withZeroWidth(PDF_TEXT, 2), 'application/pdf', 'notes.pdf');
+    expect(await scanInjectionStage.run(ctx)).toEqual({ kind: 'next', outcome: 'hidden_text:flagged' });
+    expect(ctx.work.parseText).toContain('grey lever');
+    const writes = fieldsOf(calls);
+    expect(writes).toHaveLength(1);
+    expect(writes[0]).not.toHaveProperty('status');
+    expect(writes[0]?.hidden_text_check).toBe('hidden_found');
+    const stored = (writes[0]?.metadata as Record<string, unknown>).hidden_text_report as Record<string, unknown>;
+    expect(stored).toMatchObject({ status: 'hidden_found', checker_version: 'hidden-text/1/test' });
+    expect((stored.spans as Array<{ reason: string }>).map((span) => span.reason)).toEqual(['color_near_background', 'zero_width']);
+    expect(ctx.state.quarantine).toBeNull();
+  });
+
+  test('off makes no sidecar call and writes no hidden_text_check', async () => {
+    const { ctx, calls } = setupFile({ RAG_INJECTION_SCAN: 'quarantine' }, PDF_TEXT, 'application/pdf', 'notes.pdf');
+    expect(await scanInjectionStage.run(ctx)).toEqual({ kind: 'next', outcome: 'scan_clean' });
+    expect(requests).toHaveLength(0);
+    expect(fieldsOf(calls)).toEqual([]);
+  });
+
+  test.each([
+    ['a timeout', { ok: false, reason: 'timeout', error: null }],
+    ['a 5xx', { ok: false, reason: 'http_503', error: 'checker_unavailable' }],
+    ['an invalid report', { ok: false, reason: 'malformed', error: null }],
+    ['no sidecar configured', { ok: false, reason: 'not_configured', error: null }],
+  ] as Array<[string, HiddenTextOutcome]>)('%s fails the stage closed under quarantine and records not_checked with a warning under flag', async (_name, failure) => {
+    answers.push(failure);
+    const closed = setupFile({ RAG_HIDDEN_TEXT_CHECK: 'quarantine' }, PDF_TEXT, 'application/pdf', 'notes.pdf');
+    expect(await scanInjectionStage.run(closed.ctx)).toEqual({ kind: 'fail', reason: 'hidden_text_checker_unavailable' });
+    expect(fieldsOf(closed.calls)).toEqual([]);
+    uninstallIngestDeps();
+    answers.push(failure);
+    const open = setupFile({ RAG_HIDDEN_TEXT_CHECK: 'flag' }, PDF_TEXT, 'application/pdf', 'notes.pdf');
+    expect(await scanInjectionStage.run(open.ctx)).toEqual({ kind: 'next', outcome: 'hidden_text:not_checked' });
+    expect(fieldsOf(open.calls)[0]).toMatchObject({ hidden_text_check: 'not_checked' });
+    expect(open.ctx.warnings).toContain('hidden_text_not_checked');
+  });
+
+  test('a retried stage reuses the saved report, removes each span once and gives the same reasons', async () => {
+    answers.push({ ok: true, report: report('hidden_found', [HIDDEN, 'Second hidden line for the check.']) });
+    const first = setupFile({ RAG_HIDDEN_TEXT_CHECK: 'quarantine' }, `${PDF_TEXT}Second hidden line for the check.\n`, 'application/pdf', 'notes.pdf');
+    await scanInjectionStage.run(first.ctx);
+    const firstReasons = (((fieldsOf(first.calls)[0]?.metadata as Record<string, unknown>).quarantine as Record<string, unknown>).reasons);
+    const saved = JSON.parse(JSON.stringify({ ...first.ctx.state.hiddenText, sanitized: true }));
+    const sanitizedText = first.ctx.work.parseText as string;
+    uninstallIngestDeps();
+
+    // The retry reads the sanitized parse.md the first attempt stored, and the state it saved before.
+    const retry = setupFile({ RAG_HIDDEN_TEXT_CHECK: 'quarantine' }, sanitizedText, 'application/pdf', 'notes.pdf');
+    retry.ctx.state.hiddenText = saved;
+    expect(await scanInjectionStage.run(retry.ctx)).toEqual({ kind: 'next', outcome: 'hidden_text:quarantined' });
+    expect(requests).toHaveLength(1);
+    expect(retry.ctx.work.parseText).toBe(sanitizedText);
+    const retryReasons = (((fieldsOf(retry.calls)[0]?.metadata as Record<string, unknown>).quarantine as Record<string, unknown>).reasons);
+    expect(retryReasons).toEqual(firstReasons);
+  });
+
+  test('two ingests of the same original give the same reasons in the same order', async () => {
+    const spans = ['Third hidden line of the file here.', HIDDEN];
+    const text = `${PDF_TEXT}Third hidden line of the file here.\n`;
+    const reasonsOf = async () => {
+      answers.push({ ok: true, report: report('hidden_found', spans) });
+      const run = setupFile({ RAG_INJECTION_SCAN: 'quarantine', RAG_HIDDEN_TEXT_CHECK: 'quarantine' }, withZeroWidth(text, THRESHOLD), 'application/pdf', 'notes.pdf');
+      await scanInjectionStage.run(run.ctx);
+      uninstallIngestDeps();
+      return ((fieldsOf(run.calls)[0]?.metadata as Record<string, unknown>).quarantine as Record<string, unknown>).reasons;
+    };
+    const one = await reasonsOf();
+    expect(await reasonsOf()).toEqual(one);
+    expect((one as Array<{ spans: Array<{ text: string }> }>)[0]?.spans.map((span) => span.text)).toEqual([...spans, 'U+200B']);
+  });
+
+  test('a resumed run removes the saved spans again from a stored parse text that still holds them', () => {
+    const { ctx } = setupFile({ RAG_HIDDEN_TEXT_CHECK: 'quarantine' }, PDF_TEXT, 'application/pdf', 'notes.pdf');
+    ctx.state.hiddenText = { fileSha256: SHA, report: null, removedSpans: [HIDDEN], unlocated: 0, sanitized: false };
+    reapplyHiddenTextRemoval(ctx);
+    expect(ctx.work.parseText).not.toContain('grey lever');
+    expect(JSON.stringify(ctx.work.parseChunks)).not.toContain('grey lever');
+  });
+
+  test('logs carry counts and reason kinds only, never a span', async () => {
+    answers.push({ ok: true, report: report('hidden_found', [HIDDEN]) });
+    const { ctx } = setupFile({ RAG_HIDDEN_TEXT_CHECK: 'quarantine' }, PDF_TEXT, 'application/pdf', 'notes.pdf');
+    await scanInjectionStage.run(ctx);
+    const logged = JSON.stringify(warn.mock.calls);
+    expect(logged).not.toMatch(/grey|lever|notes\.pdf/i);
+    expect(logged).toContain('hidden_text');
   });
 });

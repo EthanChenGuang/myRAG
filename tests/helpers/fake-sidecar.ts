@@ -8,6 +8,46 @@ const FIXTURES = join(process.cwd(), 'eval/fixtures/ingest');
 /** What the Phase 3 chain returns for the parse fixtures (eval/fixtures/parse/record_chain_results.py), paths relative to eval/fixtures/parse. */
 const PARSE_FIXTURES = join(process.cwd(), 'eval/fixtures/parse');
 const PARSE_CHAIN_MANIFEST = join(PARSE_FIXTURES, 'chain/manifest.json');
+/** The hidden-text PDF corpus of plan 03.2-35 and the report each file is expected to get. */
+const SECURITY_PDF_FIXTURES = join(process.cwd(), 'eval/fixtures/security/pdf');
+/** checker_version the fake answers with: hidden-text/1/<rules_version> as the sidecar builds it. */
+export const FAKE_HIDDEN_TEXT_CHECKER_VERSION = 'hidden-text/1/2026-11-25.1';
+
+interface SecurityManifestEntry {
+  expected: 'clean' | 'hidden_found';
+  hidden_text: string | null;
+  reason: string | null;
+  sha256: string;
+}
+
+export function securityPdfBytes(name: string): Uint8Array {
+  return new Uint8Array(readFileSync(join(SECURITY_PDF_FIXTURES, name)));
+}
+
+export function securityPdfEntry(name: string): SecurityManifestEntry {
+  const manifest = JSON.parse(readFileSync(join(SECURITY_PDF_FIXTURES, 'manifest.json'), 'utf8')) as { fixtures: Record<string, SecurityManifestEntry> };
+  const entry = manifest.fixtures[name];
+  if (!entry) throw new Error(`no security fixture ${name}`);
+  return entry;
+}
+
+/** The report the real checker gives a fixture of the corpus, built from its manifest entry; any other PDF is clean, any other format not_checked. */
+function recordedHiddenTextReport(sha256: string, mimeType: string): Record<string, unknown> {
+  const manifest = JSON.parse(readFileSync(join(SECURITY_PDF_FIXTURES, 'manifest.json'), 'utf8')) as { fixtures: Record<string, SecurityManifestEntry> };
+  const entry = Object.values(manifest.fixtures).find((fixture) => fixture.sha256 === sha256);
+  const base = { link_targets: [], checker_version: FAKE_HIDDEN_TEXT_CHECKER_VERSION, dropped: 0 };
+  if (mimeType !== 'application/pdf') return { ...base, status: 'not_checked', spans: [] };
+  if (!entry || entry.expected === 'clean' || entry.hidden_text === null) return { ...base, status: 'clean', spans: [] };
+  return { ...base, status: 'hidden_found', spans: [{ page: 1, text: entry.hidden_text, reason: entry.reason, bbox: null }] };
+}
+
+/** One answer of the fake /v1/hidden-text route: an error status, a replacement report, or a delay longer than the caller waits. */
+export interface FakeHiddenTextSpec {
+  status?: number;
+  error?: string;
+  report?: unknown;
+  delayMs?: number;
+}
 
 interface ManifestEntry {
   id: string;
@@ -61,6 +101,10 @@ export interface FakeSidecar {
   calls: FakeSidecarCall[];
   uploads: FakeSidecarUpload[];
   deleted: string[];
+  /** Each /v1/hidden-text request: the sha256 and size of the uploaded file and the request part. */
+  hiddenTextRequests: FakeSidecarUpload[];
+  /** Specs for /v1/hidden-text, used one per request in order; once used up, the recorded report answers. */
+  enqueueHiddenText(...specs: FakeHiddenTextSpec[]): void;
   /** Specs are used one per submit, in order; the last one repeats. */
   enqueue(...specs: FakeSidecarJobSpec[]): void;
   expire(jobId: string): void;
@@ -135,6 +179,8 @@ export async function startFakeSidecar(options: { secret?: string } = {}): Promi
   const uploads: FakeSidecarUpload[] = [];
   const deleted: string[] = [];
   const specs: FakeSidecarJobSpec[] = [];
+  const hiddenTextRequests: FakeSidecarUpload[] = [];
+  const hiddenTextSpecs: FakeHiddenTextSpec[] = [];
   const jobs = new Map<string, { spec: FakeSidecarJobSpec; polls: number; expired: boolean; result: Record<string, unknown>; artifacts: Record<string, Buffer> }>();
   let submits = 0;
 
@@ -145,6 +191,27 @@ export async function startFakeSidecar(options: { secret?: string } = {}): Promi
       const secretOk = provided === secret;
       calls.push({ method: request.method ?? 'GET', path: url.pathname, secretOk, hasSecret: provided !== undefined });
       if (!secretOk) return sendJson(response, 401, { error: 'unauthorized' });
+
+      if (request.method === 'POST' && url.pathname === '/v1/hidden-text') {
+        const body = await readBody(request);
+        const form = await new Response(new Uint8Array(body), { headers: { 'content-type': String(request.headers['content-type'] ?? '') } }).formData();
+        const file = form.get('file');
+        const requestField = form.get('request');
+        const bytes = file instanceof Blob ? Buffer.from(await file.arrayBuffer()) : Buffer.alloc(0);
+        const sha = createHash('sha256').update(bytes).digest('hex');
+        let parsed: Record<string, unknown> = {};
+        try {
+          parsed = JSON.parse(typeof requestField === 'string' ? requestField : '') as Record<string, unknown>;
+        } catch {
+          return sendJson(response, 422, { error: 'invalid_hidden_text_request' });
+        }
+        hiddenTextRequests.push({ fileSha256: sha, fileBytes: bytes.byteLength, request: parsed });
+        if (parsed.sha256 !== sha || parsed.size_bytes !== bytes.byteLength) return sendJson(response, 422, { error: 'hidden_text_mismatch' });
+        const spec = hiddenTextSpecs.shift() ?? {};
+        if (spec.delayMs !== undefined) await new Promise((resolve) => setTimeout(resolve, spec.delayMs));
+        if (spec.status !== undefined) return sendJson(response, spec.status, { error: spec.error ?? 'checker_unavailable' });
+        return sendJson(response, 200, spec.report ?? recordedHiddenTextReport(sha, String(parsed.mime_type ?? '')));
+      }
 
       if (request.method === 'POST' && url.pathname === '/v1/parse/jobs') {
         const body = await readBody(request);
@@ -219,6 +286,8 @@ export async function startFakeSidecar(options: { secret?: string } = {}): Promi
     calls,
     uploads,
     deleted,
+    hiddenTextRequests,
+    enqueueHiddenText: (...next) => void hiddenTextSpecs.push(...next),
     enqueue: (...next) => void specs.push(...next),
     expire(jobId) {
       const job = jobs.get(jobId);
