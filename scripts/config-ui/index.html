@@ -6992,6 +6992,118 @@
                                     </div>
                                 </div>
 
+                                <!-- Prompt-injection defense -->
+                                <div class="card bg-base-200 shadow-md mt-6">
+                                    <div class="card-body">
+                                        <h3 class="text-lg font-semibold mb-2 text-balance">Prompt-injection defense</h3>
+                                        <p class="text-base-content/70 mb-4">Treat retrieved documents and tool results as untrusted data. All off by default; with every switch off, chat answers are unchanged.</p>
+
+                                        <div class="form-control mb-2">
+                                            <label class="label cursor-pointer justify-start gap-3">
+                                                <input type="checkbox" id="RAG_CONTEXT_TAGGING" name="RAG_CONTEXT_TAGGING" class="checkbox checkbox-primary">
+                                                <span class="label-text">Tag retrieved context as untrusted documents</span>
+                                            </label>
+                                            <label class="label pl-8">
+                                                <span class="label-text-alt min-w-0 text-base-content/70">Wraps each retrieved chunk in a tagged block and tells the model to ignore instructions inside it.</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label" for="RAG_INJECTION_CHECK">
+                                                <span class="label-text">Retrieval-time injection check</span>
+                                            </label>
+                                            <select id="RAG_INJECTION_CHECK" name="RAG_INJECTION_CHECK" class="select select-bordered w-full">
+                                                <option value="off">off</option>
+                                                <option value="flag">flag</option>
+                                                <option value="drop">drop</option>
+                                                <option value="downweight">downweight</option>
+                                            </select>
+                                            <label class="label">
+                                                <span class="label-text-alt min-w-0 text-base-content/70"><code translate="no">flag</code> records suspicious chunks; <code translate="no">drop</code> removes them and is the recommended mode; <code translate="no">downweight</code> only lowers their rank and is weaker than drop.</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-2">
+                                            <label class="label cursor-pointer justify-start gap-3">
+                                                <input type="checkbox" id="RAG_INJECTION_PROMPT_GUARD" name="RAG_INJECTION_PROMPT_GUARD" class="checkbox checkbox-primary">
+                                                <span class="label-text">Prompt Guard 2 detector (sidecar)</span>
+                                            </label>
+                                            <label class="label pl-8">
+                                                <span class="label-text-alt min-w-0 text-base-content/70">Optional model detector in the sidecar; English and Italian only.</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-2">
+                                            <label class="label cursor-pointer justify-start gap-3">
+                                                <input type="checkbox" id="RAG_INJECTION_LAKERA" name="RAG_INJECTION_LAKERA" class="checkbox checkbox-primary">
+                                                <span class="label-text">Lakera Guard hosted detector</span>
+                                            </label>
+                                            <label class="label pl-8">
+                                                <span class="label-text-alt min-w-0 text-base-content"><span aria-hidden="true">⚠️</span> Sends chunk text to Lakera, a third party. Listed in the vendor inventory (ADM-04).</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-2">
+                                            <label class="label cursor-pointer justify-start gap-3">
+                                                <input type="checkbox" id="RAG_INJECTION_LAKERA_MULTI_TENANT_ACK" name="RAG_INJECTION_LAKERA_MULTI_TENANT_ACK" class="checkbox checkbox-primary">
+                                                <span class="label-text">Multi-tenant Lakera acknowledgement</span>
+                                            </label>
+                                            <label class="label pl-8">
+                                                <span class="label-text-alt min-w-0 text-base-content"><span aria-hidden="true">⚠️</span> Tick this only after the Lakera data-retention terms were recorded in live verification. Without it, multi-tenant deployments never send data to Lakera.</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label" for="LAKERA_GUARD_API_KEY">
+                                                <span class="label-text">Lakera Guard API key</span>
+                                            </label>
+                                            <div class="flex gap-2">
+                                                <input type="password" id="LAKERA_GUARD_API_KEY" name="LAKERA_GUARD_API_KEY" placeholder="Empty until configured" autocomplete="off"
+                                                    class="input input-bordered flex-1 w-full">
+                                                <button type="button" class="btn btn-square btn-outline" data-for="LAKERA_GUARD_API_KEY" aria-label="Show or hide the Lakera Guard API key">👁️</button>
+                                            </div>
+                                            <label class="label">
+                                                <span class="label-text-alt min-w-0 text-base-content/70">Stays on the server; only its presence is reported.</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label" for="LAKERA_GUARD_BASE_URL">
+                                                <span class="label-text">Lakera Guard base URL</span>
+                                            </label>
+                                            <input type="text" id="LAKERA_GUARD_BASE_URL" name="LAKERA_GUARD_BASE_URL" placeholder="https://api.lakera.ai" autocomplete="off" spellcheck="false"
+                                                class="input input-bordered w-full">
+                                            <label class="label">
+                                                <span class="label-text-alt min-w-0 text-base-content/70">Leave empty to use <code translate="no">https://api.lakera.ai</code>. Regional hosts such as the EU one are allowed; HTTPS only.</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label" for="RAG_TOOL_RESULT_GUARD">
+                                                <span class="label-text">Tool result guard</span>
+                                            </label>
+                                            <select id="RAG_TOOL_RESULT_GUARD" name="RAG_TOOL_RESULT_GUARD" class="select select-bordered w-full">
+                                                <option value="off">off</option>
+                                                <option value="tag">tag</option>
+                                                <option value="tag_and_flag">tag_and_flag</option>
+                                            </select>
+                                            <label class="label">
+                                                <span class="label-text-alt min-w-0 text-base-content/70"><code translate="no">tag</code> wraps web search and MCP results as untrusted data for the model; <code translate="no">tag_and_flag</code> also runs the injection check on them.</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-2">
+                                            <label class="label cursor-pointer justify-start gap-3">
+                                                <input type="checkbox" id="NEXT_PUBLIC_RAG_IMAGE_ALLOWLIST" name="NEXT_PUBLIC_RAG_IMAGE_ALLOWLIST" class="checkbox checkbox-primary">
+                                                <span class="label-text">Markdown image allowlist in answers</span>
+                                            </label>
+                                            <label class="label pl-8">
+                                                <span class="label-text-alt min-w-0 text-base-content/70">Images from other hosts render as plain links. Inlined at build time, so a change takes effect only after a rebuild.</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <!-- Info Box -->
                                 <div class="alert alert-info mt-6">
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
@@ -10016,7 +10128,7 @@
                     this.showSaveIndicator();
                     console.log('Config saved successfully');
 
-                    const shortSecrets = ['RAG_EVAL_SECRET', 'RAG_SIDECAR_SECRET', 'RAG_VOICE_TOKEN_SECRET', 'VOYAGE_API_KEY', 'DEEPINFRA_API_KEY', 'COHERE_API_KEY'].filter((name) => {
+                    const shortSecrets = ['RAG_EVAL_SECRET', 'RAG_SIDECAR_SECRET', 'RAG_VOICE_TOKEN_SECRET', 'VOYAGE_API_KEY', 'DEEPINFRA_API_KEY', 'COHERE_API_KEY', 'LAKERA_GUARD_API_KEY'].filter((name) => {
                         const value = this.config[name];
                         return typeof value === 'string' && value.length > 0 && value.length < 32;
                     });
@@ -16650,6 +16762,9 @@ When messaging:
                         { id: 'openai/gpt-4.1-mini', displayName: 'GPT-4.1 Mini' },
                         { id: 'openai/gpt-4.1', displayName: 'GPT-4.1' },
                         { id: 'anthropic/claude-opus-4.1', displayName: 'Claude Opus 4.1' },
+                        { id: 'anthropic/claude-opus-5.5', displayName: 'Claude Opus 5.5', anthropicId: 'claude-opus-5-5', supportsReasoning: true, reasoningMethod: 'effort', contextLength: 1000000 },
+                        { id: 'anthropic/claude-sonnet-5.5', displayName: 'Claude Sonnet 5.5', anthropicId: 'claude-sonnet-5-5', supportsReasoning: true, reasoningMethod: 'effort', contextLength: 1000000 },
+                        { id: 'anthropic/claude-haiku-5.5', displayName: 'Claude Haiku 5.5', anthropicId: 'claude-haiku-5-5', supportsReasoning: true, reasoningMethod: 'effort', contextLength: 1000000 },
                         { id: 'google/gemini-2.5-flash-lite', displayName: 'Gemini 2.5 Flash Lite' },
                         { id: 'google/gemini-2.5-flash', displayName: 'Gemini 2.5 Flash' },
                         { id: 'meta-llama/llama-4-maverick', displayName: 'Llama 4 Maverick', isOpenSource: true },
@@ -16691,6 +16806,9 @@ When messaging:
                             { id: 'openai/gpt-4.1-mini', displayName: 'GPT-4.1 Mini' },
                             { id: 'openai/gpt-4.1', displayName: 'GPT-4.1' },
                             { id: 'anthropic/claude-opus-4.1', displayName: 'Claude Opus 4.1' },
+                            { id: 'anthropic/claude-opus-5.5', displayName: 'Claude Opus 5.5', anthropicId: 'claude-opus-5-5', supportsReasoning: true, reasoningMethod: 'effort', contextLength: 1000000 },
+                            { id: 'anthropic/claude-sonnet-5.5', displayName: 'Claude Sonnet 5.5', anthropicId: 'claude-sonnet-5-5', supportsReasoning: true, reasoningMethod: 'effort', contextLength: 1000000 },
+                            { id: 'anthropic/claude-haiku-5.5', displayName: 'Claude Haiku 5.5', anthropicId: 'claude-haiku-5-5', supportsReasoning: true, reasoningMethod: 'effort', contextLength: 1000000 },
                             { id: 'google/gemini-2.5-flash-lite', displayName: 'Gemini 2.5 Flash Lite' },
                             { id: 'google/gemini-2.5-flash', displayName: 'Gemini 2.5 Flash' },
                             { id: 'meta-llama/llama-4-maverick', displayName: 'Llama 4 Maverick', isOpenSource: true },
@@ -16750,6 +16868,9 @@ When messaging:
                         { id: 'openai/gpt-4.1-mini', displayName: 'GPT-4.1 Mini' },
                         { id: 'openai/gpt-4.1', displayName: 'GPT-4.1' },
                         { id: 'anthropic/claude-opus-4.1', displayName: 'Claude Opus 4.1' },
+                        { id: 'anthropic/claude-opus-5.5', displayName: 'Claude Opus 5.5', anthropicId: 'claude-opus-5-5', supportsReasoning: true, reasoningMethod: 'effort', contextLength: 1000000 },
+                        { id: 'anthropic/claude-sonnet-5.5', displayName: 'Claude Sonnet 5.5', anthropicId: 'claude-sonnet-5-5', supportsReasoning: true, reasoningMethod: 'effort', contextLength: 1000000 },
+                        { id: 'anthropic/claude-haiku-5.5', displayName: 'Claude Haiku 5.5', anthropicId: 'claude-haiku-5-5', supportsReasoning: true, reasoningMethod: 'effort', contextLength: 1000000 },
                         { id: 'google/gemini-2.5-flash-lite', displayName: 'Gemini 2.5 Flash Lite' },
                         { id: 'google/gemini-2.5-flash', displayName: 'Gemini 2.5 Flash' },
                         { id: 'meta-llama/llama-4-maverick', displayName: 'Llama 4 Maverick', isOpenSource: true },
