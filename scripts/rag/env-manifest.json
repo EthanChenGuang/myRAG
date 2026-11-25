@@ -867,6 +867,11 @@
       "knownGaps": []
     },
     {
+      "name": "RAG_QWEN_EMBED_PRIMARY",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "RAG_REFUSAL_FEEDBACK",
       "status": "managed",
       "knownGaps": []
