@@ -1,9 +1,16 @@
 from collections.abc import Callable, Iterable, Mapping
 from typing import Literal
 
+from rag_sidecar.contracts.answers import CitationRecord
 from rag_sidecar.contracts.eval_run import RagTrace
 from rag_sidecar.contracts.golden import GoldenItem
-from rag_sidecar.contracts.report import ItemResult, MetricValue, QuestionKind, SliceMetrics
+from rag_sidecar.contracts.report import (
+    GroundednessLabelCounts,
+    ItemResult,
+    MetricValue,
+    QuestionKind,
+    SliceMetrics,
+)
 
 from rag_eval.bounds import upper_bound
 from rag_eval.matching import chunk_matches_span
@@ -165,6 +172,96 @@ def _rerank_skipped_rate(results: list[ItemResult]) -> MetricValue:
 
 def _lexical_leg_hit_rate(results: list[ItemResult]) -> MetricValue:
     return _mean([1.0 if r.lexical_hit_at_10 else 0.0 for r in results if r.lexical_hit_at_10 is not None])
+
+
+NO_STRATEGY = "none"
+
+
+def citation_run(traces: Iterable[RagTrace], *, requested: bool = False) -> bool:
+    """A run has citation data when it asked for citations or any trace carries a strategy or a record."""
+    return requested or any(trace.citation_strategy is not None or trace.citations for trace in traces)
+
+
+def strategy_key(trace: RagTrace) -> str:
+    return trace.citation_strategy or NO_STRATEGY
+
+
+def _labelled(context: str, alias: str) -> bool:
+    return f"[{alias}]" in context
+
+
+def citation_is_valid(trace: RagTrace, citation: CitationRecord) -> bool:
+    """D-24: a record is valid only when its alias labels a block of this trace and every chunk id was kept."""
+    kept_ids = {chunk.chunk_id for chunk in trace.kept}
+    return (
+        _labelled(trace.context, citation.alias)
+        and bool(citation.chunkIds)
+        and all(chunk_id in kept_ids for chunk_id in citation.chunkIds)
+    )
+
+
+def _answered(trace: RagTrace) -> bool:
+    return not trace.refused and trace.answer is not None and bool(trace.answer.strip())
+
+
+def _golden_by_id(golden: Iterable[GoldenItem]) -> dict[str, GoldenItem]:
+    return {item.id: item for item in golden}
+
+
+def citation_metrics(
+    traces: list[RagTrace], golden: list[GoldenItem], *, requested: bool = False
+) -> dict[str, MetricValue | int | None]:
+    """invalid_citation_rate over records, citation_coverage over answered items, cited_gold_hit over answered
+    items with gold spans; raw_invalid_markers is the informational sum of dropped markers."""
+    if not citation_run(traces, requested=requested):
+        return {"invalid_citation_rate": None, "citation_coverage": None, "cited_gold_hit": None, "raw_invalid_markers": None}
+    items = _golden_by_id(golden)
+    invalid: list[float] = []
+    coverage: list[float] = []
+    gold_hits: list[float] = []
+    for trace in traces:
+        verdicts = [(citation, citation_is_valid(trace, citation)) for citation in trace.citations]
+        invalid.extend(0.0 if valid else 1.0 for _, valid in verdicts)
+        if not _answered(trace):
+            continue
+        valid_citations = [citation for citation, valid in verdicts if valid]
+        coverage.append(1.0 if valid_citations else 0.0)
+        item = items.get(trace.item_id) if trace.item_id is not None else None
+        if item is None or not item.gold_evidence:
+            continue
+        hit = any(
+            chunk_matches_span(citation.documentName, citation.quote, span)
+            for citation in valid_citations
+            for span in item.gold_evidence
+        )
+        gold_hits.append(1.0 if hit else 0.0)
+    return {
+        "invalid_citation_rate": _mean(invalid),
+        "citation_coverage": _mean(coverage),
+        "cited_gold_hit": _mean(gold_hits),
+        "raw_invalid_markers": sum(trace.invalid_citations for trace in traces),
+    }
+
+
+def groundedness_label_counts(
+    traces: list[RagTrace], golden: list[GoldenItem]
+) -> dict[str, dict[str, GroundednessLabelCounts]]:
+    """Final groundedness labels keyed by scorer (none for unscored) then the golden item's language."""
+    items = _golden_by_id(golden)
+    counts: dict[str, dict[str, dict[str, int]]] = {}
+    for trace in traces:
+        result = trace.groundedness
+        if result is None or result.label is None:
+            continue
+        item = items.get(trace.item_id) if trace.item_id is not None else None
+        language = item.language if item is not None else (trace.query_language or "unknown")
+        by_language = counts.setdefault(result.scorer or NO_STRATEGY, {})
+        labels = by_language.setdefault(language, {})
+        labels[result.label] = labels.get(result.label, 0) + 1
+    return {
+        scorer: {language: GroundednessLabelCounts(**labels) for language, labels in sorted(by_language.items())}
+        for scorer, by_language in sorted(counts.items())
+    }
 
 
 def aggregate(

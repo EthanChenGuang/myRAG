@@ -487,6 +487,7 @@ def test_review_queue_item_rejects_bad_reasons(reasons):
 
 def _budgets(**extra):
     base = json.loads((REPO_ROOT / "eval" / "config" / "latency-budgets.json").read_text())
+    base.pop("groundedness", None)
     base.update(extra)
     return base
 

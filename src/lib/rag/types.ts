@@ -46,6 +46,7 @@ export interface StageRecord {
   rules: string[];
   detail?: string;
   counts?: Record<string, number>;
+  versions?: string[];
 }
 
 export interface UsedDocument {
