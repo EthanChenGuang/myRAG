@@ -228,7 +228,7 @@ export function applyInjectionAction<C extends ItemCandidate>(input: {
       documentId: item.documentId,
       ...(documentName ? { documentName } : {}),
       flagged: flaggedItem,
-      detectors: flaggedItem ? ['rules'] : [],
+      detectors: flaggedItem ? unique(verdict.sources ?? ['rules']) : [],
       ruleIds: flaggedItem ? unique(verdict.ruleIds) : [],
     };
   });

@@ -146,6 +146,14 @@ describe('ML detector fan-out on the items the rules did not flag (D-07)', () =>
     expect(lakera.calls.flat()).toHaveLength(3);
   });
 
+  test('each item record names the detector that flagged it, not always the rules', async () => {
+    install(MIXED, ALL_ON, promptGuardFake(), lakeraFake());
+    const result = await run('eval');
+
+    const detectorsByChunk = Object.fromEntries((result.injection?.items ?? []).map((item) => [item.chunkIds[0], item.detectors]));
+    expect(detectorsByChunk).toEqual({ c1: ['rules'], c2: ['prompt_guard'], c3: ['lakera'], c4: [] });
+  });
+
   test('a zh item is never sent to Prompt Guard and is counted unsupported_language; the en item is sent', async () => {
     const pg = promptGuardFake();
     const lakera = lakeraFake();
