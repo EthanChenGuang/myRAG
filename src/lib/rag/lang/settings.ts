@@ -31,6 +31,7 @@ export function getLanguageSettings(): LanguageSettings {
 }
 
 export interface ValidateConfiguredLanguagesOptions {
+  reranker?: LanguageDeclaration | null;
   /** Phase 3.2.1 (03.2.1-01) passes the active embedding profile; null means not verified against it. */
   embeddingProfile?: LanguageDeclaration | null;
 }
@@ -40,7 +41,7 @@ export function validateConfiguredLanguages(options: ValidateConfiguredLanguages
   const { supported, primary } = rawEnv();
   return validateLanguageSettings(
     { supported, primary },
-    { registry: getLanguageRegistry(), reranker: null, embeddingProfile: options.embeddingProfile ?? null },
+    { registry: getLanguageRegistry(), reranker: options.reranker ?? null, embeddingProfile: options.embeddingProfile ?? null },
   );
 }
 

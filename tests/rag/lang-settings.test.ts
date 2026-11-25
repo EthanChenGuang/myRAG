@@ -9,6 +9,7 @@ import {
 import {
   completePacks,
   packMissingParts,
+  parseLanguageRegistry,
   resetLanguageRegistryForTests,
   setLanguageRegistryForTests,
   type LanguagePack,
@@ -102,7 +103,7 @@ describe('pack completeness agrees with registry.ts', () => {
         context: { reranker: null, embeddingProfile: null, registryChange: { base: entry.base, ...entry.change } },
         expect: { ok: false, errors: [], warnings: [], verifiedAgainstActiveProfile: false, normalized: null },
       });
-      const pack = registry.packs.find((candidate) => candidate.code === entry.base) as unknown as LanguagePack;
+      const pack = parseLanguageRegistry(registry).packs.find((candidate) => candidate.code === entry.base) as LanguagePack;
       expect(packMissingParts(pack).length).toBeGreaterThan(0);
       const result = validateLanguageSettings({ supported: entry.base, primary: entry.base }, { registry });
       expect(result.errors).toEqual([{ code: 'incomplete_pack', language: entry.base }]);
