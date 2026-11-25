@@ -146,3 +146,72 @@ def test_no_dockerfile_stage_installs_ray_extra():
     for name, lines in _stages().items():
         for line in lines:
             assert "--extra ray" not in line, f"{name}: {line}"
+
+
+def _hhem_lines() -> list[str]:
+    stages = _stages()
+    assert "hhem" in stages, f"no hhem stage in {list(stages)}"
+    return stages["hhem"]
+
+
+def _index(lines: list[str], predicate) -> int:
+    return next(i for i, line in enumerate(lines) if predicate(line))
+
+
+def test_hhem_stage_exists_before_the_default_stage():
+    names = list(_stages())
+    assert "hhem" in names
+    assert names.index("hhem") < names.index("runtime") == len(names) - 1
+
+
+def test_hhem_stage_installs_the_extra_locked():
+    lines = _hhem_lines()
+    syncs = [line for line in lines if "uv sync" in line]
+    assert len(syncs) >= 2
+    assert all("--extra hhem" in line for line in syncs), syncs
+    assert not any("--extra docling" in line for line in lines)
+
+
+def test_hhem_stage_bakes_into_a_fixed_hf_home_before_going_offline():
+    lines = _hhem_lines()
+    hf_home = _stage_env(lines, "HF_HOME")
+    assert hf_home and hf_home.startswith("/opt/"), hf_home
+    bake_at = _index(lines, lambda line: line.startswith("RUN ") and "python -m rag_sidecar.groundedness.bake" in line)
+    offline_at = _index(lines, lambda line: line.startswith("ENV ") and "HF_HUB_OFFLINE=1" in line)
+    user_at = _index(lines, lambda line: line.startswith("USER "))
+    home_at = _index(lines, lambda line: line.startswith("ENV ") and "HF_HOME=" in line)
+    assert home_at < bake_at < offline_at < user_at
+    assert _stage_env(lines, "HF_HUB_OFFLINE") == "1"
+    assert _stage_env(lines, "TRANSFORMERS_OFFLINE") == "1"
+    assert not any("HF_HUB_OFFLINE" in line for line in lines[:bake_at])
+
+
+def test_hhem_stage_gives_hf_home_to_the_runtime_user():
+    lines = _hhem_lines()
+    hf_home = _stage_env(lines, "HF_HOME")
+    bake_at = _index(lines, lambda line: "python -m rag_sidecar.groundedness.bake" in line)
+    chowns = [
+        (i, line)
+        for i, line in enumerate(lines)
+        if re.search(rf"""chown -R (10001|sidecar)\S* .*["']?({re.escape(hf_home)}|\$\{{?HF_HOME\}}?)["']?""", line)
+    ]
+    assert chowns, "HF_HOME must be owned by uid 10001"
+    assert all(i > bake_at for i, _ in chowns)
+    assert any("--uid 10001" in line and "--no-create-home" in line for line in lines)
+    users = [line for line in lines if line.startswith("USER ")]
+    assert users[-1] == "USER 10001"
+
+
+def test_default_stage_has_no_hhem_content():
+    for line in _stages()["runtime"]:
+        assert "--extra hhem" not in line, line
+        assert "groundedness.bake" not in line, line
+        assert "snapshot_download" not in line and "huggingface-cli" not in line and "hf download" not in line, line
+        assert "HF_HUB_OFFLINE" not in line and "HF_HOME" not in line, line
+
+
+def test_only_the_hhem_stage_bakes_hhem():
+    for name, lines in _stages().items():
+        if name == "hhem":
+            continue
+        assert not any("--extra hhem" in line or "groundedness.bake" in line for line in lines), name
