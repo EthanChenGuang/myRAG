@@ -1,5 +1,6 @@
 import type { AdvanceRequest, AdvanceResponse, IngestionJob } from '@/lib/rag-eval/contracts.generated';
 import type { RpcClient } from '../../backend/supabase-rpc';
+import { backfillDocumentScope } from '../../tenant/backfill-scope';
 import { scopeFromIngestionJob } from '../../tenant/ingestion-job';
 import { scopeKey } from '../../tenant/scope';
 import { isArtifactName, loadArtifact, originalName, saveArtifact, type ArtifactContext } from '../artifacts';
@@ -342,9 +343,11 @@ async function beginBackfillDocument(job: IngestionJob, workerId: string, scope:
   if (!original) return failBegin(job, workerId, 'original_unavailable', scope, signal);
   if (!job.file_sha256 || fileSha256(original.bytes) !== job.file_sha256) return failBegin(job, workerId, 'original_changed', scope, signal);
   if (!isIngestSource(job.source)) return failBegin(job, workerId, 'invalid_source', scope, signal);
+  const documentScope = await backfillDocumentScope(scope, { signal });
+  if (!documentScope) return failBegin(job, workerId, 'organization_owner_missing', scope, signal);
 
   const input: IngestInput = {
-    scope,
+    scope: documentScope,
     source: job.source,
     sourceKey: job.source_key,
     filename: job.filename ?? baseName(job.source_key),
