@@ -233,7 +233,8 @@ export interface QueryLayerConfig {
   framework: QueryFramework;
   model: string;
   transforms: QueryTransformSwitches;
-  translateDisabledProfiles: Profile[];
+  /** Embedding-profile ids (D-24), not pipeline profiles. */
+  translateDisabledProfiles: string[];
   voiceTransforms: VoiceTransform[];
 }
 
@@ -690,19 +691,21 @@ function parseVoiceTransforms(raw: string | undefined, warnings: string[]): Voic
   return kept;
 }
 
-function parseTranslateDisabledProfiles(raw: string | undefined, warnings: string[]): Profile[] {
-  const out: Profile[] = [];
-  let unknown = 0;
+const EMBEDDING_PROFILE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+
+/** Embedding-profile ids (D-24) whose multilingual embedding makes query translation unnecessary. */
+function parseTranslateDisabledProfiles(raw: string | undefined, warnings: string[]): string[] {
+  const out: string[] = [];
+  let invalid = 0;
   for (const name of parseList(raw)) {
-    const normalised = name.toLowerCase();
-    if (isProfile(normalised)) {
-      if (!out.includes(normalised)) out.push(normalised);
+    if (EMBEDDING_PROFILE_ID_PATTERN.test(name)) {
+      if (!out.includes(name)) out.push(name);
     } else {
-      unknown += 1;
+      invalid += 1;
     }
   }
-  if (unknown > 0) {
-    problem(warnings, `translate-disabled-profiles:${raw}`, 'Unknown profile in RAG_QUERY_TRANSLATE_DISABLED_PROFILES, entry ignored', { unknown }, '[Query Layer]');
+  if (invalid > 0) {
+    problem(warnings, `translate-disabled-profiles:${raw}`, 'Malformed embedding-profile id in RAG_QUERY_TRANSLATE_DISABLED_PROFILES, entry ignored', { invalid }, '[Query Layer]');
   }
   return out;
 }
