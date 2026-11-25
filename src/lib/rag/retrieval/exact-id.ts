@@ -1,4 +1,4 @@
-import { RetrievalBackendError, type RpcClient } from '../backend/supabase-rpc';
+import { RetrievalBackendError, rpcRows, type RpcClient } from '../backend/supabase-rpc';
 import { IDENTIFIER_PATTERN } from '../ids/shapes';
 import { queryLexicalTokens } from '../lexical/tokenize';
 import { classifyTaxId, type TaxIdScheme } from '../ids/tax-ids';
@@ -166,7 +166,7 @@ export async function exactIdLookup(scope: TenantScope, tokens: ExactIdToken[], 
     .abortSignal(signal);
   signal.throwIfAborted();
   if (response.error) throw new RetrievalBackendError(RPC_NAME, response.error.code ?? null);
-  return (response.data ?? []).map(toRow).filter((row): row is ExactIdRow => row !== null);
+  return rpcRows(response.data).map(toRow).filter((row): row is ExactIdRow => row !== null);
 }
 
 /** Extracts the identifiers of a question and looks them up; a question with none costs no call. */
