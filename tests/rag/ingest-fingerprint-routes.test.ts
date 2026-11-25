@@ -42,8 +42,9 @@ async function load() {
   const deps = await import('@/lib/rag/ingest/deps');
   deps.setIngestDepsForTests({ db: () => (state.dbAvailable ? (rpcClient() as never) : null) });
   const fp = await import('@/lib/rag/ingest/fingerprint');
+  const coverage = await import('@/app/api/rag/admin/ingest-fingerprint/route');
   const impact = await import('@/app/api/rag/admin/ingest-fingerprint/impact/route');
-  return { fp, impact };
+  return { fp, coverage, impact };
 }
 
 type Loaded = Awaited<ReturnType<typeof load>>;
@@ -78,6 +79,8 @@ function post(body: unknown, raw?: string): Request {
     body: raw ?? JSON.stringify(body),
   });
 }
+
+const get = () => new Request('http://localhost/api/rag/admin/ingest-fingerprint');
 
 describe('ingest-fingerprint admin routes', () => {
   beforeEach(() => {
@@ -174,6 +177,65 @@ describe('ingest-fingerprint admin routes', () => {
       const response = await loaded.impact.POST(post({ proposed: { RAG_TABLE_HEADER_REPEAT: 'always' } }));
       expect(response.status).toBe(503);
       expect(JSON.stringify(await response.json())).not.toContain('secret internal detail');
+    });
+  });
+
+  describe('GET /api/rag/admin/ingest-fingerprint', () => {
+    it.each([401, 403, 503] as const)('answers %s when the admin guard refuses', async (status) => {
+      const loaded = await load();
+      state.admin = { ok: false, status, reason: 'x' };
+      expect((await loaded.coverage.GET(get())).status).toBe(status);
+      expect(state.rpcCalls).toEqual([]);
+    });
+
+    it('lists the documents on previous settings per mechanism, with how each rebuild starts and its command', async () => {
+      process.env.RAG_TABLE_HEADER_REPEAT = 'always';
+      const loaded = await load();
+      state.outcome = {
+        data: [
+          group(loaded, 'general', 'docling', 4),
+          group(loaded, 'general', 'docling', 2, 'always'),
+          group(loaded, 'financial_report', 'docling', 2),
+          { doc_type: 'contract_legal', ingest_fingerprint: null, parts: null, documents: 5 },
+        ],
+        error: null,
+      };
+      const response = await loaded.coverage.GET(get());
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body.success).toBe(true);
+      expect(body.total_current).toBe(13);
+      expect(body.without_fingerprint).toEqual({ count: 5, command: 'npm run rag:fingerprint -- backfill' });
+      const pending = Object.fromEntries(body.pending.map((row: { mechanism: string }) => [row.mechanism, row]));
+      expect(Object.keys(pending)).toEqual(['reparse', 'rechunk', 'relex', 'reembed', 'recaption', 'retranslate', 'rescan']);
+      expect(pending.rechunk.affected).toBe(4);
+      expect(pending.rechunk.by_doc_type.general).toBe(4);
+      expect(pending.rechunk.by_doc_type.financial_report).toBe(0);
+      expect(pending.reparse.affected).toBe(0);
+      expect(Object.fromEntries(body.pending.map((row: { mechanism: string; start: string }) => [row.mechanism, row.start]))).toEqual({
+        reparse: 'needs_async',
+        rechunk: 'ui',
+        relex: 'cli',
+        reembed: 'cli',
+        recaption: 'ui',
+        retranslate: 'cli',
+        rescan: 'cli',
+      });
+      for (const row of body.pending as Array<{ command: string }>) expect(row.command).toMatch(/^npm run rag:[a-z]+( -- [a-z -]+)?$/);
+    });
+
+    it('reports reparse as startable from the UI only when async ingestion is on', async () => {
+      process.env.RAG_INGEST_ASYNC = 'on';
+      process.env.RAG_INGEST_PIPELINE = 'unified';
+      const loaded = await load();
+      const body = await (await loaded.coverage.GET(get())).json();
+      expect(body.pending.find((row: { mechanism: string }) => row.mechanism === 'reparse').start).toBe('ui');
+    });
+
+    it('answers 503 when the read fails', async () => {
+      const loaded = await load();
+      state.outcome = { data: null, error: { message: 'down' } };
+      expect((await loaded.coverage.GET(get())).status).toBe(503);
     });
   });
 });
