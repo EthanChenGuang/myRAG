@@ -63,12 +63,12 @@ describe('Phase 3.1 ingestion switches in the Config UI (web-design-guidelines, 
   it('help text is tied to its control with aria-describedby', () => {
     for (const id of HELP_TEXT) {
       const describedBy = attr(openingTag(id), 'aria-describedby');
-      expect(describedBy, id).toBe(`${id}_help`);
+      expect(describedBy, id).toBe(`${id.toLowerCase().replace(/_/g, '-')}-help`);
       expect(region).toContain(`id="${describedBy}"`);
     }
     const helpSpans = [...region.matchAll(/<span class="label-text-alt"([^>]*)>/g)];
     expect(helpSpans.length).toBe(HELP_TEXT.length);
-    for (const span of helpSpans) expect(span[1], span[0]).toMatch(/\sid="[A-Z0-9_]+_help"/);
+    for (const span of helpSpans) expect(span[1], span[0]).toMatch(/\sid="[a-z0-9-]+-help"/);
   });
 
   it('select values are code tokens that are not machine-translated', () => {
