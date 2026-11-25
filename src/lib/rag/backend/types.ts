@@ -6,7 +6,8 @@ export const RETRIEVAL_BACKEND_IDS: readonly BackendId[] = ['pgvector', 'weaviat
 
 export interface RetrievalFilters {
   readonly currentOnly: true;
-  dateRange?: { from?: string; to?: string };
+  /** includeUndated (D-11, set only by the query layer's merge) also keeps chunks without a doc_date. */
+  dateRange?: { from?: string; to?: string; includeUndated?: boolean };
   sources?: string[];
   documentIds?: string[];
   docTypes?: string[];
