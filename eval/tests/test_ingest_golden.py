@@ -62,6 +62,7 @@ def test_golden_ingest_items_validate_and_quotes_live_in_fixture_text(manifest_d
 
 PRE_CLAUSE_COUNT = 12
 PRE_CLAUSE_SHA256 = "81ee2f95622c19d83e9b94034954237e5133c1d061eef4056f30ae74d9aac747"
+# 2026-11-25 merge train 2: re-pinned after the 03-gaps fix to the gold_evidence quotes of ingest-scan-en/it/zh (no other pre-clause item changed).
 CONTRACT_DOCUMENT = "contract-zh.pdf"
 
 

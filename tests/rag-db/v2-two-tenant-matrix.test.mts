@@ -234,8 +234,16 @@ describe('every v2 retrieval path stays inside the caller tenant, for every entr
     const parentKeys = await tenantKeys('document_parents', parentIds);
     for (const id of parentIds) assert.equal(parentKeys.get(id), own, `${where}: parent ${id} belongs to ${parentKeys.get(id) ?? 'nobody'}`);
     const imageUrls = [...result.sourceImages.map((image) => image.url), ...(result.voice?.source_images ?? []).map((image) => (image as { url?: string }).url)];
-    for (const url of imageUrls) {
-      if (typeof url === 'string') assert.equal(url, tenant(label).imageUrl, `${where}: source image ${url} is not the caller's`);
+    const urls = imageUrls.filter((url): url is string => typeof url === 'string');
+    if (urls.length > 0) {
+      const owners = await db().query<{ url: string; tenant_key: string }>(
+        `SELECT DISTINCT metadata->>'image_url' AS url, tenant_key FROM document_chunks WHERE metadata->>'image_url' = ANY($1::text[])`,
+        [urls],
+      );
+      for (const url of urls) {
+        const keys = owners.rows.filter((row) => row.url === url).map((row) => row.tenant_key);
+        assert.deepEqual(keys, [own], `${where}: source image ${url} is owned by ${keys.join(', ') || 'nobody'}, not only the caller`);
+      }
     }
   }
 
