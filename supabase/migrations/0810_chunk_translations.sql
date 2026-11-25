@@ -709,4 +709,517 @@ GRANT EXECUTE ON FUNCTION public.rag_purge_hook_chunk_translations(text, uuid, u
 
 NOTIFY pgrst, 'reload schema';
 
+-- Ledger kind translate (D-29, research F-15, Open Question 6). 0801 widened the kind check; here the enqueue function accepts the kind
+-- (a document id and settings.target_language are required, no batch, status queued; source_key defaults to
+-- translate:<document id>:<language>) and returns the active job for the same document and language instead of a second one (an
+-- advisory lock plus a partial unique index). The claim functions hand translate jobs out and move a queued one straight to embedding
+-- (no preflight, no parse); advance accepts only the embedding and ready statuses for the kind; neither advance nor fail ever writes the
+-- document row of a translate job (its document stays as publish left it). Nothing here writes a parse attempt, parse-cache or budget row.
+-- Bodies: 0801 for advance, both claims and enqueue, 0422 for fail; each keeps its signature, SECURITY DEFINER, SET search_path = '' and
+-- grants. Re-running 0801 or 0422 after this file puts back their bodies: re-run 0810 after them. The two 0421 claim indexes are rebuilt
+-- with translate in their predicate only when it is missing (re-running 0421 restores the two-kind form; re-run 0810 after it).
+
+CREATE UNIQUE INDEX IF NOT EXISTS ingestion_jobs_translate_active_ux
+  ON public.ingestion_jobs (document_id, (settings ->> 'target_language'))
+  WHERE kind = 'translate' AND deleted_at IS NULL
+    AND status NOT IN ('ready', 'failed', 'quarantined', 'needs_review', 'skipped_duplicate', 'pending_review');
+
+DO $translate_claim_indexes$
+BEGIN
+  IF COALESCE(pg_catalog.pg_get_indexdef(pg_catalog.to_regclass('public.ingestion_jobs_claim_queued_idx')), '') NOT LIKE '%translate%' THEN
+    DROP INDEX IF EXISTS public.ingestion_jobs_claim_queued_idx;
+    CREATE INDEX ingestion_jobs_claim_queued_idx
+      ON public.ingestion_jobs (priority DESC, created_at ASC, id)
+      WHERE deleted_at IS NULL
+        AND kind IN ('ingest', 'dry_run', 'translate')
+        AND status = 'queued';
+  END IF;
+  IF COALESCE(pg_catalog.pg_get_indexdef(pg_catalog.to_regclass('public.ingestion_jobs_claim_active_lease_idx')), '') NOT LIKE '%translate%' THEN
+    DROP INDEX IF EXISTS public.ingestion_jobs_claim_active_lease_idx;
+    CREATE INDEX ingestion_jobs_claim_active_lease_idx
+      ON public.ingestion_jobs (lease_until ASC, priority DESC, created_at ASC)
+      WHERE deleted_at IS NULL
+        AND kind IN ('ingest', 'dry_run', 'translate')
+        AND status IN ('preflight', 'parsing', 'checking', 'chunking', 'embedding');
+  END IF;
+END
+$translate_claim_indexes$;
+
+CREATE OR REPLACE FUNCTION public.rag_enqueue_ingestion_job(p_tenant_key text, p_kind text DEFAULT 'ingest'::text, p_source text DEFAULT NULL::text, p_source_key text DEFAULT NULL::text, p_file_sha256 text DEFAULT NULL::text, p_filename text DEFAULT NULL::text, p_mime_type text DEFAULT NULL::text, p_original_ref jsonb DEFAULT NULL::jsonb, p_settings jsonb DEFAULT '{}'::jsonb, p_priority integer DEFAULT 100, p_document_id uuid DEFAULT NULL::uuid, p_batch_id uuid DEFAULT NULL::uuid, p_status text DEFAULT 'queued'::text)
+ RETURNS public.ingestion_jobs
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+  v_doc_tenant text;
+  v_batch_tenant text;
+  v_row public.ingestion_jobs%ROWTYPE;
+  v_source_key text := p_source_key;
+  v_target text;
+BEGIN
+  PERFORM public.rag_ingest_assert_tenant_key(p_tenant_key);
+
+  IF p_kind IS NULL OR p_kind NOT IN ('ingest', 'dry_run', 'delete', 'translate') THEN
+    RAISE EXCEPTION 'ingest_refused: invalid_kind' USING ERRCODE = '22023';
+  END IF;
+  IF p_kind = 'translate' THEN
+    IF p_document_id IS NULL THEN
+      RAISE EXCEPTION 'ingest_refused: document_required' USING ERRCODE = '22023';
+    END IF;
+    v_target := p_settings ->> 'target_language';
+    IF v_target IS NULL OR v_target !~ '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' THEN
+      RAISE EXCEPTION 'ingest_refused: invalid_target_language' USING ERRCODE = '22023';
+    END IF;
+    IF p_batch_id IS NOT NULL THEN
+      RAISE EXCEPTION 'ingest_refused: batch_not_allowed_for_kind' USING ERRCODE = '22023';
+    END IF;
+    IF p_status IS DISTINCT FROM 'queued' THEN
+      RAISE EXCEPTION 'ingest_refused: invalid_status' USING ERRCODE = '22023';
+    END IF;
+    v_source_key := COALESCE(NULLIF(btrim(p_source_key), ''), 'translate:' || p_document_id::text || ':' || v_target);
+  END IF;
+  IF v_source_key IS NULL OR btrim(v_source_key) = '' THEN
+    RAISE EXCEPTION 'ingest_refused: invalid_source_key' USING ERRCODE = '22023';
+  END IF;
+  IF p_status IS NULL OR p_status NOT IN (
+    'queued', 'preflight', 'parsing', 'checking', 'chunking', 'embedding',
+    'ready', 'failed', 'quarantined', 'needs_review', 'skipped_duplicate', 'pending_review'
+  ) THEN
+    RAISE EXCEPTION 'ingest_refused: invalid_status' USING ERRCODE = '22023';
+  END IF;
+
+  IF p_document_id IS NOT NULL THEN
+    SELECT d.tenant_key INTO v_doc_tenant FROM public.documents d WHERE d.id = p_document_id;
+    IF NOT FOUND OR v_doc_tenant IS DISTINCT FROM p_tenant_key THEN
+      RAISE EXCEPTION 'ingest_refused: document_tenant_mismatch' USING ERRCODE = '22023';
+    END IF;
+  END IF;
+
+  IF p_batch_id IS NOT NULL THEN
+    SELECT b.tenant_key INTO v_batch_tenant FROM public.ingestion_batches b WHERE b.id = p_batch_id;
+    IF NOT FOUND OR v_batch_tenant IS DISTINCT FROM p_tenant_key THEN
+      RAISE EXCEPTION 'ingest_refused: batch_tenant_mismatch' USING ERRCODE = '22023';
+    END IF;
+  END IF;
+
+  IF p_kind = 'translate' THEN
+    PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('rag_translate:' || p_document_id::text || ':' || v_target, 0));
+    SELECT j.* INTO v_row
+      FROM public.ingestion_jobs j
+     WHERE j.kind = 'translate'
+       AND j.document_id = p_document_id
+       AND j.tenant_key = p_tenant_key
+       AND j.settings ->> 'target_language' = v_target
+       AND j.deleted_at IS NULL
+       AND j.status NOT IN ('ready', 'failed', 'quarantined', 'needs_review', 'skipped_duplicate', 'pending_review')
+     ORDER BY j.created_at
+     LIMIT 1;
+    IF FOUND THEN
+      RETURN v_row;
+    END IF;
+  END IF;
+
+  INSERT INTO public.ingestion_jobs (
+    tenant_key, kind, status, source, source_key, file_sha256, filename, mime_type,
+    original_ref, settings, priority, document_id, batch_id
+  ) VALUES (
+    p_tenant_key, p_kind, p_status, p_source, v_source_key, p_file_sha256, p_filename, p_mime_type,
+    p_original_ref, COALESCE(p_settings, '{}'::jsonb), COALESCE(p_priority, 100), p_document_id, p_batch_id
+  )
+  RETURNING * INTO v_row;
+
+  RETURN v_row;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.rag_claim_ingestion_job(p_job_id uuid, p_worker text, p_runner text DEFAULT 'worker'::text)
+ RETURNS public.ingestion_jobs
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+  v_job public.ingestion_jobs%ROWTYPE;
+  v_new_retries integer;
+BEGIN
+  SELECT j.* INTO v_job
+    FROM public.ingestion_jobs j
+   WHERE j.id = p_job_id
+     AND j.deleted_at IS NULL
+     AND j.kind IN ('ingest', 'dry_run', 'translate')
+     AND j.status NOT IN ('ready', 'failed', 'quarantined', 'needs_review', 'skipped_duplicate', 'pending_review')
+     AND (
+       (j.status = 'queued' AND (j.run_after IS NULL OR j.run_after <= now()))
+       OR (
+         j.status IN ('preflight', 'parsing', 'checking', 'chunking', 'embedding')
+         AND j.lease_until IS NOT NULL
+         AND j.lease_until < now()
+       )
+     )
+   FOR UPDATE OF j SKIP LOCKED;
+
+  IF NOT FOUND THEN
+    RETURN NULL;
+  END IF;
+
+  IF v_job.batch_id IS NOT NULL AND NOT public.rag_batch_has_room(v_job.batch_id) THEN
+    RETURN NULL;
+  END IF;
+
+  IF v_job.locked_by IS NOT NULL AND v_job.lease_until IS NOT NULL AND v_job.lease_until > now() THEN
+    RETURN NULL;
+  END IF;
+
+  IF v_job.status <> 'queued' AND v_job.lease_until IS NOT NULL AND v_job.lease_until < now() THEN
+    v_new_retries := v_job.retries + 1;
+    IF v_new_retries > v_job.max_retries THEN
+      PERFORM public.rag_release_job_reservations(v_job.id);
+      UPDATE public.ingestion_jobs
+         SET status = 'failed',
+             error_class = 'lease_expired',
+             error = 'lease expired',
+             dead_letter_at = now(),
+             retries = v_new_retries,
+             locked_by = NULL,
+             lease_until = NULL,
+             runner = NULL,
+             updated_at = now()
+       WHERE id = v_job.id;
+      RETURN NULL;
+    END IF;
+    PERFORM public.rag_release_job_reservations(v_job.id);
+  END IF;
+
+  UPDATE public.ingestion_jobs j
+     SET status = CASE
+           WHEN j.status = 'queued' AND j.kind = 'translate' THEN 'embedding'
+           WHEN j.status = 'queued' THEN COALESCE(NULLIF(j.stage, ''), 'preflight')
+           ELSE j.status
+         END,
+         retries = CASE
+           WHEN j.status = 'queued' THEN j.retries
+           ELSE j.retries + 1
+         END,
+         locked_by = p_worker,
+         runner = p_runner,
+         lease_until = now() + interval '120 seconds',
+         updated_at = now()
+   WHERE j.id = v_job.id
+   RETURNING j.* INTO v_job;
+
+  RETURN v_job;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.rag_claim_ingestion_jobs(p_worker text, p_limit integer, p_allow_batch boolean, p_runner text DEFAULT 'worker'::text)
+ RETURNS SETOF public.ingestion_jobs
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+  v_claimed integer := 0;
+  v_job public.ingestion_jobs%ROWTYPE;
+  v_new_retries integer;
+  v_limit integer;
+BEGIN
+  v_limit := GREATEST(COALESCE(p_limit, 0), 0);
+  IF v_limit < 1 THEN
+    RETURN;
+  END IF;
+
+  WHILE v_claimed < v_limit LOOP
+    SELECT j.* INTO v_job
+      FROM public.ingestion_jobs j
+     WHERE j.deleted_at IS NULL
+       AND j.kind IN ('ingest', 'dry_run', 'translate')
+       AND j.status NOT IN ('ready', 'failed', 'quarantined', 'needs_review', 'skipped_duplicate', 'pending_review')
+       AND (p_allow_batch OR j.batch_id IS NULL)
+       AND (
+         (j.status = 'queued' AND (j.run_after IS NULL OR j.run_after <= now()))
+         OR (
+           j.status IN ('preflight', 'parsing', 'checking', 'chunking', 'embedding')
+           AND j.lease_until IS NOT NULL
+           AND j.lease_until < now()
+         )
+       )
+       AND (j.batch_id IS NULL OR public.rag_batch_has_room(j.batch_id))
+     ORDER BY j.priority DESC, j.created_at
+     FOR UPDATE OF j SKIP LOCKED
+     LIMIT 1;
+
+    IF NOT FOUND THEN
+      EXIT;
+    END IF;
+
+    IF v_job.batch_id IS NOT NULL AND NOT public.rag_batch_has_room(v_job.batch_id) THEN
+      CONTINUE;
+    END IF;
+
+    IF v_job.status <> 'queued' AND v_job.lease_until IS NOT NULL AND v_job.lease_until < now() THEN
+      v_new_retries := v_job.retries + 1;
+      IF v_new_retries > v_job.max_retries THEN
+        PERFORM public.rag_release_job_reservations(v_job.id);
+        UPDATE public.ingestion_jobs
+           SET status = 'failed',
+               error_class = 'lease_expired',
+               error = 'lease expired',
+               dead_letter_at = now(),
+               retries = v_new_retries,
+               locked_by = NULL,
+               lease_until = NULL,
+               runner = NULL,
+               updated_at = now()
+         WHERE id = v_job.id;
+        CONTINUE;
+      END IF;
+      PERFORM public.rag_release_job_reservations(v_job.id);
+    END IF;
+
+    UPDATE public.ingestion_jobs j
+       SET status = CASE
+             WHEN j.status = 'queued' AND j.kind = 'translate' THEN 'embedding'
+             WHEN j.status = 'queued' THEN COALESCE(NULLIF(j.stage, ''), 'preflight')
+             ELSE j.status
+           END,
+           retries = CASE
+             WHEN j.status = 'queued' THEN j.retries
+             ELSE j.retries + 1
+           END,
+           locked_by = p_worker,
+           runner = p_runner,
+           lease_until = now() + interval '120 seconds',
+           updated_at = now()
+     WHERE j.id = v_job.id
+     RETURNING j.* INTO v_job;
+
+    v_claimed := v_claimed + 1;
+    RETURN NEXT v_job;
+  END LOOP;
+
+  RETURN;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.rag_advance_ingestion_job(p_job_id uuid, p_worker text, p_stage text, p_status text, p_stage_state jsonb DEFAULT NULL::jsonb, p_timing_ms integer DEFAULT NULL::integer, p_fields jsonb DEFAULT '{}'::jsonb)
+ RETURNS public.ingestion_jobs
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+  v_job public.ingestion_jobs%ROWTYPE;
+  v_expected text;
+  v_timings jsonb;
+  v_key text;
+  v_value jsonb;
+  v_whitelist text[] := ARRAY[
+    'doc_class', 'tier', 'parser_used', 'parser_version', 'pages', 'page_ranges',
+    'tier_page_counts', 'detect_counts', 'preflight_ref', 'est_cost_usd', 'embedding_profile',
+    'document_id', 'needs_review_reason', 'routing_note', 'provisional_published_at', 'trace_id'
+  ];
+  v_terminal boolean;
+  v_mirror text;
+BEGIN
+  IF p_stage IS NULL OR btrim(p_stage) = '' THEN
+    RAISE EXCEPTION 'ingest_refused: invalid_stage' USING ERRCODE = '22023';
+  END IF;
+  v_expected := public.rag_ingest_job_status_for_stage(p_stage);
+  IF v_expected IS NULL THEN
+    RAISE EXCEPTION 'ingest_refused: invalid_stage' USING ERRCODE = '22023';
+  END IF;
+  IF p_status IS NULL OR p_status <> v_expected THEN
+    RAISE EXCEPTION 'ingest_refused: invalid_status_for_stage' USING ERRCODE = '22023';
+  END IF;
+  IF p_fields IS NOT NULL AND jsonb_typeof(p_fields) = 'object' THEN
+    FOR v_key IN SELECT jsonb_object_keys(p_fields)
+    LOOP
+      IF NOT (v_key = ANY (v_whitelist)) THEN
+        RAISE EXCEPTION 'ingest_refused: field_not_allowed' USING ERRCODE = '22023';
+      END IF;
+    END LOOP;
+  END IF;
+
+  SELECT * INTO v_job FROM public.ingestion_jobs WHERE id = p_job_id AND deleted_at IS NULL FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'ingest_refused: job_not_found' USING ERRCODE = '22023';
+  END IF;
+  PERFORM public.rag_ingest_assert_job_lease(v_job, p_worker);
+  IF v_job.kind = 'translate' AND p_status NOT IN ('embedding', 'ready') THEN
+    RAISE EXCEPTION 'ingest_refused: invalid_stage_for_kind' USING ERRCODE = '22023';
+  END IF;
+
+  v_timings := COALESCE(v_job.timings, '{}'::jsonb);
+  IF p_timing_ms IS NOT NULL AND p_stage IS NOT NULL THEN
+    v_timings := v_timings || jsonb_build_object(
+      p_stage,
+      COALESCE((v_timings ->> p_stage)::bigint, 0) + p_timing_ms
+    );
+  END IF;
+
+  UPDATE public.ingestion_jobs j
+     SET status = p_status,
+         stage = p_stage,
+         timings = v_timings,
+         stage_state = CASE WHEN p_stage_state IS NOT NULL THEN p_stage_state ELSE j.stage_state END,
+         doc_class = COALESCE(p_fields ->> 'doc_class', j.doc_class),
+         tier = COALESCE(p_fields ->> 'tier', j.tier),
+         parser_used = COALESCE(p_fields ->> 'parser_used', j.parser_used),
+         parser_version = COALESCE(p_fields ->> 'parser_version', j.parser_version),
+         pages = COALESCE((p_fields ->> 'pages')::integer, j.pages),
+         page_ranges = CASE WHEN p_fields ? 'page_ranges' THEN p_fields -> 'page_ranges' ELSE j.page_ranges END,
+         tier_page_counts = CASE WHEN p_fields ? 'tier_page_counts' THEN p_fields -> 'tier_page_counts' ELSE j.tier_page_counts END,
+         detect_counts = CASE WHEN p_fields ? 'detect_counts' THEN p_fields -> 'detect_counts' ELSE j.detect_counts END,
+         preflight_ref = COALESCE(p_fields ->> 'preflight_ref', j.preflight_ref),
+         est_cost_usd = COALESCE((p_fields ->> 'est_cost_usd')::numeric, j.est_cost_usd),
+         embedding_profile = COALESCE(p_fields ->> 'embedding_profile', j.embedding_profile),
+         document_id = CASE
+           WHEN j.document_id IS NULL AND p_fields ? 'document_id'
+           THEN (p_fields ->> 'document_id')::uuid
+           ELSE j.document_id
+         END,
+         needs_review_reason = COALESCE(p_fields ->> 'needs_review_reason', j.needs_review_reason),
+         routing_note = COALESCE(p_fields ->> 'routing_note', j.routing_note),
+         provisional_published_at = CASE
+           WHEN p_fields ? 'provisional_published_at'
+           THEN (p_fields ->> 'provisional_published_at')::timestamptz
+           ELSE j.provisional_published_at
+         END,
+         trace_id = CASE WHEN p_fields ? 'trace_id' THEN (p_fields ->> 'trace_id')::uuid ELSE j.trace_id END,
+         updated_at = now()
+   WHERE j.id = p_job_id
+   RETURNING j.* INTO v_job;
+
+  v_terminal := p_status IN ('ready', 'failed', 'quarantined', 'needs_review', 'skipped_duplicate', 'pending_review');
+  IF v_terminal THEN
+    PERFORM public.rag_release_job_reservations(p_job_id);
+    UPDATE public.ingestion_jobs
+       SET locked_by = NULL, lease_until = NULL, runner = NULL
+     WHERE id = p_job_id
+     RETURNING * INTO v_job;
+  END IF;
+
+  IF v_job.document_id IS NOT NULL AND v_job.kind <> 'translate' THEN
+    v_mirror := public.rag_ingest_mirror_processing_status(v_job.status);
+    IF v_mirror IS NOT NULL THEN
+      UPDATE public.documents d
+         SET processing_status = v_mirror
+       WHERE d.id = v_job.document_id
+         AND d.tenant_key = v_job.tenant_key;
+    END IF;
+    IF p_status = 'ready' THEN
+      UPDATE public.documents d SET status = 'ready' WHERE d.id = v_job.document_id AND d.tenant_key = v_job.tenant_key;
+    ELSIF p_status = 'failed' THEN
+      UPDATE public.documents d
+         SET status = 'failed', processing_status = 'failed'
+       WHERE d.id = v_job.document_id AND d.tenant_key = v_job.tenant_key AND NOT d.is_current;
+    ELSIF p_status = 'quarantined' THEN
+      UPDATE public.documents d
+         SET status = CASE WHEN d.status = 'quarantined' THEN 'quarantined' ELSE 'failed' END,
+             processing_status = CASE WHEN d.status = 'quarantined' THEN 'quarantined' ELSE 'failed' END
+       WHERE d.id = v_job.document_id AND d.tenant_key = v_job.tenant_key AND NOT d.is_current;
+    ELSIF p_status = 'needs_review' THEN
+      UPDATE public.documents d
+         SET status = 'ready',
+             needs_review = true,
+             needs_review_reason = COALESCE(v_job.needs_review_reason, d.needs_review_reason)
+       WHERE d.id = v_job.document_id AND d.tenant_key = v_job.tenant_key;
+    END IF;
+  END IF;
+
+  PERFORM public.rag_ingest_broadcast_job(v_job);
+  RETURN v_job;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.rag_fail_ingestion_job(
+  p_job_id uuid,
+  p_worker text,
+  p_error_class text,
+  p_retryable boolean,
+  p_last_error text DEFAULT NULL
+)
+RETURNS public.ingestion_jobs
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_job public.ingestion_jobs%ROWTYPE;
+  v_new_retries integer;
+  v_terminal boolean;
+  v_last text;
+BEGIN
+  IF p_error_class IS NULL OR btrim(p_error_class) = '' THEN
+    RAISE EXCEPTION 'ingest_refused: invalid_error_class' USING ERRCODE = '22023';
+  END IF;
+  SELECT * INTO v_job FROM public.ingestion_jobs WHERE id = p_job_id AND deleted_at IS NULL FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'ingest_refused: job_not_found' USING ERRCODE = '22023';
+  END IF;
+  PERFORM public.rag_ingest_assert_job_lease(v_job, p_worker);
+
+  v_new_retries := v_job.retries + 1;
+  v_terminal := (NOT p_retryable) OR v_new_retries > v_job.max_retries;
+  v_last := COALESCE(NULLIF(btrim(p_last_error), ''), p_error_class);
+
+  IF v_terminal THEN
+    PERFORM public.rag_release_job_reservations(p_job_id);
+    UPDATE public.ingestion_jobs j
+       SET status = 'failed',
+           error_class = p_error_class,
+           error = v_last,
+           dead_letter_at = CASE
+             WHEN p_retryable AND v_new_retries > j.max_retries THEN now()
+             ELSE NULL
+           END,
+           retries = v_new_retries,
+           locked_by = NULL,
+           lease_until = NULL,
+           runner = NULL,
+           run_after = NULL,
+           updated_at = now()
+     WHERE j.id = p_job_id
+     RETURNING j.* INTO v_job;
+    IF v_job.document_id IS NOT NULL AND v_job.kind <> 'translate' THEN
+      UPDATE public.documents d
+         SET status = 'failed', processing_status = 'failed'
+       WHERE d.id = v_job.document_id AND d.tenant_key = v_job.tenant_key AND NOT d.is_current;
+    END IF;
+  ELSE
+    PERFORM public.rag_release_job_reservations(p_job_id);
+    UPDATE public.ingestion_jobs j
+       SET status = 'queued',
+           error_class = p_error_class,
+           error = v_last,
+           retries = v_new_retries,
+           run_after = now() + (30 * power(2::numeric, j.retries)) * interval '1 second',
+           locked_by = NULL,
+           lease_until = NULL,
+           runner = NULL,
+           updated_at = now()
+     WHERE j.id = p_job_id
+     RETURNING j.* INTO v_job;
+  END IF;
+
+  PERFORM public.rag_ingest_broadcast_job(v_job);
+  RETURN v_job;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.rag_advance_ingestion_job(uuid, text, text, text, jsonb, integer, jsonb) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_advance_ingestion_job(uuid, text, text, text, jsonb, integer, jsonb) TO service_role;
+REVOKE ALL ON FUNCTION public.rag_claim_ingestion_job(uuid, text, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_claim_ingestion_job(uuid, text, text) TO service_role;
+REVOKE ALL ON FUNCTION public.rag_claim_ingestion_jobs(text, integer, boolean, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_claim_ingestion_jobs(text, integer, boolean, text) TO service_role;
+REVOKE ALL ON FUNCTION public.rag_enqueue_ingestion_job(text, text, text, text, text, text, text, jsonb, jsonb, integer, uuid, uuid, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_enqueue_ingestion_job(text, text, text, text, text, text, text, jsonb, jsonb, integer, uuid, uuid, text) TO service_role;
+REVOKE ALL ON FUNCTION public.rag_fail_ingestion_job(uuid, text, text, boolean, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_fail_ingestion_job(uuid, text, text, boolean, text) TO service_role;
+
+NOTIFY pgrst, 'reload schema';
+
 COMMIT;

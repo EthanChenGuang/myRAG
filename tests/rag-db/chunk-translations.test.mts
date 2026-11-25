@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import type { PGlite } from '@electric-sql/pglite';
 import { embedText } from '../../eval/harness/fixture-embedder.mts';
 import { TWO_TENANT_IDS, createTwoTenantDatabase, type TwoTenantDatabase } from '../../eval/harness/two-tenant.mts';
+import { applyMigrationFiles } from '../../eval/harness/migrations.mts';
 
 const LEGACY = 'openai-3-small-1536';
 const TENANT_A = `u:${TWO_TENANT_IDS.userA}`;
@@ -629,5 +630,15 @@ describe('ledger kind translate (0810, D-29, research F-15)', () => {
     const queued = await enqueueTranslate(docId, { target_language: 'en' });
     const claimed = await db.query<Job>("SELECT * FROM rag_claim_ingestion_jobs('translate-batch-worker', 5, false)");
     assert.deepEqual(claimed.rows.map((row) => [row.id, row.status]), [[queued.id, 'embedding']]);
+  });
+
+  test('a second apply of 0810 is a no-op that keeps every translation, job and claim index', async () => {
+    const before = await count(db, "SELECT count(*) AS n FROM ingestion_jobs WHERE kind = 'translate'");
+    await applyMigrationFiles(db, ['supabase/migrations/0810_chunk_translations.sql']);
+    assert.equal(await count(db, "SELECT count(*) AS n FROM ingestion_jobs WHERE kind = 'translate'"), before);
+    for (const name of ['ingestion_jobs_claim_queued_idx', 'ingestion_jobs_claim_active_lease_idx']) {
+      const def = await db.query<{ d: string }>('SELECT pg_get_indexdef(to_regclass($1)) AS d', [`public.${name}`]);
+      assert.match(def.rows[0]?.d ?? '', /'translate'/, name);
+    }
   });
 });
