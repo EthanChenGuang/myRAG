@@ -8,11 +8,13 @@ import {
   resolveFinalResultCount,
   warnInjectionCheckDisabled,
 } from '@/lib/rag/config';
+import { loadIngestConfig, resetIngestConfigForTests } from '@/lib/rag/ingest/config';
 
 let warn: MockInstance<(...args: unknown[]) => void>;
 
 beforeEach(() => {
   resetRagConfigForTests();
+  resetIngestConfigForTests();
   warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 });
 
@@ -254,5 +256,72 @@ describe('resolveFinalResultCount', () => {
     resolveFinalResultCount(undefined, 'abc');
     resolveFinalResultCount(undefined, 'abc');
     expect(configWarnings()).toHaveLength(1);
+  });
+});
+describe('domain embeddings switches', () => {
+  test('defaults: off, two legs, 800 ms, and the ingest switch is off', () => {
+    const config = loadRagConfig({});
+    expect(config.v2.domainEmbeddings).toEqual({ enabled: false, maxLegs: 2, timeoutMs: 800 });
+    expect(loadIngestConfig({}).domainEmbeddings).toBe('off');
+    expect(config.warnings).toEqual([]);
+  });
+
+  test('on with embedding profiles on enables both', () => {
+    const env = { RAG_EMBEDDING_PROFILES: 'on', RAG_DOMAIN_EMBEDDINGS: 'on' };
+    expect(loadRagConfig(env).v2.domainEmbeddings?.enabled).toBe(true);
+    expect(loadIngestConfig(env).domainEmbeddings).toBe('on');
+    expect(loadRagConfig(env).warnings).toEqual([]);
+  });
+
+  test('on with embedding profiles off stays off with one warning', () => {
+    const env = { RAG_EMBEDDING_PROFILES: 'off', RAG_DOMAIN_EMBEDDINGS: 'on' };
+    const config = loadRagConfig(env);
+    expect(config.v2.domainEmbeddings?.enabled).toBe(false);
+    expect(config.warnings.filter((w) => w.includes('domain-embeddings needs embedding profiles'))).toHaveLength(1);
+    const ingest = loadIngestConfig(env);
+    expect(ingest.domainEmbeddings).toBe('off');
+    expect(ingest.warnings.filter((w) => w.includes('domain-embeddings needs embedding profiles'))).toHaveLength(1);
+  });
+
+  test('profiles on but domain embeddings unset stays off without a warning', () => {
+    const config = loadRagConfig({ RAG_EMBEDDING_PROFILES: 'on' });
+    expect(config.v2.domainEmbeddings?.enabled).toBe(false);
+    expect(config.warnings).toEqual([]);
+  });
+
+  test('an unsupported switch value falls back to off with a warning', () => {
+    const env = { RAG_EMBEDDING_PROFILES: 'on', RAG_DOMAIN_EMBEDDINGS: 'yes' };
+    const config = loadRagConfig(env);
+    expect(config.v2.domainEmbeddings?.enabled).toBe(false);
+    expect(config.warnings).toHaveLength(1);
+    expect(loadIngestConfig(env).domainEmbeddings).toBe('off');
+  });
+
+  test('max legs is bounded 0..5; zero is accepted', () => {
+    const nine = loadRagConfig({ RAG_DOMAIN_EMBEDDING_MAX_LEGS: '9' });
+    expect(nine.v2.domainEmbeddings?.maxLegs).toBe(2);
+    expect(nine.warnings).toHaveLength(1);
+    const zero = loadRagConfig({ RAG_DOMAIN_EMBEDDING_MAX_LEGS: '0' });
+    expect(zero.v2.domainEmbeddings?.maxLegs).toBe(0);
+    expect(zero.warnings).toEqual([]);
+    expect(loadRagConfig({ RAG_DOMAIN_EMBEDDING_MAX_LEGS: '5' }).v2.domainEmbeddings?.maxLegs).toBe(5);
+    expect(loadRagConfig({ RAG_DOMAIN_EMBEDDING_MAX_LEGS: 'two' }).v2.domainEmbeddings?.maxLegs).toBe(2);
+  });
+
+  test('timeout is bounded 100..5000', () => {
+    const low = loadRagConfig({ RAG_DOMAIN_EMBEDDING_TIMEOUT_MS: '50' });
+    expect(low.v2.domainEmbeddings?.timeoutMs).toBe(800);
+    expect(low.warnings).toHaveLength(1);
+    expect(loadRagConfig({ RAG_DOMAIN_EMBEDDING_TIMEOUT_MS: '5001' }).v2.domainEmbeddings?.timeoutMs).toBe(800);
+    expect(loadRagConfig({ RAG_DOMAIN_EMBEDDING_TIMEOUT_MS: '100' }).v2.domainEmbeddings?.timeoutMs).toBe(100);
+    expect(loadRagConfig({ RAG_DOMAIN_EMBEDDING_TIMEOUT_MS: '5000' }).v2.domainEmbeddings?.timeoutMs).toBe(5000);
+    expect(loadRagConfig({ RAG_DOMAIN_EMBEDDING_TIMEOUT_MS: '1.5e3' }).v2.domainEmbeddings?.timeoutMs).toBe(800);
+  });
+
+  test('the switches are part of the memo key', () => {
+    const on = loadRagConfig({ RAG_EMBEDDING_PROFILES: 'on', RAG_DOMAIN_EMBEDDINGS: 'on' });
+    const off = loadRagConfig({ RAG_EMBEDDING_PROFILES: 'on', RAG_DOMAIN_EMBEDDINGS: 'off' });
+    expect(on.v2.domainEmbeddings?.enabled).toBe(true);
+    expect(off.v2.domainEmbeddings?.enabled).toBe(false);
   });
 });
