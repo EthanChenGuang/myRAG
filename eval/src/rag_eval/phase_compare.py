@@ -19,7 +19,7 @@ from rag_sidecar.contracts.golden import GoldenItem
 from rag_sidecar.contracts.report import EvalReport, ItemResult, SliceMetrics
 from rag_sidecar.contracts.retrieval import ChunkingDecision, ChunkingSweepReport
 
-from rag_eval.calibrate.refusal import CalibrationResult, CrossComparison
+from rag_eval.calibrate.refusal import IMAGE_FLOOR, CalibrationResult, CrossComparison, _best_dense, _gate_decided, fit_threshold
 from rag_eval.gate import evaluate_gate
 from rag_eval.golden_io import load_golden
 from rag_eval.harness_runner import HARNESS_SCRIPT, TAIL_LINES, HarnessError, Spawner, _tail, default_spawner
@@ -44,6 +44,16 @@ HARNESS_DIR = "harness"
 SELECTIVE_REPORT = "selective-filter.json"
 JSON_NAME = "comparison.json"
 MARKDOWN_NAME = "comparison.md"
+
+CATEGORY_PREFIX = "category:"
+FLOOR_REASONS = ("above_similarity_floor", "below_similarity_floor")
+RATE_TOLERANCE = 1e-9
+LIVE_PLAN = "04-43"
+STRICT_OPEN_NOTE = (
+    "the fixture shows no strict correct-refusal gain at the matched false-refusal point; whether correct refusal strictly "
+    f"improves is decided by the live calibration ({LIVE_PLAN})"
+)
+STRICT_DONE_NOTE = "correct refusal is strictly higher at the matched false-refusal point against both references"
 
 EXIT_PASS = 0
 EXIT_USAGE = 2
@@ -177,7 +187,7 @@ class MatchedRefusal(_Model):
 
 
 class RefusalComparison(_Model):
-    method: Literal["point", "matched_false_refusal"] = "point"
+    method: Literal["point", "matched_false_refusal"]
     correct_refusal: float | None
     correct_refusal_n: int
     reference_correct_refusal: float | None
@@ -185,10 +195,10 @@ class RefusalComparison(_Model):
     false_refusal_n: int
     false_refusal_upper_95: float | None
     reference_false_refusal: float | None
-    matched: MatchedRefusal | None = None
+    matched: MatchedRefusal | None
     passed: bool
     strictly_improved: bool
-    failures: list[str] = Field(default_factory=list)
+    failures: list[str]
 
 
 class ReportOnlyMove(_Model):
@@ -204,7 +214,7 @@ class RecommendedCheck(_Model):
     passed: bool
     mismatches: list[str]
     drops: list[GateOffender]
-    report_only: list[ReportOnlyMove] = Field(default_factory=list)
+    report_only: list[ReportOnlyMove]
     refusal: RefusalComparison
 
 
@@ -227,8 +237,8 @@ class RecommendedResult(_Model):
     passed: bool
     baseline: RecommendedCheck
     reference: RecommendedCheck
-    strict_improvement: StrictImprovement = StrictImprovement(verdict="open", note="")
-    gate_below_floor: list[GateBelowFloor] = Field(default_factory=list)
+    strict_improvement: StrictImprovement
+    gate_below_floor: list[GateBelowFloor]
 
 
 class SwitchResult(_Model):
@@ -455,36 +465,181 @@ def legacy_parity_rule(runs: Mapping[str, tuple[RunOutput, Baseline]], noise: No
 # ---------- rule (b)
 
 
-def _refusal(report: EvalReport, reference: Baseline) -> RefusalComparison:
-    recorded = reference.slices.get("overall", {})
-    ref_cr = recorded.get("correct_refusal_rate")
-    ref_fr = recorded.get("false_refusal_rate")
+def _recorded(reference: Baseline, metric: str) -> float | None:
+    stat = reference.slices.get("overall", {}).get(metric)
+    return stat.mean if stat is not None else None
+
+
+def _refusal_fields(report: EvalReport, reference: Baseline) -> dict[str, Any]:
     correct = report.overall.correct_refusal_rate
     false = report.overall.false_refusal_rate
-    reference_correct = ref_cr.mean if ref_cr is not None else None
+    return {
+        "correct_refusal": correct.value,
+        "correct_refusal_n": correct.n,
+        "reference_correct_refusal": _recorded(reference, "correct_refusal_rate"),
+        "false_refusal": false.value,
+        "false_refusal_n": false.n,
+        "false_refusal_upper_95": report.overall.false_refusal_upper_95,
+        "reference_false_refusal": _recorded(reference, "false_refusal_rate"),
+    }
+
+
+def point_refusal(report: EvalReport, reference: Baseline) -> RefusalComparison:
+    """Against the all-off v2 run: correct refusal not lower and the false-refusal point estimate not higher."""
+    fields = _refusal_fields(report, reference)
+    correct, ref_correct = fields["correct_refusal"], fields["reference_correct_refusal"]
+    false, ref_false = fields["false_refusal"], fields["reference_false_refusal"]
+    failures: list[str] = []
+    if correct is None or ref_correct is None:
+        failures.append("correct refusal not measured")
+    elif correct < ref_correct - RATE_TOLERANCE:
+        failures.append(f"correct refusal {correct:.4f} below the reference {ref_correct:.4f}")
+    if false is None or ref_false is None:
+        failures.append("false refusal not measured")
+    elif false > ref_false + RATE_TOLERANCE:
+        failures.append(f"false refusal {false:.4f} above the reference {ref_false:.4f}")
+    strictly = not failures and correct > ref_correct + RATE_TOLERANCE
+    return RefusalComparison(method="point", **fields, matched=None, passed=not failures, strictly_improved=strictly, failures=failures)
+
+
+def _dense_scores(output: RunOutput) -> tuple[dict[str, float], dict[str, float], int]:
+    traces = {trace.item_id: trace for trace in output.traces}
+    answerable: dict[str, float] = {}
+    no_answer: dict[str, float] = {}
+    excluded = 0
+    for item in _gated_items(output):
+        trace = traces.get(item.item_id)
+        best = _best_dense(trace, IMAGE_FLOOR) if trace is not None else None
+        if best is None:
+            excluded += 1
+            continue
+        (answerable if item.answerable else no_answer)[item.item_id] = best
+    return answerable, no_answer, excluded
+
+
+def _refused_in_baseline(reference: Baseline, item_ids: set[str]) -> set[str] | None:
+    """Gated no-answer items the baseline refused in every recorded run."""
+    if reference.items is None:
+        return None
+    refused: set[str] = set()
+    for item_id in item_ids:
+        present = [value for value in reference.items.get(item_id, {}).get("correct_refusal_rate") or [] if value is not None]
+        if present and all(value == 1.0 for value in present):
+            refused.add(item_id)
+    return refused
+
+
+def matched_refusal(report: EvalReport, reference: Baseline, source: RunOutput, *, source_name: str) -> RefusalComparison:
+    """Against the committed baseline: a threshold fitted on the source run's dense scores at the baseline's false-refusal
+    rate (calibrate.refusal.fit_threshold) must reach the baseline's correct refusal (research D-28 row)."""
+    fields = _refusal_fields(report, reference)
+    ref_correct, target = fields["reference_correct_refusal"], fields["reference_false_refusal"]
+    if ref_correct is None or target is None:
+        return RefusalComparison(
+            method="matched_false_refusal",
+            **fields,
+            matched=None,
+            passed=False,
+            strictly_improved=False,
+            failures=["the baseline records no overall correct- or false-refusal rate"],
+        )
+    answerable, no_answer, excluded = _dense_scores(source)
+    if not answerable or not no_answer:
+        return RefusalComparison(
+            method="matched_false_refusal",
+            **fields,
+            matched=None,
+            passed=False,
+            strictly_improved=False,
+            failures=[f"run {source_name} has no dense score for its answerable or no-answer items"],
+        )
+    fit = fit_threshold(list(answerable.values()), list(no_answer.values()), target + RATE_TOLERANCE)
+    refused = {item_id for item_id, score in no_answer.items() if score < fit.threshold}
+    no_answer_ids = {item.item_id for item in _gated_items(source) if not item.answerable}
+    baseline_refused = _refused_in_baseline(reference, no_answer_ids)
+    missing = sorted(baseline_refused - refused) if baseline_refused is not None else []
+    matched = MatchedRefusal(
+        source=source_name,
+        target_false_refusal=target,
+        threshold=fit.threshold if math.isfinite(fit.threshold) else None,
+        false_refusal=fit.false_refusal,
+        correct_refusal=fit.correct_refusal,
+        answerable_n=len(answerable),
+        no_answer_n=len(no_answer),
+        excluded_no_similarity=excluded,
+        reference_refused=len(baseline_refused) if baseline_refused is not None else None,
+        covers_reference=None if baseline_refused is None else not missing,
+        missing=missing,
+    )
+    failures: list[str] = []
+    if fit.correct_refusal < ref_correct - RATE_TOLERANCE:
+        failures.append(
+            f"correct refusal {fit.correct_refusal:.4f} at the matched false refusal {fit.false_refusal:.4f} "
+            f"(target {target:.4f}) below the baseline {ref_correct:.4f}"
+        )
+    strictly = not failures and fit.correct_refusal > ref_correct + RATE_TOLERANCE
     return RefusalComparison(
-        correct_refusal=correct.value,
-        correct_refusal_n=correct.n,
-        reference_correct_refusal=reference_correct,
-        passed=correct.value is not None and reference_correct is not None and correct.value > reference_correct,
-        strictly_improved=correct.value is not None and reference_correct is not None and correct.value > reference_correct,
-        false_refusal=false.value,
-        false_refusal_n=false.n,
-        false_refusal_upper_95=report.overall.false_refusal_upper_95,
-        reference_false_refusal=ref_fr.mean if ref_fr is not None else None,
+        method="matched_false_refusal", **fields, matched=matched, passed=not failures, strictly_improved=strictly, failures=failures
     )
 
 
-def _recommended_check(output: RunOutput, reference: Baseline, noise: NoiseConfig, against: str) -> RecommendedCheck:
+def split_category_moves(gate: GateResult) -> tuple[list[GateOffender], list[ReportOnlyMove]]:
+    """Overall and language offenders are drops. A category offender is a drop only with paired support (interval upper
+    end below 0, or at least two items moved); otherwise it is a report-only move."""
+    drops: list[GateOffender] = []
+    moves: list[ReportOnlyMove] = []
+    for drop in gate.offenders:
+        stat = gate.paired.slices.get(drop.slice, {}).get(drop.metric) if gate.paired is not None else None
+        supported = stat is None or (stat.ci_high is not None and stat.ci_high < 0) or stat.n_nonzero >= 2
+        if not drop.slice.startswith(CATEGORY_PREFIX) or supported:
+            drops.append(drop)
+        else:
+            moves.append(ReportOnlyMove(drop=drop, n=stat.n, n_nonzero=stat.n_nonzero, ci_low=stat.ci_low, ci_high=stat.ci_high))
+    return drops, moves
+
+
+def _recommended_check(output: RunOutput, reference: Baseline, noise: NoiseConfig, against: str, refusal: RefusalComparison) -> RecommendedCheck:
     gate = slice_drops(output.report, reference, noise)
-    refusal = _refusal(output.report, reference)
+    drops, moves = split_category_moves(gate)
     return RecommendedCheck(
         against=against,
-        passed=not gate.mismatches and not gate.offenders and refusal.passed,
+        passed=not gate.mismatches and not drops and refusal.passed,
         mismatches=list(gate.mismatches),
-        drops=list(gate.offenders),
+        drops=drops,
+        report_only=moves,
         refusal=refusal,
     )
+
+
+def gate_answers_below_floor(output: RunOutput, reference: RunOutput) -> list[GateBelowFloor]:
+    """No-answer items the rerank gate answered although their best dense score is below the similarity floor (the gate
+    supersedes the floor, D-30). The floor is the one the reference run's floor decisions used."""
+    floors = {
+        trace.refusal.threshold
+        for trace in reference.traces
+        if trace.refusal is not None and trace.refusal.reason in FLOOR_REASONS and trace.refusal.threshold is not None
+    }
+    if len(floors) != 1:
+        return []
+    floor = floors.pop()
+    items = {item.item_id: item for item in output.report.items}
+    rows: list[GateBelowFloor] = []
+    for trace in output.traces:
+        item = items.get(trace.item_id) if trace.item_id else None
+        refusal = trace.refusal
+        if item is None or item.answerable or item.refused or refusal is None:
+            continue
+        if refusal.decision != "answer" or not _gate_decided(refusal):
+            continue
+        best = _best_dense(trace, IMAGE_FLOOR)
+        if best is None or best >= floor:
+            continue
+        rows.append(
+            GateBelowFloor(
+                item_id=item.item_id, split=item.split, cell_key=refusal.cell_key, gate_threshold=refusal.threshold, best_dense=best, floor=floor
+            )
+        )
+    return sorted(rows, key=lambda row: (row.split, row.item_id))
 
 
 def recommended_rule(
@@ -496,16 +651,23 @@ def recommended_rule(
     run: str,
     reference_name: str,
 ) -> RecommendedResult:
-    """D-28 (b): against the committed baseline and against the all-off v2 run (research table, D-28 b and c)."""
-    against_baseline = _recommended_check(output, baseline, noise, "baseline")
-    against_reference = _recommended_check(
-        output, baseline_from_report(reference.report, tag=reference_name), noise, reference_name
+    """D-28 (b), read at the target false-refusal point (research D-28 row; decision 2026-11-25): against the all-off v2
+    run by point estimates, against the committed baseline at a matched false-refusal rate on the all-off run's dense scores."""
+    reference_baseline = baseline_from_report(reference.report, tag=reference_name)
+    against_baseline = _recommended_check(
+        output, baseline, noise, "baseline", matched_refusal(output.report, baseline, reference, source_name=reference_name)
     )
+    against_reference = _recommended_check(
+        output, reference_baseline, noise, reference_name, point_refusal(output.report, reference_baseline)
+    )
+    strict = against_baseline.refusal.strictly_improved and against_reference.refusal.strictly_improved
     return RecommendedResult(
         run=run,
         passed=against_baseline.passed and against_reference.passed,
         baseline=against_baseline,
         reference=against_reference,
+        strict_improvement=StrictImprovement(verdict="improved" if strict else "open", note=STRICT_DONE_NOTE if strict else STRICT_OPEN_NOTE),
+        gate_below_floor=gate_answers_below_floor(output, reference),
     )
 
 
@@ -883,6 +1045,9 @@ def run_phase_comparison(
         )
     if xlg03.verdict == "not_comparable":
         notes.append(f"XLG-03: {xlg03.note}.")
+    if recommended.strict_improvement.verdict == "open":
+        notes.append(f"Success criterion 4 (correct refusal strictly improves): open; {recommended.strict_improvement.note}.")
+    notes += [_below_floor_note(row) for row in recommended.gate_below_floor]
     passed = all(
         (
             legacy.passed,
@@ -951,19 +1116,68 @@ def _switch_section(title: str, result: SwitchResult) -> list[str]:
     return lines
 
 
+def _below_floor_note(row: GateBelowFloor) -> str:
+    cell = row.cell_key or "unknown cell"
+    return (
+        f"Observation ({row.split} split): no-answer item {row.item_id} is answered by the rerank gate ({cell}, threshold "
+        f"{_num(row.gate_threshold)}) with best dense {_num(row.best_dense)}, below the similarity floor {_num(row.floor)}; "
+        "the gate supersedes the floor (D-30). Report only."
+    )
+
+
+def _refusal_lines(r: RefusalComparison) -> list[str]:
+    lines = [
+        f"- Correct refusal: {_num(r.correct_refusal)} (n={r.correct_refusal_n}) vs {_num(r.reference_correct_refusal)}",
+        f"- False refusal: {_num(r.false_refusal)} (n={r.false_refusal_n}, 95% upper {_num(r.false_refusal_upper_95)}) "
+        f"vs {_num(r.reference_false_refusal)}",
+    ]
+    if r.method == "point":
+        lines.append("- Refusal check (point estimates): correct refusal not lower and false refusal not higher")
+    else:
+        lines.append("- Refusal check (matched false refusal): a threshold fitted on the reference dense scores at the baseline's false-refusal rate")
+    m = r.matched
+    if m is not None:
+        coverage = "n/a" if m.covers_reference is None else ("yes" if m.covers_reference else "no")
+        lines += [
+            f"  - fitted on `{m.source}` dense scores (n={m.answerable_n} answerable, {m.no_answer_n} no-answer, "
+            f"{m.excluded_no_similarity} without a score), target false refusal {_num(m.target_false_refusal)}",
+            f"  - threshold {_num(m.threshold)}: false refusal {_num(m.false_refusal)}, correct refusal {_num(m.correct_refusal)} "
+            f"vs the baseline {_num(r.reference_correct_refusal)}",
+            f"  - refused set contains every no-answer item the baseline refused ({m.reference_refused if m.reference_refused is not None else 'n/a'}): "
+            f"{coverage}" + (f"; missing {', '.join(m.missing)}" if m.missing else ""),
+        ]
+    lines.append(f"- Refusal: {_verdict(r.passed)}; strictly higher: {'yes' if r.strictly_improved else 'no'}")
+    lines += [f"- Refusal failure: {failure}" for failure in r.failures]
+    return lines
+
+
+def _report_only_table(moves: list[ReportOnlyMove]) -> list[str]:
+    if not moves:
+        return []
+    lines = [
+        "Report-only category moves (beyond the band, but the paired interval reaches 0 and fewer than two items moved):",
+        "",
+        "| Slice | Metric | Reference | Threshold | Observed | n | n_nonzero | Paired 95% interval |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- |",
+    ]
+    lines += [
+        f"| {m.drop.slice} | {m.drop.metric} | {_num(m.drop.baseline_mean)} | {_num(m.drop.threshold)} | {_num(m.drop.observed)} | "
+        f"{m.n} | {m.n_nonzero} | [{_num(m.ci_low)}, {_num(m.ci_high)}] |"
+        for m in moves
+    ]
+    return [*lines, ""]
+
+
 def _recommended_section(check: RecommendedCheck, label: str) -> list[str]:
-    r = check.refusal
     return [
         f"#### Against {label}: {_verdict(check.passed)}",
         "",
-        f"- Correct refusal: {_num(r.correct_refusal)} (n={r.correct_refusal_n}) vs {_num(r.reference_correct_refusal)}; "
-        f"higher: {'yes' if r.strictly_improved else 'no'}",
-        f"- False refusal: {_num(r.false_refusal)} (n={r.false_refusal_n}, 95% upper {_num(r.false_refusal_upper_95)}) "
-        f"vs {_num(r.reference_false_refusal)}",
+        *_refusal_lines(check.refusal),
         *([f"- Data mismatch: {m}" for m in check.mismatches]),
         "",
         *_drops_table(check.drops),
         "",
+        *_report_only_table(check.report_only),
     ]
 
 
@@ -977,6 +1191,13 @@ def render_markdown(c: PhaseComparison) -> str:
         f"Noise band: a slice drops beyond the noise band when it falls more than max({c.noise_k:g} x baseline spread, "
         f"{c.noise_floor:g}) below its reference. Rules (b) and (c) check the overall, every language and every category "
         "slice on Recall@5, Recall@10 and MRR (the CI gate checks fewer slices).",
+        "",
+        "Rule (b) reading (decision 2026-11-25, research D-28 row): correct refusal is compared at matched false refusal. "
+        "Against the all-off v2 run, correct refusal must not be lower and the false-refusal point estimate not higher. "
+        "Against the committed baseline, a threshold fitted with calibrate.refusal.fit_threshold on the all-off run's dense "
+        "scores at the baseline's false-refusal rate must reach the baseline's correct refusal. Overall and language slices "
+        "keep the band; a category slice counts as a drop only when it is beyond the band and its paired interval ends "
+        "below 0 or at least two items moved.",
         "",
         *[f"- {note}" for note in c.notes],
         "",
@@ -1010,6 +1231,10 @@ def render_markdown(c: PhaseComparison) -> str:
         "",
         *_recommended_section(rec.baseline, "the committed baseline"),
         *_recommended_section(rec.reference, f"`{rec.reference.against}`"),
+        f"Correct refusal strictly improves: {rec.strict_improvement.verdict} ({rec.strict_improvement.note}).",
+        "",
+        *[f"- {_below_floor_note(row)}" for row in rec.gate_below_floor],
+        *([""] if rec.gate_below_floor else []),
         f"Calibration outcome (plan 04-39): {json.dumps(c.calibration_outcome, sort_keys=True)}",
         "",
         "## (c) Switches on and off",
