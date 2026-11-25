@@ -39,11 +39,20 @@ function warnMissingKey(variable: 'COHERE_API_KEY' | 'VOYAGE_API_KEY'): void {
   console.warn(`[RAG Config] Hosted reranker unavailable, set ${variable}`, { variable });
 }
 
-function effectiveProvider(profile: Profile, config: RagConfig, overrides?: RetrievalOverrides): RerankerKind {
+interface EffectiveProvider {
+  provider: RerankerKind;
+  auto: boolean;
+}
+
+/** Resolves RAG_RERANKER=auto from key presence only (config.v2.hasCohereKey); a Voyage key never selects Voyage here. */
+function effectiveProvider(profile: Profile, config: RagConfig, overrides?: RetrievalOverrides): EffectiveProvider {
   if (profile === 'eval' && overrides?.reranker !== undefined) {
-    return overrides.reranker;
+    return { provider: overrides.reranker, auto: false };
   }
-  return config.v2.reranker;
+  const configured = config.v2.reranker;
+  if (configured !== 'auto') return { provider: configured, auto: false };
+  if (config.v2.hasCohereKey && autoHostedProfiles.includes(profile)) return { provider: 'cohere', auto: true };
+  return { provider: autoNoKeyFallback, auto: true };
 }
 
 function resolveTier(profile: Profile, config: RagConfig, overrides?: RetrievalOverrides): RerankTier {
@@ -112,7 +121,7 @@ export function describeReranker(
   queryLanguage: string,
   overrides?: RetrievalOverrides,
 ): { id: RerankerKind; model: string } {
-  const provider = effectiveProvider(profile, config, overrides);
+  const { provider } = effectiveProvider(profile, config, overrides);
   const tier = resolveTier(profile, config, overrides);
   const model = resolveModel(provider, tier, queryLanguage, config, profile, overrides);
   return { id: provider, model: model ?? 'none' };
@@ -145,16 +154,18 @@ export function resolveReranker(
   env: RagEnvInput,
   fetchImpl: FetchFn,
 ): ResolveRerankerResult {
-  const provider = effectiveProvider(profile, config, overrides);
+  const { provider, auto } = effectiveProvider(profile, config, overrides);
   const tier = resolveTier(profile, config, overrides);
+  const autoFields = auto ? { auto: true as const } : {};
+  const fallback = auto && provider !== 'cohere';
 
   if (provider === 'none') {
-    return { reranker: null, provider, model: null, tier, reason: 'disabled' };
+    return { reranker: null, provider, model: null, tier, reason: fallback ? 'auto_fallback' : 'disabled', ...autoFields };
   }
 
   const model = resolveModel(provider, tier, queryLanguage, config, profile, overrides);
   if (model === null) {
-    return { reranker: null, provider, model: null, tier, reason: 'disabled' };
+    return { reranker: null, provider, model: null, tier, reason: 'disabled', ...autoFields };
   }
 
   if (provider === 'cohere' && (env.COHERE_API_KEY ?? '').trim() === '') {
@@ -168,5 +179,5 @@ export function resolveReranker(
 
   const factory = customFactory ?? defaultFactory;
   const reranker = factory(provider, model, env, fetchImpl);
-  return { reranker, provider, model, tier };
+  return { reranker, provider, model, tier, ...(fallback ? { reason: 'auto_fallback' as const } : {}), ...autoFields };
 }
