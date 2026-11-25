@@ -44,6 +44,11 @@
       "title": "Phase",
       "type": "string"
     },
+    "provisional": {
+      "default": false,
+      "title": "Provisional",
+      "type": "boolean"
+    },
     "worker_id": {
       "maxLength": 128,
       "minLength": 1,

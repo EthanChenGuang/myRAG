@@ -239,6 +239,8 @@ class AdvanceRequest(_Contract):
     parse_cache_id: str | None = None
     deadline_ms: int = Field(ge=1, le=40_000)
     cursor: str | None = None
+    # Progressive mode (D-30): the run publishes the provisional fast version and the job stays open for the routed run.
+    provisional: bool = False
 
     @model_validator(mode="after")
     def _post_parse_requires_cache(self) -> AdvanceRequest:

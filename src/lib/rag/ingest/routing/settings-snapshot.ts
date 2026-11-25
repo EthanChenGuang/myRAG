@@ -30,12 +30,8 @@ export function buildJobSettings(input: BuildJobSettingsInput): JobSettingsSnaps
   } = input;
 
   const progressive = isBackfill ? false : queueConfig.parseProgressive;
-  let embedMode = queueConfig.embedBatchMode;
-  if (isBackfill && embedProfileProvider === 'openai') {
-    embedMode = 'batch_api';
-  } else if (isBackfill) {
-    embedMode = 'sync';
-  }
+  // D-35: batch_api only when the switch asks for it, only for backfill jobs and only for OpenAI profiles; everything else embeds in sync.
+  const embedMode = isBackfill && queueConfig.embedBatchMode === 'batch_api' && embedProfileProvider === 'openai' ? 'batch_api' : 'sync';
 
   const snapshot = {
     cloud_allowed: queueConfig.parserAllowCloud,
