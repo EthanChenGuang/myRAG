@@ -3,7 +3,7 @@ import { EmbeddingProfileMismatchError, rpcRows, type RpcClient } from '../backe
 import { getRagDeps } from '../deps';
 import { getIngestDeps } from '../ingest/deps';
 import { loadIngestConfig } from '../ingest/config';
-import { canonicalModelId, getEmbeddingProvider } from './registry';
+import { canonicalModelId, getEmbeddingProviderFor } from './registry';
 import type { EmbeddingProvider, EmbeddingStorage } from './types';
 
 export type EmbeddingProfileState = 'available' | 'backfilling' | 'active' | 'retired';
@@ -290,7 +290,7 @@ function providerKeyConfigured(providerId: string): boolean {
 function mismatchReason(profile: EmbeddingProfile): StartupMismatchReason | null {
   let provider: EmbeddingProvider;
   try {
-    provider = getEmbeddingProvider(profile.provider);
+    provider = getEmbeddingProviderFor(profile.provider, profile.model);
   } catch {
     return 'provider_unconfigured';
   }

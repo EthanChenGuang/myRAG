@@ -1,6 +1,6 @@
 import { isEmbeddingProfilesEnabled, ProfileUnavailableError } from '../../embeddings/active-profile';
 import { EmbeddingProfileMismatch } from '../../embeddings/mrl';
-import { canonicalModelId, getEmbeddingProvider } from '../../embeddings/registry';
+import { canonicalModelId, getEmbeddingProviderFor } from '../../embeddings/registry';
 import type { RpcClient } from '../../backend/supabase-rpc';
 import { backfillScope } from '../../tenant/backfill-scope';
 import type { TenantScope } from '../../tenant/scope';
@@ -377,7 +377,7 @@ function assertProviderFits(target: EmbeddingTarget): void {
   const { profile } = target;
   let provider;
   try {
-    provider = getEmbeddingProvider(profile.provider);
+    provider = getEmbeddingProviderFor(profile.provider, profile.model);
   } catch {
     throw new TargetFailure('embed_failed');
   }
@@ -405,7 +405,7 @@ async function embedForTarget(target: EmbeddingTarget, texts: string[], signal: 
         assertShape(target, part, group.length);
         vectors.push(...part);
       } else {
-        const output = await getEmbeddingProvider(profile.provider).embedDocuments(group, { dims: profile.dims, signal });
+        const output = await getEmbeddingProviderFor(profile.provider, profile.model).embedDocuments(group, { dims: profile.dims, signal });
         if (canonicalModelId(output.model) !== canonicalModelId(profile.model)) throw new TargetFailure('embedding_profile_mismatch');
         assertShape(target, output.vectors, group.length);
         vectors.push(...output.vectors);

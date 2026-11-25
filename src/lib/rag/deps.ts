@@ -6,7 +6,7 @@ import type { RagEnvInput } from './config';
 import type { EmbeddingProfile } from './embeddings/active-profile';
 import { EmbeddingProfileMismatch } from './embeddings/mrl';
 import { embedText } from './embeddings/openai';
-import { getEmbeddingProvider } from './embeddings/registry';
+import { getEmbeddingProviderFor } from './embeddings/registry';
 import { readSecurityConfig, type SecurityConfig } from './security/config';
 
 export interface ProfileQueryEmbedding {
@@ -73,13 +73,13 @@ const defaults: RagDeps = {
   adminClient: () => getSupabaseAdmin() as SupabaseClient | null,
   embedder: embedText,
   profileEmbedder: async (text, { signal, profile }) => {
-    const output = await getEmbeddingProvider(profile.provider).embedQuery(text, { dims: profile.dims, signal });
+    const output = await getEmbeddingProviderFor(profile.provider, profile.model).embedQuery(text, { dims: profile.dims, signal });
     const vector = output.vectors[0];
     if (!vector) throw new EmbeddingProfileMismatch('dims', 0, profile.dims);
     return { vector, model: output.model };
   },
   profileBatchEmbedder: async (texts, { signal, profile }) => {
-    const provider = getEmbeddingProvider(profile.provider);
+    const provider = getEmbeddingProviderFor(profile.provider, profile.model);
     if (!provider.embedQueries) return null;
     const output = await provider.embedQueries(texts, { dims: profile.dims, signal });
     return output.vectors.map((vector) => ({ vector, model: output.model }));

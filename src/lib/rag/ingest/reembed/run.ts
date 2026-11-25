@@ -1,7 +1,7 @@
 import type { RpcClient } from '../../backend/supabase-rpc';
 import { getBackfillingProfiles, isEmbeddingProfilesEnabled, listEmbeddingProfiles, refreshAfterOperation } from '../../embeddings/active-profile';
 import { EmbeddingProfileMismatch } from '../../embeddings/mrl';
-import { canonicalModelId, getEmbeddingProvider } from '../../embeddings/registry';
+import { canonicalModelId, getEmbeddingProviderFor } from '../../embeddings/registry';
 import type { EmbedOutput, EmbeddingProvider } from '../../embeddings/types';
 import type { DocType } from '../profiles/load';
 import { getProcessingProfile } from '../profiles/load';
@@ -280,7 +280,7 @@ export async function runReembed(input: RunReembedInput): Promise<ReembedReport>
 
   let provider: EmbeddingProvider;
   try {
-    provider = getEmbeddingProvider(run.provider);
+    provider = getEmbeddingProviderFor(run.provider, run.model);
   } catch {
     return fail('provider_unconfigured');
   }
@@ -409,7 +409,7 @@ export async function dryRunReembed(input: DryRunInput): Promise<DryRunReport> {
     }
   }
 
-  const cost = estimateReembedCost(profile.provider, totals);
+  const cost = estimateReembedCost(profile.provider, totals, profile.model);
   if (deriveFrom !== null) {
     cost.note = 'Derived from stored vectors: no provider call, no provider cost.';
     cost.estimated = false;
