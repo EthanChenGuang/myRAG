@@ -50,6 +50,16 @@ from rag_sidecar.contracts.ingest import (
     ProcessingProfile,
     ProcessingProfileSet,
 )
+from rag_sidecar.contracts.injection import (
+    InjectionClassifyItem,
+    InjectionClassifyRequest,
+    InjectionClassifyResponse,
+    InjectionClassifyResult,
+    InjectionDetectorConfig,
+    LakeraConfig,
+    PromptGuardConfig,
+    VerdictCacheConfig,
+)
 from rag_sidecar.contracts.judge import JudgeConfig, JudgeItemScore, JudgeReport, OnlineJudgeConfig
 from rag_sidecar.contracts.latency import LatencyBudgets, ProfileBudget, StageLatency
 from rag_sidecar.contracts.profiles import (
@@ -143,6 +153,14 @@ __all__ = [
     "EmbeddingTextTemplate",
     "InjectionRule",
     "InjectionRuleSet",
+    "InjectionClassifyItem",
+    "InjectionClassifyRequest",
+    "InjectionClassifyResponse",
+    "InjectionClassifyResult",
+    "InjectionDetectorConfig",
+    "LakeraConfig",
+    "PromptGuardConfig",
+    "VerdictCacheConfig",
     "InvoiceExtractRequest",
     "InvoiceFields",
     "InvoiceLineItem",
