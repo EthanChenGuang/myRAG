@@ -4,8 +4,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import type { PGlite } from '@electric-sql/pglite';
-import { createEmptyFixtureDatabase, type DeploymentMode, type FixtureDatabase } from '../../eval/harness/pglite-supabase.mts';
+import { PGlite } from '@electric-sql/pglite';
+import { pg_trgm } from '@electric-sql/pglite/contrib/pg_trgm';
+import { vector } from '@electric-sql/pglite-pgvector';
+import {
+  createEmptyFixtureDatabase,
+  SUPABASE_GRANTS_SQL,
+  SUPABASE_SHIM_SQL,
+  type DeploymentMode,
+  type FixtureDatabase,
+} from '../../eval/harness/pglite-supabase.mts';
 import { applyMigrationFiles, applyMigrations, migrationFiles } from '../../eval/harness/migrations.mts';
 import { assertNoClientCallableRagFunctions } from '../helpers/rag-client-grants.ts';
 
@@ -95,7 +103,7 @@ export async function catalogDump(db: PGlite): Promise<CatalogDump> {
     policies: await rows(
       db,
       `SELECT schemaname AS schema, tablename AS "table", policyname AS name, cmd, roles::text AS roles, qual, with_check
-       FROM pg_policies WHERE schemaname = 'public'`,
+       FROM pg_policies WHERE schemaname IN ('public', 'realtime')`,
     ),
   };
 }
@@ -232,6 +240,139 @@ for (const mode of MODES) {
         assert.deepEqual(differences(dumpBefore, dumpAfter), []);
       } finally {
         await empty.db.close();
+      }
+    });
+  });
+}
+
+// Phase 3.1 fold (plan 03.1-52): the setup files end with migrations 0351 to 0359 of their mode, appended verbatim in loader order.
+const PHASE_31_HEADER = [
+  '------------------------------------------',
+  '-- Phase 3.1: Tiered parsing, ingestion queue and bulk backfill (migrations 0351-0359)',
+  '------------------------------------------',
+].join('\n');
+const PHASE_31_STEMS = /^supabase\/migrations\/035[1-9]_/;
+const OTHER_MODE: Record<DeploymentMode, DeploymentMode> = { 'single-tenant': 'multi-tenant', 'multi-tenant': 'single-tenant' };
+
+const phase31Files = (mode: DeploymentMode): string[] => migrationFiles(mode).filter((file) => PHASE_31_STEMS.test(file));
+
+/** The Phase 3.1 section as the fold writes it: the header, then each migration file under a `-- >>> path` line. */
+export function phase31Section(mode: DeploymentMode): string {
+  const blocks = phase31Files(mode).map((relpath) => {
+    const content = fs.readFileSync(path.join(REPO_ROOT, relpath), 'utf8');
+    return `-- >>> ${relpath}\n${content}${content.endsWith('\n') ? '' : '\n'}`;
+  });
+  return `${PHASE_31_HEADER}\n\n${blocks.join('\n')}`;
+}
+
+function splitFoldedSetup(mode: DeploymentMode): { before: string; section: string } {
+  const text = fs.readFileSync(path.join(REPO_ROOT, FOLDED_SETUP[mode]), 'utf8');
+  const at = text.indexOf(PHASE_31_HEADER);
+  assert.ok(at > 0, `${FOLDED_SETUP[mode]} has no Phase 3.1 section`);
+  return { before: text.slice(0, at), section: text.slice(at) };
+}
+
+/** Supabase Realtime as far as 0353 needs it: realtime.messages with RLS, realtime.topic() and realtime.send(). */
+const REALTIME_STUB_SQL = `
+CREATE SCHEMA IF NOT EXISTS realtime;
+CREATE TABLE IF NOT EXISTS realtime.messages (id bigserial PRIMARY KEY, topic text NOT NULL, extension text NOT NULL, payload jsonb, event text, private boolean);
+ALTER TABLE realtime.messages ENABLE ROW LEVEL SECURITY;
+CREATE OR REPLACE FUNCTION realtime.topic() RETURNS text LANGUAGE sql STABLE AS $$ SELECT NULLIF(current_setting('realtime.topic', true), '') $$;
+CREATE OR REPLACE FUNCTION realtime.send(payload jsonb, event text, topic text, private boolean) RETURNS void LANGUAGE sql AS $$ SELECT $$;`;
+
+/** A fresh database with the Supabase shim, optionally Realtime, then the given SQL texts in order. */
+async function freshDatabase(sqlTexts: string[], options: { realtime?: boolean } = {}): Promise<PGlite> {
+  const db = new PGlite({ extensions: { vector, pg_trgm } });
+  try {
+    await db.waitReady;
+    await db.exec(SUPABASE_SHIM_SQL);
+    await db.exec(SUPABASE_GRANTS_SQL);
+    if (options.realtime) await db.exec(REALTIME_STUB_SQL);
+    for (const sql of sqlTexts) await db.exec(sql);
+    return db;
+  } catch (error) {
+    await db.close().catch(() => undefined);
+    throw error;
+  }
+}
+
+const readRepo = (relpath: string): string => fs.readFileSync(path.join(REPO_ROOT, relpath), 'utf8');
+
+async function functionSource(db: PGlite, signature: string): Promise<string | null> {
+  const result = await db.query<{ definition: string | null }>('SELECT pg_get_functiondef(to_regprocedure($1)) AS definition', [signature]);
+  return result.rows[0]?.definition ?? null;
+}
+
+async function realtimePolicies(db: PGlite): Promise<string[]> {
+  return rows(db, "SELECT policyname AS name, cmd, roles::text AS roles, qual FROM pg_policies WHERE schemaname = 'realtime'");
+}
+
+const TOPIC_RULE = 'rag_ingest_realtime_topic_allowed(text)';
+
+for (const mode of MODES) {
+  describe(`${mode} setup: Phase 3.1 fold`, () => {
+    test(`${mode} setup ends with migrations 0351 to 0359 of this mode, verbatim and in loader order`, () => {
+      const files = phase31Files(mode);
+      assert.ok(files.length >= 10, `expected the 0351-0359 files of ${mode}, saw ${files.length}`);
+      assert.ok(files.includes(`supabase/migrations/0353_ingestion_transitions.${mode}.sql`));
+      assert.ok(!files.includes(`supabase/migrations/0353_ingestion_transitions.${OTHER_MODE[mode]}.sql`));
+      const { section } = splitFoldedSetup(mode);
+      assert.equal(section, phase31Section(mode));
+    });
+
+    test(`${mode} setup alone equals the pre-3.1 setup plus migrations 0351 to 0359`, async () => {
+      const { before } = splitFoldedSetup(mode);
+      const folded = await freshDatabase([readRepo(FOLDED_SETUP[mode])]);
+      const migrated = await freshDatabase([before, ...phase31Files(mode).map(readRepo)]);
+      try {
+        const foldedDump = await catalogDump(folded);
+        assert.ok(foldedDump.columns.some((row) => row.includes('"table":"ingestion_jobs"')), 'ingestion_jobs is in the setup file');
+        assert.deepEqual(differences(foldedDump, await catalogDump(migrated)), []);
+      } finally {
+        await folded.close();
+        await migrated.close();
+      }
+    });
+
+    test(`${mode} setup alone carries this mode's Realtime topic rule and not the other mode's`, async () => {
+      const folded = await freshDatabase([readRepo(FOLDED_SETUP[mode])]);
+      const own = await freshDatabase([readRepo(frozenSetup(mode)), ...migrationFiles(mode).map(readRepo)]);
+      const other = await freshDatabase([readRepo(frozenSetup(mode)), ...migrationFiles(mode).map(readRepo)]);
+      try {
+        await other.exec(readRepo(`supabase/migrations/0353_ingestion_transitions.${OTHER_MODE[mode]}.sql`));
+        const source = await functionSource(folded, TOPIC_RULE);
+        assert.ok(source, `${TOPIC_RULE} is in ${FOLDED_SETUP[mode]}`);
+        assert.equal(source, await functionSource(own, TOPIC_RULE));
+        assert.notEqual(source, await functionSource(other, TOPIC_RULE));
+      } finally {
+        await folded.close();
+        await own.close();
+        await other.close();
+      }
+      const code = readRepo(FOLDED_SETUP[mode])
+        .split('\n')
+        .filter((line) => !/^\s*--/.test(line))
+        .join('\n');
+      if (mode === 'multi-tenant') assert.ok(!code.includes('rag-ingest:s:default'), 'the multi-tenant setup carries the single-tenant topic');
+      else assert.ok(!code.includes("'rag-ingest:u:'"), 'the single-tenant setup carries the multi-tenant topic');
+    });
+
+    test(`${mode} with Supabase Realtime: every migration applies in loader order and the folded setup alone has the same broadcast policy`, async () => {
+      const migrated = await freshDatabase([readRepo(frozenSetup(mode)), ...migrationFiles(mode).map(readRepo)], { realtime: true });
+      const folded = await freshDatabase([readRepo(FOLDED_SETUP[mode])], { realtime: true });
+      const foldedThenMigrated = await freshDatabase([readRepo(FOLDED_SETUP[mode]), ...migrationFiles(mode).map(readRepo)], { realtime: true });
+      try {
+        const policies = await realtimePolicies(migrated);
+        assert.equal(policies.length, 1, 'rag_ingest_broadcast_read exists on realtime.messages');
+        assert.match(policies[0] as string, /rag_ingest_broadcast_read/);
+        assert.match(policies[0] as string, /rag_ingest_realtime_topic_allowed/);
+        assert.deepEqual(await realtimePolicies(folded), policies);
+        assert.equal(await functionSource(folded, TOPIC_RULE), await functionSource(migrated, TOPIC_RULE));
+        assert.deepEqual(differences(await catalogDump(foldedThenMigrated), await catalogDump(migrated)), []);
+      } finally {
+        await migrated.close();
+        await folded.close();
+        await foldedThenMigrated.close();
       }
     });
   });
