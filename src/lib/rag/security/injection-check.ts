@@ -1,6 +1,6 @@
-import type { InjectionCheckMode } from './config';
-import { scanText } from './injection-rules';
-import type { InjectionSummary, ReferencedSection, ReferencedState } from '../types';
+import type { InjectionCheckMode, SecurityConfig } from './config';
+import { injectionRulesVersion, scanText } from './injection-rules';
+import type { InjectionSummary, Profile, ReferencedSection, ReferencedState } from '../types';
 
 export type ActiveInjectionMode = Exclude<InjectionCheckMode, 'off'>;
 
@@ -25,7 +25,7 @@ export interface InjectionVerdict {
 
 export type InjectionVerdicts = ReadonlyMap<string, InjectionVerdict>;
 
-interface ItemCandidate {
+export interface ItemCandidate {
   chunk_id: string;
   document_id: string;
   content: string;
@@ -62,8 +62,30 @@ export function injectionItems(
   return items;
 }
 
+export type InjectionDetectorId = 'rules' | 'prompt_guard' | 'lakera';
+
+const RULES_ONLY_PROFILES: readonly Profile[] = ['voice', 'media'];
+
+/** ML detectors with a client in this build; empty until plan 05.1-21 wires Prompt Guard and Lakera. */
+const WIRED_ML_DETECTORS: readonly Exclude<InjectionDetectorId, 'rules'>[] = [];
+
+/** The detectors a profile runs: voice and media run the rules only whatever the ML switches say (D-09, A-11). */
+export function injectionDetectorsFor(profile: Profile, config: Pick<SecurityConfig, 'promptGuard' | 'lakera'>): InjectionDetectorId[] {
+  if (RULES_ONLY_PROFILES.includes(profile)) return ['rules'];
+  const enabled = WIRED_ML_DETECTORS.filter((id) => (id === 'prompt_guard' ? config.promptGuard : config.lakera));
+  return ['rules', ...enabled];
+}
+
+/** Detector versions recorded on the stage entry, e.g. rules@8eade169ab89. */
+export function injectionVersions(detectors: readonly InjectionDetectorId[]): string[] {
+  return detectors.includes('rules') ? [`rules@${injectionRulesVersion()}`] : [];
+}
+
 /** Runs the rules on every item synchronously; never awaits, so a stage timeout cannot skip it. */
-export function runInjectionCheck(input: { items: readonly InjectionCheckItem[]; mode: ActiveInjectionMode }): InjectionVerdicts {
+export function runInjectionCheck(input: {
+  items: readonly InjectionCheckItem[];
+  mode: ActiveInjectionMode;
+}): InjectionVerdicts {
   const verdicts = new Map<string, InjectionVerdict>();
   for (const item of input.items) {
     try {
@@ -159,6 +181,8 @@ export function applyInjectionAction<C extends ItemCandidate>(input: {
   }
 
   const flaggedItems = flaggedChunks.size + flaggedSections.size;
+  const dropCount = mode === 'drop' ? flaggedItems : 0;
+  const downweightCount = mode === 'downweight' ? flaggedItems : 0;
   return {
     candidates,
     referenced,
@@ -166,8 +190,8 @@ export function applyInjectionAction<C extends ItemCandidate>(input: {
     counts: {
       checked: items.length,
       flagged: flaggedItems,
-      dropped: mode === 'drop' ? flaggedItems : 0,
-      downweighted: mode === 'downweight' ? flaggedItems : 0,
+      dropped: dropCount,
+      downweighted: downweightCount,
     },
     summary: {
       mode,
