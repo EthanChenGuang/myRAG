@@ -24,7 +24,8 @@ from rag_sidecar.contracts import (
     SidecarReady,
 )
 from rag_sidecar.extract.invoice import extract_invoice
-from rag_sidecar.groundedness.scorer import Scorer
+from rag_sidecar.groundedness.router import build_groundedness_router
+from rag_sidecar.groundedness.scorer import Scorer, available_scorer_names, build_scorers, close_scorers
 from rag_sidecar.ingest.app_client import AppClient
 from rag_sidecar.ingest.ledger_client import LedgerClient
 from rag_sidecar.ingest.pool import UPLOAD_PRIORITY, PriorityPool
@@ -88,6 +89,7 @@ def create_app(
     active_converter = converter if converter is not None else default_converter()
     docling_in_use = converter is None and active_converter is not None
     runner = JobRunner(resolved, active_converter) if active_converter is not None else None
+    active_scorers: Mapping[str, Scorer] = scorers if scorers is not None else build_scorers(resolved)
 
     ingest_worker: IngestWorker | None = None
     ingest_pool: PriorityPool | None = None
@@ -153,6 +155,7 @@ def create_app(
             if ingest_task is not None:
                 with contextlib.suppress(asyncio.CancelledError):
                     await ingest_task
+            await close_scorers(active_scorers)
             if runner is not None:
                 runner.close()
 
@@ -181,8 +184,8 @@ def create_app(
             if not ok:
                 not_ready = SidecarReady(status="not_ready", reason=reason or "worker_not_ready")
                 return JSONResponse(status_code=503, content=not_ready.model_dump(mode="json"))
-            return SidecarReady(status="ready", reason="worker_running")
-        return SidecarReady(status="ready")
+            return SidecarReady(status="ready", reason="worker_running", scorers=available_scorer_names(active_scorers))
+        return SidecarReady(status="ready", scorers=available_scorer_names(active_scorers))
 
     v1 = APIRouter(prefix="/v1")
 
@@ -337,6 +340,7 @@ def create_app(
         )
         return JSONResponse(content=fields.model_dump(mode="json"))
 
+    v1.include_router(build_groundedness_router(resolved, active_scorers))
     app.include_router(v1)
     return app
 
