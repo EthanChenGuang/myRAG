@@ -119,6 +119,8 @@ const UPDATE_SQL =
 const LIST_SQL = 'SELECT * FROM rag_scope_vocabulary_list(p_actor => $1, p_tenant_key => $2)';
 const FOR_SQL = 'SELECT * FROM rag_scope_vocabulary_for(p_tenant_key => $1)';
 const SET_SQL = 'SELECT * FROM rag_set_document_scopes(p_document_id => $1, p_tenant_key => $2, p_scopes => $3::text[], p_actor => $4)';
+const DOCS_SQL =
+  'SELECT * FROM rag_list_documents_with_scopes(p_actor => $1, p_tenant_key => $2, p_scopes => $3::text[], p_query => $4, p_limit => $5, p_offset => $6, p_filter => $7)';
 
 async function create(db: PGlite, actor: string, key: string, dimension: string, value: string, label: string, aliases: string[] = []): Promise<Row> {
   return (await rows(db, CREATE_SQL, [actor, key, dimension, value, label, aliases]))[0] as Row;
@@ -229,6 +231,7 @@ describe('scope tags across two tenants (multi-tenant)', () => {
     );
     const names = found.map((row) => String(row.sig).replace(/\(.*$/, '')).sort();
     for (const expected of [
+      'rag_list_documents_with_scopes',
       'rag_purge_hook_scope_tags',
       'rag_scope_vocabulary_create',
       'rag_scope_vocabulary_for',
@@ -372,6 +375,101 @@ describe('scope vocabulary rules and canonical tag lists (multi-tenant)', () => 
     assert.deepEqual(keys, sorted);
     assert.equal(listed[0]?.dimension, 'region');
     assert.equal(listed.at(-1)?.dimension, 'department');
+  });
+});
+
+describe('document list with tags (multi-tenant)', () => {
+  let db: PGlite;
+  let tagged: string;
+  let both: string;
+  let untagged: string;
+  let suggested: string;
+  let percent: string;
+  let foreign: string;
+
+  const list = async (actor: string, key: string, options: { scopes?: string[] | null; query?: string | null; limit?: number; offset?: number; filter?: string } = {}) =>
+    rows(db, DOCS_SQL, [actor, key, options.scopes ?? null, options.query ?? null, options.limit ?? 50, options.offset ?? 0, options.filter ?? 'all']);
+  const ids = (found: Row[]) => found.map((row) => String(row.id)).sort();
+
+  before(async () => {
+    db = (await createTwoTenantDatabase()).db;
+    await db.query('INSERT INTO auth.users (id, email) VALUES ($1, $2), ($3, $4)', [O_ADMIN, 'o-admin@example.invalid', P_OWNER, 'p-owner@example.invalid']);
+    await db.query('INSERT INTO organizations (id, name, slug, owner_id, is_personal) VALUES ($1, $2, $3, $4, false)', [ORG_P, 'Tenant P', 'tenant-p-41l', P_OWNER]);
+    await db.query("INSERT INTO organization_members (organization_id, user_id, role) VALUES ($1, $2, 'admin'), ($3, $4, 'owner')", [ORG_O, O_ADMIN, ORG_P, P_OWNER]);
+    await create(db, O_ADMIN, KEY_O, 'region', 'a1', 'Area one');
+    await create(db, O_ADMIN, KEY_O, 'region', 'a2', 'Area two');
+    await create(db, O_ADMIN, KEY_O, 'department', 'd1', 'Unit one');
+    await create(db, P_OWNER, KEY_P, 'region', 'a1', 'Area one');
+    tagged = await publishedDocument(db, WORKSPACE_O, 'list-tagged', 'alpha-notes.md');
+    both = await publishedDocument(db, WORKSPACE_O, 'list-both', 'beta-notes.md');
+    untagged = await publishedDocument(db, WORKSPACE_O, 'list-untagged', 'gamma-notes.md');
+    suggested = await publishedDocument(db, WORKSPACE_O, 'list-suggested', 'delta-notes.md');
+    percent = await publishedDocument(db, WORKSPACE_O, 'list-percent', 'report_50%.md');
+    foreign = await publishedDocument(db, WORKSPACE_P, 'list-foreign', 'alpha-notes.md');
+    await rows(db, SET_SQL, [tagged, KEY_O, ['region:a1'], O_ADMIN]);
+    await rows(db, SET_SQL, [both, KEY_O, ['region:a2', 'department:d1'], O_ADMIN]);
+    await rows(db, SET_SQL, [suggested, KEY_O, ['region:a1'], O_ADMIN]);
+    await rows(db, SET_SQL, [foreign, KEY_P, ['region:a1'], P_OWNER]);
+    await rows(db, `UPDATE documents SET metadata = metadata || $2::jsonb WHERE id = $1`, [
+      suggested,
+      JSON.stringify({ scope_suggestions: { suggestions: [{ dimension: 'department', value: 'd1', source: 'rule' }] } }),
+    ]);
+  });
+
+  after(async () => {
+    await db?.close();
+  });
+
+  test("lists the workspace's current documents with tags, suggestions and totals, never another tenant's and never any document text", async () => {
+    const found = await list(O_ADMIN, KEY_O);
+    assert.ok(!ids(found).includes(foreign));
+    assert.ok([tagged, both, untagged, suggested, percent].every((id) => ids(found).includes(id)));
+    const row = found.find((item) => item.id === both) as Row;
+    assert.deepEqual(row.scopes, ['department:d1', 'region:a2']);
+    assert.equal(row.filename, 'beta-notes.md');
+    assert.equal(row.doc_type, 'general');
+    assert.deepEqual((found.find((item) => item.id === suggested) as Row).suggestions, [{ dimension: 'department', value: 'd1', source: 'rule' }]);
+    assert.deepEqual(row.suggestions, []);
+    assert.equal(Number(row.total_count), found.length);
+    assert.equal(Number(row.suggested_count), 1);
+    for (const column of Object.keys(row)) assert.ok(!/content|text|chunk|tenant/.test(column), column);
+    assert.deepEqual(await list(P_OWNER, KEY_O), []);
+  });
+
+  test('the tag filter is OR within a dimension and AND across dimensions', async () => {
+    assert.deepEqual(ids(await list(O_ADMIN, KEY_O, { scopes: ['region:a1'] })), [tagged, suggested].sort());
+    assert.deepEqual(ids(await list(O_ADMIN, KEY_O, { scopes: ['region:a1', 'region:a2'] })), [tagged, both, suggested].sort());
+    assert.deepEqual(ids(await list(O_ADMIN, KEY_O, { scopes: ['region:a2', 'department:d1'] })), [both]);
+    assert.deepEqual(ids(await list(O_ADMIN, KEY_O, { scopes: ['region:a1', 'department:d1'] })), []);
+  });
+
+  test('the views: with suggestions, untagged, all', async () => {
+    assert.deepEqual(ids(await list(O_ADMIN, KEY_O, { filter: 'suggested' })), [suggested]);
+    const bare = ids(await list(O_ADMIN, KEY_O, { filter: 'untagged' }));
+    assert.ok(bare.includes(untagged) && bare.includes(percent));
+    assert.ok(!bare.includes(tagged) && !bare.includes(both));
+    assert.match((await failure(db, DOCS_SQL, [O_ADMIN, KEY_O, null, null, 50, 0, 'everything'])) ?? '', /^invalid_argument/);
+  });
+
+  test('the file-name search is case-insensitive and treats % and _ as literal characters', async () => {
+    assert.deepEqual(ids(await list(O_ADMIN, KEY_O, { query: 'ALPHA' })), [tagged]);
+    assert.deepEqual(ids(await list(O_ADMIN, KEY_O, { query: '%' })), [percent]);
+    assert.deepEqual(ids(await list(O_ADMIN, KEY_O, { query: '_5' })), [percent]);
+    assert.deepEqual(ids(await list(O_ADMIN, KEY_O, { query: "notes.md' OR '1'='1" })), []);
+  });
+
+  test('pages are bounded and the total counts the whole filtered set', async () => {
+    const page = await list(O_ADMIN, KEY_O, { limit: 2, offset: 0 });
+    const all = await list(O_ADMIN, KEY_O);
+    assert.equal(page.length, 2);
+    assert.equal(Number(page[0]?.total_count), all.length);
+    assert.equal((await list(O_ADMIN, KEY_O, { limit: 1000 })).length, all.length);
+    assert.deepEqual(ids([...page, ...(await list(O_ADMIN, KEY_O, { limit: 2, offset: 2 })), ...(await list(O_ADMIN, KEY_O, { limit: 50, offset: 4 }))]), ids(all));
+  });
+
+  test('a document that is no longer current is not listed', async () => {
+    await rows(db, 'UPDATE documents SET is_current = false WHERE id = $1', [untagged]);
+    assert.ok(!ids(await list(O_ADMIN, KEY_O)).includes(untagged));
   });
 });
 

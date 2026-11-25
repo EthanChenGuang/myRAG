@@ -331,3 +331,169 @@ describe('scope tag routes: vocabulary rules', () => {
     expect(scopeCalls()[0]?.args.p_scopes).toEqual([]);
   });
 });
+
+const DOC_ROW = {
+  id: DOC_ID,
+  filename: FILE_NAME,
+  doc_type: 'general',
+  status: 'ready',
+  version: 1,
+  scopes: ['region:a1'],
+  suggestions: [
+    { dimension: 'department', value: 'd1', source: 'rule' },
+    { dimension: 'department', value: 'd2', source: 'model', note: '<img src=x onerror=alert(1)>' },
+    { dimension: 'country', value: 'x', source: 'rule' },
+  ],
+  uploaded_at: '2026-11-24T10:00:00.000Z',
+  content: 'document text that must never be answered',
+  total_count: 1,
+  suggested_count: 1,
+};
+
+describe('scope tag routes: document list, switch and workspaces', () => {
+  beforeEach(() => {
+    resetState();
+    state.outcomes.rag_list_documents_with_scopes = { data: [DOC_ROW], error: null };
+    for (const method of ['warn', 'error', 'log', 'info'] as const) vi.spyOn(console, method).mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.resetModules();
+    delete process.env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE;
+  });
+
+  it('lists documents with id, file name, type, tags and allow-listed suggestions, 50 per page, never any document text', async () => {
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    const response = await loaded.documents.GET(req('/api/rag/admin/documents?scopes=region:a1&scopes=department:d1&q=report'));
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    const body = await response.json();
+    expect(body).toEqual({
+      success: true,
+      total: 1,
+      suggested_total: 1,
+      limit: 50,
+      offset: 0,
+      items: [
+        {
+          id: DOC_ID,
+          file_name: FILE_NAME,
+          doc_type: 'general',
+          status: 'ready',
+          version: 1,
+          tags: ['region:a1'],
+          suggestions: [
+            { dimension: 'department', value: 'd1', source: 'rule' },
+            { dimension: 'department', value: 'd2', source: 'model' },
+          ],
+          uploaded_at: '2026-11-24T10:00:00.000Z',
+        },
+      ],
+    });
+    expect(JSON.stringify(body)).not.toContain('document text');
+    expect(scopeCalls()).toEqual([
+      {
+        fn: 'rag_list_documents_with_scopes',
+        args: {
+          p_actor: ADMIN_ID,
+          p_tenant_key: 's:default',
+          p_scopes: ['department:d1', 'region:a1'],
+          p_query: 'report',
+          p_limit: 50,
+          p_offset: 0,
+          p_filter: 'all',
+        },
+      },
+    ]);
+  });
+
+  it('passes the view filter and refuses a malformed tag, view or page with 400', async () => {
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    expect((await loaded.documents.GET(req('/api/rag/admin/documents?filter=untagged&limit=10&offset=20'))).status).toBe(200);
+    expect(scopeCalls()[0]?.args).toMatchObject({ p_filter: 'untagged', p_limit: 10, p_offset: 20, p_scopes: null, p_query: null });
+    for (const query of ['scopes=region', 'scopes=country:a1', 'filter=everything', 'limit=101', 'offset=-1', `q=${'x'.repeat(201)}`]) {
+      expect((await loaded.documents.GET(req(`/api/rag/admin/documents?${query}`))).status, query).toBe(400);
+    }
+    expect(scopeCalls()).toHaveLength(1);
+  });
+
+  it('answers 404 Not found on every route while RAG_SCOPE_TAGS is false, before any lookup, and writes nothing', async () => {
+    state.scopeTags = 'false';
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    const answers = [
+      await loaded.vocabulary.GET(req('/api/rag/admin/scope-vocabulary')),
+      await loaded.vocabulary.POST(req('/api/rag/admin/scope-vocabulary', { method: 'POST', body: { dimension: 'region', value: 'a1', label: 'Area one' } })),
+      await loaded.vocabulary.PATCH(req('/api/rag/admin/scope-vocabulary', { method: 'PATCH', body: { id: ENTRY_ID, active: false } })),
+      await loaded.documents.GET(req('/api/rag/admin/documents')),
+      await loaded.scopes.PUT(req(`/api/rag/admin/documents/${DOC_ID}/scopes`, { method: 'PUT', body: { scopes: [] } }), params(DOC_ID)),
+    ];
+    for (const answer of answers) {
+      expect(answer.status).toBe(404);
+      expect(await answer.json()).toEqual({ success: false, error: 'Not found' });
+    }
+    expect(state.rpcCalls).toEqual([]);
+  });
+
+  it('keeps working for reading and tagging with the legacy ingest pipeline', async () => {
+    state.pipeline = 'legacy';
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    expect((await loaded.documents.GET(req('/api/rag/admin/documents'))).status).toBe(200);
+    expect((await loaded.scopes.PUT(req(`/api/rag/admin/documents/${DOC_ID}/scopes`, { method: 'PUT', body: { scopes: ['region:a1'] } }), params(DOC_ID))).status).toBe(200);
+  });
+
+  describe('organization admins (multi-tenant)', () => {
+    beforeEach(() => {
+      state.mode = 'multi-tenant';
+      state.tables.organization_members = [
+        { organization_id: ORG_O, user_id: ORG_ADMIN_ID, role: 'admin' },
+        { organization_id: ORG_O, user_id: MEMBER_ID, role: 'member' },
+      ];
+    });
+
+    it("admits O's admin for O only, scoped to O's tenant key", async () => {
+      const loaded = await load();
+      state.session = { id: ORG_ADMIN_ID };
+      expect((await loaded.documents.GET(req(`/api/rag/admin/documents?organizationId=${ORG_O}`))).status).toBe(200);
+      expect((await loaded.vocabulary.GET(req(`/api/rag/admin/scope-vocabulary?organizationId=${ORG_O}`))).status).toBe(200);
+      expect(scopeCalls().map((call) => call.args.p_tenant_key)).toEqual([`o:${ORG_O}`, `o:${ORG_O}`]);
+    });
+
+    it("refuses O's admin for organization P and without an organization, and a member of O, with 403 and no scope call", async () => {
+      const loaded = await load();
+      state.session = { id: ORG_ADMIN_ID };
+      expect((await loaded.documents.GET(req(`/api/rag/admin/documents?organizationId=${ORG_P}`))).status).toBe(403);
+      expect((await loaded.documents.GET(req('/api/rag/admin/documents'))).status).toBe(403);
+      expect(
+        (await loaded.scopes.PUT(req(`/api/rag/admin/documents/${DOC_ID}/scopes?organizationId=${ORG_P}`, { method: 'PUT', body: { scopes: [] } }), params(DOC_ID))).status,
+      ).toBe(403);
+      expect(
+        (
+          await loaded.vocabulary.POST(
+            req(`/api/rag/admin/scope-vocabulary?organizationId=${ORG_P}`, { method: 'POST', body: { dimension: 'region', value: 'a1', label: 'Area one' } }),
+          )
+        ).status,
+      ).toBe(403);
+      state.session = { id: MEMBER_ID };
+      expect((await loaded.documents.GET(req(`/api/rag/admin/documents?organizationId=${ORG_O}`))).status).toBe(403);
+      expect(scopeCalls()).toEqual([]);
+    });
+
+    it("answers P's document ids with the same 404 as an unknown id", async () => {
+      const loaded = await load();
+      state.session = { id: ORG_ADMIN_ID };
+      state.outcomes.rag_set_document_scopes = { data: null, error: { code: 'P0001', message: 'not_found' } };
+      const answer = await loaded.scopes.PUT(
+        req(`/api/rag/admin/documents/${DOC_ID}/scopes?organizationId=${ORG_O}`, { method: 'PUT', body: { scopes: ['region:a1'] } }),
+        params(DOC_ID),
+      );
+      expect(answer.status).toBe(404);
+      expect(await answer.json()).toEqual({ success: false, error: 'Document not found' });
+      expect(scopeCalls()[0]?.args).toMatchObject({ p_tenant_key: `o:${ORG_O}`, p_actor: ORG_ADMIN_ID });
+    });
+  });
+});
