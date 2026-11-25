@@ -4,8 +4,9 @@ import React from 'react';
 import { Inter, Merriweather, Source_Code_Pro } from "next/font/google";
 import { Atkinson_Hyperlegible } from "next/font/google";
 import { Lexend } from "next/font/google";
-import { Open_Sans, Lato } from "next/font/google";
+import { Open_Sans, Lato, Instrument_Sans } from "next/font/google";
 import "./globals.css";
+import "./chat-shell.css";
 import { ThemeProviderWrapper } from "@/components/theme-provider-wrapper";
 import { AuthProvider, useAuth } from '@/components/providers/auth-provider';
 import { ModelProvider } from '@/components/providers/model-provider';
@@ -52,6 +53,12 @@ const openSans = Open_Sans({
   subsets: ['latin'],
   variable: '--font-open-sans',
 });
+const instrumentSans = Instrument_Sans({
+  weight: ['400', '500', '600'],
+  subsets: ['latin', 'latin-ext'],
+  variable: '--font-chat-ui',
+  display: 'swap',
+});
 const lato = Lato({
   weight: ['300', '400', '700'],
   subsets: ['latin'],
@@ -75,10 +82,10 @@ export default function ClientLayout({
       atkinsonHyperlegible.variable,
       lexend.variable,
       openSans.variable,
-      lato.variable
+      lato.variable,
+      instrumentSans.variable
     )}>
       <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
         {/* Disable noisy console logs in dev when requested to prevent performance degradation */}
         <script
           dangerouslySetInnerHTML={{

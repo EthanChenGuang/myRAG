@@ -174,19 +174,28 @@ const ChatItem = React.memo(({
 
   return (
     <div
+      role="button"
+      tabIndex={isEditing ? -1 : 0}
       onClick={handleClick}
+      onKeyDown={(e) => {
+        if (isEditing || e.target !== e.currentTarget) return;
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onChatSelect(chat);
+        }
+      }}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
       className={cn(
-        "w-full flex items-center justify-between rounded-lg transition-colors group cursor-pointer",
-        "px-3 py-3 lg:py-2 text-sm",
+        "chat-sidebar-row w-full flex items-center justify-between rounded-xl transition-colors group cursor-pointer",
+        "px-3 py-2.5 lg:py-2 text-sm",
         "chat-item-hover", // Mobile-safe hover from CSS
         "[&:has([data-state=open])]:bg-[#FFE8DC] dark:[&:has([data-state=open])]:bg-[#2F2F2F]",
         className
       )}
     >
       <div className="flex items-center space-x-2 min-w-0 flex-1">
-        <MessageSquare className="h-4 w-4 flex-shrink-0" />
+        <MessageSquare className="h-4 w-4 flex-shrink-0" strokeWidth={1.75} aria-hidden="true" />
         {isEditing ? (
           <form
             onSubmit={onEditSubmit}
@@ -1988,10 +1997,11 @@ export function Sidebar({ isOpen, onClose, onNewChat, onSelectChat, userEmail, o
                   <div className="flex items-center justify-between w-full lg:hidden">
                     {/* Left: Back/Close Button */}
                     <button
+                        aria-label={t('closeSidebar')}
                       onClick={onClose}
-                      className="flex items-center justify-center w-10 h-10 text-gray-700 dark:text-gray-200 hover:bg-[#FFE0D0] dark:hover:bg-[#424242] rounded-lg transition-all duration-200"
+                      className="flex items-center justify-center w-10 h-10 text-gray-700 dark:text-gray-200 hover:bg-[#FFE0D0] dark:hover:bg-[#424242] rounded-full transition-colors duration-200"
                     >
-                      <ArrowLeft className="h-6 w-6" />
+                      <ArrowLeft className="h-6 w-6" strokeWidth={1.75} aria-hidden="true" />
                     </button>
 
                     {/* Center: Title */}
@@ -2010,58 +2020,63 @@ export function Sidebar({ isOpen, onClose, onNewChat, onSelectChat, userEmail, o
                   <div className="hidden lg:flex items-center justify-between w-full relative z-[80]">
                     <PortalTooltip content={t('closeSidebar')} align="right">
                       <button
+                        aria-label={t('closeSidebar')}
                         onClick={onClose}
-                        className="flex items-center justify-center w-9 h-9 text-gray-700 dark:text-gray-200 hover:bg-[#FFE0D0] dark:hover:bg-[#424242] rounded-lg transition-all duration-200 group relative z-[101]"
+                        className="flex items-center justify-center w-9 h-9 text-gray-700 dark:text-gray-200 hover:bg-[#FFE0D0] dark:hover:bg-[#424242] rounded-full transition-colors duration-200 group relative z-[101]"
                       >
-                        <PanelLeft className="h-5 w-5" />
+                        <PanelLeft className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
                       </button>
                     </PortalTooltip>
                     <div className="flex items-center gap-1">
                       {!isSearching && (
                         <PortalTooltip content={t('search')}>
                           <button
+                        aria-label={t('search')}
                             onClick={handleSearchToggle}
                             className={cn(
-                              "flex items-center justify-center w-9 h-9 text-gray-700 dark:text-gray-200 hover:bg-[#FFE0D0] dark:hover:bg-[#424242] rounded-lg transition-all duration-200 group relative z-[101]",
+                              "flex items-center justify-center w-9 h-9 text-gray-700 dark:text-gray-200 hover:bg-[#FFE0D0] dark:hover:bg-[#424242] rounded-full transition-colors duration-200 group relative z-[101]",
                               isSearching && "bg-[#FFE0D0] dark:bg-[#424242]"
                             )}
                           >
-                            <Search className="h-5 w-5" />
+                            <Search className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
                           </button>
                         </PortalTooltip>
                       )}
                       {isSearching && (
                         <button
+                        aria-label={t('search')}
                           onClick={handleSearchToggle}
                           className={cn(
-                            "flex items-center justify-center w-9 h-9 text-gray-700 dark:text-gray-200 hover:bg-[#FFE0D0] dark:hover:bg-[#424242] rounded-lg transition-all duration-200 group relative z-[101]",
+                            "flex items-center justify-center w-9 h-9 text-gray-700 dark:text-gray-200 hover:bg-[#FFE0D0] dark:hover:bg-[#424242] rounded-full transition-colors duration-200 group relative z-[101]",
                             "bg-[#FFE0D0] dark:bg-[#424242]"
                           )}
                         >
-                          <Search className="h-5 w-5" />
+                          <Search className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
                         </button>
                       )}
                       <PortalTooltip content={t('newFolder')}>
                         <button
+                        aria-label={t('newFolder')}
                           onClick={(e) => {
                             e.stopPropagation();
                             dispatch({ type: 'OPEN_CREATE_FOLDER_MODAL' });
                           }}
-                          className="flex items-center justify-center w-9 h-9 text-gray-700 dark:text-gray-200 hover:bg-[#FFE0D0] dark:hover:bg-[#424242] rounded-lg transition-all duration-200 group relative z-[101]"
+                          className="flex items-center justify-center w-9 h-9 text-gray-700 dark:text-gray-200 hover:bg-[#FFE0D0] dark:hover:bg-[#424242] rounded-full transition-colors duration-200 group relative z-[101]"
                         >
-                          <FolderPlus className="h-5 w-5" />
+                          <FolderPlus className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
                         </button>
                       </PortalTooltip>
                       {onNewChat && (
                         <PortalTooltip content={t('newChat')}>
                           <button
+                        aria-label={t('newChat')}
                             onClick={(e) => {
                               e.stopPropagation();
                               onNewChat();
                             }}
-                            className="flex items-center justify-center w-9 h-9 text-gray-700 dark:text-gray-200 hover:bg-[#FFE0D0] dark:hover:bg-[#424242] rounded-lg transition-all duration-200 group relative z-[101]"
+                            className="flex items-center justify-center w-9 h-9 text-gray-700 dark:text-gray-200 hover:bg-[#FFE0D0] dark:hover:bg-[#424242] rounded-full transition-colors duration-200 group relative z-[101]"
                           >
-                            <SquarePen className="h-5 w-5" />
+                            <SquarePen className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
                           </button>
                         </PortalTooltip>
                       )}

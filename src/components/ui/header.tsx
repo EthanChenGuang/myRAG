@@ -251,7 +251,7 @@ export function Header({ onNewChat, onToggleSidebar, isSidebarOpen }: HeaderProp
   return (
     <div className={cn(
       "fixed top-0",
-      "header-container",
+      "header-container chat-topbar",
       isSidebarOpen ? "lg:left-64 left-0 right-0" : "left-0 right-0"
     )}
       style={{ zIndex: 60 }}>
@@ -318,7 +318,7 @@ export function Header({ onNewChat, onToggleSidebar, isSidebarOpen }: HeaderProp
         }
       `}</style>
 
-      <div className="relative flex items-center justify-between h-16 px-3 sm:px-6 bg-transparent pointer-events-auto">
+      <div className="relative flex items-center justify-between h-14 lg:h-16 px-3 sm:px-5 bg-transparent pointer-events-auto">
         {/* Desktop Layout (1024px and up) */}
         <div className="hidden lg:flex items-center justify-between w-full">
           {/* Left section with conditional layout based on sidebar state */}
@@ -329,11 +329,10 @@ export function Header({ onNewChat, onToggleSidebar, isSidebarOpen }: HeaderProp
                 <button
                   onClick={onToggleSidebar}
                   className={cn(
-                    "flex items-center justify-center w-9 h-9 text-gray-700 dark:text-gray-200 rounded-lg transition-colors group relative backdrop-blur-md",
-                    "bg-[#FFE0D0]/30 hover:bg-[#FFE0D0] dark:bg-[#2F2F2F]/30 dark:hover:bg-[#424242]"
+                    "chat-pill-icon h-9 w-9 group relative"
                   )}
                 >
-                  <PanelLeft className="h-5 w-5" />
+                  <PanelLeft className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
                   <span className="sr-only">{t('openSidebar')}</span>
                 </button>
               </PortalTooltip>
@@ -348,11 +347,10 @@ export function Header({ onNewChat, onToggleSidebar, isSidebarOpen }: HeaderProp
                     onNewChat();
                   }}
                   className={cn(
-                    "flex items-center justify-center w-9 h-9 text-gray-700 dark:text-gray-200 rounded-lg transition-colors group relative backdrop-blur-md",
-                    "bg-[#FFE0D0]/30 hover:bg-[#FFE0D0] dark:bg-[#2F2F2F]/30 dark:hover:bg-[#424242]"
+                    "chat-pill-icon h-9 w-9 group relative"
                   )}
                 >
-                  <SquarePen className="h-5 w-5" />
+                  <SquarePen className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
                   <span className="sr-only">{t('newChat')}</span>
                 </button>
               </PortalTooltip>
@@ -367,16 +365,14 @@ export function Header({ onNewChat, onToggleSidebar, isSidebarOpen }: HeaderProp
                       <button
                         ref={modelTriggerRef}
                         className={cn(
-                          "inline-flex items-center h-9 px-3 border border-[#FFE0D0]/50 dark:border-[#2F2F2F]/50 rounded-md transition-colors backdrop-blur-md",
-                          isModelDropdownOpenClosed
-                            ? "bg-[#FFE8DC] dark:bg-[#2E2E2E]"
-                            : "hover:bg-[#FFE0D0] dark:hover:bg-[#424242] bg-transparent"
+                          "chat-model-pill",
+                          isModelDropdownOpenClosed && "is-open"
                         )}
                       >
-                        <span className="font-medium text-sm truncate max-w-[140px] md:max-w-none text-gray-700 dark:text-gray-200">
+                        <span className="chat-model-pill__label truncate max-w-[140px] md:max-w-none" translate="no">
                           {headerLogoText}
                         </span>
-                        <ChevronDown className="h-3 w-3 ml-2 opacity-60 flex-shrink-0 text-gray-700 dark:text-gray-200" />
+                        <ChevronDown className="chat-model-pill__chevron" strokeWidth={1.75} aria-hidden="true" />
                       </button>
                     </DropdownMenuTrigger>
                   </PortalTooltip>
@@ -420,10 +416,8 @@ export function Header({ onNewChat, onToggleSidebar, isSidebarOpen }: HeaderProp
                       <button
                         ref={modelTriggerOpenRef}
                         className={cn(
-                          "inline-flex items-center h-9 px-3 border border-[#FFE0D0]/50 dark:border-[#2F2F2F]/50 rounded-md transition-colors backdrop-blur-md",
-                          isModelDropdownOpenOpen
-                            ? "bg-[#FFE8DC] dark:bg-[#2E2E2E]"
-                            : "hover:bg-[#FFE0D0] dark:hover:bg-[#424242] bg-transparent"
+                          "chat-model-pill",
+                          isModelDropdownOpenOpen && "is-open"
                         )}
                         style={{
                           // Ensure consistent appearance across browsers
@@ -431,10 +425,10 @@ export function Header({ onNewChat, onToggleSidebar, isSidebarOpen }: HeaderProp
                           MozAppearance: 'none'
                         }}
                       >
-                        <span className="font-medium text-sm truncate max-w-[140px] md:max-w-none text-gray-700 dark:text-gray-200">
+                        <span className="chat-model-pill__label truncate max-w-[140px] md:max-w-none" translate="no">
                           {headerLogoText}
                         </span>
-                        <ChevronDown className="h-3 w-3 ml-2 opacity-60 flex-shrink-0 text-gray-700 dark:text-gray-200" />
+                        <ChevronDown className="chat-model-pill__chevron" strokeWidth={1.75} aria-hidden="true" />
                       </button>
                     </DropdownMenuTrigger>
                   </PortalTooltip>
@@ -463,9 +457,7 @@ export function Header({ onNewChat, onToggleSidebar, isSidebarOpen }: HeaderProp
 
           {/* Right section */}
           <div className="flex items-center pointer-events-auto min-w-[80px] z-20">
-            <div className={cn(
-              "flex items-center border border-[#FFE0D0] dark:border-[#2F2F2F] rounded-lg mr-2 sm:mr-4 backdrop-blur-md"
-            )} style={{ background: 'transparent' }}>
+            <div className="chat-pill-group flex items-center gap-0.5 mr-2 sm:mr-3">
               {!isAuthPage && hasActiveChat ? (
                 <TextSizeSlider />
               ) : (
@@ -485,9 +477,7 @@ export function Header({ onNewChat, onToggleSidebar, isSidebarOpen }: HeaderProp
                     onProcessingStart={handlePermanentDocProcessingStart}
                     onProcessingComplete={handlePermanentDocProcessingComplete}
                     onProcessingError={handlePermanentDocProcessingError}
-                    className={cn(
-                      "flex items-center justify-center w-9 h-9 text-gray-700 dark:text-gray-200 bg-transparent hover:bg-[#FFE0D0] dark:bg-transparent dark:hover:bg-[#424242] transition-colors group relative backdrop-blur-md"
-                    )}
+                    className="chat-pill-icon h-9 w-9 group relative"
                   />
                   <PortalTooltip content={t('useIncognitoChat')}>
                     <button
@@ -497,14 +487,12 @@ export function Header({ onNewChat, onToggleSidebar, isSidebarOpen }: HeaderProp
                       }}
                       onClick={handleGhostModeToggle}
                       className={cn(
-                        "flex items-center justify-center w-10 h-10 rounded-lg text-gray-700 dark:text-gray-200 transition-colors group relative backdrop-blur-md",
-                        isGhostMode
-                          ? "bg-purple-500/20 hover:bg-purple-500/30 dark:bg-purple-600/20 dark:hover:bg-purple-600/30 text-purple-600 dark:text-purple-400"
-                          : "bg-transparent hover:bg-[#FFE0D0] dark:bg-transparent dark:hover:bg-[#424242]"
+                        "chat-pill-icon h-9 w-9 group relative",
+                        isGhostMode && "is-ghost-active"
                       )}
                     >
-                      <Ghost className="h-5 w-5" />
-                      <span className="sr-only">Toggle Ghost Mode</span>
+                      <Ghost className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
+                      <span className="sr-only">{t('useIncognitoChat')}</span>
                     </button>
                   </PortalTooltip>
                 </>
@@ -531,11 +519,10 @@ export function Header({ onNewChat, onToggleSidebar, isSidebarOpen }: HeaderProp
             <button
               onClick={onToggleSidebar}
               className={cn(
-                "flex items-center justify-center w-10 h-10 text-gray-700 dark:text-gray-200 rounded-lg transition-colors group relative backdrop-blur-md",
-                "bg-[#FFE0D0]/30 hover:bg-[#FFE0D0] dark:bg-[#2F2F2F]/30 dark:hover:bg-[#424242]"
+                "chat-pill-icon h-10 w-10 group relative"
               )}
             >
-              <PanelLeft className="h-5 w-5" />
+              <PanelLeft className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
               <span className="sr-only">{t('openSidebar')}</span>
             </button>
           </div>
@@ -547,17 +534,12 @@ export function Header({ onNewChat, onToggleSidebar, isSidebarOpen }: HeaderProp
                 <DropdownMenuTrigger asChild>
                   <button
                     ref={modelTriggerMobileRef}
-                    className={cn(
-                      "inline-flex items-center h-9 px-3 border border-[#FFE0D0]/50 dark:border-[#2F2F2F]/50 rounded-md transition-colors backdrop-blur-md",
-                      isModelDropdownOpenMobile
-                        ? "bg-[#FFE8DC] dark:bg-[#2E2E2E]"
-                        : "hover:bg-[#FFE0D0] dark:hover:bg-[#424242] bg-transparent"
-                    )}
+                    className={cn("chat-model-pill", isModelDropdownOpenMobile && "is-open")}
                   >
-                    <span className="font-medium text-sm truncate max-w-[140px] text-gray-700 dark:text-gray-200">
+                    <span className="chat-model-pill__label truncate max-w-[160px]" translate="no">
                       {headerLogoText}
                     </span>
-                    <ChevronDown className="h-3 w-3 ml-2 opacity-60 flex-shrink-0 text-gray-700 dark:text-gray-200" />
+                    <ChevronDown className="chat-model-pill__chevron" strokeWidth={1.75} aria-hidden="true" />
                   </button>
                 </DropdownMenuTrigger>
               </PortalTooltip>

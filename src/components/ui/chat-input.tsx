@@ -3232,7 +3232,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
       return (
         <button
           className={cn(
-            "inline-flex h-9 w-9 items-center justify-center rounded-tl-xl rounded-tr-xl rounded-bl-xl rounded-br-3xl transition-colors",
+            "chat-send-button inline-flex h-9 w-9 items-center justify-center rounded-full transition-colors",
             "bg-[#FF6417] dark:bg-[#FF6417] hover:bg-[#E55000] dark:hover:bg-[#E55000]",
             "group relative focus:outline-none"
           )}
@@ -3313,7 +3313,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
         type={parentIsLoading ? "button" : "submit"}
         onClick={handleButtonClick}
         className={cn(
-          "inline-flex h-9 w-9 items-center justify-center rounded-tl-xl rounded-tr-xl rounded-bl-xl rounded-br-3xl transition-all duration-200 group relative",
+          "chat-send-button inline-flex h-9 w-9 items-center justify-center rounded-full transition-[background-color,transform] duration-150 group relative",
           parentIsLoading
             ? "bg-red-500 hover:bg-red-600 dark:bg-red-700 dark:hover:bg-red-800"
             : isDisabled || !input.trim()
@@ -3669,7 +3669,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
     .chat-input-container .flex-1.relative > textarea,
     .chat-input-container .flex-1.relative > div:first-child {
       /* Use explicit font stack to ensure consistency */
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+      font-family: var(--font-chat-ui), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
       font-size: ${fontSize} !important; /* Configurable size from environment */
       line-height: ${lineHeight} !important; /* Proportional line height */
       font-weight: 400 !important;
@@ -3794,79 +3794,8 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
         box-sizing: border-box !important;
       }
       
-      /* Desktop browsers - handled by body classes in globals.css */
-      
-      /* Safari iOS specific - PROPER safe area padding */
-      @supports (-webkit-touch-callout: none) {
-        @media (max-width: 639px) {
-          .chat-input-container {
-            /* Use both constant() and env() for compatibility */
-            padding-bottom: constant(safe-area-inset-bottom) !important;
-            padding-bottom: env(safe-area-inset-bottom) !important;
-            /* Minimum padding fallback if safe area is 0 */
-            min-height: calc(100px + constant(safe-area-inset-bottom));
-            min-height: calc(100px + env(safe-area-inset-bottom));
-          }
-        }
-      }
-      
-      /* Chrome iOS specific - needs extra bottom padding */
-      @supports (not (-webkit-touch-callout: none)) {
-        @media (max-width: 639px) and (pointer: coarse) {
-          .chat-input-container {
-            padding-bottom: max(env(safe-area-inset-bottom, 0px), 24px) !important;
-            min-height: calc(100px + env(safe-area-inset-bottom));
-          }
-        }
-      }
-      
-      /* Chrome iOS specific positioning using JavaScript-added class */
-      /* Chrome iOS has a taller browser bar (~50px) than Safari, plus disclaimer (~30px) needs space */
-      .chrome-ios .chat-input-container {
-        padding-bottom: env(safe-area-inset-bottom, 0px) !important;
-      }
-      
-      .chrome-ios .chat-input-container form {
-        margin-bottom: 0px !important;
-      }
-      
-      /* Chrome iOS needs extra disclaimer padding since base was reduced for Safari */
-      .chrome-ios .chat-input-container > div:last-child {
-        padding-bottom: 0px !important;
-      }
+      /* Bottom inset, glass and card surface come from .chat-dock / .chat-composer-card in chat-shell.css */
 
-      /* ENHANCED FORM STYLING WITH BETTER TOUCH TARGETS */
-      .chat-input-container form {
-        background: #EFE1D5 !important;
-        border-radius: 28px !important;
-        padding: 6px !important;
-        margin: 8px !important;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.05) !important;
-        transition: box-shadow 0.2s ease-out;
-        -webkit-tap-highlight-color: transparent;
-        tap-highlight-color: transparent;
-        touch-action: manipulation;
-      }
-      
-      /* Safari specific - tighter bottom margin */
-      @supports (-webkit-touch-callout: none) {
-        .chat-input-container form {
-          margin: 8px 8px 4px 8px !important;
-        }
-      }
-
-      .dark .chat-input-container form {
-        background: #3a3a3a !important;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.2) !important;
-        margin: 8px 8px 0px 8px !important; /* Consistent with light mode */
-        margin-bottom: 0px !important;
-        padding-bottom: 6px !important; /* Increased for better touch targets */
-        /* Enhanced touch interaction for dark mode */
-        -webkit-tap-highlight-color: transparent;
-        tap-highlight-color: transparent;
-        touch-action: manipulation;
-      }
-      
       /* ENHANCED TEXTAREA WITH BETTER TOUCH INTERACTION */
       .chat-input-container textarea {
         padding: 12px 18px 16px 18px !important; /* Reduced bottom padding to prevent overlap with tool buttons */
@@ -3982,90 +3911,15 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
       color: #ccc;
     }
     
-    /* ENHANCED MOBILE KEYBOARD HANDLING WITH VIEWPORT DETECTION */
+    /* Keyboard placement is handled by useChatViewport (--chat-kb-inset) and .chat-dock in chat-shell.css */
     @supports (-webkit-touch-callout: none) {
-      /* iOS Safari specific fixes with enhanced viewport handling */
       @media (max-width: 639px) {
-        .chat-input-container {
-          /* Let parent handle positioning */
-          position: relative !important;
-          /* Force safe area on actual iOS devices - add extra padding to move UP */
-          padding-bottom: calc(constant(safe-area-inset-bottom) + 25px) !important;
-          padding-bottom: calc(env(safe-area-inset-bottom) + 25px) !important;
-        }
-        
-        /* Dynamic viewport height calculation for keyboard state */
-        body {
-          /* Set custom property for actual viewport height */
-          --actual-vh: calc(var(--vh, 1vh) * 100);
-          --keyboard-visible-vh: var(--keyboard-visible-vh, var(--actual-vh));
-        }
-        
-        /* When keyboard is visible, maintain relative positioning */
-        body.keyboard-visible .chat-input-container {
-          position: relative !important;
-        }
-        
-        /* Hide suggestions when keyboard is open to prevent overlap */
         body.keyboard-visible .suggestion-list {
           display: none !important;
-          visibility: hidden !important;
-          opacity: 0 !important;
-        }
-        
-        /* ENHANCED IOS SAFARI SPECIFIC TEXTAREA FIXES */
-        body.keyboard-visible .chat-input-container textarea {
-          transform: translateZ(0);
-          -webkit-transform: translateZ(0);
-          /* Prevent iOS from zooming on focus - critical for UX */
-          font-size: max(16px, 1rem) !important;
-          /* Improve scrolling behavior */
-          -webkit-overflow-scrolling: touch;
-          overflow-scrolling: touch;
-          /* Fix iOS Safari input focus issues */
-          -webkit-appearance: none;
-          appearance: none;
-          /* Prevent iOS Safari from adding default styling */
-          border-radius: 12px !important;
-          /* Fix scroll position jumping */
-          scroll-behavior: smooth;
-          /* Prevent iOS momentum scrolling issues */
-          overscroll-behavior: contain;
-          /* Better text rendering during input */
-          -webkit-text-fill-color: currentColor;
-          -webkit-opacity: 1;
-        }
-        
-        /* Fix iOS Safari scroll restoration after keyboard hide */
-        body.keyboard-hidden .chat-input-container textarea {
-          scroll-behavior: auto;
-          /* Restore smooth scrolling after keyboard animation */
-          transition: scroll-behavior 0.1s ease;
-        }
-        
-        /* iOS Safari focus state improvements */
-        .chat-input-container textarea:focus {
-          /* Prevent iOS from adding default focus styles */
-          -webkit-appearance: none;
-          appearance: none;
-          /* Remove outline on mobile */
-          outline: none !important;
-        }
-        
-        /* Prevent viewport shifts during keyboard animation */
-        body.keyboard-transitioning {
-          overflow: hidden !important;
-        }
-        
-        /* Optimize for smooth keyboard transitions */
-        body.keyboard-transitioning .chat-input-container {
-          will-change: bottom, transform !important;
-          transform: translateZ(0) !important;
-          -webkit-transform: translateZ(0) !important;
         }
       }
     }
-    
+
     /* iOS-SPECIFIC FIXES: Hide duplicate disclaimer and position scroll button */
     @supports (-webkit-touch-callout: none) {
       @media (max-width: 639px) {
@@ -4081,80 +3935,13 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
       }
     }
     
-    /* ENHANCED ANDROID CHROME SPECIFIC OPTIMIZATIONS */
-    /* IMPORTANT: gate to touch devices so desktop Chrome at narrow widths doesn't get "mobile-fixed" input */
-    @supports (not (-webkit-touch-callout: none)) and (-webkit-appearance: none) {
-      @media (max-width: 639px) and (pointer: coarse) {
-        /* CRITICAL FIX: When inside #mobile-dock (initial view), use relative positioning
-           to allow parent flex container to stack suggestions above input properly */
-        #mobile-dock .chat-input-container {
-          position: relative !important;
-          bottom: auto !important;
-          width: 100% !important;
-        }
-        
-        /* Only apply fixed positioning when NOT inside #mobile-dock */
-        .chat-input-container:not(#mobile-dock .chat-input-container) {
-          position: fixed !important;
-          /* Position 28px from bottom to leave room for mobile disclaimer text below */
-          bottom: max(28px, calc(28px + var(--safe-area-inset-bottom))) !important;
-        }
-        
-        /* Enhanced Android keyboard handling with viewport units */
-        body.keyboard-visible .chat-input-container:not(#mobile-dock .chat-input-container) {
-          position: fixed !important;
-          /* Use svh (small viewport height) for Android keyboard */
-          bottom: max(0px, calc(100svh - var(--keyboard-visible-vh, 100svh))) !important;
-          /* Fallback for older Android versions */
-          bottom: max(0px, var(--keyboard-adjusted-bottom, 0px)) !important;
-          /* Smooth transition for Android keyboard */
-          transition: bottom 0.2s ease-out !important;
-        }
-        
-        /* Android specific textarea optimizations */
-        .chat-input-container textarea {
-          /* Prevent Android zoom on focus */
-          font-size: max(16px, 1rem) !important;
-          /* Better touch scrolling */
-          overscroll-behavior: contain;
-          /* Optimize rendering */
-          will-change: scroll-position;
-        }
-        
-        /* Android keyboard transition optimization */
-        body.keyboard-visible .chat-input-container textarea {
-          /* Maintain font size during keyboard transition */
-          font-size: max(16px, 1rem) !important;
-          /* Prevent text jumping */
-          line-height: 1.5 !important;
-        }
+    @media (max-width: 639px) and (pointer: coarse) {
+      .chat-input-container textarea {
+        font-size: max(16px, 1rem) !important;
+        overscroll-behavior: contain;
       }
     }
-    
-    /* UNIVERSAL MOBILE VIEWPORT HANDLING */
-    @media (max-width: 639px) {
-      /* Support for newer viewport units across all mobile browsers */
-      @supports (height: 100dvh) {
-        .chat-input-container {
-          /* Use dynamic viewport height when available */
-          min-height: calc(100px + env(safe-area-inset-bottom, 0px)) !important;
-        }
-        
-        body.keyboard-visible .chat-input-container {
-          /* Better keyboard positioning with dvh */
-          bottom: max(0px, calc(100dvh - 100svh)) !important;
-        }
-      }
-      
-      /* Fallback for browsers without new viewport unit support */
-      @supports (not (height: 100dvh)) {
-        body.keyboard-visible .chat-input-container {
-          /* Use JavaScript-calculated values */
-          bottom: var(--keyboard-adjusted-bottom, 0px) !important;
-        }
-      }
-    }
-    
+
     /* ENHANCED TOUCH TARGETS AND BUTTON INTERACTIONS */
     /* Only apply on actual touch devices, not desktop browsers at narrow widths */
     @media (max-width: 639px) and (pointer: coarse) {
@@ -4270,21 +4057,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
     @media (max-width: 639px) {
       /* Optimize rendering performance */
       .chat-input-container {
-        /* Enable hardware acceleration */
-        will-change: transform, opacity !important;
-        transform: translateZ(0) !important;
-        -webkit-transform: translateZ(0) !important;
-        /* Better composition layer */
         isolation: isolate;
-      }
-      
-      /* Optimize form rendering */
-      .chat-input-container form {
-        /* Enable hardware acceleration */
-        transform: translateZ(0) !important;
-        -webkit-transform: translateZ(0) !important;
-        /* Better repaint performance */
-        contain: layout style paint !important;
       }
       
       /* Optimize textarea rendering */
@@ -4599,11 +4372,9 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
             onSubmit={handleFormSubmit}
             onClick={handleFormClick}
             className={cn(
-              'relative rounded-3xl p-1 w-full sm:max-w-full lg:max-w-[52rem] border border-[#D4C0B6]/20 dark:border-gray-600/20',
-              // Force opaque background in voice mode with !important to ensure no bleed-through
-              isVoiceModeActive
-                ? '!bg-[#EFE1D5] dark:!bg-[#2F2F2F] !opacity-100 shadow-xl'
-                : 'bg-[#EFE1D5]/70 dark:bg-[#2F2F2F]/70 backdrop-blur-sm',
+              'chat-composer-card relative rounded-3xl p-1 w-full sm:max-w-full lg:max-w-[52rem]',
+              // Voice mode keeps the card fully opaque so the overlay text never bleeds through
+              isVoiceModeActive && '!opacity-100 shadow-xl',
               'sm:mb-8',
               'rounded-3xl', // Consistent radius
               // Only apply opacity reduction if NOT in voice mode (or force it off)
@@ -4668,7 +4439,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
             </div>
 
             {/* Background Layer - 80% opacity for aesthetic */}
-            <div className="absolute inset-0 rounded-3xl bg-[#EFE1D5]/80 dark:bg-[#2F2F2F]/80 backdrop-blur-sm z-10" />
+            <div className="chat-composer-fill absolute inset-0 rounded-3xl z-10" aria-hidden="true" />
             <div className={cn("relative px-2 sm:px-1 flex flex-col z-20", isLongInput && "max-h-[400px]")}>
 
               {/* Document preview - Minimal design */}
@@ -5042,17 +4813,9 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
         />
 
         {/* Mobile disclaimer text - inside chat-input-container so it's visible in fixed mobile dock */}
-        <div
-          className="sm:hidden w-full text-center pointer-events-none bg-[#FFF1E5] dark:bg-[#212121]"
-          style={{
-            paddingTop: '4px',
-            paddingBottom: '6px'
-          }}
-        >
-          <p className="text-gray-500 dark:text-gray-400 text-center" style={{ fontSize: '10px' }}>
-            {t('mobileDisclaimer')}
-          </p>
-        </div>
+        <p className="chat-disclaimer chat-disclaimer--compact sm:hidden pointer-events-none">
+          {t('mobileDisclaimer')}
+        </p>
 
 
       </div>

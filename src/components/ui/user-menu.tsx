@@ -110,7 +110,8 @@ export function UserMenu({ email, onSignOut }: UserMenuProps) {
         <DropdownMenuTrigger asChild>
           <button
             ref={triggerRef}
-            className="dropdown-trigger inline-flex items-center justify-center w-10 h-10 overflow-hidden rounded-full bg-transparent dark:bg-transparent border border-[#FFE0D0] dark:border-[#2F2F2F] hover:bg-[#FFE0D0] dark:hover:bg-[#424242] transition-colors backdrop-blur-md"
+            className="dropdown-trigger chat-avatar-pill inline-flex items-center justify-center w-9 h-9 overflow-hidden rounded-full"
+            aria-label={email || t('settings')}
           >
             {avatarUrl && !avatarFailed ? (
               <img
@@ -123,7 +124,7 @@ export function UserMenu({ email, onSignOut }: UserMenuProps) {
             ) : initials ? (
               <span className="text-xs font-medium text-gray-800 dark:text-gray-200 leading-none">{initials}</span>
             ) : (
-              <User className="h-5 w-5 text-gray-800 dark:text-gray-200" />
+              <User className="h-5 w-5 text-gray-800 dark:text-gray-200" strokeWidth={1.75} aria-hidden="true" />
             )}
           </button>
         </DropdownMenuTrigger>
