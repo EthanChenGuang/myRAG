@@ -478,3 +478,167 @@ for (const mode of MODES) {
     });
   });
 }
+
+const LEDGER_ADMIN = '00000000-0000-4000-8000-0000000000f7';
+
+const LEDGER_FUNCTIONS = [
+  'public.rag_advance_ingestion_job(uuid, text, text, text, jsonb, integer, jsonb)',
+  'public.rag_claim_ingestion_job(uuid, text, text)',
+  'public.rag_claim_ingestion_jobs(text, integer, boolean, text)',
+  'public.rag_enqueue_ingestion_job(text, text, text, text, text, text, text, jsonb, jsonb, integer, uuid, uuid, text)',
+  'public.rag_enqueue_backfill_jobs(uuid, jsonb)',
+  'public.rag_list_batch_jobs(uuid, text, uuid, integer)',
+  'public.rag_ingest_job_status_for_stage(text)',
+  'public.rag_ingest_mirror_processing_status(text)',
+  'public.rag_purge_stale_ingestion_jobs(integer, integer)',
+  'public.rag_publish_deferred_ingestion_job(uuid, text)',
+];
+
+for (const mode of MODES) {
+  describe(`0801 ledger functions treat pending_review as terminal (${mode})`, () => {
+    let ctx: Ctx;
+    const it = (name: string, run: () => Promise<void>) => test(`${name} [${mode}]`, run);
+    const adminTenant = mode === 'single-tenant' ? 's:default' : `u:${LEDGER_ADMIN}`;
+
+    before(async () => {
+      ctx = await createCtx(mode);
+      await ctx.db.query('INSERT INTO auth.users (id, email) VALUES ($1, $2)', [LEDGER_ADMIN, 'ledger-admin@example.invalid']);
+      await ctx.db.query('INSERT INTO admin_users (id) VALUES ($1)', [LEDGER_ADMIN]);
+    });
+
+    after(async () => {
+      await ctx?.db.close();
+    });
+
+    const enqueue = async (tenantKey: string, documentId: string | null = null, status = 'queued'): Promise<string> => {
+      const row = (
+        await rows(
+          ctx.db,
+          `SELECT id FROM rag_enqueue_ingestion_job($1, 'ingest', 'config_upload', $2, NULL, NULL, NULL, NULL, '{}'::jsonb, 100, $3::uuid, NULL, $4)`,
+          [tenantKey, `ledger/${next('job')}`, documentId, status],
+        )
+      )[0];
+      assert.ok(row?.id, 'enqueue returns a job id');
+      return String(row.id);
+    };
+
+    const job = async (jobId: string): Promise<Row> =>
+      (await rows(ctx.db, 'SELECT status, stage, retries, locked_by, lease_until, dead_letter_at FROM ingestion_jobs WHERE id = $1', [jobId]))[0] as Row;
+
+    const advance = (jobId: string, worker: string, stage: string, status: string) =>
+      failure(ctx.db, `SELECT rag_advance_ingestion_job($1, $2, $3, $4, NULL, 5, '{}'::jsonb)`, [jobId, worker, stage, status]);
+
+    const batch = async (): Promise<string> =>
+      String(
+        (await rows(ctx.db, "INSERT INTO ingestion_batches (tenant_key, source_kind, source_ref) VALUES ($1, 'manifest', $2) RETURNING id", [ctx.a.key, next('manifest')]))[0]?.id,
+      );
+
+    let heldJob = '';
+    let heldDocument = '';
+
+    it('advance moves a leased job from its last working stage to pending_review, clears the lease and keeps the document unpublished', async () => {
+      heldDocument = await begin(ctx, next('held-job-doc'));
+      heldJob = await enqueue(ctx.a.key, heldDocument);
+      const claimed = (await rows(ctx.db, 'SELECT id FROM rag_claim_ingestion_job($1, $2)', [heldJob, 'w1']))[0];
+      assert.equal(claimed?.id, heldJob);
+      assert.equal(await advance(heldJob, 'w1', 'publish', 'embedding'), null);
+      assert.equal(await advance(heldJob, 'w1', 'pending_review', 'pending_review'), null, 'the transition to pending_review is accepted');
+      const held = await job(heldJob);
+      assert.equal(held.status, 'pending_review');
+      assert.equal(held.stage, 'pending_review');
+      assert.equal(held.locked_by, null);
+      assert.equal(held.lease_until, null);
+      const doc = (await rows(ctx.db, 'SELECT status, is_current, processing_status FROM documents WHERE id = $1', [heldDocument]))[0];
+      assert.equal(doc?.is_current, false, 'the ledger transition publishes nothing');
+      assert.notEqual(doc?.status, 'ready');
+      assert.equal(doc?.processing_status, 'ready', 'processing is finished; the hold is the document status');
+    });
+
+    it('a pending_review job cannot be advanced again, failed or dead-lettered', async () => {
+      assert.ok(heldJob, 'the previous test left a held job');
+      const before = await job(heldJob);
+      for (const [stage, status] of [['pending_review', 'pending_review'], ['ready', 'ready'], ['publish', 'embedding']] as const) {
+        assert.equal((await advance(heldJob, 'w1', stage, status))?.code, '55000', `advance ${stage}`);
+      }
+      const failed = await failure(ctx.db, "SELECT rag_fail_ingestion_job($1, 'w1', 'probe', true, NULL)", [heldJob]);
+      assert.equal(failed?.code, '55000');
+      assert.deepEqual(await job(heldJob), before);
+    });
+
+    it('no claim call returns a pending_review job, even with an expired lease left on the row', async () => {
+      assert.ok(heldJob);
+      await rows(ctx.db, "UPDATE ingestion_jobs SET locked_by = 'w1', lease_until = now() - interval '1 hour', run_after = NULL WHERE id = $1", [heldJob]);
+      const before = await job(heldJob);
+      const single = (await rows(ctx.db, 'SELECT id FROM rag_claim_ingestion_job($1, $2)', [heldJob, 'w2']))[0];
+      assert.equal(single?.id ?? null, null);
+      const many = await rows(ctx.db, "SELECT id FROM rag_claim_ingestion_jobs('w2', 500, true)");
+      assert.ok(!many.some((row) => row.id === heldJob), 'the batch claim skips it');
+      const afterRow = await job(heldJob);
+      assert.deepEqual(afterRow, before, 'not reaped: status, retries and dead-letter mark unchanged');
+    });
+
+    it('enqueue, backfill enqueue and batch listing accept the status pending_review; the enqueue kind list is unchanged', async () => {
+      const queued = await enqueue(ctx.a.key, null, 'pending_review');
+      assert.equal((await job(queued)).status, 'pending_review');
+      const batchId = await batch();
+      const inserted = (
+        await rows(ctx.db, 'SELECT rag_enqueue_backfill_jobs($1, $2::jsonb) AS n', [batchId, JSON.stringify([{ kind: 'ingest', source_key: next('backfill'), status: 'pending_review' }])])
+      )[0];
+      assert.equal(inserted?.n, 1);
+      const listed = await rows(ctx.db, "SELECT id, status FROM rag_list_batch_jobs($1, 'pending_review')", [batchId]);
+      assert.equal(listed.length, 1);
+      assert.equal(listed[0]?.status, 'pending_review');
+      const translate = await failure(
+        ctx.db,
+        `SELECT id FROM rag_enqueue_ingestion_job($1, 'translate', 'config_upload', $2, NULL, NULL, NULL, NULL, '{}'::jsonb, 100, NULL, NULL, 'queued')`,
+        [ctx.a.key, next('translate')],
+      );
+      assert.match(translate?.message ?? '', /invalid_kind/, 'the enqueue function learns translate in a later plan');
+    });
+
+    it('retry refuses a pending_review job', async () => {
+      const jobId = await enqueue(adminTenant, null, 'pending_review');
+      const refused = await failure(ctx.db, 'SELECT rag_retry_ingestion_job($1, $2)', [jobId, LEDGER_ADMIN]);
+      assert.match(refused?.message ?? '', /invalid_status_for_retry/);
+      assert.equal((await job(jobId)).status, 'pending_review');
+    });
+
+    it('rag_publish_deferred_ingestion_job returns a batch job already at pending_review unchanged', async () => {
+      const batchId = await batch();
+      await rows(ctx.db, 'SELECT rag_enqueue_backfill_jobs($1, $2::jsonb)', [batchId, JSON.stringify([{ kind: 'ingest', source_key: next('deferred'), status: 'pending_review' }])]);
+      const jobId = String((await rows(ctx.db, 'SELECT id FROM ingestion_jobs WHERE batch_id = $1', [batchId]))[0]?.id);
+      const result = await failure(ctx.db, 'SELECT * FROM rag_publish_deferred_ingestion_job($1, $2)', [jobId, LEGACY_PROFILE]);
+      assert.equal(result, null, 'no not_deferred refusal for a held job');
+      assert.equal((await job(jobId)).status, 'pending_review');
+    });
+
+    it('retention archives a stale pending_review job like the other terminal statuses and leaves a fresh one', async () => {
+      const stale = await enqueue(ctx.a.key, null, 'pending_review');
+      const fresh = await enqueue(ctx.a.key, null, 'pending_review');
+      await rows(ctx.db, "UPDATE ingestion_jobs SET updated_at = now() - interval '100 days' WHERE id = $1", [stale]);
+      await rows(ctx.db, 'SELECT rag_purge_stale_ingestion_jobs(90, 5000)');
+      assert.equal((await rows(ctx.db, 'SELECT 1 FROM ingestion_jobs WHERE id = $1', [stale])).length, 0);
+      assert.equal((await rows(ctx.db, 'SELECT status FROM ingestion_jobs_archive WHERE id = $1', [stale]))[0]?.status, 'pending_review');
+      assert.equal((await rows(ctx.db, 'SELECT status FROM ingestion_jobs WHERE id = $1', [fresh]))[0]?.status, 'pending_review');
+    });
+
+    it('every replaced ledger function keeps an empty search_path and service_role-only execute', async () => {
+      for (const signature of LEDGER_FUNCTIONS) {
+        const row = (
+          await rows(
+            ctx.db,
+            `SELECT p.proconfig,
+                    has_function_privilege('anon', p.oid, 'EXECUTE') AS anon,
+                    has_function_privilege('authenticated', p.oid, 'EXECUTE') AS authenticated,
+                    has_function_privilege('service_role', p.oid, 'EXECUTE') AS service
+               FROM pg_proc p WHERE p.oid = to_regprocedure($1)`,
+            [signature],
+          )
+        )[0];
+        assert.ok(row, `${signature} exists`);
+        assert.deepEqual(row.proconfig, ['search_path=""'], `${signature} search_path`);
+        assert.deepEqual([row.anon, row.authenticated, row.service], [false, false, true], `${signature} grants`);
+      }
+    });
+  });
+}
