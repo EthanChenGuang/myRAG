@@ -5,7 +5,7 @@ import { buildRetrievalFilters } from '../../query/filters';
 import { mergeLayerDateRange } from '../../query/layer-filters';
 import { queryLanguage } from '../../query/language';
 import { getTranslator, NONE_TRANSLATOR, NONE_TRANSLATOR_NAME } from '../../query/translate';
-import { buildQueryVariants, type TranslatedQuery } from '../../query/variants';
+import { buildQueryVariantSet, PHASE4_VARIANT_LIMITS, queryLayerVariantLimits, type TranslatedQuery } from '../../query/variants';
 import { timeframeToDateRange } from '../../query/timeframe';
 import { defaultQueryContext, type TemporalQueryContext } from '../../query/temporal-query-detector';
 import { runRefsStage, runStage, stageSpec, type StageSpec } from '../../pipeline';
@@ -98,12 +98,29 @@ export async function runQueryStages(ctx: QueryStagesInput): Promise<QueryStages
   });
   const filters = queryLayer?.dateRange ? mergeLayerDateRange(built, queryLayer.dateRange) : built;
 
+  // D-08: the layer's max_searches and group limits replace the Phase 4 cap of three; every cut is recorded on the plan.
+  let limits = PHASE4_VARIANT_LIMITS;
+  if (queryLayer) {
+    const { effectiveQueryParams } = await import('../../query/query-params');
+    limits = queryLayerVariantLimits(effectiveQueryParams(profile, profile === 'eval' ? stageOverrides?.queryLayer?.queryParams : undefined));
+  }
+  const { variants, cuts } = buildQueryVariantSet(
+    input.query,
+    language,
+    translated,
+    [...(queryLayer?.variants ?? []), ...(input.queryVariants ?? [])],
+    limits,
+  );
+  if (queryLayer?.plan && cuts.length > 0) {
+    queryLayer = { ...queryLayer, plan: { ...queryLayer.plan, skipped: [...(queryLayer.plan.skipped ?? []), ...cuts] } };
+  }
+
   return {
     referenced,
     queryContext,
     queryLanguage: language,
     filters,
-    variants: buildQueryVariants(input.query, language, translated, [...(queryLayer?.variants ?? []), ...(input.queryVariants ?? [])]),
+    variants,
     ...(queryLayer ? { queryLayer } : {}),
   };
 }

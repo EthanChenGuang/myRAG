@@ -81,12 +81,13 @@ export function buildQueryPlan(input: BuildQueryPlanInput): QueryPlan {
   };
 }
 
-/** The plan's variants in plan order, in the shape of the Phase 4 queryVariants seam. */
+/** The plan's variants in plan order, in the shape of the Phase 4 queryVariants seam; HyDE searches the dense leg only (P-6). */
 export function planToVariants(plan: QueryPlan): QueryVariant[] {
   return (plan.variants ?? []).map((variant) => ({
     text: variant.text,
     language: variant.language,
     kind: variant.kind,
+    legs: variant.kind === 'hyde' ? ('dense' as const) : ('both' as const),
     ...(variant.sub_question_index !== null && variant.sub_question_index !== undefined
       ? { subQuestionIndex: variant.sub_question_index }
       : {}),
