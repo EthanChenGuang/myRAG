@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { migrationFiles } from '../../eval/harness/migrations.mts';
+import { SUPABASE_GRANTS_SQL, SUPABASE_SHIM_SQL } from '../../eval/harness/pglite-supabase.mts';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
@@ -30,37 +31,57 @@ function psqlBin(pgCtl: string): string {
   return path.join(path.dirname(pgCtl), 'psql');
 }
 
+/** Why the real-Postgres check cannot run here, or null when it can. */
+export function realPostgresUnavailable(pgCtl: string | null): string | null {
+  if (!pgCtl) return 'pg_ctl not found';
+  if (process.getuid?.() === 0) return 'initdb refuses to run as root';
+  const pgConfig = path.join(path.dirname(pgCtl), 'pg_config');
+  const shareDir = fs.existsSync(pgConfig)
+    ? execFileSync(pgConfig, ['--sharedir'], { encoding: 'utf8' }).trim()
+    : path.join(path.dirname(path.dirname(pgCtl)), 'share');
+  const control = path.join(shareDir, 'extension', 'vector.control');
+  if (!fs.existsSync(control)) return 'pgvector extension not installed for this PostgreSQL';
+  const version = /default_version\s*=\s*'(\d+)\.(\d+)/.exec(fs.readFileSync(control, 'utf8'));
+  const [major, minor] = version ? [Number(version[1]), Number(version[2])] : [0, 0];
+  if (major === 0 && minor < 7) return 'pgvector older than 0.7 (setup SQL needs halfvec)';
+  return null;
+}
+
 describe('ingestion ledger claim on real PostgreSQL (optional)', () => {
   const pgCtl = findPgCtl();
-  const dataDir = pgCtl ? fs.mkdtempSync(path.join(os.tmpdir(), 'myrag-ingest-claim-')) : null;
-  let port = 55432;
-  let skipped = !pgCtl;
+  const unavailable = realPostgresUnavailable(pgCtl);
+  const dataDir = unavailable ? null : fs.mkdtempSync(path.join(os.tmpdir(), 'myrag-ingest-claim-'));
+  const port = 55432;
 
   before(() => {
-    if (!pgCtl || !dataDir) {
-      skipped = true;
-      return;
-    }
-    execFileSync(pgCtl, ['initdb', '-D', dataDir, '-A', 'trust'], { stdio: 'pipe' });
+    if (!pgCtl || !dataDir) return;
+    execFileSync(pgCtl, ['initdb', '-D', dataDir, '-o', '-A trust'], { stdio: 'pipe' });
     execFileSync(pgCtl, ['start', '-D', dataDir, '-l', path.join(dataDir, 'log'), '-o', `-p ${port}`], { stdio: 'pipe' });
     const psql = psqlBin(pgCtl);
     execFileSync(psql, ['-h', '127.0.0.1', '-p', String(port), '-d', 'postgres', '-v', 'ON_ERROR_STOP=1', '-c', 'CREATE DATABASE myrag_claim;'], {
       stdio: 'pipe',
     });
-    const setup = fs.readFileSync(path.join(REPO_ROOT, 'supabase/single-tenant-setup.sql'), 'utf8');
-    const migrations = migrationFiles('single-tenant')
-      .filter((f) => f.includes('0351') || f.includes('0352'))
-      .map((f) => fs.readFileSync(path.join(REPO_ROOT, f), 'utf8'));
-    for (const sql of [setup, ...migrations]) {
-      execFileSync(psql, ['-h', '127.0.0.1', '-p', String(port), '-d', 'myrag_claim', '-v', 'ON_ERROR_STOP=1', '-c', sql], { stdio: 'pipe' });
+    const sqlFiles = [
+      ['shim.sql', SUPABASE_SHIM_SQL],
+      ['setup.sql', fs.readFileSync(path.join(REPO_ROOT, 'supabase/single-tenant-setup.sql'), 'utf8')],
+      ...migrationFiles('single-tenant')
+        .filter((f) => f.includes('0351') || f.includes('0352'))
+        .map((f) => [path.basename(f), fs.readFileSync(path.join(REPO_ROOT, f), 'utf8')]),
+      ['grants.sql', SUPABASE_GRANTS_SQL],
+    ];
+    for (const [name, sql] of sqlFiles) {
+      const file = path.join(dataDir, `apply-${name}`);
+      fs.writeFileSync(file, sql);
+      execFileSync(psql, ['-h', '127.0.0.1', '-p', String(port), '-d', 'myrag_claim', '-v', 'ON_ERROR_STOP=1', '-q', '-f', file], { stdio: 'pipe' });
     }
-    execFileSync(psql, ['-h', '127.0.0.1', '-p', String(port), '-d', 'myrag_claim', '-v', 'ON_ERROR_STOP=1', '-c', `CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role;`], {
-      stdio: 'pipe',
-    });
   });
 
   after(() => {
     if (!pgCtl || !dataDir) return;
+    if (!fs.existsSync(path.join(dataDir, 'postmaster.pid'))) {
+      fs.rmSync(dataDir, { recursive: true, force: true });
+      return;
+    }
     try {
       execFileSync(pgCtl, ['stop', '-D', dataDir, '-m', 'immediate'], { stdio: 'pipe' });
     } finally {
@@ -68,7 +89,7 @@ describe('ingestion ledger claim on real PostgreSQL (optional)', () => {
     }
   });
 
-  test('600 jobs claimed once across 8 concurrent sessions when pg_ctl is available', { skip: skipped, timeout: 180_000 }, async () => {
+  test('600 jobs claimed once across 8 concurrent sessions when pg_ctl is available', { skip: unavailable ?? false, timeout: 180_000 }, async () => {
     const psql = psqlBin(pgCtl!);
     for (let i = 0; i < 600; i++) {
       execFileSync(
@@ -126,10 +147,7 @@ describe('ingestion ledger claim on real PostgreSQL (optional)', () => {
   });
 
   test('skips cleanly when pg_ctl is missing', () => {
-    if (pgCtl) {
-      assert.ok(true, 'pg_ctl found; optional real-Postgres path executed above');
-    } else {
-      assert.equal(findPgCtl(), null);
-    }
+    assert.equal(realPostgresUnavailable(null), 'pg_ctl not found');
+    if (!pgCtl) assert.equal(findPgCtl(), null);
   });
 });

@@ -40,7 +40,7 @@ export interface FixtureDatabase {
   ingestLlamaParseAttempts?: number;
 }
 
-const SUPABASE_SHIM_SQL = `
+export const SUPABASE_SHIM_SQL = `
 CREATE ROLE anon NOLOGIN; CREATE ROLE authenticated NOLOGIN; CREATE ROLE service_role NOLOGIN;
 CREATE SCHEMA auth; CREATE TABLE auth.users (id uuid PRIMARY KEY, email text);
 CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
@@ -50,7 +50,7 @@ CREATE SCHEMA storage; CREATE TABLE storage.buckets (id text PRIMARY KEY, name t
 CREATE TABLE storage.objects (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, bucket_id text, name text, owner uuid);
 ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;`;
 
-const SUPABASE_GRANTS_SQL = `
+export const SUPABASE_GRANTS_SQL = `
 GRANT USAGE ON SCHEMA public, auth, storage TO anon, authenticated, service_role;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA auth TO anon, authenticated, service_role;
 ALTER ROLE service_role BYPASSRLS;
