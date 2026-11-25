@@ -1,0 +1,175 @@
+{
+  "version": 1,
+  "source": ".planning/specs/query-rewrite-gate.md",
+  "pronouns": {
+    "zh": ["它", "这个", "那个", "这些", "那些", "他们", "上面", "刚才", "前面说的"],
+    "en": ["it", "its", "this", "that", "these", "those", "they", "them", "their", "above", "previous", "earlier", "the former", "the latter", "the same"],
+    "it": ["esso", "essa", "questo", "questa", "questi", "queste", "quello", "quella", "quelli", "quelle", "loro", "sopra", "precedente", "prima", "suddetto", "stesso", "lo stesso", "ne", "suo", "sua", "suoi", "sue"]
+  },
+  "relative_time": {
+    "zh": [
+      { "term": "去年", "unit": "year", "offset": -1 },
+      { "term": "今年", "unit": "year", "offset": 0 },
+      { "term": "前年", "unit": "year", "offset": -2 },
+      { "term": "上个月", "unit": "month", "offset": -1 },
+      { "term": "这个月", "unit": "month", "offset": 0 },
+      { "term": "本月", "unit": "month", "offset": 0 },
+      { "term": "上周", "unit": "week", "offset": -1 },
+      { "term": "本周", "unit": "week", "offset": 0 },
+      { "term": "最近", "unit": "recent", "offset": null },
+      { "term": "昨天", "unit": "day", "offset": -1 },
+      { "term": "今天", "unit": "day", "offset": 0 },
+      { "term": "上季度", "unit": "quarter", "offset": -1 },
+      { "term": "本季度", "unit": "quarter", "offset": 0 },
+      { "term": "近N天", "unit": "day", "n_placeholder": true },
+      { "term": "近N周", "unit": "week", "n_placeholder": true },
+      { "term": "近N个月", "unit": "month", "n_placeholder": true },
+      { "term": "近N年", "unit": "year", "n_placeholder": true }
+    ],
+    "en": [
+      { "term": "last year", "unit": "year", "offset": -1 },
+      { "term": "this year", "unit": "year", "offset": 0 },
+      { "term": "the year before last", "unit": "year", "offset": -2 },
+      { "term": "last month", "unit": "month", "offset": -1 },
+      { "term": "this month", "unit": "month", "offset": 0 },
+      { "term": "last week", "unit": "week", "offset": -1 },
+      { "term": "this week", "unit": "week", "offset": 0 },
+      { "term": "recently", "unit": "recent", "offset": null },
+      { "term": "lately", "unit": "recent", "offset": null },
+      { "term": "yesterday", "unit": "day", "offset": -1 },
+      { "term": "today", "unit": "day", "offset": 0 },
+      { "term": "last quarter", "unit": "quarter", "offset": -1 },
+      { "term": "this quarter", "unit": "quarter", "offset": 0 },
+      { "term": "past N days", "unit": "day", "n_placeholder": true },
+      { "term": "past N weeks", "unit": "week", "n_placeholder": true },
+      { "term": "past N months", "unit": "month", "n_placeholder": true },
+      { "term": "past N years", "unit": "year", "n_placeholder": true }
+    ],
+    "it": [
+      { "term": "l'anno scorso", "unit": "year", "offset": -1 },
+      { "term": "quest'anno", "unit": "year", "offset": 0 },
+      { "term": "due anni fa", "unit": "year", "offset": -2 },
+      { "term": "il mese scorso", "unit": "month", "offset": -1 },
+      { "term": "questo mese", "unit": "month", "offset": 0 },
+      { "term": "la settimana scorsa", "unit": "week", "offset": -1 },
+      { "term": "questa settimana", "unit": "week", "offset": 0 },
+      { "term": "di recente", "unit": "recent", "offset": null },
+      { "term": "recentemente", "unit": "recent", "offset": null },
+      { "term": "ieri", "unit": "day", "offset": -1 },
+      { "term": "oggi", "unit": "day", "offset": 0 },
+      { "term": "lo scorso trimestre", "unit": "quarter", "offset": -1 },
+      { "term": "questo trimestre", "unit": "quarter", "offset": 0 },
+      { "term": "negli ultimi N giorni", "unit": "day", "n_placeholder": true },
+      { "term": "negli ultimi N mesi", "unit": "month", "n_placeholder": true },
+      { "term": "negli ultimi N anni", "unit": "year", "n_placeholder": true }
+    ]
+  },
+  "comparison": {
+    "zh": ["和", "与", "跟", "哪个", "对比", "比较", "区别", "差异", "不同", "优劣"],
+    "en": ["vs", "versus", "compare", "comparison", "difference", "differences", "which is better", "which one", "or"],
+    "it": ["vs", "rispetto a", "confronta", "confronto", "differenza", "differenze", "quale è meglio", "qual è meglio", "quale", "oppure"]
+  },
+  "elliptical": {
+    "zh": ["还有呢", "然后呢", "为什么", "怎么做"],
+    "en": ["what about", "how about", "why", "how come"],
+    "it": ["che ne dici di", "perché", "come mai"]
+  },
+  "elliptical_leading": {
+    "en": ["and for", "and the"],
+    "it": ["e per", "e il", "e la"]
+  },
+  "compound": {
+    "zh": ["并且", "以及", "同时", "另外", "还有", "分别"],
+    "en": ["and also", "as well as", "additionally", "respectively", "plus"],
+    "it": ["e anche", "inoltre", "nonché", "rispettivamente"]
+  },
+  "vague": {
+    "zh": ["怎么办", "有什么", "介绍一下", "说说", "讲讲"],
+    "en": ["tell me about", "what can you", "anything about", "overview of"],
+    "it": ["parlami di", "cosa sai di", "panoramica di"]
+  },
+  "small_talk": {
+    "zh": ["你好", "您好", "你们好", "嗨", "哈喽", "谢谢", "谢谢你", "谢谢您", "多谢", "感谢", "再见", "早上好", "晚上好", "好的"],
+    "en": ["hi", "hello", "hey", "hi there", "hello there", "thanks", "thank you", "thanks a lot", "thank you very much", "many thanks", "bye", "goodbye", "good morning", "good afternoon", "good evening", "ok", "okay"],
+    "it": ["ciao", "grazie", "grazie mille", "buongiorno", "buonasera", "salve", "arrivederci", "va bene"]
+  },
+  "question_markers": {
+    "zh": {
+      "question_words": ["什么", "怎么", "怎样", "如何", "哪", "谁", "几", "多少", "多久", "吗", "呢", "为什么", "是否"],
+      "verb_markers": ["是", "能", "可以", "会", "需要", "应该", "请", "告诉", "解释", "介绍", "帮我"]
+    },
+    "en": {
+      "question_words": ["what", "which", "who", "whom", "whose", "when", "where", "why", "how"],
+      "verb_markers": ["is", "are", "was", "were", "do", "does", "did", "can", "could", "should", "would", "will", "has", "have", "need", "explain", "tell", "show", "list", "give", "find", "describe", "define"]
+    },
+    "it": {
+      "question_words": ["cosa", "che cosa", "chi", "quale", "quali", "qual", "quando", "dove", "perché", "come", "quanto", "quanta", "quanti", "quante"],
+      "verb_markers": ["è", "sono", "era", "può", "possono", "deve", "devono", "ha", "hanno", "serve", "spiega", "dimmi", "mostra", "elenca", "trova", "descrivi"]
+    }
+  },
+  "stopwords": {
+    "en": ["the", "is", "are", "what", "which", "how", "of"],
+    "it": ["il", "lo", "la", "gli", "che", "di", "è", "perché", "quale", "come", "sono", "della"]
+  },
+  "personal_data": {
+    "phone": "(?<![\\d+])(?:\\+\\d{1,3}[\\s-]?)?(?:\\(?\\d{2,4}\\)?[\\s-]?){2,4}\\d{3,4}(?!\\d)",
+    "email": "[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9-]{1,63}(?:\\.[A-Za-z0-9-]{1,63}){1,8}",
+    "cn_resident_id": "(?<![0-9A-Za-z])\\d{17}[\\dXx](?![0-9A-Za-z])",
+    "it_codice_fiscale": "(?<![A-Za-z0-9])[A-Za-z]{6}\\d{2}[A-Za-z]\\d{2}[A-Za-z]\\d{3}[A-Za-z](?![A-Za-z0-9])",
+    "long_digit_run": "(?<!\\d)\\d{9,}(?!\\d)"
+  },
+  "first_person": {
+    "zh": ["我的", "我们的", "本人", "我自己"],
+    "en": ["my", "mine", "myself", "our", "ours"],
+    "it": ["il mio", "la mia", "i miei", "le mie", "mio", "mia", "miei", "mie", "nostro", "nostra"]
+  },
+  "patterns": {
+    "exact_code": "[A-Z]+[_-][A-Z0-9_-]+|\\b[A-Z]{2,}\\d+\\b",
+    "zh_gai": "(?:^\\s*该|该(?=产品|文档|条款|公司|功能))",
+    "zh_elliptical": ["那.{0,20}?呢", "呢\\s*[?？]\\s*$"],
+    "comparison_between": {
+      "en": "\\bbetween\\b.{1,120}?\\band\\b",
+      "it": "(?<![\\p{L}\\p{N}])(?:tra|fra)(?![\\p{L}\\p{N}]).{1,120}?(?<![\\p{L}\\p{N}])e(?![\\p{L}\\p{N}])"
+    },
+    "relative_time_n": {
+      "zh": [
+        { "pattern": "近\\s*(\\d{1,4}|[一二两三四五六七八九十]{1,3})\\s*(?:天|日)", "unit": "day" },
+        { "pattern": "近\\s*(\\d{1,4}|[一二两三四五六七八九十]{1,3})\\s*(?:周|个?星期)", "unit": "week" },
+        { "pattern": "近\\s*(\\d{1,4}|[一二两三四五六七八九十]{1,3})\\s*个?月", "unit": "month" },
+        { "pattern": "近\\s*(\\d{1,4}|[一二两三四五六七八九十]{1,3})\\s*年", "unit": "year" }
+      ],
+      "en": [
+        { "pattern": "\\b(?:past|last)\\s+(\\d{1,4})\\s+days?\\b", "unit": "day" },
+        { "pattern": "\\b(?:past|last)\\s+(\\d{1,4})\\s+weeks?\\b", "unit": "week" },
+        { "pattern": "\\b(?:past|last)\\s+(\\d{1,4})\\s+months?\\b", "unit": "month" },
+        { "pattern": "\\b(?:past|last)\\s+(\\d{1,4})\\s+years?\\b", "unit": "year" }
+      ],
+      "it": [
+        { "pattern": "\\bnegli\\s+ultimi\\s+(\\d{1,4})\\s+giorni\\b", "unit": "day" },
+        { "pattern": "\\bnelle\\s+ultime\\s+(\\d{1,4})\\s+settimane\\b", "unit": "week" },
+        { "pattern": "\\bnegli\\s+ultimi\\s+(\\d{1,4})\\s+mesi\\b", "unit": "month" },
+        { "pattern": "\\bnegli\\s+ultimi\\s+(\\d{1,4})\\s+anni\\b", "unit": "year" }
+      ]
+    },
+    "quoted": [
+      "\"([^\"\\n]{1,200})\"",
+      "“([^”\\n]{1,200})”",
+      "「([^」\\n]{1,200})」",
+      "『([^』\\n]{1,200})』",
+      "«([^»\\n]{1,200})»"
+    ],
+    "url": "https?://[^\\s<>\"'“”「」«»（）()\\[\\]]{1,2000}",
+    "email": "[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9-]{1,63}(?:\\.[A-Za-z0-9-]{1,63}){1,8}",
+    "currency_amount": "[€$£¥￥]\\s?\\d{1,15}(?:[.,]\\d{1,15}){0,5}",
+    "number_with_unit": "\\d{1,15}(?:[.,]\\d{1,15}){0,5}\\s?(?:%|％|万元|亿元|元|块|万|亿|美元|欧元|英镑|日元|人民币|(?:EUR|USD|GBP|CNY|RMB|euro|euros|dollars|yuan|kg|km|cm|mm|GB|MB|TB|KB|ms)(?![\\p{L}\\p{N}]))",
+    "explicit_date": [
+      "\\d{4}[-/.]\\d{1,2}[-/.]\\d{1,2}",
+      "\\d{1,2}/\\d{1,2}/\\d{4}",
+      "\\d{4}年\\d{1,2}月(?:\\d{1,2}[日号])?",
+      "\\d{1,2}月\\d{1,2}[日号]",
+      "(?<![\\p{L}\\p{N}])\\d{1,2}\\s+(?:January|February|March|April|May|June|July|August|September|October|November|December|gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre)\\s+\\d{4}(?![\\p{N}])",
+      "(?<![\\p{L}])(?:January|February|March|April|May|June|July|August|September|October|November|December)\\s+\\d{1,2},?\\s+\\d{4}(?![\\p{N}])"
+    ],
+    "version": "(?<![\\p{L}\\p{N}])[vV]\\d{1,6}(?:\\.\\d{1,6}){1,3}(?![\\p{N}])|(?<![\\p{L}\\p{N}.])\\d{1,6}\\.\\d{1,6}\\.\\d{1,6}(?![\\p{N}])"
+  }
+}
