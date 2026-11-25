@@ -222,16 +222,21 @@ function initDocTypesPanel() {
   window.docTypesPanel = panel;
 }
 
+function bindDocTypesPanel() {
+  document.querySelectorAll('[data-tab="rag-administration"]').forEach((link) => {
+    if (link.getAttribute('data-doc-types-bound')) return;
+    link.setAttribute('data-doc-types-bound', '1');
+    link.addEventListener('click', () => initDocTypesPanel());
+  });
+}
+
 if (typeof window !== 'undefined') {
   window.buildUploadForm = buildUploadForm;
   window.buildDocTypeSelectOptions = buildDocTypeSelectOptions;
   window.fetchUploadPickerDefault = fetchUploadPickerDefault;
   window.docTypeLabelForLocale = docTypeLabelForLocale;
   window.initDocTypesPanel = initDocTypesPanel;
-  document.addEventListener('DOMContentLoaded', () => {
-    const tab = document.querySelector('[data-tab="rag-administration"]');
-    if (tab) tab.addEventListener('click', () => initDocTypesPanel());
-  });
+  document.addEventListener('DOMContentLoaded', () => bindDocTypesPanel());
 }
 
 if (typeof module !== 'undefined' && module.exports) {

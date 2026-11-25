@@ -885,7 +885,14 @@ function buildTierPutBody(docType, minTier, maxTier) {
   };
 }
 
-function mapIngestionError(result, locale, context) {
+function ingestionAppUrl(fallback) {
+  if (fallback) return fallback;
+  if (typeof window !== 'undefined' && typeof window.getConfiguredMyRAGAppUrl === 'function') return window.getConfiguredMyRAGAppUrl();
+  if (typeof window !== 'undefined' && window.location && window.location.origin) return window.location.origin;
+  return 'http://localhost:3000';
+}
+
+function mapIngestionError(result, locale, context, appUrl) {
   const status = result && result.status;
   const body = (result && result.body) || {};
   const err = body && body.error;
@@ -893,7 +900,7 @@ function mapIngestionError(result, locale, context) {
     return { key: 'error.network', message: resolveSharedLabel('error.network', locale) };
   }
   if (status === 401 || (status === 403 && err === 'Admin access required')) {
-    return { key: 'error.signIn', message: resolveSharedLabel('error.signIn', locale, { appUrl: '{appUrl}' }) };
+    return { key: 'error.signIn', message: resolveSharedLabel('error.signIn', locale, { appUrl: ingestionAppUrl(appUrl) }) };
   }
   if (status === 403 && err === 'Forbidden') {
     return { key: 'error.workspace', message: ingestionLabel('error.workspace', locale) };
@@ -941,6 +948,7 @@ class IngestionPanel {
     this.openJobId = null;
     this.listController = null;
     this.filters = { status: 'all', kind: 'all' };
+    this.appUrl = (root && root.dataset && root.dataset.appUrl) || null;
   }
 
   refresh() {
@@ -1061,7 +1069,7 @@ class IngestionPanel {
     const statusEl = this.root.querySelector('[data-ingestion-jobs-status]');
     const tbody = this.root.querySelector('[data-ingestion-jobs-tbody]');
     if (!result.ok) {
-      const mapped = mapIngestionError(result, this.locale, 'jobs');
+      const mapped = mapIngestionError(result, this.locale, 'jobs', this.appUrl);
       if (mapped.key === 'error.signIn' || mapped.key === 'error.workspace') {
         this.showAuthAlert(mapped.message);
         return;
@@ -1138,7 +1146,7 @@ class IngestionPanel {
     if (!host) return;
     host.replaceChildren();
     if (!result.ok) {
-      const mapped = mapIngestionError(result, this.locale, 'budget');
+      const mapped = mapIngestionError(result, this.locale, 'budget', this.appUrl);
       const p = document.createElement('p');
       p.className = 'text-error text-sm';
       p.textContent = mapped.message;
@@ -1163,7 +1171,7 @@ class IngestionPanel {
     });
   const statusEl = this.root.querySelector('[data-ingestion-jobs-status]');
     if (!result.ok) {
-      const mapped = mapIngestionError(result, this.locale, 'jobs');
+      const mapped = mapIngestionError(result, this.locale, 'jobs', this.appUrl);
       if (statusEl) statusEl.textContent = mapped.message;
       if (mapped.key === 'error.notFound' || mapped.key === 'error.notRetryable') this.loadJobs();
       return;
@@ -1222,7 +1230,7 @@ class IngestionPanel {
     const result = await this.rag('admin/ingest-jobs/' + encodeURIComponent(jobId) + this.orgQuery(), { method: 'DELETE' });
     const statusEl = this.root.querySelector('[data-ingestion-jobs-status]');
     if (!result.ok) {
-      const mapped = mapIngestionError(result, this.locale, 'jobs');
+      const mapped = mapIngestionError(result, this.locale, 'jobs', this.appUrl);
       if (statusEl) statusEl.textContent = mapped.message;
       if (mapped.key === 'error.notDeletable' || mapped.key === 'error.notFound') this.loadJobs();
       return;
@@ -1253,6 +1261,14 @@ function initIngestionPanel() {
   }
 }
 
+function bindIngestionPanel() {
+  document.querySelectorAll('[data-tab="rag-administration"]').forEach((link) => {
+    if (link.getAttribute('data-ingestion-bound')) return;
+    link.setAttribute('data-ingestion-bound', '1');
+    link.addEventListener('click', () => initIngestionPanel());
+  });
+}
+
 if (typeof window !== 'undefined') {
   window.initIngestionPanel = initIngestionPanel;
   window.ingestionLabel = ingestionLabel;
@@ -1261,12 +1277,11 @@ if (typeof window !== 'undefined') {
   window.buildBudgetView = buildBudgetView;
   window.buildTierPutBody = buildTierPutBody;
   window.mapIngestionError = mapIngestionError;
+  bindIngestionPanel();
   document.addEventListener('DOMContentLoaded', () => {
+    bindIngestionPanel();
     const active = document.getElementById('rag-administration');
     if (active && active.classList.contains('active')) initIngestionPanel();
-  });
-  document.querySelectorAll('[data-tab="rag-administration"]').forEach((tab) => {
-    tab.addEventListener('click', () => initIngestionPanel());
   });
 }
 

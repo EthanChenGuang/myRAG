@@ -56,6 +56,7 @@
     </script>
 
     <!-- Config UI Utilities -->
+    <script src="utils/safe-dom.js"></script>
     <script src="utils/modal.js"></script>
     <script src="pickers/folder-picker.js"></script>
     <script src="pickers/file-picker.js"></script>
@@ -2314,15 +2315,23 @@
 
                                         // Truncate filename if too long
                                         const displayName = file.name.length > 12
-                                            ? file.name.substring(0, 10) + '...'
+                                            ? file.name.substring(0, 10) + '…'
                                             : file.name;
 
-                                        previewDiv.innerHTML = `
-                                            <div class="w-16 h-16 rounded-lg overflow-hidden border border-base-content/30 bg-base-300">
-                                                <img src="${e.target.result}" alt="${file.name}" class="w-full h-full object-cover" />
-                                            </div>
-                                            <span class="text-xs text-base-content/60 mt-1 max-w-[70px] truncate" title="${file.name}">${displayName}</span>
-                                        `;
+                                        const frame = document.createElement('div');
+                                        frame.className = 'w-16 h-16 rounded-lg overflow-hidden border border-base-content/30 bg-base-300';
+                                        const preview = document.createElement('img');
+                                        preview.className = 'w-full h-full object-cover';
+                                        preview.width = 64;
+                                        preview.height = 64;
+                                        preview.src = e.target.result;
+                                        preview.alt = file.name;
+                                        frame.appendChild(preview);
+                                        const caption = document.createElement('span');
+                                        caption.className = 'text-xs text-base-content/60 mt-1 max-w-[70px] truncate';
+                                        caption.title = file.name;
+                                        caption.textContent = displayName;
+                                        previewDiv.append(frame, caption);
                                         selectedGrid.appendChild(previewDiv);
                                     };
                                     reader.readAsDataURL(file);
@@ -2366,15 +2375,17 @@
                                             imgEl.className = 'relative group w-24 h-24 sm:w-28 sm:h-28 rounded-lg overflow-hidden border border-base-content/20 cursor-pointer flex-shrink-0';
 
                                             // Build HTML - Using opacity transition
+                                            // Constant markup only; image data is set through DOM properties below.
                                             imgEl.innerHTML = `
-                                                <img src="${img.url}" alt="${img.name || 'Uploaded image'}" 
-                                                     class="w-full h-full object-cover transition-all duration-200 group-hover:opacity-90" loading="lazy" />
+                                                <img data-kb-image class="w-full h-full object-cover transition-all duration-200 group-hover:opacity-90" loading="lazy" />
                                                 
                                                 <!-- Delete Button -->
                                                 <div class="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10">
                                                     <button class="flex items-center justify-center w-7 h-7 rounded-full bg-error text-white shadow-md hover:bg-red-600 transition-colors"
+                                                            type="button"
                                                             title="Delete image"
-                                                            onclick="window.deleteImage('${img.id}', event)">
+                                                            aria-label="Delete image"
+                                                            data-kb-image-delete>
                                                         <!-- Inline Lucide Trash-2 SVG -->
                                                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                                             <path d="M3 6h18"/><path d="M19 6v14c0 1-2 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>
@@ -2382,6 +2393,12 @@
                                                     </button>
                                                 </div>
                                             `;
+                                            const thumb = imgEl.querySelector('[data-kb-image]');
+                                            thumb.width = 112;
+                                            thumb.height = 112;
+                                            thumb.src = String(img.url || '');
+                                            thumb.alt = String(img.name || 'Uploaded image');
+                                            imgEl.querySelector('[data-kb-image-delete]').addEventListener('click', (event) => window.deleteImage(img.id, event));
 
                                             // Open lightbox on click (unless delete button clicked)
                                             imgEl.onclick = (e) => {
@@ -2493,7 +2510,7 @@
 
                                     if (response.ok) {
                                         statusDiv.className = 'mt-4 p-4 rounded-lg bg-success/20 border border-success text-success-content';
-                                        statusDiv.innerHTML = `✅ Successfully uploaded and queued ${result.uploaded} image(s) for indexing.`;
+                                        statusDiv.textContent = `✅ Successfully uploaded and queued ${result.uploaded} image(s) for indexing.`;
                                         clearSelectedImages();
                                         contextInput.value = '';
                                         showNotification('Images uploaded successfully', 'success');
@@ -2522,25 +2539,42 @@
                                 const lightbox = document.createElement('div');
                                 lightbox.className = 'fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4';
                                 lightbox.onclick = (e) => { if (e.target === lightbox) lightbox.remove(); };
-                                lightbox.innerHTML = `
-                                    <div class="relative max-w-4xl max-h-[90vh]">
-                                        <img src="${url}" alt="${name || 'Image'}" class="max-w-full max-h-[90vh] object-contain rounded-lg" />
-                                        <button onclick="this.closest('.fixed').remove()" class="absolute top-2 right-2 btn btn-circle btn-sm btn-ghost text-white">✕</button>
-                                    </div>
-                                `;
+                                const frame = document.createElement('div');
+                                frame.className = 'relative max-w-4xl max-h-[90vh]';
+                                const full = document.createElement('img');
+                                full.className = 'max-w-full max-h-[90vh] object-contain rounded-lg';
+                                full.src = String(url || '');
+                                full.alt = String(name || 'Image');
+                                const close = document.createElement('button');
+                                close.type = 'button';
+                                close.className = 'absolute top-2 right-2 btn btn-circle btn-sm btn-ghost text-white';
+                                close.setAttribute('aria-label', 'Close image');
+                                close.textContent = '✕';
+                                close.addEventListener('click', () => lightbox.remove());
+                                frame.append(full, close);
+                                lightbox.appendChild(frame);
                                 document.body.appendChild(lightbox);
                             }
 
                             function showNotification(message, type = 'info') {
                                 const notification = document.createElement('div');
                                 notification.className = `fixed bottom-4 right-4 z-50 p-4 rounded-lg shadow-lg ${type === 'success' ? 'bg-success text-success-content' : type === 'error' ? 'bg-error text-error-content' : 'bg-info text-info-content'}`;
-                                notification.innerHTML = `
-                                    <div class="flex items-center gap-2">
-                                        <span>${type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️'}</span>
-                                        <span>${message}</span>
-                                        <button class="ml-4 opacity-70 hover:opacity-100" onclick="this.parentElement.parentElement.remove()">×</button>
-                                    </div>
-                                `;
+                                notification.setAttribute('role', type === 'error' ? 'alert' : 'status');
+                                const row = document.createElement('div');
+                                row.className = 'flex items-center gap-2';
+                                const icon = document.createElement('span');
+                                icon.setAttribute('aria-hidden', 'true');
+                                icon.textContent = type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️';
+                                const text = document.createElement('span');
+                                text.textContent = String(message ?? '');
+                                const dismiss = document.createElement('button');
+                                dismiss.type = 'button';
+                                dismiss.className = 'ml-4 opacity-70 hover:opacity-100';
+                                dismiss.setAttribute('aria-label', 'Dismiss notification');
+                                dismiss.textContent = '×';
+                                dismiss.addEventListener('click', () => notification.remove());
+                                row.append(icon, text, dismiss);
+                                notification.appendChild(row);
                                 document.body.appendChild(notification);
                                 setTimeout(() => {
                                     notification.style.opacity = '0';
@@ -9821,7 +9855,14 @@
                 const faviconUrl = this.config.NEXT_PUBLIC_FAVICON_URL || '/favicon.svg';
                 const faviconPreview = document.getElementById('faviconPreview');
                 if (faviconPreview) {
-                    faviconPreview.innerHTML = `<img src="${faviconUrl}" alt="Current favicon" class="w-6 h-6" onerror="this.src='/favicon.svg'">`;
+                    const faviconImg = document.createElement('img');
+                    faviconImg.className = 'w-6 h-6';
+                    faviconImg.width = 24;
+                    faviconImg.height = 24;
+                    faviconImg.alt = 'Current favicon';
+                    faviconImg.addEventListener('error', () => { faviconImg.src = '/favicon.svg'; }, { once: true });
+                    faviconImg.src = String(faviconUrl);
+                    faviconPreview.replaceChildren(faviconImg);
                 }
 
                 // Update model cards after config is loaded
@@ -11191,7 +11232,8 @@
                                         </div>
                                         <div>
                                             <input type="text" class="font-semibold bg-transparent border-b border-transparent hover:border-base-300 focus:border-primary px-1" 
-                                                   value="${group.label}" 
+                                                   data-slot-value="label"
+                                                   aria-label="Group label"
                                                    onchange="suggestionsManager.updateGroupLabel(${index}, this.value)"
                                                    placeholder="Group Label">
                                             <div class="text-sm text-base-content/60 mt-1">
@@ -11199,7 +11241,7 @@
                                                 <div class="dropdown dropdown-bottom">
                                                     <button type="button" tabindex="0" class="btn btn-xs gap-4" onclick="event.stopPropagation()">
                                                         <span class="w-4 h-4">${this.getIconEmoji(group.icon)}</span>
-                                                        <span>${group.icon}</span>
+                                                        <span data-slot="icon"></span>
                                                         <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
                                                         </svg>
@@ -11233,7 +11275,8 @@
                                         <div class="flex items-center gap-2">
                                             <span class="text-base-content/50">•</span>
                                             <input type="text" class="input input-sm input-bordered flex-1" 
-                                                   value="${item.text}" 
+                                                   data-suggestion-item="${itemIndex}"
+                                                   aria-label="Suggestion ${itemIndex + 1}"
                                                    onchange="suggestionsManager.updateItem(${index}, ${itemIndex}, this.value)"
                                                    placeholder="Suggestion text">
                                             <button class="btn btn-ghost btn-xs text-error" onclick="suggestionsManager.removeItem(${index}, ${itemIndex})">
@@ -11248,6 +11291,14 @@
                                 </div>
                             </div>
                         `;
+                        cuiFillSlots(groupEl, { label: group.label, icon: group.icon });
+                        (group.items || []).forEach((item, itemIndex) => {
+                            const input = groupEl.querySelector(`[data-suggestion-item="${itemIndex}"]`);
+                            if (input) {
+                                input.value = String(item.text ?? '');
+                                input.setAttribute('value', input.value);
+                            }
+                        });
                         container.appendChild(groupEl);
                     });
 
@@ -11917,7 +11968,7 @@
                     const messageItem = document.createElement('div');
                     messageItem.className = 'flex items-center gap-2 p-2 bg-base-200 rounded-lg';
                     messageItem.innerHTML = `
-                        <span class="flex-1 text-sm">${message.replace(/{Username}/g, '<span class="font-semibold text-primary">John</span>')}</span>
+                        <span class="flex-1 text-sm" data-welcome-text></span>
                         <button class="btn btn-xs btn-ghost" onclick="editWelcomeMessage(${index})">
                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
@@ -11931,6 +11982,16 @@
                             </svg>
                         </button>
                     `;
+                    const welcomeText = messageItem.querySelector('[data-welcome-text]');
+                    String(message).split('{Username}').forEach((part, partIndex) => {
+                        if (partIndex > 0) {
+                            const sample = document.createElement('span');
+                            sample.className = 'font-semibold text-primary';
+                            sample.textContent = 'John';
+                            welcomeText.appendChild(sample);
+                        }
+                        if (part) welcomeText.appendChild(document.createTextNode(part));
+                    });
                     welcomeMessagesList.appendChild(messageItem);
                 });
 
@@ -12414,7 +12475,13 @@
                                     // Update preview
                                     const preview = document.getElementById('faviconPreview');
                                     if (preview) {
-                                        preview.innerHTML = `<img src="${faviconUrl.value}?t=${Date.now()}" alt="Favicon preview" class="w-6 h-6">`;
+                                        const previewImg = document.createElement('img');
+                                        previewImg.className = 'w-6 h-6';
+                                        previewImg.width = 24;
+                                        previewImg.height = 24;
+                                        previewImg.alt = 'Favicon preview';
+                                        previewImg.src = `${faviconUrl.value}?t=${Date.now()}`;
+                                        preview.replaceChildren(previewImg);
                                     }
                                     // Update config manager with new favicon URL
                                     if (window.configManager) {
@@ -13564,27 +13631,27 @@
                 const options = [];
 
                 // Always add default workspace option (no organization - user_id isolation only)
-                options.push('<option value="">👤 Default Workspace</option>');
+                options.push(cuiEl('option', { attrs: { value: '' }, text: '👤 Default Workspace' }));
 
                 // Add personal workspaces section
                 if (this.workspaces.personal.length > 0) {
-                    options.push('<option disabled>───────────────────</option>');
-                    options.push('<option disabled>💼 Personal Workspaces</option>');
+                    options.push(cuiEl('option', { attrs: { disabled: true }, text: '───────────────────' }));
+                    options.push(cuiEl('option', { attrs: { disabled: true }, text: '💼 Personal Workspaces' }));
                     this.workspaces.personal.forEach(org => {
-                        options.push(`<option value="${org.id}">  💼 ${org.name}</option>`);
+                        options.push(cuiEl('option', { attrs: { value: org.id }, text: `  💼 ${org.name}` }));
                     });
                 }
 
                 // Add team workspaces section
                 if (this.workspaces.teams.length > 0) {
-                    options.push('<option disabled>───────────────────</option>');
-                    options.push('<option disabled>🏢 Team Workspaces</option>');
+                    options.push(cuiEl('option', { attrs: { disabled: true }, text: '───────────────────' }));
+                    options.push(cuiEl('option', { attrs: { disabled: true }, text: '🏢 Team Workspaces' }));
                     this.workspaces.teams.forEach(org => {
-                        options.push(`<option value="${org.id}">  🏢 ${org.name}</option>`);
+                        options.push(cuiEl('option', { attrs: { value: org.id }, text: `  🏢 ${org.name}` }));
                     });
                 }
 
-                selector.innerHTML = options.join('');
+                selector.replaceChildren(...options);
 
                 // Listen for changes
                 selector.addEventListener('change', (e) => {
@@ -13777,7 +13844,7 @@
                             const logQueued = typeof ingestLabel === 'function'
                                 ? ingestLabel('monitor.log.queued', locale, { file: fileItem.name })
                                 : `${fileItem.name} queued`;
-                            this.logActivity(this.escapeHtml(logQueued));
+                            this.logActivity(logQueued);
                             fileItem.status = 'completed';
                             fileItem.progress = 100;
                             this.beginQueuedUploadMonitor(resultEntry, locale);
@@ -14034,7 +14101,7 @@
                     const logLine = typeof ingestLabel === 'function'
                         ? ingestLabel(logKey, locale, { file: resultEntry.name, reason })
                         : `${resultEntry.name}: ${status}`;
-                    this.logActivity(this.escapeHtml(logLine));
+                    this.logActivity(logLine);
                 }
                 const announce = typeof ingestLabel === 'function'
                     ? ingestLabel('monitor.announce', locale, { file: resultEntry.name, status: view.label })
@@ -14154,7 +14221,7 @@
                 const timestamp = new Date().toLocaleTimeString();
                 const logEntry = document.createElement('div');
                 logEntry.className = 'text-sm mb-1';
-                logEntry.innerHTML = `<span class="text-base-content/60">[${timestamp}]</span> ${message}`;
+                logEntry.append(cuiEl('span', { className: 'text-base-content/60', text: `[${timestamp}]` }), ` ${message}`);
 
                 if (activityLog.children.length > 0 && activityLog.children[0].textContent.includes('No activity yet')) {
                     activityLog.innerHTML = '';
@@ -14331,7 +14398,7 @@
 
                 const entry = document.createElement('div');
                 entry.className = `text-sm ${colors[type] || colors.info} mb-1`;
-                entry.innerHTML = `<span class="text-xs opacity-60">[${timestamp}]</span> ${message}`;
+                entry.append(cuiEl('span', { className: 'text-xs opacity-60', text: `[${timestamp}]` }), ` ${message}`);
 
                 // Clear "No activity" message if present
                 if (logDiv.querySelector('.text-base-content\\/60')) {
@@ -14851,19 +14918,21 @@ When messaging:
 
             if (Object.keys(customTemplates).length > 0) {
                 customSection.classList.remove('hidden');
-                customContainer.innerHTML = Object.entries(customTemplates).map(([id, template]) => `
-                    <div class="template-option card bg-base-200 cursor-pointer hover:bg-base-300 transition-colors" data-template="${id}">
-                        <div class="card-body py-3">
-                            <div class="flex justify-between items-start">
-                                <div>
-                                    <div class="font-medium">${template.name}</div>
-                                    <div class="text-sm text-base-content/70">${template.description}</div>
-                                </div>
-                                <button class="btn btn-ghost btn-xs text-error" onclick="deleteCustomTemplateAndRefresh('${id}')">✕</button>
-                            </div>
-                        </div>
-                    </div>
-                `).join('');
+                customContainer.replaceChildren(...Object.entries(customTemplates).map(([id, template]) => {
+                    const remove = cuiEl('button', {
+                        className: 'btn btn-ghost btn-xs text-error',
+                        attrs: { type: 'button', 'aria-label': `Delete template ${template.name}` },
+                        text: '✕',
+                        on: { click: (event) => { event.stopPropagation(); deleteCustomTemplateAndRefresh(id); } },
+                    });
+                    return cuiEl('div', { className: 'template-option card bg-base-200 cursor-pointer hover:bg-base-300 transition-colors', attrs: { 'data-template': id } },
+                        cuiEl('div', { className: 'card-body py-3' },
+                            cuiEl('div', { className: 'flex justify-between items-start' },
+                                cuiEl('div', null,
+                                    cuiEl('div', { className: 'font-medium', text: template.name }),
+                                    cuiEl('div', { className: 'text-sm text-base-content/70', text: template.description })),
+                                remove)));
+                }));
             } else {
                 customSection.classList.add('hidden');
             }
@@ -15064,14 +15133,19 @@ When messaging:
                     <h3 class="font-bold text-lg mb-4">Share System Prompt</h3>
                     <p class="mb-4">Share this link to let others use your system prompt:</p>
                     <div class="form-control">
-                        <input type="text" value="${shareUrl}" class="input input-bordered" readonly>
+                        <input type="text" class="input input-bordered" aria-label="Share link" readonly data-slot-value="shareUrl">
                     </div>
                     <div class="modal-action">
-                        <button class="btn btn-primary" onclick="navigator.clipboard.writeText('${shareUrl}').then(() => showToast('Copied!', 'success'))">Copy Link</button>
-                        <button class="btn" onclick="this.closest('.modal').remove()">Close</button>
+                        <button type="button" class="btn btn-primary" data-share-copy>Copy Link</button>
+                        <button type="button" class="btn" data-share-close>Close</button>
                     </div>
                 </div>
             `;
+            cuiFillSlots(modal, { shareUrl });
+            modal.querySelector('[data-share-copy]').addEventListener('click', () => {
+                navigator.clipboard.writeText(String(shareUrl)).then(() => showToast('Copied!', 'success'));
+            });
+            modal.querySelector('[data-share-close]').addEventListener('click', () => modal.remove());
             document.body.appendChild(modal);
         }
 
@@ -15095,7 +15169,7 @@ When messaging:
                             <p class="mb-4">Someone shared a system prompt with you. Would you like to load it?</p>
                             <div class="bg-base-200 p-4 rounded-lg mb-4">
                                 <p class="text-sm text-base-content/70 mb-2">Preview:</p>
-                                <p class="text-sm whitespace-pre-wrap max-h-32 overflow-auto">${shareData.preContext.substring(0, 200)}${shareData.preContext.length > 200 ? '...' : ''}</p>
+                                <p class="text-sm whitespace-pre-wrap max-h-32 overflow-auto" data-slot="preview"></p>
                             </div>
                             <div class="modal-action">
                                 <button class="btn btn-primary" id="acceptSharedPrompt">Load Prompt</button>
@@ -15103,6 +15177,8 @@ When messaging:
                             </div>
                         </div>
                     `;
+                    const sharedPre = String(shareData.preContext ?? '');
+                    cuiFillSlots(modal, { preview: sharedPre.substring(0, 200) + (sharedPre.length > 200 ? '…' : '') });
                     document.body.appendChild(modal);
 
                     // Handle acceptance
@@ -15277,34 +15353,37 @@ When messaging:
                     this.translatedContent = result.translated;
 
                     // Show preview - combine pre and post context for display
-                    let fullTranslatedPrompt = '';
-                    const preContext = result.translated.preContext || '';
-                    const postContext = result.translated.postContext || '';
-
-                    // Check if {{context}} exists in either part
+                    const preContext = String(result.translated.preContext || '');
+                    const postContext = String(result.translated.postContext || '');
                     const hasContextPlaceholder = preContext.includes('{{context}}') || postContext.includes('{{context}}');
+                    const contextMarker = () => cuiEl('div', {
+                        className: 'bg-blue-100 text-blue-800 px-2 py-1 rounded text-center font-semibold my-2',
+                        text: '[CONTEXT WILL BE INSERTED HERE]',
+                    });
+                    const previewNodes = [];
 
                     if (hasContextPlaceholder) {
-                        // If {{context}} exists, highlight it
-                        fullTranslatedPrompt = preContext + (postContext ? '\n\n' + postContext : '');
-                        fullTranslatedPrompt = fullTranslatedPrompt.replace(
-                            /\{\{context\}\}/g,
-                            '<span class="bg-yellow-300 text-black px-1 rounded font-semibold">{{context}}</span>'
-                        );
+                        // Highlight each {{context}}; the prompt text itself stays text.
+                        const combined = preContext + (postContext ? '\n\n' + postContext : '');
+                        combined.split('{{context}}').forEach((part, partIndex) => {
+                            if (partIndex > 0) {
+                                previewNodes.push(cuiEl('span', { className: 'bg-yellow-300 text-black px-1 rounded font-semibold', text: '{{context}}' }));
+                            }
+                            if (part) previewNodes.push(part);
+                        });
                     } else {
                         // If no {{context}} placeholder, add a visual separator showing where it would go
-                        fullTranslatedPrompt = preContext;
+                        if (preContext) previewNodes.push(preContext);
                         if (preContext && postContext) {
-                            fullTranslatedPrompt += '\n\n<div class="bg-blue-100 text-blue-800 px-2 py-1 rounded text-center font-semibold my-2">[CONTEXT WILL BE INSERTED HERE]</div>\n\n';
-                            fullTranslatedPrompt += postContext;
+                            previewNodes.push('\n\n', contextMarker(), '\n\n', postContext);
                         } else if (preContext && !postContext) {
-                            fullTranslatedPrompt += '\n\n<div class="bg-blue-100 text-blue-800 px-2 py-1 rounded text-center font-semibold my-2">[CONTEXT WILL BE INSERTED HERE]</div>';
+                            previewNodes.push('\n\n', contextMarker());
                         } else if (!preContext && postContext) {
-                            fullTranslatedPrompt = '<div class="bg-blue-100 text-blue-800 px-2 py-1 rounded text-center font-semibold my-2">[CONTEXT WILL BE INSERTED HERE]</div>\n\n' + postContext;
+                            previewNodes.push(contextMarker(), '\n\n', postContext);
                         }
                     }
 
-                    previewContent.innerHTML = fullTranslatedPrompt;
+                    previewContent.replaceChildren(...previewNodes);
                     previewDiv.classList.remove('hidden');
 
                     // Update status
@@ -16185,28 +16264,29 @@ When messaging:
                 if (status === 'loading') {
                     element.innerHTML = `
                         <span class="loading loading-spinner loading-xs"></span>
-                        <span class="ml-2">${text}</span>
+                        <span class="ml-2" data-slot="text"></span>
                     `;
                     element.className = 'stat-value text-sm text-warning';
                 } else if (status === 'success') {
                     element.innerHTML = `
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline"><polyline points="20 6 9 17 4 12"/></svg>
-                        <span class="ml-2">${text}</span>
+                        <span class="ml-2" data-slot="text"></span>
                     `;
                     element.className = 'stat-value text-sm text-success';
                 } else if (status === 'error') {
                     element.innerHTML = `
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
-                        <span class="ml-2">${text}</span>
+                        <span class="ml-2" data-slot="text"></span>
                     `;
                     element.className = 'stat-value text-sm text-error';
                 } else if (status === 'warning') {
                     element.innerHTML = `
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                        <span class="ml-2">${text}</span>
+                        <span class="ml-2" data-slot="text"></span>
                     `;
                     element.className = 'stat-value text-sm text-warning';
                 }
+                cuiFillSlots(element, { text });
             }
 
             async function fetchAdminUsers() {
@@ -16235,7 +16315,7 @@ When messaging:
                     console.log('Admin users data:', data);
 
                     if (data.error) {
-                        adminUsersList.innerHTML = `<div class="text-error text-sm">Error: ${data.error}</div>`;
+                        adminUsersList.replaceChildren(cuiEl('div', { className: 'text-error text-sm', text: `Error: ${data.error}` }));
                         return;
                     }
 
@@ -16246,17 +16326,21 @@ When messaging:
                             userDiv.className = 'flex justify-between items-center p-3 bg-base-100 rounded-lg border';
                             userDiv.innerHTML = `
                                 <div class="flex-1">
-                                    <div class="font-medium text-sm">${user.email || 'Unknown Email'}</div>
-                                    <div class="text-xs text-base-content/60">ID: ${user.id}</div>
+                                    <div class="font-medium text-sm" data-slot="email"></div>
+                                    <div class="text-xs text-base-content/60">ID: <span data-slot="id"></span></div>
                                 </div>
                                 <div class="flex-shrink-0">
-                                    <button class="btn btn-outline btn-xs text-error" 
-                                            ${user.id === 'from-env-file' ? 'disabled title="Cannot remove primary admin"' : `onclick="removeAdmin('${user.id}', '${user.email}')"`}>
+                                    <button type="button" class="btn btn-outline btn-xs text-error" data-admin-remove
+                                            ${user.id === 'from-env-file' ? 'disabled title="Cannot remove primary admin"' : ''}>
                                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                                         Remove
                                     </button>
                                 </div>
                             `;
+                            cuiFillSlots(userDiv, { email: user.email || 'Unknown Email', id: user.id });
+                            if (user.id !== 'from-env-file') {
+                                userDiv.querySelector('[data-admin-remove]').addEventListener('click', () => removeAdmin(user.id, user.email));
+                            }
                             adminUsersList.appendChild(userDiv);
                         });
                     } else {
@@ -16272,7 +16356,7 @@ When messaging:
                     }
                 } catch (error) {
                     console.error('Error fetching admin users:', error);
-                    adminUsersList.innerHTML = `<div class="text-error text-sm">Error loading admin users: ${error.message}</div>`;
+                    adminUsersList.replaceChildren(cuiEl('div', { className: 'text-error text-sm', text: `Error loading admin users: ${error.message}` }));
                 }
             }
 
@@ -16348,7 +16432,9 @@ When messaging:
                 }
 
                 adminActionResult.className = className;
-                adminActionResult.innerHTML = `${icon}<span class="text-sm">${message}</span>`;
+                // icon is one of the constant markup strings above; message is data.
+                adminActionResult.innerHTML = icon;
+                adminActionResult.appendChild(cuiEl('span', { className: 'text-sm', text: message }));
             }
 
             // Admin operation functions
@@ -16440,7 +16526,9 @@ When messaging:
                 }
 
                 resultDiv.className = `mt-4 p-4 rounded-lg border ${className}`;
-                resultDiv.innerHTML = `${icon}<span class="text-sm">${message}</span>`;
+                // icon is one of the constant markup strings above; message is data.
+                resultDiv.innerHTML = icon;
+                resultDiv.appendChild(cuiEl('span', { className: 'text-sm', text: message }));
             }
 
             // Password reset function removed - no longer needed in passwordless system
@@ -16980,6 +17068,36 @@ When messaging:
             return false;
         }
 
+        function modelStatusIcon(kind, color, label) {
+            const paths = {
+                reasoning: '<path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/><path d="M17.599 6.5a3 3 0 0 0 .399-1.375"/><path d="M6.003 5.125A3 3 0 0 0 6.401 6.5"/><path d="M3.477 10.896a4 4 0 0 1 .585-.396"/><path d="M19.938 10.5a4 4 0 0 1 .585.396"/><path d="M6 18a4 4 0 0 1-1.967-.516"/><path d="M19.967 17.484A4 4 0 0 1 18 18"/>',
+                free: '<path d="M12 7v14"/><path d="M16 3a4 4 0 0 0-8 0"/><path d="M7 12h10"/><rect x="3" y="7" width="18" height="14" rx="2"/>',
+                openSource: '<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>',
+                uncensored: '<path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 1 1 0 10h-2"/><line x1="8" x2="8" y1="12" y2="12"/><line x1="16" x2="16" y1="12" y2="12"/>',
+            };
+            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+            svg.setAttribute('width', '14');
+            svg.setAttribute('height', '14');
+            svg.setAttribute('viewBox', '0 0 24 24');
+            svg.setAttribute('fill', 'none');
+            svg.setAttribute('stroke', 'currentColor');
+            svg.setAttribute('stroke-width', '2');
+            svg.setAttribute('stroke-linecap', 'round');
+            svg.setAttribute('stroke-linejoin', 'round');
+            svg.setAttribute('class', 'inline-block ml-2');
+            svg.setAttribute('style', `color: ${color}; vertical-align: middle;`);
+            svg.setAttribute('role', 'img');
+            svg.setAttribute('aria-label', label);
+            svg.setAttribute('focusable', 'false');
+            // Constant markup only: the path table holds no model data.
+            svg.innerHTML = paths[kind];
+            const title = document.createElement('title');
+            title.textContent = label;
+            svg.insertBefore(title, svg.firstChild);
+            return svg;
+        }
+
         function renderModels() {
             const container = document.getElementById('models-container');
             if (!container) return;
@@ -16993,12 +17111,21 @@ When messaging:
                 models = modelConfig.openrouterModels;
             }
 
-            container.innerHTML = '';
+            container.replaceChildren();
 
             if (models.length === 0) {
-                container.innerHTML = '<p class="text-base-content/70">No models configured for this provider.</p>';
+                const empty = document.createElement('p');
+                empty.className = 'text-base-content/70';
+                empty.textContent = 'No models configured for this provider.';
+                container.appendChild(empty);
                 return;
             }
+
+            const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+            const purpleColor = isDark ? '#c084fc' : '#9333ea';
+            const blueColor = isDark ? '#60a5fa' : '#2563eb';
+            const redColor = isDark ? '#f472b6' : '#dc2626';
+            const orangeColor = isDark ? '#fb923c' : '#ea580c';
 
             models.forEach((model, index) => {
                 const modelDiv = document.createElement('div');
@@ -17007,59 +17134,72 @@ When messaging:
                 modelDiv.draggable = true;
                 modelDiv.dataset.index = index;
 
-                // Define theme-aware colors FIRST (before using them)
-                const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-                const purpleColor = isDark ? '#c084fc' : '#9333ea';
-                const blueColor = isDark ? '#60a5fa' : '#2563eb';
-                const redColor = isDark ? '#f472b6' : '#dc2626';
-                const orangeColor = isDark ? '#fb923c' : '#ea580c';
+                const handle = document.createElement('div');
+                handle.className = 'drag-handle mr-2';
+                handle.setAttribute('style', 'font-size: 1.2rem; line-height: 1;');
+                handle.title = 'Drag to reorder';
+                handle.setAttribute('aria-hidden', 'true');
+                handle.textContent = '☰';
 
-                // Add brain icon for reasoning models (SVG to match other icons)
-                const reasoningIndicator = model.supportsReasoning
-                    ? `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline-block ml-2" style="color: ${orangeColor}; vertical-align: middle;" title="Supports ${model.reasoningMethod || 'reasoning'}"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/><path d="M17.599 6.5a3 3 0 0 0 .399-1.375"/><path d="M6.003 5.125A3 3 0 0 0 6.401 6.5"/><path d="M3.477 10.896a4 4 0 0 1 .585-.396"/><path d="M19.938 10.5a4 4 0 0 1 .585.396"/><path d="M6 18a4 4 0 0 1-1.967-.516"/><path d="M19.967 17.484A4 4 0 0 1 18 18"/></svg>`
-                    : '';
+                const info = document.createElement('div');
+                info.className = 'flex-1 min-w-0 break-words';
+                const name = document.createElement('span');
+                name.className = 'font-medium';
+                name.textContent = String(model.displayName ?? '');
+                const id = document.createElement('span');
+                id.className = 'text-sm text-base-content/70 ml-2';
+                id.textContent = `(${String(model.id ?? '')})`;
+                info.append(name, ' ', id);
 
-                // Add gift icon for free models (using SVG to match main app)
-                const freeIndicator = model.isFree
-                    ? `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline-block ml-2" style="color: ${purpleColor}; vertical-align: middle;" title="Free on OpenRouter"><path d="M12 7v14"/><path d="M16 3a4 4 0 0 0-8 0"/><path d="M7 12h10"/><rect x="3" y="7" width="18" height="14" rx="2"/></svg>`
-                    : '';
-                const openSourceIndicator = model.isOpenSource
-                    ? `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline-block ml-2" style="color: ${blueColor}; vertical-align: middle;" title="Open Source"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>`
-                    : '';
-                const uncensoredIndicator = model.isUncensored
-                    ? `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline-block ml-2" style="color: ${redColor}; vertical-align: middle;" title="Uncensored Model"><path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 1 1 0 10h-2"/><line x1="8" x2="8" y1="12" y2="12"/><line x1="16" x2="16" y1="12" y2="12"/></svg>`
-                    : '';
+                if (model.supportsReasoning) {
+                    info.appendChild(modelStatusIcon('reasoning', orangeColor, model.reasoningMethod ? `Supports reasoning (${model.reasoningMethod})` : 'Supports reasoning'));
+                }
+                if (model.isFree) info.appendChild(modelStatusIcon('free', purpleColor, 'Free on OpenRouter'));
+                if (model.isOpenSource) info.appendChild(modelStatusIcon('openSource', blueColor, 'Open Source'));
+                if (model.isUncensored) info.appendChild(modelStatusIcon('uncensored', redColor, 'Uncensored Model'));
 
-                // Default indicator (star icon for first model)
-                const defaultBadge = isDefault
-                    ? `<span class="badge badge-primary badge-sm ml-2" title="Default Model">⭐ Default</span>`
-                    : '';
+                if (isDefault) {
+                    const badge = document.createElement('span');
+                    badge.className = 'badge badge-primary badge-sm ml-2';
+                    badge.title = 'Default Model';
+                    badge.textContent = '⭐ Default';
+                    info.appendChild(badge);
+                }
 
-                // Set as default button (only show for non-default models)
-                const setDefaultButton = !isDefault
-                    ? `<button onclick="setAsDefault(${index})" class="btn btn-sm btn-outline" title="Set as default model">⭐ Set Default</button>`
-                    : '';
+                const actions = document.createElement('div');
+                actions.className = 'flex gap-2';
+                const rowLabel = String(model.displayName || model.id || 'model');
+                [['up', -1, '↑'], ['down', 1, '↓']].forEach(([direction, delta, glyph]) => {
+                    const move = document.createElement('button');
+                    move.type = 'button';
+                    move.className = 'btn btn-sm btn-ghost btn-square';
+                    move.setAttribute('aria-label', `Move ${rowLabel} ${direction}`);
+                    move.dataset.move = direction;
+                    move.title = `Move ${direction}`;
+                    move.textContent = glyph;
+                    move.disabled = (delta < 0 && index === 0) || (delta > 0 && index === models.length - 1);
+                    move.addEventListener('click', () => moveModel(index, delta));
+                    actions.appendChild(move);
+                });
+                if (!isDefault) {
+                    const setDefault = document.createElement('button');
+                    setDefault.type = 'button';
+                    setDefault.className = 'btn btn-sm btn-outline';
+                    setDefault.title = 'Set as default model';
+                    setDefault.textContent = '⭐ Set Default';
+                    setDefault.addEventListener('click', () => setAsDefault(index));
+                    actions.appendChild(setDefault);
+                }
+                const remove = document.createElement('button');
+                remove.type = 'button';
+                remove.className = 'btn btn-sm btn-error btn-outline';
+                remove.textContent = 'Remove';
+                remove.setAttribute('aria-label', `Remove ${String(model.displayName || model.id || 'model')}`);
+                remove.addEventListener('click', () => confirmRemoveModel(index, remove));
+                actions.appendChild(remove);
 
-                modelDiv.innerHTML = `
-                    <div class="drag-handle mr-2" style="font-size: 1.2rem; line-height: 1;" title="Drag to reorder">
-                        ☰
-                    </div>
-                    <div class="flex-1">
-                        <span class="font-medium">${model.displayName}</span>
-                        <span class="text-sm text-base-content/70 ml-2">(${model.id})</span>
-                        ${reasoningIndicator}
-                        ${freeIndicator}
-                        ${openSourceIndicator}
-                        ${uncensoredIndicator}
-                        ${defaultBadge}
-                    </div>
-                    <div class="flex gap-2">
-                        ${setDefaultButton}
-                        <button onclick="removeModel(${index})" class="btn btn-sm btn-error btn-outline">Remove</button>
-                    </div>
-                `;
+                modelDiv.append(handle, info, actions);
 
-                // Add drag event listeners
                 modelDiv.addEventListener('dragstart', handleDragStart);
                 modelDiv.addEventListener('dragend', handleDragEnd);
                 modelDiv.addEventListener('dragover', handleDragOver);
@@ -17169,13 +17309,19 @@ When messaging:
                                 </svg>
                                 <div>
                                     <div class="font-bold">✅ Model found! ${confidenceEmoji} Auto-filled successfully</div>
-                                    <div class="text-sm">📝 ${data.model.displayName}</div>
-                                    <div class="text-sm">🔢 ${data.model.contextLength.toLocaleString()} tokens | ${data.model.isFree ? `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline-block" style="color: ${document.documentElement.getAttribute('data-theme') === 'dark' ? '#c084fc' : '#9333ea'}; vertical-align: middle;"><path d="M12 7v14"/><path d="M16 3a4 4 0 0 0-8 0"/><path d="M7 12h10"/><rect x="3" y="7" width="18" height="14" rx="2"/></svg> Free` : '💰 Paid'}</div>
-                                    <div class="text-sm">${reasoningStatus}</div>
+                                    <div class="text-sm">📝 <span data-slot="displayName"></span></div>
+                                    <div class="text-sm">🔢 <span data-slot="contextLength"></span> tokens | ${data.model.isFree ? `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline-block" style="color: ${document.documentElement.getAttribute('data-theme') === 'dark' ? '#c084fc' : '#9333ea'}; vertical-align: middle;"><path d="M12 7v14"/><path d="M16 3a4 4 0 0 0-8 0"/><path d="M7 12h10"/><rect x="3" y="7" width="18" height="14" rx="2"/></svg> Free` : '💰 Paid'}</div>
+                                    <div class="text-sm" data-slot="reasoningStatus"></div>
                                 </div>
                             </div>
                         </div>
                     `;
+                    const contextLength = Number(data.model.contextLength);
+                    cuiFillSlots(statusDiv, {
+                        displayName: data.model.displayName,
+                        contextLength: Number.isFinite(contextLength) ? contextLength.toLocaleString() : '',
+                        reasoningStatus,
+                    });
 
                     // Add animation styles if not already present
                     if (!document.querySelector('#slideInAnimation')) {
@@ -17214,7 +17360,7 @@ When messaging:
                             </svg>
                             <div>
                                 <div class="font-bold">⚠️ Auto-fetch couldn't find the model</div>
-                                <div class="text-sm">${errorMessage}</div>
+                                <div class="text-sm" data-slot="errorMessage"></div>
                                 <div class="mt-2">
                                     <span class="text-sm">💡 You can still add it manually:</span>
                                     <div class="btn-group mt-1">
@@ -17230,6 +17376,7 @@ When messaging:
                         </div>
                     </div>
                 `;
+                cuiFillSlots(statusDiv, { errorMessage });
 
                 // Add animation styles if not already present
                 if (!document.querySelector('#slideInAnimation')) {
@@ -17372,20 +17519,21 @@ When messaging:
                 if (data.success) {
                     console.log(`✅ OpenRouter API test successful:`, data);
 
-                    const testResults = data.testModels.map(model =>
-                        `${model.found ? '✅' : '❌'} ${model.id}`
-                    ).join('<br>');
-
                     statusDiv.innerHTML = `
                         <div class="text-green-600">
                             ✅ OpenRouter API connection successful!<br>
-                            📊 Total models available: ${data.totalModels}<br>
+                            📊 Total models available: <span data-slot="totalModels"></span><br>
                             <div class="text-xs mt-1">
-                                <strong>Test Models:</strong><br>
-                                ${testResults}
+                                <strong>Test Models:</strong>
+                                <div data-test-models></div>
                             </div>
                         </div>
                     `;
+                    cuiFillSlots(statusDiv, { totalModels: data.totalModels });
+                    const testList = statusDiv.querySelector('[data-test-models]');
+                    (data.testModels || []).forEach(model => {
+                        testList.appendChild(cuiEl('div', { text: `${model.found ? '✅' : '❌'} ${model.id}` }));
+                    });
 
                     showToast('OpenRouter API connection test passed!', 'success');
                 } else {
@@ -17394,10 +17542,11 @@ When messaging:
                     statusDiv.innerHTML = `
                         <div class="text-red-600">
                             ❌ OpenRouter API test failed:<br>
-                            ${data.error}<br>
-                            <div class="text-xs mt-1">${data.details}</div>
+                            <span data-slot="error"></span><br>
+                            <div class="text-xs mt-1" data-slot="details"></div>
                         </div>
                     `;
+                    cuiFillSlots(statusDiv, { error: data.error, details: data.details });
 
                     showToast('OpenRouter API connection test failed: ' + data.error, 'error');
                 }
@@ -17406,10 +17555,11 @@ When messaging:
                 console.error('Connection test error:', error);
                 statusDiv.innerHTML = `
                     <div class="text-red-600">
-                        ❌ Connection test failed: ${error.message}<br>
+                        ❌ Connection test failed: <span data-slot="message"></span><br>
                         <div class="text-xs mt-1">Check browser console for details</div>
                     </div>
                 `;
+                cuiFillSlots(statusDiv, { message: error.message });
                 showToast('Connection test failed: ' + error.message, 'error');
             }
         }
@@ -17495,6 +17645,83 @@ When messaging:
                 ? ` with 🧠 ${newModel.reasoningMethod} reasoning`
                 : '';
             showToast(`Model '${displayName}' added successfully${reasoningStatus}!`, 'success');
+        }
+
+        function moveModel(index, delta) {
+            const models = modelConfig.provider === 'openai'
+                ? modelConfig.openaiModels
+                : modelConfig.provider === 'groq' ? modelConfig.groqModels : modelConfig.openrouterModels;
+            const target = index + delta;
+            if (target < 0 || target >= models.length) return;
+            const [moved] = models.splice(index, 1);
+            models.splice(target, 0, moved);
+            renderModels();
+            const container = document.getElementById('models-container');
+            const row = container ? container.querySelectorAll('.model-item')[target] : null;
+            const again = row ? row.querySelector(delta < 0 ? '[data-move="up"]' : '[data-move="down"]') : null;
+            if (again && !again.disabled) again.focus();
+            else if (row) {
+                const other = row.querySelector(delta < 0 ? '[data-move="down"]' : '[data-move="up"]');
+                if (other) other.focus();
+            }
+            showToast('Models reordered! Click "Save Model Configuration" to persist changes.', 'info');
+        }
+
+        function confirmRemoveModel(index, opener) {
+            const models = modelConfig.provider === 'openai'
+                ? modelConfig.openaiModels
+                : modelConfig.provider === 'groq' ? modelConfig.groqModels : modelConfig.openrouterModels;
+            const model = models[index];
+            if (!model) return;
+            const label = String(model.displayName || model.id || 'this model');
+
+            const dialog = document.createElement('dialog');
+            dialog.className = 'modal';
+            dialog.setAttribute('aria-labelledby', 'remove-model-dialog-title');
+            const box = document.createElement('div');
+            box.className = 'modal-box overscroll-contain';
+            const title = document.createElement('h3');
+            title.id = 'remove-model-dialog-title';
+            title.className = 'text-base font-semibold';
+            title.textContent = 'Remove model?';
+            const body = document.createElement('p');
+            body.className = 'text-sm mt-2';
+            body.textContent = `“${label}” will be removed from the list. Click “Save Model Configuration” to make this permanent.`;
+            const actions = document.createElement('div');
+            actions.className = 'modal-action';
+            const cancel = document.createElement('button');
+            cancel.type = 'button';
+            cancel.className = 'btn';
+            cancel.textContent = 'Cancel';
+            cancel.setAttribute('autofocus', '');
+            cancel.addEventListener('click', () => dialog.close('cancel'));
+            const confirm = document.createElement('button');
+            confirm.type = 'button';
+            confirm.className = 'btn btn-error';
+            confirm.textContent = 'Remove';
+            confirm.addEventListener('click', () => dialog.close('confirm'));
+            actions.append(cancel, confirm);
+            box.append(title, body, actions);
+            dialog.appendChild(box);
+            const backdrop = document.createElement('form');
+            backdrop.method = 'dialog';
+            backdrop.className = 'modal-backdrop';
+            const backdropButton = document.createElement('button');
+            backdropButton.type = 'submit';
+            backdropButton.textContent = 'close';
+            backdrop.appendChild(backdropButton);
+            dialog.appendChild(backdrop);
+            dialog.addEventListener('close', () => {
+                dialog.remove();
+                if (dialog.returnValue === 'confirm') {
+                    removeModel(index);
+                } else if (opener && opener.isConnected && typeof opener.focus === 'function') {
+                    opener.focus();
+                }
+            }, { once: true });
+            document.body.appendChild(dialog);
+            dialog.showModal();
+            cancel.focus();
         }
 
         function removeModel(index) {
@@ -18185,7 +18412,8 @@ Check console for full details.`;
                     <input 
                         type="text" 
                         class="input input-sm input-bordered flex-1" 
-                        value="${suggestion}" 
+                        data-slot-value="suggestion"
+                        aria-label="Suggestion ${index + 1}"
                         onchange="updateEmbedSuggestion(${index}, this.value)"
                         placeholder="Enter suggestion text"
                     />
@@ -18197,6 +18425,7 @@ Check console for full details.`;
                         ❌
                     </button>
                 `;
+                cuiFillSlots(suggestionItem, { suggestion });
                 listContainer.appendChild(suggestionItem);
             });
 
