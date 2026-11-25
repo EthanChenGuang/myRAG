@@ -2248,6 +2248,17 @@ IMPORTANT:
 
     } // End of RAG processing (skipped when disableRAG is true)
 
+    // A-8/A-14: one per-turn YOLO decision after retrieval; flagged content kept in the context (flag or downweight) suspends it
+    const injectionSummary = retrievalResult?.injection;
+    const injectionFlagged = injectionSummary ? injectionSummary.flagged && injectionSummary.mode !== 'drop' : undefined;
+    const injectionFlaggedField = injectionFlagged === undefined ? {} : { injectionFlagged };
+    const mcpYoloForTurn = mcpYoloAllowed && injectionFlagged !== true;
+    if (mcpYoloAllowed && injectionFlagged === true) {
+      console.warn('[RAG Security] YOLO suspended for a turn with flagged context; MCP tools need approval', {
+        traceId: ragTrace?.collector.traceId ?? null,
+      });
+    }
+
     const retrievalFailed =
       !effectiveDisableRAG &&
       retrievalResult !== null &&
@@ -2880,7 +2891,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                 }
 
                 // Check if YOLO mode is enabled
-                const yoloModeEnabled = mcpYoloAllowed;
+                const yoloModeEnabled = mcpYoloForTurn;
                 console.log(`[CACHED TOOL] YOLO mode enabled: ${yoloModeEnabled}`);
 
                 if (yoloModeEnabled) {
@@ -2925,7 +2936,8 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                   Object.assign(approvalError, {
                     toolCallId: toolCallId,
                     toolName: toolName,
-                    toolArgs: params
+                    toolArgs: params,
+                    ...injectionFlaggedField
                   });
                   throw approvalError;
                 }
@@ -2977,7 +2989,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                     }
 
                     // Check if YOLO mode is enabled
-                    const yoloModeEnabled = mcpYoloAllowed;
+                    const yoloModeEnabled = mcpYoloForTurn;
                     console.log(`[MCP TOOL] YOLO mode enabled: ${yoloModeEnabled}`);
 
                     if (yoloModeEnabled) {
@@ -3021,7 +3033,8 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                       Object.assign(approvalError, {
                         toolCallId: toolCallId,
                         toolName: mcpTool.name,
-                        toolArgs: params
+                        toolArgs: params,
+                        ...injectionFlaggedField
                       });
                       throw approvalError;
                     }
@@ -3207,7 +3220,8 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                       params: transformedParams, // Use transformed parameters
                       meta: enhancedMeta
                     },
-                    result: null
+                    result: null,
+                    ...injectionFlaggedField
                   };
 
                   // 🎯 CRITICAL DEBUG: Log parameter storage
@@ -3216,7 +3230,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                   console.log(`[PARAM DEBUG] Stored approval state:`, (globalThis as any).toolApprovalState[toolCallId]);
 
                   // Check if YOLO mode is enabled
-                  const yoloModeEnabled = mcpYoloAllowed;
+                  const yoloModeEnabled = mcpYoloForTurn;
                   console.log(`[ENHANCED TOOL] YOLO mode enabled: ${yoloModeEnabled}`);
 
                   if (yoloModeEnabled) {
@@ -3264,7 +3278,8 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                     Object.assign(approvalError, {
                       toolCallId: toolCallId,
                       toolName: toolName,
-                      toolArgs: transformedParams // Use transformed parameters in error too
+                      toolArgs: transformedParams, // Use transformed parameters in error too
+                      ...injectionFlaggedField
                     });
                     throw approvalError;
                   }
@@ -3943,7 +3958,8 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                   params: call.input,
                   meta: { toolCallId: call.toolCallId }
                 },
-                result: null
+                result: null,
+                ...injectionFlaggedField
               };
 
               // 🎯 CRITICAL DEBUG: Log tool call parameter storage
@@ -4181,8 +4197,8 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
           }
           const messageMetadata = ({ part }: { part: { type: string; providerMetadata?: Record<string, any> } }) => {
             if (part.type === 'start') {
-              if (!ragTraceId && !answerId) return undefined;
-              return { ...(ragTraceId ? { ragTraceId } : {}), ...(answerId ? { answerId } : {}) };
+              if (!ragTraceId && !answerId && injectionFlagged === undefined) return undefined;
+              return { ...(ragTraceId ? { ragTraceId } : {}), ...(answerId ? { answerId } : {}), ...injectionFlaggedField };
             }
             if (part.type === 'finish-step') {
               captureReasoningDetails(part.providerMetadata?.openrouter);
@@ -4190,8 +4206,8 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
             }
             if (part.type !== 'finish') return undefined;
             const finishMetadata = { ...buildFinishMetadata(), ...citationSession.finishMetadata() };
-            if (!ragTraceId && !answerId && Object.keys(finishMetadata).length === 0) return undefined;
-            return { ...(ragTraceId ? { ragTraceId } : {}), ...(answerId ? { answerId } : {}), ...finishMetadata };
+            if (!ragTraceId && !answerId && injectionFlagged === undefined && Object.keys(finishMetadata).length === 0) return undefined;
+            return { ...(ragTraceId ? { ragTraceId } : {}), ...(answerId ? { answerId } : {}), ...injectionFlaggedField, ...finishMetadata };
           };
           if (claudeStream) {
             const gate = await firstTokenGate(
