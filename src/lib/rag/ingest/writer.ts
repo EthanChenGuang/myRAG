@@ -774,7 +774,7 @@ export function createReembedWriter(input: { db: RpcClient; signal: AbortSignal 
     async profileScope(profileId) {
       const row = (await call('rag_list_embedding_profile_scopes', {})).find((entry) => entry.id === profileId);
       if (!row || !Array.isArray(row.doc_types)) return null;
-      const scope = row.doc_types.filter((docType): docType is string => typeof docType === 'string');
+      const scope = row.doc_types.filter((entry): entry is string => typeof entry === 'string');
       return scope.length > 0 ? scope : null;
     },
   };
