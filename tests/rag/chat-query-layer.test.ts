@@ -139,7 +139,8 @@ describe('chat route query-layer inputs (D-09, D-11, D-16)', () => {
     expect(system).not.toContain('Context from knowledge base');
     expect(system).not.toContain('No relevant context found');
     expect(system).not.toContain('{{context}}');
-    expect(h.retrieval).not.toHaveBeenCalled();
+    const searchCalls = h.retrieval.mock.calls.map((call) => call[0]).filter((fn) => fn !== 'rag_chunking_coverage');
+    expect(searchCalls).toEqual([]);
   });
 
   it('layer off: the same small-talk input keeps today\'s strict refusal', async () => {

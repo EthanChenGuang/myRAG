@@ -11,12 +11,14 @@ import { ContentPart, APIMessage, ExtendedMessage, fromAPIMessages, toMessage } 
 import { ReasoningConfig, REASONING_MODELS } from '@/lib/types';
 import {
   CLAUDE_FIRST_TOKEN_TIMEOUT_MS,
+  buildHistoryWindow,
   createCitationSession,
   createEnhancedRAGPrompt,
   errorStatusOf,
   firstTokenGate,
   createTraceCollector,
   finishTrace,
+  isSmallTalkResult,
   isV2Pipeline,
   knowledgeBaseUnavailableMessage,
   noKnowledgeBaseResponse,
@@ -1256,6 +1258,10 @@ export async function POST(req: Request) {
       retrievalFilters = filtersParsed.filters;
     }
 
+    // D-11: the client's IANA zone, read only by the query layer; an unknown zone resolves to UTC there
+    const clientTimeZone =
+      typeof requestBody?.timeZone === 'string' && requestBody.timeZone.length <= 64 ? requestBody.timeZone : undefined;
+
     // Initialize Supabase client
     const supabase = getSupabaseAdmin();
     if (!supabase) {
@@ -1998,6 +2004,7 @@ IMPORTANT:
     // Initialize variables for RAG
     let context = '';
     let retrievalResult: RetrievalResult | null = null;
+    let smallTalkTurn = false;
     let ragStartTime = 0;
     let ragDuration = 0;
 
@@ -2044,6 +2051,12 @@ IMPORTANT:
       }
 
       const documentRefs = { mentions: mentionNames, documentParts };
+      // D-09/D-16: the one classification of this request and a bounded history from the body; unused with the layer off
+      const queryLayerInputs = {
+        history: buildHistoryWindow(originalMessages),
+        classification: queryClassification,
+        ...(clientTimeZone ? { timeZone: clientTimeZone } : {}),
+      };
 
       // Then perform semantic search for the query text
       if (queryText) {
@@ -2066,6 +2079,7 @@ IMPORTANT:
           trace: collector,
           ...(retrievalFilters ? { retrievalFilters } : {}),
           ...(citationSession.labeler ? { citationLabeler: citationSession.labeler } : {}),
+          ...queryLayerInputs,
         });
         ragTrace = { collector, result };
         collector.setReviewContent({ query: queryText });
@@ -2093,6 +2107,7 @@ IMPORTANT:
           signal: req.signal,
           trace: collector,
           ...(citationSession.labeler ? { citationLabeler: citationSession.labeler } : {}),
+          ...queryLayerInputs,
         });
         ragTrace = { collector, result };
         retrievalResult = result;
@@ -2108,8 +2123,11 @@ IMPORTANT:
         usedDocuments = result.usedDocuments;
       }
 
+      // D-10: small talk under the query layer skipped retrieval and is answered without knowledge-base context
+      smallTalkTurn = isSmallTalkResult(retrievalResult);
+
       // Use a fallback if we have no context
-      if (!context.trim()) {
+      if (!context.trim() && !smallTalkTurn) {
         context = 'No relevant context found.';
       }
 
@@ -2275,6 +2293,7 @@ IMPORTANT:
 
     const shouldBlockNoContextResponse =
       !effectiveDisableRAG &&
+      !smallTalkTurn &&
       ragMode === 'strict' &&
       !webSearchEnabled &&
       (retrievalResult === null || retrievalResult.status === 'empty') &&
@@ -2297,7 +2316,7 @@ IMPORTANT:
       return createUIMessageStreamResponse({ stream });
     }
 
-    citationSession.attach(retrievalFailed || effectiveDisableRAG ? null : retrievalResult);
+    citationSession.attach(retrievalFailed || effectiveDisableRAG || smallTalkTurn ? null : retrievalResult);
 
     // Prepare system prompt with context
     // Check if there's a custom system prompt in environment variables (with fallback)
@@ -2402,7 +2421,9 @@ Context:
     console.log('[RAG SYSTEM DEBUG] context.length:', context.length);
     console.log('[RAG SYSTEM DEBUG] Context preview (first 200 chars):', context.substring(0, 200));
 
-    if (context.length > 0) {
+    if (smallTalkTurn) {
+      systemPrompt = createEnhancedRAGPrompt(ragSystemPrompt, '', 'bypass');
+    } else if (context.length > 0) {
       console.log('[RAG SYSTEM] ✅ Using optimized system prompt with context');
       console.log('[RAG SYSTEM] Creating enhanced prompt with context length:', context.length);
       console.log('[RAG SYSTEM] Using RAG mode:', ragMode);
