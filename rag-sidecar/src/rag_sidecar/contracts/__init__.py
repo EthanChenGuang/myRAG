@@ -5,6 +5,16 @@ from rag_sidecar.contracts.answers import (
     AnswerRecord,
     CitationRecord,
 )
+from rag_sidecar.contracts.cache import (
+    CacheCheckRequest,
+    CacheCheckResponse,
+    CachedAnswer,
+    CacheInvalidateRequest,
+    CacheInvalidateResponse,
+    CacheStoreRequest,
+    SemanticCacheCalibration,
+    SemanticCacheProfileCalibration,
+)
 from rag_sidecar.contracts.groundedness import (
     GroundednessRequest,
     GroundednessResult,
