@@ -8,6 +8,7 @@ import { createLinkUsageInstructions } from '@/lib/url-extractor';
 import {
   createEnhancedRAGPrompt,
   createTraceCollector,
+  detectLanguage,
   finishTrace,
   isV2Pipeline,
   knowledgeBaseUnavailableMessage,
@@ -15,10 +16,13 @@ import {
   resolveEmbedScope,
   runRetrieval,
   scopeKey,
+  type LogContext,
   type RetrievalFilterInput,
   type RetrievalResult,
   type TraceCollector,
 } from '@/lib/rag';
+import { knowledgeBaseUnavailableLanguage } from '@/lib/rag/generation/messages';
+import { readFeedbackLoopConfig } from '@/lib/rag/feedback-loop/config';
 
 // Use Node.js runtime instead of Edge
 export const runtime = 'nodejs';
@@ -117,11 +121,18 @@ function knowledgeBaseUnavailableResponse(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   let pendingTrace: { collector: TraceCollector; result: RetrievalResult } | null = null;
+  // Set only while RAG_RETRIEVAL_LOG is on; off leaves finishTrace's arguments as they were
+  let logContext: LogContext | null = null;
+  let logQuery: string | undefined;
   const finishPendingTrace = () => {
     if (!pendingTrace) return;
     const pending = pendingTrace;
     pendingTrace = null;
-    finishTrace(pending.collector, pending.result);
+    if (logContext) {
+      finishTrace(pending.collector, pending.result, { logContext, ...(logQuery !== undefined ? { logQuery } : {}) });
+    } else {
+      finishTrace(pending.collector, pending.result);
+    }
   };
 
   console.log('EMBED API: POST request received');
@@ -236,6 +247,15 @@ export async function POST(request: NextRequest) {
       });
       collector.setReviewContent({ query: queryText, context: result.context, model });
       pendingTrace = { collector, result };
+      if (readFeedbackLoopConfig().retrievalLog !== 'off') {
+        logContext = {
+          channel: 'embed',
+          userId: embedScope.scope.userId,
+          organizationId: embedScope.scope.organizationId,
+          ragMode: 'balanced',
+        };
+        logQuery = queryText;
+      }
 
       console.log('[Document Search] Embed retrieval finished:', {
         status: result.status,
@@ -246,6 +266,10 @@ export async function POST(request: NextRequest) {
 
       if (result.status === 'error' || (result.status === 'degraded' && result.usedDocuments.length === 0)) {
         console.error('[Document Search] Embed knowledge base unavailable:', { status: result.status, reason: result.reason });
+        if (logContext && result.logOutcome) {
+          result.logOutcome.value = 'kb_unavailable';
+          result.logOutcome.answerLanguage = knowledgeBaseUnavailableLanguage(preferredLanguage(request));
+        }
         finishPendingTrace();
         return knowledgeBaseUnavailableResponse(request);
       }
@@ -350,6 +374,8 @@ Context:
         // Don't include tools for embed API to keep it simple
         onFinish: (event) => {
           pendingTrace?.collector.setReviewContent({ answer: event.text ?? '' });
+          const logOutcome = logContext ? pendingTrace?.result.logOutcome : undefined;
+          if (logOutcome) logOutcome.answerLanguage = detectLanguage(event.text ?? '');
           finishPendingTrace();
         },
         onAbort: () => finishPendingTrace(),
@@ -357,6 +383,8 @@ Context:
       });
 
       console.log('EMBED API: streamText call successful, streaming to client');
+      const answeredOutcome = logContext ? pendingTrace?.result.logOutcome : undefined;
+      if (answeredOutcome && answeredOutcome.value === 'unknown') answeredOutcome.value = 'answered';
 
       // Return the AI SDK stream directly (SAME AS MAIN CHAT API)
       return result.toUIMessageStreamResponse({

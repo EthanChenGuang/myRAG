@@ -241,7 +241,7 @@ describe('retrieval log rows from the chat, embed, voice and eval routes keep te
     expect(stored[0]).toMatchObject({ user_id: userA, organization_id: null, chat_id: CHAT_ID, outcome: 'answered', rag_mode: 'balanced' });
     expect(stored[1]).toMatchObject({ user_id: userA, organization_id: orgO, outcome: 'answered' });
     expect(stored[2]).toMatchObject({ user_id: userB, organization_id: null, rag_mode: 'balanced', outcome: 'answered' });
-    expect(stored[3]).toMatchObject({ user_id: userA, organization_id: null });
+    expect(stored[3]).toMatchObject({ user_id: userA, organization_id: null, outcome: 'answered', answer_language: null });
     for (const [index, row] of stored.entries()) {
       for (const other of expected.filter((key) => key !== expected[index])) expect(JSON.stringify(row)).not.toContain(other);
     }
