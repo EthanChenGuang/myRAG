@@ -226,8 +226,115 @@ describe('a held reparse rebuild', () => {
     await assert.rejects(rebuild.activateRebuild(runId, 'admin'), (error: unknown) => error instanceof rebuild.RebuildRefused && error.code === 'activation_refused');
   });
 
+  test('a document that cannot be rebuilt leaves the run incomplete, and a restart processes only that document', async () => {
+    const [first, second] = docs as [{ documentId: string; sourceKey: string }, { documentId: string; sourceKey: string }];
+    const original = (await harness.rows('SELECT original_path FROM documents WHERE id = $1', [second.documentId]))[0]?.original_path;
+    await harness.db.query('UPDATE documents SET original_path = NULL WHERE id = $1', [second.documentId]);
+    const started = await rebuild.startRebuild({ mechanism: 'reparse', startedBy: 'test' }, deps());
+    assert.equal(started.status, 'started');
+    const gapRun = String(started.run?.id);
+    assert.notEqual(gapRun, runId, 'a rolled-back run is not reopened');
+    const [batch] = await harness.rows("SELECT id FROM ingestion_batches WHERE source_ref = 'rebuild:' || $1", [gapRun]);
+    const jobs = await harness.rows('SELECT id FROM ingestion_jobs WHERE batch_id = $1', [batch?.id]);
+    assert.equal(jobs.length, 1, 'only the document with an original is submitted');
+    await runJob(String(jobs[0]?.id));
+    const incomplete = await rebuild.getRebuildRun(gapRun);
+    assert.deepEqual([incomplete?.state, incomplete?.done, incomplete?.gaps], ['incomplete', 1, 1]);
+    await assert.rejects(rebuild.activateRebuild(gapRun, 'admin'), (error: unknown) => {
+      assert.ok(error instanceof rebuild.RebuildRefused);
+      return error.reason === 'eval_missing';
+    });
+    await rebuild.recordRebuildEvidence(gapRun, PASSING_GATE);
+    await assert.rejects(rebuild.activateRebuild(gapRun, 'admin'), (error: unknown) => error instanceof rebuild.RebuildRefused && error.reason === 'incomplete');
+
+    await harness.db.query('UPDATE documents SET original_path = $2 WHERE id = $1', [second.documentId, original]);
+    const resumed = await rebuild.startRebuild({ mechanism: 'reparse', startedBy: 'test' }, deps());
+    assert.equal(resumed.run?.id, gapRun);
+    assert.equal(resumed.resumed, true);
+    const after = await harness.rows('SELECT id FROM ingestion_jobs WHERE batch_id = $1 AND id <> $2', [batch?.id, jobs[0]?.id]);
+    assert.equal(after.length, 1, 'the restart submits only the document that was a gap');
+    await runJob(String(after[0]?.id));
+    const complete = await rebuild.getRebuildRun(gapRun);
+    assert.deepEqual([complete?.state, complete?.done, complete?.gaps], ['complete', 2, 0]);
+    const activated = await rebuild.activateRebuild(gapRun, 'admin');
+    assert.equal(activated.published.length, 2);
+    void first;
+  });
+
+  test('a rechunk rebuild builds a legacy-sized chunking profile from stored parse output with zero parser calls', async () => {
+    const parserCalls = harness.llama.calls.length;
+    const saved = { ...SAVED, RAG_TABLE_ROW_SERIALIZATION: 'true' };
+    const dry = await rebuild.startRebuild({ mechanism: 'rechunk', dryRun: true, startedBy: 'test' }, { ...deps(), saved });
+    assert.equal(dry.plan.kind, 'chunking_profile');
+    const started = await rebuild.startRebuild({ mechanism: 'rechunk', startedBy: 'test' }, { ...deps(), saved });
+    assert.equal(started.status, 'started', JSON.stringify(started));
+    assert.equal(started.run?.activation, 'chunking_profiles');
+    assert.equal(started.run?.state, 'complete', JSON.stringify(started.run));
+    assert.ok(started.plan.kind === 'chunking_profile');
+    const [profile] = started.plan.profiles;
+    const rows = await harness.rows('SELECT child_tokens, parent_mode, parent_tokens, status FROM chunking_profiles WHERE id = $1 AND doc_type = $2', [profile?.profileId, 'general']);
+    assert.deepEqual(rows[0], { child_tokens: 512, parent_mode: 'none', parent_tokens: null, status: rows[0]?.status });
+    assert.notEqual(rows[0]?.status, 'active', 'the pointer flip stays with rag:chunking activate');
+    const children = await harness.rows('SELECT count(*)::int AS n FROM document_chunks WHERE chunking_profile_id = $1', [profile?.profileId]);
+    assert.ok(Number(children[0]?.n) > 0);
+    assert.equal(harness.llama.calls.length, parserCalls, 'no parser call');
+    const again = await rebuild.startRebuild({ mechanism: 'rechunk', startedBy: 'test' }, { ...deps(), saved });
+    assert.equal(again.run?.id, started.run?.id);
+  });
+
   test('an unknown run is not found', async () => {
     await assert.rejects(rebuild.activateRebuild('00000000-0000-4000-8000-00000000dead', 'admin'), rebuild.RebuildNotFound);
     assert.equal(await rebuild.getRebuildRun('00000000-0000-4000-8000-00000000dead'), null);
+  });
+});
+
+describe('planRebuild', () => {
+  let plan: typeof import('@/lib/rag/ingest/rebuild/plan');
+  const hash = 'a'.repeat(64);
+  const A = 'u:00000000-0000-4000-8000-0000000000a1';
+  const B = 'o:00000000-0000-4000-8000-0000000000c2';
+  const documents = [
+    { documentId: '00000000-0000-4000-8000-000000000001', tenantKey: B, docType: 'general' },
+    { documentId: '00000000-0000-4000-8000-000000000002', tenantKey: A, docType: 'contract_legal' },
+    { documentId: '00000000-0000-4000-8000-000000000003', tenantKey: A, docType: 'general' },
+  ];
+  const options = { ingestAsync: true, settingsHash: hash, legacyChildTokens: { general: 512, contract_legal: 768 } };
+
+  before(async () => {
+    plan = await import('@/lib/rag/ingest/rebuild/plan');
+  });
+
+  test('rechunk: one legacy-sized profile without parents per affected doc type, limited to the affected documents', () => {
+    const built = plan.planRebuild('rechunk', { documents, withoutFingerprint: 0 }, options);
+    assert.equal(built.kind, 'chunking_profile');
+    assert.ok(built.kind === 'chunking_profile');
+    assert.deepEqual(built.profiles, [
+      { profileId: 'rb-aaaaaaaaaaaa', docType: 'contract_legal', childTokens: 768, parentMode: 'none', parentTokens: null, preset: 'custom' },
+      { profileId: 'rb-aaaaaaaaaaaa', docType: 'general', childTokens: 512, parentMode: 'none', parentTokens: null, preset: 'custom' },
+    ]);
+    assert.deepEqual(built.documents.map((d) => d.documentId), documents.map((d) => d.documentId));
+    assert.equal(built.activation, 'chunking_profiles');
+  });
+
+  test('relex, reembed, recaption and retranslate: the exact commands per tenant', () => {
+    const commands = (mechanism: 'relex' | 'reembed' | 'recaption' | 'retranslate') => {
+      const built = plan.planRebuild(mechanism, { documents, withoutFingerprint: 0 }, options);
+      assert.equal(built.kind, 'command');
+      return built.kind === 'command' ? built.commands : [];
+    };
+    assert.deepEqual(commands('relex'), [`npm run rag:relex -- --tenant ${B}`, `npm run rag:relex -- --tenant ${A}`]);
+    assert.deepEqual(commands('reembed'), [`npm run rag:reembed -- --tenant ${B}`, `npm run rag:reembed -- --tenant ${A}`]);
+    assert.deepEqual(commands('recaption'), [`npm run rag:reembed -- --recaption --tenant ${B}`, `npm run rag:reembed -- --recaption --tenant ${A}`]);
+    assert.deepEqual(commands('retranslate'), [`npm run rag:translate -- --tenant ${B}`, `npm run rag:translate -- --tenant ${A}`]);
+    const reembed = plan.planRebuild('reembed', { documents, withoutFingerprint: 0 }, options);
+    assert.equal(reembed.kind === 'command' ? reembed.activation : null, 'embedding_profiles');
+  });
+
+  test('reparse: a held batch with the queue on, needs_async with the count and command with it off', () => {
+    const held = plan.planRebuild('reparse', { documents, withoutFingerprint: 0 }, options);
+    assert.equal(held.kind, 'held_batch');
+    const off = plan.planRebuild('reparse', { documents, withoutFingerprint: 0 }, { ...options, ingestAsync: false });
+    assert.deepEqual(off, { kind: 'needs_async', mechanism: 'reparse', affected: 3, command: 'npm run rag:rebuild -- start --mechanism reparse' });
+    assert.deepEqual(plan.planRebuild('rechunk', { documents: [], withoutFingerprint: 2 }, options), { kind: 'nothing', mechanism: 'rechunk', affected: 0 });
   });
 });
