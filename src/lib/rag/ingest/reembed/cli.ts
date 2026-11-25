@@ -130,6 +130,7 @@ export async function main(argv: string[] = process.argv.slice(2), io: CliIo = c
       });
       io.out('[Re-embed] dry run, nothing written');
       io.out(`[Re-embed] profile ${report.profileId} (${report.provider}, ${report.dims} dims${report.derived ? `, derived from ${parsed.deriveFrom}` : ''})`);
+      if (report.scope) io.out(`[Re-embed] scope: ${report.scope.join(', ')}`);
       for (const tenant of report.cost.tenants) {
         io.out(`[Re-embed] ${tenant.tenantKey}: chunks ${tenant.chunks}, tokens ${tenant.tokens}, estimated cost ${formatUsd(tenant.usd)} USD`);
       }
@@ -181,7 +182,7 @@ export async function main(argv: string[] = process.argv.slice(2), io: CliIo = c
       return 2;
     }
     if (error instanceof ReembedWriterError) {
-      io.err(`[Re-embed] refused: ${error.reason ?? 'database error'}${error.detail ? ` ${error.detail}` : ''}${error.code ? ` (${error.code})` : ''}`);
+      io.err(`[Re-embed] refused: ${error.reason ?? 'database error'}${error.detail ? `: ${error.detail}` : ''}${error.code ? ` (${error.code})` : ''}`);
       return 1;
     }
     throw error;
