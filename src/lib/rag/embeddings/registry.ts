@@ -7,7 +7,9 @@ import type {
   ProfileShapeFailure,
   ProfileShapeResult,
 } from './types';
-import { OPENAI_NATIVE_DIMS, QWEN_SUPPORTED_DIMS, VOYAGE_SUPPORTED_DIMS, canonicalModelId } from './types';
+import { catalogEntry, defaultModelFor } from './catalog';
+import type { EmbeddingModelEntry } from './catalog';
+import { canonicalModelId } from './types';
 import { createVoyageProvider } from './voyage';
 
 export { canonicalModelId };
@@ -15,20 +17,24 @@ export { canonicalModelId };
 const MAX_HALFVEC_DIMS = 4000;
 const MAX_VECTOR_DIMS = 2000;
 const STORAGES: readonly string[] = ['legacy_column', 'halfvec'];
-const KNOWN_DIMS: Record<EmbeddingProviderId, readonly number[]> = {
-  openai: [OPENAI_NATIVE_DIMS],
-  voyage: VOYAGE_SUPPORTED_DIMS,
-  qwen3: QWEN_SUPPORTED_DIMS,
-};
+const PROVIDER_IDS: readonly EmbeddingProviderId[] = ['openai', 'voyage', 'qwen3'];
 
-const KNOWN_LIMITS: Record<EmbeddingProviderId, { maxInputTokens: number }> = {
-  openai: { maxInputTokens: 8191 },
-  voyage: { maxInputTokens: 32000 },
-  qwen3: { maxInputTokens: 32768 },
-};
+function isProviderId(id: string): id is EmbeddingProviderId {
+  return (PROVIDER_IDS as readonly string[]).includes(id);
+}
+
+function defaultEntry(id: EmbeddingProviderId): EmbeddingModelEntry {
+  const entry = catalogEntry(id, defaultModelFor(id) as string);
+  if (!entry) throw new Error(`[Embedding Profile] no catalog entry for the default model of ${id}`);
+  return entry;
+}
+
+/** Overrides are keyed by provider id (the Phase 3 form) or by `provider:model`. */
+type OverrideKey = EmbeddingProviderId | `${EmbeddingProviderId}:${string}`;
 
 let defaults: Partial<Record<EmbeddingProviderId, EmbeddingProvider>> | null = null;
-let overrides: Partial<Record<EmbeddingProviderId, EmbeddingProvider>> = {};
+let modelProviders = new Map<string, EmbeddingProvider>();
+let overrides: Partial<Record<string, EmbeddingProvider>> = {};
 
 function defaultProviders(): Partial<Record<EmbeddingProviderId, EmbeddingProvider>> {
   if (!defaults) defaults = { openai: createOpenAiProvider(), voyage: createVoyageProvider(), qwen3: createQwenProvider() };
@@ -36,31 +42,69 @@ function defaultProviders(): Partial<Record<EmbeddingProviderId, EmbeddingProvid
 }
 
 function findProvider(id: string): EmbeddingProvider | undefined {
-  const table = { ...defaultProviders(), ...overrides } as Record<string, EmbeddingProvider | undefined>;
-  return Object.prototype.hasOwnProperty.call(table, id) ? table[id] : undefined;
+  if (!isProviderId(id)) return undefined;
+  if (Object.prototype.hasOwnProperty.call(overrides, id)) return overrides[id];
+  return defaultProviders()[id];
 }
 
+/** The provider's default model. Every Phase 3 caller and test fake resolves through this. */
 export function getEmbeddingProvider(id: string): EmbeddingProvider {
   const provider = findProvider(id);
   if (!provider) throw new Error(`[Embedding Profile] unknown embedding provider "${id}"`);
   return provider;
 }
 
-export function getEmbeddingProviderFor(provider: string, _model: string): EmbeddingProvider {
-  return getEmbeddingProvider(provider);
+function sameModel(a: string, b: string): boolean {
+  return canonicalModelId(a) === canonicalModelId(b);
 }
 
-function supportedDimsFor(id: string): readonly number[] | undefined {
-  const registered = findProvider(id);
-  if (registered) return registered.supportedDims;
-  return Object.prototype.hasOwnProperty.call(KNOWN_DIMS, id) ? KNOWN_DIMS[id as EmbeddingProviderId] : undefined;
+function createForModel(entry: EmbeddingModelEntry): EmbeddingProvider {
+  switch (entry.provider) {
+    case 'voyage':
+      return createVoyageProvider({ model: entry.model });
+    default:
+      throw new Error(`[Embedding Profile] unknown embedding model for provider ${entry.provider}`);
+  }
+}
+
+/**
+ * The provider serving one model: a `provider:model` override, then a provider override or default
+ * whose model matches, then a provider built from the catalog. A pair outside the catalog throws.
+ */
+export function getEmbeddingProviderFor(provider: string, model: string): EmbeddingProvider {
+  const unknown = () => new Error(`[Embedding Profile] unknown embedding model for provider ${provider}`);
+  if (!isProviderId(provider)) throw unknown();
+  const entry = catalogEntry(provider, model);
+  const canonical = entry ? entry.model : canonicalModelId(model);
+  const keyed = overrides[`${provider}:${canonical}`];
+  if (keyed) return keyed;
+  const base = findProvider(provider);
+  if (base && sameModel(base.model, canonical)) return base;
+  if (!entry) throw unknown();
+  const cacheKey = `${provider}:${entry.model}`;
+  let built = modelProviders.get(cacheKey);
+  if (!built) {
+    built = createForModel(entry);
+    modelProviders.set(cacheKey, built);
+  }
+  return built;
+}
+
+function supportedDimsFor(id: string, model?: string): readonly number[] | undefined {
+  if (!isProviderId(id)) return undefined;
+  if (model !== undefined) {
+    const registered = findProvider(id);
+    if (registered && sameModel(registered.model, model)) return registered.supportedDims;
+    return catalogEntry(id, model)?.supportedDims;
+  }
+  return findProvider(id)?.supportedDims ?? defaultEntry(id).supportedDims;
 }
 
 /** The provider's documented input limit in tokens; throws for an id that is not a registered provider. */
 export function maxInputTokensFor(providerId: string): number {
   const registered = findProvider(providerId);
   if (registered) return registered.maxInputTokens;
-  if (Object.prototype.hasOwnProperty.call(KNOWN_LIMITS, providerId)) return KNOWN_LIMITS[providerId as EmbeddingProviderId].maxInputTokens;
+  if (isProviderId(providerId)) return defaultEntry(providerId).maxInputTokens;
   throw new Error(`[Embedding Profile] unknown provider ${providerId}`);
 }
 
@@ -73,8 +117,9 @@ function reject(reason: ProfileShapeFailure, detail: string): ProfileShapeResult
  * legacy vector column at 2000.
  */
 export function validateProfileShape(shape: ProfileShape): ProfileShapeResult {
-  const supported = supportedDimsFor(shape.provider);
-  if (!supported) return reject('provider_unknown', `unknown provider ${shape.provider}`);
+  if (!isProviderId(shape.provider)) return reject('provider_unknown', `unknown provider ${shape.provider}`);
+  const supported = supportedDimsFor(shape.provider, shape.model);
+  if (!supported) return reject('model_unknown', `${shape.provider} does not serve model ${shape.model}`);
   if (!STORAGES.includes(shape.storage)) return reject('storage_unknown', `unknown storage ${shape.storage}`);
   if (!Number.isInteger(shape.dims) || shape.dims < 1) return reject('dims_invalid', `dims ${shape.dims} is not a positive integer`);
   if (shape.dims > MAX_HALFVEC_DIMS) return reject('dims_above_limit', `dims ${shape.dims} exceeds ${MAX_HALFVEC_DIMS}`);
@@ -87,11 +132,12 @@ export function validateProfileShape(shape: ProfileShape): ProfileShapeResult {
   return { ok: true };
 }
 
-export function setEmbeddingProvidersForTests(partial: Partial<Record<string, EmbeddingProvider>>): void {
-  overrides = { ...overrides, ...(partial as Partial<Record<EmbeddingProviderId, EmbeddingProvider>>) };
+export function setEmbeddingProvidersForTests(partial: Partial<Record<OverrideKey, EmbeddingProvider>>): void {
+  overrides = { ...overrides, ...partial };
 }
 
 export function resetEmbeddingProvidersForTests(): void {
   overrides = {};
   defaults = null;
+  modelProviders = new Map();
 }

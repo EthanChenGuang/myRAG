@@ -2,13 +2,13 @@ import { env } from '@/lib/env';
 import { countTokens } from '@/lib/rag/ingest/text/tokens';
 import { EmbeddingProfileMismatch } from './mrl';
 import type { EmbedOptions, EmbedOutput, EmbeddingProvider } from './types';
-import { EmbeddingProviderError, VOYAGE_MODEL_ID, VOYAGE_SUPPORTED_DIMS, canonicalModelId, toProviderError } from './types';
+import { catalogEntry } from './catalog';
+import { EmbeddingProviderError, VOYAGE_MODEL_ID, canonicalModelId, toProviderError } from './types';
 
 const HOST = 'voyage';
 const MAX_TEXTS_PER_REQUEST = 128;
 const MAX_ESTIMATED_TOKENS_PER_REQUEST = 100_000;
 const TOKENIZER_SAFETY_FACTOR = 1.3;
-const MAX_INPUT_TOKENS = 32_000;
 const DEFAULT_TIMEOUT_MS = 60_000;
 
 export interface VoyageConfig {
@@ -19,6 +19,7 @@ export interface VoyageConfig {
 
 export interface VoyageProviderOptions {
   config?: () => VoyageConfig;
+  /** A Voyage model from the embedding catalog; defaults to voyage-4-large. */
   model?: string;
 }
 
@@ -60,6 +61,11 @@ interface VoyageResponse {
 
 export function createVoyageProvider(options: VoyageProviderOptions = {}): EmbeddingProvider {
   const getConfig = options.config ?? defaultConfig;
+  const found = catalogEntry('voyage', options.model ?? VOYAGE_MODEL_ID);
+  if (!found) throw new Error('[Embedding Profile] unknown embedding model for provider voyage');
+  const entry = found;
+  const modelId = entry.model;
+  const supportedDims = entry.supportedDims;
 
   async function embedBatch(
     batch: string[],
@@ -73,10 +79,10 @@ export function createVoyageProvider(options: VoyageProviderOptions = {}): Embed
         method: 'POST',
         headers: { 'content-type': 'application/json', authorization: `Bearer ${config.apiKey}` },
         body: JSON.stringify({
-          model: VOYAGE_MODEL_ID,
+          model: modelId,
           input: batch,
           input_type: inputType,
-          output_dimension: opts.dims,
+          ...(entry.sendsOutputDimension ? { output_dimension: opts.dims } : {}),
           truncation: false,
         }),
         signal: AbortSignal.any([opts.signal, AbortSignal.timeout(config.timeoutMs ?? DEFAULT_TIMEOUT_MS)]),
@@ -102,14 +108,17 @@ export function createVoyageProvider(options: VoyageProviderOptions = {}): Embed
       return embedding;
     });
     const tokens = payload.usage?.total_tokens ?? batch.reduce((sum, text) => sum + estimateTokens(text), 0);
-    return { vectors, model: canonicalModelId(payload.model || VOYAGE_MODEL_ID), tokens };
+    return { vectors, model: canonicalModelId(payload.model || modelId), tokens };
   }
 
   async function embed(texts: string[], inputType: 'document' | 'query', opts: EmbedOptions): Promise<EmbedOutput> {
     const config = getConfig();
     if (!config.apiKey) throw new Error('[Embedding Profile] VOYAGE_API_KEY not configured');
+    if (!entry.sendsOutputDimension && !supportedDims.includes(opts.dims)) {
+      throw new EmbeddingProfileMismatch('dims', opts.dims, entry.nativeDims);
+    }
     const vectors: number[][] = [];
-    let model: string = VOYAGE_MODEL_ID;
+    let model: string = modelId;
     let tokens = 0;
     for (const batch of splitIntoBatches(texts)) {
       const result = await embedBatch(batch, inputType, opts, config);
@@ -122,9 +131,9 @@ export function createVoyageProvider(options: VoyageProviderOptions = {}): Embed
 
   return {
     id: 'voyage',
-    model: VOYAGE_MODEL_ID,
-    maxInputTokens: MAX_INPUT_TOKENS,
-    supportedDims: VOYAGE_SUPPORTED_DIMS,
+    model: modelId,
+    maxInputTokens: entry.maxInputTokens,
+    supportedDims,
     normalize: true,
     embedDocuments: (texts, opts) => embed(texts, 'document', opts),
     embedQuery: (text, opts) => embed([text], 'query', opts),
