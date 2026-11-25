@@ -224,13 +224,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS ingestion_jobs_batch_kind_source_key_ux
   ON ingestion_jobs (batch_id, kind, source_key)
   WHERE batch_id IS NOT NULL;
 
-CREATE INDEX IF NOT EXISTS ingestion_jobs_queued_claim_idx
-  ON ingestion_jobs (priority DESC, created_at)
-  WHERE status = 'queued' AND deleted_at IS NULL;
-
-CREATE INDEX IF NOT EXISTS ingestion_jobs_active_lease_idx
-  ON ingestion_jobs (lease_until)
-  WHERE status IN ('preflight', 'parsing', 'checking', 'chunking', 'embedding');
+-- Superseded by 0421_ingestion_queue_indexes.sql; drop on re-apply so the catalog stays idempotent.
+DROP INDEX IF EXISTS public.ingestion_jobs_queued_claim_idx;
+DROP INDEX IF EXISTS public.ingestion_jobs_active_lease_idx;
 
 CREATE INDEX IF NOT EXISTS ingestion_jobs_document_id_idx ON ingestion_jobs (document_id);
 

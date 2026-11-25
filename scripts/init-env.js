@@ -440,12 +440,18 @@ RAG_PARSE_VLM_MODEL=
 RAG_INGEST_ASYNC=off
 # Concurrent worker jobs (sidecar)
 RAG_INGEST_WORKER_CONCURRENCY=2
+# Terminal ingestion jobs older than this many days are archived and purged (maintenance task)
+RAG_INGEST_JOB_RETENTION_DAYS=90
+# Sidecar maintenance loop interval (seconds); off via RAG_INGEST_MAINTENANCE=off
+RAG_INGEST_MAINTENANCE_INTERVAL_SECONDS=3600
+RAG_INGEST_MAINTENANCE=on
 # Publish chunks incrementally while parsing: true | false
 RAG_PARSE_PROGRESSIVE=false
 # Embedding batch mode for backfill: sync | batch_api
 RAG_EMBED_BATCH_MODE=sync
 # Browser realtime job updates (Supabase broadcast): true | false
 NEXT_PUBLIC_RAG_INGEST_REALTIME=false
+# Ledger workers and the app must use the Supabase project HTTPS URL (PostgREST), never a direct Postgres DSN.
 
 # Voyage embeddings
 VOYAGE_API_KEY=

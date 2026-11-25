@@ -146,7 +146,19 @@ BEGIN
   END IF;
   IF to_regprocedure('public.rag_fail_ingestion_job(uuid, text, text, boolean)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_fail_ingestion_job(uuid, text, text, boolean) FROM PUBLIC, anon, authenticated;
-    GRANT EXECUTE ON FUNCTION public.rag_fail_ingestion_job(uuid, text, text, boolean) TO service_role;
+    DROP FUNCTION public.rag_fail_ingestion_job(uuid, text, text, boolean);
+  END IF;
+  IF to_regprocedure('public.rag_fail_ingestion_job(uuid, text, text, boolean, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_fail_ingestion_job(uuid, text, text, boolean, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_fail_ingestion_job(uuid, text, text, boolean, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_count_ingestion_dead_letters(text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_count_ingestion_dead_letters(text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_count_ingestion_dead_letters(text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_purge_stale_ingestion_jobs(integer, integer)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_purge_stale_ingestion_jobs(integer, integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_purge_stale_ingestion_jobs(integer, integer) TO service_role;
   END IF;
   IF to_regprocedure('public.rag_find_content_duplicate(text, text, uuid)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_find_content_duplicate(text, text, uuid) FROM PUBLIC, anon, authenticated;
@@ -419,6 +431,10 @@ BEGIN
   IF to_regprocedure('public.rag_settle_parse_budget(uuid, integer, text, integer)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_settle_parse_budget(uuid, integer, text, integer) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_settle_parse_budget(uuid, integer, text, integer) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_soft_delete_document(text, uuid, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_soft_delete_document(text, uuid, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_soft_delete_document(text, uuid, text) TO service_role;
   END IF;
   IF to_regprocedure('public.rag_update_embed_batch(uuid, text, text, text, text, text)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_update_embed_batch(uuid, text, text, text, text, text) FROM PUBLIC, anon, authenticated;

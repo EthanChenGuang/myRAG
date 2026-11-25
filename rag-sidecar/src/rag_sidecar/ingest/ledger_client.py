@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from rag_sidecar.contracts.queue import IngestionJob
 from rag_sidecar.ingest.supabase_headers import supabase_headers
+from rag_sidecar.ingest.supabase_url import assert_supabase_api_url
 
 logger = logging.getLogger(__name__)
 
@@ -91,9 +92,8 @@ class LedgerClient:
         connect_timeout: float = _DEFAULT_CONNECT_TIMEOUT,
         read_timeout: float = _DEFAULT_READ_TIMEOUT,
     ) -> None:
-        if not base_url.strip():
-            raise ValueError("base_url must not be empty")
-        self._base_url = base_url.rstrip("/")
+        api = assert_supabase_api_url(base_url, label="NEXT_PUBLIC_SUPABASE_URL")
+        self._base_url = api.rstrip("/")
         self._service_key = service_key
         self._owns_client = client is None
         timeout = httpx.Timeout(connect=connect_timeout, read=read_timeout, write=read_timeout, pool=connect_timeout)
@@ -232,16 +232,39 @@ class LedgerClient:
             return int(first)
         raise LedgerError("record_attempt returned unexpected payload")
 
-    async def fail(self, job_id: str, worker: str, *, error_class: str, retryable: bool) -> IngestionJob:
+    async def count_dead_letters(self, tenant_key: str | None = None) -> int:
+        payload = await self._rpc("rag_count_ingestion_dead_letters", {"p_tenant_key": tenant_key})
+        if isinstance(payload, (int, float)):
+            return int(payload)
+        if isinstance(payload, str) and payload.isdigit():
+            return int(payload)
+        return 0
+
+    async def purge_stale(self, *, retention_days: int, batch_size: int = 500) -> dict[str, Any]:
         payload = await self._rpc(
-            "rag_fail_ingestion_job",
-            {
-                "p_job_id": job_id,
-                "p_worker": worker,
-                "p_error_class": error_class,
-                "p_retryable": retryable,
-            },
+            "rag_purge_stale_ingestion_jobs",
+            {"p_retention_days": retention_days, "p_batch_size": batch_size},
         )
+        return payload if isinstance(payload, dict) else {"archived": 0, "purged": 0}
+
+    async def fail(
+        self,
+        job_id: str,
+        worker: str,
+        *,
+        error_class: str,
+        retryable: bool,
+        last_error: str | None = None,
+    ) -> IngestionJob:
+        body = {
+            "p_job_id": job_id,
+            "p_worker": worker,
+            "p_error_class": error_class,
+            "p_retryable": retryable,
+        }
+        if last_error is not None:
+            body["p_last_error"] = last_error
+        payload = await self._rpc("rag_fail_ingestion_job", body)
         rows = self._rows(payload)
         if not rows:
             raise LedgerError("fail returned no row")

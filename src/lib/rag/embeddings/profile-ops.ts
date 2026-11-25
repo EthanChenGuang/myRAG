@@ -1,4 +1,4 @@
-import type { RpcError } from '../backend/supabase-rpc';
+import { rpcRows, type RpcError } from '../backend/supabase-rpc';
 import { createReembedWriter } from '../ingest/writer';
 import type { EmbeddingProfile, StartupVerdict } from './active-profile';
 import {
@@ -46,8 +46,8 @@ function refusalFrom(error: RpcError): ProfileRefusal | null {
   return { ok: false, reason: `${match[1]}: ${match[2]}`, detail: error.message };
 }
 
-function firstRow(data: unknown[] | null): Record<string, unknown> | null {
-  const row = data?.[0];
+function firstRow(data: unknown): Record<string, unknown> | null {
+  const row = rpcRows(data)[0];
   return typeof row === 'object' && row !== null ? (row as Record<string, unknown>) : null;
 }
 

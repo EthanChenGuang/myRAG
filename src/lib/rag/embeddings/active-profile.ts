@@ -1,5 +1,5 @@
 import { env } from '@/lib/env';
-import { EmbeddingProfileMismatchError, type RpcClient } from '../backend/supabase-rpc';
+import { EmbeddingProfileMismatchError, rpcRows, type RpcClient } from '../backend/supabase-rpc';
 import { getRagDeps } from '../deps';
 import { getIngestDeps } from '../ingest/deps';
 import { loadIngestConfig } from '../ingest/config';
@@ -170,7 +170,7 @@ async function readProfiles(): Promise<EmbeddingProfile[]> {
 
   const profiles: EmbeddingProfile[] = [];
   let malformedActive = false;
-  for (const raw of response.data ?? []) {
+  for (const raw of rpcRows(response.data)) {
     const profile = parseProfileRow(raw);
     if (profile) profiles.push(profile);
     else if (asRecord(raw)?.status === 'active') malformedActive = true;

@@ -110,3 +110,23 @@ describe('hostile input (T-03-15)', () => {
     });
   }
 });
+
+describe('per-token cost (CI timing failure on PR #23)', () => {
+  it('does not compile regular expressions per token', () => {
+    const Original = globalThis.RegExp;
+    let built = 0;
+    const Counting = new Proxy(Original, {
+      construct(target, args, newTarget) {
+        built += 1;
+        return Reflect.construct(target, args, newTarget);
+      },
+    });
+    globalThis.RegExp = Counting;
+    try {
+      lexicalTokens("l'acqua dell'anno a-b c-d ".repeat(500));
+    } finally {
+      globalThis.RegExp = Original;
+    }
+    expect(built).toBeLessThan(50);
+  });
+});

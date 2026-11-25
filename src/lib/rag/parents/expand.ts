@@ -1,4 +1,4 @@
-import { RetrievalBackendError, type RpcClient } from '../backend/supabase-rpc';
+import { RetrievalBackendError, rpcRows, type RpcClient } from '../backend/supabase-rpc';
 import { selectWithinBudget, type BudgetCandidate, type BudgetOptions, type RenderEstimate } from '../context/budget';
 import { assertTenantScope, scopeKey, type TenantScope } from '../tenant/scope';
 
@@ -107,7 +107,7 @@ export async function expandParents<C extends ExpandableChild>(input: ExpandPare
 
   const asked = new Set(requested);
   const parentsById = new Map<string, ParentExpansion>();
-  for (const row of response.data ?? []) {
+  for (const row of rpcRows(response.data)) {
     if (!isParentRow(row)) continue;
     if (row.tenant_key !== tenantKey || row.is_current === false || !asked.has(row.id)) continue;
     parentsById.set(row.id, toExpansion(row));

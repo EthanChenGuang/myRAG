@@ -3880,6 +3880,619 @@
     "source_images": []
   },
   {
+    "query": "Which aisles hold thermal probes according to the floor plan?",
+    "results": [
+      {
+        "chunk_id": "0d8510d1-e1a4-4fd8-aabf-67f86caa540a",
+        "document_id": "4dda7ba2-55f3-4e0f-8cfd-83f2ef597e40",
+        "content": "Document: warehouse-floorplan.png. Chunk 3 of 4. Content: ## Picking aisles\n\nThe image shows Aisle A holding thermal probes and spare cables, Aisle B holding reference thermometers and data loggers, and Aisle C holding packaging material and batteries. Each aisle has shelves on both sides with four levels, and the lithium batteries sit in a fenced cage at the north end of Aisle C.\n[Metadata:   ]",
+        "similarity": 0.23457177222638662,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.29321471528298326,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.23457177222638662,
+        "image_url": null
+      },
+      {
+        "chunk_id": "21036617-67a3-48e7-b5f2-57b3ca50353d",
+        "document_id": "959e010a-5e5f-4725-a739-cb8cddeeda49",
+        "content": "Document: product-specs.en.md. Chunk 2 of 6. Content: ## XR-4420 thermal probe\n\nThe XR-4420 thermal probe (SKU LV-77-0193) is a handheld probe for lab benches. Measurement range is -40 to 400 degrees Celsius. Accuracy is plus or minus 0.5 degrees Celsius. Response time is 2 seconds. The probe cable is 3 metres long. Power comes from two AA batteries. The housing is rated IP54. The firmware build shipped with this model is FW-2.8.14.\n[Metadata:   ]",
+        "similarity": 0.16024791953731476,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.20030989942164346,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.16024791953731476,
+        "image_url": null
+      },
+      {
+        "chunk_id": "0cc1d8ec-b580-4978-bb22-dc63c5fb6c97",
+        "document_id": "959e010a-5e5f-4725-a739-cb8cddeeda49",
+        "content": "Document: product-specs.en.md. Chunk 1 of 6. Content: ## XR-4410 thermal probe\n\nThe XR-4410 thermal probe (SKU LV-77-0192) is a handheld probe for lab benches. Measurement range is -40 to 250 degrees Celsius. Accuracy is plus or minus 0.5 degrees Celsius. Response time is 2 seconds. The probe cable is 3 metres long. Power comes from two AA batteries. The housing is rated IP54. The firmware build shipped with this model is FW-2.8.14.\n[Metadata:   ]",
+        "similarity": 0.15781282843099742,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.19726603553874678,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.15781282843099742,
+        "image_url": null
+      },
+      {
+        "chunk_id": "0aa02763-f10b-4517-997a-e61d8f850df3",
+        "document_id": "b3cea6c0-8718-4ce2-a5cc-4907af5a33fb",
+        "content": "Document: shipping-handbook.en.md. Chunk 2 of 6. Content: ## Packaging rules\n\nEvery instrument is packed in a foam-lined box with a moisture sachet. Thermal probes with a cable longer than 3 metres are coiled and fixed with a paper band before boxing. Packages that weigh more than 20 kilograms are shipped on a pallet and are never sent as ordinary parcels. Batteries are packed separately from instruments and carry a lithium handling label when the model uses lithium cells.\n[Metadata:   ]",
+        "similarity": 0.13977890546478006,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.17472363183097506,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.13977890546478006,
+        "image_url": null
+      },
+      {
+        "chunk_id": "40fc5177-6cd8-40a1-80fb-c9d5d62b05c8",
+        "document_id": "4dda7ba2-55f3-4e0f-8cfd-83f2ef597e40",
+        "content": "Document: warehouse-floorplan.png. Chunk 1 of 4. Content: ## Overall layout\n\nThe image shows a floor plan of the Lumen Valley Instruments warehouse, drawn from above. The building is a long rectangle with the loading docks along the south wall and the main office in the north-east corner. Three aisles run from the south wall to the north wall, labelled Aisle A, Aisle B and Aisle C from west to east.\n[Metadata:   ]",
+        "similarity": 0.13455205732988595,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.16819007166235744,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.13455205732988595,
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "Where do pallets wait before moving into the aisles?",
+    "results": [
+      {
+        "chunk_id": "4a19a9ae-ac20-4be5-9a3e-a3e8f4001e99",
+        "document_id": "4dda7ba2-55f3-4e0f-8cfd-83f2ef597e40",
+        "content": "Document: warehouse-floorplan.png. Chunk 2 of 4. Content: ## Receiving zone\n\nThe image marks the receiving zone in blue along the south wall, next to dock doors 1 and 2. Pallets arrive here, are scanned and wait on a yellow floor line before they move into the aisles. A small desk with a scanner stands at the west end of the zone.\n[Metadata:   ]",
+        "similarity": 0.32675568772421504,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "0aa02763-f10b-4517-997a-e61d8f850df3",
+        "document_id": "b3cea6c0-8718-4ce2-a5cc-4907af5a33fb",
+        "content": "Document: shipping-handbook.en.md. Chunk 2 of 6. Content: ## Packaging rules\n\nEvery instrument is packed in a foam-lined box with a moisture sachet. Thermal probes with a cable longer than 3 metres are coiled and fixed with a paper band before boxing. Packages that weigh more than 20 kilograms are shipped on a pallet and are never sent as ordinary parcels. Batteries are packed separately from instruments and carry a lithium handling label when the model uses lithium cells.\n[Metadata:   ]",
+        "similarity": 0.1726641367669377,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "0d8510d1-e1a4-4fd8-aabf-67f86caa540a",
+        "document_id": "4dda7ba2-55f3-4e0f-8cfd-83f2ef597e40",
+        "content": "Document: warehouse-floorplan.png. Chunk 3 of 4. Content: ## Picking aisles\n\nThe image shows Aisle A holding thermal probes and spare cables, Aisle B holding reference thermometers and data loggers, and Aisle C holding packaging material and batteries. Each aisle has shelves on both sides with four levels, and the lithium batteries sit in a fenced cage at the north end of Aisle C.\n[Metadata:   ]",
+        "similarity": 0.1569368114879235,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "Where is the main office on the warehouse floor plan?",
+    "results": [
+      {
+        "chunk_id": "40fc5177-6cd8-40a1-80fb-c9d5d62b05c8",
+        "document_id": "4dda7ba2-55f3-4e0f-8cfd-83f2ef597e40",
+        "content": "Document: warehouse-floorplan.png. Chunk 1 of 4. Content: ## Overall layout\n\nThe image shows a floor plan of the Lumen Valley Instruments warehouse, drawn from above. The building is a long rectangle with the loading docks along the south wall and the main office in the north-east corner. Three aisles run from the south wall to the north wall, labelled Aisle A, Aisle B and Aisle C from west to east.\n[Metadata:   ]",
+        "similarity": 0.21112832492893874,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "Where are lithium batteries stored in the warehouse layout?",
+    "results": [
+      {
+        "chunk_id": "0aa02763-f10b-4517-997a-e61d8f850df3",
+        "document_id": "b3cea6c0-8718-4ce2-a5cc-4907af5a33fb",
+        "content": "Document: shipping-handbook.en.md. Chunk 2 of 6. Content: ## Packaging rules\n\nEvery instrument is packed in a foam-lined box with a moisture sachet. Thermal probes with a cable longer than 3 metres are coiled and fixed with a paper band before boxing. Packages that weigh more than 20 kilograms are shipped on a pallet and are never sent as ordinary parcels. Batteries are packed separately from instruments and carry a lithium handling label when the model uses lithium cells.\n[Metadata:   ]",
+        "similarity": 0.23643213510514816,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "0d8510d1-e1a4-4fd8-aabf-67f86caa540a",
+        "document_id": "4dda7ba2-55f3-4e0f-8cfd-83f2ef597e40",
+        "content": "Document: warehouse-floorplan.png. Chunk 3 of 4. Content: ## Picking aisles\n\nThe image shows Aisle A holding thermal probes and spare cables, Aisle B holding reference thermometers and data loggers, and Aisle C holding packaging material and batteries. Each aisle has shelves on both sides with four levels, and the lithium batteries sit in a fenced cage at the north end of Aisle C.\n[Metadata:   ]",
+        "similarity": 0.1905649829584557,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "Come è stato pagato il totale sulla ricevuta?",
+    "results": [
+      {
+        "chunk_id": "00093786-bf58-48ba-89c6-5abd38c6a349",
+        "document_id": "b0f11cff-e756-4458-a963-b53776c9da72",
+        "content": "Document: scanned-receipt.it.md. Chunk 3 of 5. Content: ## Totali\n\nTota1e imponibi1e                              241,5O\nIVA 22 %                                        53,13\nTOTALE COMPLESSIVO                             294,63\nPagato con carta di credito                    294,63\nResto                                            O,OO\n[Metadata:   ]",
+        "similarity": 0.17234126329422486,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.21542657911778107,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.17234126329422486,
+        "image_url": null
+      },
+      {
+        "chunk_id": "756b5aa8-1daa-424e-a846-b3faa746fd3e",
+        "document_id": "45240c49-6437-4ed6-80d4-b958157b65df",
+        "content": "Document: product-specs.it.md. Chunk 2 of 6. Content: ## Termometro a sonda VS-220\n\nIl termometro a sonda VS-220 (codice articolo VV-21-0311) è pensato per i controlli di laboratorio e di cucina professionale. L'intervallo di misura va da -50 a 350 gradi Celsius, con una precisione di più o meno 0,3 gradi. Il tempo di risposta è di 3 secondi. Il cavo della sonda è lungo 1,5 metri. Funziona con una batteria al litio CR2032 e la custodia ha grado di protezione IP67. Il firmware installato in fabbrica è VFW-3.6.2.\n[Metadata:   ]",
+        "similarity": 0.15662038269142348,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.19577547836427933,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.15662038269142348,
+        "image_url": null
+      },
+      {
+        "chunk_id": "5f717f10-61d7-4427-b414-1554737c9390",
+        "document_id": "fb5ddaad-1d78-4479-a51a-51dc0824ed5d",
+        "content": "Document: refund-policy.it.md. Chunk 4 of 5. Content: ## Politica precedente (fino al 2023)\n\nFino alla fine del 2023 l'azienda applicava una regola più vecchia: qualsiasi cliente poteva domandare la restituzione del denaro entro 25 giorni dal pagamento, qualunque fosse il periodo di fatturazione, ma l'importo veniva restituito solo come credito sul conto cliente e non sul metodo di pagamento usato. Questa regola è stata abrogata il 1 gennaio 2024 e non vale più per i nuovi ordini.\n[Metadata:   ]",
+        "similarity": 0.15644116242583606,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.19555145303229504,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.15644116242583606,
+        "image_url": null
+      },
+      {
+        "chunk_id": "3ae70509-b583-45f6-a605-98016a4e7528",
+        "document_id": "45240c49-6437-4ed6-80d4-b958157b65df",
+        "content": "Document: product-specs.it.md. Chunk 1 of 6. Content: ## Termometro a sonda VS-210\n\nIl termometro a sonda VS-210 (codice articolo VV-21-0310) è pensato per i controlli di laboratorio e di cucina professionale. L'intervallo di misura va da -50 a 200 gradi Celsius, con una precisione di più o meno 0,3 gradi. Il tempo di risposta è di 3 secondi. Il cavo della sonda è lungo 1,5 metri. Funziona con una batteria al litio CR2032 e la custodia ha grado di protezione IP67. Il firmware installato in fabbrica è VFW-3.6.2.\n[Metadata:   ]",
+        "similarity": 0.1550116991941023,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.19376462399262784,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.1550116991941023,
+        "image_url": null
+      },
+      {
+        "chunk_id": "cb66cdc7-d8bf-4346-a673-d82095c8a676",
+        "document_id": "fb5ddaad-1d78-4479-a51a-51dc0824ed5d",
+        "content": "Document: refund-policy.it.md. Chunk 1 of 5. Content: ## Piani annuali\n\nValle Verde Strumenti accetta richieste di rimborso per i piani con fatturazione annuale. La richiesta va inviata all'ufficio amministrazione insieme al numero d'ordine. Il rimborso viene accreditato sul metodo di pagamento originale entro 12 giorni lavorativi. Per i piani annuali il termine per chiedere il rimborso è di 60 giorni dalla data di acquisto.\n[Metadata:   ]",
+        "similarity": 0.13594259046995685,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.16992823808744606,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.13594259046995685,
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "Quale ragione sociale compare in intestazione?",
+    "results": [
+      {
+        "chunk_id": "cb66cdc7-d8bf-4346-a673-d82095c8a676",
+        "document_id": "fb5ddaad-1d78-4479-a51a-51dc0824ed5d",
+        "content": "Document: refund-policy.it.md. Chunk 1 of 5. Content: ## Piani annuali\n\nValle Verde Strumenti accetta richieste di rimborso per i piani con fatturazione annuale. La richiesta va inviata all'ufficio amministrazione insieme al numero d'ordine. Il rimborso viene accreditato sul metodo di pagamento originale entro 12 giorni lavorativi. Per i piani annuali il termine per chiedere il rimborso è di 60 giorni dalla data di acquisto.\n[Metadata:   ]",
+        "similarity": 0.22800886524067077,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "0f2c29e3-bd3d-463e-b081-e3d542ede4a3",
+        "document_id": "fb5ddaad-1d78-4479-a51a-51dc0824ed5d",
+        "content": "Document: refund-policy.it.md. Chunk 2 of 5. Content: ## Piani mensili\n\nValle Verde Strumenti accetta richieste di rimborso per i piani con fatturazione mensile. La richiesta va inviata all'ufficio amministrazione insieme al numero d'ordine. Il rimborso viene accreditato sul metodo di pagamento originale entro 12 giorni lavorativi. Per i piani mensili il termine per chiedere il rimborso è di 10 giorni dalla data di acquisto.\n[Metadata:   ]",
+        "similarity": 0.21336466073991234,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "96b82c4c-5d34-4e6c-8222-02a29b8f20a3",
+        "document_id": "b0f11cff-e756-4458-a963-b53776c9da72",
+        "content": "Document: scanned-receipt.it.md. Chunk 4 of 5. Content: ## Condizioni di reso\n\nI1 reso e possibi1e entro 14 giorni dalla data dello scontrino, perche la merce deve essere integra e nella confezione origina1e. Per i1 reso occorre presentare questo scontrino. Gli articoli personalizzati non si possono restituire. Il rimborso avviene sulla stessa carta usata per l'acquisto.\n[Metadata:   ]",
+        "similarity": 0.16749164968629948,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "037d1540-850e-446a-ba08-a69b7c6b7d8d",
+        "document_id": "b0f11cff-e756-4458-a963-b53776c9da72",
+        "content": "Document: scanned-receipt.it.md. Chunk 1 of 5. Content: ## Intestazione scontrino\n\nVALLE VERDE STRUMENTI S.R.L.\nVia del Campione 1O, Citta Esempio\nScontrino n. SC-24-0O712\nData: 21 Giugno 2O24    Ora: 1O:42\nCassa: 03    Operatore: Rossi Esempio\n[Metadata:   ]",
+        "similarity": 0.16578084692809025,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "Quale codice compare per il termometro VS-21O?",
+    "results": [
+      {
+        "chunk_id": "3ae70509-b583-45f6-a605-98016a4e7528",
+        "document_id": "45240c49-6437-4ed6-80d4-b958157b65df",
+        "content": "Document: product-specs.it.md. Chunk 1 of 6. Content: ## Termometro a sonda VS-210\n\nIl termometro a sonda VS-210 (codice articolo VV-21-0310) è pensato per i controlli di laboratorio e di cucina professionale. L'intervallo di misura va da -50 a 200 gradi Celsius, con una precisione di più o meno 0,3 gradi. Il tempo di risposta è di 3 secondi. Il cavo della sonda è lungo 1,5 metri. Funziona con una batteria al litio CR2032 e la custodia ha grado di protezione IP67. Il firmware installato in fabbrica è VFW-3.6.2.\n[Metadata:   ]",
+        "similarity": 0.271914967323873,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "756b5aa8-1daa-424e-a846-b3faa746fd3e",
+        "document_id": "45240c49-6437-4ed6-80d4-b958157b65df",
+        "content": "Document: product-specs.it.md. Chunk 2 of 6. Content: ## Termometro a sonda VS-220\n\nIl termometro a sonda VS-220 (codice articolo VV-21-0311) è pensato per i controlli di laboratorio e di cucina professionale. L'intervallo di misura va da -50 a 350 gradi Celsius, con una precisione di più o meno 0,3 gradi. Il tempo di risposta è di 3 secondi. Il cavo della sonda è lungo 1,5 metri. Funziona con una batteria al litio CR2032 e la custodia ha grado di protezione IP67. Il firmware installato in fabbrica è VFW-3.6.2.\n[Metadata:   ]",
+        "similarity": 0.2665401339983764,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "b0855c87-8b8e-4b60-9908-22f04639471d",
+        "document_id": "45240c49-6437-4ed6-80d4-b958157b65df",
+        "content": "Document: product-specs.it.md. Chunk 4 of 6. Content: ## Tabella dei prezzi\n\nTutti i prezzi sono in euro per unità, IVA e spedizione escluse.\n\n| Codice | Prodotto | da 1 a 9 pezzi | da 10 a 49 pezzi | 50 pezzi o più |\n| --- | --- | --- | --- | --- |\n| VV-21-0310 | Termometro VS-210 | 94,00 | 86,00 | 79,00 |\n| VV-21-0311 | Termometro VS-220 | 118,00 | 109,00 | 99,00 |\n| VV-33-0042 | Termometro di riferimento VR-700 | 640,00 | 610,00 | 580,00 |\n| VV-48-0905 | Registratore VL-15 | 56,00 | 51,00 | 46,00 |\n[Metadata:   ]",
+        "similarity": 0.2107440845286973,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "cf6bb0c9-8c14-4419-aa00-bc3df83279a3",
+        "document_id": "b0f11cff-e756-4458-a963-b53776c9da72",
+        "content": "Document: scanned-receipt.it.md. Chunk 2 of 5. Content: ## Articoli acquistati\n\nCod.          Descrizione                     Qta   Prezzo   Importo\nVV-21-O31O    Termometro VS-21O                2     94,OO    188,OO\nVV-RC-OO6O    Cavo di ricambio 1,5 m           3     12,OO     36,OO\nVV-BT-OOO7    Batteria CR2O32                  5      3,5O     17,5O\n[Metadata:   ]",
+        "similarity": 0.1781644458068774,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "7f1d30a3-23fa-4247-96b0-d7682883b82c",
+        "document_id": "45240c49-6437-4ed6-80d4-b958157b65df",
+        "content": "Document: product-specs.it.md. Chunk 5 of 6. Content: ## Firmware e identificativi\n\nIl firmware VFW-3.6.2 supporta VS-210, VS-220 e VR-700. Il registratore VL-15 usa una linea di firmware separata, VLF-1.1.9. L'identificativo del dispositivo ha la forma VVD-VS-002815: la parte centrale indica la famiglia di modelli e le ultime sei cifre sono il numero di serie. Per aggiornare la sonda, collegarla via USB-C e avviare lo strumento Verde Link, scaricabile da https://example.com/downloads/verde-link.\n[Metadata:   ]",
+        "similarity": 0.16180211040875903,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "Qual è l'aliquota IVA indicata?",
+    "results": [
+      {
+        "chunk_id": "3ae70509-b583-45f6-a605-98016a4e7528",
+        "document_id": "45240c49-6437-4ed6-80d4-b958157b65df",
+        "content": "Document: product-specs.it.md. Chunk 1 of 6. Content: ## Termometro a sonda VS-210\n\nIl termometro a sonda VS-210 (codice articolo VV-21-0310) è pensato per i controlli di laboratorio e di cucina professionale. L'intervallo di misura va da -50 a 200 gradi Celsius, con una precisione di più o meno 0,3 gradi. Il tempo di risposta è di 3 secondi. Il cavo della sonda è lungo 1,5 metri. Funziona con una batteria al litio CR2032 e la custodia ha grado di protezione IP67. Il firmware installato in fabbrica è VFW-3.6.2.\n[Metadata:   ]",
+        "similarity": 0.23472335172970882,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "756b5aa8-1daa-424e-a846-b3faa746fd3e",
+        "document_id": "45240c49-6437-4ed6-80d4-b958157b65df",
+        "content": "Document: product-specs.it.md. Chunk 2 of 6. Content: ## Termometro a sonda VS-220\n\nIl termometro a sonda VS-220 (codice articolo VV-21-0311) è pensato per i controlli di laboratorio e di cucina professionale. L'intervallo di misura va da -50 a 350 gradi Celsius, con una precisione di più o meno 0,3 gradi. Il tempo di risposta è di 3 secondi. Il cavo della sonda è lungo 1,5 metri. Funziona con una batteria al litio CR2032 e la custodia ha grado di protezione IP67. Il firmware installato in fabbrica è VFW-3.6.2.\n[Metadata:   ]",
+        "similarity": 0.22959030769392264,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "5f717f10-61d7-4427-b414-1554737c9390",
+        "document_id": "fb5ddaad-1d78-4479-a51a-51dc0824ed5d",
+        "content": "Document: refund-policy.it.md. Chunk 4 of 5. Content: ## Politica precedente (fino al 2023)\n\nFino alla fine del 2023 l'azienda applicava una regola più vecchia: qualsiasi cliente poteva domandare la restituzione del denaro entro 25 giorni dal pagamento, qualunque fosse il periodo di fatturazione, ma l'importo veniva restituito solo come credito sul conto cliente e non sul metodo di pagamento usato. Questa regola è stata abrogata il 1 gennaio 2024 e non vale più per i nuovi ordini.\n[Metadata:   ]",
+        "similarity": 0.15742045227611134,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "3927fe78-043d-4503-8d61-f79dc1923e57",
+        "document_id": "b956386c-b598-4884-bc39-b15acb72a252",
+        "content": "Document: warranty-terms.it.md. Chunk 3 of 6. Content: ## Cosa non è coperto\n\nSono esclusi i danni da caduta, da immersione oltre il grado di protezione indicato, da uso di batterie non conformi e da aperture non autorizzate dell'involucro. Sono esclusi anche la taratura periodica e la normale usura dei cavi. Se l'involucro risulta aperto o i sigilli sono rotti, la garanzia decade.\n[Metadata:   ]",
+        "similarity": 0.15477770532836355,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "合同约定的年度服务费合计是多少元？",
+    "results": [
+      {
+        "chunk_id": "fdfb0895-2027-4fa8-bda9-3c66370242bf",
+        "document_id": "1338762a-94bb-4894-b1a8-4ca497e3f3cc",
+        "content": "Document: scanned-contract.zh.md. Chunk 3 of 6. Content: ## 第二条 费用与付款\n\n本合同年度服务费合计为人民币 36OOO\n元（不含税）。甲方应在合同签订后 15\n日内支付全部服务费的 5O%，其余款项在\n第二次巡检完成后 1O 日内付清。乙方收\n到款项后开具增值税专用发票。\n[Metadata:   ]",
+        "similarity": 0.4115877801130676,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "c6dc9636-9b19-4ed1-a499-d794228a83d9",
+        "document_id": "1338762a-94bb-4894-b1a8-4ca497e3f3cc",
+        "content": "Document: scanned-contract.zh.md. Chunk 4 of 6. Content: ## 第三条 违约责任\n\n甲方未按期付款的，每逾期一日，应按未\n付金额的千分之三向乙方支付违约金。乙\n方未按约定时间完成巡检的，每延误一日，\n应向甲方支付年度服务费的千分之一作为\n赔偿，赔偿总额不超过年度服务费的 1O%。\n[Metadata:   ]",
+        "similarity": 0.2992967869830203,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "69cf3e85-8aa4-4a46-9406-3d30c83b8f3d",
+        "document_id": "1338762a-94bb-4894-b1a8-4ca497e3f3cc",
+        "content": "Document: scanned-contract.zh.md. Chunk 5 of 6. Content: ## 第四条 保密与期限\n\n双方对在履行本合同过程中知悉的对方商\n业秘密负有保密义务，保密期限为合同终\n止后 5 年。本合同有效期为 2 年，自签订\n之日起算，期满前 6O 日内任何一方未书\n面提出异议的，合同自动续期 1 年。\n[Metadata:   ]",
+        "similarity": 0.20733798966572559,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "8026495c-e52d-4948-aade-565cd0f3592c",
+        "document_id": "1338762a-94bb-4894-b1a8-4ca497e3f3cc",
+        "content": "Document: scanned-contract.zh.md. Chunk 2 of 6. Content: ## 第一条 服务范围\n\n乙方负责对甲方位于示例工业园的 12 台温\n度记录仪和 3 台标准温度计提供定期巡检、\n校准和故障维修服务。巡检每季度进行一\n次，每次巡检结束后乙方应在 5 个工作日\n内向甲方提交书面巡检报告。\n[Metadata:   ]",
+        "similarity": 0.15633545719503106,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "巡检结束后乙方要在几个工作日内提交书面巡检报告？",
+    "results": [
+      {
+        "chunk_id": "8026495c-e52d-4948-aade-565cd0f3592c",
+        "document_id": "1338762a-94bb-4894-b1a8-4ca497e3f3cc",
+        "content": "Document: scanned-contract.zh.md. Chunk 2 of 6. Content: ## 第一条 服务范围\n\n乙方负责对甲方位于示例工业园的 12 台温\n度记录仪和 3 台标准温度计提供定期巡检、\n校准和故障维修服务。巡检每季度进行一\n次，每次巡检结束后乙方应在 5 个工作日\n内向甲方提交书面巡检报告。\n[Metadata:   ]",
+        "similarity": 0.42739528629953255,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.5342441078744157,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.42739528629953255,
+        "image_url": null
+      },
+      {
+        "chunk_id": "bdd8ebb7-f084-48b1-93e5-53de67f172f1",
+        "document_id": "def4e5c5-62cc-45f7-bcda-bc84f2e408e7",
+        "content": "Document: employee-handbook.zh.md. Chunk 2 of 6. Content: ## 年假申请流程\n\n休年假需要至少提前 3 个工作日在人事系统里提交申请，由直属主管审批。连续休假超过 5 个工作日的，还需要部门负责人再批一次。未休完的年假可以顺延到次年 3 月 31 日，过期作废，公司不以现金折算。\n[Metadata:   ]",
+        "similarity": 0.1542959380192567,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.19286992252407087,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.1542959380192567,
+        "image_url": null
+      },
+      {
+        "chunk_id": "59bf5612-9345-45da-b217-aca50cab1950",
+        "document_id": "143ce507-a535-4f0f-aa7d-209e63c6666b",
+        "content": "Document: refund-policy.zh.md. Chunk 5 of 5. Content: ## 如何提交申请\n\n请发送邮件至 refund@example.com，写明订单号和下单时填写的邮箱。电话申请请拨打 555-0143，工作日 9:00 至 17:00 受理。我们会在两个工作日内确认收到您的申请。\n[Metadata:   ]",
+        "similarity": 0.15318646405411418,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.1914830800676427,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.15318646405411418,
+        "image_url": null
+      },
+      {
+        "chunk_id": "fdfb0895-2027-4fa8-bda9-3c66370242bf",
+        "document_id": "1338762a-94bb-4894-b1a8-4ca497e3f3cc",
+        "content": "Document: scanned-contract.zh.md. Chunk 3 of 6. Content: ## 第二条 费用与付款\n\n本合同年度服务费合计为人民币 36OOO\n元（不含税）。甲方应在合同签订后 15\n日内支付全部服务费的 5O%，其余款项在\n第二次巡检完成后 1O 日内付清。乙方收\n到款项后开具增值税专用发票。\n[Metadata:   ]",
+        "similarity": 0.14684478511795182,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.18355598139743978,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.14684478511795182,
+        "image_url": null
+      },
+      {
+        "chunk_id": "ba8e89a0-0c5d-40ef-a043-c40146d82ef9",
+        "document_id": "143ce507-a535-4f0f-aa7d-209e63c6666b",
+        "content": "Document: refund-policy.zh.md. Chunk 2 of 5. Content: ## 月度方案\n\n绿谷仪器接受按月付费的方案申请退款。申请人需向财务部提交订单号。退款会在 15 个工作日内原路退回到付款时使用的支付方式。月度方案的退款期限为自购买之日起 7 天。\n[Metadata:   ]",
+        "similarity": 0.1372823643975428,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.1716029554969285,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.1372823643975428,
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "设备维护合同的甲方名称是什么？",
+    "results": [
+      {
+        "chunk_id": "aba6bb79-15e1-4547-8dd7-a0ce99177467",
+        "document_id": "1338762a-94bb-4894-b1a8-4ca497e3f3cc",
+        "content": "Document: scanned-contract.zh.md. Chunk 1 of 6. Content: ## 设备维护服务合 同\n\n合同编号：GV-MS-2O24-0057\n甲方：示例化工有限公司（以下简称“甲\n方”）\n乙方：绿谷仪器股份有限公司（以下简称\n“乙方”）\n签订日期：2O24 年 6 月 18 日\n甲方代表：陈示例    乙方代表：周样本\n[Metadata:   ]",
+        "similarity": 0.3053013011131429,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "69cf3e85-8aa4-4a46-9406-3d30c83b8f3d",
+        "document_id": "1338762a-94bb-4894-b1a8-4ca497e3f3cc",
+        "content": "Document: scanned-contract.zh.md. Chunk 5 of 6. Content: ## 第四条 保密与期限\n\n双方对在履行本合同过程中知悉的对方商\n业秘密负有保密义务，保密期限为合同终\n止后 5 年。本合同有效期为 2 年，自签订\n之日起算，期满前 6O 日内任何一方未书\n面提出异议的，合同自动续期 1 年。\n[Metadata:   ]",
+        "similarity": 0.21915477862671806,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "8026495c-e52d-4948-aade-565cd0f3592c",
+        "document_id": "1338762a-94bb-4894-b1a8-4ca497e3f3cc",
+        "content": "Document: scanned-contract.zh.md. Chunk 2 of 6. Content: ## 第一条 服务范围\n\n乙方负责对甲方位于示例工业园的 12 台温\n度记录仪和 3 台标准温度计提供定期巡检、\n校准和故障维修服务。巡检每季度进行一\n次，每次巡检结束后乙方应在 5 个工作日\n内向甲方提交书面巡检报告。\n[Metadata:   ]",
+        "similarity": 0.1705759546394674,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "fdfb0895-2027-4fa8-bda9-3c66370242bf",
+        "document_id": "1338762a-94bb-4894-b1a8-4ca497e3f3cc",
+        "content": "Document: scanned-contract.zh.md. Chunk 3 of 6. Content: ## 第二条 费用与付款\n\n本合同年度服务费合计为人民币 36OOO\n元（不含税）。甲方应在合同签订后 15\n日内支付全部服务费的 5O%，其余款项在\n第二次巡检完成后 1O 日内付清。乙方收\n到款项后开具增值税专用发票。\n[Metadata:   ]",
+        "similarity": 0.15120505313544164,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "f6c3034f-9022-42b8-a0c5-66ff73e9fc5d",
+        "document_id": "1338762a-94bb-4894-b1a8-4ca497e3f3cc",
+        "content": "Document: scanned-contract.zh.md. Chunk 6 of 6. Content: ## 签章页\n\n甲方（盖章）：示例化工有限公司\n乙方（盖章）：绿谷仪器股份有限公司\n本合同一式两份，甲乙双方各执一份，具\n有同等法律效力。联系邮箱：service@example.net\n[Metadata:   ]",
+        "similarity": 0.15049509704113118,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "合同编号是多少？",
+    "results": [
+      {
+        "chunk_id": "69cf3e85-8aa4-4a46-9406-3d30c83b8f3d",
+        "document_id": "1338762a-94bb-4894-b1a8-4ca497e3f3cc",
+        "content": "Document: scanned-contract.zh.md. Chunk 5 of 6. Content: ## 第四条 保密与期限\n\n双方对在履行本合同过程中知悉的对方商\n业秘密负有保密义务，保密期限为合同终\n止后 5 年。本合同有效期为 2 年，自签订\n之日起算，期满前 6O 日内任何一方未书\n面提出异议的，合同自动续期 1 年。\n[Metadata:   ]",
+        "similarity": 0.2748939410421368,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "4e41c7f2-251c-499b-a716-5e8567f5b29a",
+        "document_id": "0b13629f-1a6c-4b41-acff-3b354769544e",
+        "content": "Document: product-specs.zh.md. Chunk 6 of 6. Content: ## 保修与配件\n\n上表所列设备均享有自交付之日起算的三年有限保修。更换用纽扣电池的物料编号为 GV-BT-0045，防水硅胶护套的物料编号为 GV-CS-0072，壁挂支架的物料编号为 GV-WM-0019。申请保修请发送邮件至 warranty@example.org，并附上设备序列号和标签照片。\n[Metadata:   ]",
+        "similarity": 0.22365741197712008,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "aba6bb79-15e1-4547-8dd7-a0ce99177467",
+        "document_id": "1338762a-94bb-4894-b1a8-4ca497e3f3cc",
+        "content": "Document: scanned-contract.zh.md. Chunk 1 of 6. Content: ## 设备维护服务合 同\n\n合同编号：GV-MS-2O24-0057\n甲方：示例化工有限公司（以下简称“甲\n方”）\n乙方：绿谷仪器股份有限公司（以下简称\n“乙方”）\n签订日期：2O24 年 6 月 18 日\n甲方代表：陈示例    乙方代表：周样本\n[Metadata:   ]",
+        "similarity": 0.21300485262434965,
+        "metadata": {},
+        "image_url": null
+      },
+      {
+        "chunk_id": "fdfb0895-2027-4fa8-bda9-3c66370242bf",
+        "document_id": "1338762a-94bb-4894-b1a8-4ca497e3f3cc",
+        "content": "Document: scanned-contract.zh.md. Chunk 3 of 6. Content: ## 第二条 费用与付款\n\n本合同年度服务费合计为人民币 36OOO\n元（不含税）。甲方应在合同签订后 15\n日内支付全部服务费的 5O%，其余款项在\n第二次巡检完成后 1O 日内付清。乙方收\n到款项后开具增值税专用发票。\n[Metadata:   ]",
+        "similarity": 0.1592371259706744,
+        "metadata": {},
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
     "query": "show me the warehouse floorplan image",
     "results": [
       {

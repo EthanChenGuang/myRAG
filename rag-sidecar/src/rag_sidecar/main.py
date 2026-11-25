@@ -2,6 +2,7 @@ import asyncio
 import contextlib
 import json
 import random
+import tempfile
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -25,7 +26,7 @@ from rag_sidecar.contracts import (
 from rag_sidecar.extract.invoice import extract_invoice
 from rag_sidecar.ingest.app_client import AppClient
 from rag_sidecar.ingest.ledger_client import LedgerClient
-from rag_sidecar.ingest.pool import PriorityPool
+from rag_sidecar.ingest.pool import UPLOAD_PRIORITY, PriorityPool
 from rag_sidecar.ingest.worker import IngestWorker, RealClock
 from rag_sidecar.parse.converter import Converter, default_converter
 from rag_sidecar.parse.jobs import JobRunner, QueueFull
@@ -51,6 +52,31 @@ def _error(status: int, message: str, headers: dict[str, str] | None = None) -> 
     )
 
 
+def _looks_like_pdf(path: Path) -> bool:
+    try:
+        head = path.read_bytes()[:8]
+    except OSError:
+        return False
+    return head.startswith(b"%PDF-")
+
+
+def _run_preflight_job(
+    path: Path,
+    settings: SidecarSettings,
+    routing_cfg,
+    file_sha: str,
+) -> dict:
+    from rag_sidecar.preflight.l1 import EncryptedPdf
+    from rag_sidecar.preflight.run import run_preflight
+
+    try:
+        converter = settings.build_range_converter()
+        output = run_preflight(path, None, routing_cfg, converter, file_sha=file_sha)
+        return output.result.model_dump(mode="json")
+    except EncryptedPdf:
+        return {"__preflight_error__": "encrypted_pdf"}
+
+
 def create_app(settings: SidecarSettings | None = None, converter: Converter | None = None) -> FastAPI:
     resolved = settings if settings is not None else load_settings()
     active_converter = converter if converter is not None else default_converter()
@@ -59,13 +85,19 @@ def create_app(settings: SidecarSettings | None = None, converter: Converter | N
 
     ingest_worker: IngestWorker | None = None
     ingest_pool: PriorityPool | None = None
+    preflight_pool: PriorityPool | None = None
     ingest_task: asyncio.Task[None] | None = None
     ledger_client: LedgerClient | None = None
     app_client: AppClient | None = None
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        nonlocal ingest_worker, ingest_pool, ingest_task, ledger_client, app_client
+        nonlocal ingest_worker, ingest_pool, preflight_pool, ingest_task, ledger_client, app_client
+        from rag_sidecar.ingest.maintenance import start_maintenance_from_env
+
+        preflight_pool = PriorityPool(workers=resolved.parse_workers)
+        preflight_pool.start()
+        app.state.preflight_pool = preflight_pool
         if resolved.ingest_worker and resolved.worker_env_ready():
             assert resolved.supabase_url is not None
             assert resolved.service_role_key is not None
@@ -89,13 +121,18 @@ def create_app(settings: SidecarSettings | None = None, converter: Converter | N
             )
             ingest_task = asyncio.create_task(ingest_worker.run())
             app.state.ingest_worker = ingest_worker
+        maintenance = start_maintenance_from_env()
         try:
             yield
         finally:
+            if maintenance is not None:
+                await maintenance.stop()
             if ingest_worker is not None:
                 await ingest_worker.stop()
             if ingest_pool is not None:
                 await ingest_pool.stop()
+            if preflight_pool is not None:
+                await preflight_pool.stop()
             if ledger_client is not None:
                 await ledger_client.aclose()
             if app_client is not None:
@@ -207,6 +244,51 @@ def create_app(settings: SidecarSettings | None = None, converter: Converter | N
             return _error(404, "artifact_not_found")
         media_type = _ARTIFACT_MEDIA_TYPES.get(path.suffix.lower(), "application/octet-stream")
         return FileResponse(path, media_type=media_type, headers={"x-content-type-options": "nosniff"})
+
+    @v1.post("/preflight")
+    async def preflight_probe(request: Request) -> Response:
+        pool: PriorityPool | None = getattr(request.app.state, "preflight_pool", None)
+        if pool is None:
+            return _error(503, "preflight_unavailable")
+        from rag_sidecar.preflight.config import load_routing_config
+        from rag_sidecar.preflight.l2 import sha256_file
+
+        routing_cfg = load_routing_config()
+        declared = request.headers.get("content-length", "")
+        if declared.isdigit() and int(declared) > resolved.max_upload_bytes + BODY_ALLOWANCE_BYTES:
+            return _error(413, "upload_too_large")
+        with tempfile.TemporaryDirectory(prefix="rag-preflight-") as scratch:
+            upload_path = Path(scratch) / "upload.bin"
+            try:
+                upload = await read_upload(
+                    request.stream(),
+                    request.headers.get("content-type", ""),
+                    upload_path,
+                    resolved.max_upload_bytes,
+                )
+            except UploadTooLarge:
+                return _error(413, "upload_too_large")
+            except MalformedUpload:
+                return _error(415, "invalid_preflight_request")
+            if upload.file_bytes == 0:
+                return _error(415, "invalid_preflight_request")
+            if not _looks_like_pdf(upload_path):
+                return _error(415, "invalid_preflight_request")
+            digest = sha256_file(upload_path)
+            deadline_s = routing_cfg.timeouts.preflight_ms / 1000.0
+            future = pool.submit(
+                _run_preflight_job,
+                (upload_path, resolved, routing_cfg, digest),
+                priority=UPLOAD_PRIORITY,
+                deadline_s=deadline_s,
+            )
+            try:
+                payload = await future
+            except Exception:
+                return _error(500, "preflight_failed")
+            if isinstance(payload, dict) and payload.get("__preflight_error__") == "encrypted_pdf":
+                return _error(422, "encrypted_pdf")
+            return JSONResponse(content=payload)
 
     @v1.post("/ingest/wake", status_code=202)
     def ingest_wake(request: Request) -> JSONResponse:

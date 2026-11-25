@@ -1,3 +1,4 @@
+import { rpcRows } from '../backend/supabase-rpc';
 import { assertTenantScope, scopeKey, type TenantScope } from '../tenant/scope';
 import { isArtifactName, loadArtifact, versionPrefix, type ArtifactContext } from './artifacts';
 import { getIngestDeps } from './deps';
@@ -89,7 +90,7 @@ async function readDocument(scope: TenantScope, documentId: string, signal: Abor
       console.error('[Ingest] type change lookup failed', { code: response.error.code ?? null });
       return 'unavailable';
     }
-    return ((response.data ?? [])[0] as Row | undefined) ?? null;
+    return (rpcRows(response.data)[0] as Row | undefined) ?? null;
   } catch (error) {
     if (signal.aborted) throw error;
     console.error('[Ingest] type change lookup failed', { error: error instanceof Error ? error.name : 'unknown' });

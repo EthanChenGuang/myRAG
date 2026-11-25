@@ -429,6 +429,21 @@
       "knownGaps": []
     },
     {
+      "name": "RAG_INGEST_JOB_RETENTION_DAYS",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_INGEST_MAINTENANCE_INTERVAL_SECONDS",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_INGEST_MAINTENANCE",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "RAG_INITIAL_MATCH_COUNT",
       "status": "legacy",
       "knownGaps": [

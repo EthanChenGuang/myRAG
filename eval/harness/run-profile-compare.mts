@@ -5,6 +5,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { config as loadDotenv } from 'dotenv';
+import type { IngestFixtureBuildState } from './ingest-mode.mts';
+import type { EvalRequestOptions } from './run-eval.mts';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 loadDotenv({ path: path.join(REPO_ROOT, '.env.local'), quiet: true });
@@ -86,8 +88,6 @@ async function main(): Promise<number> {
   const runEvalModule = await import('./run-eval.mts');
   const { mergeGoldenFiles, ingestModeGoldenPaths, buildIngestFixtureDatabase } = ingestMode;
   const { prepareInProcessEval, runEval } = runEvalModule;
-  type IngestFixtureBuildState = ingestMode.IngestFixtureBuildState;
-  type EvalRequestOptions = runEvalModule.EvalRequestOptions;
   const NOISE_PATH = path.join(REPO_ROOT, 'eval/config/noise.json');
 
   const corpusDir = path.resolve(values.corpus as string);
@@ -112,10 +112,11 @@ async function main(): Promise<number> {
     },
   });
 
+  const ingestEdge = full.buildState.edge;
   const { fixtureAdminClient } = await import('./ingest-fakes.mts');
   const { runReembed } = await import('../../src/lib/rag/ingest/reembed/run.ts');
   const backfill = await runReembed({
-    db: fixtureAdminClient(full.edge.url),
+    db: fixtureAdminClient(ingestEdge.url),
     resumeRunId: runId,
     batchSize: 16,
     signal: new AbortController().signal,
@@ -125,7 +126,7 @@ async function main(): Promise<number> {
   // Refresh RAG deps on the ingest edge before in-process eval (matches run-smoke fixture ordering).
   const { applyFixtureProcessEnv } = await import('./process-env.mts');
   applyFixtureProcessEnv({
-    edgeUrl: full.edge.url,
+    edgeUrl: ingestEdge.url,
     deploymentMode: 'single-tenant',
     extra: { RAG_EMBEDDING_PROFILES: 'on', RAG_EVAL_SECRET: process.env.RAG_EVAL_SECRET! },
     vendorEmbeddingRoutes: true,
