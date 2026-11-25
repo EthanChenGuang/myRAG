@@ -74,3 +74,52 @@ describe('QuarantineReason generated from Pydantic', () => {
     }
   });
 });
+
+const TASK2_MODELS = [
+  'LanguageSettings',
+  'SettingsClassification',
+  'IngestFingerprintParts',
+  'FingerprintImpact',
+  'HiddenTextRequest',
+  'HiddenTextReport',
+  'HiddenTextRules',
+  'LinkCheckResult',
+  'UploadApproval',
+];
+
+describe('Phase 3.2 settings, fingerprint, hidden-text, link and approval contracts', () => {
+  it.each(TASK2_MODELS)('%s has a generated schema whose sample round-trips and rejects an extra key', (model) => {
+    const schema = schemaFor(model);
+    const sample = fixture.samples[model];
+    expect(sample, `sample for ${model}`).toBeDefined();
+    const parsed = schema.safeParse(sample);
+    expect(parsed.success).toBe(true);
+    expect(parsed.data).toEqual(sample);
+    expect(schema.safeParse({ ...sample, unexpected_key: 1 }).success).toBe(false);
+  });
+
+  it('SettingsClassification needs a mechanism on ingestion entries and none on query entries', () => {
+    const schema = schemaFor('SettingsClassification');
+    const entries = (entry: unknown) => ({ schema_version: 1, entries: [entry] });
+    expect(schema.safeParse(entries({ name: 'RAG_EXAMPLE_PART', side: 'both', mechanism: 'rescan' })).success).toBe(true);
+    expect(schema.safeParse(entries({ name: 'RAG_EXAMPLE_PART', side: 'ingestion' })).success).toBe(false);
+    expect(schema.safeParse(entries({ name: 'RAG_EXAMPLE_QUERY', side: 'query', mechanism: 'reembed' })).success).toBe(false);
+    expect(schema.safeParse(entries({ name: 'RAG_EXAMPLE_QUERY', side: 'query' })).success).toBe(true);
+  });
+
+  it('IngestFingerprintParts accepts only integers for versions and the known switch values', () => {
+    const schema = schemaFor('IngestFingerprintParts');
+    const sample = fixture.samples.IngestFingerprintParts;
+    expect(schema.safeParse({ ...sample, processing_profile_version: 1.5 }).success).toBe(false);
+    expect(schema.safeParse({ ...sample, switches: { ...sample.switches, caption_language: 'zh' } }).success).toBe(false);
+  });
+
+  it('HiddenTextReport, LinkCheckResult and UploadApproval reject unknown enum values and negative counts', () => {
+    expect(schemaFor('HiddenTextReport').safeParse({ ...fixture.samples.HiddenTextReport, status: 'unknown' }).success).toBe(false);
+    expect(schemaFor('HiddenTextReport').safeParse({ ...fixture.samples.HiddenTextReport, dropped: -1 }).success).toBe(false);
+    const link = fixture.samples.LinkCheckResult;
+    expect(schemaFor('LinkCheckResult').safeParse({ ...link, targets: [{ ...link.targets[0], kind: 'phone' }] }).success).toBe(false);
+    expect(schemaFor('UploadApproval').safeParse({ ...fixture.samples.UploadApproval, mode: 'everyone' }).success).toBe(false);
+    expect(schemaFor('FingerprintImpact').safeParse({ ...fixture.samples.FingerprintImpact, total_current: -1 }).success).toBe(false);
+  });
+});
