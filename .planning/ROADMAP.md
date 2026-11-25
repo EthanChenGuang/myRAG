@@ -33,6 +33,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 5.1: Prompt Injection Defense** (INSERTED) - Tagged, instruction-free context, runtime injection detection and an injection eval gated at 0
 - [ ] **Phase 05.1.1: Feedback Loop & Real Domain Test Set** (INSERTED) - Tenant-safe retrieval log, refusal and embed feedback, weekly failure mining into an expert-labelled queue, dictionary and training exports, and a real domain test set that gates releases
 - [ ] **Phase 5.2: Grounded Answers & Output Safety** (INSERTED) - Partial-answer rule, a citation per factual sentence, claim-level grounding marks, LLM-judge groundedness for unsupported languages, output-length cap, per-language refusal texts, output link and credential guard, uploader tracing
+- [ ] **Phase 5.3: Evaluation Gates & Online Monitoring** (INSERTED) - No-answer share and absolute false-answer gates, eval gate on Config UI changes, release gate on production promotion, LLM-judge agreement checks, daily drift alerts
 - [ ] **Phase 6: Query Layer (LlamaIndex & LangChain)** - History rewrite, multi-query fusion, HyDE and sub-questions with a router and budgets, in two switchable frameworks compared in eval
 - [ ] **Phase 06.1: Embedding fine-tuning pipeline: synthetic queries, hard negatives, MNRL training, re-embed and switch** (INSERTED) - Consent-gated per-tenant export, synthetic and mined pairs, hard negatives, CachedMNRL training, offline proof, fine-tune slots switched through the EMB-05 gate or 3.1.1 bindings
 - [ ] **Phase 6.2: Query Layer Additions** (INSERTED) - Complete decomposition, per-sub-question filters, comparison answers, translation glossary, query-language confidence, voice cross-language, speculative retrieval and Auto model routing behind switches
@@ -438,7 +439,7 @@ Plans:
 ### Phase 4.2: Retrieval Tuning Additions (INSERTED)
 **Goal**: Retrieval keeps the smallest rerank pool that works, matches company terms as single words, can answer questions about earlier policy versions, and its time to first token is gated
 **Depends on**: Phase 4, Phase 4.1, Phase 4.1.1 (TERM dictionary for LANG-07 and XLG-05), Phase 3.2
-**Requirements**: LAT-04, LANG-07, RET-11, RET-12, DATA-21, RET-13, EVAL-20 (plus the RNK-02 and LAT-01 deltas)
+**Requirements**: LAT-04, LANG-07, RET-11, RET-12, DATA-21, RET-13, EVAL-20, RNK-07 (plus the RNK-02 and LAT-01 deltas)
 **Success Criteria** (what must be TRUE):
   1. The sweep grid includes a pool of 25, the rerank input cap accepts 25, and the sweep report adds nDCG@k with k equal to the chunks sent to the LLM.
   2. A tenant dictionary term such as 年假 matches as one lexical term after `rag:relex`; Italian stemming makes dipendente and dipendenti match and is turned on only if the it slice gains Recall with no other slice dropping.
@@ -446,6 +447,7 @@ Plans:
   4. TTFT p50/p95 is on the trace for text, embed and voice, cache hits and misses are reported separately, and an injected pre-generation delay makes the CI latency gate fail.
   5. With `RAG_TABLE_LOOKUP` on, a question naming a city and a grade retrieves the matching table row through the lookup leg as an extra RRF list within the verified tenant, the row reaches the context with its header, no LLM-written SQL exists anywhere, and the cross-tenant canary includes the row store.
   6. With `RAG_DUP_CLUSTERS` on, a fixture FAQ pasted into 30 documents forms one duplicate cluster per tenant (never across tenants), and deleting one source document updates the cluster; with `RAG_RESULT_DIVERSITY=collapse` (or `mmr`), the question "VPN 连不上，而且密码也忘了怎么办？" and its en/it versions get the password answer once, with all its sources listed, plus the VPN troubleshooting chunk in the top-k; the `duplicate_flood` slice gates top-k redundancy and per-intent evidence, and no other slice drops beyond the noise band.
+  7. The refusal calibration report lists every candidate threshold with its false-answer and false-refusal rates; strict mode takes the threshold that keeps false answers at or below 5% and balanced keeps today's false-refusal target, each cell records its mode, and with the per-mode targets unset the chosen thresholds equal the Phase 4 result.
 **Live verification**: Re-run the pool sweep with real rerankers including the 25 pool; measure real TTFT against the budget.
 **Plans**: TBD
 
@@ -578,7 +580,7 @@ Plans:
 ### Phase 5.2: Grounded Answers & Output Safety (INSERTED)
 **Goal**: When the documents answer only part of a question, the answer says so instead of filling the gap, every claim can be traced to a block, and no answer can carry a phishing link or a credential request
 **Depends on**: Phase 5, Phase 5.1, Phase 5.1.1 (review queue and retrieval log)
-**Requirements**: GEN-08, GEN-09, GEN-10, GEN-11, GEN-12, LAT-05, LANG-09, SEC-06, SEC-10, GEN-14, EVAL-19 (plus the SEC-02 delta)
+**Requirements**: GEN-08, GEN-09, GEN-10, GEN-11, GEN-12, LAT-05, LANG-09, SEC-06, SEC-10, GEN-14, EVAL-19, GEN-15 (plus the SEC-02 delta)
 **Success Criteria** (what must be TRUE):
   1. With `RAG_PARTIAL_ANSWER_RULE` on, the `partial_answer` fixture items (e.g. a limit is stated but not what happens above it) are answered for the covered part and say for the rest that the documents do not cover it, in zh, en and it; the share of answers adding unsupported content is 0 in CI; when strict mode calls webSearch, document and web parts are labelled separately; `RAG_SYSTEM_PROMPT` and `{{context}}` are unchanged.
   2. The eval reports `uncited_sentence_rate`, the UI marks sentences without a valid citation, and with `RAG_CLAIM_CHECK` on unsupported sentences are marked "not confirmed by the documents" without deleting or blocking text; with the LLM judge opted in, Italian answers get a calibrated groundedness label instead of "not checked".
@@ -586,7 +588,23 @@ Plans:
   4. With `RAG_OUTPUT_GUARD` on, a fixture document carrying a hidden phishing link and a "log in again and enter your password" instruction produces answers with the link replaced and the request blocked, even across stream tokens; allowlisted links pass; WhatsApp replies are filtered and no server-side preview is fetched for non-allowlisted hosts; the system prompt forbids outputting links found only in material and asking for passwords.
   5. Security events carry the uploader on the trace, in logs and in the review queue, and a fake uploader crossing the threshold raises an admin alert; with every switch off, results match the Phase 5.1 baseline.
   6. Context blocks carry version and effective-date labels; on the `stale_version` items the answer gives the current value and names its version, never both values, and the conflict sends both documents to the review queue as a supersession candidate.
+  7. With `RAG_CONTEXT_RELEVANCE_RULE` on, the `off_topic_context` items (e.g. "公司附近哪家餐厅好吃？" whose top chunks are canteen hours and team-dinner reimbursement) get the "information not available" text in strict mode and a labelled general answer in balanced mode, the share of answers repurposing adjacent context is 0 in CI, and with the switch off the strict characterization is byte-identical.
 **Live verification**: Run the claim check and the LLM judge on real answers; send a real WhatsApp reply with an injected link and confirm no preview fetch.
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 5.3: Evaluation Gates & Online Monitoring (INSERTED)
+**Goal**: A change that makes the system answer questions its documents cannot answer is stopped before release, whether it comes through CI or the Config UI, and after release a drift in refusals, scores or votes raises an alert within a day
+**Depends on**: Phase 5.1.1 (retrieval log, review queue and domain experts), Phase 5.2 (`off_topic_context` items), Phase 4.2 (per-mode refusal operating points)
+**Requirements**: EVAL-22, EVAL-23, EVAL-24, EVAL-25, OBS-03
+**Success Criteria** (what must be TRUE):
+  1. A gated set whose no-answer share falls below 15% in any language fails the run; a fake model that answers 3 of 20 no-answer items fails CI on the absolute false-answer ceiling even when the noise-band rule would pass; ceilings and floors live in `eval/config/quality-gates.json`.
+  2. In the Config UI, saving an edited `RAG_SYSTEM_PROMPT` that drops the refusal instruction shows a failing smoke-tier result before it applies; saving anyway needs a reason that is stored with the config hash and appears in the weekly report; changing the reranker model marks its refusal cells `uncalibrated` with a warning; a finished backfill batch starts the nightly tier on that tenant's real set.
+  3. With `RAG_MONITOR` on, a seeded retrieval log whose refusal rate rises from 12% to 38% on day 5 while not-helpful votes stay flat raises one alert for that tenant and language; a shifted top-score distribution flags recalibration; alerts carry ids and counts but no query or answer text; with the switch off nothing runs.
+  4. The judge-agreement report shows Cohen's kappa and accuracy per language and metric on a labelled sample; a judge seeded to disagree becomes report-only for that slice and the nightly gate ignores it; the length-bias check is reported.
+  5. A commit whose nightly tier was skipped for missing keys, or whose `ship_check` failed, cannot be promoted to production: `rag-release-gate` reports `skipped` or `failed` and the promotion step stops; `pr-smoke` is a required check on trunk and `main`; an override needs an admin and a reason and appears in the weekly report.
+  6. A seeded spike in knowledge-base `degraded` results raises an alert that lists the switch flipped in the same window and links sample trace ids.
+**Live verification**: Run the daily monitor on a week of real logs and confirm a test alert reaches the admin channel; measure real judge agreement on expert-labelled review-queue cases; confirm a failing release gate blocks a real Vercel promotion.
 **Plans**: TBD
 **UI hint**: yes
 
@@ -698,19 +716,20 @@ Plans:
 ### Phase 6.2: Query Layer Additions (INSERTED)
 **Goal**: Questions that bundle several periods, places or topics retrieve evidence for every part and get a structured comparison, cross-language queries use company terms, and the optional latency switches pay off only when the eval says so
 **Depends on**: Phase 6, Phase 6.1, Phase 3.2, Phase 4.2, Phase 5.2
-**Requirements**: QRY-09, QRY-10, QRY-11, GEN-13, XLG-05, XLG-07, LANG-08, LAT-06, LAT-07, QRY-12, QRY-13
+**Requirements**: QRY-09, QRY-10, QRY-11, GEN-13, XLG-05, XLG-07, LANG-08, LAT-06, LAT-07, QRY-12, QRY-13, QRY-14
 **Success Criteria** (what must be TRUE):
   1. For "2024 年和 2025 年的差旅政策有什么变化？对意大利分公司有什么影响？" and its en/it versions, decomposition yields sub-questions covering both years and the Italian branch (a fake decomposer that drops one is corrected or discarded); with `RAG_QUERY_SUBQ_FILTERS` on, each sub-question is filtered by period, version scope or scope tag within the verified tenant, an empty filtered result falls back, and the answer has one cited part per sub-question plus the differences.
   2. The `version_compare` and `scoped_compound` slices report all-evidence recall and sub-question coverage above single-pass retrieval, and no other slice drops beyond the noise band.
   3. Glossary terms are enforced in translation, document translation and rewriting; short and mixed-script queries get the right language through the confidence fallback chain; the cross_lingual slice runs through the voice entry point and is gated.
   4. With `RAG_SPECULATIVE_RETRIEVAL` on, original-query retrieval starts before the transforms finish and a cache hit cancels it; with `RAG_MODEL_ROUTING=auto` and the Auto model selected, simple lookups go to the fast model; with both off, the Phase 6 order and model choice are unchanged.
   5. With `condense` forced to time out, the follow-up "那海外出差呢？" (and its en/it versions) is still retrieved through the previous-standalone-query variant and answered with the overseas limit; with `RAG_WHATSAPP_HISTORY` on, the same two-turn conversation over WhatsApp is condensed and answered correctly, history never crosses senders, and the reset command clears it.
+  6. With `RAG_SCOPE_GATE` on, the off-domain fixture questions in zh/en/it skip retrieval as `out_of_scope` within 5 ms (strict refuses, balanced answers without knowledge-base context and says so), `unsure` queries always retrieve, correct refusals rise and false refusals stay within the noise band; with it off nothing changes.
 **Live verification**: Run the multi-part fixtures and real comparison questions with real LLM keys; measure the speculative-retrieval and routing latency gains.
 **Plans**: TBD
 
 ### Phase 7: External Backends & Release Defaults
 **Goal**: Admins can switch retrieval to Weaviate or Qdrant without any cross-tenant leakage, every new provider and switch is configurable in the Config UI, and the shipped defaults are backed by a full regression
-**Depends on**: Phase 5, Phase 5.1, Phase 6, Phase 3.1.1, Phase 4.1, Phase 4.1.1, Phase 5.1.1, Phase 6.1, Phase 3.2, Phase 4.2, Phase 5.2, Phase 6.2, Phase 4.3 (the Weaviate and Qdrant adapters must inject the access-group filter on every query and prefetch)
+**Depends on**: Phase 5, Phase 5.1, Phase 6, Phase 3.1.1, Phase 4.1, Phase 4.1.1, Phase 5.1.1, Phase 6.1, Phase 3.2, Phase 4.2, Phase 5.2, Phase 5.3, Phase 6.2, Phase 4.3 (the Weaviate and Qdrant adapters must inject the access-group filter on every query and prefetch)
 **Requirements**: RET-05, RET-06, RET-07, RET-08, RET-09, ADM-01, ADM-02, ADM-03, ADM-04, LANG-10, LANG-11, SEC-11 (plus the ADM-02 delta; EVAL-17 moved to Phase 5.1.1 on 2026-11-24)
 **Success Criteria** (what must be TRUE):
   1. Tests against Weaviate and Qdrant containers in CI show that inserts, updates, deletes (including cascade deletes), version replacements and re-embeds in Supabase reach both stores through the outbox and drain worker, and that the reconcile job detects and repairs injected drift. Weaviate uses one tenant per workspace; Qdrant uses a shared collection per embedding profile with an `is_tenant` index and a tenant filter injected on every query and prefetch.
@@ -764,7 +783,7 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 3.1 → 3.1.1 → 3.2 → 4 → 4.1 → 4.1.1 → 4.2 → 4.3 → 5 → 5.1 → 5.1.1 → 5.2 → 6 → 6.1 → 6.2 → 7. Phase 6 depends on Phase 5 (its plans build on Phase 5 contracts) and runs after Phase 5.1, which touches the same files. Phase 7's backend and sync work needs only Phases 3 and 4; its regression and closeout need Phases 5 and 6. Inserted 2026-11-24: 3.1.1 follows 3.1 (and needs Phase 4's v2 search on trunk); 4.1 follows Phase 4's automated close (04-42) and flips the retrieval defaults that every later phase runs on; 4.1.1 follows 4.1; 5.1.1 follows 5.1 (plan 05.1.1-24 also needs 4.1.1), takes over EVAL-17 from Phase 7, and Phase 6 plans sharing its files depend on 05.1.1-22; 6.1 needs Phases 6, 3.1.1 and 5.1.1. Phases 3.2, 4.2, 5.2 and 6.2 were inserted on 2026-11-25 so that no plan of a phase already executing changes; Phase 7 had 2 of 34 plans executed and gains requirements through a plan revision. Phase 6 depends on Phase 5 (its plans build on Phase 5 contracts) and runs after Phase 5.1, which touches the same files. Phase 7's backend and sync work needs only Phases 3 and 4; its regression and closeout need Phases 5 and 6.
+Phases execute in numeric order: 1 → 2 → 3 → 3.1 → 3.1.1 → 3.2 → 4 → 4.1 → 4.1.1 → 4.2 → 4.3 → 5 → 5.1 → 5.1.1 → 5.2 → 5.3 → 6 → 6.1 → 6.2 → 7. Phase 6 depends on Phase 5 (its plans build on Phase 5 contracts) and runs after Phase 5.1, which touches the same files. Phase 7's backend and sync work needs only Phases 3 and 4; its regression and closeout need Phases 5 and 6. Inserted 2026-11-24: 3.1.1 follows 3.1 (and needs Phase 4's v2 search on trunk); 4.1 follows Phase 4's automated close (04-42) and flips the retrieval defaults that every later phase runs on; 4.1.1 follows 4.1; 5.1.1 follows 5.1 (plan 05.1.1-24 also needs 4.1.1), takes over EVAL-17 from Phase 7, and Phase 6 plans sharing its files depend on 05.1.1-22; 6.1 needs Phases 6, 3.1.1 and 5.1.1. Phases 3.2, 4.2, 5.2 and 6.2 were inserted on 2026-11-25 so that no plan of a phase already executing changes, and 5.3 (evaluation gates and online monitoring) follows 5.2 without holding up Phase 6; Phase 7 had 2 of 34 plans executed and gains requirements through a plan revision. Phase 6 depends on Phase 5 (its plans build on Phase 5 contracts) and runs after Phase 5.1, which touches the same files. Phase 7's backend and sync work needs only Phases 3 and 4; its regression and closeout need Phases 5 and 6.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -783,6 +802,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 3.1 → 3.1.1 → 3.2 → 4 �
 | 5.1. Prompt Injection Defense (INSERTED) | 10/25 | In Progress | - |
 | 5.1.1. Feedback Loop & Real Domain Test Set (INSERTED) | 0/25 | Planned (plan-check PASS) | - |
 | 5.2. Grounded Answers & Output Safety (INSERTED) | 0/TBD | Not planned | - |
+| 5.3. Evaluation Gates & Online Monitoring (INSERTED) | 0/TBD | Not planned | - |
 | 6. Query Layer (LlamaIndex & LangChain) | 12/46 | In Progress | - |
 | 6.1. Embedding Fine-tuning Pipeline (INSERTED) | 0/20 | Planned (plan-check PASS) | - |
 | 6.2. Query Layer Additions (INSERTED) | 0/TBD | Not planned | - |
