@@ -642,3 +642,226 @@ def test_default_runner_reads_the_golden_file_named_by_the_run_manifest(tmp_path
     assert sorted(item.id for item in result.golden) == sorted(item.id for item in GOLDEN)
     assert seen[0][seen[0].index("--fixture-mode") + 1] == "ingest" and "--no-gate" in seen[0]
     assert json.loads((tmp_path / "run" / "inputs" / "run-config.json").read_text(encoding="utf-8"))["name"] == "legacy"
+
+
+# ---------- schema 2: switch comparison (Phase 5 D-25)
+
+from rag_eval.phase_compare import (  # noqa: E402
+    SwitchComparison,
+    SwitchComparisonSpec,
+    citation_validity_check,
+    no_slice_drop_check,
+    paired_all_zero_check,
+    retrieval_unchanged_check,
+    run_switch_comparison,
+)
+
+SPEC5 = REPO_ROOT / "eval" / "config" / "phase5-comparison.json"
+PHASE5_SWITCHES = (
+    "RAG_CITATIONS",
+    "RAG_CLAUDE_CITATIONS",
+    "RAG_GROUNDEDNESS",
+    "RAG_GROUNDEDNESS_VECTARA_OPT_IN",
+    "RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK",
+    "RAG_ANSWER_FEEDBACK",
+)
+
+
+def _with_citations(output: RunOutput, invalid: float | None, n: int = 6) -> RunOutput:
+    rate = None if invalid is None else MetricValue(value=invalid, n=n)
+    return RunOutput(report=output.report.model_copy(update={"invalid_citation_rate": rate}), traces=output.traces, golden=output.golden)
+
+
+def test_citation_validity_needs_a_measured_zero_invalid_rate():
+    base = _output()
+    assert citation_validity_check(_with_citations(base, 0.0)).passed is True
+    failing = citation_validity_check(_with_citations(base, 0.25))
+    assert failing.passed is False and failing.measures["invalid_citation_rate"] == 0.25
+    assert citation_validity_check(_with_citations(base, None)).passed is False, "an unmeasured rate is not a zero rate"
+    assert citation_validity_check(_with_citations(base, 0.0, n=0)).passed is False
+
+
+def test_retrieval_unchanged_fails_on_any_nonzero_retrieval_paired_difference():
+    base = _output()
+    baseline = _baseline(base)
+    assert retrieval_unchanged_check(_output(), baseline, NOISE).passed is True
+    moved = retrieval_unchanged_check(_output(rank2=("en-general-001",)), baseline, NOISE)
+    assert moved.passed is False
+    assert any("mrr" in line for line in moved.detail)
+
+
+def test_retrieval_unchanged_ignores_answer_only_options_but_not_other_data():
+    base = _output()
+    baseline = _baseline(base)
+    on = base.report.model_copy(update={"request_options": base.report.request_options.model_copy(update={"citations": True, "groundedness": True})})
+    assert retrieval_unchanged_check(RunOutput(report=on, traces=base.traces, golden=base.golden), baseline, NOISE).passed is True
+    other = base.report.model_copy(update={"corpus_sha256": "d" * 64})
+    result = retrieval_unchanged_check(RunOutput(report=other, traces=base.traces, golden=base.golden), baseline, NOISE)
+    assert result.passed is False and any("corpus_sha256" in line for line in result.detail)
+
+
+def test_paired_all_zero_is_stricter_than_retrieval_unchanged():
+    base = _output()
+    baseline = _baseline(base)
+    assert paired_all_zero_check(_output(), baseline, NOISE).passed is True
+    flipped = _output(refused=("en-no_answer-001", "zh-no_answer-001"))
+    assert retrieval_unchanged_check(flipped, baseline, NOISE).passed is True
+    assert paired_all_zero_check(flipped, baseline, NOISE).passed is False
+
+
+def test_no_slice_drop_fails_beyond_the_noise_band():
+    base = _output()
+    baseline = _baseline(base)
+    assert no_slice_drop_check(_output(), baseline, NOISE).passed is True
+    dropped = no_slice_drop_check(_output(misses=("en-general-001", "en-table-001", "en-clause-001")), baseline, NOISE)
+    assert dropped.passed is False and dropped.detail
+
+
+def _switch_world(tmp_path: Path) -> SwitchComparisonSpec:
+    baseline = _baseline(_output())
+    for name in ("prechunked", "ingest"):
+        (tmp_path / f"{name}.json").write_text(baseline.model_dump_json(), encoding="utf-8")
+    raw = json.loads(SPEC5.read_text(encoding="utf-8"))
+    raw["baselines"] = {"prechunked": str(tmp_path / "prechunked.json"), "ingest": str(tmp_path / "ingest.json")}
+    return SwitchComparisonSpec.model_validate(raw)
+
+
+def _switch_runner(outputs: dict[str, RunOutput], seen: dict):
+    def runner(request):
+        seen[request.name] = request
+        return outputs[request.name]
+
+    return runner
+
+
+def _env_commands(codes: dict[str, int] | None = None):
+    calls: list[tuple[list[str], dict[str, str]]] = []
+
+    def run(argv: list[str], env: dict[str, str]) -> int:
+        calls.append((list(argv), dict(env)))
+        for marker, code in (codes or {}).items():
+            if marker in " ".join(argv):
+                return code
+        return 0
+
+    return run, calls
+
+
+def _passing_outputs(spec: SwitchComparisonSpec) -> dict[str, RunOutput]:
+    return {run.name: _with_citations(_output(), 0.0) if "--citations" in run.harness_flags else _output() for run in spec.runs}
+
+
+def test_committed_phase5_spec_names_both_fixture_modes_switched_off_and_on():
+    spec = SwitchComparisonSpec.model_validate_json(SPEC5.read_text(encoding="utf-8"))
+    off = [run for run in spec.runs if run.name.startswith("off-")]
+    on = [run for run in spec.runs if run.name.startswith("on-")]
+    assert {run.fixture_mode for run in off} == {"prechunked", "ingest"} == {run.fixture_mode for run in on}
+    for run in off:
+        assert {name: run.switches.get(name) for name in PHASE5_SWITCHES} == {name: "false" for name in PHASE5_SWITCHES}
+        assert run.harness_flags == []
+        assert {"paired_all_zero", "characterization"} <= set(run.checks)
+    for run in on:
+        assert run.switches["RAG_CITATIONS"] == "true" and run.switches["RAG_GROUNDEDNESS"] == "true"
+        assert {name: run.switches.get(name) for name in set(PHASE5_SWITCHES) - {"RAG_CITATIONS", "RAG_GROUNDEDNESS"}} == {
+            name: "false" for name in set(PHASE5_SWITCHES) - {"RAG_CITATIONS", "RAG_GROUNDEDNESS"}
+        }
+        assert run.harness_flags == ["--citations", "--groundedness"]
+        assert {"retrieval_unchanged", "no_slice_drop", "citation_validity", "strict_refusal"} <= set(run.checks)
+
+
+def test_switch_spec_rejects_unknown_checks_secrets_and_unknown_flags():
+    raw = json.loads(SPEC5.read_text(encoding="utf-8"))
+    for mutate in (
+        lambda r: r["runs"][0]["checks"].append("made_up"),
+        lambda r: r["runs"][0]["switches"].update({"ANTHROPIC_API_KEY": "placeholder"}),
+        lambda r: r["runs"][0]["switches"].update({"RAG_SIDECAR_SECRET": "placeholder"}),
+        lambda r: r["runs"][0]["harness_flags"].append("--base-url"),
+        lambda r: r["runs"].append(dict(r["runs"][0])),
+    ):
+        broken = json.loads(json.dumps(raw))
+        mutate(broken)
+        with pytest.raises(ValueError):
+            SwitchComparisonSpec.model_validate(broken)
+
+
+def test_run_switch_comparison_passes_and_writes_one_table_per_run(tmp_path: Path):
+    spec = _switch_world(tmp_path)
+    seen: dict = {}
+    commands, calls = _env_commands()
+    out = tmp_path / "phase-05"
+    result = run_switch_comparison(spec, out, runner=_switch_runner(_passing_outputs(spec), seen), commands=commands)
+    assert result.passed is True, result.model_dump_json(indent=2)
+    stored = SwitchComparison.model_validate_json((out / "comparison.json").read_text(encoding="utf-8"))
+    assert stored.passed is True and [run.name for run in stored.runs] == [run.name for run in spec.runs]
+    md = (out / "comparison.md").read_text(encoding="utf-8")
+    for run in spec.runs:
+        assert f"### {run.name}" in md
+    on = next(run for run in spec.runs if run.name.startswith("on-"))
+    request = seen[on.name]
+    assert request.process_env["RAG_CITATIONS"] == "true" and list(request.harness_flags) == ["--citations", "--groundedness"]
+    assert any("chat-strict" in " ".join(argv) and env.get("RAG_CITATIONS") == "true" for argv, env in calls)
+    assert any("characterize-chat" in " ".join(argv) and env.get("RAG_CITATIONS") == "false" for argv, env in calls)
+
+
+@pytest.mark.parametrize(
+    "breaker",
+    ["invalid_citations", "retrieval_moved", "command_failed", "off_refusal_changed"],
+)
+def test_run_switch_comparison_fails_on_a_synthetic_failing_input(tmp_path: Path, breaker: str):
+    spec = _switch_world(tmp_path)
+    outputs = _passing_outputs(spec)
+    on = next(run.name for run in spec.runs if run.name.startswith("on-"))
+    off = next(run.name for run in spec.runs if run.name.startswith("off-"))
+    codes = None
+    if breaker == "invalid_citations":
+        outputs[on] = _with_citations(outputs[on], 0.1)
+    elif breaker == "retrieval_moved":
+        outputs[on] = _with_citations(_output(rank2=("en-general-001",)), 0.0)
+    elif breaker == "off_refusal_changed":
+        outputs[off] = _output(refused=("en-no_answer-001", "zh-no_answer-001"))
+    else:
+        codes = {"chat-strict": 1}
+    commands, _ = _env_commands(codes)
+    result = run_switch_comparison(spec, tmp_path / "out", runner=_switch_runner(outputs, {}), commands=commands)
+    assert result.passed is False
+    assert "FAIL" in (tmp_path / "out" / "comparison.md").read_text(encoding="utf-8")
+
+
+def test_cli_dispatches_a_schema_2_spec(tmp_path: Path, monkeypatch):
+    spec = _switch_world(tmp_path)
+    spec_path = tmp_path / "spec5.json"
+    spec_path.write_text(spec.model_dump_json(), encoding="utf-8")
+    import rag_eval.phase_compare as module
+
+    commands, _ = _env_commands()
+    monkeypatch.setattr(module, "default_runner", _switch_runner(_passing_outputs(spec), {}))
+    monkeypatch.setattr(module, "default_env_command_runner", commands)
+    assert main(["--spec", str(spec_path), "--out", str(tmp_path / "cli")]) == 0
+    assert json.loads((tmp_path / "cli" / "comparison.json").read_text(encoding="utf-8"))["schema_version"] == 2
+
+
+def test_default_runner_passes_switches_and_harness_flags(tmp_path: Path):
+    output = _output()
+    seen: list[tuple[list[str], dict]] = []
+
+    def spawner(argv, cwd, env=None):
+        seen.append((argv, env))
+        out = Path(argv[argv.index("--out") + 1])
+        (out / "report.json").write_text(output.report.model_dump_json(), encoding="utf-8")
+        (out / "traces.jsonl").write_text("\n".join(t.model_dump_json() for t in output.traces) + "\n", encoding="utf-8")
+        golden_path = tmp_path / "golden.jsonl"
+        write_golden(golden_path, GOLDEN)
+        (out / "run.json").write_text(_manifest().model_copy(update={"golden_path": str(golden_path)}).model_dump_json(), encoding="utf-8")
+        return type("Done", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+
+    request = RunRequest(
+        name="on-prechunked",
+        run_config={"name": "on-prechunked", "env": {}, "overrides": None},
+        fixture_mode="prechunked",
+        out_dir=tmp_path / "run",
+        process_env={"RAG_CITATIONS": "true"},
+        harness_flags=("--citations",),
+    )
+    default_runner(request, spawner=spawner)
+    argv, env = seen[0]
+    assert "--citations" in argv and env["RAG_CITATIONS"] == "true"

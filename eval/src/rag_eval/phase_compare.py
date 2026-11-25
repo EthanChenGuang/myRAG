@@ -3,12 +3,13 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import re
 import subprocess
 import sys
 from collections import Counter
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
@@ -335,6 +336,8 @@ class RunRequest:
     run_config: dict[str, Any]
     fixture_mode: str
     out_dir: Path
+    process_env: dict[str, str] = field(default_factory=dict)
+    harness_flags: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -917,8 +920,16 @@ def default_runner(request: RunRequest, spawner: Spawner | None = None) -> RunOu
         "--no-gate",
         "--out",
         str(out_dir),
+        *request.harness_flags,
     ]
-    result = (spawner or default_spawner)(argv, REPO_ROOT)
+    if request.process_env:
+        env = {**os.environ, **request.process_env}
+        if spawner is not None:
+            result = spawner(argv, REPO_ROOT, env=env)
+        else:
+            result = subprocess.run(argv, cwd=REPO_ROOT, capture_output=True, text=True, check=False, env=env)
+    else:
+        result = (spawner or default_spawner)(argv, REPO_ROOT)
     if result.returncode != 0:
         tail = _tail(result.stderr) or _tail(result.stdout)
         raise HarnessError(
@@ -1294,6 +1305,264 @@ def render_markdown(c: PhaseComparison) -> str:
     return "\n".join(lines) + "\n"
 
 
+# ---------- schema 2: switch comparison (Phase 5 D-25 and later phases)
+#
+# A schema-2 spec names runs by the switches they set for the app under test (process environment of the harness, not the run-config
+# overlay, whose allowlist stays the Phase 4 retrieval switches) and the harness flags they pass, and lists the checks each run must pass.
+
+SWITCH_NAME = re.compile(r"^(NEXT_PUBLIC_)?RAG_[A-Z0-9_]+$")
+SECRET_PART = re.compile(r"(KEY|SECRET|TOKEN|PASSWORD|CREDENTIAL)S?(_|$)")
+HarnessFlag = Literal["--citations", "--groundedness"]
+BuiltinCheck = Literal["paired_all_zero", "retrieval_unchanged", "no_slice_drop", "citation_validity"]
+BUILTIN_CHECKS: tuple[str, ...] = ("paired_all_zero", "retrieval_unchanged", "no_slice_drop", "citation_validity")
+COMMAND_NAME = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+SWITCH_DEFAULTS_NOTE = "Every switch compared here defaults to off in src/lib/env.ts; the on runs set them for the app under test only."
+SWITCH_FIXTURE_NOTE = (
+    "Fixture corpus only: answers come from the deterministic fake citation generator and groundedness from the fake sidecar; "
+    "the live Anthropic, Vectara and HHEM checks are operator actions."
+)
+
+EnvCommandRunner = Callable[[list[str], dict[str, str]], int]
+
+
+class SwitchRun(_Model):
+    name: str = Field(pattern=r"^[a-z0-9][a-z0-9._-]{0,63}$")
+    fixture_mode: FixtureMode
+    base: str | None = None
+    switches: dict[str, str] = Field(default_factory=dict)
+    harness_flags: list[HarnessFlag] = Field(default_factory=list)
+    checks: list[str] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _switch_names(self) -> "SwitchRun":
+        for name in self.switches:
+            if not SWITCH_NAME.match(name):
+                raise ValueError(f"run {self.name}: {name} is not a RAG_* switch")
+            if SECRET_PART.search(name):
+                raise ValueError(f"run {self.name}: {name} looks like a credential; a comparison spec never carries one")
+        if len(set(self.harness_flags)) != len(self.harness_flags):
+            raise ValueError(f"run {self.name}: harness flags must be unique")
+        if len(set(self.checks)) != len(self.checks):
+            raise ValueError(f"run {self.name}: checks must be unique")
+        return self
+
+
+class SwitchComparisonSpec(_Model):
+    schema_version: Literal[2]
+    phase: str = Field(pattern=r"^\d{2}(\.\d+)*$")
+    noise: str
+    baselines: dict[FixtureMode, str]
+    runs: list[SwitchRun] = Field(min_length=1)
+    commands: dict[str, list[str]] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _references(self) -> "SwitchComparisonSpec":
+        names = [run.name for run in self.runs]
+        if len(names) != len(set(names)):
+            raise ValueError("run names must be unique")
+        for name, argv in self.commands.items():
+            if not COMMAND_NAME.match(name) or name in BUILTIN_CHECKS:
+                raise ValueError(f"command name {name!r} must be lowercase and differ from the built-in checks")
+            if not argv:
+                raise ValueError(f"command {name} is empty")
+        known = set(BUILTIN_CHECKS) | set(self.commands)
+        for run in self.runs:
+            unknown = sorted(set(run.checks) - known)
+            if unknown:
+                raise ValueError(f"run {run.name} names unknown checks: {', '.join(unknown)}")
+        if not {run.fixture_mode for run in self.runs} <= set(self.baselines):
+            raise ValueError("every fixture mode used by a run needs a baseline")
+        return self
+
+
+class CheckResult(_Model):
+    name: str
+    passed: bool
+    detail: list[str] = Field(default_factory=list)
+    measures: dict[str, float | None] = Field(default_factory=dict)
+
+
+class SwitchRunResult(_Model):
+    name: str
+    fixture_mode: FixtureMode
+    switches: dict[str, str]
+    harness_flags: list[str]
+    run_config_hash: str
+    overall: SliceMetrics
+    invalid_citation_rate: float | None
+    citation_coverage: float | None
+    passed: bool
+    checks: list[CheckResult]
+
+
+class SwitchComparison(_Model):
+    schema_version: Literal[2] = 2
+    phase: str
+    passed: bool
+    noise_floor: float
+    noise_k: float
+    runs: list[SwitchRunResult]
+    notes: list[str]
+
+
+def _paired_cells(gate: GateResult, metrics: tuple[str, ...] | None = None) -> list[str]:
+    if gate.paired is None:
+        return []
+    return [
+        f"{slice_name}:{metric} ({stat.n_nonzero} item(s) moved)"
+        for slice_name, stats in sorted(gate.paired.slices.items())
+        for metric, stat in sorted(stats.items())
+        if stat.n_nonzero and (metrics is None or metric in metrics)
+    ]
+
+
+def paired_all_zero_check(output: RunOutput, baseline: Baseline, noise: NoiseConfig) -> CheckResult:
+    """Every paired difference against the baseline is zero (retrieval and refusal), on the same data."""
+    return CheckResult(name="paired_all_zero", passed=False, detail=["not implemented"])
+
+
+def retrieval_unchanged_check(output: RunOutput, baseline: Baseline, noise: NoiseConfig) -> CheckResult:
+    """Every Recall@5, Recall@10 and MRR paired difference is zero; answer-only request options may differ (gate.ANSWER_ONLY_OPTIONS)."""
+    return CheckResult(name="retrieval_unchanged", passed=False, detail=["not implemented"])
+
+
+def no_slice_drop_check(output: RunOutput, baseline: Baseline, noise: NoiseConfig) -> CheckResult:
+    """No overall, language or category slice falls beyond the noise band on a retrieval metric."""
+    return CheckResult(name="no_slice_drop", passed=False, detail=["not implemented"])
+
+
+def citation_validity_check(output: RunOutput) -> CheckResult:
+    """invalid_citation_rate is measured over at least one citation and is exactly 0."""
+    return CheckResult(name="citation_validity", passed=False, detail=["not implemented"])
+
+
+def default_env_command_runner(argv: list[str], env: dict[str, str]) -> int:
+    result = subprocess.run(argv, cwd=REPO_ROOT, capture_output=True, text=True, check=False, env={**os.environ, **env})
+    if result.returncode != 0:
+        print(f"[Phase Compare] {' '.join(argv)} exited {result.returncode}", file=sys.stderr)
+        print(_tail(result.stdout + "\n" + result.stderr), file=sys.stderr)
+    return result.returncode
+
+
+def _switch_run_config(run: SwitchRun) -> dict[str, Any]:
+    if run.base is None:
+        return {"name": run.name, "env": {}, "overrides": None}
+    return materialise_run_config(RunSpec(name=run.name, base=run.base, fixture_mode=run.fixture_mode), [])
+
+
+def run_switch_comparison(
+    spec: SwitchComparisonSpec | Path,
+    out: Path,
+    runner: Runner = default_runner,
+    commands: EnvCommandRunner = default_env_command_runner,
+) -> SwitchComparison:
+    if not isinstance(spec, SwitchComparisonSpec):
+        spec = _read_model(SwitchComparisonSpec, str(spec), "comparison spec")
+    noise = _read_model(NoiseConfig, spec.noise, "noise config")
+    baselines = {mode: _read_model(Baseline, path, f"{mode} baseline") for mode, path in spec.baselines.items()}
+    out_dir = Path(out)
+    harness_dir = out_dir / HARNESS_DIR
+    command_cache: dict[tuple[str, tuple[tuple[str, str], ...]], int] = {}
+    results: list[SwitchRunResult] = []
+    for run in spec.runs:
+        print(f"[Phase Compare] run {run.name} ({run.fixture_mode})", file=sys.stderr)
+        output = runner(
+            RunRequest(
+                name=run.name,
+                run_config=_switch_run_config(run),
+                fixture_mode=run.fixture_mode,
+                out_dir=harness_dir / run.name,
+                process_env=dict(run.switches),
+                harness_flags=tuple(run.harness_flags),
+            )
+        )
+        baseline = baselines[run.fixture_mode]
+        checks: list[CheckResult] = []
+        for check in run.checks:
+            if check == "paired_all_zero":
+                checks.append(paired_all_zero_check(output, baseline, noise))
+            elif check == "retrieval_unchanged":
+                checks.append(retrieval_unchanged_check(output, baseline, noise))
+            elif check == "no_slice_drop":
+                checks.append(no_slice_drop_check(output, baseline, noise))
+            elif check == "citation_validity":
+                checks.append(citation_validity_check(output))
+            else:
+                argv = list(spec.commands[check])
+                key = (check, tuple(sorted(run.switches.items())))
+                if key not in command_cache:
+                    command_cache[key] = commands(argv, dict(run.switches))
+                code = command_cache[key]
+                checks.append(
+                    CheckResult(name=check, passed=code == 0, detail=[] if code == 0 else [f"{' '.join(argv)} exited {code}"])
+                )
+        report = output.report
+        results.append(
+            SwitchRunResult(
+                name=run.name,
+                fixture_mode=run.fixture_mode,
+                switches=dict(run.switches),
+                harness_flags=list(run.harness_flags),
+                run_config_hash=report.run_config_hash,
+                overall=report.overall,
+                invalid_citation_rate=report.invalid_citation_rate.value if report.invalid_citation_rate is not None else None,
+                citation_coverage=report.citation_coverage.value if report.citation_coverage is not None else None,
+                passed=all(check.passed for check in checks),
+                checks=checks,
+            )
+        )
+    comparison = SwitchComparison(
+        phase=spec.phase,
+        passed=bool(results) and all(result.passed for result in results),
+        noise_floor=noise.floor,
+        noise_k=noise.k,
+        runs=results,
+        notes=[SWITCH_FIXTURE_NOTE, SWITCH_DEFAULTS_NOTE],
+    )
+    _write_text(out_dir / JSON_NAME, json.dumps(comparison.model_dump(mode="json"), sort_keys=True, indent=2) + "\n")
+    _write_text(out_dir / MARKDOWN_NAME, render_switch_markdown(comparison))
+    return comparison
+
+
+def render_switch_markdown(c: SwitchComparison) -> str:
+    lines = [
+        f"# Phase {c.phase} comparison",
+        "",
+        f"Result: {_verdict(c.passed)}",
+        "",
+        f"Noise band: max({c.noise_k:g} x baseline spread, {c.noise_floor:g}) on Recall@5, Recall@10 and MRR over the overall, "
+        "every language and every category slice. Paired differences are against the committed baseline of the run's fixture mode.",
+        "",
+        "## Notes",
+        "",
+        *[f"- {note}" for note in c.notes],
+        "",
+        "## Runs",
+    ]
+    for r in c.runs:
+        o = r.overall
+        switches = ", ".join(f"{k}={v}" for k, v in sorted(r.switches.items())) or "none"
+        lines += [
+            "",
+            f"### {r.name}",
+            "",
+            f"Fixture mode: {r.fixture_mode}. Result: {_verdict(r.passed)}.",
+            "",
+            f"Switches: {switches}. Harness flags: {' '.join(r.harness_flags) or 'none'}.",
+            "",
+            f"Recall@5 {_num(o.recall_at_5.value)}, Recall@10 {_num(o.recall_at_10.value)}, MRR {_num(o.mrr.value)}, "
+            f"correct refusal {_num(o.correct_refusal_rate.value)}, false refusal {_num(o.false_refusal_rate.value)}, "
+            f"invalid citation rate {_num(r.invalid_citation_rate)}, citation coverage {_num(r.citation_coverage)}.",
+            "",
+            "| Check | Result | Detail |",
+            "|---|---|---|",
+        ]
+        for check in r.checks:
+            detail = "; ".join(check.detail) or "-"
+            lines.append(f"| {check.name} | {_verdict(check.passed)} | {detail} |")
+    return "\n".join(lines) + "\n"
+
+
 def _write_text(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + ".tmp")
@@ -1301,13 +1570,27 @@ def _write_text(path: Path, text: str) -> None:
     tmp.replace(path)
 
 
+def _schema_version(path: Path) -> int | None:
+    try:
+        payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return payload.get("schema_version") if isinstance(payload, dict) else None
+
+
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="rag_eval.phase_compare", description="Phase 4 D-28 comparison against the baseline")
+    parser = argparse.ArgumentParser(
+        prog="rag_eval.phase_compare", description="Phase comparison against the baseline (schema 1: Phase 4 D-28; schema 2: switch runs)"
+    )
     parser.add_argument("--spec", required=True, type=Path)
     parser.add_argument("--out", required=True, type=Path)
     args = parser.parse_args(argv)
     try:
-        result = run_phase_comparison(resolve_cli_path(args.spec), resolve_cli_path(args.out), runner=default_runner, commands=default_command_runner)
+        spec_path = resolve_cli_path(args.spec)
+        if _schema_version(spec_path) == 2:
+            result = run_switch_comparison(spec_path, resolve_cli_path(args.out), runner=default_runner, commands=default_env_command_runner)
+        else:
+            result = run_phase_comparison(spec_path, resolve_cli_path(args.out), runner=default_runner, commands=default_command_runner)
     except ComparisonError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_USAGE
