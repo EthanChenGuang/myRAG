@@ -261,6 +261,7 @@ class EnvironmentConfig {
       RAG_INGEST_MAINTENANCE: process.env.RAG_INGEST_MAINTENANCE || 'on',
       RAG_PARSE_PROGRESSIVE: process.env.RAG_PARSE_PROGRESSIVE || 'false',
       RAG_EMBED_BATCH_MODE: process.env.RAG_EMBED_BATCH_MODE || 'sync',
+      RAG_LANGUAGE_AWARE_INGEST: process.env.RAG_LANGUAGE_AWARE_INGEST || 'off',
       VOYAGE_API_KEY: process.env.VOYAGE_API_KEY || '',
       VOYAGE_BASE_URL: process.env.VOYAGE_BASE_URL || 'https://api.voyageai.com/v1',
       DEEPINFRA_API_KEY: process.env.DEEPINFRA_API_KEY || '',

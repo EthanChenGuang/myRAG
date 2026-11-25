@@ -526,6 +526,12 @@ RAG_EMBED_BATCH_MODE=sync
 NEXT_PUBLIC_RAG_INGEST_REALTIME=false
 # Ledger workers and the app must use the Supabase project HTTPS URL (PostgREST), never a direct Postgres DSN.
 
+# -----------------------------
+# LANGUAGES AND INGESTION HARDENING (Phase 3.2)
+# -----------------------------
+# Language-aware chunking, sentence splitting and OCR: off | on
+RAG_LANGUAGE_AWARE_INGEST=off
+
 # Voyage embeddings
 VOYAGE_API_KEY=
 VOYAGE_BASE_URL=https://api.voyageai.com/v1

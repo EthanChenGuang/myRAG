@@ -3,6 +3,7 @@ export type IngestParser = 'llamaparse' | 'docling';
 export type InjectionScanMode = 'off' | 'quarantine';
 export type EmbeddingProfilesMode = 'off' | 'on';
 export type QwenEmbedFallback = 'openrouter' | 'none';
+export type OffOn = 'off' | 'on';
 
 export interface IngestEnvInput {
   RAG_INGEST_PIPELINE?: string;
@@ -15,6 +16,7 @@ export interface IngestEnvInput {
   RAG_INJECTION_SCAN?: string;
   RAG_EMBEDDING_PROFILES?: string;
   RAG_QWEN_EMBED_FALLBACK?: string;
+  RAG_LANGUAGE_AWARE_INGEST?: string;
 }
 
 export interface IngestConfig {
@@ -28,6 +30,7 @@ export interface IngestConfig {
   injectionScan: InjectionScanMode;
   embeddingProfiles: EmbeddingProfilesMode;
   qwenFallback: QwenEmbedFallback;
+  languageAwareIngest: OffOn;
   warnings: string[];
 }
 
@@ -46,6 +49,7 @@ const ENV_NAMES = [
   'RAG_INJECTION_SCAN',
   'RAG_EMBEDDING_PROFILES',
   'RAG_QWEN_EMBED_FALLBACK',
+  'RAG_LANGUAGE_AWARE_INGEST',
 ] as const satisfies readonly (keyof IngestEnvInput)[];
 
 const loggedProblems = new Set<string>();
@@ -118,6 +122,7 @@ export function loadIngestConfig(env: IngestEnvInput): IngestConfig {
     injectionScan: parseChoice('RAG_INJECTION_SCAN', env.RAG_INJECTION_SCAN, ['off', 'quarantine'], 'off', warnings),
     embeddingProfiles: parseChoice('RAG_EMBEDDING_PROFILES', env.RAG_EMBEDDING_PROFILES, ['off', 'on'], 'off', warnings),
     qwenFallback: parseChoice('RAG_QWEN_EMBED_FALLBACK', env.RAG_QWEN_EMBED_FALLBACK, ['openrouter', 'none'], 'openrouter', warnings),
+    languageAwareIngest: parseChoice('RAG_LANGUAGE_AWARE_INGEST', env.RAG_LANGUAGE_AWARE_INGEST, ['off', 'on'], 'off', warnings),
     warnings,
   };
   memo.set(snapshot, config);

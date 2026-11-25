@@ -30,6 +30,7 @@ const DEFAULTS: IngestConfig = {
   injectionScan: 'off',
   embeddingProfiles: 'off',
   qwenFallback: 'openrouter',
+  languageAwareIngest: 'off',
   warnings: [],
 };
 

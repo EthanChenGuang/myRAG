@@ -9149,6 +9149,25 @@
 
                                             </div>
                                             <!-- rag-ingestion-settings:end -->
+                                            <!-- rag-phase032-settings:start -->
+                                            <div id="rag-phase032-settings" class="hidden">
+                                                <div data-rag-settings-group="ingest">
+                                                    <div class="form-control mb-4">
+                                                        <label class="label" for="RAG_LANGUAGE_AWARE_INGEST">
+                                                            <span class="label-text" data-rag-i18n="RAG_LANGUAGE_AWARE_INGEST.label">Language-aware processing</span>
+                                                        </label>
+                                                        <select id="RAG_LANGUAGE_AWARE_INGEST" name="RAG_LANGUAGE_AWARE_INGEST" aria-describedby="rag-language-aware-ingest-help" class="select select-bordered select-sm w-full">
+                                                            <option value="off" data-rag-i18n="RAG_LANGUAGE_AWARE_INGEST.opt.off">Off, as today</option>
+                                                            <option value="on" data-rag-i18n="RAG_LANGUAGE_AWARE_INGEST.opt.on">On</option>
+                                                        </select>
+                                                        <div class="label flex-wrap gap-1">
+                                                            <span class="label-text-alt" id="rag-language-aware-ingest-help"><span data-rag-i18n="RAG_LANGUAGE_AWARE_INGEST.help">Detects the language of each chunk, splits sentences by that language and reads scans with the supported languages.</span> <span data-rag-i18n="settings.affectsStored">Changing this affects documents already stored; saving shows how many.</span></span>
+                                                            <code class="font-mono text-xs" translate="no">RAG_LANGUAGE_AWARE_INGEST</code>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <!-- rag-phase032-settings:end -->
                                         </div>
                                     </section>
 

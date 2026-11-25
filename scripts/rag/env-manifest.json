@@ -551,6 +551,11 @@
       "knownGaps": []
     },
     {
+      "name": "RAG_LANGUAGE_AWARE_INGEST",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "RAG_LEXICAL_SEARCH",
       "status": "managed",
       "knownGaps": []
