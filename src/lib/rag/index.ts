@@ -71,6 +71,10 @@ export type {
 } from './chunking/profile-ops';
 export { validateChunkingProfile } from './chunking/validate';
 export type { ChunkingFinding, ChunkingValidationContext, ChunkingValidationResult } from './chunking/validate';
+export { getChunkingSweepReport, getChunkingDecisions, ChunkingReportInvalid } from './chunking/report';
+export type { ChunkingReportCode } from './chunking/report';
+export { refusalCalibrationStatus, currentRefusalCalibrationStatus } from './refusal/status';
+export type { RefusalCalibrationStatus } from './refusal/status';
 export type {
   Candidate,
   Profile,
@@ -138,6 +142,10 @@ export { loadIngestConfig } from './ingest/config';
 export { assertCloudAllowed, CloudRefused } from './ingest/guard/cloud-budget';
 export { findInvoices } from './retrieval/invoices';
 export type { FindInvoicesDeps, InvoiceFilters, InvoiceHit } from './retrieval/invoices';
+export { runChunkingBuildStep } from './ingest/rechunk/build-step';
+export type { ChunkingBuildStepOptions } from './ingest/rechunk/build-step';
+export { RechunkInputError, RechunkDatabaseError } from './ingest/rechunk/run';
+export type { RechunkReport } from './ingest/rechunk/run';
 export { getIngestStatusReport, STALE_PROCESSING_MS } from './ingest/status';
 export type { IngestStatusReport } from './ingest/status';
 export { IngestLedgerError, deleteJob, getJobForScope, listJobs, listJobsPage, retryJob } from './ingest/ledger';
