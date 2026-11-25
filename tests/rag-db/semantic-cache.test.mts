@@ -176,7 +176,56 @@ const FUNCTIONS: FunctionCase[] = [
       [key, KEY_HASH, 'p1', BASE, 'masked', JSON.stringify(ANSWER), '[]', false, 60],
     ],
   },
+  {
+    name: 'rag_cache_invalidate',
+    signature: 'public.rag_cache_invalidate(text, uuid[])',
+    call: (key) => ['SELECT public.rag_cache_invalidate($1, $2::uuid[])', [key, null]],
+  },
+  {
+    name: 'rag_cache_sources_current',
+    signature: 'public.rag_cache_sources_current(text, jsonb)',
+    call: (key) => ['SELECT public.rag_cache_sources_current($1, $2::jsonb)', [key, '[]']],
+  },
+  {
+    name: 'rag_cache_resolve_sources',
+    signature: 'public.rag_cache_resolve_sources(text, uuid[])',
+    call: (key) => ['SELECT * FROM public.rag_cache_resolve_sources($1, $2::uuid[])', [key, [crypto.randomUUID()]]],
+  },
 ];
+
+async function invalidate(db: PGlite, tenantKey: string, documentIds: string[] | null = null): Promise<number> {
+  const result = await asRole(db, 'service_role', () =>
+    db.query<{ n: number }>('SELECT public.rag_cache_invalidate($1, $2::uuid[]) AS n', [tenantKey, documentIds]),
+  );
+  return result.rows[0]!.n;
+}
+
+async function sourcesCurrent(db: PGlite, tenantKey: string, sources: SourceVersion[]): Promise<boolean> {
+  const result = await asRole(db, 'service_role', () =>
+    db.query<{ ok: boolean }>('SELECT public.rag_cache_sources_current($1, $2::jsonb) AS ok', [tenantKey, JSON.stringify(sources)]),
+  );
+  return result.rows[0]!.ok;
+}
+
+async function resolveSources(db: PGlite, tenantKey: string, ids: string[]): Promise<{ document_id: string; name: string; version: number }[]> {
+  const result = await asRole(db, 'service_role', () =>
+    db.query<{ document_id: string; name: string; version: number }>(
+      'SELECT document_id, name, version FROM public.rag_cache_resolve_sources($1, $2::uuid[]) ORDER BY document_id',
+      [tenantKey, ids],
+    ),
+  );
+  return result.rows;
+}
+
+/** Changes documents without firing triggers, so a test sees the function's own re-validation rather than trigger invalidation. */
+async function updateWithoutTriggers(db: PGlite, sql: string, params: unknown[]): Promise<void> {
+  await db.exec('SET session_replication_role = replica');
+  try {
+    await db.query(sql, params);
+  } finally {
+    await db.exec('SET session_replication_role = DEFAULT');
+  }
+}
 
 for (const mode of ['multi-tenant', 'single-tenant'] as DeploymentMode[]) {
   const tenant = mode === 'multi-tenant' ? `u:${FIXTURE_USER_ID}` : 's:default';
@@ -306,6 +355,92 @@ for (const mode of ['multi-tenant', 'single-tenant'] as DeploymentMode[]) {
       assert.equal(await countRows(db, 'tenant_key = $1 AND expires_at <= now()', [tenant]), 0);
     });
 
+    for (const [label, change] of [
+      ['no longer current', 'UPDATE documents SET is_current = false WHERE id = $1'],
+      ['soft-deleted', "UPDATE documents SET is_current = false, status = 'deleted' WHERE id = $1"],
+      ['bumped to a new version', 'UPDATE documents SET version = version + 1 WHERE id = $1'],
+      ['quarantined', "UPDATE documents SET status = 'quarantined' WHERE id = $1"],
+    ] as const) {
+      test(`a hit whose source document is ${label} becomes a miss and the row is deleted`, async () => {
+        await db.query('DELETE FROM public.rag_semantic_cache');
+        const docId = await insertDoc(db, mode);
+        const id = await store(db, { tenantKey: tenant, sources: [{ document_id: docId, version: 1 }] });
+        assert.equal((await check(db, { tenantKey: tenant })).hit, true);
+        await updateWithoutTriggers(db, change, [docId]);
+        const row = await check(db, { tenantKey: tenant });
+        assert.equal(row.hit, false);
+        assert.equal(row.answer, null);
+        assert.ok(row.distance !== null && row.distance < 0.001);
+        assert.equal(await countRows(db, 'id = $1', [id]), 0);
+      });
+    }
+
+    test('a refusal with no sources is a hit while unexpired', async () => {
+      await db.query('DELETE FROM public.rag_semantic_cache');
+      await store(db, { tenantKey: tenant, isRefusal: true, ttl: 600 });
+      const row = await check(db, { tenantKey: tenant });
+      assert.equal(row.hit, true);
+      assert.equal(row.is_refusal, true);
+    });
+
+    test('rag_cache_invalidate with NULL ids deletes every row of the tenant and returns the count', async () => {
+      await db.query('DELETE FROM public.rag_semantic_cache');
+      await store(db, { tenantKey: tenant });
+      await store(db, { tenantKey: tenant, profile: 'p2', embedding: vec([0, 1, 0]) });
+      await insertRaw(db, tenant, { expiresAt: new Date(Date.now() - 1000).toISOString() });
+      assert.equal(await invalidate(db, tenant), 3);
+      assert.equal(await countRows(db), 0);
+      assert.equal(await invalidate(db, tenant), 0);
+    });
+
+    test('rag_cache_invalidate with ids deletes only rows whose sources reference one of them', async () => {
+      await db.query('DELETE FROM public.rag_semantic_cache');
+      const doc1 = await insertDoc(db, mode);
+      const doc2 = await insertDoc(db, mode);
+      const doc3 = await insertDoc(db, mode);
+      const e1 = await store(db, { tenantKey: tenant, sources: [{ document_id: doc1, version: 1 }] });
+      const e12 = await store(db, { tenantKey: tenant, sources: [{ document_id: doc1, version: 1 }, { document_id: doc2, version: 1 }] });
+      const e3 = await store(db, { tenantKey: tenant, sources: [{ document_id: doc3, version: 1 }] });
+      const refusal = await store(db, { tenantKey: tenant, isRefusal: true });
+      assert.equal(await invalidate(db, tenant, [doc2, crypto.randomUUID()]), 1);
+      assert.equal(await countRows(db, 'id = $1', [e12]), 0);
+      assert.equal(await invalidate(db, tenant, [doc1]), 1);
+      assert.equal(await countRows(db, 'id = ANY($1::uuid[])', [[e1, e3, refusal]]), 2);
+      assert.equal(await invalidate(db, tenant, []), 0);
+    });
+
+    test('rag_cache_sources_current is true for current ready sources and false otherwise', async () => {
+      const ok1 = await insertDoc(db, mode);
+      const ok2 = await insertDoc(db, mode, { version: 3 });
+      const old = await insertDoc(db, mode, { isCurrent: false });
+      const processing = await insertDoc(db, mode, { status: 'processing' });
+      assert.equal(await sourcesCurrent(db, tenant, []), true);
+      assert.equal(await sourcesCurrent(db, tenant, [{ document_id: ok1, version: 1 }, { document_id: ok2, version: 3 }]), true);
+      assert.equal(await sourcesCurrent(db, tenant, [{ document_id: ok2, version: 2 }]), false);
+      assert.equal(await sourcesCurrent(db, tenant, [{ document_id: ok1, version: 1 }, { document_id: old, version: 1 }]), false);
+      assert.equal(await sourcesCurrent(db, tenant, [{ document_id: processing, version: 1 }]), false);
+      assert.equal(await sourcesCurrent(db, tenant, [{ document_id: crypto.randomUUID(), version: 1 }]), false);
+    });
+
+    test('rag_cache_sources_current with non-array sources raises 22023', async () => {
+      await assert.rejects(
+        () => asRole(db, 'service_role', () => db.query('SELECT public.rag_cache_sources_current($1, $2::jsonb)', [tenant, '{}'])),
+        (error: unknown) => codeOf(error) === '22023',
+      );
+    });
+
+    test('rag_cache_resolve_sources returns the current name and version of current ready documents only', async () => {
+      const renamed = await insertDoc(db, mode, { filename: 'before.md', version: 2 });
+      await db.query("UPDATE documents SET filename = 'after.md' WHERE id = $1", [renamed]);
+      const softDeleted = await insertDoc(db, mode);
+      await db.query("UPDATE documents SET is_current = false, status = 'deleted' WHERE id = $1", [softDeleted]);
+      const replaced = await insertDoc(db, mode, { isCurrent: false });
+      const processing = await insertDoc(db, mode, { status: 'processing' });
+      const rows = await resolveSources(db, tenant, [renamed, softDeleted, replaced, processing, crypto.randomUUID()]);
+      assert.deepEqual(rows, [{ document_id: renamed, name: 'after.md', version: 2 }]);
+      assert.deepEqual(await resolveSources(db, tenant, []), []);
+    });
+
     for (const fn of FUNCTIONS) {
       for (const [label, key] of [
         ['NULL', null],
@@ -429,5 +564,39 @@ describe('semantic cache two-tenant isolation', () => {
     for (let i = 0; i < 5; i += 1) await insertRaw(db, tenantB, { expiresAt: past });
     await store(db, { tenantKey: tenantA });
     assert.equal(await countRows(db, 'tenant_key = $1', [tenantB]), 5);
+  });
+
+  test("rag_cache_invalidate never deletes another tenant's rows, with or without ids", async () => {
+    await db.query('DELETE FROM public.rag_semantic_cache');
+    const docA = await insertDoc(db, 'multi-tenant', { userId: USER_A });
+    const docB = await insertDoc(db, 'multi-tenant', { userId: USER_B });
+    await store(db, { tenantKey: tenantA, sources: [{ document_id: docA, version: 1 }] });
+    await store(db, { tenantKey: tenantB, sources: [{ document_id: docB, version: 1 }] });
+    await insertRaw(db, tenantB, { sources: [{ document_id: docA, version: 1 }] });
+    assert.equal(await invalidate(db, tenantA, [docA]), 1);
+    assert.equal(await countRows(db, 'tenant_key = $1', [tenantB]), 2);
+    await store(db, { tenantKey: tenantA, sources: [{ document_id: docA, version: 1 }] });
+    assert.equal(await invalidate(db, tenantA), 1);
+    assert.equal(await countRows(db, 'tenant_key = $1', [tenantB]), 2);
+  });
+
+  test("rag_cache_sources_current is false for another tenant's current ready document", async () => {
+    const docA = await insertDoc(db, 'multi-tenant', { userId: USER_A });
+    assert.equal(await sourcesCurrent(db, tenantA, [{ document_id: docA, version: 1 }]), true);
+    assert.equal(await sourcesCurrent(db, tenantB, [{ document_id: docA, version: 1 }]), false);
+  });
+
+  test("a hit whose sources belong to another tenant is a miss and is deleted", async () => {
+    await db.query('DELETE FROM public.rag_semantic_cache');
+    const docA = await insertDoc(db, 'multi-tenant', { userId: USER_A });
+    const planted = await insertRaw(db, tenantB, { sources: [{ document_id: docA, version: 1 }] });
+    assert.equal((await check(db, { tenantKey: tenantB })).hit, false);
+    assert.equal(await countRows(db, 'id = $1', [planted]), 0);
+  });
+
+  test("rag_cache_resolve_sources with tenant B's key returns no row for tenant A's ids", async () => {
+    const docA = await insertDoc(db, 'multi-tenant', { userId: USER_A });
+    assert.equal((await resolveSources(db, tenantA, [docA])).length, 1);
+    assert.deepEqual(await resolveSources(db, tenantB, [docA]), []);
   });
 });
