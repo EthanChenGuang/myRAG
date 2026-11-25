@@ -28,7 +28,10 @@ export type StoreOnlyBypassReason =
 
 export type BypassReason = CheckBypassReason | StoreOnlyBypassReason;
 
-export type CacheRetrievalOptions = Pick<RetrievalOptions, 'mediaKind' | 'generalOverview' | 'maxResults' | 'degrade'>;
+export type CacheRetrievalOptions = Pick<
+  RetrievalOptions,
+  'mediaKind' | 'generalOverview' | 'maxResults' | 'degrade' | 'embeddingBindings' | 'domainControlLeg'
+>;
 
 export interface TurnFacts {
   profile: Profile;
@@ -91,6 +94,8 @@ export function retrievalOptionsAreDefault(options: CacheRetrievalOptions | unde
   if (options.mediaKind !== undefined) return false;
   if (options.generalOverview === true) return false;
   if (options.degrade !== undefined) return false;
+  if (options.embeddingBindings !== undefined) return false;
+  if (options.domainControlLeg !== undefined) return false;
   if (options.maxResults !== undefined && options.maxResults !== defaultMaxResults) return false;
   return true;
 }
