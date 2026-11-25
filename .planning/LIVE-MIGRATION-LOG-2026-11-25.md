@@ -65,3 +65,56 @@ list_migrations shows all 28 new names from 0320_ingest_state_guard through 0424
 - 24 legacy function bodies differ and is_org_admin and is_org_owner are missing (details above). This is the reason for the stop.
 - `public.rls_auto_enable()` is a SECURITY DEFINER function that is not in the repo, and anon and authenticated can execute it.
 - `is_org_member`, `is_subscribed` and `get_nango_stats` are definers with no search_path at all. 0411 does not cover them; 0425 would.
+
+## Continuation (patch, 0425–0703)
+
+**Result: done.** The security patch, the line-ending fix, 0425 (both files), 0501–0703 and the 0410 re-run (r2) are applied. The 0425 pre-check returned 0 rows before 0425 ran. 0426 was not applied (not on trunk yet).
+
+### Before starting
+- `git pull --ff-only`: already up to date.
+- Step 1 checks (read-only):
+  - Live counts: nango_connections 0, tool_execution_states 0, organizations 1, organization_members 1.
+  - pg_get_functiondef of create_organization_safe, get_nango_stats, is_org_member and is_subscribed, with `\r` removed, has the same md5 as the dumps the legacy-diff report was built from. Nothing changed since the report.
+- Coordinator change mid-run: 0501–0603 and 0701–0703 went in as two batch migrations (the files' exact texts joined by a newline) instead of eight separate calls. Each file keeps its own BEGIN/COMMIT, so a batch is not atomic across files. Neither batch failed.
+
+### Steps
+| # | Migration name | Result |
+|---|---|---|
+| 1 | read-only checks | ok (matches report) |
+| 2 | patch_2026_11_security_review_multi_tenant | ok. File text applied without its top-level `BEGIN;` (line 13) and `COMMIT;` (line 345); no other transaction control and no psql meta commands. |
+| 3 | normalize_legacy_function_line_endings | ok. Before it ran, a read-only check confirmed all 19 listed functions existed and contained `\r`. The DO block was applied as given in the report. |
+| 4 | 0425 pre-check (`0425-precheck.multi-tenant.sql`) | **0 rows** (pgvector in public; all 135 multi-tenant targets match the expected md5) |
+| 5a | 0425_search_path_empty | ok |
+| 5b | 0425_search_path_empty_multi_tenant | ok |
+| 6a | 0501_0603_answers_lang_cache (0501, 0502 mt, 0601, 0602, 0603) | ok |
+| 6b | 0701_0703_vector_sync (0701, 0702, 0703) | ok |
+| 7 | 0410_security_definer_rpc_grants_r2 | ok on the second call. The first call returned a gateway error (502). Afterwards nothing was recorded in list_migrations and no matching session was running. The file only changes grants and is safe to run twice, so the same text was sent once more and succeeded. |
+
+Body check: after each apply, an aggregate md5 over `proname=md5(prosrc)` of every function each file defines matched the value computed locally from the repo files:
+- 0425 common: 111/111 bodies match.
+- 0425 multi-tenant: 24/24.
+- Batch A and Batch B together: 28/28.
+- Every one of these functions has `search_path=""`.
+- Exactly one `hybrid_search_chunks` overload exists.
+
+### Verification after step 7 (post-verify.sql a–e, get_advisors security)
+- **a.** SECURITY DEFINER functions in public without `search_path=""`: one row, `rls_auto_enable()` (`search_path=pg_catalog`). This is Supabase's own event-trigger function, not a repo function, as expected.
+- **b.** rag_*, hybrid_search_chunks and match_chunks_by_profile executable by anon or authenticated: one row, `rag_ingest_realtime_topic_allowed(text)` (anon=false, authenticated=true). This is by design.
+- **c.** The same functions that service_role cannot execute (trigger functions excluded): 0 rows.
+- **d.** The 23 tables created by 0301+ that are missing or have RLS off: 0 rows. rag_answer_records, rag_semantic_cache, vector_sync_outbox, rag_vector_sync_targets and rag_backend_index_state now exist with RLS on.
+- **e.** public function count: 343. This matches the PGlite end state in the legacy-diff report.
+- **Security advisors:** no ERROR-level items. WARN and INFO items:
+  - function_search_path_mutable on 4 legacy non-definer functions that are not 0425 targets: match_documents_by_organization, check_storage_quota, get_workspace_type and get_user_workspace_summary. This is down from 10.
+  - extension_in_public for vector and pg_trgm. This is expected; do not act on it.
+  - GraphQL table exposure (lints 0026/0027).
+  - Definers executable by anon: check_admin_status, is_org_admin, is_org_member, is_org_owner and rls_auto_enable. All are by design per 0410 section 2, except rls_auto_enable.
+  - Definers executable by authenticated: the 0410 section 2 list plus rls_auto_enable.
+  - rls_enabled_no_policy (INFO) on 21 server-only tables.
+  - Leaked password protection is disabled.
+- **Data intact:** document `<document-id>` and chunk `<chunk-id>` are the same ids as before. The count is still 1 and 1.
+- **Nango:** anon and authenticated have no INSERT, UPDATE or DELETE on nango_connections or nango_sync_records; SELECT remains. Nango write policies: 0. `unique_nango_connection_id` exists.
+- **tool_execution_states.user_id** exists.
+- **is_org_admin(uuid) and is_org_owner(uuid)** exist as SECURITY DEFINER with `search_path=""`. Grants are authenticated, anon and service_role, per 0410.
+
+### Still pending
+- 0426_quarantined_job_keeps_document.sql (not on trunk yet).
