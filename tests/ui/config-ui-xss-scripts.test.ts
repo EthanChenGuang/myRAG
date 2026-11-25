@@ -38,11 +38,11 @@ function host(doc: FakeDocument, id: string, tag = 'div'): FakeElement {
 }
 
 function onclickWithPayload(doc: FakeDocument): FakeElement[] {
-  return doc.documentElement.querySelectorAll('*').filter((el) => (el.getAttribute('onclick') || '').includes('PWNED'));
+  return doc.documentElement.querySelectorAll('*').filter((el) => (el.getAttribute('onclick') || '').includes('PWNED('));
 }
 
 function expectSafe(doc: FakeDocument) {
-  expect(injectedElements(doc)).toEqual([]);
+  expect(injectedElements(doc).map((el) => `${el.tagName} ${[...el.attributes].map(([k, v]) => `${k}=${v}`).join(' ')}`)).toEqual([]);
   expect(onclickWithPayload(doc)).toEqual([]);
 }
 

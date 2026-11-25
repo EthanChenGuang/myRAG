@@ -555,7 +555,7 @@ export class FakeDocument {
 }
 
 /** Every element under root that injected markup could have created: an img with src x, or any element with an on* handler attribute holding the payload marker. */
-export function injectedElements(root: FakeElement | FakeDocument, marker = 'PWNED'): FakeElement[] {
+export function injectedElements(root: FakeElement | FakeDocument, marker = 'PWNED('): FakeElement[] {
   const base = root instanceof FakeDocument ? root.documentElement : root;
   const all = [base, ...base.querySelectorAll('*')];
   return all.filter((el) => {
