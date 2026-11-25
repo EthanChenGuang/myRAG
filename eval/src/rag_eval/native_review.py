@@ -37,3 +37,7 @@ def counts_in_gated_slices(item: GoldenItem | ItemResult) -> bool:
 
 def report_only_reason(item: GoldenItem) -> str | None:
     return None if counts_in_gated_slices(item) else REPORT_ONLY_REASON
+
+
+def review_backlog(items: list[GoldenItem]) -> list[NativeReviewBacklogEntry]:
+    return []

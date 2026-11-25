@@ -5,7 +5,8 @@ from rag_sidecar.contracts.report import EvalReport
 
 from rag_eval.gate import evaluate_gate
 from rag_eval.metrics import score_items
-from rag_eval.native_review import counts_in_gated_slices
+from rag_eval.golden_io import load_golden
+from rag_eval.native_review import counts_in_gated_slices, review_backlog
 from rag_eval.paired import item_metrics, paired_report
 from rag_eval.paths import REPO_ROOT
 from rag_eval.report import _render_markdown, build_report
@@ -238,3 +239,107 @@ def test_item_counts_from_the_moment_it_is_approved_and_not_before():
     approved = GoldenItem.model_validate({**pending.model_dump(mode="json"), "native_review": APPROVED})
     assert not counts_in_gated_slices(pending)
     assert counts_in_gated_slices(approved)
+
+
+def _backlog_items() -> list[GoldenItem]:
+    return [
+        _golden("zh-general-020", "zh", native_review=PENDING),
+        _golden("it-general-021", "it"),
+        _golden("zh-general-003", "zh"),
+        _golden("en-general-022", "en"),
+        _golden("it-general-004", "it", native_review=APPROVED),
+        _golden("zh-general-005", "zh", native_review={"origin": "native", "status": "pending"}),
+        _golden("it-general-006", "it", provenance="human"),
+        _golden("en-cross-007", "en", evidence_language="it", native_review=PENDING),
+        _golden("it-general-001", "it", native_review={"origin": "machine_translated", "status": "pending"}),
+    ]
+
+
+def test_backlog_lists_pending_and_existing_unreviewed_items_by_language_then_id():
+    backlog = review_backlog(_backlog_items())
+    assert [(entry.language, entry.item_id, entry.state) for entry in backlog] == [
+        ("it", "en-cross-007", "pending"),
+        ("it", "it-general-001", "pending"),
+        ("it", "it-general-021", "existing_unreviewed"),
+        ("zh", "zh-general-003", "existing_unreviewed"),
+        ("zh", "zh-general-020", "pending"),
+    ]
+
+
+def test_backlog_order_is_identical_across_runs_and_input_orders():
+    items = _backlog_items()
+    first = review_backlog(items)
+    assert review_backlog(list(reversed(items))) == first
+    assert review_backlog(items) == first
+
+
+def test_existing_golden_files_keep_counting_and_list_their_zh_it_items_as_backlog():
+    for path in (REPO_ROOT / "eval/fixtures/golden.jsonl", REPO_ROOT / "eval/fixtures/ingest/golden-ingest.jsonl"):
+        items = load_golden(path)
+        assert all(counts_in_gated_slices(item) for item in items)
+        backlog = review_backlog(items)
+        assert backlog and all(entry.state == "existing_unreviewed" for entry in backlog)
+        expected = {
+            item.id
+            for item in items
+            if item.provenance == "synthetic_fixture" and {item.language, item.evidence_language} & {"zh", "it"}
+        }
+        assert {entry.item_id for entry in backlog} == expected
+
+
+def test_report_prints_the_backlog_with_counts_per_language_and_ids():
+    report = _run(PENDING)
+    assert report.native_review_backlog is not None
+    markdown = _render_markdown(report)
+    section = markdown.split("## Native review backlog", 1)[1].split("\n## ", 1)[0]
+    assert "| zh | 1 | 1 | 2 |" in section
+    assert "| it | 0 | 0 | 0 |" in section
+    assert "| zh-general-001 | zh | existing, not yet reviewed, still counting |" in section
+    assert "| zh-general-002 | zh | pending, report-only until approved |" in section
+
+
+def test_report_prints_an_empty_backlog_with_count_zero():
+    golden = [_golden("en-general-001", "en")]
+    report = build_report(
+        _manifest(), score_items([_trace("en-general-001", hit=True)], golden), golden, supported_languages=("en",)
+    )
+    assert report.native_review_backlog == []
+    section = _render_markdown(report).split("## Native review backlog", 1)[1].split("\n## ", 1)[0]
+    assert "Items: 0" in section
+    assert "| zh | 0 | 0 | 0 |" in section
+
+
+def test_gated_slice_with_no_counting_items_is_report_only_without_dividing_by_zero():
+    golden = [_golden("en-general-001", "en"), _golden("zh-general-002", "zh", native_review=PENDING)]
+    traces = [_trace("en-general-001", hit=True), _trace("zh-general-002", hit=False)]
+    report = build_report(_manifest(), score_items(traces, golden), golden, supported_languages=("en", "zh", "it"))
+    assert "zh" not in report.by_language
+    result = evaluate_gate(report, _baseline(), _noise())
+    assert result.passed
+    assert "language:zh:recall_at_5" in result.skipped
+    paired = paired_report(report, _baseline(), _noise())
+    assert paired is not None and "language:zh" not in paired.slices
+    markdown = _render_markdown(report)
+    assert "| language:zh | 0 | 1 | report-only (n below 1) |" in markdown
+
+
+def test_cross_lingual_report_only_item_leaves_the_pair_slice():
+    golden = [
+        _golden("en-cross-001", "en", evidence_language="zh", native_review=PENDING),
+        _golden("en-cross-002", "en", evidence_language="zh"),
+    ]
+    traces = [_trace("en-cross-001", hit=False), _trace("en-cross-002", hit=False)]
+    report = build_report(_manifest(), score_items(traces, golden), golden, supported_languages=("en", "zh", "it"))
+    assert report.by_language_pair["en->zh"].recall_at_5.n == 1
+    assert report.by_category["cross_lingual"].recall_at_5.n == 1
+
+
+def test_paired_denominators_equal_the_counting_subset_size():
+    report = _run(PENDING)
+    paired = paired_report(report, _baseline(), _noise())
+    assert paired is not None
+    counting = [item for item in report.items if counts_in_gated_slices(item)]
+    for language in ("en", "zh"):
+        n = sum(1 for item in counting if item.language == language)
+        assert paired.slices[f"language:{language}"]["recall_at_5"].n == n
+        assert report.by_language[language].recall_at_5.n == n
