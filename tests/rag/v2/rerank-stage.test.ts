@@ -48,6 +48,7 @@ function recordingReranker(
     id: options.id ?? 'cohere',
     model: options.model ?? 'fake-quality-v1',
     scoreSemantics: options.semantics ?? 'calibrated',
+    supportedLanguages: [],
     async rerank(query, docs, opts) {
       calls.push({ query, docs, opts });
       const scores = scoreFor(docs).map((score, index) => ({ index, score }));

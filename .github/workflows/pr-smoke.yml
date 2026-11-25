@@ -63,6 +63,8 @@ jobs:
         run: |
           node scripts/ci/check-rag-boundary.mjs
           node --test scripts/tests/check-rag-boundary.node-test.mjs
+          node scripts/ci/check-language-literals.mjs
+          node --test scripts/tests/check-language-literals.node-test.mjs
       - name: Config check and type-check self-tests
         run: node --test scripts/check-config.test.mjs scripts/typecheck-new.test.mjs scripts/tests/tsc-ratchet.node-test.mjs scripts/tests/check-node-runtime.node-test.mjs scripts/tests/config-server-security.node-test.mjs
       - name: Zod generator self-test
@@ -206,6 +208,8 @@ jobs:
         run: npm run test-rag -- --out eval/out/smoke
       - name: Ingest-mode smoke tier against the ingest baseline
         run: npm run test-rag -- --fixture-mode ingest --out eval/out/smoke-ingest
+      - name: Injection absolute-zero gate under the recommended SEC configuration
+        run: npm run test-rag -- --run-config eval/config/runs/sec-recommended.json --out eval/out/smoke-sec
       - name: Upload smoke output
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -214,6 +218,7 @@ jobs:
           path: |
             eval/out/smoke
             eval/out/smoke-ingest
+            eval/out/smoke-sec
           if-no-files-found: warn
 
   gate-negative-control:

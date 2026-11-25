@@ -18,7 +18,7 @@ import { expandParents, selectWithParents, type ParentBudgetCandidate, type Pare
 import type { RerankSpan } from '../../rerank/types';
 import type { FusedHit } from '../../fusion/rrf';
 import type { RagConfig, StageName } from '../../config';
-import { downweightOrder, injectionDropped, runInjectionStage, runStage, stageSpec, type StageSpec } from '../../pipeline';
+import { documentNamesFromRows, downweightOrder, injectionDropped, runInjectionStage, runStage, stageSpec, type StageSpec } from '../../pipeline';
 import type { SecurityConfig } from '../../security/config';
 import { injectionItems, releasedRulesFromRows, type InjectionMarks } from '../../security/injection-check';
 import type { TraceCollector } from '../../trace/collector';
@@ -265,6 +265,7 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
       spec: spec('injection_check', 'skip'),
       signal,
       collector,
+      scope: input.scope ?? null,
       profile,
       security,
       mode: security.injectionCheck,
@@ -273,6 +274,7 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
       referenced,
       // Released rule ids come only from the document rows this request's scoped search returned (D-10).
       released: releasedRulesFromRows(rows.documents),
+      documentNames: documentNamesFromRows(rows.documents),
     });
     injectionStalled = run.stalled;
     if (run.applied) {

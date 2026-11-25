@@ -15,7 +15,7 @@ const RUNS_DIR = path.join(REPO_ROOT, 'eval/config/runs');
 const GOLDEN_PATH = path.join(REPO_ROOT, 'eval/fixtures/golden.jsonl');
 const CORPUS_DIR = path.join(REPO_ROOT, 'eval/fixtures/corpus');
 const TRACER_ITEM_ID = 'en-general-001';
-const REJECT_MESSAGE = '[Eval Harness] run-config may only set RAG_PIPELINE and Phase 4 RAG_* switches';
+const REJECT_MESSAGE = '[Eval Harness] run-config may only set RAG_PIPELINE, Phase 4 RAG_* switches and the Phase 5.1 SEC switches';
 const DOC_ID = '11111111-1111-4111-8111-111111111111';
 
 const tmpDirs: string[] = [];
@@ -65,13 +65,17 @@ describe('run-config file contents', () => {
 });
 
 describe('run-config validation', () => {
-  test('the allow-list is RAG_PIPELINE and the Phase 4 RAG_ switches', () => {
+  test('the allow-list is RAG_PIPELINE, the Phase 4 RAG_ switches and the five Phase 5.1 SEC switches', () => {
     assert.deepEqual([...RUN_CONFIG_ENV_ALLOWLIST].sort(), [
       'RAG_CONTEXT_COMPRESSION',
       'RAG_CONTEXT_EDGE_ORDER',
+      'RAG_CONTEXT_TAGGING',
       'RAG_CONTEXT_TOKEN_BUDGET',
       'RAG_EXACT_SCAN_CUTOFF',
       'RAG_HNSW_ITERATIVE_SCAN',
+      'RAG_INJECTION_CHECK',
+      'RAG_INJECTION_LAKERA',
+      'RAG_INJECTION_PROMPT_GUARD',
       'RAG_LEXICAL_SEARCH',
       'RAG_LEXICAL_TRANSLATION',
       'RAG_PARENT_CHILD',
@@ -81,6 +85,7 @@ describe('run-config validation', () => {
       'RAG_RERANK_TIER_CHAT',
       'RAG_RERANK_TIER_VOICE',
       'RAG_RERANK_VOYAGE_MODEL_BY_LANG',
+      'RAG_TOOL_RESULT_GUARD',
     ]);
   });
 

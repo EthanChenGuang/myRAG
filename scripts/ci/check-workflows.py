@@ -30,6 +30,10 @@ UV_IMAGE_RE = re.compile(r"ghcr\.io/astral-sh/uv:(?P<version>\d+\.\d+\.\d+)")
 SKIP_NOTICE = "::notice::judge key not configured, skipping"
 ONLINE_SKIP_NOTICE = "::notice::langfuse keys not configured, skipping online judge"
 DOCLING_SKIP_NOTICE = "::notice::docling extra not installable, skipping"
+SEC_SKIP_NOTICE = "::notice::generator key not configured, skipping injection runs"
+SEC_SMOKE_STEP = "npm run test-rag -- --run-config eval/config/runs/sec-recommended.json --out eval/out/smoke-sec"
+SEC_NIGHTLY_STEP = "run-nightly.mts --sec-matrix --generator live"
+LAKERA_SECRET = "LAKERA_GUARD_API_KEY"
 DOCLING_READY = "steps.docling.outputs.ready == 'true'"
 RAY_SYNC = "uv sync --directory rag-sidecar --locked --extra ray --extra chunking --extra preflight"
 RAY_EQUALITY_TEST = "tests/rag-e2e/backfill-ray-equality.test.mts"
@@ -232,6 +236,8 @@ def check_pr(errors: list[str]) -> None:
             "scripts/ci/check-workflows.py",
             "scripts/ci/check-rag-boundary.mjs",
             "scripts/tests/check-rag-boundary.node-test.mjs",
+            "scripts/ci/check-language-literals.mjs",
+            "scripts/tests/check-language-literals.node-test.mjs",
         ):
             if needle not in body:
                 errors.append(f"pr-smoke: job ts is missing '{needle}'")
@@ -348,6 +354,20 @@ def check_eval_smoke(job: dict | None, errors: list[str]) -> None:
     uploads = [step for step in steps if str(step.get("uses", "")).startswith("actions/upload-artifact@")]
     if not any("eval/out/smoke-ingest" in str((step.get("with") or {}).get("path", "")) for step in uploads):
         errors.append("pr-smoke: job eval-smoke must upload eval/out/smoke-ingest")
+    # D-14, T-05.1-59: the recommended SEC configuration is gated at absolute zero on every pull request.
+    sec = next((i for i, run in enumerate(runs) if "sec-recommended.json" in run), None)
+    if sec is None:
+        errors.append(f"pr-smoke: job eval-smoke must run '{SEC_SMOKE_STEP}'")
+    else:
+        sec_body = runs[sec]
+        if SEC_SMOKE_STEP not in sec_body:
+            errors.append(f"pr-smoke: the injection gate step must run '{SEC_SMOKE_STEP}'")
+        if "--no-gate" in sec_body or "--baseline" in sec_body or "|| true" in sec_body or "continue-on-error" in str(steps[sec]):
+            errors.append("pr-smoke: the injection gate step must gate against the committed baseline and fail the job")
+        if plain is None or sec < plain:
+            errors.append("pr-smoke: the injection gate step must run after the all-off smoke step, which stays as it is")
+    if not any("eval/out/smoke-sec" in str((step.get("with") or {}).get("path", "")) for step in uploads):
+        errors.append("pr-smoke: job eval-smoke must upload eval/out/smoke-sec")
 
 
 def check_online_judge(data: dict, errors: list[str]) -> None:
@@ -390,6 +410,54 @@ def check_online_judge(data: dict, errors: list[str]) -> None:
             errors.append("nightly: online-judge secrets must be passed through step env, not interpolated into run")
         if re.search(r"\becho\b.*\bKEY\b", run):
             errors.append("nightly: an online-judge step appears to echo a key")
+
+
+def check_injection_sec(data: dict, errors: list[str]) -> None:
+    """D-14, A-13: the live SEC matrix runs nightly behind the generator key; vendor keys only through step env."""
+    job = (data.get("jobs") or {}).get("injection-sec")
+    if job is None:
+        errors.append("nightly: job 'injection-sec' missing")
+        return
+    flag = "HAS_GENERATOR_KEY"
+    flag_expr = str((job.get("env") or {}).get(flag, ""))
+    if "secrets.OPENROUTER_API_KEY != ''" not in flag_expr:
+        errors.append(f"nightly: injection-sec job env {flag} must require secrets.OPENROUTER_API_KEY")
+    steps = all_steps(job)
+    ungated = [s for s in steps if f"{flag} == 'true'" not in str(s.get("if", ""))]
+    if (
+        len(ungated) != 1
+        or SEC_SKIP_NOTICE not in str(ungated[0].get("run", ""))
+        or f"{flag} != 'true'" not in str(ungated[0].get("if", ""))
+    ):
+        errors.append(f"nightly: only the skip-notice step of injection-sec may run without the {flag} == 'true' condition")
+    runner = [s for s in steps if SEC_NIGHTLY_STEP in str(s.get("run", ""))]
+    if len(runner) != 1:
+        errors.append(f"nightly: injection-sec must run '{SEC_NIGHTLY_STEP}' once")
+    else:
+        step_env = runner[0].get("env") or {}
+        for secret in ("OPENROUTER_API_KEY", LAKERA_SECRET):
+            if str(step_env.get(secret)) != f"${{{{ secrets.{secret} }}}}":
+                errors.append(f"nightly: injection-sec must pass {secret} from repository secrets by name through step env")
+    if "uv sync --directory eval --locked --all-extras" not in step_text(job):
+        errors.append("nightly: injection-sec must sync eval with --locked --all-extras")
+    for step in steps:
+        run = str(step.get("run", ""))
+        if "secrets." in run:
+            errors.append("nightly: injection-sec secrets must be passed through step env, not interpolated into run")
+        if re.search(r"\becho\b.*\bKEY\b", run):
+            errors.append("nightly: an injection-sec step appears to echo a key")
+
+
+def check_lakera_secret_scope(errors: list[str]) -> None:
+    """T-05.1-60: the Lakera key is referenced in nightly.yml only, never in a pull-request or other workflow."""
+    workflows_dir = ROOT / ".github" / "workflows"
+    for path in sorted(workflows_dir.glob("*.y*ml")):
+        if path == NIGHTLY:
+            continue
+        if LAKERA_SECRET in path.read_text(encoding="utf-8"):
+            errors.append(f"{path.name}: {LAKERA_SECRET} may be referenced only in nightly.yml")
+    if NIGHTLY.exists() and LAKERA_SECRET not in NIGHTLY.read_text(encoding="utf-8"):
+        errors.append(f"nightly: {LAKERA_SECRET} must be passed to the injection-sec job by name")
 
 
 def check_real_docling(data: dict, errors: list[str]) -> None:
@@ -451,6 +519,7 @@ def check_nightly(errors: list[str]) -> None:
         errors.append("nightly: CONFIDENT_API_KEY must never be set")
     check_online_judge(data, errors)
     check_real_docling(data, errors)
+    check_injection_sec(data, errors)
     job = (data.get("jobs") or {}).get("judge")
     if job is None:
         errors.append("nightly: job 'judge' missing")
@@ -535,6 +604,7 @@ def main() -> int:
         check_ray_optional(*load(RAY_OPTIONAL), errors)
     else:
         errors.append(f"missing {RAY_OPTIONAL.relative_to(ROOT)}")
+    check_lakera_secret_scope(errors)
     workflows = [load(path)[0] for path in (PR, NIGHTLY) if path.exists()]
     check_tsx_tests_covered(workflows, TESTS_DIR, errors)
     if errors:

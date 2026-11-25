@@ -29,7 +29,7 @@ import {
   type StageName,
   type StageOverrides,
 } from '@/lib/rag';
-import { RagRunRequestSchema, RagTraceSchema, type RagRunRequest } from '@/lib/rag-eval/contracts.generated';
+import { RagRunRequestSchema, RagTraceSchema, type RagRunRequest, type RagTrace } from '@/lib/rag-eval/contracts.generated';
 import { checkEvalAccess } from '@/lib/rag-eval/auth';
 import { buildEffectiveConfig, configHash } from '@/lib/rag-eval/trace';
 import {
@@ -104,10 +104,12 @@ function toStageOverrides(options: RagRunRequest['options']): StageOverrides | u
   };
 }
 
-type RefusalReason = 'no_relevant_context' | 'below_threshold' | 'below_similarity_floor';
+type RefusalReason = 'no_relevant_context' | 'below_threshold' | 'below_similarity_floor' | 'injection_filtered';
 
 function refusalReasonOf(result: RetrievalResult, refused: boolean): RefusalReason | null {
   if (!refused) return null;
+  // D-09, A-3: the check dropped everything that would have reached the generator.
+  if (result.status === 'empty' && result.reason === 'injection_filtered') return 'injection_filtered';
   const record = result.refusal;
   if (record?.decision === 'refuse') {
     const reason: string = record.reason;
@@ -147,6 +149,42 @@ function v2TraceFields(result: RetrievalResult) {
   };
 }
 
+type TraceInjection = NonNullable<RagTrace['injection']>;
+
+/**
+ * D-11, D-14: what injection_check did, per chunk. A referenced section's verdict applies to each of its chunks. The document is the
+ * filename the graph read under the request's scope, else the trace's own name for it, else the id.
+ */
+function injectionTraceOf(result: RetrievalResult, documentNames: ReadonlyMap<string, string>): TraceInjection | null {
+  const summary = result.injection;
+  if (!summary) return null;
+  const checked: TraceInjection['checked'] = [];
+  const flagged: TraceInjection['flagged'] = [];
+  const seen = new Set<string>();
+  const flaggedSeen = new Set<string>();
+  for (const item of summary.items ?? []) {
+    const document = item.documentName ?? documentNames.get(item.documentId) ?? item.documentId;
+    for (const chunkId of item.chunkIds) {
+      if (!chunkId) continue;
+      if (!seen.has(chunkId)) {
+        seen.add(chunkId);
+        checked.push({ chunk_id: chunkId, document });
+      }
+      if (item.flagged && item.detectors.length > 0 && !flaggedSeen.has(chunkId)) {
+        flaggedSeen.add(chunkId);
+        flagged.push({ chunk_id: chunkId, document, detectors: [...item.detectors], rule_ids: [...item.ruleIds] });
+      }
+    }
+  }
+  return {
+    mode: summary.mode,
+    checked,
+    flagged,
+    dropped: [...summary.droppedChunkIds],
+    downweighted: [...summary.downweightedChunkIds],
+    detectors_unavailable: [...summary.detectorsUnavailable],
+  };
+}
 
 /** An eval turn is a single question with no tools, MCP or attachments; reasoning is not requested. */
 const EVAL_CLAUDE_FACTS: ClaudeTurnFacts = { mcp: false, multiStep: false, webSearch: false, reasoning: false, attachments: false };
@@ -360,6 +398,7 @@ export async function POST(req: NextRequest) {
       const queryContext = result.queryContext;
       const stageCounts = stageCountsOf(result.stages);
       const v2Result = result.retrievalConfigHash !== undefined;
+      const injection = injectionTraceOf(result, documentNames);
       const effectiveConfig = buildEffectiveConfig({ security: injectionTraceVersions() });
       effectiveConfig.generator_model = generatorModel;
       const trace = {
@@ -402,6 +441,7 @@ export async function POST(req: NextRequest) {
         refusal_reason: refusalReasonOf(result, refused),
         ...(v2Result ? v2TraceFields(result) : {}),
         ...(Object.keys(stageCounts).length > 0 ? { stage_counts: stageCounts } : {}),
+        ...(injection ? { injection } : {}),
         answer,
         citations: citationFields?.citations ?? NO_CITATIONS,
         ...(citationFields

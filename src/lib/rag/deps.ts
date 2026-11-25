@@ -6,8 +6,13 @@ import type { RagEnvInput } from './config';
 import type { EmbeddingProfile } from './embeddings/active-profile';
 import { EmbeddingProfileMismatch } from './embeddings/mrl';
 import { embedText } from './embeddings/openai';
-import { getEmbeddingProvider } from './embeddings/registry';
+import { getEmbeddingProviderFor } from './embeddings/registry';
+import { isMultiTenant } from '@/lib/deployment-mode';
 import { readSecurityConfig, type SecurityConfig } from './security/config';
+import { loadInjectionDetectorConfig, type Detector } from './security/detectors';
+import type { PromptGuardClassifier } from './security/injection-check';
+import { createLakeraDetector, lakeraSettingsFrom } from './security/lakera';
+import { classifyWithPromptGuard } from './security/prompt-guard-client';
 
 export interface ProfileQueryEmbedding {
   vector: number[];
@@ -30,6 +35,10 @@ export interface RagDeps {
   ragEnv: () => RagEnvInput;
   /** Phase 5.1 switches, read at call time. */
   securityConfig: () => SecurityConfig;
+  /** The Lakera adapter; its own gate re-checks lakeraAllowed with the real deployment mode before every request. */
+  lakeraDetector: () => Detector;
+  /** The sidecar Prompt Guard client; answers not_configured without RAG_SIDECAR_URL and RAG_SIDECAR_SECRET. */
+  promptGuardClassifier: PromptGuardClassifier;
   fetch: typeof fetch;
 }
 
@@ -73,13 +82,13 @@ const defaults: RagDeps = {
   adminClient: () => getSupabaseAdmin() as SupabaseClient | null,
   embedder: embedText,
   profileEmbedder: async (text, { signal, profile }) => {
-    const output = await getEmbeddingProvider(profile.provider).embedQuery(text, { dims: profile.dims, signal });
+    const output = await getEmbeddingProviderFor(profile.provider, profile.model).embedQuery(text, { dims: profile.dims, signal });
     const vector = output.vectors[0];
     if (!vector) throw new EmbeddingProfileMismatch('dims', 0, profile.dims);
     return { vector, model: output.model };
   },
   profileBatchEmbedder: async (texts, { signal, profile }) => {
-    const provider = getEmbeddingProvider(profile.provider);
+    const provider = getEmbeddingProviderFor(profile.provider, profile.model);
     if (!provider.embedQueries) return null;
     const output = await provider.embedQueries(texts, { dims: profile.dims, signal });
     return output.vectors.map((vector) => ({ vector, model: output.model }));
@@ -88,6 +97,13 @@ const defaults: RagDeps = {
   randomId: () => randomUUID(),
   ragEnv: () => readRagEnvInput(),
   securityConfig: () => readSecurityConfig(),
+  lakeraDetector: () =>
+    createLakeraDetector({
+      config: loadInjectionDetectorConfig().lakera,
+      fetch: (input, init) => getRagDeps().fetch(input, init),
+      gate: () => lakeraSettingsFrom(getRagDeps().securityConfig(), isMultiTenant()),
+    }),
+  promptGuardClassifier: (items, opts) => classifyWithPromptGuard(items, { ...opts, fetch: getRagDeps().fetch }),
   fetch: globalThis.fetch.bind(globalThis),
 };
 

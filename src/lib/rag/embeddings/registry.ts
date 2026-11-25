@@ -70,6 +70,8 @@ function createForModel(entry: EmbeddingModelEntry): EmbeddingProvider {
 /**
  * The provider serving one model: a `provider:model` override, then a provider override or default
  * whose model matches, then a provider built from the catalog. A pair outside the catalog throws.
+ * The provider slot (override or default) always answers for the provider's default model, so a
+ * slot configured with another model is caught by the caller's model check, not replaced silently.
  */
 export function getEmbeddingProviderFor(provider: string, model: string): EmbeddingProvider {
   const unknown = () => new Error(`[Embedding Profile] unknown embedding model for provider ${provider}`);
@@ -79,7 +81,7 @@ export function getEmbeddingProviderFor(provider: string, model: string): Embedd
   const keyed = overrides[`${provider}:${canonical}`];
   if (keyed) return keyed;
   const base = findProvider(provider);
-  if (base && sameModel(base.model, canonical)) return base;
+  if (base && (sameModel(base.model, canonical) || sameModel(defaultModelFor(provider) as string, canonical))) return base;
   if (!entry) throw unknown();
   const cacheKey = `${provider}:${entry.model}`;
   let built = modelProviders.get(cacheKey);

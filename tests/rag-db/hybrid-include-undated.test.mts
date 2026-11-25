@@ -102,7 +102,7 @@ describe('hybrid_search_chunks p_include_undated (0602, D-11)', () => {
     await db.close();
   });
 
-  test('exactly one hybrid_search_chunks function exists and it takes p_include_undated boolean last', async () => {
+  test('exactly one hybrid_search_chunks function exists and it takes p_include_undated boolean after p_chunking_override', async () => {
     const rows = (
       await db.query<{ args: string }>(
         `SELECT pg_get_function_identity_arguments(p.oid) AS args
@@ -111,7 +111,7 @@ describe('hybrid_search_chunks p_include_undated (0602, D-11)', () => {
       )
     ).rows;
     assert.equal(rows.length, 1);
-    assert.match(rows[0]?.args ?? '', /p_chunking_override jsonb, p_include_undated boolean$/);
+    assert.match(rows[0]?.args ?? '', /p_chunking_override jsonb, p_include_undated boolean(, |$)/);
   });
 
   for (const leg of ['dense', 'lexical'] as const) {
@@ -191,7 +191,7 @@ describe('hybrid_search_chunks without the flag equals the Phase 4 function', ()
     }
 
     const sig =
-      'text, text, vector, text[], integer, integer, date, date, text[], uuid[], text[], text[], text, integer, text[], text, numeric, numeric, text, jsonb, boolean';
+      'text, text, vector, text[], integer, integer, date, date, text[], uuid[], text[], text[], text, integer, text[], text, numeric, numeric, text, jsonb, boolean, text[], boolean, date';
     await db.exec(`DROP FUNCTION public.hybrid_search_chunks(${sig})`);
     await db.exec(fs.readFileSync(path.join(REPO_ROOT, 'supabase/migrations/0407_hybrid_search_chunks.sql'), 'utf8'));
     try {
@@ -199,9 +199,9 @@ describe('hybrid_search_chunks without the flag equals the Phase 4 function', ()
         assert.deepEqual(await search(db, call), current[index], `call ${index}`);
       }
     } finally {
-      await db.exec(fs.readFileSync(path.join(REPO_ROOT, 'supabase/migrations/0602_hybrid_include_undated.sql'), 'utf8'));
+      await db.exec(fs.readFileSync(path.join(REPO_ROOT, 'supabase/migrations/0802_hybrid_search_scopes_dates_und.sql'), 'utf8'));
     }
     const count = await db.query<{ n: number }>("SELECT count(*)::int AS n FROM pg_proc WHERE proname = 'hybrid_search_chunks'");
-    assert.equal(count.rows[0]?.n, 1, 're-applying 0602 on top of 0407 leaves one function');
+    assert.equal(count.rows[0]?.n, 1, 're-applying 0802 on top of 0407 leaves one function');
   });
 });

@@ -77,3 +77,20 @@ Revise 07-01 and 07-14 (with 07-28 if the cases go there), address the warnings,
 ### INFO
 1. 07-29: consider asserting that the authorize route sends no `Access-Control-Allow-Origin` header.
 2. The same-wave note for 07-07 and 07-10 (PGlite migration order) is unchanged and remains advisory.
+
+## Revision 4 check (2026-11-25)
+
+Process note: the revision planner started on Fable, hit its usage limit (resets 2026-12-02) and the rest of planning ran on Opus. Owner rule: take the recommended option rather than hold seven plans for a week. Plan-check ran on Opus.
+
+### Phase 7 Revision 4 plan check
+VERDICT: PASS (0 blockers, 0 warnings, 1 info)
+
+- Graph script: 48 active plans in 18 waves. All dependencies exist, waves follow dependencies, no two plans in the same wave touch the same file, shared files are ordered, the graph has no cycles, and 07-31 (wave 15) comes after every automated plan.
+- Only held plans were edited (07-17/18/25/30/31/32/33, INDEX, VALIDATION). 07-02 and 07-03 are unchanged, and so are the retired 07-22/23/26/29.
+- D-25 sentence appears verbatim in 07-30 (x2), 07-18 and 07-PLAN-INDEX. 07-17, 07-25 and 07-18 reference eval/decisions/04.1-retrieval-defaults.json.
+- Migrations 0740-0744 are unique, appear nowhere else in .planning/phases or supabase/migrations, and are unfolded. 07-31 folds 070[1-7] only.
+- FBK-01 column names (query_language, query_language_confidence, chunk_languages, answer_language) match 05.1.1. The three-value mapping (1, 0.5, null) matches the OBS-03 text. RAG_LANG_CONFIDENCE=mapped is the default.
+- SEC-12 (07-38 sync side, 07-39 query side), the RET-05 purge outbox (07-35), RET-14 recheck (07-37) and ADM-02 cost per 1,000 (07-43) are covered. Phases 4.3 and 5.3 are not planned, and plans that need them stop on preconditions.
+- New env vars RAG_ROLLOUTS and RAG_LANG_CONFIDENCE are synced in every location, the manifest and the eval pin (07-45).
+- Task sizes 2-3 per plan. Every automated task has a <fails_when>. 07-50 is a human checkpoint marked autonomous: false.
+INFO-1: 07-50 has no automated commands (by design, it is a human checkpoint). No action needed.

@@ -72,6 +72,7 @@ describe('v2 contract literals type-check', () => {
       id: 'local_bm25',
       model: 'bm25-pool',
       scoreSemantics: 'relative',
+      supportedLanguages: [],
       async rerank() {
         return { scores: [{ index: 0, score: 1 }] };
       },
