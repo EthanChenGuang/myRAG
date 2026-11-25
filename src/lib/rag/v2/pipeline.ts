@@ -92,6 +92,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
   let injection: InjectionSummary | undefined;
   let injectionStalled = false;
   let bindingPlan: BindingLegsPlan | null = null;
+  let queryPlan: RetrievalResult['queryPlan'] | null = null;
   const security = deps.securityConfig();
   if (security.injectionCheck !== 'off') warnInjectionCheckDisabled(config, security.injectionCheck);
 
@@ -107,6 +108,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
     });
     queryContext = query.queryContext;
     queryLanguage = query.queryLanguage;
+    queryPlan = query.queryLayer?.plan ?? null;
 
     // D-18: planned before the embed stage, so the binding map is known before anything reads the config hash.
     bindingPlan = await planBindingLegs({ profile, config, scope, filters: query.filters, options: input.options });
@@ -284,6 +286,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
     injectionStalled,
     security,
     ...(bindingPlan ? { bindingHash: bindingHashFields(bindingPlan) } : {}),
+    queryPlan,
   });
 }
 

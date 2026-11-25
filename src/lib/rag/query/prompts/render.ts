@@ -1,5 +1,6 @@
 import { z } from 'zod/v3';
 import type { Lang } from '../rewrite-gate';
+import llamaindexCondense from './llamaindex.condense.v1.json';
 import sharedSuffix from './shared.suffix.v1.json';
 
 export const HISTORY_OPEN = '<conversation>';
@@ -37,6 +38,7 @@ export type RenderOptions = {
 /** Static imports keyed by id so the bundler keeps every prompt file. */
 export const PROMPT_REGISTRY: Readonly<Record<string, unknown>> = Object.freeze({
   [SUFFIX_ID]: sharedSuffix,
+  'llamaindex.condense': llamaindexCondense,
 });
 
 function templatePlaceholders(template: string): Set<string> {
