@@ -48,9 +48,13 @@ export interface FakeIngestDbOptions {
   languageShares?: Row[];
   /** Runs after a call is recorded and before it is answered. */
   onCall?: (call: RecordedRpc) => void;
+  /** Rows for functions the fake does not answer itself (or to replace its answer), keyed by function name. */
+  answers?: Record<string, (args: Record<string, unknown>) => Row[]>;
 }
 
 function answer(fn: string, args: Record<string, unknown>, options: FakeIngestDbOptions, quarantined: boolean): Row[] {
+  const custom = options.answers?.[fn];
+  if (custom) return custom(args);
   const documentId = options.documentId ?? FAKE_DOCUMENT_ID;
   switch (fn) {
     case 'rag_begin_document_version':
