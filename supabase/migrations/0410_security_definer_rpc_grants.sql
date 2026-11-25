@@ -148,6 +148,14 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_dismiss_supersession(uuid, uuid) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_dismiss_supersession(uuid, uuid) TO service_role;
   END IF;
+  IF to_regprocedure('public.rag_dismiss_effective_date_proposal(uuid, text, uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_dismiss_effective_date_proposal(uuid, text, uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_dismiss_effective_date_proposal(uuid, text, uuid) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_set_document_effective_dates(uuid, text, date, date, text, real, uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_set_document_effective_dates(uuid, text, date, date, text, real, uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_set_document_effective_dates(uuid, text, date, date, text, real, uuid) TO service_role;
+  END IF;
   IF to_regprocedure('public.rag_embedding_bindings_guard()') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_embedding_bindings_guard() FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_embedding_bindings_guard() TO service_role;
