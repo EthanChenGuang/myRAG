@@ -469,12 +469,12 @@ Plans:
   2. A multi-character term from a tenant's dictionary matches as one lexical term after `rag:relex`; Italian stemming makes singular and plural forms match and is turned on only if the it slice gains Recall with no other slice dropping.
   3. With `versions: all` or a period range, a fixture question comparing two versions of one policy retrieves chunks of both, superseded chunks carry their version and dates, and the default still returns current versions only; the semantic cache bypasses these queries.
   4. TTFT p50/p95 is on the trace for text, embed and voice, cache hits and misses are reported separately, and an injected pre-generation delay makes the CI latency gate fail.
-  5. With `RAG_TABLE_LOOKUP` on, a question naming a city and a grade retrieves the matching table row through the lookup leg as an extra RRF list within the verified tenant, the row reaches the context with its header, no LLM-written SQL exists anywhere, and the cross-tenant canary includes the row store.
+  5. With `RAG_TABLE_LOOKUP` on, a question naming two cell values of one table row retrieves the matching table row through the lookup leg as an extra RRF list within the verified tenant, the row reaches the context with its header, no LLM-written SQL exists anywhere, and the cross-tenant canary includes the row store.
   6. With `RAG_DUP_CLUSTERS` on, a fixture FAQ pasted into 30 documents forms one duplicate cluster per tenant (never across tenants), and deleting one source document updates the cluster; with `RAG_RESULT_DIVERSITY=collapse` (or `mmr`), a synthetic two-intent question in zh/en/it gets the duplicated answer once, with all its sources listed, plus the other intent's chunk in the top-k; the `duplicate_flood` slice gates top-k redundancy and per-intent evidence, and no other slice drops beyond the noise band.
   7. The refusal calibration report lists every candidate threshold with its false-answer and false-refusal rates; strict mode takes the threshold that keeps false answers at or below 5% and balanced keeps today's false-refusal target, each cell records its mode, and with the per-mode targets unset the chosen thresholds equal the Phase 4 result.
   8. With `RAG_IDENTIFIER_INDEX` and `RAG_IDENTIFIER_FILTER` on, the synthetic `identifier_near_miss` questions in every spelling retrieve and cite only the asked identifier, near-miss identifiers never reach the context, an identifier the tenant does not have gets the refusal with suggestions, admin-defined identifier patterns are honoured, and the descriptive-question slice does not drop.
 **Live verification**: Re-run the pool sweep with real rerankers including the 25 pool; measure real TTFT against the budget.
-**Plans**: TBD
+**Plans**: 37 plans in 11 waves (see `phases/04.2-retrieval-tuning-additions/04.2-PLAN-INDEX.md`); migrations 0851–0862 (0863 only when the Phase 5.1.1 retrieval log exists); `hybrid_search_chunks` is redefined by Phase 3.2's 0802 first and then by 0856; human steps in plans 23, 25, 26 (design reviews) and 33 (live pool sweep and TTFT)
 
 ### Phase 4.3: Document Access Groups (INSERTED)
 **Goal**: Inside one tenant, a member can only retrieve, be answered from, or see cached or logged content of documents their access groups allow, and this is enforced in code before ranking, never by the prompt
@@ -842,7 +842,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 3.1 → 3.1.1 → 3.2 → 3.2
 | 4. Hybrid Retrieval, Reranking & Calibrated Refusal | 46/47 | In Progress (04-43 live calibration) | - |
 | 4.1. Hybrid Retrieval & Rerank On by Default (INSERTED) | 0/13 | Planned (plan-check PASS, revised 2026-11-25) | - |
 | 4.1.1. Domain Terminology Dictionary (INSERTED) | 0/18 | Planned (plan-check PASS, revised 2026-11-25) | - |
-| 4.2. Retrieval Tuning Additions (INSERTED) | 0/TBD | Not planned | - |
+| 4.2. Retrieval Tuning Additions (INSERTED) | 0/37 | Planned (plan-check PASS) | - |
 | 4.3. Document Access Groups (INSERTED) | 0/TBD | Not planned | - |
 | 5. Verified Citations & Groundedness | 18/26 | In Progress | - |
 | 5.1. Prompt Injection Defense (INSERTED) | 10/25 | In Progress | - |
