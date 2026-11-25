@@ -5,6 +5,8 @@ import { loadCorpus } from './corpus.mts';
 import { startFakeEdge, type FakeEdge } from './fake-edge.mts';
 import { createEmptyFixtureDatabase, type DeploymentMode, type FixtureDatabase } from './pglite-supabase.mts';
 import { applyFixtureProcessEnv } from './process-env.mts';
+import { RunConfigError } from './run-config.mts';
+import type { ChunkingProfile } from '../../src/lib/rag-eval/contracts.generated.ts';
 
 const MANIFEST_PATH = path.join('eval/fixtures/ingest/manifest.json');
 
@@ -81,6 +83,8 @@ export async function buildIngestFixtureDatabase(options: {
   onAfterCorpusSlice?: (state: IngestFixtureBuildState) => Promise<void>;
   /** Ingest corpus documents [0, index) first, run the callback, then ingest [index, end) and typed fixtures. */
   splitAtCorpusIndex?: number;
+  /** Candidate chunking profiles seeded as building before the first document, so ingestion dual-write (RAG_PIPELINE=v2) fills them. */
+  chunkingProfiles?: ChunkingProfile[];
 }): Promise<FixtureDatabase & { buildState: IngestFixtureBuildState }> {
   const { deploymentMode } = options;
   const includeTyped = options.includeTypedFixtures ?? true;
@@ -94,6 +98,11 @@ export async function buildIngestFixtureDatabase(options: {
       : corpus.documents.slice(corpusStart, Math.min(splitAt, corpusEnd));
   const corpusTail =
     splitAt === undefined ? [] : corpus.documents.slice(Math.max(corpusStart, splitAt), corpusEnd);
+  const seeded = options.chunkingProfiles ?? [];
+  if (seeded.length > 0 && options.continueFrom) throw new Error('[Ingest Mode] chunking profiles are seeded only on a fresh build');
+  if (seeded.length > 0 && (options.processEnv?.RAG_PIPELINE ?? '').trim().toLowerCase() !== 'v2') {
+    throw new RunConfigError('[Eval Harness] chunking_profiles needs RAG_PIPELINE=v2');
+  }
   const empty = options.continueFrom?.fixture ?? (await createEmptyFixtureDatabase(options));
   let edge: FakeEdge | undefined;
   let scope: import('@/lib/rag/tenant/scope').TenantScope | undefined;
@@ -126,6 +135,8 @@ export async function buildIngestFixtureDatabase(options: {
     const { INGEST_MODE_FEATURE_ENV } = await import('./ingest-fakes.mts');
     const fakes = await installIngestFakes({ db: fixtureAdminClient(edge.url), env: INGEST_MODE_FEATURE_ENV });
     uninstall = fakes.uninstall;
+
+    if (seeded.length > 0) await seedChunkingProfiles(empty.db, seeded);
 
     scope =
       options.continueFrom?.scope ??
@@ -220,6 +231,29 @@ export async function buildIngestFixtureDatabase(options: {
     edge,
     ingestSidecarUploads: sidecarUploads,
     ingestLlamaParseAttempts: llamaAttempts,
+    ...(seeded.length > 0 ? { seededChunkingProfiles: seeded.map((profile) => profile.id) } : {}),
     buildState,
   };
+}
+
+/**
+ * Validates each candidate against the hard rules with the active embedding profile's input limit (validateChunkingProfile), then inserts it
+ * with status building through the fixture's superuser connection. Runs after the run-config env overlay is applied and before the first
+ * document is ingested; the RAG config memo is reset so dual-write reads RAG_PIPELINE=v2.
+ */
+async function seedChunkingProfiles(db: FixtureDatabase['db'], profiles: ChunkingProfile[]): Promise<void> {
+  const { resetRagConfigForTests } = await import('@/lib/rag/config');
+  resetRagConfigForTests();
+  const { validateChunkingProfile } = await import('@/lib/rag/chunking/validate');
+  for (const profile of profiles) {
+    const { errors } = await validateChunkingProfile(profile);
+    if (errors.length > 0) throw new RunConfigError(`[Eval Harness] chunking profile ${profile.id} is invalid: ${errors.join(', ')}`);
+  }
+  for (const profile of profiles) {
+    await db.query(
+      `INSERT INTO public.chunking_profiles (id, doc_type, child_tokens, parent_mode, parent_tokens, status, preset)
+       VALUES ($1, $2, $3, $4, $5, 'building', $6)`,
+      [profile.id, profile.doc_type, profile.child_tokens, profile.parent_mode, profile.parent_tokens, profile.preset],
+    );
+  }
 }

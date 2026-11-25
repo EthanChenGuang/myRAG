@@ -141,6 +141,7 @@ async function loadSyncManager(memory: ReturnType<typeof createMemoryDb>) {
     currentIngestConfig: () => ({ pipeline: state.pipeline }),
     scopeKey: scopeModule.scopeKey,
     softDeleteLineage,
+    removeDocumentObjects: async () => ({ removed: 0, failed: 0 }),
     queueConfigFromProcessEnv: () => ({ ingestAsync: state.ingestAsync }),
   }));
 

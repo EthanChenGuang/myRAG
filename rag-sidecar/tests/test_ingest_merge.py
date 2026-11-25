@@ -122,3 +122,38 @@ def test_slice_pages_drops_only_excluded_pages_and_merge_recovers_full_range():
     middle = _structured_part([4, 5], [], [(4, "four"), (5, "five")])
     merged = merge([kept, middle], n_pages=10)
     assert sorted(merged.pages) == list(range(1, 11))
+
+def _page_doc(page_no: int, text: str) -> DoclingDocument:
+    return premium_part([(page_no, text)], {page_no: PAGE})
+
+
+def test_join_page_parts_of_a_range_that_does_not_start_at_page_one_keeps_every_page_in_the_tree():
+    from rag_sidecar.ingest.merge import join_page_parts
+
+    joined = join_page_parts([_page_doc(7, "Seventh page text."), _page_doc(8, "Eighth page text."), _page_doc(9, "Ninth page text.")])
+
+    assert sorted(joined.pages) == [7, 8, 9]
+    markdown = joined.export_to_markdown()
+    assert "Seventh page text." in markdown and "Eighth page text." in markdown and "Ninth page text." in markdown
+    pages_by_text = {item.text: [prov.page_no for prov in item.prov] for item, _level in joined.iterate_items() if getattr(item, "text", "")}
+    assert pages_by_text == {"Seventh page text.": [7], "Eighth page text.": [8], "Ninth page text.": [9]}
+
+
+def test_join_page_parts_does_not_change_its_inputs():
+    from rag_sidecar.ingest.merge import join_page_parts
+
+    first, second = _page_doc(4, "Fourth."), _page_doc(5, "Fifth.")
+    join_page_parts([first, second])
+
+    assert sorted(first.pages) == [4] and sorted(second.pages) == [5]
+    assert [prov.page_no for item in second.texts for prov in item.prov] == [5]
+
+
+def test_slice_pages_keeps_the_page_numbers_of_a_document_that_starts_after_page_one():
+    doc = premium_part([(4, "Four."), (5, "Five."), (6, "Six.")], {4: PAGE, 5: PAGE, 6: PAGE})
+
+    sliced = slice_pages(doc, {5, 6})
+
+    assert sorted(sliced.pages) == [5, 6]
+    pages_by_text = {item.text: [prov.page_no for prov in item.prov] for item, _level in sliced.iterate_items() if getattr(item, "text", "")}
+    assert pages_by_text == {"Five.": [5], "Six.": [6]}

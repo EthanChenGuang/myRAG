@@ -35,17 +35,23 @@ def _doc_type(item: GoldenItem, doc_types: Mapping[str, str] | None) -> str:
     return doc_types.get(item.gold_evidence[0].document.casefold()) or GENERAL_DOC_TYPE
 
 
+def _lexical_rank(legs: Mapping[str, int]) -> int | None:
+    """Best rank over the lexical lists; v2 search names one list per query variant (lexical:<index>)."""
+    ranks = [rank for leg, rank in legs.items() if leg == LEXICAL_LEG or leg.startswith(f"{LEXICAL_LEG}:")]
+    return min(ranks) if ranks else None
+
+
 def _lexical_leg_ran(trace: RagTrace) -> bool:
     if LEXICAL_LEG in trace.stage_counts.get("search", {}):
         return True
-    return any(LEXICAL_LEG in candidate.legs for candidate in trace.candidates)
+    return any(_lexical_rank(candidate.legs) is not None for candidate in trace.candidates)
 
 
 def _lexical_hit(trace: RagTrace, item: GoldenItem, *, leg_ran: bool) -> bool | None:
     if not item.answerable or not leg_ran:
         return None
     for candidate in trace.candidates:
-        rank = candidate.legs.get(LEXICAL_LEG)
+        rank = _lexical_rank(candidate.legs)
         if rank is None or rank > LEXICAL_TOP_N:
             continue
         name = candidate.document_name or ""

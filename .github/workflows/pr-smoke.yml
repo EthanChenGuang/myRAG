@@ -38,7 +38,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - name: Node runtime check
         run: node scripts/ci/check-node-runtime.mjs
-      - run: uv sync --directory rag-sidecar --locked
+      - run: uv sync --directory rag-sidecar --locked --extra chunking --extra preflight
       - run: uv sync --directory eval --locked --all-extras
       - name: Vitest suite
         run: npx vitest run

@@ -1,6 +1,8 @@
+import type { RpcClient } from '../backend/supabase-rpc';
+import { getActiveProfile } from '../embeddings/active-profile';
 import { originalName, saveArtifact } from './artifacts';
 import { loadIngestConfig } from './config';
-import { getIngestDeps } from './deps';
+import { getIngestDeps, type IngestDeps } from './deps';
 import { ingest } from './index';
 import { enqueueJob } from './ledger';
 import { ORIGINALS_BUCKET } from './object-store';
@@ -36,7 +38,8 @@ function failedResult(documentId: string | null, reason: string): EnqueueResult 
   return { jobId: null, documentId, status: 'failed', reason };
 }
 
-function recordOf(input: IngestInput, ctx: StageContext): QueuedInputRecord {
+/** The queued-input record of a run whose identify, file_hash_dedup and store_original stages are done. */
+export function queuedInputRecordOf(input: IngestInput, ctx: StageContext): QueuedInputRecord {
   return {
     v: 1,
     source: input.source,
@@ -57,19 +60,8 @@ function recordOf(input: IngestInput, ctx: StageContext): QueuedInputRecord {
   };
 }
 
-/**
- * The queued counterpart of ingest() (D-22): runs identify, file_hash_dedup and store_original in the app, which leaves the not-current
- * processing version and the stored original, then inserts the ledger row with the settings snapshot and returns at once. An unchanged
- * file returns skipped_duplicate with the existing document and a terminal ledger row. These stages write nothing to
- * documents.processing_state: from here on the ledger is the only state authority of the job (D-01, A-1).
- */
-export async function enqueueIngest(input: IngestInput, options: EnqueueIngestOptions = {}): Promise<EnqueueResult> {
-  const deps = getIngestDeps();
-  const db = deps.db();
-  if (!db) {
-    console.error('[Ingest] admin client unavailable');
-    return failedResult(null, 'db_unavailable');
-  }
+/** The stage context of the enqueue-time stages (no state store: the ledger is the state authority of a queued job). */
+export function enqueueStageContext(input: IngestInput, deps: IngestDeps, db: RpcClient): StageContext {
   const ctx: StageContext = {
     input,
     deps,
@@ -86,8 +78,39 @@ export async function enqueueIngest(input: IngestInput, options: EnqueueIngestOp
     work: { parseText: null, parserVersion: null, chunks: [], chunksWritten: 0 },
   };
   if (input.typeChange) ctx.state.typeChange = { ...input.typeChange };
+  return ctx;
+}
 
-  const result = await runIngestStages(ctx, [identifyStage, fileHashDedupStage, storeOriginalStage], { partial: true });
+/** identify, file_hash_dedup and store_original: the processing version and its stored original, or the duplicate it would be. */
+export async function runEnqueueStages(ctx: StageContext): Promise<IngestResult> {
+  return runIngestStages(ctx, [identifyStage, fileHashDedupStage, storeOriginalStage], { partial: true });
+}
+
+/** The embedding provider a backfill snapshot is built for; a registry that cannot be read never selects the OpenAI Batch API. */
+export async function backfillEmbedProvider(): Promise<string> {
+  try {
+    return (await getActiveProfile()).provider;
+  } catch {
+    console.warn('[Ingest] active embedding profile unavailable; backfill embeds in sync');
+    return 'unknown';
+  }
+}
+
+/**
+ * The queued counterpart of ingest() (D-22): runs identify, file_hash_dedup and store_original in the app, which leaves the not-current
+ * processing version and the stored original, then inserts the ledger row with the settings snapshot and returns at once. An unchanged
+ * file returns skipped_duplicate with the existing document and a terminal ledger row. These stages write nothing to
+ * documents.processing_state: from here on the ledger is the only state authority of the job (D-01, A-1).
+ */
+export async function enqueueIngest(input: IngestInput, options: EnqueueIngestOptions = {}): Promise<EnqueueResult> {
+  const deps = getIngestDeps();
+  const db = deps.db();
+  if (!db) {
+    console.error('[Ingest] admin client unavailable');
+    return failedResult(null, 'db_unavailable');
+  }
+  const ctx = enqueueStageContext(input, deps, db);
+  const result = await runEnqueueStages(ctx);
   if (result.status === 'failed') return failedResult(result.documentId, result.reason ?? 'enqueue_failed');
   const identity = ctx.identity;
   if (!identity) return failedResult(null, 'identity_missing');
@@ -100,11 +123,15 @@ export async function enqueueIngest(input: IngestInput, options: EnqueueIngestOp
 
   try {
     const queueConfig = (options.queueConfig ?? queueConfigFromProcessEnv)();
+    // A job of a backfill batch gets the backfill snapshot: never progressive, Batch API embeddings only when asked for (D-30, D-35).
+    const isBackfill = options.batchId !== undefined && options.batchId !== null;
     const settings = buildJobSettings({
       queueConfig,
       profile: identity.profile,
       bounds: await effectiveTierBounds(identity.docType),
       routingConfig: loadRoutingConfig(),
+      isBackfill,
+      ...(isBackfill ? { embedProfileProvider: await backfillEmbedProvider() } : {}),
     });
     const base = {
       source: input.source,
@@ -125,7 +152,7 @@ export async function enqueueIngest(input: IngestInput, options: EnqueueIngestOp
     const document = ctx.document;
     const originalKey = ctx.state.artifacts[originalName(identity.filename)];
     if (!document || !originalKey) return await abandon('original_unavailable', null);
-    await saveArtifact(ctx, QUEUED_INPUT_ARTIFACT, encodeQueuedInput(recordOf(input, ctx)), 'application/json');
+    await saveArtifact(ctx, QUEUED_INPUT_ARTIFACT, encodeQueuedInput(queuedInputRecordOf(input, ctx)), 'application/json');
     const job = await enqueueJob(
       input.scope,
       { ...base, originalRef: { bucket: ORIGINALS_BUCKET, path: originalKey }, documentId: document.id },

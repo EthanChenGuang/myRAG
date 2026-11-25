@@ -249,6 +249,61 @@ describe('runSearchStages exact_id RRF leg (D-24)', () => {
     expect(output.fusedHits.map((row) => row.hit.chunkId)).toEqual(expected.slice(0, params.rerank_input_cap));
   });
 
+  it.each([
+    ['a document id list', { documentIds: ['00000000-0000-4000-8000-000000000001'] }],
+    ['a doc type', { docTypes: ['invoice_receipt'] }],
+    ['a language', { languages: ['it'] }],
+    ['a source', { sources: ['config_upload'] }],
+    ['a date range', { dateRange: { from: '2025-01-01', to: '2025-12-31' } }],
+    ['an invoice filter', { invoice: { supplier: 'Alfa', amountMin: 1, amountMax: 9 } }],
+  ])('stands the exact-id leg down while %s narrows the search (D-05: filters only narrow)', async (_label, narrowing) => {
+    const cfg = config();
+    const params = effectiveRetrievalParams('eval', cfg, null);
+    const { backend, exactCalls } = routedBackend(denseLexical(['a', 'b'], ['c']), [exactRow('outside-the-filter')]);
+    setRetrievalBackendForTests(backend);
+    await verifyV2Startup();
+
+    const collector = createTraceCollector({ profile: 'eval', tenantKey: 's:default' });
+    const output = await runSearchStages({
+      input: { scope, query: 'invoice FT-2025-00417', profile: 'eval', signal: new AbortController().signal },
+      scope,
+      config: cfg,
+      profile: 'eval',
+      params,
+      embedding: { vector: [0.1], profile: null },
+      signal: new AbortController().signal,
+      collector,
+      filters: { currentOnly: true, ...narrowing },
+    });
+
+    expect(exactCalls()).toBe(0);
+    expect(collector.stages().find((row) => row.name === 'exact_id_lookup')?.status).toBe('disabled');
+    expect(output.fusedHits.map((row) => row.hit.chunkId)).not.toContain('outside-the-filter');
+  });
+
+  it('keeps the exact-id leg when the filters only hold current_only or empty lists', async () => {
+    const cfg = config();
+    const params = effectiveRetrievalParams('eval', cfg, null);
+    const { backend, exactCalls } = routedBackend(denseLexical(['a'], []), [exactRow('x')]);
+    setRetrievalBackendForTests(backend);
+    await verifyV2Startup();
+
+    const output = await runSearchStages({
+      input: { scope, query: 'invoice FT-2025-00417', profile: 'eval', signal: new AbortController().signal },
+      scope,
+      config: cfg,
+      profile: 'eval',
+      params,
+      embedding: { vector: [0.1], profile: null },
+      signal: new AbortController().signal,
+      collector: createTraceCollector({ profile: 'eval', tenantKey: 's:default' }),
+      filters: { currentOnly: true, sources: [], documentIds: [] },
+    });
+
+    expect(exactCalls()).toBe(1);
+    expect(output.fusedHits.map((row) => row.hit.chunkId)).toContain('x');
+  });
+
   it('degrades to two-leg fusion when exact_id_lookup fails', async () => {
     const cfg = config();
     const params = effectiveRetrievalParams('eval', cfg, null);

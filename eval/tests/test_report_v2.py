@@ -180,6 +180,23 @@ def test_lexical_leg_hit_rate_counts_gold_inside_lexical_top_ten():
     assert [item.lexical_hit_at_10 for item in report.items] == [True, False, False, True]
 
 
+def test_lexical_leg_hit_rate_reads_the_per_variant_lexical_lists():
+    gold = ("doc.en.md", f"intro {QUOTE} outro")
+    other = ("doc.en.md", "unrelated text")
+    report = _lexical_report(
+        [
+            [(*other, {"dense:0": 1, "lexical:0": 1}), (*gold, {"dense:0": 2, "lexical:0": 4})],
+            [(*gold, {"dense:0": 1, "lexical:0": 12, "lexical:1": 2})],
+            [(*gold, {"dense:0": 1, "lexical:0": 11})],
+            [(*gold, {"dense:0": 1, "exact_id": 1})],
+        ]
+    )
+    rate = report.lexical_leg_hit_rate_at_10
+    assert rate is not None
+    assert (rate.value, rate.n) == (0.5, 4)
+    assert [item.lexical_hit_at_10 for item in report.items] == [True, True, False, False]
+
+
 def test_lexical_leg_hit_rate_is_null_when_the_lexical_leg_never_ran():
     gold = ("doc.en.md", f"intro {QUOTE} outro")
     report = _lexical_report([[(*gold, {"dense": 1})], []])

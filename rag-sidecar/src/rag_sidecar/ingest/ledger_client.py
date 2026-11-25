@@ -143,6 +143,15 @@ class LedgerClient:
             return payload
         return [payload]
 
+    @classmethod
+    def _scalar(cls, payload: Any) -> Any:
+        """The value of a scalar function: bare on PostgREST, a one-column row on the fake edge."""
+        rows = cls._rows(payload)
+        value = rows[0] if rows else None
+        if isinstance(value, dict) and len(value) == 1:
+            value = next(iter(value.values()))
+        return value
+
     async def claim(
         self,
         *,
@@ -177,14 +186,14 @@ class LedgerClient:
             "rag_heartbeat_ingestion_job",
             {"p_job_id": job_id, "p_worker": worker},
         )
-        return bool(payload)
+        return bool(self._scalar(payload))
 
     async def release(self, job_id: str, worker: str) -> bool:
         payload = await self._rpc(
             "rag_release_ingestion_job",
             {"p_job_id": job_id, "p_worker": worker},
         )
-        return bool(payload)
+        return bool(self._scalar(payload))
 
     async def advance(
         self,
@@ -233,11 +242,11 @@ class LedgerClient:
         raise LedgerError("record_attempt returned unexpected payload")
 
     async def count_dead_letters(self, tenant_key: str | None = None) -> int:
-        payload = await self._rpc("rag_count_ingestion_dead_letters", {"p_tenant_key": tenant_key})
-        if isinstance(payload, (int, float)):
-            return int(payload)
-        if isinstance(payload, str) and payload.isdigit():
-            return int(payload)
+        value = self._scalar(await self._rpc("rag_count_ingestion_dead_letters", {"p_tenant_key": tenant_key}))
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return int(value)
+        if isinstance(value, str) and value.isdigit():
+            return int(value)
         return 0
 
     async def purge_stale(self, *, retention_days: int, batch_size: int = 500) -> dict[str, Any]:
@@ -286,14 +295,7 @@ class LedgerClient:
                 "p_options_hash": options_hash,
             },
         )
-        if payload is None:
-            return None
-        if isinstance(payload, str):
-            return payload
-        rows = self._rows(payload)
-        if not rows:
-            return None
-        value = rows[0]
+        value = self._scalar(payload)
         return str(value) if value is not None else None
 
     async def cache_lookup(

@@ -76,3 +76,9 @@ eval/golden/private/
 __pycache__/
 .pytest_cache/
 wt/
+
+# Tool run scratch under committed report directories (harness traces, per-cell runs, materialised inputs)
+eval/reports/*/harness/
+eval/reports/*/inputs/
+eval/reports/*/cells/
+eval/reports/chunking-cells/

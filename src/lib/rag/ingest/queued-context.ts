@@ -131,8 +131,15 @@ export async function buildQueuedContext(input: BuildQueuedContextInput): Promis
   if (input.withOriginal) {
     const ref = job.original_ref;
     const prefix = versionPrefix(tenantKey, origin.lineageId, row.version);
-    if (!ref || ref.bucket !== ORIGINALS_BUCKET || !ref.path.startsWith(prefix)) return { ok: false, reason: 'original_unavailable' };
-    const original = await getObjectStore().get(ref.path, { signal });
+    // A backfill job keeps its staged original_ref; begin stored the version's own copy, which the document row records (D-31).
+    const path =
+      ref && ref.bucket === ORIGINALS_BUCKET && ref.path.startsWith(prefix)
+        ? ref.path
+        : origin.originalPath && origin.originalPath.startsWith(prefix)
+          ? origin.originalPath
+          : null;
+    if (!path) return { ok: false, reason: 'original_unavailable' };
+    const original = await getObjectStore().get(path, { signal });
     if (!original) return { ok: false, reason: 'original_unavailable' };
     bytes = original.bytes;
   }

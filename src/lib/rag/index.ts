@@ -52,6 +52,29 @@ export type {
   RollbackResult,
   SetStatusResult,
 } from './embeddings/profile-ops';
+export {
+  listChunkingProfiles,
+  getChunkingCoverage,
+  getChunkingProfileState,
+  createChunkingProfile,
+  recordChunkingDecision,
+  activateChunkingProfile,
+  rollbackChunkingProfile,
+  ChunkingActivationRefused,
+  ChunkingInputError,
+} from './chunking/profile-ops';
+export type {
+  ChunkingCoverageRow,
+  ChunkingProfileRecord,
+  ChunkingProfileState,
+  CreateChunkingProfileInput,
+} from './chunking/profile-ops';
+export { validateChunkingProfile } from './chunking/validate';
+export type { ChunkingFinding, ChunkingValidationContext, ChunkingValidationResult } from './chunking/validate';
+export { getChunkingSweepReport, getChunkingDecisions, ChunkingReportInvalid } from './chunking/report';
+export type { ChunkingReportCode } from './chunking/report';
+export { refusalCalibrationStatus, currentRefusalCalibrationStatus } from './refusal/status';
+export type { RefusalCalibrationStatus } from './refusal/status';
 export type {
   Candidate,
   Profile,
@@ -83,7 +106,18 @@ export { assembleContext } from './context/assemble';
 export type { AssembleInput, AssembleOutput, AssemblyCandidate, AssemblyDocumentRow } from './context/assemble';
 export { fetchAssemblyRows } from './context/fetch-rows';
 export type { AssemblyRows } from './context/fetch-rows';
-export type { KeptBy, KeptChunk, RagMode, ReferencedState, SourceImage, UsedDocument } from './types';
+export type {
+  CitationLabel,
+  CitationLabeler,
+  ContextBlock,
+  KeptBy,
+  KeptChunk,
+  RagMode,
+  ReferencedSection,
+  ReferencedState,
+  SourceImage,
+  UsedDocument,
+} from './types';
 export type { VoiceResult, VoiceResults, VoiceSourceImage } from './context/voice';
 export { deriveVoiceKeywords } from './voice/keyword-fallback';
 export { createEnhancedRAGPrompt } from './generation/prompt';
@@ -119,6 +153,10 @@ export { loadIngestConfig } from './ingest/config';
 export { assertCloudAllowed, CloudRefused } from './ingest/guard/cloud-budget';
 export { findInvoices } from './retrieval/invoices';
 export type { FindInvoicesDeps, InvoiceFilters, InvoiceHit } from './retrieval/invoices';
+export { runChunkingBuildStep } from './ingest/rechunk/build-step';
+export type { ChunkingBuildStepOptions } from './ingest/rechunk/build-step';
+export { RechunkInputError, RechunkDatabaseError } from './ingest/rechunk/run';
+export type { RechunkReport } from './ingest/rechunk/run';
 export { getIngestStatusReport, STALE_PROCESSING_MS } from './ingest/status';
 export type { IngestStatusReport } from './ingest/status';
 export { IngestLedgerError, deleteJob, getJobForScope, listJobs, listJobsPage, retryJob } from './ingest/ledger';
@@ -151,9 +189,12 @@ export { loadQueueConfig, queueConfigFromProcessEnv } from './ingest/queue-confi
 export type { QueueConfig } from './ingest/queue-config';
 export { handleAdvance } from './ingest/callbacks/advance';
 export { handleParseExternal } from './ingest/callbacks/parse-external';
+export { handleDetectVlm } from './ingest/callbacks/detect-vlm';
 export { checkSidecarSecret, SIDECAR_SECRET_HEADER } from './ingest/callbacks/internal-auth';
 export type { ChangeDocumentTypeFailure, ChangeDocumentTypeInput, ChangeDocumentTypeResult } from './ingest/change-doc-type';
 export { scopeForAdminDocument, AdminDocumentScopeError } from './tenant/ingest-scope';
 export type { AdminDocumentScopeInput } from './tenant/ingest-scope';
 export { softDeleteLineage } from './ingest/soft-delete';
+export { removeDocumentObjects } from './ingest/remove-document-objects';
+export type { DocumentObjectRow } from './ingest/remove-document-objects';
 export type { SoftDeleteResult, SoftDeleteFailure } from './ingest/soft-delete';

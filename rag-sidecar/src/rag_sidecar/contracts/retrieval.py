@@ -81,6 +81,7 @@ class RetrievalOverrides(_Contract):
     rrf_k: int | None = Field(default=None, ge=1)
     leg_weights: RetrievalLegWeights | None = None
     rerank_model: str | None = Field(default=None, min_length=1)
+    chunking_profile_by_doc_type: dict[DocType, Annotated[str, Field(min_length=1, max_length=128)]] = Field(default_factory=dict)
 
 
 class DateRangeFilter(_Contract):
@@ -373,6 +374,7 @@ def write_chunking_cases(path: Path) -> None:
 class ChunkingMetricValue(_Contract):
     value: float | None
     n: int = Field(ge=0)
+    upper_95: float | None = Field(default=None, ge=0, le=1)
 
 
 class ChunkingSliceMetrics(_Contract):
@@ -416,6 +418,7 @@ class ChunkingSweepProfileEntry(_Contract):
 class ChunkingSweepReport(_Contract):
     schema_version: Literal[1] = 1
     profiles: list[ChunkingSweepProfileEntry] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
     provenance: ConfigProvenance
     config_hash: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
 

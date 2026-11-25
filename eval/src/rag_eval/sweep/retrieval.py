@@ -19,7 +19,7 @@ from rag_eval.config_files import finalize_config, write_config_atomically
 from rag_eval.golden_io import golden_sha256, load_golden
 from rag_eval.harness_runner import HarnessError, HarnessRun, run_harness
 from rag_eval.matching import chunk_matches_span
-from rag_eval.paths import REPO_ROOT, resolve_cli_path
+from rag_eval.paths import REPO_ROOT, repo_relative, resolve_cli_path
 from rag_eval.split import assign_split
 
 DEFAULT_POOLS = (25, 50, 75, 100)
@@ -359,7 +359,7 @@ def run_retrieval_sweep(
                     latency_p95_ms=_latency_p95(run.traces),
                     n_items=n_items,
                     run_config_hash=run.report.run_config_hash if run.report is not None else None,
-                    out_dir=str(cell_dir),
+                    out_dir=repo_relative(cell_dir),
                 )
             )
             for note in run.notes:
@@ -458,6 +458,9 @@ def main(argv: list[str] | None = None) -> int:
     retrieval.add_argument("--pools", default=None, help="comma-separated candidate pool sizes (default 25,50,75,100)")
     retrieval.add_argument("--top-ks", default=None, help="comma-separated final top-k values (default 5,8,10,15,20)")
     retrieval.set_defaults(handler=_retrieval)
+    from rag_eval.sweep.chunking import register as register_chunking
+
+    register_chunking(commands)
     args = parser.parse_args(argv)
     return args.handler(args)
 

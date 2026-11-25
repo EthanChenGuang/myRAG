@@ -93,6 +93,32 @@ describe('buildJobSettings', () => {
     expect(snapshot.embed_mode).toBe('sync');
   });
 
+  test('backfill with RAG_EMBED_BATCH_MODE=sync stays on sync even for an OpenAI profile (D-35 default)', () => {
+    const queueConfig = loadQueueConfig({ RAG_EMBED_BATCH_MODE: 'sync' });
+    const snapshot = buildJobSettings({
+      queueConfig,
+      profile,
+      bounds: { min_tier: 'fast', max_tier: 'premium' },
+      routingConfig,
+      isBackfill: true,
+      embedProfileProvider: 'openai',
+    });
+    expect(snapshot.embed_mode).toBe('sync');
+  });
+
+  test('an incremental job embeds synchronously even when RAG_EMBED_BATCH_MODE=batch_api (D-35)', () => {
+    const queueConfig = loadQueueConfig({ RAG_EMBED_BATCH_MODE: 'batch_api', RAG_PARSE_PROGRESSIVE: 'true' });
+    const snapshot = buildJobSettings({
+      queueConfig,
+      profile,
+      bounds: { min_tier: 'fast', max_tier: 'premium' },
+      routingConfig,
+      embedProfileProvider: 'openai',
+    });
+    expect(snapshot.embed_mode).toBe('sync');
+    expect(snapshot.progressive).toBe(true);
+  });
+
   test('same inputs produce stable JSON', () => {
     const queueConfig = loadQueueConfig({});
     const input = {

@@ -164,7 +164,8 @@ export interface ParseCacheContent {
 /**
  * The cached parse of a job, by cache id. The id is checked inside SQL against the job's own tenant (rag_set_document_parse_cache
  * also links the cache to the version for the re-chunk path), then the entry is read back through the tenant-checked document
- * lookup, so an id from another tenant is refused before any object is read. A merged Docling entry is not stored by this plan.
+ * lookup, so an id from another tenant is refused before any object is read. A merged entry (tiered routing) stores the same
+ * result.json and artifacts as a chain entry, so it is read the same way.
  */
 export async function readParseResultForJob(job: IngestionJob, cacheId: string, signal: AbortSignal): Promise<ParseCacheContent> {
   if (!UUID.test(cacheId)) throw new ParseCacheError('cache_not_found');
@@ -177,7 +178,6 @@ export async function readParseResultForJob(job: IngestionJob, cacheId: string, 
   if (entry.id !== cacheId || entry.tenantKey !== job.tenant_key || !entry.objectPrefix.startsWith(`${job.tenant_key}/_parse-cache/`)) {
     throw new ParseCacheError('cache_tenant_mismatch');
   }
-  if (entry.parser === 'merged') throw new ParseCacheError('merged_entry_unsupported');
 
   const store = getObjectStore();
   const stored = await store.get(`${entry.objectPrefix}${PARSE_RESULT_OBJECT}`, { signal });

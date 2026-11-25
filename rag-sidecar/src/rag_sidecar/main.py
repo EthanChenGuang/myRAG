@@ -27,6 +27,7 @@ from rag_sidecar.extract.invoice import extract_invoice
 from rag_sidecar.ingest.app_client import AppClient
 from rag_sidecar.ingest.ledger_client import LedgerClient
 from rag_sidecar.ingest.pool import UPLOAD_PRIORITY, PriorityPool
+from rag_sidecar.ingest.storage_client import StorageClient
 from rag_sidecar.ingest.worker import IngestWorker, RealClock
 from rag_sidecar.parse.converter import Converter, default_converter
 from rag_sidecar.parse.jobs import JobRunner, QueueFull
@@ -89,10 +90,11 @@ def create_app(settings: SidecarSettings | None = None, converter: Converter | N
     ingest_task: asyncio.Task[None] | None = None
     ledger_client: LedgerClient | None = None
     app_client: AppClient | None = None
+    storage_client: StorageClient | None = None
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        nonlocal ingest_worker, ingest_pool, preflight_pool, ingest_task, ledger_client, app_client
+        nonlocal ingest_worker, ingest_pool, preflight_pool, ingest_task, ledger_client, app_client, storage_client
         from rag_sidecar.ingest.maintenance import start_maintenance_from_env
 
         preflight_pool = PriorityPool(workers=resolved.parse_workers)
@@ -108,12 +110,16 @@ def create_app(settings: SidecarSettings | None = None, converter: Converter | N
                 service_key=resolved.service_role_key.get_secret_value(),
             )
             app_client = AppClient(app_base_url=resolved.app_internal_url, secret=resolved.secret)
+            storage_client = StorageClient(
+                base_url=resolved.supabase_url,
+                service_key=resolved.service_role_key.get_secret_value(),
+            )
             ingest_pool = PriorityPool(workers=resolved.parse_workers)
             ingest_pool.start()
             ingest_worker = IngestWorker(
                 resolved,
                 ledger_client,
-                None,
+                storage_client,
                 app_client,
                 ingest_pool,
                 RealClock(),
@@ -137,6 +143,8 @@ def create_app(settings: SidecarSettings | None = None, converter: Converter | N
                 await ledger_client.aclose()
             if app_client is not None:
                 await app_client.aclose()
+            if storage_client is not None:
+                await storage_client.aclose()
             if ingest_task is not None:
                 with contextlib.suppress(asyncio.CancelledError):
                     await ingest_task

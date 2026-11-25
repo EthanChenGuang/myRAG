@@ -1,7 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { getChunkingCoverage, type ChunkingCoverageRow } from '../chunking/profile-ops';
 import { loadRagConfig, type RagEnvInput } from '../config';
 import { getRagDeps } from '../deps';
 import { icuSegmentsChinese } from '../lexical/icu-check';
+
 function compareSemver(a: string, b: string): number {
   const pa = a.split('.').map((part) => Number.parseInt(part, 10));
   const pb = b.split('.').map((part) => Number.parseInt(part, 10));
@@ -15,12 +17,19 @@ function compareSemver(a: string, b: string): number {
 
 export type V2StartupStatus = 'ok' | 'degraded' | 'not_checked';
 
+/** How many current ready documents each doc type's active non-legacy chunking profile lacks (counts only). */
+export interface V2ChunkingCoverage {
+  state: 'checked' | 'coverage_unchecked' | 'not_checked';
+  missing: Record<string, number>;
+}
+
 export interface V2StartupVerdict {
   status: V2StartupStatus;
   icuAvailable: boolean;
   adminKeyPresent: boolean;
   pgvectorVersion: string | null;
   reasons: readonly string[];
+  chunkingCoverage: V2ChunkingCoverage;
   checkedAt: number | null;
 }
 
@@ -29,7 +38,13 @@ export interface V2StartupDeps {
   adminClient: () => SupabaseClient | null;
   icuSegmentsChinese?: () => boolean;
   pgvectorVersion?: (client: SupabaseClient) => Promise<string | null>;
+  chunkingCoverage?: (signal: AbortSignal) => Promise<ChunkingCoverageRow[]>;
+  chunkingCoverageTimeoutMs?: number;
 }
+
+/** The coverage read is informational: it never holds startup longer than this, and a slow or failing read is only recorded. */
+const COVERAGE_TIMEOUT_MS = 3_000;
+const NOT_CHECKED_COVERAGE: V2ChunkingCoverage = { state: 'not_checked', missing: {} };
 
 const loggedKeys = new Set<string>();
 
@@ -39,6 +54,7 @@ let verdict: V2StartupVerdict = {
   adminKeyPresent: true,
   pgvectorVersion: null,
   reasons: [],
+  chunkingCoverage: NOT_CHECKED_COVERAGE,
   checkedAt: null,
 };
 
@@ -62,10 +78,55 @@ async function readPgvectorVersion(client: SupabaseClient): Promise<string | nul
   return (data as { extversion: string }).extversion;
 }
 
+async function readChunkingCoverage(deps: V2StartupDeps): Promise<V2ChunkingCoverage> {
+  const read = deps.chunkingCoverage ?? ((signal: AbortSignal) => getChunkingCoverage({ signal }));
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<'timeout'>((resolve) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      resolve('timeout');
+    }, deps.chunkingCoverageTimeoutMs ?? COVERAGE_TIMEOUT_MS);
+  });
+  let rows: ChunkingCoverageRow[] | 'timeout';
+  try {
+    rows = await Promise.race([read(controller.signal), timeout]);
+  } catch (error) {
+    const code = error instanceof Error ? (error as Error & { code?: unknown }).code : undefined;
+    console.warn('[RAG Chunking] coverage unchecked at startup', { reason: typeof code === 'string' ? code : 'read_failed' });
+    return { state: 'coverage_unchecked', missing: {} };
+  } finally {
+    clearTimeout(timer);
+  }
+  if (rows === 'timeout') {
+    console.warn('[RAG Chunking] coverage unchecked at startup', { reason: 'timeout' });
+    return { state: 'coverage_unchecked', missing: {} };
+  }
+
+  const missing: Record<string, number> = {};
+  for (const row of rows) {
+    if (!row.isActive || row.profileId === 'legacy' || row.missingDocuments <= 0) continue;
+    missing[row.docType] = row.missingDocuments;
+    console.warn(
+      `[RAG Chunking] active profile ${row.profileId} for ${row.docType} is missing ${row.missingDocuments} current documents; run npm run rag:rechunk -- --profile ${row.profileId}`,
+      { docType: row.docType, profileId: row.profileId, missingDocuments: row.missingDocuments },
+    );
+  }
+  return { state: 'checked', missing };
+}
+
 async function runChecks(deps: V2StartupDeps): Promise<V2StartupVerdict> {
   const config = loadRagConfig(deps.ragEnv());
   if (config.pipeline !== 'v2') {
-    verdict = { status: 'not_checked', icuAvailable: true, adminKeyPresent: true, pgvectorVersion: null, reasons: [], checkedAt: null };
+    verdict = {
+      status: 'not_checked',
+      icuAvailable: true,
+      adminKeyPresent: true,
+      pgvectorVersion: null,
+      reasons: [],
+      chunkingCoverage: NOT_CHECKED_COVERAGE,
+      checkedAt: null,
+    };
     return verdict;
   }
 
@@ -84,6 +145,10 @@ async function runChecks(deps: V2StartupDeps): Promise<V2StartupVerdict> {
     logOnce('admin_key', 'error', 'SUPABASE_SERVICE_ROLE_KEY is missing; retrieval RPCs are unavailable');
   }
 
+  const coverageRead: Promise<V2ChunkingCoverage> = admin
+    ? readChunkingCoverage(deps)
+    : Promise.resolve({ state: 'coverage_unchecked', missing: {} });
+
   let pgvectorVersion: string | null = null;
   if (admin) {
     try {
@@ -92,6 +157,8 @@ async function runChecks(deps: V2StartupDeps): Promise<V2StartupVerdict> {
       pgvectorVersion = null;
     }
   }
+
+  const chunkingCoverage = await coverageRead;
 
   if (config.v2.iterativeScan !== 'off' && pgvectorVersion && compareSemver(pgvectorVersion, '0.8.0') < 0) {
     reasons.push('pgvector_iterative_scan_unsupported');
@@ -107,6 +174,7 @@ async function runChecks(deps: V2StartupDeps): Promise<V2StartupVerdict> {
     adminKeyPresent,
     pgvectorVersion,
     reasons,
+    chunkingCoverage,
     checkedAt: Date.now(),
   };
   return verdict;
@@ -123,6 +191,8 @@ export function verifyV2Startup(deps?: Partial<V2StartupDeps>): Promise<V2Startu
     adminClient: deps?.adminClient ?? base.adminClient,
     ...(deps?.icuSegmentsChinese ? { icuSegmentsChinese: deps.icuSegmentsChinese } : {}),
     ...(deps?.pgvectorVersion ? { pgvectorVersion: deps.pgvectorVersion } : {}),
+    ...(deps?.chunkingCoverage ? { chunkingCoverage: deps.chunkingCoverage } : {}),
+    ...(deps?.chunkingCoverageTimeoutMs !== undefined ? { chunkingCoverageTimeoutMs: deps.chunkingCoverageTimeoutMs } : {}),
   };
   if (!startupRun) {
     startupRun = runChecks(resolved).catch(() => {
@@ -142,6 +212,7 @@ export function resetV2StartupForTests(): void {
     adminKeyPresent: true,
     pgvectorVersion: null,
     reasons: [],
+    chunkingCoverage: NOT_CHECKED_COVERAGE,
     checkedAt: null,
   };
 }

@@ -175,13 +175,29 @@ describe('computeRetrievalConfigHash', () => {
       }),
       (i) => ({ ...i, reranker: { id: 'cohere', model: 'rerank-v5.0-fast' } }),
       (i) => ({ ...i, rerankTextVersion: i.rerankTextVersion + 1 }),
-      (i) => ({ ...i, thresholdsConfigHash: 'eeee'.repeat(16) }),
       (i) => ({ ...i, activeChunkingProfiles: { pdf: 'other' } }),
       (i) => ({ ...i, switches: { ...i.switches, lexicalSearch: !i.switches.lexicalSearch } }),
     ];
     for (const mutate of parts) {
       expect(computeRetrievalConfigHash(mutate(baseHashInput()))).not.toBe(base);
     }
+  });
+
+  it('counts the thresholds file only while the refusal threshold switch is on', () => {
+    const on = (i: RetrievalConfigHashInput): RetrievalConfigHashInput => ({
+      ...i,
+      switches: { ...i.switches, refusalThreshold: true },
+    });
+    const off = (i: RetrievalConfigHashInput): RetrievalConfigHashInput => ({
+      ...i,
+      switches: { ...i.switches, refusalThreshold: false },
+    });
+    const other = (i: RetrievalConfigHashInput): RetrievalConfigHashInput => ({ ...i, thresholdsConfigHash: 'eeee'.repeat(16) });
+    expect(computeRetrievalConfigHash(other(on(baseHashInput())))).not.toBe(computeRetrievalConfigHash(on(baseHashInput())));
+    expect(computeRetrievalConfigHash(other(off(baseHashInput())))).toBe(computeRetrievalConfigHash(off(baseHashInput())));
+    expect(computeRetrievalConfigHash({ ...off(baseHashInput()), thresholdsConfigHash: null })).toBe(
+      computeRetrievalConfigHash(off(baseHashInput())),
+    );
   });
 
   it('hashes unavailable chunking differently from an empty map', () => {
@@ -262,5 +278,20 @@ describe('getActiveChunkingProfiles', () => {
     const map = await getActiveChunkingProfiles();
     expect(map).toEqual({ pdf: 'seeded' });
     expect(rpc).not.toHaveBeenCalled();
+  });
+});
+describe('eval chunking override in the retrieval config hash', () => {
+  it('the eval override replaces the active pointer for its doc type and only for the eval profile', async () => {
+    const { hashedChunkingProfiles } = await import('@/lib/rag/v2/overrides');
+    const active = { contract_legal: 'legacy', general: 'legacy' };
+    const override = { chunkingProfileByDocType: { contract_legal: 'p256-1024-contract_legal' } };
+    expect(hashedChunkingProfiles('eval', active, override)).toEqual({ contract_legal: 'p256-1024-contract_legal', general: 'legacy' });
+    expect(hashedChunkingProfiles('chat', active, override)).toBe(active);
+    expect(hashedChunkingProfiles('eval', active, undefined)).toBe(active);
+    expect(hashedChunkingProfiles('eval', null, undefined)).toBeNull();
+    expect(hashedChunkingProfiles('eval', null, override)).toEqual({ contract_legal: 'p256-1024-contract_legal' });
+    const withOverride = computeRetrievalConfigHash({ ...baseHashInput(), activeChunkingProfiles: hashedChunkingProfiles('eval', active, override) });
+    const without = computeRetrievalConfigHash({ ...baseHashInput(), activeChunkingProfiles: hashedChunkingProfiles('eval', active, undefined) });
+    expect(withOverride).not.toBe(without);
   });
 });

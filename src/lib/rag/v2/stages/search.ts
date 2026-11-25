@@ -16,6 +16,7 @@ import type { TenantScope } from '../../tenant/scope';
 import type { TraceCollector } from '../../trace/collector';
 import type { Profile, QueryVariant, RunRetrievalInput, StageOverrides } from '../../types';
 import { getV2StartupVerdict } from '../startup';
+import { evalChunkingOverride } from '../overrides';
 import type { RetrievalParams } from '@/lib/rag-eval/contracts.generated';
 
 export interface SearchStagesInput {
@@ -42,6 +43,24 @@ export interface SearchStagesOutput {
 function buildFilters(input: RunRetrievalInput): RetrievalFilters {
   const extra: RetrievalFilterInput = input.retrievalFilters ?? {};
   return { currentOnly: true, ...extra };
+}
+
+function nonEmpty(values: readonly unknown[] | undefined): boolean {
+  return values !== undefined && values.length > 0;
+}
+
+/** Mirrors what the backend sends as filter arguments: an empty list is no filter. */
+export function hasNarrowingFilters(filters: RetrievalFilters): boolean {
+  const invoice = filters.invoice;
+  return (
+    filters.dateRange?.from !== undefined ||
+    filters.dateRange?.to !== undefined ||
+    nonEmpty(filters.sources) ||
+    nonEmpty(filters.documentIds) ||
+    nonEmpty(filters.docTypes) ||
+    nonEmpty(filters.languages) ||
+    (invoice !== undefined && Object.values(invoice).some((value) => value !== undefined))
+  );
 }
 
 function lexicalLanguagesFor(variant: QueryVariant): string[] | null {
@@ -184,6 +203,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
   const lexicalEnabled = config.v2.lexicalSearch;
   const verdict = getV2StartupVerdict();
   const icuSkipLexical = lexicalEnabled && !verdict.icuAvailable;
+  const chunkingOverride = evalChunkingOverride(profile, stageOverrides?.retrievalOverrides);
 
   const runBackendSearch = async (stageSignal: AbortSignal) => {
     let denseTotal = 0;
@@ -203,6 +223,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
           denseLimit: pool,
           lexicalLimit: pool,
           signal: stageSignal,
+          ...(chunkingOverride ? { chunkingProfileOverride: chunkingOverride } : {}),
         });
         denseTotal += legs.dense.length;
         lexicalTotal += legs.lexical.length;
@@ -247,8 +268,10 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
 
   let exactList: RankedList | null = null;
   if (config.exactIdLookup) {
+    // rag_exact_id_documents takes no filter arguments, so while a request narrows the search the leg stands down rather than widen it.
+    const exactSpec = spec('exact_id_lookup', 'skip');
     const exact = await runStage(
-      spec('exact_id_lookup', 'skip'),
+      hasNarrowingFilters(filters) ? { ...exactSpec, enabled: false } : exactSpec,
       signal,
       (stageSignal) =>
         exactIdStage(input.query, scope, { client: requireAdminSearchClient(getRagDeps()), signal: stageSignal, limit: pool }),

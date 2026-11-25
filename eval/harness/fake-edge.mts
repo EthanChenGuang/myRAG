@@ -793,6 +793,18 @@ export async function startFakeEdge(options: FakeEdgeOptions): Promise<FakeEdge>
         } else {
           throw new Rejection(405, `unsupported method ${method} for ${pathname}`);
         }
+      } else if (method === 'DELETE' && /^\/storage\/v1\/object\/[A-Za-z0-9._-]+$/.test(pathname)) {
+        // storage.from(bucket).remove([...]) sends the keys as `prefixes` to the bucket path.
+        const bucket = decodeURIComponent(pathname.slice('/storage/v1/object/'.length));
+        const body = parseJsonObject(await readBody(req));
+        const prefixes = Array.isArray(body.prefixes) ? body.prefixes.filter((key): key is string => typeof key === 'string') : [];
+        const removed: Array<{ name: string }> = [];
+        for (const objectKey of prefixes) {
+          assertStorageObjectKey(objectKey);
+          calls.push({ method, path: `/storage/v1/object/${bucket}/${objectKey}` });
+          if (storageObjects.delete(storageMapKey(bucket, objectKey))) removed.push({ name: objectKey });
+        }
+        send(res, 200, removed);
       } else if (pathname.startsWith('/storage/v1/')) {
         throw new Rejection(404, `unsupported path: ${pathname}`);
       } else if (pathname === '/v2/rerank') {

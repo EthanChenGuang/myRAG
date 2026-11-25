@@ -258,12 +258,12 @@ def test_a_lost_lease_stops_the_job_without_touching_the_ledger():
     assert ledger.call_counts.get("fail") is None
 
 
-def test_tiered_routing_is_not_handled_by_this_job_function_yet():
+def test_a_tiered_pdf_job_on_a_worker_without_storage_fails_at_once_and_calls_nothing():
     ledger = FakeLedger()
     job = _claimed(ledger, routing="tiered")
     app = FakeApp()
     outcome = asyncio.run(process_job(job, _deps(ledger, app)))
-    assert outcome == JobOutcome(status="failed", error_class="routing_not_supported")
+    assert outcome == JobOutcome(status="failed", error_class="worker_not_configured")
     assert app.calls == []
 
 
@@ -286,3 +286,107 @@ def test_a_skipped_duplicate_is_a_terminal_non_failure():
     app.script("advance", [AppScript(response=_advance("skipped_duplicate", True, status="skipped_duplicate"))])
     outcome = asyncio.run(process_job(job, _deps(ledger, app)))
     assert outcome == JobOutcome(status="skipped_duplicate")
+
+
+_BATCH_ID = "00000000-0000-4000-8000-0000000000b9"
+_DOC_ID = "00000000-0000-4000-8000-0000000000d1"
+
+
+def _claimed_backfill(ledger: FakeLedger, *, kind: str = "ingest", routing: str = "fixed", document_id: str | None = None) -> IngestionJob:
+    job = _job(routing).model_copy(update={"batch_id": _BATCH_ID, "kind": kind, "document_id": document_id, "priority": 10})
+    ledger.seed(job)
+    ledger.jobs[job.id] = ledger.jobs[job.id].model_copy(
+        update={"locked_by": _WORKER, "lease_until": ledger.clock.now() + timedelta(hours=1)}
+    )
+    return ledger.jobs[job.id]
+
+
+def test_begin_a_backfill_job_without_a_document_row_calls_begin_before_parsing():
+    ledger = FakeLedger()
+    job = _claimed_backfill(ledger)
+    app = FakeApp()
+    app.script("parse_external", [AppScript(response=_done())])
+    app.script(
+        "advance",
+        [AppScript(response=_advance("preflight", False)), AppScript(response=_advance("ready", True, status="ready"))],
+    )
+
+    outcome = asyncio.run(process_job(job, _deps(ledger, app)))
+
+    assert outcome == JobOutcome(status="ready")
+    assert [call[0] for call in app.calls] == ["advance", "parse_external", "advance"]
+    begin = app.calls[0][2]
+    assert begin["phase"] == "begin"
+    assert begin["parse_cache_id"] is None and begin["cursor"] is None
+    assert app.calls[2][2]["phase"] == "post_parse"
+
+
+def test_begin_a_duplicate_at_begin_ends_the_job_without_parsing():
+    ledger = FakeLedger()
+    job = _claimed_backfill(ledger)
+    app = FakeApp()
+    app.script("parse_external", [AppScript(response=_done())])
+    app.script("advance", [AppScript(response=_advance("skipped_duplicate", True, status="skipped_duplicate"))])
+
+    outcome = asyncio.run(process_job(job, _deps(ledger, app)))
+
+    assert outcome == JobOutcome(status="skipped_duplicate")
+    assert [call[0] for call in app.calls] == ["advance"]
+    assert ledger.jobs[_JOB_ID].attempts == []
+
+
+def test_begin_a_failed_begin_reports_its_reason_without_parsing():
+    ledger = FakeLedger()
+    job = _claimed_backfill(ledger)
+    app = FakeApp()
+    app.script("parse_external", [AppScript(response=_done())])
+    app.script("advance", [AppScript(response=_advance("failed", True, status="failed", reason="original_unavailable"))])
+
+    outcome = asyncio.run(process_job(job, _deps(ledger, app)))
+
+    assert outcome == JobOutcome(status="failed", error_class="original_unavailable")
+    assert [call[0] for call in app.calls] == ["advance"]
+
+
+def test_begin_is_not_called_for_a_backfill_job_that_already_has_its_document():
+    ledger = FakeLedger()
+    job = _claimed_backfill(ledger, document_id=_DOC_ID)
+    app = FakeApp()
+    app.script("parse_external", [AppScript(response=_done())])
+    app.script("advance", [AppScript(response=_advance("ready", True, status="ready"))])
+
+    outcome = asyncio.run(process_job(job, _deps(ledger, app)))
+
+    assert outcome == JobOutcome(status="ready")
+    assert {call[2]["phase"] for call in app.calls if call[0] == "advance"} == {"post_parse"}
+
+
+def test_begin_is_not_called_for_an_incremental_job():
+    ledger = FakeLedger()
+    job = _claimed(ledger)
+    app = FakeApp()
+    app.script("parse_external", [AppScript(response=_done())])
+    app.script("advance", [AppScript(response=_advance("ready", True, status="ready"))])
+
+    asyncio.run(process_job(job, _deps(ledger, app)))
+
+    assert {call[2]["phase"] for call in app.calls if call[0] == "advance"} == {"post_parse"}
+
+
+def test_begin_dry_run_jobs_never_call_begin(monkeypatch):
+    import sys
+    import types
+
+    async def _stub(job: IngestionJob, deps: WorkerDeps) -> JobOutcome:
+        return JobOutcome(status="ready")
+
+    # The tiered module needs the preflight extra; the dry run only has to reach it without a begin call.
+    monkeypatch.setitem(sys.modules, "rag_sidecar.ingest.tiered", types.SimpleNamespace(run_tiered=_stub))
+    ledger = FakeLedger()
+    job = _claimed_backfill(ledger, kind="dry_run", routing="tiered")
+    app = FakeApp()
+
+    outcome = asyncio.run(process_job(job, _deps(ledger, app)))
+
+    assert outcome == JobOutcome(status="ready")
+    assert app.calls == []

@@ -92,6 +92,10 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_begin_document_version(text, uuid, uuid, text, text, text, text, text, text, text, integer, boolean) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_begin_document_version(text, uuid, uuid, text, text, text, text, text, text, text, integer, boolean) TO service_role;
   END IF;
+  IF to_regprocedure('public.rag_begin_progressive_final(uuid, text, uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_begin_progressive_final(uuid, text, uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_begin_progressive_final(uuid, text, uuid) TO service_role;
+  END IF;
   IF to_regprocedure('public.rag_chunk_embeddings_guard()') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_chunk_embeddings_guard() FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_chunk_embeddings_guard() TO service_role;
@@ -111,6 +115,10 @@ BEGIN
   IF to_regprocedure('public.rag_claim_ingestion_jobs(text, integer, boolean, text)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_claim_ingestion_jobs(text, integer, boolean, text) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_claim_ingestion_jobs(text, integer, boolean, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_clear_provisional(uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_clear_provisional(uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_clear_provisional(uuid) TO service_role;
   END IF;
   IF to_regprocedure('public.rag_create_ingestion_batch(text, text, text, numeric, integer, text, text)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_create_ingestion_batch(text, text, text, numeric, integer, text, text) FROM PUBLIC, anon, authenticated;
@@ -231,6 +239,10 @@ BEGIN
   IF to_regprocedure('public.rag_list_quarantine(uuid, integer, integer)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_list_quarantine(uuid, integer, integer) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_list_quarantine(uuid, integer, integer) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_mark_provisional(uuid, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_mark_provisional(uuid, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_mark_provisional(uuid, text) TO service_role;
   END IF;
   IF to_regprocedure('public.rag_mark_document_failed(uuid, text, text)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_mark_document_failed(uuid, text, text) FROM PUBLIC, anon, authenticated;
@@ -447,6 +459,10 @@ BEGIN
   IF to_regprocedure('public.rag_write_chunks(uuid, text, jsonb, jsonb, boolean, integer)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_write_chunks(uuid, text, jsonb, jsonb, boolean, integer) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_write_chunks(uuid, text, jsonb, jsonb, boolean, integer) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_sync_parent_currency()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_sync_parent_currency() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_sync_parent_currency() TO service_role;
   END IF;
   IF to_regprocedure('public.rag_write_profile_chunks(uuid, text, text, jsonb, jsonb, jsonb, boolean, integer)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_write_profile_chunks(uuid, text, text, jsonb, jsonb, jsonb, boolean, integer) FROM PUBLIC, anon, authenticated;

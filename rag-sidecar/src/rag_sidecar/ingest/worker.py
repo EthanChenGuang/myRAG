@@ -101,6 +101,7 @@ class IngestWorker:
         self._stop_claiming = False
         self._running = False
         self._job_tasks: dict[str, asyncio.Task[None]] = {}
+        self._batch_jobs: set[str] = set()
         self._held_leases: set[str] = set()
         self._last_claim_ok: datetime | None = None
         self._claim_failures_since_ok = False
@@ -160,6 +161,7 @@ class IngestWorker:
         if self._job_tasks:
             await asyncio.gather(*self._job_tasks.values(), return_exceptions=True)
         self._job_tasks.clear()
+        self._batch_jobs.clear()
 
     def _jittered_poll(self) -> float:
         spread = POLL_BASE_SECONDS * POLL_JITTER
@@ -183,16 +185,28 @@ class IngestWorker:
                 self._claim_failures_since_ok = False
             for job in jobs:
                 self._held_leases.add(job.id)
+                if job.batch_id is not None:
+                    self._batch_jobs.add(job.id)
                 self._job_tasks[job.id] = asyncio.create_task(self._job_loop(job))
         except Exception:  # noqa: BLE001
             self._claim_failures_since_ok = True
             logger.warning("[RAG Ingest] claim failed", exc_info=True)
 
+    def _batch_allowed(self, claimed: list[IngestionJob]) -> bool:
+        """Batch jobs hold at most concurrency - 1 slots, so one slot always stays for interactive jobs (D-23).
+
+        A single-slot worker takes a batch job only when it runs nothing else. Uploads still win every claim by priority.
+        """
+        if self._concurrency == 1:
+            return not self._job_tasks and not claimed
+        running = len(self._batch_jobs) + sum(1 for job in claimed if job.batch_id is not None)
+        return running < self._concurrency - 1
+
     async def _claim_slots(self, free_slots: int) -> list[IngestionJob]:
         claimed: list[IngestionJob] = []
         slots_left = free_slots
         while slots_left > 0:
-            allow_batch = slots_left > 1
+            allow_batch = self._batch_allowed(claimed)
             batch = await self.ledger.claim(
                 worker=self._worker_id, limit=1, allow_batch=allow_batch, runner="worker"
             )
@@ -220,6 +234,7 @@ class IngestWorker:
             with contextlib.suppress(asyncio.CancelledError):
                 await beat
             self._held_leases.discard(job.id)
+            self._batch_jobs.discard(job.id)
             self._job_tasks.pop(job.id, None)
 
     async def _heartbeat(self, job_id: str) -> None:
@@ -238,7 +253,16 @@ class IngestWorker:
     async def _execute(self, job: IngestionJob) -> JobOutcome:
         if self.process_fn is not None:
             return await self.process_fn(job)
-        deps = WorkerDeps(ledger=self.ledger, app=self.app, worker_id=self._worker_id, sleep=self.sleep)
+        deps = WorkerDeps(
+            ledger=self.ledger,
+            app=self.app,
+            worker_id=self._worker_id,
+            sleep=self.sleep,
+            storage=self.storage,
+            pool=self.pool,
+            converter_factory=getattr(self.settings, "build_range_converter", None),
+            page_cap=getattr(self.settings, "page_cap", None),
+        )
         return await process_job(job, deps)
 
     async def _finish_outcome(self, job: IngestionJob, outcome: JobOutcome) -> None:

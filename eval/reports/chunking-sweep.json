@@ -1,8 +1,2543 @@
 {
-  "config_hash": "2ae1aed91fe72c21f8610d36db509b70e5beba7c5b4c4c74b618579798fc1bad",
-  "profiles": [],
+  "config_hash": "8f367e07f7c7d6ba917e1db4bf01200cb8b42a516f94d58d295a0ed0f3a39285",
+  "notes": [
+    "Fixture run: the numbers prove the mechanism (seeded profiles, dual-write, override, gate); the live sweep decides real profiles.",
+    "Scope: dev split only; the test split is never read (D-14). Mode: ingest fixture, compared with the legacy profile built in the same mode (D-21).",
+    "Question kind 'clause' is the clause-tagged subset of context_heavy, reported on its own.",
+    "Recall@k uses k=10. Gate: paired differences against legacy on the overall and language slices, band 0.0200. All runs use the base env plus RAG_PARENT_CHILD=true.",
+    "p256-1024 validator warnings: top_k_parent_over_budget (top-k 8 x parent 1024 = 8192 vs context budget 6000).",
+    "p256-2048 validator warnings: top_k_parent_over_budget (top-k 8 x parent 2048 = 16384 vs context budget 6000).",
+    "Judge answer correctness skipped: judge key not configured (OPENROUTER_API_KEY, OPENAI_API_KEY not set)."
+  ],
+  "profiles": [
+    {
+      "gate": null,
+      "metrics": {
+        "by_doc_type": {
+          "contract_legal": {
+            "context_tokens": {
+              "n": 2,
+              "upper_95": null,
+              "value": 857.5
+            },
+            "correct_refusal_rate": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "false_refusal_rate": {
+              "n": 2,
+              "upper_95": 0.7763932022500211,
+              "value": 0.0
+            },
+            "judge_correctness": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "judge_skipped": true,
+            "latency_p50_ms": {
+              "n": 2,
+              "upper_95": null,
+              "value": 102.0
+            },
+            "latency_p95_ms": {
+              "n": 2,
+              "upper_95": null,
+              "value": 104.0
+            },
+            "mrr": {
+              "n": 2,
+              "upper_95": null,
+              "value": 1.0
+            },
+            "recall_at_k": {
+              "n": 2,
+              "upper_95": null,
+              "value": 1.0
+            }
+          },
+          "financial_report": {
+            "context_tokens": {
+              "n": 1,
+              "upper_95": null,
+              "value": 1583.0
+            },
+            "correct_refusal_rate": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "false_refusal_rate": {
+              "n": 1,
+              "upper_95": 0.9500000000000001,
+              "value": 0.0
+            },
+            "judge_correctness": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "judge_skipped": true,
+            "latency_p50_ms": {
+              "n": 1,
+              "upper_95": null,
+              "value": 128.0
+            },
+            "latency_p95_ms": {
+              "n": 1,
+              "upper_95": null,
+              "value": 128.0
+            },
+            "mrr": {
+              "n": 1,
+              "upper_95": null,
+              "value": 1.0
+            },
+            "recall_at_k": {
+              "n": 1,
+              "upper_95": null,
+              "value": 1.0
+            }
+          },
+          "general": {
+            "context_tokens": {
+              "n": 107,
+              "upper_95": null,
+              "value": 683.392523364486
+            },
+            "correct_refusal_rate": {
+              "n": 21,
+              "upper_95": 0.4873887916988696,
+              "value": 0.2857142857142857
+            },
+            "false_refusal_rate": {
+              "n": 86,
+              "upper_95": 0.30710150789102014,
+              "value": 0.22093023255813954
+            },
+            "judge_correctness": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "judge_skipped": true,
+            "latency_p50_ms": {
+              "n": 107,
+              "upper_95": null,
+              "value": 104.0
+            },
+            "latency_p95_ms": {
+              "n": 107,
+              "upper_95": null,
+              "value": 140.0
+            },
+            "mrr": {
+              "n": 86,
+              "upper_95": null,
+              "value": 0.5786821705426356
+            },
+            "recall_at_k": {
+              "n": 86,
+              "upper_95": null,
+              "value": 0.686046511627907
+            }
+          },
+          "invoice_receipt": {
+            "context_tokens": {
+              "n": 3,
+              "upper_95": null,
+              "value": 575.6666666666666
+            },
+            "correct_refusal_rate": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "false_refusal_rate": {
+              "n": 3,
+              "upper_95": 0.8646496378284163,
+              "value": 0.3333333333333333
+            },
+            "judge_correctness": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "judge_skipped": true,
+            "latency_p50_ms": {
+              "n": 3,
+              "upper_95": null,
+              "value": 126.0
+            },
+            "latency_p95_ms": {
+              "n": 3,
+              "upper_95": null,
+              "value": 143.0
+            },
+            "mrr": {
+              "n": 3,
+              "upper_95": null,
+              "value": 0.5
+            },
+            "recall_at_k": {
+              "n": 3,
+              "upper_95": null,
+              "value": 0.6666666666666666
+            }
+          },
+          "product_technical": {
+            "context_tokens": {
+              "n": 1,
+              "upper_95": null,
+              "value": 605.0
+            },
+            "correct_refusal_rate": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "false_refusal_rate": {
+              "n": 1,
+              "upper_95": 0.9500000000000001,
+              "value": 0.0
+            },
+            "judge_correctness": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "judge_skipped": true,
+            "latency_p50_ms": {
+              "n": 1,
+              "upper_95": null,
+              "value": 110.0
+            },
+            "latency_p95_ms": {
+              "n": 1,
+              "upper_95": null,
+              "value": 110.0
+            },
+            "mrr": {
+              "n": 1,
+              "upper_95": null,
+              "value": 1.0
+            },
+            "recall_at_k": {
+              "n": 1,
+              "upper_95": null,
+              "value": 1.0
+            }
+          },
+          "scanned_image": {
+            "context_tokens": {
+              "n": 3,
+              "upper_95": null,
+              "value": 881.3333333333334
+            },
+            "correct_refusal_rate": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "false_refusal_rate": {
+              "n": 3,
+              "upper_95": 0.6315968501359613,
+              "value": 0.0
+            },
+            "judge_correctness": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "judge_skipped": true,
+            "latency_p50_ms": {
+              "n": 3,
+              "upper_95": null,
+              "value": 104.0
+            },
+            "latency_p95_ms": {
+              "n": 3,
+              "upper_95": null,
+              "value": 107.0
+            },
+            "mrr": {
+              "n": 3,
+              "upper_95": null,
+              "value": 0.0
+            },
+            "recall_at_k": {
+              "n": 3,
+              "upper_95": null,
+              "value": 0.0
+            }
+          }
+        },
+        "by_language": {
+          "en": {
+            "context_tokens": {
+              "n": 42,
+              "upper_95": null,
+              "value": 569.8571428571429
+            },
+            "correct_refusal_rate": {
+              "n": 8,
+              "upper_95": 0.599689389190833,
+              "value": 0.25
+            },
+            "false_refusal_rate": {
+              "n": 34,
+              "upper_95": 0.352161216986184,
+              "value": 0.20588235294117646
+            },
+            "judge_correctness": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "judge_skipped": true,
+            "latency_p50_ms": {
+              "n": 42,
+              "upper_95": null,
+              "value": 105.0
+            },
+            "latency_p95_ms": {
+              "n": 42,
+              "upper_95": null,
+              "value": 138.0
+            },
+            "mrr": {
+              "n": 34,
+              "upper_95": null,
+              "value": 0.5387254901960784
+            },
+            "recall_at_k": {
+              "n": 34,
+              "upper_95": null,
+              "value": 0.6764705882352942
+            }
+          },
+          "it": {
+            "context_tokens": {
+              "n": 34,
+              "upper_95": null,
+              "value": 688.5588235294117
+            },
+            "correct_refusal_rate": {
+              "n": 6,
+              "upper_95": 0.7286616274802475,
+              "value": 0.3333333333333333
+            },
+            "false_refusal_rate": {
+              "n": 28,
+              "upper_95": 0.3796701854013115,
+              "value": 0.21428571428571427
+            },
+            "judge_correctness": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "judge_skipped": true,
+            "latency_p50_ms": {
+              "n": 34,
+              "upper_95": null,
+              "value": 101.0
+            },
+            "latency_p95_ms": {
+              "n": 34,
+              "upper_95": null,
+              "value": 135.0
+            },
+            "mrr": {
+              "n": 28,
+              "upper_95": null,
+              "value": 0.5160714285714285
+            },
+            "recall_at_k": {
+              "n": 28,
+              "upper_95": null,
+              "value": 0.6428571428571429
+            }
+          },
+          "zh": {
+            "context_tokens": {
+              "n": 41,
+              "upper_95": null,
+              "value": 830.5365853658536
+            },
+            "correct_refusal_rate": {
+              "n": 7,
+              "upper_95": 0.6587385638446641,
+              "value": 0.2857142857142857
+            },
+            "false_refusal_rate": {
+              "n": 34,
+              "upper_95": 0.352161216986184,
+              "value": 0.20588235294117646
+            },
+            "judge_correctness": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "judge_skipped": true,
+            "latency_p50_ms": {
+              "n": 41,
+              "upper_95": null,
+              "value": 105.0
+            },
+            "latency_p95_ms": {
+              "n": 41,
+              "upper_95": null,
+              "value": 147.0
+            },
+            "mrr": {
+              "n": 34,
+              "upper_95": null,
+              "value": 0.6617647058823529
+            },
+            "recall_at_k": {
+              "n": 34,
+              "upper_95": null,
+              "value": 0.7058823529411765
+            }
+          }
+        },
+        "by_question_kind": {
+          "clause": {
+            "context_tokens": {
+              "n": 2,
+              "upper_95": null,
+              "value": 857.5
+            },
+            "correct_refusal_rate": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "false_refusal_rate": {
+              "n": 2,
+              "upper_95": 0.7763932022500211,
+              "value": 0.0
+            },
+            "judge_correctness": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "judge_skipped": true,
+            "latency_p50_ms": {
+              "n": 2,
+              "upper_95": null,
+              "value": 102.0
+            },
+            "latency_p95_ms": {
+              "n": 2,
+              "upper_95": null,
+              "value": 104.0
+            },
+            "mrr": {
+              "n": 2,
+              "upper_95": null,
+              "value": 1.0
+            },
+            "recall_at_k": {
+              "n": 2,
+              "upper_95": null,
+              "value": 1.0
+            }
+          },
+          "context_heavy": {
+            "context_tokens": {
+              "n": 15,
+              "upper_95": null,
+              "value": 831.2
+            },
+            "correct_refusal_rate": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "false_refusal_rate": {
+              "n": 15,
+              "upper_95": 0.27939619361287654,
+              "value": 0.06666666666666667
+            },
+            "judge_correctness": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "judge_skipped": true,
+            "latency_p50_ms": {
+              "n": 15,
+              "upper_95": null,
+              "value": 104.0
+            },
+            "latency_p95_ms": {
+              "n": 15,
+              "upper_95": null,
+              "value": 147.0
+            },
+            "mrr": {
+              "n": 15,
+              "upper_95": null,
+              "value": 0.7488888888888888
+            },
+            "recall_at_k": {
+              "n": 15,
+              "upper_95": null,
+              "value": 0.9333333333333333
+            }
+          },
+          "fact_lookup": {
+            "context_tokens": {
+              "n": 35,
+              "upper_95": null,
+              "value": 969.6857142857143
+            },
+            "correct_refusal_rate": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "false_refusal_rate": {
+              "n": 35,
+              "upper_95": 0.1285010363413007,
+              "value": 0.02857142857142857
+            },
+            "judge_correctness": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "judge_skipped": true,
+            "latency_p50_ms": {
+              "n": 35,
+              "upper_95": null,
+              "value": 107.0
+            },
+            "latency_p95_ms": {
+              "n": 35,
+              "upper_95": null,
+              "value": 140.0
+            },
+            "mrr": {
+              "n": 35,
+              "upper_95": null,
+              "value": 0.8904761904761905
+            },
+            "recall_at_k": {
+              "n": 35,
+              "upper_95": null,
+              "value": 0.9714285714285714
+            }
+          },
+          "other": {
+            "context_tokens": {
+              "n": 67,
+              "upper_95": null,
+              "value": 522.2388059701492
+            },
+            "correct_refusal_rate": {
+              "n": 21,
+              "upper_95": 0.4873887916988696,
+              "value": 0.2857142857142857
+            },
+            "false_refusal_rate": {
+              "n": 46,
+              "upper_95": 0.5232197905211513,
+              "value": 0.391304347826087
+            },
+            "judge_correctness": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "judge_skipped": true,
+            "latency_p50_ms": {
+              "n": 67,
+              "upper_95": null,
+              "value": 101.0
+            },
+            "latency_p95_ms": {
+              "n": 67,
+              "upper_95": null,
+              "value": 147.0
+            },
+            "mrr": {
+              "n": 46,
+              "upper_95": null,
+              "value": 0.27971014492753626
+            },
+            "recall_at_k": {
+              "n": 46,
+              "upper_95": null,
+              "value": 0.3695652173913043
+            }
+          }
+        },
+        "overall": {
+          "context_tokens": {
+            "n": 117,
+            "upper_95": null,
+            "value": 695.7008547008547
+          },
+          "correct_refusal_rate": {
+            "n": 21,
+            "upper_95": 0.4873887916988696,
+            "value": 0.2857142857142857
+          },
+          "false_refusal_rate": {
+            "n": 96,
+            "upper_95": 0.2881542438423067,
+            "value": 0.20833333333333334
+          },
+          "judge_correctness": {
+            "n": 0,
+            "upper_95": null,
+            "value": null
+          },
+          "judge_skipped": true,
+          "latency_p50_ms": {
+            "n": 117,
+            "upper_95": null,
+            "value": 104.0
+          },
+          "latency_p95_ms": {
+            "n": 117,
+            "upper_95": null,
+            "value": 143.0
+          },
+          "mrr": {
+            "n": 96,
+            "upper_95": null,
+            "value": 0.5756944444444444
+          },
+          "recall_at_k": {
+            "n": 96,
+            "upper_95": null,
+            "value": 0.6770833333333334
+          }
+        }
+      },
+      "profile_id": "legacy"
+    },
+    {
+      "gate": {
+        "baseline_profile_id": "legacy",
+        "passed": false,
+        "regressions": [
+          {
+            "band": 0.02,
+            "diff": -0.125,
+            "metric": "correct_refusal_rate",
+            "slice": "language:en"
+          },
+          {
+            "band": 0.02,
+            "diff": -0.14285714285714285,
+            "metric": "correct_refusal_rate",
+            "slice": "language:zh"
+          },
+          {
+            "band": 0.02,
+            "diff": -0.09523809523809523,
+            "metric": "correct_refusal_rate",
+            "slice": "overall"
+          }
+        ]
+      },
+      "metrics": {
+        "by_doc_type": {
+          "contract_legal": {
+            "context_tokens": {
+              "n": 2,
+              "upper_95": null,
+              "value": 812.0
+            },
+            "correct_refusal_rate": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "false_refusal_rate": {
+              "n": 2,
+              "upper_95": 0.7763932022500211,
+              "value": 0.0
+            },
+            "judge_correctness": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "judge_skipped": true,
+            "latency_p50_ms": {
+              "n": 2,
+              "upper_95": null,
+              "value": 102.0
+            },
+            "latency_p95_ms": {
+              "n": 2,
+              "upper_95": null,
+              "value": 123.0
+            },
+            "mrr": {
+              "n": 2,
+              "upper_95": null,
+              "value": 1.0
+            },
+            "recall_at_k": {
+              "n": 2,
+              "upper_95": null,
+              "value": 1.0
+            }
+          },
+          "financial_report": {
+            "context_tokens": {
+              "n": 1,
+              "upper_95": null,
+              "value": 1613.0
+            },
+            "correct_refusal_rate": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "false_refusal_rate": {
+              "n": 1,
+              "upper_95": 0.9500000000000001,
+              "value": 0.0
+            },
+            "judge_correctness": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "judge_skipped": true,
+            "latency_p50_ms": {
+              "n": 1,
+              "upper_95": null,
+              "value": 63.0
+            },
+            "latency_p95_ms": {
+              "n": 1,
+              "upper_95": null,
+              "value": 63.0
+            },
+            "mrr": {
+              "n": 1,
+              "upper_95": null,
+              "value": 1.0
+            },
+            "recall_at_k": {
+              "n": 1,
+              "upper_95": null,
+              "value": 1.0
+            }
+          },
+          "general": {
+            "context_tokens": {
+              "n": 107,
+              "upper_95": null,
+              "value": 770.2897196261682
+            },
+            "correct_refusal_rate": {
+              "n": 21,
+              "upper_95": 0.38440810762765837,
+              "value": 0.19047619047619047
+            },
+            "false_refusal_rate": {
+              "n": 86,
+              "upper_95": 0.2557928364093242,
+              "value": 0.1744186046511628
+            },
+            "judge_correctness": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "judge_skipped": true,
+            "latency_p50_ms": {
+              "n": 107,
+              "upper_95": null,
+              "value": 83.0
+            },
+            "latency_p95_ms": {
+              "n": 107,
+              "upper_95": null,
+              "value": 105.0
+            },
+            "mrr": {
+              "n": 86,
+              "upper_95": null,
+              "value": 0.6293743078626799
+            },
+            "recall_at_k": {
+              "n": 86,
+              "upper_95": null,
+              "value": 0.7325581395348837
+            }
+          },
+          "invoice_receipt": {
+            "context_tokens": {
+              "n": 3,
+              "upper_95": null,
+              "value": 1158.0
+            },
+            "correct_refusal_rate": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "false_refusal_rate": {
+              "n": 3,
+              "upper_95": 0.6315968501359613,
+              "value": 0.0
+            },
+            "judge_correctness": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "judge_skipped": true,
+            "latency_p50_ms": {
+              "n": 3,
+              "upper_95": null,
+              "value": 77.0
+            },
+            "latency_p95_ms": {
+              "n": 3,
+              "upper_95": null,
+              "value": 79.0
+            },
+            "mrr": {
+              "n": 3,
+              "upper_95": null,
+              "value": 1.0
+            },
+            "recall_at_k": {
+              "n": 3,
+              "upper_95": null,
+              "value": 1.0
+            }
+          },
+          "product_technical": {
+            "context_tokens": {
+              "n": 1,
+              "upper_95": null,
+              "value": 581.0
+            },
+            "correct_refusal_rate": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "false_refusal_rate": {
+              "n": 1,
+              "upper_95": 0.9500000000000001,
+              "value": 0.0
+            },
+            "judge_correctness": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "judge_skipped": true,
+            "latency_p50_ms": {
+              "n": 1,
+              "upper_95": null,
+              "value": 74.0
+            },
+            "latency_p95_ms": {
+              "n": 1,
+              "upper_95": null,
+              "value": 74.0
+            },
+            "mrr": {
+              "n": 1,
+              "upper_95": null,
+              "value": 1.0
+            },
+            "recall_at_k": {
+              "n": 1,
+              "upper_95": null,
+              "value": 1.0
+            }
+          },
+          "scanned_image": {
+            "context_tokens": {
+              "n": 3,
+              "upper_95": null,
+              "value": 788.3333333333334
+            },
+            "correct_refusal_rate": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "false_refusal_rate": {
+              "n": 3,
+              "upper_95": 0.6315968501359613,
+              "value": 0.0
+            },
+            "judge_correctness": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "judge_skipped": true,
+            "latency_p50_ms": {
+              "n": 3,
+              "upper_95": null,
+              "value": 75.0
+            },
+            "latency_p95_ms": {
+              "n": 3,
+              "upper_95": null,
+              "value": 78.0
+            },
+            "mrr": {
+              "n": 3,
+              "upper_95": null,
+              "value": 0.0
+            },
+            "recall_at_k": {
+              "n": 3,
+              "upper_95": null,
+              "value": 0.0
+            }
+          }
+        },
+        "by_language": {
+          "en": {
+            "context_tokens": {
+              "n": 42,
+              "upper_95": null,
+              "value": 651.1904761904761
+            },
+            "correct_refusal_rate": {
+              "n": 8,
+              "upper_95": 0.4706794086011316,
+              "value": 0.125
+            },
+            "false_refusal_rate": {
+              "n": 34,
+              "upper_95": 0.352161216986184,
+              "value": 0.20588235294117646
+            },
+            "judge_correctness": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "judge_skipped": true,
+            "latency_p50_ms": {
+              "n": 42,
+              "upper_95": null,
+              "value": 79.0
+            },
+            "latency_p95_ms": {
+              "n": 42,
+              "upper_95": null,
+              "value": 116.0
+            },
+            "mrr": {
+              "n": 34,
+              "upper_95": null,
+              "value": 0.5762605042016806
+            },
+            "recall_at_k": {
+              "n": 34,
+              "upper_95": null,
+              "value": 0.6764705882352942
+            }
+          },
+          "it": {
+            "context_tokens": {
+              "n": 34,
+              "upper_95": null,
+              "value": 788.0294117647059
+            },
+            "correct_refusal_rate": {
+              "n": 6,
+              "upper_95": 0.7286616274802475,
+              "value": 0.3333333333333333
+            },
+            "false_refusal_rate": {
+              "n": 28,
+              "upper_95": 0.25416973645091445,
+              "value": 0.10714285714285714
+            },
+            "judge_correctness": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "judge_skipped": true,
+            "latency_p50_ms": {
+              "n": 34,
+              "upper_95": null,
+              "value": 83.0
+            },
+            "latency_p95_ms": {
+              "n": 34,
+              "upper_95": null,
+              "value": 103.0
+            },
+            "mrr": {
+              "n": 28,
+              "upper_95": null,
+              "value": 0.6142857142857142
+            },
+            "recall_at_k": {
+              "n": 28,
+              "upper_95": null,
+              "value": 0.75
+            }
+          },
+          "zh": {
+            "context_tokens": {
+              "n": 41,
+              "upper_95": null,
+              "value": 925.2439024390244
+            },
+            "correct_refusal_rate": {
+              "n": 7,
+              "upper_95": 0.5207029735913071,
+              "value": 0.14285714285714285
+            },
+            "false_refusal_rate": {
+              "n": 34,
+              "upper_95": 0.28464866485705337,
+              "value": 0.14705882352941177
+            },
+            "judge_correctness": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "judge_skipped": true,
+            "latency_p50_ms": {
+              "n": 41,
+              "upper_95": null,
+              "value": 77.0
+            },
+            "latency_p95_ms": {
+              "n": 41,
+              "upper_95": null,
+              "value": 110.0
+            },
+            "mrr": {
+              "n": 34,
+              "upper_95": null,
+              "value": 0.7156862745098039
+            },
+            "recall_at_k": {
+              "n": 34,
+              "upper_95": null,
+              "value": 0.7647058823529411
+            }
+          }
+        },
+        "by_question_kind": {
+          "clause": {
+            "context_tokens": {
+              "n": 2,
+              "upper_95": null,
+              "value": 812.0
+            },
+            "correct_refusal_rate": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "false_refusal_rate": {
+              "n": 2,
+              "upper_95": 0.7763932022500211,
+              "value": 0.0
+            },
+            "judge_correctness": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "judge_skipped": true,
+            "latency_p50_ms": {
+              "n": 2,
+              "upper_95": null,
+              "value": 102.0
+            },
+            "latency_p95_ms": {
+              "n": 2,
+              "upper_95": null,
+              "value": 123.0
+            },
+            "mrr": {
+              "n": 2,
+              "upper_95": null,
+              "value": 1.0
+            },
+            "recall_at_k": {
+              "n": 2,
+              "upper_95": null,
+              "value": 1.0
+            }
+          },
+          "context_heavy": {
+            "context_tokens": {
+              "n": 15,
+              "upper_95": null,
+              "value": 876.5333333333333
+            },
+            "correct_refusal_rate": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "false_refusal_rate": {
+              "n": 15,
+              "upper_95": 0.27939619361287654,
+              "value": 0.06666666666666667
+            },
+            "judge_correctness": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "judge_skipped": true,
+            "latency_p50_ms": {
+              "n": 15,
+              "upper_95": null,
+              "value": 83.0
+            },
+            "latency_p95_ms": {
+              "n": 15,
+              "upper_95": null,
+              "value": 123.0
+            },
+            "mrr": {
+              "n": 15,
+              "upper_95": null,
+              "value": 0.7822222222222222
+            },
+            "recall_at_k": {
+              "n": 15,
+              "upper_95": null,
+              "value": 0.9333333333333333
+            }
+          },
+          "fact_lookup": {
+            "context_tokens": {
+              "n": 35,
+              "upper_95": null,
+              "value": 1041.3428571428572
+            },
+            "correct_refusal_rate": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "false_refusal_rate": {
+              "n": 35,
+              "upper_95": 0.08203163585667046,
+              "value": 0.0
+            },
+            "judge_correctness": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "judge_skipped": true,
+            "latency_p50_ms": {
+              "n": 35,
+              "upper_95": null,
+              "value": 83.0
+            },
+            "latency_p95_ms": {
+              "n": 35,
+              "upper_95": null,
+              "value": 111.0
+            },
+            "mrr": {
+              "n": 35,
+              "upper_95": null,
+              "value": 0.930952380952381
+            },
+            "recall_at_k": {
+              "n": 35,
+              "upper_95": null,
+              "value": 1.0
+            }
+          },
+          "other": {
+            "context_tokens": {
+              "n": 67,
+              "upper_95": null,
+              "value": 634.0746268656717
+            },
+            "correct_refusal_rate": {
+              "n": 21,
+              "upper_95": 0.38440810762765837,
+              "value": 0.19047619047619047
+            },
+            "false_refusal_rate": {
+              "n": 46,
+              "upper_95": 0.4342211509353434,
+              "value": 0.30434782608695654
+            },
+            "judge_correctness": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "judge_skipped": true,
+            "latency_p50_ms": {
+              "n": 67,
+              "upper_95": null,
+              "value": 79.0
+            },
+            "latency_p95_ms": {
+              "n": 67,
+              "upper_95": null,
+              "value": 103.0
+            },
+            "mrr": {
+              "n": 46,
+              "upper_95": null,
+              "value": 0.36542443064182195
+            },
+            "recall_at_k": {
+              "n": 46,
+              "upper_95": null,
+              "value": 0.45652173913043476
+            }
+          }
+        },
+        "overall": {
+          "context_tokens": {
+            "n": 117,
+            "upper_95": null,
+            "value": 786.991452991453
+          },
+          "correct_refusal_rate": {
+            "n": 21,
+            "upper_95": 0.38440810762765837,
+            "value": 0.19047619047619047
+          },
+          "false_refusal_rate": {
+            "n": 96,
+            "upper_95": 0.23035363489777735,
+            "value": 0.15625
+          },
+          "judge_correctness": {
+            "n": 0,
+            "upper_95": null,
+            "value": null
+          },
+          "judge_skipped": true,
+          "latency_p50_ms": {
+            "n": 117,
+            "upper_95": null,
+            "value": 82.0
+          },
+          "latency_p95_ms": {
+            "n": 117,
+            "upper_95": null,
+            "value": 110.0
+          },
+          "mrr": {
+            "n": 96,
+            "upper_95": null,
+            "value": 0.6367311507936507
+          },
+          "recall_at_k": {
+            "n": 96,
+            "upper_95": null,
+            "value": 0.7291666666666666
+          }
+        }
+      },
+      "profile_id": "p128-512"
+    },
+    {
+      "gate": {
+        "baseline_profile_id": "legacy",
+        "passed": false,
+        "regressions": [
+          {
+            "band": 0.02,
+            "diff": -0.125,
+            "metric": "correct_refusal_rate",
+            "slice": "language:en"
+          },
+          {
+            "band": 0.02,
+            "diff": -0.14285714285714285,
+            "metric": "correct_refusal_rate",
+            "slice": "language:zh"
+          },
+          {
+            "band": 0.02,
+            "diff": -0.09523809523809523,
+            "metric": "correct_refusal_rate",
+            "slice": "overall"
+          }
+        ]
+      },
+      "metrics": {
+        "by_doc_type": {
+          "contract_legal": {
+            "context_tokens": {
+              "n": 2,
+              "upper_95": null,
+              "value": 857.5
+            },
+            "correct_refusal_rate": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "false_refusal_rate": {
+              "n": 2,
+              "upper_95": 0.7763932022500211,
+              "value": 0.0
+            },
+            "judge_correctness": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "judge_skipped": true,
+            "latency_p50_ms": {
+              "n": 2,
+              "upper_95": null,
+              "value": 101.0
+            },
+            "latency_p95_ms": {
+              "n": 2,
+              "upper_95": null,
+              "value": 111.0
+            },
+            "mrr": {
+              "n": 2,
+              "upper_95": null,
+              "value": 1.0
+            },
+            "recall_at_k": {
+              "n": 2,
+              "upper_95": null,
+              "value": 1.0
+            }
+          },
+          "financial_report": {
+            "context_tokens": {
+              "n": 1,
+              "upper_95": null,
+              "value": 1546.0
+            },
+            "correct_refusal_rate": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "false_refusal_rate": {
+              "n": 1,
+              "upper_95": 0.9500000000000001,
+              "value": 0.0
+            },
+            "judge_correctness": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "judge_skipped": true,
+            "latency_p50_ms": {
+              "n": 1,
+              "upper_95": null,
+              "value": 89.0
+            },
+            "latency_p95_ms": {
+              "n": 1,
+              "upper_95": null,
+              "value": 89.0
+            },
+            "mrr": {
+              "n": 1,
+              "upper_95": null,
+              "value": 1.0
+            },
+            "recall_at_k": {
+              "n": 1,
+              "upper_95": null,
+              "value": 1.0
+            }
+          },
+          "general": {
+            "context_tokens": {
+              "n": 107,
+              "upper_95": null,
+              "value": 767.9532710280374
+            },
+            "correct_refusal_rate": {
+              "n": 21,
+              "upper_95": 0.38440810762765837,
+              "value": 0.19047619047619047
+            },
+            "false_refusal_rate": {
+              "n": 86,
+              "upper_95": 0.2557928364093242,
+              "value": 0.1744186046511628
+            },
+            "judge_correctness": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "judge_skipped": true,
+            "latency_p50_ms": {
+              "n": 107,
+              "upper_95": null,
+              "value": 98.0
+            },
+            "latency_p95_ms": {
+              "n": 107,
+              "upper_95": null,
+              "value": 136.0
+            },
+            "mrr": {
+              "n": 86,
+              "upper_95": null,
+              "value": 0.6181339977851606
+            },
+            "recall_at_k": {
+              "n": 86,
+              "upper_95": null,
+              "value": 0.7325581395348837
+            }
+          },
+          "invoice_receipt": {
+            "context_tokens": {
+              "n": 3,
+              "upper_95": null,
+              "value": 1370.6666666666667
+            },
+            "correct_refusal_rate": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "false_refusal_rate": {
+              "n": 3,
+              "upper_95": 0.6315968501359613,
+              "value": 0.0
+            },
+            "judge_correctness": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "judge_skipped": true,
+            "latency_p50_ms": {
+              "n": 3,
+              "upper_95": null,
+              "value": 101.0
+            },
+            "latency_p95_ms": {
+              "n": 3,
+              "upper_95": null,
+              "value": 113.0
+            },
+            "mrr": {
+              "n": 3,
+              "upper_95": null,
+              "value": 1.0
+            },
+            "recall_at_k": {
+              "n": 3,
+              "upper_95": null,
+              "value": 1.0
+            }
+          },
+          "product_technical": {
+            "context_tokens": {
+              "n": 1,
+              "upper_95": null,
+              "value": 470.0
+            },
+            "correct_refusal_rate": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "false_refusal_rate": {
+              "n": 1,
+              "upper_95": 0.9500000000000001,
+              "value": 0.0
+            },
+            "judge_correctness": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "judge_skipped": true,
+            "latency_p50_ms": {
+              "n": 1,
+              "upper_95": null,
+              "value": 115.0
+            },
+            "latency_p95_ms": {
+              "n": 1,
+              "upper_95": null,
+              "value": 115.0
+            },
+            "mrr": {
+              "n": 1,
+              "upper_95": null,
+              "value": 1.0
+            },
+            "recall_at_k": {
+              "n": 1,
+              "upper_95": null,
+              "value": 1.0
+            }
+          },
+          "scanned_image": {
+            "context_tokens": {
+              "n": 3,
+              "upper_95": null,
+              "value": 771.0
+            },
+            "correct_refusal_rate": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "false_refusal_rate": {
+              "n": 3,
+              "upper_95": 0.6315968501359613,
+              "value": 0.0
+            },
+            "judge_correctness": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "judge_skipped": true,
+            "latency_p50_ms": {
+              "n": 3,
+              "upper_95": null,
+              "value": 100.0
+            },
+            "latency_p95_ms": {
+              "n": 3,
+              "upper_95": null,
+              "value": 102.0
+            },
+            "mrr": {
+              "n": 3,
+              "upper_95": null,
+              "value": 0.0
+            },
+            "recall_at_k": {
+              "n": 3,
+              "upper_95": null,
+              "value": 0.0
+            }
+          }
+        },
+        "by_language": {
+          "en": {
+            "context_tokens": {
+              "n": 42,
+              "upper_95": null,
+              "value": 629.1904761904761
+            },
+            "correct_refusal_rate": {
+              "n": 8,
+              "upper_95": 0.4706794086011316,
+              "value": 0.125
+            },
+            "false_refusal_rate": {
+              "n": 34,
+              "upper_95": 0.352161216986184,
+              "value": 0.20588235294117646
+            },
+            "judge_correctness": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "judge_skipped": true,
+            "latency_p50_ms": {
+              "n": 42,
+              "upper_95": null,
+              "value": 103.0
+            },
+            "latency_p95_ms": {
+              "n": 42,
+              "upper_95": null,
+              "value": 140.0
+            },
+            "mrr": {
+              "n": 34,
+              "upper_95": null,
+              "value": 0.5478291316526611
+            },
+            "recall_at_k": {
+              "n": 34,
+              "upper_95": null,
+              "value": 0.6764705882352942
+            }
+          },
+          "it": {
+            "context_tokens": {
+              "n": 34,
+              "upper_95": null,
+              "value": 802.1764705882352
+            },
+            "correct_refusal_rate": {
+              "n": 6,
+              "upper_95": 0.7286616274802475,
+              "value": 0.3333333333333333
+            },
+            "false_refusal_rate": {
+              "n": 28,
+              "upper_95": 0.25416973645091445,
+              "value": 0.10714285714285714
+            },
+            "judge_correctness": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "judge_skipped": true,
+            "latency_p50_ms": {
+              "n": 34,
+              "upper_95": null,
+              "value": 98.0
+            },
+            "latency_p95_ms": {
+              "n": 34,
+              "upper_95": null,
+              "value": 129.0
+            },
+            "mrr": {
+              "n": 28,
+              "upper_95": null,
+              "value": 0.6142857142857142
+            },
+            "recall_at_k": {
+              "n": 28,
+              "upper_95": null,
+              "value": 0.75
+            }
+          },
+          "zh": {
+            "context_tokens": {
+              "n": 41,
+              "upper_95": null,
+              "value": 942.1219512195122
+            },
+            "correct_refusal_rate": {
+              "n": 7,
+              "upper_95": 0.5207029735913071,
+              "value": 0.14285714285714285
+            },
+            "false_refusal_rate": {
+              "n": 34,
+              "upper_95": 0.28464866485705337,
+              "value": 0.14705882352941177
+            },
+            "judge_correctness": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "judge_skipped": true,
+            "latency_p50_ms": {
+              "n": 41,
+              "upper_95": null,
+              "value": 94.0
+            },
+            "latency_p95_ms": {
+              "n": 41,
+              "upper_95": null,
+              "value": 111.0
+            },
+            "mrr": {
+              "n": 34,
+              "upper_95": null,
+              "value": 0.7156862745098039
+            },
+            "recall_at_k": {
+              "n": 34,
+              "upper_95": null,
+              "value": 0.7647058823529411
+            }
+          }
+        },
+        "by_question_kind": {
+          "clause": {
+            "context_tokens": {
+              "n": 2,
+              "upper_95": null,
+              "value": 857.5
+            },
+            "correct_refusal_rate": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "false_refusal_rate": {
+              "n": 2,
+              "upper_95": 0.7763932022500211,
+              "value": 0.0
+            },
+            "judge_correctness": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "judge_skipped": true,
+            "latency_p50_ms": {
+              "n": 2,
+              "upper_95": null,
+              "value": 101.0
+            },
+            "latency_p95_ms": {
+              "n": 2,
+              "upper_95": null,
+              "value": 111.0
+            },
+            "mrr": {
+              "n": 2,
+              "upper_95": null,
+              "value": 1.0
+            },
+            "recall_at_k": {
+              "n": 2,
+              "upper_95": null,
+              "value": 1.0
+            }
+          },
+          "context_heavy": {
+            "context_tokens": {
+              "n": 15,
+              "upper_95": null,
+              "value": 873.2666666666667
+            },
+            "correct_refusal_rate": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "false_refusal_rate": {
+              "n": 15,
+              "upper_95": 0.27939619361287654,
+              "value": 0.06666666666666667
+            },
+            "judge_correctness": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "judge_skipped": true,
+            "latency_p50_ms": {
+              "n": 15,
+              "upper_95": null,
+              "value": 98.0
+            },
+            "latency_p95_ms": {
+              "n": 15,
+              "upper_95": null,
+              "value": 136.0
+            },
+            "mrr": {
+              "n": 15,
+              "upper_95": null,
+              "value": 0.7377777777777778
+            },
+            "recall_at_k": {
+              "n": 15,
+              "upper_95": null,
+              "value": 0.9333333333333333
+            }
+          },
+          "fact_lookup": {
+            "context_tokens": {
+              "n": 35,
+              "upper_95": null,
+              "value": 1069.2
+            },
+            "correct_refusal_rate": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "false_refusal_rate": {
+              "n": 35,
+              "upper_95": 0.08203163585667046,
+              "value": 0.0
+            },
+            "judge_correctness": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "judge_skipped": true,
+            "latency_p50_ms": {
+              "n": 35,
+              "upper_95": null,
+              "value": 103.0
+            },
+            "latency_p95_ms": {
+              "n": 35,
+              "upper_95": null,
+              "value": 132.0
+            },
+            "mrr": {
+              "n": 35,
+              "upper_95": null,
+              "value": 0.9223809523809523
+            },
+            "recall_at_k": {
+              "n": 35,
+              "upper_95": null,
+              "value": 1.0
+            }
+          },
+          "other": {
+            "context_tokens": {
+              "n": 67,
+              "upper_95": null,
+              "value": 623.9701492537314
+            },
+            "correct_refusal_rate": {
+              "n": 21,
+              "upper_95": 0.38440810762765837,
+              "value": 0.19047619047619047
+            },
+            "false_refusal_rate": {
+              "n": 46,
+              "upper_95": 0.4342211509353434,
+              "value": 0.30434782608695654
+            },
+            "judge_correctness": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "judge_skipped": true,
+            "latency_p50_ms": {
+              "n": 67,
+              "upper_95": null,
+              "value": 97.0
+            },
+            "latency_p95_ms": {
+              "n": 67,
+              "upper_95": null,
+              "value": 140.0
+            },
+            "mrr": {
+              "n": 46,
+              "upper_95": null,
+              "value": 0.36542443064182195
+            },
+            "recall_at_k": {
+              "n": 46,
+              "upper_95": null,
+              "value": 0.45652173913043476
+            }
+          }
+        },
+        "overall": {
+          "context_tokens": {
+            "n": 117,
+            "upper_95": null,
+            "value": 789.1196581196581
+          },
+          "correct_refusal_rate": {
+            "n": 21,
+            "upper_95": 0.38440810762765837,
+            "value": 0.19047619047619047
+          },
+          "false_refusal_rate": {
+            "n": 96,
+            "upper_95": 0.23035363489777735,
+            "value": 0.15625
+          },
+          "judge_correctness": {
+            "n": 0,
+            "upper_95": null,
+            "value": null
+          },
+          "judge_skipped": true,
+          "latency_p50_ms": {
+            "n": 117,
+            "upper_95": null,
+            "value": 98.0
+          },
+          "latency_p95_ms": {
+            "n": 117,
+            "upper_95": null,
+            "value": 136.0
+          },
+          "mrr": {
+            "n": 96,
+            "upper_95": null,
+            "value": 0.6266617063492064
+          },
+          "recall_at_k": {
+            "n": 96,
+            "upper_95": null,
+            "value": 0.7291666666666666
+          }
+        }
+      },
+      "profile_id": "p256-1024"
+    },
+    {
+      "gate": {
+        "baseline_profile_id": "legacy",
+        "passed": false,
+        "regressions": [
+          {
+            "band": 0.02,
+            "diff": -0.125,
+            "metric": "correct_refusal_rate",
+            "slice": "language:en"
+          },
+          {
+            "band": 0.02,
+            "diff": -0.14285714285714285,
+            "metric": "correct_refusal_rate",
+            "slice": "language:zh"
+          },
+          {
+            "band": 0.02,
+            "diff": -0.09523809523809523,
+            "metric": "correct_refusal_rate",
+            "slice": "overall"
+          }
+        ]
+      },
+      "metrics": {
+        "by_doc_type": {
+          "contract_legal": {
+            "context_tokens": {
+              "n": 2,
+              "upper_95": null,
+              "value": 857.5
+            },
+            "correct_refusal_rate": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "false_refusal_rate": {
+              "n": 2,
+              "upper_95": 0.7763932022500211,
+              "value": 0.0
+            },
+            "judge_correctness": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "judge_skipped": true,
+            "latency_p50_ms": {
+              "n": 2,
+              "upper_95": null,
+              "value": 91.0
+            },
+            "latency_p95_ms": {
+              "n": 2,
+              "upper_95": null,
+              "value": 101.0
+            },
+            "mrr": {
+              "n": 2,
+              "upper_95": null,
+              "value": 1.0
+            },
+            "recall_at_k": {
+              "n": 2,
+              "upper_95": null,
+              "value": 1.0
+            }
+          },
+          "financial_report": {
+            "context_tokens": {
+              "n": 1,
+              "upper_95": null,
+              "value": 1982.0
+            },
+            "correct_refusal_rate": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "false_refusal_rate": {
+              "n": 1,
+              "upper_95": 0.9500000000000001,
+              "value": 0.0
+            },
+            "judge_correctness": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "judge_skipped": true,
+            "latency_p50_ms": {
+              "n": 1,
+              "upper_95": null,
+              "value": 97.0
+            },
+            "latency_p95_ms": {
+              "n": 1,
+              "upper_95": null,
+              "value": 97.0
+            },
+            "mrr": {
+              "n": 1,
+              "upper_95": null,
+              "value": 1.0
+            },
+            "recall_at_k": {
+              "n": 1,
+              "upper_95": null,
+              "value": 1.0
+            }
+          },
+          "general": {
+            "context_tokens": {
+              "n": 107,
+              "upper_95": null,
+              "value": 793.9345794392524
+            },
+            "correct_refusal_rate": {
+              "n": 21,
+              "upper_95": 0.38440810762765837,
+              "value": 0.19047619047619047
+            },
+            "false_refusal_rate": {
+              "n": 86,
+              "upper_95": 0.2557928364093242,
+              "value": 0.1744186046511628
+            },
+            "judge_correctness": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "judge_skipped": true,
+            "latency_p50_ms": {
+              "n": 107,
+              "upper_95": null,
+              "value": 97.0
+            },
+            "latency_p95_ms": {
+              "n": 107,
+              "upper_95": null,
+              "value": 125.0
+            },
+            "mrr": {
+              "n": 86,
+              "upper_95": null,
+              "value": 0.6181339977851606
+            },
+            "recall_at_k": {
+              "n": 86,
+              "upper_95": null,
+              "value": 0.7325581395348837
+            }
+          },
+          "invoice_receipt": {
+            "context_tokens": {
+              "n": 3,
+              "upper_95": null,
+              "value": 1100.6666666666667
+            },
+            "correct_refusal_rate": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "false_refusal_rate": {
+              "n": 3,
+              "upper_95": 0.6315968501359613,
+              "value": 0.0
+            },
+            "judge_correctness": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "judge_skipped": true,
+            "latency_p50_ms": {
+              "n": 3,
+              "upper_95": null,
+              "value": 109.0
+            },
+            "latency_p95_ms": {
+              "n": 3,
+              "upper_95": null,
+              "value": 112.0
+            },
+            "mrr": {
+              "n": 3,
+              "upper_95": null,
+              "value": 1.0
+            },
+            "recall_at_k": {
+              "n": 3,
+              "upper_95": null,
+              "value": 1.0
+            }
+          },
+          "product_technical": {
+            "context_tokens": {
+              "n": 1,
+              "upper_95": null,
+              "value": 470.0
+            },
+            "correct_refusal_rate": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "false_refusal_rate": {
+              "n": 1,
+              "upper_95": 0.9500000000000001,
+              "value": 0.0
+            },
+            "judge_correctness": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "judge_skipped": true,
+            "latency_p50_ms": {
+              "n": 1,
+              "upper_95": null,
+              "value": 88.0
+            },
+            "latency_p95_ms": {
+              "n": 1,
+              "upper_95": null,
+              "value": 88.0
+            },
+            "mrr": {
+              "n": 1,
+              "upper_95": null,
+              "value": 1.0
+            },
+            "recall_at_k": {
+              "n": 1,
+              "upper_95": null,
+              "value": 1.0
+            }
+          },
+          "scanned_image": {
+            "context_tokens": {
+              "n": 3,
+              "upper_95": null,
+              "value": 771.0
+            },
+            "correct_refusal_rate": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "false_refusal_rate": {
+              "n": 3,
+              "upper_95": 0.6315968501359613,
+              "value": 0.0
+            },
+            "judge_correctness": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "judge_skipped": true,
+            "latency_p50_ms": {
+              "n": 3,
+              "upper_95": null,
+              "value": 103.0
+            },
+            "latency_p95_ms": {
+              "n": 3,
+              "upper_95": null,
+              "value": 104.0
+            },
+            "mrr": {
+              "n": 3,
+              "upper_95": null,
+              "value": 0.0
+            },
+            "recall_at_k": {
+              "n": 3,
+              "upper_95": null,
+              "value": 0.0
+            }
+          }
+        },
+        "by_language": {
+          "en": {
+            "context_tokens": {
+              "n": 42,
+              "upper_95": null,
+              "value": 629.1904761904761
+            },
+            "correct_refusal_rate": {
+              "n": 8,
+              "upper_95": 0.4706794086011316,
+              "value": 0.125
+            },
+            "false_refusal_rate": {
+              "n": 34,
+              "upper_95": 0.352161216986184,
+              "value": 0.20588235294117646
+            },
+            "judge_correctness": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "judge_skipped": true,
+            "latency_p50_ms": {
+              "n": 42,
+              "upper_95": null,
+              "value": 99.0
+            },
+            "latency_p95_ms": {
+              "n": 42,
+              "upper_95": null,
+              "value": 125.0
+            },
+            "mrr": {
+              "n": 34,
+              "upper_95": null,
+              "value": 0.5478291316526611
+            },
+            "recall_at_k": {
+              "n": 34,
+              "upper_95": null,
+              "value": 0.6764705882352942
+            }
+          },
+          "it": {
+            "context_tokens": {
+              "n": 34,
+              "upper_95": null,
+              "value": 844.5294117647059
+            },
+            "correct_refusal_rate": {
+              "n": 6,
+              "upper_95": 0.7286616274802475,
+              "value": 0.3333333333333333
+            },
+            "false_refusal_rate": {
+              "n": 28,
+              "upper_95": 0.25416973645091445,
+              "value": 0.10714285714285714
+            },
+            "judge_correctness": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "judge_skipped": true,
+            "latency_p50_ms": {
+              "n": 34,
+              "upper_95": null,
+              "value": 98.0
+            },
+            "latency_p95_ms": {
+              "n": 34,
+              "upper_95": null,
+              "value": 123.0
+            },
+            "mrr": {
+              "n": 28,
+              "upper_95": null,
+              "value": 0.6142857142857142
+            },
+            "recall_at_k": {
+              "n": 28,
+              "upper_95": null,
+              "value": 0.75
+            }
+          },
+          "zh": {
+            "context_tokens": {
+              "n": 41,
+              "upper_95": null,
+              "value": 965.6829268292682
+            },
+            "correct_refusal_rate": {
+              "n": 7,
+              "upper_95": 0.5207029735913071,
+              "value": 0.14285714285714285
+            },
+            "false_refusal_rate": {
+              "n": 34,
+              "upper_95": 0.28464866485705337,
+              "value": 0.14705882352941177
+            },
+            "judge_correctness": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "judge_skipped": true,
+            "latency_p50_ms": {
+              "n": 41,
+              "upper_95": null,
+              "value": 96.0
+            },
+            "latency_p95_ms": {
+              "n": 41,
+              "upper_95": null,
+              "value": 119.0
+            },
+            "mrr": {
+              "n": 34,
+              "upper_95": null,
+              "value": 0.7156862745098039
+            },
+            "recall_at_k": {
+              "n": 34,
+              "upper_95": null,
+              "value": 0.7647058823529411
+            }
+          }
+        },
+        "by_question_kind": {
+          "clause": {
+            "context_tokens": {
+              "n": 2,
+              "upper_95": null,
+              "value": 857.5
+            },
+            "correct_refusal_rate": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "false_refusal_rate": {
+              "n": 2,
+              "upper_95": 0.7763932022500211,
+              "value": 0.0
+            },
+            "judge_correctness": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "judge_skipped": true,
+            "latency_p50_ms": {
+              "n": 2,
+              "upper_95": null,
+              "value": 91.0
+            },
+            "latency_p95_ms": {
+              "n": 2,
+              "upper_95": null,
+              "value": 101.0
+            },
+            "mrr": {
+              "n": 2,
+              "upper_95": null,
+              "value": 1.0
+            },
+            "recall_at_k": {
+              "n": 2,
+              "upper_95": null,
+              "value": 1.0
+            }
+          },
+          "context_heavy": {
+            "context_tokens": {
+              "n": 15,
+              "upper_95": null,
+              "value": 879.6666666666666
+            },
+            "correct_refusal_rate": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "false_refusal_rate": {
+              "n": 15,
+              "upper_95": 0.27939619361287654,
+              "value": 0.06666666666666667
+            },
+            "judge_correctness": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "judge_skipped": true,
+            "latency_p50_ms": {
+              "n": 15,
+              "upper_95": null,
+              "value": 95.0
+            },
+            "latency_p95_ms": {
+              "n": 15,
+              "upper_95": null,
+              "value": 138.0
+            },
+            "mrr": {
+              "n": 15,
+              "upper_95": null,
+              "value": 0.7377777777777778
+            },
+            "recall_at_k": {
+              "n": 15,
+              "upper_95": null,
+              "value": 0.9333333333333333
+            }
+          },
+          "fact_lookup": {
+            "context_tokens": {
+              "n": 35,
+              "upper_95": null,
+              "value": 1061.2285714285715
+            },
+            "correct_refusal_rate": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "false_refusal_rate": {
+              "n": 35,
+              "upper_95": 0.08203163585667046,
+              "value": 0.0
+            },
+            "judge_correctness": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "judge_skipped": true,
+            "latency_p50_ms": {
+              "n": 35,
+              "upper_95": null,
+              "value": 101.0
+            },
+            "latency_p95_ms": {
+              "n": 35,
+              "upper_95": null,
+              "value": 118.0
+            },
+            "mrr": {
+              "n": 35,
+              "upper_95": null,
+              "value": 0.9223809523809523
+            },
+            "recall_at_k": {
+              "n": 35,
+              "upper_95": null,
+              "value": 1.0
+            }
+          },
+          "other": {
+            "context_tokens": {
+              "n": 67,
+              "upper_95": null,
+              "value": 662.6119402985074
+            },
+            "correct_refusal_rate": {
+              "n": 21,
+              "upper_95": 0.38440810762765837,
+              "value": 0.19047619047619047
+            },
+            "false_refusal_rate": {
+              "n": 46,
+              "upper_95": 0.4342211509353434,
+              "value": 0.30434782608695654
+            },
+            "judge_correctness": {
+              "n": 0,
+              "upper_95": null,
+              "value": null
+            },
+            "judge_skipped": true,
+            "latency_p50_ms": {
+              "n": 67,
+              "upper_95": null,
+              "value": 94.0
+            },
+            "latency_p95_ms": {
+              "n": 67,
+              "upper_95": null,
+              "value": 135.0
+            },
+            "mrr": {
+              "n": 46,
+              "upper_95": null,
+              "value": 0.36542443064182195
+            },
+            "recall_at_k": {
+              "n": 46,
+              "upper_95": null,
+              "value": 0.45652173913043476
+            }
+          }
+        },
+        "overall": {
+          "context_tokens": {
+            "n": 117,
+            "upper_95": null,
+            "value": 809.6837606837607
+          },
+          "correct_refusal_rate": {
+            "n": 21,
+            "upper_95": 0.38440810762765837,
+            "value": 0.19047619047619047
+          },
+          "false_refusal_rate": {
+            "n": 96,
+            "upper_95": 0.23035363489777735,
+            "value": 0.15625
+          },
+          "judge_correctness": {
+            "n": 0,
+            "upper_95": null,
+            "value": null
+          },
+          "judge_skipped": true,
+          "latency_p50_ms": {
+            "n": 117,
+            "upper_95": null,
+            "value": 97.0
+          },
+          "latency_p95_ms": {
+            "n": 117,
+            "upper_95": null,
+            "value": 125.0
+          },
+          "mrr": {
+            "n": 96,
+            "upper_95": null,
+            "value": 0.6266617063492064
+          },
+          "recall_at_k": {
+            "n": 96,
+            "upper_95": null,
+            "value": 0.7291666666666666
+          }
+        }
+      },
+      "profile_id": "p256-2048"
+    }
+  ],
   "provenance": {
-    "source": "defaults"
+    "source": "fixture"
   },
   "schema_version": 1
 }

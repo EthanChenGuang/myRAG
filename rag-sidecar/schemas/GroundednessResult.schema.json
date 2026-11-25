@@ -1,0 +1,66 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "latency_ms": {
+      "minimum": 0,
+      "title": "Latency Ms",
+      "type": "integer"
+    },
+    "reason": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z][a-z0-9_]{0,63}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reason"
+    },
+    "score": {
+      "anyOf": [
+        {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Score"
+    },
+    "scorer": {
+      "enum": [
+        "hhem_2_3_vectara",
+        "hhem_2_1_open",
+        "none"
+      ],
+      "title": "Scorer",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "scored",
+        "not_checked"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "truncated": {
+      "default": false,
+      "title": "Truncated",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "status",
+    "scorer",
+    "latency_ms"
+  ],
+  "title": "GroundednessResult",
+  "type": "object"
+}
