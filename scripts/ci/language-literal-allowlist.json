@@ -2,16 +2,6 @@
   "description": "Files that still hard-code the zh/en/it language codes (Phase 3.2 D-06). Every entry names the plan or phase that removes the literal; checked by scripts/ci/check-language-literals.mjs.",
   "entries": [
     {
-      "path": "rag-sidecar/src/rag_sidecar/parse/docling_adapter.py",
-      "owner": "03.2-10",
-      "reason": "language detection and OCR language defaults; plan 03.2-10 reads them from the registry"
-    },
-    {
-      "path": "rag-sidecar/src/rag_sidecar/parse/presets.py",
-      "owner": "03.2-10",
-      "reason": "language detection and OCR language defaults; plan 03.2-10 reads them from the registry"
-    },
-    {
       "path": "src/lib/rag/query/filters.ts",
       "owner": "03.2-11",
       "reason": "language value list or label map; plan 03.2-11 converts it to the registry codes"
