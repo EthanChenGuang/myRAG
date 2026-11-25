@@ -1253,6 +1253,14 @@ function initIngestionPanel() {
   }
 }
 
+function bindIngestionPanel() {
+  document.querySelectorAll('[data-tab="rag-administration"]').forEach((link) => {
+    if (link.getAttribute('data-ingestion-bound')) return;
+    link.setAttribute('data-ingestion-bound', '1');
+    link.addEventListener('click', () => initIngestionPanel());
+  });
+}
+
 if (typeof window !== 'undefined') {
   window.initIngestionPanel = initIngestionPanel;
   window.ingestionLabel = ingestionLabel;
@@ -1261,12 +1269,11 @@ if (typeof window !== 'undefined') {
   window.buildBudgetView = buildBudgetView;
   window.buildTierPutBody = buildTierPutBody;
   window.mapIngestionError = mapIngestionError;
+  bindIngestionPanel();
   document.addEventListener('DOMContentLoaded', () => {
+    bindIngestionPanel();
     const active = document.getElementById('rag-administration');
     if (active && active.classList.contains('active')) initIngestionPanel();
-  });
-  document.querySelectorAll('[data-tab="rag-administration"]').forEach((tab) => {
-    tab.addEventListener('click', () => initIngestionPanel());
   });
 }
 
