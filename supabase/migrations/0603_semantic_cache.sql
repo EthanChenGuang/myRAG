@@ -268,6 +268,85 @@ BEGIN
 END
 $fn$;
 
+-- Same-transaction invalidation (D-34, A-6): three single-event statement triggers on documents delete every cache row of each tenant whose
+-- documents were inserted, deleted, or updated in is_current, status, version or tenant_key. Processing-progress updates leave the cache
+-- alone. This covers rag_publish_document_version, soft deletes, legacy routes, connector syncs and cascades in one place. The functions
+-- are SECURITY DEFINER so invalidation works for any writer, including an authenticated owner who has no access to the cache table; they
+-- only delete cache rows for tenant keys taken from the transition tables.
+CREATE OR REPLACE FUNCTION public.rag_semantic_cache_on_documents_insert()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+BEGIN
+  DELETE FROM public.rag_semantic_cache c
+  WHERE c.tenant_key IN (SELECT DISTINCT n.tenant_key FROM new_rows n WHERE n.tenant_key IS NOT NULL);
+  RETURN NULL;
+END
+$fn$;
+
+CREATE OR REPLACE FUNCTION public.rag_semantic_cache_on_documents_update()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+BEGIN
+  DELETE FROM public.rag_semantic_cache c
+  WHERE c.tenant_key IN (
+    SELECT t.tenant_key
+    FROM old_rows o
+    JOIN new_rows n ON n.id = o.id
+    CROSS JOIN LATERAL (VALUES (o.tenant_key), (n.tenant_key)) AS t(tenant_key)
+    WHERE t.tenant_key IS NOT NULL
+      AND (o.is_current IS DISTINCT FROM n.is_current
+        OR o.status IS DISTINCT FROM n.status
+        OR o.version IS DISTINCT FROM n.version
+        OR o.tenant_key IS DISTINCT FROM n.tenant_key)
+  );
+  RETURN NULL;
+END
+$fn$;
+
+CREATE OR REPLACE FUNCTION public.rag_semantic_cache_on_documents_delete()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+BEGIN
+  DELETE FROM public.rag_semantic_cache c
+  WHERE c.tenant_key IN (SELECT DISTINCT o.tenant_key FROM old_rows o WHERE o.tenant_key IS NOT NULL);
+  RETURN NULL;
+END
+$fn$;
+
+DROP TRIGGER IF EXISTS rag_semantic_cache_documents_insert ON public.documents;
+CREATE TRIGGER rag_semantic_cache_documents_insert
+  AFTER INSERT ON public.documents
+  REFERENCING NEW TABLE AS new_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.rag_semantic_cache_on_documents_insert();
+
+DROP TRIGGER IF EXISTS rag_semantic_cache_documents_update ON public.documents;
+CREATE TRIGGER rag_semantic_cache_documents_update
+  AFTER UPDATE ON public.documents
+  REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.rag_semantic_cache_on_documents_update();
+
+DROP TRIGGER IF EXISTS rag_semantic_cache_documents_delete ON public.documents;
+CREATE TRIGGER rag_semantic_cache_documents_delete
+  AFTER DELETE ON public.documents
+  REFERENCING OLD TABLE AS old_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.rag_semantic_cache_on_documents_delete();
+
+REVOKE ALL ON FUNCTION public.rag_semantic_cache_on_documents_insert() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_semantic_cache_on_documents_update() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_semantic_cache_on_documents_delete() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_semantic_cache_on_documents_insert() TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_semantic_cache_on_documents_update() TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_semantic_cache_on_documents_delete() TO service_role;
+
 REVOKE ALL ON FUNCTION public.rag_cache_sources_current(text, jsonb) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.rag_cache_check(text, text, text, public.halfvec, double precision) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.rag_cache_store(text, text, text, public.halfvec, text, jsonb, jsonb, boolean, integer) FROM PUBLIC, anon, authenticated;
