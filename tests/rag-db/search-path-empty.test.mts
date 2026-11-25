@@ -222,6 +222,82 @@ describe('a temporary table named like a catalog table (multi-tenant, service_ro
   });
 });
 
+// 0425 overwrites live bodies with the repository's versions; its precheck proves only that the functions exist. The header carries a read-only
+// dry run that compares md5(prosrc) of every target with the hash it had before 0425, from supabase/migrations/0425_expected_pre_hashes.json.
+const PRE_HASHES = 'supabase/migrations/0425_expected_pre_hashes.json';
+const COMMON_0425 = 'supabase/migrations/0425_search_path_empty.sql';
+const HASHES_PLACEHOLDER = `'<contents of ${PRE_HASHES}>'`;
+const MODE_PLACEHOLDER = `'<single-tenant or multi-tenant>'`;
+
+const readRepo = (relpath: string): string => fs.readFileSync(path.join(REPO_ROOT, relpath), 'utf8');
+
+function precheckSignatures(relpath: string): string[] {
+  const block = /DO \$search_path_precheck\$([\s\S]*?)\$search_path_precheck\$;/.exec(readRepo(relpath))?.[1];
+  assert.ok(block, `${relpath} has no precheck block`);
+  const list = /unnest\(ARRAY\[([\s\S]*?)\]::text\[\]\)/.exec(block)?.[1] ?? '';
+  return [...list.matchAll(/'([^']+)'/g)].map((match) => match[1]!);
+}
+
+/** The dry-run query of the 0425 header: the comment lines indented by three spaces after `-- `. */
+function dryRunQuery(): string {
+  const header = readRepo(COMMON_0425).split('\n').filter((line) => line.startsWith('--'));
+  const lines = header.filter((line) => line.startsWith('--   ')).map((line) => line.slice(3));
+  assert.ok(lines.length > 2, 'the 0425 header has no dry-run query');
+  return lines.join('\n').replace(/;\s*$/, '');
+}
+
+for (const mode of MODES) {
+  describe(`0425 dry run against the expected pre-0425 bodies (${mode})`, () => {
+    let db: PGlite;
+    const files = migrationFiles(mode);
+    let expected: Record<string, string>;
+
+    before(async () => {
+      expected = (JSON.parse(readRepo(PRE_HASHES)) as Record<string, Record<string, string>>)[mode] ?? {};
+      ({ db } = await createEmptyFixtureDatabase({ deploymentMode: mode, migrations: false, setupSqlPath: frozenSetup(mode) }));
+      await applyMigrationFiles(db, files.filter((file) => path.basename(file) < '0425'));
+    });
+
+    after(async () => {
+      await db?.close();
+    });
+
+    const runDryRun = async (): Promise<string[]> => {
+      const sql = dryRunQuery().replace(HASHES_PLACEHOLDER, '$1').replace(MODE_PLACEHOLDER, '$2');
+      const result = await db.query<{ sig: string }>(sql, [readRepo(PRE_HASHES), mode]);
+      return result.rows.map((row) => row.sig);
+    };
+
+    test('the hash list names exactly the signatures the 0425 files of the mode check and replace', () => {
+      const signatures = files.filter((file) => /^supabase\/migrations\/0425_/.test(file)).flatMap(precheckSignatures).sort();
+      assert.ok(signatures.length > 120);
+      assert.deepEqual(Object.keys(expected).sort(), signatures);
+    });
+
+    test('each hash is md5(prosrc) of the function after every migration below 0425', async () => {
+      const result = await db.query<{ sig: string; md5: string }>(
+        `SELECT s.sig, pg_catalog.md5(p.prosrc) AS md5 FROM pg_catalog.unnest($1::text[]) AS s(sig)
+           LEFT JOIN pg_catalog.pg_proc p ON p.oid = pg_catalog.to_regprocedure(s.sig)`,
+        [Object.keys(expected)],
+      );
+      assert.deepEqual(Object.fromEntries(result.rows.map((row) => [row.sig, row.md5])), expected);
+    });
+
+    test('the header dry run lists nothing on the expected bodies and lists a hand-edited body', async () => {
+      assert.deepEqual(await runDryRun(), []);
+      const target = 'public.rag_parse_tier_rank(text)';
+      await db.exec('BEGIN');
+      try {
+        const definition = (await db.query<{ def: string }>(`SELECT pg_catalog.pg_get_functiondef($1::regprocedure) AS def`, [target])).rows[0]!.def;
+        await db.exec(definition.replace('AS $function$', 'AS $function$\n-- hot fix'));
+        assert.deepEqual(await runDryRun(), [target]);
+      } finally {
+        await db.exec('ROLLBACK');
+      }
+    });
+  });
+}
+
 // The 0425 bodies name public.vector, public.halfvec, public.vector_dims and OPERATOR(public.<=>), so pgvector moved to another schema (for
 // example by acting on Supabase lint 0014) would break them at run time. Each 0425 file stops first with a message that says so.
 for (const mode of MODES) {
