@@ -19,6 +19,7 @@ export interface VoyageConfig {
 
 export interface VoyageProviderOptions {
   config?: () => VoyageConfig;
+  model?: string;
 }
 
 function defaultConfig(): VoyageConfig {

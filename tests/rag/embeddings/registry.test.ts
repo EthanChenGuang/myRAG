@@ -6,6 +6,7 @@ import { estimateCostUsd, priceFor } from '@/lib/rag/embeddings/prices';
 import {
   canonicalModelId,
   getEmbeddingProvider,
+  getEmbeddingProviderFor,
   maxInputTokensFor,
   resetEmbeddingProvidersForTests,
   setEmbeddingProvidersForTests,
@@ -90,6 +91,18 @@ describe('validateProfileShape (EMB-03 registry rules)', () => {
     expect(storage.ok === false && storage.reason).toBe('storage_unknown');
     const dims = validateProfileShape({ provider: 'voyage', dims: 1024.5, storage: 'halfvec' });
     expect(dims.ok === false && dims.reason).toBe('dims_invalid');
+  });
+
+  it('uses the catalog dims of the named model (voyage-law-2 is 1024 only)', () => {
+    const law = validateProfileShape({ provider: 'voyage', dims: 2048, storage: 'halfvec', model: 'voyage-law-2' });
+    expect(law.ok === false && law.reason).toBe('dims_unsupported');
+    expect(validateProfileShape({ provider: 'voyage', dims: 1024, storage: 'halfvec', model: 'voyage-law-2' })).toEqual({ ok: true });
+    expect(validateProfileShape({ provider: 'voyage', dims: 2048, storage: 'halfvec', model: 'voyage-4-large' })).toEqual({ ok: true });
+  });
+
+  it('rejects a model the provider does not serve', () => {
+    const unknown = validateProfileShape({ provider: 'voyage', dims: 1024, storage: 'halfvec', model: 'voyage-9' });
+    expect(unknown.ok === false && unknown.reason).toBe('model_unknown');
   });
 });
 
@@ -201,6 +214,18 @@ describe('prices', () => {
     expect(estimateCostUsd('voyage', 1_000_000)).toEqual({ usd: 0.12, estimated: true });
     expect(estimateCostUsd('openai', 500_000)).toEqual({ usd: 0.01, estimated: false });
   });
+
+  it('prices per model from the catalog', () => {
+    expect(estimateCostUsd('voyage', 'voyage-law-2', 1_000_000)).toEqual({ usd: 0.12, estimated: true });
+    expect(estimateCostUsd('voyage', 'voyage-finance-2', 1_000_000)).toEqual({ usd: 0.12, estimated: true });
+    expect(estimateCostUsd('openai', 'text-embedding-3-small', 1_000_000)).toEqual({ usd: 0.02, estimated: false });
+    expect(priceFor('voyage', 'voyage-law-2')).toMatchObject({ provider: 'voyage', model: 'voyage-law-2', usdPerMillionTokens: 0.12, tokensAreEstimates: true });
+    expect(priceFor('voyage').model).toBe('voyage-4-large');
+  });
+
+  it('throws for a model with no catalog price', () => {
+    expect(() => estimateCostUsd('voyage', 'voyage-9', 1_000)).toThrow('[Embedding Profile] unknown embedding model');
+  });
 });
 
 describe('registry', () => {
@@ -276,5 +301,62 @@ describe('maxInputTokensFor', () => {
     };
     setEmbeddingProvidersForTests({ openai: fake });
     expect(maxInputTokensFor('openai')).toBe(1234);
+  });
+});
+
+describe('getEmbeddingProviderFor (D-02)', () => {
+  function fakeProvider(id: 'openai' | 'voyage' | 'qwen3', model: string): EmbeddingProvider {
+    return {
+      id,
+      model,
+      maxInputTokens: 1000,
+      supportedDims: [1024],
+      normalize: true,
+      embedDocuments: async () => ({ vectors: [], model, host: 'fake', usage: { tokens: 0 } }),
+      embedQuery: async () => ({ vectors: [], model, host: 'fake', usage: { tokens: 0 } }),
+    };
+  }
+
+  it('resolves a Voyage domain model and keeps the provider default unchanged', () => {
+    const law = getEmbeddingProviderFor('voyage', 'voyage-law-2');
+    expect(law.id).toBe('voyage');
+    expect(law.model).toBe('voyage-law-2');
+    expect(law.supportedDims).toEqual([1024]);
+    expect(law.maxInputTokens).toBe(16000);
+    expect(getEmbeddingProviderFor('voyage', 'voyage-finance-2').model).toBe('voyage-finance-2');
+    expect(getEmbeddingProvider('voyage').model).toBe('voyage-4-large');
+    expect(getEmbeddingProviderFor('voyage', 'voyage-4-large')).toBe(getEmbeddingProvider('voyage'));
+  });
+
+  it('returns the same instance for repeated lookups of one model', () => {
+    expect(getEmbeddingProviderFor('voyage', 'voyage-law-2')).toBe(getEmbeddingProviderFor('voyage', 'mongodb/voyage-law-2'));
+  });
+
+  it('throws for a pair that is not in the catalog', () => {
+    expect(() => getEmbeddingProviderFor('voyage', 'voyage-9')).toThrow('[Embedding Profile] unknown embedding model');
+    expect(() => getEmbeddingProviderFor('openai', 'voyage-law-2')).toThrow('[Embedding Profile] unknown embedding model');
+    expect(() => getEmbeddingProviderFor('cohere', 'embed-v4.0')).toThrow('[Embedding Profile] unknown embedding model');
+  });
+
+  it('keeps a provider-keyed test override working for its own model only', () => {
+    const fake = fakeProvider('voyage', 'voyage-4-large');
+    setEmbeddingProvidersForTests({ voyage: fake });
+    expect(getEmbeddingProviderFor('voyage', 'voyage-4-large')).toBe(fake);
+    expect(getEmbeddingProviderFor('voyage', 'voyage-law-2')).not.toBe(fake);
+    expect(getEmbeddingProviderFor('voyage', 'voyage-law-2').model).toBe('voyage-law-2');
+  });
+
+  it('lets a provider:model override replace only that model', () => {
+    const fake = fakeProvider('voyage', 'voyage-law-2');
+    setEmbeddingProvidersForTests({ 'voyage:voyage-law-2': fake });
+    expect(getEmbeddingProviderFor('voyage', 'voyage-law-2')).toBe(fake);
+    expect(getEmbeddingProviderFor('voyage', 'voyage-finance-2')).not.toBe(fake);
+    expect(getEmbeddingProvider('voyage').model).toBe('voyage-4-large');
+  });
+
+  it('resolves a provider-keyed override for a model outside the catalog (Phase 3 fakes)', () => {
+    const fake = fakeProvider('openai', 'fake-openai-model');
+    setEmbeddingProvidersForTests({ openai: fake });
+    expect(getEmbeddingProviderFor('openai', 'fake-openai-model')).toBe(fake);
   });
 });

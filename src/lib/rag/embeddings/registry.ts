@@ -46,6 +46,10 @@ export function getEmbeddingProvider(id: string): EmbeddingProvider {
   return provider;
 }
 
+export function getEmbeddingProviderFor(provider: string, _model: string): EmbeddingProvider {
+  return getEmbeddingProvider(provider);
+}
+
 function supportedDimsFor(id: string): readonly number[] | undefined {
   const registered = findProvider(id);
   if (registered) return registered.supportedDims;
@@ -83,8 +87,8 @@ export function validateProfileShape(shape: ProfileShape): ProfileShapeResult {
   return { ok: true };
 }
 
-export function setEmbeddingProvidersForTests(partial: Partial<Record<EmbeddingProviderId, EmbeddingProvider>>): void {
-  overrides = { ...overrides, ...partial };
+export function setEmbeddingProvidersForTests(partial: Partial<Record<string, EmbeddingProvider>>): void {
+  overrides = { ...overrides, ...(partial as Partial<Record<EmbeddingProviderId, EmbeddingProvider>>) };
 }
 
 export function resetEmbeddingProvidersForTests(): void {
