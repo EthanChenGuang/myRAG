@@ -222,6 +222,45 @@ describe('a temporary table named like a catalog table (multi-tenant, service_ro
   });
 });
 
+// The 0425 bodies name public.vector, public.halfvec, public.vector_dims and OPERATOR(public.<=>), so pgvector moved to another schema (for
+// example by acting on Supabase lint 0014) would break them at run time. Each 0425 file stops first with a message that says so.
+for (const mode of MODES) {
+  describe(`0425 with pgvector outside public (${mode})`, () => {
+    let db: PGlite;
+    const files = migrationFiles(mode).filter((file) => /^supabase\/migrations\/0425_/.test(file));
+
+    before(async () => {
+      ({ db } = await createEmptyFixtureDatabase({ deploymentMode: mode }));
+      await db.exec(`CREATE SCHEMA extensions; ALTER EXTENSION vector SET SCHEMA extensions`);
+    });
+
+    after(async () => {
+      await db?.close();
+    });
+
+    test('every 0425 file stops with 55000 and names the schema check', async () => {
+      assert.equal(files.length, 2);
+      for (const file of files) {
+        try {
+          await assert.rejects(
+            applyMigrationFiles(db, [file]),
+            (error: { code?: string; message?: string }) =>
+              error.code === '55000' && /pgvector must be in schema public, found extensions/.test(error.message ?? '') && /pg_extension/.test(error.message ?? ''),
+            file,
+          );
+        } finally {
+          await db.exec('ROLLBACK');
+        }
+      }
+    });
+
+    test('with pgvector back in public every 0425 file applies', async () => {
+      await db.exec(`ALTER EXTENSION vector SET SCHEMA public`);
+      await applyMigrationFiles(db, files);
+    });
+  });
+}
+
 for (const mode of MODES) {
   for (const kind of ['setup-plus-unfolded', 'frozen-plus-all'] as Build[]) {
     describe(`search_path '' (${mode}, ${kind})`, () => {
