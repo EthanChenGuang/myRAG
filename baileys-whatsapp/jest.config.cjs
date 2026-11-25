@@ -6,7 +6,7 @@ module.exports = {
 		'**/Tests/test.*.+(ts|tsx|js)',
 	],
 	'transform': {
-		'^.+\\.(ts|tsx)$': 'ts-jest'
+		'^.+\\.(ts|tsx)$': ['ts-jest', { tsconfig: { verbatimModuleSyntax: false, module: 'commonjs' } }]
 	},
 	moduleNameMapper: {
 		'^axios$': require.resolve('axios'),

@@ -6,6 +6,7 @@ import type { WASocket } from './src/index.js'
 import P from 'pino'
 import crypto from 'crypto'
 import axios from 'axios'
+import { buildTextMessage, socketLinkPreviewConfig } from './src/Service/link-preview-policy.js'
 
 const app = express()
 app.use(express.json())
@@ -116,7 +117,7 @@ async function initializeWhatsApp(sessionId: string = 'default') {
             keys: makeCacheableSignalKeyStore(state.keys, logger),
         },
         msgRetryCounterCache,
-        generateHighQualityLinkPreview: true,
+        ...socketLinkPreviewConfig(),
         printQRInTerminal: false,
     })
 
@@ -308,7 +309,7 @@ app.post('/api/messages/send', async (req, res) => {
         
         let messageContent: any
         if (type === 'text') {
-            messageContent = { text: message }
+            messageContent = buildTextMessage(message)
         } else {
             return res.status(400).json({ error: 'Unsupported message type' })
         }
@@ -435,7 +436,7 @@ app.post('/send-message', async (req, res) => {
             return res.status(503).json({ error: 'WhatsApp not connected' })
         }
 
-        const result = await sock.sendMessage(jid, { text: message })
+        const result = await sock.sendMessage(jid, buildTextMessage(message))
         res.json({ success: true, messageId: result?.key.id })
     } catch (error) {
         console.error('Error sending message:', error)
