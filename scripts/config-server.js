@@ -2669,6 +2669,93 @@ app.get('/api/config/get-env', (req, res) => {
   }
 });
 
+class InjectionSummaryError extends Error {
+  constructor(code, message) {
+    super(message);
+    this.code = code;
+  }
+}
+
+const INJECTION_RULE_LANGUAGES = ['zh', 'en', 'it', 'any'];
+const PROMPT_GUARD_MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._-]*$/;
+const PROMPT_GUARD_REVISION = /^[0-9a-f]{40}$/;
+const DETECTOR_CONFIG_VERSION = /^\d{4}-\d{2}-\d{2}\.[1-9][0-9]*$/;
+const SAFE_TOKEN = /^[a-z0-9_]{1,64}$/;
+
+function readInjectionConfigFile(fileName, label) {
+  const filePath = path.join(REPO_ROOT, 'config', 'rag', fileName);
+  let bytes;
+  try {
+    bytes = fs.readFileSync(filePath);
+  } catch {
+    throw new InjectionSummaryError(`injection_${label}_missing`, `config/rag/${fileName} could not be read`);
+  }
+  try {
+    return { bytes, data: JSON.parse(bytes.toString('utf8')) };
+  } catch {
+    throw new InjectionSummaryError(`injection_${label}_invalid`, `config/rag/${fileName} is not valid JSON`);
+  }
+}
+
+function isTokenList(value) {
+  return Array.isArray(value) && value.length > 0 && value.every((item) => typeof item === 'string' && SAFE_TOKEN.test(item));
+}
+
+/** Versions, counts and ids of the active injection defense; never a rule pattern, rule id or env value (D-18). Read on every call. */
+function summarizeInjectionDefense() {
+  const rulesFile = readInjectionConfigFile('injection-rules.json', 'rules');
+  const rules = rulesFile.data && Array.isArray(rulesFile.data.rules) ? rulesFile.data.rules : null;
+  if (!rules) throw new InjectionSummaryError('injection_rules_invalid', 'config/rag/injection-rules.json has no rules list');
+  const counts = Object.fromEntries(INJECTION_RULE_LANGUAGES.map((language) => [language, 0]));
+  for (const rule of rules) {
+    if (rule && Object.prototype.hasOwnProperty.call(counts, rule.language)) counts[rule.language] += 1;
+  }
+
+  const { data: detectors } = readInjectionConfigFile('injection-detectors.json', 'detectors');
+  const promptGuard = detectors && detectors.prompt_guard;
+  const lakera = detectors && detectors.lakera;
+  const valid =
+    detectors && typeof detectors.version === 'string' && DETECTOR_CONFIG_VERSION.test(detectors.version) &&
+    promptGuard && typeof promptGuard.model_id === 'string' && PROMPT_GUARD_MODEL_ID.test(promptGuard.model_id) && promptGuard.model_id.length <= 200 &&
+    typeof promptGuard.revision === 'string' && PROMPT_GUARD_REVISION.test(promptGuard.revision) &&
+    typeof promptGuard.threshold === 'number' && promptGuard.threshold >= 0 && promptGuard.threshold <= 1 &&
+    isTokenList(promptGuard.languages) &&
+    lakera && isTokenList(lakera.detector_types) &&
+    (lakera.min_level === null || lakera.min_level === undefined || (typeof lakera.min_level === 'string' && SAFE_TOKEN.test(lakera.min_level)));
+  if (!valid) throw new InjectionSummaryError('injection_detectors_invalid', 'config/rag/injection-detectors.json does not match the detector config contract');
+
+  return {
+    rules: {
+      version: require('crypto').createHash('sha256').update(rulesFile.bytes).digest('hex').slice(0, 12),
+      counts,
+    },
+    detectors: {
+      version: detectors.version,
+      prompt_guard: {
+        model_id: promptGuard.model_id,
+        revision: promptGuard.revision,
+        threshold: promptGuard.threshold,
+        languages: [...promptGuard.languages],
+      },
+      lakera: { detector_types: [...lakera.detector_types], min_level: lakera.min_level ?? null },
+    },
+  };
+}
+
+// Read-only summary for the Prompt-injection defense card; served behind the same loopback and CSRF gate as every config endpoint.
+app.get('/api/config/injection-defense', (req, res) => {
+  try {
+    return res.json(summarizeInjectionDefense());
+  } catch (error) {
+    if (error instanceof InjectionSummaryError) {
+      console.error('[Injection Defense] summary unavailable:', { code: error.code });
+      return res.status(500).json({ error: error.message, code: error.code });
+    }
+    console.error('[Injection Defense] summary failed');
+    return res.status(500).json({ error: 'Injection defense summary failed', code: 'injection_summary_failed' });
+  }
+});
+
 // API endpoint to get logo settings
 app.get('/api/config/get-logo', (req, res) => {
   try {
