@@ -1,0 +1,73 @@
+{
+  "description": "Phase 3.2 D-15 / LANG-06: sentence-splitter cases shared by src/lib/rag/lang/sentences.ts and its sidecar twin (plan 03.2-23). Each case splits text by the sentence_end characters of language's pack (runs of sentence ends count once; closing quotes, brackets and combining marks stay with the sentence; in a spaced script a sentence end needs whitespace after it, which is dropped; whitespace-only pieces are dropped). With budget_tokens null, expect_segments are the sentences. With a number, the sentences are packed greedily, joined with the language's joiner (nothing for zh, one space for en and it), into segments of at most budget_tokens cl100k_base tokens, and a sentence longer than the budget is cut by tokens without splitting a surrogate pair or a letter from its combining mark. Texts are neutral synthetic sentences.",
+  "cases": [
+    {
+      "name": "zh_semicolon_not_an_end",
+      "language": "zh",
+      "text": "第一句话在这里；它还没有结束。第二句话也在这里！第三句话呢？",
+      "budget_tokens": null,
+      "expect_segments": [
+        "第一句话在这里；它还没有结束。",
+        "第二句话也在这里！",
+        "第三句话呢？"
+      ]
+    },
+    {
+      "name": "en_semicolon_not_an_end",
+      "language": "en",
+      "text": "The first sentence is here; it continues. The second one ends! Does the third? Yes.",
+      "budget_tokens": null,
+      "expect_segments": [
+        "The first sentence is here; it continues.",
+        "The second one ends!",
+        "Does the third?",
+        "Yes."
+      ]
+    },
+    {
+      "name": "it_semicolon_not_an_end",
+      "language": "it",
+      "text": "La prima frase è qui; continua ancora. La seconda finisce! E la terza? Sì.",
+      "budget_tokens": null,
+      "expect_segments": [
+        "La prima frase è qui; continua ancora.",
+        "La seconda finisce!",
+        "E la terza?",
+        "Sì."
+      ]
+    },
+    {
+      "name": "zh_packed_over_budget",
+      "language": "zh",
+      "text": "第一部分说明了系统的基本结构；它由三层组成。第二部分介绍了数据如何在各层之间流动！第三部分回答了一个问题：为什么要这样设计？第四部分给出了一些简单的例子；每个例子都很短。第五部分是总结。",
+      "budget_tokens": 40,
+      "expect_segments": [
+        "第一部分说明了系统的基本结构；它由三层组成。",
+        "第二部分介绍了数据如何在各层之间流动！",
+        "第三部分回答了一个问题：为什么要这样设计？",
+        "第四部分给出了一些简单的例子；每个例子都很短。第五部分是总结。"
+      ]
+    },
+    {
+      "name": "en_packed_over_budget",
+      "language": "en",
+      "text": "The first part describes the basic structure of the system; it has three layers. The second part shows how data moves between the layers! Why was it designed this way? The fourth part gives a few short examples; each one is brief. The last part is a summary.",
+      "budget_tokens": 30,
+      "expect_segments": [
+        "The first part describes the basic structure of the system; it has three layers. The second part shows how data moves between the layers!",
+        "Why was it designed this way? The fourth part gives a few short examples; each one is brief. The last part is a summary."
+      ]
+    },
+    {
+      "name": "it_packed_over_budget",
+      "language": "it",
+      "text": "La prima parte descrive la struttura di base del sistema; ha tre livelli. La seconda parte mostra come i dati passano tra i livelli! Perché è stato progettato così? La quarta parte offre alcuni esempi brevi; ognuno è corto. Ultima parte: un riepilogo.",
+      "budget_tokens": 30,
+      "expect_segments": [
+        "La prima parte descrive la struttura di base del sistema; ha tre livelli.",
+        "La seconda parte mostra come i dati passano tra i livelli! Perché è stato progettato così?",
+        "La quarta parte offre alcuni esempi brevi; ognuno è corto. Ultima parte: un riepilogo."
+      ]
+    }
+  ]
+}
