@@ -10,6 +10,15 @@ import {
   resetV2ReadinessForTests,
   resolveEffectivePipeline,
 } from '@/lib/rag/v2/readiness';
+import { runRetrieval } from '@/lib/rag';
+import type { BackendLegs, RetrievalBackend } from '@/lib/rag/backend/types';
+import { resetRetrievalBackendForTests, setRetrievalBackendForTests } from '@/lib/rag/backend/registry';
+import { resetActiveChunkingProfilesForTests } from '@/lib/rag/chunking/active';
+import { mintScope } from '@/lib/rag/tenant/scope';
+import { isV2Pipeline } from '@/lib/rag/v2/switch';
+import { resetV2StartupForTests, verifyV2Startup } from '@/lib/rag/v2/startup';
+import { hit } from '../fusion/helpers';
+import { SEMANTIC_QUERY, adminWithRpc, fakeAssemblyAdmin, fakeEmbedder, fakeRpcClient, installDeps, rows, uninstallDeps } from '../helpers/pipeline-fakes';
 
 function resetAll(): void {
   resetRagDepsForTests();
@@ -196,5 +205,204 @@ describe('resolveEffectivePipeline', () => {
     setDefaultPipelineForTests('v2');
     setRagDepsForTests({ ragEnv: () => ({ RAG_PIPELINE: undefined }) });
     expect(resolveEffectivePipeline()).toEqual({ pipeline: 'v2', source: 'default', fallback: 'none' });
+  });
+});
+
+describe('runRetrieval follows the resolver', () => {
+  const scope = mintScope('single', null, null);
+  const PROFILES = ['chat', 'embed', 'eval', 'voice'] as const;
+
+  function backend(error: RetrievalBackendError | null): { backend: RetrievalBackend; calls: () => number } {
+    let count = 0;
+    return {
+      backend: {
+        id: 'pgvector',
+        async search() {
+          count += 1;
+          if (error) throw error;
+          return { dense: [hit('chunk-1', { similarity: 0.9, documentId: 'doc-1' })], lexical: [] } satisfies BackendLegs;
+        },
+        health: async () => ({ ok: true }),
+        isReady: async () => true,
+      },
+      calls: () => count,
+    };
+  }
+
+  function install(options: { pipeline?: string; error?: RetrievalBackendError | null; languages?: boolean | null }) {
+    resetActiveChunkingProfilesForTests();
+    const { embedder } = fakeEmbedder();
+    const rpc = fakeRpcClient({ rows: rows(3) });
+    installDeps({
+      embedder,
+      adminClient: adminWithRpc(rpc.client, fakeAssemblyAdmin()),
+      ragEnv: () => ({ RAG_PIPELINE: options.pipeline, RAG_LEXICAL_SEARCH: 'false', RAG_RERANKER: 'none' }),
+      ...(options.languages !== undefined ? { languagesConfigured: () => options.languages ?? null } : {}),
+    });
+    const fake = backend(options.error ?? null);
+    setRetrievalBackendForTests(fake.backend);
+    return { rpcCalls: rpc.calls, backendCalls: fake.calls };
+  }
+
+  const run = (profile: (typeof PROFILES)[number] = 'chat') =>
+    runRetrieval({ scope, query: SEMANTIC_QUERY, profile, signal: new AbortController().signal });
+
+  const LEGACY_SEARCH_RPCS = ['match_document_chunks', 'match_documents_by_workspace', 'match_chunks_by_profile'];
+  const legacySearchCalls = (calls: { fn: string }[]) => calls.filter((call) => LEGACY_SEARCH_RPCS.includes(call.fn)).length;
+  const fallbackOf = (result: { stages: { name: string; detail?: string }[] }) =>
+    result.stages.filter((stage) => stage.name === 'pipeline_fallback').map((stage) => stage.detail);
+  const comparable = (result: Awaited<ReturnType<typeof run>>) => ({
+    status: result.status,
+    reason: result.reason,
+    candidates: result.candidates,
+    context: result.context,
+    usedDocuments: result.usedDocuments,
+  });
+
+  beforeEach(() => {
+    resetAll();
+    resetRetrievalBackendForTests();
+    resetV2StartupForTests();
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  });
+  afterEach(() => {
+    uninstallDeps();
+    resetAll();
+    resetRetrievalBackendForTests();
+    resetV2StartupForTests();
+    vi.restoreAllMocks();
+  });
+
+  async function legacyBaseline(profile: (typeof PROFILES)[number] = 'chat') {
+    install({ pipeline: 'legacy' });
+    const result = await run(profile);
+    uninstallDeps();
+    resetRetrievalBackendForTests();
+    return result;
+  }
+
+  it('default v2 with a missing hybrid_search_chunks re-runs on legacy and stays there', async () => {
+    const baseline = await legacyBaseline();
+    expect(baseline.status).toBe('ok');
+
+    setDefaultPipelineForTests('v2');
+    const fake = install({ error: new RetrievalBackendError('hybrid_search_chunks', 'PGRST202') });
+    const first = await run();
+    expect(comparable(first)).toEqual(comparable(baseline));
+    expect(fallbackOf(first)).toEqual(['v2_unavailable']);
+    expect(fake.backendCalls()).toBe(1);
+    expect(isV2Available()).toBe(false);
+    expect(isV2Pipeline()).toBe(false);
+
+    const second = await run();
+    expect(comparable(second)).toEqual(comparable(baseline));
+    expect(fallbackOf(second)).toEqual(['v2_unavailable']);
+    expect(fake.backendCalls()).toBe(1);
+  });
+
+  it('a missing function with code 42883 falls back too', async () => {
+    setDefaultPipelineForTests('v2');
+    install({ error: new RetrievalBackendError('hybrid_search_chunks', '42883') });
+    const result = await run('eval');
+    expect(result.status).toBe('ok');
+    expect(fallbackOf(result)).toEqual(['v2_unavailable']);
+  });
+
+  it('the fallback log names the function and no query text', async () => {
+    setDefaultPipelineForTests('v2');
+    install({ error: new RetrievalBackendError('hybrid_search_chunks', 'PGRST202') });
+    const error = vi.mocked(console.error);
+    await run();
+    await run();
+    const lines = error.mock.calls.filter((call) => String(call[0]).startsWith('[RAG Config]'));
+    expect(lines).toHaveLength(1);
+    expect(JSON.stringify(lines)).not.toContain(SEMANTIC_QUERY);
+  });
+
+  it('explicit v2 with the same error keeps backend_error and never calls legacy', async () => {
+    const fake = install({ pipeline: 'v2', error: new RetrievalBackendError('hybrid_search_chunks', 'PGRST202') });
+    const result = await run();
+    expect(result).toMatchObject({ status: 'error', reason: 'backend_error' });
+    expect(fallbackOf(result)).toEqual([]);
+    expect(legacySearchCalls(fake.rpcCalls)).toBe(0);
+    expect(isV2Available()).toBe(true);
+    expect(isV2Pipeline()).toBe(true);
+  });
+
+  it('default v2 with any other backend error never falls back', async () => {
+    setDefaultPipelineForTests('v2');
+    const fake = install({ error: new RetrievalBackendError('hybrid_search_chunks', '57014') });
+    const result = await run();
+    expect(result).toMatchObject({ status: 'error', reason: 'backend_error' });
+    expect(fallbackOf(result)).toEqual([]);
+    expect(legacySearchCalls(fake.rpcCalls)).toBe(0);
+    expect(isV2Available()).toBe(true);
+  });
+
+  it('default v2 with languages not configured serves legacy on every profile without calling hybrid_search_chunks', async () => {
+    for (const profile of PROFILES) {
+      const baseline = await legacyBaseline(profile);
+      setDefaultPipelineForTests('v2');
+      const fake = install({ languages: false });
+      const error = vi.mocked(console.error);
+      const warn = vi.mocked(console.warn);
+      error.mockClear();
+      warn.mockClear();
+      const result = await run(profile);
+      expect(comparable(result), profile).toEqual(comparable(baseline));
+      expect(fallbackOf(result), profile).toEqual(['languages_not_configured']);
+      expect(fake.backendCalls(), profile).toBe(0);
+      expect([...error.mock.calls, ...warn.mock.calls].filter((call) => String(call[0]).startsWith('[RAG Config]')), profile).toEqual([]);
+      expect(isV2Pipeline()).toBe(false);
+      uninstallDeps();
+      resetRetrievalBackendForTests();
+      setDefaultPipelineForTests(null);
+    }
+  });
+
+  it('default v2 with languages configured or no reader runs v2', async () => {
+    for (const languages of [true, null]) {
+      setDefaultPipelineForTests('v2');
+      const fake = install({ languages });
+      const result = await run();
+      expect(fake.backendCalls()).toBe(1);
+      expect(fallbackOf(result)).toEqual([]);
+      expect(isV2Pipeline()).toBe(true);
+      uninstallDeps();
+      resetRetrievalBackendForTests();
+    }
+  });
+
+  it('explicit v2 with languages not configured still dispatches to v2', async () => {
+    const fake = install({ pipeline: 'v2', languages: false });
+    await run();
+    expect(fake.backendCalls()).toBe(1);
+    expect(legacySearchCalls(fake.rpcCalls)).toBe(0);
+  });
+
+  it('legacy never calls hybrid_search_chunks', async () => {
+    const fake = install({ pipeline: 'legacy' });
+    for (const profile of PROFILES) await run(profile);
+    expect(fake.backendCalls()).toBe(0);
+  });
+
+  it('verifyV2Startup is not_checked and silent when the resolver says legacy', async () => {
+    setDefaultPipelineForTests('v2');
+    install({ languages: false });
+    const error = vi.mocked(console.error);
+    const warn = vi.mocked(console.warn);
+    error.mockClear();
+    warn.mockClear();
+    const verdict = await verifyV2Startup({ adminClient: () => null });
+    expect(verdict.status).toBe('not_checked');
+    expect([...error.mock.calls, ...warn.mock.calls]).toEqual([]);
+
+    resetV2StartupForTests();
+    uninstallDeps();
+    install({ pipeline: 'v2' });
+    expect((await verifyV2Startup({ adminClient: () => null })).status).not.toBe('not_checked');
   });
 });
