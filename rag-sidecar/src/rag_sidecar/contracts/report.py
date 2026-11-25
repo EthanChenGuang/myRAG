@@ -7,6 +7,7 @@ from rag_sidecar.contracts.eval_run import GoldenFilter, RagRunOptions
 from rag_sidecar.contracts.golden import Category, Language, Provenance, Split
 from rag_sidecar.contracts.groundedness import GroundednessScorer
 from rag_sidecar.contracts.latency import StageLatency
+from rag_sidecar.contracts.omit import omit_none_schema
 
 
 class _Contract(BaseModel):
@@ -19,6 +20,8 @@ class MetricValue(_Contract):
 
 
 QuestionKind = Literal["fact_lookup", "context_heavy", "other"]
+ReportOnlyReason = Literal["native_review_pending"]
+NativeReviewBacklogState = Literal["pending", "existing_unreviewed"]
 
 
 class SliceMetrics(_Contract):
@@ -47,6 +50,17 @@ class ItemResult(_Contract):
     question_kind: QuestionKind | None = None
     rerank_status: str | None = None
     lexical_hit_at_10: bool | None = None
+    report_only_reason: ReportOnlyReason | None = Field(
+        default=None, exclude_if=lambda value: value is None, json_schema_extra=omit_none_schema
+    )
+
+
+class NativeReviewBacklogEntry(_Contract):
+    """One item a native speaker still has to read (D-45, XLG-02 delta)."""
+
+    item_id: str
+    language: Language
+    state: NativeReviewBacklogState
 
 
 StrategyKey = CitationStrategy | Literal["none"]
@@ -120,3 +134,6 @@ class EvalReport(_Contract):
     by_strategy: dict[StrategyKey, StrategySlice] = Field(default_factory=dict)
     injection: InjectionReport | None = None
     notes: list[str] = Field(default_factory=list)
+    native_review_backlog: list[NativeReviewBacklogEntry] | None = Field(
+        default=None, exclude_if=lambda value: value is None, json_schema_extra=omit_none_schema
+    )
