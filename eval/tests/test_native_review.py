@@ -276,9 +276,15 @@ def test_backlog_order_is_identical_across_runs_and_input_orders():
 def test_existing_golden_files_keep_counting_and_list_their_zh_it_items_as_backlog():
     for path in (REPO_ROOT / "eval/fixtures/golden.jsonl", REPO_ROOT / "eval/fixtures/ingest/golden-ingest.jsonl"):
         items = load_golden(path)
-        assert all(counts_in_gated_slices(item) for item in items)
+        # 03.2-30's drafted zh and it table_split items await native review, so they alone are report-only.
+        drafted_pending = {
+            item.id for item in items if item.native_review is not None and item.native_review.status == "pending"
+        }
+        assert {item.id for item in items if not counts_in_gated_slices(item)} == drafted_pending
         backlog = review_backlog(items)
-        assert backlog and all(entry.state == "existing_unreviewed" for entry in backlog)
+        assert backlog and all(
+            entry.state == ("pending" if entry.item_id in drafted_pending else "existing_unreviewed") for entry in backlog
+        )
         expected = {
             item.id
             for item in items
