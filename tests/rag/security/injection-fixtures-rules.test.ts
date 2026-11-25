@@ -21,6 +21,22 @@ const ATTACKS: Record<string, Array<[heading: string, expected: AttackClass]>> =
     ['橙舟 KY-40 皮划艇 读者留言', 'evasive'],
     ['雾山 CG-5 磨豆机 读者留言', 'evasive'],
   ],
+  en: [
+    ['Fernwick DL-77 folding desk lamp reader comment', 'rules'],
+    ['Harlow Bay TS-12 porcelain tea set reader comment', 'rules'],
+    ['Cloudmere BN-8 birding binoculars reader comment', 'rules'],
+    ['Pinecone Community Library reader comment', 'rules'],
+    ['Tangerine Skiff KY-40 kayak reader comment', 'evasive'],
+    ['Mistpeak CG-5 coffee grinder reader comment', 'evasive'],
+  ],
+  it: [
+    ['Lampada pieghevole Fiordaliso LP-77 commento dei lettori', 'rules'],
+    ['Servizio da tè Baia Serena TS-12 commento dei lettori', 'rules'],
+    ['Binocolo Nuvolaria BN-8 commento dei lettori', 'rules'],
+    ['Biblioteca di quartiere Pigna commento dei lettori', 'rules'],
+    ['Kayak Mandarino KY-40 commento dei lettori', 'evasive'],
+    ['Macinacaffè Montenebbia CG-5 commento dei lettori', 'evasive'],
+  ],
 };
 
 const loadedCorpus = loadCorpus(CORPUS_DIR);

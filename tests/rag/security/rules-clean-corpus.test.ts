@@ -78,7 +78,7 @@ describe('injection rules on the clean fixture corpus (D-14)', () => {
     const all = loadCorpus(CORPUS_DIR).documents;
     const excluded = all.filter((document) => isExcluded(document, injected)).map((document) => document.relpath);
     const attackFixtures = all.map((document) => document.relpath).filter((relpath) => ATTACK_FIXTURE.test(path.posix.basename(relpath)));
-    expect(attackFixtures).toEqual(['zh/sec-attacks.zh.md']);
+    expect(attackFixtures).toEqual(['en/sec-attacks.en.md', 'it/sec-attacks.it.md', 'zh/sec-attacks.zh.md']);
     expect(excluded).toEqual(['en/refund-policy.en.md', ...attackFixtures].sort());
     const named = (relpath: string) => ({ ...all[0], relpath, filename: path.posix.basename(relpath) }) as CorpusDocument;
     expect(isExcluded(named('en/sec-attacks.en.md'), new Set())).toBe(true);
