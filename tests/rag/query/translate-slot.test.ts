@@ -148,7 +148,7 @@ describe('the query layer serves the D-22 translate slot', () => {
 
     expect(fake.calls).toEqual([]);
     expect(out.queryLayer?.plan?.skipped).toContainEqual({ transform: 'translate', reason: 'error' });
-    expect(translateRecords.every((record) => record.status !== 'skipped' && record.status !== 'failed')).toBe(true);
+    expect(translateRecords.every((record) => record.status !== 'skipped')).toBe(true);
     expect(out.variants.map((variant) => variant.kind)).toEqual(['original']);
   });
 

@@ -48,6 +48,8 @@ export interface BuildV2ResultInput {
   bindingHash?: { embeddingBindings?: Record<string, string>; domainControlLeg?: string };
   /** The query layer's plan; absent while the layer is off, so the result stays identical to Phase 4. */
   queryPlan?: QueryPlan | null;
+  /** True when the query layer served the translate stage (D-24): its record is then soft like the other layer stages. */
+  layerTranslate?: boolean;
 }
 
 export function fusedHitsToVoiceChunks(hits: FusedHit[], scoreByChunk?: Map<string, number>): ChunkWithScore[] {
@@ -74,13 +76,13 @@ const CORE_STAGE_NAMES: ReadonlySet<string> = new Set(CORE_STAGES);
  * only when nothing survived and every core stage (embed, the original-query search, fuse) is ok, so a slow optional
  * transform cannot turn a legitimate empty answer into a degraded one. The records themselves stay in the trace.
  */
-export function statusRecords(records: readonly StageRecord[], survivors: number): StageRecord[] {
+export function statusRecords(records: readonly StageRecord[], survivors: number, layerTranslate = false): StageRecord[] {
   const withoutCache = records.filter((record) => record.name !== 'semantic_cache');
   if (survivors > 0) return withoutCache;
   const core = records.filter((record) => CORE_STAGE_NAMES.has(record.name));
   const coreOk = core.length > 0 && core.every((record) => record.status === 'ok');
   if (!coreOk) return withoutCache;
-  return withoutCache.filter((record) => !QUERY_LAYER_STAGE_NAMES.has(record.name));
+  return withoutCache.filter((record) => !QUERY_LAYER_STAGE_NAMES.has(record.name) && !(layerTranslate && record.name === 'translate'));
 }
 
 /** D-10: small talk under the query layer skips retrieval; ok with an empty context, never a refusal candidate. */
@@ -139,6 +141,7 @@ export async function buildV2Result(ctx: BuildV2ResultInput): Promise<RetrievalR
     injection,
     injectionStalled = false,
     queryPlan = null,
+    layerTranslate = false,
   } = ctx;
   const security = ctx.security ?? getRagDeps().securityConfig();
   const records = collector.stages();
@@ -147,7 +150,7 @@ export async function buildV2Result(ctx: BuildV2ResultInput): Promise<RetrievalR
   const survivors = profile === 'voice' ? voiceCount : assembly ? survivorCount(assembly) : outputCandidates.length;
   const assemblyWeight = profile === 'voice' ? (voiceCount > 0 ? 1 : 0) : assembly ? 1 : 0;
 
-  const derived = assembleDisabledStatus(records, deriveStatus(statusRecords(records, survivors), survivors), assemblyWeight);
+  const derived = assembleDisabledStatus(records, deriveStatus(statusRecords(records, survivors, layerTranslate), survivors), assemblyWeight);
   const injectionFiltered = (profile === 'voice' || assembly !== null) && injectionFilteredAll(injection, survivors, derived);
   let status: RetrievalResult['status'] = injectionFiltered ? 'empty' : derived;
   let reason = injectionFiltered
