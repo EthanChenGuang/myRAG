@@ -47,3 +47,17 @@ test hits it. The 03.1-42 tests use their own empty pages instead. Fix belongs t
   and table F1 (invoice) are 0.
 
 Fix in the fixture generator (03.1-13 files), then regenerate the recordings and rerun `python -m rag_eval.parser_eval`.
+
+Status (03.1-47): the fast-page half of item 4 is fixed (`build_recorded.py` clears `body.children` on scanned fast pages;
+the four recordings regenerated); the `vlm/` recordings are untouched. The second bullet of item 5 is fixed (the recorder
+emits `ColumnParagraph` blocks, so multi-column-en page 2 holds both columns in every preset). The first and third bullets
+remain.
+
+## 6. (03.1-47) A queued quarantined document ends with status failed, not quarantined
+
+`rag_advance_ingestion_job` (0353) sets the unpublished document of a job that ends `failed` or `quarantined` to
+`status = 'failed'`. The inline path leaves a quarantined document at `quarantined`, which is what the quarantine admin lists
+and releases (0316: `WHERE d.status = 'quarantined'`). So an injection hit found through the queue is out of retrieval (correct)
+but cannot be reviewed or released from the quarantine admin. The ingest mode under `--routing` accepts a job status of
+`quarantined` with an unpublished document as the queued equivalent. Fix: a 03xx migration that keeps `quarantined` for that
+transition (the function body must be copied from its latest definition), plus a PGlite test through the worker.

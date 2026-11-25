@@ -9,10 +9,13 @@ Scores the recorded outputs under `fixtures/parse/recorded/<sha>/<tier>/` agains
 - seconds and cost per page from the routing cost table, with the table's source.
 
 Page-tier accuracy reads the routing report written by `python -m rag_sidecar.preflight.report` and is report-only.
+Recall@k per tier (03.1-47) is Recall@5 of the golden items linked to each fixture (tag parse_fixture:<id>), read from the
+ingest-mode runs that pinned every page to one tier (`npm run test-rag -- --fixture-mode ingest --force-tier <tier>`).
 Docling JSON is read with a small reader of texts, tables and body order, so this module does not import docling.
 
     python -m rag_eval.parser_eval --fixtures eval/fixtures/parse --routing <routing.json> \
-        --out eval/reports/phase-03.1/parser-eval.json
+        --out eval/reports/phase-03.1/parser-eval.json \
+        --recall-runs fast=eval/out/tier-fast structured=eval/out/tier-structured premium=eval/out/tier-premium
 """
 
 from __future__ import annotations
@@ -27,9 +30,10 @@ from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from rag_sidecar.contracts.golden import GoldenItem
 from rag_sidecar.contracts.parse_eval import (
     PageTierAccuracy,
     ParserEvalReport,
@@ -38,10 +42,11 @@ from rag_sidecar.contracts.parse_eval import (
     TierParseMetrics,
 )
 from rag_sidecar.contracts.routing import Layer, ParseRoutingConfig, ParseTier, Preset
+from rag_sidecar.contracts.report import ItemResult
 from rag_sidecar.preflight.config import load_routing_config
 from rag_sidecar.preflight.report import FixtureRouting, LayerCombo, RoutingReport
 
-from rag_eval.paths import resolve_cli_path
+from rag_eval.paths import REPO_ROOT, resolve_cli_path
 
 COMBO_ORDER: tuple[LayerCombo, ...] = ("L1", "L1+L2", "L1+L2+L3")
 TIERS: tuple[str, ...] = ("fast", "structured_layout", "structured_full", "structured_ocr", "premium")
@@ -64,6 +69,19 @@ _MD_HEADING = re.compile(r"^(#{1,6})\s+(.*?)\s*#*\s*$")
 _MD_SEPARATOR_CELL = re.compile(r"^:?-+:?$")
 _BLANK_LINE = re.compile(r"\n\s*\n")
 DEFAULT_OUT = "eval/reports/phase-03.1/parser-eval.json"
+# Recall@k per tier (D-40, SC6): Recall@5 of the golden items linked to a parse fixture (tag parse_fixture:<id>), read from the
+# ingest-mode run that pinned every page to that tier. Each structured preset is scored from the forced structured run.
+RECALL_METRIC = "recall_at_5"
+FORCED_TIERS: tuple[str, ...] = ("fast", "structured", "premium")
+_FORCED_TIER: dict[str, str] = {
+    "fast": "fast",
+    "structured_layout": "structured",
+    "structured_full": "structured",
+    "structured_ocr": "structured",
+    "premium": "premium",
+}
+LINK_TAG = "parse_fixture:"
+ForcedTier = Literal["fast", "structured", "premium"]
 
 
 class _Model(BaseModel):
@@ -100,6 +118,24 @@ class TierCoverage(_Model):
     cost_as_of: str
 
 
+class RecallRun(_Model):
+    """One forced-tier ingest run (`npm run test-rag -- --fixture-mode ingest --force-tier <tier>`) the recall was read from."""
+
+    tier: ForcedTier
+    run_dir: str
+    run_id: str
+    corpus_sha256: str | None
+    linked_items: int = Field(ge=0)
+
+
+class ClassRecall(_Model):
+    tier: ForcedTier
+    parse_class: str
+    fixtures: list[str]
+    items: int = Field(ge=0)
+    recall_at_k: float = Field(ge=0, le=1)
+
+
 class ParserEvalDetails(_Model):
     routing_probe_version: str
     routing_config_version: str
@@ -108,8 +144,9 @@ class ParserEvalDetails(_Model):
     page_tier: list[ComboAccuracy]
     excluded_fixtures: list[str]
     recall_at_k_measured: bool
-    recall_runs: list[dict[str, Any]] = Field(default_factory=list)
-    recall_by_class: list[dict[str, Any]] = Field(default_factory=list)
+    recall_metric: str = RECALL_METRIC
+    recall_runs: list[RecallRun] = Field(default_factory=list)
+    recall_by_class: list[ClassRecall] = Field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -419,7 +456,7 @@ class _TierCounts:
         self.pages += other.pages
         self.fixtures.extend(other.fixtures)
 
-    def metrics(self, tier: str, cfg: ParseRoutingConfig) -> TierParseMetrics:
+    def metrics(self, tier: str, cfg: ParseRoutingConfig, recall_at_k: float = 0.0) -> TierParseMetrics:
         cost = getattr(cfg.costs.tier, _COST_TIER[tier])
         return TierParseMetrics(
             text_similarity=_similarity(self.edits, self.reference_chars),
@@ -428,8 +465,8 @@ class _TierCounts:
             headings_f1=self.headings.f1,
             s_per_page=cost.s_per_page,
             cost_per_page=cost.usd_per_page,
-            # Recall@k per tier needs forced-tier retrieval runs (plan 03.1-47); not measured here.
-            recall_at_k=0.0,
+            # From the forced-tier ingest runs (--recall-runs); 0.0 when that tier's run was not given.
+            recall_at_k=recall_at_k,
         )
 
 
@@ -555,6 +592,62 @@ def _scored_fixtures(fixtures_dir: Path) -> tuple[list[tuple[dict[str, Any], Par
     return scored, excluded
 
 
+def _linked_fixture(item: GoldenItem) -> str | None:
+    return next((tag[len(LINK_TAG) :] for tag in item.tags if tag.startswith(LINK_TAG)), None)
+
+
+def load_recall_run(tier: str, run_dir: Path, fixture_ids: Iterable[str]) -> tuple[RecallRun, dict[str, list[float]]]:
+    """Recall@5 of every answerable golden item linked to a scored fixture, by fixture, from one run-smoke output directory.
+
+    The run's own golden.merged.jsonl says which items are linked; report.json holds their results. A linked item without a
+    result is an error, so a run on another golden file cannot pass for this one.
+    """
+    if tier not in FORCED_TIERS:
+        raise ValueError(f"recall run tier must be one of {', '.join(FORCED_TIERS)}, got {tier}")
+    wanted = set(fixture_ids)
+    golden_lines = (run_dir / "golden.merged.jsonl").read_text(encoding="utf-8").splitlines()
+    linked: dict[str, str] = {}
+    for line in golden_lines:
+        if not line.strip():
+            continue
+        item = GoldenItem.model_validate_json(line)
+        fixture = _linked_fixture(item)
+        if item.answerable and item.review_status == "approved" and fixture in wanted:
+            linked[item.id] = fixture
+    raw = json.loads((run_dir / "report.json").read_text(encoding="utf-8"))
+    results = {entry["item_id"]: ItemResult.model_validate(entry) for entry in raw.get("items", [])}
+    missing = sorted(set(linked) - set(results))
+    if missing:
+        raise ValueError(f"{run_dir}: no result for linked item(s) {', '.join(missing)}")
+    by_fixture: dict[str, list[float]] = {}
+    for item_id, fixture in sorted(linked.items()):
+        result = results[item_id]
+        by_fixture.setdefault(fixture, []).append(result.spans_hit_at_5 / result.span_count if result.span_count else 0.0)
+    run = RecallRun(
+        tier=tier,  # type: ignore[arg-type]
+        run_dir=_shown_path(run_dir),
+        run_id=str(raw.get("run_id", "")),
+        corpus_sha256=raw.get("corpus_sha256"),
+        linked_items=len(linked),
+    )
+    return run, by_fixture
+
+
+def _shown_path(path: Path) -> str:
+    """Repo-relative when the run lives in the repository, so a committed report names no machine path."""
+    try:
+        return path.resolve().relative_to(REPO_ROOT.resolve()).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
+def _recall(values: dict[str, list[float]] | None, fixtures: Iterable[str]) -> tuple[float, int]:
+    if values is None:
+        return 0.0, 0
+    pooled = [value for fixture in fixtures for value in values.get(fixture, [])]
+    return (sum(pooled) / len(pooled) if pooled else 0.0), len(pooled)
+
+
 def build_parser_eval(
     fixtures_dir: Path,
     routing: RoutingReport,
@@ -563,6 +656,16 @@ def build_parser_eval(
 ) -> tuple[ParserEvalReport, ParserEvalDetails]:
     """The test-set report (micro-averaged over fixtures) and its details: per fixture, per tier coverage, routing misses."""
     scored, excluded = _scored_fixtures(fixtures_dir)
+    scored_ids = [row["id"] for row, _expected in scored]
+    loaded = {
+        tier: load_recall_run(tier, Path(path), scored_ids)
+        for tier, path in sorted((recall_runs or {}).items(), key=lambda entry: FORCED_TIERS.index(entry[0]) if entry[0] in FORCED_TIERS else -1)
+    }
+    recall_values = {tier: values for tier, (_run, values) in loaded.items()}
+
+    def recall_for(tier: str, fixtures: Iterable[str]) -> float:
+        return _recall(recall_values.get(_FORCED_TIER[tier]), fixtures)[0]
+
     totals = {tier: _TierCounts() for tier in TIERS}
     per_fixture: list[ParserEvalReport] = []
     for row, expected in scored:
@@ -573,7 +676,7 @@ def build_parser_eval(
         per_fixture.append(
             ParserEvalReport(
                 fixture_id=expected.fixture_id,
-                by_tier={tier: item.metrics(tier, cfg) for tier, item in counts.items()},
+                by_tier={tier: item.metrics(tier, cfg, recall_for(tier, [expected.fixture_id])) for tier, item in counts.items()},
                 page_tier_accuracy=page_tier_accuracy([expected], routing)[0],
             )
         )
@@ -581,7 +684,7 @@ def build_parser_eval(
     covered = {tier: item for tier, item in totals.items() if item.fixtures}
     report = ParserEvalReport(
         fixture_id=TEST_SET_ID,
-        by_tier={tier: item.metrics(tier, cfg) for tier, item in covered.items()},
+        by_tier={tier: item.metrics(tier, cfg, recall_for(tier, item.fixtures)) for tier, item in covered.items()},
         page_tier_accuracy=summary,
     )
     tiers = []
@@ -597,6 +700,14 @@ def build_parser_eval(
                 cost_as_of=cost.as_of,
             )
         )
+    class_of = {row["id"]: row["class"] for row, _expected in scored}
+    by_class: list[ClassRecall] = []
+    for tier, values in recall_values.items():
+        reachable = sorted({fixture for key, item in covered.items() if _FORCED_TIER[key] == tier for fixture in item.fixtures})
+        for parse_class in sorted({class_of[fixture] for fixture in reachable}):
+            fixtures = [fixture for fixture in reachable if class_of[fixture] == parse_class]
+            value, items = _recall(values, fixtures)
+            by_class.append(ClassRecall(tier=tier, parse_class=parse_class, fixtures=fixtures, items=items, recall_at_k=value))  # type: ignore[arg-type]
     details = ParserEvalDetails(
         routing_probe_version=routing.probe_version,
         routing_config_version=routing.routing_config_version,
@@ -604,7 +715,9 @@ def build_parser_eval(
         tiers=tiers,
         page_tier=combo_details,
         excluded_fixtures=excluded,
-        recall_at_k_measured=False,
+        recall_at_k_measured=set(loaded) == set(FORCED_TIERS),
+        recall_runs=[run for run, _values in loaded.values()],
+        recall_by_class=by_class,
     )
     return report, details
 
@@ -626,7 +739,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--routing", required=True, help="routing report from python -m rag_sidecar.preflight.report")
     parser.add_argument("--out", default=DEFAULT_OUT)
     parser.add_argument("--details-out", default=None, help="defaults to <out stem>-details.json beside --out")
-    parser.add_argument("--recall-runs", nargs="*", default=[])
+    parser.add_argument(
+        "--recall-runs",
+        nargs="*",
+        default=[],
+        metavar="TIER=DIR",
+        help="forced-tier ingest run outputs (run-smoke --out) for Recall@k per tier: fast=..., structured=..., premium=...",
+    )
     parser.add_argument("--routing-config", default=None, help="routing data with the cost table (default config/rag/parse-routing.json)")
     args = parser.parse_args(argv)
 
@@ -638,8 +757,16 @@ def main(argv: list[str] | None = None) -> int:
     except (OSError, ValidationError) as exc:
         parser.error(f"cannot read routing report: {exc}")
     cfg = load_routing_config(resolve_cli_path(args.routing_config) if args.routing_config else None)
+    recall_runs: dict[str, Path] = {}
+    for entry in args.recall_runs:
+        tier, sep, directory = entry.partition("=")
+        if not sep or tier not in FORCED_TIERS or not directory:
+            parser.error(f"--recall-runs takes TIER=DIR with TIER one of {', '.join(FORCED_TIERS)}, got {entry}")
+        if tier in recall_runs:
+            parser.error(f"--recall-runs names {tier} twice")
+        recall_runs[tier] = resolve_cli_path(directory)
     try:
-        report, details = build_parser_eval(fixtures_dir, routing, cfg)
+        report, details = build_parser_eval(fixtures_dir, routing, cfg, recall_runs=recall_runs)
     except (OSError, ValueError) as exc:
         parser.error(str(exc))
     _write_atomic(out, _dump(report))

@@ -3,17 +3,17 @@
     "fast": {
       "cost_per_page": 0.001,
       "headings_f1": 0.6060606060606061,
-      "reading_order": 0.7769230769230769,
-      "recall_at_k": 0.0,
+      "reading_order": 0.8038461538461539,
+      "recall_at_k": 0.37037037037037035,
       "s_per_page": 0.8,
       "table_cell_f1": 0.0,
-      "text_similarity": 0.6288910505836576
+      "text_similarity": 0.7076848249027237
     },
     "premium": {
       "cost_per_page": 0.004,
       "headings_f1": 0.0,
       "reading_order": 1.0,
-      "recall_at_k": 0.0,
+      "recall_at_k": 0.9166666666666666,
       "s_per_page": 5.0,
       "table_cell_f1": 0.0,
       "text_similarity": 1.0
@@ -21,29 +21,29 @@
     "structured_full": {
       "cost_per_page": 0.001,
       "headings_f1": 0.8,
-      "reading_order": 0.9730769230769231,
-      "recall_at_k": 0.0,
+      "reading_order": 1.0,
+      "recall_at_k": 1.0,
       "s_per_page": 0.8,
       "table_cell_f1": 1.0,
-      "text_similarity": 0.9212062256809339
+      "text_similarity": 1.0
     },
     "structured_layout": {
       "cost_per_page": 0.001,
       "headings_f1": 0.8,
-      "reading_order": 0.9730769230769231,
-      "recall_at_k": 0.0,
+      "reading_order": 1.0,
+      "recall_at_k": 1.0,
       "s_per_page": 0.8,
       "table_cell_f1": 0.0,
-      "text_similarity": 0.9212062256809339
+      "text_similarity": 1.0
     },
     "structured_ocr": {
       "cost_per_page": 0.001,
       "headings_f1": 0.8,
-      "reading_order": 0.9730769230769231,
-      "recall_at_k": 0.0,
+      "reading_order": 1.0,
+      "recall_at_k": 1.0,
       "s_per_page": 0.8,
       "table_cell_f1": 1.0,
-      "text_similarity": 0.9212062256809339
+      "text_similarity": 1.0
     }
   },
   "fixture_id": "parse-test-set",
