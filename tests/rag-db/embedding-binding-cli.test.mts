@@ -160,7 +160,13 @@ describe('rag:embedding binding lifecycle against the fixture database', () => {
   }
 
   async function seedVectorsAndRun(profileId: string, model: string): Promise<string> {
-    for (const chunkId of chunkIds) {
+    const inScope = await rows(
+      `SELECT c.id FROM document_chunks c JOIN documents d ON d.id = c.document_id
+       WHERE c.is_current AND c.status = 'ready' AND COALESCE(c.doc_type, d.doc_type) = $1`,
+      [CONTRACT],
+    );
+    assert.ok(chunkIds.every((id) => inScope.some((row) => row.id === id)), 'the test chunks are in scope');
+    for (const { id: chunkId } of inScope) {
       await fixture.db.query(
         `INSERT INTO chunk_embeddings (chunk_id, profile_id, tenant_key, embedding, embedding_model, dims, embedded_at)
          SELECT c.id, $2, c.tenant_key, array_fill(0.1::float4, ARRAY[1024])::halfvec, $3, 1024, now() - interval '2 hours'

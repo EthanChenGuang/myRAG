@@ -230,3 +230,46 @@ describe('binding cache', () => {
     await expect(getEffectiveBindings(TENANT_A)).rejects.toMatchObject({ reason: 'malformed_active_profile' });
   });
 });
+
+describe('deriveBindingEvidence', () => {
+  const RUN = '00000000-0000-4000-8000-0000000000f1';
+  const ROW = {
+    id: '00000000-0000-4000-8000-0000000000f2',
+    docType: 'contract_legal',
+    tenantKey: null,
+    profileId: LAW,
+    status: 'backfilling' as const,
+    previousBindingId: null,
+    hasEvidence: false,
+    baselineGlobalProfile: null,
+    activatedAt: null,
+    activatedBy: null,
+    createdAt: null,
+    createdBy: null,
+  };
+
+  async function comparison(over: Record<string, unknown> = {}): Promise<import('@/lib/rag-eval/contracts.generated').BindingComparison> {
+    const { readFileSync } = await import('node:fs');
+    const { BindingComparisonSchema } = await import('@/lib/rag-eval/contracts.generated');
+    const samples = JSON.parse(readFileSync('tests/fixtures/contracts/samples.json', 'utf8')) as { samples: Record<string, Record<string, unknown>> };
+    return BindingComparisonSchema.parse({ ...samples.samples.BindingComparison, reembed_run_ids: { [LAW]: RUN }, fixture_embedder: false, ...over });
+  }
+
+  it('counts only production and human items as real and keeps the comparison verdict', async () => {
+    const { deriveBindingEvidence } = await import('@/lib/rag/embeddings/binding-ops');
+    const evidence = deriveBindingEvidence(await comparison({ provenance_counts: { human: 3, production: 2, synthetic_fixture: 40 } }), ROW, null, '2026-11-25T08:00:00.000Z');
+    expect(evidence.doc_type_slice).toEqual({ n: 45, real_n: 5, passed: true, by_language: { en: true } });
+    expect(evidence.gate_passed).toBe(true);
+    expect(evidence.backfill_run_id).toBe(RUN);
+    expect(evidence.binding_id).toBe(ROW.id);
+  });
+
+  it('never passes the verdict for a fixture-embedder comparison and refuses a comparison without this profile', async () => {
+    const { BindingEvidenceInvalidError, deriveBindingEvidence } = await import('@/lib/rag/embeddings/binding-ops');
+    expect(deriveBindingEvidence(await comparison({ fixture_embedder: true }), ROW, null, '2026-11-25T08:00:00.000Z').gate_passed).toBe(false);
+    const other = { ...ROW, profileId: FINANCE };
+    await expect(comparison().then((value) => deriveBindingEvidence(value, other, null, '2026-11-25T08:00:00.000Z'))).rejects.toBeInstanceOf(
+      BindingEvidenceInvalidError,
+    );
+  });
+});
