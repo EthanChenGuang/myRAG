@@ -142,11 +142,11 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.rag_mark_provisional(uuid, text) FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION public.rag_begin_progressive_final(uuid, text, uuid) FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION public.rag_clear_provisional(uuid) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.rag_mark_provisional(uuid, text) TO service_role;
-GRANT EXECUTE ON FUNCTION public.rag_begin_progressive_final(uuid, text, uuid) TO service_role;
-GRANT EXECUTE ON FUNCTION public.rag_clear_provisional(uuid) TO service_role;
+REVOKE ALL ON FUNCTION rag_mark_provisional(uuid, text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION rag_begin_progressive_final(uuid, text, uuid) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION rag_clear_provisional(uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION rag_mark_provisional(uuid, text) TO service_role;
+GRANT EXECUTE ON FUNCTION rag_begin_progressive_final(uuid, text, uuid) TO service_role;
+GRANT EXECUTE ON FUNCTION rag_clear_provisional(uuid) TO service_role;
 
 COMMIT;
