@@ -6,12 +6,16 @@ import { getSupabaseAdmin } from '@/lib/supabase';
 import { detectLanguage } from '../lang/detect';
 import { isTenantScope, type TenantScope } from '../tenant/scope';
 import { scheduleAfterResponse } from '../trace/schedule';
-import type { LangfuseConfig } from '../trace/config';
+import { isMultiTenant } from '@/lib/deployment-mode';
+import { scopeKey } from '../tenant/scope';
+import { isLangfuseUsable, readLangfuseConfig, type LangfuseConfig } from '../trace/config';
 import type { CollectedTrace, ExportTraceOptions } from '../trace/langfuse';
-import type { LangfuseScoreInput, PostScoresOptions, PostScoresResult } from '../trace/scores';
+import { isSampled } from '../trace/sample';
+import { postLangfuseScores, type LangfuseScoreInput, type PostScoresOptions, type PostScoresResult } from '../trace/scores';
+import type { StageRunStatus } from '../types';
 import { readGenerationConfig, type GenerationConfig } from './config';
-import type { AnswerGroundedness } from './groundedness';
-import type { requestGroundedness } from './groundedness-client';
+import { answerGroundednessLanguage, scoreAnswerGroundedness, type AnswerGroundedness } from './groundedness';
+import { requestGroundedness } from './groundedness-client';
 
 export type AnswerSwitches = Pick<GenerationConfig, 'citations' | 'claudeCitations' | 'groundedness' | 'feedback'>;
 
@@ -73,9 +77,174 @@ export interface GroundednessStepDeps {
   langfuseTimeoutMs: number;
 }
 
+const UPDATE_TIMEOUT_MS = 5000;
+const LANGFUSE_TIMEOUT_MS = 3000;
+const OTEL_TRACE_ID = /^[0-9a-f]{32}$/;
+
+const defaultStepDeps: GroundednessStepDeps = {
+  readConfig: () => readGenerationConfig(),
+  multiTenant: () => isMultiTenant(),
+  request: requestGroundedness,
+  update: async (admin, input) => (await import('@/lib/answers/store')).updateAnswerGroundedness(admin, input),
+  langfuse: () => readLangfuseConfig(),
+  exportTrace: async (trace, options) => (await import('../trace/langfuse')).exportTrace(trace, options),
+  postScores: postLangfuseScores,
+  now: () => new Date(),
+  updateTimeoutMs: UPDATE_TIMEOUT_MS,
+  langfuseTimeoutMs: LANGFUSE_TIMEOUT_MS,
+};
+
+async function withTimeout<T>(work: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out (timeout)`)), timeoutMs);
+  });
+  try {
+    return await Promise.race([work, timeout]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
+function stageStatusOf(groundedness: AnswerGroundedness): StageRunStatus {
+  if (groundedness.status === 'scored') return 'ok';
+  if (groundedness.reason === 'timeout') return 'timeout';
+  if (groundedness.reason === 'error') return 'error';
+  return 'skipped';
+}
+
+function groundednessTrace(
+  input: AnswerFinishInput,
+  groundedness: AnswerGroundedness,
+  language: string,
+  startedAt: number,
+  endedAt: number,
+): CollectedTrace {
+  const tenantKey = scopeKey(input.scope);
+  return {
+    traceId: input.traceId,
+    tenantKey,
+    profile: 'chat',
+    status: groundedness.status,
+    reason: groundedness.reason ?? '',
+    tags: ['rag-pipeline', 'profile:chat', `tenant:${tenantKey}`],
+    startedAt,
+    endedAt,
+    stages: [
+      {
+        name: 'groundedness',
+        status: stageStatusOf(groundedness),
+        startedAt,
+        endedAt,
+        latency_ms: groundedness.latencyMs ?? Math.max(0, endedAt - startedAt),
+        candidates_in: null,
+        candidates_out: null,
+        rules: [],
+        attributes: {
+          groundedness_status: groundedness.status,
+          scorer: groundedness.scorer ?? 'none',
+          label: groundedness.label ?? 'not_checked',
+          language,
+          truncated: groundedness.truncated,
+          ...(groundedness.reason ? { groundedness_reason: groundedness.reason } : {}),
+        },
+      },
+    ],
+  };
+}
+
+function groundednessScores(input: AnswerFinishInput, groundedness: AnswerGroundedness, language: string): LangfuseScoreInput[] {
+  const metadata = {
+    status: groundedness.status,
+    scorer: groundedness.scorer ?? 'none',
+    language,
+    threshold: groundedness.threshold,
+    thresholdSource: groundedness.thresholdSource,
+    reason: groundedness.reason,
+    truncated: groundedness.truncated,
+  };
+  const scores: LangfuseScoreInput[] = [];
+  if (typeof groundedness.score === 'number') {
+    scores.push({ traceId: input.traceId, name: 'groundedness', value: groundedness.score, dataType: 'NUMERIC', metadata });
+  }
+  scores.push({ traceId: input.traceId, name: 'groundedness_label', value: groundedness.label ?? 'not_checked', dataType: 'CATEGORICAL', metadata });
+  return scores;
+}
+
+/** D-15: only for a trace Langfuse already holds (trace or review sample), or a possibly_unreliable label; failures leave the log line as the record. */
+async function reportGroundedness(
+  input: AnswerFinishInput,
+  groundedness: AnswerGroundedness,
+  language: string,
+  timing: { startedAt: number; endedAt: number },
+  deps: GroundednessStepDeps,
+): Promise<void> {
+  const config = deps.langfuse();
+  if (!isLangfuseUsable(config)) return;
+  const sampled = isSampled(input.traceId, config.sampleRate, 'trace') || isSampled(input.traceId, config.reviewSampleRate, 'review');
+  if (!sampled && groundedness.label !== 'possibly_unreliable') return;
+  const tasks: Array<Promise<unknown>> = [];
+  if (OTEL_TRACE_ID.test(input.traceId)) {
+    const trace = groundednessTrace(input, groundedness, language, timing.startedAt, timing.endedAt);
+    tasks.push(withTimeout(deps.exportTrace(trace, { config, flushTimeoutMs: deps.langfuseTimeoutMs }), deps.langfuseTimeoutMs + 500, 'groundedness span'));
+  }
+  tasks.push(
+    withTimeout(deps.postScores(groundednessScores(input, groundedness, language), { config, timeoutMs: deps.langfuseTimeoutMs }), deps.langfuseTimeoutMs + 500, 'groundedness scores'),
+  );
+  const results = await Promise.allSettled(tasks);
+  const failed = results.filter((result) => result.status === 'rejected' || (result.value as PostScoresResult | undefined)?.status === 'failed').length;
+  if (failed > 0) console.warn('[RAG Trace] Groundedness report to Langfuse failed', { answerId: input.answerId, failed });
+}
+
 /** The onPending continuation (D-15): score, store, log, then report to Langfuse when allowed. Never throws. */
-export function createGroundednessStep(_deps: Partial<GroundednessStepDeps> = {}): (context: AnswerPendingContext) => Promise<void> {
-  return async () => {};
+export function createGroundednessStep(overrides: Partial<GroundednessStepDeps> = {}): (context: AnswerPendingContext) => Promise<void> {
+  const deps: GroundednessStepDeps = { ...defaultStepDeps, ...overrides };
+  return async ({ answerId, input, admin }) => {
+    try {
+      const startedAt = Date.now();
+      let groundedness: AnswerGroundedness;
+      try {
+        groundedness = await scoreAnswerGroundedness(
+          {
+            answerId,
+            answerText: input.answerText,
+            blocks: input.premise.blocks,
+            citedAliases: input.citations.map((citation) => citation.alias),
+            webSearchTexts: input.premise.webSearchTexts,
+            eligibility: { eligible: true },
+            multiTenant: deps.multiTenant(),
+            config: deps.readConfig(),
+          },
+          { request: deps.request, now: deps.now },
+        );
+      } catch (error) {
+        console.warn('[Answer Record] Groundedness scoring failed:', { answerId, code: errorCode(error) });
+        groundedness = { ...notChecked('error'), scorer: 'none', score: null, threshold: null, thresholdSource: null, truncated: false, latencyMs: 0, checkedAt: deps.now().toISOString() };
+      }
+      const endedAt = Date.now();
+      const language = answerGroundednessLanguage(input.answerText);
+
+      try {
+        await withTimeout(deps.update(admin, { id: answerId, groundedness }), deps.updateTimeoutMs, 'groundedness update');
+      } catch (error) {
+        console.warn('[Answer Record] Groundedness update failed:', { answerId, code: errorCode(error) });
+      }
+
+      console.log('[Groundedness]', {
+        answerId,
+        status: groundedness.status,
+        scorer: groundedness.scorer,
+        label: groundedness.label,
+        language,
+        truncated: groundedness.truncated,
+        latencyMs: groundedness.latencyMs,
+      });
+
+      await reportGroundedness(input, groundedness, language, { startedAt, endedAt }, deps);
+    } catch (error) {
+      console.warn('[Answer Record] Groundedness step failed:', { answerId, code: errorCode(error) });
+    }
+  };
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -87,6 +256,7 @@ const defaultDeps: AnswerFinishDeps = {
   insert: async (admin, input) => (await import('@/lib/answers/store')).insertAnswerRecord(admin, input),
   schedule: scheduleAfterResponse,
   readConfig: () => readGenerationConfig(),
+  onPending: createGroundednessStep(),
 };
 
 /** Ghost chats, anonymous callers, callers without the citations capability and requests with every Phase 5 switch off persist nothing. */

@@ -464,6 +464,16 @@ describe('the groundedness step after the pending insert', () => {
       await resetLangfuseForTests();
     });
 
+    function meta(span: { attributes: Record<string, unknown> }, key: string): unknown {
+      const raw = span.attributes[`${ATTR}${key}`];
+      if (typeof raw !== 'string') return raw;
+      try {
+        return JSON.parse(raw) as unknown;
+      } catch {
+        return raw;
+      }
+    }
+
     function groundednessSpans(traceId: string) {
       return fake.spans.filter((span) => span.traceId === traceId && span.name === 'groundedness');
     }
@@ -477,10 +487,10 @@ describe('the groundedness step after the pending insert', () => {
 
       const spans = groundednessSpans(traceId);
       expect(spans).toHaveLength(1);
-      expect(spans[0].attributes[`${ATTR}status`]).toBe('ok');
-      expect(spans[0].attributes[`${ATTR}scorer`]).toBe('hhem_2_1_open');
-      expect(spans[0].attributes[`${ATTR}label`]).toBe('verified');
-      expect(spans[0].attributes[`${ATTR}latency_ms`]).toBe(37);
+      expect(meta(spans[0], 'status')).toBe('ok');
+      expect(meta(spans[0], 'scorer')).toBe('hhem_2_1_open');
+      expect(meta(spans[0], 'label')).toBe('verified');
+      expect(meta(spans[0], 'latency_ms')).toBe(37);
       expect(fake.scores).toEqual([
         expect.objectContaining({ id: scoreId(traceId, 'groundedness'), traceId, name: 'groundedness', value: 0.71, dataType: 'NUMERIC' }),
         expect.objectContaining({ id: scoreId(traceId, 'groundedness_label'), traceId, name: 'groundedness_label', value: 'verified', dataType: 'CATEGORICAL' }),
