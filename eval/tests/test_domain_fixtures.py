@@ -108,7 +108,7 @@ def _documents_of(doc_type: str):
 def _neutrality_terms() -> list[str]:
     text = REQUIREMENTS.read_text(encoding="utf-8")
     paragraph = next(line for line in text.split("\n") if line.startswith("**Domain neutrality"))
-    listed = re.search(r"\(([^)]*)\)", paragraph)
+    listed = re.search(r"Examples[^(]*\(([^)]*)\)", paragraph)
     assert listed, "the Domain neutrality paragraph no longer lists its illustrations in parentheses"
     terms = []
     for part in listed.group(1).split(","):
