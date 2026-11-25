@@ -4,6 +4,7 @@ import type { VoiceResults } from './context/voice';
 import type { StageName, StageTimeouts } from './config';
 import type { TemporalQueryContext } from './query/temporal-query-detector';
 import type { RefusalRecord } from './refusal/types';
+import type { DocType } from './ingest/profiles/load';
 import type { InjectionCheckMode } from './security/config';
 import type { RerankProviderId } from './rerank/types';
 import type { TenantScope } from './tenant/scope';
@@ -147,6 +148,10 @@ export interface RetrievalOptions {
   degrade?: 'drop_top_candidate';
   /** Eval profile only: embed and search a specific embedding profile (non-active allowed). */
   embeddingProfile?: string;
+  /** Eval profile only: doc type to binding profile id; replaces the effective bindings for this request (D-22). */
+  embeddingBindings?: Partial<Record<DocType, string>>;
+  /** Eval profile only: adds a global-profile leg filtered to this doc type (the comparison's control arm, D-22). */
+  domainControlLeg?: DocType;
 }
 
 export interface QueryVariant {
