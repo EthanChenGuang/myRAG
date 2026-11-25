@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { countTokens } from '@/lib/rag/ingest/text/tokens';
 import { createQwenProvider } from '@/lib/rag/embeddings/qwen';
 import type { QwenConfig } from '@/lib/rag/embeddings/qwen';
@@ -130,6 +130,125 @@ describe('Voyage provider', () => {
       actual: 512,
       expected: 1024,
     });
+  });
+});
+
+describe('Voyage provider with a fixed-dimension catalog model (D-02)', () => {
+  interface Recorded {
+    url: string;
+    body: Record<string, unknown>;
+    authorization: string | null;
+  }
+
+  function stubFetch(options: { status?: number; dims?: number; echoModel?: string; errorText?: string } = {}): Recorded[] {
+    const recorded: Recorded[] = [];
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+      recorded.push({ url, body, authorization: new Headers(init.headers).get('authorization') });
+      if (options.status && options.status >= 400) {
+        return new Response(options.errorText ?? 'error', { status: options.status });
+      }
+      const inputs = body.input as string[];
+      const size = options.dims ?? 1024;
+      return new Response(
+        JSON.stringify({
+          data: inputs.map((_, index) => ({ embedding: new Array<number>(size).fill(0.01), index })),
+          model: options.echoModel ?? body.model,
+          usage: { total_tokens: inputs.length * 3 },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    });
+    return recorded;
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function domainVoyage(model: string, apiKey = VOYAGE_KEY): EmbeddingProvider {
+    return createVoyageProvider({ model, config: () => ({ apiKey, baseUrl: 'https://voyage.invalid/v1', timeoutMs: 5000 }) });
+  }
+
+  it('reports the catalog model, dims and input limit', () => {
+    const provider = domainVoyage('voyage-law-2');
+    expect(provider.model).toBe('voyage-law-2');
+    expect(provider.supportedDims).toEqual([1024]);
+    expect(provider.maxInputTokens).toBe(16000);
+    expect(domainVoyage('voyage-finance-2').maxInputTokens).toBe(32000);
+  });
+
+  it('sends the model, input_type document, truncation false and no output_dimension for documents', async () => {
+    const recorded = stubFetch();
+    const out = await domainVoyage('voyage-law-2').embedDocuments(['first neutral sentence', 'second neutral sentence'], {
+      dims: 1024,
+      signal: signal(),
+    });
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0].body).toMatchObject({ model: 'voyage-law-2', input_type: 'document', truncation: false });
+    expect(Object.prototype.hasOwnProperty.call(recorded[0].body, 'output_dimension')).toBe(false);
+    expect(out.model).toBe('voyage-law-2');
+    expect(out.vectors[0]).toHaveLength(1024);
+  });
+
+  it('sends input_type query and no output_dimension for a query', async () => {
+    const recorded = stubFetch();
+    await domainVoyage('voyage-finance-2').embedQuery('a neutral question', { dims: 1024, signal: signal() });
+    expect(recorded[0].body).toMatchObject({ model: 'voyage-finance-2', input_type: 'query', truncation: false });
+    expect(Object.prototype.hasOwnProperty.call(recorded[0].body, 'output_dimension')).toBe(false);
+  });
+
+  it('canonicalises a host-prefixed model echo', async () => {
+    stubFetch({ echoModel: 'mongodb/voyage-law-2' });
+    const out = await domainVoyage('voyage-law-2').embedQuery('q', { dims: 1024, signal: signal() });
+    expect(out.model).toBe('voyage-law-2');
+  });
+
+  it('rejects a response with 1536-length vectors', async () => {
+    stubFetch({ dims: 1536 });
+    await expect(domainVoyage('voyage-law-2').embedQuery('q', { dims: 1024, signal: signal() })).rejects.toMatchObject({
+      name: 'EmbeddingProfileMismatch',
+      kind: 'dims',
+      actual: 1536,
+      expected: 1024,
+    });
+  });
+
+  it('refuses dims the fixed model cannot produce before any request', async () => {
+    const recorded = stubFetch();
+    await expect(domainVoyage('voyage-law-2').embedDocuments(['a'], { dims: 2048, signal: signal() })).rejects.toMatchObject({
+      name: 'EmbeddingProfileMismatch',
+      kind: 'dims',
+      actual: 2048,
+      expected: 1024,
+    });
+    expect(recorded).toHaveLength(0);
+  });
+
+  it('keeps output_dimension for voyage-4-large', async () => {
+    const recorded = stubFetch({ dims: 512 });
+    await domainVoyage('voyage-4-large').embedQuery('q', { dims: 512, signal: signal() });
+    expect(recorded[0].body).toMatchObject({ model: 'voyage-4-large', output_dimension: 512 });
+  });
+
+  it('keeps the key and the vendor response text out of a 401 error', async () => {
+    stubFetch({ status: 401, errorText: `invalid key ${VOYAGE_KEY.slice(0, 12)} vendor-detail-text` });
+    let caught: unknown;
+    try {
+      await domainVoyage('voyage-law-2').embedQuery('q', { dims: 1024, signal: signal() });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    const serialized = `${(caught as Error).message} ${JSON.stringify(caught, Object.getOwnPropertyNames(caught))}`;
+    expect((caught as Error).message).toContain('401');
+    expect(serialized).not.toContain(VOYAGE_KEY);
+    expect(serialized).not.toContain(VOYAGE_KEY.slice(0, 12));
+    expect(serialized).not.toContain('vendor-detail-text');
+  });
+
+  it('throws for a model that is not a Voyage catalog model', () => {
+    expect(() => domainVoyage('voyage-9')).toThrow('[Embedding Profile] unknown embedding model');
   });
 });
 

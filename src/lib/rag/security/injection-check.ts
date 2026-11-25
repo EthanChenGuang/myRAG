@@ -1,4 +1,5 @@
-import type { InjectionCheckMode, SecurityConfig } from './config';
+import { readSecurityConfig, type InjectionCheckMode, type SecurityConfig } from './config';
+import { detectorsConfigVersion } from './detectors';
 import { injectionRulesVersion, scanText } from './injection-rules';
 import type { InjectionSummary, Profile, ReferencedSection, ReferencedState } from '../types';
 
@@ -106,6 +107,12 @@ export function injectionDetectorsFor(profile: Profile, config: Pick<SecurityCon
   if (RULES_ONLY_PROFILES.includes(profile)) return ['rules'];
   const enabled = WIRED_ML_DETECTORS.filter((id) => (id === 'prompt_guard' ? config.promptGuard : config.lakera));
   return ['rules', ...enabled];
+}
+
+/** The eval trace's security block while the injection check is on (D-18); null when it is off. */
+export function injectionTraceVersions(env: Record<string, string | undefined> = process.env): { rules_version: string; detectors_version: string } | null {
+  if (readSecurityConfig(env).injectionCheck === 'off') return null;
+  return { rules_version: injectionRulesVersion(), detectors_version: detectorsConfigVersion() };
 }
 
 /** Detector versions recorded on the stage entry, e.g. rules@8eade169ab89. */

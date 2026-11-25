@@ -125,7 +125,7 @@ export type {
 export type { VoiceResult, VoiceResults, VoiceSourceImage } from './context/voice';
 export { deriveVoiceKeywords } from './voice/keyword-fallback';
 export { createEnhancedRAGPrompt } from './generation/prompt';
-export { knowledgeBaseUnavailableMessage } from './generation/messages';
+export { knowledgeBaseUnavailableMessage, noKnowledgeBaseResponse } from './generation/messages';
 export { readGenerationConfig } from './generation/config';
 export { detectLanguage } from './lang/detect';
 export type { GenerationConfig } from './generation/config';
@@ -237,5 +237,6 @@ export type { DocumentObjectRow } from './ingest/remove-document-objects';
 export type { SoftDeleteResult, SoftDeleteFailure } from './ingest/soft-delete';
 export { escapeTags, REFERENCE_NOTICE, TOOL_RESULT_NOTICE, TOOL_RESULT_SENTENCE } from './context/wrap';
 export { readSecurityConfig } from './security/config';
+export { injectionTraceVersions } from './security/injection-check';
 export type { ToolResultGuardMode } from './security/config';
 export { escapeToolOutput, scanToolOutput, wrapToolResultsForPrompt } from './security/tool-results';

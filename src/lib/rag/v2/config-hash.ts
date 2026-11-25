@@ -1,6 +1,10 @@
 import { createHash } from 'node:crypto';
 import type { RetrievalParams } from '@/lib/rag-eval/contracts.generated';
 import type { IterativeScanMode, RerankerKind, RerankTier } from '../config';
+import type { InjectionCheckMode, SecurityConfig, ToolResultGuardMode } from '../security/config';
+import { detectorsConfigVersion } from '../security/detectors';
+import { injectionRulesVersion } from '../security/injection-rules';
+import { lakeraAllowed } from '../security/lakera';
 
 export interface RetrievalConfigHashSwitches {
   lexicalSearch: boolean;
@@ -17,6 +21,49 @@ export interface RetrievalConfigHashSwitches {
   rerankTierVoice: RerankTier;
 }
 
+/** The prompt-injection defense configuration a result was built under (D-18). */
+export interface RetrievalConfigHashSecurity {
+  contextTagging: boolean;
+  injectionCheck: InjectionCheckMode;
+  promptGuard: boolean;
+  lakera: boolean;
+  lakeraMultiTenantAck: boolean;
+  /** Whether a Lakera request may actually be sent (lakeraAllowed); a boolean, never the key. */
+  lakeraEffective: boolean;
+  toolResultGuard: ToolResultGuardMode;
+  rulesVersion: string;
+  detectorsVersion: string;
+}
+
+/**
+ * Null while every 5.1 switch is at its default, so the hash equals its pre-5.1 value; otherwise the switches,
+ * Lakera's effective state for this deployment mode, and the rules and detector config versions.
+ */
+export function securityHashComponent(
+  security: SecurityConfig,
+  options: { multiTenant: boolean; rulesVersion?: string; detectorsVersion?: string },
+): RetrievalConfigHashSecurity | null {
+  if (!security.anyNonDefault) return null;
+  const lakeraEffective = lakeraAllowed({
+    injectionCheck: security.injectionCheck,
+    lakera: security.lakera,
+    multiTenant: options.multiTenant,
+    ack: security.lakeraMultiTenantAck,
+    apiKeyPresent: security.lakeraApiKey !== null,
+  }).allowed;
+  return {
+    contextTagging: security.contextTagging,
+    injectionCheck: security.injectionCheck,
+    promptGuard: security.promptGuard,
+    lakera: security.lakera,
+    lakeraMultiTenantAck: security.lakeraMultiTenantAck,
+    lakeraEffective,
+    toolResultGuard: security.toolResultGuard,
+    rulesVersion: options.rulesVersion ?? injectionRulesVersion(),
+    detectorsVersion: options.detectorsVersion ?? detectorsConfigVersion(),
+  };
+}
+
 export interface RetrievalConfigHashInput {
   backendId: string;
   embeddingProfileId: string;
@@ -27,6 +74,8 @@ export interface RetrievalConfigHashInput {
   thresholdsConfigHash: string | null;
   activeChunkingProfiles: Record<string, string> | null;
   switches: RetrievalConfigHashSwitches;
+  /** Present only when a 5.1 switch is not at its default (securityHashComponent). */
+  security?: RetrievalConfigHashSecurity | null;
 }
 
 function sortKeys(value: unknown): unknown {
@@ -67,6 +116,7 @@ function buildPayload(input: RetrievalConfigHashInput): Record<string, unknown> 
     reranker: input.reranker,
     switches: input.switches,
     thresholds_config_hash: input.switches.refusalThreshold ? input.thresholdsConfigHash : null,
+    ...(input.security ? { security: input.security } : {}),
   };
 }
 

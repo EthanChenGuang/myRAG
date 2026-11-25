@@ -1,0 +1,430 @@
+{
+  "$defs": {
+    "BindingArm": {
+      "additionalProperties": false,
+      "properties": {
+        "by_doc_type": {
+          "additionalProperties": {
+            "$ref": "#/$defs/SliceMetrics"
+          },
+          "title": "By Doc Type",
+          "type": "object"
+        },
+        "by_language": {
+          "additionalProperties": {
+            "$ref": "#/$defs/SliceMetrics"
+          },
+          "title": "By Language",
+          "type": "object"
+        },
+        "by_language_pair": {
+          "additionalProperties": {
+            "$ref": "#/$defs/SliceMetrics"
+          },
+          "title": "By Language Pair",
+          "type": "object"
+        },
+        "doc_type_slice": {
+          "$ref": "#/$defs/SliceMetrics"
+        },
+        "latency_ms": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Latency Ms",
+          "type": "object"
+        },
+        "profile_id": {
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+          "title": "Profile Id",
+          "type": "string"
+        },
+        "report_path": {
+          "minLength": 1,
+          "title": "Report Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile_id",
+        "report_path",
+        "doc_type_slice",
+        "by_language",
+        "by_language_pair",
+        "by_doc_type"
+      ],
+      "title": "BindingArm",
+      "type": "object"
+    },
+    "BindingCandidateResult": {
+      "additionalProperties": false,
+      "properties": {
+        "beats_baseline": {
+          "title": "Beats Baseline",
+          "type": "boolean"
+        },
+        "beats_control": {
+          "title": "Beats Control",
+          "type": "boolean"
+        },
+        "by_language": {
+          "additionalProperties": {
+            "$ref": "#/$defs/SliceMetrics"
+          },
+          "title": "By Language",
+          "type": "object"
+        },
+        "deltas_vs_baseline": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "propertyNames": {
+            "enum": [
+              "recall_at_5",
+              "recall_at_10",
+              "mrr",
+              "correct_refusal_rate",
+              "false_refusal_rate"
+            ]
+          },
+          "title": "Deltas Vs Baseline",
+          "type": "object"
+        },
+        "deltas_vs_control": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "propertyNames": {
+            "enum": [
+              "recall_at_5",
+              "recall_at_10",
+              "mrr",
+              "correct_refusal_rate",
+              "false_refusal_rate"
+            ]
+          },
+          "title": "Deltas Vs Control",
+          "type": "object"
+        },
+        "doc_type_slice": {
+          "$ref": "#/$defs/SliceMetrics"
+        },
+        "language_regressions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Language Regressions",
+          "type": "array"
+        },
+        "latency_ms": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Latency Ms",
+          "type": "object"
+        },
+        "model": {
+          "minLength": 1,
+          "title": "Model",
+          "type": "string"
+        },
+        "other_slice_regressions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Other Slice Regressions",
+          "type": "array"
+        },
+        "pair_regressions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Pair Regressions",
+          "type": "array"
+        },
+        "profile_id": {
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+          "title": "Profile Id",
+          "type": "string"
+        },
+        "recommended": {
+          "title": "Recommended",
+          "type": "boolean"
+        },
+        "refusal_regressions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Refusal Regressions",
+          "type": "array"
+        },
+        "report_path": {
+          "minLength": 1,
+          "title": "Report Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile_id",
+        "model",
+        "report_path",
+        "doc_type_slice",
+        "by_language",
+        "deltas_vs_baseline",
+        "deltas_vs_control",
+        "beats_baseline",
+        "beats_control",
+        "language_regressions",
+        "pair_regressions",
+        "other_slice_regressions",
+        "refusal_regressions",
+        "recommended"
+      ],
+      "title": "BindingCandidateResult",
+      "type": "object"
+    },
+    "BindingComparisonHashes": {
+      "additionalProperties": false,
+      "properties": {
+        "catalog_version": {
+          "minimum": 1,
+          "title": "Catalog Version",
+          "type": "integer"
+        },
+        "corpus_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Corpus Sha256",
+          "type": "string"
+        },
+        "golden_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Golden Sha256",
+          "type": "string"
+        },
+        "noise_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Noise Sha256",
+          "type": "string"
+        },
+        "retrieval_params_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Retrieval Params Hash",
+          "type": "string"
+        }
+      },
+      "required": [
+        "corpus_sha256",
+        "golden_sha256",
+        "noise_sha256",
+        "retrieval_params_hash",
+        "catalog_version"
+      ],
+      "title": "BindingComparisonHashes",
+      "type": "object"
+    },
+    "MetricValue": {
+      "additionalProperties": false,
+      "properties": {
+        "n": {
+          "minimum": 0,
+          "title": "N",
+          "type": "integer"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Value"
+        }
+      },
+      "required": [
+        "value",
+        "n"
+      ],
+      "title": "MetricValue",
+      "type": "object"
+    },
+    "SliceMetrics": {
+      "additionalProperties": false,
+      "properties": {
+        "correct_refusal_rate": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "false_refusal_rate": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "false_refusal_upper_95": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "False Refusal Upper 95"
+        },
+        "mrr": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "recall_at_10": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "recall_at_5": {
+          "$ref": "#/$defs/MetricValue"
+        }
+      },
+      "required": [
+        "recall_at_5",
+        "recall_at_10",
+        "mrr",
+        "correct_refusal_rate",
+        "false_refusal_rate"
+      ],
+      "title": "SliceMetrics",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "baseline": {
+      "$ref": "#/$defs/BindingArm"
+    },
+    "candidates": {
+      "items": {
+        "$ref": "#/$defs/BindingCandidateResult"
+      },
+      "minItems": 1,
+      "title": "Candidates",
+      "type": "array"
+    },
+    "control": {
+      "$ref": "#/$defs/BindingArm"
+    },
+    "doc_type": {
+      "enum": [
+        "general",
+        "financial_report",
+        "contract_legal",
+        "invoice_receipt",
+        "product_technical",
+        "scanned_image"
+      ],
+      "title": "Doc Type",
+      "type": "string"
+    },
+    "fixture_embedder": {
+      "title": "Fixture Embedder",
+      "type": "boolean"
+    },
+    "gate_passed": {
+      "title": "Gate Passed",
+      "type": "boolean"
+    },
+    "hashes": {
+      "$ref": "#/$defs/BindingComparisonHashes"
+    },
+    "notes": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Notes",
+      "type": "array"
+    },
+    "provenance_counts": {
+      "additionalProperties": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "propertyNames": {
+        "enum": [
+          "synthetic_fixture",
+          "claude_draft",
+          "ragas_generated",
+          "human",
+          "production"
+        ]
+      },
+      "title": "Provenance Counts",
+      "type": "object"
+    },
+    "recommended_profile": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Recommended Profile"
+    },
+    "reembed_run_ids": {
+      "additionalProperties": {
+        "format": "uuid",
+        "type": "string"
+      },
+      "title": "Reembed Run Ids",
+      "type": "object"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "doc_type",
+    "baseline",
+    "control",
+    "candidates",
+    "provenance_counts",
+    "hashes",
+    "reembed_run_ids",
+    "fixture_embedder",
+    "gate_passed"
+  ],
+  "title": "BindingComparison",
+  "type": "object"
+}

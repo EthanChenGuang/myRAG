@@ -6,7 +6,7 @@ import type { QueryEmbedding } from '../embeddings/query-embedding';
 import { LEXICAL_VERSION } from '../lexical/chunk-text';
 import type { FusedHit } from '../fusion/rrf';
 import type { ChunkWithScore } from '../rerank/local-hybrid';
-import { assembleDisabledStatus, degradedReason, deriveStatus, failure } from '../pipeline';
+import { assembleDisabledStatus, deriveStatus, failure, injectionFilteredAll, injectionReason } from '../pipeline';
 import type { VoiceResults } from '../context/voice';
 import { evalRetrievalOverrides, hashedChunkingProfiles } from './overrides';
 import { loadThresholds } from '../refusal/thresholds';
@@ -14,9 +14,12 @@ import type { RefusalRecord } from '../refusal/types';
 import { describeReranker } from '../rerank/select';
 import { RERANK_TEXT_VERSION } from '../rerank/types';
 import type { TraceCollector } from '../trace/collector';
-import type { Candidate, Profile, RetrievalResult, RunRetrievalInput } from '../types';
+import type { Candidate, InjectionSummary, Profile, RetrievalResult, RunRetrievalInput } from '../types';
 import type { TemporalQueryContext } from '../query/temporal-query-detector';
-import { computeRetrievalConfigHash } from './config-hash';
+import { isMultiTenant } from '@/lib/deployment-mode';
+import { getRagDeps } from '../deps';
+import type { SecurityConfig } from '../security/config';
+import { computeRetrievalConfigHash, securityHashComponent } from './config-hash';
 import { effectiveRetrievalParams } from './retrieval-params';
 import type { AssembleOutput } from '../context/assemble';
 import type { RetrievalParams } from '@/lib/rag-eval/contracts.generated';
@@ -36,6 +39,11 @@ export interface BuildV2ResultInput {
   preRefusalCandidates?: Candidate[];
   /** Wire payload from assembleVoiceResults in runV2Pipeline when profile is voice. */
   voice?: VoiceResults | null;
+  /** The injection_check summary; absent when RAG_INJECTION_CHECK is off. */
+  injection?: InjectionSummary;
+  injectionStalled?: boolean;
+  /** The request's security config; defaults to RagDeps.securityConfig(). */
+  security?: SecurityConfig;
 }
 
 export function fusedHitsToVoiceChunks(hits: FusedHit[], scoreByChunk?: Map<string, number>): ChunkWithScore[] {
@@ -89,22 +97,28 @@ export async function buildV2Result(ctx: BuildV2ResultInput): Promise<RetrievalR
     queryLanguage = null,
     preRefusalCandidates,
     voice = null,
+    injection,
+    injectionStalled = false,
   } = ctx;
+  const security = ctx.security ?? getRagDeps().securityConfig();
   const records = collector.stages();
   const outputCandidates = resolveCandidates(profile, refusal, candidates, preRefusalCandidates);
   const voiceCount = voice?.results.length ?? 0;
   const survivors = profile === 'voice' ? voiceCount : assembly ? survivorCount(assembly) : outputCandidates.length;
   const assemblyWeight = profile === 'voice' ? (voiceCount > 0 ? 1 : 0) : assembly ? 1 : 0;
 
-  let status = assembleDisabledStatus(records, deriveStatus(records, survivors), assemblyWeight);
-  let reason =
-    status === 'ok'
+  const derived = assembleDisabledStatus(records, deriveStatus(records, survivors), assemblyWeight);
+  const injectionFiltered = (profile === 'voice' || assembly !== null) && injectionFilteredAll(injection, survivors, derived);
+  let status: RetrievalResult['status'] = injectionFiltered ? 'empty' : derived;
+  let reason = injectionFiltered
+    ? 'injection_filtered'
+    : status === 'ok'
       ? 'ok'
       : status === 'empty'
         ? outputCandidates.length === 0
           ? 'no_candidates'
           : 'no_relevant_context'
-        : degradedReason(records);
+        : injectionReason(records, injectionStalled);
 
   if (refusal?.decision === 'refuse') {
     status = 'empty';
@@ -137,9 +151,10 @@ export async function buildV2Result(ctx: BuildV2ResultInput): Promise<RetrievalR
       rerankTierChat: config.v2.rerankTier.chat,
       rerankTierVoice: config.v2.rerankTier.voice,
     },
+    security: securityHashComponent(security, { multiTenant: isMultiTenant() }),
   });
 
-  const base = failure(collector, status, reason, queryContext);
+  const base = { ...failure(collector, status, reason, queryContext), ...(injection ? { injection } : {}) };
 
   if (profile === 'voice') {
     return {
