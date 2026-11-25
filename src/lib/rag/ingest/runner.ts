@@ -161,7 +161,7 @@ async function yieldRun(ctx: StageContext, stage: StageName, reason: string): Pr
 
 /** The terminal stage's state is recorded on a best-effort basis: the version is already published by then. */
 async function recordFinalState(ctx: StageContext, stage: StageName, result: IngestResult): Promise<void> {
-  if (result.status !== 'ready' && result.status !== 'quarantined') return;
+  if (result.status !== 'ready' && result.status !== 'quarantined' && result.status !== 'pending_review') return;
   ctx.state.lastCompleted = stage;
   try {
     await persistState(ctx, result.status);

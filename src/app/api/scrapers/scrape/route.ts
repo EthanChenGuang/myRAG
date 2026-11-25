@@ -144,7 +144,7 @@ export async function POST(request: NextRequest) {
         // Scrape and process the URL
         const result = await scrapeAndProcess(
             scope
-                ? { url: normalizedUrl, scope, signal: request.signal, outputFormat: outputFormat || 'html' }
+                ? { url: normalizedUrl, scope, signal: request.signal, uploaderId: userId, outputFormat: outputFormat || 'html' }
                 : { url: normalizedUrl, userId, organizationId, outputFormat: outputFormat || 'html' }
         );
 

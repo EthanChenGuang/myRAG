@@ -17,7 +17,7 @@ from rag_sidecar.contracts.queue import (
 )
 from rag_sidecar.ingest.app_client import AppAuthError, AppTransientError
 from rag_sidecar.ingest.ledger_client import LeaseLost
-from rag_sidecar.ingest.process_job import JobOutcome, WorkerDeps, process_job
+from rag_sidecar.ingest.process_job import TERMINAL_SUCCESS, JobOutcome, WorkerDeps, process_job
 
 _JOB_ID = "00000000-0000-4000-8000-000000000001"
 _TENANT = "u:00000000-0000-4000-8000-0000000000a1"
@@ -286,6 +286,19 @@ def test_a_skipped_duplicate_is_a_terminal_non_failure():
     app.script("advance", [AppScript(response=_advance("skipped_duplicate", True, status="skipped_duplicate"))])
     outcome = asyncio.run(process_job(job, _deps(ledger, app)))
     assert outcome == JobOutcome(status="skipped_duplicate")
+
+
+def test_a_pending_review_is_a_terminal_non_failure():
+    """A held upload (D-36) ends pending_review: processing is finished, the hold is the document status (research F-15)."""
+    ledger = FakeLedger()
+    job = _claimed(ledger)
+    app = FakeApp()
+    app.script("parse_external", [AppScript(response=_done())])
+    app.script("advance", [AppScript(response=_advance("pending_review", True, status="pending_review", reason="held_for_review"))])
+    outcome = asyncio.run(process_job(job, _deps(ledger, app)))
+    assert outcome == JobOutcome(status="pending_review")
+    assert "pending_review" in TERMINAL_SUCCESS
+    assert ledger.call_counts.get("fail") is None
 
 
 _BATCH_ID = "00000000-0000-4000-8000-0000000000b9"

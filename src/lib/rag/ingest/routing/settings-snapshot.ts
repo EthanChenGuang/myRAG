@@ -1,4 +1,4 @@
-import { JobSettingsSnapshotSchema } from '@/lib/rag-eval/contracts.generated';
+import { JobSettingsSnapshotSchema, type UploadApproval } from '@/lib/rag-eval/contracts.generated';
 import { JOB_SETTINGS_PHASE32_DEFAULTS, omitDefaultFields, type JobSettingsSnapshotWire } from '../wire-defaults';
 import { imageCaptionModelId } from '../captioner';
 import type { QueueConfig } from '../queue-config';
@@ -15,6 +15,10 @@ export interface BuildJobSettingsInput {
   isBackfill?: boolean;
   /** Active embedding profile provider; defaults to openai (legacy). */
   embedProfileProvider?: string;
+  /** The identify stage's approval decision; written only when it requires approval (D-56, research Pitfall 17). */
+  approval?: UploadApproval | null;
+  /** A job of a batch whose versions publish only at activation (D-12); written only for a backfill job. */
+  holdPublish?: boolean;
 }
 
 export function buildJobSettings(input: BuildJobSettingsInput): JobSettingsSnapshotWire {
@@ -25,9 +29,12 @@ export function buildJobSettings(input: BuildJobSettingsInput): JobSettingsSnaps
     routingConfig,
     isBackfill = false,
     embedProfileProvider = 'openai',
+    approval = null,
+    holdPublish = false,
   } = input;
 
-  const progressive = isBackfill ? false : queueConfig.parseProgressive;
+  // A held upload is never visible before approval, so a provisional version would only end the job before its routed run (D-30, D-36).
+  const progressive = isBackfill || approval?.required === true ? false : queueConfig.parseProgressive;
   // D-35: batch_api only when the switch asks for it, only for backfill jobs and only for OpenAI profiles; everything else embeds in sync.
   const embedMode = isBackfill && queueConfig.embedBatchMode === 'batch_api' && embedProfileProvider === 'openai' ? 'batch_api' : 'sync';
 
@@ -48,6 +55,8 @@ export function buildJobSettings(input: BuildJobSettingsInput): JobSettingsSnaps
     routing_config_version: routingConfig.version,
     vlm_detect: queueConfig.vlmDetect,
     vlm_model: queueConfig.vlmModel ?? imageCaptionModelId(),
+    ...(approval?.required === true ? { approval } : {}),
+    ...(holdPublish && isBackfill ? { hold_publish: true } : {}),
   };
 
   return omitDefaultFields(JobSettingsSnapshotSchema.parse(snapshot), JOB_SETTINGS_PHASE32_DEFAULTS);

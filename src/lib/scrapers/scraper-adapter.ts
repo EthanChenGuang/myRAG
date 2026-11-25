@@ -11,8 +11,8 @@ import { normalizeScrapedUrl } from './url-utils';
  * pipeline takes the scope the route resolved on the server and the request signal.
  */
 type ScraperIdentity =
-    | { userId: string; organizationId?: string | null; scope?: TenantScope; signal?: AbortSignal }
-    | { userId?: undefined; organizationId?: undefined; scope: TenantScope; signal: AbortSignal };
+    | { userId: string; organizationId?: string | null; scope?: TenantScope; signal?: AbortSignal; uploaderId?: undefined }
+    | { userId?: undefined; organizationId?: undefined; scope: TenantScope; signal: AbortSignal; uploaderId?: string };
 
 type ScrapeOptions = ScraperIdentity & {
     url: string;
@@ -51,7 +51,8 @@ interface ScrapedPage {
     metadata?: { title?: string };
 }
 
-type UnifiedIdentity = { scope: TenantScope; signal: AbortSignal };
+/** uploaderId: the session user the route verified, for the upload-approval decision (D-37). */
+type UnifiedIdentity = { scope: TenantScope; signal: AbortSignal; uploaderId?: string };
 
 // The scrape route allows 60 s and the crawl route 300 s; ingest gets what is left so a slow page ends as
 // processing (resumable) instead of the request being cut off.
@@ -64,7 +65,7 @@ function requireUnifiedIdentity(options: ScraperIdentity): UnifiedIdentity {
     if (!options.scope || !options.signal) {
         throw new Error('[Scraper Adapter] the unified pipeline needs a tenant scope and a request signal');
     }
-    return { scope: options.scope, signal: options.signal };
+    return { scope: options.scope, signal: options.signal, ...(options.uploaderId ? { uploaderId: options.uploaderId } : {}) };
 }
 
 function requireLegacyUser<T extends { userId?: string }>(options: T): T & { userId: string } {
@@ -253,7 +254,7 @@ async function crawlAndProcessLegacy({
  */
 async function scrapeAndIngest(
     { url, outputFormat }: ScrapeOptions,
-    { scope, signal }: UnifiedIdentity
+    { scope, signal, uploaderId }: UnifiedIdentity
 ): Promise<IngestedPage> {
     const startedAt = Date.now();
     const normalizedUrl = normalizeScrapedUrl(url);
@@ -263,7 +264,7 @@ async function scrapeAndIngest(
     const result = await scrapeUrl(normalizedUrl, { output });
 
     const deadlineMs = Math.max(MIN_PAGE_BUDGET_MS, SCRAPE_BUDGET_MS - (Date.now() - startedAt));
-    const ingested = await ingestPage({ ...result, url: normalizedUrl }, output, scope, signal, deadlineMs);
+    const ingested = await ingestPage({ ...result, url: normalizedUrl }, output, scope, signal, deadlineMs, uploaderId);
     if (ingested.status === 'queued') {
         scheduleIngestWake();
     }
@@ -272,7 +273,7 @@ async function scrapeAndIngest(
 
 async function crawlAndIngest(
     { url, maxPages = 10, outputFormat }: CrawlOptions,
-    { scope, signal }: UnifiedIdentity
+    { scope, signal, uploaderId }: UnifiedIdentity
 ): Promise<{
     totalPages: number;
     successfulPages: number;
@@ -300,7 +301,7 @@ async function crawlAndIngest(
             continue;
         }
         try {
-            const ingested = await ingestPage(page, output, scope, signal, Math.min(PAGE_DEADLINE_MS, remaining));
+            const ingested = await ingestPage(page, output, scope, signal, Math.min(PAGE_DEADLINE_MS, remaining), uploaderId);
             documents.push(ingested);
             if (ingested.status === 'queued') queuedPages += 1;
         } catch (error) {
@@ -335,7 +336,8 @@ async function ingestPage(
     output: 'markdown' | 'pdf',
     scope: TenantScope,
     signal: AbortSignal,
-    deadlineMs: number
+    deadlineMs: number,
+    uploaderId?: string
 ): Promise<IngestedPage> {
     const canonicalUrl = normalizeScrapedUrl(page.url);
     const title = page.metadata?.title;
@@ -354,6 +356,7 @@ async function ingestPage(
         scope,
         source: 'scraper' as const,
         sourceKey: buildSourceKey('scraper', { url: canonicalUrl }),
+        ...(uploaderId ? { uploaderId } : {}),
         ...content,
         options: {
             origin: { sourceProvider: 'firecrawl', sourceFileId: canonicalUrl, metadata },

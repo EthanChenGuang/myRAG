@@ -158,6 +158,8 @@ async function ingestNangoDocument(filename: string, buffer: Buffer, options: Pr
     scope: owner.scope,
     source: 'nango',
     sourceKey: buildSourceKey('nango', { providerFileId: sourceFileId }),
+    // The connection owner, from the server's connection record: the uploader of a synced item (D-37).
+    uploaderId: options.userId,
     file: buffer,
     filename: ingestFilename(filename, mimeType),
     mimeType,

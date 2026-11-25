@@ -159,4 +159,26 @@ describe('buildJobSettings', () => {
     const b = buildJobSettings(input);
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
   });
+  describe('upload approval (plan 03.2-14)', () => {
+    const required = { mode: 'members' as const, required: true, reason: 'member_upload' as const, uploader_id: null, decided_at: '2026-01-02T03:04:05.000Z' };
+    const base = () => ({ queueConfig: loadQueueConfig({ RAG_PARSE_PROGRESSIVE: 'true' }), profile, bounds: { min_tier: 'fast' as const, max_tier: 'premium' as const }, routingConfig });
+
+    test('a decision that requires approval is frozen in the snapshot, and the held job is not progressive', () => {
+      const snapshot = buildJobSettings({ ...base(), approval: required });
+      expect(snapshot.approval).toEqual(required);
+      expect(snapshot.progressive).toBe(false);
+      expect(JobSettingsSnapshotSchema.safeParse(snapshot).success).toBe(true);
+    });
+
+    test('a decision that requires nothing writes no approval key and keeps progressive as configured', () => {
+      const snapshot = buildJobSettings({ ...base(), approval: { ...required, required: false, reason: 'admin_upload' } });
+      expect('approval' in snapshot).toBe(false);
+      expect(snapshot.progressive).toBe(true);
+    });
+
+    test('hold_publish is written only for a backfill job', () => {
+      expect(buildJobSettings({ ...base(), holdPublish: true }).hold_publish).toBeUndefined();
+      expect(buildJobSettings({ ...base(), isBackfill: true, holdPublish: true }).hold_publish).toBe(true);
+    });
+  });
 });
