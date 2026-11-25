@@ -51,6 +51,12 @@ let store: ReturnType<typeof import('@/lib/rag/ingest/object-store').getObjectSt
 
 before(async () => {
   harness = await startQueuedHarness();
+  // The chain sends text files to LlamaParse first: every upload gets its own text, so no two versions are content duplicates.
+  harness.llama.enqueue(
+    ...Array.from({ length: 400 }, (_, index) => ({
+      pages: [{ page_number: 1, success: true, markdown: `Backfill page ${index}\n\nUnique fixture text number ${index} about shelf ${index}.` }],
+    })),
+  );
   const objectStore = await import('@/lib/rag/ingest/object-store');
   objectStore.resetObjectStoreForTests();
   store = objectStore.getObjectStore();

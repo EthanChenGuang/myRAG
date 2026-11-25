@@ -5,8 +5,10 @@ import { scopeKey } from '../../tenant/scope';
 import { isArtifactName, loadArtifact, originalName, saveArtifact, type ArtifactContext } from '../artifacts';
 import { getIngestDeps } from '../deps';
 import { callerDocumentMetadata } from '../document-metadata';
+import { enqueueStageContext, queuedInputRecordOf, runEnqueueStages } from '../enqueue';
+import { fileSha256 } from '../hash';
 import { advanceJob, beginProgressiveFinal, clearProvisional, failJob, getJobInternal, markProvisional } from '../ledger';
-import { getObjectStore } from '../object-store';
+import { ORIGINALS_BUCKET, assertObjectKey, getObjectStore } from '../object-store';
 import { originFields } from '../origin';
 import { getProcessingProfile, profileFor, type DocType } from '../profiles/load';
 import { finishQueueIngestTrace } from '../queue-trace';
@@ -19,7 +21,7 @@ import { applyParseResult, stripBom } from '../stages/parse';
 import { createLedgerStateStore, saveContextState } from '../state-store';
 import { ingestStateFromRecord } from '../status';
 import { createIngestWriter } from '../writer';
-import type { ChunkDraft, IngestResult, StageContext, StageName, StageSpec } from '../types';
+import { INGEST_SOURCES, type ChunkDraft, type IngestInput, type IngestResult, type IngestSource, type StageContext, type StageName, type StageSpec } from '../types';
 import { isTerminal, leaseHolds, mapError, refuse, type CallbackResult } from './common';
 
 /** One advance call runs stages for at most this long (D-07); the worker calls again with the cursor it was given. */
@@ -295,8 +297,82 @@ function emitFailureTrace(
   finishQueueIngestTrace({ scope, job, status: 'failed', errorClass: reason });
 }
 
+/** The ledger stage a backfill job is at once begin has given it its document: parsing proceeds from preflight. */
+const BEGIN_STAGE = 'preflight';
+
+/** The staged original of a backfill job: in the private bucket, under the job tenant's own prefix, or nothing (T-03.1-103). */
+function stagedOriginalPath(job: IngestionJob, tenantKey: string): string | null {
+  const ref = job.original_ref;
+  if (!ref || ref.bucket !== ORIGINALS_BUCKET || !ref.path.startsWith(`${tenantKey}/`)) return null;
+  try {
+    assertObjectKey(ref.path);
+  } catch {
+    return null;
+  }
+  return ref.path;
+}
+
+function isIngestSource(value: string): value is IngestSource {
+  return (INGEST_SOURCES as readonly string[]).includes(value);
+}
+
+function baseName(sourceKey: string): string {
+  return sourceKey.slice(sourceKey.lastIndexOf('/') + 1) || sourceKey;
+}
+
+async function failBegin(job: IngestionJob, workerId: string, reason: string, scope: Scope, signal: AbortSignal): Promise<Reply> {
+  const failed = await failJob(job.id, workerId, reason, false, { signal });
+  emitFailureTrace(failed, scope, reason);
+  return reply(workerId, { stage: 'failed', done: true, status: 'failed', reason });
+}
+
 /**
- * The advance callback, phase post_parse. It reads the cached parse result (checked against the job's tenant in SQL), runs the
+ * Phase begin (D-31): a backfill job is enqueued without a document row, so a batch that is never run leaves nothing in processing.
+ * At its first claim the worker calls begin, which runs identify, file_hash_dedup and store_original for the job tenant from the
+ * staged original, the job's filename and MIME type and the doc type of its snapshot, exactly as enqueueIngest does at upload,
+ * then stores the queued-input record and records the document id on the job. A file the tenant already has ends the job
+ * skipped_duplicate here, before any parse. A repeated call is safe: the version is resumed, and a job with a document answers at once.
+ */
+async function beginBackfillDocument(job: IngestionJob, workerId: string, scope: Scope, db: RpcClient, signal: AbortSignal): Promise<Reply> {
+  if (job.kind !== 'ingest' || !job.batch_id) return refuse(409, 'begin_not_allowed');
+  if (job.document_id) return reply(workerId, { stage: job.stage ?? BEGIN_STAGE, done: false });
+
+  const path = stagedOriginalPath(job, scopeKey(scope).toLowerCase());
+  const original = path ? await getObjectStore().get(path, { signal }) : null;
+  if (!original) return failBegin(job, workerId, 'original_unavailable', scope, signal);
+  if (!job.file_sha256 || fileSha256(original.bytes) !== job.file_sha256) return failBegin(job, workerId, 'original_changed', scope, signal);
+  if (!isIngestSource(job.source)) return failBegin(job, workerId, 'invalid_source', scope, signal);
+
+  const input: IngestInput = {
+    scope,
+    source: job.source,
+    sourceKey: job.source_key,
+    filename: job.filename ?? baseName(job.source_key),
+    mimeType: job.mime_type ?? 'application/octet-stream',
+    docType: job.settings.doc_type,
+    file: original.bytes,
+    signal,
+  };
+  const ctx = enqueueStageContext(input, getIngestDeps(), db);
+  const result = await runEnqueueStages(ctx);
+  if (result.status === 'skipped_duplicate') {
+    const updated = await advanceJob({ jobId: job.id, worker: workerId, stage: 'skipped_duplicate', status: 'skipped_duplicate' }, { signal });
+    finishQueueIngestTrace({ scope, job: updated, status: 'skipped_duplicate' });
+    return reply(workerId, { stage: 'skipped_duplicate', done: true, status: 'skipped_duplicate' });
+  }
+  const document = ctx.document;
+  if (result.status === 'failed' || !document) {
+    const reason = result.reason ?? 'begin_failed';
+    if (document) await ctx.writer.markFailed(document.id, reason).catch(() => undefined);
+    return failBegin(job, workerId, reason, scope, signal);
+  }
+  await saveArtifact(ctx, QUEUED_INPUT_ARTIFACT, encodeQueuedInput(queuedInputRecordOf(input, ctx)), 'application/json');
+  await advanceJob({ jobId: job.id, worker: workerId, stage: BEGIN_STAGE, status: BEGIN_STAGE, fields: { document_id: document.id } }, { signal });
+  return reply(workerId, { stage: BEGIN_STAGE, done: false });
+}
+
+/**
+ * The advance callback. Phase begin gives a backfill job its document row (above); phase post_parse reads the cached parse result (checked against the job's tenant in SQL), runs the
  * post-parse stages with the ledger as the state store inside one slice, and answers where the job stands. A call is idempotent per
  * (job, stage, cursor): a cursor that is not the job's position is a replay and changes nothing, and writes are the Phase 3
  * deterministic-id upserts with the final trim, so a repeated stage yields the same rows (D-25, F-4).
@@ -314,6 +390,13 @@ export async function handleAdvance(jobId: string, body: AdvanceBody, options: {
       return reply(body.worker_id, { stage: job.status, done: true, status: job.status, ...(job.error_class ? { reason: job.error_class } : {}) });
     }
     if (!leaseHolds(job, body.worker_id, deps.now())) return refuse(409, 'lease_lost');
+    if (body.phase === 'begin' && body.provisional !== true) {
+      const scope = await scopeFromIngestionJob(jobId, { db: deps.db, signal });
+      if (!scope) return refuse(404, 'job_not_found');
+      const db = deps.db();
+      if (!db) return refuse(500, 'db_unavailable');
+      return await beginBackfillDocument(job, body.worker_id, scope, db, signal);
+    }
     if (body.phase !== 'post_parse' || !body.parse_cache_id) return refuse(400, 'phase_not_supported');
     const provisionalRun = body.provisional === true;
     if (provisionalRun) {
