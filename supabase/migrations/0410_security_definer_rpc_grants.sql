@@ -180,6 +180,38 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_purge_hook_supersession(text, uuid, uuid[]) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_purge_hook_supersession(text, uuid, uuid[]) TO service_role;
   END IF;
+  IF to_regprocedure('public.rag_purge_hook_scope_tags(text, uuid, uuid[])') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_purge_hook_scope_tags(text, uuid, uuid[]) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_purge_hook_scope_tags(text, uuid, uuid[]) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_scope_admin(uuid, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_scope_admin(uuid, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_scope_admin(uuid, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_scope_vocabulary_list(uuid, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_scope_vocabulary_list(uuid, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_scope_vocabulary_list(uuid, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_scope_vocabulary_for(text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_scope_vocabulary_for(text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_scope_vocabulary_for(text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_scope_vocabulary_create(uuid, text, text, text, text, text[])') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_scope_vocabulary_create(uuid, text, text, text, text, text[]) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_scope_vocabulary_create(uuid, text, text, text, text, text[]) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_scope_vocabulary_update(uuid, text, uuid, text, text[], boolean, text, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_scope_vocabulary_update(uuid, text, uuid, text, text[], boolean, text, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_scope_vocabulary_update(uuid, text, uuid, text, text[], boolean, text, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_set_document_scopes(uuid, text, text[], uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_set_document_scopes(uuid, text, text[], uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_set_document_scopes(uuid, text, text[], uuid) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_list_documents_with_scopes(uuid, text, text[], text, integer, integer, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_list_documents_with_scopes(uuid, text, text[], text, integer, integer, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_list_documents_with_scopes(uuid, text, text[], text, integer, integer, text) TO service_role;
+  END IF;
   IF to_regprocedure('public.rag_record_binding_evidence(uuid, jsonb, text)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_record_binding_evidence(uuid, jsonb, text) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_record_binding_evidence(uuid, jsonb, text) TO service_role;

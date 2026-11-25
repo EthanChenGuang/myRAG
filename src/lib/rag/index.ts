@@ -249,6 +249,23 @@ export type {
   UploadExemption,
   UserDisplay,
 } from './ingest/approval/admin';
+export {
+  createVocabularyEntry,
+  listVocabulary,
+  MAX_DOCUMENT_SCOPES,
+  SCOPE_DIMENSIONS,
+  scopeTagsEnabled,
+  setDocumentScopes,
+  updateVocabularyEntry,
+} from './ingest/scopes/admin';
+export type {
+  ListVocabularyResult,
+  ScopeDimension,
+  ScopeFailure,
+  SetDocumentScopesResult,
+  VocabularyEntry,
+  VocabularyEntryResult,
+} from './ingest/scopes/admin';
 export { docTypePickerEnabled, resolvePickerDefault, listDocTypeDefaults, setDocTypeDefault, DocTypeDefaultsError, DOC_TYPE_DEFAULT_SOURCE_KINDS, DOC_TYPE_IDS, DOC_TYPE_CHOICES } from './ingest/profiles/doc-type-defaults';
 export type { DocTypeChoice, DocTypeDefaultRow, DocTypeDefaultSourceKind, PickerDefault, SetDocTypeDefaultInput } from './ingest/profiles/doc-type-defaults';
 export { getEmbeddingProfileCompleteness } from './embeddings/profile-ops';

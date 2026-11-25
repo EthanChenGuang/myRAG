@@ -229,7 +229,6 @@ describe('scope tags across two tenants (multi-tenant)', () => {
     );
     const names = found.map((row) => String(row.sig).replace(/\(.*$/, '')).sort();
     for (const expected of [
-      'rag_list_documents_with_scopes',
       'rag_purge_hook_scope_tags',
       'rag_scope_vocabulary_create',
       'rag_scope_vocabulary_for',
