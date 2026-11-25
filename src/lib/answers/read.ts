@@ -9,8 +9,9 @@ export const ANSWER_PENDING_EXPIRY_MS = 120_000;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_DOCUMENT_IDS = 1000;
 
+/** Read at call time; only the trimmed literal 'true' turns it on (the readGenerationConfig rule of plan 05-02). */
 export function answerFeedbackEnabled(): boolean {
-  return process.env.RAG_ANSWER_FEEDBACK === 'true';
+  return (process.env.RAG_ANSWER_FEEDBACK ?? '').trim() === 'true';
 }
 
 function isoOf(value: unknown): string {

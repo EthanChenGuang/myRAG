@@ -294,6 +294,8 @@ describe('/api/rag/answers routes', () => {
     expect((await (await one.GET(getOne(String(row.id)), params(String(row.id)))).json()).feedbackEnabled).toBe(false);
     process.env.RAG_ANSWER_FEEDBACK = 'true';
     expect((await (await one.GET(getOne(String(row.id)), params(String(row.id)))).json()).feedbackEnabled).toBe(true);
+    process.env.RAG_ANSWER_FEEDBACK = ' true ';
+    expect((await (await one.GET(getOne(String(row.id)), params(String(row.id)))).json()).feedbackEnabled).toBe(true);
     process.env.RAG_ANSWER_FEEDBACK = 'false';
     expect((await (await one.GET(getOne(String(row.id)), params(String(row.id)))).json()).feedbackEnabled).toBe(false);
   });
