@@ -64,8 +64,16 @@ function input(): RunRetrievalInput {
 
 /** Timing and the trace id differ per run; everything else must be identical. */
 function comparable(result: RetrievalResult) {
-  const { traceId: _traceId, stages, ...rest } = result;
-  return { ...rest, stages: stages.map(({ startedAt: _s, endedAt: _e, latency_ms: _l, ...stage }) => stage) };
+  const copy: Partial<RetrievalResult> = { ...result };
+  delete copy.traceId;
+  copy.stages = result.stages.map((stage) => {
+    const record: Partial<typeof stage> = { ...stage };
+    delete record.startedAt;
+    delete record.endedAt;
+    delete record.latency_ms;
+    return record as typeof stage;
+  });
+  return copy;
 }
 
 async function retrieve(env: Record<string, string>): Promise<RetrievalResult> {

@@ -26,10 +26,14 @@ function base(extra: Partial<RetrievalFilters> = {}): RetrievalFilters {
   return { currentOnly: true, documentIds: [DOC], docTypes: ['general'], languages: ['en'], sources: ['upload'], ...extra };
 }
 
+function withoutDates(filters: RetrievalFilters): Partial<RetrievalFilters> {
+  const copy: Partial<RetrievalFilters> = { ...filters };
+  delete copy.dateRange;
+  return copy;
+}
+
 function untouched(result: RetrievalFilters, input: RetrievalFilters) {
-  const { dateRange: _a, ...restResult } = result;
-  const { dateRange: _b, ...restInput } = input;
-  expect(restResult).toEqual(restInput);
+  expect(withoutDates(result)).toEqual(withoutDates(input));
   expect(result.currentOnly).toBe(true);
 }
 
