@@ -11,12 +11,14 @@ import {
   embedQueryForEvalProfile,
   type QueryEmbedding,
 } from '../embeddings/query-embedding';
-import { assembleVoiceResults, type VoiceResults } from '../context/voice';
-import { validResultCount } from '../config';
-import { failure, requireValue, runStage, stageSpec, StageError } from '../pipeline';
+import { assembleVoiceResults, voiceContext, type VoiceResults } from '../context/voice';
+import { validResultCount, warnInjectionCheckDisabled } from '../config';
+import { downweightOrder, failure, injectionDropped, requireValue, runInjectionStage, runStage, stageSpec, StageError } from '../pipeline';
+import { injectionItems, releasedRulesFromRows } from '../security/injection-check';
 import { assertTenantScope } from '../tenant/scope';
 import type { TraceCollector } from '../trace/collector';
-import type { Candidate, Profile, RetrievalResult, RunRetrievalInput } from '../types';
+import type { FusedHit } from '../fusion/rrf';
+import type { Candidate, InjectionSummary, Profile, RetrievalResult, RunRetrievalInput } from '../types';
 import { evalRetrievalOverrides } from './overrides';
 import { effectiveRetrievalParams } from './retrieval-params';
 import { runContextStages } from './stages/context';
@@ -54,6 +56,15 @@ function profileFailureReason(original: unknown): string | null {
   return kind ? PROFILE_FAILURE_REASONS[kind] : null;
 }
 
+/** The document rows the scoped search returned for these hits (one per document version); no extra read. */
+function documentRowsOf(hits: readonly FusedHit[]): Array<{ id: string; metadata: Record<string, unknown> | null }> {
+  const rows = new Map<string, { id: string; metadata: Record<string, unknown> | null }>();
+  for (const row of hits) {
+    if (!rows.has(row.hit.documentId)) rows.set(row.hit.documentId, { id: row.hit.documentId, metadata: row.hit.document.metadata });
+  }
+  return [...rows.values()];
+}
+
 export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCollector): Promise<RetrievalResult> {
   const deps = getRagDeps();
   const scope = input.scope;
@@ -76,6 +87,10 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
   let queryLanguage: RetrievalResult['queryLanguage'] = null;
   let preRefusalCandidates: Candidate[] | undefined;
   let voice: VoiceResults | null = null;
+  let injection: InjectionSummary | undefined;
+  let injectionStalled = false;
+  const security = deps.securityConfig();
+  if (security.injectionCheck !== 'off') warnInjectionCheckDisabled(config, security.injectionCheck);
 
   try {
     const query = await runQueryStages({
@@ -140,15 +155,45 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
 
     if (profile === 'voice') {
       const matchCount = validResultCount(input.options?.maxResults) ?? VOICE_DEFAULT_MATCH_COUNT;
-      const chunks = fusedHitsToVoiceChunks(rank.survivors, rank.rerank.scoreByChunk);
+      let chunks = fusedHitsToVoiceChunks(rank.survivors, rank.rerank.scoreByChunk);
+      let flaggedForRender: ReadonlySet<string> | undefined;
+      if (security.injectionCheck !== 'off') {
+        // Voice runs the rules only (injectionDetectorsFor); released ids come from the scoped search rows.
+        const run = await runInjectionStage({
+          spec: spec('injection_check', 'skip'),
+          signal,
+          collector,
+          profile,
+          security,
+          mode: security.injectionCheck,
+          items: injectionItems(chunks, null, null),
+          candidates: chunks,
+          referenced: null,
+          released: releasedRulesFromRows(documentRowsOf(rank.survivors)),
+        });
+        injectionStalled = run.stalled;
+        if (run.applied) {
+          injection = run.applied.summary;
+          if (injectionDropped(run.applied.summary)) chunks = run.applied.candidates;
+          if (run.applied.marks) {
+            flaggedForRender = run.applied.marks.chunkIds;
+            chunks = downweightOrder(chunks, flaggedForRender);
+          }
+        }
+      }
+      const voiceChunks = chunks;
       const assembled = await runStage(
         spec('assemble', 'skip'),
         signal,
-        () => assembleVoiceResults({ query: input.query, chunks, matchCount }),
+        () => assembleVoiceResults({ query: input.query, chunks: voiceChunks, matchCount }),
         collector,
-        { candidatesIn: chunks.length, candidatesOut: (value) => value.results.length },
+        { candidatesIn: voiceChunks.length, candidatesOut: (value) => value.results.length },
       );
       voice = assembled.skipped ? { results: [], source_images: [] } : assembled.value;
+      if (security.contextTagging && !assembled.skipped) {
+        const context = voiceContext(voice.results, flaggedForRender);
+        if (context !== null) voice = { ...voice, context };
+      }
     } else {
       const context = await runContextStages({
         input,
@@ -161,12 +206,16 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
         collector,
         stageOverrides: input.stageOverrides,
         rerank: rank.rerank,
+        security,
       });
       assembly = context.assembly;
       candidates = context.candidates;
+      injection = context.injection;
+      injectionStalled = context.injectionStalled ?? false;
     }
     if (profile === 'eval' && rank.decision.decision === 'refuse') {
-      preRefusalCandidates = rank.preRefusalHits.map((row, index) => ({
+      const dropped = new Set(injection?.droppedChunkIds ?? []);
+      preRefusalCandidates = rank.preRefusalHits.filter((row) => !dropped.has(row.hit.chunkId)).map((row, index) => ({
         chunk_id: row.hit.chunkId,
         document_id: row.hit.documentId,
         content: row.hit.content,
@@ -215,6 +264,8 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
     queryLanguage,
     preRefusalCandidates,
     voice,
+    injection,
+    injectionStalled,
   });
 }
 
