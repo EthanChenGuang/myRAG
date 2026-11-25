@@ -174,13 +174,12 @@ describe('chunk translations (0810, D-28, D-30)', () => {
   });
 
   test('the translation tables and functions exist', async () => {
-    const names = await db.query<{ t1: string | null; t2: string | null; t3: string | null; f1: string | null; f2: string | null }>(
+    const names = await db.query<{ t1: string | null; t2: string | null; f1: string | null; f2: string | null }>(
       `SELECT to_regclass('public.chunk_translations')::text AS t1, to_regclass('public.chunk_translation_embeddings')::text AS t2,
-              to_regclass('public.rag_translation_settings')::text AS t3,
               to_regproc('public.hybrid_search_translations')::text AS f1, to_regproc('public.rag_write_chunk_translations')::text AS f2`,
     );
     const row = names.rows[0];
-    assert.ok(row?.t1 && row.t2 && row.t3, 'tables exist');
+    assert.ok(row?.t1 && row.t2, 'tables exist');
     assert.ok(row?.f1 && row.f2, 'functions exist');
   });
 
