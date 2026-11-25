@@ -451,7 +451,7 @@ Plans:
 ### Phase 4.2: Retrieval Tuning Additions (INSERTED)
 **Goal**: Retrieval keeps the smallest rerank pool that works, matches company terms as single words, can answer questions about earlier policy versions, and its time to first token is gated
 **Depends on**: Phase 4, Phase 4.1, Phase 4.1.1 (TERM dictionary for LANG-07 and XLG-05), Phase 3.2
-**Requirements**: LAT-04, LANG-07, RET-11, RET-12, DATA-21, RET-13, EVAL-20, RNK-07 (plus the RNK-02 and LAT-01 deltas)
+**Requirements**: LAT-04, LANG-07, RET-11, RET-12, DATA-21, RET-13, EVAL-20, RNK-07, RET-15, RET-16, EVAL-32 (plus the RNK-02 and LAT-01 deltas)
 **Success Criteria** (what must be TRUE):
   1. The sweep grid includes a pool of 25, the rerank input cap accepts 25, and the sweep report adds nDCG@k with k equal to the chunks sent to the LLM.
   2. A multi-character term from a tenant's dictionary matches as one lexical term after `rag:relex`; Italian stemming makes singular and plural forms match and is turned on only if the it slice gains Recall with no other slice dropping.
@@ -460,6 +460,7 @@ Plans:
   5. With `RAG_TABLE_LOOKUP` on, a question naming a city and a grade retrieves the matching table row through the lookup leg as an extra RRF list within the verified tenant, the row reaches the context with its header, no LLM-written SQL exists anywhere, and the cross-tenant canary includes the row store.
   6. With `RAG_DUP_CLUSTERS` on, a fixture FAQ pasted into 30 documents forms one duplicate cluster per tenant (never across tenants), and deleting one source document updates the cluster; with `RAG_RESULT_DIVERSITY=collapse` (or `mmr`), a synthetic two-intent question in zh/en/it gets the duplicated answer once, with all its sources listed, plus the other intent's chunk in the top-k; the `duplicate_flood` slice gates top-k redundancy and per-intent evidence, and no other slice drops beyond the noise band.
   7. The refusal calibration report lists every candidate threshold with its false-answer and false-refusal rates; strict mode takes the threshold that keeps false answers at or below 5% and balanced keeps today's false-refusal target, each cell records its mode, and with the per-mode targets unset the chosen thresholds equal the Phase 4 result.
+  8. With `RAG_IDENTIFIER_INDEX` and `RAG_IDENTIFIER_FILTER` on, the synthetic `identifier_near_miss` questions in every spelling retrieve and cite only the asked identifier, near-miss identifiers never reach the context, an identifier the tenant does not have gets the refusal with suggestions, admin-defined identifier patterns are honoured, and the descriptive-question slice does not drop.
 **Live verification**: Re-run the pool sweep with real rerankers including the 25 pool; measure real TTFT against the budget.
 **Plans**: TBD
 
@@ -592,7 +593,7 @@ Plans:
 ### Phase 5.2: Grounded Answers & Output Safety (INSERTED)
 **Goal**: When the documents answer only part of a question, the answer says so instead of filling the gap, every claim can be traced to a block, no answer can carry a phishing link or a credential request, and every computed number in an answer is produced and checked by deterministic code
 **Depends on**: Phase 5, Phase 5.1, Phase 5.1.1 (review queue and retrieval log)
-**Requirements**: GEN-08, GEN-09, GEN-10, GEN-11, GEN-12, LAT-05, LANG-09, SEC-06, SEC-10, GEN-14, EVAL-19, GEN-15, GEN-16, GEN-17, EVAL-26 (plus the SEC-02 delta)
+**Requirements**: GEN-08, GEN-09, GEN-10, GEN-11, GEN-12, LAT-05, LANG-09, SEC-06, SEC-10, GEN-14, EVAL-19, GEN-15, GEN-16, GEN-17, EVAL-26, RNK-08, EVAL-33 (plus the SEC-02 delta)
 **Success Criteria** (what must be TRUE):
   1. With `RAG_PARTIAL_ANSWER_RULE` on, the `partial_answer` fixture items (e.g. a limit is stated but not what happens above it) are answered for the covered part and say for the rest that the documents do not cover it, in zh, en and it; the share of answers adding unsupported content is 0 in CI; when strict mode calls webSearch, document and web parts are labelled separately; `RAG_SYSTEM_PROMPT` and `{{context}}` are unchanged.
   2. The eval reports `uncited_sentence_rate`, the UI marks sentences without a valid citation, and with `RAG_CLAIM_CHECK` on unsupported sentences are marked "not confirmed by the documents" without deleting or blocking text; with the LLM judge opted in, Italian answers get a calibrated groundedness label instead of "not checked".
@@ -602,6 +603,7 @@ Plans:
   6. Context blocks carry version and effective-date labels; on the `stale_version` items the answer gives the current value and names its version, never both values, and the conflict sends both documents to the review queue as a supersession candidate.
   7. With `RAG_CONTEXT_RELEVANCE_RULE` on, the synthetic `off_topic_context` items (no-answer questions whose top chunks are on an adjacent subject) get the "information not available" text in strict mode and a labelled general answer in balanced mode, the share of answers repurposing adjacent context is 0 in CI, and with the switch off the strict characterization is byte-identical.
   8. With `RAG_CALC_TOOL` on, the synthetic `multi_step_calc` items in zh/en/it are answered through the calculation tool with every step listed and the same number for every paraphrase; the tool rejects free-form code, unsourced operands and mixed units; with `RAG_CALC_CHECK` on, a fake model that skips the per-item rule gets a correction notice with the recomputed value, both values in metadata and a review-queue entry, and an operand missing from its cited chunk marks the answer "calculation not verified"; with both off, answers match the Phase 5.1 baseline.
+  9. With `RAG_PROMPT_BUDGET` on, the `context_overflow` items never exceed a small fake model window, the question is present and last in every request, history is trimmed before documents, the highest-ranked parents are kept in both the v2 and legacy assembly, and prompt-part token counts and dropped documents are on the trace; with it off results equal the baseline.
 **Live verification**: Run the claim check and the LLM judge on real answers; measure the live calculation error rate with and without the tool on real models; send a real WhatsApp reply with an injected link and confirm no preview fetch.
 **Plans**: TBD
 **UI hint**: yes
