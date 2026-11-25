@@ -135,7 +135,7 @@ describe('connectors-config.js renders connector data as text (XSS)', () => {
       const doc = new FakeDocument();
       host(doc, 'providers-list');
       const { instance } = loadClass(doc, 'connectors-config.js', 'ConnectorsConfigManager');
-      instance.config = { providers: [p] };
+      Object.assign(instance, { config: { providers: [p] } });
       instance.renderProvidersList();
       expectSafe(doc);
     }
@@ -145,7 +145,7 @@ describe('connectors-config.js renders connector data as text (XSS)', () => {
     const doc = new FakeDocument();
     host(doc, 'connections-table-body', 'tbody');
     const { instance } = loadClass(doc, 'connectors-config.js', 'ConnectorsConfigManager');
-    instance.config = { providers: [provider()] };
+    Object.assign(instance, { config: { providers: [provider()] } });
     instance.renderConnectionsTable();
     expectSafe(doc);
   });
@@ -179,7 +179,7 @@ describe('mcp-config.js renders MCP server data as text (XSS)', () => {
     const doc = new FakeDocument();
     host(doc, 'mcp-servers-list');
     const { instance } = loadClass(doc, 'mcp-config.js', 'McpConfigManager');
-    instance.servers = [server, { ...server, id: 'zapier' }];
+    Object.assign(instance, { servers: [server, { ...server, id: 'zapier' }] });
     instance.renderServerList();
     expectSafe(doc);
     expect(doc.getElementById('mcp-servers-list')!.textContent).toContain(XSS_PAYLOAD);
@@ -189,7 +189,7 @@ describe('mcp-config.js renders MCP server data as text (XSS)', () => {
     for (const editing of [false, true]) {
       const doc = new FakeDocument();
       const { instance } = loadClass(doc, 'mcp-config.js', 'McpConfigManager');
-      instance.currentEditingServer = editing ? server : null;
+      Object.assign(instance, { currentEditingServer: editing ? server : null });
       instance.showServerDialog(server);
       expectSafe(doc);
       expect(doc.getElementById('server-name')!.value || doc.getElementById('server-name')!.getAttribute('value')).toBe(XSS_PAYLOAD);
