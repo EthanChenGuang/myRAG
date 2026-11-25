@@ -190,7 +190,7 @@ function requiredSignatures(statement: string): string[] {
   const direct = new Set<string>();
   let listed = false;
   for (const match of code.matchAll(GUARD_CALL)) {
-    const [whole, negated, argument, isNull, isNotNull] = match as unknown as [string, string?, string, string?, string?];
+    const [whole, negated, argument, isNull, isNotNull] = match as unknown as [string, string | undefined, string, string | undefined, string | undefined];
     const literal = /^'([\s\S]*)'$/.exec(argument)?.[1];
     if (literal !== undefined) direct.add(literal);
     const checksMissing = isNull !== undefined && isNotNull === undefined && negated === undefined;
