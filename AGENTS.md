@@ -82,6 +82,7 @@ myrag/
 - Switches (defaults in `src/lib/env.ts`): `RAG_INGEST_PIPELINE=legacy` (legacy writers vs unified pipeline), `RAG_EMBEDDING_PROFILES=off`, `RAG_INJECTION_SCAN=off`, `RAG_EXACT_ID_LOOKUP=false`, `RAG_PDF_IMAGE_CHUNKS=false`.
 - Originals land in the private **`rag-originals`** storage bucket; quarantined documents stay out of retrieval (D-08 filter on current, ready rows—no env switch).
 - Writer and search RPCs (`rag_*`, `match_chunks_by_profile`) are **service_role** only; tests assert anon/authenticated cannot execute them.
+- Domain embedding bindings (Phase 3.1.1): `RAG_DOMAIN_EMBEDDINGS=off` (default; needs `RAG_EMBEDDING_PROFILES=on`) binds a doc type, per tenant or deployment-wide, to a scoped profile; `npm run rag:embedding -- bindings` lists them, and an active binding adds one additive dense leg under v2 next to the global profile. Activation needs comparison evidence with real items (fixture evidence is refused); a binding goes stale after a global profile flip and stops serving. The bulk backfill writes no binding vectors; the scoped re-embed fills them.
 
 ### Ingestion queue (Phase 3.1)
 - Write paths call `submitIngest()`: inline `ingest()` with `RAG_INGEST_ASYNC=off`, the `ingestion_jobs` ledger with it on (unified pipeline only). Defaults reproduce Phase 3 and write no ledger, cache or budget row (`tests/rag-e2e/defaults-equal-phase3.test.mts`).
