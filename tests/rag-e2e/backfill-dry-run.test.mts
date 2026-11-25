@@ -492,18 +492,20 @@ describe('rag:backfill orchestration and exit codes', () => {
     }
   });
 
+  const childEnv = (env: Record<string, string>): NodeJS.ProcessEnv => env as NodeJS.ProcessEnv;
+
   test('--runner ray builds the uv command line with --extra ray and passes RAY_ADDRESS through', async () => {
     const { rayRunnerCommand, startRunner } = await import('@/lib/rag/ingest/backfill/runners');
     const id = '11111111-2222-4333-8444-555555555555';
-    const command = rayRunnerCommand(id, { PATH: '/usr/bin', RAY_ADDRESS: 'ray://head.example.invalid:10001' });
+    const command = rayRunnerCommand(id, childEnv({ PATH: '/usr/bin', RAY_ADDRESS: 'ray://head.example.invalid:10001' }));
     assert.equal(command.command, 'uv');
     const sidecar = command.args[2] as string;
     assert.deepEqual(command.args, ['run', '--project', sidecar, '--extra', 'ray', 'python', '-m', 'rag_sidecar.ingest.ray_runner', '--batch', id]);
     assert.ok(sidecar.endsWith('rag-sidecar'));
     assert.equal(command.env.RAY_ADDRESS, 'ray://head.example.invalid:10001');
-    assert.equal('RAY_ADDRESS' in rayRunnerCommand(id, { PATH: '/usr/bin' }).env, false, 'a local Ray instance without RAY_ADDRESS');
-    assert.equal('RAY_ADDRESS' in rayRunnerCommand(id, { PATH: '/usr/bin', RAY_ADDRESS: '' }).env, false);
-    assert.throws(() => rayRunnerCommand(`${id}; rm -rf /`, {}), /batch id/);
+    assert.equal('RAY_ADDRESS' in rayRunnerCommand(id, childEnv({ PATH: '/usr/bin' })).env, false, 'a local Ray instance without RAY_ADDRESS');
+    assert.equal('RAY_ADDRESS' in rayRunnerCommand(id, childEnv({ PATH: '/usr/bin', RAY_ADDRESS: '' })).env, false);
+    assert.throws(() => rayRunnerCommand(`${id}; rm -rf /`, childEnv({})), /batch id/);
 
     const { EventEmitter } = await import('node:events');
     const { PassThrough } = await import('node:stream');

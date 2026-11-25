@@ -1,5 +1,5 @@
 import { ChunkingDecisionSchema } from '@/lib/rag-eval/contracts.generated';
-import { RetrievalBackendError, type RpcClient } from '../backend/supabase-rpc';
+import { RetrievalBackendError, rpcRows, type RpcClient } from '../backend/supabase-rpc';
 import { getRagDeps } from '../deps';
 import { refreshActiveChunkingProfiles } from './active';
 
@@ -101,7 +101,7 @@ async function call(fn: string, args: Record<string, unknown>, signal?: AbortSig
     if (refusal) throw new ChunkingActivationRefused(refusal[1] as string, response.error.message);
     throw new RetrievalBackendError(fn, response.error.code ?? null);
   }
-  return (response.data ?? []).map(asRow).filter((row): row is Row => row !== null);
+  return rpcRows(response.data).map(asRow).filter((row): row is Row => row !== null);
 }
 
 function firstRow(rows: Row[], fn: string): Row {

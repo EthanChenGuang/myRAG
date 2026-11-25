@@ -25,7 +25,7 @@ function keysOf(row: DocumentObjectRow): string[] {
 }
 
 /**
- * Removes the original, parse.md and docling.json of deleted document versions from the private rag-originals bucket. Call it after the
+ * Removes the original, parse.md and docling.json of deleted document versions from the private originals bucket (ORIGINALS_BUCKET). Call it after the
  * rows are gone: a storage failure then never leaves a document whose original is missing, and it never changes the answer of the delete.
  * Each key must sit under `<tenant_key>/<lineage_id>/<version>/` of its own row and the tenant key is the caller's verified one, so a key that
  * points at another tenant's path is skipped. Failures are counted and logged by document id only; the keys are not logged.
