@@ -4,6 +4,7 @@ import { decideUploadApproval, normalizeUploaderId, type UploadApprovalInput } f
 import { loadIngestConfig } from '@/lib/rag/ingest/config';
 import { getIngestDeps } from '@/lib/rag/ingest/deps';
 import { resolveUploadApproval } from '@/lib/rag/ingest/approval/resolve';
+import { afterPublish, registerPostPublishHook, resetPostPublishHooksForTests } from '@/lib/rag/ingest/post-publish';
 import { identifyStage } from '@/lib/rag/ingest/stages/identify';
 import { publishStage } from '@/lib/rag/ingest/stages/publish';
 import { emptyIngestState, type IngestResult, type StageContext } from '@/lib/rag/ingest/types';
@@ -246,9 +247,11 @@ describe('resolveUploadApproval', () => {
 
 describe('publish stage with an approval decision', () => {
   beforeEach(() => {
+    resetPostPublishHooksForTests();
     vi.spyOn(console, 'warn').mockImplementation(() => undefined);
   });
   afterEach(() => {
+    resetPostPublishHooksForTests();
     vi.restoreAllMocks();
   });
 
@@ -301,5 +304,110 @@ describe('publish stage with an approval decision', () => {
     const held = await publishWith({ publishOutcome: 'held' }, { publishHold: { batchId: 'batch-1' } });
     expect(held.result).toMatchObject({ status: 'ready', reason: 'publish_held' });
     expect(held.calls).toEqual([`setFields:${DOC}:${JSON.stringify({ metadata: { publish_hold: { batch_id: 'batch-1' } } })}`, `publish:${DOC}`]);
+  });
+});
+
+describe('afterPublish', () => {
+  beforeEach(() => {
+    resetPostPublishHooksForTests();
+  });
+  afterEach(() => {
+    resetPostPublishHooksForTests();
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  const flush = async () => {
+    for (let i = 0; i < 10; i += 1) await new Promise((resolve) => setTimeout(resolve, 0));
+  };
+
+  async function runPublish(outcome: PublishOutcome, state: Partial<StageContext['state']> = {}) {
+    const { writer } = fakeWriter({ publishOutcome: outcome });
+    const ctx = ctxFor(mintScope('single', null, null), writer);
+    Object.assign(ctx.state, state);
+    const result = await publishStage.run(ctx);
+    await flush();
+    return result;
+  }
+
+  test('a registered hook runs once after published, with the document and the tenant only', async () => {
+    const seen: unknown[] = [];
+    registerPostPublishHook('probe', (event) => {
+      seen.push(event);
+    });
+    await runPublish('published');
+    expect(seen).toEqual([{ documentId: DOC, tenantKey: 's:default' }]);
+  });
+
+  test('no hook runs after pending_review, held or quarantined', async () => {
+    const seen: unknown[] = [];
+    registerPostPublishHook('probe', (event) => {
+      seen.push(event);
+    });
+    await runPublish('pending_review');
+    await runPublish('held', { publishHold: { batchId: 'b' } });
+    await runPublish('quarantined');
+    const { writer } = fakeWriter();
+    const ctx = ctxFor(mintScope('single', null, null), writer);
+    ctx.state.approval = { mode: 'all', required: true, reason: 'all_uploads', uploader_id: null, decided_at: AT };
+    await publishStage.run(ctx);
+    await flush();
+    expect(seen).toEqual([]);
+  });
+
+  test('hooks run in registration order; a throwing hook logs one [Ingest] line with ids only and the others still run', async () => {
+    const order: string[] = [];
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    registerPostPublishHook('first', () => {
+      order.push('first');
+    });
+    registerPostPublishHook('broken', () => {
+      order.push('broken');
+      throw new Error('secret document text');
+    });
+    registerPostPublishHook('third', async () => {
+      order.push('third');
+    });
+    await afterPublish({ documentId: DOC, tenantKey: 's:default' });
+    expect(order).toEqual(['first', 'broken', 'third']);
+    expect(warn).toHaveBeenCalledTimes(1);
+    const line = JSON.stringify(warn.mock.calls[0]);
+    expect(line).toContain('[Ingest]');
+    expect(line).toContain(DOC);
+    expect(line).toContain('broken');
+    expect(line).not.toContain('secret document text');
+  });
+
+  test('a throwing or slow hook does not change the ingest result or delay it', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    let release: () => void = () => undefined;
+    registerPostPublishHook('slow', () => new Promise<void>((resolve) => (release = resolve)), { timeoutMs: 60_000 });
+    registerPostPublishHook('broken', () => {
+      throw new Error('boom');
+    });
+    const outcome = await runPublish('published');
+    expect(outcome).toMatchObject({ kind: 'done', result: { status: 'ready', documentId: DOC } });
+    release();
+  });
+
+  test('a hook that exceeds its time budget is abandoned and logged as a timeout', async () => {
+    vi.useFakeTimers();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    let aborted = false;
+    registerPostPublishHook(
+      'stuck',
+      (_event, signal) =>
+        new Promise<void>(() => {
+          signal.addEventListener('abort', () => {
+            aborted = true;
+          });
+        }),
+      { timeoutMs: 50 },
+    );
+    const done = afterPublish({ documentId: DOC, tenantKey: 's:default' });
+    await vi.advanceTimersByTimeAsync(60);
+    await done;
+    expect(aborted).toBe(true);
+    expect(JSON.stringify(warn.mock.calls[0])).toContain('timeout');
   });
 });
