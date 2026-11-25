@@ -5,10 +5,14 @@ import { createUIMessageStream, createUIMessageStreamResponse, streamText, type 
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { z } from 'zod/v3';
 import { createLinkUsageInstructions } from '@/lib/url-extractor';
+import { classifyQuery } from '@/lib/query-classifier';
 import {
+  buildHistoryWindow,
   createEnhancedRAGPrompt,
   createTraceCollector,
   finishTrace,
+  isQueryLayerEnabled,
+  isSmallTalkResult,
   isV2Pipeline,
   knowledgeBaseUnavailableMessage,
   parseRetrievalFilters,
@@ -44,6 +48,9 @@ const embedChatSchema = z.object({
   })),
   model: z.string().optional()
 });
+
+// D-11: read only while the query layer is on, so the body is handled exactly as before with it off
+const embedTimeZoneSchema = z.string().max(64).optional();
 
 const FALLBACK_EMBED_MODEL = 'openai/gpt-4o-mini';
 
@@ -193,6 +200,23 @@ export async function POST(request: NextRequest) {
       retrievalFilters = filtersParsed.filters;
     }
 
+    const queryLayerOn = isQueryLayerEnabled();
+    let clientTimeZone: string | undefined;
+    if (queryLayerOn) {
+      const timeZoneParsed = embedTimeZoneSchema.safeParse(body?.timeZone);
+      if (!timeZoneParsed.success) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Invalid request data',
+            details: timeZoneParsed.error.errors.map((issue) => ({ path: 'timeZone', message: issue.message })),
+          },
+          { status: 400, headers: CORS_HEADERS }
+        );
+      }
+      clientTimeZone = timeZoneParsed.data;
+    }
+
     const embedScope = await resolveEmbedScope({
       rawBody: body,
       configuredTenant: env.RAG_EMBED_TENANT,
@@ -215,9 +239,18 @@ export async function POST(request: NextRequest) {
     const queryText = lastUserMessage?.content || '';
 
     let context = '';
+    let smallTalkTurn = false;
 
     if (queryText.trim().length > 0) {
       const isGPTModel = model.includes('gpt-4') || model.includes('o1') || model.includes('chatgpt');
+      // D-09/D-16: one classification and a bounded history from the body, only while the query layer is on
+      const queryLayerInputs = queryLayerOn
+        ? {
+            history: buildHistoryWindow(messages),
+            classification: classifyQuery(queryText),
+            ...(clientTimeZone ? { timeZone: clientTimeZone } : {}),
+          }
+        : {};
       const collector = createTraceCollector({ profile: 'embed', tenantKey: scopeKey(embedScope.scope) });
       const result = await runRetrieval({
         scope: embedScope.scope,
@@ -233,6 +266,7 @@ export async function POST(request: NextRequest) {
         signal: request.signal,
         trace: collector,
         ...(retrievalFilters ? { retrievalFilters } : {}),
+        ...queryLayerInputs,
       });
       collector.setReviewContent({ query: queryText, context: result.context, model });
       pendingTrace = { collector, result };
@@ -250,7 +284,9 @@ export async function POST(request: NextRequest) {
         return knowledgeBaseUnavailableResponse(request);
       }
 
-      context = result.context;
+      // D-10: small talk under the query layer skipped retrieval and is answered without knowledge-base context
+      smallTalkTurn = isSmallTalkResult(result);
+      context = smallTalkTurn ? '' : result.context;
     } else {
       console.log('[Document Search] Embed request has no query text, skipping retrieval');
     }
@@ -308,9 +344,11 @@ Context:
 
     // Use the same logic as main chat: if context exists, use enhanced prompt
     // This enforces strict RAG-only behavior preventing answers outside knowledge base
-    const finalSystemPrompt = context.length > 0
-      ? createEnhancedRAGPrompt(systemPrompt, context)
-      : systemPrompt.replace('{{context}}', context);
+    const finalSystemPrompt = smallTalkTurn
+      ? createEnhancedRAGPrompt(systemPrompt, '', 'bypass')
+      : context.length > 0
+        ? createEnhancedRAGPrompt(systemPrompt, context)
+        : systemPrompt.replace('{{context}}', context);
 
     console.log('[EMBED RAG] Final system prompt preview (first 300 chars):', finalSystemPrompt.substring(0, 300));
     console.log('[EMBED RAG] Using enhanced RAG prompt:', context.length > 0);
