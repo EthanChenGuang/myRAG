@@ -1,3 +1,6 @@
+import json
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
@@ -309,3 +312,87 @@ def test_drafted_batch_accepts_the_cross_lingual_category():
     batch = DraftedItemBatch.model_validate({"items": [proposal]})
     assert batch.items[0].category == "cross_lingual"
     assert batch.items[0].evidence_language == "zh"
+
+
+GOLDEN_FIXTURE = Path(__file__).resolve().parents[2] / "eval" / "fixtures" / "golden.jsonl"
+
+
+def _small_talk(**overrides):
+    base = {
+        "id": "en-small-talk-001",
+        "question": "Hello there, thanks!",
+        "conversation": [],
+        "language": "en",
+        "category": "small_talk",
+        "answerable": False,
+        "expected_answer": None,
+        "gold_evidence": [],
+        "review_status": "approved",
+        "provenance": "synthetic_fixture",
+        "split": "dev",
+    }
+    base.update(overrides)
+    return base
+
+
+@pytest.mark.parametrize("category", ["cache_paraphrase", "cache_near_miss"])
+def test_cache_pair_items_need_pair_of(category):
+    with pytest.raises(ValidationError):
+        GoldenItem.model_validate(_item(category))
+    item = GoldenItem.model_validate(_item(category, pair_of="en-general-001"))
+    assert item.pair_of == "en-general-001"
+    assert item.category == category
+
+
+@pytest.mark.parametrize("pair_of", ["Bad Id", "ab", "-x-y"])
+def test_pair_of_uses_the_item_id_pattern(pair_of):
+    with pytest.raises(ValidationError):
+        GoldenItem.model_validate(_item("cache_paraphrase", pair_of=pair_of))
+
+
+def test_pair_of_cannot_point_at_the_item_itself():
+    with pytest.raises(ValidationError):
+        GoldenItem.model_validate(_item("cache_paraphrase", pair_of="en-cache-paraphrase-001"))
+
+
+@pytest.mark.parametrize("category", ["general", "no_answer", "multi_turn", "cross_lingual"])
+def test_pair_of_on_other_categories_fails(category):
+    overrides = {"pair_of": "en-general-002"}
+    if category == "cross_lingual":
+        overrides["evidence_language"] = "zh"
+    with pytest.raises(ValidationError):
+        GoldenItem.model_validate(_item(category, **overrides))
+
+
+def test_pair_of_defaults_to_none():
+    assert GoldenItem.model_validate(_item()).pair_of is None
+
+
+def test_small_talk_is_not_answerable_and_has_no_evidence():
+    item = GoldenItem.model_validate(_small_talk())
+    assert item.answerable is False
+    with pytest.raises(ValidationError):
+        GoldenItem.model_validate(_small_talk(answerable=True, expected_answer="Hi!", gold_evidence=[_span()]))
+    with pytest.raises(ValidationError):
+        GoldenItem.model_validate(_small_talk(gold_evidence=[_span()]))
+
+
+def test_no_answer_still_requires_answerable_false():
+    with pytest.raises(ValidationError):
+        GoldenItem.model_validate(_item("no_answer", answerable=True, expected_answer="x", gold_evidence=[_span()]))
+    with pytest.raises(ValidationError):
+        GoldenItem.model_validate(_item("general", answerable=False, expected_answer=None, gold_evidence=[]))
+
+
+def test_drafted_batch_accepts_the_cache_and_small_talk_categories():
+    proposal = DraftedItemProposal.model_validate(
+        {"question": "Hi", "language": "en", "category": "small_talk", "answerable": False}
+    )
+    assert proposal.category == "small_talk"
+
+
+def test_every_fixture_golden_item_still_validates():
+    lines = [line for line in GOLDEN_FIXTURE.read_text(encoding="utf-8").splitlines() if line.strip()]
+    assert lines
+    for line in lines:
+        GoldenItem.model_validate(json.loads(line))
