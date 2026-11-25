@@ -1,6 +1,6 @@
 import base64
 import hashlib
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any
 
 from rag_sidecar.contracts import (
@@ -115,6 +115,19 @@ from rag_sidecar.contracts import (
     TraceUsedDocument,
 )
 
+from rag_sidecar.contracts.cache import (
+    CacheCheckRequest,
+    CacheCheckResponse,
+    CachedAnswer,
+    CachedSource,
+    CachedSourceVersion,
+    CacheInvalidateRequest,
+    CacheInvalidateResponse,
+    CacheSplitMetrics,
+    CacheStoreRequest,
+    SemanticCacheCalibration,
+    SemanticCacheProfileCalibration,
+)
 from rag_sidecar.contracts.latency import GroundednessBudgets, ScorerBudget
 from rag_sidecar.contracts.parse_eval import (
     DuplicateCounts,
@@ -143,6 +156,21 @@ from rag_sidecar.contracts.eval_run import (
     TraceSecurityVersions,
 )
 from rag_sidecar.contracts.golden import AttackSpec
+from rag_sidecar.contracts.query import (
+    CondensedQuery,
+    DateRange,
+    HypotheticalDocument,
+    QueryParams,
+    QueryParamsOverride,
+    QueryPlan,
+    QueryTransformToggles,
+    QueryTranslation,
+    QueryVariantOut,
+    QueryVariants,
+    RewriteGateResult,
+    SkippedTransform,
+    SubQuestions,
+)
 from rag_sidecar.contracts.report import GroundednessLabelCounts, InjectionReport, StrategySlice
 from rag_sidecar.contracts.routing import (
     DetectCounts,
@@ -162,6 +190,99 @@ _SAMPLE_JOB_ID = "00000000-0000-4000-8000-000000000001"
 _SAMPLE_DOC_ID = "00000000-0000-4000-8000-000000000002"
 _SAMPLE_NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
 _TINY_PNG = base64.b64encode(b"\x89PNG" + b"\x00" * 8).decode("ascii")
+
+
+_QUERY_ORIGINAL = "Does it cover ERR_TIMEOUT, and how long is it?"
+_QUERY_STANDALONE = "Does the product warranty cover ERR_TIMEOUT, and how long is the warranty?"
+_QUERY_SUB_QUESTIONS = [
+    "Does the product warranty cover ERR_TIMEOUT?",
+    "How long is the product warranty?",
+]
+
+
+def _rewrite_gate() -> RewriteGateResult:
+    return RewriteGateResult(
+        rewrite=True,
+        transforms=["condense_history", "decompose"],
+        reasons=["pronoun_with_history", "multi_part_question"],
+        lang="en",
+        protected_tokens=["ERR_TIMEOUT"],
+        skip_retrieval=False,
+    )
+
+
+def _query_plan() -> QueryPlan:
+    return QueryPlan(
+        original=_QUERY_ORIGINAL,
+        standalone=_QUERY_STANDALONE,
+        language="en",
+        gate=_rewrite_gate(),
+        date_range=DateRange(
+            from_date=date(2026, 1, 1),
+            to_date=date(2026, 3, 31),
+            include_undated=False,
+            time_zone="UTC",
+        ),
+        variants=[
+            QueryVariantOut(text=_QUERY_ORIGINAL, language="en", kind="original", protected_ok=True),
+            QueryVariantOut(text=_QUERY_STANDALONE, language="en", kind="condensed", protected_ok=True),
+            QueryVariantOut(
+                text=_QUERY_SUB_QUESTIONS[0],
+                language="en",
+                kind="sub_question",
+                sub_question_index=0,
+                protected_ok=True,
+            ),
+            QueryVariantOut(
+                text=_QUERY_SUB_QUESTIONS[1],
+                language="en",
+                kind="sub_question",
+                sub_question_index=1,
+                protected_ok=True,
+            ),
+        ],
+        sub_questions=list(_QUERY_SUB_QUESTIONS),
+        skipped=[SkippedTransform(transform="hyde", reason="disabled_for_profile")],
+        framework="llamaindex",
+    )
+
+
+def _query_contract_samples() -> dict[str, Any]:
+    return {
+        "RewriteGateResult": _rewrite_gate(),
+        "QueryPlan": _query_plan(),
+        "CondensedQuery": CondensedQuery(standalone=_QUERY_STANDALONE, unchanged=False),
+        "QueryVariants": QueryVariants(
+            queries=[
+                "ERR_TIMEOUT warranty coverage",
+                "product warranty length and ERR_TIMEOUT faults",
+            ]
+        ),
+        "HypotheticalDocument": HypotheticalDocument(
+            passage="The product warranty lasts two years and covers ERR_TIMEOUT faults caused by the device."
+        ),
+        "SubQuestions": SubQuestions(questions=list(_QUERY_SUB_QUESTIONS)),
+        "QueryTranslation": QueryTranslation(
+            target_language="zh", text="产品保修是否涵盖 ERR_TIMEOUT？保修期多长？"
+        ),
+        "QueryParams": QueryParams(),
+    }
+
+
+def _query_overrides_request() -> RagRunRequest:
+    return RagRunRequest(
+        item_id="en-general-001",
+        query=_QUERY_ORIGINAL,
+        conversation=[ConversationTurn(role="user", content="Tell me about the product warranty.")],
+        rag_mode="strict",
+        options=RagRunOptions(
+            query_framework="langchain",
+            query_layer=True,
+            query_transforms=QueryTransformToggles(condense=True, decompose=True, hyde=False),
+            semantic_cache="off",
+            query_params=QueryParamsOverride(max_llm_variants=1, max_searches=4),
+        ),
+    )
 
 
 def _phase31_contract_samples() -> dict[str, Any]:
@@ -1003,6 +1124,101 @@ def _answer_record(*, pending: bool = False) -> AnswerRecord:
     )
 
 
+_CACHE_QUOTE = "placeholder quote"
+_CACHE_DOCUMENT_ID = "00000000-0000-4000-8000-0000000000d1"
+_CACHE_KEY_HASH = hashlib.sha256(b"cache-key-placeholder").hexdigest()
+_CACHE_PROFILE_ID = "openai-3-small-1536"
+_CACHE_VECTOR = [0.125, -0.25, 0.5]
+
+
+def _cached_answer() -> CachedAnswer:
+    citation = _citation_record().model_copy(
+        update={"quote": _CACHE_QUOTE, "quoteHash": hashlib.sha256(_CACHE_QUOTE.encode("utf-8")).hexdigest()}
+    )
+    return CachedAnswer(
+        answer_text="Placeholder cached answer [S1].",
+        citations=[citation],
+        sources=[CachedSource(document_id=_CACHE_DOCUMENT_ID, name="leave-policy.pdf", version=2)],
+        source_versions=[CachedSourceVersion(document_id=_CACHE_DOCUMENT_ID, version=2)],
+        answer_language="en",
+        rag_mode="strict",
+        is_refusal=False,
+        groundedness=_answer_record().groundedness,
+        trace_id="0123456789abcdef0123456789abcdef",
+        created_at="2026-01-01T00:00:00.000Z",
+    )
+
+
+def _cache_check_request() -> CacheCheckRequest:
+    return CacheCheckRequest(
+        tenant_key="s:default",
+        key_hash=_CACHE_KEY_HASH,
+        embedding_profile_id=_CACHE_PROFILE_ID,
+        vector=_CACHE_VECTOR,
+        max_distance=0.05,
+    )
+
+
+def _cache_store_request() -> CacheStoreRequest:
+    return CacheStoreRequest(
+        tenant_key="s:default",
+        key_hash=_CACHE_KEY_HASH,
+        embedding_profile_id=_CACHE_PROFILE_ID,
+        query_text_masked="How many leave days does [EMAIL] get?",
+        vector=_CACHE_VECTOR,
+        answer=_cached_answer(),
+        ttl_seconds=3600,
+    )
+
+
+def _semantic_cache_calibration() -> SemanticCacheCalibration:
+    metrics = CacheSplitMetrics(
+        paraphrase_pairs=10, near_miss_pairs=10, paraphrase_hit_rate=0.8, near_miss_wrong_hit_rate=0.0
+    )
+    return SemanticCacheCalibration(
+        profiles=[
+            SemanticCacheProfileCalibration(
+                embedding_profile_id=_CACHE_PROFILE_ID,
+                max_distance=0.05,
+                source="calibrated",
+                fitted_at="2026-01-01T00:00:00.000Z",
+                dev=metrics,
+                test=metrics,
+            )
+        ]
+    )
+
+
+def _cache_contract_samples() -> dict[str, Any]:
+    return {
+        "CachedAnswer": _cached_answer(),
+        "CacheCheckRequest": _cache_check_request(),
+        "CacheCheckResponse": CacheCheckResponse(
+            hit=True, entry_id="cache-entry-0001", distance=0.03, answer=_cached_answer()
+        ),
+        "CacheStoreRequest": _cache_store_request(),
+        "CacheInvalidateRequest": CacheInvalidateRequest(tenant_key="s:default", document_ids=[_CACHE_DOCUMENT_ID]),
+        "CacheInvalidateResponse": CacheInvalidateResponse(deleted=3),
+        "SemanticCacheCalibration": _semantic_cache_calibration(),
+    }
+
+
+def _cache_near_miss_item() -> GoldenItem:
+    return GoldenItem(
+        id="en-cache-near-miss-001",
+        question="How many sick days do employees get?",
+        language="en",
+        category="cache_near_miss",
+        answerable=True,
+        expected_answer="Ten days per year.",
+        gold_evidence=[_span()],
+        pair_of="en-general-001",
+        review_status="approved",
+        provenance="synthetic_fixture",
+        split="dev",
+    )
+
+
 def _groundedness_thresholds() -> GroundednessThresholds:
     return GroundednessThresholds(
         cells=[
@@ -1229,6 +1445,8 @@ def _models() -> dict[str, Any]:
             source="fixture",
         ),
         **_phase31_contract_samples(),
+        **_query_contract_samples(),
+        **_cache_contract_samples(),
     }
 
 
@@ -1257,6 +1475,22 @@ def build_samples() -> dict[str, dict[str, Any]]:
             "model": "GoldenItem",
             "value": _cross_lingual_item().model_dump(mode="json"),
         },
+        "GoldenItem:cache_near_miss": {
+            "model": "GoldenItem",
+            "value": _cache_near_miss_item().model_dump(mode="json"),
+        },
+        "RetrievalParams:sub_question_coverage_off": {
+            "model": "RetrievalParams",
+            "value": RetrievalParams(sub_question_coverage=False).model_dump(mode="json"),
+        },
+        "CacheCheckResponse:miss": {
+            "model": "CacheCheckResponse",
+            "value": CacheCheckResponse(hit=False).model_dump(mode="json"),
+        },
+        "CacheInvalidateRequest:whole_tenant": {
+            "model": "CacheInvalidateRequest",
+            "value": CacheInvalidateRequest(tenant_key="s:default").model_dump(mode="json"),
+        },
         "GoldenItem:injection": {
             "model": "GoldenItem",
             "value": _injection_item().model_dump(mode="json"),
@@ -1272,6 +1506,16 @@ def build_samples() -> dict[str, dict[str, Any]]:
         "RagTrace:answer_null": {
             "model": "RagTrace",
             "value": _trace(None).model_dump(mode="json"),
+        },
+        "RagTrace:query_plan": {
+            "model": "RagTrace",
+            "value": _trace("Twenty days per year.")
+            .model_copy(update={"query_plan": _query_plan()})
+            .model_dump(mode="json"),
+        },
+        "RagRunRequest:query_overrides": {
+            "model": "RagRunRequest",
+            "value": _query_overrides_request().model_dump(mode="json"),
         },
         "RagRunRequest:query_only": {
             "model": "RagRunRequest",

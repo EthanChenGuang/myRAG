@@ -16,12 +16,15 @@ import {
   finishTrace,
   isV2Pipeline,
   knowledgeBaseUnavailableMessage,
+  mintAnswerId,
   parseRetrievalFilters,
   readGenerationConfig,
   repairOwnerMembership,
   resolveTenantScope,
   runRetrieval,
+  scheduleAnswerFinish,
   scopeKey,
+  shouldPersistAnswer,
   type RetrievalFilterInput,
   type RetrievalResult,
   type TenantScope,
@@ -57,6 +60,9 @@ interface StepToolCall {
   toolName: string;
   input?: unknown;
 }
+
+// Tool results that are evidence the answer may rely on; anything else (MCP) skips groundedness
+const ANSWER_EVIDENCE_TOOLS = new Set(['webSearch', 'useDocument']);
 
 interface StepToolResult {
   type: string;
@@ -1874,13 +1880,29 @@ IMPORTANT:
     const isGPTModel = model.includes('gpt-4') || model.includes('o1') || model.includes('chatgpt');
 
     const parsedCapabilities = ChatCapabilitiesSchema.safeParse(data?.capabilities);
+    const citationCapabilities = parsedCapabilities.success ? { citations: parsedCapabilities.data.citations === true } : null;
+    const generationConfig = readGenerationConfig();
     const citationSession = createCitationSession({
-      capabilities: parsedCapabilities.success ? { citations: parsedCapabilities.data.citations === true } : null,
+      capabilities: citationCapabilities,
       ragMode,
       modelId: model,
       language: userLanguage,
-      config: readGenerationConfig(),
+      config: generationConfig,
     });
+
+    // Only web-chat answers of a signed-in user outside ghost chats get an answerId and a record
+    let answerUserId: string | null = null;
+    if (scope && citationCapabilities?.citations === true) {
+      try {
+        answerUserId = (await getSessionUser())?.id ?? null;
+      } catch {
+        answerUserId = null;
+      }
+    }
+    const answerId =
+      scope && shouldPersistAnswer({ capabilities: citationCapabilities, userId: answerUserId, chatId: data?.chatId, config: generationConfig })
+        ? mintAnswerId()
+        : null;
 
     // Log model selection for debugging
     console.log('[WEBAPP] Model from request:', data?.settings?.model);
@@ -3579,11 +3601,15 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
       // First streamText call with merged tools and reasoning
       const citationTransforms = citationSession.transforms();
       if (citationTransforms.length > 0) streamParams.experimental_transform = citationTransforms;
+      let answerToolOutputUsed = false;
 
       const result = await streamText({
         ...streamParams,
         onStepFinish: async (params: { text?: string; toolCalls?: StepToolCall[]; toolResults?: StepToolResult[] }) => {
           let { text, toolCalls = [] as StepToolCall[], toolResults = [] as StepToolResult[] } = params;
+          if (Array.isArray(toolResults) && toolResults.some((item) => typeof item?.toolName === 'string' && !ANSWER_EVIDENCE_TOOLS.has(item.toolName))) {
+            answerToolOutputUsed = true;
+          }
 
           // Clean any malformed useDocument calls from the text
           if (text && isGPTModel) {
@@ -3930,6 +3956,43 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
       const ragTraceId = ragTrace?.collector.traceId;
       let generationFailed = false;
 
+      let answerRecordPending = answerId !== null;
+      const finishAnswerRecord = (responseText: string, aborted: boolean, failed: boolean) => {
+        if (!answerRecordPending || !answerId || !scope || !answerUserId) return;
+        answerRecordPending = false;
+        const records = citationSession.fullRecords();
+        const premiseBlocks =
+          !retrievalFailed && !effectiveDisableRAG && retrievalResult?.blocks
+            ? retrievalResult.blocks.filter((block) => !block.isImage).map((block) => ({ alias: block.alias ?? '', text: block.text }))
+            : [];
+        const knowledgeBaseContext =
+          premiseBlocks.length > 0 && (retrievalResult?.status === 'ok' || retrievalResult?.status === 'degraded');
+        scheduleAnswerFinish({
+          answerId,
+          scope,
+          userId: answerUserId,
+          chatId: typeof data?.chatId === 'string' ? data.chatId : null,
+          traceId: ragTraceId ?? answerId,
+          modelId: safeModelId,
+          ragMode,
+          queryText: getLastUserText(rawMessages),
+          citations: records?.citations ?? [],
+          citationStrategy: records ? citationSession.strategy : null,
+          invalidCitations: records?.invalidCitations ?? 0,
+          answerText: responseText,
+          aborted,
+          groundednessEligible: !failed && (ragMode === 'strict' || ragMode === 'balanced') && knowledgeBaseContext,
+          toolOutputUsed: answerToolOutputUsed,
+          premise: {
+            blocks: premiseBlocks,
+            webSearchTexts: webSearchResults
+              .map((item) => (typeof item?.text === 'string' ? item.text : typeof item?.content === 'string' ? item.content : ''))
+              .filter((text) => text.length > 0),
+          },
+          requestLanguage: userLanguage,
+        });
+      };
+
       const buildFinishMetadata = () => {
         const metadata: Record<string, unknown> = {};
 
@@ -3995,24 +4058,33 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
           writer.merge(result.toUIMessageStream({
             sendStart: precomputedSourceImages.length === 0,
             messageMetadata: ({ part }) => {
-              if (part.type === 'start') return ragTraceId ? { ragTraceId } : undefined;
+              if (part.type === 'start') {
+                if (!ragTraceId && !answerId) return undefined;
+                return { ...(ragTraceId ? { ragTraceId } : {}), ...(answerId ? { answerId } : {}) };
+              }
               if (part.type === 'finish-step') {
                 captureReasoningDetails(part.providerMetadata?.openrouter);
                 return undefined;
               }
               if (part.type !== 'finish') return undefined;
               const finishMetadata = { ...buildFinishMetadata(), ...citationSession.finishMetadata() };
-              if (!ragTraceId && Object.keys(finishMetadata).length === 0) return undefined;
-              return { ...(ragTraceId ? { ragTraceId } : {}), ...finishMetadata };
+              if (!ragTraceId && !answerId && Object.keys(finishMetadata).length === 0) return undefined;
+              return { ...(ragTraceId ? { ragTraceId } : {}), ...(answerId ? { answerId } : {}), ...finishMetadata };
             },
           }));
         },
-        onFinish: ({ isAborted, finishReason }) => {
+        onFinish: ({ isAborted, finishReason, responseMessage }) => {
           if (ragTrace) {
             const status = isAborted ? 'aborted' : generationFailed || finishReason === 'error' ? 'error' : 'ok';
             ragTrace.collector.record({ name: 'generation', status, startedAt: aiStartTime, endedAt: ragTrace.collector.now() });
           }
           finishRagTrace();
+          if (answerRecordPending) {
+            const responseText = responseMessage.parts
+              .map((part) => (part.type === 'text' ? part.text : ''))
+              .join('');
+            finishAnswerRecord(responseText, isAborted || req.signal.aborted, generationFailed || finishReason === 'error');
+          }
         },
         // Handle tool-related errors in the stream
         onError: error => {

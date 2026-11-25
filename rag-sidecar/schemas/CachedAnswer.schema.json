@@ -1,0 +1,366 @@
+{
+  "$defs": {
+    "AnswerGroundedness": {
+      "additionalProperties": false,
+      "properties": {
+        "checkedAt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Checkedat"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "enum": [
+                "verified",
+                "possibly_unreliable",
+                "not_checked"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "latencyMs": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Latencyms"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "score": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Score"
+        },
+        "scorer": {
+          "anyOf": [
+            {
+              "enum": [
+                "hhem_2_3_vectara",
+                "hhem_2_1_open",
+                "none"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scorer"
+        },
+        "status": {
+          "enum": [
+            "pending",
+            "scored",
+            "not_checked"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "threshold": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Threshold"
+        },
+        "thresholdSource": {
+          "anyOf": [
+            {
+              "enum": [
+                "default",
+                "calibrated"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Thresholdsource"
+        },
+        "truncated": {
+          "default": false,
+          "title": "Truncated",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "title": "AnswerGroundedness",
+      "type": "object"
+    },
+    "CachedSource": {
+      "additionalProperties": false,
+      "properties": {
+        "document_id": {
+          "minLength": 1,
+          "title": "Document Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "version": {
+          "minimum": 1,
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "document_id",
+        "name",
+        "version"
+      ],
+      "title": "CachedSource",
+      "type": "object"
+    },
+    "CachedSourceVersion": {
+      "additionalProperties": false,
+      "properties": {
+        "document_id": {
+          "minLength": 1,
+          "title": "Document Id",
+          "type": "string"
+        },
+        "version": {
+          "minimum": 1,
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "document_id",
+        "version"
+      ],
+      "title": "CachedSourceVersion",
+      "type": "object"
+    },
+    "CitationRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "alias": {
+          "pattern": "^S[1-9][0-9]*$",
+          "title": "Alias",
+          "type": "string"
+        },
+        "chunkIds": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Chunkids",
+          "type": "array"
+        },
+        "documentId": {
+          "minLength": 1,
+          "title": "Documentid",
+          "type": "string"
+        },
+        "documentName": {
+          "title": "Documentname",
+          "type": "string"
+        },
+        "documentVersion": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Documentversion"
+        },
+        "n": {
+          "minimum": 1,
+          "title": "N",
+          "type": "integer"
+        },
+        "page": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Page"
+        },
+        "quote": {
+          "minLength": 1,
+          "title": "Quote",
+          "type": "string"
+        },
+        "quoteHash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Quotehash",
+          "type": "string"
+        },
+        "sectionPath": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sectionpath"
+        },
+        "strategy": {
+          "enum": [
+            "claude-citations",
+            "chunk-alias"
+          ],
+          "title": "Strategy",
+          "type": "string"
+        }
+      },
+      "required": [
+        "n",
+        "alias",
+        "chunkIds",
+        "documentId",
+        "documentName",
+        "quote",
+        "quoteHash",
+        "strategy"
+      ],
+      "title": "CitationRecord",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "answer_language": {
+      "enum": [
+        "zh",
+        "en",
+        "it"
+      ],
+      "title": "Answer Language",
+      "type": "string"
+    },
+    "answer_text": {
+      "minLength": 1,
+      "title": "Answer Text",
+      "type": "string"
+    },
+    "citations": {
+      "items": {
+        "$ref": "#/$defs/CitationRecord"
+      },
+      "title": "Citations",
+      "type": "array"
+    },
+    "created_at": {
+      "minLength": 1,
+      "title": "Created At",
+      "type": "string"
+    },
+    "groundedness": {
+      "$ref": "#/$defs/AnswerGroundedness"
+    },
+    "is_refusal": {
+      "title": "Is Refusal",
+      "type": "boolean"
+    },
+    "rag_mode": {
+      "enum": [
+        "strict",
+        "balanced"
+      ],
+      "title": "Rag Mode",
+      "type": "string"
+    },
+    "source_versions": {
+      "items": {
+        "$ref": "#/$defs/CachedSourceVersion"
+      },
+      "title": "Source Versions",
+      "type": "array"
+    },
+    "sources": {
+      "items": {
+        "$ref": "#/$defs/CachedSource"
+      },
+      "title": "Sources",
+      "type": "array"
+    },
+    "trace_id": {
+      "minLength": 1,
+      "title": "Trace Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "answer_text",
+    "answer_language",
+    "rag_mode",
+    "is_refusal",
+    "groundedness",
+    "trace_id",
+    "created_at"
+  ],
+  "title": "CachedAnswer",
+  "type": "object"
+}

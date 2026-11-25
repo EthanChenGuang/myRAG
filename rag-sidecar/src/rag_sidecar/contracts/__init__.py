@@ -5,6 +5,19 @@ from rag_sidecar.contracts.answers import (
     AnswerRecord,
     CitationRecord,
 )
+from rag_sidecar.contracts.cache import (
+    CacheCheckRequest,
+    CacheCheckResponse,
+    CachedAnswer,
+    CachedSource,
+    CachedSourceVersion,
+    CacheInvalidateRequest,
+    CacheInvalidateResponse,
+    CacheSplitMetrics,
+    CacheStoreRequest,
+    SemanticCacheCalibration,
+    SemanticCacheProfileCalibration,
+)
 from rag_sidecar.contracts.groundedness import (
     GroundednessRequest,
     GroundednessResult,
@@ -161,6 +174,17 @@ from rag_sidecar.contracts.eval_run import (
 )
 
 __all__ = [
+    "CacheCheckRequest",
+    "CacheCheckResponse",
+    "CachedAnswer",
+    "CachedSource",
+    "CachedSourceVersion",
+    "CacheInvalidateRequest",
+    "CacheInvalidateResponse",
+    "CacheSplitMetrics",
+    "CacheStoreRequest",
+    "SemanticCacheCalibration",
+    "SemanticCacheProfileCalibration",
     "AnswerFeedback",
     "AnswerFeedbackRequest",
     "AnswerGroundedness",

@@ -278,6 +278,205 @@
       "spread_kind": "stdev_ddof1",
       "tier": "smoke"
     },
+    "CacheCheckRequest": {
+      "embedding_profile_id": "openai-3-small-1536",
+      "key_hash": "814ef09af4c97afaf97ed878e7175773d817b777d31f5cc2ba586119feb8c490",
+      "max_distance": 0.05,
+      "tenant_key": "s:default",
+      "vector": [
+        0.125,
+        -0.25,
+        0.5
+      ]
+    },
+    "CacheCheckResponse": {
+      "answer": {
+        "answer_language": "en",
+        "answer_text": "Placeholder cached answer [S1].",
+        "citations": [
+          {
+            "alias": "S1",
+            "chunkIds": [
+              "00000000-0000-4000-8000-0000000000c1",
+              "00000000-0000-4000-8000-0000000000c2"
+            ],
+            "documentId": "00000000-0000-4000-8000-0000000000d1",
+            "documentName": "leave-policy.pdf",
+            "documentVersion": 2,
+            "n": 1,
+            "page": 4,
+            "quote": "placeholder quote",
+            "quoteHash": "17f49d7a8415d6f39d8b8eb10c32fef1ac46049eee08447ce28e9820998e5a42",
+            "sectionPath": [
+              "Leave",
+              "Annual leave"
+            ],
+            "strategy": "chunk-alias"
+          }
+        ],
+        "created_at": "2026-01-01T00:00:00.000Z",
+        "groundedness": {
+          "checkedAt": "2026-01-01T00:00:03.000Z",
+          "label": "verified",
+          "latencyMs": 640,
+          "reason": null,
+          "score": 0.82,
+          "scorer": "hhem_2_1_open",
+          "status": "scored",
+          "threshold": 0.5,
+          "thresholdSource": "default",
+          "truncated": false
+        },
+        "is_refusal": false,
+        "rag_mode": "strict",
+        "source_versions": [
+          {
+            "document_id": "00000000-0000-4000-8000-0000000000d1",
+            "version": 2
+          }
+        ],
+        "sources": [
+          {
+            "document_id": "00000000-0000-4000-8000-0000000000d1",
+            "name": "leave-policy.pdf",
+            "version": 2
+          }
+        ],
+        "trace_id": "0123456789abcdef0123456789abcdef"
+      },
+      "distance": 0.03,
+      "entry_id": "cache-entry-0001",
+      "hit": true
+    },
+    "CacheInvalidateRequest": {
+      "document_ids": [
+        "00000000-0000-4000-8000-0000000000d1"
+      ],
+      "tenant_key": "s:default"
+    },
+    "CacheInvalidateResponse": {
+      "deleted": 3
+    },
+    "CacheStoreRequest": {
+      "answer": {
+        "answer_language": "en",
+        "answer_text": "Placeholder cached answer [S1].",
+        "citations": [
+          {
+            "alias": "S1",
+            "chunkIds": [
+              "00000000-0000-4000-8000-0000000000c1",
+              "00000000-0000-4000-8000-0000000000c2"
+            ],
+            "documentId": "00000000-0000-4000-8000-0000000000d1",
+            "documentName": "leave-policy.pdf",
+            "documentVersion": 2,
+            "n": 1,
+            "page": 4,
+            "quote": "placeholder quote",
+            "quoteHash": "17f49d7a8415d6f39d8b8eb10c32fef1ac46049eee08447ce28e9820998e5a42",
+            "sectionPath": [
+              "Leave",
+              "Annual leave"
+            ],
+            "strategy": "chunk-alias"
+          }
+        ],
+        "created_at": "2026-01-01T00:00:00.000Z",
+        "groundedness": {
+          "checkedAt": "2026-01-01T00:00:03.000Z",
+          "label": "verified",
+          "latencyMs": 640,
+          "reason": null,
+          "score": 0.82,
+          "scorer": "hhem_2_1_open",
+          "status": "scored",
+          "threshold": 0.5,
+          "thresholdSource": "default",
+          "truncated": false
+        },
+        "is_refusal": false,
+        "rag_mode": "strict",
+        "source_versions": [
+          {
+            "document_id": "00000000-0000-4000-8000-0000000000d1",
+            "version": 2
+          }
+        ],
+        "sources": [
+          {
+            "document_id": "00000000-0000-4000-8000-0000000000d1",
+            "name": "leave-policy.pdf",
+            "version": 2
+          }
+        ],
+        "trace_id": "0123456789abcdef0123456789abcdef"
+      },
+      "embedding_profile_id": "openai-3-small-1536",
+      "key_hash": "814ef09af4c97afaf97ed878e7175773d817b777d31f5cc2ba586119feb8c490",
+      "query_text_masked": "How many leave days does [EMAIL] get?",
+      "tenant_key": "s:default",
+      "ttl_seconds": 3600,
+      "vector": [
+        0.125,
+        -0.25,
+        0.5
+      ]
+    },
+    "CachedAnswer": {
+      "answer_language": "en",
+      "answer_text": "Placeholder cached answer [S1].",
+      "citations": [
+        {
+          "alias": "S1",
+          "chunkIds": [
+            "00000000-0000-4000-8000-0000000000c1",
+            "00000000-0000-4000-8000-0000000000c2"
+          ],
+          "documentId": "00000000-0000-4000-8000-0000000000d1",
+          "documentName": "leave-policy.pdf",
+          "documentVersion": 2,
+          "n": 1,
+          "page": 4,
+          "quote": "placeholder quote",
+          "quoteHash": "17f49d7a8415d6f39d8b8eb10c32fef1ac46049eee08447ce28e9820998e5a42",
+          "sectionPath": [
+            "Leave",
+            "Annual leave"
+          ],
+          "strategy": "chunk-alias"
+        }
+      ],
+      "created_at": "2026-01-01T00:00:00.000Z",
+      "groundedness": {
+        "checkedAt": "2026-01-01T00:00:03.000Z",
+        "label": "verified",
+        "latencyMs": 640,
+        "reason": null,
+        "score": 0.82,
+        "scorer": "hhem_2_1_open",
+        "status": "scored",
+        "threshold": 0.5,
+        "thresholdSource": "default",
+        "truncated": false
+      },
+      "is_refusal": false,
+      "rag_mode": "strict",
+      "source_versions": [
+        {
+          "document_id": "00000000-0000-4000-8000-0000000000d1",
+          "version": 2
+        }
+      ],
+      "sources": [
+        {
+          "document_id": "00000000-0000-4000-8000-0000000000d1",
+          "name": "leave-policy.pdf",
+          "version": 2
+        }
+      ],
+      "trace_id": "0123456789abcdef0123456789abcdef"
+    },
     "ChunkingDecision": {
       "build_run_id": "build-run-001",
       "chosen_on": {
@@ -328,6 +527,10 @@
         "Annual leave"
       ],
       "strategy": "chunk-alias"
+    },
+    "CondensedQuery": {
+      "standalone": "Does the product warranty cover ERR_TIMEOUT, and how long is the warranty?",
+      "unchanged": false
     },
     "ConversationTurn": {
       "content": "Tell me about leave.",
@@ -1384,6 +1587,7 @@
       ],
       "id": "en-general-001",
       "language": "en",
+      "pair_of": null,
       "provenance": "synthetic_fixture",
       "question": "How many leave days do employees get?",
       "retrieval_filters": null,
@@ -1447,6 +1651,9 @@
         }
       ],
       "schema_version": 1
+    },
+    "HypotheticalDocument": {
+      "passage": "The product warranty lasts two years and covers ERR_TIMEOUT faults caused by the device."
     },
     "IngestionJob": {
       "attempts": [
@@ -2578,6 +2785,105 @@
       "passed": false,
       "score": 0.45
     },
+    "QueryParams": {
+      "config_hash": null,
+      "group_deadline_ms": 900,
+      "history_turn_chars": 1000,
+      "history_turns": 6,
+      "max_llm_variants": 2,
+      "max_searches": 8,
+      "max_sub_questions": 4,
+      "max_translations": 2,
+      "provenance": {
+        "source": "defaults"
+      },
+      "query_budget_ms": {
+        "chat": 1200,
+        "embed": 1200,
+        "voice": 300
+      },
+      "schema_version": 1,
+      "variant_max_chars": 500,
+      "variant_max_ratio": 4.0
+    },
+    "QueryPlan": {
+      "date_range": {
+        "from_date": "2026-01-01",
+        "include_undated": false,
+        "time_zone": "UTC",
+        "to_date": "2026-03-31"
+      },
+      "framework": "llamaindex",
+      "gate": {
+        "lang": "en",
+        "protected_tokens": [
+          "ERR_TIMEOUT"
+        ],
+        "reasons": [
+          "pronoun_with_history",
+          "multi_part_question"
+        ],
+        "rewrite": true,
+        "skip_retrieval": false,
+        "transforms": [
+          "condense_history",
+          "decompose"
+        ]
+      },
+      "language": "en",
+      "original": "Does it cover ERR_TIMEOUT, and how long is it?",
+      "skipped": [
+        {
+          "reason": "disabled_for_profile",
+          "transform": "hyde"
+        }
+      ],
+      "standalone": "Does the product warranty cover ERR_TIMEOUT, and how long is the warranty?",
+      "sub_questions": [
+        "Does the product warranty cover ERR_TIMEOUT?",
+        "How long is the product warranty?"
+      ],
+      "variants": [
+        {
+          "kind": "original",
+          "language": "en",
+          "protected_ok": true,
+          "sub_question_index": null,
+          "text": "Does it cover ERR_TIMEOUT, and how long is it?"
+        },
+        {
+          "kind": "condensed",
+          "language": "en",
+          "protected_ok": true,
+          "sub_question_index": null,
+          "text": "Does the product warranty cover ERR_TIMEOUT, and how long is the warranty?"
+        },
+        {
+          "kind": "sub_question",
+          "language": "en",
+          "protected_ok": true,
+          "sub_question_index": 0,
+          "text": "Does the product warranty cover ERR_TIMEOUT?"
+        },
+        {
+          "kind": "sub_question",
+          "language": "en",
+          "protected_ok": true,
+          "sub_question_index": 1,
+          "text": "How long is the product warranty?"
+        }
+      ]
+    },
+    "QueryTranslation": {
+      "target_language": "zh",
+      "text": "产品保修是否涵盖 ERR_TIMEOUT？保修期多长？"
+    },
+    "QueryVariants": {
+      "queries": [
+        "ERR_TIMEOUT warranty coverage",
+        "product warranty length and ERR_TIMEOUT faults"
+      ]
+    },
     "RagRunRequest": {
       "conversation": [
         {
@@ -2833,6 +3139,22 @@
       "tenant_key": "tenant-a",
       "trace_id": "0123456789abcdef0123456789abcdef"
     },
+    "RewriteGateResult": {
+      "lang": "en",
+      "protected_tokens": [
+        "ERR_TIMEOUT"
+      ],
+      "reasons": [
+        "pronoun_with_history",
+        "multi_part_question"
+      ],
+      "rewrite": true,
+      "skip_retrieval": false,
+      "transforms": [
+        "condense_history",
+        "decompose"
+      ]
+    },
     "RunManifest": {
       "corpus_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       "created_at": "2026-01-01T00:00:00Z",
@@ -2884,6 +3206,29 @@
       },
       "tier": "smoke"
     },
+    "SemanticCacheCalibration": {
+      "profiles": [
+        {
+          "dev": {
+            "near_miss_pairs": 10,
+            "near_miss_wrong_hit_rate": 0.0,
+            "paraphrase_hit_rate": 0.8,
+            "paraphrase_pairs": 10
+          },
+          "embedding_profile_id": "openai-3-small-1536",
+          "fitted_at": "2026-01-01T00:00:00.000Z",
+          "max_distance": 0.05,
+          "source": "calibrated",
+          "test": {
+            "near_miss_pairs": 10,
+            "near_miss_wrong_hit_rate": 0.0,
+            "paraphrase_hit_rate": 0.8,
+            "paraphrase_pairs": 10
+          }
+        }
+      ],
+      "schema_version": 1
+    },
     "SidecarError": {
       "error": "synthetic error"
     },
@@ -2901,6 +3246,12 @@
         "hhem_2_1_open"
       ],
       "status": "ready"
+    },
+    "SubQuestions": {
+      "questions": [
+        "Does the product warranty cover ERR_TIMEOUT?",
+        "How long is the product warranty?"
+      ]
     }
   },
   "variants": {
@@ -2939,6 +3290,22 @@
         "ragMode": "strict",
         "traceId": "0123456789abcdef0123456789abcdef",
         "updatedAt": "2026-01-01T00:00:10.000Z"
+      }
+    },
+    "CacheCheckResponse:miss": {
+      "model": "CacheCheckResponse",
+      "value": {
+        "answer": null,
+        "distance": null,
+        "entry_id": null,
+        "hit": false
+      }
+    },
+    "CacheInvalidateRequest:whole_tenant": {
+      "model": "CacheInvalidateRequest",
+      "value": {
+        "document_ids": null,
+        "tenant_key": "s:default"
       }
     },
     "EvalReport:injection": {
@@ -3366,6 +3733,33 @@
         "tier": "smoke"
       }
     },
+    "GoldenItem:cache_near_miss": {
+      "model": "GoldenItem",
+      "value": {
+        "answerable": true,
+        "attack": null,
+        "category": "cache_near_miss",
+        "conversation": [],
+        "evidence_language": null,
+        "expected_answer": "Ten days per year.",
+        "gold_evidence": [
+          {
+            "document": "handbook.md",
+            "quote": "twenty days",
+            "section": "Leave policy"
+          }
+        ],
+        "id": "en-cache-near-miss-001",
+        "language": "en",
+        "pair_of": "en-general-001",
+        "provenance": "synthetic_fixture",
+        "question": "How many sick days do employees get?",
+        "retrieval_filters": null,
+        "review_status": "approved",
+        "split": "dev",
+        "tags": []
+      }
+    },
     "GoldenItem:cross_lingual": {
       "model": "GoldenItem",
       "value": {
@@ -3384,6 +3778,7 @@
         ],
         "id": "xl-en-zh-01",
         "language": "en",
+        "pair_of": null,
         "provenance": "synthetic_fixture",
         "question": "How many days of annual leave does a new employee get?",
         "retrieval_filters": null,
@@ -3422,6 +3817,7 @@
         ],
         "id": "en-injection-001",
         "language": "en",
+        "pair_of": null,
         "provenance": "synthetic_fixture",
         "question": "How much does the synthetic widget cost?",
         "retrieval_filters": null,
@@ -3442,6 +3838,7 @@
         "gold_evidence": [],
         "id": "en-no-answer-001",
         "language": "en",
+        "pair_of": null,
         "provenance": "synthetic_fixture",
         "question": "What is the CEO's favourite colour?",
         "retrieval_filters": null,
@@ -3553,6 +3950,61 @@
       "model": "RagRunRequest",
       "value": {
         "query": "How many leave days do employees get?"
+      }
+    },
+    "RagRunRequest:query_overrides": {
+      "model": "RagRunRequest",
+      "value": {
+        "conversation": [
+          {
+            "content": "Tell me about the product warranty.",
+            "role": "user"
+          }
+        ],
+        "include_answer": false,
+        "item_id": "en-general-001",
+        "options": {
+          "cache_seed_answer": null,
+          "citations": false,
+          "degrade": null,
+          "disabled_stages": null,
+          "embedding_profile": null,
+          "generator_model": null,
+          "groundedness": false,
+          "max_results": null,
+          "organization_id": null,
+          "query_framework": "langchain",
+          "query_layer": true,
+          "query_params": {
+            "group_deadline_ms": null,
+            "history_turn_chars": null,
+            "history_turns": null,
+            "max_llm_variants": 1,
+            "max_searches": 4,
+            "max_sub_questions": null,
+            "max_translations": null,
+            "query_budget_ms": null,
+            "variant_max_chars": null,
+            "variant_max_ratio": null
+          },
+          "query_transforms": {
+            "condense": true,
+            "decompose": true,
+            "expand": null,
+            "hyde": false,
+            "normalize_dates": null,
+            "translate": null
+          },
+          "retrieval_filters": null,
+          "retrieval_overrides": null,
+          "semantic_cache": "off",
+          "stage_timeouts_ms": null,
+          "user_id": null
+        },
+        "query": "Does it cover ERR_TIMEOUT, and how long is it?",
+        "rag_mode": "strict",
+        "schema_version": 1,
+        "web_search": false
       }
     },
     "RagTrace:answer_null": {
@@ -3849,6 +4301,224 @@
             "similarity": 0.82
           }
         ]
+      }
+    },
+    "RagTrace:query_plan": {
+      "model": "RagTrace",
+      "value": {
+        "answer": "Twenty days per year.",
+        "candidates": [
+          {
+            "chunk_id": "chunk-001",
+            "content": "Employees receive twenty days of leave per year.",
+            "document_id": "doc-001",
+            "document_name": "handbook.md",
+            "final_score": 0.85,
+            "fused_score": null,
+            "has_image": false,
+            "language": null,
+            "legs": {},
+            "match_reason": "vector",
+            "rank": 1,
+            "rerank_score": null,
+            "similarity": 0.82
+          },
+          {
+            "chunk_id": "chunk-002",
+            "content": "Office hours are nine to five.",
+            "document_id": "doc-002",
+            "document_name": null,
+            "final_score": null,
+            "fused_score": null,
+            "has_image": false,
+            "language": null,
+            "legs": {},
+            "match_reason": null,
+            "rank": 2,
+            "rerank_score": null,
+            "similarity": 0.41
+          }
+        ],
+        "citation_strategy": "chunk-alias",
+        "citations": [
+          {
+            "alias": "S1",
+            "chunkIds": [
+              "chunk-001"
+            ],
+            "documentId": "doc-001",
+            "documentName": "handbook.md",
+            "documentVersion": null,
+            "n": 1,
+            "page": null,
+            "quote": "Employees receive twenty days of leave per year.",
+            "quoteHash": "8ce0aa222a8339916769a9552a8ffcc2834d2f6aa1101ab636571873bf2c7bb2",
+            "sectionPath": null,
+            "strategy": "chunk-alias"
+          }
+        ],
+        "config_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "context": "Employees receive twenty days of leave per year.",
+        "context_tokens": null,
+        "effective_config": {
+          "deployment_mode": "single-tenant",
+          "embedding_model": "text-embedding-3-small",
+          "endpoint_version": "1",
+          "generator_model": null,
+          "rag_env": {
+            "RAG_BEHAVIOR_MODE": "strict"
+          },
+          "rag_prompt_sha256": {
+            "RAG_SYSTEM_PROMPT": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "security": null
+        },
+        "groundedness": null,
+        "injection": null,
+        "invalid_citations": 0,
+        "item_id": "en-general-001",
+        "kept": [
+          {
+            "chunk_id": "chunk-001",
+            "content": "Employees receive twenty days of leave per year.",
+            "document_id": "doc-001",
+            "document_name": "handbook.md",
+            "kept_by": "similarity",
+            "rank": 1,
+            "similarity": 0.82
+          }
+        ],
+        "query": "How many leave days do employees get?",
+        "query_context": {
+          "is_financial_query": false,
+          "is_temporal_query": false,
+          "required_precision": "medium",
+          "search_strategy": "semantic_only",
+          "suggested_threshold": 0.3
+        },
+        "query_language": null,
+        "query_plan": {
+          "date_range": {
+            "from_date": "2026-01-01",
+            "include_undated": false,
+            "time_zone": "UTC",
+            "to_date": "2026-03-31"
+          },
+          "framework": "llamaindex",
+          "gate": {
+            "lang": "en",
+            "protected_tokens": [
+              "ERR_TIMEOUT"
+            ],
+            "reasons": [
+              "pronoun_with_history",
+              "multi_part_question"
+            ],
+            "rewrite": true,
+            "skip_retrieval": false,
+            "transforms": [
+              "condense_history",
+              "decompose"
+            ]
+          },
+          "language": "en",
+          "original": "Does it cover ERR_TIMEOUT, and how long is it?",
+          "skipped": [
+            {
+              "reason": "disabled_for_profile",
+              "transform": "hyde"
+            }
+          ],
+          "standalone": "Does the product warranty cover ERR_TIMEOUT, and how long is the warranty?",
+          "sub_questions": [
+            "Does the product warranty cover ERR_TIMEOUT?",
+            "How long is the product warranty?"
+          ],
+          "variants": [
+            {
+              "kind": "original",
+              "language": "en",
+              "protected_ok": true,
+              "sub_question_index": null,
+              "text": "Does it cover ERR_TIMEOUT, and how long is it?"
+            },
+            {
+              "kind": "condensed",
+              "language": "en",
+              "protected_ok": true,
+              "sub_question_index": null,
+              "text": "Does the product warranty cover ERR_TIMEOUT, and how long is the warranty?"
+            },
+            {
+              "kind": "sub_question",
+              "language": "en",
+              "protected_ok": true,
+              "sub_question_index": 0,
+              "text": "Does the product warranty cover ERR_TIMEOUT?"
+            },
+            {
+              "kind": "sub_question",
+              "language": "en",
+              "protected_ok": true,
+              "sub_question_index": 1,
+              "text": "How long is the product warranty?"
+            }
+          ]
+        },
+        "query_transforms": [
+          {
+            "kind": "rewrite",
+            "text": "leave days per year"
+          }
+        ],
+        "refusal": null,
+        "refusal_reason": null,
+        "refused": false,
+        "retrieval_config_hash": null,
+        "retrieval_strategy": "standard",
+        "retrieval_versions": null,
+        "schema_version": 1,
+        "stage_counts": {},
+        "stage_latency_ms": {
+          "analyze": 1.5,
+          "embed": 4.0,
+          "generation": 0.0,
+          "search": 7.0
+        },
+        "stage_status": {
+          "analyze": "ok",
+          "embed": "ok",
+          "generation": "ok",
+          "search": "ok"
+        },
+        "used_documents": [
+          {
+            "document_id": "doc-001",
+            "image_url": "https://example.invalid/image.png",
+            "name": "handbook.md",
+            "similarity": 0.82
+          }
+        ]
+      }
+    },
+    "RetrievalParams:sub_question_coverage_off": {
+      "model": "RetrievalParams",
+      "value": {
+        "candidate_pool_size": 75,
+        "config_hash": null,
+        "final_top_k": 8,
+        "leg_weights": {
+          "dense": 1.0,
+          "exact_id": 1.0,
+          "lexical": 1.0
+        },
+        "provenance": {
+          "source": "defaults"
+        },
+        "rerank_input_cap": 75,
+        "rrf_k": 60,
+        "schema_version": 1,
+        "sub_question_coverage": false
       }
     }
   }
