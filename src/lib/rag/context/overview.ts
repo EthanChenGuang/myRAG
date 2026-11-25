@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { UsedDocument } from '../types';
+import type { ContextBlock, UsedDocument } from '../types';
 import { NO_CONTEXT_TEXT, type AssemblyDocumentRow } from './assemble';
+import { docsFromBlocks, wrapDocuments } from './wrap';
 
 export const OVERVIEW_QUERY = 'general information overview';
 export const OVERVIEW_MATCH_COUNT = 5;
@@ -16,6 +17,15 @@ export interface OverviewChunk {
 export interface OverviewContext {
   context: string;
   usedDocuments: UsedDocument[];
+  /** One block per document group in render order; absent when no chunk has content. */
+  blocks?: ContextBlock[];
+}
+
+export interface OverviewAssembleOptions {
+  /** Renders the blocks through wrapDocuments instead of the `=== Document:` string. */
+  contextTagging?: boolean;
+  /** Downweighted chunks: rendered after the unflagged chunks of their document, all-flagged documents last. */
+  flaggedChunkIds?: ReadonlySet<string>;
 }
 
 const UNKNOWN_DOCUMENT = 'Unknown Document';
@@ -49,12 +59,16 @@ export function assembleOverviewContext(
   rows: OverviewChunk[],
   documents: Map<string, AssemblyDocumentRow>,
   referenced: UsedDocument[] = [],
+  options: OverviewAssembleOptions = {},
 ): OverviewContext {
   const chunksWithContent = rows.filter((chunk) => chunk.content && chunk.content.trim().length > 0);
+  const flagged = options.flaggedChunkIds && options.flaggedChunkIds.size > 0 ? options.flaggedChunkIds : null;
   let context: string;
+  let blocks: ContextBlock[] | undefined;
 
   if (chunksWithContent.length > 0) {
-    const chunksByDocument = new Map<string, Array<{ content: string; similarity: number; chunkNum?: number }>>();
+    type GroupChunk = { chunkId: string; documentId: string; content: string; similarity: number; chunkNum?: number };
+    const chunksByDocument = new Map<string, GroupChunk[]>();
 
     for (const chunk of chunksWithContent) {
       const docName = documents.get(chunk.document_id)?.filename || UNKNOWN_DOCUMENT;
@@ -62,19 +76,45 @@ export function assembleOverviewContext(
       const chunkNum = chunkMatch ? parseInt(chunkMatch[1]) : undefined;
 
       if (!chunksByDocument.has(docName)) chunksByDocument.set(docName, []);
-      chunksByDocument.get(docName)!.push({ content: chunk.content, similarity: chunk.similarity, chunkNum });
+      chunksByDocument
+        .get(docName)!
+        .push({ chunkId: chunk.chunk_id, documentId: chunk.document_id, content: chunk.content, similarity: chunk.similarity, chunkNum });
     }
 
-    const contextParts: string[] = [];
-    for (const [docName, chunks] of chunksByDocument) {
+    let groups = [...chunksByDocument];
+    for (const [, chunks] of groups) {
       chunks.sort((a, b) => {
         if (a.chunkNum && b.chunkNum) return a.chunkNum - b.chunkNum;
         return b.similarity - a.similarity;
       });
+      if (flagged) chunks.sort((a, b) => Number(flagged.has(a.chunkId)) - Number(flagged.has(b.chunkId)));
+    }
+    if (flagged) {
+      const allFlagged = ([, chunks]: [string, GroupChunk[]]) => Number(chunks.every((chunk) => flagged.has(chunk.chunkId)));
+      groups = groups.sort((a, b) => allFlagged(a) - allFlagged(b));
+    }
+
+    const contextParts: string[] = [];
+    blocks = [];
+    for (const [docName, chunks] of groups) {
       contextParts.push(`=== Document: ${docName} (${chunks.length} relevant chunks) ===`);
       contextParts.push(...chunks.map((chunk) => chunk.content));
+      blocks.push({
+        documentId: chunks[0]!.documentId,
+        documentName: docName,
+        documentVersion: null,
+        chunkIds: chunks.map((chunk) => chunk.chunkId),
+        page: null,
+        sectionPath: null,
+        title: docName,
+        text: chunks.map((chunk) => chunk.content).join('\n\n'),
+        isImage: false,
+        alias: null,
+      });
     }
-    context = contextParts.join('\n\n');
+    context = options.contextTagging
+      ? (wrapDocuments(docsFromBlocks(blocks, flagged ? { flaggedChunkIds: flagged } : {})) ?? NO_CONTEXT_TEXT)
+      : contextParts.join('\n\n');
   } else {
     context = NO_CONTEXT_TEXT;
   }
@@ -96,5 +136,5 @@ export function assembleOverviewContext(
     });
   }
 
-  return { context, usedDocuments };
+  return blocks ? { context, usedDocuments, blocks } : { context, usedDocuments };
 }

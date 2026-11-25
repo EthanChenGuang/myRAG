@@ -25,6 +25,8 @@ export interface StageEntry {
   candidatesOut?: number | null;
   counts?: Record<string, number>;
   rules?: string[];
+  /** Detector versions such as rules@<12 hex>. */
+  versions?: string[];
   detail?: string;
 }
 
@@ -89,6 +91,7 @@ export function createTraceCollector(options: TraceCollectorOptions): TraceColle
       if (entry.reason !== undefined) record.reason = entry.reason;
       if (entry.detail !== undefined) record.detail = entry.detail;
       if (entry.counts !== undefined) record.counts = entry.counts;
+      if (entry.versions !== undefined) record.versions = entry.versions;
       records.push(record);
       return record;
     },
