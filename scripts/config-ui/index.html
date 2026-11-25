@@ -6892,6 +6892,106 @@
                                     </div>
                                 </div>
 
+                                <!-- Citations and groundedness -->
+                                <div class="card bg-base-200 shadow-md mt-6">
+                                    <div class="card-body">
+                                        <h3 class="text-lg font-semibold mb-2 text-balance">Citations and groundedness</h3>
+                                        <p class="text-base-content/70 mb-4">Inline citations, Claude Citations, groundedness scoring and answer feedback. All off by default; with every switch off, chat answers are unchanged.</p>
+
+                                        <div class="form-control mb-2">
+                                            <label class="label cursor-pointer justify-start gap-3">
+                                                <input type="checkbox" id="RAG_CITATIONS" name="RAG_CITATIONS" class="checkbox checkbox-primary">
+                                                <span class="label-text">Inline citations on knowledge-base answers</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-2">
+                                            <label class="label cursor-pointer justify-start gap-3">
+                                                <input type="checkbox" id="RAG_CLAUDE_CITATIONS" name="RAG_CLAUDE_CITATIONS" class="checkbox checkbox-primary">
+                                                <span class="label-text">Claude Citations through the Anthropic API</span>
+                                            </label>
+                                            <label class="label pl-8">
+                                                <span class="label-text-alt min-w-0 text-base-content/70">Needs an Anthropic API key. Claude models go to the Anthropic API directly; other models keep inline citations.</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-2">
+                                            <label class="label cursor-pointer justify-start gap-3">
+                                                <input type="checkbox" id="RAG_GROUNDEDNESS" name="RAG_GROUNDEDNESS" class="checkbox checkbox-primary">
+                                                <span class="label-text">Groundedness scoring after the answer</span>
+                                            </label>
+                                            <label class="label pl-8">
+                                                <span class="label-text-alt min-w-0 text-base-content/70">Scored by the sidecar after the stream ends; it does not delay the answer.</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-2">
+                                            <label class="label cursor-pointer justify-start gap-3">
+                                                <input type="checkbox" id="RAG_GROUNDEDNESS_VECTARA_OPT_IN" name="RAG_GROUNDEDNESS_VECTARA_OPT_IN" class="checkbox checkbox-primary">
+                                                <span class="label-text">Allow the Vectara hosted scorer</span>
+                                            </label>
+                                            <label class="label pl-8">
+                                                <span class="label-text-alt min-w-0 text-base-content/70">Sends the answer and its context to Vectara. Without it, only the local scorer runs.</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-2">
+                                            <label class="label cursor-pointer justify-start gap-3">
+                                                <input type="checkbox" id="RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK" name="RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK" class="checkbox checkbox-primary">
+                                                <span class="label-text">Multi-tenant Vectara acknowledgement</span>
+                                            </label>
+                                            <label class="label pl-8">
+                                                <span class="label-text-alt min-w-0 text-base-content"><span aria-hidden="true">⚠️</span> Tick this only after the Vectara data-retention terms were recorded in live verification. Without it, multi-tenant deployments never send data to Vectara.</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-2">
+                                            <label class="label cursor-pointer justify-start gap-3">
+                                                <input type="checkbox" id="RAG_ANSWER_FEEDBACK" name="RAG_ANSWER_FEEDBACK" class="checkbox checkbox-primary">
+                                                <span class="label-text">Answer feedback (thumbs up and down)</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2 mb-4">
+                                            <div class="form-control">
+                                                <label class="label" for="RAG_GROUNDEDNESS_TIMEOUT_MS"><span class="label-text">Groundedness timeout (ms)</span></label>
+                                                <input type="number" min="1" max="55000" id="RAG_GROUNDEDNESS_TIMEOUT_MS" placeholder="20000" autocomplete="off" inputmode="numeric"
+                                                    class="input input-bordered w-full">
+                                            </div>
+                                            <div class="form-control">
+                                                <label class="label" for="RAG_GROUNDEDNESS_MAX_PREMISE_TOKENS"><span class="label-text">Groundedness premise cap (tokens)</span></label>
+                                                <input type="number" min="256" max="8000" id="RAG_GROUNDEDNESS_MAX_PREMISE_TOKENS" placeholder="3000" autocomplete="off" inputmode="numeric"
+                                                    class="input input-bordered w-full">
+                                            </div>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label" for="ANTHROPIC_API_KEY">
+                                                <span class="label-text">Anthropic API key</span>
+                                            </label>
+                                            <div class="flex gap-2">
+                                                <input type="password" id="ANTHROPIC_API_KEY" name="ANTHROPIC_API_KEY" placeholder="Empty until configured" autocomplete="off"
+                                                    class="input input-bordered flex-1 w-full">
+                                                <button type="button" class="btn btn-square btn-outline" data-for="ANTHROPIC_API_KEY" aria-label="Show or hide the Anthropic API key">👁️</button>
+                                            </div>
+                                            <label class="label">
+                                                <span class="label-text-alt min-w-0 text-base-content/70">Stays on the server; only its presence is reported.</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label" for="ANTHROPIC_BASE_URL">
+                                                <span class="label-text">Anthropic base URL</span>
+                                            </label>
+                                            <input type="text" id="ANTHROPIC_BASE_URL" name="ANTHROPIC_BASE_URL" placeholder="https://api.anthropic.com/v1" autocomplete="off"
+                                                class="input input-bordered w-full">
+                                            <label class="label">
+                                                <span class="label-text-alt min-w-0 text-base-content/70">For tests and recorded streams only. Leave empty to use <code translate="no">https://api.anthropic.com/v1</code>.</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <!-- Info Box -->
                                 <div class="alert alert-info mt-6">
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
