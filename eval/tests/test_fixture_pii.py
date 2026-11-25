@@ -37,7 +37,7 @@ def email_violations(text: str) -> list[str]:
 
 INGEST_FIXTURES = FIXTURES / "ingest"
 PARSE_FIXTURES = FIXTURES / "parse"
-INGEST_FILE_COUNT = 33
+INGEST_FILE_COUNT = 48
 
 
 def _ingest_files():

@@ -33,8 +33,8 @@ DIGITAL_IDS = {
 }
 SCANNED_IDS = {"scan-zh", "scan-en", "scan-it"}
 TEXT_IDS = {"contract-zh", "injection-zh", "injection-en", "injection-it"}
-LONG_TABLE_PLAIN = ["long-table-en"]
-LONG_TABLE_CONTINUED: list[str] = []
+LONG_TABLE_PLAIN = ["long-table-zh", "long-table-en", "long-table-it"]
+LONG_TABLE_CONTINUED = ["long-table-zh-continued", "long-table-en-continued", "long-table-it-continued"]
 LONG_TABLE_IDS = LONG_TABLE_PLAIN + LONG_TABLE_CONTINUED
 
 
@@ -620,3 +620,69 @@ def test_the_plain_long_table_is_recorded_as_one_table_of_61_rows_starting_with_
     assert _normalized(table_lines[0]) == _normalized(_markdown_row(_roles(spec)["header"]))
     assert SEPARATOR_ROW.match(table_lines[1])
     assert len(table_lines) == LONG_TABLE_BODY_ROWS + 2
+
+
+CJK = re.compile(r"[\u4e00-\u9fff]")
+
+
+def test_each_language_writes_its_columns_and_keys_in_its_own_language():
+    by_language = {_long_spec(spec_id).language: _long_header_and_body(_long_spec(spec_id)) for spec_id in LONG_TABLE_PLAIN}
+    assert set(by_language) == {"zh", "en", "it"}
+    for language, (header, body) in by_language.items():
+        words = [*header, body[0][0], body[0][1], body[0][4]]
+        assert all(bool(CJK.search(word)) == (language == "zh") for word in words), language
+    assert not set(by_language["en"][0]) & set(by_language["it"][0])
+    assert not {row[0] for row in by_language["en"][1]} & {row[0] for row in by_language["it"][1]}
+
+
+@pytest.mark.parametrize("spec_id", LONG_TABLE_CONTINUED)
+def test_a_continued_variant_holds_the_same_rows_as_two_tables_the_second_without_header(spec_id):
+    spec = _long_spec(spec_id)
+    plain = _long_spec(spec_id.removesuffix("-continued"))
+    assert spec.language == plain.language and spec.doc_type == plain.doc_type
+    assert _long_header_and_body(spec) == _long_header_and_body(plain)
+    first, second = _long_tables(spec)
+    assert first.header and not second.header
+    assert second.page > first.last_page
+    assert len(second.rows[0]) == len(first.rows[0])
+    header, body = _long_header_and_body(spec)
+    assert second.rows[0] == body[len(first.rows) - 1] and second.rows[0] != header
+    roles = _roles(spec)
+    assert roles["continued"] is True and _roles(plain)["continued"] is False
+    assert roles["target_row"] >= len(first.rows) - 1, "the target row must be in the second table"
+    assert {key: value for key, value in roles.items() if key not in {"continued", "tables"}} == {
+        key: value for key, value in _roles(plain).items() if key not in {"continued", "tables"}
+    }
+
+
+@pytest.mark.parametrize("spec_id", LONG_TABLE_CONTINUED)
+def test_a_continued_recording_starts_its_second_table_on_a_later_page_with_a_data_row(spec_id):
+    entry = _long_entry(spec_id)
+    spec = _long_spec(spec_id)
+    header, body = _long_header_and_body(spec)
+    docling = json.loads(_read(INGEST / entry["recorded"]["docling"]))
+    assert len(docling["tables"]) == 2
+    first, second = docling["tables"]
+    assert min(prov["page_no"] for prov in second["prov"]) > max(prov["page_no"] for prov in first["prov"])
+    assert second["data"]["num_cols"] == first["data"]["num_cols"] == len(header)
+    assert first["data"]["num_rows"] + second["data"]["num_rows"] == LONG_TABLE_BODY_ROWS + 1
+    first_row = sorted((cell for cell in second["data"]["table_cells"] if cell["start_row_offset_idx"] == 0), key=lambda cell: cell["start_col_offset_idx"])
+    assert not any(cell["column_header"] for cell in first_row)
+    assert tuple(cell["text"] for cell in first_row) == body[first["data"]["num_rows"] - 1]
+    result = ParseResult.model_validate_json(_read(INGEST / entry["recorded"]["parse_result"]))
+    assert result.page_count == spec.page_count == 2
+    assert result.language == spec.language
+
+
+@pytest.mark.parametrize("spec_id", LONG_TABLE_CONTINUED)
+def test_the_continued_text_artifact_separates_its_two_tables_only_by_blank_lines(spec_id):
+    spec = _long_spec(spec_id)
+    first, second = _long_tables(spec)
+    text = _read(TEXT_DIR / f"{spec_id}.md").decode("utf-8")
+    last_of_first = _markdown_row(first.rows[-1])
+    first_of_second = _markdown_row(second.rows[0])
+    assert text.count(last_of_first) == 1 and text.count(first_of_second) == 1
+    between = text[text.index(last_of_first) + len(last_of_first) : text.index(first_of_second)]
+    assert between.strip() == "" and between.count("\n") >= 2
+    lines = text.splitlines()
+    assert SEPARATOR_ROW.match(lines[lines.index(first_of_second) + 1])
