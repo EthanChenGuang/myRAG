@@ -2,6 +2,11 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { LanguageValidationResult } from '../../config/rag/validate-language-settings.cjs';
 import { resetLanguageRegistryForTests, setLanguageRegistryForTests } from '@/lib/rag/lang/registry';
 import { resetLanguageSettingsForTests, validateConfiguredLanguages } from '@/lib/rag/lang/settings';
+import {
+  parseRerankProviderId,
+  resetRerankerLanguagesForTests,
+  setRerankerLanguagesForTests,
+} from '@/lib/rag/rerank/languages';
 import { expectedResult, loadLangCases, registryForCase, type LangCase } from './helpers/lang-cases';
 
 /**
@@ -14,7 +19,7 @@ interface EntryPointAdapter {
   cleanup(): void;
 }
 
-const ENV_NAMES = ['RAG_SUPPORTED_LANGUAGES', 'RAG_PRIMARY_LANGUAGE'] as const;
+const ENV_NAMES = ['RAG_SUPPORTED_LANGUAGES', 'RAG_PRIMARY_LANGUAGE', 'RAG_RERANKER'] as const;
 const savedEnv = Object.fromEntries(ENV_NAMES.map((name) => [name, process.env[name]]));
 
 function setEnv(name: string, value: string | null): void {
@@ -28,15 +33,22 @@ const appAdapter: EntryPointAdapter = {
     setEnv('RAG_SUPPORTED_LANGUAGES', entry.supported);
     setEnv('RAG_PRIMARY_LANGUAGE', entry.primary);
     if (entry.context.registryChange) setLanguageRegistryForTests(registryForCase(entry));
-    return validateConfiguredLanguages({
-      reranker: entry.context.reranker,
-      embeddingProfile: entry.context.embeddingProfile,
-    });
+    const reranker = entry.context.reranker;
+    if (reranker) {
+      const id = parseRerankProviderId(reranker.id);
+      if (id === null) throw new Error(`case ${entry.name}: unknown reranker ${reranker.id}`);
+      setEnv('RAG_RERANKER', id);
+      setRerankerLanguagesForTests(id, reranker.supportedLanguages);
+    } else {
+      setEnv('RAG_RERANKER', 'none');
+    }
+    return validateConfiguredLanguages({ embeddingProfile: entry.context.embeddingProfile });
   },
   cleanup() {
     for (const name of ENV_NAMES) setEnv(name, savedEnv[name] ?? null);
     resetLanguageRegistryForTests();
     resetLanguageSettingsForTests();
+    resetRerankerLanguagesForTests();
   },
 };
 

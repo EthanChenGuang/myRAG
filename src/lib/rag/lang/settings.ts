@@ -5,6 +5,7 @@ import {
   type LanguageValidationResult,
   type NormalizedLanguageSettings,
 } from '../../../../config/rag/validate-language-settings.cjs';
+import { parseRerankProviderId, rerankerSupportedLanguages } from '../rerank/languages';
 import { getLanguageRegistry } from './registry';
 
 export type LanguageSettings = NormalizedLanguageSettings;
@@ -30,18 +31,23 @@ export function getLanguageSettings(): LanguageSettings {
   return cached;
 }
 
+/** The reranker RAG_RERANKER selects with its declared languages; null for none (no reranker rule). */
+export function activeRerankerDeclaration(): LanguageDeclaration | null {
+  const id = parseRerankProviderId(process.env.RAG_RERANKER);
+  return id === null ? null : { id, supportedLanguages: rerankerSupportedLanguages(id) };
+}
+
 export interface ValidateConfiguredLanguagesOptions {
-  reranker?: LanguageDeclaration | null;
   /** Phase 3.2.1 (03.2.1-01) passes the active embedding profile; null means not verified against it. */
   embeddingProfile?: LanguageDeclaration | null;
 }
 
-/** D-07 for the app entry point: the configured values against the registry. */
+/** D-07 for the app entry point: the configured values against the registry and the active reranker. */
 export function validateConfiguredLanguages(options: ValidateConfiguredLanguagesOptions = {}): LanguageValidationResult {
   const { supported, primary } = rawEnv();
   return validateLanguageSettings(
     { supported, primary },
-    { registry: getLanguageRegistry(), reranker: options.reranker ?? null, embeddingProfile: options.embeddingProfile ?? null },
+    { registry: getLanguageRegistry(), reranker: activeRerankerDeclaration(), embeddingProfile: options.embeddingProfile ?? null },
   );
 }
 

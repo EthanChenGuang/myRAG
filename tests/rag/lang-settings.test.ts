@@ -14,7 +14,22 @@ import {
   setLanguageRegistryForTests,
   type LanguagePack,
 } from '@/lib/rag/lang/registry';
-import { getLanguageSettings, resetLanguageSettingsForTests } from '@/lib/rag/lang/settings';
+import {
+  activeRerankerDeclaration,
+  getLanguageSettings,
+  resetLanguageSettingsForTests,
+  validateConfiguredLanguages,
+} from '@/lib/rag/lang/settings';
+import { loadRagConfig } from '@/lib/rag/config';
+import { createCohereReranker } from '@/lib/rag/rerank/cohere';
+import {
+  parseRerankProviderId,
+  rerankerSupportedLanguages,
+  resetRerankerLanguagesForTests,
+  setRerankerLanguagesForTests,
+} from '@/lib/rag/rerank/languages';
+import { createLocalBm25Reranker } from '@/lib/rag/rerank/local-bm25';
+import { createVoyageReranker } from '@/lib/rag/rerank/voyage';
 import { expectedResult, loadLangCases, registryForCase, shippedRegistry } from './helpers/lang-cases';
 
 const COMPLETENESS_CASES = path.resolve(__dirname, '..', 'fixtures', 'rag', 'language-pack-completeness-cases.json');
@@ -133,5 +148,69 @@ describe('parseLanguageList', () => {
     expect(parseLanguageList(' ZH , en,zh,,')).toEqual(['zh', 'en']);
     expect(parseLanguageList(undefined)).toEqual([]);
     expect(parseLanguageList(['EN', ' it '])).toEqual(['en', 'it']);
+  });
+});
+
+describe('reranker language declarations', () => {
+  const savedReranker = process.env.RAG_RERANKER;
+  const stubFetch = (() => Promise.reject(new Error('no network'))) as unknown as typeof fetch;
+
+  afterEach(() => {
+    if (savedReranker === undefined) delete process.env.RAG_RERANKER;
+    else process.env.RAG_RERANKER = savedReranker;
+    resetRerankerLanguagesForTests();
+  });
+
+  it('cohere and voyage declare the evaluated packs, local_bm25 every pack with segmentation', () => {
+    const registryCodes = shippedRegistry().packs.map((pack) => pack.code);
+    const cohere = createCohereReranker({ fetch: stubFetch, apiKey: 'placeholder', baseUrl: '', model: 'rerank-v5.0-pro' });
+    const voyage = createVoyageReranker({ fetch: stubFetch, apiKey: 'placeholder', baseUrl: '', model: 'rerank-3' });
+    expect(cohere.supportedLanguages).toEqual(registryCodes);
+    expect(voyage.supportedLanguages).toEqual(registryCodes);
+    expect(createLocalBm25Reranker().supportedLanguages).toEqual(registryCodes);
+  });
+
+  it('local_bm25 leaves out a pack without a segmentation method', () => {
+    const registry = shippedRegistry();
+    const last = registry.packs[registry.packs.length - 1];
+    last.segmentation = null;
+    setLanguageRegistryForTests(registry);
+    expect(createLocalBm25Reranker().supportedLanguages).not.toContain(last.code);
+    expect(rerankerSupportedLanguages('local_bm25')).toEqual(registry.packs.slice(0, -1).map((pack) => pack.code));
+  });
+
+  it('RAG_RERANKER=cohere with a declaration that lacks it gives reranker_unsupported for it', () => {
+    setRaw('zh,en,it', 'en');
+    process.env.RAG_RERANKER = 'cohere';
+    setRerankerLanguagesForTests('cohere', ['zh', 'en']);
+    const result = validateConfiguredLanguages();
+    expect(result.ok).toBe(false);
+    expect(result.errors).toEqual([{ code: 'reranker_unsupported', language: 'it', id: 'cohere' }]);
+    expect(result.verifiedAgainstActiveProfile).toBe(false);
+  });
+
+  it('RAG_RERANKER=none gives no reranker error', () => {
+    setRaw('zh,en,it', 'en');
+    process.env.RAG_RERANKER = 'none';
+    setRerankerLanguagesForTests('cohere', []);
+    setRerankerLanguagesForTests('voyage', []);
+    setRerankerLanguagesForTests('local_bm25', []);
+    expect(activeRerankerDeclaration()).toBeNull();
+    expect(validateConfiguredLanguages().errors).toEqual([]);
+  });
+
+  it('the shipped rerankers accept the shipped set', () => {
+    setRaw('zh,en,it', 'zh');
+    for (const id of ['cohere', 'voyage', 'local_bm25']) {
+      process.env.RAG_RERANKER = id;
+      expect(validateConfiguredLanguages().ok).toBe(true);
+    }
+  });
+
+  it('reads RAG_RERANKER the way loadRagConfig does', () => {
+    for (const raw of [undefined, '', 'none', 'Cohere', ' voyage ', 'LOCAL_BM25', 'bogus']) {
+      const fromConfig = loadRagConfig({ RAG_RERANKER: raw }).v2.reranker;
+      expect(parseRerankProviderId(raw) ?? 'none').toBe(fromConfig);
+    }
   });
 });
