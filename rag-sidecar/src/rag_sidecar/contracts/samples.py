@@ -100,7 +100,6 @@ from rag_sidecar.contracts import (
     SliceMetrics,
     StageLatency,
     TraceCandidate,
-    TraceCitation,
     TraceEffectiveConfig,
     TraceKeptChunk,
     TraceQueryContext,
@@ -552,6 +551,9 @@ def _cross_lingual_item() -> GoldenItem:
     )
 
 
+_TRACE_QUOTE = "Employees receive twenty days of leave per year."
+
+
 def _trace(answer: str | None) -> RagTrace:
     return RagTrace(
         item_id="en-general-001",
@@ -609,7 +611,19 @@ def _trace(answer: str | None) -> RagTrace:
         refused=False,
         refusal_reason=None,
         answer=answer,
-        citations=[TraceCitation(document_id="doc-001", chunk_id="chunk-001")],
+        citations=[
+            CitationRecord(
+                n=1,
+                alias="S1",
+                chunkIds=["chunk-001"],
+                documentId="doc-001",
+                documentName="handbook.md",
+                quote=_TRACE_QUOTE,
+                quoteHash=hashlib.sha256(_TRACE_QUOTE.encode("utf-8")).hexdigest(),
+                strategy="chunk-alias",
+            )
+        ],
+        citation_strategy="chunk-alias",
         stage_latency_ms={"analyze": 1.5, "embed": 4.0, "search": 7.0, "generation": 0.0},
         stage_status={"analyze": "ok", "embed": "ok", "search": "ok", "generation": "ok"},
         effective_config=TraceEffectiveConfig(
