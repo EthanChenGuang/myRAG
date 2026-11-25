@@ -214,11 +214,13 @@ export { PARSE_TIERS, ParseAdminError, listTierBounds, readBudgetView, setTierOv
 export type { BudgetTenantUsage, BudgetView, ParseTierName, SetTierOverrideInput, TierBoundsItem, TierBoundsPair, TierOverrideView } from './ingest/parse-admin';
 export { listQuarantine } from './ingest/quarantine-admin';
 export { releaseQuarantined } from './ingest/quarantine-admin';
-export { deleteQuarantined } from './ingest/quarantine-admin';
+export { deleteQuarantined, listNotChecked } from './ingest/quarantine-admin';
 export type {
   DeleteQuarantinedResult,
   ListQuarantineInput,
+  ListNotCheckedResult,
   ListQuarantineResult,
+  NotCheckedItem,
   QuarantineActionInput,
   QuarantineFailure,
   QuarantineItem,

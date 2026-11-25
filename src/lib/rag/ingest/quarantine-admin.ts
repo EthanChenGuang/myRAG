@@ -1,6 +1,8 @@
 import type { RpcClient } from '../backend/supabase-rpc';
+import { buildQuarantineReasons, legacyQuarantineReasons, type QuarantineReason } from '../security/quarantine-reasons';
 import { removeVersionObjects } from './artifacts';
 import { getIngestDeps } from './deps';
+import { afterPublish } from './post-publish';
 
 export type QuarantineFailure = 'not_found' | 'not_quarantined' | 'not_admin' | 'invalid_argument' | 'unavailable';
 
@@ -15,7 +17,29 @@ export interface QuarantineItem {
   snippets: string[];
   quarantinedAt: string;
   detectedBy: 'injection_scan' | 'invoice_extraction';
+  /** D-32, in the fixed order; an older row without reasons shows its rule ids as one injection_rule reason. Evidence text: never log it. */
+  reasons: QuarantineReason[];
+  /** Hidden spans the remover could not locate in the parse text, summed over the reasons. */
+  unlocated: number;
+  hiddenTextCheck: 'clean' | 'hidden_found' | 'not_checked' | null;
+  /** The upload also needed approval (D-36); releasing it counts as the approval. */
+  pendingApproval: boolean;
+  uploaderId: string | null;
 }
+
+export interface NotCheckedItem {
+  documentId: string;
+  lineageId: string;
+  tenantKey: string;
+  filename: string;
+  docType: string | null;
+  source: string;
+  uploadedAt: string;
+}
+
+export type ListNotCheckedResult =
+  | { ok: true; items: NotCheckedItem[]; total: number; limit: number; offset: number }
+  | { ok: false; reason: QuarantineFailure };
 
 export type ListQuarantineResult =
   | { ok: true; items: QuarantineItem[]; total: number; limit: number; offset: number }
@@ -36,7 +60,17 @@ export interface ListQuarantineInput {
 }
 
 export type ReleaseQuarantinedResult =
-  | { ok: true; documentId: string; version: number; supersededDocumentId: string | null; ruleIds: string[] }
+  | {
+      ok: true;
+      documentId: string;
+      version: number;
+      supersededDocumentId: string | null;
+      ruleIds: string[];
+      /** The link targets the admin reviewed; skipped on the next version of the lineage (D-35). */
+      releasedTargets: string[];
+      /** published, or superseded_lineage when a confirmed supersession link keeps the lineage retired (0806). */
+      outcome: 'published' | 'superseded_lineage';
+    }
   | { ok: false; reason: QuarantineFailure };
 
 export type DeleteQuarantinedResult =
@@ -97,6 +131,17 @@ function timeOf(row: Row, key: string): string | null {
   return parsed !== null && !Number.isNaN(parsed.getTime()) ? parsed.toISOString() : null;
 }
 
+const HIDDEN_TEXT_CHECKS = new Set(['clean', 'hidden_found', 'not_checked']);
+
+/** Validates the stored reasons with the generated schema; a reason that fails is dropped and only the count is logged. */
+function reasonsOf(row: Row, ruleIds: string[], detectedBy: QuarantineItem['detectedBy']): QuarantineItem['reasons'] {
+  const stored = Array.isArray(row.reasons) ? (row.reasons as unknown[]) : [];
+  if (stored.length === 0) return legacyQuarantineReasons(ruleIds, detectedBy);
+  const { reasons, dropped } = buildQuarantineReasons(stored);
+  if (dropped > 0) console.warn('[RAG Admin] quarantine reasons failed validation and were dropped', { documentId: row.document_id, dropped });
+  return reasons;
+}
+
 function itemOf(row: Row): QuarantineItem | null {
   const documentId = text(row, 'document_id');
   const lineageId = text(row, 'lineage_id');
@@ -104,6 +149,9 @@ function itemOf(row: Row): QuarantineItem | null {
   const version = integer(row, 'version');
   const quarantinedAt = timeOf(row, 'quarantined_at');
   if (documentId === null || lineageId === null || tenantKey === null || version === null || quarantinedAt === null) return null;
+  const ruleIds = strings(row, 'rule_ids');
+  const detectedBy: QuarantineItem['detectedBy'] = text(row, 'detected_by') === 'invoice_extraction' ? 'invoice_extraction' : 'injection_scan';
+  const hiddenTextCheck = text(row, 'hidden_text_check');
   return {
     documentId,
     lineageId,
@@ -111,10 +159,15 @@ function itemOf(row: Row): QuarantineItem | null {
     filename: text(row, 'filename') ?? '',
     source: text(row, 'source') ?? '',
     version,
-    ruleIds: strings(row, 'rule_ids'),
+    ruleIds,
     snippets: strings(row, 'snippets').slice(0, 3),
     quarantinedAt,
-    detectedBy: text(row, 'detected_by') === 'invoice_extraction' ? 'invoice_extraction' : 'injection_scan',
+    detectedBy,
+    reasons: reasonsOf(row, ruleIds, detectedBy),
+    unlocated: Math.max(integer(row, 'unlocated') ?? 0, 0),
+    hiddenTextCheck: HIDDEN_TEXT_CHECKS.has(hiddenTextCheck ?? '') ? (hiddenTextCheck as QuarantineItem['hiddenTextCheck']) : null,
+    pendingApproval: row.pending_approval === true,
+    uploaderId: text(row, 'uploader_id'),
   };
 }
 
@@ -132,7 +185,7 @@ export async function listQuarantine(input: ListQuarantineInput): Promise<ListQu
   const limit = clamp(input.limit, DEFAULT_LIMIT, 1, MAX_LIMIT);
   const offset = clamp(input.offset, 0, 0, 1_000_000);
 
-  const page = await call('rag_list_quarantine', { p_actor: actor, p_limit: limit, p_offset: offset }, input.signal);
+  const page = await call('rag_list_quarantine_reasons', { p_actor: actor, p_limit: limit, p_offset: offset }, input.signal);
   if (!page.ok) return page;
   const items: QuarantineItem[] = [];
   for (const row of page.rows) {
@@ -142,7 +195,7 @@ export async function listQuarantine(input: ListQuarantineInput): Promise<ListQu
   }
   let total = page.rows.length > 0 ? Number(page.rows[0]?.total_count) : 0;
   if (page.rows.length === 0 && offset > 0) {
-    const first = await call('rag_list_quarantine', { p_actor: actor, p_limit: 1, p_offset: 0 }, input.signal);
+    const first = await call('rag_list_quarantine_reasons', { p_actor: actor, p_limit: 1, p_offset: 0 }, input.signal);
     if (!first.ok) return first;
     total = first.rows.length > 0 ? Number(first.rows[0]?.total_count) : 0;
   }
@@ -157,7 +210,7 @@ export async function listQuarantine(input: ListQuarantineInput): Promise<ListQu
 export async function releaseQuarantined(input: QuarantineActionInput): Promise<ReleaseQuarantinedResult> {
   if (!UUID.test(input.documentId) || !UUID.test(input.actorUserId)) return { ok: false, reason: 'invalid_argument' };
   const result = await call(
-    'rag_release_quarantine',
+    'rag_release_quarantine_reasons',
     { p_document_id: input.documentId.toLowerCase(), p_actor: input.actorUserId.toLowerCase() },
     input.signal,
   );
@@ -165,8 +218,64 @@ export async function releaseQuarantined(input: QuarantineActionInput): Promise<
   const row = result.rows[0];
   const documentId = row ? text(row, 'document_id') : null;
   const version = row ? integer(row, 'version') : null;
-  if (!row || documentId === null || version === null) return { ok: false, reason: 'unavailable' };
-  return { ok: true, documentId, version, supersededDocumentId: text(row, 'superseded_document_id'), ruleIds: strings(row, 'rule_ids') };
+  const outcome = row ? text(row, 'outcome') : null;
+  if (!row || documentId === null || version === null || (outcome !== 'published' && outcome !== 'superseded_lineage')) {
+    return { ok: false, reason: 'unavailable' };
+  }
+  const tenantKey = text(row, 'tenant_key');
+  // A release goes through the publish seam: the post-publish hooks run as after any publish. Never awaited, never fails the release.
+  if (outcome === 'published' && tenantKey !== null) void afterPublish({ documentId, tenantKey });
+  return {
+    ok: true,
+    documentId,
+    version,
+    supersededDocumentId: text(row, 'superseded_document_id'),
+    ruleIds: strings(row, 'rule_ids'),
+    releasedTargets: strings(row, 'released_targets'),
+    outcome,
+  };
+}
+
+function notCheckedOf(row: Row): NotCheckedItem | null {
+  const documentId = text(row, 'document_id');
+  const lineageId = text(row, 'lineage_id');
+  const tenantKey = text(row, 'tenant_key');
+  const uploadedAt = timeOf(row, 'uploaded_at');
+  if (documentId === null || lineageId === null || tenantKey === null || uploadedAt === null) return null;
+  return {
+    documentId,
+    lineageId,
+    tenantKey,
+    filename: text(row, 'filename') ?? '',
+    docType: text(row, 'doc_type'),
+    source: text(row, 'source') ?? '',
+    uploadedAt,
+  };
+}
+
+/** Current, ready documents of the actor's tenants that no hidden-text checker covered (D-34), newest first, one page. */
+export async function listNotChecked(input: ListQuarantineInput): Promise<ListNotCheckedResult> {
+  if (!UUID.test(input.actorUserId)) return { ok: false, reason: 'invalid_argument' };
+  const actor = input.actorUserId.toLowerCase();
+  const limit = clamp(input.limit, DEFAULT_LIMIT, 1, MAX_LIMIT);
+  const offset = clamp(input.offset, 0, 0, 1_000_000);
+
+  const page = await call('rag_list_not_checked', { p_actor: actor, p_limit: limit, p_offset: offset }, input.signal);
+  if (!page.ok) return page;
+  const items: NotCheckedItem[] = [];
+  for (const row of page.rows) {
+    const item = notCheckedOf(row);
+    if (item === null) return { ok: false, reason: 'unavailable' };
+    items.push(item);
+  }
+  let total = page.rows.length > 0 ? Number(page.rows[0]?.total_count) : 0;
+  if (page.rows.length === 0 && offset > 0) {
+    const first = await call('rag_list_not_checked', { p_actor: actor, p_limit: 1, p_offset: 0 }, input.signal);
+    if (!first.ok) return first;
+    total = first.rows.length > 0 ? Number(first.rows[0]?.total_count) : 0;
+  }
+  if (!Number.isFinite(total)) return { ok: false, reason: 'unavailable' };
+  return { ok: true, items, total, limit, offset };
 }
 
 /**

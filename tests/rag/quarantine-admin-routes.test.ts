@@ -168,8 +168,8 @@ describe('quarantine admin routes', () => {
     state.rpcCalls = [];
     state.dbAvailable = true;
     state.outcomes = {
-      rag_list_quarantine: { data: [LIST_ROW], error: null },
-      rag_release_quarantine: { data: [RELEASE_ROW], error: null },
+      rag_list_quarantine_reasons: { data: [LIST_ROW], error: null },
+      rag_release_quarantine_reasons: { data: [RELEASE_ROW], error: null },
       rag_delete_quarantined: { data: [DELETE_ROW], error: null },
     };
     logged = [];
@@ -276,7 +276,7 @@ describe('quarantine admin routes', () => {
         },
       ],
     });
-    expect(state.rpcCalls).toEqual([{ fn: 'rag_list_quarantine', args: { p_actor: ADMIN_ID, p_limit: 20, p_offset: 40 } }]);
+    expect(state.rpcCalls).toEqual([{ fn: 'rag_list_quarantine_reasons', args: { p_actor: ADMIN_ID, p_limit: 20, p_offset: 40 } }]);
     expect(logged.join('\n')).not.toContain(SNIPPET);
   });
 
@@ -298,7 +298,7 @@ describe('quarantine admin routes', () => {
     );
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ success: true, id: DOC_ID, status: 'ready', version: 1, superseded_document_id: null, rule_ids: ['inj-en-ignore-previous'] });
-    expect(state.rpcCalls).toEqual([{ fn: 'rag_release_quarantine', args: { p_document_id: DOC_ID, p_actor: ADMIN_ID } }]);
+    expect(state.rpcCalls).toEqual([{ fn: 'rag_release_quarantine_reasons', args: { p_document_id: DOC_ID, p_actor: ADMIN_ID } }]);
     expect(logged.some((line) => line.includes('[RAG Admin]') && line.includes(DOC_ID))).toBe(true);
     expect(logged.join('\n')).not.toContain(SNIPPET);
   });
@@ -350,7 +350,7 @@ describe('quarantine admin routes', () => {
     }
     expect(state.rpcCalls).toEqual([]);
 
-    state.outcomes.rag_release_quarantine = { data: null, error: { code: 'P0001', message: 'not_found' } };
+    state.outcomes.rag_release_quarantine_reasons = { data: null, error: { code: 'P0001', message: 'not_found' } };
     state.outcomes.rag_delete_quarantined = { data: null, error: { code: 'P0001', message: 'not_found' } };
     const released = await loaded.release.POST(req(`/api/rag/admin/quarantine/${DOC_ID}/release`, { method: 'POST' }), params(DOC_ID));
     const deleted = await loaded.del.DELETE(req(`/api/rag/admin/quarantine/${DOC_ID}`, { method: 'DELETE' }), params(DOC_ID));
@@ -362,9 +362,9 @@ describe('quarantine admin routes', () => {
   it('gives 409 to a document that is not quarantined, 403 when the database refuses the actor, and 503 when the database is unavailable', async () => {
     const loaded = await load();
     state.session = { id: ADMIN_ID };
-    state.outcomes.rag_release_quarantine = { data: null, error: { code: 'P0001', message: 'not_quarantined' } };
+    state.outcomes.rag_release_quarantine_reasons = { data: null, error: { code: 'P0001', message: 'not_quarantined' } };
     expect((await loaded.release.POST(req(`/api/rag/admin/quarantine/${DOC_ID}/release`, { method: 'POST' }), params(DOC_ID))).status).toBe(409);
-    state.outcomes.rag_release_quarantine = { data: null, error: { code: 'P0001', message: 'not_admin' } };
+    state.outcomes.rag_release_quarantine_reasons = { data: null, error: { code: 'P0001', message: 'not_admin' } };
     expect((await loaded.release.POST(req(`/api/rag/admin/quarantine/${DOC_ID}/release`, { method: 'POST' }), params(DOC_ID))).status).toBe(403);
     state.outcomes.rag_delete_quarantined = { data: null, error: { code: 'XX000', message: 'connection reset by peer: secret text' } };
     const failed = await loaded.del.DELETE(req(`/api/rag/admin/quarantine/${DOC_ID}`, { method: 'DELETE' }), params(DOC_ID));
