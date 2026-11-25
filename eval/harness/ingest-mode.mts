@@ -17,6 +17,32 @@ interface ManifestFixture {
   expected?: { injection?: { expected_status?: string } };
 }
 
+export type IngestRouting = 'fixed' | 'tiered';
+export type ForcedTier = 'fast' | 'structured' | 'premium';
+export interface IngestRoutingOptions {
+  routing: IngestRouting;
+  forceTier?: ForcedTier;
+}
+
+export interface ParseFixtureDocument {
+  id: string;
+  class: string;
+  language: string;
+  filename: string;
+  path: string;
+  sha256: string;
+  pageCount: number;
+  typedTwin: boolean;
+}
+
+export function ingestModeParseFixtures(): ParseFixtureDocument[] {
+  return [];
+}
+
+export function parseIngestRoutingFlags(_values: { routing?: string; 'force-tier'?: string }): IngestRoutingOptions | undefined {
+  return undefined;
+}
+
 /** Repo-relative golden files the ingest mode scores; ingest-only items are added here. */
 export function ingestModeGoldenPaths(): string[] {
   return ['eval/fixtures/golden.jsonl', 'eval/fixtures/ingest/golden-ingest.jsonl'];
@@ -81,6 +107,9 @@ export async function buildIngestFixtureDatabase(options: {
   onAfterCorpusSlice?: (state: IngestFixtureBuildState) => Promise<void>;
   /** Ingest corpus documents [0, index) first, run the callback, then ingest [index, end) and typed fixtures. */
   splitAtCorpusIndex?: number;
+  typedFixtureIds?: string[];
+  parseFixtureIds?: string[];
+  routing?: IngestRoutingOptions;
 }): Promise<FixtureDatabase & { buildState: IngestFixtureBuildState }> {
   const { deploymentMode } = options;
   const includeTyped = options.includeTypedFixtures ?? true;
