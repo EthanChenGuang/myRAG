@@ -4,6 +4,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { NextRequest } from 'next/server';
 import type { PGlite } from '@electric-sql/pglite';
 import { env } from '@/lib/env';
+import { noKnowledgeBaseResponse } from '@/lib/rag/generation/messages';
 import { mintScope } from '@/lib/rag/tenant/scope';
 import { mintVoiceToken } from '@/lib/rag/tenant/voice-token';
 import { loadPinnedEvalEnv } from '../../eval/harness/eval-env.mts';
@@ -96,6 +97,7 @@ const IMAGE_QUESTION = 'Which aisles hold thermal probes according to the floor 
 const IMAGE_URL = 'https://example.com/fixtures/warehouse-floorplan.png';
 const UNAVAILABLE_EN = 'The knowledge base is temporarily unavailable';
 const NOT_AVAILABLE = 'Information Not Available';
+const LOCALIZED_NOT_AVAILABLE = ['es', 'en'].map((language) => noKnowledgeBaseResponse(language).split('\n')[0]!.replace(/^# /, ''));
 const VOICE_INTENT_QUERIES = [
   'show me the warehouse floorplan image',
   'warehouse floorplan picture',
@@ -346,7 +348,10 @@ describe('defaults characterization (Phase 4.1 D-01 set, explicit)', () => {
       expect(h.traced, `no trace for ${item.id}`).toHaveLength(1);
       if (h.traced[0].status !== 'empty') continue;
       empties += 1;
-      expect(readSseText(body), `strict empty retrieval for ${item.id} did not answer information not available`).toContain(NOT_AVAILABLE);
+      expect(
+        LOCALIZED_NOT_AVAILABLE.some((title) => readSseText(body).includes(title)),
+        `strict empty retrieval for ${item.id} did not answer information not available`,
+      ).toBe(true);
       expect(body).not.toContain(UNAVAILABLE_EN);
       expect(h.capture.streamText, `strict empty retrieval for ${item.id} reached the model`).not.toHaveBeenCalled();
     }
