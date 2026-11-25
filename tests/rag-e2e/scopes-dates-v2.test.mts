@@ -21,6 +21,16 @@ const DOCS = {
   bTagged: { docId: '00000000-0000-4000-8000-00000000b101', chunkId: '00000000-0000-4000-8000-00000000b1c1', userId: TWO_TENANT_IDS.userB, scopes: ['region:a1'] },
 } as const;
 
+/** The injected clock: 2026-03-15 in UTC, late enough that a zone east of UTC would already read the next day. */
+const NOW = Date.parse('2026-03-15T23:30:00.000Z');
+const ONE_DAY = 24 * 60 * 60 * 1000;
+const DATED = {
+  future: { docId: '00000000-0000-4000-8000-00000000a201', chunkId: '00000000-0000-4000-8000-00000000a2c1', userId: TWO_TENANT_IDS.userA, from: '2026-03-16', to: null },
+  expired: { docId: '00000000-0000-4000-8000-00000000a202', chunkId: '00000000-0000-4000-8000-00000000a2c2', userId: TWO_TENANT_IDS.userA, from: null, to: '2026-03-14' },
+  current: { docId: '00000000-0000-4000-8000-00000000a203', chunkId: '00000000-0000-4000-8000-00000000a2c3', userId: TWO_TENANT_IDS.userA, from: '2026-01-01', to: '2026-03-15' },
+  bFuture: { docId: '00000000-0000-4000-8000-00000000b201', chunkId: '00000000-0000-4000-8000-00000000b2c1', userId: TWO_TENANT_IDS.userB, from: '2026-03-16', to: null },
+} as const;
+
 function vectorLiteral(text: string): string {
   return `[${embedText(text).join(',')}]`;
 }
@@ -34,6 +44,7 @@ describe('scopes filter and effective dates through the v2 pipeline, two tenants
   let scopesModule: typeof import('@/lib/rag/query/scopes');
   let filtersModule: typeof import('@/lib/rag/query/filters');
   let configModule: typeof import('@/lib/rag/config');
+  let depsModule: typeof import('@/lib/rag/deps');
   const saved: Record<string, string | undefined> = {};
 
   async function seedDocument(doc: (typeof DOCS)[keyof typeof DOCS], label: string) {
@@ -51,6 +62,18 @@ describe('scopes filter and effective dates through the v2 pipeline, two tenants
     );
   }
 
+  async function seedDated(doc: (typeof DATED)[keyof typeof DATED], label: string) {
+    const text = `Two tenant isolation canary phrase: dated sample ${label}`;
+    await fixture.db.query(
+      'INSERT INTO documents (id, filename, content, user_id, effective_from, effective_to) VALUES ($1, $2, $3, $4, $5::date, $6::date)',
+      [doc.docId, `${label}.md`, text, doc.userId, doc.from, doc.to],
+    );
+    await fixture.db.query(
+      'INSERT INTO document_chunks (id, document_id, content, embedding, chunk_index, metadata, effective_from, effective_to) VALUES ($1, $2, $3, $4::vector, 0, $5::jsonb, $6::date, $7::date)',
+      [doc.chunkId, doc.docId, `Document: ${label}.md. Content: ${text}`, vectorLiteral(text), '{}', doc.from, doc.to],
+    );
+  }
+
   async function seedVocabulary(tenantKey: string, value: string) {
     await fixture.db.query(
       `INSERT INTO rag_scope_vocabulary (tenant_key, dimension, value, label, created_by, updated_by) VALUES ($1, 'region', $2, $3, $4, $4)`,
@@ -64,6 +87,7 @@ describe('scopes filter and effective dates through the v2 pipeline, two tenants
     await seedDocument(DOCS.aUntagged, 'a-untagged');
     await seedDocument(DOCS.aOtherValue, 'a-other');
     await seedDocument(DOCS.bTagged, 'b-tagged');
+    for (const [label, doc] of Object.entries(DATED)) await seedDated(doc, label);
     await seedVocabulary(TENANT_A, 'a1');
     await seedVocabulary(TENANT_A, 'b2');
     await seedVocabulary(TENANT_B, 'a1');
@@ -78,12 +102,15 @@ describe('scopes filter and effective dates through the v2 pipeline, two tenants
     scopesModule = await import('@/lib/rag/query/scopes');
     filtersModule = await import('@/lib/rag/query/filters');
     configModule = await import('@/lib/rag/config');
+    depsModule = await import('@/lib/rag/deps');
+    depsModule.setRagDepsForTests({ now: () => NOW });
     const { resetRetrievalBackendForTests } = await import('@/lib/rag/backend/registry');
     configModule.resetRagConfigForTests();
     resetRetrievalBackendForTests();
   });
 
   after(async () => {
+    depsModule?.resetRagDepsForTests();
     for (const [name, value] of Object.entries(saved)) {
       if (value === undefined) delete process.env[name];
       else process.env[name] = value;
@@ -119,8 +146,12 @@ describe('scopes filter and effective dates through the v2 pipeline, two tenants
       signal: new AbortController().signal,
       ...(filters ? { retrievalFilters: filters } : {}),
     });
-    assert.ok(result.stages.some((entry) => entry.name === 'fuse'), 'the v2 graph ran');
-    return { docs: new Set(result.candidates.map((candidate) => candidate.document_id)), calls: edge.calls.slice(start) };
+    if (process.env.RAG_PIPELINE === 'v2') assert.ok(result.stages.some((entry) => entry.name === 'fuse'), 'the v2 graph ran');
+    return {
+      docs: new Set(result.candidates.map((candidate) => candidate.document_id)),
+      calls: edge.calls.slice(start),
+      hash: result.retrievalConfigHash,
+    };
   };
 
   test('a scopes filter returns chunks of the tagged document only', async () => {
@@ -178,5 +209,73 @@ describe('scopes filter and effective dates through the v2 pipeline, two tenants
     } finally {
       process.env.RAG_SCOPE_TAGS = 'true';
     }
+  });
+  const withEnv = async <T,>(values: Record<string, string>, run: () => Promise<T>): Promise<T> => {
+    const before = Object.fromEntries(Object.keys(values).map((name) => [name, process.env[name]]));
+    Object.assign(process.env, values);
+    configModule.resetRagConfigForTests();
+    try {
+      return await run();
+    } finally {
+      for (const [name, value] of Object.entries(before)) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
+      configModule.resetRagConfigForTests();
+    }
+  };
+
+  test('RAG_EFFECTIVE_DATES off: dated documents are retrieved as today', async () => {
+    const { docs } = await retrieve(TWO_TENANT_IDS.userA, undefined);
+    for (const doc of [DATED.future, DATED.expired, DATED.current]) assert.ok(docs.has(doc.docId), doc.docId);
+  });
+
+  test('RAG_EFFECTIVE_DATES on: a future document is not used yet, an expired one is excluded, null bounds pass', async () => {
+    await withEnv({ RAG_EFFECTIVE_DATES: 'true' }, async () => {
+      const { docs, calls } = await retrieve(TWO_TENANT_IDS.userA, undefined);
+      assert.ok(!docs.has(DATED.future.docId), 'not effective yet');
+      assert.ok(!docs.has(DATED.expired.docId), 'expired');
+      assert.ok(docs.has(DATED.current.docId), 'inside its window, ending today');
+      assert.ok(docs.has(TWO_TENANT_IDS.docA), 'undated');
+      assert.ok(docs.has(DOCS.aTagged.docId), 'undated and tagged');
+      assert.ok(!docs.has(DATED.bFuture.docId));
+      assert.ok(calls.some((call) => call.path.includes('/rpc/hybrid_search_chunks')));
+    });
+  });
+
+  test('RAG_EFFECTIVE_DATES on: moving the clock one day makes the future document effective', async () => {
+    await withEnv({ RAG_EFFECTIVE_DATES: 'true' }, async () => {
+      depsModule.setRagDepsForTests({ now: () => NOW + ONE_DAY });
+      try {
+        const { docs } = await retrieve(TWO_TENANT_IDS.userA, undefined);
+        assert.ok(docs.has(DATED.future.docId), 'effective from the next day');
+        assert.ok(!docs.has(DATED.current.docId), 'its window ended the day before');
+        assert.ok(!docs.has(DATED.bFuture.docId), "tenant B's document stays out");
+      } finally {
+        depsModule.setRagDepsForTests({ now: () => NOW });
+      }
+    });
+  });
+
+  test('the retrieval config hash is unchanged with the switch off and names the date with it on', async () => {
+    const off = await retrieve(TWO_TENANT_IDS.userA, undefined);
+    const onToday = await withEnv({ RAG_EFFECTIVE_DATES: 'true' }, () => retrieve(TWO_TENANT_IDS.userA, undefined));
+    depsModule.setRagDepsForTests({ now: () => NOW + ONE_DAY });
+    try {
+      const offTomorrow = await retrieve(TWO_TENANT_IDS.userA, undefined);
+      const onTomorrow = await withEnv({ RAG_EFFECTIVE_DATES: 'true' }, () => retrieve(TWO_TENANT_IDS.userA, undefined));
+      assert.equal(offTomorrow.hash, off.hash, 'switch off: the clock does not reach the hash');
+      assert.equal(new Set([off.hash, onToday.hash, onTomorrow.hash]).size, 3);
+    } finally {
+      depsModule.setRagDepsForTests({ now: () => NOW });
+    }
+  });
+
+  test('the legacy pipeline returns every dated document as today, with the switch on', async () => {
+    await withEnv({ RAG_EFFECTIVE_DATES: 'true', RAG_PIPELINE: 'legacy' }, async () => {
+      const { docs } = await retrieve(TWO_TENANT_IDS.userA, undefined);
+      for (const doc of [DATED.future, DATED.expired, DATED.current]) assert.ok(docs.has(doc.docId), doc.docId);
+      assert.ok(!docs.has(DATED.bFuture.docId));
+    });
   });
 });

@@ -259,3 +259,6 @@ export function buildRetrievalFilters(input: {
 
   return result;
 }
+export function effectiveOnFor(_config: { effectiveDates: boolean }, _nowMs: number): string | undefined {
+  return undefined;
+}
