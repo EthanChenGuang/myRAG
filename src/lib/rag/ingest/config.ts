@@ -6,6 +6,7 @@ export type IngestParser = 'llamaparse' | 'docling';
 export type InjectionScanMode = 'off' | 'quarantine';
 export type EmbeddingProfilesMode = 'off' | 'on';
 export type QwenEmbedFallback = 'openrouter' | 'none';
+export type QwenEmbedPrimary = 'deepinfra' | 'openrouter';
 export type OffOn = 'off' | 'on';
 export type TableHeaderRepeat = 'profile' | 'always';
 export type CaptionLanguage = 'en' | 'document';
@@ -24,6 +25,7 @@ export interface IngestEnvInput {
   RAG_INJECTION_SCAN?: string;
   RAG_EMBEDDING_PROFILES?: string;
   RAG_QWEN_EMBED_FALLBACK?: string;
+  RAG_QWEN_EMBED_PRIMARY?: string;
   RAG_LANGUAGE_AWARE_INGEST?: string;
   RAG_TABLE_HEADER_REPEAT?: string;
   RAG_TABLE_ROW_SERIALIZATION?: string;
@@ -54,6 +56,7 @@ export interface IngestConfig {
   injectionScan: InjectionScanMode;
   embeddingProfiles: EmbeddingProfilesMode;
   qwenFallback: QwenEmbedFallback;
+  qwenPrimary: QwenEmbedPrimary;
   languageAwareIngest: OffOn;
   tableHeaderRepeat: TableHeaderRepeat;
   tableRowSerialization: boolean;
@@ -89,6 +92,7 @@ const ENV_NAMES = [
   'RAG_INJECTION_SCAN',
   'RAG_EMBEDDING_PROFILES',
   'RAG_QWEN_EMBED_FALLBACK',
+  'RAG_QWEN_EMBED_PRIMARY',
   'RAG_LANGUAGE_AWARE_INGEST',
   'RAG_TABLE_HEADER_REPEAT',
   'RAG_TABLE_ROW_SERIALIZATION',
@@ -219,6 +223,7 @@ export function loadIngestConfig(env: IngestEnvInput): IngestConfig {
     injectionScan: parseChoice('RAG_INJECTION_SCAN', env.RAG_INJECTION_SCAN, ['off', 'quarantine'], 'off', warnings),
     embeddingProfiles,
     qwenFallback: parseChoice('RAG_QWEN_EMBED_FALLBACK', env.RAG_QWEN_EMBED_FALLBACK, ['openrouter', 'none'], 'openrouter', warnings),
+    qwenPrimary: parseChoice('RAG_QWEN_EMBED_PRIMARY', env.RAG_QWEN_EMBED_PRIMARY, ['deepinfra', 'openrouter'], 'deepinfra', warnings),
     languageAwareIngest: parseChoice('RAG_LANGUAGE_AWARE_INGEST', env.RAG_LANGUAGE_AWARE_INGEST, ['off', 'on'], 'off', warnings),
     tableHeaderRepeat: parseChoice('RAG_TABLE_HEADER_REPEAT', env.RAG_TABLE_HEADER_REPEAT, ['profile', 'always'], 'profile', warnings),
     tableRowSerialization: parseFlag('RAG_TABLE_ROW_SERIALIZATION', env.RAG_TABLE_ROW_SERIALIZATION, warnings),

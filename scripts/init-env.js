@@ -520,6 +520,8 @@ RAG_DOMAIN_EMBEDDING_MAX_LEGS=2
 RAG_DOMAIN_EMBEDDING_TIMEOUT_MS=800
 # Fallback host when the Qwen embedding provider is unavailable: openrouter | none
 RAG_QWEN_EMBED_FALLBACK=openrouter
+# Primary host for the Qwen embedding provider: deepinfra | openrouter (openrouter needs only OPENROUTER_API_KEY; the fallback then goes to DeepInfra when a key is set)
+RAG_QWEN_EMBED_PRIMARY=deepinfra
 
 # -----------------------------
 # INGESTION (Phase 3.1 queue)

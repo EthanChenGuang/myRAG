@@ -469,6 +469,10 @@
       "side": "query"
     },
     {
+      "name": "RAG_QWEN_EMBED_PRIMARY",
+      "side": "query"
+    },
+    {
       "name": "RAG_REFUSAL_FEEDBACK",
       "side": "query"
     },
