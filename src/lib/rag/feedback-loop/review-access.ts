@@ -173,7 +173,7 @@ export async function listReviewItems(ssr: Client, query: ReviewListQuery): Prom
 }
 
 /** The item as RLS lets the caller see it, with the internal link columns; null when missing or not visible. */
-async function readVisibleItem(ssr: Client, id: string): Promise<Row | null> {
+export async function readVisibleItem(ssr: Client, id: string): Promise<Row | null> {
   if (!isReviewItemId(id)) return null;
   const { data, error } = await ssr.from('rag_review_items').select(DETAIL_COLUMNS.join(',')).eq('id', id.toLowerCase()).maybeSingle();
   if (error) throw new Error('review_item_read_failed');
@@ -260,7 +260,7 @@ interface SnapshotRef {
   documentId: string;
 }
 
-function snapshotRefs(candidates: unknown): SnapshotRef[] {
+export function snapshotRefs(candidates: unknown): SnapshotRef[] {
   if (!Array.isArray(candidates)) return [];
   const seen = new Set<string>();
   const refs: SnapshotRef[] = [];
@@ -272,6 +272,67 @@ function snapshotRefs(candidates: unknown): SnapshotRef[] {
     refs.push({ chunkId, documentId });
   }
   return refs.slice(0, REVIEW_PAGE_SIZE);
+}
+
+export interface ServableChunk {
+  chunk_id: string;
+  document_id: string;
+  document_name: string;
+  section: string;
+  text: string;
+}
+
+/**
+ * Admin-client read of chunk ids restricted to one tenant_key and to current, ready rows of current, ready documents (D-08), so a
+ * quarantined, superseded or other-tenant chunk is simply absent from the map. The filters run in SQL and again in code. Keys are
+ * lower-case chunk ids; ids that are not UUIDs are never queried.
+ */
+export async function fetchServableChunks(admin: Client, tenantKey: string, ids: readonly string[]): Promise<Map<string, ServableChunk>> {
+  const servable = new Map<string, ServableChunk>();
+  const chunkIds = [...new Set(ids.map((chunkId) => chunkId.toLowerCase()).filter((chunkId) => UUID_RE.test(chunkId)))];
+  if (chunkIds.length === 0 || !parseTenantKey(tenantKey)) return servable;
+  const { data, error } = await admin
+    .from('document_chunks')
+    .select('id,document_id,content,section_path,tenant_key,is_current,status')
+    .in('id', chunkIds)
+    .eq('tenant_key', tenantKey)
+    .eq('is_current', true)
+    .eq('status', 'ready');
+  if (error) throw new Error('review_chunks_read_failed');
+  const chunks = new Map<string, Row>();
+  for (const row of (data ?? []) as unknown as Row[]) {
+    if (row.tenant_key === tenantKey && row.is_current === true && row.status === 'ready' && typeof row.content === 'string') {
+      chunks.set(String(row.id).toLowerCase(), row);
+    }
+  }
+  const documentIds = [...new Set([...chunks.values()].map((row) => String(row.document_id).toLowerCase()))];
+  const documents = new Map<string, Row>();
+  if (documentIds.length > 0) {
+    const { data: docs, error: docError } = await admin
+      .from('documents')
+      .select('id,filename,tenant_key,is_current,status')
+      .in('id', documentIds)
+      .eq('tenant_key', tenantKey)
+      .eq('is_current', true)
+      .eq('status', 'ready');
+    if (docError) throw new Error('review_documents_read_failed');
+    for (const row of (docs ?? []) as unknown as Row[]) {
+      if (row.tenant_key === tenantKey && row.is_current === true && row.status === 'ready') documents.set(String(row.id).toLowerCase(), row);
+    }
+  }
+  for (const [chunkId, chunk] of chunks) {
+    const documentId = String(chunk.document_id).toLowerCase();
+    const document = documents.get(documentId);
+    if (!document) continue;
+    servable.set(chunkId, {
+      chunk_id: chunkId,
+      document_id: documentId,
+      document_name: typeof document.filename === 'string' ? document.filename : '',
+      section: stringArray(chunk.section_path).join(' > '),
+      text: chunk.content as string,
+    });
+  }
+  return servable;
 }
 
 /**
@@ -291,51 +352,24 @@ export async function getReviewItemChunks(
   if (typeof tenantKey !== 'string' || !parseTenantKey(tenantKey)) return { ok: false, reason: 'not_found' };
 
   const refs = snapshotRefs(item.candidates);
-  const chunkIds = [...new Set(refs.map((ref) => ref.chunkId.toLowerCase()).filter((chunkId) => UUID_RE.test(chunkId)))];
-  const chunks = new Map<string, Row>();
-  const documents = new Map<string, Row>();
-  if (chunkIds.length > 0) {
-    const { data, error } = await admin
-      .from('document_chunks')
-      .select('id,document_id,content,section_path,tenant_key,is_current,status')
-      .in('id', chunkIds)
-      .eq('tenant_key', tenantKey)
-      .eq('is_current', true)
-      .eq('status', 'ready');
-    if (error) throw new Error('review_chunks_read_failed');
-    for (const row of (data ?? []) as unknown as Row[]) {
-      if (row.tenant_key === tenantKey && row.is_current === true && row.status === 'ready') chunks.set(String(row.id).toLowerCase(), row);
-    }
-    const documentIds = [...new Set([...chunks.values()].map((row) => String(row.document_id).toLowerCase()))];
-    if (documentIds.length > 0) {
-      const { data: docs, error: docError } = await admin
-        .from('documents')
-        .select('id,filename,tenant_key,is_current,status')
-        .in('id', documentIds)
-        .eq('tenant_key', tenantKey)
-        .eq('is_current', true)
-        .eq('status', 'ready');
-      if (docError) throw new Error('review_documents_read_failed');
-      for (const row of (docs ?? []) as unknown as Row[]) {
-        if (row.tenant_key === tenantKey && row.is_current === true && row.status === 'ready') documents.set(String(row.id).toLowerCase(), row);
-      }
-    }
-  }
+  const servable = await fetchServableChunks(
+    admin,
+    tenantKey,
+    refs.map((ref) => ref.chunkId),
+  );
 
   const result: ReviewChunk[] = refs.map((ref) => {
-    const chunk = chunks.get(ref.chunkId.toLowerCase());
-    const documentId = chunk ? String(chunk.document_id).toLowerCase() : null;
-    const document = documentId ? documents.get(documentId) : undefined;
-    if (!chunk || !document || documentId !== ref.documentId.toLowerCase() || typeof chunk.content !== 'string') {
+    const chunk = servable.get(ref.chunkId.toLowerCase());
+    if (!chunk || chunk.document_id !== ref.documentId.toLowerCase()) {
       return { chunk_id: ref.chunkId, document_id: ref.documentId, available: false };
     }
     return {
       chunk_id: ref.chunkId,
       document_id: ref.documentId,
       available: true,
-      document_name: typeof document.filename === 'string' ? document.filename : '',
-      section: stringArray(chunk.section_path).join(' > '),
-      text: chunk.content,
+      document_name: chunk.document_name,
+      section: chunk.section,
+      text: chunk.text,
     };
   });
   const count = result.filter((entry) => entry.available).length;
