@@ -68,6 +68,172 @@
         "La seconda parte mostra come i dati passano tra i livelli! Perché è stato progettato così?",
         "La quarta parte offre alcuni esempi brevi; ognuno è corto. Ultima parte: un riepilogo."
       ]
+    },
+    {
+      "name": "zh_consecutive_ends",
+      "language": "zh",
+      "text": "真的吗？！是的。。好吧",
+      "budget_tokens": null,
+      "expect_segments": [
+        "真的吗？！",
+        "是的。。",
+        "好吧"
+      ]
+    },
+    {
+      "name": "en_consecutive_ends",
+      "language": "en",
+      "text": "Really?! Yes... Fine",
+      "budget_tokens": null,
+      "expect_segments": [
+        "Really?!",
+        "Yes...",
+        "Fine"
+      ]
+    },
+    {
+      "name": "zh_closing_quote",
+      "language": "zh",
+      "text": "他说：“好的。”然后离开了。",
+      "budget_tokens": null,
+      "expect_segments": [
+        "他说：“好的。”",
+        "然后离开了。"
+      ]
+    },
+    {
+      "name": "zh_closing_bracket",
+      "language": "zh",
+      "text": "（见上文。）下一部分开始了。",
+      "budget_tokens": null,
+      "expect_segments": [
+        "（见上文。）",
+        "下一部分开始了。"
+      ]
+    },
+    {
+      "name": "en_closing_quote",
+      "language": "en",
+      "text": "She wrote \"done.\" Then left.",
+      "budget_tokens": null,
+      "expect_segments": [
+        "She wrote \"done.\"",
+        "Then left."
+      ]
+    },
+    {
+      "name": "en_closing_bracket",
+      "language": "en",
+      "text": "(See above.) Next part.",
+      "budget_tokens": null,
+      "expect_segments": [
+        "(See above.)",
+        "Next part."
+      ]
+    },
+    {
+      "name": "empty",
+      "language": "en",
+      "text": "",
+      "budget_tokens": null,
+      "expect_segments": []
+    },
+    {
+      "name": "whitespace_only",
+      "language": "zh",
+      "text": "  \n　 ",
+      "budget_tokens": null,
+      "expect_segments": []
+    },
+    {
+      "name": "zh_no_sentence_end",
+      "language": "zh",
+      "text": "一段没有句末标点的文字",
+      "budget_tokens": null,
+      "expect_segments": [
+        "一段没有句末标点的文字"
+      ]
+    },
+    {
+      "name": "en_no_sentence_end_over_budget",
+      "language": "en",
+      "text": "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu",
+      "budget_tokens": 5,
+      "expect_segments": [
+        "alpha beta gamma delta epsilon",
+        " zeta eta theta iota",
+        " kappa lambda mu"
+      ]
+    },
+    {
+      "name": "zh_surrogate_pair_before_end",
+      "language": "zh",
+      "text": "表情😀。下一句",
+      "budget_tokens": null,
+      "expect_segments": [
+        "表情😀。",
+        "下一句"
+      ]
+    },
+    {
+      "name": "zh_surrogate_pairs_hard_split",
+      "language": "zh",
+      "text": "😀😀😀😀😀😀",
+      "budget_tokens": 3,
+      "expect_segments": [
+        "😀",
+        "😀",
+        "😀",
+        "😀",
+        "😀",
+        "😀"
+      ]
+    },
+    {
+      "name": "en_combining_mark_after_end",
+      "language": "en",
+      "text": "Fine.́ Next one.",
+      "budget_tokens": null,
+      "expect_segments": [
+        "Fine.́",
+        "Next one."
+      ]
+    },
+    {
+      "name": "en_combining_marks_hard_split",
+      "language": "en",
+      "text": "éééééééé",
+      "budget_tokens": 3,
+      "expect_segments": [
+        "é",
+        "é",
+        "é",
+        "é",
+        "é",
+        "é",
+        "é",
+        "é"
+      ]
+    },
+    {
+      "name": "zh_ascii_full_stop_inside",
+      "language": "zh",
+      "text": "版本v2.0已发布，速度提升3.5倍。说明见第3.5节. 然后继续。",
+      "budget_tokens": null,
+      "expect_segments": [
+        "版本v2.0已发布，速度提升3.5倍。",
+        "说明见第3.5节. 然后继续。"
+      ]
+    },
+    {
+      "name": "en_decimal_not_an_end",
+      "language": "en",
+      "text": "Version 2.0 is out. Speed rose 3.5 times.",
+      "budget_tokens": null,
+      "expect_segments": [
+        "Version 2.0 is out.",
+        "Speed rose 3.5 times."
+      ]
     }
   ]
 }

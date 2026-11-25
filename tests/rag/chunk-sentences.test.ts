@@ -1,14 +1,16 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { chunkDocument, type ChunkerConfig } from '@/lib/rag/ingest/chunkers';
+import { CHUNKERS, chunkDocument, type ChunkerConfig } from '@/lib/rag/ingest/chunkers';
+import { chunkParentChild } from '@/lib/rag/ingest/chunkers/parent-child';
+import { buildProfileChunks } from '@/lib/rag/ingest/profile-chunks';
 import { getProcessingProfile } from '@/lib/rag/ingest/profiles/load';
 import { chunkStage } from '@/lib/rag/ingest/stages/chunk';
 import { buildEmbeddingText } from '@/lib/rag/ingest/text/embedding-text';
 import { countTokens } from '@/lib/rag/ingest/text/tokens';
 import { emptyIngestState, type IngestWork, type StageContext } from '@/lib/rag/ingest/types';
 import { resetLanguageSettingsForTests, setLanguageSettingsTrapForTests } from '@/lib/rag/lang/settings';
-import { joinSentences, segmentText, splitSentences, splitterFor } from '@/lib/rag/lang/sentences';
+import { blockSplitterForIngest, joinSentences, segmentText, splitSentences, splitterFor } from '@/lib/rag/lang/sentences';
 import { legacyChunkDigests } from './helpers/legacy-chunk-snapshot';
 
 interface SentenceCase {
@@ -166,5 +168,92 @@ describe('language-aware section chunking through the chunk stage', () => {
       throw new Error('language settings read with RAG_LANGUAGE_AWARE_INGEST=off');
     });
     expect(legacyChunkDigests()).toEqual(SNAPSHOT);
+  });
+});
+
+const ZH_MIXED = [
+  '说明见第3.5节. 然后继续说明这一部分的内容；内容并不复杂，读起来也很顺畅。',
+  '版本v2.0带来了很多变化；每一项变化都需要单独记录下来。',
+  '第三段解释了这些变化的原因；原因主要来自使用中的反馈！',
+  '最后一段给出总结；总结很短，只有一句话？',
+];
+const MIXED_MARKDOWN = ['# 文档', '', ZH_MIXED.join(''), '', EN_SENTENCES.join(' '), ''].join('\n');
+const LEGAL_MARKDOWN = ['第一章 总则', '', '第1条 范围', ZH_MIXED.join(''), '', EN_SENTENCES.join(' '), ''].join('\n');
+const TABLE_MARKDOWN = ['## 表格', '', '| 项目 | 数量 |', '| --- | --- |', '| 甲 | 1 |', '| 乙 | 2 |', '', ZH_MIXED.join(''), '', EN_SENTENCES.join(' '), ''].join('\n');
+const SENTENCE_TAIL = /[。！？.!?]$/u;
+
+/** Text chunks end at a sentence end of their own block language and keep every sentence of both blocks whole. */
+function expectPerBlockBoundaries(chunks: ReadonlyArray<{ content: string; chunk_kind: string }>): void {
+  const text = chunks.filter((chunk) => chunk.chunk_kind === 'text');
+  expect(text.length).toBeGreaterThan(2);
+  for (const chunk of text) {
+    expect(chunk.content).toMatch(SENTENCE_TAIL);
+    expect(chunk.content).not.toMatch(/[;；]$/u);
+  }
+  expectSentencesWhole(chunks, ZH_MIXED);
+  expectSentencesWhole(chunks, EN_SENTENCES);
+}
+
+describe('every TS chunker splits each block by its own language', () => {
+  const on = (): ReturnType<typeof blockSplitterForIngest> => blockSplitterForIngest('on');
+
+  it('markdown_sections: a zh block keeps 3.5 and "节. 然后" together, an en block splits at . ! ?', () => {
+    const chunker = generalChunker(64);
+    expectPerBlockBoundaries(CHUNKERS.markdown_sections!(MIXED_MARKDOWN, chunker, on()).chunks);
+  });
+
+  it('legal_clauses: an over-long clause body is cut at the sentence ends of each block', () => {
+    const chunker: ChunkerConfig = { ...getProcessingProfile('contract_legal').chunker, max_tokens: 72, min_chunk_tokens: 0 };
+    const chunks = CHUNKERS.legal_clauses!(LEGAL_MARKDOWN, chunker, on()).chunks;
+    expect(chunks.every((chunk) => chunk.section_path.join('/') === '第一章 总则/第1条 范围')).toBe(true);
+    expectPerBlockBoundaries(chunks);
+  });
+
+  it('table_aware: rows stay whole and text blocks follow their language', () => {
+    const chunker: ChunkerConfig = { ...getProcessingProfile('financial_report').chunker, max_tokens: 64, overlap_tokens: 0, min_chunk_tokens: 0 };
+    const chunks = CHUNKERS.table_aware!(TABLE_MARKDOWN, chunker, on()).chunks;
+    expect(chunks.some((chunk) => chunk.content.includes('| 甲 | 1 |') && chunk.content.includes('| 乙 | 2 |'))).toBe(true);
+    expectPerBlockBoundaries(chunks);
+  });
+
+  it.each(['none', 'structure', 'fixed'] as const)('parent-child (%s): children and fixed parents use the same rule', (parentMode) => {
+    const chunker = generalChunker(512);
+    const result = chunkParentChild(MIXED_MARKDOWN, { childTokens: 64, parentMode, parentTokens: parentMode === 'none' ? null : 160 }, chunker, on());
+    expectPerBlockBoundaries(result.children);
+    for (const parent of result.parents) expect(parent.content).toMatch(SENTENCE_TAIL);
+  });
+
+  it('buildProfileChunks (rag:rechunk and the write stage) takes the switch: on splits per block, off equals today', () => {
+    const profile = { id: 'p-64', docType: 'general', childTokens: 64, parentMode: 'none' as const, parentTokens: null, status: 'building' as const };
+    const document = { filename: 'notes.md', chunker: generalChunker(512) };
+    const built = buildProfileChunks({ ...document, languageAwareIngest: 'on' }, MIXED_MARKDOWN, profile);
+    expectPerBlockBoundaries(built.children);
+
+    setLanguageSettingsTrapForTests(() => {
+      throw new Error('language settings read with RAG_LANGUAGE_AWARE_INGEST=off');
+    });
+    const off = buildProfileChunks({ ...document, languageAwareIngest: 'off' }, MIXED_MARKDOWN, profile);
+    expect(off).toEqual(buildProfileChunks(document, MIXED_MARKDOWN, profile));
+    expect(off.children.some((child) => /[;；]$/u.test(child.content) || child.content.endsWith('第3.5节.'))).toBe(true);
+  });
+
+  it('a monolingual zh setting never splits at an ASCII full stop; und text falls back to the primary language', () => {
+    process.env.RAG_SUPPORTED_LANGUAGES = 'zh';
+    process.env.RAG_PRIMARY_LANGUAGE = 'zh';
+    resetLanguageSettingsForTests();
+    expect(blockSplitterForIngest('on')('Plain words. More words.').language).toBe('zh');
+    process.env.RAG_SUPPORTED_LANGUAGES = 'zh,en,it';
+    process.env.RAG_PRIMARY_LANGUAGE = 'it';
+    resetLanguageSettingsForTests();
+    expect(blockSplitterForIngest('on')('12345 67890. 13579').language).toBe('it');
+    expect(blockSplitterForIngest('on')(ZH_MIXED[0]!).language).toBe('zh');
+  });
+
+  it('a 200,000-character single sentence is scanned in linear time', () => {
+    const started = Date.now();
+    expect(splitSentences('字'.repeat(200_000), 'zh')).toHaveLength(1);
+    expect(splitSentences('a'.repeat(200_000), 'en')).toHaveLength(1);
+    expect(splitSentences('.'.repeat(200_000), 'en')).toHaveLength(1);
+    expect(Date.now() - started).toBeLessThan(2000);
   });
 });
