@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   canonicalTenantKey,
   isCanonicalTenantKey,
@@ -7,6 +7,23 @@ import {
   weaviateTenantName,
 } from '@/lib/rag/backend/tenant-key';
 import { mintScope, scopeKey, type TenantScope } from '@/lib/rag/tenant/scope';
+
+const keyOverride = vi.hoisted(() => ({ transform: null as ((key: string) => string) | null }));
+
+vi.mock('@/lib/rag/tenant/scope', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/rag/tenant/scope')>();
+  return {
+    ...actual,
+    scopeKey: (scope: Parameters<typeof actual.scopeKey>[0]) => {
+      const key = actual.scopeKey(scope);
+      return keyOverride.transform ? keyOverride.transform(key) : key;
+    },
+  };
+});
+
+afterEach(() => {
+  keyOverride.transform = null;
+});
 
 const USER_LOWER = '0f8e2c1a-9b7d-4c3e-8a21-5d6f7e8a9b0c';
 const ORG_LOWER = 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d';
@@ -23,6 +40,15 @@ describe('canonicalTenantKey', () => {
   it('lower-cases an org scope minted from an upper-case UUID', () => {
     const scope = mintScope('org', USER_LOWER.toUpperCase(), ORG_LOWER.toUpperCase());
     expect(canonicalTenantKey(scope)).toBe(`o:${ORG_LOWER}`);
+  });
+
+  it('lower-cases an upper-case UUID even when the scope key arrives upper-case', () => {
+    keyOverride.transform = (key) => key.replace(/^([uo]:)(.*)$/, (_m, p: string, id: string) => p + id.toUpperCase());
+    const personal = mintScope('personal', USER_LOWER.toUpperCase(), null);
+    const org = mintScope('org', null, ORG_LOWER.toUpperCase());
+    expect(scopeKey(personal)).toBe(`u:${USER_LOWER.toUpperCase()}`);
+    expect(canonicalTenantKey(personal)).toBe(`u:${USER_LOWER}`);
+    expect(canonicalTenantKey(org)).toBe(`o:${ORG_LOWER}`);
   });
 
   it('gives s:default for the single scope', () => {
