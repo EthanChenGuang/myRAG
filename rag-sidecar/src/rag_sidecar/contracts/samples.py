@@ -107,6 +107,7 @@ from rag_sidecar.contracts import (
     TraceUsedDocument,
 )
 
+from rag_sidecar.contracts.latency import GroundednessBudgets, ScorerBudget
 from rag_sidecar.contracts.parse_eval import (
     DuplicateCounts,
     ExpectedHeading,
@@ -127,6 +128,7 @@ from rag_sidecar.contracts.queue import (
     ParseAttemptPages,
     ParseExternalPageText,
 )
+from rag_sidecar.contracts.report import GroundednessLabelCounts, StrategySlice
 from rag_sidecar.contracts.routing import (
     DetectCounts,
     PageCheck,
@@ -688,6 +690,25 @@ def _eval_report() -> EvalReport:
             "embed": StageLatency(p50_ms=4.0, p95_ms=6.0, n=12),
             "retrieval_total": StageLatency(p50_ms=12.0, p95_ms=20.0, n=12),
         },
+        invalid_citation_rate=MetricValue(value=0.0, n=3),
+        citation_coverage=MetricValue(value=0.75, n=4),
+        cited_gold_hit=MetricValue(value=0.5, n=4),
+        raw_invalid_markers=1,
+        groundedness_labels={
+            "hhem_2_1_open": {"en": GroundednessLabelCounts(verified=2, possibly_unreliable=1)},
+            "none": {"it": GroundednessLabelCounts(not_checked=1)},
+        },
+        groundedness_latency={"hhem_2_1_open": StageLatency(p50_ms=900.0, p95_ms=1800.0, n=3)},
+        by_strategy={
+            "chunk-alias": StrategySlice(
+                items=4,
+                invalid_citation_rate=MetricValue(value=0.0, n=3),
+                citation_coverage=MetricValue(value=0.75, n=4),
+                cited_gold_hit=MetricValue(value=0.5, n=4),
+                raw_invalid_markers=1,
+                generation_latency=StageLatency(p50_ms=300.0, p95_ms=900.0, n=4),
+            )
+        },
         notes=["synthetic sample"],
     )
 
@@ -699,7 +720,11 @@ def _latency_budgets() -> LatencyBudgets:
                 total_p50_ms=1000, total_p95_ms=2000, stages={"embed": 200, "search": 400, "assemble": 100}
             ),
             "voice": ProfileBudget(total_p50_ms=400, total_p95_ms=800),
-        }
+        },
+        groundedness=GroundednessBudgets(
+            hhem_2_1_open=ScorerBudget(p50_ms=2500, p95_ms=5000),
+            hhem_2_3_vectara=ScorerBudget(p50_ms=4000, p95_ms=8000),
+        ),
     )
 
 
@@ -1039,9 +1064,10 @@ def _models() -> dict[str, Any]:
             context_masked="Employees receive twenty days of leave per year.",
             model="generator/model-b",
             tags=["review_candidate"],
+            reasons=["feedback_negative"],
         ),
         "SidecarHealth": SidecarHealth(status="ok"),
-        "SidecarReady": SidecarReady(status="not_ready", reason="warming up"),
+        "SidecarReady": SidecarReady(status="ready", scorers=["hhem_2_1_open"]),
         "SidecarInfo": SidecarInfo(service="rag-sidecar", version="0.0.0", contracts_schema_version=1),
         "SidecarError": SidecarError(error="synthetic error"),
         "EmbeddingProfileComparison": _profile_comparison(),

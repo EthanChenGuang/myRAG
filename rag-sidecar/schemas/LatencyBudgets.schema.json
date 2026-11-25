@@ -1,5 +1,40 @@
 {
   "$defs": {
+    "GroundednessBudgets": {
+      "additionalProperties": false,
+      "properties": {
+        "hhem_2_1_open": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScorerBudget"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "hhem_2_3_vectara": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScorerBudget"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "report_only": {
+          "const": true,
+          "default": true,
+          "title": "Report Only",
+          "type": "boolean"
+        }
+      },
+      "title": "GroundednessBudgets",
+      "type": "object"
+    },
     "ProfileBudget": {
       "additionalProperties": false,
       "properties": {
@@ -27,10 +62,42 @@
       ],
       "title": "ProfileBudget",
       "type": "object"
+    },
+    "ScorerBudget": {
+      "additionalProperties": false,
+      "properties": {
+        "p50_ms": {
+          "exclusiveMinimum": 0,
+          "title": "P50 Ms",
+          "type": "number"
+        },
+        "p95_ms": {
+          "exclusiveMinimum": 0,
+          "title": "P95 Ms",
+          "type": "number"
+        }
+      },
+      "required": [
+        "p50_ms",
+        "p95_ms"
+      ],
+      "title": "ScorerBudget",
+      "type": "object"
     }
   },
   "additionalProperties": false,
   "properties": {
+    "groundedness": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/GroundednessBudgets"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "profiles": {
       "additionalProperties": {
         "$ref": "#/$defs/ProfileBudget"

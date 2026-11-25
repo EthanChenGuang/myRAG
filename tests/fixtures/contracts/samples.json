@@ -179,10 +179,12 @@
         }
       },
       "request_options": {
+        "citations": false,
         "degrade": null,
         "disabled_stages": null,
         "embedding_profile": null,
         "generator_model": null,
+        "groundedness": false,
         "max_results": 10,
         "organization_id": null,
         "retrieval_filters": null,
@@ -1140,6 +1142,38 @@
           }
         }
       },
+      "by_strategy": {
+        "chunk-alias": {
+          "citation_coverage": {
+            "n": 4,
+            "value": 0.75
+          },
+          "cited_gold_hit": {
+            "n": 4,
+            "value": 0.5
+          },
+          "faithfulness": null,
+          "generation_latency": {
+            "n": 4,
+            "p50_ms": 300.0,
+            "p95_ms": 900.0
+          },
+          "invalid_citation_rate": {
+            "n": 3,
+            "value": 0.0
+          },
+          "items": 4,
+          "raw_invalid_markers": 1
+        }
+      },
+      "citation_coverage": {
+        "n": 4,
+        "value": 0.75
+      },
+      "cited_gold_hit": {
+        "n": 4,
+        "value": 0.5
+      },
       "corpus_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       "deployment_mode": "single-tenant",
       "embedder_id": "fixture-embedder",
@@ -1153,6 +1187,33 @@
         ]
       },
       "golden_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "groundedness_labels": {
+        "hhem_2_1_open": {
+          "en": {
+            "not_checked": 0,
+            "possibly_unreliable": 1,
+            "verified": 2
+          }
+        },
+        "none": {
+          "it": {
+            "not_checked": 1,
+            "possibly_unreliable": 0,
+            "verified": 0
+          }
+        }
+      },
+      "groundedness_latency": {
+        "hhem_2_1_open": {
+          "n": 3,
+          "p50_ms": 900.0,
+          "p95_ms": 1800.0
+        }
+      },
+      "invalid_citation_rate": {
+        "n": 3,
+        "value": 0.0
+      },
       "items": [
         {
           "answerable": true,
@@ -1219,11 +1280,14 @@
           "value": 0.5
         }
       },
+      "raw_invalid_markers": 1,
       "request_options": {
+        "citations": false,
         "degrade": null,
         "disabled_stages": null,
         "embedding_profile": null,
         "generator_model": null,
+        "groundedness": false,
         "max_results": 10,
         "organization_id": null,
         "retrieval_filters": null,
@@ -1630,6 +1694,17 @@
       "schema_version": 1
     },
     "LatencyBudgets": {
+      "groundedness": {
+        "hhem_2_1_open": {
+          "p50_ms": 2500.0,
+          "p95_ms": 5000.0
+        },
+        "hhem_2_3_vectara": {
+          "p50_ms": 4000.0,
+          "p95_ms": 8000.0
+        },
+        "report_only": true
+      },
       "profiles": {
         "chat": {
           "stages": {
@@ -2425,10 +2500,12 @@
       "include_answer": true,
       "item_id": "en-general-001",
       "options": {
+        "citations": false,
         "degrade": "drop_top_candidate",
         "disabled_stages": null,
         "embedding_profile": null,
         "generator_model": "generator/model-b",
+        "groundedness": false,
         "max_results": 10,
         "organization_id": null,
         "retrieval_filters": null,
@@ -2475,10 +2552,22 @@
           "similarity": 0.41
         }
       ],
+      "citation_strategy": "chunk-alias",
       "citations": [
         {
-          "chunk_id": "chunk-001",
-          "document_id": "doc-001"
+          "alias": "S1",
+          "chunkIds": [
+            "chunk-001"
+          ],
+          "documentId": "doc-001",
+          "documentName": "handbook.md",
+          "documentVersion": null,
+          "n": 1,
+          "page": null,
+          "quote": "Employees receive twenty days of leave per year.",
+          "quoteHash": "8ce0aa222a8339916769a9552a8ffcc2834d2f6aa1101ab636571873bf2c7bb2",
+          "sectionPath": null,
+          "strategy": "chunk-alias"
         }
       ],
       "config_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
@@ -2496,6 +2585,8 @@
           "RAG_SYSTEM_PROMPT": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         }
       },
+      "groundedness": null,
+      "invalid_citations": 0,
       "item_id": "en-general-001",
       "kept": [
         {
@@ -2634,6 +2725,9 @@
       "model": "generator/model-b",
       "observation_id": "0123456789abcdef",
       "query_masked": "How many leave days do employees get?",
+      "reasons": [
+        "feedback_negative"
+      ],
       "tags": [
         "review_candidate"
       ],
@@ -2663,10 +2757,12 @@
       "golden_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
       "item_count": 1,
       "request_options": {
+        "citations": false,
         "degrade": null,
         "disabled_stages": null,
         "embedding_profile": null,
         "generator_model": null,
+        "groundedness": false,
         "max_results": 10,
         "organization_id": null,
         "retrieval_filters": null,
@@ -2695,8 +2791,11 @@
       "version": "0.0.0"
     },
     "SidecarReady": {
-      "reason": "warming up",
-      "status": "not_ready"
+      "reason": null,
+      "scorers": [
+        "hhem_2_1_open"
+      ],
+      "status": "ready"
     }
   },
   "variants": {
@@ -2879,10 +2978,22 @@
             "similarity": 0.41
           }
         ],
+        "citation_strategy": "chunk-alias",
         "citations": [
           {
-            "chunk_id": "chunk-001",
-            "document_id": "doc-001"
+            "alias": "S1",
+            "chunkIds": [
+              "chunk-001"
+            ],
+            "documentId": "doc-001",
+            "documentName": "handbook.md",
+            "documentVersion": null,
+            "n": 1,
+            "page": null,
+            "quote": "Employees receive twenty days of leave per year.",
+            "quoteHash": "8ce0aa222a8339916769a9552a8ffcc2834d2f6aa1101ab636571873bf2c7bb2",
+            "sectionPath": null,
+            "strategy": "chunk-alias"
           }
         ],
         "config_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
@@ -2900,6 +3011,8 @@
             "RAG_SYSTEM_PROMPT": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
           }
         },
+        "groundedness": null,
+        "invalid_citations": 0,
         "item_id": "en-general-001",
         "kept": [
           {

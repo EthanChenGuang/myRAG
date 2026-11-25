@@ -49,6 +49,31 @@
       "title": "GoldenFilter",
       "type": "object"
     },
+    "GroundednessLabelCounts": {
+      "additionalProperties": false,
+      "properties": {
+        "not_checked": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Not Checked",
+          "type": "integer"
+        },
+        "possibly_unreliable": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Possibly Unreliable",
+          "type": "integer"
+        },
+        "verified": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Verified",
+          "type": "integer"
+        }
+      },
+      "title": "GroundednessLabelCounts",
+      "type": "object"
+    },
     "InvoiceFilter": {
       "additionalProperties": false,
       "properties": {
@@ -288,6 +313,11 @@
     "RagRunOptions": {
       "additionalProperties": false,
       "properties": {
+        "citations": {
+          "default": false,
+          "title": "Citations",
+          "type": "boolean"
+        },
         "degrade": {
           "anyOf": [
             {
@@ -351,6 +381,11 @@
           ],
           "default": null,
           "title": "Generator Model"
+        },
+        "groundedness": {
+          "default": false,
+          "title": "Groundedness",
+          "type": "boolean"
         },
         "max_results": {
           "anyOf": [
@@ -849,6 +884,89 @@
       },
       "title": "StageTimeoutsMs",
       "type": "object"
+    },
+    "StrategySlice": {
+      "additionalProperties": false,
+      "properties": {
+        "citation_coverage": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MetricValue"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "cited_gold_hit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MetricValue"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "faithfulness": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MetricValue"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "generation_latency": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StageLatency"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "invalid_citation_rate": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MetricValue"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "items": {
+          "minimum": 0,
+          "title": "Items",
+          "type": "integer"
+        },
+        "raw_invalid_markers": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Raw Invalid Markers"
+        }
+      },
+      "required": [
+        "items"
+      ],
+      "title": "StrategySlice",
+      "type": "object"
     }
   },
   "additionalProperties": false,
@@ -915,6 +1033,35 @@
       },
       "title": "By Split",
       "type": "object"
+    },
+    "by_strategy": {
+      "additionalProperties": {
+        "$ref": "#/$defs/StrategySlice"
+      },
+      "title": "By Strategy",
+      "type": "object"
+    },
+    "citation_coverage": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/MetricValue"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "cited_gold_hit": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/MetricValue"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "corpus_sha256": {
       "anyOf": [
@@ -984,6 +1131,47 @@
       "title": "Golden Sha256",
       "type": "string"
     },
+    "groundedness_labels": {
+      "additionalProperties": {
+        "additionalProperties": {
+          "$ref": "#/$defs/GroundednessLabelCounts"
+        },
+        "type": "object"
+      },
+      "propertyNames": {
+        "enum": [
+          "hhem_2_3_vectara",
+          "hhem_2_1_open",
+          "none"
+        ]
+      },
+      "title": "Groundedness Labels",
+      "type": "object"
+    },
+    "groundedness_latency": {
+      "additionalProperties": {
+        "$ref": "#/$defs/StageLatency"
+      },
+      "propertyNames": {
+        "enum": [
+          "hhem_2_3_vectara",
+          "hhem_2_1_open"
+        ]
+      },
+      "title": "Groundedness Latency",
+      "type": "object"
+    },
+    "invalid_citation_rate": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/MetricValue"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "items": {
       "items": {
         "$ref": "#/$defs/ItemResult"
@@ -1033,6 +1221,19 @@
     },
     "overall": {
       "$ref": "#/$defs/SliceMetrics"
+    },
+    "raw_invalid_markers": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Raw Invalid Markers"
     },
     "request_options": {
       "$ref": "#/$defs/RagRunOptions"
