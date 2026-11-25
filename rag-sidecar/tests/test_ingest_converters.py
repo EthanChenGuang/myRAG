@@ -112,3 +112,13 @@ def test_select_range_converter_by_name():
     assert isinstance(recorded, converters.RecordedRangeConverter)
     docling = converters.select_range_converter("docling")
     assert isinstance(docling, converters.DoclingRangeConverter)
+
+def test_recorded_bench_pages_come_out_with_the_page_numbers_that_were_asked_for():
+    converter = converters.RecordedRangeConverter(RECORDED)
+
+    doc, _meta = converter.convert(Path("ignored.pdf"), BENCH_SHA, "structured_full", 10, 11, priority=100)
+
+    assert sorted(doc.pages) == [10, 11]
+    pages_by_text = {item.text: [prov.page_no for prov in item.prov] for item, _level in doc.iterate_items() if getattr(item, "text", "")}
+    assert pages_by_text["Benchmark page 10"] == [10]
+    assert pages_by_text["Benchmark page 11"] == [11]

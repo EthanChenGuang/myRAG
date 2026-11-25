@@ -54,7 +54,7 @@ def _expand_contiguous_parts(parts: Sequence[DoclingDocument]) -> list[DoclingDo
         if not pages:
             raise MergeInvariantError("merge_invariant:empty_part")
         for run in _contiguous_runs(pages):
-            expanded.append(part if run == pages else part.filter(page_nrs=set(run)))
+            expanded.append(part if run == pages else slice_pages(part, run))
     return expanded
 
 
@@ -112,16 +112,39 @@ def merge(parts: Sequence[DoclingDocument], n_pages: int) -> DoclingDocument:
     return merged
 
 
+def shift_pages(doc: DoclingDocument, offset: int) -> DoclingDocument:
+    """A deep copy of ``doc`` with every page number moved by ``offset``; the input is left alone."""
+    shifted = doc.model_copy(deep=True)
+    shifted.pages = {
+        page_no + offset: page.model_copy(update={"page_no": page_no + offset}) for page_no, page in shifted.pages.items()
+    }
+    for collection in (shifted.texts, shifted.tables, shifted.pictures, shifted.key_value_items, shifted.form_items):
+        for item in collection:
+            for provenance in item.prov or []:
+                provenance.page_no += offset
+    return shifted
+
+
 def join_page_parts(parts: Sequence[DoclingDocument]) -> DoclingDocument:
-    """Join non-overlapping parts without renumbering page_no (recorded assembly)."""
+    """Join non-overlapping parts, keeping the page numbers of the file.
+
+    Contiguous parts are concatenated with the body tree rebuilt; DoclingDocument.concatenate numbers pages from 1, so parts that
+    start later are moved down first and the result is moved back. Parts with a gap between them are only listed side by side
+    (recorded assembly).
+    """
     if not parts:
         raise MergeInvariantError("merge_invariant:no_parts")
     if len(parts) == 1:
         return parts[0]
     page_sets = [sorted(part.pages) for part in parts]
     flat = sorted({page for pages in page_sets for page in pages})
-    if flat == list(range(1, flat[-1] + 1)):
-        return merge(parts, flat[-1])
+    if flat == list(range(flat[0], flat[-1] + 1)):
+        ordered = sorted(parts, key=lambda part: min(part.pages))
+        if flat[0] == 1:
+            return merge(ordered, flat[-1])
+        offset = flat[0] - 1
+        lowered = [shift_pages(part, -offset) for part in ordered]
+        return shift_pages(merge(lowered, flat[-1] - offset), offset)
     merged = parts[0].model_copy(deep=True)
     merged.pages = {key: value for part in parts for key, value in part.pages.items()}
     merged.texts = []
@@ -214,9 +237,13 @@ def premium_part(
 def slice_pages(doc: DoclingDocument, pages: Iterable[int]) -> DoclingDocument:
     """Return a document containing only items on the given pages, keeping page numbers.
 
-    Uses DoclingDocument.filter (docling-core 2.107.1).
+    Uses DoclingDocument.filter (docling-core 2.107.1), which numbers pages from the first page of the source document; the
+    numbers are moved back.
     """
-    return doc.filter(page_nrs=set(pages))
+    sliced = doc.filter(page_nrs=set(pages))
+    # DoclingDocument.filter numbers pages from the first page of the source document, not from page one of the file.
+    offset = min(doc.pages) - 1 if doc.pages else 0
+    return shift_pages(sliced, offset) if offset else sliced
 
 
 def merge_dict_fingerprint(doc: DoclingDocument) -> bytes:

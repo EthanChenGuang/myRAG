@@ -104,6 +104,8 @@ class StorageClient:
         object_path = f"{prefix.rstrip('/')}/{name}"
         url = f"{self._base_url}/storage/v1/object/{bucket}/{object_path}"
         headers = self._headers(content_type="application/octet-stream")
+        # Cache objects are named by their key, so a resumed job that writes one again writes the same bytes.
+        headers["x-upsert"] = "true"
         try:
             response = await self._client.post(url, content=data, headers=headers)
         except httpx.HTTPError as exc:
