@@ -68,7 +68,7 @@ afterEach(async () => {
   );
 });
 
-function allLogText(spies: Array<ReturnType<typeof vi.spyOn>>): string {
+function allLogText(spies: Array<{ mock: { calls: unknown[][] } }>): string {
   return spies.flatMap((spy) => spy.mock.calls.map((call) => JSON.stringify(call))).join('\n');
 }
 
