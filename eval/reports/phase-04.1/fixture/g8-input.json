@@ -1,0 +1,21 @@
+{
+  "two_tenant_matrix": {
+    "single_tenant": true,
+    "multi_tenant": true
+  },
+  "negative_checks": {
+    "drop_top_candidate_fails": false,
+    "max_results_1_fails": false
+  },
+  "notes": [
+    "drop_top_candidate under v2-default (prechunked): gate passed=True, offenders=0, mismatches=0",
+    "drop_top_candidate under v2-default (ingest): gate passed=True, offenders=0, mismatches=0",
+    "max_results 1 under v2-default (prechunked): gate passed=True, offenders=0, mismatches=0",
+    "max_results 1 under v2-default (ingest): gate passed=True, offenders=0, mismatches=0",
+    "control (plain v2-default, prechunked) against the same scratch baseline: gate passed=True",
+    "control (plain v2-default, ingest) against the same scratch baseline: gate passed=True",
+    "negative checks are gated against scratch baselines recorded from three v2-default runs per mode under eval/out (not committed; the ingest one with --allow-spread because the v2 ingest runs differ on category:typo mrr); against the committed legacy-recorded baselines every v2-default run already fails G1 (see the configurations above), so a failure there would not show that the controls work",
+    "the eval-profile degrade option and max_results are applied only on the legacy branch of runRetrieval; the v2 eval path ignores them, so both controls pass the gate under the D-01 values",
+    "two-tenant matrix under the D-01 values: node --test name pattern 'under the D-01 values: multi-tenant' exit 0, 'under the D-01 values: single-tenant' exit 0 (keyless and with the fixture key)"
+  ]
+}
