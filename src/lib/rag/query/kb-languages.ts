@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { QueryTranslationSchema } from '@/lib/rag-eval/contracts.generated';
 import { getRagDeps } from '../deps';
 import { rpcRows, type RpcClient } from '../backend/supabase-rpc';
 import { scopeKey, type TenantScope } from '../tenant/scope';
@@ -16,7 +17,8 @@ export const KB_LANGUAGE_CACHE_TTL_MS = 10 * 60 * 1000;
 /** D-23: the query language is rare at or below this share; a KB language is a target only above it. */
 export const TRANSLATE_SHARE_THRESHOLD = 0.2;
 const MAX_TARGETS = 2;
-const LANGS: readonly Lang[] = ['zh', 'en', 'it'];
+/** The translatable languages, in the contract's order (also the tie-break order). */
+const LANGS: readonly Lang[] = QueryTranslationSchema.shape.target_language.options;
 
 const cache = new Map<string, { shares: KbLanguageShares; fetchedAt: number }>();
 
