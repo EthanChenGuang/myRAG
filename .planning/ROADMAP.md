@@ -761,13 +761,13 @@ Plans:
 **Requirements**: QRY-09, QRY-10, QRY-11, GEN-13, XLG-05, XLG-07, LANG-08, LAT-06, LAT-07, QRY-12, QRY-13, QRY-14
 **Success Criteria** (what must be TRUE):
   1. For synthetic questions in zh/en/it that compare two periods of one policy and ask about one scope, decomposition yields sub-questions covering both periods and the scope (a fake decomposer that drops one is corrected or discarded); with `RAG_QUERY_SUBQ_FILTERS` on, each sub-question is filtered by period, version scope or scope tag within the verified tenant, an empty filtered result falls back, and the answer has one cited part per sub-question plus the differences.
-  2. The `version_compare` and `scoped_compound` slices report all-evidence recall and sub-question coverage above single-pass retrieval, and no other slice drops beyond the noise band.
+  2. The `version_compare` and `scoped_compound` slices report all-evidence recall and sub-question coverage above single-pass retrieval, and no other slice drops beyond the noise band. The `version_compare` slice is judged only once Phase 4.2 (RET-11) is on trunk (06.2-25, 06.2-31).
   3. Glossary terms are enforced in translation, document translation and rewriting; short and mixed-script queries get the right language through the confidence fallback chain; the cross_lingual slice runs through the voice entry point and is gated.
   4. With `RAG_SPECULATIVE_RETRIEVAL` on, original-query retrieval starts before the transforms finish and a cache hit cancels it; with `RAG_MODEL_ROUTING=auto` and the Auto model selected, simple lookups go to the fast model; with both off, the Phase 6 order and model choice are unchanged.
   5. With `condense` forced to time out, a synthetic elliptical follow-up in zh/en/it is still retrieved through the previous-standalone-query variant and answered from the right passage; with `RAG_WHATSAPP_HISTORY` on, the same two-turn conversation over WhatsApp is condensed and answered correctly, history never crosses senders, and the reset command clears it.
   6. With `RAG_SCOPE_GATE` on, the off-domain fixture questions in zh/en/it skip retrieval as `out_of_scope` within 5 ms (strict refuses, balanced answers without knowledge-base context and says so), `unsure` queries always retrieve, correct refusals rise and false refusals stay within the noise band; with it off nothing changes.
 **Live verification**: Run the multi-part fixtures and real comparison questions with real LLM keys; measure the speculative-retrieval and routing latency gains.
-**Plans**: TBD
+**Plans**: 40 plans in 14 waves (see `phases/06.2-query-layer-additions/06.2-PLAN-INDEX.md`); migrations 0980–0983; human steps in 06.2-13 (approve `fasttext-predict` and the lid.176 model), 06.2-19 (live push of 0980–0983) and 06.2-33 (live verification and native-speaker review); 06.2-25 and 06.2-31 wait for Phase 4.2, and 06.2-09 (with 23, 29, 30, 35) for Phase 5.2's GEN-08
 
 ### Phase 6.3: Source Deletion Sync & Purge (INSERTED)
 **Goal**: A document deleted or withdrawn at its source stops being retrieved, cited or served from cache within one sync, withdrawn content can be purged from every store, and SharePoint and OneDrive libraries can be connected
@@ -863,6 +863,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 3.1 → 3.1.1 → 3.2 → 3.2
 | 5.3. Evaluation Gates & Online Monitoring (INSERTED) | 0/52 | Planned (plan-check PASS) | - |
 | 6. Query Layer (LlamaIndex & LangChain) | 12/46 | In Progress | - |
 | 6.1. Embedding Fine-tuning Pipeline (INSERTED) | 0/20 | Planned (plan-check PASS) | - |
-| 6.2. Query Layer Additions (INSERTED) | 0/TBD | Not planned | - |
+| 6.2. Query Layer Additions (INSERTED) | 0/40 | Planned (plan-check PASS) | - |
 | 6.3. Source Deletion Sync & Purge (INSERTED) | 0/27 | Planned (plan-check PASS) | - |
 | 7. External Backends & Release Defaults | 2/52 | In Progress (revision 4 planned 2026-11-25; UI-SPEC pending for 07-48, 07-49, 07-52) | - |
