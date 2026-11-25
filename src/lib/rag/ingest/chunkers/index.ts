@@ -76,6 +76,8 @@ function fromDocling(chunks: readonly DoclingChunk[]): ChunkDraft[] {
 export interface ChunkDocumentOptions {
   /** RAG_LANGUAGE_AWARE_INGEST: `on` splits each block at its own language's sentence ends; off (or absent) is today's splitter. */
   languageAwareIngest?: 'off' | 'on';
+  /** RAG_TABLE_HEADER_REPEAT: `always` repeats every table's header and carries it onto header-less continuations; `profile` (or absent) reads the profile flag. */
+  tableHeaderRepeat?: 'profile' | 'always';
 }
 
 /**

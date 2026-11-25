@@ -24,6 +24,8 @@ export interface ProfileDocument {
   templateHeader?: string;
   /** RAG_LANGUAGE_AWARE_INGEST: `on` splits each block at its own language's sentence ends (D-15); off or absent is today's splitter. */
   languageAwareIngest?: 'off' | 'on';
+  /** RAG_TABLE_HEADER_REPEAT (D-19, D-20); `profile` or absent reads the processing profile's repeat_table_header. */
+  tableHeaderRepeat?: 'profile' | 'always';
 }
 
 export interface BuiltProfileChunks {
