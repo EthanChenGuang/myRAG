@@ -354,8 +354,19 @@ describe('quarantine reasons: zero-width check, admin list, release and the not-
     assert.ok(forB.ok && !forB.items.some((entry) => entry.documentId === ownReady.documentId));
   });
 
-  test('each of the three functions has one overload, no PUBLIC, anon or authenticated execute, and service_role execute', async () => {
-    for (const name of ['rag_list_quarantine', 'rag_release_quarantine', 'rag_list_not_checked']) {
+  test('the 0425 signature rag_release_quarantine releases through the same path and keeps its return columns', async () => {
+    const result = await upload(hiddenText('zwpi'));
+    const released = await one('SELECT * FROM rag_release_quarantine($1, $2)', [result.documentId, A]);
+    assert.deepEqual(Object.keys(released).sort(), ['document_id', 'outcome', 'rule_ids', 'superseded_document_id', 'version']);
+    assert.equal(released.outcome, 'published');
+    const document = await one('SELECT status, approved_by, metadata FROM documents WHERE id = $1', [result.documentId]);
+    assert.equal(document.status, 'ready');
+    assert.equal(document.approved_by, A);
+    assert.deepEqual(((document.metadata as Row).quarantine as Row).released_targets, []);
+  });
+
+  test('each quarantine function has one overload, no PUBLIC, anon or authenticated execute, and service_role execute', async () => {
+    for (const name of ['rag_list_quarantine', 'rag_release_quarantine', 'rag_list_quarantine_reasons', 'rag_release_quarantine_reasons', 'rag_list_not_checked']) {
       const found = await rows(
         `SELECT p.oid::regprocedure::text AS signature, p.prosecdef, p.proconfig,
                 has_function_privilege('anon', p.oid, 'EXECUTE') AS anon,

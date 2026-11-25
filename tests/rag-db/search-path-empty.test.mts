@@ -305,11 +305,8 @@ for (const mode of MODES) {
     let db: PGlite;
     const files = migrationFiles(mode).filter((file) => /^supabase\/migrations\/0425_/.test(file));
 
-    // The database stands at the 0425 level: 0804 changes the return type of two 0425 functions (research F-8), so 0425 cannot be applied
-    // again on top of the later migrations.
     before(async () => {
-      ({ db } = await createEmptyFixtureDatabase({ deploymentMode: mode, migrations: false }));
-      await applyMigrationFiles(db, unfoldedMigrationFiles(mode).filter((file) => /^supabase\/migrations\/0([0-3]\d\d|4[01]\d|42[0-4])_/.test(file)));
+      ({ db } = await createEmptyFixtureDatabase({ deploymentMode: mode }));
       await db.exec(`CREATE SCHEMA extensions; ALTER EXTENSION vector SET SCHEMA extensions`);
     });
 

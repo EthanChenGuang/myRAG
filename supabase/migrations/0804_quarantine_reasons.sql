@@ -1,27 +1,28 @@
 -- 0804: Quarantine reasons, release as approval, not-checked list (plan 03.2-34; D-32, D-34, D-35, D-36; SEC-07, SEC-08).
--- rag_list_quarantine is rebuilt from its 0425 body with four added columns: reasons (metadata.quarantine.reasons, '[]' for an older row,
--- which the service module presents as one injection_rule reason from its rule ids), unlocated (the summed unlocated span count of the
--- reasons), hidden_text_check (the 0801 column) and pending_approval (the upload also needed approval, metadata.quarantine.approval_required,
--- and nobody approved it yet); uploader_id (documents.user_id) is added for the uploader display. The return type changes, so the old
--- signature is dropped first (research F-8: CREATE OR REPLACE would fail or leave two overloads) and the grants are given again.
--- rag_release_quarantine is rebuilt from its 0425 body. The reasons stay; the targets of the untrusted_link reasons are stored as
--- metadata.quarantine.released_targets beside released_rule_ids (skipped on the next version, as Phase 5.1 D-10 does for rule ids); a release
--- counts as approval (D-36), so approved_by and approved_at are stamped on the document and approved_by on its chunks. The publish outcome
--- superseded_lineage (0806) is a completed release: the version is stored, retired by a confirmed link. The return type gains
--- released_targets and tenant_key (the service module calls afterPublish with it), so the old signature is dropped first.
+-- rag_list_quarantine_reasons is the 0425 rag_list_quarantine body with added columns: reasons (metadata.quarantine.reasons, '[]' for an
+-- older row, which the service module presents as one injection_rule reason from its rule ids), unlocated (the summed unlocated span count
+-- of the reasons), hidden_text_check (the 0801 column), pending_approval (the upload also needed approval,
+-- metadata.quarantine.approval_required, and nobody approved it yet) and uploader_id (documents.user_id).
+-- rag_release_quarantine_reasons is the 0425 rag_release_quarantine body extended: the reasons stay; the targets of the untrusted_link
+-- reasons are stored as metadata.quarantine.released_targets beside released_rule_ids (skipped on the next version, as Phase 5.1 D-10 does
+-- for rule ids); a release counts as approval (D-36), so approved_by and approved_at are stamped on the document and approved_by on its
+-- chunks; the publish outcome superseded_lineage (0806) is a completed release (the version is stored, retired by a confirmed link). It
+-- returns released_targets and tenant_key (the service module calls afterPublish with it).
+-- The two 0425 functions keep their signatures and return types (research F-8): 0425 checks that they exist and replaces them with CREATE
+-- OR REPLACE, so a changed return type would make every second apply of the migrations fail with 42P13. rag_list_quarantine keeps its
+-- 0425 body; rag_release_quarantine becomes a wrapper of rag_release_quarantine_reasons, so both release paths behave the same.
 -- rag_list_not_checked lists the current, ready documents of the actor's tenants whose hidden_text_check is not_checked (D-34).
 -- Admin access is rag_admin_tenant_keys (the Quarantine panel rule): a non-admin and an admin of another tenant both see nothing or get
 -- not_found. Every function here is SECURITY DEFINER with search_path '' and schema-qualified names, service_role only: REVOKE ALL FROM
 -- PUBLIC, anon, authenticated and GRANT EXECUTE TO service_role per signature.
--- Not folded into the setup files. Idempotent: DROP FUNCTION IF EXISTS on the exact signatures, then CREATE. 0806 does not define
--- rag_release_quarantine. After this file 0425 cannot be re-run as it stands: its CREATE OR REPLACE of the two old return types fails with
--- 42P13 and the whole 0425 transaction rolls back, changing nothing.
+-- Not folded into the setup files. Idempotent: the new functions are dropped by exact signature and created again. Re-running 0425 puts
+-- back the old rag_release_quarantine body: re-run this file after it.
 
 BEGIN;
 
-DROP FUNCTION IF EXISTS public.rag_list_quarantine(uuid, integer, integer);
+DROP FUNCTION IF EXISTS public.rag_list_quarantine_reasons(uuid, integer, integer);
 
-CREATE FUNCTION public.rag_list_quarantine(p_actor uuid, p_limit integer DEFAULT 50, p_offset integer DEFAULT 0)
+CREATE FUNCTION public.rag_list_quarantine_reasons(p_actor uuid, p_limit integer DEFAULT 50, p_offset integer DEFAULT 0)
  RETURNS TABLE(document_id uuid, lineage_id uuid, tenant_key text, filename text, source text, version integer, rule_ids text[], snippets text[],
                quarantined_at timestamp with time zone, detected_by text, reasons jsonb, unlocated integer, hidden_text_check text,
                pending_approval boolean, uploader_id uuid, total_count bigint)
@@ -77,9 +78,9 @@ BEGIN
 END
 $function$;
 
-DROP FUNCTION IF EXISTS public.rag_release_quarantine(uuid, uuid);
+DROP FUNCTION IF EXISTS public.rag_release_quarantine_reasons(uuid, uuid);
 
-CREATE FUNCTION public.rag_release_quarantine(p_document_id uuid, p_actor uuid)
+CREATE FUNCTION public.rag_release_quarantine_reasons(p_document_id uuid, p_actor uuid)
  RETURNS TABLE(outcome text, document_id uuid, version integer, superseded_document_id uuid, rule_ids text[], released_targets text[], tenant_key text)
  LANGUAGE plpgsql
  SECURITY DEFINER
@@ -153,6 +154,20 @@ BEGIN
 END
 $function$;
 
+-- The 0425 signature and return type, same behaviour as rag_release_quarantine_reasons.
+CREATE OR REPLACE FUNCTION public.rag_release_quarantine(p_document_id uuid, p_actor uuid)
+ RETURNS TABLE(outcome text, document_id uuid, version integer, superseded_document_id uuid, rule_ids text[])
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+BEGIN
+  RETURN QUERY
+  SELECT r.outcome, r.document_id, r.version, r.superseded_document_id, r.rule_ids
+  FROM public.rag_release_quarantine_reasons(p_document_id, p_actor) AS r;
+END
+$function$;
+
 CREATE OR REPLACE FUNCTION public.rag_list_not_checked(p_actor uuid, p_limit integer DEFAULT 50, p_offset integer DEFAULT 0)
  RETURNS TABLE(document_id uuid, lineage_id uuid, tenant_key text, filename text, doc_type text, source text, uploaded_at timestamp with time zone,
                total_count bigint)
@@ -176,8 +191,10 @@ BEGIN
 END
 $function$;
 
-REVOKE ALL ON FUNCTION public.rag_list_quarantine(uuid, integer, integer) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.rag_list_quarantine(uuid, integer, integer) TO service_role;
+REVOKE ALL ON FUNCTION public.rag_list_quarantine_reasons(uuid, integer, integer) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_list_quarantine_reasons(uuid, integer, integer) TO service_role;
+REVOKE ALL ON FUNCTION public.rag_release_quarantine_reasons(uuid, uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_release_quarantine_reasons(uuid, uuid) TO service_role;
 REVOKE ALL ON FUNCTION public.rag_release_quarantine(uuid, uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.rag_release_quarantine(uuid, uuid) TO service_role;
 REVOKE ALL ON FUNCTION public.rag_list_not_checked(uuid, integer, integer) FROM PUBLIC, anon, authenticated;

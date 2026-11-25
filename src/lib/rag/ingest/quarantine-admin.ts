@@ -185,7 +185,7 @@ export async function listQuarantine(input: ListQuarantineInput): Promise<ListQu
   const limit = clamp(input.limit, DEFAULT_LIMIT, 1, MAX_LIMIT);
   const offset = clamp(input.offset, 0, 0, 1_000_000);
 
-  const page = await call('rag_list_quarantine', { p_actor: actor, p_limit: limit, p_offset: offset }, input.signal);
+  const page = await call('rag_list_quarantine_reasons', { p_actor: actor, p_limit: limit, p_offset: offset }, input.signal);
   if (!page.ok) return page;
   const items: QuarantineItem[] = [];
   for (const row of page.rows) {
@@ -195,7 +195,7 @@ export async function listQuarantine(input: ListQuarantineInput): Promise<ListQu
   }
   let total = page.rows.length > 0 ? Number(page.rows[0]?.total_count) : 0;
   if (page.rows.length === 0 && offset > 0) {
-    const first = await call('rag_list_quarantine', { p_actor: actor, p_limit: 1, p_offset: 0 }, input.signal);
+    const first = await call('rag_list_quarantine_reasons', { p_actor: actor, p_limit: 1, p_offset: 0 }, input.signal);
     if (!first.ok) return first;
     total = first.rows.length > 0 ? Number(first.rows[0]?.total_count) : 0;
   }
@@ -210,7 +210,7 @@ export async function listQuarantine(input: ListQuarantineInput): Promise<ListQu
 export async function releaseQuarantined(input: QuarantineActionInput): Promise<ReleaseQuarantinedResult> {
   if (!UUID.test(input.documentId) || !UUID.test(input.actorUserId)) return { ok: false, reason: 'invalid_argument' };
   const result = await call(
-    'rag_release_quarantine',
+    'rag_release_quarantine_reasons',
     { p_document_id: input.documentId.toLowerCase(), p_actor: input.actorUserId.toLowerCase() },
     input.signal,
   );
