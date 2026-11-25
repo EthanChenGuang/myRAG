@@ -22,6 +22,7 @@ tech-stack:
 key-files:
   created:
     - supabase/migrations/0425_search_path_empty.sql
+    - supabase/migrations/0425_expected_pre_hashes.json
     - supabase/migrations/0425_search_path_empty.single-tenant.sql
     - supabase/migrations/0425_search_path_empty.multi-tenant.sql
     - tests/rag-db/search-path-empty.test.mts
@@ -30,6 +31,7 @@ key-files:
     - .planning/phases/04-hybrid-retrieval-reranking-calibrated-refusal/04-47-PLAN.md
     - .planning/phases/04-hybrid-retrieval-reranking-calibrated-refusal/04-47-SUMMARY.md
   modified:
+    - AGENTS.md
     - supabase/single-tenant-setup.sql
     - supabase/multi-tenant-setup.sql
     - tests/rag-db/schema-equality.test.mts
@@ -97,7 +99,7 @@ plan_head_after: 9ba5fcf028002ece0c440d9abe65a637d5f4fdc6
 
 - Phase 4 total: 17 final definitions. The verifier's other Phase 4 functions (hybrid_search_chunks, rag_write_profile_chunks, rag_fetch_parents and the 0413 set) were already `''` in their final definitions: 0413, then 0602 for hybrid_search_chunks. 0425 does not touch hybrid_search_chunks, so 0602's include-undated rule and the 0413 image/invoice_header rule stay as they are.
 - Allow-list entries: none.
-- Files: `0425_search_path_empty.sql` (111 functions identical in both modes), `.single-tenant.sql` (15), `.multi-tenant.sql` (24). Each file starts with a DO block that raises `55000` when any of its targets is missing.
+- Files: `0425_search_path_empty.sql` (111 functions identical in both modes), `.single-tenant.sql` (15), `.multi-tenant.sql` (24). Each file starts with a DO block that raises `55000` when pgvector is not in schema `public` or when any of its targets is missing. The block proves only that the targets exist; it does not compare their bodies.
 
 ### Gap 1: frontend design gate
 
@@ -171,13 +173,44 @@ This plan changed `scripts/config-ui/index.html`, so it is a UI plan.
 
 Python, contracts and golden data were not touched, so pytest and gen:schemas were not run. Nothing under `eval/fixtures/parse/` was touched.
 
+## Review Fixes (0425 review, warnings and IN-01, IN-05)
+
+0425 had not been applied to a live database, so 0425 and its fold sections were edited in place; the fold stays byte-identical to the migration files. Each fix began with a failing test.
+
+- **WR-01:** the seven catalog references in 0425 are now `pg_catalog.pg_attribute` and `pg_catalog.pg_extension`. The scanner flags unqualified pg_catalog relations anywhere in an empty-path body. A test reproduces the review: in multi-tenant mode, a service_role session with a temporary `pg_attribute` must still be refused `s:default` by `rag_ingest_assert_tenant_key`. 0413, 0424, 0601 and 0602 had no unqualified catalog relation. The header now says that pg_temp is still searched first under `''`.
+- **WR-02:** in `tests/helpers/sql-function-acl.ts`, DROP FUNCTION clears the required signature, and only CREATE OR REPLACE may skip one. A signature is required only when the block checks it with `to_regprocedure(...) IS NULL` and raises after it. On the repository files, every scenario tracks the same functions and ACLs as before.
+- **WR-03:** each 0425 precheck stops with `55000` when pgvector is not in schema `public`. It is tested with `ALTER EXTENSION vector SET SCHEMA extensions` in PGlite. The requirement is noted in AGENTS.md section 6.
+- **WR-04, IN-01:** `0425_expected_pre_hashes.json` and a dry run in the 0425 header (see Operator Actions). Both the frozen setup plus every migration below 0425 and the setup files at `e2319f2a~1` give the same hashes.
+
+| Gate | Result |
+|------|--------|
+| search-path-empty / schema-equality / definer-search-path-pglite / search-rpc-grants-pglite | 26/26, 31/31, 6/6, 10/10 |
+| vitest search-rpc-grants (ACL simulator units), security-definer-search-path, agents-guide | 55/55 |
+| hybrid-filters / -grants / -include-undated / -search / -tenant | 7, 12, 12, 13, 11, all pass |
+| v2-two-tenant-matrix, ingest-writer, profile-chunk-writer | 50, 67, 20, all pass |
+| ingestion-* (8 suites, after `uv sync --extra chunking --extra preflight`) | 115 pass, 0 fail |
+| rechunk, reembed | 23, 44, all pass |
+| `npx next typegen && npx tsc --noEmit -p tsconfig.json`, `npm run typecheck:new` | 0 errors |
+| reviewer's diff0425 (accepting `pg_catalog.` too), both modes | 126 / 135 changed, 0 body mismatches, 0 header diffs, idempotent, 6 `pg_catalog.` edits per mode |
+
 ## Deferred Issues
 
 - Phases 01, 02 and 03.1 still fail the narrowed design gate on real UI plans (01-11, 02-33, 03.1-03 and others) that predate the gate. They are out of scope here.
 - The ingest-mode-routing suite needs `docling_core` in the rag-sidecar venv (pre-existing environment gap, same family as the `pypdfium2` note in 04-42).
 
+## Known Limitations and Residuals
+
+- **Type names under `search_path = ''` (service_role only).** pg_temp is still searched first for relations and types when it is not listed. Since review fix WR-01, every relation in an empty-path body is qualified, `pg_catalog.pg_attribute` and `pg_catalog.pg_extension` included, so a temporary table cannot shadow one. Type names (`text`, `uuid`, `jsonb`, `regclass` and so on) stay unqualified. A session that can create a temporary domain, for example `CREATE DOMAIN pg_temp.jsonb AS integer`, still changes how a cast resolves inside these functions. That needs a raw SQL session with TEMP privilege plus EXECUTE. Every affected SECURITY DEFINER function is service_role only, and PostgREST clients cannot create temporary objects. The project keeps `''` as its convention rather than `pg_catalog, pg_temp`.
+- **Legacy SECURITY INVOKER functions with no search_path (IN-05).** These are outside 0425's scope. They give no escalation, since they run as the caller, and search-path-empty asserts that no empty-path body calls them. A future empty-path function, trigger or policy that calls one would break. The same list comes from the setup plus all migrations and from the frozen setup plus all migrations:
+  - single-tenant: `search_chunks_by_keywords(text,integer)`, `update_document_url_by_filename(text,text)`;
+  - multi-tenant: `check_storage_quota(uuid,bigint)`, `get_user_workspace_summary()`, `get_workspace_type(uuid)`, `match_documents_by_organization(vector,double precision,integer,uuid)`, `update_document_url_by_filename(text,text)`.
+
 ## Operator Actions
 
-- Apply `supabase/migrations/0425_search_path_empty.sql` and then the file for the deployment mode, after 0424. It stops with `55000` if an earlier migration is missing. A fresh install from either setup file already includes it.
+- Check pgvector's schema first: `SELECT extname, extnamespace::regnamespace FROM pg_extension WHERE extname = 'vector'` must show `public`. Each 0425 file stops with `55000` otherwise. Do not act on Supabase lint 0014 (`extension_in_public`) for `vector`.
+- Run the read-only dry run in the header of `supabase/migrations/0425_search_path_empty.sql`. Paste in the contents of `supabase/migrations/0425_expected_pre_hashes.json` and the deployment mode. Each row it returns is a function whose live body differs from the one expected before 0425. Resolve every row before applying.
+- Apply `0425_search_path_empty.sql`, then the file for the deployment mode, after 0424. The precheck proves only that the replaced functions exist: it stops with `55000` if one is missing, and it compares neither bodies nor grants. 0425 overwrites every live body with the repository's version. A body hot-fixed by hand, or one left behind by a skipped body-only migration, is replaced without notice. A skipped ACL-only migration (0409 to 0411) stays skipped. The common file and the mode file are separate transactions; if the mode file stops, re-run both.
+- Re-run 0425 (the common file, then the mode file) after re-running any earlier migration. Re-running a migration below 0425 puts back that migration's search_path and body.
+- A fresh install from either setup file already includes 0425.
 
 ## Self-Check: PASSED

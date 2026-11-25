@@ -1,20 +1,46 @@
 -- 0425: empty search_path for every public SECURITY DEFINER function, every trigger function and every
 -- function created from 0301 on (Phase 4 gap closure, plan 04-47). 0411 and the Phase 3, 3.1 and 4 migrations fixed search_path to
--- pg_catalog, public or to public (a few legacy functions to public, pg_temp, three multi-tenant legacy triggers to nothing). pg_temp is still
--- searched first for relations when it is not listed, so an unqualified table name in a definer body could be shadowed by a temporary table;
--- and a trigger runs with the search_path of the statement that fired it, so a trigger without its own path breaks under an empty-path writer.
--- Each function below is replaced with SET search_path = '' and a body that differs from the one it replaces only by schema-qualified names:
--- public. tables, row types, functions and the vector and halfvec types, and OPERATOR(public.<=>) for pgvector (both setup files install
--- vector in public). Signature, defaults, volatility, SECURITY mode, owner and grants are unchanged: CREATE OR REPLACE keeps the ACL and this
--- file issues no GRANT or REVOKE. Every function must already exist (the first block checks and stops otherwise), so the file never creates
--- one with default PUBLIC execute. tests/rag-db/search-path-empty.test.mts. Idempotent: CREATE OR REPLACE only.
+-- pg_catalog, public or to public (a few legacy functions to public, pg_temp, three multi-tenant legacy triggers to nothing), and a trigger
+-- runs with the search_path of the statement that fired it, so a trigger without its own path breaks under an empty-path writer.
+-- search_path = '' does not take pg_temp out of the path: when pg_temp is not listed, PostgreSQL still searches it first for relations and
+-- types, before pg_catalog. So '' alone does not stop a temporary table from shadowing a name; qualifying every relation does, and the bodies
+-- therefore name catalog tables pg_catalog.pg_attribute and pg_catalog.pg_extension as well. Functions and operators are never looked up in
+-- pg_temp. Each function below is replaced with SET search_path = '' and a body that differs from the one it replaces only by schema-qualified
+-- names: public. tables, row types, functions and the vector and halfvec types, OPERATOR(public.<=>) for pgvector (both setup files install
+-- vector in public), and pg_catalog. catalog tables. Signature, defaults, volatility, SECURITY mode, owner and grants are unchanged: CREATE OR
+-- REPLACE keeps the ACL and this file issues no GRANT or REVOKE. The first block stops with 55000 unless pgvector is in schema public (the
+-- bodies name public.vector and OPERATOR(public.<=>)) and every function already exists, so the file never creates one with default PUBLIC
+-- execute. tests/rag-db/search-path-empty.test.mts. Idempotent: CREATE OR REPLACE only.
+--
+-- Live upgrade. The first block proves only that the functions exist, not that their bodies are the ones this file was generated from:
+-- 0425 overwrites every live body with the repository's version. A body hot-fixed by hand or left behind by a skipped body-only migration
+-- (0424, for example) is replaced without notice, and a skipped ACL-only migration (0409 to 0411) stays skipped, since grants are not
+-- compared. Run this read-only dry run first. It lists every target of this file and of the mode file whose live md5(prosrc) differs from
+-- the hash expected before 0425 (generated from the pre-0425 harness build, supabase/migrations/0425_expected_pre_hashes.json). Paste that
+-- file's contents and the deployment mode into the two placeholders. No rows means every live body is the expected one; for each row,
+-- compare pg_get_functiondef with the repository before applying.
+--   SELECT x.sig, x.md5 AS expected, pg_catalog.md5(p.prosrc) AS live
+--     FROM pg_catalog.jsonb_each_text('<contents of supabase/migrations/0425_expected_pre_hashes.json>'::jsonb -> '<single-tenant or multi-tenant>') AS x(sig, md5)
+--     LEFT JOIN pg_catalog.pg_proc p ON p.oid = pg_catalog.to_regprocedure(x.sig)
+--    WHERE p.oid IS NULL OR pg_catalog.md5(p.prosrc) <> x.md5
+--    ORDER BY 1;
+-- Re-running any migration below 0425 after 0425 puts back that migration's search_path and body, so re-run 0425 (this file, then the mode
+-- file) after it.
 
 BEGIN;
 
 DO $search_path_precheck$
 DECLARE
   v_missing text[];
+  v_vector_schema text;
 BEGIN
+  SELECT n.nspname INTO v_vector_schema
+  FROM pg_catalog.pg_extension e JOIN pg_catalog.pg_namespace n ON n.oid = e.extnamespace
+  WHERE e.extname = 'vector';
+  IF v_vector_schema IS DISTINCT FROM 'public' THEN
+    RAISE EXCEPTION '0425: pgvector must be in schema public, found %; check with: SELECT extname, extnamespace::regnamespace FROM pg_catalog.pg_extension WHERE extname = ''vector''',
+      COALESCE(v_vector_schema, 'no vector extension') USING ERRCODE = '55000';
+  END IF;
   SELECT pg_catalog.array_agg(s.sig ORDER BY s.sig) INTO v_missing
   FROM pg_catalog.unnest(ARRAY[
     'public.check_admin_status()',
@@ -228,7 +254,7 @@ BEGIN
     RAISE EXCEPTION 'embedding_profile_mismatch: profile not active' USING ERRCODE = '22000';
   END IF;
 
-  SELECT extversion INTO v_version FROM pg_extension WHERE extname = 'vector';
+  SELECT extversion INTO v_version FROM pg_catalog.pg_extension WHERE extname = 'vector';
   IF v_version IS NOT NULL AND (string_to_array(v_version, '.'))[1:2]::int[] >= ARRAY[0, 8] THEN
     PERFORM set_config('hnsw.iterative_scan', 'relaxed_order', true);
   END IF;
@@ -617,7 +643,7 @@ BEGIN
 
   -- user_id is NOT NULL in the multi-tenant schema and nullable in the single-tenant one.
   multi_tenant := EXISTS (
-    SELECT 1 FROM pg_attribute
+    SELECT 1 FROM pg_catalog.pg_attribute
     WHERE attrelid = 'public.documents'::regclass AND attname = 'user_id' AND attnotnull AND NOT attisdropped
   );
   IF multi_tenant THEN
@@ -1130,7 +1156,7 @@ BEGIN
     RETURN false;
   END IF;
   multi_tenant := EXISTS (
-    SELECT 1 FROM pg_attribute
+    SELECT 1 FROM pg_catalog.pg_attribute
     WHERE attrelid = 'public.documents'::regclass AND attname = 'user_id' AND attnotnull AND NOT attisdropped
   );
   IF multi_tenant THEN
@@ -1618,7 +1644,7 @@ BEGIN
     RAISE EXCEPTION 'ingest_refused: invalid_tenant_key' USING ERRCODE = '22023';
   END IF;
   multi_tenant := EXISTS (
-    SELECT 1 FROM pg_attribute
+    SELECT 1 FROM pg_catalog.pg_attribute
     WHERE attrelid = 'public.documents'::regclass AND attname = 'user_id' AND attnotnull AND NOT attisdropped
   );
   IF multi_tenant THEN
@@ -2157,7 +2183,7 @@ BEGIN
   PERFORM pg_advisory_xact_lock(hashtextextended(doc.tenant_key || '|' || doc.source || '|' || doc.source_key, 0));
 
   has_slug := (
-    SELECT count(*) = 2 FROM pg_attribute
+    SELECT count(*) = 2 FROM pg_catalog.pg_attribute
     WHERE attrelid = 'public.documents'::regclass AND attname IN ('content_type', 'slug') AND NOT attisdropped
   );
 
