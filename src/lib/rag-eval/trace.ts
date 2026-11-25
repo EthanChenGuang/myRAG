@@ -1,7 +1,4 @@
 import crypto from 'node:crypto';
-import { readSecurityConfig } from '@/lib/rag/security/config';
-import { detectorsConfigVersion } from '@/lib/rag/security/detectors';
-import { injectionRulesVersion } from '@/lib/rag/security/injection-rules';
 
 export const ENDPOINT_VERSION = 'rag-eval/1';
 
@@ -25,7 +22,12 @@ function sha256Hex(value: string): string {
   return crypto.createHash('sha256').update(value, 'utf8').digest('hex');
 }
 
-export function buildEffectiveConfig(): EffectiveConfig {
+export interface EffectiveConfigOptions {
+  /** injectionTraceVersions() from @/lib/rag: rules_version and detectors_version while the check is on, else null. */
+  security?: { rules_version: string; detectors_version: string } | null;
+}
+
+export function buildEffectiveConfig(options: EffectiveConfigOptions = {}): EffectiveConfig {
   const ragEnv: Record<string, string> = {};
   for (const name of Object.keys(process.env).sort()) {
     if (!name.startsWith('RAG_') && !name.startsWith('NEXT_PUBLIC_RAG_')) continue;
@@ -43,10 +45,7 @@ export function buildEffectiveConfig(): EffectiveConfig {
     promptDigests[name] = sha256Hex(process.env[name] ?? '');
   }
 
-  const security =
-    readSecurityConfig(process.env).injectionCheck !== 'off'
-      ? { security: { rules_version: injectionRulesVersion(), detectors_version: detectorsConfigVersion() } }
-      : {};
+  const security = options.security ? { security: { rules_version: options.security.rules_version, detectors_version: options.security.detectors_version } } : {};
 
   return {
     ...security,

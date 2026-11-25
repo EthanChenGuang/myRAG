@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from 'vitest';
 import { buildEffectiveConfig, configHash } from '@/lib/rag-eval/trace';
+import { injectionTraceVersions } from '@/lib/rag';
 import { RagTraceSchema } from '@/lib/rag-eval/contracts.generated';
 import { detectorsConfigVersion } from '@/lib/rag/security/detectors';
 import { injectionRulesVersion } from '@/lib/rag/security/injection-rules';
@@ -48,23 +49,25 @@ describe('buildEffectiveConfig security block (D-18)', () => {
 
   test('carries the rules and detector config versions when the injection check is on', () => {
     env.RAG_INJECTION_CHECK = 'drop';
-    const config = buildEffectiveConfig() as ReturnType<typeof buildEffectiveConfig> & { security?: unknown };
+    const config = buildEffectiveConfig({ security: injectionTraceVersions() });
     expect(config.security).toEqual({ rules_version: injectionRulesVersion(), detectors_version: detectorsConfigVersion() });
     expect(RagTraceSchema.shape.effective_config.parse(config)).toMatchObject({ security: config.security });
   });
 
   test('omits the block when the check is unset or off', () => {
     delete env.RAG_INJECTION_CHECK;
-    const unset = buildEffectiveConfig();
+    expect(injectionTraceVersions()).toBeNull();
+    const unset = buildEffectiveConfig({ security: injectionTraceVersions() });
     expect(unset).not.toHaveProperty('security');
     expect(RagTraceSchema.shape.effective_config.parse(unset).security).toBeNull();
     env.RAG_INJECTION_CHECK = 'off';
+    expect(buildEffectiveConfig({ security: injectionTraceVersions() })).not.toHaveProperty('security');
     expect(buildEffectiveConfig()).not.toHaveProperty('security');
   });
 
   test('with the check on the config hash covers the security block', () => {
     env.RAG_INJECTION_CHECK = 'flag';
-    const on = buildEffectiveConfig() as ReturnType<typeof buildEffectiveConfig> & { security?: { rules_version: string } };
+    const on = buildEffectiveConfig({ security: injectionTraceVersions() });
     expect(on.security).toBeDefined();
     const changed = { ...on, security: { ...on.security!, rules_version: 'other' } };
     expect(configHash(changed)).not.toBe(configHash(on));
