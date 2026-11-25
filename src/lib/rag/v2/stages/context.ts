@@ -18,9 +18,20 @@ import { expandParents, selectWithParents, type ParentBudgetCandidate, type Pare
 import type { RerankSpan } from '../../rerank/types';
 import type { FusedHit } from '../../fusion/rrf';
 import type { RagConfig, StageName } from '../../config';
-import { runStage, stageSpec, type StageSpec } from '../../pipeline';
+import { downweightOrder, injectionDropped, runInjectionStage, runStage, stageSpec, type StageSpec } from '../../pipeline';
+import type { SecurityConfig } from '../../security/config';
+import { injectionItems, releasedRulesFromRows, type InjectionMarks } from '../../security/injection-check';
 import type { TraceCollector } from '../../trace/collector';
-import type { Candidate, CitationLabeler, KeptBy, Profile, ReferencedState, RunRetrievalInput, StageOverrides } from '../../types';
+import type {
+  Candidate,
+  CitationLabeler,
+  InjectionSummary,
+  KeptBy,
+  Profile,
+  ReferencedState,
+  RunRetrievalInput,
+  StageOverrides,
+} from '../../types';
 import { v2ProfileSettings } from '../profiles';
 import type { RetrievalParams } from '@/lib/rag-eval/contracts.generated';
 
@@ -42,11 +53,16 @@ export interface ContextStagesInput {
   collector: TraceCollector;
   stageOverrides?: StageOverrides;
   rerank?: ContextRerankInput;
+  /** Defaults to RagDeps.securityConfig(). */
+  security?: SecurityConfig;
 }
 
 export interface ContextStagesOutput {
   assembly: AssembleOutput<Candidate> | null;
   candidates: Candidate[];
+  /** Present only when RAG_INJECTION_CHECK is on and the stage produced a verdict. */
+  injection?: InjectionSummary;
+  injectionStalled?: boolean;
 }
 
 function assemblyRowsFromHits(hits: FusedHit[]): AssemblyRows {
@@ -103,6 +119,27 @@ interface ExpandStageValue {
   /** Null when no parent came back: assembly then takes the plain child selection. */
   selection: ParentSelection<ParentBudgetCandidate> | null;
   fetched: number;
+  /** The children with their parents attached, before budget selection. */
+  expanded: ParentBudgetCandidate[];
+}
+
+/** Moves flagged entries after the others and renumbers ranks, so budget selection reaches them last. */
+function rerankFlaggedLast<C extends ParentBudgetCandidate>(list: C[], flagged: ReadonlySet<string>): C[] {
+  return downweightOrder(list, flagged).map((entry, index) => (entry.rank === index + 1 ? entry : { ...entry, rank: index + 1 }));
+}
+
+/**
+ * Downweighted groups never take an edge slot: without edge order they follow the others; with it the clean groups
+ * are edge-ordered and the flagged ones sit in the middle. With fewer than two clean groups an edge cannot be avoided.
+ */
+export function placeFlaggedGroups(groupIds: string[], flagged: ReadonlySet<string>, edgeOrdered: boolean): string[] {
+  const clean = groupIds.filter((id) => !flagged.has(id));
+  const marked = groupIds.filter((id) => flagged.has(id));
+  if (!edgeOrdered) return [...clean, ...marked];
+  const ordered = edgeOrder(clean);
+  if (ordered.length < 2) return [...ordered, ...marked];
+  const middle = Math.ceil(ordered.length / 2);
+  return [...ordered.slice(0, middle), ...marked, ...ordered.slice(middle)];
 }
 
 interface AssembleStageValue {
@@ -125,11 +162,13 @@ interface CompressStageValue {
 }
 
 export async function runContextStages(ctx: ContextStagesInput): Promise<ContextStagesOutput> {
-  const { input, config, profile, params, fusedHits, referenced, signal, collector, stageOverrides, rerank } = ctx;
+  const { input, config, profile, params, fusedHits, signal, collector, stageOverrides, rerank } = ctx;
+  let referenced = ctx.referenced;
+  const security = ctx.security ?? getRagDeps().securityConfig();
   const spec = (name: StageName, onFail: StageSpec['onFail']) => stageSpec(config, profile, name, onFail, stageOverrides);
   const settings = v2ProfileSettings(profile, config);
   const topHits = fusedHits.slice(0, params.final_top_k);
-  const candidates = topHits.map((row) => fusedToCandidate(row, rerank?.scoreByChunk?.get(row.hit.chunkId)));
+  let candidates = topHits.map((row) => fusedToCandidate(row, rerank?.scoreByChunk?.get(row.hit.chunkId)));
   const rows = assemblyRowsFromHits(topHits);
   const hitById = new Map(topHits.map((row) => [row.hit.chunkId, row.hit]));
   const rankById = new Map(candidates.map((candidate, index) => [candidate.chunk_id, index + 1]));
@@ -157,6 +196,9 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
     blockRuns: blocks?.runs,
     blockChunkIds: blocks?.chunkIds,
     citationLabeler: blocks?.labeler,
+    // With tagging on, buildContext renders the final blocks through wrapDocuments on every render (assemble, compress, label).
+    ...(security.contextTagging ? { contextTagging: true } : {}),
+    ...(injectionMarks ? { injectionMarks } : {}),
   });
 
   const render = (list: Candidate[], groupOrder: string[], blocks?: BlockShape): AssembleOutput<Candidate> => {
@@ -166,7 +208,8 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
 
   const filenameOf = (documentId: string) => rows.documents.get(documentId)?.filename ?? 'Unknown Document';
 
-  const budgetInput: ParentBudgetCandidate[] = candidates.map((candidate, index) => ({
+  let injectionMarks: InjectionMarks | null = null;
+  let budgetInput: ParentBudgetCandidate[] = candidates.map((candidate, index) => ({
     rank: index + 1,
     chunk_id: candidate.chunk_id,
     document_id: candidate.document_id,
@@ -195,7 +238,7 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
       });
       const selection =
         expanded.fetched > 0 ? selectWithParents(expanded.candidates, settings.tokenBudget, estimateRender, budgetOptions) : null;
-      return { selection, fetched: expanded.fetched };
+      return { selection, fetched: expanded.fetched, expanded: expanded.candidates };
     },
     collector,
     {
@@ -204,7 +247,57 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
       counts: (value) => ({ parents_fetched: value.fetched, parents_used: value.selection?.parentIds.size ?? 0 }),
     },
   );
-  const parentSelection = expansion.skipped || !expansion.value.selection?.parentIds.size ? null : expansion.value.selection;
+  let parentSelection = expansion.skipped || !expansion.value.selection?.parentIds.size ? null : expansion.value.selection;
+
+  // injection_check sits after expand_parents and before budget selection and aliasing (D-06, R3): it sees the
+  // candidates with their expanded parent text, captions and referenced sections, so nothing dropped is budgeted or cited.
+  let injection: InjectionSummary | undefined;
+  let injectionStalled = false;
+  if (security.injectionCheck !== 'off') {
+    const expandedList = expansion.skipped ? null : expansion.value.expanded;
+    const parentTextById = new Map<string, string>();
+    for (const entry of expandedList ?? []) if (entry.parent) parentTextById.set(entry.chunk_id, entry.parent.content);
+    const checkedTexts = candidates.map((candidate) => {
+      const parentText = parentTextById.get(candidate.chunk_id);
+      return parentText === undefined ? candidate : { ...candidate, content: `${candidate.content}\n${parentText}` };
+    });
+    const run = await runInjectionStage({
+      spec: spec('injection_check', 'skip'),
+      signal,
+      collector,
+      profile,
+      security,
+      mode: security.injectionCheck,
+      items: injectionItems(checkedTexts, rows.chunkMetadata, referenced),
+      candidates,
+      referenced,
+      // Released rule ids come only from the document rows this request's scoped search returned (D-10).
+      released: releasedRulesFromRows(rows.documents),
+    });
+    injectionStalled = run.stalled;
+    if (run.applied) {
+      injection = run.applied.summary;
+      const dropped = injectionDropped(run.applied.summary);
+      const flaggedChunks = run.applied.marks?.chunkIds ?? null;
+      if (dropped || flaggedChunks) {
+        const survivors = new Set(run.applied.candidates.map((candidate) => candidate.chunk_id));
+        candidates = run.applied.candidates;
+        referenced = run.applied.referenced;
+        injectionMarks = run.applied.marks;
+        const keep = <C extends ParentBudgetCandidate>(list: C[]): C[] => {
+          const kept = list.filter((entry) => survivors.has(entry.chunk_id));
+          return flaggedChunks ? rerankFlaggedLast(kept, flaggedChunks) : kept.map((entry, index) => ({ ...entry, rank: index + 1 }));
+        };
+        budgetInput = keep(budgetInput);
+        if (expandedList && !expansion.skipped && expansion.value.fetched > 0) {
+          const selection = selectWithParents(keep(expandedList), settings.tokenBudget, estimateRender, budgetOptions);
+          parentSelection = selection.parentIds.size ? selection : null;
+        } else {
+          parentSelection = null;
+        }
+      }
+    }
+  }
 
   const assembled = await runStage(
     spec('assemble', 'skip'),
@@ -236,7 +329,16 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
         });
       const groups = mergeAdjacent(adjacent);
       const groupIds = groups.map((group) => group.documentId);
-      const groupOrder = config.v2.edgeOrder ? edgeOrder(groupIds) : groupIds;
+      const marks = injectionMarks as InjectionMarks | null;
+      const flaggedGroups = new Set(
+        marks ? groups.filter((group) => group.runs.flat().some((chunk) => marks.chunkIds.has(chunk.chunk_id))).map((group) => group.documentId) : [],
+      );
+      const groupOrder =
+        flaggedGroups.size > 0
+          ? placeFlaggedGroups(groupIds, flaggedGroups, config.v2.edgeOrder)
+          : config.v2.edgeOrder
+            ? edgeOrder(groupIds)
+            : groupIds;
 
       const blockRuns = new Map<string, string>();
       for (const group of groups) {
@@ -286,8 +388,9 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
     },
   );
 
+  const injectionOut = injection ? { injection, injectionStalled } : {};
   if (assembled.skipped) {
-    return { assembly: null, candidates };
+    return { assembly: null, candidates, ...injectionOut };
   }
 
   const base = assembled.value;
@@ -339,7 +442,7 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
 
   // Labelling is the last context step: it renders the final selection once more, in the same order, with the labels.
   const labeler = input.citationLabeler;
-  if (!labeler) return { assembly: final.output, candidates };
+  if (!labeler) return { assembly: final.output, candidates, ...injectionOut };
   const labelled = render(final.selected, base.groupOrder, { runs: base.blockRuns, chunkIds: base.blockChunkIds, labeler });
-  return { assembly: { ...final.output, context: labelled.context, blocks: labelled.blocks }, candidates };
+  return { assembly: { ...final.output, context: labelled.context, blocks: labelled.blocks }, candidates, ...injectionOut };
 }

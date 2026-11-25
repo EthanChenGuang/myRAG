@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, test } from 'vitest';
@@ -8,6 +9,13 @@ import { loadCorpus, type CorpusDocument } from '../../../eval/harness/corpus.mt
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const CORPUS_DIR = path.join(REPO_ROOT, 'eval/fixtures/corpus');
 const CANARY_RE = /ZXQ-CANARY-\d{4}/g;
+const GOLDEN_PATH = path.join(REPO_ROOT, 'eval/fixtures/golden.jsonl');
+
+interface GoldenAttackLine {
+  id: string;
+  category: string;
+  attack?: { canary: string; injected_quotes: Array<{ document: string; section: string; quote: string }> };
+}
 
 type AttackClass = 'rules' | 'evasive';
 
@@ -99,5 +107,23 @@ describe('injection fixture documents against the shipped rules (D-13, D-14)', (
       .flatMap((document) => document.content.match(CANARY_RE) ?? []);
     expect(canaries.length).toBe(Object.values(ATTACKS).flat().length);
     expect(new Set(canaries).size).toBe(canaries.length);
+  });
+
+  test('golden injection items point at rule-caught chunks and evasive items at chunks no rule catches (05.1-17)', () => {
+    const items = readFileSync(GOLDEN_PATH, 'utf8')
+      .split('\n')
+      .filter((line) => line.trim())
+      .map((line) => JSON.parse(line) as GoldenAttackLine)
+      .filter((item) => item.category === 'injection' || item.category === 'injection_evasive');
+    expect(items.length).toBeGreaterThanOrEqual(18);
+    for (const item of items) {
+      for (const span of item.attack?.injected_quotes ?? []) {
+        const language = span.document.replace(/^sec-attacks\.([a-z]{2})\.md$/, '$1');
+        const chunk = documentNamed(`${language}/${span.document}`).chunks.find((entry) => entry.section === span.section);
+        expect(chunk?.text, item.id).toContain(span.quote);
+        expect(chunk?.text, item.id).toContain(item.attack?.canary);
+        expect(scanText(chunk?.text ?? '').matched, item.id).toBe(item.category === 'injection');
+      }
+    }
   });
 });

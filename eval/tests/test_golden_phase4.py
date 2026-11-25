@@ -27,6 +27,8 @@ PAIRINGS = ("same", "cross")
 SPLITS = ("dev", "test")
 
 PRE_EXISTING_COUNT = 126
+# Categories added after plan 04-38 (05.1-17 injection items); test_golden_injection.py covers them.
+LATER_PHASE_CATEGORIES = frozenset({"injection", "injection_evasive"})
 PRE_EXISTING_SHA256 = "78d15c174a16d1aad33814318f67cf1c9d71530813f80b777fd907e6307618dd"
 
 NEW_NO_ANSWER_IDS = {
@@ -145,11 +147,12 @@ def test_every_new_id_split_equals_assign_split(items):
 def test_pre_existing_items_are_byte_identical_and_new_items_only_add():
     lines = [line for line in GOLDEN_PATH.read_text(encoding="utf-8").split("\n") if line.strip()]
     rows = [json.loads(line) for line in lines]
-    old = sorted((row for row in rows if row["id"] not in NEW_IDS), key=lambda row: row["id"])
+    later = [row for row in rows if row["category"] in LATER_PHASE_CATEGORIES]
+    old = sorted((row for row in rows if row["id"] not in NEW_IDS and row not in later), key=lambda row: row["id"])
     assert len(old) == PRE_EXISTING_COUNT
     payload = "\n".join(json.dumps(row, sort_keys=True, ensure_ascii=False) for row in old)
     assert hashlib.sha256(payload.encode("utf-8")).hexdigest() == PRE_EXISTING_SHA256
-    assert len(rows) == PRE_EXISTING_COUNT + len(NEW_IDS)
+    assert len(rows) == PRE_EXISTING_COUNT + len(NEW_IDS) + len(later)
 
 
 @pytest.mark.parametrize("item_id", sorted(CROSS_TOPICS))

@@ -84,6 +84,8 @@ class GateOffender(_Contract):
     threshold: float
     observed: float
     direction: Literal["higher", "lower"]
+    kind: Literal["noise_band", "absolute_zero"] = "noise_band"
+    reason: str | None = None
 
 
 class GateResult(_Contract):

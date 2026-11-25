@@ -7,7 +7,8 @@ Run from the repository root, in the sidecar environment with the chunking extra
 For every fixture it builds a DoclingDocument from the spec with docling-core, runs the sidecar adapter
 (to_parse_result) with the options of the fixture's processing profile, and writes <id>.parse.json
 (the ParseResult), <id>.docling.json and the picture artifacts under recorded/. manifest.json maps each
-fixture to its PDF, its sha256, its recordings and the facts later plans assert. Real Docling is not run
+fixture to its PDF, its sha256, its recordings and the facts later plans assert; the long-table fixtures are listed
+under long_table_fixtures, apart from the fixtures the ingest fixture mode loads. Real Docling is not run
 here; the nightly real-Docling job compares real conversions with these recordings.
 """
 
@@ -73,7 +74,7 @@ def _prov(page: int, top: float, height: float, *, left: float = MARGIN_X, right
     return ProvenanceItem(page_no=page, bbox=box, charspan=(0, text_length))
 
 
-def _table_data(rows: tuple[tuple[str, ...], ...]) -> TableData:
+def _table_data(rows: tuple[tuple[str, ...], ...], header: bool = True) -> TableData:
     cells = [
         TableCell(
             text=value,
@@ -81,7 +82,7 @@ def _table_data(rows: tuple[tuple[str, ...], ...]) -> TableData:
             end_row_offset_idx=row_index + 1,
             start_col_offset_idx=col_index,
             end_col_offset_idx=col_index + 1,
-            column_header=row_index == 0,
+            column_header=header and row_index == 0,
         )
         for row_index, row in enumerate(rows)
         for col_index, value in enumerate(row)
@@ -133,9 +134,15 @@ def build_document(spec: Any, binary_hash: int) -> DoclingDocument:
             doc.add_list_item(text, enumerated=False, parent=list_group, prov=_prov(block.page, top, height, left=MARGIN_X + 18, text_length=len(text)))
             cursor[block.page] = top + height + 3.0
         elif isinstance(block, specs.Table):
-            height = TABLE_ROW_HEIGHT * len(block.rows)
-            doc.add_table(data=_table_data(block.rows), prov=_prov(block.page, top, height))
+            slices = block.page_rows or (len(block.rows),)
+            height = TABLE_ROW_HEIGHT * slices[0]
+            table = doc.add_table(data=_table_data(block.rows, block.header), prov=_prov(block.page, top, height))
             cursor[block.page] = top + height + 10.0
+            for number, count in enumerate(slices[1:], start=1):
+                page_no = block.page + number
+                height = TABLE_ROW_HEIGHT * count
+                table.prov.append(_prov(page_no, MARGIN_TOP, height))
+                cursor[page_no] = MARGIN_TOP + height + 10.0
         elif isinstance(block, specs.ColumnParagraph):
             # Columns share a top; the left one is read first, and the page moves on below the taller column.
             width = (specs.PAGE_WIDTH - 2 * MARGIN_X) / 2
@@ -209,11 +216,29 @@ def build_all(pdf_dir: Path) -> dict[str, bytes]:
     specs = _specs()
     build_info = json.loads((pdf_dir / "build-info.json").read_text(encoding="utf-8"))
     files: dict[str, bytes] = {}
+    entries = _record_entries(specs.all_specs(), pdf_dir, files, first_hash=2000)
+    long_table_entries = _record_entries(specs.long_table_specs(), pdf_dir, files, first_hash=3000)
+    from importlib.metadata import version
+
+    manifest = {
+        "schema_version": 1,
+        "generator": build_info["generator"],
+        "scan_font": build_info["scan_font"],
+        "recorded_with": {"adapter": "rag_sidecar.parse.docling_adapter.to_parse_result", "docling_core": version("docling-core"), "tokenizer": "cl100k_base"},
+        "fixtures": entries,
+        "long_table_fixtures": long_table_entries,
+    }
+    files["manifest.json"] = _dump(manifest)
+    return files
+
+
+def _record_entries(fixture_specs: Any, pdf_dir: Path, files: dict[str, bytes], first_hash: int) -> list[dict[str, Any]]:
+    """Records each spec into files and returns its manifest entries, in spec order."""
     entries: list[dict[str, Any]] = []
-    for index, spec in enumerate(specs.all_specs(), start=1):
+    for index, spec in enumerate(fixture_specs, start=1):
         pdf_path = pdf_dir / f"{spec.id}.pdf"
         pdf_bytes = pdf_path.read_bytes()
-        result, artifacts = record_fixture(spec, binary_hash=2000 + index)
+        result, artifacts = record_fixture(spec, binary_hash=first_hash + index)
         if "invoice" in spec.facts:
             _check_invoice_facts(spec, result)
         recorded: dict[str, Any] = {"artifacts": {}}
@@ -246,17 +271,7 @@ def build_all(pdf_dir: Path) -> dict[str, bytes]:
             text_bytes = (HERE / "text" / f"{spec.id}.md").read_bytes()
             entry["text"] = {"path": f"text/{spec.id}.md", "mime": "text/markdown", "sha256": hashlib.sha256(text_bytes).hexdigest()}
         entries.append(entry)
-    from importlib.metadata import version
-
-    manifest = {
-        "schema_version": 1,
-        "generator": build_info["generator"],
-        "scan_font": build_info["scan_font"],
-        "recorded_with": {"adapter": "rag_sidecar.parse.docling_adapter.to_parse_result", "docling_core": version("docling-core"), "tokenizer": "cl100k_base"},
-        "fixtures": entries,
-    }
-    files["manifest.json"] = _dump(manifest)
-    return files
+    return entries
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -3,12 +3,17 @@ from typing import Annotated, Literal, get_args
 from pydantic import BaseModel, ConfigDict, Field
 
 from rag_sidecar.contracts.answers import AnswerGroundedness, CitationRecord, CitationStrategy
+from rag_sidecar.contracts.ingest import DocType
 from rag_sidecar.contracts.query import QueryFramework, QueryParamsOverride, QueryPlan, QueryTransformToggles
 from rag_sidecar.contracts.retrieval import ChunkingProfile, RetrievalFilters, RetrievalOverrides
 
 
 class _Contract(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
+
+
+BINDING_PROFILE_ID_PATTERN = r"^[a-z0-9][a-z0-9._-]{0,63}$"
+BindingProfileId = Annotated[str, Field(pattern=BINDING_PROFILE_ID_PATTERN)]
 
 
 class ConversationTurn(_Contract):
@@ -82,6 +87,8 @@ class RagRunOptions(_Contract):
     semantic_cache: SemanticCacheBackend | None = None
     query_params: QueryParamsOverride | None = None
     cache_seed_answer: str | None = Field(default=None, min_length=1, max_length=4000)
+    embedding_bindings: dict[DocType, BindingProfileId] | None = Field(default=None, max_length=6)
+    domain_control_leg: DocType | None = None
 
 
 class RagRunRequest(_Contract):
