@@ -479,3 +479,100 @@ test('lakera-http: the Lakera host and /v2/guard fail outside src/lib/rag/securi
   assert.deepEqual(rulesFor({ 'eval/harness/x.mts': direct }), []);
   assert.deepEqual(rulesFor({ 'src/lib/b.ts': '// docs: https://api.lakera.ai/v2/guard\nconst x = 1;\n' }), []);
 });
+
+const ADAPTER = 'src/lib/rag/query/langchain/index.ts';
+const LC_STATIC = "import { BaseRetriever } from '@langchain/core/retrievers';\nexport const a = BaseRetriever;\n";
+const onlyRule = (files, id) => rulesFor(files).filter((v) => v.endsWith(`:${id}`)).sort();
+
+test('exports the Phase 6 LangChain and zod rule ids and the adapter allow-list', () => {
+  const ids = RULES.map((r) => r.id);
+  for (const id of ['langchain-import', 'langchain-adapter-reach', 'zod-v4']) assert.ok(ids.includes(id), `missing rule ${id}`);
+  assert.equal(boundary.LANGCHAIN_DIR, 'src/lib/rag/query/langchain/');
+  assert.ok(Array.isArray(boundary.LANGCHAIN_ADAPTER_ALLOWED_IMPORTS) && boundary.LANGCHAIN_ADAPTER_ALLOWED_IMPORTS.length > 0);
+});
+
+test('langchain-import: static, dynamic and require imports fail outside the adapter in every scan root', () => {
+  const files = {
+    'src/lib/rag/v2/x.ts': LC_STATIC,
+    'tests/x.test.ts': LC_STATIC,
+    'src/app/x.ts': "export async function f() { return await import('@langchain/classic/retrievers/ensemble'); }\n",
+    'scripts/x.cjs': "const { ChatOpenAI } = require('@langchain/openai');\nmodule.exports = ChatOpenAI;\n",
+    'eval/harness/x.mts': LC_STATIC,
+    'voice-agent/src/x.ts': "export * from '@langchain/core/messages';\n",
+  };
+  assert.deepEqual(onlyRule(files, 'langchain-import'), [
+    'eval/harness/x.mts:langchain-import',
+    'scripts/x.cjs:langchain-import',
+    'src/app/x.ts:langchain-import',
+    'src/lib/rag/v2/x.ts:langchain-import',
+    'tests/x.test.ts:langchain-import',
+    'voice-agent/src/x.ts:langchain-import',
+  ]);
+});
+
+test('langchain-import: the adapter directory, look-alike packages, comments and the self-test dir pass', () => {
+  assert.deepEqual(onlyRule({ [ADAPTER]: LC_STATIC }, 'langchain-import'), []);
+  assert.deepEqual(onlyRule({ 'src/lib/rag/query/langchain/retrievers/x.ts': LC_STATIC }, 'langchain-import'), []);
+  assert.deepEqual(onlyRule({ 'src/lib/a.ts': "import x from '@langchainx/core';\nimport y from 'langchain-utils';\n" }, 'langchain-import'), []);
+  assert.deepEqual(onlyRule({ 'src/lib/b.ts': "// import { A } from '@langchain/core';\nexport const b = 1;\n" }, 'langchain-import'), []);
+  assert.deepEqual(onlyRule({ 'scripts/tests/fixture.mjs': LC_STATIC }, 'langchain-import'), []);
+  assert.deepEqual(onlyRule({ 'src/lib/rag/query/langchainish/x.ts': LC_STATIC }, 'langchain-import'), [
+    'src/lib/rag/query/langchainish/x.ts:langchain-import',
+  ]);
+});
+
+test('langchain-adapter-reach: backend, embedding, reranker, Supabase, tenant, v2 and openai imports fail', () => {
+  const forbidden = [
+    "import { search } from '../../backend/pgvector';\n",
+    "import { embedText } from '../../embeddings/openai';\n",
+    "import { rerank } from '../../rerank/cohere';\n",
+    "import { scopeKey } from '../../tenant/scope';\n",
+    "import { createClient } from '@supabase/supabase-js';\n",
+    "import { getSupabaseAdmin } from '@/lib/supabase';\n",
+    "import { runV2 } from '../../v2/port';\n",
+    "import OpenAI from 'openai';\n",
+    "import { QueryTransformer } from '../transformer';\n",
+    "export async function f() { return import('../../backend/pgvector'); }\n",
+    "const { env } = require('@/lib/env');\n",
+    "import '../../v2/port';\n",
+  ];
+  for (const code of forbidden) {
+    assert.deepEqual(onlyRule({ [ADAPTER]: code }, 'langchain-adapter-reach'), [`${ADAPTER}:langchain-adapter-reach`], code);
+  }
+});
+
+test('langchain-adapter-reach: @langchain packages, the adapter dir, port types, prompts, a type-only transformer and contracts pass', () => {
+  const allowed = [
+    "import { ChatOpenAI } from '@langchain/openai';\n",
+    "import { capture } from './capture';\n",
+    "import { fake } from './retrievers/fake';\n",
+    "import type { SearchPort } from '../port-types';\n",
+    "import { searchPortOf } from '../port-types';\n",
+    "import { render } from '../prompts/render';\n",
+    "import type { QueryTransformer } from '../transformer';\n",
+    "import { type QueryTransformer } from '../transformer';\n",
+    "import { CondensedQuerySchema } from '@/lib/rag-eval/contracts.generated';\n",
+    "import schema from '../../../../../rag-sidecar/schemas/CondensedQuery.schema.json';\n",
+  ];
+  for (const code of allowed) {
+    assert.deepEqual(onlyRule({ [ADAPTER]: code }, 'langchain-adapter-reach'), [], code);
+  }
+  assert.deepEqual(onlyRule({ 'src/lib/rag/query/llm.ts': "import OpenAI from 'openai';\n" }, 'langchain-adapter-reach'), []);
+});
+
+test('zod-v4: zod/v4 and zod/mini fail in app code, zod and zod/v3 pass', () => {
+  const files = {
+    'src/lib/a.ts': "import { z } from 'zod/v4';\n",
+    'src/lib/b.ts': "import { z } from 'zod/mini';\n",
+    'src/lib/c.ts': "import * as core from 'zod/v4/core';\n",
+    'scripts/d.cjs': "const { z } = require('zod/v4');\n",
+  };
+  assert.deepEqual(onlyRule(files, 'zod-v4'), [
+    'scripts/d.cjs:zod-v4',
+    'src/lib/a.ts:zod-v4',
+    'src/lib/b.ts:zod-v4',
+    'src/lib/c.ts:zod-v4',
+  ]);
+  assert.deepEqual(onlyRule({ 'src/lib/e.ts': "import { z } from 'zod/v3';\nimport { z as z2 } from 'zod';\n" }, 'zod-v4'), []);
+  assert.deepEqual(onlyRule({ 'src/lib/f.ts': "import { z } from 'zod-v4-compat';\n" }, 'zod-v4'), []);
+});
