@@ -258,3 +258,223 @@ for (const mode of MODES) {
     });
   });
 }
+
+const PROFILE_ID = 'phase32-general-p256';
+
+interface ColumnSpec {
+  table: 'documents' | 'document_chunks';
+  column: string;
+  type: string;
+  nullable: 'YES' | 'NO';
+  defaultLike?: RegExp;
+}
+
+const NEW_COLUMNS: ColumnSpec[] = [
+  { table: 'documents', column: 'languages', type: 'ARRAY', nullable: 'NO', defaultLike: /'\{\}'::text\[\]/ },
+  { table: 'documents', column: 'ingest_fingerprint', type: 'text', nullable: 'YES' },
+  { table: 'documents', column: 'hidden_text_check', type: 'text', nullable: 'YES' },
+  { table: 'documents', column: 'scopes', type: 'ARRAY', nullable: 'NO', defaultLike: /'\{\}'::text\[\]/ },
+  { table: 'documents', column: 'effective_from', type: 'date', nullable: 'YES' },
+  { table: 'documents', column: 'effective_to', type: 'date', nullable: 'YES' },
+  { table: 'documents', column: 'effective_dates_origin', type: 'text', nullable: 'YES' },
+  { table: 'documents', column: 'effective_dates_confidence', type: 'real', nullable: 'YES' },
+  { table: 'documents', column: 'approved_by', type: 'uuid', nullable: 'YES' },
+  { table: 'documents', column: 'approved_at', type: 'timestamp with time zone', nullable: 'YES' },
+  { table: 'document_chunks', column: 'language_confidence', type: 'real', nullable: 'YES' },
+  { table: 'document_chunks', column: 'scopes', type: 'ARRAY', nullable: 'NO', defaultLike: /'\{\}'::text\[\]/ },
+  { table: 'document_chunks', column: 'effective_from', type: 'date', nullable: 'YES' },
+  { table: 'document_chunks', column: 'effective_to', type: 'date', nullable: 'YES' },
+  { table: 'document_chunks', column: 'approved_by', type: 'uuid', nullable: 'YES' },
+];
+
+for (const mode of MODES) {
+  describe(`0801 new columns, setter fields and chunk writers (${mode})`, () => {
+    let ctx: Ctx;
+    const it = (name: string, run: () => Promise<void>) => test(`${name} [${mode}]`, run);
+
+    before(async () => {
+      ctx = await createCtx(mode);
+      await ctx.db.exec(`
+        INSERT INTO chunking_profiles (id, doc_type, child_tokens, parent_mode, parent_tokens, status, preset)
+        VALUES ('${PROFILE_ID}', 'general', 256, 'structure', 1024, 'building', '256/1024')
+        ON CONFLICT DO NOTHING`);
+    });
+
+    after(async () => {
+      await ctx?.db.close();
+    });
+
+    it('every new column exists with its type, nullability and default', async () => {
+      for (const spec of NEW_COLUMNS) {
+        const row = (
+          await rows(
+            ctx.db,
+            `SELECT data_type, is_nullable, column_default, udt_name FROM information_schema.columns
+              WHERE table_schema = 'public' AND table_name = $1 AND column_name = $2`,
+            [spec.table, spec.column],
+          )
+        )[0];
+        assert.ok(row, `${spec.table}.${spec.column} exists`);
+        assert.equal(row.data_type, spec.type, `${spec.table}.${spec.column} type`);
+        if (spec.type === 'ARRAY') assert.equal(row.udt_name, '_text', `${spec.table}.${spec.column} is text[]`);
+        assert.equal(row.is_nullable, spec.nullable, `${spec.table}.${spec.column} nullability`);
+        if (spec.defaultLike) assert.match(String(row.column_default), spec.defaultLike, `${spec.table}.${spec.column} default`);
+      }
+    });
+
+    it('a new document has empty languages and scopes and null for the other new columns', async () => {
+      const id = await begin(ctx, next('defaults'));
+      const doc = (
+        await rows(
+          ctx.db,
+          `SELECT languages, scopes, ingest_fingerprint, hidden_text_check, effective_from, effective_to, effective_dates_origin,
+                  effective_dates_confidence, approved_by, approved_at FROM documents WHERE id = $1`,
+          [id],
+        )
+      )[0];
+      assert.deepEqual(doc, {
+        languages: [],
+        scopes: [],
+        ingest_fingerprint: null,
+        hidden_text_check: null,
+        effective_from: null,
+        effective_to: null,
+        effective_dates_origin: null,
+        effective_dates_confidence: null,
+        approved_by: null,
+        approved_at: null,
+      });
+    });
+
+    it('the checks refuse effective_from after effective_to, an unknown hidden_text_check or origin and an out-of-range confidence', async () => {
+      const id = await begin(ctx, next('checks'));
+      const cases: [string, unknown[]][] = [
+        ["UPDATE documents SET effective_from = '2025-06-01', effective_to = '2025-01-01' WHERE id = $1", [id]],
+        ["UPDATE documents SET hidden_text_check = 'maybe' WHERE id = $1", [id]],
+        ["UPDATE documents SET effective_dates_origin = 'guess' WHERE id = $1", [id]],
+        ['UPDATE documents SET effective_dates_confidence = 1.5 WHERE id = $1', [id]],
+      ];
+      for (const [sql, params] of cases) assert.equal((await failure(ctx.db, sql, params))?.code, '23514', sql);
+      for (const value of ['clean', 'hidden_found', 'not_checked', null]) {
+        assert.equal(await failure(ctx.db, 'UPDATE documents SET hidden_text_check = $2 WHERE id = $1', [id, value]), null, `hidden_text_check ${String(value)}`);
+      }
+      assert.equal(await failure(ctx.db, "UPDATE documents SET effective_from = '2025-01-01', effective_to = '2025-01-01', effective_dates_origin = 'admin' WHERE id = $1", [id]), null);
+
+      await writeChunks(ctx, id, [`${next('chunkcheck')} neutral probe sentence`]);
+      const [chunkId] = await chunkIds(ctx, id);
+      assert.equal((await failure(ctx.db, 'UPDATE document_chunks SET language_confidence = 1.5 WHERE id = $1', [chunkId]))?.code, '23514');
+      assert.equal((await failure(ctx.db, 'UPDATE document_chunks SET language_confidence = -0.1 WHERE id = $1', [chunkId]))?.code, '23514');
+      assert.equal(
+        (await failure(ctx.db, "UPDATE document_chunks SET effective_from = '2025-06-01', effective_to = '2025-01-01' WHERE id = $1", [chunkId]))?.code,
+        '23514',
+      );
+      assert.equal(await failure(ctx.db, 'UPDATE document_chunks SET language_confidence = 0.5 WHERE id = $1', [chunkId]), null);
+    });
+
+    it('rag_set_document_fields writes languages, ingest_fingerprint and hidden_text_check and refuses fields outside its list', async () => {
+      const id = await begin(ctx, next('setter-fields'));
+      const fingerprint = crypto.createHash('sha256').update('fingerprint-probe').digest('hex');
+      await rows(ctx.db, SET_SQL, [id, ctx.a.key, JSON.stringify({ languages: ['en', 'it'], ingest_fingerprint: fingerprint, hidden_text_check: 'clean' })]);
+      const doc = (await rows(ctx.db, 'SELECT languages, ingest_fingerprint, hidden_text_check FROM documents WHERE id = $1', [id]))[0];
+      assert.deepEqual(doc, { languages: ['en', 'it'], ingest_fingerprint: fingerprint, hidden_text_check: 'clean' });
+
+      await rows(ctx.db, SET_SQL, [id, ctx.a.key, JSON.stringify({ language: 'en' })]);
+      const kept = (await rows(ctx.db, 'SELECT languages, ingest_fingerprint, hidden_text_check FROM documents WHERE id = $1', [id]))[0];
+      assert.deepEqual(kept, doc, 'fields not named are left as they are');
+
+      for (const fields of [{ languages: 'en' }, { languages: ['en', 3] }, { hidden_text_check: 'maybe' }, { ingest_fingerprint: 7 }]) {
+        assert.match((await failure(ctx.db, SET_SQL, [id, ctx.a.key, JSON.stringify(fields)]))?.message ?? '', /invalid_field/, JSON.stringify(fields));
+      }
+      for (const name of ['scopes', 'effective_from', 'effective_to', 'approved_by', 'approved_at', 'language_confidence']) {
+        assert.match((await failure(ctx.db, SET_SQL, [id, ctx.a.key, JSON.stringify({ [name]: null })]))?.message ?? '', /invalid_field/, name);
+      }
+    });
+
+    it('rag_write_chunks stores language_confidence when a chunk carries it and copies scopes and effective dates from the document', async () => {
+      const id = await begin(ctx, next('writer-copy'));
+      await rows(ctx.db, "UPDATE documents SET scopes = ARRAY['region:north'], effective_from = '2025-01-01', effective_to = '2026-12-31' WHERE id = $1", [id]);
+      await writeChunks(ctx, id, [`${next('withconf')} neutral probe sentence one`, `${next('noconf')} neutral probe sentence two`], (index) =>
+        index === 0 ? { language_confidence: 0.87 } : {},
+      );
+      const chunks = await rows(
+        ctx.db,
+        `SELECT chunk_index, language_confidence, scopes, effective_from::text AS effective_from, effective_to::text AS effective_to, approved_by
+           FROM document_chunks WHERE document_id = $1 ORDER BY chunk_index`,
+        [id],
+      );
+      assert.equal(chunks.length, 2);
+      assert.ok(Math.abs(Number(chunks[0]?.language_confidence) - 0.87) < 1e-6, 'confidence of the chunk that carries it');
+      assert.equal(chunks[1]?.language_confidence, null, 'null for a chunk without the key');
+      for (const chunk of chunks) {
+        assert.deepEqual(chunk.scopes, ['region:north']);
+        assert.equal(chunk.effective_from, '2025-01-01');
+        assert.equal(chunk.effective_to, '2026-12-31');
+        assert.equal(chunk.approved_by, null);
+      }
+
+      const refused = await failure(ctx.db, WRITE_SQL, [id, ctx.a.key, JSON.stringify([{ chunk_index: 0, content: 'x', language_confidence: 'high' }]), null, false, null]);
+      assert.match(refused?.message ?? '', /invalid_chunk/);
+    });
+
+    it('rag_write_profile_chunks stores language_confidence and copies scopes and effective dates from the document', async () => {
+      const id = await begin(ctx, next('profile-copy'));
+      await rows(ctx.db, "UPDATE documents SET scopes = ARRAY['department:ops', 'region:north'], effective_from = '2025-03-01' WHERE id = $1", [id]);
+      const children = [
+        { chunk_index: 0, content: 'profile child one neutral sentence', parent_index: 0, language_confidence: 0.42 },
+        { chunk_index: 1, content: 'profile child two neutral sentence', parent_index: 0 },
+      ];
+      const parents = [{ parent_index: 0, content: 'profile parent neutral sentence', token_count: 12 }];
+      await rows(
+        ctx.db,
+        `SELECT * FROM rag_write_profile_chunks(p_document_id => $1, p_tenant_key => $2, p_profile_id => $3, p_parents => $4::jsonb,
+           p_children => $5::jsonb, p_embeddings => NULL, p_final => true, p_total => 2)`,
+        [id, ctx.a.key, PROFILE_ID, JSON.stringify(parents), JSON.stringify(children)],
+      );
+      const chunks = await rows(
+        ctx.db,
+        `SELECT chunk_index, language_confidence, scopes, effective_from::text AS effective_from, effective_to::text AS effective_to
+           FROM document_chunks WHERE document_id = $1 AND chunking_profile_id = $2 ORDER BY chunk_index`,
+        [id, PROFILE_ID],
+      );
+      assert.equal(chunks.length, 2);
+      assert.ok(Math.abs(Number(chunks[0]?.language_confidence) - 0.42) < 1e-6);
+      assert.equal(chunks[1]?.language_confidence, null);
+      for (const chunk of chunks) {
+        assert.deepEqual(chunk.scopes, ['department:ops', 'region:north']);
+        assert.equal(chunk.effective_from, '2025-03-01');
+        assert.equal(chunk.effective_to, null);
+      }
+    });
+
+    it('document_chunks.scopes has a GIN index and documents has a (tenant_key, ingest_fingerprint) index', async () => {
+      const gin = (await rows(ctx.db, "SELECT indexdef FROM pg_indexes WHERE schemaname = 'public' AND indexname = 'document_chunks_scopes_gin'"))[0];
+      assert.match(String(gin?.indexdef), /ON public\.document_chunks USING gin \(scopes\)/);
+      const fingerprint = (await rows(ctx.db, "SELECT indexdef FROM pg_indexes WHERE schemaname = 'public' AND indexname = 'documents_tenant_fingerprint_idx'"))[0];
+      assert.match(String(fingerprint?.indexdef), /ON public\.documents USING btree \(tenant_key, ingest_fingerprint\)/);
+    });
+
+    it('the replaced setter and writers keep an empty search_path and service_role-only execute', async () => {
+      for (const signature of [
+        'public.rag_set_document_fields(uuid, text, jsonb)',
+        'public.rag_write_chunks(uuid, text, jsonb, jsonb, boolean, integer)',
+        'public.rag_write_profile_chunks(uuid, text, text, jsonb, jsonb, jsonb, boolean, integer)',
+      ]) {
+        const row = (
+          await rows(
+            ctx.db,
+            `SELECT p.proconfig, p.prosecdef,
+                    has_function_privilege('anon', p.oid, 'EXECUTE') AS anon,
+                    has_function_privilege('authenticated', p.oid, 'EXECUTE') AS authenticated,
+                    has_function_privilege('service_role', p.oid, 'EXECUTE') AS service
+               FROM pg_proc p WHERE p.oid = to_regprocedure($1)`,
+            [signature],
+          )
+        )[0];
+        assert.ok(row, `${signature} exists`);
+        assert.deepEqual(row.proconfig, ['search_path=""'], `${signature} search_path`);
+        assert.equal(row.prosecdef, true, `${signature} stays SECURITY DEFINER`);
+        assert.deepEqual([row.anon, row.authenticated, row.service], [false, false, true], `${signature} grants`);
+      }
+    });
+  });
+}
