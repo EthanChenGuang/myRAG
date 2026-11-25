@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { parseRetrievalFilters } from '@/lib/rag/query/filters';
+import { buildRetrievalFilters, parseRetrievalFilters } from '@/lib/rag/query/filters';
+import { cacheKeyFilterParts, computeCacheKeyHash } from '@/lib/rag/cache/keys';
+import type { CacheKeyParts } from '@/lib/rag/cache/types';
 import { ScopeFilterError, resolveScopesFilter } from '@/lib/rag/query/scopes';
 import { createPgvectorBackend } from '@/lib/rag/backend/pgvector';
 import { hasNarrowingFilters } from '@/lib/rag/v2/stages/search';
@@ -198,5 +200,56 @@ describe('the pgvector backend arguments', () => {
     expect(hasNarrowingFilters({ currentOnly: true })).toBe(false);
     expect(hasNarrowingFilters({ currentOnly: true, scopes: [] })).toBe(false);
     expect(hasNarrowingFilters({ currentOnly: true, scopes: ['region:a1'] })).toBe(true);
+  });
+});
+
+describe('the scopes filter in the semantic-cache key (D-39, T-03.2-422)', () => {
+  const BASE: CacheKeyParts = {
+    answerLanguage: 'en',
+    ragMode: 'strict',
+    generatorModel: 'provider/model-a',
+    retrievalConfigHash: 'a'.repeat(64),
+    queryFramework: 'llamaindex',
+    entryProfile: 'chat',
+    systemPromptHash: 'b'.repeat(64),
+  };
+  /** The key the BASE parts had before scope filters existed. */
+  const RECORDED_FILTER_FREE_KEY = 'fb53541beaa58b6af99961111e1e40dee4c9cfaaff8589eda0a31ede5985bcf6';
+  const keyFor = (filters: RetrievalFilters) => computeCacheKeyHash({ ...BASE, ...cacheKeyFilterParts(filters) });
+
+  it('a filter-free request keeps the recorded key', () => {
+    expect(computeCacheKeyHash(BASE)).toBe(RECORDED_FILTER_FREE_KEY);
+    expect(keyFor({ currentOnly: true })).toBe(RECORDED_FILTER_FREE_KEY);
+  });
+
+  it('an empty scopes list has the key of no filter', () => {
+    expect(keyFor({ currentOnly: true, scopes: [] })).toBe(RECORDED_FILTER_FREE_KEY);
+    expect(keyFor({ currentOnly: true, scopes: [], scopesIncludeUntagged: true })).toBe(RECORDED_FILTER_FREE_KEY);
+  });
+
+  it('body filters listing dimensions and values in different orders give one key and one p_scopes array', async () => {
+    const one = parseRetrievalFilters({ scopes: { region: ['b2', 'a1'], department: ['unit-x'] } });
+    const two = parseRetrievalFilters({ scopes: { department: ['unit-x'], region: ['a1', 'b2'] } });
+    if (!one.ok || !two.ok) throw new Error('filters must parse');
+    const filtersOne = buildRetrievalFilters({ explicit: one.filters, referencedDocumentIds: [] });
+    const filtersTwo = buildRetrievalFilters({ explicit: two.filters, referencedDocumentIds: [] });
+    expect(keyFor(filtersOne)).toBe(keyFor(filtersTwo));
+    expect((await rpcArgsFor(filtersOne)).p_scopes).toEqual((await rpcArgsFor(filtersTwo)).p_scopes);
+  });
+
+  it('the key does not depend on the order of the resolved tags either', () => {
+    expect(keyFor({ currentOnly: true, scopes: ['region:b2', 'region:a1'] })).toBe(keyFor({ currentOnly: true, scopes: ['region:a1', 'region:b2'] }));
+  });
+
+  it('different scope filters never share a key', () => {
+    const keys = [
+      keyFor({ currentOnly: true }),
+      keyFor({ currentOnly: true, scopes: ['region:a1'] }),
+      keyFor({ currentOnly: true, scopes: ['region:b2'] }),
+      keyFor({ currentOnly: true, scopes: ['region:a1', 'region:b2'] }),
+      keyFor({ currentOnly: true, scopes: ['region:a1'], scopesIncludeUntagged: true }),
+      keyFor({ currentOnly: true, scopes: ['department:a1'] }),
+    ];
+    expect(new Set(keys).size).toBe(keys.length);
   });
 });

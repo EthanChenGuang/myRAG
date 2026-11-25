@@ -32,3 +32,7 @@ export function computeCacheKeyHash(parts: CacheKeyParts): string {
 export function hashSystemPromptTemplate(template: string): string {
   return sha256Hex(template);
 }
+
+export function cacheKeyFilterParts(_filters: unknown): Record<string, never> {
+  return {};
+}
