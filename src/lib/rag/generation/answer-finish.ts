@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { AnswerGroundednessValue, InsertAnswerRecordInput } from '@/lib/answers/store';
+import type { AnswerGroundednessValue, InsertAnswerRecordInput, ReviewReason } from '@/lib/answers/store';
 import type { CitationRecord } from '@/lib/rag-eval/contracts.generated';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { detectLanguage } from '../lang/detect';
@@ -10,6 +10,7 @@ import { isMultiTenant } from '@/lib/deployment-mode';
 import { scopeKey } from '../tenant/scope';
 import { isLangfuseUsable, readLangfuseConfig, type LangfuseConfig } from '../trace/config';
 import type { CollectedTrace, ExportTraceOptions } from '../trace/langfuse';
+import { exportReviewCandidate, type ReviewCandidateInput, type ReviewExportOptions, type ReviewExportStatus } from '../trace/review-export';
 import { isSampled } from '../trace/sample';
 import { postLangfuseScores, type LangfuseScoreInput, type PostScoresOptions, type PostScoresResult } from '../trace/scores';
 import type { StageRunStatus } from '../types';
@@ -75,6 +76,10 @@ export interface GroundednessStepDeps {
   now: () => Date;
   updateTimeoutMs: number;
   langfuseTimeoutMs: number;
+  /** D-19: records groundedness_flagged on the row for a possibly_unreliable label. */
+  appendReviewReason: (admin: SupabaseClient, input: { id: string; reason: ReviewReason }) => Promise<boolean>;
+  /** D-19: the masked review copy on the trace, independent of sampling. */
+  exportReview: (input: ReviewCandidateInput, options: ReviewExportOptions) => Promise<ReviewExportStatus>;
 }
 
 const UPDATE_TIMEOUT_MS = 5000;
@@ -92,6 +97,8 @@ const defaultStepDeps: GroundednessStepDeps = {
   now: () => new Date(),
   updateTimeoutMs: UPDATE_TIMEOUT_MS,
   langfuseTimeoutMs: LANGFUSE_TIMEOUT_MS,
+  appendReviewReason: async (admin, input) => (await import('@/lib/answers/store')).appendReviewReason(admin, input),
+  exportReview: exportReviewCandidate,
 };
 
 async function withTimeout<T>(work: Promise<T>, timeoutMs: number, label: string): Promise<T> {
@@ -196,6 +203,30 @@ async function reportGroundedness(
   if (failed > 0) console.warn('[RAG Trace] Groundedness report to Langfuse failed', { answerId: input.answerId, failed });
 }
 
+/** D-19: groundedness_flagged on the record, then the masked review copy from the in-memory query and answer. Never throws. */
+async function flagForReview(input: AnswerFinishInput, admin: SupabaseClient, deps: GroundednessStepDeps): Promise<void> {
+  try {
+    await withTimeout(deps.appendReviewReason(admin, { id: input.answerId, reason: 'groundedness_flagged' }), deps.updateTimeoutMs, 'review reason');
+  } catch (error) {
+    console.warn('[Answer Record] Review reason append failed:', { answerId: input.answerId, code: errorCode(error) });
+  }
+  const status = await deps
+    .exportReview(
+      {
+        traceId: input.traceId,
+        tenantKey: scopeKey(input.scope),
+        reason: 'groundedness_flagged',
+        query: input.queryText,
+        answer: input.answerText,
+        citedQuotes: input.citations.map((citation) => citation.quote),
+        model: input.modelId,
+      },
+      { config: deps.langfuse(), timeoutMs: deps.langfuseTimeoutMs },
+    )
+    .catch((): ReviewExportStatus => 'failed');
+  if (status === 'failed') console.warn('[RAG Trace] Review export to Langfuse failed', { answerId: input.answerId, reason: 'groundedness_flagged' });
+}
+
 /** The onPending continuation (D-15): score, store, log, then report to Langfuse when allowed. Never throws. */
 export function createGroundednessStep(overrides: Partial<GroundednessStepDeps> = {}): (context: AnswerPendingContext) => Promise<void> {
   const deps: GroundednessStepDeps = { ...defaultStepDeps, ...overrides };
@@ -240,6 +271,7 @@ export function createGroundednessStep(overrides: Partial<GroundednessStepDeps> 
         latencyMs: groundedness.latencyMs,
       });
 
+      if (groundedness.label === 'possibly_unreliable') await flagForReview(input, admin, deps);
       await reportGroundedness(input, groundedness, language, { startedAt, endedAt }, deps);
     } catch (error) {
       console.warn('[Answer Record] Groundedness step failed:', { answerId, code: errorCode(error) });
