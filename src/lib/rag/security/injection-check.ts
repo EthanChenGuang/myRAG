@@ -67,7 +67,7 @@ export type ReleasedRules = ReadonlyMap<string, ReadonlySet<string>>;
 
 interface ReleasedRow {
   id: string;
-  metadata?: Record<string, any> | null;
+  metadata?: Record<string, unknown> | null;
 }
 
 function stringList(value: unknown): string[] | null {
@@ -84,8 +84,9 @@ export function releasedRulesFromRows(rows: Iterable<ReleasedRow> | ReadonlyMap<
   if (!rows) return released;
   const list = rows instanceof Map ? rows.values() : (rows as Iterable<ReleasedRow>);
   for (const row of list) {
-    const quarantine = row?.metadata?.quarantine;
-    if (!quarantine || typeof quarantine !== 'object' || Array.isArray(quarantine)) continue;
+    const raw = row?.metadata?.quarantine;
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+    const quarantine = raw as Record<string, unknown>;
     if (typeof quarantine.released_at !== 'string' || quarantine.released_at === '') continue;
     const ids = stringList(quarantine.released_rule_ids) ?? stringList(quarantine.rule_ids) ?? [];
     if (ids.length > 0 && typeof row.id === 'string') released.set(row.id, new Set(ids));
