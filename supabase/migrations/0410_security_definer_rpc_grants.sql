@@ -220,6 +220,10 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_count_ingestion_dead_letters(text) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_count_ingestion_dead_letters(text) TO service_role;
   END IF;
+  IF to_regprocedure('public.rag_list_not_checked(uuid, integer, integer)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_list_not_checked(uuid, integer, integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_list_not_checked(uuid, integer, integer) TO service_role;
+  END IF;
   IF to_regprocedure('public.rag_list_pending_uploads(uuid, text, integer, integer)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_list_pending_uploads(uuid, text, integer, integer) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_list_pending_uploads(uuid, text, integer, integer) TO service_role;
