@@ -127,8 +127,10 @@ export function createCitationSession(input: CitationSessionInput): CitationSess
       return `${prompt}\n\n${citationInstruction(input.language)}`;
     },
     stripHistory(messages) {
-      void stripContent;
-      return messages;
+      if (!strategy) return messages;
+      return messages.map((message) =>
+        message.role === 'assistant' ? { ...message, content: stripContent(message.content) } : message,
+      );
     },
     transforms() {
       if (strategy !== 'chunk-alias' || !parser) return [];

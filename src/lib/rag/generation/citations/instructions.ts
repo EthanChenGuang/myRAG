@@ -1,5 +1,13 @@
 const CITATION_INSTRUCTIONS: Record<string, string> = {
   en: 'Cite the sources you use with [S<number>] markers taken only from the labelled sources above, for example [S1] or [S1][S3]. Never cite a number that is not in a label.',
+  zh: '请使用 [S<编号>] 标记引用你所依据的来源，编号只能取自上方带标签的来源，例如 [S1] 或 [S1][S3]。不要引用标签中不存在的编号。',
+  it: 'Cita le fonti che usi con i marcatori [S<numero>] presi solo dalle fonti etichettate qui sopra, per esempio [S1] o [S1][S3]. Non citare mai un numero che non compare in un\'etichetta.',
+};
+
+const ATTACHED_DOCUMENTS_SENTENCES: Record<string, string> = {
+  en: 'The reference documents for this question are attached to the conversation.',
+  zh: '与本问题相关的参考文档已附在对话中。',
+  it: 'I documenti di riferimento per questa domanda sono allegati alla conversazione.',
 };
 
 function localized(table: Record<string, string>, language: string): string {
@@ -12,6 +20,6 @@ export function citationInstruction(language: string): string {
 }
 
 /** Takes the place of the context on the Claude Citations path. */
-export function attachedDocumentsSentence(_language: string): string {
-  return '';
+export function attachedDocumentsSentence(language: string): string {
+  return localized(ATTACHED_DOCUMENTS_SENTENCES, language);
 }
