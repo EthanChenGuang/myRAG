@@ -157,7 +157,7 @@ function switchIsOff(): boolean {
  * The text ingest embeds for the chunk, rebuilt from stored columns only: the section path, the profile header rendered from the document's
  * stored columns, and the content. An unknown document type renders no header.
  */
-function embeddingTextOf(chunk: ReembedChunk, warnings: Set<string>): string {
+export function embeddingTextOf(chunk: ReembedChunk, warnings: Set<string>): string {
   let header = '';
   if (chunk.docType) {
     try {
