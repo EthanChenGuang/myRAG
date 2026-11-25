@@ -739,3 +739,52 @@ test('each of the three config-server templates writes every Phase 6 name', () =
     }
   }
 });
+
+function templateBlocks(text) {
+  return [
+    ['save', text.slice(0, text.indexOf('function getMinimalTemplate()'))],
+    ['standard', text.slice(text.indexOf('function getStandardTemplate()'), text.indexOf('function getFullTemplate()'))],
+    ['full', text.slice(text.indexOf('function getFullTemplate()'), text.indexOf('async function checkAdminUsers()'))],
+  ];
+}
+
+function templatesMissing(text, name) {
+  const line = new RegExp(`^\\$?\\{?[^\\n]*(?<![A-Z0-9_])${name}=`, 'm');
+  return templateBlocks(text).filter(([, block]) => !line.test(block)).map(([label]) => label);
+}
+
+test('refusal floor in every template', () => {
+  const text = fs.readFileSync(path.join(REPO, 'scripts/config-server.js'), 'utf8');
+  assert.deepEqual(templatesMissing(text, 'RAG_REFUSAL_FLOOR'), []);
+  for (const [label, block] of templateBlocks(text)) {
+    assert.match(block, /RAG_REFUSAL_FLOOR[^\n]*'similarity'|RAG_REFUSAL_FLOOR=similarity/, `${label} template does not default to similarity`);
+  }
+  const [, standard] = templateBlocks(text)[1];
+  const withoutStandard = text.replace(standard, standard.replace(/^RAG_REFUSAL_FLOOR=.*\n/m, ''));
+  assert.deepEqual(templatesMissing(withoutStandard, 'RAG_REFUSAL_FLOOR'), ['standard']);
+
+  const manifest = JSON.parse(fs.readFileSync(path.join(REPO, MANIFEST), 'utf8'));
+  const entry = manifest.vars.find((v) => v.name === 'RAG_REFUSAL_FLOOR');
+  assert.equal(entry?.status, 'managed');
+  assert.deepEqual(entry?.knownGaps, []);
+
+  const root = copyRealTree();
+  try {
+    removeName(root, 'scripts/config-server.js', 'RAG_REFUSAL_FLOOR');
+    const { code, out } = run(root);
+    assert.equal(code, 1, out);
+    assert.match(out, /RAG_REFUSAL_FLOOR \[config-server\] missing from this location/);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('the reranker option lists name auto and keep none as the default', () => {
+  const init = fs.readFileSync(path.join(REPO, 'scripts/init-env.js'), 'utf8');
+  assert.match(init, /# Reranker: none \| auto \| cohere \| voyage \| local_bm25/);
+  assert.match(init, /^RAG_RERANKER=none$/m);
+  assert.match(init, /^RAG_REFUSAL_FLOOR=similarity$/m);
+  const env = fs.readFileSync(path.join(REPO, 'src/lib/env.ts'), 'utf8');
+  assert.match(env, /RAG_REFUSAL_FLOOR: process\.env\.RAG_REFUSAL_FLOOR \|\| 'similarity'/);
+  assert.match(env, /RAG_RERANKER: process\.env\.RAG_RERANKER \|\| 'none'/);
+});
