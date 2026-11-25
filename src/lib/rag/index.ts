@@ -122,6 +122,18 @@ export type { VoiceResult, VoiceResults, VoiceSourceImage } from './context/voic
 export { deriveVoiceKeywords } from './voice/keyword-fallback';
 export { createEnhancedRAGPrompt } from './generation/prompt';
 export { knowledgeBaseUnavailableMessage } from './generation/messages';
+export { readGenerationConfig } from './generation/config';
+export type { GenerationConfig } from './generation/config';
+export { createCitationSession } from './generation/citations/session';
+export type {
+  CitationCapabilities,
+  CitationFinishMetadata,
+  CitationSession,
+  CitationSessionInput,
+  HistoryMessage,
+} from './generation/citations/session';
+export { selectCitationStrategy } from './generation/citations/strategy';
+export type { CitationRagMode, CitationStrategyId, CitationTurn } from './generation/citations/strategy';
 export { repairOwnerMembership } from './tenant/repair-owner';
 export type { RepairOwnerMembershipInput } from './tenant/repair-owner';
 export { resolveDocumentRefs } from './refs/resolve';
