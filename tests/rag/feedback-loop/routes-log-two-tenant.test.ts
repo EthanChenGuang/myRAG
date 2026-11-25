@@ -43,6 +43,16 @@ function logClient() {
   const deleted: Array<[string, unknown]> = [];
   return {
     from(table: string) {
+      if (table === 'rag_tenant_feedback_settings') {
+        // No tenant row: the tenant inherits RAG_RETRIEVAL_LOG (05.1.1-08).
+        const settings = {
+          select: () => settings,
+          eq: () => settings,
+          abortSignal: () => settings,
+          maybeSingle: async () => ({ data: null, error: null }),
+        };
+        return settings;
+      }
       if (table !== 'rag_retrieval_log') throw new Error(`unexpected table ${table}`);
       return {
         insert(row: Record<string, unknown>) {
