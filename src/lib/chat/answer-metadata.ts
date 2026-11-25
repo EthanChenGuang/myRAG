@@ -71,3 +71,11 @@ export function pickAnswerMetadata(metadata: unknown): AnswerMessageMetadata {
   if (feedback.success) picked.feedback = feedback.data;
   return picked;
 }
+
+export function extractStreamAnswerMetadata(_metadata: unknown, previous: StreamAnswerMetadata = {}): StreamAnswerMetadata {
+  return previous;
+}
+
+export function mergeAnswerRecord<T extends { metadata?: Record<string, unknown> }>(messages: T[], _record: AnswerRecord): T[] {
+  return messages;
+}
