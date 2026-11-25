@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from typing import Any
 
 import httpx
@@ -46,6 +47,19 @@ class ParseCacheEntry(BaseModel):
     object_prefix: str
     result: dict[str, Any] = Field(default_factory=dict)
     byte_size: int | None = None
+
+
+class BatchJobRef(BaseModel):
+    """What a runner needs to choose jobs from a batch listing. Inventory rows (duplicates recorded as terminal, with empty
+    settings) do not satisfy the full job contract, so a listing reads only these columns."""
+
+    model_config = ConfigDict(extra="ignore", frozen=True)
+
+    id: str
+    kind: str
+    status: str
+    run_after: datetime | None = None
+    lease_until: datetime | None = None
 
 
 _STRIPPED_JOB_COLUMNS = ("error",)
@@ -179,7 +193,32 @@ class LedgerClient:
         rows = self._rows(payload)
         if not rows:
             return None
-        return _job_from_row(rows[0])
+        row = rows[0]
+        # A NULL composite arrives as an object whose columns are all null: nothing was claimed.
+        if row is None or (isinstance(row, dict) and row.get("id") is None):
+            return None
+        return _job_from_row(row)
+
+    async def list_batch_jobs(
+        self,
+        batch_id: str,
+        *,
+        status: str | None = None,
+        page_size: int = 500,
+    ) -> list[BatchJobRef]:
+        """Every job of a batch in (created_at, id) order, read page by page through rag_list_batch_jobs."""
+        jobs: list[BatchJobRef] = []
+        after: str | None = None
+        while True:
+            payload = await self._rpc(
+                "rag_list_batch_jobs",
+                {"p_batch_id": batch_id, "p_status": status, "p_after_id": after, "p_limit": page_size},
+            )
+            page = [BatchJobRef.model_validate(row) for row in self._rows(payload)]
+            jobs.extend(page)
+            if len(page) < page_size:
+                return jobs
+            after = page[-1].id
 
     async def heartbeat(self, job_id: str, worker: str) -> bool:
         payload = await self._rpc(
