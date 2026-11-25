@@ -6437,12 +6437,12 @@
                                                 <span class="label-text">Pipeline</span>
                                             </label>
                                             <select id="RAG_PIPELINE" name="RAG_PIPELINE" class="select select-bordered w-full" translate="no"
-                                                aria-describedby="RAG_PIPELINE_help">
+                                                aria-describedby="rag-pipeline-help">
                                                 <option value="legacy" selected>legacy</option>
                                                 <option value="v2">v2</option>
                                             </select>
                                             <label class="label">
-                                                <span class="label-text-alt" id="RAG_PIPELINE_help"><span translate="no">legacy</span> keeps the current retrieval path; <span translate="no">v2</span> uses the Phase 4 staged pipeline (switches below).</span>
+                                                <span class="label-text-alt" id="rag-pipeline-help"><span translate="no">legacy</span> keeps the current retrieval path; <span translate="no">v2</span> uses the Phase 4 staged pipeline (switches below).</span>
                                             </label>
                                         </div>
 
@@ -6506,9 +6506,9 @@
                                             <div class="form-control">
                                                 <label class="label" for="RAG_RERANK_VOYAGE_MODEL_BY_LANG"><span class="label-text">Voyage rerank model by language</span></label>
                                                 <input type="text" id="RAG_RERANK_VOYAGE_MODEL_BY_LANG" name="RAG_RERANK_VOYAGE_MODEL_BY_LANG" placeholder="zh=rerank-2.5…"
-                                                    autocomplete="off" spellcheck="false" translate="no" aria-describedby="RAG_RERANK_VOYAGE_MODEL_BY_LANG_help"
+                                                    autocomplete="off" spellcheck="false" translate="no" aria-describedby="rag-rerank-voyage-model-help"
                                                     class="input input-bordered w-full">
-                                                <label class="label"><span class="label-text-alt" id="RAG_RERANK_VOYAGE_MODEL_BY_LANG_help">Per-language model override decided by eval, for example <span translate="no">zh=rerank-2.5</span></span></label>
+                                                <label class="label"><span class="label-text-alt" id="rag-rerank-voyage-model-help">Per-language model override decided by eval, for example <span translate="no">zh=rerank-2.5</span></span></label>
                                             </div>
                                             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                 <div class="form-control">
