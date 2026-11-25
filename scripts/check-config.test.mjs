@@ -788,3 +788,82 @@ test('the reranker option lists name auto and keep none as the default', () => {
   assert.match(env, /RAG_REFUSAL_FLOOR: process\.env\.RAG_REFUSAL_FLOOR \|\| 'similarity'/);
   assert.match(env, /RAG_RERANKER: process\.env\.RAG_RERANKER \|\| 'none'/);
 });
+
+const FEEDBACK_LOOP_NAMES = [
+  'RAG_RETRIEVAL_LOG',
+  'RAG_RETRIEVAL_LOG_RETENTION_DAYS',
+  'RAG_REFUSAL_FEEDBACK',
+  'RAG_EMBED_FEEDBACK',
+  'RAG_EMBED_FEEDBACK_SECRET',
+  'RAG_SOURCE_OPEN_SIGNAL',
+  'RAG_DOMAIN_EXPERT_REVIEW',
+];
+const FEEDBACK_LOOP_DEFAULTS = {
+  RAG_RETRIEVAL_LOG: 'off',
+  RAG_RETRIEVAL_LOG_RETENTION_DAYS: '30',
+  RAG_REFUSAL_FEEDBACK: 'false',
+  RAG_EMBED_FEEDBACK: 'false',
+  RAG_EMBED_FEEDBACK_SECRET: '',
+  RAG_SOURCE_OPEN_SIGNAL: 'false',
+  RAG_DOMAIN_EXPERT_REVIEW: 'false',
+};
+
+test('the manifest lists the seven feedback-loop names as managed (D-26)', () => {
+  const manifest = JSON.parse(fs.readFileSync(path.join(REPO, MANIFEST), 'utf8'));
+  const byName = new Map(manifest.vars.map((entry) => [entry.name, entry]));
+  for (const name of FEEDBACK_LOOP_NAMES) {
+    assert.equal(byName.get(name)?.status, 'managed', name);
+    assert.deepEqual(byName.get(name)?.knownGaps, [], name);
+  }
+});
+
+test('fails when any feedback-loop name is removed from any single location', () => {
+  for (const name of FEEDBACK_LOOP_NAMES) {
+    for (const [relative, location] of [
+      ['scripts/init-env.js', 'init-env'],
+      ['src/lib/env.ts', 'env-ts'],
+      ['scripts/config-server.js', 'config-server'],
+      ['scripts/config-ui/index.html', 'config-ui'],
+    ]) {
+      const root = copyRealTree();
+      try {
+        removeName(root, relative, name);
+        const { code, out } = run(root);
+        assert.equal(code, 1, `${name} removed from ${location}: ${out}`);
+        assert.match(out, new RegExp(`${name} \\[${location}\\] missing from this location`));
+      } finally {
+        cleanup(root);
+      }
+    }
+  }
+});
+
+test('the feedback-loop defaults match D-26 in init-env, env.ts and all three config-server templates', () => {
+  const init = fs.readFileSync(path.join(REPO, 'scripts/init-env.js'), 'utf8');
+  const envTs = fs.readFileSync(path.join(REPO, 'src/lib/env.ts'), 'utf8');
+  const server = fs.readFileSync(path.join(REPO, 'scripts/config-server.js'), 'utf8');
+  for (const [name, value] of Object.entries(FEEDBACK_LOOP_DEFAULTS)) {
+    assert.match(init, new RegExp(`^${name}=${value}$`, 'm'), `init-env ${name}`);
+    assert.ok(envTs.includes(`${name}: process.env.${name} || '${value}',`), `env.ts ${name}`);
+    assert.deepEqual(templatesMissing(server, name), [], `config-server ${name}`);
+    for (const [label, block] of templateBlocks(server)) {
+      const quoted = `'${name}=${value}'`;
+      const fallback = `getEnvValue('${name}') || '${value}'`;
+      assert.ok(block.includes(quoted) || block.includes(fallback), `${label} template default for ${name}`);
+    }
+  }
+});
+
+test('the embed feedback secret is masked by the config server and warned on when shorter than 32 characters', async () => {
+  const { createRequire } = await import('node:module');
+  const require = createRequire(import.meta.url);
+  const security = require('./config-server-security.js');
+  assert.equal(security.isSecretConfigEntry('RAG_EMBED_FEEDBACK_SECRET', ''), true);
+  const masked = security.maskConfig({ RAG_EMBED_FEEDBACK_SECRET: 'placeholder-value', RAG_EMBED_FEEDBACK: 'true' });
+  assert.deepEqual(masked.config, { RAG_EMBED_FEEDBACK: 'true' });
+  assert.deepEqual(masked.secretsSet, ['RAG_EMBED_FEEDBACK_SECRET']);
+  const server = fs.readFileSync(path.join(REPO, 'scripts/config-server.js'), 'utf8');
+  const list = server.match(/for \(const name of \[([^\]]*'RAG_EVAL_SECRET'[^\]]*)\]\)/);
+  assert.ok(list, 'short-secret warning list exists');
+  assert.match(list[1], /'RAG_EMBED_FEEDBACK_SECRET'/);
+});
