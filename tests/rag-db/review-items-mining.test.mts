@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { PGlite } from '@electric-sql/pglite';
 import { createEmptyFixtureDatabase } from '../../eval/harness/pglite-supabase.mts';
+import { allowListEntryFor } from '../helpers/security-definer-allow-list';
 
 type Role = 'anon' | 'authenticated' | 'service_role';
 type Row = Record<string, unknown>;
@@ -379,6 +380,7 @@ describe('rag_mine_failed_queries (multi-tenant)', () => {
     ).rows[0];
     assert.equal(fn?.prosecdef, true);
     assert.deepEqual(fn?.proconfig, ['search_path=""']);
+    assert.equal(allowListEntryFor('rag_mine_failed_queries(timestamptz,timestamptz,jsonb)'), undefined);
   });
 });
 

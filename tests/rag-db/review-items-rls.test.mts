@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import type { PGlite } from '@electric-sql/pglite';
 import { createEmptyFixtureDatabase, type DeploymentMode } from '../../eval/harness/pglite-supabase.mts';
 import { applyMigrationFiles } from '../../eval/harness/migrations.mts';
+import { allowListEntryFor } from '../helpers/security-definer-allow-list';
 
 type Role = 'anon' | 'authenticated' | 'service_role';
 type Row = Record<string, unknown>;
@@ -153,6 +154,7 @@ describe('rag_review_items RLS (multi-tenant, two tenants)', () => {
     );
     assert.deepEqual(answers, { a: true, b: false });
     await rejectsWith(() => asRole(db, 'anon', null, () => db.query('SELECT public.rag_is_domain_expert($1)', [tenantA])), '42501');
+    assert.equal(allowListEntryFor('rag_is_domain_expert(text)')?.anon, false);
   });
 
   test('revoking the grant removes visibility', async () => {
