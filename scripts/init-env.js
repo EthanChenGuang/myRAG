@@ -432,7 +432,7 @@ RAG_INJECTION_PROMPT_GUARD=false
 RAG_INJECTION_LAKERA=false
 # Lakera Guard API key (never logged)
 LAKERA_GUARD_API_KEY=
-# Lakera Guard base URL; empty uses https://api.lakera.ai (regional hosts such as the EU one are allowed)
+# Lakera Guard base URL; empty uses the default Lakera host (regional hosts such as the EU one are allowed)
 LAKERA_GUARD_BASE_URL=
 # Multi-tenant only: set after the Lakera data-retention terms were recorded in live verification
 RAG_INJECTION_LAKERA_MULTI_TENANT_ACK=false

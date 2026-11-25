@@ -93,6 +93,8 @@ const BACKFILL_DIR = 'src/lib/rag/ingest/backfill/';
 const outsideRag = (rel) => !rel.startsWith(RAG_DIR);
 const inSrcOrScripts = (rel) => rel.startsWith('src/') || rel.startsWith('scripts/');
 const outsideRerankHttp = (rel) => inSrcOrScripts(rel) && !rel.startsWith(RERANK_DIR);
+const LAKERA_ADAPTER = 'src/lib/rag/security/lakera.ts';
+const outsideLakeraAdapter = (rel) => rel !== LAKERA_ADAPTER;
 const outsideTenant = (rel) => !rel.startsWith(TENANT_DIR);
 const inVoiceAgent = (rel) => rel.startsWith('voice-agent/src/');
 const isLegacyWriter = (rel, ruleId) => LEGACY_WRITERS.some((w) => w.path === rel && w.rules.includes(ruleId));
@@ -361,6 +363,15 @@ export const RULES = [
       out.push(...regexMatches(/fetch\s*\(\s*`[^`\n]*\/rerank/g, text));
       return out;
     },
+  },
+  {
+    id: 'lakera-http',
+    description: 'Lakera Guard host or guard endpoint path outside src/lib/rag/security/lakera.ts (the gated adapter)',
+    appliesTo: outsideLakeraAdapter,
+    find: (text) => [
+      ...regexMatches(/\b(?:[a-z0-9-]+\.)*api\.lakera\.ai\b/gi, text),
+      ...regexMatches(/\/v2\/guard\b/g, text),
+    ],
   },
 ];
 
