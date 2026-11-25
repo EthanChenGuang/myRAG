@@ -179,7 +179,32 @@ class LedgerClient:
         rows = self._rows(payload)
         if not rows:
             return None
-        return _job_from_row(rows[0])
+        row = rows[0]
+        # A NULL composite arrives as an object whose columns are all null: nothing was claimed.
+        if row is None or (isinstance(row, dict) and row.get("id") is None):
+            return None
+        return _job_from_row(row)
+
+    async def list_batch_jobs(
+        self,
+        batch_id: str,
+        *,
+        status: str | None = None,
+        page_size: int = 500,
+    ) -> list[IngestionJob]:
+        """Every job of a batch in (created_at, id) order, read page by page through rag_list_batch_jobs."""
+        jobs: list[IngestionJob] = []
+        after: str | None = None
+        while True:
+            payload = await self._rpc(
+                "rag_list_batch_jobs",
+                {"p_batch_id": batch_id, "p_status": status, "p_after_id": after, "p_limit": page_size},
+            )
+            page = [_job_from_row(row) for row in self._rows(payload)]
+            jobs.extend(page)
+            if len(page) < page_size:
+                return jobs
+            after = page[-1].id
 
     async def heartbeat(self, job_id: str, worker: str) -> bool:
         payload = await self._rpc(
