@@ -24,6 +24,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 3.1: Tiered Parsing, Incremental Queue & Bulk Backfill** (INSERTED) - Cheapest-tier-that-passes parse routing with escalation, cloud and budget constraints, an ingestion ledger and parse cache, an async upload queue and a budgeted, resumable backfill. **2026-11-24 pause:** trunk merge train at `56b0349d` (#10 #9 #4 #5 merged); resume per `.planning/phases/03.1-tiered-parsing-incremental-queue-bulk-backfill/.continue-here.md`.
 - [ ] **Phase 03.1.1: Domain embedding model candidates and per-doc-type model selection** (INSERTED) - Voyage law and finance models as a model catalog, per-doc-type and per-tenant bindings with their own gate, and an extra gated, rollback-able retrieval leg proven per doc type on our own test set
 - [ ] **Phase 3.2: Language Support & Ingestion Hardening** (INSERTED) - Deployment-level supported languages chosen at setup, a language-pack registry, chunk languages, scope tags, captions and document translation in the document's language, BGE-M3 fallback, table headers in every profile and row serialization, hidden-text and link checks, optional upload approval
+- [ ] **Phase 3.2.1: BGE-M3 Open-Source Fallback Embedding** (INSERTED) - BGE-M3 profile hosted and in the sidecar, catalog entry, activation gate and comparison (split from 3.2, needs 3.1.1)
 - [ ] **Phase 4: Hybrid Retrieval, Reranking & Calibrated Refusal** - Filtered hybrid search on pgvector, switchable rerankers, edge-ordered context and refusal from calibrated rerank scores
 - [ ] **Phase 04.1: Hybrid retrieval and rerank on by default, proven by eval** (INSERTED) - v2 with hybrid search, `RAG_RERANKER=auto` and threshold refusal become the defaults after a pre-registered eval gate passes; `RAG_PIPELINE=legacy` restores today exactly
 - [ ] **Phase 04.1.1: Domain terminology dictionary: expert-maintained synonyms, query expansion, index-time synonyms, log mining** (INSERTED) - Versioned, audited shared and per-tenant dictionary, down-weighted query-time expansion, CSV import/export, mined candidates for expert review; index-time synonyms recorded as not built
@@ -289,21 +290,31 @@ Plans:
 
 ### Phase 3.2: Language Support & Ingestion Hardening (INSERTED)
 **Goal**: The deployment supports exactly the languages chosen at setup, every ingestion step works per language, and documents with hidden text, untrusted links or unapproved uploads never reach retrieval
-**Depends on**: Phase 3, Phase 3.1, Phase 3.1.1 (EMB-11 joins its model catalog)
-**Requirements**: LANG-01, LANG-02, LANG-03, LANG-04, LANG-05, LANG-06, XLG-04, XLG-06, EMB-11, SEC-07, SEC-08, SEC-09, DATA-18, CHK-06, CHK-07, EVAL-18, DATA-19, DATA-20 (plus the DATA-05 and XLG-02 deltas)
+**Depends on**: Phase 3, Phase 3.1 (the BGE-M3 profile, EMB-11, moved to Phase 3.2.1 on 2026-11-25 so this phase does not wait for Phase 3.1.1)
+**Requirements**: LANG-01, LANG-02, LANG-03, LANG-04, LANG-05, LANG-06, XLG-04, XLG-06, SEC-07, SEC-08, SEC-09, DATA-18, CHK-06, CHK-07, EVAL-18, DATA-19, DATA-20 (plus the DATA-05 and XLG-02 deltas)
 **Success Criteria** (what must be TRUE):
   1. First-run setup asks for the supported languages (single or multi-select, plus a primary language) in an interactive `scripts/init-env.js` run and in the Config UI, and writes them to `.env.local` and the five config locations; with them unset, the legacy pipelines behave as today (also when a newer default would select v2) with one startup warning and a Config UI banner pointing to the picker, while an explicit `RAG_PIPELINE=v2` or `RAG_INGEST_PIPELINE=unified` without languages fails with `languages_not_configured`; choosing one language turns off detection, translation and the cross-lingual slices.
   2. The language-pack registry is Pydantic data with generated Zod; the golden contract, eval corpus, drafting tools and `src/lib/rag/lang/detect.ts` validate against it, a CI check fails on a hard-coded `zh|en|it` literal outside the registry and fixtures, and saving a set with an incomplete pack or an unsupported embedding profile or reranker fails.
   3. One ingestion fingerprint combines the existing per-chunk versions and the settings snapshot; an ingestion-side change shows the affected document count and rebuilds only those documents side by side, rollbackable; chunks carry their own language with confidence (`und` when undetected), and Chinese chunks split at 。！？ with `cl100k_base` counting.
   4. A fixture scan with Chinese text and Italian accents comes out character-exact on Docling and LlamaParse, the legacy routes no longer hard-code `language: "en"`, captions of Chinese and Italian documents are written in that language, and with `RAG_DOC_TRANSLATION` on an Italian question hits a translation while the answer cites the original Chinese chunk.
-  5. BGE-M3 runs as an embedding profile through the hosted API and the sidecar with identical vectors, passes the EMB-05 activation gate and is compared on every slice with cost.
+  5. Every ingestion-side and query-side component reads the supported languages from the registry, and the language validator reports an embedding profile whose languages it cannot check as "not verified" instead of passing.
   6. Fixture documents with white-on-white text, tiny fonts, off-page text, zero-width characters and hidden Word runs, and documents containing links outside the allowlist, are quarantined with the reason shown to the admin; with `RAG_UPLOAD_APPROVAL` on, a member's upload stays out of retrieval and the cache until approved; scope tags filter retrieval to the documents tagged with the scope a question names.
   7. With every new switch off, the characterization tests pass and no slice drops beyond the noise band; machine-translated zh/it golden items count only after native-speaker review.
   8. In every processing profile, a 60-row fixture table cut into several chunks repeats its header in each chunk and a page-continued table carries the header forward; the synthetic `table_split` items in zh/en/it are answered from the asked column of the right row, not a neighbouring column; with `RAG_TABLE_ROW_SERIALIZATION` on, table chunks embed "column = value" lines while the LLM still sees the Markdown table.
   9. An older version uploaded as a separate file next to its newer version is flagged as a possible older version, and after admin confirmation only the newer version is current; with `RAG_EFFECTIVE_DATES` on, a policy whose effective date is next month is not used yet and an expired one is treated as historical.
-**Live verification**: Run OCR on real scanned Chinese and Italian documents; call the hosted BGE-M3 API; review a sample of quarantined real documents.
+**Live verification**: Run OCR on real scanned Chinese and Italian documents; review a sample of quarantined real documents.
 **Plans**: TBD
 **UI hint**: yes
+
+### Phase 3.2.1: BGE-M3 Open-Source Fallback Embedding (INSERTED)
+**Goal**: An open-source embedding model is available as a fallback profile, served hosted or self-run with identical vectors, and is only activated when the eval says it is good enough
+**Depends on**: Phase 3.1.1 (model catalog, doc-type bindings, model-aware lookup), Phase 3.2 (language registry and validator, translation and sidecar groundwork)
+**Requirements**: EMB-11
+**Success Criteria** (what must be TRUE):
+  1. BGE-M3 runs as an embedding profile through the hosted API and the sidecar with identical vectors (within a recorded tolerance), joins the Phase 3.1.1 catalog with its supported languages, and the language validator checks it.
+  2. It passes the EMB-05 activation gate before it can serve, and it is compared with the active profile on every slice, language and cost; with the profile inactive, results match the Phase 3.2 baseline.
+**Live verification**: Call the hosted BGE-M3 API, confirm the weights revision, compare hosted and sidecar vectors, and push migration 0811 live.
+**Plans**: TBD
 
 ### Phase 4: Hybrid Retrieval, Reranking & Calibrated Refusal
 **Goal**: On pgvector, questions in Chinese, English and Italian find the right chunks through filtered hybrid search and reranking, and the system refuses when the best reranked evidence is too weak
@@ -749,7 +760,7 @@ Plans:
 
 ### Phase 7: External Backends & Release Defaults
 **Goal**: Admins can switch retrieval to Weaviate or Qdrant without any cross-tenant leakage, every new provider and switch is configurable in the Config UI, and the shipped defaults are backed by a full regression
-**Depends on**: Phase 5, Phase 5.1, Phase 6, Phase 3.1.1, Phase 4.1, Phase 4.1.1, Phase 5.1.1, Phase 6.1, Phase 3.2, Phase 4.2, Phase 5.2, Phase 5.3, Phase 6.2, Phase 6.3, Phase 4.3 (the Weaviate and Qdrant adapters must inject the access-group filter on every query and prefetch)
+**Depends on**: Phase 5, Phase 5.1, Phase 6, Phase 3.1.1, Phase 4.1, Phase 4.1.1, Phase 5.1.1, Phase 6.1, Phase 3.2, Phase 3.2.1, Phase 4.2, Phase 5.2, Phase 5.3, Phase 6.2, Phase 6.3, Phase 4.3 (the Weaviate and Qdrant adapters must inject the access-group filter on every query and prefetch)
 **Requirements**: RET-05, RET-06, RET-07, RET-08, RET-09, ADM-01, ADM-02, ADM-03, ADM-04, LANG-10, LANG-11, SEC-11 (plus the ADM-02 delta and the RET-05 delta: the outbox carries DATA-24 purges and RET-14 is always on for Weaviate and Qdrant; EVAL-17 moved to Phase 5.1.1 on 2026-11-24)
 **Success Criteria** (what must be TRUE):
   1. Tests against Weaviate and Qdrant containers in CI show that inserts, updates, deletes (including cascade deletes), version replacements and re-embeds in Supabase reach both stores through the outbox and drain worker, and that the reconcile job detects and repairs injected drift. Weaviate uses one tenant per workspace; Qdrant uses a shared collection per embedding profile with an `is_tenant` index and a tenant filter injected on every query and prefetch.
@@ -803,7 +814,7 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 3.1 → 3.1.1 → 3.2 → 4 → 4.1 → 4.1.1 → 4.2 → 4.3 → 5 → 5.1 → 5.1.1 → 5.2 → 5.3 → 6 → 6.1 → 6.2 → 6.3 → 7. Phase 6 depends on Phase 5 (its plans build on Phase 5 contracts) and runs after Phase 5.1, which touches the same files. Phase 7's backend and sync work needs only Phases 3 and 4; its regression and closeout need Phases 5 and 6. Inserted 2026-11-24: 3.1.1 follows 3.1 (and needs Phase 4's v2 search on trunk); 4.1 follows Phase 4's automated close (04-42) and flips the retrieval defaults that every later phase runs on; 4.1.1 follows 4.1; 5.1.1 follows 5.1 (plan 05.1.1-24 also needs 4.1.1), takes over EVAL-17 from Phase 7, and Phase 6 plans sharing its files depend on 05.1.1-22; 6.1 needs Phases 6, 3.1.1 and 5.1.1. Phases 3.2, 4.2, 5.2 and 6.2 were inserted on 2026-11-25 so that no plan of a phase already executing changes, and 5.3 (evaluation gates and online monitoring) follows 5.2 without holding up Phase 6; 6.3 (source deletion sync and purge) follows 6.2, and Phase 7's outbox must carry its purges; Phase 7 had 2 of 34 plans executed and gains requirements through a plan revision. Phase 6 depends on Phase 5 (its plans build on Phase 5 contracts) and runs after Phase 5.1, which touches the same files. Phase 7's backend and sync work needs only Phases 3 and 4; its regression and closeout need Phases 5 and 6.
+Phases execute in numeric order: 1 → 2 → 3 → 3.1 → 3.1.1 → 3.2 → 3.2.1 → 4 → 4.1 → 4.1.1 → 4.2 → 4.3 → 5 → 5.1 → 5.1.1 → 5.2 → 5.3 → 6 → 6.1 → 6.2 → 6.3 → 7. Phase 6 depends on Phase 5 (its plans build on Phase 5 contracts) and runs after Phase 5.1, which touches the same files. Phase 7's backend and sync work needs only Phases 3 and 4; its regression and closeout need Phases 5 and 6. Inserted 2026-11-24: 3.1.1 follows 3.1 (and needs Phase 4's v2 search on trunk); 4.1 follows Phase 4's automated close (04-42) and flips the retrieval defaults that every later phase runs on; 4.1.1 follows 4.1; 5.1.1 follows 5.1 (plan 05.1.1-24 also needs 4.1.1), takes over EVAL-17 from Phase 7, and Phase 6 plans sharing its files depend on 05.1.1-22; 6.1 needs Phases 6, 3.1.1 and 5.1.1. Phases 3.2, 4.2, 5.2 and 6.2 were inserted on 2026-11-25 so that no plan of a phase already executing changes, 3.2.1 (BGE-M3, split from 3.2 on 2026-11-25) follows 3.2 and needs 3.1.1, and later phases do not wait for it; 5.3 (evaluation gates and online monitoring) follows 5.2 without holding up Phase 6; 6.3 (source deletion sync and purge) follows 6.2, and Phase 7's outbox must carry its purges; Phase 7 had 2 of 34 plans executed and gains requirements through a plan revision. Phase 6 depends on Phase 5 (its plans build on Phase 5 contracts) and runs after Phase 5.1, which touches the same files. Phase 7's backend and sync work needs only Phases 3 and 4; its regression and closeout need Phases 5 and 6.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -813,6 +824,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 3.1 → 3.1.1 → 3.2 → 4 �
 | 3.1. Tiered Parsing, Incremental Queue & Bulk Backfill (INSERTED) | 54/55 | In Progress (live checks) | - |
 | 3.1.1. Domain Embedding Model Candidates & Per-Doc-Type Selection (INSERTED) | 0/16 | Planned (plan-check PASS) | - |
 | 3.2. Language Support & Ingestion Hardening (INSERTED) | 0/TBD | Not planned | - |
+| 3.2.1. BGE-M3 Open-Source Fallback Embedding (INSERTED) | 0/TBD | Not planned | - |
 | 4. Hybrid Retrieval, Reranking & Calibrated Refusal | 46/47 | In Progress (04-43 live calibration) | - |
 | 4.1. Hybrid Retrieval & Rerank On by Default (INSERTED) | 0/12 | Planned (plan-check PASS) | - |
 | 4.1.1. Domain Terminology Dictionary (INSERTED) | 0/16 | Planned (plan-check PASS) | - |
