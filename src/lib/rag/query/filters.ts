@@ -228,6 +228,8 @@ const NO_DOCUMENT_ID = '00000000-0000-0000-0000-000000000000';
 export function buildRetrievalFilters(input: {
   explicit?: RetrievalFilterInput;
   referencedDocumentIds: string[];
+  /** From effectiveOnFor, never from the request body. */
+  effectiveOn?: string;
 }): RetrievalFilters {
   const explicit = input.explicit ?? {};
   const result: RetrievalFilters = { currentOnly: true };
@@ -257,8 +259,11 @@ export function buildRetrievalFilters(input: {
     result.documentIds = [...explicitIds];
   }
 
+  if (input.effectiveOn) result.effectiveOn = input.effectiveOn;
   return result;
 }
-export function effectiveOnFor(_config: { effectiveDates: boolean }, _nowMs: number): string | undefined {
-  return undefined;
+/** D-44: today's UTC date while RAG_EFFECTIVE_DATES is on; the zone is always UTC, never the server's. */
+export function effectiveOnFor(config: { effectiveDates: boolean }, nowMs: number): string | undefined {
+  if (!config.effectiveDates) return undefined;
+  return new Date(nowMs).toISOString().slice(0, 10);
 }
