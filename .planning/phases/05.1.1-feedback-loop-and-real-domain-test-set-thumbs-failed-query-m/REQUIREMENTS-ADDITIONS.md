@@ -75,3 +75,15 @@ Because EVAL-17 moves here (05.1.1-CONTEXT.md D-02), Phase 7 must not execute th
 - **Phase 4.1.1 (dictionary, log mining)** runs before this phase and already planned for it: its interim `rag_term_misses` log reserves `source = 'feedback'` for this phase (its D-25), and its import service has an adapter for this phase's `DictionaryCandidate` (its D-25a, plan 04.1.1-11, relation values aligned). Plan 05.1.1-24 writes feedback failures into that log through 4.1.1's recorder. Switching 4.1.1's `readMisses` to read `rag_retrieval_log` (its D-25a option) is left as a follow-up; it is not required for either phase's success criteria.
 - **Phase 6.1 (fine-tuning)** consumes the `TrainingPair` export as is (its D-08), resolves chunk text by id under the tenant and never trains on `held_out` pairs. Note for 6.1: hard negatives now carry `confirmed` (true when the expert marked the candidate not relevant); 6.1's 'expert-rejected negatives first' rule should read that flag.
 - **Migration numbers** 0531–0535 are claimed here; sibling phases should avoid them.
+
+## Revision 2026-11-25: wording for the orchestrator (not applied by the planner)
+
+The sections above were applied to `.planning/REQUIREMENTS.md` and `.planning/ROADMAP.md` before this revision. The revision added D-03a (language columns) and D-29 (seams); the wording below would bring the two files in line. Nothing here was applied.
+
+- **FBK-01** (`.planning/REQUIREMENTS.md`): replace "query language, the masked query (only in `masked_query` mode)" with "query language and its confidence, the languages of the kept chunks and the answer language (codes only, never text), the masked query (only in `masked_query` mode)". Reason: LANG-10 and OBS-03 read these columns.
+- **ROADMAP Phase 05.1.1, success criterion 1**: replace "refusal decision and outcome, latency)" with "refusal decision and outcome, latency, and the language codes of the query, the kept chunks and the answer)".
+- **ROADMAP Phase 05.1.1, ordering note**: add `src/lib/rag/generation/messages.ts` to the files whose Phase 6 editors depend on 05.1.1-22 (plan 07 adds one exported helper there).
+- **LANG-10** (Phase 7) and **OBS-03** (Phase 5.3): optional note "reads the `rag_retrieval_log` language columns frozen by Phase 5.1.1 (D-03a, D-29)". The confidence is a three-value mapping (1, 0.5, null) of the current detector until Phase 7 calibrates it; no schema change is needed for that.
+- **OBS-03**: the log has no document-type column; the per-document-type cells resolve the type through `candidates[].document_id`.
+- **EVAL-27, EVAL-29, EVAL-30, EVAL-24** (Phase 5.3) and **DATA-24** (Phase 6.3): no text change needed. Their planners should read the plan index section "Seams for later phases" for the interface each one builds on.
+- **EVAL-03**: no change. Gold spans stay span-based and never carry chunk ids; the new optional `GoldSpan.document_id` is a document id, set only on promoted domain items.

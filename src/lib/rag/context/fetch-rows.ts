@@ -2,6 +2,11 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { AssemblyCandidate, AssemblyDocumentRow } from './assemble';
 
 export interface AssemblyRows {
+  /**
+   * Rows read under the caller's scope (the ids come from scoped candidates). `metadata` carries
+   * metadata.quarantine (rule_ids, released_rule_ids, released_at), which releasedRulesFromRows turns into the
+   * per-version released rule ids for injection_check without another query.
+   */
   documents: Map<string, AssemblyDocumentRow>;
   chunkMetadata: Map<string, Record<string, any> | null>;
 }
