@@ -80,6 +80,10 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_advance_ingestion_job(uuid, text, text, text, jsonb, integer, jsonb) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_advance_ingestion_job(uuid, text, text, text, jsonb, integer, jsonb) TO service_role;
   END IF;
+  IF to_regprocedure('public.rag_approve_upload(uuid, uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_approve_upload(uuid, uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_approve_upload(uuid, uuid) TO service_role;
+  END IF;
   IF to_regprocedure('public.rag_batch_has_room(uuid)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_batch_has_room(uuid) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_batch_has_room(uuid) TO service_role;
@@ -167,6 +171,10 @@ BEGIN
   IF to_regprocedure('public.rag_count_ingestion_dead_letters(text)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_count_ingestion_dead_letters(text) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_count_ingestion_dead_letters(text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_list_pending_uploads(uuid, text, integer, integer)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_list_pending_uploads(uuid, text, integer, integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_list_pending_uploads(uuid, text, integer, integer) TO service_role;
   END IF;
   IF to_regprocedure('public.rag_purge_stale_ingestion_jobs(integer, integer)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_purge_stale_ingestion_jobs(integer, integer) FROM PUBLIC, anon, authenticated;
@@ -388,6 +396,10 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_reembed_write_batch(uuid, jsonb, uuid, bigint) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_reembed_write_batch(uuid, jsonb, uuid, bigint) TO service_role;
   END IF;
+  IF to_regprocedure('public.rag_reject_upload(uuid, uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_reject_upload(uuid, uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_reject_upload(uuid, uuid) TO service_role;
+  END IF;
   IF to_regprocedure('public.rag_release_ingestion_job(uuid, text)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_release_ingestion_job(uuid, text) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_release_ingestion_job(uuid, text) TO service_role;
@@ -471,6 +483,22 @@ BEGIN
   IF to_regprocedure('public.rag_update_ingestion_batch(uuid, text, jsonb, jsonb)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_update_ingestion_batch(uuid, text, jsonb, jsonb) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_update_ingestion_batch(uuid, text, jsonb, jsonb) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_upload_approval_keys(uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_upload_approval_keys(uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_upload_approval_keys(uuid) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_upload_exemption_add(uuid, text, text, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_upload_exemption_add(uuid, text, text, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_upload_exemption_add(uuid, text, text, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_upload_exemption_list(uuid, text, integer, integer)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_upload_exemption_list(uuid, text, integer, integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_upload_exemption_list(uuid, text, integer, integer) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_upload_exemption_remove(uuid, uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_upload_exemption_remove(uuid, uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_upload_exemption_remove(uuid, uuid) TO service_role;
   END IF;
   IF to_regprocedure('public.rag_vector_sync_chunking_profiles()') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_vector_sync_chunking_profiles() FROM PUBLIC, anon, authenticated;
