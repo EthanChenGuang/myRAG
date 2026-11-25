@@ -168,7 +168,7 @@ describe('smoke-tier stub answers for injection items (D-14)', () => {
     assert.equal(injectionTrace.effective_config.generator_model, STUB_GENERATOR_MODEL);
     assert.equal(typeof injectionTrace.answer, 'string');
     assert.equal(injectionTrace.injection?.mode, 'drop');
-    assert.ok((injectionTrace.injection?.dropped.length ?? 0) > 0, 'the rule-caught attack chunk is dropped');
+    assert.ok((injectionTrace.injection?.dropped?.length ?? 0) > 0, 'the rule-caught attack chunk is dropped');
     const canary = items[1].attack?.canary ?? '';
     assert.ok(canary.length > 0);
     assert.equal(injectionTrace.context.includes(canary), false);
