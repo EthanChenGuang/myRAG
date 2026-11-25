@@ -19,6 +19,17 @@ export function scopeTagsEnabled(): boolean {
   return currentIngestConfig().scopeTags;
 }
 
+const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+/**
+ * The slug a vocabulary value is stored as, the twin of rag_scope_slug: lower case, every run of characters other than a-z and 0-9 becomes
+ * one hyphen, no leading or trailing hyphen. Returns null when nothing valid remains (no ASCII letter or digit, or longer than 64).
+ */
+export function normalizeScopeValue(raw: string): string | null {
+  const slug = raw.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return slug.length > 0 && slug.length <= 64 && SLUG.test(slug) ? slug : null;
+}
+
 export type ScopeFailure =
   | 'not_found'
   | 'not_admin'
@@ -163,8 +174,11 @@ export interface CreateVocabularyEntryInput extends ScopeAdminInput {
   aliases: string[];
 }
 
+/** Creates one value; the value is normalized to its slug first (the database normalizes again and stays the authority). */
 export async function createVocabularyEntry(input: CreateVocabularyEntryInput): Promise<VocabularyEntryResult> {
   if (!validScope(input)) return { ok: false, reason: 'invalid_argument' };
+  const value = normalizeScopeValue(input.value);
+  if (value === null) return { ok: false, reason: 'invalid_value' };
   return oneEntry(
     await call(
       'rag_scope_vocabulary_create',
@@ -172,7 +186,7 @@ export async function createVocabularyEntry(input: CreateVocabularyEntryInput): 
         p_actor: input.actorUserId.toLowerCase(),
         p_tenant_key: input.tenantKey,
         p_dimension: input.dimension,
-        p_value: input.value,
+        p_value: value,
         p_label: input.label,
         p_aliases: input.aliases,
       },

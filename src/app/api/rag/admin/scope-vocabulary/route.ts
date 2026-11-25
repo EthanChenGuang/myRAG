@@ -13,7 +13,8 @@ const EntryFields = ScopeVocabularyEntrySchema.shape;
 const CreateSchema = z
   .object({
     dimension: EntryFields.dimension,
-    value: EntryFields.value,
+    /** Normalized to the contract's slug by the service ('Area  A' is 'area-a'); a duplicate after normalization is tag_exists. */
+    value: z.string().min(1).max(200),
     label: EntryFields.label,
     aliases: EntryFields.aliases,
   })

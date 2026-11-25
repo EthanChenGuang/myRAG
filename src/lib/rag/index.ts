@@ -253,6 +253,7 @@ export {
   createVocabularyEntry,
   listVocabulary,
   MAX_DOCUMENT_SCOPES,
+  normalizeScopeValue,
   SCOPE_DIMENSIONS,
   scopeTagsEnabled,
   setDocumentScopes,

@@ -184,6 +184,10 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_purge_hook_scope_tags(text, uuid, uuid[]) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_purge_hook_scope_tags(text, uuid, uuid[]) TO service_role;
   END IF;
+  IF to_regprocedure('public.rag_scope_names_taken(text, text, text[], uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_scope_names_taken(text, text, text[], uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_scope_names_taken(text, text, text[], uuid) TO service_role;
+  END IF;
   IF to_regprocedure('public.rag_scope_admin(uuid, text)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_scope_admin(uuid, text) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_scope_admin(uuid, text) TO service_role;

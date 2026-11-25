@@ -54,6 +54,70 @@ ALTER TABLE public.rag_scope_vocabulary ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.rag_scope_vocabulary FROM PUBLIC, anon, authenticated, service_role;
 GRANT SELECT ON TABLE public.rag_scope_vocabulary TO service_role;
 
+-- The slug a value is stored as: lower case, every run of characters other than a-z and 0-9 becomes one hyphen, no leading or trailing
+-- hyphen. 'Area  A', 'area--a' and ' AREA_A ' are all 'area-a'. A text without ASCII letters or digits gives '' (refused as invalid_value).
+CREATE OR REPLACE FUNCTION public.rag_scope_slug(p_value text)
+ RETURNS text
+ LANGUAGE sql
+ IMMUTABLE
+ SET search_path TO ''
+AS $function$
+  SELECT pg_catalog.btrim(pg_catalog.regexp_replace(pg_catalog.lower(COALESCE(p_value, '')), '[^a-z0-9]+', '-', 'g'), '-')
+$function$;
+
+-- The comparison form of a label or alias: trimmed, inner whitespace collapsed, lower case.
+CREATE OR REPLACE FUNCTION public.rag_scope_name_key(p_name text)
+ RETURNS text
+ LANGUAGE sql
+ IMMUTABLE
+ SET search_path TO ''
+AS $function$
+  SELECT pg_catalog.lower(pg_catalog.regexp_replace(pg_catalog.btrim(COALESCE(p_name, '')), '\s+', ' ', 'g'))
+$function$;
+
+-- Aliases as stored: trimmed, inner whitespace collapsed, empty ones dropped, the first of names equal by rag_scope_name_key kept, order kept.
+CREATE OR REPLACE FUNCTION public.rag_scope_clean_aliases(p_aliases text[])
+ RETURNS text[]
+ LANGUAGE sql
+ IMMUTABLE
+ SET search_path TO ''
+AS $function$
+  SELECT COALESCE(pg_catalog.array_agg(c.alias ORDER BY c.position), '{}'::text[])
+  FROM (
+    SELECT DISTINCT ON (public.rag_scope_name_key(a.alias)) pg_catalog.regexp_replace(pg_catalog.btrim(a.alias), '\s+', ' ', 'g') AS alias, a.position
+    FROM pg_catalog.unnest(COALESCE(p_aliases, '{}'::text[])) WITH ORDINALITY AS a(alias, position)
+    WHERE a.alias IS NOT NULL AND public.rag_scope_name_key(a.alias) <> ''
+    ORDER BY public.rag_scope_name_key(a.alias), a.position
+  ) c
+$function$;
+
+-- True when one of p_names (labels and aliases, any form) equals a label or alias of another active entry of the tenant's dimension. Two
+-- active values must never share a name, or rule-based suggestions (D-40) and the admin's pickers would be ambiguous.
+CREATE OR REPLACE FUNCTION public.rag_scope_names_taken(p_tenant_key text, p_dimension text, p_names text[], p_exclude uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.rag_scope_vocabulary v
+    CROSS JOIN LATERAL pg_catalog.unnest(pg_catalog.array_prepend(v.label, v.aliases)) AS taken(name)
+    WHERE v.tenant_key = p_tenant_key AND v.dimension = p_dimension AND v.active AND v.id IS DISTINCT FROM p_exclude
+      AND public.rag_scope_name_key(taken.name) IN (SELECT public.rag_scope_name_key(n.name) FROM pg_catalog.unnest(p_names) AS n(name))
+  )
+$function$;
+
+-- Serializes vocabulary writes of one tenant and dimension, so two concurrent creates cannot both pass the name check.
+CREATE OR REPLACE FUNCTION public.rag_scope_lock_dimension(p_tenant_key text, p_dimension text)
+ RETURNS void
+ LANGUAGE sql
+ VOLATILE
+ SET search_path TO ''
+AS $function$
+  SELECT pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('rag_scope_vocabulary|' || p_tenant_key || '|' || p_dimension, 0))
+$function$;
+
 -- True when the actor may administer the tenant's tags (rag_upload_approval_keys). Raises nothing for a non-admin.
 CREATE OR REPLACE FUNCTION public.rag_scope_admin(p_actor uuid, p_tenant_key text)
  RETURNS boolean
@@ -89,7 +153,7 @@ BEGIN
   SELECT v.id, v.tenant_key, v.dimension, v.value, v.label, v.aliases, v.active, v.created_at, v.updated_at
   FROM public.rag_scope_vocabulary v
   WHERE v.tenant_key = p_tenant_key
-  ORDER BY pg_catalog.array_position(ARRAY['region', 'legal_entity', 'department'], v.dimension), pg_catalog.lower(v.label), v.value;
+  ORDER BY pg_catalog.array_position(ARRAY['region', 'legal_entity', 'department'], v.dimension), pg_catalog.lower(v.label) COLLATE "C", v.value COLLATE "C";
 END
 $function$;
 
@@ -107,7 +171,7 @@ BEGIN
   SELECT v.dimension, v.value, v.label, v.aliases, v.active
   FROM public.rag_scope_vocabulary v
   WHERE v.tenant_key = p_tenant_key
-  ORDER BY pg_catalog.array_position(ARRAY['region', 'legal_entity', 'department'], v.dimension), pg_catalog.lower(v.label), v.value;
+  ORDER BY pg_catalog.array_position(ARRAY['region', 'legal_entity', 'department'], v.dimension), pg_catalog.lower(v.label) COLLATE "C", v.value COLLATE "C";
 END
 $function$;
 
@@ -125,9 +189,9 @@ CREATE OR REPLACE FUNCTION public.rag_scope_vocabulary_create(
 AS $function$
 #variable_conflict use_column
 DECLARE
-  v_label text := pg_catalog.btrim(COALESCE(p_label, ''));
-  v_aliases text[] := COALESCE(p_aliases, '{}'::text[]);
-  v_value text := COALESCE(p_value, '');
+  v_label text := pg_catalog.regexp_replace(pg_catalog.btrim(COALESCE(p_label, '')), '\s+', ' ', 'g');
+  v_aliases text[];
+  v_value text := public.rag_scope_slug(p_value);
   created public.rag_scope_vocabulary%ROWTYPE;
 BEGIN
   PERFORM public.rag_assert_tenant_key(p_tenant_key);
@@ -143,8 +207,15 @@ BEGIN
   IF pg_catalog.length(v_label) NOT BETWEEN 1 AND 200 THEN
     RAISE EXCEPTION 'invalid_label';
   END IF;
-  IF pg_catalog.cardinality(v_aliases) > 50 OR pg_catalog.array_position(v_aliases, NULL) IS NOT NULL THEN
+  IF pg_catalog.cardinality(COALESCE(p_aliases, '{}'::text[])) > 50
+     OR EXISTS (SELECT 1 FROM pg_catalog.unnest(COALESCE(p_aliases, '{}'::text[])) AS a(alias) WHERE pg_catalog.length(a.alias) > 200) THEN
     RAISE EXCEPTION 'invalid_aliases';
+  END IF;
+  v_aliases := public.rag_scope_clean_aliases(p_aliases);
+
+  PERFORM public.rag_scope_lock_dimension(p_tenant_key, p_dimension);
+  IF public.rag_scope_names_taken(p_tenant_key, p_dimension, pg_catalog.array_prepend(v_label, v_aliases), NULL) THEN
+    RAISE EXCEPTION 'tag_exists';
   END IF;
 
   INSERT INTO public.rag_scope_vocabulary AS v (tenant_key, dimension, value, label, aliases, created_by, updated_by)
@@ -188,16 +259,23 @@ BEGIN
   IF entry.id IS NULL THEN
     RAISE EXCEPTION 'not_found';
   END IF;
-  IF (p_dimension IS NOT NULL AND p_dimension <> entry.dimension) OR (p_value IS NOT NULL AND p_value <> entry.value) THEN
+  IF (p_dimension IS NOT NULL AND p_dimension <> entry.dimension) OR (p_value IS NOT NULL AND public.rag_scope_slug(p_value) <> entry.value) THEN
     RAISE EXCEPTION 'value_immutable';
   END IF;
-  v_label := COALESCE(pg_catalog.btrim(p_label), entry.label);
-  v_aliases := COALESCE(p_aliases, entry.aliases);
+  v_label := COALESCE(pg_catalog.regexp_replace(pg_catalog.btrim(p_label), '\s+', ' ', 'g'), entry.label);
   IF pg_catalog.length(v_label) NOT BETWEEN 1 AND 200 THEN
     RAISE EXCEPTION 'invalid_label';
   END IF;
-  IF pg_catalog.cardinality(v_aliases) > 50 OR pg_catalog.array_position(v_aliases, NULL) IS NOT NULL THEN
+  IF pg_catalog.cardinality(COALESCE(p_aliases, '{}'::text[])) > 50
+     OR EXISTS (SELECT 1 FROM pg_catalog.unnest(COALESCE(p_aliases, '{}'::text[])) AS a(alias) WHERE pg_catalog.length(a.alias) > 200) THEN
     RAISE EXCEPTION 'invalid_aliases';
+  END IF;
+  v_aliases := CASE WHEN p_aliases IS NULL THEN entry.aliases ELSE public.rag_scope_clean_aliases(p_aliases) END;
+
+  PERFORM public.rag_scope_lock_dimension(p_tenant_key, entry.dimension);
+  IF COALESCE(p_active, entry.active)
+     AND public.rag_scope_names_taken(p_tenant_key, entry.dimension, pg_catalog.array_prepend(v_label, v_aliases), entry.id) THEN
+    RAISE EXCEPTION 'tag_exists';
   END IF;
 
   UPDATE public.rag_scope_vocabulary v
@@ -231,17 +309,27 @@ BEGIN
     RAISE EXCEPTION 'invalid_argument';
   END IF;
 
-  SELECT d.id, d.user_id INTO doc FROM public.documents d WHERE d.id = p_document_id AND d.tenant_key = p_tenant_key FOR UPDATE;
+  SELECT d.id, d.user_id, d.scopes INTO doc FROM public.documents d WHERE d.id = p_document_id AND d.tenant_key = p_tenant_key FOR UPDATE;
   IF doc.id IS NULL OR NOT (public.rag_scope_admin(p_actor, p_tenant_key) OR doc.user_id IS NOT DISTINCT FROM p_actor) THEN
     RAISE EXCEPTION 'not_found';
   END IF;
 
-  v_scopes := p_scopes;
+  SELECT COALESCE(pg_catalog.array_agg(DISTINCT t.tag ORDER BY t.tag), '{}'::text[]) INTO v_scopes
+  FROM pg_catalog.unnest(p_scopes) AS u(raw)
+  CROSS JOIN LATERAL (SELECT u.raw COLLATE "C" AS tag) AS t;
+  IF pg_catalog.array_position(p_scopes, NULL) IS NOT NULL THEN
+    RAISE EXCEPTION 'unknown_scope_value';
+  END IF;
+  IF pg_catalog.cardinality(v_scopes) > 20 THEN
+    RAISE EXCEPTION 'too_many_scopes';
+  END IF;
+  -- Every tag must be an active entry of the tenant's vocabulary; a retired entry is accepted only where the document already carries it,
+  -- so editing a document's other tags does not force a retired tag off it.
   IF EXISTS (
     SELECT 1 FROM pg_catalog.unnest(v_scopes) AS s(tag)
     WHERE NOT EXISTS (
       SELECT 1 FROM public.rag_scope_vocabulary v
-      WHERE v.tenant_key = p_tenant_key AND (v.dimension || ':' || v.value) = s.tag
+      WHERE v.tenant_key = p_tenant_key AND (v.dimension || ':' || v.value) = s.tag AND (v.active OR s.tag = ANY (doc.scopes))
     )
   ) THEN
     RAISE EXCEPTION 'unknown_scope_value';
@@ -281,6 +369,16 @@ BEGIN
 END
 $function$;
 
+REVOKE ALL ON FUNCTION public.rag_scope_slug(text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_scope_slug(text) TO service_role;
+REVOKE ALL ON FUNCTION public.rag_scope_name_key(text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_scope_name_key(text) TO service_role;
+REVOKE ALL ON FUNCTION public.rag_scope_clean_aliases(text[]) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_scope_clean_aliases(text[]) TO service_role;
+REVOKE ALL ON FUNCTION public.rag_scope_names_taken(text, text, text[], uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_scope_names_taken(text, text, text[], uuid) TO service_role;
+REVOKE ALL ON FUNCTION public.rag_scope_lock_dimension(text, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_scope_lock_dimension(text, text) TO service_role;
 REVOKE ALL ON FUNCTION public.rag_scope_admin(uuid, text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.rag_scope_admin(uuid, text) TO service_role;
 REVOKE ALL ON FUNCTION public.rag_scope_vocabulary_list(uuid, text) FROM PUBLIC, anon, authenticated;
