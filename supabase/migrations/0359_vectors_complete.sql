@@ -375,18 +375,18 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.rag_vectors_complete(uuid, text, text) FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION public.rag_defer_ingestion_embed(uuid, text) FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION public.rag_deferred_embed_chunks(uuid, text, uuid, integer) FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION public.rag_write_deferred_vectors(uuid, text, jsonb) FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION public.rag_publish_deferred_ingestion_job(uuid, text) FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION public.rag_batch_progress(uuid) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.rag_vectors_complete(uuid, text, text) TO service_role;
-GRANT EXECUTE ON FUNCTION public.rag_defer_ingestion_embed(uuid, text) TO service_role;
-GRANT EXECUTE ON FUNCTION public.rag_deferred_embed_chunks(uuid, text, uuid, integer) TO service_role;
-GRANT EXECUTE ON FUNCTION public.rag_write_deferred_vectors(uuid, text, jsonb) TO service_role;
-GRANT EXECUTE ON FUNCTION public.rag_publish_deferred_ingestion_job(uuid, text) TO service_role;
-GRANT EXECUTE ON FUNCTION public.rag_batch_progress(uuid) TO service_role;
+REVOKE ALL ON FUNCTION rag_vectors_complete(uuid, text, text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION rag_defer_ingestion_embed(uuid, text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION rag_deferred_embed_chunks(uuid, text, uuid, integer) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION rag_write_deferred_vectors(uuid, text, jsonb) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION rag_publish_deferred_ingestion_job(uuid, text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION rag_batch_progress(uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION rag_vectors_complete(uuid, text, text) TO service_role;
+GRANT EXECUTE ON FUNCTION rag_defer_ingestion_embed(uuid, text) TO service_role;
+GRANT EXECUTE ON FUNCTION rag_deferred_embed_chunks(uuid, text, uuid, integer) TO service_role;
+GRANT EXECUTE ON FUNCTION rag_write_deferred_vectors(uuid, text, jsonb) TO service_role;
+GRANT EXECUTE ON FUNCTION rag_publish_deferred_ingestion_job(uuid, text) TO service_role;
+GRANT EXECUTE ON FUNCTION rag_batch_progress(uuid) TO service_role;
 
 COMMIT;
 
