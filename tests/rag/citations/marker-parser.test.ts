@@ -115,3 +115,26 @@ describe('parseAnswerMarkers', () => {
     });
   });
 });
+
+test('random marker-like text gives the same result for random splits', () => {
+  let seed = 7;
+  const rand = (n: number) => {
+    seed = (seed * 1103515245 + 12345) % 2147483648;
+    return seed % n;
+  };
+  const pieces = ['[', ']', '【', '】', '［', '］', 'S', '1', '2', '0', ',', '，', '、', ' ', 'x', '\n'];
+  for (let round = 0; round < 300; round++) {
+    let text = '';
+    const len = 5 + rand(60);
+    for (let i = 0; i < len; i++) text += pieces[rand(pieces.length)];
+    const expected = parseAnswerMarkers(text, ALIASES);
+    const parts: string[] = [];
+    let rest = text;
+    while (rest.length > 0) {
+      const cut = 1 + rand(Math.min(rest.length, 8));
+      parts.push(rest.slice(0, cut));
+      rest = rest.slice(cut);
+    }
+    expect(feedAll(parts), JSON.stringify(parts)).toEqual(expected);
+  }
+});
