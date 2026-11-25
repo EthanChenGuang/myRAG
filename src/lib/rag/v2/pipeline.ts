@@ -25,6 +25,7 @@ import { runContextStages } from './stages/context';
 import { runQueryStages } from './stages/query';
 import { runRankStages } from './stages/rank';
 import { runSearchStages } from './stages/search';
+import { bindingHashFields, planBindingLegs, startBindingEmbeds, type BindingEmbed, type BindingLegsPlan } from './stages/binding-legs';
 import { buildV2Result, fusedHitsToVoiceChunks } from './result';
 
 export const V2_PROFILES = ['chat', 'embed', 'eval', 'voice'] as const;
@@ -89,6 +90,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
   let voice: VoiceResults | null = null;
   let injection: InjectionSummary | undefined;
   let injectionStalled = false;
+  let bindingPlan: BindingLegsPlan | null = null;
   const security = deps.securityConfig();
   if (security.injectionCheck !== 'off') warnInjectionCheckDisabled(config, security.injectionCheck);
 
@@ -104,6 +106,12 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
     });
     queryContext = query.queryContext;
     queryLanguage = query.queryLanguage;
+
+    // D-18: planned before the embed stage, so the binding map is known before anything reads the config hash.
+    bindingPlan = await planBindingLegs({ profile, config, scope, filters: query.filters, options: input.options });
+    const originalText = query.variants.find((variant) => variant.kind === 'original')?.text ?? input.query;
+    const bindingEmbeds: Promise<BindingEmbed>[] =
+      bindingPlan.legs.length > 0 ? startBindingEmbeds(bindingPlan.legs, originalText, signal, config.v2.domainEmbeddings.timeoutMs) : [];
 
     const variantEmbeddings = requireValue(
       await runStage(
@@ -135,6 +143,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
       variants: query.variants,
       variantEmbeddings,
       filters: query.filters,
+      bindings: { plan: bindingPlan, embeds: bindingEmbeds },
     });
 
     const rank = await runRankStages({
@@ -268,6 +277,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
     injection,
     injectionStalled,
     security,
+    ...(bindingPlan ? { bindingHash: bindingHashFields(bindingPlan) } : {}),
   });
 }
 

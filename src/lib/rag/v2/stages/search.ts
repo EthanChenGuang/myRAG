@@ -17,6 +17,7 @@ import type { TraceCollector } from '../../trace/collector';
 import type { Profile, QueryVariant, RunRetrievalInput, StageOverrides } from '../../types';
 import { getV2StartupVerdict } from '../startup';
 import { evalChunkingOverride } from '../overrides';
+import { bindingFailureDetail, hasBindingWork, runBindingLegs, type BindingEmbed, type BindingLegsOutput, type BindingLegsPlan } from './binding-legs';
 import type { RetrievalParams } from '@/lib/rag-eval/contracts.generated';
 
 export interface SearchStagesInput {
@@ -33,7 +34,12 @@ export interface SearchStagesInput {
   /** Index-aligned with variants; a missing entry falls back to the embedding of the original. */
   variantEmbeddings?: QueryEmbedding[];
   filters?: RetrievalFilters;
+  /** Planned binding legs and their embeds, started before the global embed stage (D-18). */
+  bindings?: { plan: BindingLegsPlan; embeds: readonly Promise<BindingEmbed>[] };
 }
+
+/** Keeps a binding leg's backend call inside the search stage budget so a slow leg can never time the stage out. */
+const BINDING_STAGE_MARGIN_MS = 10;
 
 export interface SearchStagesOutput {
   fusedHits: FusedHit[];
@@ -204,10 +210,33 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
   const verdict = getV2StartupVerdict();
   const icuSkipLexical = lexicalEnabled && !verdict.icuAvailable;
   const chunkingOverride = evalChunkingOverride(profile, stageOverrides?.retrievalOverrides);
+  const bindings = ctx.bindings && hasBindingWork(ctx.bindings.plan) ? ctx.bindings : null;
+  const searchSpec = spec('search', 'throw');
+  const bindingTimeoutMs = Math.max(
+    1,
+    Math.min(config.v2.domainEmbeddings.timeoutMs, searchSpec.timeoutMs - BINDING_STAGE_MARGIN_MS),
+  );
+
+  const runDomainLegs = (stageSignal: AbortSignal): Promise<BindingLegsOutput | null> =>
+    bindings
+      ? runBindingLegs({
+          backend,
+          scope,
+          filters,
+          params,
+          plan: bindings.plan,
+          embeds: bindings.embeds,
+          globalEmbedding: embedding,
+          signal: stageSignal,
+          timeoutMs: bindingTimeoutMs,
+          ...(chunkingOverride ? { chunkingProfileOverride: chunkingOverride } : {}),
+        })
+      : Promise.resolve(null);
 
   const runBackendSearch = async (stageSignal: AbortSignal) => {
     let denseTotal = 0;
     let lexicalTotal = 0;
+    const domainPending = runDomainLegs(stageSignal);
     const legsByVariant = await Promise.all(
       variants.map(async (variant, index) => {
         const variantEmbedding = ctx.variantEmbeddings?.[index] ?? embedding;
@@ -230,40 +259,57 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
         return legs;
       }),
     );
-    return { legsByVariant, denseTotal, lexicalTotal };
+    const domain = await domainPending;
+    return { legsByVariant, denseTotal, lexicalTotal, domain };
   };
 
+  type SearchResult = Awaited<ReturnType<typeof runBackendSearch>>;
+
+  const searchCounts = (value: { denseTotal: number; lexicalTotal: number; domain: BindingLegsOutput | null }) => ({
+    dense: value.denseTotal,
+    lexical: value.lexicalTotal,
+    ...(value.domain ? value.domain.counts : {}),
+  });
+
   let searchValue: Awaited<ReturnType<typeof runBackendSearch>>['legsByVariant'];
+  let domainLists: RankedList[] = [];
   if (icuSkipLexical) {
     const startedAt = collector.now();
-    const { legsByVariant, denseTotal, lexicalTotal } = await runAgainstSignal(signal, runBackendSearch);
-    searchValue = legsByVariant;
+    const searched = await runAgainstSignal(signal, runBackendSearch);
+    searchValue = searched.legsByVariant;
+    domainLists = searched.domain?.lists ?? [];
     collector.record({
       name: 'search',
       status: 'degraded',
       startedAt,
       endedAt: collector.now(),
       detail: 'lexical_icu_unavailable',
-      counts: { dense: denseTotal, lexical: lexicalTotal },
-      candidatesOut: denseTotal + lexicalTotal,
+      counts: searchCounts(searched),
+      candidatesOut: searched.denseTotal + searched.lexicalTotal,
     });
   } else {
-    searchValue = requireValue(
-      await runStage(
-        spec('search', 'throw'),
+    const searched = requireValue(
+      await runStage<SearchResult>(
+        searchSpec,
         signal,
-        async (stageSignal) => {
-          const { legsByVariant, denseTotal, lexicalTotal } = await runBackendSearch(stageSignal);
-          return { legsByVariant, denseTotal, lexicalTotal };
-        },
+        (stageSignal) => runBackendSearch(stageSignal),
         collector,
         {
           candidatesOut: (value) => value.denseTotal + value.lexicalTotal,
-          counts: (value) => ({ dense: value.denseTotal, lexical: value.lexicalTotal }),
+          counts: searchCounts,
+          ...(bindings
+            ? {
+                // D-19: a dropped binding leg degrades the stage; the global legs and the answer continue.
+                status: (value) => (value.domain && value.domain.failures.length > 0 ? 'degraded' : 'ok'),
+                detail: (value) => (value.domain ? bindingFailureDetail(value.domain.failures) : undefined),
+              }
+            : {}),
         },
       ),
       'search',
-    ).legsByVariant;
+    );
+    searchValue = searched.legsByVariant;
+    domainLists = searched.domain?.lists ?? [];
   }
 
   let exactList: RankedList | null = null;
@@ -294,6 +340,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
       () => {
         const lists = searchValue.flatMap((legs, index) => listsFromLegs(index, legs.dense, legs.lexical, params));
         if (exactList) lists.push(exactList);
+        lists.push(...domainLists);
         return rrf(lists, params.rrf_k);
       },
       collector,
