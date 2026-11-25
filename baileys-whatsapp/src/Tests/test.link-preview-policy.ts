@@ -40,7 +40,10 @@ describe('link preview policy', () => {
 		it('does not treat a subdomain or lookalike as allowlisted', () => {
 			expect(buildTextMessage('https://evil.docs.example.com/a', env)).toHaveProperty('linkPreview', null)
 			expect(buildTextMessage('https://docs.example.com.attacker.example/a', env)).toHaveProperty('linkPreview', null)
-			expect(buildTextMessage('https://user@attacker.example/docs.example.com', env)).toHaveProperty('linkPreview', null)
+			expect(buildTextMessage('https://user@attacker.example/docs.example.com', env)).toHaveProperty(
+				'linkPreview',
+				null
+			)
 		})
 
 		it('keeps previews off when any URL in the text is not allowlisted', () => {
