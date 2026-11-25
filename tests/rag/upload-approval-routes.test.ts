@@ -124,7 +124,8 @@ async function load() {
   const list = await import('@/app/api/rag/admin/upload-approvals/route');
   const approve = await import('@/app/api/rag/admin/upload-approvals/[id]/approve/route');
   const reject = await import('@/app/api/rag/admin/upload-approvals/[id]/reject/route');
-  return { list, approve, reject, hookCalls };
+  const exemptions = await import('@/app/api/rag/admin/upload-approvals/exemptions/route');
+  return { list, approve, reject, exemptions, hookCalls };
 }
 
 type Loaded = Awaited<ReturnType<typeof load>>;
@@ -417,6 +418,232 @@ describe('upload approval routes: deployment admin', () => {
       expect(source).toContain("'@/lib/admin-route-auth'");
       expect(source).not.toMatch(/rag_(approve|reject|list_pending)_upload/);
       expect(source).toContain("from 'zod/v3'");
+    }
+  });
+});
+
+const ORG_ADMIN_ID = '00000000-0000-4000-8000-0000000016f1';
+const DOC_O = '00000000-0000-4000-8000-0000000016d4';
+const CONNECTION_O = 'connection-neutral-o';
+const CONNECTION_P = 'connection-neutral-p';
+const P_MEMBER_ID = '00000000-0000-4000-8000-0000000016f2';
+
+describe('upload approval routes: organization admin admission (multi-tenant)', () => {
+  beforeEach(() => {
+    resetState();
+    state.mode = 'multi-tenant';
+    state.tables.organization_members = [
+      { organization_id: ORG_O, user_id: ORG_ADMIN_ID, role: 'admin' },
+      { organization_id: ORG_O, user_id: MEMBER_ID, role: 'member' },
+      { organization_id: ORG_O, user_id: UPLOADER_ID, role: 'member' },
+      { organization_id: ORG_P, user_id: P_MEMBER_ID, role: 'owner' },
+    ];
+    state.tables.documents.push({ id: DOC_O, tenant_key: `o:${ORG_O}` });
+    state.tables.rag_upload_approval_exemptions = [
+      { id: EXEMPTION_ID, tenant_key: `o:${ORG_O}` },
+      { id: '00000000-0000-4000-8000-0000000016e2', tenant_key: `o:${ORG_P}` },
+    ];
+    state.tables.nango_connections = [
+      { connection_id: CONNECTION_O, provider: 'drive', user_id: MEMBER_ID },
+      { connection_id: CONNECTION_P, provider: 'drive', user_id: P_MEMBER_ID },
+    ];
+    state.users[ORG_ADMIN_ID] = { id: ORG_ADMIN_ID, email: 'org-admin@example.invalid' };
+    state.users[P_MEMBER_ID] = { id: P_MEMBER_ID, email: 'p-owner@example.invalid' };
+    state.outcomes.rag_list_pending_uploads = { data: [{ ...PENDING_ROW, document_id: DOC_O, tenant_key: `o:${ORG_O}` }], error: null };
+    state.outcomes.rag_upload_exemption_list = { data: [{ ...EXEMPTION_ROW, tenant_key: `o:${ORG_O}`, created_by: ORG_ADMIN_ID }], error: null };
+    state.outcomes.rag_approve_upload = { data: [{ outcome: 'published', document_id: DOC_O, version: 2, superseded_document_id: null }], error: null };
+    state.outcomes.rag_upload_exemption_add = {
+      data: [{ outcome: 'added', id: EXEMPTION_ID, tenant_key: `o:${ORG_O}`, kind: 'uploader', ref: MEMBER_ID, created_by: ORG_ADMIN_ID, created_at: '2026-11-25T08:00:00.000Z' }],
+      error: null,
+    };
+    state.outcomes.rag_upload_exemption_remove = { data: [{ outcome: 'removed', id: EXEMPTION_ID }], error: null };
+    for (const method of ['warn', 'error', 'log', 'info'] as const) vi.spyOn(console, method).mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.resetModules();
+    delete process.env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE;
+  });
+
+  const list = (l: Loaded, org: string | null) => l.list.GET(req(`/api/rag/admin/upload-approvals${org ? `?organizationId=${org}` : ''}`));
+  const approve = (l: Loaded, id: string, org: string | null) =>
+    l.approve.POST(req(`/api/rag/admin/upload-approvals/${id}/approve${org ? `?organizationId=${org}` : ''}`, { method: 'POST' }), params(id));
+  const reject = (l: Loaded, id: string, org: string | null) =>
+    l.reject.POST(req(`/api/rag/admin/upload-approvals/${id}/reject${org ? `?organizationId=${org}` : ''}`, { method: 'POST' }), params(id));
+  const exemptionsUrl = (org: string, extra = '') => `/api/rag/admin/upload-approvals/exemptions?organizationId=${org}${extra}`;
+
+  it('admits an organization admin who is not in admin_users for that organization only, and lists that tenant only', async () => {
+    const loaded = await load();
+    state.session = { id: ORG_ADMIN_ID };
+    const response = await list(loaded, ORG_O);
+    expect(response.status).toBe(200);
+    expect((await response.json()).items.map((item: Row) => item.id)).toEqual([DOC_O]);
+    expect(state.rpcCalls).toContainEqual({ fn: 'rag_list_pending_uploads', args: { p_actor: ORG_ADMIN_ID, p_tenant_key: `o:${ORG_O}`, p_limit: 50, p_offset: 0 } });
+
+    state.rpcCalls = [];
+    const other = await list(loaded, ORG_P);
+    expect(other.status).toBe(403);
+    expect(other.headers.get('cache-control')).toBe('no-store');
+    expect((await list(loaded, null)).status).toBe(403);
+    expect((await list(loaded, 'not-a-uuid')).status).toBe(403);
+    expect(approvalCalls()).toEqual([]);
+  });
+
+  it('admits an organization admin by bearer token as well', async () => {
+    const loaded = await load();
+    state.tokens = { 'token-org-admin': ORG_ADMIN_ID };
+    expect((await loaded.list.GET(req(`/api/rag/admin/upload-approvals?organizationId=${ORG_O}`, { authorization: 'Bearer token-org-admin' }))).status).toBe(200);
+  });
+
+  it('denies a member of the organization and a user of another organization with the standard denial', async () => {
+    const loaded = await load();
+    for (const user of [MEMBER_ID, P_MEMBER_ID]) {
+      state.session = { id: user };
+      const response = await list(loaded, ORG_O);
+      expect(response.status, user).toBe(403);
+      expect(await response.json()).toEqual({ success: false, error: 'Admin access required' });
+      expect((await approve(loaded, DOC_O, ORG_O)).status).toBe(403);
+    }
+    expect(approvalCalls()).toEqual([]);
+  });
+
+  it('fails closed when the membership lookup fails', async () => {
+    const loaded = await load();
+    state.session = { id: ORG_ADMIN_ID };
+    state.membershipFails = true;
+    expect((await list(loaded, ORG_O)).status).toBe(503);
+    expect((await approve(loaded, DOC_O, ORG_O)).status).toBe(503);
+    expect(approvalCalls()).toEqual([]);
+  });
+
+  it('approves an upload of its organization with the verified user as the actor', async () => {
+    const loaded = await load();
+    state.session = { id: ORG_ADMIN_ID };
+    const response = await approve(loaded, DOC_O, ORG_O);
+    expect(response.status).toBe(200);
+    expect(approvalCalls()).toEqual([{ fn: 'rag_approve_upload', args: { p_document_id: DOC_O, p_actor: ORG_ADMIN_ID } }]);
+    await flush();
+    expect(loaded.hookCalls).toEqual([{ documentId: DOC_O, tenantKey: `o:${ORG_O}` }]);
+  });
+
+  it('answers the shared 404 for an upload of another organization or a personal workspace and runs no function', async () => {
+    const loaded = await load();
+    state.session = { id: ORG_ADMIN_ID };
+    state.tables.documents.push({ id: DOC_ID, tenant_key: `u:${UPLOADER_ID}` });
+    state.tables.documents = state.tables.documents.filter((row) => !(row.id === DOC_ID && row.tenant_key === 's:default'));
+    for (const id of [DOC_P, DOC_ID]) {
+      const approved = await approve(loaded, id, ORG_O);
+      const rejected = await reject(loaded, id, ORG_O);
+      expect(approved.status, id).toBe(404);
+      expect(rejected.status, id).toBe(404);
+      expect(await approved.json()).toEqual({ success: false, error: 'Document not found' });
+    }
+    expect(approvalCalls()).toEqual([]);
+  });
+
+  it('gives a deployment admin who does not administer the named organization 403 Forbidden', async () => {
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    const response = await list(loaded, ORG_O);
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ success: false, error: 'Forbidden' });
+    expect(approvalCalls()).toEqual([]);
+  });
+
+  it('lists exemptions with the choices of the organization: its members and their connections', async () => {
+    const loaded = await load();
+    state.session = { id: ORG_ADMIN_ID };
+    const response = await loaded.exemptions.GET(req(exemptionsUrl(ORG_O)));
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    const body = await response.json();
+    expect(body.items).toEqual([
+      {
+        id: EXEMPTION_ID,
+        kind: 'uploader',
+        ref: MEMBER_ID,
+        display: 'member@example.invalid',
+        added_by: { id: ORG_ADMIN_ID, display: 'org-admin@example.invalid' },
+        added_at: '2026-11-23T09:00:00.000Z',
+      },
+    ]);
+    expect(body.total).toBe(1);
+    expect(body.choices.connector).toEqual([{ ref: CONNECTION_O, display: `drive (${CONNECTION_O})` }]);
+    expect(body.choices.uploader.map((choice: Row) => choice.ref).sort()).toEqual([MEMBER_ID, ORG_ADMIN_ID, UPLOADER_ID].sort());
+    expect(state.rpcCalls).toContainEqual({ fn: 'rag_upload_exemption_list', args: { p_actor: ORG_ADMIN_ID, p_tenant_key: `o:${ORG_O}`, p_limit: 50, p_offset: 0 } });
+  });
+
+  it('adds an exemption for a member or a connection of the organization, and refuses other refs, kinds and keys with 400', async () => {
+    const loaded = await load();
+    state.session = { id: ORG_ADMIN_ID };
+    const post = (body: unknown) => loaded.exemptions.POST(req(exemptionsUrl(ORG_O), { method: 'POST', body }));
+
+    const added = await post({ kind: 'uploader', ref: MEMBER_ID });
+    expect(added.status).toBe(201);
+    expect((await added.json()).outcome).toBe('added');
+    expect(approvalCalls()).toEqual([
+      { fn: 'rag_upload_exemption_add', args: { p_actor: ORG_ADMIN_ID, p_tenant_key: `o:${ORG_O}`, p_kind: 'uploader', p_ref: MEMBER_ID } },
+    ]);
+    state.rpcCalls = [];
+    expect((await post({ kind: 'connector', ref: CONNECTION_O })).status).toBe(201);
+    expect(approvalCalls()[0]?.args).toMatchObject({ p_kind: 'connector', p_ref: CONNECTION_O });
+
+    state.rpcCalls = [];
+    for (const body of [{ kind: 'uploader', ref: P_MEMBER_ID }, { kind: 'connector', ref: CONNECTION_P }, { kind: 'uploader', ref: 'not-a-user' }]) {
+      const response = await post(body);
+      expect(response.status, JSON.stringify(body)).toBe(400);
+      expect(await response.json()).toEqual({ success: false, error: 'invalid_ref' });
+    }
+    for (const body of [{ kind: 'group', ref: MEMBER_ID }, { kind: 'uploader', ref: MEMBER_ID, actor: ADMIN_ID }, { kind: 'uploader' }, [1]]) {
+      expect((await post(body)).status, JSON.stringify(body)).toBe(400);
+    }
+    expect(approvalCalls()).toEqual([]);
+  });
+
+  it('removes an exemption of the organization and answers 404 for another organization one', async () => {
+    const loaded = await load();
+    state.session = { id: ORG_ADMIN_ID };
+    const removed = await loaded.exemptions.DELETE(req(exemptionsUrl(ORG_O, `&id=${EXEMPTION_ID}`), { method: 'DELETE' }));
+    expect(removed.status).toBe(200);
+    expect(await removed.json()).toEqual({ success: true, id: EXEMPTION_ID });
+    expect(approvalCalls()).toEqual([{ fn: 'rag_upload_exemption_remove', args: { p_actor: ORG_ADMIN_ID, p_exemption_id: EXEMPTION_ID } }]);
+
+    state.rpcCalls = [];
+    const foreign = await loaded.exemptions.DELETE(req(exemptionsUrl(ORG_O, '&id=00000000-0000-4000-8000-0000000016e2'), { method: 'DELETE' }));
+    expect(foreign.status).toBe(404);
+    expect((await loaded.exemptions.DELETE(req(exemptionsUrl(ORG_O, '&id=bad'), { method: 'DELETE' }))).status).toBe(400);
+    expect(approvalCalls()).toEqual([]);
+  });
+
+  it('denies a member on every exemptions method', async () => {
+    const loaded = await load();
+    state.session = { id: MEMBER_ID };
+    expect((await loaded.exemptions.GET(req(exemptionsUrl(ORG_O)))).status).toBe(403);
+    expect((await loaded.exemptions.POST(req(exemptionsUrl(ORG_O), { method: 'POST', body: { kind: 'uploader', ref: MEMBER_ID } }))).status).toBe(403);
+    expect((await loaded.exemptions.DELETE(req(exemptionsUrl(ORG_O, `&id=${EXEMPTION_ID}`), { method: 'DELETE' }))).status).toBe(403);
+    expect(approvalCalls()).toEqual([]);
+  });
+
+  it('in single-tenant mode admits admin_users members only, whatever their organization role', async () => {
+    state.mode = 'single-tenant';
+    const loaded = await load();
+    state.session = { id: ORG_ADMIN_ID };
+    expect((await list(loaded, ORG_O)).status).toBe(403);
+    expect((await approve(loaded, DOC_ID, ORG_O)).status).toBe(403);
+    expect(approvalCalls()).toEqual([]);
+  });
+
+  it('keeps all four route files on checkAdminOrOrgAdmin', () => {
+    for (const file of [
+      'src/app/api/rag/admin/upload-approvals/route.ts',
+      'src/app/api/rag/admin/upload-approvals/[id]/approve/route.ts',
+      'src/app/api/rag/admin/upload-approvals/[id]/reject/route.ts',
+      'src/app/api/rag/admin/upload-approvals/exemptions/route.ts',
+    ]) {
+      const source = fs.readFileSync(path.join(REPO_ROOT, file), 'utf8');
+      expect(source, file).toContain('checkAdminOrOrgAdmin');
+      expect(source, file).not.toMatch(/\bcheckAdmin\(/);
     }
   });
 });
