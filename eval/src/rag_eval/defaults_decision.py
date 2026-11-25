@@ -205,14 +205,17 @@ def _recorded_ref(path: str, recorded_sha256: str, what: str) -> FileRef:
 
 
 def _hosted(live: LiveRerankResult) -> tuple[list[Profile], HostedDecision]:
-    return list(PROFILES), HostedDecision(preference=HOSTED_PREFERENCE, basis="live", dropped=[])
     if live.status == "pending_live":
         return list(PROFILES), HostedDecision(
             preference=HOSTED_PREFERENCE,
             basis="pending_live",
             dropped=[],
-            notes=["G7 not run: the live passes of plan 04.1-08 are an operator action; AUTO_HOSTED_PROFILES keeps its code default "
-                   "until this record is rebuilt from a complete live result"],
+            notes=[
+                (
+                    "G7 not run: the live passes of plan 04.1-08 are an operator action; AUTO_HOSTED_PROFILES keeps its code "
+                    "default until this record is rebuilt from a complete live result"
+                )
+            ],
         )
     if live.status == "stopped":
         reason = f"the live run stopped ({live.stop_reason or 'no reason recorded'}): hosted rerank is not shown to work"
@@ -314,7 +317,6 @@ def _criteria_records(gate: DefaultsGateResult, g7: G7Record) -> list[CriterionR
 
 
 def _flip_reasons(gate: DefaultsGateResult, blockers: list[str]) -> list[str]:
-    return []
     reasons = list(gate.failures)
     found: dict[str, ConfigResult] = {config.name: config for config in gate.configurations}
     details = gate.selection_details
@@ -445,8 +447,10 @@ def render_markdown(record: DecisionRecord) -> str:
         "",
         f"- refusal floor (D-04): {record.refusal_floor or 'none chosen'}",
         f"- no-key fallback, AUTO_NO_KEY_FALLBACK (D-06): {record.auto_no_key_fallback or 'none chosen'}",
-        f"- AUTO_HOSTED_PROFILES (D-09, G7): {', '.join(record.auto_hosted_profiles) or '(none)'}; hosted preference "
-        f"{record.hosted.preference}; basis {record.hosted.basis}",
+        (
+            f"- AUTO_HOSTED_PROFILES (D-09, G7): {', '.join(record.auto_hosted_profiles) or '(none)'}; hosted preference "
+            f"{record.hosted.preference}; basis {record.hosted.basis}"
+        ),
         *[f"  - {d.profile} dropped: {d.reason}" for d in record.hosted.dropped],
         *[f"  - {note}" for note in record.hosted.notes],
         f"- implicit in templates (D-25): {', '.join(record.implicit_in_templates)}",
@@ -533,7 +537,6 @@ def _write_text(path: Path, text: str) -> None:
 
 
 def _kept_notes(path: Path) -> str:
-    return ""
     if not path.is_file():
         return ""
     text = path.read_text(encoding="utf-8")
@@ -556,11 +559,7 @@ def _cmd_check(args: argparse.Namespace) -> int:
     path = resolve_cli_path(args.decision)
     record = DecisionRecord.model_validate_json(path.read_text(encoding="utf-8"))
     stale: list[str] = []
-    for role, ref in ():  # stub
-        pass
-    for role, ref in ((),) and ():  # stub
-        pass
-    for role, ref in () and (
+    for role, ref in (
         ("criteria", record.criteria_file),
         ("baseline:prechunked", record.baselines.prechunked),
         ("baseline:ingest", record.baselines.ingest),
