@@ -13,7 +13,7 @@ const ZH_STOP = new Set<string>(rules.stopwords.zh);
 const MAX_TOKEN_CHARS = 64;
 const MAX_QUERY_TOKENS = 64;
 const JOINED_SEP = /[-_./]/g;
-const ENGLISH_POSSESSIVE = /'s\b/gi;
+export const ENGLISH_POSSESSIVE = /'s\b/gi;
 
 function mapApostrophe(text: string): string {
   return text.replace(/[\u2018\u2019\u201B]/g, "'");

@@ -125,7 +125,7 @@ export type {
 export type { VoiceResult, VoiceResults, VoiceSourceImage } from './context/voice';
 export { deriveVoiceKeywords } from './voice/keyword-fallback';
 export { createEnhancedRAGPrompt } from './generation/prompt';
-export { knowledgeBaseUnavailableMessage } from './generation/messages';
+export { knowledgeBaseUnavailableMessage, noKnowledgeBaseResponse } from './generation/messages';
 export { readGenerationConfig } from './generation/config';
 export { detectLanguage } from './lang/detect';
 export type { GenerationConfig } from './generation/config';
