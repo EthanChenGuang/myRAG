@@ -397,3 +397,7 @@ export {
 } from './feedback-loop/review-access';
 export type { DomainExpertGrant, ReviewChunk, ReviewListQuery } from './feedback-loop/review-access';
 export { openReviewSession, REVIEW_NO_STORE, reviewNotFound, reviewUnavailable } from './feedback-loop/review-route';
+export { LabelRequestSchema, normalizeQuoteText, validateAndSaveLabel } from './feedback-loop/labels';
+export type { EvidenceFailureReason, LabelRequest, SaveLabelResult } from './feedback-loop/labels';
+export { REVIEW_SEARCH_POOL, ReviewSearchRequestSchema, searchForReviewItem } from './feedback-loop/review-search';
+export type { ReviewSearchHit, ReviewSearchRequest, ReviewSearchResult } from './feedback-loop/review-search';
