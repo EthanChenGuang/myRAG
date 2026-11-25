@@ -5,6 +5,7 @@ from pathlib import Path
 
 from rag_sidecar.contracts.eval_run import RagTrace, RunManifest
 from rag_sidecar.contracts.golden import GoldenItem
+from rag_sidecar.contracts.judge import JudgeReport
 from rag_sidecar.contracts.latency import LatencyBudgets, StageLatency
 from rag_sidecar.contracts.report import (
     EvalReport,
@@ -105,7 +106,12 @@ def load_latency_budgets(path: Path | None = None) -> LatencyBudgets:
 
 
 def build_report(
-    manifest: RunManifest, results: list[ItemResult], golden: list[GoldenItem], traces: list[RagTrace] | None = None
+    manifest: RunManifest,
+    results: list[ItemResult],
+    golden: list[GoldenItem],
+    traces: list[RagTrace] | None = None,
+    *,
+    judge: JudgeReport | None = None,
 ) -> EvalReport:
     notes: list[str] = []
     if any(item.language == "zh" for item in golden):
