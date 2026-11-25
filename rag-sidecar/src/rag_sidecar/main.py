@@ -26,6 +26,8 @@ from rag_sidecar.contracts import (
 from rag_sidecar.extract.invoice import extract_invoice
 from rag_sidecar.groundedness.router import build_groundedness_router
 from rag_sidecar.groundedness.scorer import Scorer, available_scorer_names, build_scorers, close_scorers
+from rag_sidecar.injection.router import build_injection_router
+from rag_sidecar.injection.scorer import InjectionScorer, load_prompt_guard_config, resolve_scorer
 from rag_sidecar.ingest.app_client import AppClient
 from rag_sidecar.ingest.ledger_client import LedgerClient
 from rag_sidecar.ingest.pool import UPLOAD_PRIORITY, PriorityPool
@@ -84,12 +86,17 @@ def create_app(
     settings: SidecarSettings | None = None,
     converter: Converter | None = None,
     scorers: Mapping[str, Scorer] | None = None,
+    injection_scorer: InjectionScorer | None = None,
 ) -> FastAPI:
     resolved = settings if settings is not None else load_settings()
     active_converter = converter if converter is not None else default_converter()
     docling_in_use = converter is None and active_converter is not None
     runner = JobRunner(resolved, active_converter) if active_converter is not None else None
     active_scorers: Mapping[str, Scorer] = scorers if scorers is not None else build_scorers(resolved)
+    prompt_guard_config = load_prompt_guard_config()
+    active_injection_scorer = (
+        injection_scorer if injection_scorer is not None else resolve_scorer(resolved, prompt_guard_config)
+    )
 
     ingest_worker: IngestWorker | None = None
     ingest_pool: PriorityPool | None = None
@@ -341,6 +348,7 @@ def create_app(
         return JSONResponse(content=fields.model_dump(mode="json"))
 
     v1.include_router(build_groundedness_router(resolved, active_scorers))
+    v1.include_router(build_injection_router(active_injection_scorer, prompt_guard_config))
     app.include_router(v1)
     return app
 

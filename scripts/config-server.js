@@ -603,6 +603,27 @@ ${fullValues.RAG_INJECTION_LAKERA_MULTI_TENANT_ACK !== undefined ? `RAG_INJECTIO
 ${fullValues.RAG_TOOL_RESULT_GUARD !== undefined ? `RAG_TOOL_RESULT_GUARD=${fullValues.RAG_TOOL_RESULT_GUARD}` : 'RAG_TOOL_RESULT_GUARD=off'}
 ${fullValues.NEXT_PUBLIC_RAG_IMAGE_ALLOWLIST !== undefined ? `NEXT_PUBLIC_RAG_IMAGE_ALLOWLIST=${fullValues.NEXT_PUBLIC_RAG_IMAGE_ALLOWLIST}` : 'NEXT_PUBLIC_RAG_IMAGE_ALLOWLIST=false'}
 
+# Query layer
+${fullValues.RAG_QUERY_LAYER !== undefined ? `RAG_QUERY_LAYER=${fullValues.RAG_QUERY_LAYER}` : 'RAG_QUERY_LAYER=false'}
+${fullValues.RAG_QUERY_FRAMEWORK !== undefined ? `RAG_QUERY_FRAMEWORK=${fullValues.RAG_QUERY_FRAMEWORK}` : 'RAG_QUERY_FRAMEWORK=llamaindex'}
+${fullValues.RAG_QUERY_LLM_MODEL !== undefined ? `RAG_QUERY_LLM_MODEL=${fullValues.RAG_QUERY_LLM_MODEL}` : 'RAG_QUERY_LLM_MODEL=openai/gpt-4.1-nano'}
+${fullValues.RAG_QUERY_CONDENSE !== undefined ? `RAG_QUERY_CONDENSE=${fullValues.RAG_QUERY_CONDENSE}` : 'RAG_QUERY_CONDENSE=true'}
+${fullValues.RAG_QUERY_EXPAND !== undefined ? `RAG_QUERY_EXPAND=${fullValues.RAG_QUERY_EXPAND}` : 'RAG_QUERY_EXPAND=true'}
+${fullValues.RAG_QUERY_DECOMPOSE !== undefined ? `RAG_QUERY_DECOMPOSE=${fullValues.RAG_QUERY_DECOMPOSE}` : 'RAG_QUERY_DECOMPOSE=true'}
+${fullValues.RAG_QUERY_TRANSLATE !== undefined ? `RAG_QUERY_TRANSLATE=${fullValues.RAG_QUERY_TRANSLATE}` : 'RAG_QUERY_TRANSLATE=true'}
+${fullValues.RAG_QUERY_DATE_NORMALIZE !== undefined ? `RAG_QUERY_DATE_NORMALIZE=${fullValues.RAG_QUERY_DATE_NORMALIZE}` : 'RAG_QUERY_DATE_NORMALIZE=true'}
+${fullValues.RAG_QUERY_HYDE !== undefined ? `RAG_QUERY_HYDE=${fullValues.RAG_QUERY_HYDE}` : 'RAG_QUERY_HYDE=false'}
+${fullValues.RAG_QUERY_TRANSLATE_DISABLED_PROFILES !== undefined ? `RAG_QUERY_TRANSLATE_DISABLED_PROFILES=${fullValues.RAG_QUERY_TRANSLATE_DISABLED_PROFILES}` : 'RAG_QUERY_TRANSLATE_DISABLED_PROFILES='}
+${fullValues.RAG_QUERY_VOICE_TRANSFORMS !== undefined ? `RAG_QUERY_VOICE_TRANSFORMS=${fullValues.RAG_QUERY_VOICE_TRANSFORMS}` : 'RAG_QUERY_VOICE_TRANSFORMS=condense_history,normalize_dates'}
+
+# Semantic cache
+${fullValues.RAG_SEMANTIC_CACHE !== undefined ? `RAG_SEMANTIC_CACHE=${fullValues.RAG_SEMANTIC_CACHE}` : 'RAG_SEMANTIC_CACHE=off'}
+${fullValues.RAG_SEMANTIC_CACHE_TTL !== undefined ? `RAG_SEMANTIC_CACHE_TTL=${fullValues.RAG_SEMANTIC_CACHE_TTL}` : 'RAG_SEMANTIC_CACHE_TTL=3600'}
+${fullValues.RAG_SEMANTIC_CACHE_REFUSAL_TTL !== undefined ? `RAG_SEMANTIC_CACHE_REFUSAL_TTL=${fullValues.RAG_SEMANTIC_CACHE_REFUSAL_TTL}` : 'RAG_SEMANTIC_CACHE_REFUSAL_TTL=600'}
+${fullValues.RAG_SEMANTIC_CACHE_MAX_DISTANCE !== undefined ? `RAG_SEMANTIC_CACHE_MAX_DISTANCE=${fullValues.RAG_SEMANTIC_CACHE_MAX_DISTANCE}` : 'RAG_SEMANTIC_CACHE_MAX_DISTANCE=0.05'}
+${fullValues.RAG_SEMANTIC_CACHE_EMBED_STORE !== undefined ? `RAG_SEMANTIC_CACHE_EMBED_STORE=${fullValues.RAG_SEMANTIC_CACHE_EMBED_STORE}` : 'RAG_SEMANTIC_CACHE_EMBED_STORE=false'}
+${fullValues.REDIS_URL !== undefined ? `REDIS_URL=${fullValues.REDIS_URL}` : 'REDIS_URL='}
+
 # Ingestion and embedding profiles
 ${fullValues.RAG_INGEST_PIPELINE !== undefined ? `RAG_INGEST_PIPELINE=${fullValues.RAG_INGEST_PIPELINE}` : 'RAG_INGEST_PIPELINE=legacy'}
 ${fullValues.RAG_PARSER !== undefined ? `RAG_PARSER=${fullValues.RAG_PARSER}` : 'RAG_PARSER=llamaparse'}
@@ -1440,6 +1461,25 @@ LAKERA_GUARD_BASE_URL=${getEnvValue('LAKERA_GUARD_BASE_URL') || ''}
 RAG_INJECTION_LAKERA_MULTI_TENANT_ACK=${getEnvValue('RAG_INJECTION_LAKERA_MULTI_TENANT_ACK') || 'false'}
 RAG_TOOL_RESULT_GUARD=${getEnvValue('RAG_TOOL_RESULT_GUARD') || 'off'}
 NEXT_PUBLIC_RAG_IMAGE_ALLOWLIST=${getEnvValue('NEXT_PUBLIC_RAG_IMAGE_ALLOWLIST') || 'false'}
+# Query layer
+RAG_QUERY_LAYER=${getEnvValue('RAG_QUERY_LAYER') || 'false'}
+RAG_QUERY_FRAMEWORK=${getEnvValue('RAG_QUERY_FRAMEWORK') || 'llamaindex'}
+RAG_QUERY_LLM_MODEL=${getEnvValue('RAG_QUERY_LLM_MODEL') || 'openai/gpt-4.1-nano'}
+RAG_QUERY_CONDENSE=${getEnvValue('RAG_QUERY_CONDENSE') || 'true'}
+RAG_QUERY_EXPAND=${getEnvValue('RAG_QUERY_EXPAND') || 'true'}
+RAG_QUERY_DECOMPOSE=${getEnvValue('RAG_QUERY_DECOMPOSE') || 'true'}
+RAG_QUERY_TRANSLATE=${getEnvValue('RAG_QUERY_TRANSLATE') || 'true'}
+RAG_QUERY_DATE_NORMALIZE=${getEnvValue('RAG_QUERY_DATE_NORMALIZE') || 'true'}
+RAG_QUERY_HYDE=${getEnvValue('RAG_QUERY_HYDE') || 'false'}
+RAG_QUERY_TRANSLATE_DISABLED_PROFILES=${getEnvValue('RAG_QUERY_TRANSLATE_DISABLED_PROFILES') || ''}
+RAG_QUERY_VOICE_TRANSFORMS=${getEnvValue('RAG_QUERY_VOICE_TRANSFORMS') || 'condense_history,normalize_dates'}
+# Semantic cache
+RAG_SEMANTIC_CACHE=${getEnvValue('RAG_SEMANTIC_CACHE') || 'off'}
+RAG_SEMANTIC_CACHE_TTL=${getEnvValue('RAG_SEMANTIC_CACHE_TTL') || '3600'}
+RAG_SEMANTIC_CACHE_REFUSAL_TTL=${getEnvValue('RAG_SEMANTIC_CACHE_REFUSAL_TTL') || '600'}
+RAG_SEMANTIC_CACHE_MAX_DISTANCE=${getEnvValue('RAG_SEMANTIC_CACHE_MAX_DISTANCE') || '0.05'}
+RAG_SEMANTIC_CACHE_EMBED_STORE=${getEnvValue('RAG_SEMANTIC_CACHE_EMBED_STORE') || 'false'}
+REDIS_URL=${getEnvValue('REDIS_URL') || ''}
 # Ingestion and embedding profiles
 RAG_INGEST_PIPELINE=${getEnvValue('RAG_INGEST_PIPELINE') || 'legacy'}
 RAG_PARSER=${getEnvValue('RAG_PARSER') || 'llamaparse'}
@@ -1844,6 +1884,25 @@ LAKERA_GUARD_BASE_URL=${getEnvValue('LAKERA_GUARD_BASE_URL') || ''}
 RAG_INJECTION_LAKERA_MULTI_TENANT_ACK=${getEnvValue('RAG_INJECTION_LAKERA_MULTI_TENANT_ACK') || 'false'}
 RAG_TOOL_RESULT_GUARD=${getEnvValue('RAG_TOOL_RESULT_GUARD') || 'off'}
 NEXT_PUBLIC_RAG_IMAGE_ALLOWLIST=${getEnvValue('NEXT_PUBLIC_RAG_IMAGE_ALLOWLIST') || 'false'}
+# Query layer
+RAG_QUERY_LAYER=${getEnvValue('RAG_QUERY_LAYER') || 'false'}
+RAG_QUERY_FRAMEWORK=${getEnvValue('RAG_QUERY_FRAMEWORK') || 'llamaindex'}
+RAG_QUERY_LLM_MODEL=${getEnvValue('RAG_QUERY_LLM_MODEL') || 'openai/gpt-4.1-nano'}
+RAG_QUERY_CONDENSE=${getEnvValue('RAG_QUERY_CONDENSE') || 'true'}
+RAG_QUERY_EXPAND=${getEnvValue('RAG_QUERY_EXPAND') || 'true'}
+RAG_QUERY_DECOMPOSE=${getEnvValue('RAG_QUERY_DECOMPOSE') || 'true'}
+RAG_QUERY_TRANSLATE=${getEnvValue('RAG_QUERY_TRANSLATE') || 'true'}
+RAG_QUERY_DATE_NORMALIZE=${getEnvValue('RAG_QUERY_DATE_NORMALIZE') || 'true'}
+RAG_QUERY_HYDE=${getEnvValue('RAG_QUERY_HYDE') || 'false'}
+RAG_QUERY_TRANSLATE_DISABLED_PROFILES=${getEnvValue('RAG_QUERY_TRANSLATE_DISABLED_PROFILES') || ''}
+RAG_QUERY_VOICE_TRANSFORMS=${getEnvValue('RAG_QUERY_VOICE_TRANSFORMS') || 'condense_history,normalize_dates'}
+# Semantic cache
+RAG_SEMANTIC_CACHE=${getEnvValue('RAG_SEMANTIC_CACHE') || 'off'}
+RAG_SEMANTIC_CACHE_TTL=${getEnvValue('RAG_SEMANTIC_CACHE_TTL') || '3600'}
+RAG_SEMANTIC_CACHE_REFUSAL_TTL=${getEnvValue('RAG_SEMANTIC_CACHE_REFUSAL_TTL') || '600'}
+RAG_SEMANTIC_CACHE_MAX_DISTANCE=${getEnvValue('RAG_SEMANTIC_CACHE_MAX_DISTANCE') || '0.05'}
+RAG_SEMANTIC_CACHE_EMBED_STORE=${getEnvValue('RAG_SEMANTIC_CACHE_EMBED_STORE') || 'false'}
+REDIS_URL=${getEnvValue('REDIS_URL') || ''}
 # Ingestion and embedding profiles
 RAG_INGEST_PIPELINE=${getEnvValue('RAG_INGEST_PIPELINE') || 'legacy'}
 RAG_PARSER=${getEnvValue('RAG_PARSER') || 'llamaparse'}
@@ -2666,6 +2725,93 @@ app.get('/api/config/get-env', (req, res) => {
   } catch (error) {
     console.error('API: Error fetching environment variable:', error);
     res.status(500).json({ error: 'Failed to read environment variable' });
+  }
+});
+
+class InjectionSummaryError extends Error {
+  constructor(code, message) {
+    super(message);
+    this.code = code;
+  }
+}
+
+const INJECTION_RULE_LANGUAGES = ['zh', 'en', 'it', 'any'];
+const PROMPT_GUARD_MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._-]*$/;
+const PROMPT_GUARD_REVISION = /^[0-9a-f]{40}$/;
+const DETECTOR_CONFIG_VERSION = /^\d{4}-\d{2}-\d{2}\.[1-9][0-9]*$/;
+const SAFE_TOKEN = /^[a-z0-9_]{1,64}$/;
+
+function readInjectionConfigFile(fileName, label) {
+  const filePath = path.join(REPO_ROOT, 'config', 'rag', fileName);
+  let bytes;
+  try {
+    bytes = fs.readFileSync(filePath);
+  } catch {
+    throw new InjectionSummaryError(`injection_${label}_missing`, `config/rag/${fileName} could not be read`);
+  }
+  try {
+    return { bytes, data: JSON.parse(bytes.toString('utf8')) };
+  } catch {
+    throw new InjectionSummaryError(`injection_${label}_invalid`, `config/rag/${fileName} is not valid JSON`);
+  }
+}
+
+function isTokenList(value) {
+  return Array.isArray(value) && value.length > 0 && value.every((item) => typeof item === 'string' && SAFE_TOKEN.test(item));
+}
+
+/** Versions, counts and ids of the active injection defense; never a rule pattern, rule id or env value (D-18). Read on every call. */
+function summarizeInjectionDefense() {
+  const rulesFile = readInjectionConfigFile('injection-rules.json', 'rules');
+  const rules = rulesFile.data && Array.isArray(rulesFile.data.rules) ? rulesFile.data.rules : null;
+  if (!rules) throw new InjectionSummaryError('injection_rules_invalid', 'config/rag/injection-rules.json has no rules list');
+  const counts = Object.fromEntries(INJECTION_RULE_LANGUAGES.map((language) => [language, 0]));
+  for (const rule of rules) {
+    if (rule && Object.prototype.hasOwnProperty.call(counts, rule.language)) counts[rule.language] += 1;
+  }
+
+  const { data: detectors } = readInjectionConfigFile('injection-detectors.json', 'detectors');
+  const promptGuard = detectors && detectors.prompt_guard;
+  const lakera = detectors && detectors.lakera;
+  const valid =
+    detectors && typeof detectors.version === 'string' && DETECTOR_CONFIG_VERSION.test(detectors.version) &&
+    promptGuard && typeof promptGuard.model_id === 'string' && PROMPT_GUARD_MODEL_ID.test(promptGuard.model_id) && promptGuard.model_id.length <= 200 &&
+    typeof promptGuard.revision === 'string' && PROMPT_GUARD_REVISION.test(promptGuard.revision) &&
+    typeof promptGuard.threshold === 'number' && promptGuard.threshold >= 0 && promptGuard.threshold <= 1 &&
+    isTokenList(promptGuard.languages) &&
+    lakera && isTokenList(lakera.detector_types) &&
+    (lakera.min_level === null || lakera.min_level === undefined || (typeof lakera.min_level === 'string' && SAFE_TOKEN.test(lakera.min_level)));
+  if (!valid) throw new InjectionSummaryError('injection_detectors_invalid', 'config/rag/injection-detectors.json does not match the detector config contract');
+
+  return {
+    rules: {
+      version: require('crypto').createHash('sha256').update(rulesFile.bytes).digest('hex').slice(0, 12),
+      counts,
+    },
+    detectors: {
+      version: detectors.version,
+      prompt_guard: {
+        model_id: promptGuard.model_id,
+        revision: promptGuard.revision,
+        threshold: promptGuard.threshold,
+        languages: [...promptGuard.languages],
+      },
+      lakera: { detector_types: [...lakera.detector_types], min_level: lakera.min_level ?? null },
+    },
+  };
+}
+
+// Read-only summary for the Prompt-injection defense card; served behind the same loopback and CSRF gate as every config endpoint.
+app.get('/api/config/injection-defense', (req, res) => {
+  try {
+    return res.json(summarizeInjectionDefense());
+  } catch (error) {
+    if (error instanceof InjectionSummaryError) {
+      console.error('[Injection Defense] summary unavailable:', { code: error.code });
+      return res.status(500).json({ error: error.message, code: error.code });
+    }
+    console.error('[Injection Defense] summary failed');
+    return res.status(500).json({ error: 'Injection defense summary failed', code: 'injection_summary_failed' });
   }
 });
 

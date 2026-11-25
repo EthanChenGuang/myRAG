@@ -460,3 +460,22 @@ test('backfill-rpc: batch RPCs fail outside src/lib/rag/ingest/backfill/', () =>
     [],
   );
 });
+
+test('lakera-http: the Lakera host and /v2/guard fail outside src/lib/rag/security/lakera.ts', () => {
+  const direct = "await fetch('https://api.lakera.ai/v2/guard', opts);\n";
+  const regional = "const host = 'https://eu.api.lakera.ai';\n";
+  const template = 'await fetch(`${base}/v2/guard`, opts);\n';
+  assert.ok(RULES.some((r) => r.id === 'lakera-http'));
+  assert.deepEqual(rulesFor({ 'src/app/api/x/route.ts': direct }), ['src/app/api/x/route.ts:lakera-http']);
+  assert.deepEqual(rulesFor({ 'scripts/tools/x.mjs': regional }), ['scripts/tools/x.mjs:lakera-http']);
+  assert.deepEqual(rulesFor({ 'src/lib/a.ts': template }), ['src/lib/a.ts:lakera-http']);
+  assert.deepEqual(rulesFor({ 'voice-agent/src/x.ts': "const u = 'https://ap-southeast-1.api.lakera.ai/v2/guard';\n" }), [
+    'voice-agent/src/x.ts:lakera-http',
+  ]);
+  assert.deepEqual(rulesFor({ 'src/lib/rag/security/config.ts': regional }), ['src/lib/rag/security/config.ts:lakera-http']);
+  assert.deepEqual(rulesFor({ 'src/lib/rag/security/lakera.ts': direct + regional + template }), []);
+  assert.deepEqual(rulesFor({ 'tests/rag/security/lakera.test.ts': direct }), []);
+  assert.deepEqual(rulesFor({ 'tests/fixtures/security/x.mts': regional }), []);
+  assert.deepEqual(rulesFor({ 'eval/harness/x.mts': direct }), []);
+  assert.deepEqual(rulesFor({ 'src/lib/b.ts': '// docs: https://api.lakera.ai/v2/guard\nconst x = 1;\n' }), []);
+});

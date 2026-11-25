@@ -1,3 +1,7 @@
+import { DEFAULT_LAKERA_BASE_URL } from './lakera';
+
+export { DEFAULT_LAKERA_BASE_URL };
+
 export type InjectionCheckMode = 'off' | 'flag' | 'drop' | 'downweight';
 export type ToolResultGuardMode = 'off' | 'tag' | 'tag_and_flag';
 
@@ -29,7 +33,6 @@ export interface SecurityConfig {
 
 export type SecurityEnvSource = Record<string, string | undefined>;
 
-export const DEFAULT_LAKERA_BASE_URL = 'https://api.lakera.ai';
 
 const INJECTION_CHECK_MODES: readonly InjectionCheckMode[] = ['off', 'flag', 'drop', 'downweight'];
 const TOOL_RESULT_GUARD_MODES: readonly ToolResultGuardMode[] = ['off', 'tag', 'tag_and_flag'];
