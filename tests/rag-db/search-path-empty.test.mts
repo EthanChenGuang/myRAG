@@ -59,6 +59,7 @@ async function build(mode: DeploymentMode, kind: Build): Promise<PGlite> {
 interface FunctionRow {
   signature: string;
   definer: boolean;
+  trigger: boolean;
   legacy: boolean;
   empty_path: boolean;
   config: string | null;
@@ -67,7 +68,8 @@ interface FunctionRow {
 
 async function functionRows(db: PGlite, legacy: string[]): Promise<FunctionRow[]> {
   const result = await db.query<FunctionRow>(
-    `SELECT p.oid::regprocedure::text AS signature, p.prosecdef AS definer, p.proname = ANY ($1::text[]) AS legacy,
+    `SELECT p.oid::regprocedure::text AS signature, p.prosecdef AS definer, p.prorettype = 'trigger'::regtype AS trigger,
+            p.proname = ANY ($1::text[]) AS legacy,
             ${EMPTY_PATH} AS empty_path, p.proconfig::text AS config, p.prosrc AS source
        FROM pg_proc p
       WHERE p.pronamespace = 'public'::regnamespace AND p.prokind IN ('f', 'p') AND NOT ${EXTENSION_MEMBER}
@@ -175,8 +177,10 @@ for (const mode of MODES) {
         await db?.close();
       });
 
-      test('every public SECURITY DEFINER function, and every function created from 0301 on, has search_path ""', () => {
-        const scoped = rows.filter((row) => row.definer || !row.legacy);
+      // Trigger functions are in scope whatever their age: a trigger runs with the search_path of the statement that fired it, so a legacy
+      // trigger without its own search_path fails (or resolves through pg_temp) under an empty-search_path writer.
+      test('every public SECURITY DEFINER function, every trigger function and every function created from 0301 on has search_path ""', () => {
+        const scoped = rows.filter((row) => row.definer || row.trigger || !row.legacy);
         assert.ok(scoped.filter((row) => row.definer).length > 100, `expected the full SECURITY DEFINER inventory, saw ${scoped.length}`);
         assert.ok(scoped.filter((row) => !row.legacy && !row.definer).length > 20, 'the post-Phase-3 invoker and trigger functions are in scope');
         assert.deepEqual(
@@ -192,6 +196,14 @@ for (const mode of MODES) {
           .filter((entry) => entry.references.length > 0);
         assert.deepEqual(offenders, []);
         assert.ok(empty.length > 100, `expected the empty search_path inventory, saw ${empty.length}`);
+      });
+
+      test('no empty-search_path function calls a public function that has no search_path of its own', () => {
+        const unpinned = new Set(rows.filter((row) => row.config === null).map((row) => row.signature.replace(/\(.*$/, '')));
+        const callers = rows
+          .filter((row) => row.empty_path)
+          .flatMap((row) => [...row.source.matchAll(/\bpublic\.([a-z_][a-z0-9_]*)\s*\(/gi)].filter((match) => unpinned.has(match[1]!)).map((match) => `${row.signature} -> ${match[1]}`));
+        assert.deepEqual([...new Set(callers)], []);
       });
     });
   }
