@@ -237,7 +237,7 @@ Plans:
 ### Phase 3.2: Language Support & Ingestion Hardening (INSERTED)
 **Goal**: The deployment supports exactly the languages chosen at setup, every ingestion step works per language, and documents with hidden text, untrusted links or unapproved uploads never reach retrieval
 **Depends on**: Phase 3, Phase 3.1
-**Requirements**: LANG-01, LANG-02, LANG-03, LANG-04, LANG-05, LANG-06, XLG-04, XLG-06, EMB-11, SEC-07, SEC-08, SEC-09, DATA-18, CHK-06, CHK-07, EVAL-18 (plus the DATA-05 and XLG-02 deltas)
+**Requirements**: LANG-01, LANG-02, LANG-03, LANG-04, LANG-05, LANG-06, XLG-04, XLG-06, EMB-11, SEC-07, SEC-08, SEC-09, DATA-18, CHK-06, CHK-07, EVAL-18, DATA-19, DATA-20 (plus the DATA-05 and XLG-02 deltas)
 **Success Criteria** (what must be TRUE):
   1. First-run setup asks for the supported languages (single or multi-select, plus a primary language) in an interactive `scripts/init-env.js` run and in the Config UI, and writes them to `.env.local` and the five config locations; with them unset, `RAG_PIPELINE=legacy` behaves as today and the new pipeline refuses to start with a message pointing to the picker; choosing one language turns off detection, translation and the cross-lingual slices.
   2. The language-pack registry is Pydantic data with generated Zod; the golden contract, eval corpus, drafting tools and `src/lib/rag/lang/detect.ts` validate against it, a CI check fails on a hard-coded `zh|en|it` literal outside the registry and fixtures, and saving a set with an incomplete pack or an unsupported embedding profile or reranker fails.
@@ -247,6 +247,7 @@ Plans:
   6. Fixture documents with white-on-white text, tiny fonts, off-page text, zero-width characters and hidden Word runs, and documents containing links outside the allowlist, are quarantined with the reason shown to the admin; with `RAG_UPLOAD_APPROVAL` on, a member's upload stays out of retrieval and the cache until approved; scope tags filter retrieval to documents tagged for the Italian branch.
   7. With every new switch off, the characterization tests pass and no slice drops beyond the noise band; machine-translated zh/it golden items count only after native-speaker review.
   8. In every processing profile, a 60-row fixture table cut into several chunks repeats its header in each chunk and a page-continued table carries the header forward; the `table_split` items ("米兰的 P5 员工住宿上限是多少？" and its en/it versions) are answered with the lodging limit, not another column; with `RAG_TABLE_ROW_SERIALIZATION` on, table chunks embed "column = value" lines while the LLM still sees the Markdown table.
+  9. A 2023 policy uploaded as a separate file next to its 2025 version is flagged as a possible older version, and after admin confirmation only the 2025 version is current; with `RAG_EFFECTIVE_DATES` on, a policy whose effective date is next month is not used yet and an expired one is treated as historical.
 **Live verification**: Run OCR on real scanned Chinese and Italian documents; call the hosted BGE-M3 API; review a sample of quarantined real documents.
 **Plans**: TBD
 **UI hint**: yes
@@ -386,13 +387,14 @@ Plans:
 ### Phase 5.2: Grounded Answers & Output Safety (INSERTED)
 **Goal**: When the documents answer only part of a question, the answer says so instead of filling the gap, every claim can be traced to a block, and no answer can carry a phishing link or a credential request
 **Depends on**: Phase 5, Phase 5.1
-**Requirements**: GEN-08, GEN-09, GEN-10, GEN-11, GEN-12, LAT-05, LANG-09, SEC-06, SEC-10 (plus the SEC-02 delta)
+**Requirements**: GEN-08, GEN-09, GEN-10, GEN-11, GEN-12, LAT-05, LANG-09, SEC-06, SEC-10, GEN-14, EVAL-19 (plus the SEC-02 delta)
 **Success Criteria** (what must be TRUE):
   1. With `RAG_PARTIAL_ANSWER_RULE` on, the `partial_answer` fixture items (e.g. a limit is stated but not what happens above it) are answered for the covered part and say for the rest that the documents do not cover it, in zh, en and it; the share of answers adding unsupported content is 0 in CI; when strict mode calls webSearch, document and web parts are labelled separately; `RAG_SYSTEM_PROMPT` and `{{context}}` are unchanged.
   2. The eval reports `uncited_sentence_rate`, the UI marks sentences without a valid citation, and with `RAG_CLAIM_CHECK` on unsupported sentences are marked "not confirmed by the documents" without deleting or blocking text; with the LLM judge opted in, Italian answers get a calibrated groundedness label instead of "not checked".
   3. With `RAG_MAX_OUTPUT_TOKENS` on, answers are capped and asked to be concise, the strict refusal is never cut, citations before a cut-off are persisted and the truncation rate stays below 2%; refusal and notice texts come from the registry in the question's language and today's English text is byte-identical.
   4. With `RAG_OUTPUT_GUARD` on, a fixture document carrying a hidden phishing link and a "log in again and enter your password" instruction produces answers with the link replaced and the request blocked, even across stream tokens; allowlisted links pass; WhatsApp replies are filtered and no server-side preview is fetched for non-allowlisted hosts; the system prompt forbids outputting links found only in material and asking for passwords.
   5. Security events carry the uploader on the trace, in logs and in the review queue, and a fake uploader crossing the threshold raises an admin alert; with every switch off, results match the Phase 5.1 baseline.
+  6. Context blocks carry version and effective-date labels; on the `stale_version` items the answer gives the current value and names its version, never both values, and the conflict sends both documents to the review queue as a supersession candidate.
 **Live verification**: Run the claim check and the LLM judge on real answers; send a real WhatsApp reply with an injected link and confirm no preview fetch.
 **Plans**: TBD
 **UI hint**: yes
