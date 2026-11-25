@@ -135,3 +135,9 @@ Body check: after each apply, an aggregate md5 over `proname=md5(prosrc)` of eve
 - Realtime: `realtime.messages` has RLS on and one read policy, `rag_ingest_broadcast_read`, that allows only broadcast messages on topics `rag_ingest_realtime_topic_allowed` accepts. That function runs for `authenticated` only (anon refused).
 - Backups: `archive_mode` is on (WAL archiving). The backup list itself was not read: the Management API token was not provided, so it needs the dashboard (Database → Backups).
 - Security advisor: no errors. `auth_leaked_password_protection` still reports the protection is off; the Realtime "Allow public access" project setting is not visible through SQL. Both are dashboard settings for the owner.
+
+## 03.1-53 project settings (2026-11-25, Management API, owner-authorized)
+
+- Realtime: `private_only` set to true (was unset, so public channels were allowed). The app's only Realtime channel (`use-ingest-job-status`) already subscribes with `private: true`, so nothing breaks. Verified by reading the config back.
+- Leaked password protection: not enabled. The API answered 402 `entitlement_required`: HaveIBeenPwned checks need the Pro plan. `password_min_length` stays 6. Owner decision pending: upgrade, or raise the minimum length and required characters as a substitute.
+- Backups: the project lists 0 scheduled backups and point-in-time recovery is off (WAL-G is enabled internally, but no downloadable backup exists). So there was no backup before the 2026-11-25 migrations. The live data is small (1 document, 1 chunk, 1 organization). Owner decision pending: upgrade to get daily backups or PITR, or take a manual `pg_dump` with the database connection string.
