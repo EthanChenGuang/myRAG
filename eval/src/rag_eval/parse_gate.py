@@ -308,6 +308,55 @@ def run_gate(
 
 
 # -------------------------------------------------------------------------------------------------------------------------
+# Threshold sweep (D-41)
+# -------------------------------------------------------------------------------------------------------------------------
+
+
+class SweepCandidate(_Model):
+    garbled_ratio: float
+    min_ruling_paths: int
+    scanned_max_chars: int
+
+
+class SweepGrid(_Model):
+    garbled_ratio: list[float]
+    min_ruling_paths: list[int]
+    scanned_max_chars: list[int]
+
+
+class SweepSpec(_Model):
+    grid: SweepGrid
+    report: str
+
+
+class SweepFixture(_Model):
+    fixture_id: str
+    split: str
+    expected_tiers: dict[int, str]
+
+
+class SweepItem(_Model):
+    item_id: str
+    fixture_id: str
+    split: str
+    pages: list[int]
+    recall_by_tier: dict[str, float]
+    fixed_recall: float
+
+
+def fixture_split(fixture_id: str) -> str:
+    return "dev"
+
+
+def apply_thresholds(raw: dict[str, Any], chosen: SweepCandidate, reference: str) -> dict[str, Any]:
+    return dict(raw)
+
+
+def sweep(spec, *, fixtures, items, router, current, cfg, noise):
+    raise NotImplementedError
+
+
+# -------------------------------------------------------------------------------------------------------------------------
 # Runs and the CLI
 # -------------------------------------------------------------------------------------------------------------------------
 

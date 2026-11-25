@@ -265,3 +265,134 @@ def test_cli_refuses_missing_runs(tmp_path: Path):
     _write_runs(runs, "fixed", _many(10))
     assert main(["--spec", str(_spec(tmp_path, runs)), "--out", str(tmp_path / "out"), "--skip-runs"]) == 2
     assert not (tmp_path / "out" / "parse-gate.json").exists()
+
+
+# -------------------------------------------------------------------------------------------------------------------------
+# The dev-split threshold sweep (D-41)
+# -------------------------------------------------------------------------------------------------------------------------
+
+from rag_sidecar.contracts.routing import ParseRoutingConfig  # noqa: E402
+
+from rag_eval.parse_gate import (  # noqa: E402
+    SweepCandidate,
+    SweepFixture,
+    SweepGrid,
+    SweepItem,
+    SweepSpec,
+    apply_thresholds,
+    fixture_split,
+    sweep,
+)
+
+CURRENT = SweepCandidate(garbled_ratio=0.05, min_ruling_paths=4, scanned_max_chars=30)
+GRID = SweepGrid(garbled_ratio=[0.03, 0.05], min_ruling_paths=[2, 4], scanned_max_chars=[20, 30])
+SPEC = SweepSpec(grid=GRID, report="eval/reports/phase-03.1/threshold-sweep.json")
+
+
+def _fixture(fixture_id: str, split: str, tiers: list[str]) -> SweepFixture:
+    return SweepFixture(fixture_id=fixture_id, split=split, expected_tiers={page: tier for page, tier in enumerate(tiers, start=1)})
+
+
+# dev-table: page 2 holds a table; only min_ruling_paths 2 sees it. dev-scan: page 1 is a scan; only scanned_max_chars 30 sees it.
+# test-doc: a test fixture whose only well-routed candidate is garbled 0.03, ruling 2, scanned 20 (the poisoned answer).
+FIXTURES = [
+    _fixture("dev-table", "dev", ["fast", "structured"]),
+    _fixture("dev-scan", "dev", ["structured"]),
+    _fixture("test-doc", "test", ["structured", "structured"]),
+]
+
+
+class FakeRouter:
+    """Routes from the candidate's values alone and records every call."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[list[SweepCandidate], list[str]]] = []
+
+    def __call__(self, candidates, fixture_ids):
+        self.calls.append((list(candidates), list(fixture_ids)))
+        out = []
+        for candidate in candidates:
+            routed: dict[str, dict[int, str]] = {}
+            for fixture in fixture_ids:
+                if fixture == "dev-table":
+                    routed[fixture] = {1: "fast", 2: "structured" if candidate.min_ruling_paths <= 2 else "fast"}
+                elif fixture == "dev-scan":
+                    routed[fixture] = {1: "structured" if candidate.scanned_max_chars >= 30 else "fast"}
+                else:
+                    good = candidate == SweepCandidate(garbled_ratio=0.03, min_ruling_paths=2, scanned_max_chars=20)
+                    routed[fixture] = {1: "structured" if good else "fast", 2: "structured" if good else "fast"}
+            out.append(routed)
+        return out
+
+
+def _items(test_recall: float = 1.0) -> list[SweepItem]:
+    full = {"fast": 0.0, "structured": 1.0, "premium": 1.0}
+    return [
+        SweepItem(item_id="dev-table-q", fixture_id="dev-table", split="dev", pages=[2], recall_by_tier=full, fixed_recall=1.0),
+        SweepItem(item_id="dev-table-p1", fixture_id="dev-table", split="dev", pages=[1], recall_by_tier={"fast": 1.0, "structured": 1.0, "premium": 1.0}, fixed_recall=1.0),
+        SweepItem(item_id="dev-scan-q", fixture_id="dev-scan", split="dev", pages=[1], recall_by_tier=full, fixed_recall=1.0),
+        SweepItem(item_id="test-q", fixture_id="test-doc", split="test", pages=[], recall_by_tier={"fast": test_recall, "structured": 1.0, "premium": 1.0}, fixed_recall=1.0),
+    ]
+
+
+def _sweep(fixtures=FIXTURES, items=None, router=None):
+    return sweep(SPEC, fixtures=fixtures, items=items or _items(), router=router or FakeRouter(), current=CURRENT, cfg=CFG, noise=NOISE)
+
+
+def test_the_sweep_picks_the_best_dev_accuracy_among_candidates_that_keep_recall():
+    report = _sweep()
+    assert report.chosen == SweepCandidate(garbled_ratio=0.05, min_ruling_paths=2, scanned_max_chars=30)
+    chosen = next(row for row in report.candidates if row.candidate == report.chosen)
+    assert chosen.dev_tier_accuracy == 1.0 and chosen.within_band is True
+    assert len(report.candidates) == 8
+
+
+def test_a_candidate_that_loses_dev_recall_beyond_the_band_is_not_chosen():
+    report = _sweep()
+    lossy = next(row for row in report.candidates if row.candidate == SweepCandidate(garbled_ratio=0.05, min_ruling_paths=4, scanned_max_chars=20))
+    assert lossy.within_band is False
+    assert lossy.dev_projected_recall == pytest.approx(1 / 3)
+
+
+def test_the_sweep_routes_only_dev_fixtures_until_the_choice_and_the_test_split_once():
+    router = FakeRouter()
+    report = _sweep(router=router)
+    *selection, final = router.calls
+    assert selection and all(set(ids) == {"dev-table", "dev-scan"} for _candidates, ids in selection)
+    assert final == ([report.chosen], ["test-doc"])
+    assert report.test_split.fixtures == ["test-doc"]
+    assert report.test_split.items == 1
+
+
+def test_a_poisoned_test_split_never_changes_the_choice():
+    clean = _sweep()
+    poisoned_fixtures = [*FIXTURES[:2], _fixture("test-doc", "test", ["fast", "fast"])]
+    poisoned = _sweep(fixtures=poisoned_fixtures, items=_items(test_recall=0.0))
+    assert poisoned.chosen == clean.chosen
+    assert [row.model_dump() for row in poisoned.candidates] == [row.model_dump() for row in clean.candidates]
+    assert poisoned.test_split != clean.test_split
+
+
+def test_ties_keep_the_values_closest_to_the_current_config():
+    report = _sweep()
+    tied = [row for row in report.candidates if row.within_band and row.dev_tier_accuracy == 1.0]
+    assert len(tied) == 2
+    assert report.chosen.garbled_ratio == CURRENT.garbled_ratio
+
+
+def test_fixture_split_follows_the_phase_1_rule():
+    from rag_eval.split import assign_split
+
+    for fixture_id in ("cross-boundary", "digital-text", "table-en", "scan-zh"):
+        assert fixture_split(fixture_id) == assign_split(fixture_id)
+
+
+def test_apply_thresholds_writes_the_choice_and_the_reference_and_still_validates():
+    raw = json.loads((Path(__file__).resolve().parents[2] / "config" / "rag" / "parse-routing.json").read_text(encoding="utf-8"))
+    chosen = SweepCandidate(garbled_ratio=0.06, min_ruling_paths=3, scanned_max_chars=40)
+    updated = apply_thresholds(raw, chosen, "eval/reports/phase-03.1/threshold-sweep.json")
+    cfg = ParseRoutingConfig.model_validate(updated)
+    assert (cfg.l1.garbled_ratio, cfg.l1.min_ruling_paths, cfg.l1.scanned_max_chars) == (0.06, 3, 40)
+    assert cfg.thresholds_ref == "eval/reports/phase-03.1/threshold-sweep.json"
+    assert list(updated) == list(raw), "key order is kept"
+    assert updated["l1"]["thin_path_pt"] == raw["l1"]["thin_path_pt"]
