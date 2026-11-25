@@ -177,6 +177,13 @@ Python, contracts and golden data were not touched, so pytest and gen:schemas we
 - Phases 01, 02 and 03.1 still fail the narrowed design gate on real UI plans (01-11, 02-33, 03.1-03 and others) that predate the gate. They are out of scope here.
 - The ingest-mode-routing suite needs `docling_core` in the rag-sidecar venv (pre-existing environment gap, same family as the `pypdfium2` note in 04-42).
 
+## Known Limitations and Residuals
+
+- **Type names under `search_path = ''` (service_role only).** pg_temp is still searched first for relations and types when it is not listed. Since review fix WR-01, every relation in an empty-path body is qualified, `pg_catalog.pg_attribute` and `pg_catalog.pg_extension` included, so a temporary table cannot shadow one. Type names (`text`, `uuid`, `jsonb`, `regclass` and so on) stay unqualified. A session that can create a temporary domain, for example `CREATE DOMAIN pg_temp.jsonb AS integer`, still changes how a cast resolves inside these functions. That needs a raw SQL session with TEMP privilege plus EXECUTE. Every affected SECURITY DEFINER function is service_role only, and PostgREST clients cannot create temporary objects. The project keeps `''` as its convention rather than `pg_catalog, pg_temp`.
+- **Legacy SECURITY INVOKER functions with no search_path (IN-05).** These are outside 0425's scope. They give no escalation, since they run as the caller, and search-path-empty asserts that no empty-path body calls them. A future empty-path function, trigger or policy that calls one would break. The same list comes from the setup plus all migrations and from the frozen setup plus all migrations:
+  - single-tenant: `search_chunks_by_keywords(text,integer)`, `update_document_url_by_filename(text,text)`;
+  - multi-tenant: `check_storage_quota(uuid,bigint)`, `get_user_workspace_summary()`, `get_workspace_type(uuid)`, `match_documents_by_organization(vector,double precision,integer,uuid)`, `update_document_url_by_filename(text,text)`.
+
 ## Operator Actions
 
 - Check pgvector's schema first: `SELECT extname, extnamespace::regnamespace FROM pg_extension WHERE extname = 'vector'` must show `public`. Each 0425 file stops with `55000` otherwise. Do not act on Supabase lint 0014 (`extension_in_public`) for `vector`.
