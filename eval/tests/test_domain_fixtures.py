@@ -321,3 +321,141 @@ def test_pii_pack_has_no_phone_email_tax_id_or_iban():
         assert email_violations(text) == [], path.name
         assert tax_id_violations(text) == [], path.name
         assert iban_violations(text) == [], path.name
+
+
+DOMAIN_GOLDEN = DOMAIN / "golden.jsonl"
+DOMAIN_SPLIT = DOMAIN / "split-manifest.json"
+DOC_TYPE_SHORT = {"contract_legal": "contract", "financial_report": "finrep"}
+SAME_LANGUAGE_CATEGORIES = {"exact_term", "general", "compound", "colloquial", "table", "no_answer"}
+ITEM_ID = re.compile(r"^dom-(contract|finrep)-(zh|en|it)-([a-z]+(?:-[a-z]+)*)-(\d{3})$")
+MIN_ITEMS_PER_CELL = 6
+MIN_CROSS_LINGUAL_PER_CELL = 2
+MIN_SPLIT_SHARE = 0.4
+
+
+def _golden_items():
+    from rag_eval.golden_io import load_golden
+
+    assert DOMAIN_GOLDEN.is_file(), "eval/fixtures/domain/golden.jsonl is missing"
+    return load_golden(DOMAIN_GOLDEN)
+
+
+def _item_doc_type(item) -> str:
+    tagged = [tag.split(":", 1)[1] for tag in item.tags if tag.startswith("doc_type:")]
+    assert len(tagged) == 1, item.id
+    return tagged[0]
+
+
+def _documents_by_name():
+    return {doc.filename: doc for doc in _documents().values()}
+
+
+def test_golden_items_are_approved_synthetic_fixtures_with_pack_ids():
+    items = _golden_items()
+    assert len(items) >= 36
+    for item in items:
+        assert item.provenance == "synthetic_fixture", item.id
+        assert item.review_status == "approved", item.id
+        match = ITEM_ID.match(item.id)
+        assert match, item.id
+        short, language, category, _ = match.groups()
+        doc_type = _item_doc_type(item)
+        assert DOC_TYPE_SHORT[doc_type] == short, item.id
+        assert language == item.language, item.id
+        assert category == item.category.replace("_", "-"), item.id
+        assert item.category in SAME_LANGUAGE_CATEGORIES | {"cross_lingual"}, item.id
+
+
+def test_golden_counts_per_doc_type_and_language():
+    items = _golden_items()
+    total = collections.Counter()
+    cross_asked = collections.Counter()
+    cross_evidence = collections.Counter()
+    no_answer = collections.Counter()
+    pairs = collections.defaultdict(set)
+    for item in items:
+        doc_type = _item_doc_type(item)
+        total[(doc_type, item.language)] += 1
+        if item.category == "cross_lingual":
+            cross_asked[(doc_type, item.language)] += 1
+            cross_evidence[(doc_type, item.evidence_language)] += 1
+            pairs[doc_type].add((item.language, item.evidence_language))
+        if not item.answerable:
+            no_answer[(doc_type, item.language)] += 1
+    for doc_type in DOC_TYPES:
+        for language in LANGUAGES:
+            cell = (doc_type, language)
+            assert total[cell] >= MIN_ITEMS_PER_CELL, cell
+            assert cross_asked[cell] >= MIN_CROSS_LINGUAL_PER_CELL, cell
+            assert cross_evidence[cell] >= MIN_CROSS_LINGUAL_PER_CELL, cell
+            assert no_answer[cell] >= 1, cell
+            assert total[cell] - cross_asked[cell] - no_answer[cell] >= 3, cell
+        ordered_pairs = {(a, b) for a in LANGUAGES for b in LANGUAGES if a != b}
+        assert pairs[doc_type] == ordered_pairs, doc_type
+
+
+def test_golden_quotes_occur_verbatim_in_the_named_section_of_a_pack_document():
+    from rag_eval.matching import chunk_matches_span
+
+    documents = _documents_by_name()
+    manifest = _manifest()
+    for item in _golden_items():
+        doc_type = _item_doc_type(item)
+        if item.category == "compound":
+            assert len(item.gold_evidence) >= 2, item.id
+        for span in item.gold_evidence:
+            assert span.document in documents, (item.id, span.document)
+            doc = documents[span.document]
+            assert manifest[doc.relpath] == doc_type, item.id
+            expected_language = item.evidence_language if item.category == "cross_lingual" else item.language
+            assert doc.language == expected_language, item.id
+            if item.category != "cross_lingual":
+                assert item.evidence_language in (None, item.language), item.id
+            holders = [chunk for chunk in doc.chunks if span.quote in chunk.text]
+            assert holders, (item.id, span.quote)
+            assert all(chunk.section == span.section for chunk in holders), (item.id, span.section)
+            for other in documents.values():
+                if other is doc:
+                    continue
+                assert not any(chunk_matches_span(span.document, c.text, span) for c in other.chunks), item.id
+
+
+def test_golden_item_text_avoids_requirement_illustrations_and_main_corpus_names():
+    terms = _neutrality_terms()
+    names = _main_corpus_names()
+    for item in _golden_items():
+        text = " ".join([item.question, item.expected_answer or ""])
+        folded = text.casefold()
+        for term in terms:
+            assert term not in folded, (item.id, term)
+        for name in names:
+            assert name not in text, (item.id, name)
+
+
+def test_split_manifest_is_frozen_by_rule_and_balanced_per_doc_type():
+    from rag_eval.split import SPLIT_RULE, assign_split, load_manifest
+
+    assert DOMAIN_SPLIT.is_file(), "eval/fixtures/domain/split-manifest.json is missing"
+    raw = json.loads(DOMAIN_SPLIT.read_text(encoding="utf-8"))
+    assert raw["rule"] == SPLIT_RULE
+    assignments = load_manifest(DOMAIN_SPLIT)
+    items = _golden_items()
+    assert set(assignments) == {item.id for item in items}
+    per_type = collections.defaultdict(collections.Counter)
+    for item in items:
+        assert assignments[item.id] == item.split == assign_split(item.id), item.id
+        per_type[_item_doc_type(item)][item.split] += 1
+    for doc_type in DOC_TYPES:
+        counts = per_type[doc_type]
+        size = counts["dev"] + counts["test"]
+        assert counts["dev"] >= MIN_SPLIT_SHARE * size, (doc_type, counts)
+        assert counts["test"] >= MIN_SPLIT_SHARE * size, (doc_type, counts)
+
+
+def test_golden_ids_do_not_collide_with_the_main_golden_set():
+    from rag_eval.golden_io import load_golden
+
+    main_ids = {item.id for item in load_golden(REPO_ROOT / "eval/fixtures/golden.jsonl")}
+    assert not main_ids & {item.id for item in _golden_items()}
+    main_names = {doc.filename for doc in load_corpus(MAIN_CORPUS)}
+    assert not main_names & set(_documents_by_name())
