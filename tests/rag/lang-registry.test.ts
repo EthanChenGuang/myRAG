@@ -2,16 +2,21 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  COMPLETENESS_PARTS,
+  completePacks,
   getLanguagePack,
   getLanguageRegistry,
+  packMissingParts,
   parseLanguageRegistry,
   registryOrder,
   resetLanguageRegistryForTests,
   setLanguageRegistryForTests,
+  type LanguagePack,
 } from '@/lib/rag/lang/registry';
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const REGISTRY_PATH = path.join(ROOT, 'config', 'rag', 'language-packs.json');
+const CASES_PATH = path.join(ROOT, 'tests', 'fixtures', 'rag', 'language-pack-completeness-cases.json');
 
 type RawPack = Record<string, unknown>;
 type RawRegistry = { schema_version: number; packs: RawPack[] };
@@ -91,5 +96,42 @@ describe('language-pack registry', () => {
   it('does not read process.env', () => {
     const source = fs.readFileSync(path.join(ROOT, 'src', 'lib', 'rag', 'lang', 'registry.ts'), 'utf8');
     expect(source).not.toMatch(/process\.env/);
+  });
+});
+
+type CompletenessCase = {
+  name: string;
+  base: string;
+  change: { op: 'set' | 'delete'; path: string[]; value?: unknown };
+  missing: string[];
+};
+
+const CASES = (JSON.parse(fs.readFileSync(CASES_PATH, 'utf8')) as { cases: CompletenessCase[] }).cases;
+
+function applyChange(pack: RawPack, change: CompletenessCase['change']): RawPack {
+  const parents = change.path.slice(0, -1);
+  const leaf = change.path[change.path.length - 1]!;
+  let target = pack as Record<string, unknown>;
+  for (const key of parents) target = target[key] as Record<string, unknown>;
+  if (change.op === 'delete') delete target[leaf];
+  else target[leaf] = change.value;
+  return pack;
+}
+
+describe('pack completeness (D-04), same cases as rag-sidecar/tests/test_language_registry.py', () => {
+  it('every shipped pack is complete', () => {
+    expect(completePacks().map((pack) => pack.code)).toEqual(['zh', 'en', 'it']);
+  });
+
+  it('the shared cases cover every part once', () => {
+    expect(CASES.map((entry) => entry.missing[0]).sort()).toEqual([...COMPLETENESS_PARTS].sort());
+    expect(CASES.every((entry) => entry.missing.length === 1)).toBe(true);
+  });
+
+  it.each(CASES.map((entry) => [entry.name, entry] as const))('%s is reported incomplete', (_name, entry) => {
+    const registry = raw();
+    registry.packs = [applyChange(rawPack(entry.base), entry.change)];
+    const pack: LanguagePack = parseLanguageRegistry(registry).packs[0]!;
+    expect(packMissingParts(pack)).toEqual(entry.missing);
   });
 });

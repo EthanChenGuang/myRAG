@@ -9,6 +9,8 @@ import pytest
 from pydantic import ValidationError
 
 from rag_sidecar.contracts.languages import (
+    COMPLETENESS_PARTS,
+    LanguagePack,
     LanguageRegistry,
     complete_packs,
     default_language_packs_path,
@@ -19,6 +21,7 @@ from rag_sidecar.contracts.languages import (
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 REGISTRY_PATH = REPO_ROOT / "config" / "rag" / "language-packs.json"
+CASES_PATH = REPO_ROOT / "tests" / "fixtures" / "rag" / "language-pack-completeness-cases.json"
 
 
 def _raw() -> dict:
@@ -88,3 +91,29 @@ def test_a_pattern_that_does_not_compile_is_rejected():
 def test_every_shipped_pack_is_complete():
     assert [pack.code for pack in complete_packs()] == ["zh", "en", "it"]
     assert all(pack_missing_parts(pack) == [] for pack in load_language_registry().packs)
+
+
+def _apply(pack: dict, removal: dict) -> dict:
+    target = pack
+    *parents, leaf = removal["path"]
+    for key in parents:
+        target = target[key]
+    if removal["op"] == "delete":
+        del target[leaf]
+    else:
+        target[leaf] = removal["value"]
+    return pack
+
+
+_CASES = json.loads(CASES_PATH.read_text(encoding="utf-8"))["cases"]
+
+
+def test_the_shared_cases_cover_every_part_once():
+    assert sorted(case["missing"][0] for case in _CASES) == sorted(COMPLETENESS_PARTS)
+    assert all(len(case["missing"]) == 1 for case in _CASES)
+
+
+@pytest.mark.parametrize("case", _CASES, ids=[case["name"] for case in _CASES])
+def test_a_fixture_pack_missing_one_part_is_incomplete(case):
+    pack = LanguagePack.model_validate(_apply(_pack(case["base"]), case["change"]))
+    assert pack_missing_parts(pack) == case["missing"]
