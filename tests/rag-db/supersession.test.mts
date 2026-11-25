@@ -581,6 +581,208 @@ for (const mode of MODES) {
   });
 }
 
+async function hold(ctx: Ctx, documentId: string): Promise<string> {
+  const row = (await rows(ctx.db, 'SELECT outcome FROM rag_hold_document_for_review(p_document_id => $1, p_tenant_key => $2)', [documentId, ctx.key]))[0];
+  return String(row?.outcome);
+}
+
+/** A confirmed link from the older document's lineage to the newer one's. */
+async function confirmedPair(ctx: Ctx, label: string) {
+  const p = await pair(ctx, label);
+  const raised = await raise(ctx, p.newer, p.older);
+  await rows(ctx.db, CONFIRM_SQL, [raised.candidate_id, ctx.admin]);
+  return { ...p, candidateId: String(raised.candidate_id) };
+}
+
+async function newVersion(ctx: Ctx, sourceKey: string, label: string): Promise<{ id: string; own: string }> {
+  const own = next('toknewver');
+  const id = await begin(ctx, sourceKey, next(label));
+  await writeChunks(ctx, id, [probe(own)]);
+  return { id, own };
+}
+
+async function pendingCandidatesOf(ctx: Ctx, documentId: string): Promise<Row[]> {
+  return rows(ctx.db, "SELECT * FROM rag_supersession_candidates WHERE status = 'pending' AND (document_id = $1 OR candidate_document_id = $1)", [documentId]);
+}
+
+const APPROVE_SQL = 'SELECT * FROM rag_approve_upload(p_document_id => $1, p_actor => $2)';
+const PURGE_SQL = 'SELECT public.rag_purge_hook_supersession(p_tenant_key => $1, p_lineage_id => $2, p_document_ids => $3::uuid[]) AS deleted';
+
+for (const mode of MODES) {
+  describe(`0806 supersession: publish respects confirmed lineage links (${mode})`, () => {
+    let ctx: Ctx;
+    const it = (name: string, run: () => Promise<void>) => test(`${name} [${mode}]`, run);
+
+    before(async () => {
+      ctx = await createCtx(mode);
+    });
+
+    after(async () => {
+      await ctx?.db.close();
+    });
+
+    it('a new version of a superseded lineage is stored non-current, points at the newer document and raises one pending candidate without a direction', async () => {
+      const p = await confirmedPair(ctx, 'retired');
+      const v = await newVersion(ctx, p.olderKey, 'retired-v2');
+      const row = (await rows(ctx.db, 'SELECT * FROM rag_publish_document_version(p_document_id => $1, p_tenant_key => $2)', [v.id, ctx.key]))[0] as Row;
+      assert.equal(row.outcome, 'superseded_lineage');
+      assert.equal(row.document_id, v.id);
+      const doc = await docState(ctx, v.id);
+      assert.equal(doc.is_current, false);
+      assert.equal(doc.status, 'ready');
+      assert.equal(doc.superseded_by, p.newer);
+      assert.ok((await chunkStates(ctx, v.id)).every((chunk) => chunk.is_current === false));
+      assert.equal((await docState(ctx, p.newer)).is_current, true);
+      assert.deepEqual(await hybridDocuments(ctx, v.own), []);
+      assert.deepEqual(await hybridDocuments(ctx, p.shared), [p.newer]);
+
+      const raised = await pendingCandidatesOf(ctx, v.id);
+      assert.equal(raised.length, 1);
+      assert.equal(raised[0]?.origin, 'detected');
+      assert.equal(raised[0]?.direction, null);
+      assert.equal(raised[0]?.document_id, v.id);
+      assert.equal(raised[0]?.candidate_document_id, p.newer);
+      assert.equal(await publish(ctx, v.id), 'superseded_lineage', 'a repeated publish raises no second candidate');
+      assert.equal((await pendingCandidatesOf(ctx, v.id)).length, 1);
+
+      const listed = await rows(ctx.db, LIST_SQL, [ctx.admin, ctx.key, 100, 0]);
+      const entry = listed.find((item) => item.candidate_id === raised[0]?.id);
+      assert.equal(entry?.stale, false, 'the raised candidate can be decided');
+      assert.match(await failure(ctx.db, UNDO_SQL, [p.candidateId, ctx.admin]), /stale_candidate/, 'a later version of the retired lineage blocks the undo');
+    });
+
+    it('confirming the raised candidate with the new version as older keeps it retired; naming the current document as older reverses the link', async () => {
+      const keep = await confirmedPair(ctx, 'keep');
+      const v = await newVersion(ctx, keep.olderKey, 'keep-v2');
+      assert.equal(await publish(ctx, v.id), 'superseded_lineage');
+      const [cand] = await pendingCandidatesOf(ctx, v.id);
+      assert.match(await failure(ctx.db, CONFIRM_SQL, [cand?.id, ctx.admin]), /direction_required/);
+      const kept = (await rows(ctx.db, CONFIRM_OLDER_SQL, [cand?.id, ctx.admin, v.id]))[0] as Row;
+      assert.equal(kept.outcome, 'confirmed');
+      assert.equal((await docState(ctx, v.id)).is_current, false);
+      assert.equal((await docState(ctx, keep.newer)).is_current, true);
+      assert.equal(kept.link_id, (await links(ctx, keep.candidateId))[0]?.id, 'the existing link stands');
+      assert.deepEqual((await auditRows(ctx, v.id)).map((entry) => entry.action), ['confirm_supersession']);
+
+      const flip = await confirmedPair(ctx, 'flip');
+      const w = await newVersion(ctx, flip.olderKey, 'flip-v2');
+      assert.equal(await publish(ctx, w.id), 'superseded_lineage');
+      const [flipCand] = await pendingCandidatesOf(ctx, w.id);
+      const flipped = (await rows(ctx.db, CONFIRM_OLDER_SQL, [flipCand?.id, ctx.admin, flip.newer]))[0] as Row;
+      assert.equal(flipped.outcome, 'confirmed');
+      assert.equal(flipped.older_document_id, flip.newer);
+      const now = await docState(ctx, w.id);
+      assert.equal(now.is_current, true);
+      assert.equal(now.superseded_by, null);
+      assert.ok((await chunkStates(ctx, w.id)).every((chunk) => chunk.is_current === true));
+      const retired = await docState(ctx, flip.newer);
+      assert.equal(retired.is_current, false);
+      assert.equal(retired.superseded_by, w.id);
+      assert.equal((await links(ctx, flip.candidateId)).length, 0, 'the old link is removed');
+      const reversed = await links(ctx, String(flipCand?.id));
+      assert.equal(reversed.length, 1);
+      assert.equal(reversed[0]?.older_lineage_id, retired.lineage_id);
+      assert.equal(reversed[0]?.newer_lineage_id, now.lineage_id);
+      assert.deepEqual(await hybridDocuments(ctx, w.own), [w.id]);
+      assert.deepEqual(await hybridDocuments(ctx, flip.shared), []);
+    });
+
+    it('after undo a new version of the formerly superseded lineage publishes normally', async () => {
+      const p = await confirmedPair(ctx, 'undone');
+      await rows(ctx.db, UNDO_SQL, [p.candidateId, ctx.admin]);
+      const v = await newVersion(ctx, p.olderKey, 'undone-v2');
+      assert.equal(await publish(ctx, v.id), 'published');
+      assert.equal((await docState(ctx, v.id)).is_current, true);
+      const older = await docState(ctx, p.older);
+      assert.equal(older.is_current, false);
+      assert.equal(older.superseded_by, v.id, 'the DATA-07 swap within the lineage');
+      assert.equal((await pendingCandidatesOf(ctx, v.id)).length, 0);
+    });
+
+    it('a chain of links resolves to the newest current document', async () => {
+      const shared = next('tokchain');
+      const x = await currentDocument(ctx, 'chain-x', shared);
+      const y = await currentDocument(ctx, 'chain-y', shared);
+      const z = await currentDocument(ctx, 'chain-z', shared);
+      await rows(ctx.db, CONFIRM_SQL, [(await raise(ctx, y.id, x.id)).candidate_id, ctx.admin]);
+      await rows(ctx.db, CONFIRM_SQL, [(await raise(ctx, z.id, y.id)).candidate_id, ctx.admin]);
+      const v = await newVersion(ctx, x.sourceKey, 'chain-x2');
+      assert.equal(await publish(ctx, v.id), 'superseded_lineage');
+      assert.equal((await docState(ctx, v.id)).superseded_by, z.id);
+      assert.deepEqual(await hybridDocuments(ctx, shared), [z.id]);
+    });
+
+    it('the pending_review and held branches of 0803 still come first on a superseded lineage, and approval accepts superseded_lineage', async () => {
+      const p = await confirmedPair(ctx, 'holds');
+      const pending = await newVersion(ctx, p.olderKey, 'holds-pending');
+      assert.equal(await hold(ctx, pending.id), 'pending_review');
+      assert.equal(await publish(ctx, pending.id), 'pending_review');
+      assert.equal((await pendingCandidatesOf(ctx, pending.id)).length, 0, 'a held version raises nothing');
+
+      const approved = (await rows(ctx.db, APPROVE_SQL, [pending.id, ctx.admin]))[0] as Row;
+      assert.equal(approved.outcome, 'superseded_lineage');
+      const doc = await docState(ctx, pending.id);
+      assert.equal(doc.is_current, false);
+      assert.equal(doc.status, 'ready');
+      assert.equal(doc.superseded_by, p.newer);
+      assert.deepEqual(
+        (await rows(ctx.db, 'SELECT action FROM rag_admin_audit WHERE document_id = $1', [pending.id])).map((entry) => entry.action),
+        ['approve_upload'],
+      );
+      assert.equal((await pendingCandidatesOf(ctx, pending.id)).length, 1);
+
+      const held = await newVersion(ctx, p.olderKey, 'holds-batch');
+      await rows(ctx.db, `UPDATE documents SET metadata = COALESCE(metadata, '{}'::jsonb) || '{"publish_hold": {"batch_id": "b1"}}'::jsonb WHERE id = $1`, [held.id]);
+      assert.equal(await publish(ctx, held.id), 'held');
+      assert.equal((await docState(ctx, held.id)).status, 'processing');
+
+      const quarantined = await newVersion(ctx, p.olderKey, 'holds-quarantine');
+      await rows(ctx.db, "UPDATE documents SET status = 'quarantined' WHERE id = $1", [quarantined.id]);
+      assert.equal(await publish(ctx, quarantined.id), 'quarantined');
+    });
+
+    it('the purge hook removes the candidates and links of a purged lineage in that tenant only', async () => {
+      const p = await confirmedPair(ctx, 'purge');
+      const q = await pair(ctx, 'purge-other');
+      const kept = await raise(ctx, q.newer, q.older);
+      const older = await docState(ctx, p.older);
+      const removed = (await rows(ctx.db, PURGE_SQL, [ctx.key, older.lineage_id, [p.older]]))[0] as Row;
+      assert.equal(Number(removed.deleted), 2, 'one candidate and one link');
+      assert.equal((await rows(ctx.db, 'SELECT 1 FROM rag_supersession_candidates WHERE id = $1', [p.candidateId])).length, 0);
+      assert.equal((await links(ctx, p.candidateId)).length, 0);
+      assert.equal((await candidate(ctx, String(kept.candidate_id))).status, 'pending');
+      if (ctx.otherKey) {
+        const q2 = await docState(ctx, q.older);
+        const none = (await rows(ctx.db, PURGE_SQL, [ctx.otherKey, q2.lineage_id, [q.older]]))[0] as Row;
+        assert.equal(Number(none.deleted), 0, 'another tenant key removes nothing');
+        assert.equal((await candidate(ctx, String(kept.candidate_id))).status, 'pending');
+      }
+      assert.match(await failure(ctx.db, PURGE_SQL, ['not-a-key', older.lineage_id, []]), /malformed tenant key/);
+    });
+
+    it('confirm, undo and publish take the lineage advisory locks before touching documents (concurrency backstop)', async () => {
+      const defs = await rows(
+        ctx.db,
+        `SELECT p.proname AS name, pg_get_functiondef(p.oid) AS def FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+          WHERE n.nspname = 'public' AND p.proname IN ('rag_confirm_supersession', 'rag_undo_supersession', 'rag_publish_document_version', 'rag_supersession_lock_pair')`,
+      );
+      const def = (name: string): string => String(defs.find((row) => row.name === name)?.def ?? '');
+      for (const name of ['rag_confirm_supersession', 'rag_undo_supersession']) {
+        const body = def(name);
+        const lock = body.indexOf('rag_supersession_lock_pair(');
+        assert.ok(lock > 0, `${name} takes the pair locks`);
+        assert.ok(lock < body.indexOf('UPDATE public.documents'), `${name} locks before it changes a document`);
+      }
+      const pairLock = def('rag_supersession_lock_pair');
+      assert.ok(pairLock.indexOf('pg_advisory_xact_lock') < pairLock.indexOf('FOR UPDATE'), 'advisory locks first, then document rows');
+      assert.match(pairLock, /ORDER BY d\.id FOR UPDATE/);
+      const publishBody = def('rag_publish_document_version');
+      assert.ok(publishBody.indexOf('pg_advisory_xact_lock') < publishBody.indexOf('rag_supersession_links'), 'publish checks links under the lineage lock');
+      assert.ok(publishBody.indexOf("'held'") < publishBody.indexOf('rag_supersession_links'), 'the hold branches come before the link check');
+    });
+  });
+}
+
 describe('0806 migration file', () => {
   test('is one transaction that reloads the PostgREST schema', () => {
     assert.ok(fs.existsSync(path.join(REPO_ROOT, MIGRATION)), `${MIGRATION} exists`);
@@ -588,5 +790,13 @@ describe('0806 migration file', () => {
     assert.match(sql, /^BEGIN;$/m);
     assert.match(sql, /^COMMIT;$/m);
     assert.match(sql, /NOTIFY pgrst, 'reload schema';\s*$/);
+  });
+
+  test('does not define rag_release_quarantine (its newest body belongs to 0804) and says 0803 re-runs need 0806 again', () => {
+    assert.ok(fs.existsSync(path.join(REPO_ROOT, MIGRATION)), `${MIGRATION} exists`);
+    const sql = fs.readFileSync(path.join(REPO_ROOT, MIGRATION), 'utf8');
+    assert.doesNotMatch(sql, /FUNCTION public\.rag_release_quarantine/);
+    assert.match(sql, /0803/);
+    assert.match(sql, /re-run this file/i);
   });
 });
