@@ -1,7 +1,9 @@
 import type { ExtractedURL } from '@/lib/url-extractor';
+import type { QueryClassification } from '@/lib/query-classifier';
+import type { QueryPlan, RagRunRequest } from '@/lib/rag-eval/contracts.generated';
 import type { RetrievalFilterInput } from './backend/types';
 import type { VoiceResults } from './context/voice';
-import type { StageName, StageTimeouts } from './config';
+import type { QueryFramework, QueryTransformSwitches, SemanticCacheBackend, StageName, StageTimeouts } from './config';
 import type { TemporalQueryContext } from './query/temporal-query-detector';
 import type { RefusalRecord } from './refusal/types';
 import type { InjectionCheckMode } from './security/config';
@@ -149,10 +151,16 @@ export interface RetrievalOptions {
   embeddingProfile?: string;
 }
 
+export type QueryVariantKind = 'original' | 'condensed' | 'expanded' | 'hyde' | 'sub_question' | 'translated';
+
 export interface QueryVariant {
   text: string;
   language: string | null;
-  kind: 'original' | 'translated';
+  kind: QueryVariantKind;
+  /** Retrieval legs this variant searches; absent means every leg (Phase 4 behaviour). */
+  legs?: Array<'dense' | 'lexical'>;
+  /** sub_question variants only: the index into QueryPlan.sub_questions. */
+  subQuestionIndex?: number;
 }
 
 export interface RetrievalOverrides {
@@ -177,10 +185,28 @@ export interface RetrievalOverrides {
   chunkingProfileByDocType?: Record<string, string>;
 }
 
+export type QueryParamsOverrides = NonNullable<NonNullable<NonNullable<RagRunRequest['options']>['query_params']>>;
+
+/** D-38 eval-only query-layer overrides; ignored for every other profile. They can only narrow what the environment enables. */
+export interface QueryLayerOverrides {
+  enabled?: boolean;
+  framework?: QueryFramework;
+  transforms?: Partial<QueryTransformSwitches>;
+  semanticCache?: SemanticCacheBackend;
+  queryParams?: QueryParamsOverrides;
+}
+
 export interface StageOverrides {
   disabledStages?: StageName[];
   timeouts?: StageTimeouts;
   retrievalOverrides?: RetrievalOverrides;
+  queryLayer?: QueryLayerOverrides;
+}
+
+/** One earlier conversation turn, as sent in the request body (D-16). */
+export interface HistoryTurn {
+  role: 'user' | 'assistant';
+  content: string;
 }
 
 export interface RunRetrievalInput {
@@ -196,6 +222,12 @@ export interface RunRetrievalInput {
   queryVariants?: QueryVariant[];
   /** When absent the context is rendered exactly as without citations. */
   citationLabeler?: CitationLabeler;
+  /** Earlier turns of the conversation, oldest first; read only by the query layer (D-16). */
+  history?: HistoryTurn[];
+  /** The entry point's classifyQuery result; the pipeline never classifies again (D-09). */
+  classification?: QueryClassification;
+  /** The client's IANA time zone for relative dates (D-11); validated where it is used. */
+  timeZone?: string;
 }
 
 /** What the injection_check stage found and did for one request (ids and rule ids only, never text). */
@@ -256,4 +288,6 @@ export interface RetrievalResult {
   blocks?: ContextBlock[];
   /** Absent when RAG_INJECTION_CHECK is off or the stage did not run. */
   injection?: InjectionSummary;
+  /** The D-03 query plan; absent unless the query layer ran. */
+  queryPlan?: QueryPlan;
 }

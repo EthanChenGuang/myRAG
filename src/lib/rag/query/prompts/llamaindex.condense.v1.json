@@ -1,0 +1,8 @@
+{
+  "id": "llamaindex.condense",
+  "version": 1,
+  "source": "llamaindex: @llamaindex/core 0.6.23 prompts defaultCondenseQuestionPrompt (template variables chatHistory and question renamed to history and question)",
+  "license": "MIT (Copyright (c) LlamaIndex)",
+  "template": "Given a conversation (between Human and Assistant) and a follow up message from Human, rewrite the message to be a standalone question that captures all relevant context from the conversation.\n\n<Chat History>\n{{history}}\n\n<Follow Up Message>\n{{question}}\n\n<Standalone question>\n",
+  "placeholders": ["history", "question"]
+}

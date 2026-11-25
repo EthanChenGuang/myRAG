@@ -89,6 +89,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
   let voice: VoiceResults | null = null;
   let injection: InjectionSummary | undefined;
   let injectionStalled = false;
+  let queryPlan: RetrievalResult['queryPlan'] | null = null;
   const security = deps.securityConfig();
   if (security.injectionCheck !== 'off') warnInjectionCheckDisabled(config, security.injectionCheck);
 
@@ -104,6 +105,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
     });
     queryContext = query.queryContext;
     queryLanguage = query.queryLanguage;
+    queryPlan = query.queryLayer?.plan ?? null;
 
     const variantEmbeddings = requireValue(
       await runStage(
@@ -268,6 +270,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
     injection,
     injectionStalled,
     security,
+    queryPlan,
   });
 }
 

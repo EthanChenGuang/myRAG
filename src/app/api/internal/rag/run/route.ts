@@ -3,6 +3,7 @@ import type { ModelMessage } from 'ai';
 import { NextRequest, NextResponse } from 'next/server';
 import { env } from '@/lib/env';
 import { validateRequest } from '@/lib/api-middleware';
+import { classifyQuery } from '@/lib/query-classifier';
 import {
   CORE_STAGES,
   countTokens,
@@ -191,6 +192,13 @@ const EVAL_CLAUDE_FACTS: ClaudeTurnFacts = { mcp: false, multiStep: false, webSe
 
 const NO_CITATIONS: CitationRecord[] = [];
 
+/** D-38: the rewrites the query layer searched, in plan order; empty while the layer is off. */
+function queryTransformsOf(result: RetrievalResult): RagTrace['query_transforms'] {
+  const plan = result.queryPlan;
+  if (!plan) return [];
+  return (plan.variants ?? []).filter((variant) => variant.kind !== 'original').map((variant) => ({ kind: variant.kind, text: variant.text }));
+}
+
 interface CitationTraceFields {
   citations: CitationRecord[];
   citation_strategy: NonNullable<CitationSession['strategy']>;
@@ -280,6 +288,9 @@ export async function POST(req: NextRequest) {
 
   const stageOverrides = toStageOverrides(options);
   const collector = createTraceCollector({ profile: 'eval', tenantKey: scopeKey(scope) });
+  // D-16: the request conversation is the history; D-09: classified once at entry, and only while the query layer is on.
+  const history = (conversation ?? []).map((turn) => ({ role: turn.role, content: turn.content }));
+  const classification = env.RAG_QUERY_LAYER === 'true' ? classifyQuery(query) : undefined;
 
   try {
     const generatorModel = includeAnswer ? resolveGeneratorModel(options?.generator_model) : null;
@@ -315,6 +326,8 @@ export async function POST(req: NextRequest) {
       ...(stageOverrides ? { stageOverrides } : {}),
       ...(retrievalFilters ? { retrievalFilters } : {}),
       ...(citationSession?.labeler ? { citationLabeler: citationSession.labeler } : {}),
+      ...(history.length > 0 ? { history } : {}),
+      ...(classification ? { classification } : {}),
     });
 
     try {
@@ -405,7 +418,8 @@ export async function POST(req: NextRequest) {
         schema_version: 1 as const,
         item_id: itemId ?? null,
         query,
-        query_transforms: [],
+        query_transforms: queryTransformsOf(result),
+        query_plan: result.queryPlan ?? null,
         query_context: {
           is_financial_query: queryContext.isFinancialQuery,
           is_temporal_query: queryContext.isTemporalQuery,

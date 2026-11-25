@@ -24,7 +24,7 @@ export function buildQueryVariants(
   const variants: QueryVariant[] = [{ text: query, language, kind: 'original' }];
   const seen = new Set([textKey(query)]);
   const extras: QueryVariant[] = [
-    ...provided.filter((variant) => variant.kind === 'translated'),
+    ...provided.filter((variant) => variant.kind !== 'original'),
     ...translated.map((item): QueryVariant => ({ text: item.text, language: item.language, kind: 'translated' })),
   ];
   for (const variant of extras) {
@@ -32,7 +32,7 @@ export function buildQueryVariants(
     const key = textKey(variant.text);
     if (key === '' || seen.has(key)) continue;
     seen.add(key);
-    variants.push({ text: variant.text.trim(), language: variant.language, kind: 'translated' });
+    variants.push({ ...variant, text: variant.text.trim() });
   }
   return variants;
 }
