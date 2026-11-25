@@ -33,7 +33,7 @@ function messageOf(error: unknown): string {
 
 let sequence = 0;
 
-describe('recaption (rag:reembed --recaption, migration 0812)', () => {
+describe('recaption (rag:reembed --recaption, migration 0813)', () => {
   let fixture: TwoTenantDatabase;
   let edge: import('../../eval/harness/fake-edge.mts').FakeEdge;
   let recaption: typeof import('@/lib/rag/ingest/reembed/recaption');

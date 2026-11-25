@@ -1,4 +1,4 @@
--- 0812: caption languages and the recaption run (plan 03.2-33; D-23, D-24; XLG-06). Phase 3.2 gap-closure number: 0801-0811 are assigned.
+-- 0813: caption languages and the recaption run (plan 03.2-33; D-23, D-24; XLG-06). Phase 3.2 gap-closure number: 0801-0811 are assigned, 0812 is 03.2-22.
 -- rag_set_image_chunk_languages: under RAG_CAPTION_LANGUAGE=document the write stage stores, per picture caption of a version, the language
 -- detected on the caption as written. The chunk writers copy the document language onto every chunk; this function then sets language and
 -- metadata.language of the version's image chunks named by image URL. Nothing calls it with the switch at en. A later rag_set_document_fields
