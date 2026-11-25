@@ -56,6 +56,19 @@ for (const mode of ['multi-tenant', 'single-tenant'] as MigrationMode[]) {
       }
     });
 
+    test('the folded setup file alone leaves every public SECURITY DEFINER function with a fixed search_path', async () => {
+      const fixture = await createEmptyFixtureDatabase({ deploymentMode: mode, migrations: false });
+      try {
+        const { total, missing } = await definersWithoutSearchPath(fixture.db);
+        assert.ok(total > 60, `expected the full SECURITY DEFINER inventory, saw ${total}`);
+        const ledger = await fixture.db.query<{ n: number }>("SELECT count(*)::int AS n FROM pg_proc WHERE proname = 'rag_claim_ingestion_jobs' AND prosecdef");
+        assert.equal(ledger.rows[0]?.n, 1, 'the Phase 3.1 definers are in the setup file');
+        assert.deepEqual(missing, []);
+      } finally {
+        await fixture.db.close();
+      }
+    });
+
     test('0411 fixes an upgraded database whose functions have no search_path, and re-applies cleanly', async () => {
       const fixture = await createEmptyFixtureDatabase({ deploymentMode: mode, migrations: false });
       try {

@@ -74,6 +74,9 @@
     <script src="rag-panels/quarantine.js"></script>
     <script src="rag-panels/embedding-profiles.js"></script>
     <script src="rag-panels/ingestion.js"></script>
+    <script src="rag-panels/chunking-validate.js"></script>
+    <script src="rag-panels/chunking-profiles.js"></script>
+    <script src="rag-panels/refusal-calibration.js"></script>
 
     <style>
         /* Tab content visibility */
@@ -6430,15 +6433,16 @@
                                         <p class="text-base-content/70 mb-4">Selects the retrieval pipeline and its per-stage controls. Leave the defaults to keep the current behaviour.</p>
 
                                         <div class="form-control mb-4">
-                                            <label class="label">
+                                            <label class="label" for="RAG_PIPELINE">
                                                 <span class="label-text">Pipeline</span>
                                             </label>
-                                            <select id="RAG_PIPELINE" class="select select-bordered w-full">
+                                            <select id="RAG_PIPELINE" name="RAG_PIPELINE" class="select select-bordered w-full" translate="no"
+                                                aria-describedby="rag-pipeline-help">
                                                 <option value="legacy" selected>legacy</option>
                                                 <option value="v2">v2</option>
                                             </select>
                                             <label class="label">
-                                                <span class="label-text-alt">legacy keeps the current retrieval path; v2 uses the Phase 4 staged pipeline (switches below).</span>
+                                                <span class="label-text-alt" id="rag-pipeline-help"><span translate="no">legacy</span> keeps the current retrieval path; <span translate="no">v2</span> uses the Phase 4 staged pipeline (switches below).</span>
                                             </label>
                                         </div>
 
@@ -6467,16 +6471,16 @@
                                         </div>
 
                                         <div class="border border-base-300 rounded-lg p-4 mb-4 space-y-4">
-                                            <h4 class="font-semibold text-sm">Phase 4 retrieval switches (off = current behaviour)</h4>
+                                            <h4 class="font-semibold text-sm text-balance">Phase 4 retrieval switches (off = current behaviour)</h4>
                                             <div class="form-control">
                                                 <label class="flex items-center gap-2 cursor-pointer">
-                                                    <input type="checkbox" id="RAG_LEXICAL_SEARCH" class="checkbox checkbox-primary">
-                                                    <span class="label-text">Lexical search leg (RAG_LEXICAL_SEARCH)</span>
+                                                    <input type="checkbox" id="RAG_LEXICAL_SEARCH" name="RAG_LEXICAL_SEARCH" class="checkbox checkbox-primary">
+                                                    <span class="label-text">Lexical search leg (<span translate="no">RAG_LEXICAL_SEARCH</span>)</span>
                                                 </label>
                                             </div>
                                             <div class="form-control">
-                                                <label class="label"><span class="label-text">Reranker</span></label>
-                                                <select id="RAG_RERANKER" class="select select-bordered w-full">
+                                                <label class="label" for="RAG_RERANKER"><span class="label-text">Reranker</span></label>
+                                                <select id="RAG_RERANKER" name="RAG_RERANKER" translate="no" class="select select-bordered w-full">
                                                     <option value="none" selected>none</option>
                                                     <option value="cohere">cohere</option>
                                                     <option value="voyage">voyage</option>
@@ -6485,87 +6489,94 @@
                                             </div>
                                             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                 <div class="form-control">
-                                                    <label class="label"><span class="label-text">Chat rerank tier</span></label>
-                                                    <select id="RAG_RERANK_TIER_CHAT" class="select select-bordered w-full">
+                                                    <label class="label" for="RAG_RERANK_TIER_CHAT"><span class="label-text">Chat rerank tier</span></label>
+                                                    <select id="RAG_RERANK_TIER_CHAT" name="RAG_RERANK_TIER_CHAT" translate="no" class="select select-bordered w-full">
                                                         <option value="quality" selected>quality</option>
                                                         <option value="fast">fast</option>
                                                     </select>
                                                 </div>
                                                 <div class="form-control">
-                                                    <label class="label"><span class="label-text">Voice rerank tier</span></label>
-                                                    <select id="RAG_RERANK_TIER_VOICE" class="select select-bordered w-full">
+                                                    <label class="label" for="RAG_RERANK_TIER_VOICE"><span class="label-text">Voice rerank tier</span></label>
+                                                    <select id="RAG_RERANK_TIER_VOICE" name="RAG_RERANK_TIER_VOICE" translate="no" class="select select-bordered w-full">
                                                         <option value="quality">quality</option>
                                                         <option value="fast" selected>fast</option>
                                                     </select>
                                                 </div>
                                             </div>
                                             <div class="form-control">
-                                                <label class="label"><span class="label-text">Voyage rerank model by language</span></label>
-                                                <input type="text" id="RAG_RERANK_VOYAGE_MODEL_BY_LANG" placeholder="zh=rerank-2.5"
+                                                <label class="label" for="RAG_RERANK_VOYAGE_MODEL_BY_LANG"><span class="label-text">Voyage rerank model by language</span></label>
+                                                <input type="text" id="RAG_RERANK_VOYAGE_MODEL_BY_LANG" name="RAG_RERANK_VOYAGE_MODEL_BY_LANG" placeholder="zh=rerank-2.5…"
+                                                    autocomplete="off" spellcheck="false" translate="no" aria-describedby="rag-rerank-voyage-model-help"
                                                     class="input input-bordered w-full">
-                                                <label class="label"><span class="label-text-alt">Per-language model override decided by eval, for example zh=rerank-2.5</span></label>
+                                                <label class="label"><span class="label-text-alt" id="rag-rerank-voyage-model-help">Per-language model override decided by eval, for example <span translate="no">zh=rerank-2.5</span></span></label>
                                             </div>
                                             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                 <div class="form-control">
-                                                    <label class="label"><span class="label-text">Cohere API key</span></label>
+                                                    <label class="label" for="COHERE_API_KEY"><span class="label-text">Cohere API key</span></label>
                                                     <div class="flex gap-2">
-                                                        <input type="password" id="COHERE_API_KEY" placeholder="Empty until configured"
-                                                            class="input input-bordered flex-1 w-full">
-                                                        <button class="btn btn-square btn-outline" data-for="COHERE_API_KEY">👁️</button>
+                                                        <input type="password" id="COHERE_API_KEY" name="COHERE_API_KEY" placeholder="Paste your Cohere API key…"
+                                                            autocomplete="off" spellcheck="false" class="input input-bordered flex-1 w-full min-w-0">
+                                                        <button type="button" class="btn btn-square btn-outline" data-for="COHERE_API_KEY" aria-label="Show or hide the Cohere API key">👁️</button>
                                                     </div>
                                                 </div>
                                                 <div class="form-control">
-                                                    <label class="label"><span class="label-text">Cohere base URL</span></label>
-                                                    <input type="text" id="COHERE_BASE_URL" placeholder="https://api.cohere.com"
-                                                        class="input input-bordered w-full">
+                                                    <label class="label" for="COHERE_BASE_URL"><span class="label-text">Cohere base URL</span></label>
+                                                    <input type="url" id="COHERE_BASE_URL" name="COHERE_BASE_URL" placeholder="https://api.cohere.com"
+                                                        autocomplete="off" spellcheck="false" translate="no" class="input input-bordered w-full">
                                                 </div>
                                             </div>
                                             <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                                <div class="flex flex-col gap-1">
+                                                    <label class="flex items-center gap-2 cursor-pointer">
+                                                        <input type="checkbox" id="RAG_REFUSAL_THRESHOLD" name="RAG_REFUSAL_THRESHOLD" class="checkbox checkbox-primary">
+                                                        <span class="label-text">Threshold refusal</span>
+                                                    </label>
+                                                    <div class="flex flex-wrap items-center gap-x-2 pl-8">
+                                                        <span class="label-text-alt text-base-content/70" data-refusal-pointer-text>Calibration status and warnings are under RAG administration, Refusal calibration.</span>
+                                                        <button type="button" class="btn btn-link btn-xs px-0" data-refusal-pointer>Open refusal calibration</button>
+                                                    </div>
+                                                </div>
                                                 <label class="flex items-center gap-2 cursor-pointer">
-                                                    <input type="checkbox" id="RAG_REFUSAL_THRESHOLD" class="checkbox checkbox-primary">
-                                                    <span class="label-text">Threshold refusal</span>
-                                                </label>
-                                                <label class="flex items-center gap-2 cursor-pointer">
-                                                    <input type="checkbox" id="RAG_CONTEXT_EDGE_ORDER" class="checkbox checkbox-primary">
+                                                    <input type="checkbox" id="RAG_CONTEXT_EDGE_ORDER" name="RAG_CONTEXT_EDGE_ORDER" class="checkbox checkbox-primary">
                                                     <span class="label-text">Context edge order</span>
                                                 </label>
                                                 <label class="flex items-center gap-2 cursor-pointer">
-                                                    <input type="checkbox" id="RAG_CONTEXT_COMPRESSION" class="checkbox checkbox-primary">
+                                                    <input type="checkbox" id="RAG_CONTEXT_COMPRESSION" name="RAG_CONTEXT_COMPRESSION" class="checkbox checkbox-primary">
                                                     <span class="label-text">Context compression</span>
                                                 </label>
                                                 <label class="flex items-center gap-2 cursor-pointer">
-                                                    <input type="checkbox" id="RAG_PARENT_CHILD" class="checkbox checkbox-primary">
+                                                    <input type="checkbox" id="RAG_PARENT_CHILD" name="RAG_PARENT_CHILD" class="checkbox checkbox-primary">
                                                     <span class="label-text">Parent-child expansion</span>
                                                 </label>
                                                 <label class="flex items-center gap-2 cursor-pointer">
-                                                    <input type="checkbox" id="RAG_LEXICAL_TRANSLATION" class="checkbox checkbox-primary">
+                                                    <input type="checkbox" id="RAG_LEXICAL_TRANSLATION" name="RAG_LEXICAL_TRANSLATION" class="checkbox checkbox-primary">
                                                     <span class="label-text">Lexical query translation</span>
                                                 </label>
                                             </div>
                                             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                 <div class="form-control">
-                                                    <label class="label"><span class="label-text">Context token budget</span></label>
-                                                    <input type="number" min="0" id="RAG_CONTEXT_TOKEN_BUDGET" placeholder="6000"
-                                                        class="input input-bordered w-full">
+                                                    <label class="label" for="RAG_CONTEXT_TOKEN_BUDGET"><span class="label-text">Context token budget</span></label>
+                                                    <input type="number" min="0" id="RAG_CONTEXT_TOKEN_BUDGET" name="RAG_CONTEXT_TOKEN_BUDGET" placeholder="6000"
+                                                        inputmode="numeric" autocomplete="off" class="input input-bordered w-full">
                                                 </div>
                                                 <div class="form-control">
-                                                    <label class="label"><span class="label-text">Exact-scan row cutoff</span></label>
-                                                    <input type="number" min="0" id="RAG_EXACT_SCAN_CUTOFF" placeholder="0"
-                                                        class="input input-bordered w-full">
+                                                    <label class="label" for="RAG_EXACT_SCAN_CUTOFF"><span class="label-text">Exact-scan row cutoff</span></label>
+                                                    <input type="number" min="0" id="RAG_EXACT_SCAN_CUTOFF" name="RAG_EXACT_SCAN_CUTOFF" placeholder="0"
+                                                        inputmode="numeric" autocomplete="off" class="input input-bordered w-full">
                                                 </div>
                                             </div>
                                             <div class="form-control">
-                                                <label class="label"><span class="label-text">HNSW iterative scan</span></label>
-                                                <select id="RAG_HNSW_ITERATIVE_SCAN" class="select select-bordered w-full max-w-xs">
+                                                <label class="label" for="RAG_HNSW_ITERATIVE_SCAN"><span class="label-text">HNSW iterative scan</span></label>
+                                                <select id="RAG_HNSW_ITERATIVE_SCAN" name="RAG_HNSW_ITERATIVE_SCAN" translate="no" class="select select-bordered w-full max-w-xs">
                                                     <option value="off" selected>off</option>
                                                     <option value="relaxed_order">relaxed_order</option>
                                                     <option value="strict_order">strict_order</option>
                                                 </select>
                                             </div>
                                             <div class="form-control">
-                                                <label class="label"><span class="label-text">Retrieval params override (emergency)</span></label>
-                                                <input type="text" id="RAG_RETRIEVAL_PARAMS_OVERRIDE" placeholder="pool=50,cap=60,topk=10"
-                                                    class="input input-bordered w-full">
+                                                <label class="label" for="RAG_RETRIEVAL_PARAMS_OVERRIDE"><span class="label-text">Retrieval params override (emergency)</span></label>
+                                                <input type="text" id="RAG_RETRIEVAL_PARAMS_OVERRIDE" name="RAG_RETRIEVAL_PARAMS_OVERRIDE" placeholder="pool=50,cap=60,topk=10…"
+                                                    autocomplete="off" spellcheck="false" translate="no" class="input input-bordered w-full">
                                             </div>
                                         </div>
 
@@ -6950,7 +6961,7 @@
                                                     <label class="flex items-center gap-2 cursor-pointer">
                                                         <input type="checkbox" id="RAG_RERANKING"
                                                             class="checkbox checkbox-primary" checked>
-                                                        <span class="label-text">Result Re-ranking <span class="text-xs opacity-70">(legacy, not read by RAG_PIPELINE=v2)</span></span>
+                                                        <span class="label-text">Result Re-ranking <span class="text-xs opacity-70">(legacy, not read by <span translate="no">RAG_PIPELINE=v2</span>)</span></span>
                                                     </label>
 
                                                     <!-- Cache Results -->
@@ -6964,7 +6975,7 @@
                                                     <label class="flex items-center gap-2 cursor-pointer">
                                                         <input type="checkbox" id="RAG_ENABLE_HYBRID_SEARCH"
                                                             class="checkbox checkbox-primary">
-                                                        <span class="label-text">Hybrid Search (Semantic + Keyword) ⭐ <span class="text-xs opacity-70">(legacy, not read by RAG_PIPELINE=v2)</span></span>
+                                                        <span class="label-text">Hybrid Search (Semantic + Keyword) ⭐ <span class="text-xs opacity-70">(legacy, not read by <span translate="no">RAG_PIPELINE=v2</span>)</span></span>
                                                     </label>
 
                                                     <!-- Frontend Reranking Enabled -->
@@ -6989,7 +7000,7 @@
                                                     </select>
                                                     <label class="label">
                                                         <span class="label-text-alt text-base-content/70">How search
-                                                            results are re-ranked after retrieval <span class="opacity-70">(legacy, not read by RAG_PIPELINE=v2)</span></span>
+                                                            results are re-ranked after retrieval <span class="opacity-70">(legacy, not read by <span translate="no">RAG_PIPELINE=v2</span>)</span></span>
                                                     </label>
                                                 </div>
                                             </div>
@@ -7084,7 +7095,7 @@
                                                     <label class="flex items-center gap-2 cursor-pointer">
                                                         <input type="checkbox" id="RAG_TEMPORAL_MATCHING"
                                                             class="checkbox checkbox-success">
-                                                        <span class="label-text">Require Temporal Matching <span class="text-xs opacity-70">(legacy, not read by RAG_PIPELINE=v2)</span></span>
+                                                        <span class="label-text">Require Temporal Matching <span class="text-xs opacity-70">(legacy, not read by <span translate="no">RAG_PIPELINE=v2</span>)</span></span>
                                                     </label>
                                                 </div>
                                             </div>
@@ -8518,7 +8529,7 @@
                         <div class="card bg-base-100 shadow-lg">
                             <div class="card-body p-4 lg:p-6">
                                 <h2 class="card-title text-xl lg:text-2xl text-myrag-primary mb-2">🛡️ RAG Administration</h2>
-                                <p class="text-base-content/70 mb-6">Manage document-type defaults, ingestion jobs, quarantined uploads, and embedding profiles using your existing admin session.</p>
+                                <p class="text-base-content/70 mb-6">Manage document-type defaults, ingestion jobs, quarantined uploads, embedding and chunking profiles, and check refusal calibration, using your existing admin session.</p>
 
                                 <div class="grid gap-6">
                                     <section id="rag-administration-doc-types" class="card bg-base-200 shadow-md">
@@ -8765,6 +8776,26 @@
                                                 <button type="button" class="btn btn-outline btn-sm" data-rag-profiles-rollback>Rollback active profile</button>
                                             </div>
                                             <div data-rag-profiles-list></div>
+                                        </div>
+                                    </section>
+
+                                    <section id="rag-administration-chunking" class="card bg-base-200 shadow-md min-w-0" aria-labelledby="rag-chunking-title">
+                                        <div class="card-body">
+                                            <h3 id="rag-chunking-title" class="text-lg font-semibold mb-2" data-chunking-title>Chunking profiles</h3>
+                                            <p class="text-sm text-base-content/70 mb-4 max-w-prose" data-chunking-description>Chunk sizes per document type. Build a new profile next to the current one, compare it in the sweep report, then activate it. Applies to every workspace in this deployment.</p>
+                                            <div data-chunking-alert class="mb-4 empty:mb-0"></div>
+                                            <div data-chunking-content></div>
+                                            <div data-chunking-status class="text-sm mt-4" role="status" aria-live="polite"></div>
+                                        </div>
+                                    </section>
+
+                                    <section id="rag-administration-refusal" class="card bg-base-200 shadow-md min-w-0 scroll-mt-4" aria-labelledby="rag-refusal-title">
+                                        <div class="card-body">
+                                            <h3 id="rag-refusal-title" class="text-lg font-semibold mb-2 rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" tabindex="-1" data-refusal-title>Refusal calibration</h3>
+                                            <p class="text-sm text-base-content/70 mb-4 max-w-prose" data-refusal-description>Read-only. Shows which refusal thresholds the app can use and how they scored when they were calibrated. Thresholds change only through the calibration tool and a pull request. Applies to every workspace in this deployment.</p>
+                                            <div data-refusal-alert class="mb-4 empty:mb-0"></div>
+                                            <div data-refusal-content></div>
+                                            <div data-refusal-status class="text-sm mt-4" role="status" aria-live="polite"></div>
                                         </div>
                                     </section>
                                 </div>

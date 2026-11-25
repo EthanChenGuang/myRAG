@@ -639,7 +639,7 @@ describe('rechunk job (src/lib/rag/ingest/rechunk)', () => {
     assert.equal(functions.length, 9);
     for (const fn of functions) {
       assert.equal(fn.definer, true, String(fn.signature));
-      assert.match(String(fn.config), /search_path=pg_catalog, public/, String(fn.signature));
+      assert.match(String(fn.config), /search_path=\\"\\"/, String(fn.signature));
       assert.deepEqual([fn.anon, fn.authenticated, fn.service_role], [false, false, true], String(fn.signature));
     }
     for (const table of ['chunking_build_runs', 'chunking_build_gaps']) {

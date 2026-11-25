@@ -21,7 +21,7 @@ Execution note for wave 1: 04-05, 04-06 and 04-07 share no file, but each runs t
 | 11 | 04-34, 04-40 | Admin routes (chunking profiles, report, refusal status); final D-28 comparison tool and run |
 | 12 | 04-36, 04-46 | Config UI panels (chunking profiles, refusal calibration); gap closure for 04-40 rule (b) (refusal at matched false refusal, paired category rule) |
 | 13 | 04-42 | Fold migrations into setup files, full gates with defaults, AGENTS.md |
-| 14 | 04-43 | Live verification checkpoints (autonomous: false) |
+| 14 | 04-43, 04-47 | Live verification checkpoints (autonomous: false); gap closure for 04-VERIFICATION (search_path '' migration 0425 folded after 0424, frontend design gate scoped to UI plans, 04-02 design record) |
 
 ## Requirement coverage
 
@@ -30,7 +30,7 @@ Execution note for wave 1: 04-05, 04-06 and 04-07 share no file, but each runs t
 | RET-01 | 04-01, 04-17, 04-19, 04-40, 04-41, 04-42 |
 | RET-02 | 04-06, 04-11, 04-15, 04-17, 04-19, 04-29, 04-40, 04-42 |
 | RET-03 | 04-03, 04-06, 04-15, 04-16, 04-17, 04-40, 04-42, 04-43 |
-| RET-04 | 04-01, 04-05, 04-07, 04-15, 04-17, 04-41, 04-42, 04-43 |
+| RET-04 | 04-01, 04-05, 04-07, 04-15, 04-17, 04-41, 04-42, 04-43, 04-47 |
 | RET-10 | 04-02, 04-04, 04-15, 04-18, 04-26, 04-37, 04-40, 04-42, 04-43 |
 | DATA-08 | 04-02, 04-04, 04-14, 04-15, 04-17, 04-20, 04-21, 04-29, 04-37, 04-41, 04-42 |
 | RNK-01 | 04-09, 04-10, 04-23, 04-40, 04-42, 04-43, 04-45 |
@@ -40,7 +40,7 @@ Execution note for wave 1: 04-05, 04-06 and 04-07 share no file, but each runs t
 | RNK-05 | 04-04, 04-08, 04-13, 04-20, 04-21, 04-26, 04-30, 04-34, 04-36, 04-38, 04-39, 04-40, 04-42, 04-43, 04-46 |
 | RNK-06 | 04-02, 04-09, 04-13, 04-23, 04-26, 04-42 |
 | CHK-03 | 04-07, 04-27, 04-31, 04-33, 04-35, 04-38, 04-40, 04-41, 04-42 |
-| CHK-04 | 04-04, 04-07, 04-31, 04-32, 04-33, 04-34, 04-35, 04-36, 04-42, 04-43 |
+| CHK-04 | 04-04, 04-07, 04-31, 04-32, 04-33, 04-34, 04-35, 04-36, 04-42, 04-43, 04-47 |
 | CHK-05 | 04-04, 04-26, 04-34, 04-35, 04-36, 04-42, 04-43 |
 | LAT-01 | 04-08, 04-11, 04-19, 04-24, 04-25, 04-28, 04-39, 04-42, 04-44 |
 | LAT-02 | 04-02, 04-23, 04-26, 04-28, 04-40, 04-42, 04-43, 04-44, 04-45 |
@@ -117,3 +117,4 @@ Deferred ideas (filter UI, stemming, MMR, removing legacy voice heuristics, per-
 ## Gap closure
 
 - 04-46 (2026-11-25, `gap_closure: true`, depends on 04-40): 04-40 rule (b) failed on measurement, not on production logic (`.planning/debug/04-40-rule-b.md`). Correct refusal is compared at matched false refusal (research D-28 row), category slices count as drops only with paired support, and the strict refusal gain stays open for 04-43. Touches only the eval comparison tool, its tests, the regenerated report and 04-CONTEXT.md; shares no file with 04-36.
+- 04-47 (2026-11-25, `gap_closure: true`, depends on 04-42; base also merges 03.1-52): closes both 04-VERIFICATION gaps. Migration 0425 (next free number after 0424 on every branch) gives every public SECURITY DEFINER function, every trigger function and every function created from 0301 on `SET search_path = ''` with schema-qualified bodies and is folded after the 0420-0424 section; the frontend design gate checks only UI plans, 04-02 gets its Design skills record and its Config UI controls the web-design-guidelines fixes. Shares no file with 04-43.
