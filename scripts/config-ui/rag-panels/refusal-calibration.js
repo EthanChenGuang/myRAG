@@ -903,7 +903,7 @@ class RefusalCalibrationPanel {
       if (row.stale) badges.appendChild(refusalEl('span', { cls: 'badge badge-warning badge-outline badge-sm h-auto whitespace-nowrap', text: row.staleLabel }));
       tbody.appendChild(
         refusalEl('tr', null, [
-          refusalEl('th', { cls: 'font-normal align-top min-w-32', attrs: { scope: 'row' } }, [
+          refusalEl('th', { cls: 'font-normal align-top min-w-40', attrs: { scope: 'row' } }, [
             refusalEl('div', { cls: 'text-sm', text: row.provider }),
             refusalEl('div', { cls: 'font-mono text-xs break-all', text: row.model, attrs: { translate: 'no' } }),
           ]),
