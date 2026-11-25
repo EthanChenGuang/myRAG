@@ -22,6 +22,7 @@
     "test-rag": "tsx eval/harness/run-smoke.mts",
     "typecheck:new": "node scripts/typecheck-new.mjs",
     "eval:baseline": "uv run --directory eval python -m rag_eval.baseline record --runs 3 --out eval/baselines/fixture-baseline.json",
+    "eval:parse-gate": "uv run --directory eval --frozen python -m rag_eval.parse_gate --spec eval/config/phase31-parse-gate.json --out eval/reports/phase-03.1",
     "gen:schemas": "uv run --project rag-sidecar python -m rag_sidecar.export_schemas && node scripts/gen-zod.mjs",
     "db:push": "echo 'Use Supabase dashboard to manage schema'",
     "db:seed": "echo 'No seed script configured yet'"

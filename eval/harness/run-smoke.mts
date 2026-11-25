@@ -115,6 +115,7 @@ async function main(): Promise<number> {
   const baselinePath = path.resolve(values.baseline ?? DEFAULT_BASELINES[fixtureMode]);
 
   const outDir = path.resolve(values.out as string);
+  if (ingestRouting) ingestRouting.ledgerOut = path.join(outDir, 'ingest-ledger.json');
   // Ingest mode scores the golden files it names itself unless --golden says otherwise, so its ingest-only items need no change here.
   const defaultGolden = fixtureMode === 'ingest' ? ingestModeGoldenPaths() : [DEFAULT_GOLDEN];
   const goldenFiles = values.golden !== undefined ? [path.resolve(values.golden)] : defaultGolden.map((file) => path.resolve(REPO_ROOT, file));

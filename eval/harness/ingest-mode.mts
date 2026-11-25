@@ -48,6 +48,8 @@ export interface IngestRoutingOptions {
   routing: IngestRouting;
   /** Pins every page to this tier through rag_parse_tier_overrides (min = max); needs tiered routing. */
   forceTier?: ForcedTier;
+  /** When set, the ledger row of every queued job is written here as JSON (the parse gate reads tiers and pages from it). */
+  ledgerOut?: string;
 }
 
 const ROUTINGS: readonly IngestRouting[] = ['fixed', 'tiered'];
@@ -177,6 +179,23 @@ export interface IngestRoutingSummary {
   llamaUploads: number;
   /** Documents a forced tier could not publish (job needs_review), with the reason. */
   needsReview: Array<{ filename: string; reason: string }>;
+  /** The ledger row of every queued job, with the page count the harness knows for a PDF (fixed routing records none). */
+  ledger: IngestLedgerRow[];
+}
+
+/** What the parse gate reads from a queued job's ledger row (D-40). */
+export interface IngestLedgerRow {
+  filename: string;
+  mime_type: string | null;
+  status: string;
+  doc_class: string | null;
+  tier: string | null;
+  pages: number | null;
+  harness_page_count: number | null;
+  tier_page_counts: Record<string, number>;
+  page_ranges: unknown[];
+  est_cost_usd: number | null;
+  attempts: unknown[];
 }
 
 function writeRecordedPage(root: string, sha: string, preset: string, page: number, source: string): void {
@@ -478,6 +497,13 @@ export async function buildIngestFixtureDatabase(options: {
       for (const item of parseWork()) await run(item);
     }
     routingSummary = queuedSummary?.();
+    if (routing?.ledgerOut && routingSummary) {
+      fs.mkdirSync(path.dirname(routing.ledgerOut), { recursive: true });
+      fs.writeFileSync(
+        routing.ledgerOut,
+        `${JSON.stringify({ routing: routingSummary.routing, force_tier: routingSummary.forceTier, jobs: routingSummary.ledger }, null, 2)}\n`,
+      );
+    }
 
     sidecarUploads = fakes.sidecar.uploads.map((upload) => ({
       fileSha256: upload.fileSha256,
@@ -614,6 +640,7 @@ async function startQueuedIngest(options: {
   const serviceKey = fixtureProcessEnv(edge.url).SUPABASE_SERVICE_ROLE_KEY as string;
   let jobs = 0;
   const needsReview: IngestRoutingSummary['needsReview'] = [];
+  const ledger: IngestLedgerRow[] = [];
 
   async function run(item: IngestWork): Promise<void> {
     const queued = await enqueueIngest(item.input, { queueConfig });
@@ -648,8 +675,14 @@ async function startQueuedIngest(options: {
     }
     const [document] = (await options.pg.query<{ status: string }>('SELECT status FROM documents WHERE id = $1', [queued.documentId])).rows;
     const [job] = (
-      await options.pg.query<Record<string, unknown>>('SELECT status, error_class, error, needs_review_reason FROM ingestion_jobs WHERE id = $1', [queued.jobId])
+      await options.pg.query<Record<string, unknown>>(
+        `SELECT status, error_class, error, needs_review_reason, filename, mime_type, doc_class, tier, pages, tier_page_counts, page_ranges,
+                est_cost_usd, attempts
+           FROM ingestion_jobs WHERE id = $1`,
+        [queued.jobId],
+      )
     ).rows;
+    if (job && queued.status === 'queued') ledger.push(ledgerRowOf(job, item));
     // The ledger's terminal transition (0353) sets a quarantined job's unpublished document to failed rather than quarantined (logged
     // in deferred-items.md); either way it stays out of retrieval, so the job status is what says the injection scan held it.
     const status = item.expected === 'quarantined' && job?.status === 'quarantined' && document?.status !== 'ready' ? 'quarantined' : (document?.status ?? 'missing');
@@ -666,6 +699,40 @@ async function startQueuedIngest(options: {
 
   return {
     run,
-    summary: () => ({ routing: routing.routing, forceTier: routing.forceTier ?? null, jobs, llamaUploads: llama.uploads.length, needsReview: [...needsReview] }),
+    summary: () => ({
+      routing: routing.routing,
+      forceTier: routing.forceTier ?? null,
+      jobs,
+      llamaUploads: llama.uploads.length,
+      needsReview: [...needsReview],
+      ledger: [...ledger],
+    }),
+  };
+}
+
+function numberOrNull(value: unknown): number | null {
+  const parsed = typeof value === 'number' ? value : typeof value === 'string' && value.trim() !== '' ? Number(value) : Number.NaN;
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function ledgerRowOf(job: Record<string, unknown>, item: IngestWork): IngestLedgerRow {
+  const counts: Record<string, number> = {};
+  const raw = job.tier_page_counts && typeof job.tier_page_counts === 'object' ? (job.tier_page_counts as Record<string, unknown>) : {};
+  for (const [tier, value] of Object.entries(raw)) {
+    const count = numberOrNull(value);
+    if (count !== null) counts[tier] = count;
+  }
+  return {
+    filename: String(job.filename ?? item.input.filename),
+    mime_type: typeof job.mime_type === 'string' ? job.mime_type : null,
+    status: String(job.status),
+    doc_class: typeof job.doc_class === 'string' ? job.doc_class : null,
+    tier: typeof job.tier === 'string' ? job.tier : null,
+    pages: numberOrNull(job.pages),
+    harness_page_count: item.pageCount ?? null,
+    tier_page_counts: counts,
+    page_ranges: Array.isArray(job.page_ranges) ? job.page_ranges : [],
+    est_cost_usd: numberOrNull(job.est_cost_usd),
+    attempts: Array.isArray(job.attempts) ? job.attempts : [],
   };
 }
