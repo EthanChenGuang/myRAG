@@ -21,6 +21,9 @@ from rag_sidecar.contracts import (
     GateResult,
     GoldenItem,
     GoldenSplitManifest,
+    InjectionClassifyRequest,
+    InjectionClassifyResponse,
+    InjectionDetectorConfig,
     InjectionRuleSet,
     InvoiceExtractRequest,
     InvoiceFields,
@@ -141,6 +144,9 @@ CONTRACTS: list[tuple[type[BaseModel], Mode]] = [
     (GroundednessThresholds, "serialization"),
     (AnswerFeedbackRequest, "validation"),
     (AnswerRecord, "serialization"),
+    (InjectionClassifyRequest, "validation"),
+    (InjectionClassifyResponse, "serialization"),
+    (InjectionDetectorConfig, "validation"),
 ]
 
 
