@@ -23,6 +23,9 @@ export interface NormalizeDatesOptions {
   timeZone?: string | null;
 }
 
+/** 最近 / recently / di recente: the last 90 days, today included. */
+export const RECENT_DAYS = 90;
+
 const FALLBACK_TIME_ZONE = 'UTC';
 const MAX_TIME_ZONE_LENGTH = 64;
 const IANA_NAME = /^[A-Za-z][A-Za-z0-9_+-]*(?:\/[A-Za-z0-9_+-]+){0,2}$/;
@@ -164,8 +167,29 @@ function periodRange(unit: string, offset: number, today: Civil): DayRange | nul
   }
 }
 
+/** The last n units ending today, today included (近30天 = today minus 29 days through today). */
+function trailingRange(unit: string, n: number, today: Civil): DayRange | null {
+  const todayDays = toDays(today);
+  switch (unit) {
+    case 'day':
+      return { from: todayDays - n + 1, to: todayDays };
+    case 'week':
+      return { from: todayDays - n * 7 + 1, to: todayDays };
+    case 'month':
+      return { from: toDays(addMonths(today, -n)) + 1, to: todayDays };
+    case 'year':
+      return { from: toDays(addMonths(today, -n * 12)) + 1, to: todayDays };
+    default:
+      return null;
+  }
+}
+
 function rangeFor(match: RelativeTimeMatch, today: Civil): DayRange | null {
+  if (match.unit === 'recent') return trailingRange('day', RECENT_DAYS, today);
   if (typeof match.offset === 'number') return periodRange(match.unit, match.offset, today);
+  if (typeof match.n === 'number' && Number.isInteger(match.n) && match.n > 0) {
+    return trailingRange(match.unit, match.n, today);
+  }
   return null;
 }
 

@@ -224,9 +224,21 @@ function maskSpans(text: string, spans: readonly Span[]): string {
   return out + text.slice(cursor);
 }
 
-/** R2 phrases as structured lexicon entries (unit, offset or n), for deterministic date normalization. */
+/** R2 phrases as structured lexicon entries (unit, offset or n); of overlapping spans only the longest is kept. */
 export function matchRelativeTime(q: string): RelativeTimeMatch[] {
-  return scanRelativeTime(normalizeText(q)).map((span) => span.match);
+  const spans = scanRelativeTime(normalizeText(q));
+  return spans
+    .filter(
+      (span) =>
+        !spans.some(
+          (other) =>
+            other !== span &&
+            other.length > span.length &&
+            other.index < span.index + span.length &&
+            span.index < other.index + other.length
+        )
+    )
+    .map((span) => span.match);
 }
 
 const WORD = /[\p{L}\p{N}_]+/gu;
