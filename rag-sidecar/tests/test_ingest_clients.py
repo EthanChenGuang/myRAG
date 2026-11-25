@@ -176,6 +176,81 @@ def test_ledger_maps_postgrest_errors(code, status, exc):
     asyncio.run(run())
 
 
+@pytest.mark.parametrize("payload", [None, {}, {key: None for key in _job_payload()}])
+def test_ledger_claim_one_reads_an_unclaimable_job_as_none(payload):
+    """rag_claim_ingestion_job returns a NULL composite; PostgREST sends it as an object whose columns are all null."""
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=payload)
+
+    async def run():
+        client = LedgerClient(
+            base_url=_SUPABASE_URL,
+            service_key=_SB_KEY,
+            client=_recorded_transport({"/rpc/rag_claim_ingestion_job": handler}, []),
+        )
+        try:
+            return await client.claim_one(_JOB_ID, worker="ray:a", runner="ray")
+        finally:
+            await client.aclose()
+
+    assert asyncio.run(run()) is None
+
+
+def test_ledger_claim_one_posts_the_runner():
+    recorded: list[dict] = []
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_job_payload(status="preflight", locked_by="ray:a", runner="ray"))
+
+    async def run():
+        client = LedgerClient(
+            base_url=_SUPABASE_URL,
+            service_key=_SB_KEY,
+            client=_recorded_transport({"/rpc/rag_claim_ingestion_job": handler}, recorded),
+        )
+        try:
+            return await client.claim_one(_JOB_ID, worker="ray:a", runner="ray")
+        finally:
+            await client.aclose()
+
+    job = asyncio.run(run())
+    assert job is not None and job.runner == "ray"
+    assert recorded[0]["body"] == {"p_job_id": _JOB_ID, "p_worker": "ray:a", "p_runner": "ray"}
+
+
+def test_ledger_list_batch_jobs_pages_by_the_last_id():
+    batch = "00000000-0000-4000-8000-0000000000b7"
+    ids = [f"00000000-0000-4000-8000-{index:012d}" for index in range(1, 6)]
+    recorded: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        after = body["p_after_id"]
+        start = 0 if after is None else ids.index(after) + 1
+        page = ids[start : start + body["p_limit"]]
+        return httpx.Response(200, json=[_job_payload(id=job_id, batch_id=batch) for job_id in page])
+
+    async def run():
+        client = LedgerClient(
+            base_url=_SUPABASE_URL,
+            service_key=_SB_KEY,
+            client=_recorded_transport({"/rpc/rag_list_batch_jobs": handler}, recorded),
+        )
+        try:
+            return await client.list_batch_jobs(batch, page_size=2)
+        finally:
+            await client.aclose()
+
+    jobs = asyncio.run(run())
+    assert [job.id for job in jobs] == ids
+    assert [row["body"] for row in recorded] == [
+        {"p_batch_id": batch, "p_status": None, "p_after_id": None, "p_limit": 2},
+        {"p_batch_id": batch, "p_status": None, "p_after_id": ids[1], "p_limit": 2},
+        {"p_batch_id": batch, "p_status": None, "p_after_id": ids[3], "p_limit": 2},
+    ]
+
+
 def test_ledger_repr_never_contains_key():
     client = LedgerClient(base_url=_SUPABASE_URL, service_key=_JWT_KEY)
     text = repr(client)
