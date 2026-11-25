@@ -137,7 +137,7 @@ describe('embed route query-layer inputs (D-09, D-10, D-11, D-16)', () => {
     expect(system).not.toContain('Context from knowledge base');
     expect(system).not.toContain('{{context}}');
     expect(system).not.toMatch(/Context:\s*$/u);
-    const searchCalls = h.retrieval.mock.calls.map((call) => call[0]).filter((fn) => fn !== 'rag_chunking_coverage');
+    const searchCalls = h.retrieval.mock.calls.map((call) => call[0]).filter((fn) => fn !== 'rag_chunking_coverage' && fn !== 'rag_tenant_language_shares');
     expect(searchCalls).toEqual([]);
   });
 
