@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireAdminOrDeny } from '@/lib/admin-route-auth';
-import { readFeedbackLoopConfig } from '@/lib/rag/feedback-loop/config';
-import { purgeRetrievalLog, PurgeError } from '@/lib/rag/feedback-loop/purge';
+import { purgeRetrievalLog, PurgeError, readFeedbackLoopConfig } from '@/lib/rag';
 import { getSupabaseAdmin } from '@/lib/supabase';
 
 export const runtime = 'nodejs';

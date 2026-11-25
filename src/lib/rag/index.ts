@@ -298,3 +298,13 @@ export { readSecurityConfig } from './security/config';
 export { injectionTraceVersions } from './security/injection-check';
 export type { ToolResultGuardMode } from './security/config';
 export { escapeToolOutput, scanToolOutput, wrapToolResultsForPrompt } from './security/tool-results';
+export { readFeedbackLoopConfig } from './feedback-loop/config';
+export {
+  effectiveLogMode,
+  readTenantFeedbackSettings,
+  setTenantFeedbackSettings,
+  TENANT_RETRIEVAL_LOG_LEVELS,
+} from './feedback-loop/settings';
+export type { TenantFeedbackSettingsRow, TenantRetrievalLog } from './feedback-loop/settings';
+export { purgeRetrievalLog, PurgeError } from './feedback-loop/purge';
+export type { PurgeCounts } from './feedback-loop/purge';

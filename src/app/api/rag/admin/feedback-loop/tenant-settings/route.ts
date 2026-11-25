@@ -3,12 +3,12 @@ import { z } from 'zod/v3';
 import { adminDenied, checkAdmin, requireAdminOrDeny } from '@/lib/admin-route-auth';
 import { getDeploymentMode } from '@/lib/deployment-mode';
 import {
+  parseTenantKey,
   readTenantFeedbackSettings,
   setTenantFeedbackSettings,
   TENANT_RETRIEVAL_LOG_LEVELS,
   type TenantRetrievalLog,
-} from '@/lib/rag/feedback-loop/settings';
-import { parseTenantKey } from '@/lib/rag/tenant/embed';
+} from '@/lib/rag';
 import { getSupabaseAdmin } from '@/lib/supabase';
 
 export const runtime = 'nodejs';
