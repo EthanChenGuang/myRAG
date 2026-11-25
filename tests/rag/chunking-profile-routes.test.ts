@@ -488,3 +488,154 @@ describe('chunking profile admin routes: list, create, validate, report', () => 
     vi.doUnmock(path.join(REPO_ROOT, 'eval/reports/chunking-sweep.json'));
   });
 });
+
+describe('chunking profile admin routes: build, activate, rollback', () => {
+  authMatrix(TASK2_ROUTES);
+
+  const buildRequest = (id: string, init: ReqInit = {}) =>
+    req(`/api/rag/admin/chunking-profiles/${id}/build`, { method: 'POST', body: {}, ...init });
+  const activateRequest = (id: string, init: ReqInit = {}) =>
+    req(`/api/rag/admin/chunking-profiles/${id}/activate`, { method: 'POST', body: { doc_type: 'contract_legal' }, ...init });
+  const rollbackRequest = (init: ReqInit = {}) => req('/api/rag/admin/chunking-profiles/rollback', { method: 'POST', body: { doc_type: 'contract_legal' }, ...init });
+
+  it('build runs one bounded step of 45 s and returns progress and gap counts, never a document id', async () => {
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    let step = 0;
+    state.buildImpl = async () => {
+      step += 1;
+      return {
+        runId: 'run-1',
+        profileId: 'p256-1024',
+        docType: 'contract_legal',
+        status: step === 1 ? 'running' : 'incomplete',
+        docsDone: step === 1 ? 2 : 3,
+        docsTotal: 3,
+        more: step === 1,
+        gaps: step === 1 ? [] : [{ documentId: DOC_ID, tenantKey: 's:default', reason: 'no_parse_output', detail: null }],
+      };
+    };
+    const first = await loaded.build.POST(buildRequest('p256-1024', { body: { doc_type: 'contract_legal' } }), params('p256-1024'));
+    expect(first.status).toBe(200);
+    expect(first.headers.get('cache-control')).toBe('no-store');
+    expect(await first.json()).toMatchObject({ success: true, status: 'running', docsDone: 2, docsTotal: 3, gaps: 0, more: true, run_id: 'run-1' });
+    const second = await loaded.build.POST(buildRequest('p256-1024', { body: { doc_type: 'contract_legal' } }), params('p256-1024'));
+    const body = await second.json();
+    expect(body).toMatchObject({ success: true, status: 'incomplete', docsDone: 3, docsTotal: 3, gaps: 1, gap_reasons: { no_parse_output: 1 }, more: false });
+    expect(JSON.stringify(body)).not.toContain(DOC_ID);
+    expect(JSON.stringify(body)).not.toContain('s:default');
+    expect(state.buildCalls).toHaveLength(2);
+    for (const call of state.buildCalls) {
+      expect(call).toMatchObject({ profileId: 'p256-1024', docType: 'contract_legal', deadlineMs: 45_000 });
+      expect(call.signal).toBeInstanceOf(AbortSignal);
+    }
+    expect(logged.join('\n')).not.toContain(DOC_ID);
+  });
+
+  it('build maps an unknown profile to 404, other refusals to 409, a database failure to 503 and a bad body to 400', async () => {
+    const loaded = await load();
+    const rag = await import('@/lib/rag');
+    state.session = { id: ADMIN_ID };
+    state.buildImpl = async () => {
+      throw new rag.RechunkInputError('unknown_profile');
+    };
+    expect((await loaded.build.POST(buildRequest('nope'), params('nope'))).status).toBe(404);
+    state.buildImpl = async () => {
+      throw new rag.RechunkInputError('profile_is_legacy');
+    };
+    const legacy = await loaded.build.POST(buildRequest('legacy'), params('legacy'));
+    expect(legacy.status).toBe(409);
+    expect(await legacy.json()).toEqual({ success: false, error: 'build_refused', reason: 'profile_is_legacy' });
+    state.buildImpl = async () => {
+      throw new rag.RechunkDatabaseError('rag_rechunk_claim', 'XX000');
+    };
+    const failed = await loaded.build.POST(buildRequest('p256-1024'), params('p256-1024'));
+    expect(failed.status).toBe(503);
+    expect(JSON.stringify(await failed.json())).not.toMatch(/XX000|rag_rechunk/);
+    state.buildCalls = [];
+    expect((await loaded.build.POST(buildRequest('Bad Id'), params('Bad Id'))).status).toBe(400);
+    expect((await loaded.build.POST(buildRequest('p256-1024', { body: { doc_type: 'novel' } }), params('p256-1024'))).status).toBe(400);
+    expect((await loaded.build.POST(buildRequest('p256-1024', { body: { actor: OTHER_ADMIN_ID } }), params('p256-1024'))).status).toBe(400);
+    expect(state.buildCalls).toEqual([]);
+  });
+
+  it('an aborted request stops the build step without a progress report', async () => {
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    const controller = new AbortController();
+    state.buildImpl = async (input) => {
+      controller.abort();
+      (input.signal as AbortSignal).throwIfAborted();
+      return { runId: 'run-1', status: 'running', docsDone: 1, docsTotal: 3, more: true, gaps: [] };
+    };
+    const response = await loaded.build.POST(buildRequest('p256-1024', { signal: controller.signal }), params('p256-1024'));
+    expect(response.status).toBe(499);
+    const body = await response.json();
+    expect(body).toEqual({ success: false, error: 'build_aborted' });
+  });
+
+  it('activate flips the pointer with the verified admin as actor, never a header or body value', async () => {
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    const response = await loaded.activate.POST(
+      activateRequest('p256-1024', { headers: { 'x-actor-id': OTHER_ADMIN_ID, 'x-user-id': OTHER_ADMIN_ID } }),
+      params('p256-1024'),
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(await response.json()).toEqual({ success: true, activated: 'p256-1024', previous: 'legacy', doc_type: 'contract_legal', changed: true });
+    const calls = state.rpcCalls.filter((call) => call.fn === 'rag_activate_chunking_profile');
+    expect(calls).toEqual([{ fn: 'rag_activate_chunking_profile', args: { p_profile_id: 'p256-1024', p_actor: ADMIN_ID, p_doc_type: 'contract_legal' } }]);
+    state.rpcCalls = [];
+    const withActor = await loaded.activate.POST(activateRequest('p256-1024', { body: { doc_type: 'contract_legal', actor: OTHER_ADMIN_ID } }), params('p256-1024'));
+    expect(withActor.status).toBe(400);
+    expect(state.rpcCalls).toEqual([]);
+  });
+
+  it('activate uses the cookie admin as actor', async () => {
+    const loaded = await load();
+    state.session = { id: OTHER_ADMIN_ID };
+    const cookie = cookieOf(loaded.session.mintAdminSessionValue(OTHER_ADMIN_ID));
+    const response = await loaded.activate.POST(activateRequest('p256-1024', { cookie }), params('p256-1024'));
+    expect(response.status).toBe(200);
+    expect(state.rpcCalls.find((call) => call.fn === 'rag_activate_chunking_profile')?.args.p_actor).toBe(OTHER_ADMIN_ID);
+  });
+
+  it('activate maps a gate refusal to 409 with its reason, unknown_profile to 404, a bad id to 400 and a database failure to 503', async () => {
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    state.outcomes.rag_activate_chunking_profile = { data: null, error: { code: '55000', message: 'chunking_activation_refused:eval_failed (2 slices) secret text' } };
+    const refused = await loaded.activate.POST(activateRequest('p256-1024'), params('p256-1024'));
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toEqual({ success: false, error: 'activation_refused', reason: 'eval_failed' });
+    state.outcomes.rag_activate_chunking_profile = { data: null, error: { code: '55000', message: 'chunking_activation_refused:unknown_profile' } };
+    expect((await loaded.activate.POST(activateRequest('ghost'), params('ghost'))).status).toBe(404);
+    state.outcomes.rag_activate_chunking_profile = { data: null, error: { code: 'XX000', message: DB_SECRET } };
+    const failed = await loaded.activate.POST(activateRequest('p256-1024'), params('p256-1024'));
+    expect(failed.status).toBe(503);
+    expect(JSON.stringify(await failed.json())).not.toContain('secret text');
+    state.rpcCalls = [];
+    expect((await loaded.activate.POST(activateRequest('UPPER'), params('UPPER'))).status).toBe(400);
+    expect((await loaded.activate.POST(activateRequest('p256-1024', { body: { doc_type: 'novel' } }), params('p256-1024'))).status).toBe(400);
+    expect(state.rpcCalls).toEqual([]);
+    expect(logged.join('\n')).not.toContain('secret text');
+  });
+
+  it('rollback restores the previous profile, refuses no_previous with 409 and an invalid doc type with 400', async () => {
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    const response = await loaded.rollback.POST(rollbackRequest({ headers: { 'x-actor-id': OTHER_ADMIN_ID } }));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ success: true, restored: 'legacy', rolled_back: 'p256-1024', doc_type: 'contract_legal' });
+    expect(state.rpcCalls.find((call) => call.fn === 'rag_rollback_chunking_profile')?.args).toEqual({ p_doc_type: 'contract_legal', p_actor: ADMIN_ID });
+    state.outcomes.rag_rollback_chunking_profile = { data: null, error: { code: '55000', message: 'chunking_activation_refused:no_previous' } };
+    const refused = await loaded.rollback.POST(rollbackRequest());
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toEqual({ success: false, error: 'rollback_refused', reason: 'no_previous' });
+    state.rpcCalls = [];
+    expect((await loaded.rollback.POST(rollbackRequest({ body: { doc_type: 'novel' } }))).status).toBe(400);
+    expect((await loaded.rollback.POST(rollbackRequest({ body: {} }))).status).toBe(400);
+    expect((await loaded.rollback.POST(rollbackRequest({ body: { doc_type: 'contract_legal', actor: OTHER_ADMIN_ID } }))).status).toBe(400);
+    expect(state.rpcCalls).toEqual([]);
+  });
+});
