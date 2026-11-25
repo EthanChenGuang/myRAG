@@ -1,4 +1,15 @@
 {
+  "groundedness": {
+    "hhem_2_1_open": {
+      "p50_ms": 2500,
+      "p95_ms": 5000
+    },
+    "hhem_2_3_vectara": {
+      "p50_ms": 4000,
+      "p95_ms": 8000
+    },
+    "report_only": true
+  },
   "profiles": {
     "chat": {
       "stages": {

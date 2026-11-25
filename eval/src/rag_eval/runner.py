@@ -2,6 +2,8 @@ import argparse
 import sys
 from pathlib import Path
 
+from rag_sidecar.contracts.judge import JudgeReport
+
 from rag_eval.corpus import load_corpus
 from rag_eval.golden_io import load_golden, select_golden
 from rag_eval.metrics import score_items
@@ -51,6 +53,11 @@ def _score(args: argparse.Namespace) -> int:
         golden = load_golden(resolve_cli_path(args.golden))
         traces = load_traces(resolve_cli_path(args.traces))
         manifest = load_manifest(resolve_cli_path(args.manifest))
+        judge = (
+            JudgeReport.model_validate_json(resolve_cli_path(args.judge).read_text(encoding="utf-8"))
+            if args.judge
+            else None
+        )
     except (OSError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
@@ -69,7 +76,7 @@ def _score(args: argparse.Namespace) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     results = score_items(traces, golden, rank_field=args.rank_source, doc_types=doc_types)
-    report = build_report(manifest, results, golden, traces)
+    report = build_report(manifest, results, golden, traces, judge=judge)
     write_report(report, resolve_cli_path(args.out))
     overall = report.overall
     print(
@@ -109,6 +116,12 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="corpus directory whose fixture-meta doc_type keys feed by_doc_type "
         "(default: the fixture corpus when the manifest records a corpus hash, else every item is general)",
+    )
+    score.add_argument(
+        "--judge",
+        type=Path,
+        default=None,
+        help="judge.json from rag_eval.judge.run; fills Faithfulness per citation strategy (report-only)",
     )
     score.set_defaults(handler=_score)
     args = parser.parse_args(argv)
