@@ -1,15 +1,59 @@
+import { createHash } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod/v3';
 import { env } from '@/lib/env';
-import { deriveVoiceKeywords, readSecurityConfig, resolveVoiceScope, runRetrieval } from '@/lib/rag';
+import {
+    createTraceCollector,
+    deriveVoiceKeywords,
+    finishTrace,
+    loadRagConfig,
+    readSecurityConfig,
+    resolveVoiceScope,
+    runRetrieval,
+    scopeKey,
+    VOICE_SCOPE_HEADER,
+} from '@/lib/rag';
+import { getRagDeps } from '@/lib/rag/deps';
+import type { HistoryTurn, RetrievalResult } from '@/lib/rag/types';
+import { classifyQuery } from '@/lib/query-classifier';
 import { internalApiKeyMatches } from '@/lib/internal-api-key';
 
 export const runtime = 'nodejs';
 
+const MAX_HISTORY_TURNS = 6;
+const SERVER_REWRITE_HEADER = 'x-rag-server-query-rewrite';
+
+const historyTurnSchema = z.object({
+    role: z.enum(['user', 'assistant']),
+    content: z.string().min(1).max(1000),
+    binding: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
+});
+
 const bodySchema = z.object({
     query: z.string().min(1).max(4000),
     matchCount: z.number().int().min(1).max(20).optional(),
+    history: z.array(historyTurnSchema).max(MAX_HISTORY_TURNS).optional(),
 });
+
+/** The session binding of a history turn: the first 22 characters of base64url SHA-256 over the raw scope token. */
+function historyBinding(rawToken: string): string {
+    return createHash('sha256').update(rawToken, 'utf8').digest('base64url').slice(0, 22);
+}
+
+/** D-30/W2: whether the voice profile condenses history server-side, so the agent can skip its own rewrite. */
+function serverCondensesVoice(): boolean {
+    const config = loadRagConfig(getRagDeps().ragEnv());
+    return (
+        config.pipelineBlocked === null &&
+        config.queryLayer.enabled &&
+        !config.disabledStages.has('condense') &&
+        config.queryLayer.voiceTransforms.includes('condense_history')
+    );
+}
+
+function fellBack(result: RetrievalResult): boolean {
+    return result.stages.some((stage) => stage.name === 'pipeline_fallback');
+}
 
 /**
  * Internal API Endpoint for Voice Agent RAG
@@ -41,10 +85,8 @@ export async function POST(req: NextRequest) {
         const parsed = bodySchema.safeParse(rawBody);
         if (!parsed.success) {
             const field = parsed.error.issues[0]?.path[0];
-            return NextResponse.json(
-                { error: field === 'matchCount' ? 'Invalid matchCount' : 'Missing or invalid query' },
-                { status: 400 }
-            );
+            const error = field === 'matchCount' ? 'Invalid matchCount' : field === 'history' ? 'Invalid history' : 'Missing or invalid query';
+            return NextResponse.json({ error }, { status: 400 });
         }
         const { query, matchCount = 5 } = parsed.data;
 
@@ -53,22 +95,41 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: scope.status === 503 ? 'Voice scope unavailable' : 'Unauthorized', reason: scope.reason }, { status: scope.status });
         }
 
+        // Turns recorded under another scope token (another session, or before a token refresh) never reach the query layer.
+        let history: HistoryTurn[] | undefined;
+        let trace: ReturnType<typeof createTraceCollector> | undefined;
+        if (parsed.data.history) {
+            const own = historyBinding(req.headers.get(VOICE_SCOPE_HEADER) ?? '');
+            history = parsed.data.history.filter((turn) => turn.binding === own).map(({ role, content }) => ({ role, content }));
+            const dropped = parsed.data.history.length - history.length;
+            if (dropped > 0) console.warn('[Internal RAG] Dropped history turns bound to another session', { count: dropped });
+            trace = createTraceCollector({ profile: 'voice', tenantKey: scopeKey(scope.scope) });
+            const at = trace.now();
+            trace.record({ name: 'voice_history', status: 'ok', startedAt: at, endedAt: at, counts: { history_kept: history.length, history_dropped: dropped } });
+        }
+
+        const classification = env.RAG_QUERY_LAYER === 'true' ? classifyQuery(query) : undefined;
         const result = await runRetrieval({
             scope: scope.scope,
             query,
             profile: 'voice',
             options: { maxResults: matchCount },
             signal: req.signal,
+            ...(history ? { history } : {}),
+            ...(classification ? { classification } : {}),
+            ...(trace ? { trace } : {}),
         });
+        if (trace) finishTrace(trace, result, { query });
+        const headers: Record<string, string> = serverCondensesVoice() && !fellBack(result) ? { [SERVER_REWRITE_HEADER]: '1' } : {};
 
         const voice = result.voice;
         if (result.status === 'error' || (result.status === 'degraded' && (!voice || voice.results.length === 0))) {
             console.error('[Document Search] Voice retrieval unavailable', { status: result.status, reason: result.reason, traceId: result.traceId });
-            return NextResponse.json({ error: 'knowledge_base_unavailable', reason: result.reason }, { status: 503 });
+            return NextResponse.json({ error: 'knowledge_base_unavailable', reason: result.reason }, { status: 503, headers });
         }
 
         if (!voice || voice.results.length === 0) {
-            return NextResponse.json({ results: [] });
+            return NextResponse.json({ results: [] }, { headers });
         }
 
         const keywords = deriveVoiceKeywords(query);
@@ -83,7 +144,7 @@ export async function POST(req: NextRequest) {
             ...(readSecurityConfig().contextTagging && typeof voice.context === 'string' && voice.context.trim() !== ''
                 ? { context: voice.context }
                 : {}),
-        });
+        }, { headers });
 
     } catch (error: unknown) {
         console.error('[Internal RAG] Error:', error instanceof Error ? error.message : 'unknown');
