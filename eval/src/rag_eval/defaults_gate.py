@@ -397,7 +397,6 @@ def _false_refusal_upper(value: MetricValue | None) -> float | None:
 def derive_absolute_floor(
     criteria_raw: dict[str, Any], ingest_baseline: Path, noise_path: Path, *, baseline_label: str | None = None
 ) -> dict[str, Any]:
-    return dict(criteria_raw)
     """Return the criteria dict with only its `absolute` block (re)written from the ingest baseline and noise files."""
     baseline = Baseline.model_validate_json(Path(ingest_baseline).read_text(encoding="utf-8"))
     noise = NoiseConfig.model_validate_json(Path(noise_path).read_text(encoding="utf-8"))
@@ -430,7 +429,6 @@ def derive_absolute_floor(
 
 
 def criteria_problems(criteria: DefaultsGateCriteria, ingest_baseline: Path, noise_path: Path) -> list[str]:
-    return []
     """Empty when the recorded derivation matches the files given; otherwise the reasons the criteria are stale."""
     if criteria.absolute is None:
         return ["absolute.ingest.overall is missing: run the derive command"]
@@ -611,7 +609,6 @@ def evaluate_config_mode(
     *,
     legacy: bool = False,
 ) -> ConfigModeResult:
-    return ConfigModeResult(config=run.config, mode=run.mode, report_path='', report_sha256='', run_id='', run_config_hash='', created_at='', passed=False, criteria=[])
     if legacy:
         results = [_g6(evaluate_gate(run.report, baseline, noise))]
     else:
@@ -653,7 +650,6 @@ def _overall_value(mode_result: ConfigModeResult, runs: dict[tuple[str, str], Ru
 def choose_floor(
     criteria: DefaultsGateCriteria, results: list[ConfigResult], runs: dict[tuple[str, str], RunInput]
 ) -> FloorSelection:
-    return FloorSelection(chosen=None, candidates=[], reason='stub')
     """D-04: a floor passes only if all its configurations pass in every mode; both pass: the higher mean overall correct
     refusal over its configurations and modes wins, a tie goes to legacy_rule; neither passes: None."""
     rule = criteria.selection_rules.floor
@@ -693,7 +689,6 @@ def choose_no_key_fallback(
     baselines: dict[str, Baseline],
     noise: NoiseConfig,
 ) -> FallbackSelection:
-    return FallbackSelection(chosen=None, candidates=[], reason='stub')
     """D-06: local_bm25 only if its keyless configurations pass and, in every mode and configuration pair, each registered
     metric is at or above the none run's value minus the band; otherwise none if it passes; otherwise None."""
     rule = criteria.selection_rules.fallback
@@ -805,7 +800,6 @@ def evaluate_defaults_gate(
     sources: list[SourceFile],
     g8: G8Input | None,
 ) -> DefaultsGateResult:
-    raise CriteriaStaleError(['stub'])
     if criteria.absolute is None:
         raise CriteriaStaleError(["absolute.ingest.overall is missing: run the derive command"])
     late = sorted(
