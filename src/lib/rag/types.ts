@@ -81,10 +81,48 @@ export interface KeptChunk {
 
 export type RagMode = 'strict' | 'balanced' | 'flexible' | 'bypass';
 
+export interface ReferencedSection {
+  documentId: string;
+  documentName: string;
+  /** Chunks whose content was used; empty when the document's full text was used. */
+  chunkIds: string[];
+  text: string;
+  /** True when the document was referenced but no content could be read; rendered as a note, never a block. */
+  missing?: boolean;
+}
+
 export interface ReferencedState {
   usedDocuments: UsedDocument[];
   context: string;
+  /** The referenced part of the context as data, in render order. */
+  sections?: ReferencedSection[];
 }
+
+/** One citable unit of the final context, in the order it appears in the rendered context (Phase 5 D-02). */
+export interface ContextBlock {
+  documentId: string;
+  documentName: string;
+  documentVersion: number | null;
+  chunkIds: string[];
+  page: number | null;
+  sectionPath: string[] | null;
+  title: string;
+  /** Exactly the text written to the context for this block. */
+  text: string;
+  isImage: boolean;
+  alias: string | null;
+}
+
+export interface CitationLabel {
+  alias: string;
+  /** One line written before the block. */
+  header: string;
+  /** Written in place of the block text. */
+  text: string;
+}
+
+/** Called once per non-image block in render order, ordinals from 1. */
+export type CitationLabeler = (block: Omit<ContextBlock, 'alias'>, ordinal: number) => CitationLabel;
 
 export interface DocumentPartRef {
   id: string;
@@ -154,6 +192,8 @@ export interface RunRetrievalInput {
   stageOverrides?: StageOverrides;
   retrievalFilters?: RetrievalFilterInput;
   queryVariants?: QueryVariant[];
+  /** When absent the context is rendered exactly as without citations. */
+  citationLabeler?: CitationLabeler;
 }
 
 export interface RetrievalResult {
@@ -175,4 +215,6 @@ export interface RetrievalResult {
   refusal?: RefusalRecord | null;
   retrievalConfigHash?: string;
   queryLanguage?: string | null;
+  /** The final context blocks in render order; absent when no assembly ran. */
+  blocks?: ContextBlock[];
 }
