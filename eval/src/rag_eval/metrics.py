@@ -167,6 +167,16 @@ def _lexical_leg_hit_rate(results: list[ItemResult]) -> MetricValue:
     return _mean([1.0 if r.lexical_hit_at_10 else 0.0 for r in results if r.lexical_hit_at_10 is not None])
 
 
+def citation_metrics(
+    traces: list[RagTrace], golden: list[GoldenItem], *, requested: bool = False
+) -> dict[str, MetricValue | int | None]:
+    return {"invalid_citation_rate": None, "citation_coverage": None, "cited_gold_hit": None, "raw_invalid_markers": None}
+
+
+def groundedness_label_counts(traces: list[RagTrace], golden: list[GoldenItem]) -> dict:
+    return {}
+
+
 def aggregate(
     results: list[ItemResult],
     k_values: tuple[int, ...] = (5, 10),
