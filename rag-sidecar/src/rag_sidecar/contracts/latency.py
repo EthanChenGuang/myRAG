@@ -33,6 +33,24 @@ class ProfileBudget(_Contract):
         return self
 
 
+class ScorerBudget(_Contract):
+    p50_ms: float = Field(gt=0)
+    p95_ms: float = Field(gt=0)
+
+    @model_validator(mode="after")
+    def _p50_not_above_p95(self) -> "ScorerBudget":
+        if self.p50_ms > self.p95_ms:
+            raise ValueError("p50_ms must not exceed p95_ms")
+        return self
+
+
+class GroundednessBudgets(_Contract):
+    hhem_2_1_open: ScorerBudget | None = None
+    hhem_2_3_vectara: ScorerBudget | None = None
+    report_only: Literal[True] = True
+
+
 class LatencyBudgets(_Contract):
     schema_version: Literal[1] = 1
     profiles: dict[Profile, ProfileBudget]
+    groundedness: GroundednessBudgets | None = None

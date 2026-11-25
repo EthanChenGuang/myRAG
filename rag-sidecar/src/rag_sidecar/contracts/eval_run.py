@@ -2,6 +2,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from rag_sidecar.contracts.answers import AnswerGroundedness, CitationRecord, CitationStrategy
 from rag_sidecar.contracts.retrieval import ChunkingProfile, RetrievalFilters, RetrievalOverrides
 
 
@@ -52,6 +53,8 @@ class RagRunOptions(_Contract):
     embedding_profile: str | None = None
     retrieval_overrides: RetrievalOverrides | None = None
     retrieval_filters: RetrievalFilters | None = None
+    citations: bool = False
+    groundedness: bool = False
 
 
 class RagRunRequest(_Contract):
@@ -111,9 +114,7 @@ class TraceQueryTransform(_Contract):
     text: str
 
 
-class TraceCitation(_Contract):
-    document_id: str
-    chunk_id: str | None = None
+TraceCitation = CitationRecord
 
 
 class TraceRetrievalVersions(_Contract):
@@ -159,7 +160,10 @@ class RagTrace(_Contract):
     context_tokens: int | None = Field(default=None, ge=0)
     stage_counts: dict[str, dict[str, float]] = Field(default_factory=dict)
     answer: str | None = None
-    citations: list[TraceCitation]
+    citations: list[CitationRecord]
+    citation_strategy: CitationStrategy | None = None
+    invalid_citations: int = Field(default=0, ge=0)
+    groundedness: AnswerGroundedness | None = None
     stage_latency_ms: dict[str, float]
     stage_status: dict[str, str] = Field(default_factory=dict)
     effective_config: TraceEffectiveConfig

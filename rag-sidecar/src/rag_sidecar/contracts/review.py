@@ -1,10 +1,15 @@
-from pydantic import BaseModel, ConfigDict, Field
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from rag_sidecar.contracts.golden import Language
 
 
 class _Contract(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
+
+
+ReviewReason = Literal["sampled", "feedback_negative", "groundedness_flagged"]
 
 
 class ReviewQueueItem(_Contract):
@@ -18,3 +23,11 @@ class ReviewQueueItem(_Contract):
     context_masked: str
     model: str
     tags: list[str] = Field(default_factory=list)
+    reasons: list[ReviewReason] = Field(default_factory=list, json_schema_extra={"uniqueItems": True})
+
+    @field_validator("reasons")
+    @classmethod
+    def _no_repeats(cls, value: list[str]) -> list[str]:
+        if len(value) != len(set(value)):
+            raise ValueError("review reasons must not repeat")
+        return value
