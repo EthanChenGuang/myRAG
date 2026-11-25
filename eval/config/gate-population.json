@@ -1,0 +1,8 @@
+{
+  "min_items": 100,
+  "mode": "legacy",
+  "provenances": [
+    "production",
+    "human"
+  ]
+}

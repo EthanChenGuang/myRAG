@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import sys
@@ -9,6 +10,7 @@ from pathlib import Path
 from typing import Callable, TypeVar
 
 from pydantic import BaseModel, ValidationError
+from rag_sidecar.contracts.feedback_loop import GatePopulationConfig
 from rag_sidecar.contracts.query import QueryParams
 from rag_sidecar.contracts.retrieval import (
     ChunkingSweepReport,
@@ -36,6 +38,24 @@ CONFIG_TARGETS: list[tuple[str, type[BaseModel], Callable[[], BaseModel]]] = [
 ]
 
 PROTECTED_SOURCES = frozenset({"sweep", "calibration", "fixture", "live"})
+
+GATE_POPULATION_REL = "eval/config/gate-population.json"
+GATE_POPULATION_PATH = REPO_ROOT / GATE_POPULATION_REL
+
+
+def load_gate_population(path: Path | None = None) -> tuple[GatePopulationConfig, str]:
+    """D-23: the gate population switch and the sha256 of the exact bytes it was read from."""
+    source = GATE_POPULATION_PATH if path is None else Path(path)
+    raw = source.read_bytes()
+    try:
+        config = GatePopulationConfig.model_validate_json(raw)
+    except ValidationError as exc:
+        raise ValueError(f"{source}: not a valid GatePopulationConfig: {exc}") from exc
+    return config, hashlib.sha256(raw).hexdigest()
+
+
+def write_gate_population(config: GatePopulationConfig, path: Path | None = None) -> None:
+    write_config_atomically(GATE_POPULATION_PATH if path is None else Path(path), config)
 
 
 def finalize_config(model: T, *, provenance_source: str = "defaults") -> T:

@@ -6,6 +6,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 from rag_sidecar.contracts.baseline import Baseline, NoiseConfig, PairedReport, PairedStat
+from rag_sidecar.contracts.feedback_loop import GatePopulationConfig
 from rag_sidecar.contracts.report import EvalReport, ItemResult
 
 from rag_eval.metrics import CROSS_LINGUAL, language_pair_key
@@ -85,7 +86,9 @@ def _slice_members(items: list[ItemResult]) -> dict[str, list[ItemResult]]:
     return members
 
 
-def paired_report(report: EvalReport, baseline: Baseline, noise: NoiseConfig) -> PairedReport | None:
+def paired_report(
+    report: EvalReport, baseline: Baseline, noise: NoiseConfig, population: GatePopulationConfig | None = None
+) -> PairedReport | None:
     if baseline.items is None:
         return None
     gated_items = [item for item in report.items if item.split == report.golden_filter.gate_split]

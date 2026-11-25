@@ -5,6 +5,7 @@ from typing import Literal
 
 from rag_sidecar.contracts.answers import CitationRecord
 from rag_sidecar.contracts.eval_run import RagTrace, TraceInjection
+from rag_sidecar.contracts.feedback_loop import GatePopulationConfig
 from rag_sidecar.contracts.golden import AttackSpec, GoldenItem
 from rag_sidecar.contracts.report import (
     GroundednessLabelCounts,
@@ -266,11 +267,26 @@ def groundedness_label_counts(
     }
 
 
+REAL_SET_TOO_SMALL = "real_set_too_small"
+
+
+class RealSetTooSmall(ValueError):
+    """D-23: a real gate population below min_items fails the run instead of falling back."""
+
+    reason = REAL_SET_TOO_SMALL
+
+    def __init__(self, count: int, min_items: int) -> None:
+        super().__init__(f"{REAL_SET_TOO_SMALL}: {count} real gate item(s), at least {min_items} required")
+        self.count = count
+        self.min_items = min_items
+
+
 def aggregate(
     results: list[ItemResult],
     k_values: tuple[int, ...] = (5, 10),
     gate_split: str = "dev",
     approved_ids: frozenset[str] | None = None,
+    population: GatePopulationConfig | None = None,
 ) -> dict[str, object]:
     if tuple(k_values) != (5, 10):
         raise ValueError(f"unsupported k_values {tuple(k_values)!r}: the report contract carries recall@5 and recall@10")

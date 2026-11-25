@@ -33,6 +33,7 @@ def _cross_check(golden_ids: list[str], trace_ids: list[str | None]) -> list[str
 
 
 DEFAULT_CORPUS_DIR = REPO_ROOT / "eval" / "fixtures" / "corpus"
+EXIT_REAL_SET_TOO_SMALL = 3
 
 
 def _doc_types(corpus_dir: Path | None, corpus_sha256: str | None) -> dict[str, str] | None:
@@ -123,6 +124,7 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="judge.json from rag_eval.judge.run; fills Faithfulness per citation strategy (report-only)",
     )
+    score.add_argument("--gate-population", type=Path, default=None)
     score.set_defaults(handler=_score)
     args = parser.parse_args(argv)
     return args.handler(args)

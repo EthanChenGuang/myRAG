@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 
 from rag_sidecar.contracts.eval_run import RagTrace, RunManifest
+from rag_sidecar.contracts.feedback_loop import GatePopulationConfig
 from rag_sidecar.contracts.golden import GoldenItem
 from rag_sidecar.contracts.judge import JudgeReport
 from rag_sidecar.contracts.latency import LatencyBudgets, StageLatency
@@ -306,6 +307,7 @@ def build_report(
     *,
     judge: JudgeReport | None = None,
     supported_languages: tuple[str, ...] | None = None,
+    gate_population_config: tuple[GatePopulationConfig, str] | None = None,
 ) -> EvalReport:
     notes: list[str] = []
     if any(item.language == "zh" for item in golden):
