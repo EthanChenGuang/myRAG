@@ -244,11 +244,35 @@ def test_ledger_list_batch_jobs_pages_by_the_last_id():
 
     jobs = asyncio.run(run())
     assert [job.id for job in jobs] == ids
+    assert all(job.kind == "ingest" and job.status == "queued" for job in jobs)
     assert [row["body"] for row in recorded] == [
         {"p_batch_id": batch, "p_status": None, "p_after_id": None, "p_limit": 2},
         {"p_batch_id": batch, "p_status": None, "p_after_id": ids[1], "p_limit": 2},
         {"p_batch_id": batch, "p_status": None, "p_after_id": ids[3], "p_limit": 2},
     ]
+
+
+def test_ledger_list_batch_jobs_reads_inventory_rows_the_job_contract_does_not_cover():
+    """The inventory records duplicates as terminal rows with empty settings and no source; listing must not reject them."""
+    batch = "00000000-0000-4000-8000-0000000000b7"
+    inventory_row = _job_payload(id="00000000-0000-4000-8000-000000000009", batch_id=batch, status="skipped_duplicate", settings={}, source=None)
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=[_job_payload(batch_id=batch), inventory_row])
+
+    async def run():
+        client = LedgerClient(
+            base_url=_SUPABASE_URL,
+            service_key=_SB_KEY,
+            client=_recorded_transport({"/rpc/rag_list_batch_jobs": handler}, []),
+        )
+        try:
+            return await client.list_batch_jobs(batch)
+        finally:
+            await client.aclose()
+
+    jobs = asyncio.run(run())
+    assert [(job.id, job.status) for job in jobs] == [(_JOB_ID, "queued"), (inventory_row["id"], "skipped_duplicate")]
 
 
 def test_ledger_repr_never_contains_key():
