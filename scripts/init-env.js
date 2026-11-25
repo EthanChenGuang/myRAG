@@ -396,6 +396,30 @@ LANGFUSE_CAPTURE_CONTENT=false
 LANGFUSE_REVIEW_SAMPLE_RATE=0
 
 # -----------------------------
+# VERIFIED CITATIONS AND GROUNDEDNESS
+# -----------------------------
+# Inline citations on knowledge-base answers
+RAG_CITATIONS=false
+# Route Claude models to the Anthropic API with Claude Citations
+RAG_CLAUDE_CITATIONS=false
+# Anthropic API key for Claude Citations (never logged)
+ANTHROPIC_API_KEY=
+# Anthropic API base URL; empty uses https://api.anthropic.com/v1 (set only for tests and recorded streams)
+ANTHROPIC_BASE_URL=
+# Score answers for groundedness after the stream (sidecar)
+RAG_GROUNDEDNESS=false
+# Allow the Vectara hosted groundedness scorer
+RAG_GROUNDEDNESS_VECTARA_OPT_IN=false
+# Groundedness scoring timeout in milliseconds
+RAG_GROUNDEDNESS_TIMEOUT_MS=20000
+# Premise sent to the scorer, in cl100k tokens
+RAG_GROUNDEDNESS_MAX_PREMISE_TOKENS=3000
+# Thumbs up/down feedback on answers
+RAG_ANSWER_FEEDBACK=false
+# Multi-tenant only: set after the Vectara data-retention terms were recorded in live verification
+RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK=false
+
+# -----------------------------
 # INGESTION AND EMBEDDING PROFILES
 # -----------------------------
 # legacy keeps today's document writers; unified switches to the single ingest pipeline

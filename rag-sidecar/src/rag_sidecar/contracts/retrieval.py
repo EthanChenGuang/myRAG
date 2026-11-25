@@ -70,6 +70,7 @@ class RetrievalParams(_Contract):
     final_top_k: int = Field(default=8, ge=1, le=100)
     rrf_k: int = Field(default=60, ge=1)
     leg_weights: RetrievalLegWeights = Field(default_factory=RetrievalLegWeights)
+    sub_question_coverage: bool = True
     provenance: ConfigProvenance = Field(default_factory=lambda: ConfigProvenance(source="defaults"))
     config_hash: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
 
@@ -87,6 +88,7 @@ class RetrievalOverrides(_Contract):
 class DateRangeFilter(_Contract):
     from_: Annotated[date, Field(alias="from")]
     to: date
+    include_undated: bool = False
 
     @model_validator(mode="after")
     def _from_before_to(self) -> "DateRangeFilter":

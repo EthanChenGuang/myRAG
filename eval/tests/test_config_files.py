@@ -88,3 +88,34 @@ def test_module_entrypoint_refuses_the_committed_calibrated_files():
     assert "refusing to overwrite" in result.stderr
     after = {rel: (REPO_ROOT / rel).read_bytes() for rel in before}
     assert before == after
+
+QUERY_PARAMS_REL = "eval/config/query-params.json"
+
+
+def test_config_targets_include_query_params():
+    assert QUERY_PARAMS_REL in [rel for rel, _model, _factory in CONFIG_TARGETS]
+
+
+def test_init_writes_query_params_with_sorted_keys_and_d08_defaults(root: Path):
+    assert init_configs() == 0
+    path = root / QUERY_PARAMS_REL
+    assert path.is_file()
+    text = path.read_text(encoding="utf-8")
+    payload = json.loads(text)
+    assert payload["schema_version"] == 1
+    assert list(payload) == sorted(payload)
+    assert payload["max_sub_questions"] == 4
+    assert payload["max_searches"] == 8
+    assert payload["query_budget_ms"] == {"chat": 1200, "embed": 1200, "voice": 300}
+    first = path.read_bytes()
+    assert init_configs() == 0
+    assert path.read_bytes() == first
+
+
+def test_committed_query_params_matches_defaults():
+    path = REPO_ROOT / QUERY_PARAMS_REL
+    assert path.is_file()
+    model_cls = dict((rel, model) for rel, model, _factory in CONFIG_TARGETS).get(QUERY_PARAMS_REL)
+    assert model_cls is not None
+    committed = model_cls.model_validate_json(path.read_text(encoding="utf-8"))
+    assert committed == finalize_config(model_cls())

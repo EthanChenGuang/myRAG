@@ -468,6 +468,46 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_update_ingestion_batch(uuid, text, jsonb, jsonb) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_update_ingestion_batch(uuid, text, jsonb, jsonb) TO service_role;
   END IF;
+  IF to_regprocedure('public.rag_vector_sync_chunking_profiles()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_vector_sync_chunking_profiles() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_vector_sync_chunking_profiles() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_vector_sync_chunks_delete()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_vector_sync_chunks_delete() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_vector_sync_chunks_delete() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_vector_sync_chunks_insert()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_vector_sync_chunks_insert() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_vector_sync_chunks_insert() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_vector_sync_chunks_update()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_vector_sync_chunks_update() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_vector_sync_chunks_update() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_vector_sync_documents_delete()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_vector_sync_documents_delete() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_vector_sync_documents_delete() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_vector_sync_documents_update()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_vector_sync_documents_update() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_vector_sync_documents_update() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_vector_sync_embedding_profiles()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_vector_sync_embedding_profiles() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_vector_sync_embedding_profiles() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_vector_sync_embeddings_delete()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_vector_sync_embeddings_delete() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_vector_sync_embeddings_delete() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_vector_sync_embeddings_insert()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_vector_sync_embeddings_insert() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_vector_sync_embeddings_insert() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_vector_sync_embeddings_update()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_vector_sync_embeddings_update() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_vector_sync_embeddings_update() TO service_role;
+  END IF;
   IF to_regprocedure('public.rag_write_chunks(uuid, text, jsonb, jsonb, boolean, integer)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_write_chunks(uuid, text, jsonb, jsonb, boolean, integer) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_write_chunks(uuid, text, jsonb, jsonb, boolean, integer) TO service_role;

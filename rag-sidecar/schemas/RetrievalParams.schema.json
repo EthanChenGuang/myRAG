@@ -100,6 +100,11 @@
       "default": 1,
       "title": "Schema Version",
       "type": "integer"
+    },
+    "sub_question_coverage": {
+      "default": true,
+      "title": "Sub Question Coverage",
+      "type": "boolean"
     }
   },
   "title": "RetrievalParams",

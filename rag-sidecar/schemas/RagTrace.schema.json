@@ -241,6 +241,276 @@
       "title": "CitationRecord",
       "type": "object"
     },
+    "DateRange": {
+      "additionalProperties": false,
+      "properties": {
+        "from_date": {
+          "format": "date",
+          "title": "From Date",
+          "type": "string"
+        },
+        "include_undated": {
+          "default": false,
+          "title": "Include Undated",
+          "type": "boolean"
+        },
+        "time_zone": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Time Zone",
+          "type": "string"
+        },
+        "to_date": {
+          "format": "date",
+          "title": "To Date",
+          "type": "string"
+        }
+      },
+      "required": [
+        "from_date",
+        "to_date",
+        "time_zone"
+      ],
+      "title": "DateRange",
+      "type": "object"
+    },
+    "QueryPlan": {
+      "additionalProperties": false,
+      "properties": {
+        "date_range": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DateRange"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "framework": {
+          "enum": [
+            "llamaindex",
+            "langchain"
+          ],
+          "title": "Framework",
+          "type": "string"
+        },
+        "gate": {
+          "$ref": "#/$defs/RewriteGateResult"
+        },
+        "language": {
+          "enum": [
+            "zh",
+            "en",
+            "it"
+          ],
+          "title": "Language",
+          "type": "string"
+        },
+        "original": {
+          "maxLength": 4000,
+          "minLength": 1,
+          "title": "Original",
+          "type": "string"
+        },
+        "skipped": {
+          "items": {
+            "$ref": "#/$defs/SkippedTransform"
+          },
+          "title": "Skipped",
+          "type": "array"
+        },
+        "standalone": {
+          "maxLength": 4000,
+          "minLength": 1,
+          "title": "Standalone",
+          "type": "string"
+        },
+        "sub_questions": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 4,
+          "title": "Sub Questions",
+          "type": "array"
+        },
+        "variants": {
+          "items": {
+            "$ref": "#/$defs/QueryVariantOut"
+          },
+          "maxItems": 8,
+          "title": "Variants",
+          "type": "array"
+        }
+      },
+      "required": [
+        "original",
+        "standalone",
+        "language",
+        "gate",
+        "framework"
+      ],
+      "title": "QueryPlan",
+      "type": "object"
+    },
+    "QueryVariantOut": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "original",
+            "condensed",
+            "expanded",
+            "hyde",
+            "sub_question",
+            "translated"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "language": {
+          "enum": [
+            "zh",
+            "en",
+            "it"
+          ],
+          "title": "Language",
+          "type": "string"
+        },
+        "protected_ok": {
+          "title": "Protected Ok",
+          "type": "boolean"
+        },
+        "sub_question_index": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 4,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sub Question Index"
+        },
+        "text": {
+          "maxLength": 4000,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "language",
+        "kind",
+        "protected_ok"
+      ],
+      "title": "QueryVariantOut",
+      "type": "object"
+    },
+    "RewriteGateResult": {
+      "additionalProperties": false,
+      "properties": {
+        "lang": {
+          "enum": [
+            "zh",
+            "en",
+            "it"
+          ],
+          "title": "Lang",
+          "type": "string"
+        },
+        "protected_tokens": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Protected Tokens",
+          "type": "array"
+        },
+        "reasons": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Reasons",
+          "type": "array"
+        },
+        "rewrite": {
+          "title": "Rewrite",
+          "type": "boolean"
+        },
+        "skip_retrieval": {
+          "default": false,
+          "title": "Skip Retrieval",
+          "type": "boolean"
+        },
+        "transforms": {
+          "items": {
+            "enum": [
+              "condense_history",
+              "normalize_dates",
+              "decompose",
+              "expand",
+              "translate"
+            ],
+            "type": "string"
+          },
+          "maxItems": 5,
+          "title": "Transforms",
+          "type": "array"
+        }
+      },
+      "required": [
+        "rewrite",
+        "transforms",
+        "reasons",
+        "lang",
+        "protected_tokens"
+      ],
+      "title": "RewriteGateResult",
+      "type": "object"
+    },
+    "SkippedTransform": {
+      "additionalProperties": false,
+      "properties": {
+        "reason": {
+          "enum": [
+            "timeout",
+            "error",
+            "aborted",
+            "protected_token_lost",
+            "length",
+            "cap",
+            "disabled_for_profile"
+          ],
+          "title": "Reason",
+          "type": "string"
+        },
+        "transform": {
+          "enum": [
+            "condense_history",
+            "normalize_dates",
+            "decompose",
+            "expand",
+            "hyde",
+            "translate"
+          ],
+          "title": "Transform",
+          "type": "string"
+        }
+      },
+      "required": [
+        "transform",
+        "reason"
+      ],
+      "title": "SkippedTransform",
+      "type": "object"
+    },
     "TraceCandidate": {
       "additionalProperties": false,
       "properties": {
@@ -400,6 +670,17 @@
           },
           "title": "Rag Prompt Sha256",
           "type": "object"
+        },
+        "security": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TraceSecurityVersions"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -410,6 +691,116 @@
         "endpoint_version"
       ],
       "title": "TraceEffectiveConfig",
+      "type": "object"
+    },
+    "TraceInjection": {
+      "additionalProperties": false,
+      "properties": {
+        "checked": {
+          "items": {
+            "$ref": "#/$defs/TraceInjectionChecked"
+          },
+          "title": "Checked",
+          "type": "array"
+        },
+        "detectors_unavailable": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Detectors Unavailable",
+          "type": "array"
+        },
+        "downweighted": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Downweighted",
+          "type": "array"
+        },
+        "dropped": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Dropped",
+          "type": "array"
+        },
+        "flagged": {
+          "items": {
+            "$ref": "#/$defs/TraceInjectionFlagged"
+          },
+          "title": "Flagged",
+          "type": "array"
+        },
+        "mode": {
+          "enum": [
+            "flag",
+            "drop",
+            "downweight"
+          ],
+          "title": "Mode",
+          "type": "string"
+        }
+      },
+      "required": [
+        "mode"
+      ],
+      "title": "TraceInjection",
+      "type": "object"
+    },
+    "TraceInjectionChecked": {
+      "additionalProperties": false,
+      "properties": {
+        "chunk_id": {
+          "minLength": 1,
+          "title": "Chunk Id",
+          "type": "string"
+        },
+        "document": {
+          "title": "Document",
+          "type": "string"
+        }
+      },
+      "required": [
+        "chunk_id",
+        "document"
+      ],
+      "title": "TraceInjectionChecked",
+      "type": "object"
+    },
+    "TraceInjectionFlagged": {
+      "additionalProperties": false,
+      "properties": {
+        "chunk_id": {
+          "minLength": 1,
+          "title": "Chunk Id",
+          "type": "string"
+        },
+        "detectors": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Detectors",
+          "type": "array"
+        },
+        "document": {
+          "title": "Document",
+          "type": "string"
+        },
+        "rule_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Rule Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "chunk_id",
+        "document",
+        "detectors"
+      ],
+      "title": "TraceInjectionFlagged",
       "type": "object"
     },
     "TraceKeptChunk": {
@@ -615,6 +1006,27 @@
       "title": "TraceRetrievalVersions",
       "type": "object"
     },
+    "TraceSecurityVersions": {
+      "additionalProperties": false,
+      "properties": {
+        "detectors_version": {
+          "minLength": 1,
+          "title": "Detectors Version",
+          "type": "string"
+        },
+        "rules_version": {
+          "minLength": 1,
+          "title": "Rules Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "rules_version",
+        "detectors_version"
+      ],
+      "title": "TraceSecurityVersions",
+      "type": "object"
+    },
     "TraceUsedDocument": {
       "additionalProperties": false,
       "properties": {
@@ -738,6 +1150,17 @@
       ],
       "default": null
     },
+    "injection": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/TraceInjection"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "invalid_citations": {
       "default": 0,
       "minimum": 0,
@@ -782,6 +1205,17 @@
       "default": null,
       "title": "Query Language"
     },
+    "query_plan": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/QueryPlan"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "query_transforms": {
       "items": {
         "$ref": "#/$defs/TraceQueryTransform"
@@ -806,7 +1240,8 @@
           "enum": [
             "no_relevant_context",
             "below_threshold",
-            "below_similarity_floor"
+            "below_similarity_floor",
+            "injection_filtered"
           ],
           "type": "string"
         },

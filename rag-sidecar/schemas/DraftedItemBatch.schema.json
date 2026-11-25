@@ -44,7 +44,9 @@
             "ambiguous",
             "typo",
             "cross_lingual",
-            "selective_filter"
+            "selective_filter",
+            "injection",
+            "injection_evasive"
           ],
           "title": "Category",
           "type": "string"
