@@ -341,3 +341,13 @@ def test_zh_and_it_table_items_are_llm_drafted_pending_review_and_en_items_have_
             assert item.native_review.origin == "llm_drafted", item.id
             assert item.native_review.status == "pending", item.id
             assert item.native_review.reviewer is None and item.native_review.reviewed_at is None, item.id
+
+
+def test_table_answer_value_and_distractors_never_contain_each_other():
+    from rag_eval.matching import normalize_text
+
+    for item in _table_items():
+        value = normalize_text(item.table_answer.value)
+        for distractor in item.table_answer.distractor_values:
+            other = normalize_text(distractor)
+            assert value not in other and other not in value, f"{item.id}: {distractor!r}"
