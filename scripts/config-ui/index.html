@@ -6629,6 +6629,149 @@
                                     </div>
                                 </div>
 
+                                <!-- Query layer -->
+                                <div class="card bg-base-200 shadow-md mt-6" id="query-layer-card">
+                                    <div class="card-body">
+                                        <h3 class="text-lg font-semibold mb-2 text-balance">Query layer</h3>
+                                        <p class="text-base-content/70 mb-4">Rewrites the question before retrieval and caches answers. Off by default; while the master switch is off, the transform switches below have no effect.</p>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label cursor-pointer justify-start gap-3">
+                                                <input type="checkbox" id="RAG_QUERY_LAYER" name="RAG_QUERY_LAYER" class="checkbox checkbox-primary" aria-describedby="rag-query-layer-help">
+                                                <span class="label-text">Enable the query layer (<span translate="no">RAG_QUERY_LAYER</span>)</span>
+                                            </label>
+                                            <label class="label pl-8">
+                                                <span class="label-text-alt min-w-0" id="rag-query-layer-help">Off keeps the current retrieval path unchanged.</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                                            <div class="form-control">
+                                                <label class="label" for="RAG_QUERY_FRAMEWORK"><span class="label-text">Framework</span></label>
+                                                <select id="RAG_QUERY_FRAMEWORK" name="RAG_QUERY_FRAMEWORK" translate="no" class="select select-bordered w-full">
+                                                    <option value="llamaindex" selected>llamaindex</option>
+                                                    <option value="langchain">langchain</option>
+                                                </select>
+                                            </div>
+                                            <div class="form-control">
+                                                <label class="label" for="RAG_QUERY_LLM_MODEL"><span class="label-text">Query model</span></label>
+                                                <input type="text" id="RAG_QUERY_LLM_MODEL" name="RAG_QUERY_LLM_MODEL" placeholder="openai/gpt-4.1-nano…" autocomplete="off" spellcheck="false" translate="no"
+                                                    class="input input-bordered w-full">
+                                            </div>
+                                        </div>
+
+                                        <div class="border border-base-300 rounded-lg p-4 mb-4 space-y-3">
+                                            <h4 class="font-semibold text-sm text-balance">Transforms</h4>
+                                            <div class="form-control">
+                                                <label class="flex items-center gap-2 cursor-pointer">
+                                                    <input type="checkbox" id="RAG_QUERY_CONDENSE" name="RAG_QUERY_CONDENSE" class="checkbox checkbox-primary" checked>
+                                                    <span class="label-text">Condense follow-up questions (<span translate="no">RAG_QUERY_CONDENSE</span>)</span>
+                                                </label>
+                                            </div>
+                                            <div class="form-control">
+                                                <label class="flex items-center gap-2 cursor-pointer">
+                                                    <input type="checkbox" id="RAG_QUERY_EXPAND" name="RAG_QUERY_EXPAND" class="checkbox checkbox-primary" checked>
+                                                    <span class="label-text">Expand with paraphrases (<span translate="no">RAG_QUERY_EXPAND</span>)</span>
+                                                </label>
+                                            </div>
+                                            <div class="form-control">
+                                                <label class="flex items-center gap-2 cursor-pointer">
+                                                    <input type="checkbox" id="RAG_QUERY_DECOMPOSE" name="RAG_QUERY_DECOMPOSE" class="checkbox checkbox-primary" checked>
+                                                    <span class="label-text">Decompose compound questions (<span translate="no">RAG_QUERY_DECOMPOSE</span>)</span>
+                                                </label>
+                                            </div>
+                                            <div class="form-control">
+                                                <label class="flex items-center gap-2 cursor-pointer">
+                                                    <input type="checkbox" id="RAG_QUERY_TRANSLATE" name="RAG_QUERY_TRANSLATE" class="checkbox checkbox-primary" checked>
+                                                    <span class="label-text">Translate for cross-language search (<span translate="no">RAG_QUERY_TRANSLATE</span>)</span>
+                                                </label>
+                                            </div>
+                                            <div class="form-control">
+                                                <label class="flex items-center gap-2 cursor-pointer">
+                                                    <input type="checkbox" id="RAG_QUERY_DATE_NORMALIZE" name="RAG_QUERY_DATE_NORMALIZE" class="checkbox checkbox-primary" checked>
+                                                    <span class="label-text">Normalize relative dates (<span translate="no">RAG_QUERY_DATE_NORMALIZE</span>)</span>
+                                                </label>
+                                            </div>
+                                            <div class="form-control">
+                                                <label class="flex items-center gap-2 cursor-pointer">
+                                                    <input type="checkbox" id="RAG_QUERY_HYDE" name="RAG_QUERY_HYDE" class="checkbox checkbox-primary" aria-describedby="rag-query-hyde-help">
+                                                    <span class="label-text">Hypothetical answer (HyDE) variant (<span translate="no">RAG_QUERY_HYDE</span>)</span>
+                                                </label>
+                                                <label class="label pl-8">
+                                                    <span class="label-text-alt min-w-0" id="rag-query-hyde-help">HyDE is off by default and is never used in voice.</span>
+                                                </label>
+                                            </div>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label" for="RAG_QUERY_VOICE_TRANSFORMS"><span class="label-text">Voice transforms</span></label>
+                                            <input type="text" id="RAG_QUERY_VOICE_TRANSFORMS" name="RAG_QUERY_VOICE_TRANSFORMS" placeholder="condense_history,normalize_dates…" autocomplete="off" spellcheck="false" translate="no"
+                                                aria-describedby="rag-query-voice-help" class="input input-bordered w-full">
+                                            <label class="label">
+                                                <span class="label-text-alt min-w-0" id="rag-query-voice-help">allowed: <span translate="no">condense_history</span>, <span translate="no">normalize_dates</span>, <span translate="no">translate</span>; voice always uses the native condense.</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label" for="RAG_QUERY_TRANSLATE_DISABLED_PROFILES"><span class="label-text">Profiles without translation</span></label>
+                                            <input type="text" id="RAG_QUERY_TRANSLATE_DISABLED_PROFILES" name="RAG_QUERY_TRANSLATE_DISABLED_PROFILES" placeholder="profile_id,profile_id…" autocomplete="off" spellcheck="false" translate="no"
+                                                aria-describedby="rag-query-translate-profiles-help" class="input input-bordered w-full">
+                                            <label class="label">
+                                                <span class="label-text-alt min-w-0" id="rag-query-translate-profiles-help">Comma-separated embedding profiles that skip the translate transform; empty translates for every profile.</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="border border-base-300 rounded-lg p-4 space-y-4">
+                                            <h4 class="font-semibold text-sm text-balance">Semantic cache</h4>
+                                            <div class="form-control">
+                                                <label class="label" for="RAG_SEMANTIC_CACHE"><span class="label-text">Cache backend</span></label>
+                                                <select id="RAG_SEMANTIC_CACHE" name="RAG_SEMANTIC_CACHE" translate="no" class="select select-bordered w-full">
+                                                    <option value="off" selected>off</option>
+                                                    <option value="pgvector">pgvector</option>
+                                                    <option value="redisvl">redisvl</option>
+                                                </select>
+                                            </div>
+                                            <div class="form-control">
+                                                <label class="label" for="REDIS_URL"><span class="label-text">Redis URL</span></label>
+                                                <div class="flex gap-2">
+                                                    <input type="password" id="REDIS_URL" name="REDIS_URL" placeholder="Empty until configured" autocomplete="off" spellcheck="false"
+                                                        aria-describedby="rag-redis-url-help" class="input input-bordered flex-1 w-full">
+                                                    <button type="button" class="btn btn-square btn-outline" data-for="REDIS_URL" aria-label="Show or hide the Redis URL">👁️</button>
+                                                </div>
+                                                <label class="label">
+                                                    <span class="label-text-alt min-w-0 text-base-content/70" id="rag-redis-url-help">Used by the sidecar for the <span translate="no">redisvl</span> backend. Stays on the server; only its presence is reported.</span>
+                                                </label>
+                                            </div>
+                                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                                <div class="form-control">
+                                                    <label class="label" for="RAG_SEMANTIC_CACHE_TTL"><span class="label-text">Answer lifetime (seconds)</span></label>
+                                                    <input type="number" min="0" step="1" inputmode="numeric" id="RAG_SEMANTIC_CACHE_TTL" name="RAG_SEMANTIC_CACHE_TTL" placeholder="3600"
+                                                        class="input input-bordered w-full">
+                                                </div>
+                                                <div class="form-control">
+                                                    <label class="label" for="RAG_SEMANTIC_CACHE_REFUSAL_TTL"><span class="label-text">Refusal lifetime (seconds)</span></label>
+                                                    <input type="number" min="0" step="1" inputmode="numeric" id="RAG_SEMANTIC_CACHE_REFUSAL_TTL" name="RAG_SEMANTIC_CACHE_REFUSAL_TTL" placeholder="600"
+                                                        class="input input-bordered w-full">
+                                                </div>
+                                                <div class="form-control">
+                                                    <label class="label" for="RAG_SEMANTIC_CACHE_MAX_DISTANCE"><span class="label-text">Max hit distance</span></label>
+                                                    <input type="number" min="0" max="2" step="0.01" inputmode="decimal" id="RAG_SEMANTIC_CACHE_MAX_DISTANCE" name="RAG_SEMANTIC_CACHE_MAX_DISTANCE" placeholder="0.05"
+                                                        class="input input-bordered w-full">
+                                                </div>
+                                            </div>
+                                            <div class="form-control">
+                                                <label class="label cursor-pointer justify-start gap-3">
+                                                    <input type="checkbox" id="RAG_SEMANTIC_CACHE_EMBED_STORE" name="RAG_SEMANTIC_CACHE_EMBED_STORE" class="checkbox checkbox-primary" aria-describedby="rag-cache-embed-help">
+                                                    <span class="label-text">Store embed widget answers (<span translate="no">RAG_SEMANTIC_CACHE_EMBED_STORE</span>)</span>
+                                                </label>
+                                                <label class="label pl-8">
+                                                    <span class="label-text-alt min-w-0" id="rag-cache-embed-help">embed widget answers are only read from the cache unless this is on.</span>
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <!-- Ingestion and embedding profiles -->
                                 <div class="card bg-base-200 shadow-md mt-6">
                                     <div class="card-body">

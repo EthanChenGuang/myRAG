@@ -442,6 +442,33 @@ RAG_TOOL_RESULT_GUARD=off
 NEXT_PUBLIC_RAG_IMAGE_ALLOWLIST=false
 
 # -----------------------------
+# QUERY LAYER
+# -----------------------------
+# Query rewriting before retrieval; false keeps today's behaviour and every switch below is inert while it is false
+RAG_QUERY_LAYER=false
+RAG_QUERY_FRAMEWORK=llamaindex
+RAG_QUERY_LLM_MODEL=openai/gpt-4.1-nano
+RAG_QUERY_CONDENSE=true
+RAG_QUERY_EXPAND=true
+RAG_QUERY_DECOMPOSE=true
+RAG_QUERY_TRANSLATE=true
+RAG_QUERY_DATE_NORMALIZE=true
+RAG_QUERY_HYDE=false
+RAG_QUERY_TRANSLATE_DISABLED_PROFILES=
+RAG_QUERY_VOICE_TRANSFORMS=condense_history,normalize_dates
+
+# -----------------------------
+# SEMANTIC CACHE
+# -----------------------------
+# Answer cache backend: off | pgvector | redisvl (REDIS_URL is read by the sidecar for redisvl only)
+RAG_SEMANTIC_CACHE=off
+RAG_SEMANTIC_CACHE_TTL=3600
+RAG_SEMANTIC_CACHE_REFUSAL_TTL=600
+RAG_SEMANTIC_CACHE_MAX_DISTANCE=0.05
+RAG_SEMANTIC_CACHE_EMBED_STORE=false
+REDIS_URL=
+
+# -----------------------------
 # INGESTION AND EMBEDDING PROFILES
 # -----------------------------
 # legacy keeps today's document writers; unified switches to the single ingest pipeline
