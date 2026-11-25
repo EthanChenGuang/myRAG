@@ -603,6 +603,76 @@
           {
             "level": 1,
             "page": 1,
+            "text": "试验地块作物株高记录"
+          }
+        ],
+        "long_table": {
+          "body_rows": 60,
+          "category_column": "长势",
+          "continued": false,
+          "header": [
+            "地块",
+            "测量批次",
+            "首测株高（厘米）",
+            "复测株高（厘米）",
+            "长势"
+          ],
+          "key_columns": [
+            "地块",
+            "测量批次"
+          ],
+          "subject": "六个虚构试验地块的作物株高测量",
+          "tables": [
+            {
+              "body_rows": 60,
+              "first_page": 1,
+              "header_row": true,
+              "last_page": 2
+            }
+          ],
+          "target_row": 51,
+          "target_values": [
+            "己区",
+            "第02批",
+            "117.6",
+            "43.3",
+            "良好"
+          ],
+          "value_columns": [
+            "首测株高（厘米）",
+            "复测株高（厘米）"
+          ]
+        },
+        "page_count": 2
+      },
+      "file_sha256": "80704596394edea7fea8c83eab453360dba35261f8e0956e0023429e95dc0ef1",
+      "id": "long-table-zh",
+      "language": "zh",
+      "mime": "application/pdf",
+      "path": "pdf/long-table-zh.pdf",
+      "profile_id": "general@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/long-table-zh.docling.json"
+        },
+        "docling": "recorded/long-table-zh.docling.json",
+        "parse_result": "recorded/long-table-zh.parse.json"
+      },
+      "size_bytes": 26706,
+      "text": {
+        "mime": "text/markdown",
+        "path": "text/long-table-zh.md",
+        "sha256": "5a45ce81a2c0cfcadce0a99ec222e9a0b56e4e3d5d4304e695bf8697ee32a716"
+      },
+      "text_layer": "digital"
+    },
+    {
+      "doc_type": "general",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
             "text": "Synthetic Basin Level Readings"
           }
         ],
@@ -663,6 +733,304 @@
         "mime": "text/markdown",
         "path": "text/long-table-en.md",
         "sha256": "501c88f78fb37762ec411500972c47dcd346b6e4ead66b3916efa76cbf8baa01"
+      },
+      "text_layer": "digital"
+    },
+    {
+      "doc_type": "general",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "Registro sintetico dello spessore dei campioni di vetro"
+          }
+        ],
+        "long_table": {
+          "body_rows": 60,
+          "category_column": "Esito",
+          "continued": false,
+          "header": [
+            "Lotto",
+            "Campione",
+            "Spessore iniziale (mm)",
+            "Spessore finale (mm)",
+            "Esito"
+          ],
+          "key_columns": [
+            "Lotto",
+            "Campione"
+          ],
+          "subject": "spessore di campioni di vetro sintetici",
+          "tables": [
+            {
+              "body_rows": 60,
+              "first_page": 1,
+              "header_row": true,
+              "last_page": 2
+            }
+          ],
+          "target_row": 48,
+          "target_values": [
+            "Lotto Grigio",
+            "Campione n. 09",
+            "2,874",
+            "2,215",
+            "conforme alla prova"
+          ],
+          "value_columns": [
+            "Spessore iniziale (mm)",
+            "Spessore finale (mm)"
+          ]
+        },
+        "page_count": 2
+      },
+      "file_sha256": "05823761a1c17b0d3b4dd27492e23569842706fcbf1cfc659d0543edd4617014",
+      "id": "long-table-it",
+      "language": "it",
+      "mime": "application/pdf",
+      "path": "pdf/long-table-it.pdf",
+      "profile_id": "general@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/long-table-it.docling.json"
+        },
+        "docling": "recorded/long-table-it.docling.json",
+        "parse_result": "recorded/long-table-it.parse.json"
+      },
+      "size_bytes": 20017,
+      "text": {
+        "mime": "text/markdown",
+        "path": "text/long-table-it.md",
+        "sha256": "511d1122f511d610f86f18a3527063a1885be587424627d8a0e4cd02571d183a"
+      },
+      "text_layer": "digital"
+    },
+    {
+      "doc_type": "general",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "试验地块作物株高记录"
+          }
+        ],
+        "long_table": {
+          "body_rows": 60,
+          "category_column": "长势",
+          "continued": true,
+          "header": [
+            "地块",
+            "测量批次",
+            "首测株高（厘米）",
+            "复测株高（厘米）",
+            "长势"
+          ],
+          "key_columns": [
+            "地块",
+            "测量批次"
+          ],
+          "subject": "六个虚构试验地块的作物株高测量",
+          "tables": [
+            {
+              "body_rows": 44,
+              "first_page": 1,
+              "header_row": true,
+              "last_page": 1
+            },
+            {
+              "body_rows": 16,
+              "first_page": 2,
+              "header_row": false,
+              "last_page": 2
+            }
+          ],
+          "target_row": 51,
+          "target_values": [
+            "己区",
+            "第02批",
+            "117.6",
+            "43.3",
+            "良好"
+          ],
+          "value_columns": [
+            "首测株高（厘米）",
+            "复测株高（厘米）"
+          ]
+        },
+        "page_count": 2
+      },
+      "file_sha256": "3dc0af1c0294743e3de8f7e60a752bb059de3ea36f3b2a83e49cdf584194e1f6",
+      "id": "long-table-zh-continued",
+      "language": "zh",
+      "mime": "application/pdf",
+      "path": "pdf/long-table-zh-continued.pdf",
+      "profile_id": "general@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/long-table-zh-continued.docling.json"
+        },
+        "docling": "recorded/long-table-zh-continued.docling.json",
+        "parse_result": "recorded/long-table-zh-continued.parse.json"
+      },
+      "size_bytes": 26996,
+      "text": {
+        "mime": "text/markdown",
+        "path": "text/long-table-zh-continued.md",
+        "sha256": "1d5cd2bbb0409210cb535864ecd49d5453e9aa8b1e4ab3726900f0e7d7e168a4"
+      },
+      "text_layer": "digital"
+    },
+    {
+      "doc_type": "general",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "Synthetic Basin Level Readings"
+          }
+        ],
+        "long_table": {
+          "body_rows": 60,
+          "category_column": "Trend",
+          "continued": true,
+          "header": [
+            "Basin",
+            "Survey week",
+            "Morning level (cm)",
+            "Evening level (cm)",
+            "Trend"
+          ],
+          "key_columns": [
+            "Basin",
+            "Survey week"
+          ],
+          "subject": "water level readings of six synthetic storage basins",
+          "tables": [
+            {
+              "body_rows": 44,
+              "first_page": 1,
+              "header_row": true,
+              "last_page": 1
+            },
+            {
+              "body_rows": 16,
+              "first_page": 2,
+              "header_row": false,
+              "last_page": 2
+            }
+          ],
+          "target_row": 54,
+          "target_values": [
+            "Lower Basin",
+            "Survey week 05",
+            "341.8",
+            "322.7",
+            "rising slowly"
+          ],
+          "value_columns": [
+            "Morning level (cm)",
+            "Evening level (cm)"
+          ]
+        },
+        "page_count": 2
+      },
+      "file_sha256": "5d278c5949b9caa36d0499c362555c6355e184e1ce17bcec7def92bd4bb91fb0",
+      "id": "long-table-en-continued",
+      "language": "en",
+      "mime": "application/pdf",
+      "path": "pdf/long-table-en-continued.pdf",
+      "profile_id": "general@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/long-table-en-continued.docling.json"
+        },
+        "docling": "recorded/long-table-en-continued.docling.json",
+        "parse_result": "recorded/long-table-en-continued.parse.json"
+      },
+      "size_bytes": 19574,
+      "text": {
+        "mime": "text/markdown",
+        "path": "text/long-table-en-continued.md",
+        "sha256": "1eea273bc3a269f30d4cf07b4ed7c815ddab62efdc8970393e145d3a14c979d1"
+      },
+      "text_layer": "digital"
+    },
+    {
+      "doc_type": "general",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "Registro sintetico dello spessore dei campioni di vetro"
+          }
+        ],
+        "long_table": {
+          "body_rows": 60,
+          "category_column": "Esito",
+          "continued": true,
+          "header": [
+            "Lotto",
+            "Campione",
+            "Spessore iniziale (mm)",
+            "Spessore finale (mm)",
+            "Esito"
+          ],
+          "key_columns": [
+            "Lotto",
+            "Campione"
+          ],
+          "subject": "spessore di campioni di vetro sintetici",
+          "tables": [
+            {
+              "body_rows": 44,
+              "first_page": 1,
+              "header_row": true,
+              "last_page": 1
+            },
+            {
+              "body_rows": 16,
+              "first_page": 2,
+              "header_row": false,
+              "last_page": 2
+            }
+          ],
+          "target_row": 48,
+          "target_values": [
+            "Lotto Grigio",
+            "Campione n. 09",
+            "2,874",
+            "2,215",
+            "conforme alla prova"
+          ],
+          "value_columns": [
+            "Spessore iniziale (mm)",
+            "Spessore finale (mm)"
+          ]
+        },
+        "page_count": 2
+      },
+      "file_sha256": "ffc0aed8bc30385b3a93ad35fea4b5f8e6a07ab84c0ab6392d4802acae4fc979",
+      "id": "long-table-it-continued",
+      "language": "it",
+      "mime": "application/pdf",
+      "path": "pdf/long-table-it-continued.pdf",
+      "profile_id": "general@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/long-table-it-continued.docling.json"
+        },
+        "docling": "recorded/long-table-it-continued.docling.json",
+        "parse_result": "recorded/long-table-it-continued.parse.json"
+      },
+      "size_bytes": 20067,
+      "text": {
+        "mime": "text/markdown",
+        "path": "text/long-table-it-continued.md",
+        "sha256": "77b5b8cd11c851a09912c7c5f7281fe1bc8be9d72461c0f8a5c68db5bcc17f65"
       },
       "text_layer": "digital"
     }

@@ -588,7 +588,7 @@ def _long_table(language: str, continued: bool) -> FixtureSpec:
 
 def long_table_specs() -> tuple[FixtureSpec, ...]:
     """The long-table fixtures; kept out of all_specs() so the loaded fixture tenant does not change (research Pitfall 10)."""
-    return (_long_table("en", False),)
+    return tuple(_long_table(language, continued) for continued in (False, True) for language in ("zh", "en", "it"))
 
 
 def all_specs() -> tuple[FixtureSpec, ...]:
