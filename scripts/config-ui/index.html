@@ -74,6 +74,8 @@
     <script src="rag-panels/quarantine.js"></script>
     <script src="rag-panels/embedding-profiles.js"></script>
     <script src="rag-panels/ingestion.js"></script>
+    <script src="rag-panels/chunking-validate.js"></script>
+    <script src="rag-panels/chunking-profiles.js"></script>
 
     <style>
         /* Tab content visibility */
@@ -8764,6 +8766,16 @@
                                                 <button type="button" class="btn btn-outline btn-sm" data-rag-profiles-rollback>Rollback active profile</button>
                                             </div>
                                             <div data-rag-profiles-list></div>
+                                        </div>
+                                    </section>
+
+                                    <section id="rag-administration-chunking" class="card bg-base-200 shadow-md" aria-labelledby="rag-chunking-title">
+                                        <div class="card-body">
+                                            <h3 id="rag-chunking-title" class="text-lg font-semibold mb-2" data-chunking-title>Chunking profiles</h3>
+                                            <p class="text-sm text-base-content/70 mb-4 max-w-prose" data-chunking-description>Chunk sizes per document type. Build a new profile next to the current one, compare it in the sweep report, then activate it. Applies to every workspace in this deployment.</p>
+                                            <div data-chunking-alert class="mb-4 empty:mb-0"></div>
+                                            <div data-chunking-content></div>
+                                            <div data-chunking-status class="text-sm mt-4" role="status" aria-live="polite"></div>
                                         </div>
                                     </section>
                                 </div>

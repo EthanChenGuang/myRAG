@@ -231,12 +231,7 @@ class FakeElement {
     throw new Error('insertAdjacentHTML is not allowed in Config UI panels');
   }
   get isConnected(): boolean {
-    let node: FakeElement | null = this;
-    while (node) {
-      if (node === this.doc.body || node === this.doc.documentElement) return true;
-      node = node.parentNode;
-    }
-    return false;
+    return this.doc.documentElement.contains(this);
   }
   appendChild<T extends FakeNode>(node: T): T {
     if (node.parentNode) node.parentNode.removeChild(node);
@@ -642,7 +637,7 @@ describe('coverageWarning', () => {
       expect(warning?.text).toContain('p256-1024-contract_legal');
       expect(warning?.text).not.toMatch(/\{\w+\}/);
     }
-    expect(coverageWarning(contract, 'en')?.text).toMatch(/legacy chunks until the profile is rebuilt/);
+    expect(coverageWarning(contract, 'en')?.text).toMatch(/Until the profile is rebuilt, questions about them are answered from legacy chunks/);
     expect(coverageWarning(contract, 'en')?.text).toMatch(/Build missing documents/);
     expect(coverageWarning(contract, 'zh')?.text).toContain('构建缺失文档');
     expect(coverageWarning(contract, 'it')?.text).toContain('Costruisci documenti mancanti');
@@ -960,6 +955,126 @@ describe('ChunkingProfilesPanel renders server strings as text only', () => {
       expect(all).not.toContain('{appUrl}');
       expect(root.querySelectorAll('input').length).toBe(0);
       expect((root.querySelector('[data-chunking-content]') as FakeElement).hidden).toBe(true);
+    });
+  });
+});
+
+function chunkingRoot(doc: FakeDocument): FakeElement {
+  const root = doc.createElement('section');
+  root.id = 'rag-administration-chunking';
+  for (const attr of ['data-chunking-title', 'data-chunking-description', 'data-chunking-alert', 'data-chunking-content', 'data-chunking-status']) {
+    const el = doc.createElement('div');
+    el.setAttribute(attr, '');
+    root.appendChild(el);
+  }
+  doc.body.appendChild(root);
+  return root;
+}
+
+function buttonByText(root: FakeElement, text: string): FakeElement {
+  const match = root.querySelectorAll('button').find((b) => b.textContent.includes(text));
+  if (!match) throw new Error(`no button ${text}`);
+  return match;
+}
+
+describe('ChunkingProfilesPanel flows', () => {
+  const reportRoute = { ok: true, status: 200, body: { success: true, report: REPORT, decisions: DECISIONS } };
+
+  it('the form disables Create on a hard error and keeps it enabled for warnings', async () => {
+    await withFakeDocument(async (doc) => {
+      const { ChunkingProfilesPanel } = loadChunkingPanel();
+      const { fetcher } = fakeFetcher({
+        'GET /api/rag/admin/chunking-profiles': { ok: true, status: 200, body: listBody() },
+        'GET /api/rag/admin/chunking-profiles/report': reportRoute,
+        'POST /api/rag/admin/chunking-profiles/validate': { ok: true, status: 200, body: { success: true, valid: true, errors: [], warnings: ['top_k_parent_over_budget'] } },
+      });
+      const root = chunkingRoot(doc);
+      const panel = new ChunkingProfilesPanel(root, { fetcher, locale: 'en' });
+      await panel.mount();
+      await flush();
+      buttonByText(root, 'New profile').click();
+      const create = buttonByText(root, 'Create profile');
+      expect(create.disabled).toBe(false);
+      expect((root.querySelector('#chunking-form-id') as FakeElement).value).toBe('p256-1024-general');
+
+      const custom = root.querySelector('#chunking-form-preset-custom') as FakeElement;
+      custom.checked = true;
+      custom.dispatch('change');
+      const parent = root.querySelector('#chunking-form-parent') as FakeElement;
+      parent.value = '400';
+      parent.dispatch('input');
+      expect(create.disabled).toBe(true);
+      expect(parent.getAttribute('aria-invalid')).toBe('true');
+      expect(textNodes(root).join(' ')).toContain('The parent size must be at least twice the child size: 512 or more.');
+
+      parent.value = '1536';
+      parent.dispatch('input');
+      expect(create.disabled).toBe(false);
+      expect((root.querySelector('#chunking-form-id') as FakeElement).value).toBe('p256-1536-general');
+    });
+  });
+
+  it('Build missing documents loops through gaps and reports them by reason', async () => {
+    await withFakeDocument(async (doc) => {
+      const { ChunkingProfilesPanel } = loadChunkingPanel();
+      const steps = [
+        { ok: true, status: 200, body: { success: true, run_id: 'MARKER_RUN', status: 'running', docsDone: 1, docsTotal: 3, gaps: 1, gap_reasons: { no_parse_output: 1 }, more: true } },
+        { ok: true, status: 200, body: { success: true, run_id: 'MARKER_RUN', status: 'incomplete', docsDone: 3, docsTotal: 3, gaps: 1, gap_reasons: { no_parse_output: 1 }, more: false } },
+      ];
+      const { fetcher, calls } = fakeFetcher({
+        'GET /api/rag/admin/chunking-profiles': { ok: true, status: 200, body: listBody() },
+        'GET /api/rag/admin/chunking-profiles/report': reportRoute,
+        'POST /api/rag/admin/chunking-profiles/p256-1024-contract_legal/build': () => steps.shift() as FetchResult,
+      });
+      const root = chunkingRoot(doc);
+      const panel = new ChunkingProfilesPanel(root, { fetcher, locale: 'en' });
+      await panel.mount();
+      await flush();
+      buttonByText(root, 'Build missing documents').click();
+      await flush(20);
+      const builds = calls.filter((c) => c.path.endsWith('/build'));
+      expect(builds.length).toBe(2);
+      expect(JSON.parse(builds[0].body as string)).toEqual({ doc_type: 'contract_legal' });
+      const all = textNodes(root).join(' ');
+      expect(all).toContain('Build finished, but some documents were left out: 1.');
+      expect(all).toContain('npm run rag:rechunk -- --profile p256-1024-contract_legal --dry-run');
+      expect(all).not.toContain('MARKER_RUN');
+    });
+  });
+
+  it('Activate asks for confirmation and shows the gate refusal sentence on 409', async () => {
+    await withFakeDocument(async (doc) => {
+      const { ChunkingProfilesPanel } = loadChunkingPanel();
+      const { fetcher, calls } = fakeFetcher({
+        'GET /api/rag/admin/chunking-profiles': { ok: true, status: 200, body: listBody() },
+        'GET /api/rag/admin/chunking-profiles/report': reportRoute,
+        'POST /api/rag/admin/chunking-profiles/p128-512-contract_legal/activate': {
+          ok: false,
+          status: 409,
+          body: { success: false, error: 'activation_refused', reason: 'no_evidence' },
+        },
+      });
+      const root = chunkingRoot(doc);
+      const panel = new ChunkingProfilesPanel(root, { fetcher, locale: 'en' });
+      await panel.mount();
+      await flush();
+      const activate = root.querySelectorAll('button').find((b) => b.getAttribute('aria-label') === 'Activate profile p128-512-contract_legal for Contract & legal');
+      expect(activate).toBeTruthy();
+      activate?.click();
+      const dialog = doc.body.querySelector('dialog') as FakeElement;
+      expect(dialog.open).toBe(true);
+      expect(doc.activeElement?.textContent).toBe('Keep current profile');
+      const backdrop = dialog.querySelector('form') as FakeElement;
+      expect(backdrop.querySelector('button')?.getAttribute('aria-label')).toBe('Keep current profile');
+      expect(calls.some((c) => c.path.endsWith('/activate'))).toBe(false);
+      buttonByText(dialog, 'Activate profile').click();
+      await flush(20);
+      const activation = calls.find((c) => c.path.endsWith('/activate'));
+      expect(JSON.parse(activation?.body as string)).toEqual({ doc_type: 'contract_legal' });
+      const all = textNodes(root).join(' ');
+      expect(all).toContain('Not activated. No sweep decision is recorded in the database for p128-512-contract_legal.');
+      expect(all).toContain('npm run rag:chunking -- record-decision <decision.json>');
+      expect(root.querySelectorAll('div').some((el) => el.getAttribute('role') === 'alert')).toBe(true);
     });
   });
 });
