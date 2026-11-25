@@ -1,5 +1,5 @@
 import { adminDenied, checkAdmin } from '@/lib/admin-route-auth';
-import { computeFingerprintCoverage } from '@/lib/rag/ingest/fingerprint/impact';
+import { computeFingerprintCoverage } from '@/lib/rag';
 import { fingerprintUnavailable, jsonNoStore } from './_responses';
 
 export const runtime = 'nodejs';

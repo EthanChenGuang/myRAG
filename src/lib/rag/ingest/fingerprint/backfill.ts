@@ -108,7 +108,7 @@ function asRow(raw: unknown): BackfillRow {
   return {
     id: String(row.id),
     tenant_key: String(row.tenant_key),
-    doc_type: typeof row.doc_type === 'string' ? row.doc_type : 'general',
+    doc_type: text(row.doc_type) ?? 'general',
     parser_used: text(row.parser_used),
     parser_version: text(row.parser_version),
     processing_profile_id: text(row.processing_profile_id),
@@ -149,7 +149,8 @@ export function partsFromStoredRow(row: BackfillRow, options: { embeddingProfile
   let profile = row.processing_profile_id === null ? undefined : profiles.find((candidate) => candidate.id === row.processing_profile_id);
   let profileId = row.processing_profile_id;
   if (profileId === null) {
-    profile = profiles.find((candidate) => candidate.doc_type === row.doc_type) ?? profiles.find((candidate) => candidate.doc_type === 'general');
+    const byType = new Map(profiles.map((candidate) => [candidate.doc_type as string, candidate]));
+    profile = byType.get(row.doc_type) ?? byType.get('general');
     profileId = profile?.id ?? UNKNOWN;
     assumed.add('processing_profile_id');
   }

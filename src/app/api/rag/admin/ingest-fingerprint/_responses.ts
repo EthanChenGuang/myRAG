@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { FingerprintImpactError } from '@/lib/rag/ingest/fingerprint/impact';
+import { FingerprintImpactError } from '@/lib/rag';
 
 const NO_STORE = { 'Cache-Control': 'no-store' } as const;
 

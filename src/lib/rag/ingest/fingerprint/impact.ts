@@ -63,7 +63,7 @@ function asGroup(row: unknown): FingerprintGroup | null {
   if (typeof row !== 'object' || row === null) return null;
   const record = row as Record<string, unknown>;
   return {
-    docType: typeof record.doc_type === 'string' ? record.doc_type : 'general',
+    docType: String(record.doc_type ?? 'general'),
     fingerprint: typeof record.ingest_fingerprint === 'string' ? record.ingest_fingerprint : null,
     parts: record.parts ?? null,
     documents: toCount(record.documents),

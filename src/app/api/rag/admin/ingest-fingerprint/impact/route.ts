@@ -1,6 +1,6 @@
 import { z } from 'zod/v3';
 import { adminDenied, checkAdmin } from '@/lib/admin-route-auth';
-import { computeFingerprintImpact, isSettingName } from '@/lib/rag/ingest/fingerprint/impact';
+import { computeFingerprintImpact, isSettingName } from '@/lib/rag';
 import { fingerprintUnavailable, invalidRequest, jsonNoStore } from '../_responses';
 
 export const runtime = 'nodejs';

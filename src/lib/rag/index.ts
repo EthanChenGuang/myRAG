@@ -298,3 +298,5 @@ export { readSecurityConfig } from './security/config';
 export { injectionTraceVersions } from './security/injection-check';
 export type { ToolResultGuardMode } from './security/config';
 export { escapeToolOutput, scanToolOutput, wrapToolResultsForPrompt } from './security/tool-results';
+export { FingerprintImpactError, computeFingerprintCoverage, computeFingerprintImpact, isSettingName } from './ingest/fingerprint/impact';
+export type { FingerprintCoverage, PendingRebuild, RebuildStart } from './ingest/fingerprint/impact';
