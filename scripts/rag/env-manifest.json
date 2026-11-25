@@ -32,6 +32,16 @@
       "knownGaps": []
     },
     {
+      "name": "LAKERA_GUARD_API_KEY",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "LAKERA_GUARD_BASE_URL",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "LANGFUSE_BASE_URL",
       "status": "managed",
       "knownGaps": []
@@ -147,6 +157,11 @@
         "config-ui",
         "env-ts"
       ]
+    },
+    {
+      "name": "NEXT_PUBLIC_RAG_IMAGE_ALLOWLIST",
+      "status": "managed",
+      "knownGaps": []
     },
     {
       "name": "NEXT_PUBLIC_RAG_INGEST_REALTIME",
@@ -271,6 +286,11 @@
     },
     {
       "name": "RAG_CONTEXT_EDGE_ORDER",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_CONTEXT_TAGGING",
       "status": "managed",
       "knownGaps": []
     },
@@ -499,6 +519,26 @@
       "knownGaps": [
         "config-ui"
       ]
+    },
+    {
+      "name": "RAG_INJECTION_CHECK",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_INJECTION_LAKERA",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_INJECTION_LAKERA_MULTI_TENANT_ACK",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_INJECTION_PROMPT_GUARD",
+      "status": "managed",
+      "knownGaps": []
     },
     {
       "name": "RAG_INJECTION_SCAN",
@@ -780,6 +820,11 @@
       "knownGaps": [
         "env-ts"
       ]
+    },
+    {
+      "name": "RAG_TOOL_RESULT_GUARD",
+      "status": "managed",
+      "knownGaps": []
     },
     {
       "name": "RAG_VOICE_TOKEN_SECRET",

@@ -420,6 +420,28 @@ RAG_ANSWER_FEEDBACK=false
 RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK=false
 
 # -----------------------------
+# PROMPT-INJECTION DEFENSE
+# -----------------------------
+# Wrap retrieved chunks in tagged <doc> blocks with an untrusted-content notice
+RAG_CONTEXT_TAGGING=false
+# Retrieval-time injection check: off | flag | drop | downweight (drop is recommended; downweight is weaker than drop)
+RAG_INJECTION_CHECK=off
+# Prompt Guard 2 detector in the sidecar (optional; en and it only)
+RAG_INJECTION_PROMPT_GUARD=false
+# Lakera Guard hosted detector (sends chunk text to Lakera, a third party)
+RAG_INJECTION_LAKERA=false
+# Lakera Guard API key (never logged)
+LAKERA_GUARD_API_KEY=
+# Lakera Guard base URL; empty uses https://api.lakera.ai (regional hosts such as the EU one are allowed)
+LAKERA_GUARD_BASE_URL=
+# Multi-tenant only: set after the Lakera data-retention terms were recorded in live verification
+RAG_INJECTION_LAKERA_MULTI_TENANT_ACK=false
+# Tool results (web search, MCP) in the model context: off | tag | tag_and_flag
+RAG_TOOL_RESULT_GUARD=off
+# Render markdown images in answers only from allowed hosts (inlined at build time; needs a rebuild)
+NEXT_PUBLIC_RAG_IMAGE_ALLOWLIST=false
+
+# -----------------------------
 # INGESTION AND EMBEDDING PROFILES
 # -----------------------------
 # legacy keeps today's document writers; unified switches to the single ingest pipeline
