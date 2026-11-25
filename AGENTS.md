@@ -89,7 +89,7 @@ myrag/
 - The worker runs in the sidecar: `RAG_INGEST_WORKER=on` (default off: the sidecar starts no worker) with `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `RAG_APP_INTERNAL_URL` and `RAG_SIDECAR_SECRET`; it calls back into `/api/internal/rag/ingest/jobs/[id]/*`.
 - Bulk import: `npm run rag:backfill -- --tenant <key> --source <folder|bucket|manifest>:<ref> --budget <USD>`. The sample dry run always runs first; without `--budget`, or with `--dry-run`, the command stops after the report (exit 2). `--resume <batch_id>` continues a batch.
 - `RAG_PARSER_ALLOW_CLOUD=false` applies in every pipeline: no request reaches LlamaParse or the vision model; the legacy knowledge-base PDF upload answers 503 `cloud_parsing_disabled`, the unified chain parses locally.
-- Tier routing thresholds and presets live in `config/rag/parse-routing.json` (read by the app and the sidecar).
+- Tier routing thresholds and presets live in `config/rag/parse-routing.json` (read by the app and the sidecar). The sidecar image ships copies of it and `processing-profiles.json` from `rag-sidecar/config/rag/` (as `/app/config/rag/`); edit both, a sidecar test fails when they differ.
 
 ### Hybrid retrieval (Phase 4)
 - `RAG_PIPELINE=legacy` (default) runs none of Phase 4. `RAG_PIPELINE=v2` runs the v2 stage graph; with every sub-switch off it is dense-only search through `hybrid_search_chunks`, then RRF over one leg and the Phase 2 assembly.

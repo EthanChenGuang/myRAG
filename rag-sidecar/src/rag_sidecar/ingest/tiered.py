@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, Any
 
 from docling_core.types.doc import DoclingDocument, Size
 
-from rag_sidecar.contracts.ingest import ParseJobRequest, ParseResult, ProcessingProfile, ProcessingProfileSet
+from rag_sidecar.contracts.ingest import ParseJobRequest, ParseResult, ProcessingProfile
 from rag_sidecar.contracts.queue import IngestionJob, ParseAttemptPages, ParseExternalRequest
 from rag_sidecar.contracts.routing import (
     PageRange,
@@ -38,7 +38,7 @@ from rag_sidecar.ingest.merge import MergeInvariantError, join_page_parts, merge
 from rag_sidecar.ingest.pool import UPLOAD_PRIORITY, PoolCrashed
 from rag_sidecar.parse import docling_adapter
 from rag_sidecar.parse.converter import ConversionError
-from rag_sidecar.preflight.config import load_routing_config
+from rag_sidecar.preflight.config import RagConfigMissing, load_processing_profiles, load_routing_config
 
 if TYPE_CHECKING:
     from rag_sidecar.ingest.process_job import JobOutcome, WorkerDeps
@@ -61,7 +61,6 @@ _TIER_RANK = {"native": 0, "fast": 1, "structured": 2, "premium": 3}
 _DEFAULT_LADDER = ["fast", "structured", "premium"]
 _PRESET_RANK = {"native": 0, "fast": 1, "structured_layout": 2, "structured_full": 3, "structured_ocr": 4, "premium": 5}
 _MAX_PREMIUM_POLLS = 400
-_PROFILES_PATH = Path(__file__).resolve().parents[4] / "config" / "rag" / "processing-profiles.json"
 _PERMANENT_ERRORS = frozenset(
     {
         "encrypted_pdf",
@@ -151,8 +150,12 @@ async def _blocking(deps: WorkerDeps, cfg: ParseRoutingConfig, priority: int, ta
     return outcome[1]
 
 
-def _preflight_job(preflight: Callable[..., Any], path: Path, settings: Any, cfg: ParseRoutingConfig, converter: Any, sha: str) -> Any:
-    return preflight(path, settings, cfg, converter, file_sha=sha)
+def _preflight_job(
+    preflight: Callable[..., Any], path: Path, settings: Any, cfg: ParseRoutingConfig, converter: Any, sha: str, vlm_app: Any = None
+) -> Any:
+    if vlm_app is None:
+        return preflight(path, settings, cfg, converter, file_sha=sha)
+    return preflight(path, settings, cfg, converter, file_sha=sha, vlm_app=vlm_app)
 
 
 def _chunk_job(doc: DoclingDocument, request: ParseJobRequest, out_dir: Path, version: str, text_layer_share: float | None) -> ParseResult:
@@ -175,8 +178,10 @@ def load_profile(profile_id: str) -> ProcessingProfile:
     global _profiles
     if _profiles is None:
         try:
-            raw = json.loads(_PROFILES_PATH.read_text(encoding="utf-8"))
-            profile_set = ProcessingProfileSet.model_validate(raw)
+            profile_set = load_processing_profiles()
+        except RagConfigMissing as exc:
+            logger.error("[RAG Ingest] processing profiles missing: %s", exc)
+            raise TieredFailure("profile_unavailable") from exc
         except (OSError, ValueError) as exc:
             raise TieredFailure("profile_unavailable") from exc
         _profiles = {profile.id: profile for profile in profile_set.profiles}
@@ -419,6 +424,21 @@ async def _resume_preflight(run: _Run) -> PreflightResult | None:
         return None
 
 
+def _vlm_app(run: _Run) -> Any:
+    """The L3 bridge for this job, or None when the snapshot does not ask for L3 (vlm_detect, tiered, cloud allowed, budget).
+
+    Preflight runs in a pool thread; the bridge hands each detect-vlm call back to this loop, which owns the app client.
+    """
+    from rag_sidecar.preflight.l3 import LoopVlmApp, l3_enabled
+
+    if run.cfg.l3.max_pages_per_doc <= 0 or not l3_enabled(run.job.settings):
+        return None
+    if getattr(run.deps.app, "detect_vlm", None) is None:
+        return None
+    attempt_no = max(run.last_attempt_no, len(run.job.attempts)) + 1
+    return LoopVlmApp(run.deps.app, run.job.id, run.deps.worker_id, attempt_no, asyncio.get_running_loop())
+
+
 async def _run_preflight(run: _Run) -> PreflightResult:
     resumed = await _resume_preflight(run)
     if resumed is not None:
@@ -428,9 +448,10 @@ async def _run_preflight(run: _Run) -> PreflightResult:
         from rag_sidecar.preflight.run import run_preflight
 
         preflight = run_preflight
+    vlm_app = _vlm_app(run)
     started = time.perf_counter()
     output = await _blocking(
-        run.deps, run.cfg, run.job.priority, _preflight_job, preflight, run.path, run.job.settings, run.cfg, run.converter, run.sha
+        run.deps, run.cfg, run.job.priority, _preflight_job, preflight, run.path, run.job.settings, run.cfg, run.converter, run.sha, vlm_app
     )
     elapsed = int((time.perf_counter() - started) * 1000)
     run.reusable = dict(output.reusable_fast)

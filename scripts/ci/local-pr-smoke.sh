@@ -58,7 +58,7 @@ if [[ "${LOCAL_GATE_SKIP_DOCKER:-}" == 1 ]]; then
   STATUS[docker-build]=SKIP
   DETAIL[docker-build]="skipped (LOCAL_GATE_SKIP_DOCKER=1)"
 elif command -v docker >/dev/null 2>&1; then
-  run_job docker-build bash -c 'docker build -t rag-sidecar:ci rag-sidecar'
+  run_job docker-build bash -c 'set -euo pipefail; docker build -t rag-sidecar:ci rag-sidecar; for name in parse-routing.json processing-profiles.json; do docker run --rm rag-sidecar:ci cat "/app/config/rag/$name" | cmp - "config/rag/$name"; done'
 else
   STATUS[docker-build]=SKIP
   DETAIL[docker-build]="docker not available"

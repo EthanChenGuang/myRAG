@@ -138,8 +138,8 @@ def render_pages(path: Path | str, page_numbers: Sequence[int]) -> list[tuple[in
     return out
 
 
-def _enabled(snapshot: JobSettingsSnapshot | None) -> bool:
-    # The app's guard is the authority; the worker just does not send what the snapshot already forbids (D-18).
+def l3_enabled(snapshot: JobSettingsSnapshot | None) -> bool:
+    """Whether the job snapshot asks for L3; the app's guard is the authority, the worker only skips what the snapshot forbids (D-18)."""
     return (
         snapshot is not None
         and snapshot.vlm_detect
@@ -197,7 +197,7 @@ def l3_refine(
     page or a failing call leaves the pages as they are, so the higher tier of L1 and L2 stands (D-49); it never raises.
     """
     limit = min(cfg.l3.max_pages_per_doc, MAX_VLM_PAGES)
-    if limit <= 0 or not _enabled(snapshot):
+    if limit <= 0 or not l3_enabled(snapshot):
         return pages
     known = {page.page for page in pages}
     targets = sorted({number for number in disagreements if number in known})[:limit]

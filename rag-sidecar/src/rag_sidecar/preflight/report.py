@@ -38,8 +38,6 @@ COMBO_L1_L2: LayerCombo = "L1+L2"
 COMBO_L1_L2_L3: LayerCombo = "L1+L2+L3"
 ALL_COMBOS: tuple[LayerCombo, ...] = (COMBO_L1, COMBO_L1_L2, COMBO_L1_L2_L3)
 
-_REPO_ROOT = Path(__file__).resolve().parents[4]
-_DEFAULT_PROFILES = _REPO_ROOT / "config" / "rag" / "processing-profiles.json"
 _DEFAULT_DOC_TYPE = "general"
 # The parse fixtures carry a class, not a document type; only the invoice class maps to its own processing profile.
 _DOC_TYPE_BY_CLASS = {"invoice": "invoice_receipt"}
@@ -208,11 +206,11 @@ def build_routing_report(
 ) -> RoutingReport:
     """Route the selected fixtures (all of them by default) once per layer combination; ``cfg`` overrides the routing file."""
     from rag_sidecar.ingest.converters import RecordedRangeConverter
-    from rag_sidecar.preflight.config import load_routing_config
+    from rag_sidecar.preflight.config import default_processing_profiles_path, load_routing_config
     from rag_sidecar.preflight.run import PROBE_VERSION
 
     cfg = cfg or load_routing_config(routing_config)
-    profiles_path = profiles or _DEFAULT_PROFILES
+    profiles_path = profiles or default_processing_profiles_path()
     recorded_root = fixtures_dir / "recorded"
     converter = RecordedRangeConverter(recorded_root)
     # manifest paths are relative to the eval project root (eval/fixtures/parse -> eval)

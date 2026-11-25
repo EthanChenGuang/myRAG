@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -1101,3 +1102,145 @@ def test_a_dry_run_under_fixed_routing_is_refused_before_anything_is_parsed_or_p
 
     assert outcome == JobOutcome(status="failed", error_class="dry_run_requires_tiered")
     assert env.app.calls == []
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# L3 in the queue worker: the job snapshot turns the vision call on (DATA-12, D-49, D-50)
+# ---------------------------------------------------------------------------------------------------------------------
+
+
+def _vlm_verdict(**overrides: Any) -> dict[str, Any]:
+    base: dict[str, Any] = {
+        "has_table": False,
+        "has_multi_column": False,
+        "is_scanned": False,
+        "has_formula": False,
+        "has_chart": False,
+        "complexity": "simple",
+        "confidence": 0.9,
+    }
+    base.update(overrides)
+    return base
+
+
+class _PremiumApp(FakeApp):
+    """Answers every premium request with text for exactly the pages it asked for."""
+
+    async def parse_external(self, job_id, request):  # noqa: ANN001, ANN201
+        from rag_sidecar.contracts.queue import ParseExternalResponse
+
+        body = request.model_dump(mode="json")
+        self.calls.append(("parse_external", job_id, body))
+        pages = body["pages"] or {"start": 1, "end": 1}
+        return ParseExternalResponse.model_validate(
+            {
+                "worker_id": _WORKER,
+                "status": "done",
+                "cache_id": _CACHE_ID,
+                "pages": [
+                    {"page": page, "text": f"Premium page {page} text.", "has_table": True}
+                    for page in range(pages["start"], pages["end"] + 1)
+                ],
+            }
+        )
+
+
+def _vlm_env(tmp_path: Path, **settings: Any) -> Env:
+    fixture = "cross-boundary"
+    env = Env(
+        tmp_path,
+        _job(sha=SHA[fixture], **settings),
+        PDF[fixture].read_bytes(),
+        converter=converters.RecordedRangeConverter(RECORDED),
+    )
+    app = _PremiumApp()
+    app.scripts = env.app.scripts
+    app.script(
+        "detect_vlm",
+        [
+            AppScript(
+                response={
+                    "worker_id": _WORKER,
+                    "pages": [
+                        {"page": 4, "verdict": _vlm_verdict(has_table=True, complexity="complex"), "refused": None},
+                        {"page": 5, "verdict": _vlm_verdict(), "refused": None},
+                    ],
+                }
+            )
+        ],
+    )
+    env.app = app
+    env.deps = dataclasses.replace(env.deps, app=app)
+    return env
+
+
+def _vlm_calls(env: Env) -> list[dict[str, Any]]:
+    return [call[2] for call in env.app.calls if call[0] == "detect_vlm"]
+
+
+@pytest.mark.parametrize("use_pool", [False, True], ids=["thread", "priority-pool"])
+def test_a_queued_job_with_vlm_detect_on_reaches_detect_vlm_and_a_complex_verdict_routes_the_page_to_premium(tmp_path, use_pool):
+    from rag_sidecar.ingest.pool import PriorityPool
+
+    env = _vlm_env(tmp_path, vlm_detect=True, premium_page_budget=100)
+
+    async def scenario() -> JobOutcome:
+        pool = PriorityPool(workers=1) if use_pool else None
+        if pool is not None:
+            pool.start()
+            env.deps = dataclasses.replace(env.deps, pool=pool)
+        try:
+            return await tiered.run_tiered(env.job, env.deps)
+        finally:
+            if pool is not None:
+                await pool.stop()
+
+    outcome = asyncio.run(scenario())
+
+    calls = _vlm_calls(env)
+    assert len(calls) == 1, "the worker never reached detect-vlm"
+    call = calls[0]
+    assert call["worker_id"] == _WORKER
+    assert call["attempt_no"] == 1
+    assert [page["page"] for page in call["pages"]] == [4, 5]
+    job = env.job
+    assert job.detect_counts is not None and job.detect_counts.L3 == 2
+    assert job.tier_page_counts is not None and job.tier_page_counts["premium"] >= 1
+    premium = [body for action, _job_id, body in env.app.calls if action == "parse_external" and body["mode"] == "premium"]
+    assert premium and premium[0]["pages"]["start"] <= 4 <= premium[0]["pages"]["end"]
+    assert outcome == JobOutcome(status="ready")
+
+
+def test_vlm_detect_off_calls_the_preflight_exactly_as_before_and_never_detect_vlm(tmp_path):
+    seen: list[dict[str, Any]] = []
+    inner = _synthetic_preflight(5, [(1, 5, "fast")])
+
+    def preflight(path, settings, cfg, converter, **kwargs):  # noqa: ANN001, ANN202
+        seen.append(kwargs)
+        return inner(path, settings, cfg, converter, **kwargs)
+
+    env = _synthetic_env(tmp_path, SyntheticConverter(), preflight)
+
+    outcome = env.run()
+
+    assert outcome == JobOutcome(status="ready")
+    assert seen == [{"file_sha": "b" * 64}]
+    assert _vlm_calls(env) == []
+
+
+@pytest.mark.parametrize(
+    "settings",
+    [
+        {"vlm_detect": True, "premium_page_budget": 100, "cloud_allowed": False},
+        {"vlm_detect": True, "premium_page_budget": 0},
+        {"vlm_detect": False, "premium_page_budget": 100},
+    ],
+    ids=["cloud-off", "budget-zero", "switch-off"],
+)
+def test_a_snapshot_that_forbids_l3_sends_no_vision_request(tmp_path, settings):
+    env = _vlm_env(tmp_path, **settings)
+
+    env.run()
+
+    assert _vlm_calls(env) == []
+    assert env.job.detect_counts is not None and env.job.detect_counts.L3 == 0
