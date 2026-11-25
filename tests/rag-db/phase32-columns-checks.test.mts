@@ -8,6 +8,7 @@ import type { PGlite } from '@electric-sql/pglite';
 import { embedText } from '../../eval/harness/fixture-embedder.mts';
 import { createFixtureDatabase, type DeploymentMode, type FixtureDatabase } from '../../eval/harness/pglite-supabase.mts';
 import { TWO_TENANT_IDS, createTwoTenantDatabase } from '../../eval/harness/two-tenant.mts';
+import { applyMigrationFiles, migrationFiles } from '../../eval/harness/migrations.mts';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const CORPUS = path.join(REPO_ROOT, 'eval/fixtures/corpus');
@@ -250,11 +251,13 @@ for (const mode of MODES) {
       for (const [fn, ids] of Object.entries(back)) assert.ok(ids.includes(chunkId), `${fn} returns the chunk after publish`);
     });
 
-    it('applying 0801 a second time leaves the catalog unchanged', async () => {
+    it('applying 0801 a second time, then the later 08xx files (operator rule), leaves the catalog unchanged', async () => {
       const file = path.join(REPO_ROOT, MIGRATION);
       assert.ok(fs.existsSync(file), `${MIGRATION} exists`);
       const first = await catalog(ctx.db);
       await ctx.db.exec(fs.readFileSync(file, 'utf8'));
+      const later = migrationFiles(ctx.mode).filter((relpath) => path.basename(relpath) > path.basename(MIGRATION) && path.basename(relpath).startsWith('08'));
+      await applyMigrationFiles(ctx.db, later);
       const second = await catalog(ctx.db);
       assert.deepEqual(second, first);
     });
@@ -595,7 +598,7 @@ for (const mode of MODES) {
         `SELECT id FROM rag_enqueue_ingestion_job($1, 'translate', 'config_upload', $2, NULL, NULL, NULL, NULL, '{}'::jsonb, 100, NULL, NULL, 'queued')`,
         [ctx.a.key, next('translate')],
       );
-      assert.match(translate?.message ?? '', /invalid_kind/, 'the enqueue function learns translate in a later plan');
+      assert.match(translate?.message ?? '', /document_required/, 'the enqueue function knows translate (0810) and needs its document');
     });
 
     it('retry refuses a pending_review job', async () => {
