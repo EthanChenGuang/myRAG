@@ -2,17 +2,20 @@ import { NextRequest, NextResponse } from 'next/server';
 import { env } from '@/lib/env';
 import { validateRequest } from '@/lib/api-middleware';
 import {
+  CORE_STAGES,
   countTokens,
   createTraceCollector,
   evalScope,
   finishTrace,
   LEXICAL_VERSION,
+  OPTIONAL_STAGES,
   parseRetrievalFilters,
   RERANK_TEXT_VERSION,
   runRetrieval,
   scopeKey,
   type RetrievalFilterInput,
   type RetrievalResult,
+  type StageName,
   type StageOverrides,
 } from '@/lib/rag';
 import { RagRunRequestSchema, RagTraceSchema, type RagRunRequest } from '@/lib/rag-eval/contracts.generated';
@@ -61,8 +64,14 @@ function toFilterBody(input: NonNullable<RetrievalFiltersInput>): Record<string,
   return body;
 }
 
+const REGISTERED_STAGES: ReadonlySet<string> = new Set<string>([...CORE_STAGES, ...OPTIONAL_STAGES]);
+
+function isRegisteredStage(name: string): name is StageName {
+  return REGISTERED_STAGES.has(name);
+}
+
 function toStageOverrides(options: RagRunRequest['options']): StageOverrides | undefined {
-  const disabledStages = options?.disabled_stages ?? undefined;
+  const disabledStages = options?.disabled_stages?.flatMap((name) => (isRegisteredStage(name) ? [name] : []));
   const timeouts = Object.fromEntries(
     Object.entries(options?.stage_timeouts_ms ?? {}).filter((entry): entry is [string, number] => typeof entry[1] === 'number'),
   );
