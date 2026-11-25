@@ -1,4 +1,6 @@
 import type { Profile } from './types';
+import { getLanguageSettings } from './lang/settings';
+import { LANGUAGES_NOT_CONFIGURED, resolvePipelines, type LanguagesNotConfigured } from './lang/resolve';
 
 export const CORE_STAGES = ['embed', 'search', 'fuse'] as const;
 export const OPTIONAL_STAGES = [
@@ -185,6 +187,10 @@ export interface RagEnvInput {
 
 export interface RagConfig {
   pipeline: 'legacy' | 'v2';
+  /** D-02: an explicit RAG_PIPELINE=v2 without chosen languages; retrieval answers status error with this reason. */
+  pipelineBlocked: LanguagesNotConfigured | null;
+  /** D-03: exactly one supported language; the translate stage and lexical translation are then no-ops. */
+  monolingual: boolean;
   disabledStages: ReadonlySet<StageName>;
   timeouts: Record<Profile, StageTimeouts>;
   exactIdLookup: boolean;
@@ -223,9 +229,13 @@ function parseList(value: string | undefined): string[] {
     .filter((item) => item !== '');
 }
 
+/** The pipeline an unset RAG_PIPELINE runs (the shipped default). */
+export const DEFAULT_PIPELINE: 'legacy' | 'v2' = 'legacy';
+
 function parsePipeline(raw: string | undefined, warnings: string[]): 'legacy' | 'v2' {
   const value = (raw ?? '').trim();
-  if (value === '' || value === 'legacy') return 'legacy';
+  if (value === '') return DEFAULT_PIPELINE;
+  if (value === 'legacy') return 'legacy';
   if (value === 'v2') return 'v2';
   problem(warnings, `pipeline:${value}`, 'Unsupported RAG_PIPELINE value, running legacy', { value });
   return 'legacy';
@@ -529,13 +539,37 @@ function memoKey(env: RagEnvInput): string {
   ]);
 }
 
+interface LanguageGate {
+  blocked: LanguagesNotConfigured | null;
+  /** An unset RAG_PIPELINE whose shipped default is v2 serves legacy while the languages are not chosen. */
+  servedLegacy: boolean;
+  monolingual: boolean;
+}
+
+const NO_LANGUAGE_GATE: LanguageGate = { blocked: null, servedLegacy: false, monolingual: false };
+const SHIPPED_DEFAULTS = { retrieval: DEFAULT_PIPELINE, ingest: 'legacy' } as const;
+
+/** D-02: a legacy pipeline (set or defaulted) keeps today's path and never reads the language settings. */
+function languageGate(env: RagEnvInput): LanguageGate {
+  const value = (env.RAG_PIPELINE ?? '').trim();
+  if (value === 'legacy' || (value === '' && DEFAULT_PIPELINE === 'legacy')) return NO_LANGUAGE_GATE;
+  const resolved = resolvePipelines({ RAG_PIPELINE: env.RAG_PIPELINE, RAG_INGEST_PIPELINE: 'legacy' }, SHIPPED_DEFAULTS, getLanguageSettings);
+  if (!resolved.languagesRead) return NO_LANGUAGE_GATE;
+  return {
+    blocked: resolved.retrieval.pipeline === LANGUAGES_NOT_CONFIGURED ? LANGUAGES_NOT_CONFIGURED : null,
+    servedLegacy: resolved.retrieval.servedLegacyBecauseUnset,
+    monolingual: resolved.monolingual,
+  };
+}
+
 export function loadRagConfig(env: RagEnvInput): RagConfig {
-  const snapshot = memoKey(env);
+  const gate = languageGate(env);
+  const snapshot = gate === NO_LANGUAGE_GATE ? memoKey(env) : `${memoKey(env)}|${gate.blocked ?? ''}|${gate.servedLegacy}|${gate.monolingual}`;
   const cached = memo.get(snapshot);
   if (cached) return cached;
 
   const warnings: string[] = [];
-  const pipeline = parsePipeline(env.RAG_PIPELINE, warnings);
+  const pipeline = gate.servedLegacy ? 'legacy' : parsePipeline(env.RAG_PIPELINE, warnings);
   const disabledStages = parseDisabled(env.RAG_DISABLED_STAGES, warnings);
   const overrideByProfile = parseTimeouts(env.RAG_STAGE_TIMEOUTS, warnings);
 
@@ -561,7 +595,7 @@ export function loadRagConfig(env: RagEnvInput): RagConfig {
     parentChild: parseBooleanSwitch(env.RAG_PARENT_CHILD, false, 'parent-child', warnings),
     iterativeScan: parseIterativeScan(env.RAG_HNSW_ITERATIVE_SCAN, warnings),
     exactScanCutoff: parseNonNegativeInt(env.RAG_EXACT_SCAN_CUTOFF, 0, 100_000, 'exact-scan-cutoff', warnings),
-    lexicalTranslation: parseBooleanSwitch(env.RAG_LEXICAL_TRANSLATION, false, 'lexical-translation', warnings),
+    lexicalTranslation: gate.monolingual ? false : parseBooleanSwitch(env.RAG_LEXICAL_TRANSLATION, false, 'lexical-translation', warnings),
     paramsOverride: parseParamsOverride(env.RAG_RETRIEVAL_PARAMS_OVERRIDE, warnings),
     hasCohereKey: (env.COHERE_API_KEY ?? '').trim() !== '',
     hasVoyageKey: (env.VOYAGE_API_KEY ?? '').trim() !== '',
@@ -572,6 +606,8 @@ export function loadRagConfig(env: RagEnvInput): RagConfig {
 
   const config: RagConfig = {
     pipeline,
+    pipelineBlocked: gate.blocked,
+    monolingual: gate.monolingual,
     disabledStages,
     timeouts,
     exactIdLookup,

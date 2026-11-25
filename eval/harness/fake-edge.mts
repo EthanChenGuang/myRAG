@@ -890,6 +890,9 @@ export function fixtureProcessEnv(edgeUrl: string, options?: { vendorEmbeddingRo
     COHERE_BASE_URL: edgeUrl.replace(/\/+$/, ''),
     COHERE_API_KEY: 'cohere-fixture-placeholder-key-00000000',
     VOYAGE_BASE_URL: `${edgeUrl.replace(/\/+$/, '')}/v1`,
+    // D-02: CI, the eval pin and all fixtures run with zh, en and it, primary en.
+    RAG_SUPPORTED_LANGUAGES: 'zh,en,it',
+    RAG_PRIMARY_LANGUAGE: 'en',
   };
   if (options?.vendorEmbeddingRoutes) {
     env.VOYAGE_BASE_URL = `${edgeUrl}/voyage/v1`;

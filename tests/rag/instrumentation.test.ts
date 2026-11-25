@@ -9,6 +9,8 @@ import { getStartupVerdict, resetActiveProfileForTests } from '@/lib/rag/embeddi
 import { resetEmbeddingProvidersForTests, setEmbeddingProvidersForTests } from '@/lib/rag/embeddings/registry';
 import type { EmbeddingProvider } from '@/lib/rag/embeddings/types';
 import { resetIngestDepsForTests, setIngestDepsForTests } from '@/lib/rag/ingest/deps';
+import { resetLanguageStartupCheckForTests, verifyLanguageSettingsAtStartup } from '@/lib/rag/lang/startup';
+import { resetLanguageSettingsForTests } from '@/lib/rag/lang/settings';
 
 const VOYAGE_KEY = 'test-voyage-key-placeholder-0123456789';
 const DEEPINFRA_KEY = 'test-deepinfra-key-placeholder-0123';
@@ -234,5 +236,83 @@ describe('register (startup embedding profile check)', () => {
     expect(errorSpy).not.toHaveBeenCalled();
     expect(getStartupVerdict()).toMatchObject({ status: 'unknown', reason: 'profile_unavailable' });
     expect(loggedText()).not.toContain('registry exploded');
+  });
+});
+
+describe('register (startup language check, D-02)', () => {
+  const LANGUAGE_VARS = ['RAG_SUPPORTED_LANGUAGES', 'RAG_PRIMARY_LANGUAGE'] as const;
+  const saved: Record<string, string | undefined> = {};
+  const NEW_DEFAULTS = { retrieval: 'v2', ingest: 'unified' } as const;
+  const languageLines = () =>
+    [...warnSpy.mock.calls, ...errorSpy.mock.calls].map((call) => String(call[0])).filter((line) => line.startsWith('[RAG Languages]'));
+
+  beforeEach(() => {
+    for (const name of LANGUAGE_VARS) {
+      saved[name] = process.env[name];
+      delete process.env[name];
+    }
+    resetLanguageSettingsForTests();
+    resetLanguageStartupCheckForTests();
+    mode = 'off';
+  });
+
+  afterEach(() => {
+    for (const name of LANGUAGE_VARS) {
+      if (saved[name] === undefined) delete process.env[name];
+      else process.env[name] = saved[name];
+    }
+    resetLanguageSettingsForTests();
+    resetLanguageStartupCheckForTests();
+  });
+
+  it('with the shipped legacy defaults and nothing set, logs nothing', async () => {
+    setRagDepsForTests({ rawPipelineEnv: () => ({}) });
+    await register();
+    expect(languageLines()).toEqual([]);
+  });
+
+  it('logs "not configured — serving legacy" exactly once when an unset variable would default to the new pipeline', () => {
+    setRagDepsForTests({ rawPipelineEnv: () => ({}) });
+    const first = verifyLanguageSettingsAtStartup(NEW_DEFAULTS);
+    verifyLanguageSettingsAtStartup(NEW_DEFAULTS);
+    expect(first?.servedLegacyBecauseUnset).toBe(true);
+    expect(languageLines()).toEqual(['[RAG Languages] not configured — serving legacy']);
+  });
+
+  it('an explicit RAG_PIPELINE=v2 without languages logs one warning naming the variable', async () => {
+    setRagDepsForTests({ rawPipelineEnv: () => ({ RAG_PIPELINE: 'v2' }) });
+    await register();
+    await register();
+    const lines = languageLines();
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('RAG_PIPELINE');
+    expect(lines[0]).toContain('languages_not_configured');
+  });
+
+  it('both explicit variables give one warning each', () => {
+    setRagDepsForTests({ rawPipelineEnv: () => ({ RAG_PIPELINE: 'v2', RAG_INGEST_PIPELINE: 'unified' }) });
+    verifyLanguageSettingsAtStartup();
+    const lines = languageLines();
+    expect(lines).toHaveLength(2);
+    expect(lines[1]).toContain('RAG_INGEST_PIPELINE');
+  });
+
+  it('with the languages chosen an explicit v2 logs nothing', () => {
+    process.env.RAG_SUPPORTED_LANGUAGES = 'zh,en,it';
+    process.env.RAG_PRIMARY_LANGUAGE = 'en';
+    setRagDepsForTests({ rawPipelineEnv: () => ({ RAG_PIPELINE: 'v2', RAG_INGEST_PIPELINE: 'unified' }) });
+    verifyLanguageSettingsAtStartup();
+    expect(languageLines()).toEqual([]);
+  });
+
+  it('a failing language check never stops the server', async () => {
+    setRagDepsForTests({
+      rawPipelineEnv: () => {
+        throw new Error('env reader exploded');
+      },
+    });
+    await expect(register()).resolves.toBeUndefined();
+    expect(languageLines()).toEqual(['[RAG Languages] startup language check failed']);
+    expect(loggedText()).not.toContain('env reader exploded');
   });
 });

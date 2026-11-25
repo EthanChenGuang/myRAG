@@ -55,7 +55,7 @@ function getDownloadUrl(filePath: string): string {
   return `${baseUrl}/storage/v1/object/public/${BUCKET_NAME}/${filePath}?download`;
 }
 
-type UploadPipeline = 'legacy' | 'unified';
+type UploadPipeline = 'legacy' | 'unified' | 'blocked';
 
 /**
  * Which write path an upload takes, read per request after the session check. A switch that cannot be read means the legacy path.
@@ -64,7 +64,9 @@ type UploadPipeline = 'legacy' | 'unified';
 async function uploadPipeline(): Promise<UploadPipeline> {
   try {
     const { currentIngestConfig } = await import('@/lib/rag');
-    return currentIngestConfig().pipeline === 'unified' ? 'unified' : 'legacy';
+    const config = currentIngestConfig();
+    if (config.pipeline === 'unified' && config.pipelineBlocked) return 'blocked';
+    return config.pipeline === 'unified' ? 'unified' : 'legacy';
   } catch {
     logger.warn('Upload API', 'Ingest switch unavailable, using the legacy pipeline');
     return 'legacy';
@@ -170,7 +172,11 @@ export async function POST(request: NextRequest) {
 
     // The unified pipeline resolves its scope here, before any storage write, from the session already verified above
     let ingestScope: TenantScope | null = null;
-    if (processRag && (await uploadPipeline()) === 'unified') {
+    const pipeline = processRag ? await uploadPipeline() : 'legacy';
+    if (pipeline === 'blocked') {
+      return NextResponse.json({ error: 'languages_not_configured' }, { status: 503 });
+    }
+    if (pipeline === 'unified') {
       const resolved = await resolveUploadScope(request, formData, sessionUser);
       if ('response' in resolved) return resolved.response;
       ingestScope = resolved.scope;
