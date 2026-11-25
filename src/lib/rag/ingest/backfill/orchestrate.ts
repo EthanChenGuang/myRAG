@@ -347,6 +347,10 @@ interface DeferredChunk extends BatchChunk {
   tokens: number;
 }
 
+function textOf(value: unknown): string | null {
+  return typeof value === 'string' && value !== '' ? value : null;
+}
+
 /** The text ingest embeds for a chunk, rebuilt from stored columns exactly as the re-embed job does (section path, profile header, content). */
 function deferredText(row: JobRow): string {
   const sectionPath = Array.isArray(row.section_path) ? row.section_path.filter((entry): entry is string => typeof entry === 'string') : [];
@@ -355,9 +359,10 @@ function deferredText(row: JobRow): string {
     for (const [key, value] of Object.entries(row.template_row as JobRow)) templateRow[key] = typeof value === 'string' ? value : null;
   }
   let header = '';
-  if (typeof row.doc_type === 'string') {
+  const stored = textOf(row.doc_type);
+  if (stored) {
     try {
-      header = templateHeaderFor(getProcessingProfile(row.doc_type as DocType).embedding_text_template, templateRow);
+      header = templateHeaderFor(getProcessingProfile(stored as DocType).embedding_text_template, templateRow);
     } catch {
       header = '';
     }
