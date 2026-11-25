@@ -18,7 +18,7 @@ const SELECT_OPTIONS: Record<string, [string, string][]> = {
   RAG_LANGUAGE_AWARE_INGEST: [['off', 'Off, as today'], ['on', 'On']],
   RAG_TABLE_HEADER_REPEAT: [['profile', 'Follow the document type'], ['always', 'Always']],
   RAG_TABLE_ROW_SERIALIZATION: [['false', 'Off'], ['true', 'On']],
-  RAG_CAPTION_LANGUAGE: [['en', 'English, as today'], ['document', "The document's language"]],
+  RAG_CAPTION_LANGUAGE: [['en', 'English, as today'], ['document', 'The document’s language']],
   RAG_HIDDEN_TEXT_CHECK: [['off', 'Off'], ['flag', 'Record only'], ['quarantine', 'Remove and quarantine']],
   RAG_INGEST_LINK_CHECK: [['off', 'Off'], ['flag', 'Record only'], ['quarantine', 'Quarantine']],
   RAG_UPLOAD_APPROVAL: [['off', 'None'], ['members', 'Uploads by members'], ['all', 'Every upload']],
@@ -34,7 +34,7 @@ const SELECT_OPTIONS: Record<string, [string, string][]> = {
 const LABELS: Record<string, string> = {
   RAG_LANGUAGE_AWARE_INGEST: 'Language-aware processing',
   RAG_TABLE_HEADER_REPEAT: 'Table header repetition',
-  RAG_TABLE_ROW_SERIALIZATION: 'Table rows as "column = value" for search',
+  RAG_TABLE_ROW_SERIALIZATION: 'Table rows as “column = value” for search',
   RAG_CAPTION_LANGUAGE: 'Image caption language',
   RAG_HIDDEN_TEXT_CHECK: 'Hidden text',
   RAG_INGEST_LINK_CHECK: 'Links',
@@ -146,7 +146,8 @@ describe('Phase 3.2 settings block in the Config UI (UI-SPEC 6.3, 12.9)', () => 
       const describedBy = attr(openingTag(id), 'aria-describedby');
       expect(describedBy, id).toBeTruthy();
       expect(block()).toContain(`id="${describedBy}"`);
-      expect(formControl(id), `${id} shows its env name`).toContain(`<code class="font-mono text-xs" translate="no">${id}</code>`);
+      expect(formControl(id), `${id} shows its env name`).toMatch(new RegExp(`<code class="font-mono text-xs[^"]*" translate="no">${id}</code>`));
+      expect(attr(openingTag(id), 'autocomplete'), `${id} autocomplete`).toBe('off');
     }
   });
 
@@ -181,6 +182,13 @@ describe('Phase 3.2 settings block in the Config UI (UI-SPEC 6.3, 12.9)', () => 
         expect(formControl(id), `${id} ${value}`).toMatch(new RegExp(`<option value="${value}" data-rag-i18n="[^"]+">`));
       }
     }
+  });
+
+  it('code tokens and brand names are not machine-translated; copy uses curly quotes', () => {
+    expect(block()).toContain('<span translate="no">https://</span>');
+    expect(block()).toContain('<span translate="no">BGE-M3</span>');
+    const text = block().replace(/<[^>]+>/g, ' ');
+    expect(text).not.toMatch(/"|'/);
   });
 
   it('adds no script and no inline handler', () => {
