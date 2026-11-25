@@ -219,3 +219,104 @@ def test_query_params_enforce_d08_upper_limits():
     assert rejects(params, {"max_translations": 3})
     assert rejects(params, {"max_sub_questions": 5})
     assert rejects(params, {"max_searches": 9})
+
+
+# --- Task 2: stage names, run options, trace
+
+
+def test_new_stage_names_are_accepted_everywhere():
+    from rag_sidecar.contracts.eval_run import RagRunOptions, StageTimeoutsMs
+
+    for stage in NEW_STAGES:
+        assert accepts(StageTimeoutsMs, {stage: 500}), stage
+        assert accepts(RagRunOptions, {"disabled_stages": [stage]}), stage
+
+
+def test_disabled_stages_accepts_the_full_stage_set():
+    from typing import get_args
+
+    from rag_sidecar.contracts.eval_run import RagRunOptions, StageName
+
+    stages = list(get_args(StageName))
+    assert set(NEW_STAGES) <= set(stages)
+    assert accepts(RagRunOptions, {"disabled_stages": stages})
+
+
+def test_run_options_accept_query_layer_overrides():
+    from rag_sidecar.contracts.eval_run import RagRunOptions
+
+    payload = {
+        "query_framework": "langchain",
+        "query_layer": True,
+        "query_transforms": {"expand": False, "hyde": True},
+        "semantic_cache": "pgvector",
+        "query_params": {"max_sub_questions": 2},
+        "cache_seed_answer": "placeholder answer",
+    }
+    assert accepts(RagRunOptions, payload)
+    options = RagRunOptions()
+    for field in ["query_framework", "query_layer", "query_transforms", "semantic_cache", "query_params", "cache_seed_answer"]:
+        assert getattr(options, field, "missing") is None, field
+
+
+def test_run_options_reject_bad_query_overrides():
+    from rag_sidecar.contracts.eval_run import RagRunOptions
+
+    assert rejects(RagRunOptions, {"query_params": {"max_sub_questions": 5}})
+    assert rejects(RagRunOptions, {"query_params": {"max_searches": 9}})
+    assert rejects(RagRunOptions, {"query_params": {"unknown_knob": 1}})
+    assert rejects(RagRunOptions, {"query_framework": "other"})
+    assert rejects(RagRunOptions, {"query_transforms": {"summarize": True}})
+    assert rejects(RagRunOptions, {"semantic_cache": "memcached"})
+    assert rejects(RagRunOptions, {"cache_seed_answer": "x" * 4001})
+    assert accepts(RagRunOptions, {"cache_seed_answer": "x" * 4000})
+
+
+def test_rag_trace_accepts_query_plan_none_and_full():
+    from rag_sidecar.contracts.eval_run import RagTrace
+
+    sample = json.loads(SAMPLES_PATH.read_text(encoding="utf-8"))["samples"]["RagTrace"]
+    assert "query_plan" in RagTrace.model_fields
+    assert RagTrace.model_validate(sample).query_plan is None
+    assert accepts(RagTrace, {**sample, "query_plan": None})
+    assert accepts(RagTrace, {**sample, "query_plan": _plan()})
+
+
+def test_every_committed_sample_still_validates():
+    from rag_sidecar.export_schemas import CONTRACTS
+
+    by_name = {model.__name__: model for model, _mode in CONTRACTS}
+    payload = json.loads(SAMPLES_PATH.read_text(encoding="utf-8"))
+    for name, value in payload["samples"].items():
+        assert accepts(by_name[name], value), name
+    for key, variant in payload["variants"].items():
+        assert accepts(by_name[variant["model"]], variant["value"]), key
+
+
+# --- Task 2: retrieval fields
+
+
+def test_retrieval_params_sub_question_coverage_defaults_true():
+    from rag_sidecar.contracts.retrieval import RetrievalParams
+
+    assert getattr(RetrievalParams(), "sub_question_coverage", None) is True
+    assert accepts(RetrievalParams, {"sub_question_coverage": False})
+
+
+def test_committed_retrieval_params_validates():
+    from rag_sidecar.contracts.retrieval import RetrievalParams
+
+    model = RetrievalParams.model_validate_json(RETRIEVAL_PARAMS_PATH.read_text(encoding="utf-8"))
+    assert getattr(model, "sub_question_coverage", None) is True
+
+
+def test_date_range_include_undated_defaults_false():
+    from rag_sidecar.contracts.retrieval import RetrievalFilters
+
+    filters = RetrievalFilters.model_validate({"date_range": {"from": "2026-01-01", "to": "2026-01-31"}})
+    assert filters.date_range is not None
+    assert getattr(filters.date_range, "include_undated", None) is False
+    with_undated = RetrievalFilters.model_validate(
+        {"date_range": {"from": "2026-01-01", "to": "2026-01-31", "include_undated": True}}
+    )
+    assert getattr(with_undated.date_range, "include_undated", None) is True
