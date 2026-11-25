@@ -438,6 +438,60 @@ describe('rechunk job (src/lib/rag/ingest/rechunk)', () => {
     assert.equal(embeddedTexts.length, children.length);
   });
 
+  test('children of a bound doc type are embedded for the binding profile of their own tenant only (D-15, D-27)', async () => {
+    const LAW = 'voyage-law-2-1024';
+    const bindingsModule = await import('@/lib/rag/embeddings/bindings');
+    await fixture.db.query('DELETE FROM embedding_profile_bindings');
+    const created = (await rows("SELECT * FROM rag_create_embedding_binding('contract_legal', $1, $2, 'operator-test')", [A.key, LAW]))[0] as Row;
+    await rows("SELECT * FROM rag_set_embedding_binding_status($1, 'backfilling', 'operator-test')", [created.binding_id]);
+    const seen: string[] = [];
+    registryModule.setEmbeddingProvidersForTests({
+      'voyage:voyage-law-2': {
+        id: 'voyage',
+        model: 'voyage-law-2',
+        maxInputTokens: 16000,
+        supportedDims: [1024],
+        normalize: true,
+        async embedDocuments(texts, opts) {
+          seen.push(...texts);
+          return { vectors: texts.map((text, index) => vector(opts.dims, text.length + index)), model: 'voyage-law-2', host: 'fake-host', usage: { tokens: texts.length } };
+        },
+        async embedQuery(text, opts) {
+          return { vectors: [vector(opts.dims, text.length)], model: 'voyage-law-2', host: 'fake-host', usage: { tokens: 1 } };
+        },
+      },
+    });
+    try {
+      useEnv({ RAG_EMBEDDING_PROFILES: 'on', RAG_DOMAIN_EMBEDDINGS: 'on' });
+      bindingsModule.resetBindingsForTests();
+
+      const dry = await rechunk.dryRunRechunk({ db: db(), profileId: PROFILE, batchSize: 4 });
+      assert.deepEqual(dry.embeddingProfiles, [LEGACY, LAW]);
+      const law = dry.cost.profiles.find((profile) => profile.profileId === LAW);
+      const tokensA = dry.tenants.find((tenant) => tenant.tenantKey === A.key)?.tokens ?? 0;
+      assert.ok(law && tokensA > 0 && Math.abs(law.usd - (tokensA * 0.12) / 1_000_000) < 1e-12, 'law-2 is priced for tenant A tokens only');
+
+      const report = await rechunk.runRechunk({ db: db(), profileId: PROFILE, scopeFor });
+      assert.equal(report.status, 'incomplete', 'the contract without parse output stays a gap');
+      const lawCount = async (documentId: string): Promise<{ children: number; law: number }> => {
+        const children = await childrenOf(documentId);
+        const law = await rows(`SELECT count(*)::int AS n FROM chunk_embeddings WHERE profile_id = $1 AND chunk_id = ANY($2::uuid[])`, [LAW, children.map((child) => String(child.id))]);
+        return { children: children.length, law: Number(law[0]?.n) };
+      };
+      const a1 = await lawCount(docs.a1);
+      assert.ok(a1.children >= 1);
+      assert.equal(a1.law, a1.children, 'tenant A children carry the binding vectors');
+      const b1 = await lawCount(docs.b1);
+      assert.ok(b1.children >= 1);
+      assert.equal(b1.law, 0, 'the tenant binding of A never reaches B');
+      assert.ok(seen.length >= a1.children);
+    } finally {
+      await fixture.db.query("DELETE FROM chunk_embeddings WHERE profile_id = 'voyage-law-2-1024'");
+      await fixture.db.query('DELETE FROM embedding_profile_bindings');
+      bindingsModule.resetBindingsForTests();
+    }
+  });
+
   test('a failing active embedding target fails the run, writes nothing, and the run resumes', async () => {
     embedMode = 'throw';
     const failed = await rechunk.runRechunk({ db: db(), profileId: PROFILE, scopeFor });
@@ -677,5 +731,19 @@ describe('rechunk job (src/lib/rag/ingest/rechunk)', () => {
     assert.equal(report.estimated, true, 'a non-OpenAI token count is an estimate');
     assert.ok(report.note);
     assert.throws(() => costModule.estimateRechunkCost([{ profileId: 'x', provider: 'unknown' }], {}), /no price table/);
+  });
+
+  test('cost: a binding profile is priced only for the tenants it applies to (D-15)', () => {
+    const totals = { 't-2': { chunks: 1, tokens: 500_000 }, 't-1': { chunks: 2, tokens: 1_000_000 } };
+    const report = costModule.estimateRechunkCost(
+      [
+        { profileId: 'a', provider: 'openai' },
+        { profileId: 'law', provider: 'voyage', tenantKeys: ['t-1'] },
+      ],
+      totals,
+    );
+    assert.deepEqual(report.profiles.map((profile) => [profile.profileId, profile.usd.toFixed(6)]), [['a', '0.030000'], ['law', '0.120000']]);
+    assert.deepEqual(report.tenants.map((tenant) => [tenant.tenantKey, tenant.usd.toFixed(6)]), [['t-1', '0.140000'], ['t-2', '0.010000']]);
+    assert.equal(report.totals.tokens, 1_500_000);
   });
 });

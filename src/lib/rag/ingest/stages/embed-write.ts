@@ -218,17 +218,18 @@ async function dualWriteProfiles(ctx: StageContext, documentId: string, targets:
 }
 
 /**
- * Embeds each batch once per target (active, backfilling, previous active) from the same embedding text and writes the vectors in one call.
- * A failing active target fails the run (embed_failed, or embedding_profile_mismatch for a wrong model or dimensions); a failing other target
+ * Embeds each batch once per target (active, backfilling, previous active, and the binding profiles of the document's doc type and tenant)
+ * from the same embedding text and writes the vectors in one call. A failing active target fails the run (embed_failed, or embedding_profile_mismatch for a wrong model or dimensions); a failing other target
  * leaves its vectors out, stops being tried for the rest of the run, and records each affected chunk as a gap of its open run. With the
  * switch off the only target is the legacy profile, written exactly as before.
  */
 async function runEmbed(ctx: StageContext): Promise<StageOutcome> {
   const document = requireDocument(ctx, 'embed');
+  const identity = requireIdentity(ctx, 'embed');
   const dualWrite = loadRagConfig(getRagDeps().ragEnv()).pipeline === 'v2';
   let targets: EmbeddingTarget[];
   try {
-    targets = await resolveEmbeddingTargets(ctx.writer);
+    targets = await resolveEmbeddingTargets(ctx.writer, { docType: identity.docType, tenantKey: identity.tenantKey });
   } catch (error) {
     if (error instanceof ProfileUnavailableError) throw new IngestStageError('embed', 'embedding_profile_unavailable');
     throw error;
@@ -311,7 +312,8 @@ async function runEmbed(ctx: StageContext): Promise<StageOutcome> {
 /**
  * D-35, Batch API backfill: the embed stage writes the chunks without vectors and leaves the embedding to the rag:backfill process, which
  * fills every target profile by chunk id before the job is published. Children of chunking profiles (RAG_PIPELINE=v2) are still embedded
- * here, because the Batch API path fills document_chunks only.
+ * here, because the Batch API path fills document_chunks only. Its targets carry no document scope, like the orchestrator's: binding profiles
+ * of such a document are filled by a scoped re-embed run.
  */
 async function runDeferredEmbed(ctx: StageContext): Promise<StageOutcome> {
   const document = requireDocument(ctx, 'embed');
