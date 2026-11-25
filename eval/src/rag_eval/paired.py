@@ -9,6 +9,7 @@ from rag_sidecar.contracts.baseline import Baseline, NoiseConfig, PairedReport, 
 from rag_sidecar.contracts.report import EvalReport, ItemResult
 
 from rag_eval.metrics import CROSS_LINGUAL, language_pair_key
+from rag_eval.native_review import counts_in_gated_slices
 from rag_eval.paths import resolve_cli_path
 
 SEED = 20261123
@@ -88,7 +89,11 @@ def _slice_members(items: list[ItemResult]) -> dict[str, list[ItemResult]]:
 def paired_report(report: EvalReport, baseline: Baseline, noise: NoiseConfig) -> PairedReport | None:
     if baseline.items is None:
         return None
-    gated_items = [item for item in report.items if item.split == report.golden_filter.gate_split]
+    gated_items = [
+        item
+        for item in report.items
+        if item.split == report.golden_filter.gate_split and counts_in_gated_slices(item)
+    ]
     if report.gate_population == "production":
         gated_items = [item for item in gated_items if item.provenance == "production"]
     slices: dict[str, dict[str, PairedStat]] = {}

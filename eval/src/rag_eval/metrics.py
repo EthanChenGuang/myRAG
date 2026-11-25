@@ -16,6 +16,7 @@ from rag_sidecar.contracts.report import (
 
 from rag_eval.bounds import upper_bound
 from rag_eval.matching import chunk_matches_span
+from rag_eval.native_review import counts_in_gated_slices, report_only_reason
 
 _RECALL_FIELDS = {5: "spans_hit_at_5", 10: "spans_hit_at_10"}
 CROSS_LINGUAL = "cross_lingual"
@@ -133,6 +134,7 @@ def score_items(
                 question_kind=question_kind(item.category, item.tags),
                 rerank_status=trace.stage_status.get(RERANK_STAGE),
                 lexical_hit_at_10=_lexical_hit(trace, item, leg_ran=leg_ran),
+                report_only_reason=report_only_reason(item),
             )
         )
     return results
@@ -165,6 +167,10 @@ def _group(results: Iterable[ItemResult], key: Callable[[ItemResult], str]) -> d
     for result in results:
         groups.setdefault(key(result), []).append(result)
     return {name: _slice(members) for name, members in sorted(groups.items())}
+
+
+def slices_by(results: Iterable[ItemResult], key: Callable[[ItemResult], str]) -> dict[str, SliceMetrics]:
+    return _group(results, key)
 
 
 def _rerank_skipped_rate(results: list[ItemResult]) -> MetricValue:
@@ -275,10 +281,11 @@ def aggregate(
     if tuple(k_values) != (5, 10):
         raise ValueError(f"unsupported k_values {tuple(k_values)!r}: the report contract carries recall@5 and recall@10")
     gated = [r for r in results if r.split == gate_split]
+    counting = [r for r in gated if counts_in_gated_slices(r)]
     production = [
-        r for r in gated if r.provenance == "production" and (approved_ids is None or r.item_id in approved_ids)
+        r for r in counting if r.provenance == "production" and (approved_ids is None or r.item_id in approved_ids)
     ]
-    population = production or gated
+    population = production or counting
     return {
         "overall": _slice(population),
         "by_language": _group(population, lambda r: r.language),
