@@ -124,3 +124,8 @@ Body check: after each apply, an aggregate md5 over `proname=md5(prosrc)` of eve
 - Applied `0426_quarantined_job_keeps_document` to `<live-project-ref>` after train 8 (PR #30) merged into trunk with all 8 pr-smoke checks green. Only the file's top-level `BEGIN;` and `COMMIT;` were left out; the rest is the exact file text.
 - Check: the live `public.rag_advance_ingestion_job` body md5 equals the repo file's body md5 (8f7099570eef907e07d36e24b022b3cb, 5570 characters). One overload, SECURITY DEFINER, `search_path=""`; EXECUTE for service_role only (anon and authenticated refused).
 - Re-run note: re-running 0353 or 0425 restores the old quarantine transition, so re-run 0426 after either of them.
+
+## 0427 (applied after merge train 10, 2026-11-25)
+
+- Applied `0427_parse_attempt_cost_key` to `<live-project-ref>` after train 10 (PR #36) merged into trunk with all 8 pr-smoke checks green. Only the file's top-level `BEGIN;` and `COMMIT;` were left out.
+- Check: the live `public.rag_record_parse_attempt` body md5 equals the repo file's body md5 (2334fc23d88d057214cdee4394f5b971, 1195 characters). One overload, SECURITY DEFINER, `search_path=""`; EXECUTE for service_role only (anon and authenticated refused).
