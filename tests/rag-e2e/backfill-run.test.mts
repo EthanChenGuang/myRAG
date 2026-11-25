@@ -5,7 +5,7 @@
 import { after, before, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { SIDECAR_SECRET, startQueuedHarness, type QueuedHarness } from '../../eval/harness/queued-ingest.mts';
+import { QUEUED_IDS, SIDECAR_SECRET, startQueuedHarness, type QueuedHarness } from '../../eval/harness/queued-ingest.mts';
 import { spawnSidecarModule } from '../../eval/harness/sidecar-worker.mts';
 
 type Row = Record<string, unknown>;
@@ -163,6 +163,20 @@ describe('advance phase begin: the document row at first claim (D-31)', () => {
     assert.equal(finished.length, 1);
     assert.equal(finished[0]?.status, 'ready');
     assert.equal(finished[0]?.is_current, true);
+  });
+
+  test('begin: an organization tenant job gets its version owned by the organization owner (documents.user_id is required)', async () => {
+    const batchId = await createBatch(tenantB);
+    const { jobId, sha } = await enqueueStaged(batchId, 'org-tenant');
+    await harness.claim(jobId, WORKER);
+    const reply = await harness.callback(jobId, 'advance', BEGIN_BODY);
+    assert.equal(reply.status, 200, JSON.stringify(reply.body));
+    assert.equal(reply.body.done, false, JSON.stringify(reply.body));
+    const [doc] = await harness.rows('SELECT id, tenant_key, user_id, organization_id FROM documents WHERE file_sha256 = $1', [sha]);
+    assert.equal(doc?.tenant_key, tenantB);
+    assert.equal(doc?.organization_id, QUEUED_IDS.orgB);
+    assert.equal(doc?.user_id, QUEUED_IDS.userB, 'the organization owner');
+    assert.equal((await job(jobId)).document_id, doc?.id);
   });
 
   test('begin: the worker calls begin itself for an unclaimed backfill job and the job ends ready', async () => {
