@@ -92,6 +92,8 @@ export interface DocumentFields {
   /** The parsed text, kept for the relevance filter and the source preview that read documents.content. */
   content?: string;
   status?: 'processing' | 'quarantined' | 'failed' | 'deleted';
+  /** D-10: sha256 of the ingestion fingerprint parts, written at publish with the parts in metadata.ingest_fingerprint_parts. */
+  ingest_fingerprint?: string;
   metadata?: Record<string, unknown>;
 }
 

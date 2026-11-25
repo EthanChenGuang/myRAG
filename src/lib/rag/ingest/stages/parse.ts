@@ -211,6 +211,7 @@ export async function applyParseResult(ctx: StageContext, parsed: Parsed): Promi
   ctx.work.parseChunks = result.chunks.length > 0 ? result.chunks : null;
   ctx.work.pictures = result.pictures.length > 0 ? result.pictures : null;
   ctx.work.parserVersion = result.parser_version;
+  ctx.state.parserVersion = result.parser_version;
   ctx.parserUsed = result.parser;
   for (const code of [...(result.warnings ?? []), ...parsed.warnings]) warn(ctx, code);
   if (result.partial) warn(ctx, 'parse_partial');
