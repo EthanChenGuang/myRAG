@@ -140,6 +140,38 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_embedding_bindings_guard() FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_embedding_bindings_guard() TO service_role;
   END IF;
+  IF to_regprocedure('public.rag_activate_embedding_binding(uuid, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_activate_embedding_binding(uuid, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_activate_embedding_binding(uuid, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_create_embedding_binding(text, text, text, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_create_embedding_binding(text, text, text, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_create_embedding_binding(text, text, text, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_deactivate_embedding_binding(text, text, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_deactivate_embedding_binding(text, text, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_deactivate_embedding_binding(text, text, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_list_embedding_bindings()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_list_embedding_bindings() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_list_embedding_bindings() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_list_embedding_profile_scopes()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_list_embedding_profile_scopes() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_list_embedding_profile_scopes() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_record_binding_evidence(uuid, jsonb, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_record_binding_evidence(uuid, jsonb, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_record_binding_evidence(uuid, jsonb, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_rollback_embedding_binding(text, text, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_rollback_embedding_binding(text, text, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_rollback_embedding_binding(text, text, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_set_embedding_binding_status(uuid, text, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_set_embedding_binding_status(uuid, text, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_set_embedding_binding_status(uuid, text, text) TO service_role;
+  END IF;
   IF to_regprocedure('public.rag_enqueue_backfill_jobs(uuid, jsonb)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_enqueue_backfill_jobs(uuid, jsonb) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_enqueue_backfill_jobs(uuid, jsonb) TO service_role;
