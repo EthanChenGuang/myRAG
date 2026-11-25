@@ -1,0 +1,28 @@
+{
+  "additionalProperties": false,
+  "description": "Sidecar `POST /v1/embed` request (D-26).",
+  "properties": {
+    "inputs": {
+      "items": {
+        "maxLength": 20000,
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 32,
+      "minItems": 1,
+      "title": "Inputs",
+      "type": "array"
+    },
+    "model": {
+      "const": "BAAI/bge-m3",
+      "default": "BAAI/bge-m3",
+      "title": "Model",
+      "type": "string"
+    }
+  },
+  "required": [
+    "inputs"
+  ],
+  "title": "EmbedRequest",
+  "type": "object"
+}

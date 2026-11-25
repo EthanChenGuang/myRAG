@@ -184,7 +184,7 @@ from rag_sidecar.contracts.eval_run import (
     TraceInjectionFlagged,
     TraceSecurityVersions,
 )
-from rag_sidecar.contracts.golden import AttackSpec
+from rag_sidecar.contracts.golden import AttackSpec, NativeReview, TableAnswer
 from rag_sidecar.contracts.query import (
     CondensedQuery,
     DateRange,
@@ -209,6 +209,16 @@ from rag_sidecar.contracts.routing import (
     ParseAttemptPages as RoutingParseAttemptPages,
     default_parse_routing_config,
 )
+from rag_sidecar.contracts.embed import EmbedRequest, EmbedResponse
+from rag_sidecar.contracts.retrieval import RetrievalLegWeights
+from rag_sidecar.contracts.translation import ChunkTranslation, TranslationSettings
+from rag_sidecar.contracts.versions import (
+    EffectiveDateExtraction,
+    SupersessionCandidate,
+    SupersessionRules,
+    SupersessionSignals,
+)
+from rag_sidecar.contracts.scopes import ScopeFilter, ScopeTagSuggestion, ScopeTagSuggestionItem, ScopeVocabularyEntry
 
 _HASH_A = "a" * 64
 _HASH_B = "b" * 64
@@ -715,6 +725,23 @@ def _cross_lingual_item() -> GoldenItem:
         review_status="approved",
         provenance="synthetic_fixture",
         split="dev",
+    )
+
+
+def _table_split_item() -> GoldenItem:
+    return GoldenItem(
+        id="en-table-split-001",
+        question="Which value does the synthetic table list in column B for row key K-17?",
+        language="en",
+        category="table_split",
+        answerable=True,
+        expected_answer="Column B lists 418 for row key K-17.",
+        gold_evidence=[GoldSpan(document="synthetic-table.en.pdf", section="Table 1", quote="K-17 | 205 | 418")],
+        review_status="approved",
+        provenance="synthetic_fixture",
+        split="dev",
+        table_answer=TableAnswer(value="418", column="B", distractor_values=["205"]),
+        native_review=NativeReview(origin="llm_drafted", status="pending"),
     )
 
 
@@ -1574,6 +1601,7 @@ def _models() -> dict[str, Any]:
         **_query_contract_samples(),
         **_cache_contract_samples(),
         **_phase32_ingest_contract_samples(),
+        **_phase32_query_contract_samples(),
     }
 
 
@@ -1706,6 +1734,87 @@ def _phase32_ingest_contract_variants() -> dict[str, dict[str, Any]]:
     }
 
 
+def _phase32_query_contract_samples() -> dict[str, Any]:
+    return {
+        "ScopeVocabularyEntry": ScopeVocabularyEntry(
+            dimension="legal_entity", value="unit-a", label="Unit A", aliases=["UA"], active=True
+        ),
+        "ScopeTagSuggestion": ScopeTagSuggestion(
+            suggestions=[
+                ScopeTagSuggestionItem(dimension="region", value="north", source="rule"),
+                ScopeTagSuggestionItem(dimension="department", value="unit-b", source="model"),
+            ]
+        ),
+        "SupersessionCandidate": _supersession_candidate(),
+        "SupersessionRules": SupersessionRules(
+            rules_version="supersession@1",
+            title_similarity_min=0.9,
+            content_overlap_min_percent=70,
+            min_conflicting_numbers=1,
+        ),
+        "EffectiveDateExtraction": EffectiveDateExtraction(
+            effective_from=date(2026, 1, 1),
+            effective_to=None,
+            confidence=0.9,
+            evidence_quote="Valid from 1 January 2026.",
+        ),
+        "ChunkTranslation": ChunkTranslation(content="A neutral translated sentence."),
+        "TranslationSettings": TranslationSettings(
+            target_languages=[LANGUAGE_CODES[0]], enabled=True, updated_by="00000000-0000-4000-8000-0000000000e1"
+        ),
+        "EmbedRequest": EmbedRequest(inputs=["A neutral sentence.", "Another neutral sentence."]),
+        "EmbedResponse": EmbedResponse(revision="rev-0001", vectors=[_unit_vector(0), _unit_vector(1)]),
+    }
+
+
+def _unit_vector(position: int) -> list[float]:
+    vector = [0.0] * 1024
+    vector[position] = 1.0
+    return vector
+
+
+def _supersession_candidate(**update: Any) -> SupersessionCandidate:
+    base = SupersessionCandidate(
+        id="00000000-0000-4000-8000-0000000000d1",
+        document_id="00000000-0000-4000-8000-0000000000a1",
+        candidate_document_id="00000000-0000-4000-8000-0000000000b1",
+        signals=SupersessionSignals(title_match=True, content_overlap_percent=82, conflicting_numbers=3),
+        status="pending",
+        origin="detected",
+    )
+    return SupersessionCandidate.model_validate({**base.model_dump(mode="json"), **update})
+
+
+def _phase32_query_contract_variants() -> dict[str, dict[str, Any]]:
+    return {
+        "RetrievalFilters:scopes": {
+            "model": "RetrievalFilters",
+            "value": RetrievalFilters(
+                scopes=ScopeFilter(region=["north"], legal_entity=["unit-a", "unit-b"]), include_untagged=True
+            ).model_dump(mode="json"),
+        },
+        "SupersessionCandidate:confirmed": {
+            "model": "SupersessionCandidate",
+            "value": _supersession_candidate(
+                status="confirmed",
+                direction="document_is_newer",
+                decided_by="00000000-0000-4000-8000-0000000000e1",
+                decided_at="2026-01-02T00:00:00Z",
+            ).model_dump(mode="json"),
+        },
+        "TranslationSettings:unconfigured": {
+            "model": "TranslationSettings",
+            "value": TranslationSettings().model_dump(mode="json"),
+        },
+        "RetrievalParams:translation_weight": {
+            "model": "RetrievalParams",
+            "value": RetrievalParams(
+                leg_weights=RetrievalLegWeights(dense=1.0, lexical=1.0, exact_id=1.0, translation=0.5)
+            ).model_dump(mode="json"),
+        },
+    }
+
+
 def build_samples() -> dict[str, dict[str, Any]]:
     samples = {name: model.model_dump(mode="json") for name, model in _models().items()}
     variants: dict[str, dict[str, Any]] = {
@@ -1730,6 +1839,10 @@ def build_samples() -> dict[str, dict[str, Any]]:
         "GoldenItem:cross_lingual": {
             "model": "GoldenItem",
             "value": _cross_lingual_item().model_dump(mode="json"),
+        },
+        "GoldenItem:table_split": {
+            "model": "GoldenItem",
+            "value": _table_split_item().model_dump(mode="json"),
         },
         "GoldenItem:cache_near_miss": {
             "model": "GoldenItem",
@@ -1799,4 +1912,5 @@ def build_samples() -> dict[str, dict[str, Any]]:
         },
     }
     variants.update(_phase32_ingest_contract_variants())
+    variants.update(_phase32_query_contract_variants())
     return {"samples": samples, "variants": variants}

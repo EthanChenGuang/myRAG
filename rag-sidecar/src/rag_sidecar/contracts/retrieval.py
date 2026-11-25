@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validat
 from rag_sidecar.contracts.ingest import DocType
 
 from .languages import Language
+from .scopes import ScopeFilter
 
 FilterLanguage = Language
 
@@ -60,6 +61,12 @@ class RetrievalLegWeights(_Contract):
     lexical: float = Field(default=1.0, gt=0)
     exact_id: float = Field(default=1.0, gt=0)
     domain: float | None = Field(
+        default=None,
+        gt=0,
+        exclude_if=lambda value: value is None,
+        json_schema_extra=_optional_positive_number_schema,
+    )
+    translation: float | None = Field(
         default=None,
         gt=0,
         exclude_if=lambda value: value is None,
@@ -126,6 +133,18 @@ class InvoiceFilter(_Contract):
         return self
 
 
+def _optional_object_schema(schema: dict[str, Any]) -> None:
+    schema.pop("default", None)
+    branches = schema.pop("anyOf", None) or []
+    for branch in branches:
+        if branch.get("type") != "null":
+            schema.update(branch)
+
+
+def _optional_boolean_schema(schema: dict[str, Any]) -> None:
+    schema.pop("default", None)
+
+
 def _reject_empty_list(values: list[Any] | None, field: str) -> list[Any] | None:
     if values is None:
         return None
@@ -142,6 +161,22 @@ class RetrievalFilters(_Contract):
     languages: list[FilterLanguage] | None = None
     invoice: InvoiceFilter | None = None
     current_only: Literal[True] = True
+    scopes: ScopeFilter | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+        json_schema_extra=_optional_object_schema,
+    )
+    include_untagged: bool = Field(
+        default=False,
+        exclude_if=lambda value: value is False,
+        json_schema_extra=_optional_boolean_schema,
+    )
+
+    @model_validator(mode="after")
+    def _untagged_needs_scopes(self) -> "RetrievalFilters":
+        if self.include_untagged and self.scopes is None:
+            raise ValueError("include_untagged requires scopes")
+        return self
 
     @field_validator("sources", mode="after")
     @classmethod

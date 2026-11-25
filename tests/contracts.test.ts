@@ -102,3 +102,100 @@ describe('optional and defaulted fields', () => {
     expect(schemaFor('RagRunRequest').safeParse({ query: '' }).success).toBe(false);
   });
 });
+
+describe('Phase 3.2 scope filter and translation leg weight (plan 03.2-06)', () => {
+  const filters = () => schemaFor('RetrievalFilters');
+
+  it('the generated filter schema accepts a scopes filter with includeUntagged', () => {
+    const result = filters().safeParse({
+      ...fixture.samples.RetrievalFilters,
+      scopes: { region: ['north'], legal_entity: ['unit-a'], department: ['unit-b'] },
+      include_untagged: true,
+    });
+    expect(result.success).toBe(true);
+    expect(result.data.scopes).toEqual({ region: ['north'], legal_entity: ['unit-a'], department: ['unit-b'] });
+    expect(result.data.include_untagged).toBe(true);
+  });
+
+  it('the generated filter schema rejects a fourth dimension and a non-slug value', () => {
+    expect(filters().safeParse({ scopes: { region: ['north'], project: ['north'] } }).success).toBe(false);
+    expect(filters().safeParse({ scopes: { region: ['North'] } }).success).toBe(false);
+  });
+
+  it('a filter without scopes parses without adding scope keys', () => {
+    const result = filters().safeParse(fixture.samples.RetrievalFilters);
+    expect(result.success).toBe(true);
+    expect(result.data).not.toHaveProperty('scopes');
+    expect(result.data).not.toHaveProperty('include_untagged');
+  });
+
+  it('leg weights accept an optional translation weight and omit it by default', () => {
+    const params = schemaFor('RetrievalParams');
+    const withTranslation = params.safeParse({
+      ...fixture.samples.RetrievalParams,
+      leg_weights: { dense: 1, lexical: 1, exact_id: 1, translation: 0.5 },
+    });
+    expect(withTranslation.success).toBe(true);
+    expect(withTranslation.data.leg_weights.translation).toBe(0.5);
+    const plain = params.safeParse(fixture.samples.RetrievalParams);
+    expect(plain.data.leg_weights).not.toHaveProperty('translation');
+    expect(fixture.variants['RetrievalFilters:scopes']?.model).toBe('RetrievalFilters');
+  });
+});
+
+describe('Phase 3.2 model-output and embed contracts (plan 03.2-06)', () => {
+  it('generates a schema for every remaining D-49 model', () => {
+    for (const model of [
+      'SupersessionCandidate',
+      'SupersessionRules',
+      'EffectiveDateExtraction',
+      'ChunkTranslation',
+      'TranslationSettings',
+      'EmbedRequest',
+      'EmbedResponse',
+    ]) {
+      expect(schemas[`${model}Schema`], model).toBeDefined();
+    }
+  });
+
+  it('EmbedRequest takes 1 to 32 inputs of at most 20,000 characters', () => {
+    const embed = schemas.EmbedRequestSchema;
+    expect(embed?.safeParse({ model: 'BAAI/bge-m3', inputs: ['one'] }).success).toBe(true);
+    expect(embed?.safeParse({ model: 'BAAI/bge-m3', inputs: [] }).success).toBe(false);
+    expect(embed?.safeParse({ model: 'BAAI/bge-m3', inputs: Array(33).fill('x') }).success).toBe(false);
+    expect(embed?.safeParse({ model: 'BAAI/bge-m3', inputs: ['x'.repeat(20_001)] }).success).toBe(false);
+  });
+
+  it('EmbedResponse requires 1024 dimensions per vector', () => {
+    const vector = [...Array(1023).fill(0), 1];
+    const response = schemas.EmbedResponseSchema;
+    expect(response?.safeParse({ model: 'BAAI/bge-m3', revision: 'r1', dims: 1024, vectors: [vector] }).success).toBe(true);
+    expect(response?.safeParse({ model: 'BAAI/bge-m3', revision: 'r1', dims: 1024, vectors: [vector.slice(1)] }).success).toBe(
+      false
+    );
+  });
+});
+
+describe('Phase 3.2 golden additions (plan 03.2-06, D-45)', () => {
+  it('the generated GoldenItem schema accepts the table_split sample with table_answer and native_review', () => {
+    const variant = fixture.variants['GoldenItem:table_split'];
+    expect(variant?.model).toBe('GoldenItem');
+    const result = schemaFor('GoldenItem').safeParse(variant?.value);
+    expect(result.success).toBe(true);
+    expect(result.data.table_answer.column).toBeTruthy();
+    expect(result.data.native_review.status).toBe('pending');
+  });
+
+  it('an existing GoldenItem parses without adding the new keys', () => {
+    const result = schemaFor('GoldenItem').safeParse(fixture.samples.GoldenItem);
+    expect(result.success).toBe(true);
+    expect(result.data).not.toHaveProperty('table_answer');
+    expect(result.data).not.toHaveProperty('native_review');
+  });
+
+  it('rejects an unknown native_review origin', () => {
+    const value = fixture.variants['GoldenItem:table_split']?.value ?? {};
+    const review = { origin: 'human', status: 'pending', reviewer: null, reviewed_at: null };
+    expect(schemaFor('GoldenItem').safeParse({ ...value, native_review: review }).success).toBe(false);
+  });
+});

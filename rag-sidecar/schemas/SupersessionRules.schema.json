@@ -1,0 +1,43 @@
+{
+  "additionalProperties": false,
+  "description": "Detector thresholds, stored as data in config/rag/supersession-rules.json (D-41).",
+  "properties": {
+    "content_overlap_min_percent": {
+      "maximum": 100,
+      "minimum": 1,
+      "title": "Content Overlap Min Percent",
+      "type": "integer"
+    },
+    "min_conflicting_numbers": {
+      "minimum": 1,
+      "title": "Min Conflicting Numbers",
+      "type": "integer"
+    },
+    "rules_version": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Rules Version",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "title_similarity_min": {
+      "exclusiveMinimum": 0,
+      "maximum": 1,
+      "title": "Title Similarity Min",
+      "type": "number"
+    }
+  },
+  "required": [
+    "rules_version",
+    "title_similarity_min",
+    "content_overlap_min_percent",
+    "min_conflicting_numbers"
+  ],
+  "title": "SupersessionRules",
+  "type": "object"
+}

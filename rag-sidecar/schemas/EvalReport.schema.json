@@ -200,7 +200,8 @@
             "injection_evasive",
             "cache_paraphrase",
             "cache_near_miss",
-            "small_talk"
+            "small_talk",
+            "table_split"
           ],
           "title": "Category",
           "type": "string"
@@ -1001,6 +1002,10 @@
           "default": null,
           "title": "Document Ids"
         },
+        "include_untagged": {
+          "title": "Include Untagged",
+          "type": "boolean"
+        },
         "invoice": {
           "anyOf": [
             {
@@ -1031,6 +1036,9 @@
           ],
           "default": null,
           "title": "Languages"
+        },
+        "scopes": {
+          "$ref": "#/$defs/ScopeFilter"
         },
         "sources": {
           "anyOf": [
@@ -1075,6 +1083,11 @@
           "default": 1.0,
           "exclusiveMinimum": 0,
           "title": "Lexical",
+          "type": "number"
+        },
+        "translation": {
+          "exclusiveMinimum": 0,
+          "title": "Translation",
           "type": "number"
         }
       },
@@ -1184,6 +1197,50 @@
         }
       },
       "title": "RetrievalOverrides",
+      "type": "object"
+    },
+    "ScopeFilter": {
+      "additionalProperties": false,
+      "description": "DATA-08 scope filter (D-39): OR within a dimension, AND across dimensions; only the three fixed dimensions.",
+      "properties": {
+        "department": {
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "type": "string"
+          },
+          "maxItems": 50,
+          "minItems": 1,
+          "title": "Department",
+          "type": "array"
+        },
+        "legal_entity": {
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "type": "string"
+          },
+          "maxItems": 50,
+          "minItems": 1,
+          "title": "Legal Entity",
+          "type": "array"
+        },
+        "region": {
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "type": "string"
+          },
+          "maxItems": 50,
+          "minItems": 1,
+          "title": "Region",
+          "type": "array"
+        }
+      },
+      "title": "ScopeFilter",
       "type": "object"
     },
     "SliceMetrics": {

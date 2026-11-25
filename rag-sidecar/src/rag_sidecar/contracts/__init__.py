@@ -41,6 +41,8 @@ from rag_sidecar.contracts.golden import (
     GoldenItem,
     GoldenSplitManifest,
     GoldSpan,
+    NativeReview,
+    TableAnswer,
 )
 from rag_sidecar.contracts.ingest import (
     ChunkerSettings,
@@ -136,6 +138,20 @@ from rag_sidecar.contracts.ingest_security import (
     QuarantineReason,
     QuarantineSpan,
     UntrustedLinkQuarantineReason,
+)
+from rag_sidecar.contracts.embed import EmbedRequest, EmbedResponse
+from rag_sidecar.contracts.translation import ChunkTranslation, TranslationSettings
+from rag_sidecar.contracts.versions import (
+    EffectiveDateExtraction,
+    SupersessionCandidate,
+    SupersessionRules,
+    SupersessionSignals,
+)
+from rag_sidecar.contracts.scopes import (
+    ScopeFilter,
+    ScopeTagSuggestion,
+    ScopeTagSuggestionItem,
+    ScopeVocabularyEntry,
 )
 from rag_sidecar.contracts.parse_eval import (
     BackfillDryRunReport,
@@ -340,6 +356,8 @@ __all__ = [
     "GoldenItem",
     "GoldenSplitManifest",
     "GoldSpan",
+    "NativeReview",
+    "TableAnswer",
     "ConversationTurn",
     "GoldenFilter",
     "RagRunOptions",
@@ -387,6 +405,18 @@ __all__ = [
     "RefusalCell",
     "RefusalThresholds",
     "RetrievalFilters",
+    "ScopeFilter",
+    "ScopeTagSuggestion",
+    "ScopeTagSuggestionItem",
+    "ScopeVocabularyEntry",
+    "ChunkTranslation",
+    "EffectiveDateExtraction",
+    "EmbedRequest",
+    "EmbedResponse",
+    "SupersessionCandidate",
+    "SupersessionRules",
+    "SupersessionSignals",
+    "TranslationSettings",
     "RetrievalOverrides",
     "RetrievalParams",
     "compute_config_hash",

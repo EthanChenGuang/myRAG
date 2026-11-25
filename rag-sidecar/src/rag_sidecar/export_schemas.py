@@ -104,6 +104,15 @@ from rag_sidecar.contracts import (
     LinkCheckResult,
     SettingsClassification,
     UploadApproval,
+    ScopeTagSuggestion,
+    ScopeVocabularyEntry,
+    SupersessionCandidate,
+    SupersessionRules,
+    EffectiveDateExtraction,
+    ChunkTranslation,
+    TranslationSettings,
+    EmbedRequest,
+    EmbedResponse,
 )
 from rag_sidecar.contracts.samples import build_samples
 
@@ -211,6 +220,15 @@ CONTRACTS: list[tuple[type[BaseModel], Mode]] = [
     (HiddenTextRules, "validation"),
     (LinkCheckResult, "serialization"),
     (UploadApproval, "validation"),
+    (ScopeVocabularyEntry, "validation"),
+    (ScopeTagSuggestion, "validation"),
+    (SupersessionCandidate, "serialization"),
+    (SupersessionRules, "validation"),
+    (EffectiveDateExtraction, "validation"),
+    (ChunkTranslation, "validation"),
+    (TranslationSettings, "validation"),
+    (EmbedRequest, "validation"),
+    (EmbedResponse, "serialization"),
 ]
 
 
