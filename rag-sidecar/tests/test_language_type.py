@@ -107,3 +107,54 @@ def test_extra_values_follow_the_codes_in_the_schema():
 def test_an_empty_code_list_is_refused():
     with pytest.raises(ValueError):
         build_language_type([])
+
+
+def _field_schema(model: type[BaseModel], field: str) -> dict:
+    schema = model.model_json_schema()
+    prop = schema["properties"][field]
+    for option in prop.get("anyOf", [prop]):
+        if option.get("type") == "array":
+            return option["items"]
+        if option.get("type") == "string":
+            return option
+    raise AssertionError(f"no string or array schema for {model.__name__}.{field}")
+
+
+def test_every_contract_language_field_takes_its_codes_from_the_registry():
+    from rag_sidecar.contracts.ingest import (
+        InjectionRule,
+        InvoiceExtractRequest,
+        ParseJobRequest,
+        ParserSettings,
+    )
+    from rag_sidecar.contracts.query import (
+        QueryPlan,
+        QueryTranslation,
+        QueryVariantOut,
+        RewriteGateResult,
+    )
+    from rag_sidecar.contracts.retrieval import RetrievalFilters
+
+    codes = _registry_codes()
+    cases = [
+        (ParserSettings, "ocr_languages", codes),
+        (ParseJobRequest, "ocr_languages", codes),
+        (InvoiceExtractRequest, "language_hint", codes),
+        (InjectionRule, "language", [*codes, "any"]),
+        (RewriteGateResult, "lang", codes),
+        (QueryVariantOut, "language", codes),
+        (QueryPlan, "language", codes),
+        (QueryTranslation, "target_language", codes),
+        (RetrievalFilters, "languages", codes),
+    ]
+    for model, field, expected in cases:
+        assert _field_schema(model, field)["enum"] == expected, f"{model.__name__}.{field}"
+
+
+def test_injection_rule_language_accepts_any_and_rejects_an_unknown_code():
+    from rag_sidecar.contracts.ingest import RuleLanguage
+
+    adapter = TypeAdapter(RuleLanguage)
+    assert adapter.validate_python("any") == "any"
+    with pytest.raises(ValidationError):
+        adapter.validate_python("xx")
